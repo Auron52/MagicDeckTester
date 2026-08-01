@@ -2,7 +2,7 @@
   "value_leaf_table": {
     "metric": "loss_penalized_avg_win_turn",
     "value_min_depth": 0,
-    "games": 400,
+    "games": 3000,
     "seeds": [
       8008,
       9009
@@ -10,35 +10,54 @@
     "hdepths": [
       1,
       2,
-      3
-    ],
-    "heuristic_lp": [
-      4.4663,
-      4.4288,
-      4.36
-    ],
-    "vdepths": [
-      1,
-      2,
       3,
       4,
       5
     ],
-    "value_leaf_lp": [
-      4.8213,
-      4.7212,
-      4.5725,
-      4.4675,
-      4.4262
+    "heuristic_lp": [
+      4.4358,
+      4.4092,
+      4.3988,
+      4.3952,
+      4.3947
     ],
-    "h_conv": 4.36,
-    "h_conv_depth_cap": 5,
+    "vdepths": [
+      5,
+      6,
+      7,
+      8
+    ],
+    "value_leaf_lp": [
+      4.4018,
+      4.3967,
+      4.3947,
+      4.3947
+    ],
+    "h_conv": 4.3947,
+    "h_conv_depth_cap": 6,
     "tol": 0.002,
     "crossover_offset": 3,
     "no_fallback_margin": 0.02,
     "monotonicity_warnings": [],
     "derivation": "PLAY SCALARS use only in-play depths (<= h_conv_depth_cap): h_conv = min heuristic_lp over those; value_trust_depth = min{d<=cap: value_leaf_lp[d]-h_conv <= tol}; value_no_fallback likewise. (Deep cells d>cap extend the table+crossover for the anchor but do NOT move the escalation gate; a trust_depth > search_depth is equivalent to UNSET in play.) crossover spans ALL depths."
   },
+  "value_fallback_crossover": {
+    "rule": "after escalating a value-leaf line committed at depth c, TAKE the heuristic line iff hcommitted >= take_heuristic_at_hdepth[c] (else keep the leaf). Clamp c/hcommitted to the measured [min,max] depth. Per-committed-depth (NOT a uniform offset).",
+    "committed_depths": [
+      5,
+      6,
+      7,
+      8
+    ],
+    "take_heuristic_at_hdepth": [
+      3,
+      4,
+      6,
+      6
+    ],
+    "max_table_depth": 8
+  },
+  "value_trust_depth": 6,
   "value_no_fallback": false,
   "eval_model": {
     "intercept": 4874,
@@ -14830,29 +14849,5 @@
     "note": "ADOPTED: play d6/b40 trust-with-shallow-fallback; gen d3/b10 (H3 rollouts, fast+good).",
     "mull_gen_depth": 3,
     "mull_gen_budget_ms": 10
-  },
-  "value_fallback_crossover": {
-    "rule": "take H iff hcommitted>=take_heuristic_at_hdepth[c]; keep-leaf at committed>=6 (9 sentinel), fallback on shallow truncation<=5.",
-    "committed_depths": [
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8
-    ],
-    "take_heuristic_at_hdepth": [
-      1,
-      1,
-      1,
-      1,
-      3,
-      9,
-      9,
-      9
-    ],
-    "max_table_depth": 8
   }
 }

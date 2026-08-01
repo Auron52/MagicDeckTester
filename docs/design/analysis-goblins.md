@@ -349,3 +349,120 @@ rollout quality (H3), not the 0.18t disaster I first feared (that number was V3,
 - **Generation plan:** R=1 recommend chunk on the FROZEN commit for a trustworthy `complete`(R40) projection
   (pools into the full run via MTG_KEEP_PRIOR_RAW); launch full R40 if projection ≤4 days. This is the secondary
   machine (can run days). Rough estimate from the ~57/s rate: R=1 ≈ 4.4h, full R40 ≈ 2–4 days.
+
+## Mulligan-gen cost root-cause + branching attribution (2026-08-01, autonomous)
+
+**R=1 recommend chunk COMPLETE** (frozen commit `8a3bbb1`, `logs/eval/goblins_gen_r1_final.out`):
+floor pass = **27937 s (7.8 h) @ 32 rollouts/s**, 910034 cells. Built-in projection:
+- **COMPLETE (R40) ≈ 310 h ≈ 12.9 days**  — far over the 4-day bar.
+- **FAST (R30) ≈ 155 h ≈ 6.5 days**       — also over 4 days.
+Both exceed budget → generation needs a real speedup OR another machine / weekend, OR accept >4 d.
+The probe chunk (`Goblins.keepmodel.exhaustive.raw.json.probe`) is written and pools into a later run.
+
+**Root cause = plan-enumeration breadth (NOT a stalled-hand / budget issue).** The recommend dump's
+top-12 slowest rollouts (17–39 s each vs a ~31 ms median) are all wide-board tutor/payoff hands
+(Goblin Matron in 11/12, + Muxus / Aether Vial / Skirk). The cast-subset **odometer** width is
+`∏_g(1+|group_g|)·2^|independent|`; it is bounded by neither depth nor the search budget (budget
+bounds rollout depth/nodes, not the breadth of plans built at a single node).
+
+**Branching-attribution tool** (already existed: `branchstats`, env `MTG_BRANCH_STATS=1`; wired in
+`EnumeratePlans`, reached via `FSLineTail`/`EnumeratePlansWithLand` — the rollout path. NOTE: it does
+NOT instrument `TurnSolver::Solve`'s inline odometer twin, i.e. the top-of-turn decision; extend there
+if we want that too. Built into `build-instr/mtg` via `-DMTG_PROFILE=ON`, but branchstats is
+runtime-gated so a normal build works). Ranked run — goblins d3 heuristic rollout, 300 g, seed 3003
+(`MTG_BRANCH_STATS=1 MTG_VALUE_MODEL=0 build-instr/mtg … --depth 3 --ignore-play-profile`):
+
+| driver card | calls | sum_odo | %tot | max_odo |
+|---|---:|---:|---:|---:|
+| **Goblin Matron** | 693 873 | **143 599 313** | **82 %** | 36 864 |
+| Twinshot Sniper | 140 847 | 5 331 771 | 3 % | 768 |
+| Siege-Gang Commander | 326 132 | 4 775 314 | 2.7 % | 256 |
+| Krenko, Mob Boss | 251 883 | 3 062 166 | 1.7 % | 256 |
+| Muxus, Goblin Grandee | 141 461 | 2 341 146 | 1.3 % | 256 |
+| (all others) | — | <2 M each | <1 % | ≤512 |
+
+Totals: 175.4 M odometer positions walked → **7.0 M final (deduped) plans** (raw 16.1 M). **Goblin
+Matron alone drives 82 % of enumeration work.** Peak single call = 36 864 ≈ ×9 Matron-target options
+× 2¹² cast-subset. Worst situations: `groups=5-8 board=7-10/11-15` (wide boards, mid group count).
+
+**Why Matron:** `GoblinsProvider` deliberately uses `GenericProvider`'s **full-candidate**
+`TutorCandidates` (every distinct Goblin in library), because narrowing was already REJECTED for play
+(the clairvoyant search finds lines through "excluded" targets — DecisionProviders.h:311/324). Each
+candidate is a mutually-exclusive `CastFromHand` Action (`tutor_target` set), so the group contributes
+`(num_targets+1)` to the odometer product, multiplied against the `2^cast-subset`.
+
+**PROPOSED non-destructive speedup (NOT a cap — factor, don't drop):** Goblin Matron fetches to HAND;
+the fetched card is not in the start-of-turn hand the odometer enumerates from, so it is **never cast
+the same turn**. Therefore the tutor-target dimension is **provably independent of the same-turn cast
+subset** — the `(cast-subset × target)` cross-product re-applies the *identical* same-turn subset
+(clone + `ApplyPlanDirect` + eval) once per target, differing only in the card added to hand. Factor
+it: enumerate the cast-subsets ONCE and fork the target only at the cheap "add fetched card to hand"
+step (sharing the expensive same-turn application). Same final plan set, same rollout values →
+non-destructive. Expected ≈ **3.5–4× reduction in total odometer work** (Matron is 82 %; ÷~5–9 on its
+calls), concentrated on the exact wide-board tail that dominates the 27937 s floor pass → plausibly
+halves-or-better the gen time (FAST R30 6.5 d → ~3 d, COMPLETE R40 12.9 d → ~6–7 d).
+
+**CAVEATS / decision gate (for the user — implement nothing on the frozen play path without approval):**
+- This touches the core odometer in BOTH `Solve` and `EnumeratePlans` ("change one, change both") — a
+  delicate change that alters play output → must A/B on the regression matrix (frozen depth ladder) and,
+  if adopted, re-freeze + **re-run the R=1 estimate** on the new commit before launching R40 (the probe
+  chunk's commit fingerprint gates pooling).
+- Fallback if we don't take it: `fast` R30 ≈ 6.5 d on this secondary box (over the 4-day bar but
+  runnable), or trim scope, or accept.
+
+*Corroboration (d5, 100 g, seed 2002):* same ranking holds at play depth — Goblin Matron = 66 %
+of odometer work (320.2 M / 483.3 M), still ~8× the next card; Matron alone 320 M positions → 12 M
+kept plans. The 82 % (d3) / 66 % (d5) split confirms the finding is depth-robust, not a d3 artifact.
+
+## Escalation-waste bug + stale value_leaf_table (2026-08-01, found by a second agent, confirmed)
+
+**BUG (perf, confirmed):** in hybrid play (value model + escalation), Goblins runs the deep heuristic
+escalation at committed depth 6 and then the crossover's keep-leaf sentinel DISCARDS it — wasted deep
+work (and the pathological d6 heuristic games). Chain:
+- `escalate = (committed < value_min_depth && !verified)`, `value_min_depth = escalate_below`
+  (TurnSolver.cpp ~10758; AIEngine.cpp ~1598).
+- `escalate_below = value_trust_depth if set, else target_depth+1`. Goblins `value_trust_depth` is
+  **UNSET** → `escalate_below = 7` → escalation fires at committed=6.
+- The crossover `take_heuristic_at_hdepth[6]=9` (keep leaf) then throws the escalation away.
+- **Root:** `value_trust_depth` is DERIVED from `value_leaf_table`, but the committed table is the EARLY
+  **weak-leaf / partial** run (`vdepths=[1..5]`, `hdepths=[1..3]`, `h_conv=4.36`) — **V6–8 and H4–5 are
+  MISSING**, so the leaf never reaches convergence in-table → trust un-derived → default 7. `burn` (the
+  sibling d6 deck) has a full table and correctly carries `value_trust_depth=6`.
+
+**FIX (confirmed, NO re-measurement — the high-N cells already exist):** the improved-leaf HIGH-N (3000g)
+ladder is in `logs/eval/goblins_depth_overnight.txt` (H1–5, V5) + `goblins_vladder.txt` (V6–8): V5=4.4018,
+V6=4.3967, V7=V8=4.3947 = H-floor 4.3947. Feed ONLY the high-N logs (NOT mixed with the early 100g H6–7=4.36
+noise, which corrupts `h_conv`) to the generator with `--scalar-max-depth 6`:
+```
+cat logs/eval/goblins_depth_overnight.txt logs/eval/goblins_vladder.txt > /tmp/goblins_highN.txt
+python3 scripts/attic/valueleaf_table_to_metadata.py /tmp/goblins_highN.txt --decks goblins --scalar-max-depth 6
+```
+Dry-run VERIFIED: `trust=6 no_fb=False`. Writing it folds the full V5–8/H1–5 table into the profile AND
+derives `value_trust_depth=6` — fixing the escalation waste and repairing the stale evidence in one shot.
+value_trust_depth=6 aligns the escalate gate with the crossover keep-leaf-at-6: expected QUALITY-NEUTRAL
+(same kept-leaf decision) + FASTER (skips the discarded deep escalation). MUST A/B (d6/b40) before commit;
+changes frozen play so re-freeze + re-run R=1 with the other pre-freeze changes. (Note: this is a PLAY-cost
+bug — gen runs at mull_gen_depth=3, committed<=3, so it never hits committed=6.)
+
+## Escalation fix — APPLIED + VALIDATED (2026-08-01)
+
+`scripts/attic/valueleaf_table_to_metadata.py /tmp/goblins_highN.txt --decks goblins
+--scalar-max-depth 6` (no `--dry-run`) rewrote `Goblins.value.json`:
+- `value_leaf_table`: games 400→3000, hdepths [1,2,3]→[1,2,3,4,5], vdepths [1..5]→[5,6,7,8],
+  h_conv 4.36→4.3947 (clean floor). V6-8/H4-5 now present. **Folds the depth matrix into the
+  play profile** (the user's explicit ask).
+- `value_trust_depth: 6` (was UNSET) → `escalate_below = 6` (was `target_depth+1 = 7`).
+- crossover regenerated from clean high-N: committed_depths [5,6,7,8], take@[3,4,6,6].
+
+**A/B (500g × 4 held-out seeds 6006/7007/1001/2468, same build/Release, BEFORE vs AFTER profile):**
+- Quality: MEAN **4.3935 == 4.3935**, identical *per seed* → byte-identical quality.
+- Wall: **82.3s → 63.0s (−23%)** in play at d6/b40.
+- Root of the speedup (MTG_HYBRID_STATS, 150g seed 6006): BEFORE `d6 redid 38` of 72 total
+  escalations — the deepest, most expensive re-searches, ALL discarded by the keep-leaf sentinel.
+  AFTER `d6 redid 0`. The committed<6 (truncated) escalations still fire (genuine fallback);
+  only the wasted d6==target ones are gone.
+
+**Scope note:** this speeds up PLAY (search reaches d6). It does NOT materially change mulligan
+GEN speed — gen is capped at `mull_gen_depth=3`, below where the d6 waste occurred; the R40 gen
+cost is Matron's tutor-branching, a separate lever. Profile change is standalone-validated and
+ready to fold into the frozen batch commit.
