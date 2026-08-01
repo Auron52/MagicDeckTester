@@ -1977,6 +1977,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // offered as an action -> they sit in hand as faithful dead draws. Gated off for
         // every existing deck.
         if (def.params.goldfish_inert) { continue; }
+        // Duplicate legend with nothing on entry: the legend rule kills it the moment it resolves,
+        // so the cast buys nothing and costs a card plus this turn's mana. Provider-owned, and a
+        // PRUNE rather than a ranking -- it drops a plan variant that cannot be better, which
+        // matters because variants share a fixed rollout budget. Default off (MTG_PRUNE_DUP_LEGEND).
+        if (!ResolveProvider(state).OfferDuplicateLegendCast(state, state.active_player_index, def))
+        { continue; }
         // Suspend-only cards (Lotus Bloom, mana_cost "") have NO normal cost -- they can ONLY be
         // suspended, never hard-cast from hand. Skip the cast enumeration; the {0} Suspend action is
         // emitted in its own block below. Gated on suspend_time_counters -> other decks byte-identical.
