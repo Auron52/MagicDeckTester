@@ -275,6 +275,46 @@ inline std::vector<int> CleanupDiscardRanking(const GameState& state,
     return CleanupDiscardRankingWithOrder(state, required_pieces, {});
 }
 
+// WHICH lands Land's Edge pitches, most expendable FIRST -- the same provider ranking the cleanup
+// discard uses. Both consume lands out of the same hand for the same reason ("this card is worth
+// less to me than what it buys"), so having the outlet pick by HAND ORDER while the cleanup picks
+// by a deck-aware ranking meant the deck's own judgement was applied to the RARER of the two: TH
+// sheds ~0.8 cards per game to cleanup but can pitch five or more in a single Land's Edge turn.
+// It is also where the ranking's conditional rules finally bite -- deprioritising a Reliquary Tower
+// once an outlet is out only matters if something is actually choosing which land to burn.
+//
+// Returns hand indices, at most `count`. The ranking is filtered to LANDS (Land's Edge can only
+// discard a land) and topped up in hand order if the provider named fewer lands than needed --
+// the outlet may legally pitch any land, so a short ranking must not reduce the damage.
+// MTG_LE_RANKED_PITCH=0 restores the historical hand-order pitch (byte-identical A/B).
+inline std::vector<int> LandsEdgePitchOrder(const GameState& state,
+                                            const std::vector<std::string>* required_pieces,
+                                            int count)
+{
+    std::vector<int> out;
+    if (count <= 0) { return out; }
+    const Player& ap = state.players[state.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+    auto usable = [&](int i)
+    { return i >= 0 && i < n && !ap.hand[i].m_is_staged && CleanupDiscardIsLand(ap.hand[i]); };
+
+    static const bool s_ranked = EnvOn("MTG_LE_RANKED_PITCH");   // DEFAULT OFF pending measurement
+    if (s_ranked)
+    {
+        for (int i : ResolveProvider(state).CleanupDiscardCandidates(state, required_pieces))
+        {
+            if (static_cast<int>(out.size()) >= count) { break; }
+            if (usable(i)) { out.push_back(i); }
+        }
+    }
+    for (int i = 0; i < n && static_cast<int>(out.size()) < count; ++i)
+    {
+        if (!usable(i)) { continue; }
+        if (std::find(out.begin(), out.end(), i) == out.end()) { out.push_back(i); }
+    }
+    return out;
+}
+
 inline int SelectCleanupDiscardIndex(const GameState& state,
                                      const std::vector<std::string>* required_pieces)
 {
