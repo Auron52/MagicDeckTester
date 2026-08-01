@@ -176,9 +176,19 @@ def main():
     reg_intercept = 0.0
     F = [0.0] * n
     pairs = te_pairs = None
+    tr_idx = list(range(n)); te_idx = []
     if args.regression:
         # VALUE model: init F at the mean win turn, boost squared-error residuals toward y.
-        reg_intercept = sum(y) / n
+        # --holdout in REGRESSION mode: hold out every 4th DECISION and report held-out RMSE as it
+        # boosts. Without this there was no held-out metric at all in regression mode -- only train
+        # RMSE, which falls monotonically as trees are added and so cannot tell "learning" from
+        # "memorising". That gap is why nobody could say where the value model SATURATES, i.e. how
+        # many rows a dump actually needs. Added 2026-08-01.
+        if args.holdout:
+            gids = sorted(set(groups)); held = set(gids[::4])
+            tr_idx = [i for i in range(n) if groups[i] not in held]
+            te_idx = [i for i in range(n) if groups[i] in held]
+        reg_intercept = sum(y[i] for i in tr_idx) / max(len(tr_idx), 1)
         F = [reg_intercept] * n
     else:
         if args.holdout:
@@ -193,8 +203,12 @@ def main():
             for i in range(n):
                 F[i] = sum(-lin_coefs_wt[j] * X[i][j] for j in range(d))    # linear goodness init
 
-    def rmse():
-        return math.sqrt(sum((F[i] - y[i]) ** 2 for i in range(n)) / n)
+    def rmse(idxs=None):
+        ii = range(n) if idxs is None else idxs
+        cnt = len(list(ii)) if idxs is not None else n
+        if cnt == 0: return float("nan")
+        ii = range(n) if idxs is None else idxs
+        return math.sqrt(sum((F[i] - y[i]) ** 2 for i in ii) / cnt)
 
     trees = []
     for rnd in range(args.trees):
@@ -202,7 +216,7 @@ def main():
             resid = [y[i] - F[i] for i in range(n)]                        # squared-error negative gradient
         else:
             resid, _ = pairwise_residuals(pairs, F, n)
-        nodes = fit_tree(X, resid, list(range(n)), args.depth, args.min_leaf, d)
+        nodes = fit_tree(X, resid, tr_idx, args.depth, args.min_leaf, d)
         for i in range(n):
             F[i] += args.lr * tree_predict(nodes, X[i])
         # scale leaves by lr for serving (so serving sums the same increments)
@@ -212,7 +226,9 @@ def main():
         trees.append(nodes)
         if rnd % 20 == 0 or rnd == args.trees - 1:
             if args.regression:
-                print("round %3d  train_RMSE=%.4f turns" % (rnd, rmse()), file=sys.stderr)
+                msg = "round %3d  train_RMSE=%.4f turns" % (rnd, rmse(tr_idx))
+                if te_idx: msg += "  heldout_RMSE=%.4f  (n_tr=%d n_te=%d)" % (rmse(te_idx), len(tr_idx), len(te_idx))
+                print(msg, file=sys.stderr)
             else:
                 msg = "round %3d  train_pair_acc=%.1f%%" % (rnd, pairwise_acc(pairs, F))
                 if te_pairs is not None:

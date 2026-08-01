@@ -89,5 +89,59 @@ deep)
     --out logs/eval/valueleaf_depth_hinata_v2_deep.txt
   ;;
 
-*) echo "usage: $0 {status|train [rows]|matrix [value.json]|deep}"; exit 2 ;;
+# ---- STAGE 1 RESUME ------------------------------------------------------------------------
+# The dumps APPEND, and per-game seed is base_seed+gi with gi restarting at 0 EVERY invocation
+# (GoldFishRunner: `SetupGame(deck, base_seed + gi)`; --game-index only shifts the opponent-spawn
+# pattern). So a naive relaunch REPLAYS the same games and duplicates positions into the training
+# set. Resume by advancing BOTH --seed and --game-index past the highest game index already dumped
+# (a gap is harmless, an overlap is not). Offsets below were derived from the game seeds carried in
+# the existing rows + a full thread-set of slack.
+#   dumpB : the K=3 volume run  -- ~823 rows/hr on 24 threads, ~12 h to the ~11k knee
+#   dumpA : the K=8 fidelity run -- ~352 rows/hr on 24 threads, ~34 h to ~12.5k
+dumpB)
+  MTG_DUMP_VALUE_ROWS=logs/eval/hinata_value_v2b.rows MTG_EVAL_ROWS_K=3 \
+    ./build/Release/mtg "$DECK" --profile "$PROF" \
+    --games 4000 --seed 20227 --game-index 207 --threads 24
+  ;;
+
+dumpA)
+  MTG_DUMP_VALUE_ROWS=logs/eval/hinata_value_v2.rows MTG_EVAL_ROWS_K=8 \
+    ./build/Release/mtg "$DECK" --profile "$PROF" \
+    --games 4000 --seed 8148 --game-index 140 --threads 24
+  ;;
+
+# Head-to-head on ONE common test set -- the only sound way to compare models trained on different
+# K (the trainer's own held-out RMSE scores each against its OWN noisier/cleaner labels).
+compare)
+  python3 - <<'PYEOF'
+import random, subprocess, statistics as st
+def load(p):
+    L=[l.rstrip('\n') for l in open(p) if l.strip()]
+    return [l for l in L if l.startswith('#')][0], [l for l in L if not l.startswith('#')]
+hA,A=load('logs/eval/hinata_value_v2.rows'); hB,B=load('logs/eval/hinata_value_v2b.rows')
+gid=lambda r:(r.split()[-2], r.split()[-1])
+gids=sorted({gid(r) for r in A}); res={'A':[],'BN':[],'BC':[]}
+for rep in range(6):
+    rnd=random.Random(100+rep); g=list(gids); rnd.shuffle(g); held=set(g[:len(g)//4])
+    te=[r for r in A if gid(r) in held]; tr=[r for r in A if gid(r) not in held]
+    Bs=list(B); rnd.shuffle(Bs); N=len(tr)
+    files={'A':tr,'BN':Bs[:N],'BC':Bs[:min(len(Bs),int(N*2.27))]}
+    open('/tmp/cmp_te.rows','w').write(hA+"\n"+"\n".join(te)+"\n")
+    for k,rows in files.items():
+        open(f'/tmp/cmp_{k}.rows','w').write((hA if k=='A' else hB)+"\n"+"\n".join(rows)+"\n")
+        subprocess.run(['python3','scripts/attic/train_eval_gbdt.py','--rows',f'/tmp/cmp_{k}.rows',
+                        '--out',f'/tmp/cmp_{k}.json','--regression','--trees','60','--depth','4',
+                        '--lr','0.15','--min-leaf','20'],capture_output=True)
+        out=subprocess.run(['python3','scripts/attic/valueleaf_score_rows.py','--model',f'/tmp/cmp_{k}.json',
+                            '--rows','/tmp/cmp_te.rows','--label',k],capture_output=True,text=True).stdout
+        res[k].append(float(out.split('RMSE=')[1].split()[0]))
+for k,lbl in (('A','A  K=8   (equal rows)'),('BN','B  K=3   (equal rows)'),('BC','B  K=3   (equal cost)')):
+    print(f"{lbl:24s} mean RMSE={st.mean(res[k]):.4f}  sd={st.pstdev(res[k]):.4f}")
+for k,lbl in (('BN','equal ROWS   B-A'),('BC','equal COST   B-A')):
+    d=[b-a for a,b in zip(res['A'],res[k])]; m=st.mean(d); se=st.pstdev(d)/len(d)**.5
+    print(f"paired {lbl}: {m:+.4f}  se={se:.4f}  t={m/se:+.2f}  ({sum(1 for x in d if x>0)}/6 favour A)")
+PYEOF
+  ;;
+
+*) echo "usage: $0 {status|dumpB|dumpA|compare|train [rows]|matrix [value.json]|deep}"; exit 2 ;;
 esac
