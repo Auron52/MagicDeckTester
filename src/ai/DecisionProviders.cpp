@@ -1780,6 +1780,18 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
         return k;
     };
 
+    // Board state the Tower rule is conditional on (see band()): another no-max-hand-size land
+    // already out makes the one in hand dead, and a Land's Edge outlet makes the hand limit moot.
+    bool tower_in_play = false, outlet_in_play = false;
+    for (const Permanent& perm : s.battlefield)
+    {
+        if (perm.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(perm.card);
+        if (pd == nullptr) { continue; }
+        if (pd->params.no_max_hand_size && pd->card.IsLand()) { tower_in_play  = true; }
+        if (pd->params.discard_land_damage > 0)               { outlet_in_play = true; }
+    }
+
     // What JOB a land does, for the rung-6 diversity rule. Deliberately coarse: the point is not to
     // rank these against each other (rungs 4/5 measured that as invisible) but to notice when the
     // hand holds five of one and none of another. Order of the tests matters -- a cycler that also
@@ -2066,14 +2078,26 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
         const bool tapped_now = d != nullptr && !depletion && LandWouldEnterTapped(s, *d);
         const int  colors     = p != nullptr ? static_cast<int>(p->produces.size()) : 0;
 
-        // Reliquary Tower is NEVER shed -- it is the card that ends this decision outright. 90 is
-        // above every band any rung can produce (kept tops out at 59, the rung-8 fallback at 18,
-        // surplus at 8), which is the point: this used to return 9, and 9 only means "highest" on
-        // the rung-1 scale. The later rungs widened the range, so the Tower quietly landed in the
-        // MIDDLE of rung 8's fallback band and was shed ahead of any land ranked worse than 9 --
-        // 4 times per 1200 games. A "never" encoded as a magic number is only as durable as the
-        // scale around it; this one is now stated relative to the whole range.
-        if (p != nullptr && p->no_max_hand_size) { return 90; }
+        // Reliquary Tower protection is CONDITIONAL on the Tower still having a job. Its whole
+        // value is that PLAYING it ends this decision, so protecting it is only right while that
+        // is still true:
+        //   * another no-max-hand-size land already in play -> the one in hand is DEAD, exactly
+        //     like a duplicate Land's Edge. Shed it first. (Reached only via a non-cleanup discard:
+        //     CleanupStep skips the shed entirely once one is out.)
+        //   * a Land's Edge outlet in play -> the hand is being CONVERTED to damage, so the hand
+        //     limit is moot and the Tower is worth the same 2 points as any other land. No claim
+        //     to protection; fall through and rank it as the ordinary land it now is.
+        //   * otherwise -> protect it. 90 is above every band any rung can produce (kept tops out
+        //     at 59, the rung-8 fallback at 18, surplus at 8).
+        //
+        // The absolute version also silently outranked the duplicate rule: copies_seen() counts the
+        // battlefield, so a second Tower WAS already classified spare -- the early return just never
+        // let that fire. Same failure shape as the band-9 bug, one layer up.
+        if (p != nullptr && p->no_max_hand_size)
+        {
+            if (tower_in_play) { return 0; }
+            if (!outlet_in_play) { return 90; }
+        }
 
         if (!is_land)
         {
