@@ -269,6 +269,31 @@ bool GenericProvider::DiscardLandsFirst(const GameState&) const
 // AIEngine::ChooseDiscard tie-break among win-optimal discards and what the searched rollout axis
 // fans out over. Must NOT call SelectCleanupDiscardIndex: that routes through this hook (so a
 // provider override reaches every caller), which would recurse.
+// Prune casting a legendary permanent we already control a copy of, when that card does nothing on
+// entry. See the hook comment in DecisionProvider.h for why the whitelist is positive rather than
+// an etb_* enumeration (the failure direction matters: a missed field would prune a GOOD cast).
+bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controller,
+                                                const CardDefinition& def) const
+{
+    // Gated, default OFF pending measurement -- it removes plan variants, so it is not
+    // byte-identical wherever it fires.
+    static const bool s_prune = EnvOn("MTG_PRUNE_DUP_LEGEND");
+    if (!s_prune) { return true; }
+
+    if (!def.card.HasSupertype(Supertype::Legendary)) { return true; }
+    // Enter-inert templates ONLY: a body (plus, for a lord, a continuous effect). Anything else --
+    // every `custom` card, notably Muxus with its enter-reveal -- keeps being offered.
+    if (def.tmpl != CardTemplate::VanillaCreature && def.tmpl != CardTemplate::LordEffect)
+    { return true; }
+    // A copy already on OUR battlefield is what makes the new one die on resolution. (An opponent's
+    // copy is irrelevant: the legend rule is per-controller.)
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_name == def.card.m_name) { return false; }
+    }
+    return true;
+}
+
 std::vector<int> DecisionProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {

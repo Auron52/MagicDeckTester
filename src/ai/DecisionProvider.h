@@ -700,6 +700,30 @@ public:
         return duplicates.empty() ? -1 : duplicates.front();
     }
 
+    // OfferDuplicateLegendCast -- should the search even CONSIDER casting a legendary permanent
+    // whose copy we already control? The legend rule (CR 704.5j) kills one immediately on
+    // resolution, so for a card with no enter-triggered effect the cast buys literally nothing and
+    // costs a card plus that turn's mana. A human never considers it.
+    //
+    // This is a PRUNE, which is the legitimate use of a heuristic here -- it removes a plan variant
+    // that cannot be better, rather than picking between real ones. It matters because plan
+    // variants share a FIXED rollout budget: a pointless variant dilutes every real one, the same
+    // mechanism that made the rollout discard axis measure worse.
+    //
+    // WHY IT WAS NOT ALREADY HAPPENING: the legend rule is modelled correctly and immediately in
+    // both paths, so the duplicate dies and board value is unchanged -- which makes the cast a TIE,
+    // not a loss, and a tie-break casts it. MTG_TRACE=legend found 106 real duplicate Hinatas in
+    // 600 games.
+    //
+    // THE WHITELIST IS DELIBERATELY POSITIVE. Only templates that are provably enter-inert are
+    // pruned (VanillaCreature, LordEffect: a body plus a continuous effect, nothing on entry). Any
+    // other card -- notably every `custom` one -- is OFFERED. Enumerating etb_* params to prove
+    // inertness instead would fail the wrong way: miss one field and a genuinely good cast is
+    // pruned. Muxus (etb_reveal_count: a second copy really does fire the reveal) is `custom` and
+    // so is never pruned, which is the behaviour that must not regress.
+    virtual bool OfferDuplicateLegendCast(const GameState& s, int controller,
+                                          const CardDefinition& def) const;
+
     // LandEntersUntapped -- a land that offers "pay a cost, or enter tapped": a shock land
     // (etb_pay_life_to_untap) or a reveal land (etb_untap_reveal_subtypes). `heuristic` carries the
     // engine's answer (shock: pay whenever mana is needed this turn and life allows; reveal: reveal
