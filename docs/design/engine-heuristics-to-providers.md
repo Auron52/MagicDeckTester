@@ -129,13 +129,21 @@ points. That audit found ~13 more, of which these are now handled:
   a per-deck fact that happens to be right for slivers, and `MTG_REPLICATE_TRACE` shows the pool is
   contended, so the hook is the escape hatch for a deck where it is not).
 
-Still engine-owned with no hook: `FindBurnKillTarget`, `FindLifegainRemovalTarget` (which also
-hides a *cast gate* — "don't cast Swords without a Remedy enabler" — inside a targeting helper),
-`FindBestOwnAttacker`, the burn face-vs-creature default, `PerformLightPawsAttach` (a **tutor**,
-while every other tutor is provider-owned), the Retrace discard ("first land in hand order"), the
-Shard Volley sac-a-land, `BounceKarooLand`, `EnforceLegendRule` ("keep the oldest", though CR
-704.5j makes it the controller's choice and copies differ by auras/counters/summoning sickness),
-and the shock/reveal land entry.
+The remaining nine were ported in `7a3d5cd`, so **no decision in the engine now picks among legal
+options with no provider involvement**: `LightPawsAuraCandidates` (the one tutor that did not route
+through a provider), `RetraceDiscardCandidates`, `SacrificeLandCandidates`, `BounceLandCandidates`,
+`LegendKeepIndex`, `LandEntersUntapped`, and the three target helpers
+(`BurnCreatureTargetCandidates`, `LifegainRemovalCandidates`, `OwnPumpTargetCandidates`).
+
+Two deliberate non-moves, both for lockstep reasons:
+
+- The **"only cast Swords while a Remedy enabler is in play" gate** stays inside
+  `FindLifegainRemovalTarget`. It is a castability precondition shared by the enumeration gate, the
+  rollout and the executor; a provider that disagreed with it would desync the three. The hook owns
+  WHICH creature, not WHETHER to cast.
+- `LandEntersUntapped` is routed through the **predicate** (`LandWouldEnterTapped`), not only the
+  real land drop, because enumeration prices a plan's mana off that same function. If the two
+  disagreed, the planned mana and the realised mana would diverge.
 
 ## Status
 
@@ -147,3 +155,10 @@ and the shock/reveal land entry.
 | ETB dig pick | yes (`EtbDigCandidates`) | first-match-in-shuffle-order, **94% of digs have a choice** | **yes — `910a234`, 7/7 seeds, −0.0599** |
 | Goblin Lackey put | yes (`CombatCheatCandidates`) | highest-MV **measured best of 4**; a bad rule costs 1.47 | ranked for it; axis not yet emitted |
 | replicate count | yes (`ReplicateCounts`) | greedy-max right for slivers, per-deck | deliberately not |
+| Light-Paws Aura tutor | yes (`LightPawsAuraCandidates`) | realized-power rank — sound | no |
+| retrace discard | yes (`RetraceDiscardCandidates`) | **first land in hand order — arbitrary** | no |
+| Shard Volley sac-land | yes (`SacrificeLandCandidates`) | tapped-first sound; fallback arbitrary | no |
+| Karoo bounce | yes (`BounceLandCandidates`) | 3-tier weighting — sound | no |
+| legend-rule keep | yes (`LegendKeepIndex`) | **keeps oldest; CR 704.5j makes it a choice** | no |
+| shock/reveal land entry | yes (`LandEntersUntapped`) | pay whenever affordable + needed | no |
+| burn / removal / pump targets | yes (3 hooks) | goldfish-scoped; revisit vs a real opponent | no |
