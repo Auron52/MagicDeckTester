@@ -315,6 +315,21 @@ std::vector<int> DecisionProvider::CombatCheatCandidates(
 {
     const Player& ap = s.players[s.active_player_index];
     const LackeyRank mode = LackeyRankMode();
+    // LETHAL FIRST (MTG_LACKEY_LETHAL, default ON). The put resolves in the combat-DAMAGE step, so a
+    // creature whose ETB deals damage closes the game THIS turn, while any other body cannot attack
+    // until the next one -- a full turn of the primary metric. Param-driven (etb_damage_any), not
+    // card-named, so any deck with an ETB-damage creature in the cheat pool gets it.
+    //
+    // This is an ORDERING key, not a forced choice: it makes the lethal candidate index 0 so the
+    // searched axis always scores it, and the search may still prefer another line.
+    const int opp_life = s.players[1 - s.active_player_index].life;
+    static const bool s_lethal_first = EnvOn("MTG_LACKEY_LETHAL", true);
+    auto lethal_now = [&](int h) -> bool {
+        if (!s_lethal_first) { return false; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[h]);
+        return d != nullptr && d->params.etb_damage_any > 0
+            && d->params.etb_damage_any >= opp_life;
+    };
     // Affordability is only consulted by the `uncast` variant, and it is the expensive part, so it
     // is computed once per call and only when that variant is live.
     ManaPool pool;
@@ -336,7 +351,13 @@ std::vector<int> DecisionProvider::CombatCheatCandidates(
         }
     };
     std::vector<int> out = hand_indices;
-    std::stable_sort(out.begin(), out.end(), [&](int a, int b) { return key(a) < key(b); });
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
+        // Lethal-now outranks every ranking variant, including the anti-heuristic arms, so the
+        // MTG_LACKEY_RANK sweep stays a test of the NON-lethal ordering rather than of this.
+        const bool la = lethal_now(a), lb = lethal_now(b);
+        if (la != lb) { return la; }
+        return key(a) < key(b);
+    });
     return out;
 }
 
