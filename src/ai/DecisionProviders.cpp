@@ -1718,8 +1718,16 @@ bool TreasureHuntProvider::ScryKeepOnTop(const GameState& s, const Card& top_car
 //                 cannot fill is simply given back to whatever lands remain. Differs from rung 7
 //                 in taking a filter as its OWN slot rather than as a preference inside two shared
 //                 untapped slots, and in buying three diggers rather than one or two.
+//   9 islet    -- rung 8 with the Fiery Islet double-count resolved. Islet is BOTH untapped U/R
+//                 mana and a digger, and rung 8 spent a DIG slot on it -- so the hand paid for its
+//                 dig role twice and bought one fewer real cycler. Here it fills the untapped
+//                 non-filter slot instead (the mana it provides is the same either way) and is
+//                 barred from the dig slots, which frees a cycler into the list; and the leftover
+//                 capacity prefers CYCLERS rather than alternating, so the extras keep digging.
+//                 The measured symptom this targets: rung 8 shed MORE cyclers than the simple
+//                 rule, which is the opposite of its intent.
 enum class ThDiscard { Base = 0, Dup = 1, Tapped = 2, NoDig = 3, TapDig = 4, Mono = 5, Mix = 6,
-                       Keep = 7, Shop = 8 };
+                       Keep = 7, Shop = 8, Islet = 9 };
 static ThDiscard ThDiscardVariant()
 {
     static const ThDiscard v = []() -> ThDiscard
@@ -1736,7 +1744,8 @@ static ThDiscard ThDiscardVariant()
             case 5:  return ThDiscard::Mono;
             case 6:  return ThDiscard::Mix;
             case 7:  return ThDiscard::Keep;
-            default: return ThDiscard::Shop;
+            case 8:  return ThDiscard::Shop;
+            default: return ThDiscard::Islet;
         }
     }();
     return v;
@@ -1801,7 +1810,17 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
     //     tapped land. That is the easy mistake here, and it is invisible without this ordering.
     //   * Fiery Islet is the best FIRST digger precisely because it doubles as untapped U/R mana --
     //     a fact about the rest of the keep set, not about the card alone.
+    // keep_slot: 0 == not bought by the list; otherwise the SLOT it filled, 1 = most wanted.
+    // Banding kept lands by this rather than by role is load-bearing: a hand can hold more lands
+    // than the 7-card limit leaves room for even after the list is filled (Treasure Hunt and
+    // Land's Edge are never shed, so the real land budget is 7 minus those), and when the kept set
+    // itself has to be trimmed, the trim MUST follow the list's priority. Banding it by th_role
+    // instead sheds Reliquary Tower first and the diggers second -- almost exactly inverted -- and
+    // that bug, not the ranking, is what the first rung-8 measurement measured.
+    std::vector<int>  keep_slot(static_cast<std::size_t>(n), 0);
+    int next_slot = 0;
     std::vector<char> kept(static_cast<std::size_t>(n), 0);
+    auto take = [&](int i) { if (!kept[i]) { kept[i] = 1; keep_slot[i] = ++next_slot; } };
     // Rung 8 fallback ordering for lands the shopping list did not buy: 0 == not ranked, otherwise
     // smaller == more wanted. Cards ranked here are shed AFTER the unranked surplus, in reverse.
     std::vector<int>  fallback(static_cast<std::size_t>(n), 0);
@@ -1829,6 +1848,14 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
             if (p == nullptr || deplet_i(i) || is_snarl(i)) { return false; }
             return !p->enters_tapped;
         };
+        // Rung 9: a digger that is ALSO untapped mana (Fiery Islet) is bought with the untapped
+        // slot and barred from the dig slots, so the list stops paying for the same card twice.
+        auto islet_i = [&](int i)
+        {
+            const CardParams* p = par(i);
+            return variant >= ThDiscard::Islet && p != nullptr && !p->enters_tapped
+                && (p->cycling_cost.has_value() || p->sacrifice_draw_cost.has_value());
+        };
         // Preference inside the untapped slots: a filter first (Cascade Bluffs over Ferrous Lake),
         // then a dual, then a mono source.
         auto untapped_rank = [&](int i)
@@ -1846,7 +1873,7 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
 
         // Reliquary Tower is never shed, so it is kept outside the quotas.
         for (int i : lands_i) { const CardParams* p = par(i);
-                                if (p != nullptr && p->no_max_hand_size) { kept[i] = 1; } }
+                                if (p != nullptr && p->no_max_hand_size) { take(i); } }
 
         // 1. two untapped sources, best-ranked first.
         std::vector<int> ups;
@@ -1860,17 +1887,22 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
             // a better version of a plain untapped land, it is a different tool, so competing them
             // for the same two slots (rung 7) can end up buying two of one kind.
             bool took_plain = false, took_filter = false;
-            for (int i : ups)
+            // Rung 9 takes the Islet FIRST for the plain untapped slot -- it is the one untapped
+            // source that keeps digging after it is played.
+            std::vector<int> ups2 = ups;
+            std::stable_sort(ups2.begin(), ups2.end(),
+                             [&](int a, int b) { return islet_i(a) > islet_i(b); });
+            for (int i : (variant >= ThDiscard::Islet ? ups2 : ups))
             {
                 const CardParams* p2 = par(i);
                 const bool filt = p2 != nullptr && (p2->is_filter || p2->ramp_filter);
-                if (filt && !took_filter)       { kept[i] = 1; took_filter = true; ++untapped_kept; }
-                else if (!filt && !took_plain)  { kept[i] = 1; took_plain  = true; ++untapped_kept; }
+                if (filt && !took_filter)       { take(i); took_filter = true; ++untapped_kept; }
+                else if (!filt && !took_plain)  { take(i); took_plain  = true; ++untapped_kept; }
             }
         }
         else
         {
-            for (int i : ups) { if (untapped_kept < 2) { kept[i] = 1; ++untapped_kept; } }
+            for (int i : ups) { if (untapped_kept < 2) { take(i); ++untapped_kept; } }
         }
 
         // A Snarl only fills a remaining untapped slot if something we are KEEPING turns it on.
@@ -1890,7 +1922,7 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
                         for (const std::string& want : d->params.etb_untap_reveal_subtypes)
                             if (cs == want) { enabled = true; }
                 }
-                if (enabled) { kept[i] = 1; ++untapped_kept; }
+                if (enabled) { take(i); ++untapped_kept; }
             }
         }
 
@@ -1936,7 +1968,7 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
             bool have_name = false;
             for (int j : lands_i)
             { if (kept[j] && ap.hand[j].m_name == ap.hand[i].m_name) { have_name = true; } }
-            if (!have_name) { kept[i] = 1; }
+            if (!have_name) { take(i); }
         }
 
         // 3. diggers if room remains, in the order they are worth a slot:
@@ -1963,13 +1995,14 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
             return subs.begin() != subs.end() ? 3 : 4;
         };
         std::vector<int> digs_v;
-        for (int i : lands_i) { if (!kept[i] && digs_i(i)) { digs_v.push_back(i); } }
+        for (int i : lands_i)
+        { if (!kept[i] && digs_i(i) && !islet_i(i)) { digs_v.push_back(i); } }
         std::stable_sort(digs_v.begin(), digs_v.end(),
                          [&](int a, int b) { return dig_rank(a) < dig_rank(b); });
         // Three dig slots at rung 8 -- the list is sized to the hand limit, not rationed.
         const int dig_quota = variant >= ThDiscard::Shop ? 3 : (have_engine ? 1 : 2);
         int dig_kept = 0;
-        for (int i : digs_v) { if (dig_kept < dig_quota) { kept[i] = 1; ++dig_kept; } }
+        for (int i : digs_v) { if (dig_kept < dig_quota) { take(i); ++dig_kept; } }
 
         // 4. FALLBACK for slots the hand could not fill (or capacity past the list): alternate
         //    untapped and dig while both remain, then take whatever is left. Alternating matters
@@ -1993,6 +2026,15 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
             // fallback_rank: earlier = more wanted. Interleave, then the remainder, then the rest.
             std::size_t a_i = 0, d_i = 0;
             int order = 0;
+            if (variant >= ThDiscard::Islet)
+            {
+                // Extras go to DIGGERS first, not alternating: the list has already bought the mana
+                // it needs, so spare capacity is worth more as selection than as a fourth land that
+                // taps for the same colours.
+                for (int i : rest_dig) { fallback[i] = ++order; }
+                for (int i : rest_up)  { fallback[i] = ++order; }
+            }
+            else
             while (a_i < rest_up.size() || d_i < rest_dig.size())
             {
                 if (a_i < rest_up.size())  { fallback[rest_up[a_i++]]  = ++order; }
@@ -2024,7 +2066,14 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
         const bool tapped_now = d != nullptr && !depletion && LandWouldEnterTapped(s, *d);
         const int  colors     = p != nullptr ? static_cast<int>(p->produces.size()) : 0;
 
-        if (p != nullptr && p->no_max_hand_size) { return 9; }   // never: it ends this decision
+        // Reliquary Tower is NEVER shed -- it is the card that ends this decision outright. 90 is
+        // above every band any rung can produce (kept tops out at 59, the rung-8 fallback at 18,
+        // surplus at 8), which is the point: this used to return 9, and 9 only means "highest" on
+        // the rung-1 scale. The later rungs widened the range, so the Tower quietly landed in the
+        // MIDDLE of rung 8's fallback band and was shed ahead of any land ranked worse than 9 --
+        // 4 times per 1200 games. A "never" encoded as a magic number is only as durable as the
+        // scale around it; this one is now stated relative to the whole range.
+        if (p != nullptr && p->no_max_hand_size) { return 90; }
 
         if (!is_land)
         {
@@ -2082,7 +2131,9 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
         // not, and the surplus is shed in role order.
         if (variant >= ThDiscard::Keep)
         {
-            if (kept[i]) { return 20 + th_role(c); }
+            // Kept: slot 1 (most wanted) sheds LAST. 60 keeps every kept land above every
+            // fallback and surplus band below.
+            if (kept[i]) { return 60 - std::min(keep_slot[i], 30); }
             if (variant >= ThDiscard::Shop && fallback[i] > 0)
             {
                 // Ranked fallback: wanted-est last to be shed. 19 down to 3, so every fallback land
