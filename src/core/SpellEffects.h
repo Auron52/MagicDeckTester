@@ -1672,13 +1672,32 @@ inline void ApplyTapForTokens(GameState& state, int controller, int source_id)
 inline int CanonicalSacVictim(const GameState& state, int controller, int source_id,
                               const std::string& need_sub)
 {
-    int victim_id = -1; int victim_rank = std::numeric_limits<int>::max();   // lower = more expendable
+    // Expendability heuristic (lower rank = sacrifice FIRST). Base metric is EFFECTIVE power (sac the
+    // weakest), adjusted so we:
+    //   - sac TOKENS and SELF-REPLACING bodies FIRST -- a Goblin token costs ~nothing, and Mogg War
+    //     Marshal (dies -> creates a Goblin token) refills its own body, so saccing it is board-neutral;
+    //   - DEFER (keep) SCALING creatures -- lords that buff/enable the rest of the board (Chieftain/King/
+    //     Rundvelt +1/+1, Warchief cost-reduction) or payoffs that grow with it (Piledriver): losing one
+    //     de-buffs every other Goblin, so they are sacked only when nothing else is left;
+    //   - sac the outlet SOURCE last.
+    // Matters most for the Skirk multi-sac burst, which sacrifices several victims in one turn.
+    int victim_id = -1; int victim_rank = std::numeric_limits<int>::max();
     for (const Permanent& v : state.battlefield)
     {
         if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
         if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
-        int rank = v.is_token ? 0 : (1 + v.card.m_power.value_or(0));   // token first, then weakest
-        if (v.card.m_number == source_id) { rank += 1000; }            // sac the source last
+        int rank = v.EffectivePower();                 // base: sac the weakest first
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(v.card);
+        const bool self_replacing = d && d->params.dies_trigger_creates_tokens > 0
+                                      && !d->params.dies_token_subtypes.empty();     // Mogg War Marshal
+        const bool scaling = d && (
+              (!d->params.subtypes_affected.empty()
+               && (d->params.power_bonus > 0 || d->params.tough_bonus > 0
+                   || !d->params.reduces_spell_subtype.empty()))                     // stat / tempo lord
+              || d->params.attack_pump_power_per_other_matching > 0);                // Piledriver-style payoff
+        if (v.is_token || self_replacing) { rank -= 1000; }    // tokens & Mogg: most expendable
+        if (scaling)                      { rank += 1000; }    // lords / scaling payoffs: keep (defer)
+        if (v.card.m_number == source_id) { rank += 100000; }  // sac the source last
         if (rank < victim_rank) { victim_rank = rank; victim_id = v.card.m_number; }
     }
     return victim_id;
@@ -2187,6 +2206,39 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         const bool skirk = d->params.sac_creature_outlet && !d->params.sac_outlet_add_mana_color.empty();
         if (!lotus && !skirk) { return; }
         if (lotus && p.tapped)  { return; }   // Lotus taps as part of the cost; a tapped one can't
+        // Skirk MULTI-SAC BURST: the repeatable "Sacrifice a Goblin: Add {R}" can ramp in one turn.
+        // ritual_float carries the TOTAL floated (k * per-sac), so a burst is `amount > per`. Sac k
+        // canonical Goblins (token/weakest first, the source LAST -- so a full sac-all sacs Skirk itself
+        // only on the final activation, which is rules-legal), floating `per` and firing OnCreatureDies
+        // each (Pashalik ping / Rundvelt impulse / Mogg death token per Goblin). count==1 falls through
+        // to the single-sac path below (BYTE-IDENTICAL). Shared by executor + rollout (every caller passes
+        // a.ritual_float), so lockstep is automatic.
+        if (skirk)
+        {
+            const int per = std::max(1, d->params.sac_outlet_add_mana_amount);
+            const int count = amount / per;
+            if (count > 1)
+            {
+                for (int n = 0; n < count; ++n)
+                {
+                    const int vid = CanonicalSacVictim(state, controller, sac_source_id,
+                                                       d->params.sac_creature_requires_subtype);
+                    if (vid < 0) { break; }   // ran out of Goblins to sacrifice
+                    AddChosenColorFloat(state, color, per);
+                    for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+                    {
+                        Permanent& q = state.battlefield[j];
+                        if (q.controller_index != controller || q.card.m_number != vid) { continue; }
+                        const Card dead = q.card;
+                        state.players[controller].graveyard.push_back(dead);
+                        state.battlefield.erase(state.battlefield.begin() + j);
+                        OnCreatureDies(state, controller, dead);   // per-sac death triggers (lockstep)
+                        break;
+                    }
+                }
+                return;
+            }
+        }
         AddChosenColorFloat(state, color, amount);   // float the chosen colour into state.floating_mana
         if (g_play_event_sink)   // nulled during search/rollout -> byte-identical
         {

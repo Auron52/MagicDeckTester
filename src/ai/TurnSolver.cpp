@@ -2353,19 +2353,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             const std::string& need_sub = sd->params.sac_creature_requires_subtype;
             // BOUNDED victim selection (heuristic narrowing -- NOT one action per victim, which makes
             // the O(2^candidates) subset search explode on a wide Goblin board / Krenko tokens and
-            // hangs). The victims are fungible for a sac outlet, so pick ONE canonical victim: prefer a
-            // TOKEN (most expendable), else the lowest-power matching Goblin that is NOT the outlet
-            // source, else the source itself. This emits ONE action per outlet -- linear, not
-            // exponential. (Multi-sac-for-lethal as a searched COUNT is a documented refinement.)
-            int victim_id = -1; int victim_rank = std::numeric_limits<int>::max();   // lower = expendable
-            for (const Permanent& v : state.battlefield)
-            {
-                if (v.controller_index != state.active_player_index || !v.card.IsCreature()) { continue; }
-                if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
-                int rank = v.is_token ? 0 : (1 + v.card.m_power.value_or(0));   // token first, then weakest
-                if (v.card.m_number == src.card.m_number) { rank += 1000; }     // sac the source last
-                if (rank < victim_rank) { victim_rank = rank; victim_id = v.card.m_number; }
-            }
+            // hangs). The victims are fungible for a sac outlet, so pick ONE canonical victim via the
+            // shared expendability heuristic (tokens/Mogg first, lords/scaling deferred, source last --
+            // see CanonicalSacVictim). This emits ONE action per outlet -- linear, not exponential, and
+            // keeps the single-sac pick in lockstep with the Skirk multi-sac burst's apply-time picks.
+            const int victim_id = CanonicalSacVictim(state, state.active_player_index,
+                                                     src.card.m_number, need_sub);
             if (victim_id < 0) { continue; }   // no legal Goblin to sacrifice
             Action a;
             a.card_name      = src.card.m_name;
@@ -2394,6 +2387,52 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                     + sd->params.sac_outlet_creates_tokens) * DMG;
             }
             actions.push_back(std::move(a));
+
+            // Multi-sac MANA BURST (Skirk Prospector): "Sacrifice a Goblin: Add {R}" is REPEATABLE, so
+            // the single-sac action alone under-models it (1 mana/turn) -- the ramp-into-Muxus/Krenko line
+            // is impossible for the search. Emit ONE extra bounded burst: sac k Goblins for k*{R}, where k
+            // = the shortfall to the most expensive hand spell newly reachable with the sacs (capped at
+            // victims). Demand-driven -> one action, no O(2^victims) blowup. Mutually exclusive with the
+            // sac-1 action (same-source SacForMana reject), so the search picks none / sac-1 / sac-k.
+            // ritual_float=k*per credits the mana solver; ApplySacForMana derives the sac COUNT from it.
+            if (is_mana_outlet)
+            {
+                const int per = std::max(1, sd->params.sac_outlet_add_mana_amount);
+                int V = 0;
+                for (const Permanent& v : state.battlefield)
+                {
+                    if (v.controller_index != state.active_player_index || !v.card.IsCreature()) { continue; }
+                    if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
+                    ++V;
+                }
+                const int base = AvailableManaPool(state).Total();   // mana this turn WITHOUT Skirk
+                int reach_mv = 0;   // most expensive hand spell newly reachable with <= V sacs
+                for (const Card& hc : ap.hand)
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (!hd || hd->card.IsLand()) { continue; }
+                    const int mv = hd->card.m_mana_cost.ManaValue();
+                    if (mv > base && mv <= base + V * per && mv > reach_mv) { reach_mv = mv; }
+                }
+                int k = (reach_mv > base) ? (reach_mv - base + per - 1) / per : 0;   // sacs to reach it
+                if (k > V) { k = V; }
+                if (k >= 2)
+                {
+                    Action b;
+                    b.kind               = Action::Kind::SacForMana;
+                    b.card_name          = src.card.m_name;
+                    b.hand_index         = -1;
+                    b.sac_source_id      = src.card.m_number;
+                    b.sac_victim_id      = 0;                 // canonical victims chosen at apply
+                    b.sac_count          = k;
+                    b.cost               = ManaCost{};
+                    b.ritual_float       = k * per;           // k*{R}; apply derives the sac count
+                    b.chosen_float_color = sd->params.sac_outlet_add_mana_color;
+                    b.is_noncreature     = true;
+                    b.eval               = 0;
+                    actions.push_back(std::move(b));
+                }
+            }
 
             // Multi-sac BURST (searched COUNT, bounded to ONE extra action so no O(2^victims) blowup):
             // for a DAMAGE outlet (Siege-Gang) also offer saccing MULTIPLE Goblins in one activation for
@@ -8186,7 +8225,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // colour in the signature so the dedup never collapses the colour decision (core invariant).
                 case Action::Kind::SacForMana:
                     msf.push_back(act.card_name + "#" + act.chosen_float_color
-                                  + "#" + std::to_string(act.sac_source_id)); break;
+                                  + "#" + std::to_string(act.sac_source_id)
+                                  + "#" + std::to_string(act.ritual_float)); break;   // sac-1 vs sac-k burst distinct
                 case Action::Kind::DigDraw:  break;  // human-play only; not a plan.actions signature key
                 case Action::Kind::PlayLand: break;  // never appears in plan.actions
                 // Krenko tap: key on which source so a tap plan is distinct from a no-tap plan.
