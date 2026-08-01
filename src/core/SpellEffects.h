@@ -2049,9 +2049,16 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
                     affordable += ap.hand[ci].m_name.str();
                 }
             }
-            std::fprintf(stderr, "%s creatures=%d muxus_in_lib=%d opplife=%d castable=%s\n",
+            // Land count -> next turn's mana ceiling (lands + 1 land drop). The Lackey slot's real
+            // opportunity cost is not "can I cast this NOW" but "will I get it anyway soon": a card
+            // at or below next turn's mana arrives regardless, so spending the free put on it wins
+            // only a turn of tempo, while a card above that ceiling is otherwise unreachable.
+            int my_lands = 0;
+            for (const Permanent& q : state.battlefield)
+            { if (q.controller_index == controller && q.card.IsLand()) { ++my_lands; } }
+            std::fprintf(stderr, "%s creatures=%d muxus_in_lib=%d opplife=%d lands=%d castable=%s\n",
                          line.c_str(), my_creatures, muxus_left,
-                         state.players[1 - controller].life, affordable.c_str());
+                         state.players[1 - controller].life, my_lands, affordable.c_str());
         }
 
         // Human play (--claude-play/viewer): let the player pick WHICH Goblin permanent to put, or
