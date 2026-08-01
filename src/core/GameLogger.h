@@ -218,6 +218,12 @@ extern thread_local GameLogger* g_reveal_logger;
 // game logic may branch on it, or the search and the real game would stop being the same function.
 extern thread_local bool g_real_resolution;
 
+// True only while Land's Edge is asking the provider WHICH lands to burn. The pitch reuses the
+// cleanup-discard ranking hook, so without this the MTG_TRACE=discard instrument counts every
+// pitch as a cleanup discard -- a doubled, tower-heavy distribution no cleanup ever produced.
+// DIAGNOSTIC USE ONLY, same contract as g_real_resolution: no game logic may branch on it.
+extern thread_local bool g_le_pitch_ranking;
+
 // ---- Human-play "look at the top N" resolution chooser ---------------------------------
 // Scry / Surveil / Ponder-style reorder all resolve a "look at the top N, decide their
 // disposition" sub-decision. Autonomously the provider heuristic (ScryKeepOnTop / KeepReorderTop)

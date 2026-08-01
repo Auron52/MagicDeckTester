@@ -246,7 +246,7 @@ inline std::vector<int> CleanupDiscardRankingWithOrder(
     // trace in the single-index helper sees nothing a goldfish run does. Gated on g_real_resolution
     // (every rollout scope clears it) so a searched run reports the discards the GAME actually
     // made, not the millions the search imagined.
-    if (TRACE_ON("discard") && g_real_resolution && !out.empty())
+    if (TRACE_ON("discard") && g_real_resolution && !g_le_pitch_ranking && !out.empty())
     {
         int lip = 0, lands_in_hand = 0;
         for (const Permanent& perm : state.battlefield)
@@ -286,7 +286,13 @@ inline std::vector<int> CleanupDiscardRanking(const GameState& state,
 // Returns hand indices, at most `count`. The ranking is filtered to LANDS (Land's Edge can only
 // discard a land) and topped up in hand order if the provider named fewer lands than needed --
 // the outlet may legally pitch any land, so a short ranking must not reduce the damage.
-// MTG_LE_RANKED_PITCH=0 restores the historical hand-order pitch (byte-identical A/B).
+// ADOPTED. MTG_LE_RANKED_PITCH=0 restores the historical hand-order pitch (byte-identical A/B).
+// Worth -0.0001 at d0 / -0.0005 at d3 on top of the rung-9 ranking (320k games/arm, fresh seeds),
+// and inert on top of rung 1 -- that pairing is the control, since rung 1 names only SPARE cards
+// so ordinary lands fall through it in hand order and the pitch has no order to apply. The effect
+// is small for a structural reason worth knowing before optimising here: the outlet burns EVERY
+// land in hand ~97.6% of the time, and damage is per land, so the order is unobservable unless
+// the pitch is a strict subset. See the rung table in DecisionProviders.cpp.
 inline std::vector<int> LandsEdgePitchOrder(const GameState& state,
                                             const std::vector<std::string>* required_pieces,
                                             int count)
@@ -298,10 +304,18 @@ inline std::vector<int> LandsEdgePitchOrder(const GameState& state,
     auto usable = [&](int i)
     { return i >= 0 && i < n && !ap.hand[i].m_is_staged && CleanupDiscardIsLand(ap.hand[i]); };
 
-    static const bool s_ranked = EnvOn("MTG_LE_RANKED_PITCH");   // DEFAULT OFF pending measurement
+    static const bool s_ranked = EnvOn("MTG_LE_RANKED_PITCH", true);   // ADOPTED -- see the header
     if (s_ranked)
     {
-        for (int i : ResolveProvider(state).CleanupDiscardCandidates(state, required_pieces))
+        // The pitch asks the provider the same question the CLEANUP discard asks, through the same
+        // hook -- so without this guard every pitch also emits a [discard] trace line and the
+        // cleanup instrument reads a doubled, tower-heavy distribution that no cleanup ever made.
+        // Scoped rather than a state pin: the hook returns before this function does.
+        g_le_pitch_ranking = true;
+        const std::vector<int> ranked =
+            ResolveProvider(state).CleanupDiscardCandidates(state, required_pieces);
+        g_le_pitch_ranking = false;
+        for (int i : ranked)
         {
             if (static_cast<int>(out.size()) >= count) { break; }
             if (usable(i)) { out.push_back(i); }
@@ -311,6 +325,35 @@ inline std::vector<int> LandsEdgePitchOrder(const GameState& state,
     {
         if (!usable(i)) { continue; }
         if (std::find(out.begin(), out.end(), i) == out.end()) { out.push_back(i); }
+    }
+
+    // MTG_TRACE=lepitch: is this decision REAL? A ranked pitch can only change a game when the
+    // outlet takes a STRICT SUBSET of the lands in hand -- pitch everything and the set is the
+    // same set whatever order names it, so the ranking is unobservable. That distinction is
+    // invisible in an avg-win-turn delta (it reads as "no effect", exactly like a rule that had
+    // its chance and declined it), and this repo has twice believed such a null. `sub` counts the
+    // calls that could differ; `diffset` counts the calls that actually DID pick a different set
+    // than hand order would have. Gated on g_real_resolution so a searched run reports the pitches
+    // the GAME made, not the millions the rollout imagined.
+    if (TRACE_ON("lepitch") && g_real_resolution)
+    {
+        int avail = 0;
+        for (int i = 0; i < n; ++i) { if (usable(i)) { ++avail; } }
+        std::vector<int> plain;
+        for (int i = 0; i < n && static_cast<int>(plain.size()) < count; ++i)
+        { if (usable(i)) { plain.push_back(i); } }
+        std::vector<int> a = out, b = plain;
+        std::sort(a.begin(), a.end());
+        std::sort(b.begin(), b.end());
+        // The NAMES matter as much as the counts. Avg win turn cannot resolve an effect this rare,
+        // but "which cards did the outlet actually burn" is measurable at any sample size -- so a
+        // claim like "we are pitching the cycling lands we needed" gets tested directly rather than
+        // inferred from a null. Names are of the cards BURNED, comma-separated.
+        std::string burned;
+        for (int i : out)
+        { burned += (burned.empty() ? "" : ","); burned += ap.hand[i].m_name.str(); }
+        TRACE("lepitch", "count=%d avail=%d sub=%d diffset=%d burned=%s", count, avail,
+              count < avail ? 1 : 0, a != b ? 1 : 0, burned.c_str());
     }
     return out;
 }

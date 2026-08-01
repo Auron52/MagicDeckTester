@@ -15,6 +15,7 @@ thread_local TopChooser*    g_play_top_chooser = nullptr;
 // resolution (the default, byte-identical). See SpellEffects.h ChooseTopDisposition.
 thread_local int            g_scripted_top_choice = -1;
 thread_local bool           g_real_resolution = true;   // cleared by RevealLogPause (diagnostic only)
+thread_local bool           g_le_pitch_ranking = false; // set by LandsEdgePitchOrder (diagnostic only)
 thread_local int            g_scripted_etbdig_choice = -1;
 thread_local int            g_scripted_reorder_choice = -1;
 thread_local TargetChooser* g_play_target_chooser = nullptr;
