@@ -2011,6 +2011,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
     };
 
+    // Same pin the search applied when it scored this plan (Plan::etbdig_choice), so the realised
+    // ETB dig takes the card the line assumed. Executor/rollout lockstep: without it the search
+    // would score one Knight and the real game would put a different one into hand. Scoped to the
+    // rest of the phase; the first dig consumes it. -1 (no variant chosen) is inert.
+    ScriptedEtbDig _sed_exec(plan.etbdig_choice);
+
     // Cast a spell from hand by name.
     auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "",
                             int chosen_x = 0, int own_targets = 0, int ponder_keep = -1,

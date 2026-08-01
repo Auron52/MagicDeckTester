@@ -425,6 +425,30 @@ bool PerformEtbDig(GameState& state, int controller_index,
         ResolveProvider(state).EtbDigCandidates(state, controller_index, examined, legal);
     int take = ranked.empty() ? -1 : ranked.front();
 
+    // SEARCHED pick: a plan variant may pin an index into `ranked` (consumed by this dig). Clamped
+    // rather than dropped, because the enumerator sizes the axis off the library as it stood at
+    // enumeration time -- an earlier cantrip in the same plan can shift the top N, leaving a pinned
+    // index past the end. Clamping makes that variant a duplicate of the last one (identical state
+    // -> the search tie-breaks to the first, which is the heuristic) instead of a silent no-dig.
+    if (g_scripted_etbdig_choice >= 0 && !ranked.empty())
+    {
+        const int k = g_scripted_etbdig_choice;
+        take = ranked[std::min<std::size_t>(static_cast<std::size_t>(k), ranked.size() - 1)];
+    }
+    g_scripted_etbdig_choice = -1;   // consumed by this dig (see the header note)
+
+    // MTG_ETBDIG_TRACE: DIAGNOSTIC (no play change). Sizes the decision -- how many legal matches the
+    // dig actually chooses among. One match is forced (no decision to make); the arbitrary-pick
+    // defect only bites when there are two or more, and the count is also the branching factor a
+    // searched axis would cost.
+    static const bool s_dig_trace = EnvOn("MTG_ETBDIG_TRACE");
+    if (s_dig_trace)
+    {
+        std::fprintf(stderr, "[etbdig] turn=%d looked=%d legal=%d\n",
+                     state.turn_number, static_cast<int>(examined.size()),
+                     static_cast<int>(legal.size()));
+    }
+
     // Human play: with at least one legal candidate, let the player choose WHICH match enters hand
     // (or take nothing). Nulled by RevealLogPause for search/rollout, so this never fires during
     // hypothetical scoring -- only the real ETB. An out-of-range reply falls back to the heuristic.

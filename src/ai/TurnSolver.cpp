@@ -1354,6 +1354,54 @@ static std::size_t TutorAxisWidth()
     return w;
 }
 
+// SEARCHED ETB-DIG PICK (Acclaimed Contender). Same additive post-dedup axis as the tutor target:
+// the dug card goes to HAND and cannot be cast this turn, so the pick does not change what the plan
+// affords and every variant shares a cast-name signature -- which is exactly why the dedup inside
+// EnumeratePlans used to discard all but the provider's first pick. DEFAULT ON; =0 restores the
+// pure heuristic.
+static bool EtbDigAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_ETBDIG_AXIS", true);
+    return on;
+}
+// How many dig candidates the axis scores, INCLUDING the provider's best (so 1 == heuristic only).
+// DEFAULT 3: MTG_ETBDIG_TRACE over 200 Knights games measured the legal-match count at 5.9% one,
+// 60.0% two, 6.9% three, 23.4% four, 3.7% five (mean 2.6), so 3 covers the whole distribution up to
+// the tail while keeping the common two-match case exact.
+static std::size_t EtbDigAxisWidth()
+{
+    static const std::size_t w = []() -> std::size_t
+    {
+        const char* v = std::getenv("MTG_ETBDIG_WIDTH");
+        if (v == nullptr || *v == '\0') { return 3; }
+        const int n = std::atoi(v);
+        return n < 1 ? 1 : static_cast<std::size_t>(n);
+    }();
+    return w;
+}
+
+// How many legal dig matches the top `pp.etb_dig_count` of the library holds RIGHT NOW. Used only to
+// SIZE the axis at enumeration time; the real candidate list is rebuilt at resolution (an earlier
+// cantrip in the same plan can shift the top N), and the pin clamps if this over-counts.
+static std::size_t EtbDigCandidateCountNow(const GameState& state, const CardParams& pp)
+{
+    const Player& ap = state.players[state.active_player_index];
+    const int n = std::min(pp.etb_dig_count, static_cast<int>(ap.library.size()));
+    std::size_t matches = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
+        const SubtypeSet& subs = d ? d->card.m_subtypes : ap.library[i].m_subtypes;
+        for (const std::string& want : pp.etb_dig_subtypes)
+        {
+            bool match = false;
+            for (const std::string& cs : subs) { if (cs == want) { match = true; break; } }
+            if (match) { ++matches; break; }
+        }
+    }
+    return matches;
+}
+
 static int BpSearchDepth()
 {
     static const int d = []() -> int
@@ -4964,6 +5012,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     PROF_INC(applyplan_calls);
     Player& ap  = state.ActivePlayer();
     int opp_idx = 1 - state.active_player_index;
+
+    // Pin this plan variant's searched ETB-dig pick (Plan::etbdig_choice) for the whole apply; the
+    // first dig consumes it and any later dig falls back to the provider's ranked default. Scoped,
+    // so a nested breakpoint re-solve restores the outer pin if it has not fired yet. -1 is inert.
+    ScriptedEtbDig _sed(plan.etbdig_choice);
 
     // Commit-the-line recording (out_breakpoint != null, set only when building the
     // committed line): capture the casts each draw-breakpoint re-solve makes so the
@@ -9662,6 +9715,46 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                     extra.push_back(std::move(v));
                 }
                 break;   // vary ONE tutor per variant; a second tutor keeps its heuristic target
+            }
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+
+    // SEARCHED ETB-DIG PICK -- the same post-dedup fan-out as the tutor target above, for the same
+    // reason: the pick is cost-neutral, so every variant shares a cast-name signature and the dedup
+    // inside EnumeratePlans kept only the provider's first candidate. The base rule it replaces is
+    // "first legal match in LOOK order", i.e. library order -- an arbitrary pick among the matches,
+    // live in 94% of digs (MTG_ETBDIG_TRACE, 200 Knights games).
+    //
+    // Why the axis loses nothing this turn: the dug card enters HAND, and an ETB dig is not one of
+    // the five breakpoint sites, so no re-solve follows and the card cannot be cast this turn. The
+    // pick therefore cannot interact with the rest of this turn's subset -- the condition that makes
+    // a second axis equivalent to the cross product rather than an approximation of it.
+    if (EtbDigAxisEnabled() && EtbDigAxisWidth() > 1 && !HumanPlayActive())
+    {
+        std::vector<TurnSolver::Plan> extra;
+        for (const TurnSolver::Plan& p : all)
+        {
+            // Base plans only -- one axis at a time, so cost stays additive (same trade as scry).
+            if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0) { continue; }
+            for (const Action& act : p.actions)
+            {
+                if (act.kind != Action::Kind::CastFromHand
+                    && act.kind != Action::Kind::ActivateVial) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
+                if (d == nullptr || d->params.etb_dig_count <= 0) { continue; }
+                const std::size_t cands_now = EtbDigCandidateCountNow(state, d->params);
+                const std::size_t k = std::min(cands_now, EtbDigAxisWidth());
+                TRACE("etbdig", "T%d %s cands_now=%zu -> %zu variants",
+                      state.turn_number, act.card_name.c_str(), cands_now, k > 0 ? k - 1 : 0);
+                for (std::size_t c = 1; c < k; ++c)
+                {
+                    TurnSolver::Plan v = p;
+                    v.etbdig_choice = static_cast<int>(c);
+                    extra.push_back(std::move(v));
+                }
+                break;   // vary ONE dig per variant; a second dig keeps its ranked default
             }
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
