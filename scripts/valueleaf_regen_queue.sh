@@ -148,27 +148,39 @@ d_rows() {   # key dir stem K rollout
         log "$key: $r rows / $CAL_GAMES games in $((SECONDS-t0))s -> $(tr '\n' ' ' < "$VLQ/$key.calibration")"
         mark "${key}_10_cal"
     fi
-    # TOP-UP LOOP. rows/game measured on a short calibration slice OVER-ESTIMATES the real yield --
-    # the sample is biased toward short games, and long games do not produce proportionally more rows.
-    # So a single sized dump undershoots (measured on auras: 4.875 rows/game predicted 405, got 341).
-    # Re-measure from the actual yield each round and top up. Each round is ONE pooled batch, so this
-    # is not the forbidden loop-of-small-invocations; in the normal case it runs once or twice.
-    # BASE advances past everything already dumped so no round can replay another's games.
-    local have rpg need base=40040 round=0 games_done=0
+    # TOP-UP LOOP -- TAIL-BOUNDED. rows/game from a short calibration slice OVER-ESTIMATES the true
+    # yield (the sample is biased toward short games), so one sized dump undershoots: measured on auras,
+    # 4.875 rows/game predicted 405 and produced 341. The naive fix -- keep topping up until the target
+    # is met -- REINTRODUCES THE EXACT TAIL the pooled batch exists to remove, because ROUNDS ARE
+    # BARRIERS: round N+1 cannot start until round N's SLOWEST game finishes, and the rounds shrink fast
+    # (auras went 75 -> 13 -> 2 games). A 13-game round on a deck with a pathological-game tail means
+    # hours with 23 of 24 cores idle -- the very failure documented in the batch-dump header. So:
+    #   * oversize each round by MARGIN so one round normally OVERSHOOTS instead of iterating,
+    #   * cap at 2 rounds, and
+    #   * stop once within SHORTFALL_OK of the target -- the last few percent of rows are worth far
+    #     less than another round's tail, and the trainer floor is half the target anyway.
+    # Overshooting is free: the extra games ride in the SAME pooled batch, so they add no tail at all.
+    local MARGIN=13 SHORTFALL_OK=10          # MARGIN/10 = 1.3x sizing; accept landing within 10%
+    local have rpg need base=40040 round=0 games_done=0 floor_ok
+    floor_ok=$(( ROW_TARGET - ROW_TARGET * SHORTFALL_OK / 100 ))
     while :; do
         have=$(grep -vc '^#' "$rows" 2>/dev/null || echo 0)
-        [ "$have" -ge "$ROW_TARGET" ] && break
-        if [ "$round" -ge 6 ]; then
-            log "$key: STOPPING top-up at $have/$ROW_TARGET rows after $round rounds (diminishing yield)"
+        if [ "$have" -ge "$floor_ok" ]; then
+            [ "$have" -lt "$ROW_TARGET" ] && log "$key: $have rows is within ${SHORTFALL_OK}% of $ROW_TARGET -- stopping rather than paying another round's tail"
             break
         fi
-        # Yield estimate: the observed rows/game once we have real dump data, else the calibration.
+        if [ "$round" -ge 2 ]; then
+            log "$key: STOPPING top-up at $have/$ROW_TARGET rows after $round rounds (another round costs a full tail for few rows)"
+            break
+        fi
+        # Yield estimate: observed rows/game once there is real dump data, else the calibration.
         rpg=$(awk -v h="$have" -v g="$games_done" -v c="$(sed -n 's/^rows_per_game=//p' "$VLQ/$key.calibration")" \
               'BEGIN{print (g>0 && h>0) ? h/g : c}')
-        need=$(awk -v t="$ROW_TARGET" -v h="$have" -v r="$rpg" 'BEGIN{n=(t-h)/r; print (n<1?1:int(n+0.999))}')
+        need=$(awk -v t="$ROW_TARGET" -v h="$have" -v r="$rpg" -v m="$MARGIN" \
+               'BEGIN{n=(t-h)/r*m/10; print (n<1?1:int(n+0.999))}')
         local eta; eta=$(awk -v n="$need" -v f="$VLQ/$key.calibration" \
             'BEGIN{while((getline l < f)>0) if (l ~ /^sec_per_game=/){split(l,a,"=");printf "%.1f", n*a[2]/3600}}')
-        log "$key: round $round -- $have/$ROW_TARGET rows; queueing $need games (yield $rpg rows/game, rough ETA ${eta}h)"
+        log "$key: round $round -- $have/$ROW_TARGET rows; queueing $need games (yield $rpg rows/game, ${MARGIN}/10 margin, rough ETA ${eta}h)"
         K=$K ROLLOUT=$ro bash scripts/valueleaf_row_dump.sh "$dir" "$stem" "$need" "$rows" "$base" \
             >> "$VLQ/${key}_dump.log" 2>&1
         base=$(( base + need + 1000 ))     # margin so consecutive rounds cannot overlap
