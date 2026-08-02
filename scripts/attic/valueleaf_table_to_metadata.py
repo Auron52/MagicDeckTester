@@ -220,15 +220,58 @@ def training_adequacy(H, V, xover, hgames_of, vgames, min_games, band=0.03, conv
     return warns, detail
 
 
-def write_deck(block, tol, offset, margin, dry, scalar_cap=5, set_esc_cap=True):
+def completeness_error(deck, V, trust_depth, no_fallback, h_conv, tol, target_depth, conv_eps=0.005):
+    """Return a human-readable reason string iff this table is INCONCLUSIVE -- i.e. it is NOT safe to write
+    the derived scalars because the value ladder was TRUNCATED before it either converged or was proven to
+    diverge. This is the guard that would have caught the 2026-07 goblins bug (V ladder stopped at V5 while
+    still descending, so value_trust_depth came out UNSET and the engine silently escalated-and-discarded at
+    the play depth). Returns None (OK to write) when the table is conclusive.
+
+    A table is INCONCLUSIVE iff trust_depth is UNSET *and* the leaf is not classified no_fallback *and* the
+    deepest measured value cell is STILL DESCENDING (V_top < V_prev - conv_eps). Descending = a deeper cell
+    would likely be lower, possibly crossing `tol` and setting a real trust depth -- so 'UNSET' is unearned.
+    A leaf that has FLATTENED above h_conv (antilife, TH) is a genuine never-trust state and passes. A leaf
+    that reaches tol (trust set) or is provably far (no_fallback) passes. Also flags a ladder that does not
+    reach the deck's play target_depth (the crossover then can't cover the depth play actually commits at)."""
+    vdall = sorted(V)
+    reasons = []
+    if target_depth and max(vdall) < target_depth:
+        reasons.append("V ladder tops out at V%d but play searches to target_depth=%d -- the table does not "
+                       "cover the play depth; extend --vdepths to >= %d" % (max(vdall), target_depth, target_depth))
+    if trust_depth is None and not no_fallback and len(vdall) >= 2:
+        vtop, vprev = V[vdall[-1]], V[vdall[-2]]
+        if vtop < vprev - conv_eps:
+            reasons.append("value_trust_depth is UNSET and the leaf is not no_fallback, yet V%d=%.4f is still "
+                           "DESCENDING from V%d=%.4f (gap to h_conv=%.4f is %.4f) -- the ladder is TRUNCATED "
+                           "before it converged; a deeper cell would likely cross tol=%.4f and set a real "
+                           "trust depth. Extend --vdepths deeper (or pass --allow-partial if this UNSET is "
+                           "intentional)." % (vdall[-1], vtop, vdall[-2], vprev, h_conv, vtop - h_conv, tol))
+    return "; ".join(reasons) if reasons else None
+
+
+def write_deck(block, tol, offset, margin, dry, scalar_cap=None, set_esc_cap=True, allow_partial=False):
     deck = block["deck"]
     prof = NAME2VALUE.get(deck)
     if prof is None:
-        print("  %-9s SKIP (no metadata path mapped)" % deck); return
+        print("  %-9s SKIP (no metadata path mapped)" % deck); return True
     H, V, meta = block["H"], block["V"], block["meta"]
     if not H or not V:
-        print("  %-9s SKIP (log block missing H or V rows)" % deck); return
+        print("  %-9s SKIP (log block missing H or V rows)" % deck); return True
+    # Resolve the play target_depth from the EXISTING profile (used to auto-cap the scalars AND to guard
+    # ladder coverage). Auto-cap = the deck's search depth: the shipped default of 5 silently under-capped
+    # target_depth=6 decks (burn/goblins), excluding V6 from the scalar derivation -- part of the goblins bug.
+    _ep = json.load(open(prof), object_pairs_hook=collections.OrderedDict)
+    _vp = _ep.get("value_play") if isinstance(_ep.get("value_play"), dict) else {}
+    target_depth = _vp.get("target_depth")
+    if scalar_cap is None:
+        scalar_cap = int(target_depth) if target_depth else 5
     h_conv, trust_depth, no_fallback, ref_h, hd, vd, top_v = derive(H, V, tol, offset, margin, scalar_cap)
+    problem = completeness_error(deck, V, trust_depth, no_fallback, h_conv, tol, target_depth)
+    if problem and not allow_partial:
+        print("  %-9s ✗ REFUSING TO WRITE (incomplete/inconclusive table): %s" % (deck, problem))
+        return False
+    if problem:
+        print("  %-9s ⚠ writing PARTIAL table (--allow-partial): %s" % (deck, problem))
     xover = crossover(H, V)   # {committed_depth c: hc*[c]} -- the DERIVED runtime fallback rule
     warns = monotonicity_flags(H, V)   # deeper-is-worse anomalies (noise or search pathology)
 
@@ -238,7 +281,7 @@ def write_deck(block, tol, offset, margin, dry, scalar_cap=5, set_esc_cap=True):
     # manual_overrides = {"<committed_depth>": {"from": <derived>, "to": <forced>, "reason": "..."}}. The engine
     # reads take_heuristic_at_hdepth (= derived with overrides applied); derived_take_heuristic_at_hdepth keeps
     # the untouched derivation visible for audit. Empty overrides => byte-identical to before (no extra keys).
-    existing_prof = json.load(open(prof), object_pairs_hook=collections.OrderedDict)
+    existing_prof = _ep
     ex_xo = existing_prof.get("value_fallback_crossover")
     manual = (ex_xo.get("manual_overrides") if isinstance(ex_xo, dict) else None) or {}
     cdepths = list(xover.keys())
@@ -324,6 +367,7 @@ def write_deck(block, tol, offset, margin, dry, scalar_cap=5, set_esc_cap=True):
     if not dry:
         # Match the trained sidecar's compact single-line format (default separators) so the diff is minimal.
         json.dump(nd, open(prof, "w"))
+    return True
 
 
 def main():
@@ -335,10 +379,17 @@ def main():
                     help="take-crossover offset: the deepest leaf (d) is credited against heuristic at d-offset")
     ap.add_argument("--margin", type=float, default=0.02,
                     help="min LP by which V_top must exceed its credited heuristic to force no_fallback")
-    ap.add_argument("--scalar-max-depth", type=int, default=5,
+    ap.add_argument("--scalar-max-depth", type=int, default=None,
                     help="cap for the PLAY scalars (h_conv/trust_depth/no_fallback): use only depths <= this "
                          "(the in-play search depth). Deeper cells still extend the table+crossover but do not "
-                         "move the escalation gate. Default 5 (shipped search depth).")
+                         "move the escalation gate. DEFAULT: auto = the deck's value_play.target_depth (falls "
+                         "back to 5). Auto-capping stops the old default of 5 from silently under-capping "
+                         "target_depth=6 decks and excluding V6 from the derivation.")
+    ap.add_argument("--allow-partial", action="store_true",
+                    help="downgrade the completeness guard from an ERROR to a warning and write anyway. The "
+                         "guard REFUSES to write a table whose value ladder was truncated before it converged "
+                         "(trust UNSET + not no_fallback + deepest V still descending) or that does not reach "
+                         "the deck's play target_depth. Use ONLY when the UNSET/partial state is intentional.")
     ap.add_argument("--average-seeds", action="store_true",
                     help="AVERAGE per-depth cells instead of latest-wins -- for PER-SEED incremental logs "
                          "(valueleaf_incremental.py emits one block per (seed,depth)). Do NOT use for the "
@@ -355,11 +406,16 @@ def main():
     want = args.decks or list(blocks)
     print("=== value-leaf table -> metadata  (tol=%.4f offset=%d margin=%.3f%s) from %s ==="
           % (args.tol, args.offset, args.margin, "  [DRY-RUN]" if args.dry_run else "", args.log))
+    ok = True
     for deck in want:
         if deck not in blocks:
             print("  %-9s SKIP (not in log)" % deck); continue
-        write_deck(blocks[deck], args.tol, args.offset, args.margin, args.dry_run, args.scalar_max_depth,
-                   set_esc_cap=not args.no_escalation_cap)
+        ok &= write_deck(blocks[deck], args.tol, args.offset, args.margin, args.dry_run, args.scalar_max_depth,
+                         set_esc_cap=not args.no_escalation_cap, allow_partial=args.allow_partial)
+    if not ok:
+        print("REFUSED to write one or more decks (incomplete/inconclusive table). "
+              "Extend the ladder and re-measure, or pass --allow-partial if the state is intentional.")
+        sys.exit(2)
 
 
 if __name__ == "__main__":

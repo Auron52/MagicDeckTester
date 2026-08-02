@@ -20,7 +20,7 @@ See learned-d0-policy.md.
     scripts/valueleaf_depth_matrix.py --games 1000 --seeds 8008 9009 10010 11011 \
         --hdepths 1 2 3 4 5 --vdepths 1 2 3 4 5 --value-min-depth 0
 """
-import argparse, json, os, re, subprocess, threading, time
+import argparse, json, os, re, subprocess, sys, threading, time
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
 MTG = "build/Release/mtg"
@@ -229,6 +229,15 @@ def main():
     ap.add_argument("--threads",type=int,default=6)
     ap.add_argument("--decks",nargs="+",default=list(DECKS))
     ap.add_argument("--out",default="logs/eval/valueleaf_depth_matrix.txt")
+    ap.add_argument("--write-profile",action="store_true",
+                    help="After measuring, AUTOMATICALLY fold this run's table into each deck's play profile "
+                         "(<deck>.value.json) via valueleaf_table_to_metadata.py -- so measure+write is ONE "
+                         "atomic command and the profile can never drift from a stale/hand-stitched log. Uses "
+                         "ONLY this run's freshly-measured blocks (not the appended --out history). The writer's "
+                         "completeness guard REFUSES a truncated ladder (extend --vdepths and re-run).")
+    ap.add_argument("--allow-partial",action="store_true",
+                    help="pass through to the profile writer: write even a truncated/inconclusive table "
+                         "(--write-profile only). Use only when an UNSET trust depth is intentional.")
     # --- incremental / tractability-aware mode ---
     ap.add_argument("--incremental",action="store_true",
                     help="Round-robin 50-game BATCHES across every cell (breadth-first), written incrementally, "
@@ -258,7 +267,8 @@ def main():
         k, v = spec.split(":"); hgd[int(k)] = int(v)
     os.makedirs(os.path.dirname(args.out),exist_ok=True)
     of=open(args.out,"a")
-    def emit(s): print(s,flush=True); of.write(s+"\n"); of.flush()
+    run_lines=[]   # THIS run's blocks only (for --write-profile; the --out file is append-history)
+    def emit(s): print(s,flush=True); of.write(s+"\n"); of.flush(); run_lines.append(s)
     # Header's `games=` carries VGAMES (the full value arm -> the writer's provenance); heuristic games trail it.
     hnote = ("hgames=%d" % hgames) + ("" if not hgd else " hgames_depth=" + ",".join("%d:%d" % (d, hgd[d]) for d in sorted(hgd)))
     emit("\n===== DEPTH MATRIX (UNBOUNDED)  games=%d seeds=%s value_min_depth=%d%s  %s =====" % (
@@ -290,6 +300,25 @@ def main():
                 row += "%+.4f " % (V[vi][0]/n - H[hj][0]/n)
             emit(row)
     of.close()
+
+    if args.write_profile:
+        # Fold THIS run's table straight into the play profile(s) -- one atomic command, no hand-stitched log.
+        # Write this run's blocks to a fresh run-scoped log (NOT the appended --out) so the writer sees only
+        # the ladder we just measured, then delegate to the completeness-guarded metadata writer.
+        thisrun = args.out + ".thisrun.txt"
+        with open(thisrun, "w") as f:
+            f.write("\n".join(run_lines) + "\n")
+        here = os.path.dirname(os.path.abspath(__file__))
+        cmd = [sys.executable, os.path.join(here, "valueleaf_table_to_metadata.py"),
+               thisrun, "--decks", *args.decks]
+        if args.allow_partial:
+            cmd.append("--allow-partial")
+        print("\n=== --write-profile: folding this run's table into the play profile(s) ===", flush=True)
+        rc = subprocess.run(cmd).returncode
+        if rc != 0:
+            print("!! profile write REFUSED (rc=%d): the ladder is incomplete. Extend --vdepths/--hdepths "
+                  "to cover the deck's play target_depth and re-run, or pass --allow-partial." % rc)
+            sys.exit(rc)
 
 
 if __name__ == "__main__":
