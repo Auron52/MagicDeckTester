@@ -27,6 +27,28 @@ invalidates them. Several landed after the tables were built, including the dupl
 
 Coverage is a third, lesser problem: several tables are thin (Hinata 200 games × 2 seeds, H ∈ {1,2,3}).
 
+### DO NOT START THIS QUEUE UNTIL PROFILE GENERATION HAS LANDED
+
+**Hard ordering constraint.** The whole point of `c910b06` is that the matrix must be measured
+**with** the deck profile — and the keep/mulligan model is a *sibling of the profile*, resolved
+directory-relative (`decks/<d>/<d>.keepmodel.exhaustive.profile.json.gz` next to
+`decks/<d>/<d>.profile.json`). So passing `--profile` silently pulls in whatever keep model is on
+disk at that moment.
+
+That means **regenerating a deck's play or mulligan profile invalidates any value-leaf table measured
+before it** — the same bug `c910b06` fixed, wearing a different hat: not "no profile" this time, but
+"a profile that has since been replaced".
+
+As of 2026-08-02, play-profile and mulligan-profile generation are being run on other machines. This
+queue is therefore **downstream of that work and must not start until it lands**. Order:
+
+1. play + mulligan profile generation completes and is committed
+2. freeze
+3. this queue
+
+If a deck's profile is regenerated later, that deck's value-leaf artifacts go stale again and it
+returns to the queue. Only that deck, not the whole set.
+
 ---
 
 ## 2. THE FREEZE RULE — read this before starting
