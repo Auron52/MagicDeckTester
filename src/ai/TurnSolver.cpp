@@ -9822,6 +9822,23 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         return i < 0 ? std::string() : std::string(ap.hand[i].m_name);
     }();
 
+    // Early land-choice PRUNE (provider-owned; see DecisionProvider::ForcedEarlyLandName). When the
+    // provider names an early land that is actually in hand, collapse the fan-out to that one name --
+    // the land-choice breadth on turns 1..2 is paid for out of the same fixed budget as the spell
+    // decisions. Empty (every deck by default) leaves land_names untouched -> byte-identical.
+    // Gated MTG_FORCED_EARLY_LAND (default on) so the with/without A/B is one env flag.
+    static const bool s_forced_early_land = EnvOn("MTG_FORCED_EARLY_LAND", true);
+    if (s_forced_early_land)
+    {
+        const std::string forced =
+            ResolveProvider(state).ForcedEarlyLandName(state, state.active_player_index);
+        if (!forced.empty()
+            && std::find(land_names.begin(), land_names.end(), forced) != land_names.end())
+        {
+            land_names.assign(1, forced);
+        }
+    }
+
     std::vector<TurnSolver::Plan> all;
 
     auto add_for_land = [&](const std::string& land_name, const std::string& fetch_target,

@@ -314,6 +314,23 @@ public:
     // BurnProvider opts in, gated on lands-in-play.
     virtual bool PreferHoldLandDrop(const GameState& s, int controller) const { return false; }
 
+    // ForcedEarlyLandName -- collapse the EARLY land-choice branch to one named land. Returns the land
+    // NAME to play unconditionally this turn (when it is in hand), or "" to let the search fan out over
+    // every distinct land as usual.
+    //
+    // This is a PRUNE, and it is deliberate. EnumeratePlansWithLand emits one plan group per distinct
+    // land name in hand, so a hand holding two different lands doubles the candidate set on EVERY turn
+    // until one of them is played -- and under a fixed ms budget that breadth is paid for out of the
+    // spell decisions. Measured on Goblins: leaving a singleton Cavern of Souls in hand instead of
+    // playing it costs +18% interior nodes (gi28) and +97% (gi166) on games whose win turn is
+    // unchanged. Forcing the opening land removes that fan-out for turns 1..2, where the land choice is
+    // least interesting (the deck wants its unrestricted coloured source down early regardless).
+    //
+    // Honoured at the single enumeration choke point, so the search and the rollout prune identically.
+    // DEFAULT "" -> no prune, every deck byte-identical; only an archetype provider opts in.
+    virtual std::string ForcedEarlyLandName(const GameState& s, int controller) const
+    { (void)s; (void)controller; return {}; }
+
     // HoldDeferredDropForLethal -- after a deferred Treasure Hunt (DrawUntilNonland) resolves, HOLD the
     // still-open land drop entirely rather than developing it, because the lands now in hand are the marginal
     // Land's Edge ammunition for a lethal THIS turn. Generically the engine plays the deferred drop

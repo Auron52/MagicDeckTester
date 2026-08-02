@@ -208,6 +208,22 @@ class GoblinsProvider : public GenericProvider
 {
 public:
     int TutorSearchWidth() const override { return 12; }
+    // Turns 1-2: play a Mountain if one is in hand, without branching over the alternatives.
+    //
+    // The mana base is 21 Mountain + TWO singleton utility lands: Cavern of Souls
+    // (colored_creature_only -- its coloured mana cannot pay Lightning Bolt or any other noncreature
+    // spell) and Three Tree City ("{2},{T}: add N of a chosen colour", N = Goblins you control;
+    // its basic tap is {C} only). Neither produces red on the turn it lands, so on turns 1-2 -- when
+    // the deck wants a red source for its one-drops and removal -- the Mountain is the answer the
+    // search almost always reaches anyway.
+    //
+    // Be honest about the cost: this DOES suppress a real choice. Three Tree City is a genuine
+    // payoff land, and deploying it early is arguable on turn 2. The justification is empirical, not
+    // a claim that the alternatives are worthless: over 6600 fresh games (seeds 9001-9006, d3+d5)
+    // the win turn is IDENTICAL with and without the prune, while it removes 3.72% of rollout calls
+    // (4 seeds, -2.88% to -4.75%, same direction every time). If that ever stops holding, this is
+    // the first thing to drop.
+    std::string ForcedEarlyLandName(const GameState& s, int controller) const override;
 };
 
 // Mono-red Burn (Searing Blaze's landfall damage is the deck's signature): once it has enough
