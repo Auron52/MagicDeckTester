@@ -348,7 +348,13 @@ public:
     // 8 and 12 are statistically indistinguishable on train (0.0008 apart over 15 cases); 12 is taken
     // because both seed sets rank it no worse and the axis is ADDITIVE -- the whole 3-deck regression
     // makespan moves 38s -> 46s across the entire width range, not per-width multiplicatively.
-    int TutorSearchWidth() const override { return 12; }
+    // FOLDED IN a value x deploy-discount RANKING (TutorCandidates below): the smooth width-sensitivity
+    // documented above was largely an UNRANKED coverage gap, not pure target diversity. Measured (d5 b20
+    // s2002): ranked w4 4.322 ~= unranked w12 4.316; ranked w2 4.324 beats unranked w4 4.329. So width
+    // drops 12 -> 4 to search only the ranked THREATS (Muxus/Siege-Gang/lords/Krenko float to the top,
+    // chaff sinks) -- near-full quality (train ~+0.006) at a narrower, cheaper axis. See TutorCandidates.
+    int TutorSearchWidth() const override { return 4; }
+    std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     // WITHDRAWN, and left here only as the hook's one implementation: "turns 1-2, play a Mountain if
     // one is in hand, without branching over the alternatives". Reachable ONLY under
     // MTG_FORCED_EARLY_LAND=1 (default off) -- see TurnSolver's s_forced_early_land.

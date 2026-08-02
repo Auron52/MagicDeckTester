@@ -3819,6 +3819,181 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
     return true;                                             // nothing else to cast -> keep the attacker (PAY)
 }
 
+
+// Goblin Matron fetch RANKING (value x deploy-discount, STATE-AWARE), FOLDED IN (default-on; disable for
+// A/B via the unpruned Tutor gate = raw unranked list). Orders the full candidate set best-first so the
+// narrow searched axis (TutorSearchWidth=4) searches the genuine THREATS, not shuffle-order chaff. value =
+// board impact EvalCard misses (lords over board+hand Goblins, haste, cost-cut, Krenko/Muxus/Siege-Gang);
+// discount = 0.55^turns-to-deploy over the best enabler path (mana + Skirk ramp, Vial charge-gated put,
+// Lackey free-drop) + opportunity-cost downweight. cands[0] (the dedup's default pick) is thus the best.
+std::vector<std::string>
+GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    if (DecisionUnpruned(UnprunedGate::Tutor)) { return GenericProvider::TutorCandidates(s, controller, pp); }
+    std::vector<std::string> cands = GenericProvider::TutorCandidates(s, controller, pp);
+    if (cands.size() <= 1) { return cands; }
+    // --- board scan (done once) ---------------------------------------------------------------
+    int  goblins_controlled = 0;   // my Goblin creatures (lord/Krenko/Piledriver scale with this)
+    int  goblins_sick       = 0;   // ... that cannot attack yet (the ones a haste grant unlocks NOW)
+    int  ready_atk          = 0;   // total power that can already swing at the opponent THIS turn (lethal reach)
+    bool lackey_now = false;       // a Goblin Lackey that can attack THIS turn -> free drop this turn
+    bool lackey_persist = false;   // any Goblin Lackey on board -> free drop next turn
+    bool skirk_on   = false;       // a Skirk Prospector (sac Goblin -> {R}) -> a mana RAMP for bombs
+    int  vial_charge = -1;         // best untapped Aether Vial's charge (-1 = no Vial); puts a creature of MV==charge
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        const Card& pc = d ? d->card : p.card;
+        if (pc.IsCreature() && CardHasSubtype(pc, "Goblin"))
+        {
+            ++goblins_controlled;
+            if (!CanAttackFull(p, s.battlefield, controller)) { ++goblins_sick; }
+        }
+        if (pc.IsCreature() && CanAttackFull(p, s.battlefield, controller))
+        { ready_atk += std::max(0, pc.m_power.value_or(0)); }   // any ready attacker (goldfish: connects)
+        if (!d) { continue; }
+        if (!d->params.combat_damage_puts_subtype_from_hand.empty())      // Goblin Lackey
+        {
+            lackey_persist = true;
+            if (CanAttackFull(p, s.battlefield, controller)) { lackey_now = true; }
+        }
+        if (d->params.sac_creature_outlet && !d->params.sac_outlet_add_mana_color.empty()) { skirk_on = true; } // Skirk
+        if (d->params.upkeep_adds_charge && !p.tapped) { vial_charge = std::max(vial_charge, p.charge_counters); } // Vial
+    }
+    const int G         = goblins_controlled;
+    // Goblins waiting in hand are near-future lord-buff targets: a +1/+1 lord makes EACH of them hit
+    // harder the moment it lands, so a lord's team-buff must be credited over board + hand, not board
+    // alone (this is why a lord out-values a same-power vanilla body -- e.g. Goblin King vs Chainwhirler
+    // with a Matron down: the King's +1 on Matron already matches the body, and every Goblin added widens
+    // the gap). Capped so a flooded hand can't unboundedly balloon the term.
+    int goblins_in_hand = 0;
+    for (const Card& h : s.players[controller].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+        const Card& hc = hd ? hd->card : h;
+        if (hc.IsCreature() && CardHasSubtype(hc, "Goblin")) { ++goblins_in_hand; }
+    }
+    const int buff_targets = G + std::min(goblins_in_hand, 3);   // board + near-future (hand) buff recipients
+    // Skirk ramp: each OTHER Goblin sacs for {R}, so a bomb is reachable ~this turn if Skirk + fodder pay for it.
+    const int skirk_ramp = skirk_on ? std::max(0, G - 1) : 0;
+    const int untapped_mana = AvailableManaPool(s).Total();               // real mana this turn (no Skirk fudge)
+    const int mana_now  = untapped_mana + skirk_ramp;
+    const int mana_next = CountLandsInPlay(s, controller) + 1 + skirk_ramp;   // + one land drop next turn
+    const int opp_life  = s.players[1 - controller].life;
+
+    // --- per-card value (board impact, incl. payoffs EvalCard misses) --------------------------
+    constexpr double BODY = 100.0;   // per power (a damage-equivalent, matching EvalCard's DMG)
+    auto value_of = [&](const CardDefinition* d, const Card& c) -> double
+    {
+        if (!d) { return 0.0; }
+        const CardParams& p = d->params;
+        double v = c.m_power.value_or(0) * BODY;
+        // Lord / team-buff: the buff THIS card grants my existing Goblins (EvalCard scores only the card).
+        if (!p.subtypes_affected.empty())
+        {
+            if (p.power_bonus > 0)              { v += p.power_bonus * buff_targets * BODY; } // King/Chieftain/Rundvelt +1/+1: a buffed Goblin's +1 power is worth a body power point AND recurs+scales
+            if (p.grants_haste)                 { v += goblins_sick * 90.0; }        // Warchief/Chieftain: sick attack NOW
+            if (!p.reduces_spell_subtype.empty()) { v += 70.0; }                     // Warchief: cost cut -> deploy more
+            if (p.attack_pump_power_per_other_matching > 0)
+            { v += p.attack_pump_power_per_other_matching * G * 45.0; }              // Piledriver: +2 per other Goblin
+        }
+        // Payoffs.
+        if (p.etb_reveal_count > 0)            { v += p.etb_reveal_count * 75.0; }   // Muxus: cheat ~half of N free
+        if (!p.tap_creates_tokens_per_controlled_subtype.empty())
+        { v += G * 80.0; }                                                           // Krenko: G tokens/tap, snowballs
+        if (p.etb_self_creates_tokens > 0)     { v += p.etb_self_creates_tokens * 90.0; } // Siege-Gang(3)/Mogg(1)
+        if (p.sac_outlet_damage > 0)           { v += 40.0; }                        // Siege-Gang reach
+        return v;
+    };
+
+    // --- deploy discount: how many TURNS until it can hit the board, over the best path ---------
+    // (mana incl. Skirk ramp; Goblin Lackey free-drop; Aether Vial put once its charge reaches MV).
+    // Value-PRIMARY but deployability shades HARD: a bomb that is genuinely stuck for turns must fall
+    // BELOW a deployable developer -- the flat 0.45 was too gentle and over-fetched an undeployable
+    // Muxus (analysis-goblins.md, the searched-slower audit). Curve (user 2026-08-02): t=1 (NEXT turn)
+    // is ACCEPTABLE -- "you don't always have mana for any of them this turn" -- so t1 is only a mild
+    // 0.85; the steep 0.45/step decay begins at t>=2 (genuinely stuck): 1.0 / 0.85 / 0.38 / 0.17.
+    auto turns_to_deploy = [&](const Card& c) -> int
+    {
+        const int mv = c.m_mana_cost.ManaValue();
+        int t = std::max(0, mv - mana_now);        // via mana (+~1/turn beyond what's available now)
+        if (mv <= mana_next)          { t = std::min(t, 1); }
+        if (lackey_now)               { t = 0; }   // free-drop any Goblin this turn (ignores mana)
+        else if (lackey_persist)      { t = std::min(t, 1); }
+        if (vial_charge >= 0)         { t = std::min(t, std::max(0, mv - vial_charge)); } // Vial: +1 charge/turn
+        return std::max(0, t);
+    };
+    // Opportunity cost: if the hand ALREADY holds a deployable-this-turn threat, another card we can't
+    // play now is redundant gas -- we need to DEPLOY, not draw more. Mild downweight for such candidates.
+    bool hand_has_play = false;
+    for (const Card& h : s.players[controller].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+        if (hd && hd->card.IsCreature() && turns_to_deploy(hd->card) == 0
+            && h.m_name != "Goblin Matron") { hand_has_play = true; break; }
+    }
+    auto discount_of = [&](const Card& c) -> double
+    {
+        const int t = turns_to_deploy(c);
+        double disc = 1.0;
+        if (t >= 1) { disc = 0.85; for (int k = 1; k < t; ++k) { disc *= 0.45; } } // mild t1, steep t>=2
+        if (t > 0 && hand_has_play) { disc *= 0.75; }   // opportunity cost: already have a play
+        return disc;
+    };
+
+    // --- lethal reach: a fetch whose CHEAP direct damage closes the game THIS turn must outrank a bigger
+    // body. Credit only burst reachable now over the card's cheapest path (channel from hand / Lackey or
+    // hardcast ETB ping / Siege-Gang sac), gated on paying that path this turn. Generalizes "opp at 1,
+    // drop it now": e.g. Twinshot Sniper channels {1}{R} for 2 from hand (no body) or pings 2 off a Lackey.
+    auto face_burst = [&](const CardDefinition* d, const Card& c) -> int
+    {
+        if (!d) { return 0; }
+        const CardParams& p = d->params;
+        const int mv = c.m_mana_cost.ManaValue();
+        int burst = 0;
+        // Channel: pay channel_cost + discard from HAND -> channel_damage to face (needs no board slot).
+        if (p.channel_damage > 0 && p.channel_cost && p.channel_cost->ManaValue() <= untapped_mana)
+        { burst = std::max(burst, p.channel_damage); }
+        // ETB ping ("any target" -> face, or "each opponent" -> face): the body must ENTER this turn.
+        const int etb_face = std::max(p.etb_damage_any, p.etb_damage_each_opponent);
+        if (etb_face > 0)
+        {
+            const bool enters = lackey_now || mv <= untapped_mana || (vial_charge >= 0 && vial_charge >= mv);
+            if (enters) { burst = std::max(burst, etb_face); }
+        }
+        // Siege-Gang: cast it, then sac the tokens it makes for sac_outlet_damage each ({1}{R}/activation).
+        if (p.sac_outlet_damage > 0 && p.etb_self_creates_tokens > 0 && mv <= untapped_mana)
+        {
+            const int sacs = std::min(p.etb_self_creates_tokens, (untapped_mana - mv) / 2);
+            if (sacs > 0) { burst = std::max(burst, p.sac_outlet_damage * sacs); }
+        }
+        return burst;
+    };
+
+    auto score_of = [&](const std::string& name) -> double
+    {
+        for (const Card& lc : s.players[controller].library)
+        {
+            if (lc.m_name != name) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+            const Card& c = d ? d->card : lc;
+            double sc = value_of(d, c) * discount_of(c);
+            const int burst = face_burst(d, c);
+            // Only when the burst is what CROSSES lethal (attackers alone fall short, but reach them): a
+            // fetch that guarantees the kill this turn sorts ahead of every non-lethal one, best burst first.
+            if (burst > 0 && ready_atk < opp_life && opp_life <= ready_atk + burst)
+            { sc += 1.0e6 + burst; }
+            return sc;
+        }
+        return 0.0;   // whiff placeholder ("") or vanished name -> lowest
+    };
+
+    std::stable_sort(cands.begin(), cands.end(),
+                     [&](const std::string& a, const std::string& b) { return score_of(a) > score_of(b); });
+    return cands;
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
