@@ -1,6 +1,5 @@
-# Regression ground truth -- commit c33ac9f  date 2026-08-02
+# Regression ground truth -- commit e4fe091  date 2026-08-02
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (regression, 2026-08-02): Light-Paws aura ranking, MTG_AURA_RANK_MODE=1 (scale-first, user-directed): rank ALL scaling Auras above flat ones, then greatest realized power, then highest MV. Adopted on QUALITY: -0.0073 vs legacy over 72000 UNIQUE games on disjoint bases (24/24 jobs better, 0 worse; d0 -0.0080, d3 -0.0065, d5 -0.0061); train seeds -0.0070 game-weighted with 18 searched faster / 6 slower and d0 10 faster / 1 slower. Mechanism: scaling Auras COMPOUND -- each reads the enchantment count, so a third scaler raises every scaler already attached, which realized-power-at-fetch-time cannot see. Worked case gi=309: scale-first fetches All That Glitters then Ethereal Armor and wins T4 with three scalers; scale-last fetches a flat Armadillo Cloak (it wins the MV rung at equal power) and needs T5 despite casting Ancestral Mask a turn EARLIER. The scale-last variant measures 0.0003 ahead but every one of its divergent wins traces to the re-valuation changing which Aura is CAST FROM HAND (tempo churn, e.g. gi=1472), not to a better fetch.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -26,9 +25,9 @@ hinata_smoke_d5_s1001=5.8933/00c7dfbdeea1ac1a
 dragonstorm_smoke_d0_s1001=5.4300/16986eaeb61de74e
 dragonstorm_smoke_d3_s1001=4.5067/034c99d56e059dde
 dragonstorm_smoke_d5_s1001=4.4667/8cf792208eab7cc6
-auras_smoke_d0_s1001=4.3850/568c9de365ae0f75
-auras_smoke_d3_s1001=4.1467/df6d14ce7723626b
-auras_smoke_d5_s1001=4.1400/67dce1b63cb0efaf
+auras_smoke_d0_s1001=4.3760/d0a56ce8cb114f9d
+auras_smoke_d3_s1001=4.1400/de66d9efc3f9e6d7
+auras_smoke_d5_s1001=4.1320/876a844b4869aaae
 goblins_smoke_d0_s1001=4.8070/3b59fdf42c54b7bf
 goblins_smoke_d3_s1001=4.2533/ac71193d4154ad5b
 goblins_smoke_d5_s1001=4.2133/59cc1c936137afd0
@@ -69,11 +68,11 @@ dragonstorm_regression_d3_s2002=4.3367/42e2b2ffa993a091
 dragonstorm_regression_d3_s3003=4.4767/d691c989f057d8bd
 dragonstorm_regression_d5_s2002=4.3000/6ae08169abf25df8
 dragonstorm_regression_d5_s3003=4.4760/99b6d1ebd3c0d281
-auras_regression_d0_s2002=4.3690/6637c112e13d4367
-auras_regression_d3_s2002=4.1180/bcf4fde9b24c5eac
-auras_regression_d3_s3003=4.2200/7b3b3d3bbd2c39b9
-auras_regression_d5_s2002=4.1120/62e6a761e357e112
-auras_regression_d5_s3003=4.2080/4fbd7848bdabfb1b
+auras_regression_d0_s2002=4.3610/c7fa315cfa428bac
+auras_regression_d3_s2002=4.1080/17175aeea335db68
+auras_regression_d3_s3003=4.2080/ae97a5df84727fa6
+auras_regression_d5_s2002=4.1020/c6baf8d3edf97c1e
+auras_regression_d5_s3003=4.1960/1d233832be2a2284
 goblins_regression_d0_s2002=4.8200/a8885580c3f9f4c2
 goblins_regression_d3_s2002=4.3633/d1974417b45557f8
 goblins_regression_d3_s3003=4.3633/8d73d0a1c4de7ccd
