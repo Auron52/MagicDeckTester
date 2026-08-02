@@ -2737,6 +2737,22 @@ bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const
     return lands >= kBankThreshold;
 }
 
+std::string GoblinsProvider::ForcedEarlyLandName(const GameState& s, int controller) const
+{
+    // Turns 1-2 only. Past that the hand is usually all-Mountain anyway (21 of 23 lands) so the
+    // prune would buy nothing, and the later turns are exactly where the utility lands become a real
+    // decision -- Three Tree City wants deploying once there are Goblins to scale off, and a Cavern
+    // can deploy a creature while a Mountain stays up for removal. Keep the prune to the turns where
+    // the deck simply needs its red source, and leave the interesting choices searched.
+    constexpr int kEarlyTurns = 2;
+    if (s.turn_number > kEarlyTurns) { return {}; }
+    for (const Card& c : s.players[controller].hand)
+    {
+        if (c.m_name == "Mountain") { return "Mountain"; }
+    }
+    return {};   // no Mountain in hand -> no prune, the search fans out as usual
+}
+
 // ---- NC tempo bonus (NcLandDropTempoBonus) -----------------------------------------------
 
 static int CountLandsInPlay(const GameState& s, int controller)

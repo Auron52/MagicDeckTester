@@ -172,6 +172,37 @@ to all-Mountains and one land option. Measured on same-outcome games: **+18% int
 compare games whose win turn is unchanged. This search-economy effect -- not the pool -- is the
 question worth pursuing (land-order heuristic, GoblinsProvider).
 
+### What DID ship out of this: the land-order prune
+
+The branching side-effect turned out to be the real finding, and it belongs to a class the audit had
+not been looking at: **breadth the search pays for on turns where the answer is not interesting.**
+`EnumeratePlansWithLand` emits one plan group per distinct land NAME in hand, so a hand holding two
+different lands doubles the candidate set every turn until one is played -- and under a fixed ms
+budget that breadth comes out of the spell decisions.
+
+`GoblinsProvider::ForcedEarlyLandName` (hook `DecisionProvider::ForcedEarlyLandName`,
+`MTG_FORCED_EARLY_LAND`) collapses the turn 1-2 land fan-out to Mountain when one is in hand. Goblins
+runs 21 Mountain + two singleton utility lands (Cavern of Souls, Three Tree City), neither of which
+makes red the turn it lands.
+
+| | result |
+|---|---|
+| quality | **0.0000** -- win turn IDENTICAL on all 12 jobs, 6600 fresh games/arm (seeds 9001-9006) |
+| cost | **-3.72% rollout calls** (4 seeds, -2.88% to -4.75%, same direction every time) |
+| train seeds | -0.0038, 5 faster / 1 slower -- NOT claimed; that magnitude is noise on this deck |
+
+Adopted on COST at flat quality -- the same basis as the duplicate-legend prune's -4.4%. Notes:
+
+- The prune fires only when a Mountain is actually in hand; with a single Mountain it forces turn 1
+  and then the hook returns empty, so turn 2 fans out normally. Turns 3+ are always searched.
+- **It suppresses a real choice.** Three Tree City is a genuine payoff land and deploying it turn 2
+  is arguable. The justification is measured equivalence, not a claim that the alternative is
+  worthless. Drop this first if the equivalence stops holding.
+- Method trap avoided by luck, not rigour: the deck's mana base was first read by grepping the
+  decklist for "mountain|cavern|land", which silently MISSED Three Tree City and produced a
+  confident, wrong "21 Mountain + 1 Cavern" premise. Resolve card types through `cards.json`, never
+  by name-pattern on a decklist.
+
 Two lessons, both about the audit rather than the engine:
 
 - **Fixing one site of a decision is not fixing the decision** (third instance). The restricted-mana
