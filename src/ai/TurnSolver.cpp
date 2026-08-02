@@ -9827,7 +9827,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // the land-choice breadth on turns 1..2 is paid for out of the same fixed budget as the spell
     // decisions. Empty (every deck by default) leaves land_names untouched -> byte-identical.
     // Gated MTG_FORCED_EARLY_LAND (default on) so the with/without A/B is one env flag.
-    static const bool s_forced_early_land = EnvOn("MTG_FORCED_EARLY_LAND", true);
+    static const bool s_forced_early_land = EnvOn("MTG_FORCED_EARLY_LAND");
     if (s_forced_early_land)
     {
         const std::string forced =
@@ -9838,6 +9838,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             land_names.assign(1, forced);
         }
     }
+    // Land fan-out probe (MTG_TRACE=landfan): how many DISTINCT land options this turn's enumeration
+    // branches over. One line per committed decision. The question it answers is whether an early
+    // land PRUNE actually reduces total branching or merely defers it -- forcing the opening Mountain
+    // removes the turn 1-2 fan-out but leaves the singleton utility lands in hand, where they branch
+    // on every later turn instead.
+    // g_bp_root_enum (not g_real_resolution) is the committed-node marker here: this enumeration runs
+    // INSIDE the search, where reveal logging is paused and g_real_resolution is false.
+    if (TRACE_ON("landfan") && g_bp_root_enum)
+    { TRACE("landfan", "turn=%d options=%zu", state.turn_number, land_names.size()); }
 
     std::vector<TurnSolver::Plan> all;
 
