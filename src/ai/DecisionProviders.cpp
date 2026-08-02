@@ -3711,19 +3711,62 @@ int DragonstormProvider::ExtraLethalDamage(const GameState& s,
 
 // ---- Goblins ---------------------------------------------------------------
 
-// Defer the creature-sac VALUE outlets (Siege-Gang damage / Pashalik tokens / the multi-sac burst) out
-// of the pre-combat enumeration, and haste-gate Skirk's sac-for-mana. Off-switch MTG_NO_GOBLIN_SAC_2ND
-// (ADOPTED default-ON 2026-07-31). See DeferSacOutletPreCombat in DecisionProvider.h and analysis-goblins.md.
+// Defer the creature-sac outlets (Siege-Gang damage / Pashalik tokens / Skirk's sac-for-mana and its
+// multi-sac burst) out of the pre-combat enumeration -- UNLESS a haste enabler makes the outlet's output
+// able to attack THIS turn. Off-switch MTG_NO_GOBLIN_SAC_2ND (ADOPTED default-ON 2026-07-31).
+// See DeferSacOutletPreCombat in DecisionProvider.h and analysis-goblins.md.
+//
+// The haste gate reaches TOKEN-CREATING value outlets too, not just the mana one (2026-08-02). It used
+// to sit below an unconditional `if (!is_mana_outlet) return true;`, so a VALUE outlet never reached it
+// -- and Pashalik Mons ({3}{R}, Sacrifice a Goblin: create two 1/1 Goblins) is exactly the case that
+// breaks: under Goblin Chieftain/Warchief those tokens enter as 2/2s WITH HASTE, so the outlet is a
+// pre-combat play worth +2 power and a free Pashalik death-trigger ping. Deferring it to the second main
+// throws the whole turn away. Caught by goblins gi5 (seed 1006), which lost a T4 kill at d0/d3/d5 alike:
+//   pre-combat sac Lackey -> ping 1 (9->8) + two hasty 2/2s -> attack for 9 -> exactly lethal
+//   deferred              -> cast Aether Vial instead      -> attack for 7 -> opp 2, wins T5
+// The original rationale ("without haste the float is second-main-recoverable") was always a statement
+// about haste, not about mana; it just wasn't reachable for the other outlets.
+//
+// HONEST MEASUREMENT (goblins held-out overnight seeds, 16,000 games/arm, 2026-08-02). This is adopted on
+// the DESIGN principle -- do not let a heuristic prune a line that can be lethal -- NOT on a measured win,
+// because there isn't one:
+//                          d3+d5 (8000g)      d0 (8000g)      overall
+//   mode 1 (all outlets)      +0.0000          +0.0030         +0.0015   (4/4 d0 cases WORSE)
+//   mode 2 (adopted)          +0.0000          +0.0004         +0.0002   (1 better / 2 worse / 9 equal)
+// Two things to read off that table. First, at searched depth the deferral is win-turn-NEUTRAL over 8000
+// held-out games even though the play digests all differ -- the search reaches the same outcome either
+// way, which vindicates the deferral as a pure perf pruner and means gi5's recovery is a TRAIN-seed
+// result (it was selected because it regressed; it is not evidence of generalisation). Second, mode 2
+// exists because a DAMAGE outlet is timing-indifferent: narrowing to token-creating outlets removed ~87%
+// of mode 1's d0 cost, confirming Siege-Gang's un-deferral was pure branch noise.
+// If a future Goblins change needs to buy back d0, this is a known-cheap thing to re-examine.
 bool GoblinsProvider::DeferSacOutletPreCombat(const GameState& s, const Permanent& src,
                                               bool is_mana_outlet) const
 {
     static const bool on = !EnvOn("MTG_NO_GOBLIN_SAC_2ND");
     if (!on) { return false; }
-    if (!is_mana_outlet) { return true; }   // value outlets: always defer to the second main
-    // Skirk MANA outlet: keep it pre-combat only if a Goblin haste lord is on the battlefield (src is a
-    // Goblin, so HasHasteFromLords answers this) OR one is castable from hand this turn ("our plan").
-    // Without haste its float is second-main-recoverable, and Skirk-for-mana is the dominant pre-combat
-    // branch amplifier on a wide board -- so defer it too when no haste enabler is available.
+    // Which outlet kinds reach the haste gate below (2026-08-02 A/B lever):
+    //   0 = historical -- only the mana outlet; every value outlet always defers
+    //   1 = every outlet kind
+    //   2 = mana outlet + value outlets that CREATE CREATURE TOKENS (see below)
+    static const int haste_mode = []{
+        const char* e = std::getenv("MTG_GOBLIN_SAC_HASTE_MODE");
+        return (e && *e) ? std::atoi(e) : 2;
+    }();
+    if (!is_mana_outlet && haste_mode != 1)
+    {
+        if (haste_mode == 0) { return true; }
+        // Mode 2: only a TOKEN-CREATING value outlet is pre-combat-relevant. Pashalik's two 1/1 Goblins
+        // enter as hasty 2/2s under Chieftain/Warchief and can attack this turn, so the timing is the
+        // whole point. A damage outlet (Siege-Gang) is timing-INDIFFERENT -- 2 to the face is 2 to the
+        // face in either main -- so un-deferring it only widens the pre-combat branch for nothing.
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+        if (!sd || sd->params.sac_outlet_creates_tokens <= 0) { return true; }
+    }
+    // Keep the outlet pre-combat if a Goblin haste lord is on the battlefield (src is a Goblin, and so
+    // are Pashalik's tokens, so HasHasteFromLords answers this for both the source and its output) OR one
+    // is castable from hand this turn ("our plan"). Otherwise the outlet buys nothing combat can use and
+    // is the dominant pre-combat branch amplifier on a wide board -- defer it to the second main.
     const int active = s.active_player_index;
     if (HasHasteFromLords(src.card, s.battlefield, active)) { return false; }
     for (const Card& h : s.players[active].hand)
@@ -3731,7 +3774,7 @@ bool GoblinsProvider::DeferSacOutletPreCombat(const GameState& s, const Permanen
         const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
         if (hd && hd->params.grants_haste) { return false; }
     }
-    return true;   // no haste enabler in play or hand -> defer Skirk to the second main
+    return true;   // no haste enabler in play or hand -> defer to the second main
 }
 
 // Mogg War Marshal echo keep-exception (off-switch MTG_NO_GOBLIN_ECHO -> historical always-decline). The

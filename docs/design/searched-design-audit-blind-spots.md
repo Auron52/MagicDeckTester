@@ -289,6 +289,20 @@ seeds mean one game counted `k` times. Two agents inventing the same bug from sc
 is the argument for the assertion rather than the discipline. This section is the case study; the
 skill is the rule.
 
+**And a THIRD instance, this one committed.** After writing the two above, an audit of
+`test/regression_cases.sh` found the trap sitting in the suite's own held-out tier: every deck's
+`d0` overnight case runs **2000 games** on bases spaced **1001** (`4004/5005/6006/7007`), so each
+case overlapped its neighbour by 999 games -- 27 overlapping pairs across 9 decks, 8000 games
+reported per deck against 5003 distinct. Smoke and regression were clean. Fixed 2026-08-02 by
+re-spacing `d0` to `4004/6006/8008/10010`; `d3`/`d5` run 1000 games on the 1001-spaced bases and
+were already disjoint **by exactly one seed**, which is a trap primed to spring the moment anyone
+raises those game counts. The audit is ~20 lines of Python (group cases by `(deck, depth)`, assert
+`base_i + games_i - 1 < base_{i+1}`) and is worth re-running whenever a case is added.
+
+The pattern across all three: **the trap does not announce itself.** Each instance produced a
+plausible, confidently-reported number. What catches it is checking the seed arithmetic directly,
+never the result's appearance.
+
 Two corollaries learned the same day:
 
 * **Per-job "N better / 0 worse" is only as strong as the number of INDEPENDENT samples.** Count

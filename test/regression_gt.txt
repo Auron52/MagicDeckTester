@@ -1,14 +1,5 @@
-# Regression ground truth -- commit cc5181f  date 2026-08-02
+# Regression ground truth -- commit 54e1094  date 2026-08-02
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-08-02): gi325:bounded single-canonical-victim sac enumeration (anti-hang, intentional) can't find gi325's victim-specific multi-sac T4 lethal -> wins T5; 1 knife-edge miss in ~48k games, net searched 147 faster:15 slower
-# STALE OVERNIGHT (2026-08-02, branch integration): the overnight values below predate the merge of
-#   bp-nested-cantrip-coverage into phase-1-2-deck-analyzer and are NOT a valid baseline for this
-#   commit. Every deck's overnight row comes from the 65-commit searched-decisions branch and so
-#   MISSES the Goblins Skirk / value_trust_depth work; goblins rows are the most affected. Smoke and
-#   regression WERE re-accepted here. The next --overnight run should expect goblins diffs and treat
-#   that run, not this file, as the first true post-merge overnight baseline.
-#   (Kept rather than deleted so the next run still has something to attribute against; the two
-#   restored notes above were dropped by --accept, which rewrites the header, and re-added by hand.)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -37,9 +28,9 @@ dragonstorm_smoke_d5_s1001=4.4667/8cf792208eab7cc6
 auras_smoke_d0_s1001=4.3760/d0a56ce8cb114f9d
 auras_smoke_d3_s1001=4.1400/de66d9efc3f9e6d7
 auras_smoke_d5_s1001=4.1320/876a844b4869aaae
-goblins_smoke_d0_s1001=4.7960/9f656d3dcfb4984b
-goblins_smoke_d3_s1001=4.2467/407b13585cc50d03
-goblins_smoke_d5_s1001=4.2267/585d68765d1860ce
+goblins_smoke_d0_s1001=4.7950/842edcf4e56fd1d5
+goblins_smoke_d3_s1001=4.2400/d43270e03ea5cea9
+goblins_smoke_d5_s1001=4.2133/4e98df94b8001b98
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/7b06530f1cd2f10f
@@ -82,7 +73,7 @@ auras_regression_d3_s2002=4.1080/17175aeea335db68
 auras_regression_d3_s3003=4.2080/ae97a5df84727fa6
 auras_regression_d5_s2002=4.1020/c6baf8d3edf97c1e
 auras_regression_d5_s3003=4.1960/1d233832be2a2284
-goblins_regression_d0_s2002=4.7750/802928305a043e82
+goblins_regression_d0_s2002=4.7760/5a669bb28318a2a9
 goblins_regression_d3_s2002=4.3333/b34612dc1de58f23
 goblins_regression_d3_s3003=4.3533/084a0a76c0f04f6e
 goblins_regression_d5_s2002=4.3720/309bf5a74b33eb5d
@@ -90,9 +81,7 @@ goblins_regression_d5_s3003=4.3120/58ba16e062c78af5
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/3c364eea0dbc63eb
-slivers_overnight_d0_s5005=4.6325/09e836612ac2db65
 slivers_overnight_d0_s6006=4.6400/c5bcbd3821c8d471
-slivers_overnight_d0_s7007=4.6335/2774949bef52d899
 slivers_overnight_d3_s4004=4.2340/e45e6ad5eb34e638
 slivers_overnight_d3_s5005=4.2080/891bb224bfa9dffa
 slivers_overnight_d3_s6006=4.2390/34db939f9dcaef98
@@ -102,9 +91,7 @@ slivers_overnight_d5_s5005=4.2070/294a1d2bfa148699
 slivers_overnight_d5_s6006=4.2370/a6772c67a777aa12
 slivers_overnight_d5_s7007=4.2140/7a8d6e488db1b30d
 burn_overnight_d0_s4004=4.5740/bb4c95f8ea8b0c13
-burn_overnight_d0_s5005=4.5705/b5860e9d6ded69b7
 burn_overnight_d0_s6006=4.5880/f23966751e50e223
-burn_overnight_d0_s7007=4.5470/7dc58015fd1189ec
 burn_overnight_d3_s4004=4.3500/2c966da2f791e74a
 burn_overnight_d3_s5005=4.3360/83349ee93e226d46
 burn_overnight_d3_s6006=4.3510/605e4e4efcc6729a
@@ -114,9 +101,7 @@ burn_overnight_d5_s5005=4.3350/e42c35e1ac028fa9
 burn_overnight_d5_s6006=4.3520/ac1b6b257b3e2de5
 burn_overnight_d5_s7007=4.3730/e9b3e6df99ef8fc1
 th_overnight_d0_s4004=5.4440/f846564c4f6ee85f
-th_overnight_d0_s5005=5.4225/3b4d6e8e8b63e3bd
 th_overnight_d0_s6006=5.4080/5f0a3a3ddc5137a6
-th_overnight_d0_s7007=5.4130/e8b58b93505d379f
 th_overnight_d3_s4004=4.0760/2283c95bf4b07e03
 th_overnight_d3_s5005=4.0500/785ac3f619cef16f
 th_overnight_d3_s6006=4.0250/0084e946bb4e75ef
@@ -126,9 +111,7 @@ th_overnight_d5_s5005=4.0450/7a1a9d11b7dbb42e
 th_overnight_d5_s6006=4.0250/bcfefd3470898133
 th_overnight_d5_s7007=4.0660/0284f6d75c9c462d
 knights_overnight_d0_s4004=4.5505/c216d58bc66b476a
-knights_overnight_d0_s5005=4.5675/5e92f25f687d4a0b
 knights_overnight_d0_s6006=4.5560/c41a86df7e749590
-knights_overnight_d0_s7007=4.5505/f07c1b34f3fd6aa0
 knights_overnight_d3_s4004=4.3330/102efc6faced3cc4
 knights_overnight_d3_s5005=4.3640/db4747afb8d52593
 knights_overnight_d3_s6006=4.3490/8fe5885ee5db904a
@@ -138,9 +121,7 @@ knights_overnight_d5_s5005=4.3630/66de9025605f45e9
 knights_overnight_d5_s6006=4.3480/91e65e2cbede531f
 knights_overnight_d5_s7007=4.3450/87cb0ef59c2498f7
 antilife_overnight_d0_s4004=5.5915/ce860fe2f80bf423
-antilife_overnight_d0_s5005=5.6470/f69c1c16b0a77b87
 antilife_overnight_d0_s6006=5.6420/2b19b2e538716943
-antilife_overnight_d0_s7007=5.6505/ef36597d9a680c3a
 antilife_overnight_d3_s4004=4.2530/822846a0878443cf
 antilife_overnight_d3_s5005=4.2720/3d876bf13718d507
 antilife_overnight_d3_s6006=4.2380/26663433b013d171
@@ -150,9 +131,7 @@ antilife_overnight_d5_s5005=4.2640/c96be10ecc7f8c35
 antilife_overnight_d5_s6006=4.2230/68e53f7343ace7e6
 antilife_overnight_d5_s7007=4.2010/6d70f8b066bb5586
 hinata_overnight_d0_s4004=7.1410/f033900b0f987ba8
-hinata_overnight_d0_s5005=7.0820/fe3eda98678ca2f5
 hinata_overnight_d0_s6006=7.0915/83e33be15e923d58
-hinata_overnight_d0_s7007=7.1570/cbf9372c9b0e17aa
 hinata_overnight_d3_s4004=5.9350/9b00b74e915d96f9
 hinata_overnight_d3_s5005=5.9000/8f5ee71ce6b72f94
 hinata_overnight_d3_s6006=5.9575/ba59c634ad337ac3
@@ -162,9 +141,7 @@ hinata_overnight_d5_s5005=5.8433/9040cf4be408910d
 hinata_overnight_d5_s6006=5.9233/579c76625ddf1a80
 hinata_overnight_d5_s7007=5.8633/86e0dab54e7dd1a2
 dragonstorm_overnight_d0_s4004=5.4035/624b5581a33a44d1
-dragonstorm_overnight_d0_s5005=5.4415/cf6c78dc2f3a3bb0
 dragonstorm_overnight_d0_s6006=5.5225/0f199fd1165fdfa1
-dragonstorm_overnight_d0_s7007=5.4480/38453e333aaa2d32
 dragonstorm_overnight_d3_s4004=4.3820/115ea73e13eabbb1
 dragonstorm_overnight_d3_s5005=4.3140/6997f5426ebf3e80
 dragonstorm_overnight_d3_s6006=4.3240/14a98995e066ae2b
@@ -174,9 +151,7 @@ dragonstorm_overnight_d5_s5005=4.3667/2230fe86786d634c
 dragonstorm_overnight_d5_s6006=4.2333/ec518d4650418a62
 dragonstorm_overnight_d5_s7007=4.4267/89d03136b8897283
 auras_overnight_d0_s4004=4.4385/edbb0c159cf80669
-auras_overnight_d0_s5005=4.4410/3667ce54fcc6790f
 auras_overnight_d0_s6006=4.4595/927bc0bd5b44c53e
-auras_overnight_d0_s7007=4.4565/c468bbb6695826a6
 auras_overnight_d3_s4004=4.1330/64058130b56b84a7
 auras_overnight_d3_s5005=4.1590/a446bff93c2bd5d2
 auras_overnight_d3_s6006=4.1330/70a8571ec94d9ab1
@@ -186,9 +161,7 @@ auras_overnight_d5_s5005=4.1600/0d9029f8f375773c
 auras_overnight_d5_s6006=4.1320/ae1a03f312ec1f50
 auras_overnight_d5_s7007=4.1680/3f886fb40dd223d7
 goblins_overnight_d0_s4004=4.8805/d76247dc7d3355ec
-goblins_overnight_d0_s5005=4.8615/fcaf1e1d2304a32f
 goblins_overnight_d0_s6006=4.8640/fd3e97589a0913fd
-goblins_overnight_d0_s7007=4.8800/d5c453e1701d3dcf
 goblins_overnight_d3_s4004=4.3310/7e1a094e6be1470a
 goblins_overnight_d3_s5005=4.3270/6ca352c582577645
 goblins_overnight_d3_s6006=4.3260/a45b5a3b49e8c747

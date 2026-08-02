@@ -159,11 +159,24 @@ REGRESSION_CASES=(
 # (th/burn at 80/80); slivers stays low (10/20 -- it spins on its heavy tail and its
 # 1000g x4-seed counts make a big budget a multi-hour sink for zero benefit); knights
 # gets a modest bump (20/40). See search-perf-investigation memory.
+#
+# SEED SPACING (fixed 2026-08-02 -- the d0 rows were overlapping). A game's identity is
+# base_seed + game_index, so a case with base B and N games OWNS effective seeds [B, B+N-1].
+# Two cases at the same depth whose ranges touch are NOT independent replicates -- they
+# replay the same games and a "4 seeds all agree" reads as 4x more evidence than it is.
+# The d0 rows run 2000 games but sat on bases spaced 1001 (4004/5005/6006/7007), so each
+# overlapped its neighbour by 999 games: 8000 games reported, 5003 distinct. All 9 decks,
+# 27 overlapping pairs. d0 now uses 4004/6006/8008/10010 (spacing 2002 > 2000 games).
+# d3/d5 run 1000 games on the 1001-spaced bases and were already disjoint -- by ONE seed,
+# so if you ever raise a d3/d5 game count above 1001 you MUST re-space those too.
+# Rule: bases must be spaced STRICTLY WIDER than the per-case game count.
+# See .claude/skills/regression-testing.md rule 7 and
+# docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
   "slivers 0 4004 2000 0"
-  "slivers 0 5005 2000 0"
-  "slivers 0 6006 2000 0"
-  "slivers 0 7007 2000 0"
+  "slivers 0  6006 2000 0"
+  "slivers 0  8008 2000 0"
+  "slivers 0 10010 2000 0"
   "slivers 3 4004 1000 10"
   "slivers 3 5005 1000 10"
   "slivers 3 6006 1000 10"
@@ -173,9 +186,9 @@ OVERNIGHT_CASES=(
   "slivers 5 6006 1000 20"
   "slivers 5 7007 1000 20"
   "burn    0 4004 2000 0"
-  "burn    0 5005 2000 0"
-  "burn    0 6006 2000 0"
-  "burn    0 7007 2000 0"
+  "burn    0  6006 2000 0"
+  "burn    0  8008 2000 0"
+  "burn    0 10010 2000 0"
   "burn    3 4004 1000 80"
   "burn    3 5005 1000 80"
   "burn    3 6006 1000 80"
@@ -185,9 +198,9 @@ OVERNIGHT_CASES=(
   "burn    5 6006 1000 80"
   "burn    5 7007 1000 80"
   "th      0 4004 2000 0"
-  "th      0 5005 2000 0"
-  "th      0 6006 2000 0"
-  "th      0 7007 2000 0"
+  "th      0  6006 2000 0"
+  "th      0  8008 2000 0"
+  "th      0 10010 2000 0"
   "th      3 4004 1000 80"
   "th      3 5005 1000 80"
   "th      3 6006 1000 80"
@@ -197,9 +210,9 @@ OVERNIGHT_CASES=(
   "th      5 6006 1000 80"
   "th      5 7007 1000 80"
   "knights 0 4004 2000 0"
-  "knights 0 5005 2000 0"
-  "knights 0 6006 2000 0"
-  "knights 0 7007 2000 0"
+  "knights 0  6006 2000 0"
+  "knights 0  8008 2000 0"
+  "knights 0 10010 2000 0"
   "knights 3 4004 1000 20"
   "knights 3 5005 1000 20"
   "knights 3 6006 1000 20"
@@ -210,9 +223,9 @@ OVERNIGHT_CASES=(
   "knights 5 7007 1000 40"
   # antilife: re-added at 1/10 virtual-ms (see smoke block + search-perf-investigation memory).
   "antilife 0 4004 2000 0"
-  "antilife 0 5005 2000 0"
-  "antilife 0 6006 2000 0"
-  "antilife 0 7007 2000 0"
+  "antilife 0  6006 2000 0"
+  "antilife 0  8008 2000 0"
+  "antilife 0 10010 2000 0"
   "antilife 3 4004 1000 10"
   "antilife 3 5005 1000 10"
   "antilife 3 6006 1000 10"
@@ -229,9 +242,9 @@ OVERNIGHT_CASES=(
   # this scale). Still kept under the other decks' 1000/seed on purpose (Hinata is ~8x their per-game
   # cost). Re-measure the tail before raising further (a rare monster game could still surprise).
   "hinata  0 4004 2000 0"
-  "hinata  0 5005 2000 0"
-  "hinata  0 6006 2000 0"
-  "hinata  0 7007 2000 0"
+  "hinata  0  6006 2000 0"
+  "hinata  0  8008 2000 0"
+  "hinata  0 10010 2000 0"
   "hinata  3 4004  400 10"
   "hinata  3 5005  400 10"
   "hinata  3 6006  400 10"
@@ -242,9 +255,9 @@ OVERNIGHT_CASES=(
   "hinata  5 7007  300 20"
   # dragonstorm: 4-seed sweep at modest gate budgets (10/20) -- it's cheap, ~11 min total across seeds.
   "dragonstorm 0 4004 2000 0"
-  "dragonstorm 0 5005 2000 0"
-  "dragonstorm 0 6006 2000 0"
-  "dragonstorm 0 7007 2000 0"
+  "dragonstorm 0  6006 2000 0"
+  "dragonstorm 0  8008 2000 0"
+  "dragonstorm 0 10010 2000 0"
   "dragonstorm 3 4004  500 10"
   "dragonstorm 3 5005  500 10"
   "dragonstorm 3 6006  500 10"
@@ -263,9 +276,9 @@ OVERNIGHT_CASES=(
   #     metric, but it is real extra state exploration, which is what the overnight budget is for.
   #     Cost measured at 0.066 s/game vs 0.023 (2.8x) = ~4 min single-thread across the 4 seeds.
   "auras   0 4004 2000 0"
-  "auras   0 5005 2000 0"
-  "auras   0 6006 2000 0"
-  "auras   0 7007 2000 0"
+  "auras   0  6006 2000 0"
+  "auras   0  8008 2000 0"
+  "auras   0 10010 2000 0"
   "auras   3 4004 1000 80"
   "auras   3 5005 1000 80"
   "auras   3 6006 1000 80"
@@ -276,9 +289,9 @@ OVERNIGHT_CASES=(
   "auras   5 7007 1000 20"
   # goblins: wide 4-seed sweep (cheap fast aggro; d3/d5 sized like knights/dragonstorm).
   "goblins 0 4004 2000 0"
-  "goblins 0 5005 2000 0"
-  "goblins 0 6006 2000 0"
-  "goblins 0 7007 2000 0"
+  "goblins 0  6006 2000 0"
+  "goblins 0  8008 2000 0"
+  "goblins 0 10010 2000 0"
   "goblins 3 4004 1000 20"
   "goblins 3 5005 1000 20"
   "goblins 3 6006 1000 20"
