@@ -123,7 +123,7 @@ phase_freeze() {
 # ------------------------------------------------------- PHASE A: every deck's rows, ONE pooled batch
 phase_rows() {
     done_p A_rows && return 0
-    local key dir stem mkey base games row total=0 b n
+    local key dir stem mkey base games row b n
     { for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
         b=0
@@ -133,9 +133,10 @@ phase_rows() {
                   "$dir/$stem.profile.json" "$n" "$(( base + b ))"
             b=$(( b + 250 ))
         done
-        total=$(( total + games ))
       done; } | h_manifest "$ALL_ROWS.manifest.json" >/dev/null
-    log "PHASE A: $total games across ${#DECK_TABLE[@]} decks in ONE queue (K=$ROW_K searched labels)."
+    # Counted from the manifest, not accumulated in the loop: the loop runs inside the pipeline's
+    # SUBSHELL, so a variable incremented there is lost and the line logged "0 games".
+    log "PHASE A: $(grep -c '"name"' "$ALL_ROWS.manifest.json") jobs across ${#DECK_TABLE[@]} decks in ONE queue (K=$ROW_K searched labels)."
     log "  One tail, at the very end. Hinata dominates; the other decks fill cores behind its slow games."
     MTG_DUMP_VALUE_ROWS="$ALL_ROWS" MTG_EVAL_ROWS_K="$ROW_K" MTG_EVAL_ROWS_ROLLOUT=0 \
         ./build/Release/mtg --batch "$ALL_ROWS.manifest.json" --threads 24 \
