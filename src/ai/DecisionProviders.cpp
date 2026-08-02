@@ -2739,11 +2739,11 @@ bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const
 
 std::string GoblinsProvider::ForcedEarlyLandName(const GameState& s, int controller) const
 {
-    // Turns 1-2 only. Past that the hand is usually all-Mountain anyway (21 of 23 lands) so the
-    // prune would buy nothing, and the later turns are exactly where the utility lands become a real
-    // decision -- Three Tree City wants deploying once there are Goblins to scale off, and a Cavern
-    // can deploy a creature while a Mountain stays up for removal. Keep the prune to the turns where
-    // the deck simply needs its red source, and leave the interesting choices searched.
+    // Turns 1-2 only -- the window where both utility lands are strictly {C} sources and a Mountain
+    // is strictly better (see the header comment: Three Tree City's scaled mode cannot switch on
+    // before turn 3, and a Cavern's colours never pay for a noncreature spell). From turn 3 they
+    // become genuine decisions -- Three Tree City can finally scale, and a Cavern can deploy a
+    // creature while a Mountain stays up for removal -- so those turns stay fully searched.
     constexpr int kEarlyTurns = 2;
     if (s.turn_number > kEarlyTurns) { return {}; }
     for (const Card& c : s.players[controller].hand)
