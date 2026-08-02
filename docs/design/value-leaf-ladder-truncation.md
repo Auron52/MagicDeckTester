@@ -29,46 +29,62 @@ never re-run on the union.
 
 2. **Nothing enforced ladder completeness.** The writer emitted whatever cells the log
    held. Fix: a completeness guard (`completeness_error`) **refuses to write** (exit 2) when
-   the ladder is inconclusive — `trust` UNSET *and* not `no_fallback` *and* the deepest V
-   still **descending** (would likely cross `tol` with more depth = truncated), or the
-   ladder doesn't reach the deck's `target_depth`. `--allow-partial` downgrades to a warning
-   for a deck whose UNSET trust is deliberate. The scalar cap now also **auto-derives** from
+   the ladder is inconclusive. `--allow-partial` downgrades to a warning for a deck whose
+   UNSET trust is deliberate. The scalar cap now also **auto-derives** from
    `value_play.target_depth` (was a fixed default of 5, which silently under-capped
    `target_depth=6` decks).
 
-The guard's discriminator is the key idea: a genuine never-trust leaf (antilife, TH) has
-**flattened** above `h_conv`; a truncated ladder (goblins-pre) was still **descending** at
-its deepest measured cell. Flattened ⇒ conclusive UNSET (allowed); descending ⇒ inconclusive
-(refused).
+The guard's discriminator is **coverage of the in-play depth range**, i.e. depths
+`<= scalar_cap == target_depth` — the only depths the escalation gate reads. A table is
+conclusive when that range is fully measured:
 
-## Open: hinata2 and dragonstorm are in the same descending+UNSET state
+- `trust_depth` SET ⇒ conclusive (leaf trusted from that depth).
+- `no_fallback` True ⇒ conclusive (leaf provably worse everywhere ⇒ always escalate-and-take).
+- `trust` UNSET but `max(vdepths) >= target_depth` ⇒ **conclusive UNSET**: the leaf at the
+  play depth is genuinely `> tol` worse than the heuristic, so escalate-and-**take** is
+  correct. Whether the leaf keeps descending at OUT-OF-RANGE depths (`d > target_depth`) is
+  irrelevant — it can't move the in-play gate.
 
-When the guard was written it was checked against every committed value deck. Two — **hinata2**
-and **dragonstorm** — trip it: their committed tables have `value_trust_depth` UNSET,
-`no_fallback` false, and the deepest measured V cell **still descending**, only ~0.006–0.009
-LP above `h_conv`:
+It refuses ONLY when `trust` UNSET *and* not `no_fallback` *and* `max(vdepths) < target_depth`
+— the ladder stops **below** the play depth, so an unmeasured in-range cell could still cross
+`tol`. That is exactly goblins-pre (V5, target 6: V6 was in-range and unmeasured).
 
-| deck | V_top | V_prev | descent | h_conv | gap V_top−h_conv |
-|------|-------|--------|---------|--------|------------------|
-| hinata2 | 6.1460 | 6.2200 | +0.0740 | 6.1400 | 0.0060 |
-| dragonstorm | 4.7862 | 4.8312 | +0.0450 | 4.7775 | 0.0087 |
+> An earlier version of this guard also fired on a merely *still-descending* deepest cell
+> that sat AT the cap. That was a **false positive**: it flagged hinata2/dragonstorm
+> (measured to V5 == target 5), whose UNSET is correct. Corrected to the coverage rule above.
 
-This is the **same shape** as goblins-pre (V still dropping ~0.05–0.07/depth, a hair above
-`h_conv`). It is plausible — not proven — that extending each ladder one or two depths would
-cross `tol` and set a real `value_trust_depth`, which (as on goblins) would remove wasted
-escalate-and-discard work at the play depth with no quality change. It is equally possible the
-leaf plateaus just above `h_conv` and UNSET is correct.
+## Are other decks affected? — no confirmed bug; goblins was unique
 
-**This was surfaced, not changed** — the committed hinata2/dragonstorm profiles are untouched.
-To resolve, on a frozen commit:
+The whole point of the escalation gate is whether the leaf reaches `tol` of `h_conv` **within
+the in-play depth range** (`<= target_depth`). Goblins was the only deck whose ladder stopped
+BELOW that range (V5, target 6) *and* whose crossover discarded the escalations it triggered.
+Every other value deck is conclusive:
 
-```
-# extend the ladder deeper for the one deck, then let the guard decide:
-python3 scripts/attic/valueleaf_depth_matrix.py --decks hinata --hdepths 1 2 3 \
-    --vdepths 5 6 7 8 --value-min-depth 0 --games 3000 --seeds <held-out> \
-    --write-profile            # refuses if still inconclusive; writes trust if it converges
-```
+| deck | target | max V | trust | `take@target` | verdict |
+|------|--------|-------|-------|---------------|---------|
+| goblins (fixed) | 6 | 8 | **6** | 4 (take) | trust set — no escalation at play depth |
+| hinata2 | 5 | **5** | UNSET | **2 (take)** | escalate-and-**take** — UNSET is correct |
+| dragonstorm | 5 | **5** | UNSET | **3 (take)** | escalate-and-**take** — UNSET is correct |
+| antilife | 5 | 7 | UNSET | 3 (take) | leaf far worse; escalate-and-take |
+| TH | 5 | 8 | UNSET | 3 (take) | leaf converges out-of-range; escalate-and-take |
+| slivers / knights / auras | 5 | 5–8 | 5 (set) | — | trust set |
+| burn | 6 | 8 | 6 (set) | — | trust set |
 
-Then A/B the play profile (quality byte-identical expected; wall faster if trust becomes set,
-exactly like goblins' −23%). Adopt only on the usual regression accept flow. Do **not** hand-edit
-the table — the guard exists precisely so the profile can only come from a complete measurement.
+The critical contrast is **`take@target`**: goblins-pre carried a keep-leaf sentinel (`9`) at
+its target depth, so its escalations were run **and discarded** (pure waste — the −23% we
+recovered). hinata2/dragonstorm have a LOW `take@target` (2–3), so their escalations are
+**taken** — productive work buying the ~0.006–0.009 LP by which the heuristic beats the leaf at
+depth 5. Their UNSET is the correct config, not a latent goblins bug.
+
+Two genuinely-open (minor) items, neither a correctness bug:
+
+- **Sampling confidence.** hinata2's table is 200 games, dragonstorm's 400 (goblins is now
+  3000). The ~0.006–0.009 leaf-vs-heuristic gap at the play depth is within plausible noise. If
+  we ever want to *firm up* that these should stay UNSET (vs. the leaf actually being at parity,
+  which would let us drop the escalations for a speed win), re-measure at high N via
+  `valueleaf_depth_matrix.py --decks hinata --vdepths 1 2 3 4 5 --games 3000 --seeds <held-out>
+  --write-profile` (the guard passes either way; only the numbers firm up). Precision, not a fix.
+- **No-op escalations.** For combo decks most escalations re-search to the *same* win turn (a
+  known ~82% on hinata). Skipping those predicted no-ops is the **escalation confidence-gate**
+  (`MTG_ESCALATION_GATE`, `docs/design/escalation-and-rollout-cost.md`) — a separate speed lever,
+  unrelated to the table/trust question here.

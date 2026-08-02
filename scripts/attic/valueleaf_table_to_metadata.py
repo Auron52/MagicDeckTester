@@ -222,31 +222,39 @@ def training_adequacy(H, V, xover, hgames_of, vgames, min_games, band=0.03, conv
 
 def completeness_error(deck, V, trust_depth, no_fallback, h_conv, tol, target_depth, conv_eps=0.005):
     """Return a human-readable reason string iff this table is INCONCLUSIVE -- i.e. it is NOT safe to write
-    the derived scalars because the value ladder was TRUNCATED before it either converged or was proven to
-    diverge. This is the guard that would have caught the 2026-07 goblins bug (V ladder stopped at V5 while
-    still descending, so value_trust_depth came out UNSET and the engine silently escalated-and-discarded at
-    the play depth). Returns None (OK to write) when the table is conclusive.
+    the derived scalars because the value ladder was truncated BELOW the play depth, so an UNSET trust could
+    not have been earned. Returns None (OK to write) when the table is conclusive.
 
-    A table is INCONCLUSIVE iff trust_depth is UNSET *and* the leaf is not classified no_fallback *and* the
-    deepest measured value cell is STILL DESCENDING (V_top < V_prev - conv_eps). Descending = a deeper cell
-    would likely be lower, possibly crossing `tol` and setting a real trust depth -- so 'UNSET' is unearned.
-    A leaf that has FLATTENED above h_conv (antilife, TH) is a genuine never-trust state and passes. A leaf
-    that reaches tol (trust set) or is provably far (no_fallback) passes. Also flags a ladder that does not
-    reach the deck's play target_depth (the crossover then can't cover the depth play actually commits at)."""
+    The ONLY thing the escalation gate reads is whether the leaf reaches `tol` of h_conv WITHIN the in-play
+    depth range (depths <= scalar_cap == the deck's target_depth). So a table is conclusive as long as that
+    in-play range is fully measured:
+      - trust_depth SET  -> conclusive (leaf trusted from that depth).
+      - no_fallback True -> conclusive (leaf provably worse everywhere -> always escalate-and-take).
+      - trust UNSET but max(vdepths) >= target_depth -> conclusive UNSET: the leaf at the play depth is
+        genuinely > tol worse than the heuristic, so escalate-and-TAKE is correct (hinata/dragonstorm/
+        antilife/TH). Whether the leaf keeps descending at OUT-OF-CAP depths (d > target_depth) does NOT
+        move the in-play gate, so it is irrelevant here.
+    INCONCLUSIVE iff trust UNSET *and* not no_fallback *and* max(vdepths) < target_depth: the ladder stops
+    BELOW the play depth, so an unmeasured IN-RANGE cell could still cross tol and set a real trust depth.
+    This is exactly the 2026-07 goblins bug (V ladder stopped at V5 while target_depth was 6, so V6 -- the
+    in-range cell that crosses tol -- was never measured, trust came out UNSET, and the engine
+    escalated-and-discarded at the play depth). The earlier version of this guard ALSO fired on a merely
+    'still-descending' deepest cell that was AT the cap (hinata/dragonstorm, measured to V5 == target 5);
+    that was a false positive -- descending out-of-range does not change the gate."""
     vdall = sorted(V)
-    reasons = []
-    if target_depth and max(vdall) < target_depth:
-        reasons.append("V ladder tops out at V%d but play searches to target_depth=%d -- the table does not "
-                       "cover the play depth; extend --vdepths to >= %d" % (max(vdall), target_depth, target_depth))
-    if trust_depth is None and not no_fallback and len(vdall) >= 2:
-        vtop, vprev = V[vdall[-1]], V[vdall[-2]]
-        if vtop < vprev - conv_eps:
-            reasons.append("value_trust_depth is UNSET and the leaf is not no_fallback, yet V%d=%.4f is still "
-                           "DESCENDING from V%d=%.4f (gap to h_conv=%.4f is %.4f) -- the ladder is TRUNCATED "
-                           "before it converged; a deeper cell would likely cross tol=%.4f and set a real "
-                           "trust depth. Extend --vdepths deeper (or pass --allow-partial if this UNSET is "
-                           "intentional)." % (vdall[-1], vtop, vdall[-2], vprev, h_conv, vtop - h_conv, tol))
-    return "; ".join(reasons) if reasons else None
+    if trust_depth is not None or no_fallback or not target_depth:
+        return None
+    if max(vdall) >= target_depth:
+        return None
+    detail = ""
+    if len(vdall) >= 2 and V[vdall[-1]] < V[vdall[-2]] - conv_eps:
+        detail = (" and V%d=%.4f is still DESCENDING from V%d=%.4f (gap to h_conv=%.4f is %.4f), so a deeper "
+                  "IN-RANGE cell would likely cross tol=%.4f and set a real trust depth"
+                  % (vdall[-1], V[vdall[-1]], vdall[-2], V[vdall[-2]], h_conv, V[vdall[-1]] - h_conv, tol))
+    return ("value_trust_depth is UNSET but the value ladder tops out at V%d, SHORT of the play "
+            "target_depth=%d -- the in-play depth range is not fully measured%s. Extend --vdepths to >= %d "
+            "and re-measure (or pass --allow-partial if this UNSET is intentional)."
+            % (max(vdall), target_depth, detail, target_depth))
 
 
 def write_deck(block, tol, offset, margin, dry, scalar_cap=None, set_esc_cap=True, allow_partial=False):
