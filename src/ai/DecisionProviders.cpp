@@ -697,7 +697,7 @@ bool GenericProvider::ShouldAttackWith(const GameState&, const Permanent&) const
     return true;    // goldfish default: attack with everything that can attack (no blockers).
 }
 
-int GenericProvider::CastOrderRank(const GameState&, const CardDefinition& def) const
+int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     // See DecisionProvider::CastOrderRank. Reliable deck-agnostic order so the canonical line
     // realises what EnumeratePlans projects (prowess), at no search cost. Tiers (lower =
@@ -745,6 +745,46 @@ int GenericProvider::CastOrderRank(const GameState&, const CardDefinition& def) 
     // it earlier can pre-empt a lethal line and, worse, let a later un-reversed lifegain rider
     // (Aria with the Remedy now gone) HEAL the opponent. Ranked alongside the self-damage tier.
     if (def.params.destroy_all_enchantments)   { return 30; }
+    // ---- Light-Paws aura cast ORDER -------------------------------------------------------------
+    // Only when we actually control an aura_cast_tutor_attach permanent (Light-Paws): every Aura we
+    // cast then fetches ANOTHER Aura, and the fetch may not name an Aura we already control. So the
+    // cast order decides what stays fetchable.
+    //
+    // Cast the Auras we do NOT want to duplicate FIRST, and the ones we do want LAST. Casting
+    // Ethereal Armor from hand makes Ethereal Armor unfetchable for the rest of the turn; casting a
+    // Rancor first lets its fetch GRAB an Ethereal Armor, after which our own copy is still in hand
+    // to cast -- two of them instead of one. Since scaling Auras compound (each reads the
+    // enchantment count, see LightPawsAuraCandidates), they are exactly the ones worth duplicating.
+    //
+    //   20 plain flat Aura        -- first; its fetch can still reach a scaler
+    //   22 SCALING Aura           -- later, so the fetches above can take one
+    //   23 Aura with an ENCHANT REQUIREMENT -- LAST
+    //
+    // Rank 23 is a correctness constraint, not a preference: Daybreak Coronet ("enchant creature
+    // with another Aura attached to it") and Lion Umbra ("enchant modified creature") CANNOT be cast
+    // onto a bare creature. Ordering them last guarantees an Aura is already attached whenever any
+    // other Aura is in the plan; if one of them is the only Aura in the plan, order cannot help and
+    // enumeration legality decides as before. This is why the scalers are demoted to 22 rather than
+    // to the last slot -- pushing them past the constrained pair would strand it.
+    // Gated MTG_AURA_CAST_ORDER (default on) and on controlling the tutor, so every deck without a
+    // Light-Paws is byte-identical.
+    static const bool s_aura_cast_order = EnvOn("MTG_AURA_CAST_ORDER", true);
+    if (s_aura_cast_order && def.params.is_aura)
+    {
+        bool tutor = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.aura_cast_tutor_attach) { tutor = true; break; }
+        }
+        if (tutor)
+        {
+            if (!def.params.aura_enchant_requires.empty()) { return 23; }
+            if (!def.params.aura_scale_kind.empty() && def.params.aura_scale_power > 0) { return 22; }
+            return 20;
+        }
+    }
     if (RockRampEnumEnabled() && def.params.mana_rock && !def.card.IsCreature()) { return 5; }
     // Goblin Warchief (a subtype cost reducer): cast it just BEFORE other creatures (8 < 10) so a
     // same-turn Goblin it discounts is enumerated after the reducer is online. Gated on the param,
