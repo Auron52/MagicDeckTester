@@ -297,8 +297,22 @@ static std::string BoardSignature(const GameState& s)
 // to prevent. Found by the board-nullity probe (MTG_TRACE=nil): 25/60 Goblins games committed a plan
 // containing a Lightning Bolt that never resolved, every one of them off a Cavern of Souls.
 // Restricted to this NON-creature pool, so the creature-cast path keeps the full colour list.
-// Default on; MTG_CCO_NONCREATURE_POOL=0 restores the old over-credit for the A/B.
-static const bool s_cco_noncreature_pool = EnvOn("MTG_CCO_NONCREATURE_POOL", true);
+//
+// DEFAULT OFF (opt in with MTG_CCO_NONCREATURE_POOL=1). It was briefly adopted and then WITHDRAWN
+// (user-directed), because it does not clear the bar for keeping a change that perturbs results:
+//   * It is NOT "we allowed invalid behaviour and now disallow it". The evaluator already refused
+//     the Bolt off a Cavern -- MTG_CCO_AUDIT reports 0 illegal taps on the unfixed arm. The cast
+//     merely STRANDED; no illegal play was ever made. So the regressing cases cannot be charged to
+//     correctness, and the change has to earn its place on measurement like any heuristic.
+//   * On measurement it is EXACTLY neutral: 0.0000 delta on all 12 jobs, 6600 fresh games/arm
+//     (seeds 9001-9006, d3/10ms + d5/20ms). Every digest differs, so play IS perturbed -- the
+//     outcome simply is not. An earlier +0.0024t read on one train seed pair was sampling noise.
+// The reason it cancels is worth keeping: the fixed arm GAINS the Bolt's damage but PAYS more land
+// branching, because playing the Mountain first leaves the singleton Cavern in hand and every later
+// turn must keep branching over two distinct land choices. Measured on same-outcome games:
+// +18% interior nodes (gi28), +97% (gi166), -3% (gi90). That search-economy effect is the live
+// question -- see the land-order heuristic in GoblinsProvider -- not this pool.
+static const bool s_cco_noncreature_pool = EnvOn("MTG_CCO_NONCREATURE_POOL");
 
 // Pool excluding creature-only mana sources (e.g. Ancient Ziggurat).
 // Used to verify that non-creature spells are payable without those sources.

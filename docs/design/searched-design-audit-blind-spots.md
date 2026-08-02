@@ -103,7 +103,7 @@ move the projected win turn. Casting a lord on turn 2 does not make a turn-4 win
 no player would skip it. Aggregating into a per-card free-rate (`scripts/tie_probe_report.py`)
 does not separate the classes either, because the noise is not per-card.
 
-### `MTG_TRACE=nil` -- board-nullity (SHARP; this is the one that found a bug)
+### `MTG_TRACE=nil` -- board-nullity (SHARP; the one worth reaching for)
 
 What actually characterised the duplicate legend is stronger and **horizon-independent**: applying
 the action left the BOARD exactly as it was. The copy resolved, the legend rule killed it, and the
@@ -116,7 +116,7 @@ with tapped/sickness/counters/damage/auras, plus both life totals). Nine decks, 
 | deck | board-null actions | verdict |
 |---|---|---|
 | burn, th, knights, slivers, antilife, auras | 0 | clean |
-| goblins | **25** (all Lightning Bolt) | **REAL BUG** -- see below |
+| goblins | **25** (all Lightning Bolt) | enumeration hygiene, WITHDRAWN -- see below |
 | hinata | 151 | all explained: rituals/cantrips + 2 probe artifacts |
 | dragonstorm | 30 | all the known ritual afford optimism (deliberate) |
 
@@ -145,21 +145,42 @@ source as one **WILD** that satisfies any coloured pip. So the enumerator believ
 pay {R} for a Lightning Bolt. The payment path already models this correctly
 (`ProducesForPayment`), so the cast **stranded as a silent no-op**.
 
-The cost was not a wasted plan variant. The land-fold ranked "play Cavern + Bolt" as good as "play
-Mountain + Bolt", so the engine **played the wrong land and wasted the turn**. Goblins gi28: old T1
-Cavern + nothing (opp still 20 through T2) -> new T1 Mountain + Bolt (opp 17); same win turn T4, opp
-at -7 instead of -2.
+The land-fold then ranked "play Cavern + Bolt" as good as "play Mountain + Bolt", so the engine
+played the Cavern -- the land off which the Bolt could NOT be cast. Goblins gi28: T1 Cavern +
+nothing (opp still 20 through T2) vs T1 Mountain + Bolt (opp 17).
 
-This is the third instance of one lesson: **fixing one site of a decision is not fixing the
-decision.** The restricted-mana model was adopted at the payment sites; the enumerator's
-affordability pool was a separate site nobody grepped. Same shape as Dwarven Hold vs Mercadian
-Bazaar. Question 3 of the corrected method exists for exactly this and was not applied here.
+**WITHDRAWN (user-directed), and the reasoning is the durable part of this entry.** The fix is
+committed but `MTG_CCO_NONCREATURE_POOL` defaults OFF. Two things sank it:
 
-Note also what this says about the audit's own framing: it is filed under offer/prune, but it is a
-FEASIBILITY bug, not a heuristic. Per the heuristic-optimization skill's Rule 0 that makes it
-something to fix against the rules, not something to tune -- and the probe was still the thing that
-found it. A sweep aimed at one class will surface others; classify what you find rather than
-forcing it into the category you went looking for.
+1. **It is not a correctness fix, and I wrongly argued it was.** The bar for keeping a change whose
+   cases regress is: *we allowed invalid behaviour, we now disallow it, and that is what made those
+   cases worse.* Not met. The evaluator ALREADY refused the Bolt off a Cavern -- `MTG_CCO_AUDIT`
+   reports **0 illegal taps** on the unfixed arm, a fact this audit had measured and then failed to
+   draw the conclusion from. Nothing illegal was ever played; the cast merely stranded. So the
+   change is enumeration hygiene, and must earn its place on measurement like any heuristic.
+2. **On measurement it is exactly neutral.** 0.0000 delta on all 12 jobs, 6600 fresh games/arm
+   (seeds 9001-9006, d3/10ms + d5/20ms). Every digest differs -- play IS perturbed -- but no
+   outcome moves. The `+0.0024t` first reported was sampling noise from ONE train seed pair over
+   five cases; it was adopted on train seeds with no held-out validation, which is the process error
+   underneath the judgement error.
+
+**Why it cancels -- the live finding.** The fixed arm GAINS the Bolt's damage and PAYS more land
+branching: playing the Mountain first leaves the singleton Cavern in hand, so every later turn must
+keep branching over two distinct land choices, where dumping the odd land early collapses the hand
+to all-Mountains and one land option. Measured on same-outcome games: **+18% interior nodes (gi28),
++97% (gi166), -3% (gi90)**. Caveat: `interior_nodes` is confounded by early-win cutoffs, so only
+compare games whose win turn is unchanged. This search-economy effect -- not the pool -- is the
+question worth pursuing (land-order heuristic, GoblinsProvider).
+
+Two lessons, both about the audit rather than the engine:
+
+- **Fixing one site of a decision is not fixing the decision** (third instance). The restricted-mana
+  model was adopted at the payment sites; the enumerator's affordability pool was a separate site
+  nobody grepped. Same shape as Dwarven Hold vs Mercadian Bazaar. Question 3 exists for this.
+- **Do not let a category justify a result.** This was filed under offer/prune and then defended as
+  a "faithfulness fix" -- a category claim doing work that only a measurement can do. A sweep aimed
+  at one class will surface others; classify what you find, and when the finding turns out to be a
+  heuristic rather than a bug, hold it to the heuristic's bar.
 
 ## Open queue (agreed order, 2026-08-01)
 
