@@ -61,7 +61,12 @@ ROWS=${2:-$ROWS}
 # ONE queue by the single --batch call below; the blocks exist only to keep seed ranges disjoint,
 # NOT to serialise the work.
 BLOCK=250
-BASE=30030      # fresh: clear of 20020+gi used by the chunked runs and of the suite's seed sets
+# BASE is overridable because a REPEATED invocation with the same base replays the SAME games:
+# per-game seed is base+gi with gi restarting at 0, so a second `... 2000` covers the identical
+# range and every row it produces is dropped by collect's (seed,turn) dedupe -- i.e. hours of work
+# for zero new rows. The doc line "repeat until ~11k rows" is only correct with a disjoint BASE.
+# Successive invocations must advance BASE by at least the previous invocation's GAMES.
+BASE=${BASE:-30030}      # fresh: clear of 20020+gi used by the chunked runs and of the suite's seed sets
 {
     b=0
     while [ "$b" -lt "$GAMES" ]; do

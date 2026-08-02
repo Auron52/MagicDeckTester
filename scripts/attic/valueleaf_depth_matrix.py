@@ -45,6 +45,14 @@ DECKS = {
     # goblins (aggro): board-driven like burn/slivers/auras -> value leaf expected inert on quality,
     # a search SPEED win. hdepths capped at 3 (heuristic converges by d3 for aggro). value model 2026-07-31.
     "goblins":  ("decks/Goblins/Goblins.cod",             "decks/Goblins/Goblins.value.json",             8),
+    # STAGED variants: same deck + same mulligan profile, but the V cells read a value model that is
+    # NOT yet installed in the deck folder (the trainer writes logs/eval/<deck>.value.STAGED.json and
+    # deliberately does not touch the live sidecar). The model reaches the engine via MTG_VALUE_PROFILE,
+    # so pointing a deck key at the staged path is all that is needed to measure a table for a model
+    # before adopting it -- which is the order the regeneration queue requires (measure, then adopt).
+    # H cells set MTG_VALUE_MODEL=0 and so are byte-identical to the non-staged key; only V cells move.
+    "hinata_staged":   ("decks/Hinata2/Hinata2.cod",              "logs/eval/Hinata2.value.STAGED.json",       8),
+    "antilife_staged": ("decks/Anti-Lifegain/Anti-Lifegain.cod",  "logs/eval/Anti-Lifegain.value.STAGED.json", 8),
 }
 
 
@@ -63,6 +71,8 @@ PROFILES = {
     "hinata":      "decks/Hinata2/Hinata2.profile.json",
     "dragonstorm": "decks/Dragonstorm/Dragonstorm.profile.json",
     "auras":       "decks/Auras/Auras.profile.json",
+    "hinata_staged":   "decks/Hinata2/Hinata2.profile.json",
+    "antilife_staged": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
 }
 
 def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_depth,
