@@ -492,14 +492,95 @@ std::vector<int> DecisionProvider::LightPawsAuraCandidates(
         const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
         return d ? d->card.m_mana_cost.ManaValue() : -1;
     };
+    // Where a SCALING Aura sits in the ranking (MTG_AURA_RANK_MODE):
+    //   0 = legacy      power -> MV -> library order  (the historical rule)
+    //   1 = scale-first SCALING -> power -> MV        (all scalers ahead of all flat Auras)
+    //   2 = scale-last  power -> MV -> SCALING        (scaling breaks EXACT ties only)
+    //   3 = conditional  scale-first WHEN another Aura is castable this/next turn, else mode 2
+    //
+    // Both beat legacy decisively and by almost the same margin (12600 fresh games/arm, seeds
+    // 9001-9006, d0+d3+d5): mode 1 -0.0067, mode 2 -0.0071, each 18 jobs better / 0 worse. The
+    // shared win is real and comes from the same place -- realized power prices the board as it
+    // stands, which systematically undervalues an Aura whose whole point is that it grows. Ethereal
+    // Armor (+1/+1 per enchantment) and Audacity (+2/+2 flat) tie at two enchantments and the Armor
+    // is strictly ahead from the third on; in an Auras deck a third is coming, and under legacy ~18
+    // fetches per 250 games landed on the flat card by LIBRARY ORDER alone.
+    //
+    // Mode 2 is the default because it is WEAKLY DOMINANT, not because mode 1 is wrong: the two are
+    // BIT-IDENTICAL at d3 and d5 (12/12 jobs), and mode 2 is better by exactly 0.0010 on all 6 d0
+    // jobs. The gap is the known cost of mode 1, and it is a real hole rather than noise: at fetch
+    // time you always control at least the Aura you just cast, so a freshly-fetched scaler counts
+    // exactly 2 -- All That Glitters and Ancestral Mask are therefore +2 against a Lion Umbra /
+    // Daybreak Coronet +3 (both MV 2, and legal whenever an MV>=2 Aura was cast). Mode 1 takes the
+    // scaler while it is a point behind; that is recoverable when a search can see the later turns,
+    // which is why it costs nothing at d3/d5 and 0.0010 at greedy d0.
+    // Mode 2 keeps the scaling preference exactly where it is free -- an exact tie -- so "greatest
+    // power, then highest MV" still decide everything above it.
+    static const int s_rank_mode = []{
+        const char* e = std::getenv("MTG_AURA_RANK_MODE");
+        return (e && *e) ? std::atoi(e) : 0;   // 0 until the mode is chosen -- see the header note
+    }();
+    auto scales = [&](int i) -> bool {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
+        return d && !d->params.aura_scale_kind.empty() && d->params.aura_scale_power > 0;
+    };
+    // Mode 3 -- ask the question the other modes only guess at. A scaling Aura is worth taking while
+    // it is a point behind IFF more enchantments are actually coming; otherwise the +3/+3 is simply
+    // better and should win. So look at the HAND: is another Aura castable this turn or next?
+    // If yes, prefer the scaler (it will be ahead shortly, and by more than one -- casting that Aura
+    // fires Light-Paws again, so it adds TWO enchantments, itself and its fetch). If no, fall
+    // through to the straight power comparison.
+    // "This turn or next" is modelled as MV <= lands in play + 1 (next turn's land drop). Deliberately
+    // generous: the failure it guards against is taking a scaler that never grows, and a hand with a
+    // castable Aura in it is exactly the case where it does.
+    auto another_aura_soon = [&]() -> bool {
+        int lands = 0;
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == controller && p.card.IsLand()) { ++lands; } }
+        const int reach = lands + 1;
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.is_aura && d->card.m_mana_cost.ManaValue() <= reach) { return true; }
+        }
+        return false;
+    };
+    const bool scale_first_now = (s_rank_mode == 1)
+                              || (s_rank_mode == 3 && another_aura_soon());
     std::vector<int> out = legal;
-    // Original scan: higher contrib wins; on equal contrib the higher MV wins; both comparisons are
-    // strict, so the FIRST library index wins any remaining tie -- which stable_sort preserves.
+    // Every comparison is strict, so the FIRST library index wins any remaining tie -- which
+    // stable_sort preserves (that is what keeps mode 0 byte-identical to the historical scan).
     std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
+        if (scale_first_now)
+        {
+            const bool sa = scales(a), sb = scales(b);
+            if (sa != sb) { return sa; }        // all scaling Auras ahead of all flat ones
+        }
         const int ca = contrib(a), cb = contrib(b);
-        if (ca != cb) { return ca > cb; }
-        return mv(a) > mv(b);
+        if (ca != cb) { return ca > cb; }       // then greatest realized power
+        const int ma = mv(a), mb = mv(b);
+        if (ma != mb) { return ma > mb; }       // then highest mana value
+        if (s_rank_mode == 2 || s_rank_mode == 3)
+        {
+            const bool sa = scales(a), sb = scales(b);
+            if (sa != sb) { return sa; }        // exact-tie preference (also mode 3's fallback)
+        }
+        return false;
     });
+    // Contention probe (MTG_TRACE=aura) -- is this fetch a real decision, or does the top pick win
+    // outright? The triage question for whether to BRANCH this tutor rather than take front(): a
+    // fetched Aura PERSISTS (unlike the legend-rule keep, whose differences the next untap erased),
+    // so a wrong pick here is not self-correcting. `gap` is the realized-power margin over the
+    // runner-up: gap=0 means the heuristic broke a genuine tie and the search never saw the choice.
+    // Real resolution only, so rollout re-evaluations do not flood it.
+    if (TRACE_ON("aura") && g_real_resolution && !out.empty())
+    {
+        const int top = contrib(out.front());
+        const int second = out.size() > 1 ? contrib(out[1]) : top;
+        TRACE("aura", "legal=%zu gap=%d pick=%s(%d) runnerup=%s", out.size(), top - second,
+              ap.library[out.front()].m_name.str().c_str(), top,
+              out.size() > 1 ? ap.library[out[1]].m_name.str().c_str() : "-");
+    }
     return out;
 }
 
@@ -2739,13 +2820,25 @@ bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const
 
 std::string GoblinsProvider::ForcedEarlyLandName(const GameState& s, int controller) const
 {
-    // Turns 1-2 only -- the window where both utility lands are strictly {C} sources and a Mountain
-    // is strictly better (see the header comment: Three Tree City's scaled mode cannot switch on
-    // before turn 3, and a Cavern's colours never pay for a noncreature spell). From turn 3 they
-    // become genuine decisions -- Three Tree City can finally scale, and a Cavern can deploy a
-    // creature while a Mountain stays up for removal -- so those turns stay fully searched.
-    constexpr int kEarlyTurns = 2;
-    if (s.turn_number > kEarlyTurns) { return {}; }
+    // How many opening turns to force (MTG_FORCED_EARLY_LAND_TURNS, default 1).
+    //
+    // The window is a genuine trade, and it is NOT "more is better". A forced land does not delete a
+    // branch, it DEFERS one: the singleton utility lands stay in hand and fan out on a later turn
+    // instead. The land fan-out multiplies the spell-subset enumeration (plans ~ land options x
+    // spell subsets), and that subset space grows fast with turn number -- so a 2-way land branch on
+    // turn 1 is cheap and the same branch on turn 3 is not. Forcing turns 1-2 pushed the singleton
+    // out to turn 3+ and measured +1.87% MORE rollout calls on disjoint seeds, the opposite of the
+    // intended saving.
+    //
+    // Turn 1 alone keeps the part that motivated the rule -- red available for Lightning Bolt on the
+    // opening turn, which a Cavern (colored_creature_only) and a Three Tree City ({C} until turn 3)
+    // cannot provide -- while letting the singleton leave hand on turn 2, before the multiplier gets
+    // expensive.
+    static const int s_early_turns = []{
+        const char* e = std::getenv("MTG_FORCED_EARLY_LAND_TURNS");
+        return (e && *e) ? std::atoi(e) : 1;
+    }();
+    if (s.turn_number > s_early_turns) { return {}; }
     for (const Card& c : s.players[controller].hand)
     {
         if (c.m_name == "Mountain") { return "Mountain"; }
