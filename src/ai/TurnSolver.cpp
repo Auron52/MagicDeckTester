@@ -202,7 +202,103 @@ static std::string PlanDesc(const TurnSolver::Plan& p)
     return os.str();
 }
 
+// ---- Indifference probe (MTG_TRACE=tie) ----------------------------------
+//
+// Finds the OFFER/PRUNE class of design gap: actions the search takes because it is
+// INDIFFERENT rather than because they help. See
+// docs/design/searched-design-audit-blind-spots.md (blind spot 1).
+//
+// Mechanism it watches: FSLineWin keeps a plan only when it is STRICTLY better, and
+// MoveOrderPlans has already sorted candidates by static value -- so among plans the search
+// cannot tell apart, the FIRST scanned wins, which is the highest-STATIC-value one. Whenever a
+// scored plan Q is a strict SUBSET of the chosen plan P and reached the SAME win turn, the extra
+// actions P\Q bought nothing measurable and were taken on static value alone. That is the
+// signature of the duplicate-legend misplay (109 casts per 600 games, -0.0417 once pruned) -- a
+// correct rule plus an indifferent search.
+//
+// WEAK IN PRACTICE: at a bounded horizon most plays do not move the projected win turn either
+// (67.5% of Goblins decisions contain such an action), so prefer the board-nullity probe below.
+// Reports the difference, not the plan, because the difference is the candidate for a prune.
+// Off unless MTG_TRACE lists `tie`; the keys are only built when it is on.
+static std::vector<std::string> PlanActionKeys(const TurnSolver::Plan& p)
+{
+    std::vector<std::string> keys;
+    keys.reserve(p.actions.size());
+    for (const Action& a : p.actions)
+    {
+        // Disambiguate the plan VARIANTS that share a card name (X value, splice count, tutor
+        // target, alt cost, chosen colour); without this an X=3 plan would read as a subset of
+        // an X=5 plan and the probe would report a difference that is really a substitution.
+        // Card names contain spaces, so the trace joins keys with '|' -- never whitespace.
+        std::string k = a.card_name;
+        k += "#" + std::to_string(static_cast<int>(a.kind));
+        if (a.chosen_x)               { k += "/x" + std::to_string(a.chosen_x); }
+        if (a.splice_count)           { k += "/s" + std::to_string(a.splice_count); }
+        if (a.discard_lands)          { k += "/d" + std::to_string(a.discard_lands); }
+        if (a.alt_cost)               { k += "/alt"; }
+        if (!a.tutor_target.empty())  { k += "/t" + a.tutor_target; }
+        if (!a.chosen_float_color.empty()) { k += "/c" + a.chosen_float_color; }
+        keys.push_back(std::move(k));
+    }
+    std::sort(keys.begin(), keys.end());
+    return keys;
+}
+
+// ---- Board-nullity probe (MTG_TRACE=nil) ---------------------------------
+//
+// The SHARP lens for the offer/prune audit. The `tie` probe above asks "did this action move the
+// projected win turn", which at a bounded horizon is dominated by noise -- a lord cast on turn 2
+// does not move a turn-4 win either, yet every player casts it. What actually characterised the
+// duplicate-legend misplay is stronger and horizon-INDEPENDENT: applying the action left the BOARD
+// exactly as it was. The copy resolved, the legend rule killed it, and the only trace was a card
+// gone from hand and mana spent -- neither of which the leaf evaluator prices, which is precisely
+// why the search could not see the loss.
+//
+// So: signature = the multiset of permanents (name + tapped + sickness + counters) plus both life
+// totals. An action whose presence does not change it produced NO board effect.
+//
+// This is a SHORTLIST generator, not a verdict. Cantrips, rituals and tutors are board-null by
+// construction and are all perfectly good plays -- their payoff is in hand, library or mana. Only
+// an action that is board-null AND converts nothing is the duplicate-legend shape. The classifying
+// question stays human: would a player ever consider this play?
+static std::string BoardSignature(const GameState& s)
+{
+    std::vector<std::string> perms;
+    perms.reserve(s.battlefield.size());
+    for (const Permanent& p : s.battlefield)
+    {
+        std::string e = p.card.m_name;
+        e += p.tapped ? "/T" : "/U";
+        e += p.entered_this_turn ? "/S" : "/R";     // summoning sickness
+        e += "/c" + std::to_string(p.counters.size());
+        e += "/ch" + std::to_string(p.charge_counters) + "," + std::to_string(p.storage_counters);
+        e += "/p" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus);
+        e += "/d" + std::to_string(p.damage);
+        e += "/a" + std::to_string(p.aura_attached_to);
+        e += "/o" + std::to_string(p.controller_index);
+        perms.push_back(std::move(e));
+    }
+    std::sort(perms.begin(), perms.end());
+    std::string sig;
+    for (const std::string& e : perms) { sig += e; sig += ";"; }
+    for (const Player& pl : s.players) { sig += "L" + std::to_string(pl.life) + ";"; }
+    return sig;
+}
+
 // ---- Local helpers -------------------------------------------------------
+
+// A colored_creature_only source (Cavern of Souls / Unclaimed Territory / Sliver Hive / Secluded
+// Courtyard) is PARTIALLY creature-only: "{T}: Add {C}" is unrestricted, but its coloured mana can
+// only pay for a creature spell. AddSourceToPool sees six produces (W/U/B/R/G/C) and books it as one
+// WILD, which satisfies any single coloured pip -- so in the NON-creature pool it wrongly paid for a
+// coloured noncreature spell. The payment path already models this correctly (ProducesForPayment,
+// honoured in ManaPayment.cpp), so the enumerator OFFERED casts the executor then could not pay and
+// which strand as a silent no-op -- exactly the failure the colour-producibility gate below exists
+// to prevent. Found by the board-nullity probe (MTG_TRACE=nil): 25/60 Goblins games committed a plan
+// containing a Lightning Bolt that never resolved, every one of them off a Cavern of Souls.
+// Restricted to this NON-creature pool, so the creature-cast path keeps the full colour list.
+// Default on; MTG_CCO_NONCREATURE_POOL=0 restores the old over-credit for the A/B.
+static const bool s_cco_noncreature_pool = EnvOn("MTG_CCO_NONCREATURE_POOL", true);
 
 // Pool excluding creature-only mana sources (e.g. Ancient Ziggurat).
 // Used to verify that non-creature spells are payable without those sources.
@@ -217,6 +313,15 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap()) || def->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
+        if (s_cco_noncreature_pool && def->params.colored_creature_only)
+        {
+            // Only the unrestricted "{T}: Add {C}" mode is legal for a noncreature spell. Book it as
+            // colourless (pays generic pips, never a coloured one) instead of as wild. Yield
+            // resolution mirrors AddSourceToPool's own yield_override handling.
+            const int yield = PermanentManaYield(p, *def);
+            pool.Add(Color::Colorless, yield >= 0 ? yield : ManaProducedPerTap(*def));
+            continue;
+        }
         AddSourceToPool(pool, state, *def, PermanentManaYield(p, *def));
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }  // see AvailableManaPool
@@ -10855,6 +10960,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // Set when an in-horizon win BROKE the loop so the wave phase can try to beat it (see
     // BpWaveCompleteNodes). Suppresses the node_vals store exactly as the old early RETURN did.
     bool deferred_win = false;
+    // Indifference probe (MTG_TRACE=tie) -- the OFFER/PRUNE audit, blind spot 1. This loop keeps a
+    // plan only when it is STRICTLY better, and `pre` is MoveOrderPlans-sorted by static value, so
+    // among plans the search cannot tell apart the highest STATIC VALUE wins. Record every scored
+    // plan's (win_turn, action keys) at the committed node; the report below asks whether the
+    // chosen plan strictly CONTAINS an equally-scoring one -- i.e. whether it took actions that
+    // bought nothing measurable. Committed node only (bp_root), so rollout interior nodes stay
+    // silent and the volume is one line per real decision.
+    static const bool s_trace_tie = TRACE_ON("tie");
+    const bool tie_scan_here = s_trace_tie && bp_root;
+    std::vector<std::pair<int, std::vector<std::string>>> tie_scan;
     for (const TurnSolver::Plan& p : pre)
     {
         // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
@@ -10903,6 +11018,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         TurnSolver::SearchLine tail =
             FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget);
         if (rec_vals) { node_vals.push_back(tail.win_turn); }   // value-rank for the beam reorder
+        if (tie_scan_here) { tie_scan.emplace_back(tail.win_turn, PlanActionKeys(p)); }
         if (tail.win_turn < best.win_turn)
         {
             best.win_turn = tail.win_turn;
@@ -11022,6 +11138,108 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         if (lc != nullptr) { lc->emplace(key, best); }
                         return best;
                     }
+                }
+            }
+        }
+    }
+
+    // ---- Indifference report (MTG_TRACE=tie) -----------------------------------------------
+    // The committed plan reached best.win_turn. If a LATER-scored plan reached the same win turn
+    // with a strict SUBSET of its actions, the extra actions changed nothing the search could
+    // measure -- they were taken on static value (the MoveOrderPlans order), not on merit. Report
+    // the LARGEST such difference, since that is the widest set of actions shown to be free.
+    // A card that recurs in these lines is a prune candidate: exactly how the duplicate-legend
+    // cast was found. See docs/design/searched-design-audit-blind-spots.md.
+    if (tie_scan_here && !best.phases.empty() && best.win_turn <= max_turns)
+    {
+        const std::vector<std::string> best_keys = PlanActionKeys(best.phases.front().plan);
+        std::vector<std::string>       widest;
+        for (const auto& [wt, keys] : tie_scan)
+        {
+            if (wt != best.win_turn || keys.size() >= best_keys.size()) { continue; }
+            if (!std::includes(best_keys.begin(), best_keys.end(), keys.begin(), keys.end()))
+            { continue; }
+            std::vector<std::string> diff;
+            std::set_difference(best_keys.begin(), best_keys.end(), keys.begin(), keys.end(),
+                                std::back_inserter(diff));
+            if (diff.size() > widest.size()) { widest = std::move(diff); }
+        }
+        // Coverage line (MTG_TRACE=tiescan): EVERY committed decision, whether or not it found a
+        // free action -- so a silent `tie` stream reads as "no indifference here" rather than "the
+        // probe never ran" (the inert-probe trap this audit has hit repeatedly). It also carries
+        // the chosen plan's full action list, which is the DENOMINATOR the analysis needs: a single
+        // free action means little (at a bounded horizon almost any play is free for the projected
+        // win turn), but a card that is free EVERY time it is cast is a prune candidate. Free-rate
+        // per card = `tie` count / `tiescan` count -- see scripts/tie_probe_report.py.
+        {
+            std::string chosen;
+            for (const std::string& k : best_keys)
+            { if (!chosen.empty()) { chosen += "|"; } chosen += k; }
+            TRACE("tiescan", "turn=%d scored=%zu win=%d free=%zu chosen: %s",
+                  state.turn_number, tie_scan.size(), best.win_turn, widest.size(),
+                  chosen.empty() ? "<pass>" : chosen.c_str());
+        }
+        if (!widest.empty())
+        {
+            std::string joined;
+            for (const std::string& k : widest)
+            { if (!joined.empty()) { joined += "|"; } joined += k; }
+            TRACE("tie", "turn=%d win=%d free=%zu/%zu extra: %s",
+                  state.turn_number, best.win_turn, widest.size(), best_keys.size(),
+                  joined.c_str());
+        }
+    }
+
+    // ---- Board-nullity report (MTG_TRACE=nil) ----------------------------------------------
+    // For each action of the committed plan, apply the plan WITH and WITHOUT it and compare the
+    // resulting board signature. An action that leaves it identical had no board effect at all --
+    // the duplicate-legend shape. Horizon-independent, unlike the `tie` probe above.
+    // Costs one extra ApplyPlanDirect per action per committed decision, so it is strictly a
+    // diagnostic; the stream is off in every normal run. See BoardSignature.
+    static const bool s_trace_nil = TRACE_ON("nil");
+    if (s_trace_nil && bp_root && !best.phases.empty())
+    {
+        const TurnSolver::Plan& chosen = best.phases.front().plan;
+        if (chosen.actions.size() >= 1)
+        {
+            GameState full = state;
+            ApplyPlanDirect(full, chosen, true);
+            const std::string full_sig = BoardSignature(full);
+            for (std::size_t i = 0; i < chosen.actions.size(); ++i)
+            {
+                TurnSolver::Plan without = chosen;
+                without.actions.erase(without.actions.begin() + static_cast<long>(i));
+                GameState w = state;
+                ApplyPlanDirect(w, without, true);
+                if (BoardSignature(w) == full_sig)
+                {
+                    // `strand` = the card is STILL IN HAND after applying the plan, i.e. the cast was
+                    // enumerated but unpayable and silently no-opped. That distinguishes an
+                    // ENUMERATION-feasibility gap from a genuinely effect-less play (the
+                    // duplicate-legend shape), which are different bugs with different fixes.
+                    auto in_hand = [&](const GameState& g)
+                    {
+                        for (const Card& c : g.ActivePlayer().hand)
+                        { if (c.m_name == chosen.actions[i].card_name) { return true; } }
+                        return false;
+                    };
+                    std::string others;
+                    for (std::size_t j = 0; j < chosen.actions.size(); ++j)
+                    {
+                        if (j == i) { continue; }
+                        if (!others.empty()) { others += "|"; }
+                        others += chosen.actions[j].card_name;
+                    }
+                    TRACE("nil", "turn=%d win=%d oppLife=%d hand=%zu/%zu gy=%zu/%zu bf=%zu/%zu "
+                                 "land=%s strand=%d with=[%s] board-null: %s#%d",
+                          state.turn_number, best.win_turn, full.Opponent().life,
+                          full.ActivePlayer().hand.size(), w.ActivePlayer().hand.size(),
+                          full.ActivePlayer().graveyard.size(), w.ActivePlayer().graveyard.size(),
+                          full.battlefield.size(), w.battlefield.size(),
+                          chosen.land_to_play.empty() ? "-" : chosen.land_to_play.c_str(),
+                          in_hand(full) ? 1 : 0, others.empty() ? "-" : others.c_str(),
+                          chosen.actions[i].card_name.c_str(),
+                          static_cast<int>(chosen.actions[i].kind));
                 }
             }
         }
