@@ -41,13 +41,14 @@ NAME2VALUE = {
     "dragonstorm": "decks/Dragonstorm/Dragonstorm.value.json",
     "auras":    "decks/Auras/Auras.value.json",
     "goblins":  "decks/Goblins/Goblins.value.json",
-    # STAGED targets, matching the same keys in valueleaf_depth_matrix.py's DECKS/PROFILES. A
-    # regenerated table CHANGES PLAY, so it has to be measured against the live one before it is
-    # installed; writing it here keeps the live sidecar untouched until that A/B has run. Adopt by
-    # copying the staged file over the live one once the measurement justifies it.
-    "hinata_staged":   "logs/eval/Hinata2.value.STAGED.json",
-    "antilife_staged": "logs/eval/Anti-Lifegain.value.STAGED.json",
 }
+
+# STAGED targets, matching the "<deck>_staged" keys in valueleaf_depth_matrix.py. A regenerated table
+# CHANGES PLAY, so it must be measured against the live one before being installed; writing it here
+# keeps the live sidecar untouched until that A/B has run. Adopt by copying the staged file over the
+# live one once the measurement justifies it. Derived so a new deck gets one for free.
+for _k, _v in list(NAME2VALUE.items()):
+    NAME2VALUE[_k + "_staged"] = "logs/eval/%s.value.STAGED.json" % _v.rsplit("/", 1)[-1][:-len(".value.json")]
 
 HDR = re.compile(r"games=(\d+)\s+seeds=\[([^\]]+)\]\s+value_min_depth=(\d+)")
 HGAMES = re.compile(r"hgames=(\d+)")

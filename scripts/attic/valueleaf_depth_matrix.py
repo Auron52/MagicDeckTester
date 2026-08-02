@@ -45,15 +45,17 @@ DECKS = {
     # goblins (aggro): board-driven like burn/slivers/auras -> value leaf expected inert on quality,
     # a search SPEED win. hdepths capped at 3 (heuristic converges by d3 for aggro). value model 2026-07-31.
     "goblins":  ("decks/Goblins/Goblins.cod",             "decks/Goblins/Goblins.value.json",             8),
-    # STAGED variants: same deck + same mulligan profile, but the V cells read a value model that is
-    # NOT yet installed in the deck folder (the trainer writes logs/eval/<deck>.value.STAGED.json and
-    # deliberately does not touch the live sidecar). The model reaches the engine via MTG_VALUE_PROFILE,
-    # so pointing a deck key at the staged path is all that is needed to measure a table for a model
-    # before adopting it -- which is the order the regeneration queue requires (measure, then adopt).
-    # H cells set MTG_VALUE_MODEL=0 and so are byte-identical to the non-staged key; only V cells move.
-    "hinata_staged":   ("decks/Hinata2/Hinata2.cod",              "logs/eval/Hinata2.value.STAGED.json",       8),
-    "antilife_staged": ("decks/Anti-Lifegain/Anti-Lifegain.cod",  "logs/eval/Anti-Lifegain.value.STAGED.json", 8),
 }
+
+# STAGED variants: "<deck>_staged" is the same deck + the same mulligan profile, but its V cells read
+# a value model that is NOT yet installed in the deck folder (logs/eval/<stem>.value.STAGED.json). The
+# model reaches the engine via MTG_VALUE_PROFILE, so pointing a deck key at the staged path is all it
+# takes to measure a table for a model BEFORE adopting it -- the order the regeneration queue requires
+# (measure, then adopt). H cells set MTG_VALUE_MODEL=0, so they are byte-identical to the plain key;
+# only V cells move. Derived for every deck rather than listed, so a new deck gets one for free.
+for _k, (_deck, _val, _mt) in list(DECKS.items()):
+    _stem = os.path.basename(_val).replace(".value.json", "")
+    DECKS[_k + "_staged"] = (_deck, "logs/eval/%s.value.STAGED.json" % _stem, _mt)
 
 
 # DECK PROFILE (<name>.profile.json). ADDED 2026-07-31: neither run() nor run_batch() used to pass
