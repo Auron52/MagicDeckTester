@@ -259,3 +259,29 @@ A/B harnesses: `test/le_pitch_power_ab.sh`, `test/th_rung0_baseline_ab.sh` (ladd
 rule, plus a rebuild-neutrality control), `test/th_retrace_ab.sh`, `test/dup_legend_prune_ab.sh`
 (includes the goblins/Muxus safety control), `test/th_mechanism_probe.sh` (WHICH cards leave the
 hand -- use when avg win turn is too blunt).
+
+## Method trap: overlapping seed bases (2026-08-02, cost two withdrawn adoptions)
+
+The per-game seed is `base + gi`. So a sweep over bases 9001..9006 with N games each covers
+`9001..9000+N`, `9002..9001+N`, ... -- **999 of every 1000 games SHARED**. An A/B reported as
+"18 jobs better / 0 worse" over "6600 games/arm" was really ~3 independent samples (one per depth)
+and ~1100 unique games, dressed up as eighteen.
+
+It manufactured two false results in a single session, both adopted and then withdrawn:
+
+* a `-3.72%` rollout-call win that was **`+1.87%` worse** on disjoint bases (the Goblins forced
+  opening Mountain, `1fd821a` -> `c33ac9f`);
+* a "bit-identical at d3/d5, differs only at d0 by 0.0010" claim about the aura ranking that was
+  simply false -- properly sampled the two variants differ at every depth.
+
+**Rule: seed bases must be spaced STRICTLY WIDER than the per-job game count**, and jobs of
+different depths need their own ranges too. `logs/tie_probe/aura_big.json` is a worked example
+(bases 1000000+i*10000 for 5000-game jobs).
+
+Two corollaries learned the same day:
+
+* **Per-job "N better / 0 worse" is only as strong as the number of INDEPENDENT samples.** Count
+  unique games, not jobs.
+* **A tiny delta over a small effective sample is not a tie-break, it is noise.** A `+0.0024`
+  read (5 cases, one seed pair) and a `0.0010` d0 read (3 divergent games in 1000) were both
+  reported as consistent findings; the first reversed and the second was a 2-1 coin flip.
