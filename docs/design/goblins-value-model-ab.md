@@ -179,7 +179,36 @@ attribution credible rather than coincidental. Accounting for the whole tier:
 If that d5 figure holds, **`ec70359` exceeds the ±0.0025 neutrality bar it claimed for itself** — its
 own validation measured the deep *rollout* arm, not the d5 play config.
 
-## The unmeasured cell (open; owned elsewhere)
+## The unmeasured cell — RESOLVED upstream 2026-08-02
+
+Fixed by `70515df` (set `value_trust_depth: 6`, fold the real V6–8/H4–5 matrix into the profile),
+`72f87cb` (a completeness guard that refuses to write a truncated ladder) and `fc1dc98` (the bug class
+written up as `value-leaf-ladder-truncation.md`). **The suspicion was right: `hc*[6]` measured as 4,
+not 9** — the sentinel was padding from a truncated ladder, and the real threshold is reachable
+(`hcommitted <= depth = 6`). Effect in play: d6 escalations **47 → 0**, total redos **60 → 18**.
+
+The guard described at the end of this section is **dropped**, and the reasoning is worth keeping:
+once every deck is configured correctly, `value_trust_depth` already stops the escalation wherever a
+take threshold exceeds the reachable depth — the guard fires nowhere in the fleet. It was only ever a
+backstop against a *misconfigured* deck. `72f87cb` fixes that at the source by refusing to emit the bad
+table, which is the better place: don't work around bad data in the engine, don't ship it.
+
+**Caveat worth carrying: the deciding margins are inside the measurement's noise.** The trust test is
+`V_d − h_conv <= tol`, and `V6 − h_conv = 0.0020` against `tol = 0.002` — it passes by exactly zero
+margin. `hc*[6] = 4` rests on `V6 − H4 = 0.0015`. Per-game loss-penalized stdev on this deck is
+**0.9937** (measured over 100,000 d6 games), so a 3000-game cell carries s.e. ≈ **0.018** unpaired, or
+~0.002–0.007 if the arms are seed-paired. Both margins are 0.3σ–1.1σ. The deep end of the ladder
+(H3/H4/H5 = 4.3988/4.3952/4.3947, V6/V7/V8 = 4.3967/4.3947/4.3947) is flat to within error.
+
+That does **not** flip the decision — escalating at committed 6 would gain ~0.0015 LP and only ~45% of
+those escalations reach h≥4, so the expected gain is ~0.0007 LP against 21.8% of the instruction count.
+Trusting the leaf is the right trade under either reading. But do not treat the 0.002 margin as solid,
+and note two estimator biases: `h_conv = min(heuristic_lp)` takes a minimum over noisy cells so it is
+biased low, which makes the trust test *conservative* (trust was earned against a headwind); whereas
+`hc* = min{hc : H_hc < V_c}` is a first-crossing statistic, biased low, which makes the engine take the
+heuristic slightly too eagerly.
+
+### Original diagnosis (kept — it is how the gap was found)
 
 Goblins' `value_fallback_crossover` reads `take_heuristic_at_hdepth = [1,1,1,1,3,9,9,9]`, and the 9 at
 committed 6 looks like "trust the leaf at 6". **It is not.** From the deck's own `value_leaf_table`:
@@ -241,7 +270,24 @@ correctness depends entirely on which way `hc*[6]` lands once measured.
 
 ## Open
 
-- **The unmeasured cell above** — being handled by the agent that ran the deep-cell sweeps.
+- **The affordability gap.** Even with the table fixed, escalations are paid for and then discarded
+  when the search cannot afford the threshold depth. Under the pre-fix config only **3 of 60**
+  escalations were actually taken: 47 were structurally unusable (the padding cell) and 10 more were
+  at committed 5, where the threshold is H3 but the escalation reached only H1/H2 every time. Skipping
+  those needs a *predicted* affordability, and that is not reliable today for three reasons:
+  (1) the shadow-ladder audit `MTG_ESC_PREDICT_AUDIT` only instruments the **research** branch
+  (`s_esc_predict && (tt == nullptr || s_esc_predict_warm)`), not the `eff_single_deck` path every deck
+  runs — the shipped predictor has no measured accuracy; (2) `escalation_r` is **absent on all nine
+  decks**, so the cost model falls back to the deck-agnostic prior `R = 120.0`, and the field exists
+  precisely to hold a calibrated value; (3) the error is asymmetric — today a bad prediction picks the
+  wrong pass depth and the overrun-abort recovers, but gating on it would silently discard a takeable
+  escalation, which the code itself already labels `LOSSY`. Order of work: extend the audit to the
+  adopted branch, calibrate `escalation_r` per deck, measure the lossy rate, and only then gate.
+- **`escalation_cap` is inert fleet-wide.** It is documented as the CONVERGENCE cap ("heuristic gains
+  ~0 past it", `clamp(cap, 1, depth)`, "never search deeper") but is set equal to `target_depth` on all
+  nine decks, so it never binds. Its live function is as a *switch*: `escalation_cap > 0` is what
+  selects `eff_single_deck`, the single-pass predicted-affordable path. Worth either setting it to the
+  measured convergence depth or renaming it for what it does.
 - Whether the d3 `+0.00041` from the value leaf is worth suppressing (e.g. raising the leaf's
   minimum depth so it does not fire below the depth it was validated at). It does not affect the
   shipped configuration.
