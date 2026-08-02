@@ -278,6 +278,17 @@ It manufactured two false results in a single session, both adopted and then wit
 different depths need their own ranges too. `logs/tie_probe/aura_big.json` is a worked example
 (bases 1000000+i*10000 for 5000-game jobs).
 
+**This trap was hit TWICE, independently, on the same day.** The other machine walked into it on a
+Goblins value-leaf sweep (bases `100001..100100` at 1000 games/job: 100,000 games claimed, 1,099
+distinct, a 1.3-sigma result reported as -14.4 sigma) and wrote it up as **rule 7 of
+`.claude/skills/regression-testing.md`**, which is now the enforcement point -- it carries the
+spacing formula (`base = S0 + i*N`), the assertion (`distinct(base+gi) == sum(games)`) and the best
+tell for spotting it after the fact: **a zero-variance paired result.** An average over exactly `N`
+games is an integer turn-sum over `N`, so identical per-seed deltas across supposedly independent
+seeds mean one game counted `k` times. Two agents inventing the same bug from scratch within hours
+is the argument for the assertion rather than the discipline. This section is the case study; the
+skill is the rule.
+
 Two corollaries learned the same day:
 
 * **Per-job "N better / 0 worse" is only as strong as the number of INDEPENDENT samples.** Count

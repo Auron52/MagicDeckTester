@@ -191,47 +191,6 @@ public:
     bool WantVialCharge(const GameState&, const Permanent&) const override;
 };
 
-// Goblins (Lackey / Matron / Muxus aggro). The deck rode GenericProvider until there was something
-// MEASURED to put here -- an earlier attempt at a Goblins Lackey-put priority table was worth
-// exactly 0.0000 and was correctly not shipped. This is the first hook that pays: Goblin Matron
-// tutors for "a Goblin card" out of ~16 distinct Goblin names, and unlike every other tutor in the
-// suite its targets are not close substitutes (Muxus and Mogg War Marshal are not the same fetch),
-// so the search keeps finding value well past the provider's top few.
-//
-// Measured, MONOTONE with a knee at 8 -- the opposite shape to Hinata's dilution:
-//   TRAIN (1001/2002/3003)   w2 -0.0294  w4 -0.1627  w6 -0.1846  w8 -0.2100  w12 -0.2108
-//   HELD-OUT (4004..7007)    w12 -0.2740 (the best arm measured there too)
-// 8 and 12 are statistically indistinguishable on train (0.0008 apart over 15 cases); 12 is taken
-// because both seed sets rank it no worse and the axis is ADDITIVE -- the whole 3-deck regression
-// makespan moves 38s -> 46s across the entire width range, not per-width multiplicatively.
-class GoblinsProvider : public GenericProvider
-{
-public:
-    int TutorSearchWidth() const override { return 12; }
-    // Turns 1-2: play a Mountain if one is in hand, without branching over the alternatives.
-    //
-    // The mana base is 21 Mountain + TWO singleton utility lands, and on turns 1-2 BOTH are strictly
-    // worse than a Mountain, so the prune gives up nothing:
-    //   * Cavern of Souls -- colored_creature_only, so its coloured mana cannot pay Lightning Bolt
-    //     or any other noncreature spell; for those it is a {C} land.
-    //   * Three Tree City -- "{2},{T}: add N of a chosen colour" (N = Goblins you control), but that
-    //     mode is UNREACHABLE before turn 3: ScaledManaNetYield requires {2} from OTHER sources
-    //     (>= 3 lands) AND net = Goblins - 2 >= 1 (>= 3 Goblins). Until then its only mode is the
-    //     basic {C} tap. Nor does deploying it turn 2 rather than turn 3 buy earlier access -- both
-    //     lines have the same three lands down on turn 3.
-    // A Mountain makes {R} the turn it lands, which is what the one-drops and the removal want. So
-    // on turns 1-2 there is no real decision here to search, only breadth to pay for.
-    //
-    // None of which says those lands are never the turn-1/2 play -- with no Mountain in hand one of
-    // them obviously IS. That case is not pruned: the hook returns "" whenever the hand holds no
-    // Mountain, so the search fans out over Three Tree City / Cavern exactly as before. The prune
-    // only ever removes a land option that a Mountain in the same hand already dominates.
-    //
-    // Backed by measurement, not just the argument: over 6600 fresh games (seeds 9001-9006, d3+d5)
-    // the win turn is IDENTICAL with and without the prune, while it removes 3.72% of rollout calls
-    // (4 seeds, -2.88% to -4.75%, same direction every time).
-    std::string ForcedEarlyLandName(const GameState& s, int controller) const override;
-};
 
 // Mono-red Burn (Searing Blaze's landfall damage is the deck's signature): once it has enough
 // lands in play (its curve tops at mana value 2), it BANKS further land drops so a future
@@ -379,6 +338,33 @@ class GoblinsProvider : public GenericProvider
 {
 public:
     bool DeferSacOutletPreCombat(const GameState&, const Permanent&, bool) const override;
+    // Goblin Matron tutors for "a Goblin card" out of ~16 distinct Goblin names, and unlike every
+    // other tutor in the suite its targets are not close substitutes (Muxus and Mogg War Marshal are
+    // not the same fetch), so the search keeps finding value well past the provider's top few.
+    //
+    // Measured, MONOTONE with a knee at 8 -- the opposite shape to Hinata's dilution:
+    //   TRAIN (1001/2002/3003)   w2 -0.0294  w4 -0.1627  w6 -0.1846  w8 -0.2100  w12 -0.2108
+    //   HELD-OUT (4004..7007)    w12 -0.2740 (the best arm measured there too)
+    // 8 and 12 are statistically indistinguishable on train (0.0008 apart over 15 cases); 12 is taken
+    // because both seed sets rank it no worse and the axis is ADDITIVE -- the whole 3-deck regression
+    // makespan moves 38s -> 46s across the entire width range, not per-width multiplicatively.
+    int TutorSearchWidth() const override { return 12; }
+    // WITHDRAWN, and left here only as the hook's one implementation: "turns 1-2, play a Mountain if
+    // one is in hand, without branching over the alternatives". Reachable ONLY under
+    // MTG_FORCED_EARLY_LAND=1 (default off) -- see TurnSolver's s_forced_early_land.
+    //
+    // The argument still looks sound (on turns 1-2 both singleton utility lands are dominated by a
+    // Mountain: Cavern of Souls is colored_creature_only so it cannot pay Lightning Bolt, and Three
+    // Tree City's scaled mode is unreachable before turn 3), and the hook correctly returns "" when
+    // the hand holds no Mountain, so it never removes an option a Mountain does not dominate.
+    //
+    // What did NOT hold was the measurement. The claimed "-3.72% rollout calls at identical win
+    // turn" came from seed bases 9001-9006, which OVERLAP: the per-game seed is base+gi, so 6 bases
+    // x 1000 games share 999 of every 1000 games. On disjoint bases the prune is +1.87% rollout
+    // calls -- WORSE, not better, because the branch units it saves on turns 1-2 move to turn 3,
+    // where the cast-subset multiplier is larger. See
+    // docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
+    std::string ForcedEarlyLandName(const GameState& s, int controller) const override;
     // Opt in to the board-lethal search short-circuit (win-turn-invariant; see UseLethalShortCircuit). Kept
     // Goblins-only so the other suite decks' play digests stay byte-identical -- Goblins re-accepts its GT
     // for the sac-deferral heuristic anyway, so absorbing this cut's play-digest change costs nothing extra.
