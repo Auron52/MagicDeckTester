@@ -121,3 +121,32 @@ AIEngine / SpellEffects, so every table now predates it -- including goblins' `7
 (the source of `value_trust_depth: 6` and `hc*[6] = 4`). That, not `--profile`, is the reason to
 re-measure. And when re-measuring, re-anchor an existing cell rather than appending: mixing engine
 states inside one table is the antilife defect documented above.
+
+## Post-merge re-verification: Auras `value_trust_depth: 5` HOLDS (2026-08-02)
+
+The first table re-measured on the merged (searched-decisions) engine. Both halves of the adoption
+trade reproduce, so the shipped Auras setting needs no change.
+
+Method -- one pooled batch, 100 jobs x 1000 games per arm, bases `600000 + i*1000` spaced exactly
+`games_per_job` so each arm tiles `[600000, 700999]` once (A/B rule 7; asserted 100,000 distinct
+`base+gi` ids for 100,000 games). Arms are a deck COPY differing only in `value_trust_depth` -- the
+key lives in `<deck>.value.json`, NOT the profile, and the two profiles are byte-identical.
+
+| | trust=5 | unset (`escalate_below = depth+1 = 6`) |
+|---|---|---|
+| avg turn-to-win (unwon=9) | 4.12799 | 4.12780 |
+| callgrind Ir, 200 games 1 thread | 17,082,877,411 | 18,673,379,509 |
+| escalations / 214 decisions | **2** (both at committed d4) | **11** (the extra 9 all at committed d5) |
+
+Quality: trust=5 costs **+0.00019** (paired t=+4.09; 16 seeds worse, 0 better, 84 tied -- strictly
+one-directional). Cost: trust=5 saves **8.52% Ir**. Pre-merge the same pair measured +0.00019 /
+8.2%, so the merge moved neither side of the trade.
+
+The escalation histogram is the load-bearing evidence, and it makes the sign self-checking: with the
+key absent, `escalate_below` falls back to `m_lookahead_depth + 1`, which at the batch default depth
+of 5 (`main.cpp`: `j.value("depth", 5)`) escalates at committed==5 too -- lines the trust=5 arm
+keeps. Those extra escalations run deep heuristic passes (achieved h4 x1, h5 x6), which is where the
+8.5% goes. **When an Ir A/B's sign is in doubt, read the redo counts first**: they predict the
+direction from the code path, so a cost number that disagrees with them indicates a mislabelled arm
+rather than a surprising result. That is exactly what happened here -- an earlier reading of the
+stale scratch files had the two arms swapped, and the counts are what exposed it.
