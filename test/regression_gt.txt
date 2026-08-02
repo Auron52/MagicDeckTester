@@ -1,6 +1,6 @@
-# Regression ground truth -- commit bbed1e5  date 2026-08-01
+# Regression ground truth -- commit 70515df  date 2026-08-02
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-08-01): goblins d3/d5 +0.0030 each: attributed to ec70359 (d3 +0.00177 isolated on 100k distinct games) + the value model (d3 +0.00041, d5 -0.00136 i.e. an improvement); d0 -0.0659 from ec70359's GoblinsProvider dominates => tier net -0.03144 over 16000 games
+# accepted-with-regressions (overnight, 2026-08-02): gi325:bounded single-canonical-victim sac enumeration (anti-hang, intentional) can't find gi325's victim-specific multi-sac T4 lethal -> wins T5; 1 knife-edge miss in ~48k games, net searched 147 faster:15 slower
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -29,9 +29,9 @@ dragonstorm_smoke_d5_s1001=4.4933/dafd9a5af2d05ba1
 auras_smoke_d0_s1001=4.4560/083d95ae3a2a9c0f
 auras_smoke_d3_s1001=4.1533/d1d5be0464ab5754
 auras_smoke_d5_s1001=4.1480/3f0c22061ad83dc3
-goblins_smoke_d0_s1001=4.7860/3df200e7c499e8ee
-goblins_smoke_d3_s1001=4.3133/42f2e7a27d14c5fd
-goblins_smoke_d5_s1001=4.3067/a75c4a8793101993
+goblins_smoke_d0_s1001=4.7980/09f48d63dacb5776
+goblins_smoke_d3_s1001=4.3000/2c35264873a6eca4
+goblins_smoke_d5_s1001=4.2933/4c8e940960400192
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/7b06530f1cd2f10f
@@ -74,11 +74,11 @@ auras_regression_d3_s2002=4.1280/e94f592d652ec13f
 auras_regression_d3_s3003=4.2220/fcba8b69ceff0f79
 auras_regression_d5_s2002=4.1220/44885db4120a1a00
 auras_regression_d5_s3003=4.2100/b6269af426628f17
-goblins_regression_d0_s2002=4.7530/44913c405070839a
-goblins_regression_d3_s2002=4.3900/e158b3f473090bf8
-goblins_regression_d3_s3003=4.4267/1d4a05ecdc6e1359
-goblins_regression_d5_s2002=4.4360/a36bba91a2139576
-goblins_regression_d5_s3003=4.4080/c64d3a06aa88931f
+goblins_regression_d0_s2002=4.7760/1704e3ad3a179c20
+goblins_regression_d3_s2002=4.3700/6963eb5bc6042811
+goblins_regression_d3_s3003=4.4100/8afc3c70427fe08a
+goblins_regression_d5_s2002=4.4200/a18d9082d344d25c
+goblins_regression_d5_s3003=4.3880/2ec576dace740a6e
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/3c364eea0dbc63eb
@@ -177,15 +177,15 @@ auras_overnight_d5_s4004=4.1320/abe55509c44c4d5c
 auras_overnight_d5_s5005=4.1600/0d9029f8f375773c
 auras_overnight_d5_s6006=4.1320/ae1a03f312ec1f50
 auras_overnight_d5_s7007=4.1680/3f886fb40dd223d7
-goblins_overnight_d0_s4004=4.8100/3d206a65c790d7de
-goblins_overnight_d0_s5005=4.7885/52060fafa37f1e5a
-goblins_overnight_d0_s6006=4.8095/d5bba01bac01a0c7
-goblins_overnight_d0_s7007=4.8195/83bf521cb9f404c6
-goblins_overnight_d3_s4004=4.3840/86ca7a755402c73a
-goblins_overnight_d3_s5005=4.3880/4210e6fad9303326
-goblins_overnight_d3_s6006=4.3770/0c5a7971ace35e56
-goblins_overnight_d3_s7007=4.4540/7b583c12e21018c5
-goblins_overnight_d5_s4004=4.3740/52187cdb300a3e30
-goblins_overnight_d5_s5005=4.3880/0a1f7c50028c2e0a
-goblins_overnight_d5_s6006=4.3690/5d9563e60a9968e9
-goblins_overnight_d5_s7007=4.4540/c4d4b1fca781bb5f
+goblins_overnight_d0_s4004=4.8285/dd36213f614e2414
+goblins_overnight_d0_s5005=4.8045/370f14425faaa704
+goblins_overnight_d0_s6006=4.8345/1a7fcd3445763086
+goblins_overnight_d0_s7007=4.8425/94fe844c2ce8c86b
+goblins_overnight_d3_s4004=4.3690/ec2a8f717bf59c9d
+goblins_overnight_d3_s5005=4.3680/6b274095f0a204be
+goblins_overnight_d3_s6006=4.3680/7d089a8e47fbcacf
+goblins_overnight_d3_s7007=4.4320/69c1ebf253c930b8
+goblins_overnight_d5_s4004=4.3590/601a909f4b00a5b7
+goblins_overnight_d5_s5005=4.3700/7c63e173b59be6ec
+goblins_overnight_d5_s6006=4.3550/733ca00ea4613284
+goblins_overnight_d5_s7007=4.4330/dacab0a4ff7e12a6
