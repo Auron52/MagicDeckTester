@@ -210,19 +210,26 @@ public:
     int TutorSearchWidth() const override { return 12; }
     // Turns 1-2: play a Mountain if one is in hand, without branching over the alternatives.
     //
-    // The mana base is 21 Mountain + TWO singleton utility lands: Cavern of Souls
-    // (colored_creature_only -- its coloured mana cannot pay Lightning Bolt or any other noncreature
-    // spell) and Three Tree City ("{2},{T}: add N of a chosen colour", N = Goblins you control;
-    // its basic tap is {C} only). Neither produces red on the turn it lands, so on turns 1-2 -- when
-    // the deck wants a red source for its one-drops and removal -- the Mountain is the answer the
-    // search almost always reaches anyway.
+    // The mana base is 21 Mountain + TWO singleton utility lands, and on turns 1-2 BOTH are strictly
+    // worse than a Mountain, so the prune gives up nothing:
+    //   * Cavern of Souls -- colored_creature_only, so its coloured mana cannot pay Lightning Bolt
+    //     or any other noncreature spell; for those it is a {C} land.
+    //   * Three Tree City -- "{2},{T}: add N of a chosen colour" (N = Goblins you control), but that
+    //     mode is UNREACHABLE before turn 3: ScaledManaNetYield requires {2} from OTHER sources
+    //     (>= 3 lands) AND net = Goblins - 2 >= 1 (>= 3 Goblins). Until then its only mode is the
+    //     basic {C} tap. Nor does deploying it turn 2 rather than turn 3 buy earlier access -- both
+    //     lines have the same three lands down on turn 3.
+    // A Mountain makes {R} the turn it lands, which is what the one-drops and the removal want. So
+    // on turns 1-2 there is no real decision here to search, only breadth to pay for.
     //
-    // Be honest about the cost: this DOES suppress a real choice. Three Tree City is a genuine
-    // payoff land, and deploying it early is arguable on turn 2. The justification is empirical, not
-    // a claim that the alternatives are worthless: over 6600 fresh games (seeds 9001-9006, d3+d5)
+    // None of which says those lands are never the turn-1/2 play -- with no Mountain in hand one of
+    // them obviously IS. That case is not pruned: the hook returns "" whenever the hand holds no
+    // Mountain, so the search fans out over Three Tree City / Cavern exactly as before. The prune
+    // only ever removes a land option that a Mountain in the same hand already dominates.
+    //
+    // Backed by measurement, not just the argument: over 6600 fresh games (seeds 9001-9006, d3+d5)
     // the win turn is IDENTICAL with and without the prune, while it removes 3.72% of rollout calls
-    // (4 seeds, -2.88% to -4.75%, same direction every time). If that ever stops holding, this is
-    // the first thing to drop.
+    // (4 seeds, -2.88% to -4.75%, same direction every time).
     std::string ForcedEarlyLandName(const GameState& s, int controller) const override;
 };
 

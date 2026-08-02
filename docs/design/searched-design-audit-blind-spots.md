@@ -195,13 +195,19 @@ Adopted on COST at flat quality -- the same basis as the duplicate-legend prune'
 
 - The prune fires only when a Mountain is actually in hand; with a single Mountain it forces turn 1
   and then the hook returns empty, so turn 2 fans out normally. Turns 3+ are always searched.
-- **It suppresses a real choice.** Three Tree City is a genuine payoff land and deploying it turn 2
-  is arguable. The justification is measured equivalence, not a claim that the alternative is
-  worthless. Drop this first if the equivalence stops holding.
-- Method trap avoided by luck, not rigour: the deck's mana base was first read by grepping the
-  decklist for "mountain|cavern|land", which silently MISSED Three Tree City and produced a
-  confident, wrong "21 Mountain + 1 Cavern" premise. Resolve card types through `cards.json`, never
-  by name-pattern on a decklist.
+- **It gives up nothing on those turns**, which is the point. Both utility lands are strictly {C}
+  sources until turn 3: a Cavern's colours never pay for a noncreature spell, and Three Tree City's
+  scaled mode needs {2} from OTHER sources (>= 3 lands) AND 3+ Goblins before it beats a plain {C}
+  tap. Delaying Three Tree City costs no access either -- playing it turn 2 vs turn 3 leaves the
+  same three lands down on turn 3.
+- Method traps, one caught and one nearly missed:
+  * The mana base was first read by grepping the decklist for `"mountain|cavern|land"`, which
+    silently MISSED Three Tree City and produced a confident, wrong "21 Mountain + 1 Cavern" premise.
+    **Resolve card types through `cards.json`, never by name-pattern on a decklist.**
+  * Having found Three Tree City, the correction over-shot the other way and recorded it as a
+    "real choice the prune suppresses" -- reasoning from the card's NAME and flavour instead of from
+    `ScaledManaNetYield`, which shows the mode is unreachable in the pruned window. **Read the
+    model's activation conditions before pricing a card's option value.**
 
 Two lessons, both about the audit rather than the engine:
 
