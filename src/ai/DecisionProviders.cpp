@@ -506,19 +506,25 @@ std::vector<int> DecisionProvider::LightPawsAuraCandidates(
     // is strictly ahead from the third on; in an Auras deck a third is coming, and under legacy ~18
     // fetches per 250 games landed on the flat card by LIBRARY ORDER alone.
     //
-    // Mode 2 is the default because it is WEAKLY DOMINANT, not because mode 1 is wrong: the two are
-    // BIT-IDENTICAL at d3 and d5 (12/12 jobs), and mode 2 is better by exactly 0.0010 on all 6 d0
-    // jobs. The gap is the known cost of mode 1, and it is a real hole rather than noise: at fetch
-    // time you always control at least the Aura you just cast, so a freshly-fetched scaler counts
-    // exactly 2 -- All That Glitters and Ancestral Mask are therefore +2 against a Lion Umbra /
-    // Daybreak Coronet +3 (both MV 2, and legal whenever an MV>=2 Aura was cast). Mode 1 takes the
-    // scaler while it is a point behind; that is recoverable when a search can see the later turns,
-    // which is why it costs nothing at d3/d5 and 0.0010 at greedy d0.
-    // Mode 2 keeps the scaling preference exactly where it is free -- an exact tie -- so "greatest
-    // power, then highest MV" still decide everything above it.
+    // Mode 1 is the default: scaling Auras COMPOUND with each other. Each one reads the count of
+    // enchantments you control, so a third scaler does not add its own power -- it raises the power
+    // of every scaler already attached. Realized power at fetch time cannot see that, and it is why
+    // trading a scaler for a flat Aura of EQUAL current power is a much worse deal than it looks.
+    //
+    // Worked case (Auras gi=309, d3, full logs in the commit message): mode 1 fetches All That
+    // Glitters then Ethereal Armor and wins T4 with THREE scaling Auras on board; mode 2 fetches
+    // Armadillo Cloak (flat +2, MV 3 -- it wins the MV rung at equal power) and needs T5, despite
+    // casting its Ancestral Mask a turn EARLIER. That is the whole argument in one game.
+    //
+    // Mode 2 measures 0.0003 ahead over 72000 disjoint games, and that gap is NOT a preference for
+    // flat Auras: inspecting every divergent game, mode 2's wins come from the re-valuation changing
+    // which Aura the search casts FROM HAND (a tempo side-effect), not from a better fetch. See
+    // gi=1472, where mode 2 casts All That Glitters on T3 instead of Spirit Link and simply attacks
+    // for more. Weighed against a mechanism that is real in every game, 0.0003 of cast-order churn
+    // is not a reason to prefer the flat Aura.
     static const int s_rank_mode = []{
         const char* e = std::getenv("MTG_AURA_RANK_MODE");
-        return (e && *e) ? std::atoi(e) : 0;   // 0 until the mode is chosen -- see the header note
+        return (e && *e) ? std::atoi(e) : 1;   // scale-first (see the note above)
     }();
     auto scales = [&](int i) -> bool {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
