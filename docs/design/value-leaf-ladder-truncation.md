@@ -88,3 +88,36 @@ Two genuinely-open (minor) items, neither a correctness bug:
   known ~82% on hinata). Skipping those predicted no-ops is the **escalation confidence-gate**
   (`MTG_ESCALATION_GATE`, `docs/design/escalation-and-rollout-cost.md`) — a separate speed lever,
   unrelated to the table/trust question here.
+
+## CORRECTION 2026-08-02: the tables were NOT measured profile-less
+
+`3668b6b` ("the depth matrix never passed `--profile` -- every value-leaf depth table in this repo
+was measured on a deck with NO profile") is **factually wrong**, and the conclusion drawn from it --
+that every table needs regenerating for this reason -- does not follow. Three independent checks:
+
+1. **The engine auto-detects the profile from the deck path.** `src/main.cpp`:
+   ```cpp
+   // Auto-detect deckname.profile.json if no explicit --profile was given.
+   if (profile_path.empty())
+   { profile_path = deck_path.parent_path() / (deck_path.stem().string() + ".profile.json"); }
+   ```
+   In place since `e71f51f` (2026-06-03) -- months before any of these tables were built. The
+   per-deck folder layout (`decks/<name>/<name>.profile.json` beside `decks/<name>/<name>.cod`)
+   guarantees the derived path exists for every deck.
+2. **The new `PROFILES` map is byte-identical to what auto-resolution already picks** -- all eight
+   entries, same paths. The fix threads through a value the engine was already deriving itself.
+3. **Measured**: same deck/seed/games with and without `--profile` gives the same avg (4.1533) and
+   the same unwon game, and BOTH print `Loaded profile from decks/Auras/Auras.profile.json`.
+   Verified fleet-general (Hinata2, slivers_vial, Anti-Lifegain all auto-load).
+
+The commit is harmless -- passing the flag explicitly resolves to the same file -- but do **not**
+regenerate a table on this rationale, and do not attribute table drift to it. If Hinata's numbers
+really moved when regenerated, the cause is elsewhere (the engine moving underneath it, or its
+exhaustive keep model landing between the two runs) and is worth finding rather than mis-attributing.
+
+**The real invalidator is the engine.** A table is only comparable to the engine it was measured on;
+the 2026-08-02 searched-decisions merge changed ~3,900 lines across TurnSolver / DecisionProviders /
+AIEngine / SpellEffects, so every table now predates it -- including goblins' `70515df` regeneration
+(the source of `value_trust_depth: 6` and `hc*[6] = 4`). That, not `--profile`, is the reason to
+re-measure. And when re-measuring, re-anchor an existing cell rather than appending: mixing engine
+states inside one table is the antilife defect documented above.
