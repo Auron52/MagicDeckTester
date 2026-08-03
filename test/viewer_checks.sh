@@ -58,6 +58,16 @@ if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_decision_types_check.js
   fi
 fi
 
+# 0b) Reveal/log parity (node). Static, milliseconds -- pins "what the viewer history shows, the
+#     log records". Broken once in each direction (see the check's header), hence a gate.
+if command -v node >/dev/null 2>&1 && [ -f "$HERE/reveal_log_parity_check.js" ]; then
+  echo "--- reveal/log parity (engine) ---"
+  if node "$HERE/reveal_log_parity_check.js"; then :; else
+    echo "FAIL: a reveal can reach the viewer without reaching the saved game log."
+    rc=1
+  fi
+fi
+
 # 1) Frontend line-build check (node). Sub-second, no binary.
 if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_linebuild_check.js" ]; then
   echo "--- viewer line-build check (frontend) ---"

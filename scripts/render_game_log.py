@@ -52,6 +52,23 @@ def render(path, tag=None):
                     break
             if t == "DRAW":
                 continue  # draws are noise for a play comparison
+            if t == "ATTACK":
+                # ATTACK carries no card, so the generic name_of() lookup rendered it as "#-1".
+                out.append(f"    {'ATTACK':<16} {a.get('damage', '?')} damage"
+                           f"  -> opp life {a.get('oppLife', '?')}")
+                continue
+            if t == "REVEAL":
+                # The log must read like the viewer history (user, 2026-08-03: "what we would show in
+                # the viewer history should show in the log"). Same derivation as EmitReveal /
+                # RevealDisposition: explicit `to` wins, else kept / bottomed decide.
+                kept, bottomed = set(a.get("kept", [])), set(a.get("bottomed", []))
+                shown = []
+                for c in a.get("lookedAt", []):
+                    lbl = c.get("to") or ("kept" if c.get("card") in kept else
+                                          "to the bottom" if c.get("card") in bottomed else "")
+                    shown.append(f"{c.get('cardName', '?')}" + (f" ({lbl})" if lbl else ""))
+                out.append(f"    {'REVEAL':<16} {a.get('source', '?')}: {', '.join(shown)}")
+                continue
             out.append(f"    {t:<16} {cn}{extra}")
         b = seg.get("boardAfter") or {}
         if seg.get("phase") in ("COMBAT", "END", "MAIN2") and b:

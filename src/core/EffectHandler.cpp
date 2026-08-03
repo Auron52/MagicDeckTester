@@ -528,7 +528,7 @@ void EffectHandler::ResolveDrawUntilNonland(GameState& state, const StackEntry& 
     // revealed this way into your hand").
     // Capture the revealed -> hand cards for the replay viewer (real play only; the reveal
     // logger is paused during search/rollout, so this never fires off the real game's resolution).
-    const bool capture = (g_reveal_logger != nullptr);
+    const bool capture = RevealVisible();   // log AND/or viewer (--claude-play attaches no GameLogger)
     std::vector<int>         revealed_nums;
     std::vector<std::string> revealed_names;
     while (!controller.library.empty())
@@ -547,7 +547,7 @@ void EffectHandler::ResolveDrawUntilNonland(GameState& state, const StackEntry& 
     {
         // All revealed cards go to hand, so "kept" = every revealed card (the viewer labels a
         // Treasure-Hunt source as "to hand").
-        g_reveal_logger->LogReveal(def.card.m_name, revealed_nums, revealed_names,
+        EmitReveal(state.turn_number, def.card.m_name, revealed_nums, revealed_names,
                                    revealed_nums, /*bottomed*/ std::vector<int>{});
     }
     MoveToGraveyard(state, entry);

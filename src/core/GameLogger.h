@@ -475,6 +475,22 @@ using LackeyChooser = std::function<int(const GameState& state, int controller, 
                                         const std::vector<Card>& candidates, int heuristic_index)>;
 extern thread_local LackeyChooser* g_play_lackey_chooser;
 
+// ---- Human-play ETB tutor chooser (Goblin Matron entering OFF a cast) ----------------------
+// A tutor resolved from a CAST already has its target decided: the search enumerates one plan
+// variant per candidate, so the human picks it in the viewer's variant dialog and PerformTutor
+// receives a non-empty target_name. But the SAME ETB fires when the creature is PUT onto the
+// battlefield -- a Goblin Lackey combat cheat, an Aether Vial deploy, a Muxus reveal -- and that
+// path has no plan and no variant, so PerformTutor fell through to `cands.front()` and searched up
+// a card the human never chose (the reported bug: a Lackey-dropped Matron silently fetched Goblin
+// Chieftain). This chooser closes that asymmetry: `candidates` = the provider's tutor candidates
+// (unpruned in human play, so every legal Goblin card), `heuristic_index` = what the engine would
+// have taken. Returns the chosen index, or -1 to DECLINE -- Matron reads "you MAY search", so
+// declining is a legal line the engine could not previously express. Nulled by RevealLogPause for
+// every search/rollout/enumeration scope, so autonomous + batch play is byte-identical. Inert unless set.
+using TutorChooser = std::function<int(const GameState& state, int controller, const std::string& source,
+                                       const std::vector<std::string>& candidates, int heuristic_index)>;
+extern thread_local TutorChooser* g_play_tutor_chooser;
+
 // ---- Human-play draw sink (accurate per-draw reporting for the viewer history) -------------
 // Under --claude-play the viewer wants to show exactly what was drawn and on which turn, rather
 // than guessing from a hand diff (which can't tell duplicate copies apart or split a cantrip
@@ -486,6 +502,59 @@ extern thread_local LackeyChooser* g_play_lackey_chooser;
 // for every search/rollout/enumeration scope, so it fires ONLY for real draws and autonomous play
 // is byte-identical (appending to an external vector never touches GameState). Inert unless set.
 extern thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink;
+
+// ---- Human-play REVEAL sink (what was revealed, and what happened to each card) -------------
+// Every reveal already funnels through GameLogger::LogReveal, but that only reaches the SAVED game
+// log -- the play viewer's history never saw it, so a Muxus reveal, a searched-up tutor target or a
+// scry looked like nothing happened and the player had to infer it from a board diff. When set, the
+// single LogReveal chokepoint appends one entry per reveal here, and the next main-phase decision
+// emits them so the viewer can print them as history lines. Mirrors g_play_draw_sink exactly: real
+// sites append, the decision consumer clears. Null in search/rollout (LogReveal is gated on
+// g_reveal_logger, which RevealLogPause nulls), so play is byte-identical.
+//
+// `disposition` is per-card and parallel to `cards`: "-> battlefield", "-> bottom of library",
+// "-> hand", "" when the source did not say. The rule this encodes (user, 2026-08-03): a player must
+// never have to guess WHAT was revealed or WHAT WE DID with it.
+struct PlayReveal
+{
+    int                      turn = 0;
+    std::string              source;
+    std::vector<std::string> cards;
+    std::vector<std::string> disposition;
+};
+extern thread_local std::vector<PlayReveal>* g_play_reveal_sink;
+
+// Is ANYONE listening for a reveal? True when the saved game log is being written OR the play viewer
+// is attached. Every reveal site guards on this rather than on g_reveal_logger alone -- --claude-play
+// attaches no GameLogger, so a g_reveal_logger-only guard silently dropped every reveal in the very
+// mode a human is watching (the bug: a Muxus put-split showed as nothing at all).
+inline bool RevealVisible() { return g_reveal_logger != nullptr || g_play_reveal_sink != nullptr; }
+
+// Route ONE reveal to whichever sinks are live: the saved game log and/or the viewer history. `turn`
+// stamps the viewer entry (the game log takes it from the open phase).
+//
+// THE INVARIANT (user, 2026-08-03): **whatever the viewer history shows, the log records.** One
+// reveal, one `dispositions` channel, both sinks. There used to be two channels and a `viewer_only`
+// escape hatch, added to dodge the fact that GameLogger::LogReveal folds into the PLAY DIGEST -- so a
+// pure reporting change forced a ground-truth rebaseline. That trade is the wrong way round: it made
+// the saved log strictly less informative than the screen, and a Lackey deck's cheat-into-play
+// choices had to be reverse-engineered from per-phase board deltas during an A/B. Pay the rebaseline.
+//
+// Where a site gives no explicit disposition the label is DERIVED from the kept / bottomed sets --
+// identically for both sinks (see EmitReveal), so the log stays information-complete without
+// materialising a redundant string into the digest at every scry.
+void EmitReveal(int turn, const std::string& source,
+                const std::vector<int>& looked_at_nums,
+                const std::vector<std::string>& looked_at_names,
+                const std::vector<int>& kept_nums,
+                const std::vector<int>& bottomed_nums,
+                const std::vector<std::string>& dispositions = {});
+
+// The one derivation of a per-card reveal label, shared by the log renderer and the viewer so the
+// two can never drift. Explicit disposition wins; otherwise kept / bottomed decide.
+std::string RevealDisposition(int card_num,
+                              const std::vector<int>& kept_nums,
+                              const std::vector<int>& bottomed_nums);
 
 // Life-affecting-event sink for the play viewer's history (damage / lifegain enumeration). Mirrors
 // g_play_draw_sink: when set, the REAL resolution sites append a PlayEvent as each combat / burn /
@@ -539,12 +608,14 @@ struct RevealLogPause
     FirebreatheChooser* saved_fbchooser;
     CastOrderChooser* saved_cochooser;
     StorageHoldChooser* saved_shchooser;
+    TutorChooser*       saved_tutorchooser;
+    std::vector<PlayReveal>* saved_revealsink;
     bool saved_real;
     RevealLogPause() : saved(g_reveal_logger), saved_real(g_real_resolution), saved_chooser(g_play_top_chooser),
                        saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
                        saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
                        saved_eichooser(g_play_ei_chooser), saved_rtchooser(g_play_retrace_chooser),
-                       saved_sfchooser(g_play_soulfire_chooser), saved_drawsink(g_play_draw_sink),
+                       saved_sfchooser(g_play_soulfire_chooser), saved_drawsink(g_play_draw_sink), saved_revealsink(g_play_reveal_sink),
                        saved_evsink(g_play_event_sink), saved_dropsink(g_play_dropped_cast_sink),
                        saved_sacchooser(g_play_sacrifice_chooser),
                        saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser),
@@ -552,21 +623,24 @@ struct RevealLogPause
                        saved_lpchooser(g_play_lightpaws_chooser),
                        saved_fbchooser(g_play_firebreathe_chooser),
                        saved_cochooser(g_play_cast_order_chooser),
-                       saved_shchooser(g_play_storage_hold_chooser)
+                       saved_shchooser(g_play_storage_hold_chooser),
+                       saved_tutorchooser(g_play_tutor_chooser)
     { g_real_resolution = false; g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
       g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
       g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
-      g_play_draw_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
+      g_play_draw_sink = nullptr; g_play_reveal_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
       g_play_sacrifice_chooser = nullptr;
       g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr;
       g_play_lackey_chooser = nullptr;
       g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
-      g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr; }
+      g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr;
+      g_play_tutor_chooser = nullptr; }
     ~RevealLogPause() { g_real_resolution = saved_real; g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
                         g_play_ei_chooser = saved_eichooser; g_play_retrace_chooser = saved_rtchooser;
                         g_play_soulfire_chooser = saved_sfchooser; g_play_draw_sink = saved_drawsink;
+                        g_play_reveal_sink = saved_revealsink;
                         g_play_event_sink = saved_evsink; g_play_dropped_cast_sink = saved_dropsink;
                         g_play_sacrifice_chooser = saved_sacchooser;
                         g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
@@ -574,7 +648,8 @@ struct RevealLogPause
                         g_play_lightpaws_chooser = saved_lpchooser;
                         g_play_firebreathe_chooser = saved_fbchooser;
                         g_play_cast_order_chooser = saved_cochooser;
-                        g_play_storage_hold_chooser = saved_shchooser; }
+                        g_play_storage_hold_chooser = saved_shchooser;
+                        g_play_tutor_chooser = saved_tutorchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

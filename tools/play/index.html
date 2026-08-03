@@ -724,7 +724,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','echo','land_entry'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','echo','land_entry','tutor_etb'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -1501,7 +1501,7 @@ function renderDecisionPanel(d, dec){
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon'
                 || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold'
-                || dec==='lackey_put' || dec==='echo'; // centered card-image modals
+                || dec==='lackey_put' || dec==='echo' || dec==='tutor_etb'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
@@ -1515,6 +1515,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='bottom' ? bottomPanelHtml(d)
                   : dec==='dragon' ? dragonPanelHtml(d)
                   : dec==='lackey_put' ? lackeyPanelHtml(d)
+                  : dec==='tutor_etb' ? tutorPanelHtml(d)
                   : dec==='echo' ? echoPanelHtml(d)
                   : dec==='lightpaws' ? lightPawsPanelHtml(d)
                   : dec==='firebreathe' ? firebreathePanelHtml(d)
@@ -1599,6 +1600,26 @@ function lackeyPanelHtml(d){
   });
   h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
      `<button class="ghost" data-opt="-1">Decline</button></div>`;
+  return h;
+}
+// ETB tutor fired by a PUT rather than a cast (a Lackey cheat / Vial deploy / Muxus reveal dropping a
+// Goblin Matron): IMAGE-based central modal, SINGLE-SELECT over the library candidates. A tutor from a
+// CAST is picked in the variant dialog instead and never lands here. Declining is legal ("you may
+// search"), so it gets its own button. The AI's pick is tagged.
+function tutorPanelHtml(d){
+  const cands=d.candidates||[];
+  let h=`<h3>${esc(d.source||'Tutor')} — search your library</h3>`;
+  h+=`<div class="sub"><b>${esc(d.source||'Tutor')}</b> entered the battlefield — search your library for a card and put it into your hand. Click one, or decline (searching is optional).</div>`;
+  h+=`<div class="tutgrid">`;
+  if(!cands.length) h+=`<span class="hint">No legal card to search up.</span>`;
+  cands.forEach(c=>{
+    const def=c.index===d.heuristic_default;
+    h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+     `<button class="ghost" data-opt="-1">Decline — search for nothing</button></div>`;
   return h;
 }
 // Echo pay-or-sacrifice panel: central modal, BINARY. At upkeep an echo creature is sacrificed unless
@@ -1968,6 +1989,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitLightPaws(d, +b.dataset.opt));
   else if (dec==='lackey_put')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitLackey(d, +b.dataset.opt));
+  else if (dec==='tutor_etb')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitTutor(d, +b.dataset.opt));
   else if (dec==='echo')
     panel.querySelectorAll('button[data-echo]').forEach(b=>b.onclick=()=>commitEcho(d, +b.dataset.echo));
   else if (dec==='discard'){
@@ -2033,6 +2056,10 @@ function commitLightPaws(d, oi){
 function commitLackey(d, oi){
   const c=(d.candidates||[]).find(x=>x.index===oi);
   pushChoice(d, oi, `${d.source||'Goblin Lackey'}: ${oi<0||!c?'decline':'put '+c.name}`);
+}
+function commitTutor(d, oi){
+  const c=(d.candidates||[]).find(x=>x.index===oi);
+  pushChoice(d, oi, `${d.source||'Tutor'}: ${oi<0||!c?'declined the search':'searched up '+c.name}`);
 }
 function commitEcho(d, v){ pushChoice(d, v, `Echo ${d.creature||''}: ${v?'pay':'sacrifice'}`); }
 // Multi-select cleanup discard: toggle a card in/out of the discard set (capped at over_by), then
@@ -2268,6 +2295,18 @@ function logEventList(events) {
     i+=n;
   }
 }
+// Reveals since the last decision -> history lines. The engine funnels EVERY reveal through one
+// chokepoint (GameLogger::LogReveal), so this single renderer covers a Muxus put-split, a Treasure
+// Hunt reveal-until-nonland, a tutor's searched-up card and a scry look alike. The rule: a player
+// must never have to guess what was revealed or what we did with it -- which matters most for the
+// choice-free effects (Muxus), since those surface no picker to infer it from.
+function logReveals(dec) {
+  if (!dec || !dec.reveals || !dec.reveals.length) return;
+  dec.reveals.forEach(r=>{
+    const cards=(r.cards||[]).map(c=>c.disposition?`${c.name} — ${c.disposition}`:c.name).join(', ');
+    S.history.push({ turn:r.turn, label:`\u{1F441} ${r.source}: ${cards}` });
+  });
+}
 function logEvents(dec) { if (dec) logEventList(dec.events); }
 // ---- Persistent decision-surface options (localStorage) --------------------------------------
 // The engine ALWAYS emits every decision (it is never silently skipped at the engine level); this
@@ -2343,7 +2382,7 @@ function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)
   // checkpoint and step() replays + re-logs the decision exactly. One checkpoint per shown decision.
   (S.checkpoints=S.checkpoints||[]).push({ histLen:S.history.length, lastGy:Object.assign({},S.lastGy||{}),
     lastCasts:new Set(S.lastCasts||[]), handOrder:S.handOrder?S.handOrder.slice():undefined });
-  if (dec && dec.type==='main_phase') { logDraws(dec); logEvents(dec); logGyAdds(dec.me); renderHistory(); }
+  if (dec && dec.type==='main_phase') { logDraws(dec); logReveals(dec); logEvents(dec); logGyAdds(dec.me); renderHistory(); }
   // Options-menu "let AI decide": auto-reply the heuristic default without surfacing the modal
   // (default for the repetitive shock/reveal land-entry choice). Short-circuits before rendering.
   if (autoResolveDecision(dec)) return;

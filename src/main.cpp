@@ -532,7 +532,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                               const std::vector<std::pair<int, std::string>>& drew = {},
                               const std::vector<PlayEvent>& events = {},
                               const std::vector<std::string>& dropped_casts = {},
-                              int main_ordinal = -1)
+                              int main_ordinal = -1,
+                              const std::vector<PlayReveal>& reveals = {})
 {
     const Player& me  = s.ActivePlayer();
     DecisionJson d(os, decision_index);
@@ -556,6 +557,31 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             os << "{ \"turn\": " << drew[di].first << ", \"card\": ";
             JsonStr(os, drew[di].second);
             os << " }";
+        }
+        os << "],\n";
+    }
+    // Reveals since the previous main-phase decision (a Muxus reveal, a searched-up tutor target, a
+    // scry/dig look), each { turn, source, cards:[{name, disposition}] }. The player must never have to
+    // guess WHAT was revealed or WHAT WE DID with it -- including the mandatory, choice-free splits like
+    // Muxus's "put all Goblins, rest to the bottom", which surface no decision to infer it from.
+    if (!reveals.empty())
+    {
+        os << "  \"reveals\": [";
+        for (size_t ri = 0; ri < reveals.size(); ++ri)
+        {
+            if (ri) { os << ", "; }
+            const PlayReveal& r = reveals[ri];
+            os << "{ \"turn\": " << r.turn << ", \"source\": "; JsonStr(os, r.source);
+            os << ", \"cards\": [";
+            for (size_t ci = 0; ci < r.cards.size(); ++ci)
+            {
+                if (ci) { os << ", "; }
+                os << "{ \"name\": "; JsonStr(os, r.cards[ci]);
+                os << ", \"disposition\": ";
+                JsonStr(os, ci < r.disposition.size() ? r.disposition[ci] : std::string());
+                os << " }";
+            }
+            os << "] }";
         }
         os << "],\n";
     }
@@ -1171,6 +1197,25 @@ static void WriteLackeyDecisionJson(std::ostream& os, const GameState& s, const 
     d.Note("reply a candidate index to put that Goblin permanent from hand onto the battlefield, or -1 to decline. Default = the AI's pick.");
 }
 
+// ETB tutor fired off a PUT rather than a cast (a Lackey combat cheat / Vial deploy / Muxus reveal
+// dropping a Goblin Matron): the player picks WHICH card to search up, or declines. A tutor resolved
+// from a CAST never reaches here -- the search enumerates one plan variant per candidate and the
+// viewer's variant dialog already asks -- so this covers exactly the path that used to pick silently.
+// `heuristic_default` = the engine's pick (candidate 0), pre-selected in the viewer.
+static void WriteTutorDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                   const std::vector<std::string>& candidates, int heuristic_default,
+                                   int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    d.Type("tutor_etb").Source(source).Turn(s.turn_number).Board(s).HeuristicDefault(heuristic_default);
+    d.Array("candidates", candidates.size(), [&](std::size_t i)
+    {
+        os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i]); os << " }";
+    });
+    d.Note("reply a candidate index to search that card up, or -1 to decline the optional search. "
+           "Default = the AI's pick.");
+}
+
 // Dragonstorm put-order decision (the Dragon override dialog): the player picks WHICH library Dragons
 // enter the battlefield (up to `max_puts`); the engine keeps the rule's fixed play order (Lathliss ->
 // Scourges -> Utvara -> haste). Emits the candidate Dragon copies as image options IN THAT ORDER, each
@@ -1512,11 +1557,13 @@ g_play_replicate_chooser = nullptr;
 g_play_land_entry_chooser = nullptr;
 g_play_dragon_chooser = nullptr;
 g_play_lackey_chooser = nullptr;
+g_play_tutor_chooser = nullptr;
 g_play_lightpaws_chooser = nullptr;
 g_play_firebreathe_chooser = nullptr;
 g_play_cast_order_chooser = nullptr;
 g_play_storage_hold_chooser = nullptr;
 g_play_draw_sink = nullptr;
+g_play_reveal_sink = nullptr;
 g_play_event_sink = nullptr;
 g_play_dropped_cast_sink = nullptr;
 }
@@ -1653,6 +1700,8 @@ struct ClaudePlayHarness
     // decision, so the NEXT emitted main-phase decision reports exactly the new draws for the
     // viewer history. Nulled by RevealLogPause during the search, so only real draws land here.
     std::vector<std::pair<int, std::string>> draw_log;
+    // Reveals since the last decision -> the viewer history (see GameLogger.h PlayReveal).
+    std::vector<PlayReveal> reveal_log;
     // Life-affecting events (combat/burn/lifegain-loss) since the last resolved main decision, for the
     // viewer history. Same lifecycle as draw_log: real sites append, cleared when a decision is consumed.
     std::vector<PlayEvent> event_log;
@@ -1676,6 +1725,7 @@ struct ClaudePlayHarness
     DigChooser            dig_chooser;
     LightPawsChooser      lightpaws_chooser;
     LackeyChooser         lackey_chooser;
+    TutorChooser          tutor_chooser;
     DragonChooser         dragon_chooser;
     DiscardChooser        discard_chooser;
     EIChooser             ei_chooser;
@@ -1702,6 +1752,7 @@ struct ClaudePlayHarness
 void ClaudePlayHarness::Install(AIEngine& ai)
 {
     g_play_draw_sink         = &draw_log;
+    g_play_reveal_sink       = &reveal_log;
     g_play_event_sink        = &event_log;
     g_play_dropped_cast_sink = &dropped_log;
 
@@ -1746,7 +1797,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
                         }
                     }
                     ss << ", \"decision\": ";
-                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal);
+                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal, reveal_log);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
@@ -1754,6 +1805,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
                 // its draws were already reported. Clear so the NEXT emitted decision reports only
                 // the draws that happen AFTER it (turn draw / cantrip draws of the next segment).
                 draw_log.clear();
+                reveal_log.clear();
                 event_log.clear();
                 dropped_log.clear();
                 return chosen;
@@ -1808,13 +1860,13 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
                 }
                 std::cout << "],\n";
                 std::cout << "  \"decision\": ";
-                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal);
+                WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal, reveal_log);
                 std::cout << "}\n<<<END_VALIDATION>>>\n";
                 std::cout.flush();
                 std::exit(71);   // distinct code: "validation verdict emitted"
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal);
+            WriteDecisionJson(std::cout, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal, reveal_log);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             std::exit(70);   // distinct code: "more input needed"
@@ -2287,6 +2339,41 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_lackey_chooser = &lackey_chooser;
+
+    // ETB tutor off a PUT (Lackey cheat / Vial deploy / Muxus reveal drops a Goblin Matron): the human
+    // picks WHICH card to search up, or -1 to decline ("you MAY search"). A tutor from a CAST carries a
+    // searched target and never reaches the chooser. Shares the --choices stream; default = candidate 0
+    // (the heuristic's pick). Human-play only (nulled for search/rollout), so ground truth is unaffected.
+    tutor_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+            const std::vector<std::string>& candidates, int heuristic_index) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                bool ok = (chosen == -1)
+                       || (chosen >= 0 && chosen < static_cast<int>(candidates.size()));
+                if (!ok) { chosen = heuristic_index; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteTutorDecisionJson(ss, s, source, candidates, heuristic_index, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteTutorDecisionJson(std::cout, s, source, candidates, heuristic_index, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_tutor_chooser = &tutor_chooser;
 
     // Dragonstorm put override (the Dragon dialog): the player picks WHICH library Dragons enter (up to
     // max_puts); the engine keeps the rule's play order. Reply = one int per candidate (1 = put this

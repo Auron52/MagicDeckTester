@@ -1,5 +1,6 @@
 #include "EnvFlags.h"
 #include "GameLogger.h"
+#include <algorithm>
 #include <fstream>
 #include <cstdio>
 #include <cstdlib>
@@ -30,6 +31,8 @@ thread_local LandEntryChooser* g_play_land_entry_chooser = nullptr;
 thread_local SoulfireTargetChooser* g_play_soulfire_chooser = nullptr;
 thread_local DragonChooser*  g_play_dragon_chooser = nullptr;
 thread_local LackeyChooser*  g_play_lackey_chooser = nullptr;
+thread_local TutorChooser*   g_play_tutor_chooser  = nullptr;
+thread_local std::vector<PlayReveal>* g_play_reveal_sink = nullptr;
 thread_local LightPawsChooser* g_play_lightpaws_chooser = nullptr;
 thread_local FirebreatheChooser* g_play_firebreathe_chooser = nullptr;
 thread_local int                 g_fb_activations_this_turn = 0;   // MTG_FB_TRACE diagnostic
@@ -204,6 +207,48 @@ void GameLogger::LogReveal(const std::string& source_name,
     a.bottomed        = bottomed_nums;
     a.dispositions    = dispositions;
     m_current.actions.push_back(std::move(a));
+}
+
+// See GameLogger.h. The one place a reveal fans out to the saved log and the live viewer.
+void EmitReveal(int turn, const std::string& source,
+                const std::vector<int>& looked_at_nums,
+                const std::vector<std::string>& looked_at_names,
+                const std::vector<int>& kept_nums,
+                const std::vector<int>& bottomed_nums,
+                const std::vector<std::string>& dispositions)
+{
+    if (g_reveal_logger != nullptr)
+    {
+        g_reveal_logger->LogReveal(source, looked_at_nums, looked_at_names,
+                                   kept_nums, bottomed_nums, dispositions);
+    }
+    if (g_play_reveal_sink == nullptr || looked_at_names.empty()) { return; }
+    PlayReveal pr;
+    pr.turn   = turn;
+    pr.source = source;
+    pr.cards  = looked_at_names;
+    pr.disposition.reserve(looked_at_names.size());
+    for (std::size_t i = 0; i < looked_at_names.size(); ++i)
+    {
+        // Same inputs the log got, same derivation -- the viewer cannot show a disposition the log
+        // does not carry (explicitly in `dispositions`, or implicitly in kept / bottomed).
+        if (i < dispositions.size() && !dispositions[i].empty())
+        { pr.disposition.push_back(dispositions[i]); continue; }
+        const int num = (i < looked_at_nums.size()) ? looked_at_nums[i] : 0;
+        pr.disposition.push_back(RevealDisposition(num, kept_nums, bottomed_nums));
+    }
+    g_play_reveal_sink->push_back(std::move(pr));
+}
+
+std::string RevealDisposition(int card_num,
+                              const std::vector<int>& kept_nums,
+                              const std::vector<int>& bottomed_nums)
+{
+    if (std::find(kept_nums.begin(), kept_nums.end(), card_num) != kept_nums.end())
+    { return "kept"; }
+    if (std::find(bottomed_nums.begin(), bottomed_nums.end(), card_num) != bottomed_nums.end())
+    { return "to the bottom"; }
+    return {};
 }
 
 void GameLogger::LogAbility(int source_card_num, const std::string& source_card_name,

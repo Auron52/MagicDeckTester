@@ -40,6 +40,25 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, controller_index, pp);
         if (cands.empty()) { return; }
         want = cands.front();
+        // Human play: a tutor resolving with NO searched target came from a PUT, not a cast (a Goblin
+        // Lackey cheat, a Vial deploy, a Muxus reveal) -- there was no plan variant for the human to
+        // pick in, so this used to search up cands.front() silently. Ask instead; -1 declines outright
+        // ("you MAY search"). g_play_tutor_chooser is nulled by RevealLogPause for every
+        // search/rollout/enumeration scope, so the search and every batch game keep taking the
+        // heuristic front() and stay byte-identical. See GameLogger.h TutorChooser.
+        if (g_play_tutor_chooser)
+        {
+            // Offer each NAME once: TutorCandidates lists library order, so a deck with three copies
+            // of a card would otherwise show it three times, and picking any of them fetches the same
+            // first matching library card anyway. Dedup preserves first-occurrence order, so index 0
+            // is still cands.front() -- the heuristic default the viewer pre-selects.
+            std::vector<std::string> uniq;
+            for (const std::string& c : cands)
+            { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+            const int picked = (*g_play_tutor_chooser)(state, controller_index, source_name, uniq, 0);
+            if (picked < 0) { return; }                                   // declined the optional search
+            if (picked < static_cast<int>(uniq.size())) { want = uniq[picked]; }
+        }
     }
     Player& ap = state.players[controller_index];
     int idx = -1;
@@ -62,10 +81,11 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // Record WHAT was searched up so the replay viewer shows it (real play only -- the reveal
     // logger is null during search/rollout, so this is byte-identical to the suite). Modelled as
     // a one-card reveal "kept" by the tutor (the fetched-to-hand/top card).
-    if (g_reveal_logger)
+    if (RevealVisible())
     {
-        g_reveal_logger->LogReveal(source_name + " (searched)",
-                                   { fetched_num }, { fetched_name }, { fetched_num }, {});
+        EmitReveal(state.turn_number, source_name + " (searched)",
+                   { fetched_num }, { fetched_name }, { fetched_num }, {},
+                   /*dispositions*/ { "to hand" });
     }
 
     // Gamble: "then discard a card at random." Deterministic so the rollout and the real executor
@@ -320,8 +340,25 @@ void PerformMuxusReveal(GameState& state, int controller, const CardParams& pp)
         return pp.etb_reveal_put_subtypes.empty();
     };
 
-    if (g_reveal_logger)
-    { g_reveal_logger->LogReveal("Muxus (reveal)", revealed_nums, revealed_names, {}, {}); }
+    // Report WHAT MUXUS DID, not just what it saw: the old call passed empty kept/bottomed lists, so
+    // the viewer history showed six revealed cards with no indication of which hit the battlefield and
+    // which went to the bottom. The split is MANDATORY, not a choice -- the card reads "put ALL Goblin
+    // creature cards with mana value 5 or less onto the battlefield and the rest on the bottom" -- so
+    // this is pure reporting. Computed here, before the put loop mutates the battlefield, and gated on
+    // g_reveal_logger (null in search/rollout), so play stays byte-identical.
+    if (RevealVisible())
+    {
+        std::vector<int>         put_nums, bottom_nums;
+        std::vector<std::string> labels;
+        for (const Card& rc : revealed)
+        {
+            const bool put = matches_put(rc);
+            (put ? put_nums : bottom_nums).push_back(rc.m_number);
+            labels.push_back(put ? "\xE2\x86\x92 battlefield" : "\xE2\x86\x92 bottom of library");
+        }
+        EmitReveal(state.turn_number, "Muxus (reveal)", revealed_nums, revealed_names,
+                   put_nums, bottom_nums, /*dispositions*/ labels);
+    }
 
     // Put matching cards onto the battlefield (each fires its own ETB cascade); bottom the rest.
     for (const Card& raw : revealed)
@@ -534,7 +571,7 @@ void ResolveExpressiveIteration(GameState& state)
     }
     if (capture && !seen_nums.empty())
     {
-        g_reveal_logger->LogReveal("Expressive Iteration", seen_nums, seen_names, kept_nums, bottom_nums);
+        EmitReveal(state.turn_number, "Expressive Iteration", seen_nums, seen_names, kept_nums, bottom_nums);
     }
 }
 

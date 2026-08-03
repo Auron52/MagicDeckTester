@@ -2266,6 +2266,23 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
         perm.entered_this_turn = true;
         state.battlefield.push_back(perm);
         const int slot = static_cast<int>(state.battlefield.size()) - 1;
+        // Report WHAT was cheated in. A Lackey put moves a card from a HIDDEN zone (hand) to a public
+        // one, exactly like a tutor fetch, so it rides the same reveal channel -- otherwise the only
+        // record is the viewer's own click label, which means an AI-resolved game, a rendered log and
+        // (for 1v1) the OPPONENT all see nothing. Emitted BEFORE the ETB cascade so the put reads
+        // before anything it triggers. Gated on RevealVisible -> byte-identical when nobody listens.
+        //
+        // This was viewer_only at first (a new log entry folds into the play digest and forces a
+        // rebaseline), which left post-hoc A/B forensics on this deck blind to the cheat-into-play
+        // choices -- the drops had to be reverse-engineered from per-phase board deltas. Dropped at
+        // the Goblins tutor-ranking rebaseline, which pays that digest cost anyway. The site only
+        // fires for combat_damage_puts_subtype_from_hand, so ONLY Goblins digests move.
+        if (RevealVisible())
+        {
+            EmitReveal(state.turn_number, src.card.m_name.str() + " (put)",
+                       { raw.m_number }, { raw.m_name.str() }, { raw.m_number }, {},
+                       /*dispositions*/ { "\xE2\x86\x92 battlefield (from hand)" });
+        }
         OnDragonEnters(state, controller, slot);   // in case a put permanent is ever a Dragon
         OnGoblinEnters(state, controller, slot);   // fire the put permanent's own Goblin ETB cascade
         // Legend rule (CR 704.5j) -- a STATE-BASED action, checked continuously, so it must run the
@@ -3329,7 +3346,7 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
 
     if (capture && !flip_nums.empty())
     {
-        g_reveal_logger->LogReveal("Soulfire Eruption (exiled)",
+        EmitReveal(state.turn_number, "Soulfire Eruption (exiled)",
                                    flip_nums, flip_names, flip_nums, {}, disp);
     }
     return r;
@@ -4621,7 +4638,7 @@ inline void ScryTop(GameState& state, int n, const std::string& source = "Scry")
 
     // Reveal capture (real play only; null during search): seen cards in look order, and which
     // were kept on top vs bottomed -- read from the chosen disposition BEFORE looked is consumed.
-    if (g_reveal_logger)
+    if (RevealVisible())
     {
         std::vector<int> seen_nums, kept_nums, bottom_nums;
         std::vector<std::string> seen_names;
@@ -4633,7 +4650,7 @@ inline void ScryTop(GameState& state, int n, const std::string& source = "Scry")
             seen_names.push_back(looked[i].m_name);
             (on_top[i] ? kept_nums : bottom_nums).push_back(looked[i].m_number);
         }
-        g_reveal_logger->LogReveal(source, seen_nums, seen_names, kept_nums, bottom_nums);
+        EmitReveal(state.turn_number, source, seen_nums, seen_names, kept_nums, bottom_nums);
     }
 
     for (int _e = 0; _e < look; ++_e) { ap.library.erase(ap.library.begin()); }
@@ -4681,13 +4698,13 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
         disp = ChooseTopDisposition(state, source, looked, LookKind::Reorder, keep_decision);
     }
 
-    if (g_reveal_logger)
+    if (RevealVisible())
     {
         std::vector<int> seen_nums; std::vector<std::string> seen_names;
         for (const Card& c : looked) { seen_nums.push_back(c.m_number); seen_names.push_back(c.m_name); }
         if (disp.shuffle)
         {
-            g_reveal_logger->LogReveal(source + " (shuffle)", seen_nums, seen_names,
+            EmitReveal(state.turn_number, source + " (shuffle)", seen_nums, seen_names,
                                        /*kept*/ std::vector<int>{}, /*bottomed*/ seen_nums);
         }
         else
@@ -4697,7 +4714,7 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
             for (int idx : disp.top_order)
             { if (idx >= 0 && idx < look && !placed[idx]) { placed[idx] = 1; kept_nums.push_back(looked[idx].m_number); } }
             for (int i = 0; i < look; ++i) { if (!placed[i]) { kept_nums.push_back(looked[i].m_number); } }
-            g_reveal_logger->LogReveal(source, seen_nums, seen_names, kept_nums, /*bottomed*/ std::vector<int>{});
+            EmitReveal(state.turn_number, source, seen_nums, seen_names, kept_nums, /*bottomed*/ std::vector<int>{});
         }
     }
 
@@ -4740,7 +4757,7 @@ inline void SurveilTop(GameState& state, int n, const std::string& source = "Sur
         }
         // For surveil the "bottomed" set is really the graveyard set; the viewer labels
         // the disposition from the source, so reusing the bottomed slot is fine.
-        g_reveal_logger->LogReveal(source, seen_nums, seen_names, kept_nums, grave_nums);
+        EmitReveal(state.turn_number, source, seen_nums, seen_names, kept_nums, grave_nums);
     }
 
     for (int _e = 0; _e < look; ++_e) { ap.library.erase(ap.library.begin()); }
