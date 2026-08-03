@@ -83,6 +83,21 @@ buries Chieftain's `power_bonus × buff_targets × BODY`. The flat fraction is t
 Chieftain's `+1/+1` across the team, by contrast, is immediate damage every combat — which is why it
 was the right fetch in all 11.
 
+## PRIORITY (user, 2026-08-03): the SEARCHED regressions matter, d0 mostly does not
+
+> "I'm less worried about the d0 problem than I am about the searched problems. I wouldn't invest
+> too much effort trying to get d0 perfect unless that can also help us a lot with searched."
+
+So weigh the **3 persisting searched games** (gi573, gi849, gi44), not the 31 d0 entries. d0 stays
+listed because it is a cheap, high-signal diagnostic — it takes `cands[0]`, so a ranking-order error
+shows up there undiluted by the search's ability to recover — but a d0-only improvement is **not**
+a reason to ship, and a d0-only regression is **not** by itself a reason to reject.
+
+This reframing forced a re-measurement, and it changed one verdict's *reasoning* (see variant 3
+below): the original rejection was driven by a combined net that d0 dominated. Split by tier, the
+train-searched signal was +1.0 turn-units over 1,325 games — noise. Only the held-out searched run
+settled it.
+
 ## THREE FIX ATTEMPTS, ALL MEASURED AND REJECTED (2026-08-03)
 
 Recorded so nobody re-treads them. Each was built, built cleanly, and measured against the committed
@@ -93,7 +108,34 @@ ships today — not worse than pre-enabler.
 |---|---------|--------|---------|
 | 1 | **Turns-saved gate on ALL channels.** Compute the stuck card's arrival turn with/without the enabler over every channel (cut / ramp / free cheat), credit only `base_t - with_t > 0`. | smoke d0 4.7520 → **4.7610** (exactly the pre-enabler value): gave back **9** d0 gains on s1001 alone and recovered **neither** gi19 nor gi222. | REJECTED — broke what worked, fixed nothing |
 | 2 | **Gate only the two Warchief clauses** (cost cut, blanket haste); ramp and free-cheat keep their flat fractions, since neither was implicated. | smoke d0 4.7520 → 4.7550: still gave back 3 gains (gi311, gi468, gi823), still recovered neither gi19 nor gi222. | REJECTED |
-| 3 | **Variant 2 + token-aware `buff_targets`** — count a hand Goblin's `etb_self_creates_tokens` as extra buff recipients (Siege-Gang is four bodies, not one), cap raised 3 → 5. | **Recovered gi44 at BOTH searched depths** (smoke d3 → 4.2400, d5 → 4.2000, the pre-ranking values) and gi289. But net **+3 turn-units on smoke** and **+4 on regression** (d0_s2002 +1, d3_s3003 +2, d5_s3003 +2). | REJECTED — recovers tracked games, costs more elsewhere |
+| 3 | **Variant 2 + token-aware `buff_targets`** — count a hand Goblin's `etb_self_creates_tokens` as extra buff recipients (Siege-Gang is four bodies, not one), cap raised 3 → 5. | **Recovered gi44 at BOTH searched depths** (smoke d3 → 4.2400, d5 → 4.2000, the pre-ranking values) and gi289. Train: d0 +6.0, searched +1.0 (noise). **Held-out overnight: searched +20.0 turn-units over 8,000 games, worse in 7 of 8 cases** (d0 +39.0). | REJECTED — worse on the tier that matters, on the largest sample |
+
+### Variant 3 in detail: why the held-out searched run was the decisive one
+
+Under the user's priority the first rejection was under-argued — it leaned on a combined net that d0
+dominated. Re-split, train looked like this:
+
+```
+                d0        searched
+smoke         +5.0          -2.0
+regression    +1.0          +3.0
+              ----          ----
+              +6.0          +1.0   over 1,325 searched games -> noise
+```
+
+That is genuinely ambiguous on searched, so the variant deserved the held-out run it had never had.
+It is unambiguous:
+
+```
+overnight  d3_s4004 +3.0   d3_s5005 +1.0   d3_s6006 +4.0   d3_s7007 +2.0
+           d5_s4004 +3.0   d5_s5005 +0.0   d5_s6006 +4.0   d5_s7007 +3.0
+           searched +20.0 turn-units / 8,000 games (+0.0025/game), 7 of 8 cases worse
+```
+
+**Lesson worth keeping: a small train-searched delta over ~1,300 games cannot resolve a change of
+this size — only the 8,000-game held-out searched tier can.** Cost is ~90 s with
+`--deck=goblins`, so there is no excuse for skipping it. This mirrors the trap `6bc04b8` fell into
+(a train-only "+0.006, near-full quality" claim that held-out contradicted).
 
 ### What variant 3 proved, and why it still matters
 
@@ -127,10 +169,14 @@ and takes no account of how reliable the enabler itself is — a plausible next 
    token bodies only when scoring a lord against an enabler, not inside `value_of` generally.
 2. **Discount the enabler credit by the enabler's own reliability** — Lackey must survive and connect;
    Warchief's cut only pays if the mana is otherwise wasted. Currently both take a flat fraction.
-3. **Accept that d0 and searched want different rankings.** Every rejected variant traded d0 against
-   searched in some direction. d0 takes `cands[0]`, while the searched tiers only need the right card
-   inside the top 4 — a strictly easier requirement. A width-aware credit (aggressive at rank 1,
-   softer for ranks 2-4) could serve both.
+3. **De-prioritised by the user, but noted:** d0 and searched may want different rankings — d0 takes
+   `cands[0]`, the search only needs the right card inside the top 4. A width-aware credit could
+   serve both. Only worth building if it also moves searched materially.
+
+**Measurement protocol for anything tried here**, learned the hard way on variant 3:
+`bash test/regression.sh --overnight --deck=goblins` (~90 s, 8,000 searched + 8,000 d0 held-out
+games) is the gate. Smoke and regression together are only ~1,325 searched games — enough to kill an
+obviously-bad variant fast, never enough to *accept* one.
 
 **Method note:** run smoke FIRST when iterating here — it is ~5 minutes, and all three variants above
 were killed by smoke d0 alone before spending a full sweep. Confirm any survivor on regression +
