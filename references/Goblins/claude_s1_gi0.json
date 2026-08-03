@@ -1,0 +1,168 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 24, "name": "Mountain" }, { "num": 49, "name": "Rundvelt Hordemaster" }, { "num": 9, "name": "Goblin Lackey" }, { "num": 59, "name": "Three Tree City" }, { "num": 15, "name": "Goblin Piledriver" }, { "num": 25, "name": "Mountain" }, { "num": 56, "name": "Skirk Prospector" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 9, "name": "Goblin Lackey", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Goblin Piledriver", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Rundvelt Hordemaster", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Skirk Prospector", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Goblin Lackey", "land": "Mountain", "casts": ["Goblin Lackey"], "actions": [{ "card": "Goblin Lackey" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Skirk Prospector", "land": "Mountain", "casts": ["Skirk Prospector"], "actions": [{ "card": "Skirk Prospector" }] },
+    { "index": 2, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Three Tree City; cast: (nothing)", "land": "Three Tree City", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Goblin Lackey" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Lackey", "idx": 1, "num": 9, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 24, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Goblin Lackey", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Goblin Piledriver", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Rundvelt Hordemaster", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Skirk Prospector", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Goblin Lackey, Skirk Prospector", "land": "Mountain", "casts": ["Goblin Lackey", "Skirk Prospector"], "cast_order_canonical": ["Goblin Lackey", "Skirk Prospector"], "actions": [{ "card": "Goblin Lackey" }, { "card": "Skirk Prospector" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Skirk Prospector, Goblin Lackey", "land": "Mountain", "casts": ["Skirk Prospector", "Goblin Lackey"], "cast_order_canonical": ["Skirk Prospector", "Goblin Lackey"], "actions": [{ "card": "Skirk Prospector" }, { "card": "Goblin Lackey" }] },
+    { "index": 2, "summary": "land=Three Tree City; cast: Rundvelt Hordemaster", "land": "Three Tree City", "casts": ["Rundvelt Hordemaster"], "actions": [{ "card": "Rundvelt Hordemaster" }] },
+    { "index": 3, "summary": "land=Three Tree City; cast: Goblin Piledriver", "land": "Three Tree City", "casts": ["Goblin Piledriver"], "actions": [{ "card": "Goblin Piledriver" }] },
+    { "index": 4, "summary": "land=Three Tree City; cast: Skirk Prospector", "land": "Three Tree City", "casts": ["Skirk Prospector"], "actions": [{ "card": "Skirk Prospector" }] },
+    { "index": 5, "summary": "land=Three Tree City; cast: Goblin Lackey", "land": "Three Tree City", "casts": ["Goblin Lackey"], "actions": [{ "card": "Goblin Lackey" }] },
+    { "index": 6, "summary": "land=Mountain; cast: Rundvelt Hordemaster", "land": "Mountain", "casts": ["Rundvelt Hordemaster"], "actions": [{ "card": "Rundvelt Hordemaster" }] },
+    { "index": 7, "summary": "land=Mountain; cast: Goblin Piledriver", "land": "Mountain", "casts": ["Goblin Piledriver"], "actions": [{ "card": "Goblin Piledriver" }] },
+    { "index": 8, "summary": "land=Mountain; cast: Skirk Prospector", "land": "Mountain", "casts": ["Skirk Prospector"], "actions": [{ "card": "Skirk Prospector" }] },
+    { "index": 9, "summary": "land=Mountain; cast: Goblin Lackey", "land": "Mountain", "casts": ["Goblin Lackey"], "actions": [{ "card": "Goblin Lackey" }] },
+    { "index": 10, "summary": "land=none; cast: Skirk Prospector", "land": null, "casts": ["Skirk Prospector"], "actions": [{ "card": "Skirk Prospector" }] },
+    { "index": 11, "summary": "land=none; cast: Goblin Lackey", "land": null, "casts": ["Goblin Lackey"], "actions": [{ "card": "Goblin Lackey" }] },
+    { "index": 12, "summary": "land=Three Tree City; cast: (nothing)", "land": "Three Tree City", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "type": "lackey_put",
+  "source": "Goblin Lackey",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Lackey", "idx": 1, "num": 9, "tapped": true, "is_land": false }, { "name": "Goblin Lackey", "idx": 3, "num": 10, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 25, "tapped": true, "is_land": true }, { "name": "Skirk Prospector", "idx": 4, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Goblin Piledriver", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Rundvelt Hordemaster", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 19, "battlefield": [] },
+  "heuristic_default": 1,
+  "candidates": [{ "index": 0, "name": "Rundvelt Hordemaster" }, { "index": 1, "name": "Goblin Piledriver" }],
+  "note": "reply a candidate index to put that Goblin permanent from hand onto the battlefield, or -1 to decline. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Goblin Lackey (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Lackey", "idx": 1, "num": 9, "tapped": true, "is_land": false }, { "name": "Goblin Lackey", "idx": 3, "num": 10, "is_land": false }, { "name": "Goblin Piledriver", "idx": 5, "num": 15, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 25, "tapped": true, "is_land": true }, { "name": "Skirk Prospector", "idx": 4, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Rundvelt Hordemaster", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 19, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Skirk Prospector (other)", "land": null, "casts": ["Skirk Prospector"], "actions": [{ "card": "Skirk Prospector", "float_color": "R" }] },
+    { "index": 1, "summary": "land=none; cast: Skirk Prospector (other)", "land": null, "casts": ["Skirk Prospector"], "actions": [{ "card": "Skirk Prospector", "float_color": "R" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Goblin Lackey" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Lackey", "idx": 1, "num": 9, "is_land": false }, { "name": "Goblin Lackey", "idx": 3, "num": 10, "is_land": false }, { "name": "Goblin Piledriver", "idx": 5, "num": 15, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 24, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 25, "is_land": true }, { "name": "Skirk Prospector", "idx": 4, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Goblin Lackey", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Rundvelt Hordemaster", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 19, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Three Tree City; cast: Goblin Lackey, Rundvelt Hordemaster", "land": "Three Tree City", "casts": ["Goblin Lackey", "Rundvelt Hordemaster"], "cast_order_canonical": ["Goblin Lackey", "Rundvelt Hordemaster"], "actions": [{ "card": "Goblin Lackey" }, { "card": "Rundvelt Hordemaster" }] },
+    { "index": 1, "summary": "land=Three Tree City; cast: Rundvelt Hordemaster, Goblin Lackey", "land": "Three Tree City", "casts": ["Rundvelt Hordemaster", "Goblin Lackey"], "cast_order_canonical": ["Rundvelt Hordemaster", "Goblin Lackey"], "actions": [{ "card": "Rundvelt Hordemaster" }, { "card": "Goblin Lackey" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Goblin Lackey, Rundvelt Hordemaster", "land": "Mountain", "casts": ["Goblin Lackey", "Rundvelt Hordemaster"], "cast_order_canonical": ["Goblin Lackey", "Rundvelt Hordemaster"], "actions": [{ "card": "Goblin Lackey" }, { "card": "Rundvelt Hordemaster" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Rundvelt Hordemaster, Goblin Lackey", "land": "Mountain", "casts": ["Rundvelt Hordemaster", "Goblin Lackey"], "cast_order_canonical": ["Rundvelt Hordemaster", "Goblin Lackey"], "actions": [{ "card": "Rundvelt Hordemaster" }, { "card": "Goblin Lackey" }] },
+    { "index": 4, "summary": "land=Three Tree City; cast: Rundvelt Hordemaster", "land": "Three Tree City", "casts": ["Rundvelt Hordemaster"], "actions": [{ "card": "Rundvelt Hordemaster" }] },
+    { "index": 5, "summary": "land=Three Tree City; cast: Goblin Lackey", "land": "Three Tree City", "casts": ["Goblin Lackey"], "actions": [{ "card": "Goblin Lackey" }] },
+    { "index": 6, "summary": "land=Mountain; cast: Rundvelt Hordemaster", "land": "Mountain", "casts": ["Rundvelt Hordemaster"], "actions": [{ "card": "Rundvelt Hordemaster" }] },
+    { "index": 7, "summary": "land=Mountain; cast: Goblin Lackey", "land": "Mountain", "casts": ["Goblin Lackey"], "actions": [{ "card": "Goblin Lackey" }] },
+    { "index": 8, "summary": "land=none; cast: Rundvelt Hordemaster", "land": null, "casts": ["Rundvelt Hordemaster"], "actions": [{ "card": "Rundvelt Hordemaster" }] },
+    { "index": 9, "summary": "land=none; cast: Goblin Lackey", "land": null, "casts": ["Goblin Lackey"], "actions": [{ "card": "Goblin Lackey" }] },
+    { "index": 10, "summary": "land=Three Tree City; cast: (nothing)", "land": "Three Tree City", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Goblin Lackey (2), Goblin Lackey (2), Skirk Prospector (2), Goblin Piledriver (8) — 14 to opponent (19→5)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Lackey", "idx": 1, "num": 9, "tapped": true, "is_land": false }, { "name": "Goblin Lackey", "idx": 3, "num": 10, "tapped": true, "is_land": false }, { "name": "Goblin Lackey", "idx": 8, "num": 11, "is_land": false }, { "name": "Goblin Piledriver", "idx": 5, "num": 15, "tapped": true, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 25, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 26, "tapped": true, "is_land": true }, { "name": "Rundvelt Hordemaster", "idx": 7, "num": 49, "is_land": false }, { "name": "Skirk Prospector", "idx": 4, "num": 56, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 59, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 5, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Skirk Prospector (other)", "land": null, "casts": ["Skirk Prospector"], "actions": [{ "card": "Skirk Prospector", "float_color": "R" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Lackey", "idx": 1, "num": 9, "is_land": false }, { "name": "Goblin Lackey", "idx": 3, "num": 10, "is_land": false }, { "name": "Goblin Lackey", "idx": 8, "num": 11, "is_land": false }, { "name": "Goblin Piledriver", "idx": 5, "num": 15, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 24, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 25, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 26, "is_land": true }, { "name": "Rundvelt Hordemaster", "idx": 7, "num": 49, "is_land": false }, { "name": "Skirk Prospector", "idx": 4, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49 },
+  "opponent": { "life": 5, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Three Tree City; cast: (nothing)", "land": "Three Tree City", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
