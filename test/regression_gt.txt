@@ -1,4 +1,4 @@
-# Regression ground truth -- commit c89a7c2  date 2026-08-02
+# Regression ground truth -- commit 943ad4b  date 2026-08-03
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -10,27 +10,27 @@ slivers_smoke_d5_s1001=4.1867/355a98aea4d15d94
 burn_smoke_d0_s1001=4.5830/bb9efdf465009c20
 burn_smoke_d3_s1001=4.3533/a38dae5c6ea18138
 burn_smoke_d5_s1001=4.3640/7dd163eb237624f1
-th_smoke_d0_s1001=5.4650/76f0ed7f06d5c368
-th_smoke_d3_s1001=4.1133/15157a8d70f71770
-th_smoke_d5_s1001=4.0000/8e2465368d0e8ea4
-knights_smoke_d0_s1001=4.5440/f9f1a1dbd111bc44
+th_smoke_d0_s1001=5.4570/8d7bfc92ba129b2c
+th_smoke_d3_s1001=4.1133/9e1b7512be69504d
+th_smoke_d5_s1001=4.0000/24cce11abbaee0fa
+knights_smoke_d0_s1001=4.5440/765ed59dbea166cf
 knights_smoke_d3_s1001=4.3960/d3d46a3e982ea9bb
-knights_smoke_d5_s1001=4.4000/def7d65ff1283926
+knights_smoke_d5_s1001=4.3933/160dd7e447cde867
 antilife_smoke_d0_s1001=5.5820/fcddbc3ccb346733
-antilife_smoke_d3_s1001=4.2200/142a40e97cc48f60
-antilife_smoke_d5_s1001=4.1800/a4fbb5d4eb52c5fb
-hinata_smoke_d0_s1001=7.0790/a4e4cb40e5d85841
-hinata_smoke_d3_s1001=5.9200/64c776e12c3f3799
-hinata_smoke_d5_s1001=6.0533/4f6d4d25fba1e8cc
+antilife_smoke_d3_s1001=4.2200/96a16a6fb1baf6a7
+antilife_smoke_d5_s1001=4.1800/e52c031a9afb5bd5
+hinata_smoke_d0_s1001=7.0300/1c5a266ea4d808b1
+hinata_smoke_d3_s1001=5.7400/c6fff7b09b2df826
+hinata_smoke_d5_s1001=5.8933/00c7dfbdeea1ac1a
 dragonstorm_smoke_d0_s1001=5.4300/16986eaeb61de74e
-dragonstorm_smoke_d3_s1001=4.5267/794744ad2d5af779
-dragonstorm_smoke_d5_s1001=4.4933/dafd9a5af2d05ba1
-auras_smoke_d0_s1001=4.4560/083d95ae3a2a9c0f
-auras_smoke_d3_s1001=4.1533/d1d5be0464ab5754
-auras_smoke_d5_s1001=4.1480/3f0c22061ad83dc3
-goblins_smoke_d0_s1001=4.7700/0747b43dca13cb43
-goblins_smoke_d3_s1001=4.2800/27320aff1831db6f
-goblins_smoke_d5_s1001=4.2533/d9b2dc40439cec3f
+dragonstorm_smoke_d3_s1001=4.5067/034c99d56e059dde
+dragonstorm_smoke_d5_s1001=4.4667/8cf792208eab7cc6
+auras_smoke_d0_s1001=4.3760/d0a56ce8cb114f9d
+auras_smoke_d3_s1001=4.1400/de66d9efc3f9e6d7
+auras_smoke_d5_s1001=4.1320/876a844b4869aaae
+goblins_smoke_d0_s1001=4.7610/70a46d96cce53c47
+goblins_smoke_d3_s1001=4.2400/754cef013412685b
+goblins_smoke_d5_s1001=4.2000/ec00f6652f787b53
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/7b06530f1cd2f10f
