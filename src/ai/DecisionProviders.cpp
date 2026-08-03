@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <algorithm>   // std::stable_sort (OrderEntriesByEtbValue payoff-ordering primitive)
 #include <tuple>       // std::make_tuple (CombatCheatCandidates ranking key)
+#include <set>         // MTG_TUTOR_RANK_DUMP situation dedupe (diagnostic only)
 #include "DecisionProviders.h"
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
@@ -3829,7 +3830,20 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
 std::vector<std::string>
 GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {
-    if (DecisionUnpruned(UnprunedGate::Tutor)) { return GenericProvider::TutorCandidates(s, controller, pp); }
+    const bool unpruned = DecisionUnpruned(UnprunedGate::Tutor);
+    // MTG_TUTOR_RANK_DUMP=1 prints this ranking and every input it derives from, ONCE PER TURN --
+    // the first call of a turn is the search's root enumeration, i.e. the real pre-cast state (the
+    // top-level resolution never gets here: it replays the search's chosen name, so PerformTutor
+    // short-circuits and g_real_resolution would never fire). DIAGNOSTIC ONLY -- it never branches
+    // play, and under the unpruned gate it still returns the unranked list. This is the instrument
+    // that showed the lethal-reach clause missing gi865's Twinshot Sniper kill.
+    // Deduped by the ranking's own INPUTS (turn/board/mana), each distinct situation printed once,
+    // capped. A per-turn latch does not work: the search simulates future turns, so "the first T3
+    // call" is a hypothetical inside T1's lookahead, not the real T3 root -- match the real state by
+    // its printed inputs instead. MTG_TUTOR_RANK_DUMP_MAX caps the distinct situations (default 400).
+    static const bool s_dump_on = EnvOn("MTG_TUTOR_RANK_DUMP");   // cached: this is a hot path
+    bool dump = s_dump_on;
+    if (unpruned && !dump) { return GenericProvider::TutorCandidates(s, controller, pp); }
     std::vector<std::string> cands = GenericProvider::TutorCandidates(s, controller, pp);
     if (cands.size() <= 1) { return cands; }
     // --- board scan (done once) ---------------------------------------------------------------
@@ -3840,6 +3854,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     bool lackey_persist = false;   // any Goblin Lackey on board -> free drop next turn
     bool skirk_on   = false;       // a Skirk Prospector (sac Goblin -> {R}) -> a mana RAMP for bombs
     int  vial_charge = -1;         // best untapped Aether Vial's charge (-1 = no Vial); puts a creature of MV==charge
+    int  sick_goblin_power  = 0;   // power still locked up by summoning sickness (a haste grant frees it)
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != controller) { continue; }
@@ -3848,7 +3863,8 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         if (pc.IsCreature() && CardHasSubtype(pc, "Goblin"))
         {
             ++goblins_controlled;
-            if (!CanAttackFull(p, s.battlefield, controller)) { ++goblins_sick; }
+            if (!CanAttackFull(p, s.battlefield, controller))
+            { ++goblins_sick; sick_goblin_power += std::max(0, pc.m_power.value_or(0)); }
         }
         if (pc.IsCreature() && CanAttackFull(p, s.battlefield, controller))
         { ready_atk += std::max(0, pc.m_power.value_or(0)); }   // any ready attacker (goldfish: connects)
@@ -3907,6 +3923,47 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         return v;
     };
 
+    // --- enabler credit: what the fetch UNLOCKS, not just what it is ---------------------------
+    // value_of above scores a card for its own board impact, so every ENABLER in this deck reads as
+    // a vanilla body: Goblin Warchief 270, Skirk Prospector 100, Goblin Lackey 100 -- against a
+    // lord's 900-1100. At W=12 the unranked axis stumbled onto them by shuffle order; at W=4 they
+    // are unreachable, and that is the whole remaining W12->4 held-out cost. Measured (Goblins
+    // overnight, both arms at unlimited budget) the pre-W arm fetched an enabler and won a turn
+    // earlier in every one of the four: gi602 + gi206 Warchief (T5 vs T6), gi842 Skirk (T5 vs T6),
+    // gi924 Lackey (T5 vs T6) -- each time to land the bomb ALREADY IN HAND one turn sooner.
+    //
+    // So the credit is measured against the hand: how much does this fetch pull forward the best
+    // thing I am already holding? One idea, four expressions of it (cost cut / ramp / free cheat /
+    // blanket haste), each a fraction of the accelerated card's own value so the scale needs no new
+    // constant. Gated on actually holding something stuck -- an enabler with nothing to enable is
+    // just its body. MTG_GOBLIN_ENABLER_RANK=0 drops the term for the A/B.
+    static const bool enabler_rank = EnvOn("MTG_GOBLIN_ENABLER_RANK", true);   // cached: hot path
+    double stuck_hand_value = 0.0;   // best hand Goblin I cannot cast right now = what to accelerate
+    for (const Card& h : s.players[controller].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+        if (!hd) { continue; }
+        const Card& hc = hd->card;
+        if (!hc.IsCreature() || !CardHasSubtype(hc, "Goblin")) { continue; }
+        if (hc.m_mana_cost.ManaValue() <= untapped_mana) { continue; }   // already castable: nothing to unlock
+        stuck_hand_value = std::max(stuck_hand_value, value_of(hd, hc));
+    }
+    auto enabler_of = [&](const CardDefinition* d) -> double
+    {
+        if (!enabler_rank || !d || stuck_hand_value <= 0.0) { return 0.0; }
+        const CardParams& p = d->params;
+        double frac = 0.0;
+        // Warchief: "Goblin spells cost {1} less" -- the stuck bomb arrives a turn early.
+        if (!p.reduces_spell_subtype.empty())                 { frac += 0.50; }
+        // Warchief again: blanket haste means whatever lands next swings the turn it lands.
+        if (p.grants_haste && !p.subtypes_affected.empty())    { frac += 0.30; }
+        // Skirk Prospector: sac a spare Goblin for {R} -- ramp, but it eats the bodies it counts.
+        if (p.sac_outlet_add_mana_amount > 0 && G >= 2)        { frac += 0.40; }
+        // Goblin Lackey: connect and the stuck bomb comes down FREE (this deck's engine).
+        if (!p.combat_damage_puts_subtype_from_hand.empty())   { frac += 0.60; }
+        return frac * stuck_hand_value;
+    };
+
     // --- deploy discount: how many TURNS until it can hit the board, over the best path ---------
     // (mana incl. Skirk ramp; Goblin Lackey free-drop; Aether Vial put once its charge reaches MV).
     // Value-PRIMARY but deployability shades HARD: a bomb that is genuinely stuck for turns must fall
@@ -3941,6 +3998,56 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         if (t > 0 && hand_has_play) { disc *= 0.75; }   // opportunity cost: already have a play
         return disc;
     };
+
+    // --- projected swing: the attack we will ACTUALLY make this turn, not the board as it stands -----
+    // The lethal-reach test below has to measure the swing we are about to make, and by the time it runs
+    // two deploys are already all but certain: the tutor SOURCE is entering (that is why we are here),
+    // and this deck's standard turn is "and also cast the lord". A bare board scan sees neither. Measured
+    // on gi865 (Goblins overnight d3_s4004) it read ready_atk=7 where the real swing was 17 -- Goblin
+    // Chieftain's +1/+1 over 7 Goblins plus its own hasty body plus the haste it grants the fresh Matron
+    // -- so the fetch that closed the game (Twinshot Sniper, 2 to the face for EXACTLY lethal at 19) never
+    // reached the top 4 and the T3 kill was invisible to the search at W=4. Conservative by construction:
+    // the lord must be hard-castable ALONGSIDE the source out of real untapped mana (no Skirk ramp, which
+    // eats the very attackers being counted; no Lackey drop, which resolves after combat damage and so
+    // cannot attack). MTG_GOBLIN_SWING_LETHAL=0 restores the bare board scan for the A/B.
+    int swing_atk = ready_atk;
+    static const bool s_swing_lethal = EnvOn("MTG_GOBLIN_SWING_LETHAL", true);   // cached: hot path
+    if (s_swing_lethal)
+    {
+        int src_mv = 0, src_pow = 0;   // the tutor source in hand -- it is entering this turn
+        for (const Card& h : s.players[controller].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if (!hd || !(hd->params.tutor_to_hand || hd->params.tutor_to_top)) { continue; }
+            src_mv  = hd->card.m_mana_cost.ManaValue();
+            src_pow = std::max(0, hd->card.m_power.value_or(0));
+            break;
+        }
+        const int ready_goblins = std::max(0, goblins_controlled - goblins_sick);
+        int best_lord = 0;             // the best team-buff/haste lord affordable next to the source
+        for (const Card& h : s.players[controller].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if (!hd) { continue; }
+            const Card&       hc = hd->card;
+            const CardParams& hp = hd->params;
+            if (!hc.IsCreature() || hp.subtypes_affected.empty()) { continue; }
+            if (hc.m_mana_cost.ManaValue() + src_mv > untapped_mana) { continue; }
+            const int  bonus = std::max(0, hp.power_bonus);
+            int extra = bonus * ready_goblins;                        // buff on what already swings
+            if (hp.grants_haste)
+            {   // sick bodies (and the fresh source) turn on, each also carrying the buff
+                extra += sick_goblin_power + bonus * goblins_sick;
+                extra += src_pow + bonus;
+            }
+            // Its own body swings too if it has haste intrinsically (Chieftain) or grants it to
+            // itself (Warchief: "Goblins you control have haste", no lord_excludes_self).
+            if (hc.HasKeyword(Keyword::Haste) || (hp.grants_haste && !hp.lord_excludes_self))
+            { extra += std::max(0, hc.m_power.value_or(0)); }
+            best_lord = std::max(best_lord, extra);
+        }
+        swing_atk += best_lord;
+    }
 
     // --- lethal reach: a fetch whose CHEAP direct damage closes the game THIS turn must outrank a bigger
     // body. Credit only burst reachable now over the card's cheapest path (channel from hand / Lackey or
@@ -3978,11 +4085,11 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             if (lc.m_name != name) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
             const Card& c = d ? d->card : lc;
-            double sc = value_of(d, c) * discount_of(c);
+            double sc = (value_of(d, c) + enabler_of(d)) * discount_of(c);
             const int burst = face_burst(d, c);
             // Only when the burst is what CROSSES lethal (attackers alone fall short, but reach them): a
             // fetch that guarantees the kill this turn sorts ahead of every non-lethal one, best burst first.
-            if (burst > 0 && ready_atk < opp_life && opp_life <= ready_atk + burst)
+            if (burst > 0 && swing_atk < opp_life && opp_life <= swing_atk + burst)
             { sc += 1.0e6 + burst; }
             return sc;
         }
@@ -3991,6 +4098,42 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
 
     std::stable_sort(cands.begin(), cands.end(),
                      [&](const std::string& a, const std::string& b) { return score_of(a) > score_of(b); });
+    if (dump)
+    {
+        static thread_local std::set<uint64_t> s_seen;
+        uint64_t sig = 1469598103934665603ull;
+        for (int v : { s.turn_number, G, goblins_sick, ready_atk, opp_life, (int)lackey_now,
+                       (int)lackey_persist, (int)skirk_on, vial_charge, untapped_mana, mana_now,
+                       mana_next, buff_targets, (int)hand_has_play })
+        { sig = (sig ^ (uint64_t)(uint32_t)v) * 1099511628211ull; }
+        if (!s_seen.insert(sig).second
+            || (int)s_seen.size() > EnvInt("MTG_TUTOR_RANK_DUMP_MAX", 400)) { dump = false; }
+    }
+    if (dump)
+    {
+        std::fprintf(stderr,
+                     "[tutor-rank] T%d src=%s | G=%d sick=%d ready_atk=%d swing_atk=%d opp_life=%d | lackey_now=%d "
+                     "lackey_persist=%d skirk=%d vial=%d | mana: untapped=%d now=%d next=%d | "
+                     "buff_targets=%d hand_has_play=%d | W=%d\n",
+                     s.turn_number, pp.tutor_types.empty() ? "?" : pp.tutor_types[0].c_str(),
+                     G, goblins_sick, ready_atk, swing_atk, opp_life, (int)lackey_now, (int)lackey_persist,
+                     (int)skirk_on, vial_charge, untapped_mana, mana_now, mana_next,
+                     buff_targets, (int)hand_has_play, TutorSearchWidth());
+        for (std::size_t i = 0; i < cands.size(); ++i)
+        {
+            const Card* lc = nullptr;
+            for (const Card& c : s.players[controller].library)
+            { if (c.m_name == cands[i]) { lc = &c; break; } }
+            if (!lc) { std::fprintf(stderr, "  %2zu. %-28s (gone)\n", i, cands[i].c_str()); continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(*lc);
+            const Card& c = d ? d->card : *lc;
+            std::fprintf(stderr, "  %2zu.%s %-28s score=%10.1f  value=%7.1f +enable=%7.1f x disc=%.3f (t=%d)  burst=%d\n",
+                         i, (int)i < TutorSearchWidth() ? " *" : "  ", cands[i].c_str(),
+                         score_of(cands[i]), value_of(d, c), enabler_of(d), discount_of(c),
+                         turns_to_deploy(c), face_burst(d, c));
+        }
+    }
+    if (unpruned) { return GenericProvider::TutorCandidates(s, controller, pp); }
     return cands;
 }
 
