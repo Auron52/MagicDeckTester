@@ -665,6 +665,15 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             os << "{ \"card\": "; JsonStr(os, ac.card_name);
             if (ac.kind == Action::Kind::DiscardToLandsEdge) { os << ", \"landsedge\": " << ac.discard_lands; }
             if (ac.kind == Action::Kind::DigDraw) { os << ", \"dig\": true, \"dig_sacrifice\": " << (ac.dig_sacrifice ? "true" : "false"); }
+            // An activated ability of a permanent ALREADY ON THE BATTLEFIELD (Krenko's "{T}: create X
+            // Goblins"; a Skirk Prospector / Siege-Gang sac outlet). CheckLine matches these by card_name
+            // inside the ordinary cast multiset (see CheckLine's `orderNames`), so the human commits one
+            // with the same `cast=<name>` verb -- but the GUI can only QUEUE cards from HAND, so without
+            // this flag there was no way to express one and the ability was simply unusable by a human.
+            // The flag says "this name is a board activation, not a hand cast", which is what the viewer
+            // needs to make the permanent clickable. Emitted only in the human-play decision JSON.
+            if (ac.kind == Action::Kind::TapForTokens
+             || ac.kind == Action::Kind::SacCreatureOutlet) { os << ", \"activate\": true"; }
             if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }

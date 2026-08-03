@@ -11,6 +11,12 @@
 // with the network seam (fetch) pointed at the SAME server.js route logic (runStep/runValidate)
 // the live bridge uses — so the engine truth is real, only the transport is in-process.
 //
+// BLIND SPOT (measured, not assumed): this check drives the client's COMMIT functions directly
+// (pushChoice/commitTurn/applyAccepted), so it never renders the decision panel and cannot see the
+// SUBDECISIONS gate in renderBoard. Deleting a type from that whitelist — which hides the modal and
+// leaves the game unanswerable in a real browser — still passes here. test/viewer_decision_types_check.js
+// is what guards that; keep both.
+//
 // It is a PROPERTY test, deck-agnostic: because the whole protocol is a STATELESS replay from
 // (deck, seed, game-index, choices), the client state after undo-then-nothing MUST equal the
 // client state you'd get by never having played the undone step. Any divergence in the rendered
@@ -36,15 +42,24 @@ function argVal(name, dflt) {
   return hit ? hit.slice(name.length + 3) : dflt;
 }
 const VERBOSE = process.argv.includes('--verbose');
-// Default scenarios: a couple of profiled decks with different tempos. treasure_hunt draws a lot
-// (Treasure Hunt / cantrips) and has multi-main turns, which is exactly where the history panel's
-// draw re-logging on undo is most likely to corrupt.
+// `main` = how a scenario answers a main-phase decision, which decides WHICH decision types the
+// scenario can ever reach:
+//   'pass' — empty "Commit turn" (the #2 auto-advance path). Develops NO board, so it never reaches
+//            a decision that needs permanents in play (combat triggers, upkeep costs).
+//   'ai'   — submit plan index 0 (the model's own line) via applyAccepted, the same client entry
+//            point the "click an enumerated plan" button uses. The board actually develops, which is
+//            the only way in-game decisions like lackey_put (a combat-damage trigger) are reached.
+// Both are real GUI paths and both are worth guarding, so scenarios carry the mode per-entry.
 const SCENARIOS = argVal('deck', null)
-  ? [{ deck: argVal('deck', ''), seed: parseInt(argVal('seed', '4'), 10), turns: parseInt(argVal('turns', '8'), 10) }]
+  ? [{ deck: argVal('deck', ''), seed: parseInt(argVal('seed', '4'), 10),
+       turns: parseInt(argVal('turns', '8'), 10), main: argVal('main', 'pass') }]
   : [
-      { deck: 'treasure_hunt', seed: 4, turns: 8 },
-      { deck: 'Dragonstorm',   seed: 1, turns: 8 },
-      { deck: 'burn',          seed: 2, turns: 8 },
+      { deck: 'treasure_hunt', seed: 4, turns: 8, main: 'pass' },
+      { deck: 'Dragonstorm',   seed: 1, turns: 8, main: 'pass' },
+      { deck: 'burn',          seed: 2, turns: 8, main: 'pass' },
+      // Goblins on the model's own line: develops a board and connects with Goblin Lackey, so this is
+      // the scenario that drives a lackey_put modal through the client's history/undo bookkeeping.
+      { deck: 'Goblins',       seed: 1, turns: 8, main: 'ai' },
     ];
 
 // ---- fetch stub: dispatch the viewer's XHRs to the real server.js route logic ----
@@ -230,11 +245,19 @@ function diff(a, b) {
 //   - bottom    -> follow the AI's fill and commit the batch (commitBottomBatch)
 //   - main      -> empty "Commit turn" (auto-passes the rest of the turn — the #2 auto-advance path)
 //   - other sub -> the heuristic default via pushChoice
-async function stepForward(win) {
+// Which decision types a scenario actually reached. A scenario only guards the types it PLAYS INTO,
+// so without this the pass tells you nothing about coverage (an empty "Commit turn" line develops no
+// board, so it may never reach e.g. a combat-damage lackey_put). --verbose prints the tally.
+const TYPES_SEEN = new Map();
+async function stepForward(win, mainMode) {
   const st = S(win);
   if (st.over || !st.decision) return false;
   const d = st.decision, t = d.type;
-  if (t === 'main_phase') { st.plan = []; win.commitTurn(); }
+  TYPES_SEEN.set(t, (TYPES_SEEN.get(t) || 0) + 1);
+  // 'ai': play the model's own plan (index 0) through applyAccepted — the same entry point the
+  // "click an enumerated plan" button uses — so the board develops and in-game decisions are reached.
+  if (t === 'main_phase' && mainMode === 'ai') { st.plan = []; win.applyAccepted(0, 'AI plan'); }
+  else if (t === 'main_phase') { st.plan = []; win.commitTurn(); }
   else if (t === 'mulligan') { win.commitMulligan(d, 1); }        // keep
   else if (t === 'bottom') { win.followAiBottom(d); win.commitBottomBatch(d); }
   else if (t === 'firebreathe') { win.commitFirebreathe(d, d.heuristic_default == null ? (d.max_count || 0) : d.heuristic_default); }
@@ -263,13 +286,17 @@ async function playScenario(sc) {
   // pass. We drive "Commit turn" (auto-passes the rest of the turn) since that is precisely the
   // auto-advance path issue #2 fingers.
   const rests = [];   // { choices, hist } captured at each user rest point, in order
+  TYPES_SEEN.clear();   // tally THIS scenario's forward pass only (the undo passes replay it)
   let guard = 0;
   while (!S(win).over && guard++ < 80) {
     if (!S(win).decision) break;
     rests.push({ choices: S(win).choices.slice(), hist: histSnapshot(win) });
-    if (!(await stepForward(win))) break;
+    if (!(await stepForward(win, sc.main))) break;
   }
-  if (VERBOSE) console.log(`  [${sc.deck} s${sc.seed}] played ${rests.length} rest points, over=${S(win).over}`);
+  if (VERBOSE) {
+    console.log(`  [${sc.deck} s${sc.seed}] played ${rests.length} rest points, over=${S(win).over}`);
+    console.log(`  [${sc.deck} s${sc.seed}] decision types reached: ` +
+                [...TYPES_SEEN].map(([t, n]) => `${t}×${n}`).join(' ')); }
 
   // Property: from rest R, take ONE more forward pass and undo it — the undo must reproduce rest R's
   // history EXACTLY (stateless replay ⇒ undo-then-nothing == never having taken the step). A fresh DOM
@@ -281,12 +308,12 @@ async function playScenario(sc) {
     await startGame(fresh, sc);
     let g2 = 0;
     while (!S(fresh).over && g2++ < 80 && S(fresh).choices.length < rests[r].choices.length) {
-      if (!(await stepForward(fresh))) break;
+      if (!(await stepForward(fresh, sc.main))) break;
     }
     if (S(fresh).choices.length !== rests[r].choices.length) continue;   // couldn't reach this rest deterministically
     const atR = histSnapshot(fresh);
     if (S(fresh).over || !S(fresh).decision) continue;
-    await stepForward(fresh);           // one more forward pass
+    await stepForward(fresh, sc.main);   // one more forward pass
     await fresh.undo();                  // then undo it
     await settle(fresh);
     const afterUndo = histSnapshot(fresh);
@@ -294,6 +321,52 @@ async function playScenario(sc) {
     if (rows.length) failures.push({ r, atR, afterUndo, rows });
   }
   return { deck: sc.deck, seed: sc.seed, rests: rests.length, over: S(win).over, failures };
+}
+
+// Board-activated abilities (Krenko's "{T}: create X Goblins"; a Siege-Gang / Skirk Prospector sac
+// outlet). The engine enumerates these INSIDE its plans and commits them with the ordinary
+// `cast=<name>` verb — but the card is on the BATTLEFIELD, and the GUI's cast route only reaches the
+// HAND, so for a long time there was no way for a human to use one at all: clicking Krenko did
+// nothing. This drives the real board click and asserts the ability actually resolves, which is the
+// only way to catch the affordance silently disappearing again (the plan-driven scenarios below
+// commit plan indices directly, so they would never notice).
+async function testBoardActivation() {
+  const fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const win = buildDom(); await settle(win);
+  await startGame(win, { deck: 'Goblins', seed: 2, turns: 8 });
+  const st = () => S(win);
+  let guard = 0;
+  while (guard++ < 40 && !(st().decision.type === 'main_phase' && st().decision.turn === 3)) {
+    await stepForward(win, 'ai');
+  }
+  chk(st().decision && st().decision.turn === 3, 'reached Goblins s2 turn 3 (Krenko in play via a Lackey hit)');
+  if (fails.length) return fails;
+
+  const thumb = (n) => [...win.document.getElementById('board').querySelectorAll('.thumb[data-name]')]
+                        .find(t => t.dataset.name === n);
+  const krenko = thumb('Krenko, Mob Boss');
+  chk(!!krenko, 'Krenko is rendered on the battlefield');
+  chk(krenko && krenko.hasAttribute('data-activate'), 'Krenko is CLICKABLE (data-activate) — the ability is reachable');
+  chk(thumb('Goblin Lackey') && !thumb('Goblin Lackey').hasAttribute('data-activate'),
+      'a permanent with no activated ability stays non-clickable');
+  if (!krenko || !krenko.hasAttribute('data-activate')) return fails;
+
+  krenko.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  chk(st().plan.length === 1 && st().plan[0].kind === 'activate', 'one click queues an activate entry');
+  krenko.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  chk(st().plan.length === 0, 'clicking again (past the cap) removes it');
+  krenko.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+
+  const goblinsBefore = (st().decision.me.battlefield || [])
+    .filter(p => !p.is_land && !/Token/i.test(p.name)).length;
+  await win.commitLine(); await settle(win);
+  chk(!S(win).hadReject, 'the activation line is ACCEPTED by the engine (not a reject)');
+  const after = st().decision || st().result;
+  const tokens = (((after || {}).me || {}).battlefield || []).filter(p => /Goblin Token/i.test(p.name)).length;
+  // Krenko: X = Goblins controlled at resolution (itself + the other Goblins, tokens not yet there).
+  chk(tokens === goblinsBefore, `the ability RESOLVED: ${tokens} tokens for ${goblinsBefore} Goblins controlled`);
+  return fails;
 }
 
 (async () => {
@@ -312,6 +385,14 @@ async function playScenario(sc) {
     const coFails = testCastOrderBookkeeping(win);
     if (coFails.length) { anyFail = true; console.log(`✗ cast_order bookkeeping: ${coFails.length} fail`); coFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ cast_order GUI bookkeeping (canonical diff + side-channel + undo)'); }
+  }
+  // Board-activated ability reachable + resolving (needs a real game walk, so it runs on its own).
+  {
+    let baFails;
+    try { baFails = await testBoardActivation(); }
+    catch (e) { console.error(`✗ board activation: harness error: ${e.stack || e}`); process.exit(2); }
+    if (baFails.length) { anyFail = true; console.log(`✗ board activation: ${baFails.length} fail`); baFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ board-activated ability (Krenko: clickable → queued → accepted → tokens)'); }
   }
   for (const sc of SCENARIOS) {
     let res;

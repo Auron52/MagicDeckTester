@@ -11,6 +11,10 @@
 # reference -- not on every regression.
 #
 # Two layers (either can fail the run; a CONTRACT break exits non-zero so this can gate CI):
+#   * decision-type coverage (frontend) -- viewer_decision_types_check.js pins the viewer's
+#     SUBDECISIONS whitelist against every decision type src/main.cpp can emit. A type missing
+#     there hides the panel outright, so the decision is unanswerable and the game stalls on a
+#     dead board -- how lackey_put/echo/land_entry each shipped inert. Static, milliseconds.
 #   * line-build (frontend) -- viewer_linebuild_check.js drives the REAL browser queue logic
 #     (tools/play/linebuild.js): can the GUI still rebuild every line the user actually played?
 #     Sub-second, needs node, no binary.
@@ -43,6 +47,16 @@ for a in "$@"; do
 done
 
 rc=0
+
+# 0) Decision-type coverage (node). Static, milliseconds, no binary -- run first so a
+#    whole decision type being unanswerable is reported before the slower layers.
+if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_decision_types_check.js" ]; then
+  echo "--- viewer decision-type coverage (frontend) ---"
+  if node "$HERE/viewer_decision_types_check.js"; then :; else
+    echo "FAIL: an engine decision type is missing from the viewer's SUBDECISIONS whitelist."
+    rc=1
+  fi
+fi
 
 # 1) Frontend line-build check (node). Sub-second, no binary.
 if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_linebuild_check.js" ]; then

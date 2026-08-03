@@ -98,3 +98,7 @@ scripts/*.so
 
 # Parsed-sidecar binary cache (derived; rebuilt from the .gz on demand)
 *.bincache
+
+# Node dev dependencies for the viewer client check (test/package.json pins jsdom;
+# the tree itself is reinstallable with `npm i` in test/, so never tracked).
+node_modules/

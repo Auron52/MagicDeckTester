@@ -146,8 +146,10 @@
   .thumb.planned .srcbadge { position:absolute; bottom:2px; right:2px; border-radius:4px; font-size:10px;
       font-weight:700; padding:0 3px; z-index:3; color:#0c1116; }
   .thumb.planned .srcbadge.vial { background:var(--acc); } .thumb.planned .srcbadge.retrace { background:#e6a94c; }
+  .thumb.planned .srcbadge.act { background:#c58cf0; }
   #planbar .chip.vial { border-color:var(--acc); background:#1f2d3a; } #planbar .chip.vial .nm { color:var(--acc); }
   #planbar .chip.retrace { border-color:#7a5a2e; background:#332817; } #planbar .chip.retrace .nm { color:#e6a94c; }
+  #planbar .chip.act { border-color:#6b4a8a; background:#2a1f33; } #planbar .chip.act .nm { color:#c58cf0; }
   /* planned (this-turn) card: green ring + order badge + remove */
   .thumb.planned img { box-shadow:0 0 0 2px var(--good); }
   .thumb.planned.aura-plan { cursor:grab; }   /* untargeted queued aura: drag onto a creature (issue #11) */
@@ -185,6 +187,13 @@
   .thumb.sac-src:hover { box-shadow:0 0 0 2px #5ac8b4, 0 0 8px rgba(90,200,180,.45); }
   .hand .thumb.cyc-src { cursor:pointer; }
   .hand .thumb.cyc-src:hover { box-shadow:0 0 0 2px #5ac8b4, 0 0 8px rgba(90,200,180,.4); }
+  /* Activated ability of a permanent already in play (Krenko's token tap, a Goblin sac outlet).
+     Single-click queues one activation; the ring turns solid once at least one is queued. */
+  .thumb .actbadge { position:absolute; bottom:2px; left:2px; background:rgba(197,140,240,.95); color:#0c1116;
+      border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; cursor:pointer; }
+  .thumb.act-src { cursor:pointer; box-shadow:0 0 0 1px #6b4a8a inset; }
+  .thumb.act-src:hover { box-shadow:0 0 0 2px #c58cf0, 0 0 8px rgba(197,140,240,.45); }
+  .thumb.act-src.act-on img { box-shadow:0 0 0 2px #c58cf0; }
   .zone.ledrop { border:1px dashed #7a5a1e; border-radius:10px; background:rgba(58,47,27,.35); padding:2px 6px; }
   .zone.ledrop.active { border-color:#ffb84d; background:rgba(58,47,27,.6); }
   /* divided-damage board editor: an inline −[n]+ stepper on each legal target (Fiery Justice / Magma Opus). */
@@ -572,6 +581,44 @@ function fireDig(planIndex, label) {
   hideVerdict();
   applyAccepted(planIndex, label);
 }
+// Battlefield permanents whose ACTIVATED ABILITY the model enumerates this phase, name -> the most
+// activations any single plan uses (the cap on how many times you may queue it). The engine tags those
+// plan actions `activate:true` (Krenko's "{T}: create X Goblins", a Skirk Prospector sac outlet); they
+// are committed with the ordinary `cast=<name>` verb, but the card is on the BATTLEFIELD, so the hand's
+// double-click/drag route can never reach them — hence the board click below. Derived from the plans
+// rather than from card text, so the viewer offers exactly the abilities the engine will actually honour.
+// MEMOISED per decision: bfThumb calls this for EVERY permanent, and a wide-enumeration deck
+// (Dragonstorm) can offer hundreds of plans -- rescanning them per thumb is a per-render blowup.
+// The plan set is fixed for a decision, so cache on decision_index and recompute only when it moves.
+function activatableSources(){
+  const d = S.decision;
+  if (!d) return {};
+  if (S._actSrcFor === d.decision_index && S._actSrc) return S._actSrc;
+  const max = {};
+  (d.plans||[]).forEach(p=>{
+    const per = {};
+    (p.actions||[]).forEach(a=>{ if (a && a.activate && a.card) per[a.card]=(per[a.card]||0)+1; });
+    Object.keys(per).forEach(n=>{ if (!(max[n]>=per[n])) max[n]=per[n]; });
+  });
+  S._actSrcFor = d.decision_index; S._actSrc = max;
+  return max;
+}
+function activateCount(name){ return S.plan.filter(p=>p.kind==='activate' && p.name===name).length; }
+// Queue (or unqueue) one activation of a battlefield permanent's ability. Toggles the LAST queued
+// activation off when already at the cap, so a click always does something visible.
+function toggleActivate(name){
+  if (S.over || !S.decision || S.decision.type!=='main_phase') return;
+  hideVerdict();
+  const cap = activatableSources()[name]||0, have = activateCount(name);
+  if (have >= cap) {                                  // at the cap -> clicking removes the last one
+    const i = S.plan.map(p=>p.kind==='activate'&&p.name===name).lastIndexOf(true);
+    if (i>=0) { S.plan.splice(i,1); flashHint(`Removed ${name}’s ability from this turn’s line.`); renderBoard(); }
+    return;
+  }
+  S.plan.push({name, kind:'activate'});
+  flashHint(`Activating ${name}’s ability${cap>1?` (${have+1}/${cap})`:''}. Commit the phase to resolve it.`);
+  renderBoard();
+}
 function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const land = !!o.is_land;
   const le = !!o.is_le;   // a Land's Edge-style "discard a land: deal N" source
@@ -582,11 +629,18 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const vialActive = isVial && S.vialMode===charge.count;
   // A land in play with a sacrifice-to-draw ability (Fiery Islet), untapped so it can pay its own {T}.
   const canSac = land && !le && !isVial && !o.tapped && !S.over && (digSources().sac[o.name] != null);
-  const cls = (le ? `spell le-src${S.leMode?' active':''}` : (land?'land':'spell')) + (canSac?' sac-src':'');
+  // A permanent with an enumerated activated ability (Krenko's token tap, a Goblin sac outlet):
+  // single-click queues one activation. The engine already gates legality (summoning sickness, an
+  // untapped source, the cost), because the offer is derived from the plans it actually enumerated.
+  const actCap = (!S.over && !le && !isVial && !canSac) ? (activatableSources()[o.name]||0) : 0;
+  const actN = actCap ? activateCount(o.name) : 0;
+  const cls = (le ? `spell le-src${S.leMode?' active':''}` : (land?'land':'spell'))
+            + (canSac?' sac-src':'') + (actCap?' act-src':'') + (actN?' act-on':'');
   const vcls = isVial ? ` vial-src${vialActive?' active':''}` : '';
   const attrs = le ? ' data-le="1" title="click to discard lands to Land’s Edge"'
               : isVial ? ` data-vial="${charge.count}" title="click to deploy a creature with mana value ${charge.count} via this Vial"`
-              : canSac ? ` data-sacdig="${esc(o.name)}" title="click to sacrifice ${esc(o.name)} to draw a card"` : '';
+              : canSac ? ` data-sacdig="${esc(o.name)}" title="click to sacrifice ${esc(o.name)} to draw a card"`
+              : actCap ? ` data-activate="${esc(o.name)}" title="click to activate ${esc(o.name)}’s ability this phase${actN?' (click again to remove)':''}"` : '';
   const idxAttr = (o.idx!=null) ? ` data-idx="${o.idx}"` : '';
   // data-num = stable m_number; it is the drop target key for drag-to-enchant (a creature only — lands
   // have num 0). enchantTargetsFor()/tryEnchantDrop() gate to legal aura targets, so a non-creature num
@@ -597,21 +651,25 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
     `<img loading="lazy" src="${scryImg(o.name,'small')}" alt="${esc(o.name)}" onerror="this.style.opacity=.15"/>`+
     (le?`<span class="lebadge">⚡${S.leMode?' active':''}</span>`:'')+
     (canSac?`<span class="digbadge" title="sacrifice ${esc(o.name)} to draw a card">🩸 sac</span>`:'')+
+    (actCap?`<span class="actbadge" title="activated ability available">⟳${actN?` ×${actN}`:''}</span>`:'')+
     (o.tapped?`<span class="tapbadge" title="tapped">⤵</span>`:'')+
     counterBadges(o)+
     `<em>${esc(o.name)}</em></span>`;
 }
 function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS turn's plan
   const src = entry.kind==='vial'    ? `<span class="srcbadge vial" title="deployed via Aether Vial (free)">⚡</span>`
-            : entry.kind==='retrace' ? `<span class="srcbadge retrace" title="cast from graveyard via Retrace (discards a land)">↩</span>` : '';
+            : entry.kind==='retrace' ? `<span class="srcbadge retrace" title="cast from graveyard via Retrace (discards a land)">↩</span>`
+            : entry.kind==='activate'? `<span class="srcbadge act" title="activated ability of a permanent already on the battlefield">⟳</span>` : '';
   // data-num on a queued creature makes it a drop target for a same-turn Aura (drag Rancor onto it).
   const numAttr = (entry.num && !entry.target) ? ` data-num="${entry.num}"` : '';
   // An UNTARGETED queued Aura is draggable straight onto a creature to set its enchant target --
   // reuses retargetPlanAura via the #playfield drop funnel (no bounce to hand, no duplicate). Tagging
   // it .aura-plan[data-pi] makes wireBoard's EXISTING dragstart wiring pick it up; the .aura-plan
   // positioning CSS is .enchgroup-scoped, so this flat thumb keeps normal .planned styling (issue #11).
+  // 'activate' is an ABILITY of a permanent already in play, never a card being put onto the
+  // battlefield, so it can never be a queued Aura to drag onto a host (excluded like vial/retrace).
   const isQueuedAura = entry.kind!=='land' && entry.kind!=='le' && entry.kind!=='vial'
-                    && entry.kind!=='retrace' && !entry.target
+                    && entry.kind!=='retrace' && entry.kind!=='activate' && !entry.target
                     && Object.keys(enchantTargetsFor(entry.name)).length>0;
   const dragAttr = isQueuedAura
     ? ` draggable="true" data-pi="${planIdx}" title="${esc(entry.name)} — queued; drag onto a creature to enchant it"` : '';
@@ -662,7 +720,11 @@ function plannedEnchantGroup(entry, planIdx, ord, planned) {
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold'];
+// MUST list every `d.Type("...")` the engine can emit besides main_phase: a type missing here makes
+// `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
+// dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
+// never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','echo','land_entry'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -698,7 +760,9 @@ function renderBoard() {
   S.plan.forEach((p,i)=>{
     if(p.kind==='le'){ plannedLE.push(plannedThumb(p,i,ord[i])); return; }        // discarded to Land's Edge
     if(p.kind==='land'){ plannedLands.push(plannedThumb(p,i,ord[i])); return; }
-    if(p.kind==='retrace'||p.kind==='nonpermanent'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
+    // 'activate' = an ability of a permanent ALREADY in play. It puts no new card onto the battlefield,
+    // so it belongs with the spells being cast this phase, not in the planned-permanents row.
+    if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
     if(p.target){ return; }   // a queued aura with a target -> drawn overlapping its host (below)
     // A queued CREATURE that has queued Auras on it (and isn't already a board creature) renders as a
     // planned enchant group; otherwise a plain planned thumb. ('vial' deploy is a creature -> perms zone.)
@@ -867,10 +931,11 @@ function renderPlanbar() {
   // (per-land removal lives in the discard zone), appended at the end.
   const chips = S.plan.map((p,i)=>{
     if (p.kind==='le') return '';
-    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='land'?'land':'spell');
-    const tag = (p.kind==='vial'?' ⚡':p.kind==='retrace'?' ↩':'') + (p.targetName?` → ${esc(p.targetName)}`:'');
+    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':p.kind==='activate'?'act':(p.kind==='land'?'land':'spell');
+    const tag = (p.kind==='vial'?' ⚡':p.kind==='retrace'?' ↩':p.kind==='activate'?' ⟳ ability':'')
+              + (p.targetName?` → ${esc(p.targetName)}`:'');
     // An Aura chip (something with legal enchant targets) is draggable onto a creature to (re)aim it.
-    const isAura = p.kind!=='land' && Object.keys(enchantTargetsFor(p.name)).length>0;
+    const isAura = p.kind!=='land' && p.kind!=='activate' && Object.keys(enchantTargetsFor(p.name)).length>0;
     const drag = isAura ? ` draggable="true" data-pi="${i}" title="drag onto a creature to enchant it"` : '';
     return `<span class="chip ${cls}${isAura?' aura':''}"${drag}><span class="n">${i+1}</span>`+
       `<span class="nm" data-name="${esc(p.name)}">${esc(p.name)}${tag}</span><span class="x" data-rm="${i}">✕</span></span>`;
@@ -996,6 +1061,10 @@ function wireBoard() {
   $('board').querySelectorAll('.thumb[data-sacdig]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); const nm=t.dataset.sacdig;
       fireDig(digSources().sac[nm], `sacrifice ${nm} to draw`); });
+  // click a permanent with an activated ability (Krenko's token tap, a Goblin sac outlet) to queue
+  // one activation into this phase's line; clicking past the cap removes the last one.
+  $('board').querySelectorAll('.thumb[data-activate]').forEach(t =>
+    t.onclick = e => { e.stopPropagation(); toggleActivate(t.dataset.activate); });
 }
 
 function renderEffects() {
