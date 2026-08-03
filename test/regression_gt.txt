@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 943ad4b  date 2026-08-03
+# Regression ground truth -- commit 6bc5632  date 2026-08-03
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -176,15 +176,15 @@ auras_overnight_d5_s4004=4.1140/d52af565f8bd31ab
 auras_overnight_d5_s5005=4.1460/9424cf33b61fa6db
 auras_overnight_d5_s6006=4.1150/bcccc60421b43d16
 auras_overnight_d5_s7007=4.1520/f7a8a209c1db565a
-goblins_overnight_d0_s4004=4.8295/afe9e8823a7fcdfe
-goblins_overnight_d0_s6006=4.8305/62af6c519257fb07
-goblins_overnight_d0_s8008=4.8180/0af19e601d30a723
-goblins_overnight_d0_s10010=4.8265/60f1cec8cc08c9e3
-goblins_overnight_d3_s4004=4.3190/d289a913cdba07b0
-goblins_overnight_d3_s5005=4.3150/7a18cf3e1f003f1d
-goblins_overnight_d3_s6006=4.3180/534182640838e64b
-goblins_overnight_d3_s7007=4.3880/b0b0b75a73070178
-goblins_overnight_d5_s4004=4.3100/4c2ddde949e2e9b5
-goblins_overnight_d5_s5005=4.3160/ef7674ea99d7b62b
-goblins_overnight_d5_s6006=4.3080/fca3e0e83e8c5ecf
-goblins_overnight_d5_s7007=4.3810/bb4fb58a4467c788
+goblins_overnight_d0_s4004=4.7945/0e5de6cf4fc30a47
+goblins_overnight_d0_s6006=4.8000/cb2f449e48f6f152
+goblins_overnight_d0_s8008=4.7900/efd4506850283346
+goblins_overnight_d0_s10010=4.7985/1435f56ac6a91e25
+goblins_overnight_d3_s4004=4.3240/1206ed2349d3ae3e
+goblins_overnight_d3_s5005=4.3130/891d4f16ab01953e
+goblins_overnight_d3_s6006=4.3250/1cbb0a8a216e4d99
+goblins_overnight_d3_s7007=4.3920/6354c3b828803713
+goblins_overnight_d5_s4004=4.3150/9f87cc70053472ee
+goblins_overnight_d5_s5005=4.3130/2ab189d56130ad92
+goblins_overnight_d5_s6006=4.3120/45a6c5ec70397336
+goblins_overnight_d5_s7007=4.3890/3e57ddeaf0ca49d1
