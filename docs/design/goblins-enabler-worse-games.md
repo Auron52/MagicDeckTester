@@ -824,3 +824,63 @@ arms with and without it are byte-identical. Not a broken gate — a Skirk is li
 decisions (`skirk_ramp` up to 26). The pairing simply never decides a fetch: Hordemaster is already
 ranked high enough that more value does not move it, and where it did move something (d0 +1.0 alone)
 it moved it wrong. `MTG_GOBLIN_IMPULSE_PER`, default 0.
+
+## ROUND 8 (2026-08-04): Twinshot Sniper — the face weight re-trained on the CURRENT ranking
+
+Round 7 left Twinshot Sniper as 3 of the 4 remaining past-window commits. Two things about how this
+was diagnosed are worth keeping.
+
+**The obvious hypothesis was wrong.** All three misses are T5 decisions, so "late, near lethal, and a
+flat face weight cannot see it" was the natural guess — and a near-lethal ramp would have been built
+on it. The states refute it outright: `opp_life` 15 / 19 / 14 against swings of 5 / 3 / 3, i.e. 3-6
+swings still to come. Nothing near lethal. Checking the states before building the fix cost one dump
+and saved a whole mechanism.
+
+**What it actually was: a calibration that had gone stale.** Twinshot scores exactly 400 in all three
+(200 body + 2 x 100 face) and the margins are tiny — in `s4004 gi828` it is *tied on 400* with Goblin
+Chainwhirler and loses only the stable-sort tie-break; in `s6006 gi496` it needs +61 to clear Krenko;
+in `s4004 gi14` it is already inside the window. The weight had been trained in round 5, **before**
+the Skirk and Piledriver fixes reshuffled everything around it, so it was tuned against a ranking that
+no longer existed.
+
+Re-swept with the same train/validate split against the current ranking:
+
+```
+per     TRAIN(4000g)   VALIDATE(4000g)   d0(12000g)
+100        0.0             0.0              0.0     the shipped weight (baseline)
+120       -2.0             0.0            +10.0
+140       -2.0            -2.0            +10.0
+160       -4.0            -2.0            +17.0     <- ADOPTED, interior optimum
+180        0.0            -2.0            +19.0
+200       +2.0            -2.0           +123.0
+```
+
+Train has a genuine interior minimum at 160 with 140 and 180 both worse on either side, so it is an
+optimum rather than a sweep boundary. 160 was **also** the train minimum in round 5's sweep against
+the old ranking — a stable optimum across two different rankings, which is the best evidence available
+that it is real and not selection noise. (Round 5 nonetheless shipped 100, correctly at the time: the
+searched curve was flat from 100 up *then*, so the smallest weight won on the tie-break. It is no
+longer flat.)
+
+Held-out: **searched -6.0 with 6 games better and ZERO worse** — the cleanest searched result of this
+sequence. It is not free: **d0 +17.0, 1 game better and 17 worse**, by far the largest d0 cost adopted
+here (Skirk 0.0, Piledriver -3.0). Taken on the standing priority that searched is what ships and d0 is
+a diagnostic, but it is a genuine trade and is recorded as one.
+
+### Where the width gap stands after rounds 6-8
+
+```
+                       W=12 better   W=12 worse   past-window commits
+start of the sequence       16            3          10 of 21  (48%)
+after Skirk + Piledriver     9            3           4 of 13  (31%)
+after the face weight        6            4           3 of 11  (27%)
+```
+
+Remaining misses are one each of Twinshot Sniper, Goblin Lackey and Rundvelt Hordemaster — no card
+appears twice any more, which is the signal that the systematic mispricings are done and what is left
+is per-state noise. Of the 6 games still better at W=12, only 3 contain a ranking miss at all; the rest
+commit *inside* W=6 and are plan diversity, which no reordering recovers.
+
+Note the "W=12 worse" column grew to 4. That is not a regression in shipped play — it counts games
+where widening the axis HURTS, i.e. where the shipped W=6 ranking now beats the wide search
+(`s1001 gi113` T4 vs T5). It is a fact about search instability, not about the ranking.

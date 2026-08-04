@@ -4166,7 +4166,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         // max(), not sum: the ETB ping and the Channel mode are ALTERNATIVES (cast the creature, or
         // discard it from hand for the same damage), so adding them would double-count one card.
         static const bool  face_value = EnvOn("MTG_GOBLIN_FACE_VALUE", true);
-        static const double face_per  = EnvInt("MTG_GOBLIN_FACE_VALUE_PER", static_cast<int>(BODY));
+        static const double face_per  = EnvInt("MTG_GOBLIN_FACE_VALUE_PER", 160);
         if (face_value)
         {
             const int face = std::max({ p.etb_damage_any, p.etb_damage_each_opponent, p.channel_damage });
