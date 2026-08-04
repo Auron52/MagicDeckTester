@@ -4271,6 +4271,22 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         }
     }
     if (unpruned) { return GenericProvider::TutorCandidates(s, controller, pp); }
+    // DIAGNOSTIC (MTG_TUTOR_FORCE_RANK=k, 1-based; unset = off): return ONLY the k-th ranked
+    // candidate, collapsing the tutor axis to that one card. Sweeping k over a game therefore
+    // measures the REAL win turn of fetching each ranked candidate -- ground truth for the ranking
+    // itself, rather than the usual proxy of "what width does the search need".
+    //
+    // The question it answers (user, 2026-08-04): "determine how real game win-turns match against
+    // our ranking ... W=4 being insufficient means we are quite far off." A ranking is only as good
+    // as the position it assigns the card that actually wins soonest, and no aggregate turn-unit
+    // delta reports that. This does: rank of the best-outcome candidate, per decision.
+    //
+    // Every callsite reaches the provider through ResolveProvider(state).TutorCandidates, so the
+    // truncation covers the heuristic pick, the search axis and resolution alike. Diagnostic only --
+    // it makes play strictly worse whenever k is not the best rank, so never set it in a measured run.
+    static const int force_rank = EnvInt("MTG_TUTOR_FORCE_RANK", 0);
+    if (force_rank > 0 && static_cast<std::size_t>(force_rank) <= cands.size())
+    { return { cands[force_rank - 1] }; }
     return cands;
 }
 
