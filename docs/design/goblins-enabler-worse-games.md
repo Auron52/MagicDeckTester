@@ -570,3 +570,72 @@ ranking work alone**, because a material part of the width's value was never abo
 ranking is now right at #1 in 12 of the 16 decisions that matter and inside the top 4 in 14 of 16;
 the residual belongs to plan diversity, not to candidate ordering. W=6 stays, and this line of
 investigation is closed.
+
+---
+
+## ROUND 5 (2026-08-04): reading the rank the SEARCH COMMITS TO, and the face-damage term
+
+### The forced-rank table was unsound — do not rebuild it
+
+`MTG_TUTOR_FORCE_RANK` collapses the tutor axis to width 1, which changes the PLAN, not just the
+fetch. `s7007 gi371` is the proof: forced rank 6 casts Matron on T4 and forced rank 10 casts it on
+T3, **both fetching a Goblin Piledriver**. Same card, two "ranks", two board states whose candidate
+lists never coexist. Any per-rank win-turn table built that way mislabels plan changes as ranking
+misses, and the first version of this analysis did exactly that.
+
+### The sound instrument: MTG_TUTOR_CHOSEN_RANK
+
+Log the ranking position the search **commits to** at real tutor resolution (gated on
+`g_real_resolution`, so rollouts are silent). Run wide and it reads unambiguously: a committed rank
+past the shipped width is a real ranking miss with a trustworthy card name; inside it means the extra
+width bought plan diversity and no reordering will recover that game. Ranks are over NAMES deduped in
+list order, since fetching by name always takes the first matching library card.
+
+```
+the 19 games the width decides, at W=12   21 real tutor decisions, 10 committed PAST W=6:
+   4x Skirk Prospector   ranks 8, 9, 12, 12      2x Goblin Piledriver  ranks 7, 8
+   3x Twinshot Sniper    ranks 11, 12, 13        1x Goblin Lackey      rank 10
+
+BASE RATE, 300 arbitrary games                   80 real tutor decisions, 5 committed PAST W=6:
+   4x Twinshot Sniper        1x Goblin Lackey                     -> 6% of decisions
+```
+
+Past-window commits are a **6% tail** in general, so the shipped W=6 is right for the overwhelming
+majority of decisions. But **Twinshot Sniper is 4 of the 5 unbiased misses** — the deck's single
+largest ranking error. It also explains `s4004 gi14`, which no single forced rank could reach: it has
+TWO tutor decisions, rank 1 at T3 and rank 11 at T5, and the forced instrument pins one rank for the
+whole game by construction.
+
+### Face damage was worth exactly ZERO (ADOPTED, trained)
+
+`value_of` had no `etb_damage_any` / `channel_damage` term at all, and `face_burst` — which does
+compute the damage — is consumed only by the exact-lethal override. So Twinshot Sniper's "deals 2
+damage to any target" paid nothing unless it happened to be the last 2 points; it scored as a 2-power
+body, 200. A plain modelling gap, not a tuning question.
+
+TRAINED rather than guessed (`test/goblins_face_value_train.sh`). Selection used the overnight
+searched cases of seeds **s4004+s5005 only**, reading s6006+s7007 afterwards — sweeping the whole
+overnight tier and taking its minimum is selection on the holdout, and the regression tier's ~1,325
+searched games cannot resolve a delta this size:
+
+```
+per     TRAIN(4000g)   VALIDATE(4000g)   d0(12000g)
+ 80        0.0             0.0             +3        inert -- below a lord's score, nothing reorders
+100       -4.0            -2.0             +4        <- ADOPTED (== BODY)
+120       -4.0            -4.0            +15
+160       -6.0            -3.0            +25        <- train minimum
+200       -4.0            -3.0           +133
+```
+
+Train's minimum is 160, but 160 vs 100 is 2 turn-units over 4,000 games — noise. Searched is flat
+from 100 up; what actually separates the weights is **d0 cost, which climbs steeply**. So take the
+smallest weight that captures the effect: it is statistically indistinguishable from the train
+optimum, by far the cheapest, and the least extreme claim — 100 is exactly `BODY`, i.e. *a point of
+unconditional face damage is worth a point of power on a body*, which deliberately does NOT assert
+that burn beats creatures.
+
+`max()`, not sum, over the ETB ping and the Channel mode: they are alternatives (cast the creature,
+or discard it from hand for the same damage), so adding them double-counts one card.
+
+Held-out: **zero searched slowdowns or play changes**, every searched case better or equal. One
+regression-tier game slower (`s3003 gi156` T4→T5) — CHURN, recovers at 16x budget and at unlimited.

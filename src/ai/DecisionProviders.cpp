@@ -3989,6 +3989,49 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         { v += G * 80.0; }                                                           // Krenko: G tokens/tap, snowballs
         if (p.etb_self_creates_tokens > 0)     { v += p.etb_self_creates_tokens * 90.0; } // Siege-Gang(3)/Mogg(1)
         if (p.sac_outlet_damage > 0)           { v += 40.0; }                        // Siege-Gang reach
+        // DIRECT DAMAGE TO THE FACE (MTG_GOBLIN_FACE_VALUE). Until now this was worth exactly ZERO
+        // here: value_of had no etb_damage_any / channel_damage term at all, and face_burst -- which
+        // does compute the damage correctly -- is consumed only by the exact-lethal override, so
+        // Twinshot Sniper's "deals 2 damage to any target" paid nothing unless it happened to be the
+        // last 2 points. It was scored as a 2-power body, 200, and the measured consequence is that
+        // it is the deck's single largest ranking miss: reading the rank the SEARCH commits to at
+        // W=12 (MTG_TUTOR_CHOSEN_RANK), Twinshot Sniper is 4 of the 5 past-window commits over an
+        // unbiased 300-game sample, and 3 more in the games the width decides -- always at rank
+        // 11-13 of 14-16.
+        //
+        // The weight is BODY -- one point of face damage is worth one point of power on a creature.
+        // Burn is one-shot where a body's power recurs every combat, but against a goldfish it is
+        // unconditional: nothing blocks, no lifegain, no summoning sickness, no needing to survive,
+        // and it can be aimed at exactly the last points. Parity is the claim; it deliberately does
+        // NOT assert that burn beats bodies.
+        //
+        // TRAINED, not guessed (test/goblins_face_value_train.sh). Selecting on the overnight
+        // searched cases of seeds s4004+s5005 and reading s6006+s7007 only afterwards -- because
+        // sweeping the whole overnight tier and taking its minimum is selection on the holdout, and
+        // the regression tier's ~1,325 searched games cannot resolve a delta this size:
+        //
+        //     per     TRAIN(4000g)   VALIDATE(4000g)   d0(12000g)
+        //      80        0.0             0.0             +3
+        //     100       -4.0            -2.0             +4     <- adopted
+        //     120       -4.0            -4.0            +15
+        //     160       -6.0            -3.0            +25     <- train minimum
+        //     200       -4.0            -3.0           +133
+        //
+        // Train's minimum is 160, but 160 vs 100 is 2 turn-units over 4,000 games -- noise. Searched
+        // is flat from 100 up; what actually separates the weights is d0 cost, which climbs steeply.
+        // So take the smallest weight that captures the effect, which is also the least extreme claim
+        // and the cheapest. Below ~100 the term is inert (80 is byte-identical to off): Twinshot
+        // Sniper's score has to clear a lord's before any ordering changes.
+        //
+        // max(), not sum: the ETB ping and the Channel mode are ALTERNATIVES (cast the creature, or
+        // discard it from hand for the same damage), so adding them would double-count one card.
+        static const bool  face_value = EnvOn("MTG_GOBLIN_FACE_VALUE", true);
+        static const double face_per  = EnvInt("MTG_GOBLIN_FACE_VALUE_PER", static_cast<int>(BODY));
+        if (face_value)
+        {
+            const int face = std::max({ p.etb_damage_any, p.etb_damage_each_opponent, p.channel_damage });
+            if (face > 0) { v += face * face_per; }
+        }
         return v;
     };
 
