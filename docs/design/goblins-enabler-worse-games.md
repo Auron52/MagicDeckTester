@@ -207,3 +207,78 @@ brings Muxus into range on five lands; gi842 Skirk ramp; gi924 Lackey free drop)
 improved. Sweep with `test/goblins_swing_lethal_ab.sh` (5 arms, 19,325 games/arm, all three tiers
 pooled into one batch; the `base` arm must reproduce committed GT exactly — that is the validity
 check). Compare against `606a381` as the new baseline, not against pre-`6bc04b8`.
+
+---
+
+## ROUND 2 (2026-08-04): user-directed rules, and the real defect behind the enabler credit
+
+Driven by four domain rules from the user. Measured on held-out goblins overnight
+(`regression.sh --overnight --deck=goblins`, ~90 s, 8,000 searched + 8,000 d0), vs shipped `606a381`.
+
+| user's rule | implemented as | held-out searched | verdict |
+|---|---|--:|---|
+| "Lackey is probably not a great search option for Matron" | drop the Lackey clause / drop Lackey as a candidate | **+12.0 (worse)** | KEEP Lackey — see below |
+| "Skirk needs bodies on board; Lackey is the opposite (heavy hand, empty board); both only help you USE GAS IN HAND" | Skirk credit ∝ sacrificeable bodies; Lackey credit ∝ turns-out-of-reach | +1.0 (neutral) alone | keep — recovers gi849 |
+| "There should be a play-this-turn benefit" | flat ×1.35 for castable-now | **+10.0 (worse)** | REJECTED as implemented |
+| "Test duplicates in HAND, not board — you might want a Muxus in hand for a Lackey drop even with one on board" | discount 0.55 per copy **in hand only** | hand+board +11.0 → hand-only +8.0 → −3.0 once play-now removed | **ADOPT** — the distinction flipped the sign |
+
+### Is Lackey a big help? No — a rare, narrow one (measured)
+
+Excluding Lackey entirely changes **16 games out of 16,000 (0.1%)**: 14 worse, 2 better, net +12.0
+turn-units, and **exactly 0.0 at d0**. The zero at d0 is the tell: the line depends on the *searched*
+Aether Vial charge decision, which is inert at depth 0.
+
+The mechanism, from `logs` of overnight `s6006 gi842`: hand holds **two Muxus** (MV 6, dead until
+turn 6) plus an Aether Vial. The search **overrides the charge heuristic at T2 to add a counter, then
+declines at T3 to HOLD the Vial at 1** (`MTG_VIAL_TRACE`: `turn=2 counters=0 win(heur)=6 win(alt)=5`
+→ add; `turn=3 counters=1 win(heur)=5 win(alt)=6` → hold). Matron then fetches Lackey (MV 1), the
+Vial deploys it free that same turn, and T4 Lackey cheats Muxus in → 6-card reveal → T5 kill. Holding
+a Vial at 1 is unusual but correct here, and it is exactly what defeats the "you cannot even deploy
+the Lackey that turn" objection. Confirmed legal: every put path gates `ManaValue() == charge_counters`.
+
+### THE defect: "stuck" was measured against untapped mana only
+
+The enabler credit is a fraction of `stuck_hand_value` — the best hand Goblin we cannot deploy. That
+test compared the card's cost to **`untapped_mana`**, ignoring the Skirk ramp and next turn's land.
+The gi573 dump shows the damage:
+
+```
+[tutor-rank] T2 G=4 buff_targets=7 | mana: untapped=1 now=4 next=6
+   0. * Goblin Warchief     1638   value= 630  +enable=1008
+   1. * Goblin Chieftain     901   value=1260  +enable= 378
+   3. * Rundvelt Hordemaster 800   value= 800  +enable=   0
+```
+
+`stuck_hand_value = 1260` is a **Goblin Chieftain in hand costing 3, with 4 mana available now and 6
+next turn** — not stranded at all. The enablers collected ~1000 points for "accelerating" it, and
+Chieftain collected 378 for accelerating **itself**. Testing against `mana_next` instead (the user's
+"when we can cast what we have anyway neither is worth considering") **recovers gi573 and gi849**.
+
+Candidate = Skirk/Lackey asymmetry + hand-only duplicates + fixed stuck test:
+**held-out searched −5.0 turn-units, d0 +18.0**, 2 of the 3 tracked regressions recovered.
+
+### gi44 is blocked by a PLAN-ENUMERATION BUG, not by the ranking
+
+`smoke d3_s1001 gi44` resists every ranking variant, because its cause is not ranking. Per-phase
+board trace (seed 1045):
+
+```
+pre-ranking  T1 MAIN_2  bf=[Cavern, Skirk Prospector]  gy=[]      -> T2: attack, sac Skirk for {R}, cast Matron
+candidate    T1 MAIN_2  bf=[Cavern]                    gy=[Skirk] -> Skirk sacrificed on T1 for mana NEVER SPENT
+```
+
+The engine sacrifices Skirk Prospector in T1 main 2, casts nothing, and the `{R}` is lost. That plan
+is **strictly dominated** by the same plan without the sacrifice, so it should never survive
+enumeration — a lost body plus lost tempo, which is exactly the turn gi44 gives up (no Skirk → no T2
+Matron → the whole line slides a turn). It appears only with the enabler term on (`enabler-only` and
+`candidate` reproduce it; `pre-ranking` and `swing-only` do not), so the ranking *exposes* it rather
+than causes it: the changed valuation makes the search prefer a plan that was always unsound.
+
+**This is a bug to fix against the rules/solver, not a heuristic to tune** — a ritual/sac-for-mana
+whose mana goes unspent should be pruned as dominated. `TurnSolver.cpp` has related pruning around
+"drop every group all of whose options are rituals" (~line 4071) but it evidently does not cover
+this case. Fix that first: it should recover gi44 on its own, and being a dominated-plan prune it
+may pay off well beyond Goblins.
+
+**No rebaseline until all three are recovered** (user, 2026-08-04: "let's try to fix all of the
+regressions before rebaselining entirely"). Candidate code is UNCOMMITTED in the working tree.
