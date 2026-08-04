@@ -3854,6 +3854,8 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     bool lackey_now = false;       // a Goblin Lackey that can attack THIS turn -> free drop this turn
     bool lackey_persist = false;   // any Goblin Lackey on board -> free drop next turn
     bool skirk_on   = false;       // a Skirk Prospector (sac Goblin -> {R}) -> a mana RAMP for bombs
+    bool haste_source = false;     // a Goblin lord granting haste -> a fetched body can attack NOW
+    bool deathwatch_on = false;    // Rundvelt Hordemaster: every Goblin death impulse-digs a card
     int  vial_charge = -1;         // best untapped Aether Vial's charge (-1 = no Vial); puts a creature of MV==charge
     int  sick_goblin_power  = 0;   // power still locked up by summoning sickness (a haste grant frees it)
     for (const Permanent& p : s.battlefield)
@@ -3885,6 +3887,10 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             if (CanAttackFull(p, s.battlefield, controller)) { lackey_now = true; }
         }
         if (d->params.sac_creature_outlet && !d->params.sac_outlet_add_mana_color.empty()) { skirk_on = true; } // Skirk
+        // A Goblin lord granting haste (Warchief / Chieftain): whatever we fetch can attack the
+        // turn it lands, which is the whole difference for an attack-triggered payoff.
+        if (d->params.grants_haste && !d->params.subtypes_affected.empty()) { haste_source = true; }
+        if (d->params.dies_trigger_impulse_exile) { deathwatch_on = true; }
         if (d->params.upkeep_adds_charge && !p.tapped) { vial_charge = std::max(vial_charge, p.charge_counters); } // Vial
     }
     const int G         = goblins_controlled;
@@ -3966,6 +3972,39 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     const int mana_now  = untapped_mana + skirk_ramp;
     const int mana_next = CountLandsInPlay(s, controller) + 1 + skirk_ramp;   // + one land drop next turn
     const int opp_life  = s.players[1 - controller].life;
+    // Can a fetched body attack the turn it lands? A Goblin lord granting haste already on the
+    // battlefield, or one in hand we can afford now, is the difference between an attack-triggered
+    // payoff paying immediately and losing a full swing.
+    // Haste only matters for the turn the fetched body LANDS -- after that it is unsick anyway --
+    // so a hand haste-lord counts only if it is castable ALONGSIDE the tutor source out of real
+    // untapped mana, which is the same conservative rule the swing_atk projection below uses. (The
+    // loose "MV <= mana_now" test was wrong: it credited a Chieftain at MV 3 against mana_now 3
+    // while the Matron being cast is already spending exactly that mana.)
+    int tutor_src_mv = 0;
+    for (const Card& h : s.players[controller].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+        if (!hd || !(hd->params.tutor_to_hand || hd->params.tutor_to_top)) { continue; }
+        tutor_src_mv = hd->card.m_mana_cost.ManaValue();
+        break;
+    }
+    bool haste_avail = haste_source;
+    if (!haste_avail)
+    {
+        for (const Card& h : s.players[controller].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if (!hd || !hd->params.grants_haste || hd->params.subtypes_affected.empty()) { continue; }
+            if (hd->card.m_mana_cost.ManaValue() + tutor_src_mv <= untapped_mana)
+            { haste_avail = true; break; }
+        }
+    }
+    // How many more attack steps we expect to need. This is the SAME quantity as "how close to
+    // lethal are we", read the other way round, and it is what decides whether a delayed
+    // attack-trigger payoff is worth anything at all (see the Piledriver note in value_of).
+    // Sick bodies are included: they wake up before a fetched creature could swing anyway.
+    const int per_swing   = std::max(1, ready_atk + sick_goblin_power);
+    const int swings_left = std::max(1, std::min(6, (opp_life + per_swing - 1) / per_swing));
 
     // --- per-card value (board impact, incl. payoffs EvalCard misses) --------------------------
     constexpr double BODY = 100.0;   // per power (a damage-equivalent, matching EvalCard's DMG)
@@ -3980,46 +4019,73 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             if (p.power_bonus > 0)              { v += p.power_bonus * buff_targets * BODY; } // King/Chieftain/Rundvelt +1/+1: a buffed Goblin's +1 power is worth a body power point AND recurs+scales
             if (p.grants_haste)                 { v += goblins_sick * 90.0; }        // Warchief/Chieftain: sick attack NOW
             if (!p.reduces_spell_subtype.empty()) { v += 70.0; }                     // Warchief: cost cut -> deploy more
-            // Piledriver: +2/+0 per other ATTACKING Goblin, priced over G = the Goblins on the
-            // battlefield right now.
+            // GOBLIN PILEDRIVER IS A LORD-EQUIVALENT, and CONDITIONALLY so (user, 2026-08-04):
+            // "similar to a lord except it does 2 per other goblin and only realized when it
+            // attacks ... 2 per other attacking goblin plus the 1 base power, whereas the lord does
+            // 1 per other attacking goblin + 1 base power ... pretty close to Rundvelt Hordemaster
+            // unless the lord effect can give lethal this turn. Piledriver usually wins if there is
+            // haste or there are multiple turns it can attack." And, decisively: "it's important
+            // that the Piledriver is not strictly better ... If close to lethal and no haste the
+            // lord is better."
             //
-            // MEASURED AND REJECTED (2026-08-04) -- the crowd count is NOT the axis. The motivating
-            // argument was good and is worth keeping: G is read at the instant of the FETCH, which is
-            // when the board is smallest, while a fetched Piledriver enters summoning-sick and cannot
-            // attack until the following turn -- by which point the entering tutor source is a Goblin
-            // on the battlefield, another deploy has landed, and every currently-sick body is ready.
-            // Piledriver is 2 of the 10 past-window commits (MTG_TUTOR_CHOSEN_RANK at W=12), and in
-            // both -- s3003 gi290 and s7007 gi371 -- G is 1 against a buff_targets of 4, so it scores
-            // 190 as a near-vanilla body at rank 9-10 of 14-16. Widening the count to buff_targets
-            // does lift it to rank 3-5, exactly as intended.
+            // As swing damage added, with N = other ATTACKING Goblins:
+            //       +1/+1 lord   N*1 + 1        Piledriver   N*2 + 1
+            // The lord side is already priced exactly that way (power_bonus * buff_targets * BODY,
+            // plus its own body). Piledriver was priced as G * 2 * 45 -- a DIFFERENT crowd
+            // (board-only, read at the instant of the fetch, when the board is smallest) and UNDER
+            // HALF the per-point rate. At buff_targets 4 that is 190 against the lord's 500, where
+            // the true ratio is 9/5. The two halves of the comparison were never on one scale.
             //
-            // It does not pay. Held-out overnight, 8,000 searched games, against the shipped count:
+            // That also explains the earlier negative result recorded here: the crowd was swept at
+            // the old 45/point (buff_targets -1.0, G+entering+1 +4.0, buff_targets@25 +2.0 held-out)
+            // and d0 was EXACTLY 0.0 in every arm -- across 12,000 greedy games Piledriver never
+            // once changed the top pick, because 190 -> 460 still lost to every lord. The COUNT was
+            // never the axis; the SCALE was, and nothing tested moved it far enough to matter.
             //
-            //     crowd                 per    held-out    games
-            //     G (shipped)            45       0.0      --
-            //     buff_targets           45      -1.0      5 better / 4 WORSE
-            //     G + entering + 1       45      +4.0      0 better / 4 WORSE
-            //     buff_targets           25      +2.0      0 better / 2 WORSE
-            //
-            // The buff_targets arm is noise, not a win: split by seed it is +1 on s4004+s5005 and -2
-            // on s6006+s7007 -- OPPOSITE SIGNS on the two halves -- and stacked on the Skirk fix below
-            // it adds exactly nothing (both together measure the same -3.0 as Skirk alone). The other
-            // two arms hold the magnitude near shipped, to separate "wrong count" from "wrong size",
-            // and both are strictly worse with ZERO games improved. So the term's 45.0 is calibrated
-            // against the undercounted crowd and the product is what the games actually like; no
-            // redistribution of it helps. Same shape of negative result as MTG_GOBLIN_CUT_WIDTH.
-            // d0 was exactly 0.0 in every arm -- across 12,000 greedy games Piledriver never once
-            // changed the top pick, so this only ever moved it around inside the tail.
-            // MTG_GOBLIN_PILEDRIVER_CROWD: 0 = board only (shipped), 1 = buff_targets,
-            // 2 = board + entering source + one more deploy. MTG_GOBLIN_PILEDRIVER_PER scales it.
+            // The conditionality is not a tuned constant -- it falls out of how many swings are
+            // left. Over T remaining attack steps a lord realizes T*(N+1) while Piledriver, which
+            // cannot attack the turn it lands, realizes only (T-1)*(2N+1). So the pump is scaled by
+            // (T-1)/T, and every one of the user's conditions drops out of that single factor:
+            //     T = 1 (lethal this turn, no haste) -> 0.00  Piledriver contributes NOTHING,
+            //                                                 the lord is strictly better
+            //     T = 2                              -> 0.50  2N * 0.5 = N: parity with the lord
+            //     T = 3+                             -> 0.67+ Piledriver ahead ("multiple turns")
+            //     haste                              -> 1.00  no lost swing, ~2x the lord
+            // T is estimated from the damage already on the board against the opponent's life, so
+            // "close to lethal" and "plenty of turns left" are the same quantity read two ways.
+            // MTG_GOBLIN_PILEDRIVER_CROWD: 0 = board only, 1 = buff_targets. _PER = per pump point
+            // (100 = BODY = lord parity). _DELAY: 0 = derived (T-1)/T, >0 = that fixed percent.
             if (p.attack_pump_power_per_other_matching > 0)
             {
-                static const int pile_crowd = EnvInt("MTG_GOBLIN_PILEDRIVER_CROWD", 0);
-                static const int pile_per   = EnvInt("MTG_GOBLIN_PILEDRIVER_PER", 45);
+                static const int pile_crowd = EnvInt("MTG_GOBLIN_PILEDRIVER_CROWD", 2);
+                static const int pile_per   = EnvInt("MTG_GOBLIN_PILEDRIVER_PER", static_cast<int>(BODY));
+                static const int pile_delay = EnvInt("MTG_GOBLIN_PILEDRIVER_DELAY", 50);
+                // The crowd is "other ATTACKING Goblins", which is not the lord's crowd: a lord's
+                // buff waits around for hand Goblins to land, but a pump that only fires on the
+                // swing is bounded by what is actually deployed by then -- about one more body per
+                // turn. Mode 1 (buff_targets, board + up to 3 in HAND) ranks Piledriver FIRST on a
+                // T1 empty board off three undeployed hand cards, which is the same over-reach as
+                // the rejected variant 3. Mode 2 is board + the entering source + one deploy.
                 const int crowd = pile_crowd == 1 ? buff_targets
                                 : pile_crowd == 2 ? G + entering_fodder + 1
                                                   : G;
-                v += p.attack_pump_power_per_other_matching * crowd * static_cast<double>(pile_per);
+                // (T-1)/T from the swings left, CAPPED at lord parity. Both halves are load-bearing
+                // and each was measured: the derived factor alone reaches 0.83 by T=6, which makes
+                // Piledriver ~1.67x a lord and measures WORSE held-out (+2.0 searched) -- the user's
+                // "it's important that the Piledriver is not strictly better" is empirically right,
+                // and the cost is monotone in how far past parity it goes (0.50 -> -3.0, 0.65 -> 0.0,
+                // 0.83 -> +2.0). The cap alone would lose the other half, since a flat 0.50 still
+                // pays half credit when the game ends THIS turn. min() keeps both: T=1 gives exactly
+                // 0.0 ("if close to lethal and no haste the lord is better") and everything from
+                // T=2 up sits at parity.
+                double realized = 1.0;
+                if (!haste_avail)
+                {
+                    const double derived = (swings_left - 1) / static_cast<double>(swings_left);
+                    realized = std::min(pile_delay / 100.0, derived);
+                }
+                v += p.attack_pump_power_per_other_matching * crowd
+                     * static_cast<double>(pile_per) * realized;
             }
         }
         // Payoffs.
@@ -4028,6 +4094,41 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         { v += G * 80.0; }                                                           // Krenko: G tokens/tap, snowballs
         if (p.etb_self_creates_tokens > 0)     { v += p.etb_self_creates_tokens * 90.0; } // Siege-Gang(3)/Mogg(1)
         if (p.sac_outlet_damage > 0)           { v += 40.0; }                        // Siege-Gang reach
+        // DEATH-WATCH IMPULSE next to a sac outlet (user, 2026-08-04): "Rundvelt Hordemaster is
+        // better if we are sacrificing creatures to Skirk Prospector -- the extra effect comes into
+        // play ... and the skirk effect can be pretty huge."
+        //
+        // Hordemaster is "Whenever a Goblin you control dies, exile the top card; you may play it if
+        // it's a Goblin", dies_watch_includes_self. On its own that is a slow trickle -- against a
+        // goldfish nothing blocks, so Goblins essentially do not die. Next to a Skirk Prospector it
+        // is a different card: every body converted to mana ALSO digs, and roughly half this deck is
+        // Goblin creatures, so the ramp and the card advantage are the same activation. Worth
+        // exactly ZERO until now -- value_of had no dies_trigger_impulse_exile term at all.
+        //
+        // Priced off the sacs we actually expect: skirk_ramp is the bodies a Skirk on the
+        // battlefield can eat, and it is already 0 when there is no outlet, so the term is
+        // self-gating and cannot inflate Hordemaster in a boardless state. Half of BODY per expected
+        // death is the hit rate -- a dig that whiffs on a non-Goblin is inert deck-thinning.
+        // The pairing is SYMMETRIC and both halves are priced here, because either card can be the
+        // one already on the battlefield when we fetch the other:
+        //   * fetching the Hordemaster INTO a Skirk board  -> skirk_ramp bodies are already eatable
+        //   * fetching the Skirk INTO a Hordemaster board  -> the fetched outlet turns the board
+        //     into mana AND cards, and this is the commoner state of the two, since Hordemaster
+        //     ranks 2-4 and so is usually the one already down
+        // Both are self-gating (each is zero without its partner), so neither can inflate a card in
+        // a state where the combination does not exist.
+        static const double impulse_per = EnvInt("MTG_GOBLIN_IMPULSE_PER", 0);
+        if (p.dies_trigger_impulse_exile && skirk_ramp > 0)
+        {
+            v += skirk_ramp * impulse_per;
+        }
+        if (p.sac_outlet_add_mana_amount > 0 && deathwatch_on)
+        {
+            // Same body count the enabler credit uses for a FETCHED Prospector: the board's
+            // expendable Goblins, the tutor source entering now, and the Prospector itself.
+            const int sacs = (use_nolord ? goblin_fodder : G) + entering_fodder + 1;
+            v += sacs * impulse_per;
+        }
         // DIRECT DAMAGE TO THE FACE (MTG_GOBLIN_FACE_VALUE). Until now this was worth exactly ZERO
         // here: value_of had no etb_damage_any / channel_damage term at all, and face_burst -- which
         // does compute the damage correctly -- is consumed only by the exact-lethal override, so
@@ -4514,11 +4615,12 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         std::fprintf(stderr,
                      "[tutor-rank] T%d src=%s | G=%d sick=%d ready_atk=%d swing_atk=%d opp_life=%d | lackey_now=%d "
                      "lackey_persist=%d skirk=%d vial=%d | mana: untapped=%d now=%d next=%d | "
-                     "buff_targets=%d hand_has_play=%d | W=%d\n",
+                     "buff_targets=%d hand_has_play=%d | haste=%d swings_left=%d skirk_ramp=%d | W=%d\n",
                      s.turn_number, pp.tutor_types.empty() ? "?" : pp.tutor_types[0].c_str(),
                      G, goblins_sick, ready_atk, swing_atk, opp_life, (int)lackey_now, (int)lackey_persist,
                      (int)skirk_on, vial_charge, untapped_mana, mana_now, mana_next,
-                     buff_targets, (int)hand_has_play, TutorSearchWidth());
+                     buff_targets, (int)hand_has_play, (int)haste_avail, swings_left, skirk_ramp,
+                     TutorSearchWidth());
         for (std::size_t i = 0; i < cands.size(); ++i)
         {
             const Card* lc = nullptr;

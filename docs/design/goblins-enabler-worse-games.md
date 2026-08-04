@@ -754,3 +754,73 @@ the arm being measured plays a different game from the shipped W=6 engine; chang
 the ordering **and the W=12 trajectory** move, so the before/after decisions are not the same decisions
 re-scored. The instrument is sound for "in the games width decides, what rank does the search commit
 to" — it is not a before/after quality metric across an engine change. Turn-units are the ground truth.
+
+## ROUND 7 (2026-08-04): Piledriver re-derived from the user's model — ADOPTED
+
+Round 6 rejected the Piledriver crowd-count fix on a clean held-out measurement. The rejection was
+correct; the *diagnosis* was not. The user supplied the model that was missing:
+
+> "similar to a lord except it does 2 per other goblin and only realized when it attacks ... 2 per
+> other attacking goblin plus the 1 base power, whereas the lord does 1 per other attacking goblin +
+> 1 base power ... pretty close to Rundvelt Hordemaster unless the lord effect can give lethal this
+> turn. Piledriver usually wins if there is haste or there are multiple turns it can attack." And,
+> decisively: **"it's important that the Piledriver is not strictly better."**
+
+### The two halves of the comparison were never on one scale
+
+As swing damage added, with N = other attacking Goblins: **lord = N·1 + 1, Piledriver = N·2 + 1.**
+The lord side was already priced exactly that way (`power_bonus * buff_targets * BODY` + body).
+Piledriver was `G * 2 * 45` — a different crowd (board-only, read at the fetch, when the board is
+smallest) *and* under half the per-point rate. At `buff_targets` 4 that is **190 against the lord's
+500, where the true ratio is 9/5**.
+
+This also explains Round 6's negative result rather than contradicting it: every variant there was
+swept at the old 45/point, and `d0` was **exactly 0.0 in all of them** — across 12,000 greedy games
+Piledriver never once changed the top pick, because 190→460 still lost to every lord. The count was
+never the axis. The **scale** was, and nothing tested moved it far enough to matter.
+
+### The conditionality is derived, then capped — and the cap is the user's call, not a tuned knob
+
+Over T remaining attack steps a lord realizes `T(N+1)` while Piledriver, which cannot attack the turn
+it lands, realizes `(T-1)(2N+1)`. So the pump scales by `(T-1)/T`, and T is estimated from board
+damage against opponent life — "close to lethal" and "plenty of turns left" being one quantity read
+two ways. But the derived factor alone reaches 0.83 by T=6, making Piledriver ~1.67x a lord, and the
+held-out cost is **monotone in how far past parity it goes**:
+
+```
+realization factor          HELD-OUT searched   d0        crowd
+0.50  (== lord parity)            -3.0         -3.0      board + source + 1   <- ADOPTED
+0.65                               0.0        +21.0      board + source + 1
+(T-1)/T, uncapped ~0.83           +2.0        -52.0 *    board + source + 1
+(T-1)/T, uncapped                 +6.0        +55.0      buff_targets
+* not a win: one seed carries it (s4004 -81) while the other three d0 seeds are +13/+8/+8.
+```
+
+So `min(0.50, (T-1)/T)`, which keeps **both** halves: T=1 gives exactly 0.0 (*"if close to lethal and
+no haste the lord is better"*), everything from T=2 up sits at parity, and haste removes the lost
+swing entirely for the full 2x. The user's intuition beat the derivation — the 0.50 anchor is
+*measured*, and "not strictly better" was empirically right.
+
+**Crowd matters too, and `buff_targets` is wrong here.** A lord's buff waits around for hand Goblins
+to land; a pump that fires only on the swing is bounded by what is deployed by then. `buff_targets`
+ranked Piledriver **first on a T1 empty board** off three undeployed hand cards — the same over-reach
+as the rejected variant 3 — and measured +6.0 held-out. Board + entering source + one deploy is the
+honest count.
+
+Shipped: smoke -1.0, regression -3.0, **held-out overnight -3.0 searched and -3.0 d0**.
+
+### Rundvelt Hordemaster x Skirk Prospector: real, and inert here (lever kept, default off)
+
+> "Rundvelt Hordemaster is better if we are sacrificing creatures to Skirk Prospector — the extra
+> effect comes into play ... and the skirk effect can be pretty huge."
+
+True, and `value_of` had no `dies_trigger_impulse_exile` term at all, so it was worth zero. Both
+directions were implemented (fetch the Hordemaster into a Skirk board; fetch the Skirk into a
+Hordemaster board — the commoner state, since Hordemaster ranks 2-4 and is usually the one already
+down) and priced off the sacs actually expected, each self-gating on its partner.
+
+It measures **exactly nothing**: searched 0.0 alone, and with the Piledriver rescale in place the
+arms with and without it are byte-identical. Not a broken gate — a Skirk is live at ~16% of tutor
+decisions (`skirk_ramp` up to 26). The pairing simply never decides a fetch: Hordemaster is already
+ranked high enough that more value does not move it, and where it did move something (d0 +1.0 alone)
+it moved it wrong. `MTG_GOBLIN_IMPULSE_PER`, default 0.
