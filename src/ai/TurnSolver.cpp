@@ -12542,7 +12542,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
 TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState& state,
                                                                 int max_turns, bool second_main,
                                                                 bool rollout_label, int rollout_depth,
-                                                                bool honest)
+                                                                bool honest, bool earliest_only)
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     ShuffleEvalGuard _seg(true);  // decoupling instrument: planning shuffles use shuffle_salt_search
@@ -12552,21 +12552,30 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
     EarliestWinReport report;
     report.turn     = state.turn_number;
     report.earliest = max_turns + 1;
+    report.bounded_candidates = earliest_only;
 
     // Same candidate set the search ranks (cast ORDERINGS included iff MTG_SEARCH_ORDER /
     // MTG_UNPRUNED is set -- EnumeratePlansWithLand expands them there).
     std::vector<TurnSolver::Plan> pre = EnumeratePlansWithLand(state, true);
 
-    // Deep enough to reach any win up to max_turns from this turn; NO cross-candidate B&B
-    // (cutoff = max_turns+1) so each candidate gets its TRUE earliest win, not a pruned bound.
+    // Cross-candidate B&B is OFF by default (cutoff = max_turns+1) so each candidate gets its TRUE
+    // earliest win rather than a pruned bound -- the eval-row dump needs every candidate's own
+    // number. With earliest_only the caller wants only the MIN, so we carry the running incumbent
+    // as the cutoff instead; see the header. Depth is deep enough to reach any win up to max_turns.
     int depth = max_turns - state.turn_number + 1;
     if (depth < 1) { depth = 1; }
 
-    // Shared tail memo across candidates (downstream states transpose). Budget is never armed
-    // for overrun here, so FSLineTail runs to completion -- this is an offline tool.
+    // Shared tail memo across candidates (downstream states transpose). The overrun guard is never
+    // armed, so no pass is aborted mid-flight -- but m_limit still gates whether the iterative
+    // deepening STARTS a further pass, and on an expensive deck it does bind. When it binds the
+    // label silently degrades to whatever depth was reached, i.e. a LATER win turn than the truth.
+    // MTG_VALUE_LABEL_BUDGET_MS exposes it (0 = unlimited) so a label run can be checked for, or
+    // freed from, budget degradation. Offline-only: this function is a dump/diagnostic path.
     TranspositionTable tt;
     FSLineCache        lc;
-    SearchBudget       budget = SearchBudget::FromVirtualMs(1000000);
+    static const int s_label_budget_ms = EnvInt("MTG_VALUE_LABEL_BUDGET_MS", 1000000);
+    SearchBudget     budget = s_label_budget_ms > 0 ? SearchBudget::FromVirtualMs(s_label_budget_ms)
+                                                    : SearchBudget();
 
     for (const TurnSolver::Plan& p : pre)
     {
@@ -12607,8 +12616,18 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
             }
             else
             {
+                // B&B: with earliest_only, a candidate only matters if it BEATS the incumbent, so
+                // pass the incumbent as the cutoff. Sound because the cutoff only ever tightens
+                // (report.earliest is monotonically non-increasing): a subtree pruned as "no win
+                // better than c" stays pruned under any tighter c, and the caches store only
+                // genuine wins -- a no-win is never cached, since it may be a cutoff abort rather
+                // than a true dead end (see FSLineWin's store guard). A win returned under a tight
+                // cutoff is still exact: a better line would have beaten the cutoff and so was not
+                // cut. Candidates that lose the race come back as a BOUND, which is why
+                // bounded_candidates is set.
+                const int cutoff = earliest_only ? report.earliest : (max_turns + 1);
                 TurnSolver::SearchLine tail = FSLineTail(s, depth - 1, max_turns,
-                                                         max_turns + 1, second_main,
+                                                         cutoff, second_main,
                                                          &tt, &lc, &budget);
                 wt = tail.win_turn;
             }

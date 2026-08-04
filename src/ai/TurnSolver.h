@@ -636,6 +636,10 @@ public:
         int turn     = 0;                      // the decision turn
         int earliest = 0;                      // min win_turn over all candidates
         std::vector<EarliestWinCandidate> candidates;
+        // earliest_only was used => each candidate's win_turn is an UPPER BOUND, not its true
+        // earliest win (a candidate that could not beat the running incumbent was cut). `earliest`
+        // itself is exact. Never feed bounded candidates to a per-candidate consumer (eval rows).
+        bool bounded_candidates = false;
     };
     // rollout_label: label each candidate by a NON-CLAIRVOYANT greedy d0 rollout (apply plan ->
     // SimulateToEnd under the baseline policy) instead of the clairvoyant earliest-win SEARCH. Used
@@ -647,9 +651,17 @@ public:
     // honest: when rollout_depth>0, DECOUPLE the continuation lookahead from the real draw order
     // (reshuffle each turn's unseen library before the lookahead, resolve against the true order) ->
     // a full-strength NON-clairvoyant teacher, not a clairvoyant deep search. See g_honest_teacher.
+    // earliest_only: the caller wants ONLY report.earliest, so carry the running incumbent as the
+    // cross-candidate cutoff (branch-and-bound). LOSSLESS for `earliest` -- pruning only cuts lines
+    // that cannot beat the incumbent, and a line that could would not be cut -- but it makes each
+    // candidate's win_turn an upper bound, so report.bounded_candidates is set. This is the same
+    // bound FSLineTail already carries between siblings (std::min(cutoff, best.win_turn)); the
+    // candidate loop opted out of it deliberately to give every candidate its TRUE win turn, which
+    // only the eval-row dump needs. Use ONLY when value-dumping with eval-dumping off.
     static EarliestWinReport EnumerateEarliestWins(const GameState& state, int max_turns,
                                                    bool second_main, bool rollout_label = false,
-                                                   int rollout_depth = 0, bool honest = false);
+                                                   int rollout_depth = 0, bool honest = false,
+                                                   bool earliest_only = false);
 
     // Reshuffle-averaged NON-CLAIRVOYANT search as a PLAY policy (ceiling measurement +
     // learned-lookahead training target). Ranks each candidate plan by its win turn AVERAGED over K

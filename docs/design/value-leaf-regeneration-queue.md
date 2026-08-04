@@ -350,18 +350,50 @@ not a wide-board deck. Do not restart these decks on the current engine; they wi
 Three **offline-only** changes unblock them. All three are gated to the label path, so the in-play
 path stays byte-identical and **no ground-truth rebaseline is needed**:
 
-1. **`earliest_only` branch-and-bound (the big one).** A value row consumes only `report.earliest`,
-   the MIN over candidates; the per-candidate win turns exist solely for EVAL rows, which value
-   dumps do not emit. So carrying the incumbent as the cutoff is **lossless for the value label**.
-   This is not a new technique — `FSLineTail` already does exactly this between siblings
-   (`std::min(cutoff, best.win_turn)`), and the transposition table already refuses to store a
-   no-win because it "may be a cutoff abort rather than a true dead end". The change hoists a proven
-   pattern one level up, to the candidate loop that deliberately opted out of it.
-   **Gate on value-dump-on AND eval-dump-off**, and mark pruned candidates so nothing downstream
-   reads a bound as a true win turn.
+1. ~~**`earliest_only` branch-and-bound (the big one).**~~ **BUILT AND MEASURED 2026-08-04 —
+   REFUTED. Do not adopt; it is behind `MTG_VALUE_LABEL_BNB`, default OFF.**
+
+   The reasoning was sound on paper: a value row consumes only `report.earliest`, the MIN over
+   candidates, so carrying the incumbent as the cutoff should be lossless while cutting the work —
+   the same bound `FSLineTail` already carries between siblings. It is not what happens.
+
+   | deck | games | B&B off | B&B on | labels |
+   |---|---|---|---|---|
+   | burn | 12 | 38–41 s | 51–54 s (~**30% slower**) | identical |
+   | antilife | 4 | 2.44 s | 2.60 s | **differ, 2 of 15 rows** |
+   | dragonstorm | 4 | 0.75 s | 128 s (~**170× slower**) | **differ** |
+
+   **The slowdown is explicable.** This search finds *a* win cheaply (it is goal-directed) but
+   proving *no better* win exists requires exhausting the subtree. Tightening the cutoff converts
+   every cheap "find a win" query into an expensive "prove nothing beats the incumbent" one. On top
+   of that, a cutoff-aborted no-win is deliberately never cached (it may be an abort rather than a
+   true dead end), so the shared memo across candidates stops paying off and later candidates
+   re-search what a loose cutoff would have cached as a genuine win. B&B is the wrong shape for this
+   problem.
+
+   **The label difference is the real finding, and it is not yet explained.** With B&B the labels
+   come out *lower* — an EARLIER win (6→4, 7→6.33). Pruning cannot discover a win the unpruned
+   search missed, and `earliest` is a min whose first candidate runs with an identical cutoff and
+   cold caches in both arms, so this ought to be impossible. Budget degradation was the obvious
+   suspect and is **ruled out**: the disagreement persists with `MTG_VALUE_LABEL_BUDGET_MS=0`
+   (unlimited). What remains is an **order-dependence in the shared `FSLineCache` /
+   `TranspositionTable` across candidates** — a candidate's result depending on what an earlier
+   candidate happened to populate. If that is right, it is a latent soundness bug in the labeller's
+   caching that this flag merely surfaced, and **some existing labels are wrong**.
+
+   Next step is to isolate it: re-run one disagreeing position with the shared caches made cold per
+   candidate. If cold-per-candidate agrees with the B&B arm, the cache is unsound and that — not
+   B&B — is the thing to fix.
 2. **Fix the fabricated loss.** On budget overrun `FSLineWin` returns `{max_turns+1}` — which is
    indistinguishable from a real LOSS and would poison labels. It must instead fall through to the
    1-ply heuristic leaf below it. This is a prerequisite for *any* budgeting of the labeller.
+
+   **Correction to an earlier claim in this file's history:** the labeller's budget was described as
+   "~9×10⁸ nodes, never binds". The overrun guard is indeed never armed, so no pass is aborted
+   mid-flight — but `m_limit` still gates whether iterative deepening *starts* a further pass, and
+   on an expensive deck it does bind, silently degrading the label to whatever depth was reached.
+   `MTG_VALUE_LABEL_BUDGET_MS` (default 1000000, `0` = unlimited) now exposes it so a label run can
+   be checked for budget degradation. Note this was NOT the cause of the B&B disagreement above.
 3. **Ladder-on-value-leaf as an offline matrix mode.** Use the value leaf for passes 1..d−1 and the
    heuristic only for pass d. Measured saving 49–71% at d5, and it makes H6/H7 cost less than
    today's H5. Pure-H timings stay reconstructible as `H(d) = H(d−1) + ladder(d) − V(d−1)` with
