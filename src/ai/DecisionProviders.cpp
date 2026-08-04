@@ -3848,6 +3848,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     if (cands.size() <= 1) { return cands; }
     // --- board scan (done once) ---------------------------------------------------------------
     int  goblins_controlled = 0;   // my Goblin creatures (lord/Krenko/Piledriver scale with this)
+    int  goblin_fodder      = 0;   // ... that are actually EXPENDABLE to a sac outlet (no lords)
     int  goblins_sick       = 0;   // ... that cannot attack yet (the ones a haste grant unlocks NOW)
     int  ready_atk          = 0;   // total power that can already swing at the opponent THIS turn (lethal reach)
     bool lackey_now = false;       // a Goblin Lackey that can attack THIS turn -> free drop this turn
@@ -3865,6 +3866,15 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             ++goblins_controlled;
             if (!CanAttackFull(p, s.battlefield, controller))
             { ++goblins_sick; sick_goblin_power += std::max(0, pc.m_power.value_or(0)); }
+            // Sacrificeable BODIES, which is not the same set as "Goblins I control". A lord or a
+            // scaling payoff is fodder only in extremis -- feeding a Chieftain to Skirk de-buffs
+            // everything else on the board -- so it does not count toward the ramp. Same
+            // expendability ordering CanonicalSacVictim uses when it actually picks a victim.
+            const bool scaling = d && ((!d->params.subtypes_affected.empty()
+                                        && (d->params.power_bonus > 0 || d->params.tough_bonus > 0
+                                            || !d->params.reduces_spell_subtype.empty()))
+                                       || d->params.attack_pump_power_per_other_matching > 0);
+            if (!scaling) { ++goblin_fodder; }
         }
         if (pc.IsCreature() && CanAttackFull(p, s.battlefield, controller))
         { ready_atk += std::max(0, pc.m_power.value_or(0)); }   // any ready attacker (goldfish: connects)
@@ -3892,7 +3902,56 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     }
     const int buff_targets = G + std::min(goblins_in_hand, 3);   // board + near-future (hand) buff recipients
     // Skirk ramp: each OTHER Goblin sacs for {R}, so a bomb is reachable ~this turn if Skirk + fodder pay for it.
-    const int skirk_ramp = skirk_on ? std::max(0, G - 1) : 0;
+    //
+    // TWO corrections (user, 2026-08-04), both about counting the bodies that will ACTUALLY be
+    // available to sacrifice, rather than the board exactly as it stands right now:
+    //
+    // 1. COUNT THE ENTERING TUTOR SOURCE. Goblin Matron is itself a Goblin creature and it is
+    //    entering right now -- that is the whole reason this function is running -- so it is fodder
+    //    for the very turn this ramp predicts. The board scan runs while the source is still in
+    //    hand, so it was missed. 606a381 made exactly this correction on the ATTACK side (the swing
+    //    projection counts the source as entering); the MANA side never got it. Detected the same
+    //    way, by finding the tutor source still in hand, so at real ETB resolution -- when the source
+    //    is already on the battlefield and so already in the scan -- it is not double-counted.
+    //
+    // 2. LORDS ARE NOT FODDER (goblin_fodder, see the board scan). "In most cases you probably would
+    //    not use them, but maybe in a rare case it could happen" -- so they are excluded from the
+    //    ramp while staying in G for every other purpose. This is only about what Skirk can eat.
+    //
+    // gi206 is the case: at the T3 Matron, mana_next reads 4 against a Muxus at MV 6, so the deploy
+    // discount prices the deck's bomb three turns out and buries it -- while the line that wins a
+    // turn earlier hard-casts Muxus next turn off precisely these sacs.
+    // The two corrections are SEPARABLE and were measured separately -- 0 = off, 1 = both (ADOPTED),
+    // 2 = entering source only, 3 = lord-exclusion only. Bundling them unmeasured would have repeated
+    // this session's sharpest mistake, where a bundle's aggregate hid a component that was actively
+    // harmful on the tier that matters. Held-out overnight, 8,000 searched / 12,000 d0 games:
+    //
+    //   entering source only    searched -2.0   d0 +10.0
+    //   lords-not-fodder only   searched  0.0   d0  -2.0
+    //   both (adopted)          searched -2.0   d0  +1.0
+    //
+    // The entering-source correction carries the searched gain; the lord exclusion is searched-neutral
+    // and cancels its d0 cost, so they complement. The aggregate is inside the noise band -- these are
+    // adopted for MODEL CORRECTNESS (both counts were simply wrong about which bodies exist and which
+    // can be eaten) on a measured non-regression, not on the turn-units. The sharper evidence is the
+    // ranking diagnostic: gi206's Muxus climbs rank 13 -> 7, and the worst miss across 100 sampled
+    // decisions improves from 13 to 11 (test/goblins_tutor_truth.py).
+    static const int  skirk_fodder = EnvInt("MTG_GOBLIN_SKIRK_FODDER", 1);
+    const bool use_entering = (skirk_fodder == 1 || skirk_fodder == 2);
+    const bool use_nolord   = (skirk_fodder == 1 || skirk_fodder == 3);
+    int entering_fodder = 0;
+    if (use_entering)
+    {
+        for (const Card& h : s.players[controller].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if (!hd || !(hd->params.tutor_to_hand || hd->params.tutor_to_top)) { continue; }
+            if (hd->card.IsCreature() && CardHasSubtype(hd->card, "Goblin")) { entering_fodder = 1; }
+            break;
+        }
+    }
+    const int skirk_ramp = !skirk_on ? 0
+                         : std::max(0, (use_nolord ? goblin_fodder : G) - 1 + entering_fodder);
     const int untapped_mana = AvailableManaPool(s).Total();               // real mana this turn (no Skirk fudge)
     const int mana_now  = untapped_mana + skirk_ramp;
     const int mana_next = CountLandsInPlay(s, controller) + 1 + skirk_ramp;   // + one land drop next turn

@@ -407,3 +407,67 @@ The useful negative result: **"how much gas the cut unlocks" is not the axis tha
 states.** One scalar trades them against each other. gi131 is the standing item — a better account of
 the cost cut needs to price *multi-spell turns* without inflating the single-bomb case, and neither a
 flat fraction nor a linear count of deployable cards does that.
+
+---
+
+## ROUND 4 (2026-08-04): scoring the ranking against real win turns
+
+Every measurement above is a PROXY — aggregate turn-units, or "what width does the search need".
+`test/goblins_tutor_truth.py` (via `MTG_TUTOR_FORCE_RANK`) measures the thing itself: force the tutor
+to each ranked candidate and record the real win turn. 400 held-out games, 100 with a searched tutor:
+
+```
+all 100 decisions       best at #1: 96   top4: 97   top6: 98
+the 16 where the fetch
+CHANGES the win turn    best at #1: 12   top4: 13   top6: 14
+total regret @W=4: 3 turns / 100 decisions        @W=6: 2 turns
+```
+
+**The ranking is not broadly wrong.** The fetch is a tie in 84% of decisions, and among those that
+matter it picks the best card outright three times in four. The entire W=4 gap is three decisions in
+a hundred. Score the ranking only on the decisions where the fetch changes the win turn — averaging
+in the ties flatters it badly, and a flat row counts as a "hit" purely by argmin convention.
+
+Two earlier claims in this doc were corrected by that measurement:
+
+* *"All 11 persisting regressions recover at W=12, so the ranking put the right card outside the
+  window"* — the recovery numbers were right, the mechanism was not. gi14 is T6 at **every** forced
+  rank 1..16 yet reaches T5 at W=12, so part of what wider W buys is extra search branching, not a
+  better fetch.
+* *"Two of the three W=4 misses are Muxus buried by the deploy discount"* — read off T1
+  search-simulated states rather than the decision. Both winning lines deploy Muxus perfectly well
+  (gi206 hard-casts it off Skirk sacs; gi33 puts it in via a Lackey connect).
+
+**Instrument limitation:** it forces the same rank at every tutor in a game and collapses the axis to
+width 1, so a game needing different picks at two Matrons cannot be represented — gi14 is that shape.
+
+### The real gi206 defect: skirk_ramp counted the wrong bodies (ADOPTED)
+
+At the T3 Matron, `mana_next` reads 4 against a Muxus at MV 6, so the deploy discount prices the
+deck's bomb three turns out and buries it — while the line that wins a turn earlier hard-casts Muxus
+*next turn* off exactly these sacs. Two counting errors, both user-directed:
+
+1. **The entering tutor source was not counted.** Goblin Matron is itself a Goblin creature and is
+   entering right now. The board scan runs while it is still in hand, so it was missed. `606a381`
+   made this same correction on the ATTACK side (the swing projection counts the source as entering);
+   the MANA side never got it.
+2. **Lords were counted as fodder.** Feeding a Chieftain to Skirk de-buffs the whole board, so it is
+   fodder only in extremis — now excluded, matching `CanonicalSacVictim`'s expendability ordering.
+   They stay in `G` for every other purpose; this is only about what Skirk can eat.
+
+Measured separately, because bundling is what hid the harmful component in round 3:
+
+```
+entering source only    held-out searched -2.0   d0 +10.0
+lords-not-fodder only   held-out searched  0.0   d0  -2.0
+both (ADOPTED)          held-out searched -2.0   d0  +1.0     train: smoke +1, regression -2
+```
+
+The entering-source correction carries the searched gain; the lord exclusion is searched-neutral and
+cancels its d0 cost. The aggregate is **inside the noise band** — these are adopted for MODEL
+CORRECTNESS on a measured non-regression, not on turn-units. The sharper evidence is the diagnostic:
+gi206's Muxus climbs **rank 13 → 7**, and the worst miss across the 100 sampled decisions improves
+from 13 to 11.
+
+`regret@W=4` is unchanged at 3 turns — Muxus is closer but still outside a four-slot window. That is
+the standing target: **get regret@W=4 to zero and the W=6 widening can be reverted.**
