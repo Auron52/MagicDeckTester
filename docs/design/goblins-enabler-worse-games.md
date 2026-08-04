@@ -471,3 +471,50 @@ from 13 to 11.
 
 `regret@W=4` is unchanged at 3 turns — Muxus is closer but still outside a four-slot window. That is
 the standing target: **get regret@W=4 to zero and the W=6 widening can be reverted.**
+
+### Why the ideal card was good, per game (2026-08-04)
+
+Analysing the three `regret@W=4` misses individually, rather than as an aggregate.
+
+**gi206 — Muxus. GENUINE, now fixed.** At the T3 Matron the board is just Skirk, 2 lands, hand holds
+Siege-Gang / Hordemaster / Chieftain. The winning line fetches Muxus, plays a fourth land, sacs two
+Goblins to Skirk for 6 mana, and Muxus converts the top of the library onto the battlefield — lethal
+from 19 in one swing.
+
+The ranking could not see the mana, and the reason is an inconsistency with the engine:
+`skirk_ramp = G - 1`. "Sacrifice a Goblin: Add {R}" is repeatable and needs no tap, and Skirk is
+itself a Goblin, so the last activation eats Skirk and **N bodies convert to N mana, not N-1**.
+`CollectActions`' own multi-sac burst already models it that way (victim count `V` includes the
+source; `k` is capped at `V`), so the ranking was predicting one less mana than the solver would
+find. With `-1`, `mana_next` reads 5 against a MV-6 Muxus and the discount prices the bomb two turns
+out; with the correct count it reads exactly 6 — castable next turn. **Muxus rank 7 → 2**, so the
+full chain on this decision is 13 → 7 → 2.
+
+**gi33 — INSTRUMENT ARTIFACT, not a ranking miss.** The fetched Muxus is never cast; it sits in hand.
+The T3 kill comes from Siege-Gang sacrificing Goblins for damage in main 2 (life 6 → 0). What changed
+is the PLAN: the shipped line spends both mana on Skirk plus a second Lackey, the forced line casts
+only Skirk and keeps mana for the sac kill. Collapsing the tutor axis to width 1 changed the plan's
+value — the documented limitation of `MTG_TUTOR_FORCE_RANK`, showing up in the data. Do not chase it
+as a ranking defect.
+
+**gi124 — Lackey. GENUINE, STILL OPEN, and the clearest remaining modelling gap.** At the T3 Matron:
+Aether Vial out, 2 lands, hand holds Krenko / Chainwhirler. Fetching Lackey deploys it that turn, and
+it then connects on **T4 and again on T5**, putting Siege-Gang (MV 5) and Chainwhirler (MV 3) onto
+the battlefield free — 8 mana of creatures across two combats.
+
+What the ranking pays it: a 1/1 body worth 100, plus `min(0.60, 0.20 x (stuck_turns - 1)) x
+stuck_hand_value`. Only Krenko is out of reach and only by one turn, so `stuck_turns = 2` and the
+fraction is **0.20**, applied to Krenko's 300 — Lackey scores ~160 for two free deploys.
+
+The defect is structural: **the Lackey credit is a fraction of ONE stuck card, but Lackey is a
+REPEATING engine.** It does not accelerate a single bomb by a turn; it deploys a card every combat
+for the rest of the game. The natural representation is the decayed sum of the top-2 hand Goblins it
+can realistically drop, not a fraction of the best one. Muxus has a milder version of the same
+problem: `etb_reveal_count x 75` prices six revealed cards at 450, when 54% of the deck is Goblin
+creatures (33 of 61), so it expects **~3.2 free bodies** whose real average value is several hundred
+each. Both are the lord-amplification family — value that arrives as OTHER CARDS.
+
+Self-sac measured: `regret@W=4` **3 → 2**, `@W=6` 2 → 1, top-4 among live decisions 13/16 → 14/16.
+Aggregate is searched-NEUTRAL (held-out 0.0, regression -1.0, smoke 0.0) with d0 +6.0 / 12,000. It is
+adopted on the engine-inconsistency and the regret metric, NOT on turn-units. The Lackey
+repeating-deploy model is the one that should actually move turns.

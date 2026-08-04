@@ -3950,8 +3950,18 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             break;
         }
     }
+    // The "-1" contradicts the engine. "Sacrifice a Goblin: Add {R}" is repeatable and needs no tap,
+    // and Skirk Prospector is itself a Goblin, so the LAST activation can eat Skirk: N bodies convert
+    // to N mana, not N-1. CollectActions' own multi-sac burst already models it that way -- its victim
+    // count V counts every Goblin creature including the source, and k is capped at V -- so the ranking
+    // was predicting one less mana than the solver will actually find. gi206 is exactly that mana: at
+    // the T3 Matron, N-1 puts mana_next at 5 against a Muxus at MV 6 (so the discount prices the bomb
+    // two turns out), while N puts it at 6 -- castable next turn, which is the line that wins a turn
+    // earlier. MTG_GOBLIN_SKIRK_SELFSAC=0 restores the old count for the A/B.
+    static const bool selfsac = EnvOn("MTG_GOBLIN_SKIRK_SELFSAC", true);
     const int skirk_ramp = !skirk_on ? 0
-                         : std::max(0, (use_nolord ? goblin_fodder : G) - 1 + entering_fodder);
+                         : std::max(0, (use_nolord ? goblin_fodder : G) - (selfsac ? 0 : 1)
+                                       + entering_fodder);
     const int untapped_mana = AvailableManaPool(s).Total();               // real mana this turn (no Skirk fudge)
     const int mana_now  = untapped_mana + skirk_ramp;
     const int mana_next = CountLandsInPlay(s, controller) + 1 + skirk_ramp;   // + one land drop next turn
