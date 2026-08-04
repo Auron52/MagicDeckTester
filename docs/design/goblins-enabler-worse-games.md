@@ -277,8 +277,50 @@ than causes it: the changed valuation makes the search prefer a plan that was al
 **This is a bug to fix against the rules/solver, not a heuristic to tune** — a ritual/sac-for-mana
 whose mana goes unspent should be pruned as dominated. `TurnSolver.cpp` has related pruning around
 "drop every group all of whose options are rituals" (~line 4071) but it evidently does not cover
-this case. Fix that first: it should recover gi44 on its own, and being a dominated-plan prune it
-may pay off well beyond Goblins.
+this case.
 
-**No rebaseline until all three are recovered** (user, 2026-08-04: "let's try to fix all of the
-regressions before rebaselining entirely"). Candidate code is UNCOMMITTED in the working tree.
+### The solver bug: found, fixed, adopted — but it did NOT recover gi44 on its own
+
+`SubsetWastesCreatureSacMana` (TurnSolver.cpp) now rejects a subset that activates a **creature**
+sac-for-mana outlet while spending no mana at all. Two corrections to the diagnosis above are worth
+recording, because both were wrong in an instructive way:
+
+1. **`Solve` already had the rule; only the SEARCH lacked it.** `MTG_NO_RITUAL_PAYOFF_GUARD=1` at d0
+   reproduces the sacrifice exactly, so the rituals-for-payoff guard is what kept d0/d1 honest all
+   along. `EnumeratePlans` skips that guard *deliberately* — for a HAND ritual, "cast it now or keep
+   the card for a later turn" is a real branch the search should arbitrate. That rationale simply does
+   not transfer to an **in-play** outlet: declining leaves both the outlet and the body on the
+   battlefield, so the branch has no upside to weigh. That asymmetry is the whole fix.
+2. **A blanket "sac-for-unused-mana is dominated" prune would have been WRONG for this very deck.**
+   Goblins runs three death payoffs — Pashalik Mons (1 damage per Goblin death), Rundvelt Hordemaster
+   (impulse exile) and Mogg War Marshal (a token on its own death) — any of which turns a "wasted"
+   sacrifice into real value with the mana incidental. The prune bails whenever any death-watcher is
+   on the controller's battlefield, and on any subset carrying direct damage.
+
+Measured (prune off reproduces committed GT exactly on every tier — that is the validity check):
+
+```
+smoke        d3 4.2467 -> 4.2467 (digest only)   d5 4.2133 -> 4.2000
+regression   d3 -0.0134 / -0.0100               d5 -0.0040 / 0.0000
+overnight    8 of 8 searched cases BETTER, net -36.0 turn-units / 8,000 games (-0.0045/game)
+             36 games better, 1 worse (d3_s4004 gi173, CHURN: recovers at 4x budget and at 0)
+             d0 net exactly 0.0 -- Solve already had the rule, so only searched moves
+             every non-Goblins deck byte-identical (no other deck has a creature mana outlet)
+```
+
+**But gi44 stayed at T5.** Removing the dominated play made both arms play identical T1–T2 lines
+(Skirk survives, T2 Matron off the sac), which did not fix the game — it *isolated* it. gi44 is now
+a pure ranking question, and it is the SAME Chieftain → Warchief substitution as the 31 d0 games:
+
+```
+pre-ranking  T2 Matron fetches Goblin Chieftain -> T3 Chieftain, T4 Piledriver + Lackey,
+             Lackey has HASTE from Chieftain -> connects -> cheats Muxus in -> T4 kill
+shipped/v2   T2 Matron fetches Goblin Warchief  -> T3 Warchief, T4 Krenko + Piledriver -> T5 kill
+```
+
+Chieftain scores 945 (200 body + 400 lord over `buff_targets=4` + 255 haste-enabler); Warchief 1040
+(360 body + 0.80 × 850 of "the Muxus in hand arrives sooner"). Warchief's cost cut *does* genuinely
+pull a hard-cast Muxus from T6 to T5, which is why the turns-saved gate of variants 1/2 could never
+recover this game — the enabler model is right about the mana and still picks the wrong card, exactly
+as it was for smoke gi19. What decides gi44 is on the other side: the Muxus that lands on T4 brings
+three more Goblins, so Chieftain's real contribution to that swing is +7, not the +4 it is priced at.

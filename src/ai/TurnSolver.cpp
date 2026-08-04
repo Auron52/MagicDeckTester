@@ -979,6 +979,66 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
     return false;
 }
 
+// Reject a plan that activates a CREATURE sac-for-mana outlet (Skirk Prospector, "Sacrifice a Goblin:
+// Add {R}") while the subset spends NO mana at all. Such a plan is strictly DOMINATED by the same plan
+// without the activation: floated mana empties at end of phase, so it buys nothing, while the
+// sacrificed body is gone permanently -- a lost creature and lost tempo for exactly zero gain. The
+// no-sac variant is always enumerated alongside it (the powerset visits the same subset minus this
+// index, and no other reject keys on the sac), so dropping the dominated one never hides a line.
+//
+// Solve already refuses this via the rituals-for-payoff guard, which rejects a SURPLUS ritual on any
+// non-winning subset -- that is precisely why d0/d1 never make the play and only the searched depths
+// do. EnumeratePlans deliberately does NOT run that guard, and for a HAND ritual that is right: "cast
+// it now or keep the card for a later turn" is a real branch the search should arbitrate. An IN-PLAY
+// sac outlet has no such trade -- declining leaves both the outlet and the body on the battlefield --
+// so the branch carries no upside to weigh against the loss. Goblins gi44 is the case that exposed it:
+// the search sacrificed Skirk Prospector in T1 main 2 for an unspendable {R} and so could not pay for
+// the T2 Goblin Matron that same body funds, sliding the whole line a turn.
+//
+// NOT dominated when a death TRIGGER pays for the body: Pashalik Mons (1 damage per Goblin death),
+// Rundvelt Hordemaster (impulse exile) and Mogg War Marshal (a token on its own death) all turn an
+// "unspent" sacrifice into real value, and the mana is then incidental. Any death-watcher on the
+// controller's battlefield suppresses the prune -- conservatively, whether or not it would actually
+// match this victim's subtype. The victim itself is covered by that scan (it must be on the
+// battlefield to be sacrificed). A subset carrying direct damage is likewise left alone, so the prune
+// can never touch a reach-to-lethal line. Inert (false) for every deck without a creature mana outlet
+// -> byte-identical.
+static const bool s_sac_waste_prune = !EnvOn("MTG_NO_SAC_WASTE_PRUNE");
+
+static bool SubsetWastesCreatureSacMana(const GameState& state,
+                                        const std::vector<Action>& cands,
+                                        const std::vector<int>& sel)
+{
+    if (!s_sac_waste_prune) { return false; }
+    bool      has_creature_sac = false;
+    long long spend            = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        spend += a.cost.ManaValue();
+        if (a.direct_damage > 0) { return false; }          // never touch a reach-to-lethal subset
+        if (a.kind != Action::Kind::SacForMana || a.sac_source_id == 0) { continue; }
+        for (const Permanent& p : state.battlefield)        // is the source a CREATURE sac outlet?
+        {
+            if (p.controller_index != state.active_player_index
+                || p.card.m_number != a.sac_source_id) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(p.card);
+            if (sd && sd->params.sac_creature_outlet) { has_creature_sac = true; }
+            break;
+        }
+    }
+    if (!has_creature_sac || spend > 0) { return false; }   // mana IS spent -> the sac may be paying for it
+    for (const Permanent& p : state.battlefield)            // a death payoff makes the body worth spending
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.dies_trigger_damage > 0 || d->params.dies_trigger_creates_tokens > 0
+            || d->params.dies_trigger_impulse_exile) { return false; }
+    }
+    return true;
+}
+
 // Reject a subset that over-splices Desperate Ritual (splice_onto_arcane). Splicing k copies onto a
 // base cast REVEALS k OTHER copies that must still be IN HAND at that moment; a revealed copy stays in
 // hand and may later be cast as its own base (and/or spliced again). So casting m bases of the SAME
@@ -4311,6 +4371,11 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
+        // Reject a creature sac-for-mana whose float nothing spends (see the helper). Solve's
+        // rituals-for-payoff guard already covers this on the credited/pool path; this also catches
+        // the filter fallback, and keeps the rule identical on both sides. Inert without a creature
+        // mana outlet -> byte-identical.
+        if (SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice (a spliced copy must still be in
         // hand). Inert without a splice base selected -> byte-identical.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
@@ -8295,6 +8360,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
+        // Reject a creature sac-for-mana whose float nothing spends -- the dominated branch this
+        // enumeration otherwise hands the search (Goblins gi44). Unlike the rituals-for-payoff guard
+        // above, declining an in-play outlet keeps BOTH the outlet and the body, so there is no
+        // "hold it for a later turn" trade for the search to arbitrate. See the helper.
+        if (SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice. Inert without a splice base.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
         // Reject a sequenced restricted aura (injected above) with no in-subset enabler on its target.
