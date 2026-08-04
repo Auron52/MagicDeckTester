@@ -4234,6 +4234,80 @@ static bool PlanHasLand(const std::vector<Action>& cands, const std::vector<int>
     return false;
 }
 
+// ---- Sac-land burn hold ("hold Shard Volley until it buys something") -------------------------
+// A sacrifice-a-land damage spell (Shard Volley: {R}, sac a land, 3 to any target) trades a
+// PERMANENT mana source for a fixed lump of face damage. Goldfishing there is no race and the
+// opponent never gains life, so 3 damage now is worth exactly what 3 damage later is worth -- while
+// the sacrificed land costs a mana on EVERY intervening turn. So the cast is only ever right when it
+// buys something THIS turn -- three exceptions, all board-readable (nothing clairvoyant):
+//   (a) the plan wins this turn -- the damage is the killing blow;
+//   (b) it turns Spectacle on for a spell in the same plan (Light Up the Stage {2}{R} -> {R}) -- a
+//       real same-turn discount the deferred cast cannot recover;
+//   (c) it pumps a PROWESS attacker that connects this turn (Monastery Swiftspear) -- likewise
+//       destroyed by deferring.
+// Everything else is a strictly worse ordering of the same total damage. Being FLOODED is NOT a
+// fourth exception: surplus lands make an early cast harmless, never better, so there is no upside
+// to weigh and the rule needs no flood branch (it also makes deferring free in exactly those hands).
+//
+// Motivation: at d5 the search cast its first Shard Volley by T3 in 37/100k games vs 8 at d6, and
+// those games are ~60% of d5's quality deficit (seed 203265: sacs its ONLY land on T2, sits on 0
+// lands through T5 unable to cast four drawn spells, and loses with the opponent on 1 life).
+//
+// This is a PRUNE and nothing else (search-primary): it only ever REMOVES plans, it is provider-owned
+// (burn opts in -> every other deck is byte-identical), and MTG_UNPRUNED / MTG_UNPRUNE=saclandhold
+// reopens the full branch set for the standing pruned-vs-unpruned audit. MTG_SV_HOLD=0 is the legacy
+// hatch (pre-heuristic behaviour) for a byte-identical A/B.
+//
+// MEASURED (burn, shipped d6/budget-20/trust-5, 20 paired seeds x 5000 games per arm, both blocks):
+//   train    -0.00143 turns  t=-12.11  20/20 seeds better
+//   held-out -0.00174 turns  t=-10.72  20/20 seeds better        [negative = better]
+//   cost: +0.14% instructions (callgrind, deterministic); wall clock indistinguishable.
+// Exceptions (b) and (c) are NOT decoration -- they carry the result:
+//   * WITHOUT (c): +0.00292  t=+16.25  0/20 better. The rule alone LOSES. A noncreature cast pumps
+//     every attacking Swiftspear, which the "3 damage is worth the same later" argument misses.
+//   * (b) strict-vs-permissive (must SV be the only face-damage source to count as the enabler?) is
+//     byte-identical over 100k games -- the powerset never affords Light Up at full cost, so the only
+//     SV+Spectacle plans come from the Plan-B builder, where SV is the sole trigger by construction.
+//     Kept in its strict form because that is the rule as reasoned; the permissive branch was deleted.
+static bool SacLandHoldEnabled()
+{
+    static const bool on = EnvOn("MTG_SV_HOLD", true);   // DEFAULT ON; =0 restores the old behaviour
+    return on;
+}
+
+// True => drop this plan. Exception (a) is the caller's `!wins` gate, so this only decides (b)/(c).
+// Callers also gate on `sacrifice_count > 0`, so a deck with no sac-land card never reaches the scan.
+// prowess_attackers = attacking prowess creatures already on the battlefield + any this plan casts
+// with haste (the enumerators' corrected projection term).
+static bool HoldSacLandBurn(const GameState& state, const std::vector<Action>& cands,
+                            const std::vector<int>& sel, int prowess_attackers)
+{
+    if (!SacLandHoldEnabled())                                       { return false; }
+    if (!ResolveProvider(state).HoldsSacLandBurnUntilLethal())       { return false; }
+    if (DecisionUnpruned(UnprunedGate::SacLandHold))                 { return false; }
+
+    bool has_sac = false, has_spectacle = false, other_face_damage = false;
+    for (int j : sel)
+    {
+        const Action& c = cands[j];
+        if (c.kind != Action::Kind::CastFromHand) { continue; }
+        if (c.sacrifice_land && c.direct_damage > 0) { has_sac = true; continue; }
+        if (c.has_spectacle)      { has_spectacle = true; }
+        if (c.direct_damage > 0)  { other_face_damage = true; }
+    }
+    if (!has_sac) { return false; }   // the sac cast is a non-damage one (no such card today)
+    // (b) Spectacle enabler. Already-active Spectacle needs no enabler, so the exception is dead
+    // there -- and another face-damage cast in the plan is the cheaper enabler (it leaves the land).
+    if (has_spectacle && !state.opponent_lost_life_this_turn && !other_face_damage) { return false; }
+    // (c) prowess: the cast pumps every attacker that connects this turn, damage a deferred cast
+    // never recovers -- i.e. the rule's premise ("3 damage now is worth 3 damage later") is simply
+    // FALSE here, so the prune has no licence and the decision goes back to the search. Worth
+    // -0.00019 (t=-3.05, 12/2/6) once the projection above was fixed, and -0.0042 before it: see
+    // docs/design/shard-volley-hold.md, which also gives the one-line change to re-test it.
+    if (prowess_attackers > 0) { return false; }
+    return true;
+}
+
 // ---- TurnSolver::Solve ---------------------------------------------------
 
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
@@ -4603,6 +4677,11 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             extra_lethal = provider.ExtraLethalDamage(state, casting);
         }
         bool wins = (projected_atk + direct_dmg + extra_lethal) >= state.Opponent().life;
+
+        // Hold a sac-land burn (Shard Volley) unless it wins this turn or enables Spectacle -- see
+        // HoldSacLandBurn. The integer test keeps every deck without such a card off the scan.
+        if (sacrifice_count > 0 && !wins
+            && HoldSacLandBurn(state, cands, sel, prowess_attackers + haste_cast_prowess)) { return; }
 
         // Rituals-for-payoff guard (see the flag above), with the STORM heuristic gate the user asked for.
         // Question: may this plan spend MORE ritual mana than the payoff's cost? Default NO -- so we reject
@@ -8640,6 +8719,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         int projected_atk = pending_atk + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         bool wins = (projected_atk + direct_dmg) >= state.Opponent().life;
+        // Sac-land burn hold (mirrors Solve::consider) -- see HoldSacLandBurn.
+        if (sacrifice_count > 0 && !wins
+            && HoldSacLandBurn(state, cands, sel, prowess_attackers + haste_cast_prowess)) { return; }
         TurnSolver::Plan plan;
         plan.value          = total_eval;
         plan.wins_this_turn = wins;

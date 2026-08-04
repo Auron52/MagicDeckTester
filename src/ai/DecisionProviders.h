@@ -58,6 +58,8 @@ enum class UnprunedGate
     SpliceCollapse, // Dragonstorm Desperate Ritual splice-count collapse disabled: enumerate the full
                   // k=0..N-1 splice fan-out per copy instead of only the bare + max-chain families
                   // (DragonstormProvider::UseSpliceCollapse)
+    SacLandHold,  // burn's sac-land burn hold disabled: keep the plans that cast Shard Volley before the
+                  // winning turn (BurnProvider::HoldsSacLandBurnUntilLethal)
     _Count
 };
 
@@ -200,6 +202,10 @@ class BurnProvider : public GenericProvider
 {
 public:
     bool PreferHoldLandDrop(const GameState&, int) const override;
+    // Shard Volley is the deck's only sacrifice-a-land spell, and every land it could sacrifice is a
+    // Mountain (no utility land whose loss is free) -- so holding it until it wins the game or unlocks
+    // Spectacle is a pure gain in available mana. See HoldSacLandBurn in TurnSolver.cpp.
+    bool HoldsSacLandBurnUntilLethal() const override { return true; }
 };
 
 // Hinata, Dawn-Crowned (UR Crackle / cost-reduction combo). Its spells slash their cost by

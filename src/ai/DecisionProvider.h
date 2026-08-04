@@ -595,6 +595,14 @@ public:
     virtual bool ImpulseFloatColorRedOnly()       const { return false; }
     virtual bool RestrictSacColorsToHasteAndRed() const { return false; }
 
+    // HoldsSacLandBurnUntilLethal -- opt IN to the sac-land burn hold (Shard Volley). A spell whose
+    // additional cost is "sacrifice a land" spends a permanent mana source for a fixed lump of damage,
+    // which in a goldfish is worth the same on any later turn -- so the enumerators drop plans that cast
+    // one unless it wins this turn or enables Spectacle. See HoldSacLandBurn in TurnSolver.cpp for the
+    // rule, the two exceptions and the measurement. Base false -> every other deck keeps the full
+    // (unpruned) plan set; MTG_UNPRUNED / MTG_UNPRUNE=saclandhold reopens it for burn too.
+    virtual bool HoldsSacLandBurnUntilLethal() const { return false; }
+
     // ScaledCastVariants -- SCALED-CAST variants: for a spell whose cost depends on how much output it
     // commits, the candidate (opponent-face damage, cost) levels to branch on. This is the DIVIDED-damage
     // analogue of XCandidates: Magma Opus deals 4 damage divided among any number of targets, and committing
