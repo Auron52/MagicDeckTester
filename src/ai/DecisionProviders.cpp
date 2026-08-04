@@ -3938,16 +3938,36 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // constant. Gated on actually holding something stuck -- an enabler with nothing to enable is
     // just its body. MTG_GOBLIN_ENABLER_RANK=0 drops the term for the A/B.
     static const bool enabler_rank = EnvOn("MTG_GOBLIN_ENABLER_RANK", true);   // cached: hot path
+    // ROUND-2 ranking candidate, DEFAULT OFF pending gi44 (see
+    // docs/design/goblins-enabler-worse-games.md). Held-out searched -5.0 turn-units and it recovers
+    // 2 of the 3 tracked regressions, but gi44 is blocked by a separate solver bug (a sac-for-mana
+    // whose mana is never spent survives plan enumeration), and the user's bar is to fix ALL of the
+    // regressions before rebaselining. Flip this default to true once that is done, then rebaseline.
+    static const bool rank_v2 = EnvOn("MTG_GOBLIN_RANK_V2");
     double stuck_hand_value = 0.0;   // best hand Goblin I cannot cast right now = what to accelerate
+    int    stuck_mv         = 0;
     for (const Card& h : s.players[controller].hand)
     {
         const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
         if (!hd) { continue; }
         const Card& hc = hd->card;
         if (!hc.IsCreature() || !CardHasSubtype(hc, "Goblin")) { continue; }
-        if (hc.m_mana_cost.ManaValue() <= untapped_mana) { continue; }   // already castable: nothing to unlock
-        stuck_hand_value = std::max(stuck_hand_value, value_of(hd, hc));
+        // "Stuck" means genuinely out of reach -- not castable this turn NOR next, ramp included
+        // (user, 2026-08-04: "when we are low on gas or can cast what we have anyway neither is
+        // worth considering"). Testing against untapped mana alone was the defect: in gi573 a Goblin
+        // Chieftain with untapped=1 / now=4 / next=6 counted as stranded, so the enablers collected
+        // ~1000 points for "accelerating" a 3-drop that was castable immediately -- and Chieftain
+        // even collected 378 for accelerating ITSELF. mana_next already includes the Skirk ramp.
+        if (hc.m_mana_cost.ManaValue() <= (rank_v2 ? mana_next : untapped_mana)) { continue; }
+        const double v = value_of(hd, hc);
+        if (v > stuck_hand_value) { stuck_hand_value = v; stuck_mv = hc.m_mana_cost.ManaValue(); }
     }
+    // Turns until the stuck card could be HARD-CAST unaided (+1 land/turn). This is what an enabler
+    // is competing against: if the answer is 1, we can just cast it next turn and no enabler is
+    // worth a fetch slot (user: "when we are low on gas or can cast what we have anyway neither is
+    // worth considering").
+    const int stuck_turns = (stuck_mv <= untapped_mana)
+                          ? 0 : std::max(1, stuck_mv - CountLandsInPlay(s, controller));
     auto enabler_of = [&](const CardDefinition* d) -> double
     {
         if (!enabler_rank || !d || stuck_hand_value <= 0.0) { return 0.0; }
@@ -3957,10 +3977,20 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         if (!p.reduces_spell_subtype.empty())                 { frac += 0.50; }
         // Warchief again: blanket haste means whatever lands next swings the turn it lands.
         if (p.grants_haste && !p.subtypes_affected.empty())    { frac += 0.30; }
-        // Skirk Prospector: sac a spare Goblin for {R} -- ramp, but it eats the bodies it counts.
-        if (p.sac_outlet_add_mana_amount > 0 && G >= 2)        { frac += 0.40; }
-        // Goblin Lackey: connect and the stuck bomb comes down FREE (this deck's engine).
-        if (!p.combat_damage_puts_subtype_from_hand.empty())   { frac += 0.60; }
+        // Skirk and Lackey are MIRROR-IMAGE enablers, and a flat fraction models neither (user,
+        // 2026-08-04): "Skirk should probably not be considered when we have almost no goblins on
+        // board ... on the flip side it is a great enabler when we have a lot on board. Lackey is
+        // the opposite, better when we have heavy stuff in hand and almost nothing on board."
+        //
+        // Skirk converts BODIES into mana, so its worth scales with the bodies available to sac --
+        // the old flat 0.40 behind a G>=2 gate paid full price for a single sacrificeable Goblin.
+        if (p.sac_outlet_add_mana_amount > 0)
+        { frac += rank_v2 ? std::min(0.40, 0.13 * std::max(0, G - 1)) : (G >= 2 ? 0.40 : 0.0); }
+        // Lackey buys the TURNS we would otherwise spend reaching the stuck card's cost, so it
+        // scales with how far out of reach that card is -- and is worth nothing when the card is
+        // castable next turn anyway.
+        if (!p.combat_damage_puts_subtype_from_hand.empty())
+        { frac += rank_v2 ? std::min(0.60, 0.20 * std::max(0, stuck_turns - 1)) : 0.60; }
         return frac * stuck_hand_value;
     };
 
@@ -4078,6 +4108,28 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         return burst;
     };
 
+    // "Play this turn" premium + redundancy discount (user, 2026-08-04): "Hordemaster is a better
+    // option when we can play it this turn, especially if we already have a Chieftain. There should
+    // be a 'play this turn' benefit in those cases."
+    //
+    // The existing deploy discount only separates castable-now from next-turn by 1.00 vs 0.85 -- 15%,
+    // nowhere near enough to rank a castable Rundvelt Hordemaster over an UNCASTABLE second Goblin
+    // Chieftain that is already sitting in hand. Two independent facts were missing: a fetch we can
+    // deploy immediately turns into board presence a full turn sooner, and a copy we already hold or
+    // control adds far less than the first (only one can be deployed per turn anyway).
+    // Deliberately HARD-CAST mana only -- a Lackey/Vial put is not "cast it this turn".
+    // HAND copies only, deliberately (user, 2026-08-04): "duplicates in hand will be slow ... but for
+    // example, you might want to get a Muxus in hand for a Lackey drop even if you have one on
+    // board." A second copy in HAND is close to dead -- only one can be cast per turn. A copy on the
+    // BATTLEFIELD says nothing about wanting one in hand: it is exactly the Lackey/Vial cheat target,
+    // and a second lord stacks anyway. Counting board copies was measured and is the wrong half.
+    auto copies_in_hand = [&](const std::string& name) -> int
+    {
+        int c = 0;
+        for (const Card& h : s.players[controller].hand) { if (h.m_name == name) { ++c; } }
+        return c;
+    };
+    static const bool dup_hand_penalty = EnvOn("MTG_GOBLIN_DUP_HAND", true);
     auto score_of = [&](const std::string& name) -> double
     {
         for (const Card& lc : s.players[controller].library)
@@ -4091,6 +4143,15 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             // fetch that guarantees the kill this turn sorts ahead of every non-lethal one, best burst first.
             if (burst > 0 && swing_atk < opp_life && opp_life <= swing_atk + burst)
             { sc += 1.0e6 + burst; }
+            // After the lethal override, so a fetch that wins outright is never discounted.
+            if (rank_v2 && dup_hand_penalty && sc < 1.0e6)
+            {
+                // A flat "castable now" multiplier was measured here and REJECTED (+10.0 turn-units
+                // on held-out searched): it rewards every cheap card that happens to be castable,
+                // chaff included, which is not the intent. The idea -- prefer what we can deploy THIS
+                // turn -- is sound but needs to be proportional to what deploying now actually adds.
+                for (int k = copies_in_hand(name); k > 0; --k) { sc *= 0.55; }
+            }
             return sc;
         }
         return 0.0;   // whiff placeholder ("") or vanished name -> lowest
