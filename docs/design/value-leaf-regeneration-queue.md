@@ -1,6 +1,14 @@
 # Value-leaf regeneration: the serialized queue
 
-**Status:** planned, not started. Owner: whichever agent takes the queue — it is designed to be run
+**Status: RUN 2026-08-02..04 on frozen `27d76b4`. Result: regeneration is NEUTRAL — the staleness
+this document was written to fix turned out to cost nothing measurable.** 4 decks completed
+(Anti-Lifegain, Dragonstorm, burn, Auras), 1 thin (Hinata), 3 could not be labelled at all
+(slivers_vial, treasure_hunt, Knights — **zero rows in 34 h**; see §8). Nothing adopted; staged
+artifacts sit in `logs/eval/<stem>.value.STAGED.json` with the live sidecars untouched.
+Driver: `scripts/valueleaf_regen_queue.sh` (a pooled rewrite of the serial queue below —
+see §8 for why the serial design in §4 was abandoned).
+
+Owner: whichever agent takes the queue — it is designed to be run
 by **ONE agent, one job at a time**, because every job wants the whole box.
 
 This is the self-contained runbook for regenerating the value-leaf artifacts across all nine suite
@@ -13,31 +21,52 @@ made the work impossible to hand to a fresh agent without reading two thousand l
 
 ## 1. Why regenerate at all
 
-Two independent invalidations, either of which alone would justify it.
+Two independent invalidations were claimed. **The first one is wrong** — corrected below, since it
+was the headline reason and acting on it alone would waste days.
 
-**(a) Every table was measured profile-less.** `scripts/attic/valueleaf_depth_matrix.py` never passed
-`--profile`, so every cell in every deck's `value_leaf_table` was measured against a deck with **no
-mulligan/keep model and no card_scores** — a materially different engine from the one that ships.
-Fixed in `c910b06` (2026-07-31); the tables built before it were not. The precedent for how badly
-this misleads is `docs/design/antilife-valueleaf-deep-cells-overnight.md`.
+**~~(a) Every table was measured profile-less.~~ FALSE — do not regenerate on this rationale.**
+The original claim was that `scripts/attic/valueleaf_depth_matrix.py` never passed `--profile`, so
+every cell was measured against a deck with no mulligan/keep model and no card_scores. In fact the
+**profile auto-resolves from the deck path** and has since `e71f51f`, so the matrix has been picking
+up each deck's profile (and, directory-relative, its keep model) all along. The script does not even
+accept `--profile` — passing it exits 2. `c910b06` did not fix a live defect of this shape.
 
-**(b) Play has drifted since.** The tables are win-turn measurements, so any change to play
-invalidates them. Several landed after the tables were built, including the duplicate-legend prune
-(`dd8d93c`, 2026-08-01 22:40), which moves any deck running a legend.
+**(b) Play has drifted since.** *This* is the real invalidator. The tables are win-turn
+measurements, so any change to play invalidates them. Several landed after the tables were built,
+including the duplicate-legend prune (`dd8d93c`, 2026-08-01 22:40), which moves any deck running a
+legend — and, larger, the 65-commit searched-decisions merge.
+
+**What the regeneration actually measured (2026-08-04), 8 seeds × 1000 games/arm, staged vs live:**
+
+| deck | Δ LP (staged − live) | paired t | seeds better/worse/tied | trust: live → staged |
+|---|---|---|---|---|
+| Anti-Lifegain | −0.00138 | −1.14 | 5/3/0 | UNSET → UNSET |
+| Dragonstorm | −0.00075 | −1.03 | 3/1/4 | UNSET → UNSET |
+| burn | 0.00000 | +0.00 | 1/1/6 | **6 → 5** |
+| Auras | 0.00000 | n/a | 0/0/8 | 5 → 5 |
+
+Final matrix: 208 cells, all at the full 400 games × 4 seeds, one consistent pass on `27d76b4`.
+
+Every shipped `target_depth` stands (the play-profile sweeps put the shipped depth at or inside
+noise of the best arm on all four). burn is the only derived scalar that moves, and its A/B is
+*exactly* zero — the two trust depths are behaviourally indistinguishable over 8,000 games. So the
+honest summary is: **(b) was real but its effect was below measurement, and regeneration on a
+neutral result is not worth its cost.** Regenerate a deck when its *profile* changes, not on a
+schedule.
 
 Coverage is a third, lesser problem: several tables are thin (Hinata 200 games × 2 seeds, H ∈ {1,2,3}).
 
 ### DO NOT START THIS QUEUE UNTIL PROFILE GENERATION HAS LANDED
 
-**Hard ordering constraint.** The whole point of `c910b06` is that the matrix must be measured
-**with** the deck profile — and the keep/mulligan model is a *sibling of the profile*, resolved
-directory-relative (`decks/<d>/<d>.keepmodel.exhaustive.profile.json.gz` next to
-`decks/<d>/<d>.profile.json`). So passing `--profile` silently pulls in whatever keep model is on
-disk at that moment.
+**Hard ordering constraint — still correct, but not for the reason originally given.** The matrix is
+always measured *with* the deck profile (it auto-resolves; §1a), and the keep/mulligan model is a
+*sibling of the profile*, resolved directory-relative
+(`decks/<d>/<d>.keepmodel.exhaustive.profile.json.gz` next to `decks/<d>/<d>.profile.json`). So a
+matrix run silently picks up whatever profile and keep model are on disk at that moment.
 
 That means **regenerating a deck's play or mulligan profile invalidates any value-leaf table measured
-before it** — the same bug `c910b06` fixed, wearing a different hat: not "no profile" this time, but
-"a profile that has since been replaced".
+before it.** This is the one invalidation that survived scrutiny (§1b), and it is the trigger to
+regenerate a deck — not elapsed time, and not the withdrawn "profile-less" claim.
 
 As of 2026-08-02, play-profile and mulligan-profile generation are being run on other machines. This
 queue is therefore **downstream of that work and must not start until it lands**. Order:
@@ -118,8 +147,13 @@ most risk from a wrong table. Decks showing `–` still use the table via
 
 ## 4. The queue, in order
 
-Ordered by value-per-hour, so that stopping early still banks the most useful results. Total is
-additive — serial execution means order does not change the sum, only what is finished if you stop.
+**SUPERSEDED as an execution plan — kept for the per-deck cost estimates.** The serial "one job at a
+time" design below was replaced by `scripts/valueleaf_regen_queue.sh`, which pools *every* game of
+*every* deck into three batches (rows → matrix → measurement). The reason is the repo's standing
+batching rule: a serial queue pays a load-imbalance tail **per job**, and the slow decks here all
+have long-tail games, so a nine-job queue meant nine tails plus an idle box during every
+single-threaded step between them. Pooling collapses that to one tail per phase. The ordering column
+is still useful for deciding what to sacrifice if the run is stopped early.
 
 | # | job | rough cost | why here |
 |---|---|---|---|
@@ -149,20 +183,26 @@ bash build.sh                      # NEVER raw cmake; see CLAUDE.md
 git rev-parse --short HEAD         # record this in every artifact's provenance
 ```
 
-**Matrix, per deck** (run with the box to *itself* — the intractability cut-off is wall-clock based,
-so a loaded box misclassifies slow cells as intractable and silently truncates the table):
+**Matrix, ALL decks in ONE pool** (not one run per deck — a per-deck loop pays a load-imbalance tail
+*per deck*, and the intractability cut-off is wall-clock based, so the idle-then-busy pattern of
+serial runs misclassifies cells):
 
 ```bash
-python3 scripts/attic/valueleaf_depth_matrix.py --incremental --decks <deck> \
-  --hdepths 1 2 3 4 5 --vdepths 1 2 3 4 5 \
+python3 scripts/attic/valueleaf_depth_matrix.py --incremental \
+  --decks <deck1>_staged <deck2>_staged ... \
+  --hdepths 1 2 3 4 5 --vdepths 1 2 3 4 5 6 7 8 \
   --seeds 8008 9009 10010 11011 \
-  --profile <the deck's profile>            \
   --target 400 --reference-target 50 --batch 25 --workers 20 \
-  --value-min-depth 0 --intractable-sec-per-game 3.0 \
-  --out logs/eval/valueleaf_depth_<deck>.txt
+  --value-min-depth 0 --intractable-sec-per-game 60 \
+  --out logs/eval/valueleaf_depth_regen.txt
 ```
 
-`--profile` is the whole point of this exercise — if it is missing the run reproduces the original bug.
+**Do NOT pass `--profile`** — the script has no such option and exits 2. The profile resolves
+automatically from the deck path (§1a). Use the `<deck>_staged` keys so the derivation writes to
+`logs/eval/<stem>.value.STAGED.json` instead of straight to the live sidecar.
+
+**`--intractable-sec-per-game` must be generous — 60, not 3.** See §8: at 3.0 this guard truncated
+cells that were 11× *under* budget and silently corrupted a shipped play parameter.
 
 **Hinata rows** (pooled; see the batching gotcha below):
 
@@ -221,3 +261,171 @@ queue in one place rather than splitting it.
   absence of data, not from evidence.
 - Commit `decks/<deck>/<deck>.value.json` with the frozen commit in provenance. Raw rows stay
   gitignored.
+
+---
+
+## 8. What the 2026-08-02..04 run learned
+
+### 8.1 A cost guard keyed on one sample faked a −4.25σ regression
+
+This is the run's main finding and it generalises well beyond this queue.
+
+`--intractable-sec-per-game` decided whether a cell was too slow to be worth finishing. It keyed on
+**the current batch's** rate and, once tripped, set a **sticky** flag that was never re-examined.
+One 25-game batch holding a single pathological game therefore condemned a cell permanently.
+
+The damage was not "a slow cell got skipped". It ran all the way through to a shipped play parameter:
+
+```
+one unlucky batch  ->  cell capped at reference-target  ->  thin H2..H5
+                   ->  wrong h_conv (min over a truncated H row)
+                   ->  table derives trust=5 instead of UNSET
+                   ->  trust IS the escalate-below threshold, so play changes in EVERY game
+                   ->  +0.0035 LP, t = +4.25, 0/8 seeds better
+```
+
+Read as a model comparison, that is an unambiguous regression with a clean significance story — and
+it was entirely an artifact of the measurement harness. Filling the cells restored `UNSET` and the
+regression vanished (−0.00075, t = −1.03). **Every one of the seven tripped cells was far under the
+threshold on its cumulative average**; the worst was 20.0 s/game and one was 5.5 s/game against a
+60 s/game bar — 11× under. The entire cost of the cells the old 3.0 cutoff condemned was **4
+core-hours**, i.e. the guard saved nothing and cost a wrong answer.
+
+Fixed in `1249872`: the rate is **cumulative and recomputed every batch**, so it is robust to one
+bad game and self-corrects as the average recovers, while still capping a genuinely hopeless cell.
+
+**Lessons, in order of generality:**
+1. **Never let a cost guard key on a single sample, and never make its verdict sticky.** Use a
+   cumulative statistic and re-evaluate it.
+2. **A truncation guard must not be able to change a derived value silently.** The derivation read a
+   thin row as if it were a complete one. Either propagate "this cell is partial" into the
+   derivation (the `completeness_error` path already exists — it just did not cover this shape), or
+   refuse to derive.
+   **A partial cell is not merely noisy — it is BIASED, and `h_conv` is a `min`, which makes the
+   bias one-sided.** Measured on the refill: dragonstorm's `H5` read **4.3438 at 300 games and
+   4.3550 at 400** — the partial cell was optimistic by 0.0112. Taking a min over the H row means
+   any one optimistic cell pulls `h_conv` down, which raises the bar the value leaf must clear, which
+   pushes `trust` deeper or to UNSET. So under-training a *single* H cell perturbs the gate for the
+   whole deck, in a predictable direction, with no warning anywhere in the output.
+3. **When an A/B says a regenerated model is worse, suspect the harness before the model.** The
+   tell here was that the regression was *large and clean* for a change that should have been
+   near-neutral — the same shape as the seed-overlap trap (rule 7).
+
+The guard still cannot preempt: it only checks *between* batches, so a 25-game batch ran ~90 min at
+>200 s/game before being caught. It bounds throughput, not latency.
+
+### 8.2 The label path contains no rollouts and never reaches the value leaf
+
+Worth recording because two plausible-sounding concerns about label quality are both false, and
+because it redirects all optimisation effort to the one thing that actually costs.
+
+Rows are byte-identical with `MTG_VALUE_MODEL=1` and `=0`. The reason is structural:
+`EnumerateEarliestWins` sets `depth = max_turns - turn + 1` exactly, and `FSLineWin`'s **first**
+guard (`turn_number > max_turns`) therefore always fires before the `depth <= 0` value-leaf branch.
+So the label is search-verified wins only — an old or bad value leaf cannot contaminate it, and
+there is nothing wasteful to remove there.
+
+The cost is entirely:
+
+```
+|candidate plans|  ×  unpruned depth-8 search  ×  K
+```
+
+with `cutoff = max_turns + 1` (cross-candidate B&B deliberately off) and
+`SearchBudget::FromVirtualMs(1000000)` (~9×10⁸ nodes — it never binds). Play's 20 ms budget does
+**not** bound the labeller.
+
+**Two cost intuitions that measurement refuted.** The H/V ratio is not a large constant: it is ~1.0×
+at d1 rising to only 4–16× at d5 (antilife 8.1, burn 15.9, auras 3.8, dragonstorm 8.1). V is
+roughly *flat* in depth while H grows steeply — which is why extending the V ladder to 8 was cheap.
+And ladder growth is ~1.6×/level, not ~6× (games end around turn 4–5), so intermediate passes are
+~60% of total cost rather than ~20%.
+
+### 8.3 Three decks cannot be labelled at all, and why
+
+slivers_vial, treasure_hunt and Knights produced **zero rows in 34 hours**. No mechanism has been
+verified for why — in particular the "wide board" explanation is wrong for treasure_hunt, which is
+not a wide-board deck. Do not restart these decks on the current engine; they will not finish.
+
+Three **offline-only** changes unblock them. All three are gated to the label path, so the in-play
+path stays byte-identical and **no ground-truth rebaseline is needed**:
+
+1. **`earliest_only` branch-and-bound (the big one).** A value row consumes only `report.earliest`,
+   the MIN over candidates; the per-candidate win turns exist solely for EVAL rows, which value
+   dumps do not emit. So carrying the incumbent as the cutoff is **lossless for the value label**.
+   This is not a new technique — `FSLineTail` already does exactly this between siblings
+   (`std::min(cutoff, best.win_turn)`), and the transposition table already refuses to store a
+   no-win because it "may be a cutoff abort rather than a true dead end". The change hoists a proven
+   pattern one level up, to the candidate loop that deliberately opted out of it.
+   **Gate on value-dump-on AND eval-dump-off**, and mark pruned candidates so nothing downstream
+   reads a bound as a true win turn.
+2. **Fix the fabricated loss.** On budget overrun `FSLineWin` returns `{max_turns+1}` — which is
+   indistinguishable from a real LOSS and would poison labels. It must instead fall through to the
+   1-ply heuristic leaf below it. This is a prerequisite for *any* budgeting of the labeller.
+3. **Ladder-on-value-leaf as an offline matrix mode.** Use the value leaf for passes 1..d−1 and the
+   heuristic only for pass d. Measured saving 49–71% at d5, and it makes H6/H7 cost less than
+   today's H5. Pure-H timings stay reconstructible as `H(d) = H(d−1) + ladder(d) − V(d−1)` with
+   H(1) exact, so the timing column survives in approximate form.
+
+**Acceptance bar for all three (user, explicit):** digest drift is *expected* and fine; **win-turn
+drift is a bug and blocks adoption until fixed.** Gate on per-game win turns via `MTG_DUMP_WINS`,
+not on aggregate LP. The rationale: search returns a *minimum* (order-independent) and the engine
+commits to and follows that line, so the realised win must equal the searched win. Drift therefore
+means either unsound pruning (a search bug) or broken follow-through (an executor bug — this has
+happened, `23d7b9a`). The gate matters most for (1), which is a pruning change.
+
+**Rollout labels stay OFF for value dumps.** Value dumps want the searched label; the
+rollout-vs-searched comparison in `learned-d0-policy.md` is about **d0 EVAL sidecars**, a different
+artifact with a different purpose.
+
+### 8.4 Operational gotchas
+
+- **The filesystem is case-insensitive.** `logs/eval/Auras_value.rows` collided with a pre-merge
+  `auras_value.rows`. Rows now live in queue-owned `logs/vlq/rows/`.
+- **Never edit a running `.sh`.** Bash reads a script lazily and will execute garbage from the new
+  byte offset. Use `cp` → edit → `mv` (atomic rename), or a separate sidecar process — which is why
+  the supervisor and heartbeat are two scripts rather than one. Editing a running **`.py`** is safe
+  (compiled at import).
+- **Killing the driver does not kill its descendants.** `pkill -f <script>` left the Python matrix
+  pool and 14 `mtg` workers running and burning the box, twice. Kill by explicit PID list; note
+  `pgrep -cf` also matches its own wrapper.
+- **A counter incremented inside `{ ...; } | consumer` is lost** — that is a subshell. It made a
+  populated manifest report "0 games".
+- **Never rebuild while a matrix pool is running.** The pool spawns `build/Release/mtg` per batch,
+  so a rebuild swaps the binary mid-run and silently violates the freeze.
+
+### 8.5 burn `trust` 6 → 5: the only moving scalar, and its history
+
+This is the one derived value the regeneration changes, so it is the one adoption decision on the
+table. It has been attempted before and it failed at scale — the context matters.
+
+**Why it was 6.** `docs/design/learned-d0-policy.md` records the matched-depth residual `V5 − H5`,
+described there as "the worse at generous budget" case:
+
+| deck | knights | slivers | **burn** | antilife | TH |
+|---|---|---|---|---|---|
+| `V5 − H5` | 0.000 | +0.0003 | **+0.0033** | +0.009 | +0.0165 |
+
+burn's `+0.0033` exceeded `tol = 0.002`, so the derivation pushed trust to 6. That was not a
+formality: at depth 5 the leaf really was ~0.0033 turns worse than the converged heuristic —
+invisible in smoke, but enough to show up in a large run, which is what happened.
+
+**Why it is now 5.** On the regenerated table the residual is **0.0000** (`h_conv = V5 = 4.3438`).
+burn has moved into knights' category, and knights ships trust=5 without trouble.
+
+**Caveats before adopting.**
+- The new table is 400 games/cell against the old 1000, so the LP quantum is 0.000625 vs 0.000250.
+  "0.0000" means *under one quantum*, not identically zero. It is still a real narrowing — the old
+  0.0033 would be ~5 quanta at the new resolution and would be plainly visible.
+- The trust derivation is thin either way: `V4`'s gap is 0.0031, missing the 0.002 bar by 0.0011.
+  trust=5 rests on one cell clearing a tolerance by about a thousandth of a turn.
+- **trust=5 is NOT inert.** The staged-vs-live A/B differs in digest on 4 of 8 seeds, with 1 seed
+  better, 1 worse, 6 tied — play changes and the effects cancel. Cancellation at 8 seeds is weaker
+  evidence than it looks.
+- **The matrix does not measure burn as it ships.** Cells are run `--ignore-play-profile --depth N`
+  at the default budget; burn ships **d6 / budget-20** with its profile live. Trust interacts with
+  the budget (trusting at 5 means one fewer escalation, handing the freed budget back to the
+  search), and the matrix cannot see that interaction at all.
+
+**Recommended gate:** because the previous failure surfaced at scale rather than in smoke, carry
+burn trust=5 through the **overnight** tier, not just regression, before adopting.
