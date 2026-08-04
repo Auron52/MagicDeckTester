@@ -353,7 +353,17 @@ public:
     // s2002): ranked w4 4.322 ~= unranked w12 4.316; ranked w2 4.324 beats unranked w4 4.329. So width
     // drops 12 -> 4 to search only the ranked THREATS (Muxus/Siege-Gang/lords/Krenko float to the top,
     // chaff sinks) -- near-full quality (train ~+0.006) at a narrower, cheaper axis. See TutorCandidates.
-    int TutorSearchWidth() const override { return 4; }
+    //
+    // WIDENED 4 -> 6 (2026-08-04) once the lord-amplification term landed. The two are entangled and
+    // neither is adoptable alone: amplification is a clear ranking IMPROVEMENT (held-out d0, which takes
+    // cands[0] and so reads ordering directly, -114.0 turn-units) that at W=4 nonetheless cost +11.0 on
+    // held-out SEARCHED -- promoting a lord into a four-slot window pushes out a card the search still
+    // wanted. That is a window-MEMBERSHIP effect, not an ordering error, and the measurement separates
+    // them cleanly: the same arm at W=6 is -4.0 searched, while its d0 gain is identical at both widths
+    // (width is irrelevant when you take the top card). Width is cheap here -- the axis is ADDITIVE, not
+    // multiplicative -- so 6 buys back the displaced candidate. Held-out searched for the adopted bundle
+    // (v2 ranking + amplification + W=6) is -5.0 with train agreeing on every tier.
+    int TutorSearchWidth() const override { return 6; }
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     // WITHDRAWN, and left here only as the hook's one implementation: "turns 1-2, play a Mountain if
     // one is in hand, without branching over the alternatives". Reachable ONLY under

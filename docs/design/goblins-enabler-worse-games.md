@@ -324,3 +324,86 @@ pull a hard-cast Muxus from T6 to T5, which is why the turns-saved gate of varia
 recover this game — the enabler model is right about the mana and still picks the wrong card, exactly
 as it was for smoke gi19. What decides gi44 is on the other side: the Muxus that lands on T4 brings
 three more Goblins, so Chieftain's real contribution to that swing is +7, not the +4 it is priced at.
+
+---
+
+## ROUND 3 (2026-08-04): all three tracked regressions recovered — ADOPTED
+
+The three tracked searched regressions are **gi44, gi573, gi849** and they are now all recovered, at
+their pre-ranking turns. Re-deriving the set against the post-prune ground truth also retired the two
+churn entries (gi289, gi112) — the whole searched regression set had shrunk to those three.
+
+The adopted change is a **bundle of three levers that is not decomposable**; each is measured, and two
+of them are actively harmful alone:
+
+| lever | what it does | alone, held-out searched |
+|---|---|--:|
+| `MTG_GOBLIN_RANK_V2` | the round-2 corrections (stuck vs `mana_next`, Skirk/Lackey scaling, hand-only duplicates) | −4.0 |
+| `MTG_GOBLIN_LORD_AMP` | a lord also multiplies the bodies the stuck bomb ARRIVES with | **+11.0** |
+| `TutorSearchWidth` 4 → 6 | the tutor axis window | −6.0 |
+
+```
+                       held-out searched    held-out d0
+  v2                        -4.0              +18.0
+  amp                      +11.0             -114.0     <- rejected alone
+  v2 + amp                  +7.0              -95.0     <- rejected
+  W6                        -6.0                0.0
+  amp + W6                  -4.0             -114.0
+  v2 + W6                   -7.0              +18.0
+  v2 + amp + W6             -5.0              -95.0     <- ADOPTED
+```
+
+### The finding worth keeping: a ranking loss that was a WINDOW loss
+
+Amplification alone reads as a contradiction — the biggest d0 gain of anything tried here (−114.0
+turn-units) *and* a searched loss (+11.0). d0 takes `cands[0]`, so it reads the ordering directly:
+−114.0 says the ranking genuinely got better. The searched loss was therefore not a bad order but a
+bad **window** — promoting a lord into a four-slot axis pushes out a card the search still wanted.
+
+The measurement separates the two cleanly. Re-run at W=6, the same term is −4.0 on searched while its
+d0 gain is **identical** (−114.0, as it must be: width is irrelevant when you take the top card).
+Width is cheap here because the tutor axis is additive, not multiplicative — the full-suite smoke
+makespan moved 17s → 21s.
+
+**Generalisable:** when a ranking change improves d0 and regresses searched, suspect the width before
+rejecting the ranking. `docs/design/searched-action-subdecisions.md` set these widths per provider
+against the *old* ranking; a ranking that reorders candidates can invalidate its own window.
+
+### Measured result of the adopted bundle
+
+```
+smoke       searched -3.0    d0 -1.0     (0 searched games worse)
+regression  searched -2.0    d0 +1.0     (0 searched games worse)
+overnight   searched -5.0    d0 -95.0    (held out)
+            -> -10.0 turn-units over 9,325 searched games, train and held-out agreeing on sign
+every non-Goblins deck byte-identical (the ranking is GoblinsProvider-owned; the width is the
+provider's override, NOT the global MTG_TUTOR_WIDTH, which would also move antilife's W=2)
+```
+
+Four searched games got slower; three (overnight gi327, gi483, gi830 on s4004) are **churn** — they
+recover at 4× budget and hold at unlimited.
+
+### NEW tracked regression: overnight s6006 gi131 (T4 → T5), PERSISTS
+
+The one real cost, and it is the exact mirror of gi44 — same two cards, opposite verdict:
+
+```
+base   T2 Matron -> Goblin Warchief; T3 Warchief; T4 King + Stingscourger + Piledriver -> T4 kill
+amp    T2 Stingscourger; T3 King; T4 Matron -> Chieftain; T5 Chieftain -> T5 kill
+```
+
+Warchief's cut is worth far more here than the ranking can see: with King(3) + Stingscourger(2) +
+Piledriver(2) in hand, −{1} each is the difference between two spells and **three in one turn**. The
+enabler credit is anchored on the single best stuck card, so it prices the cut as accelerating one
+card — right for gi44, badly short for gi131.
+
+**Rejected fix — scale the cut by deployable gas** (`MTG_GOBLIN_CUT_WIDTH`, kept default-off in
+`DecisionProviders.cpp` with the numbers in place). Credit `0.25 + 0.25 × min(3, hand Goblins within
+one mana of next turn's reach)` instead of a flat 0.50. It does exactly what it was designed to do on
+gi131 (T5 → T4) and simply **moves the error**: gi44 goes T4 → T5 and gi573 T3 → T4 straight back.
+Held-out: searched −5.0 → 0.0, d0 −95.0 → +37.0. Worse on both tiers.
+
+The useful negative result: **"how much gas the cut unlocks" is not the axis that separates these
+states.** One scalar trades them against each other. gi131 is the standing item — a better account of
+the cost cut needs to price *multi-spell turns* without inflating the single-bomb case, and neither a
+flat fraction nor a linear count of deployable cards does that.

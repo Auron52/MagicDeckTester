@@ -3938,14 +3938,43 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // constant. Gated on actually holding something stuck -- an enabler with nothing to enable is
     // just its body. MTG_GOBLIN_ENABLER_RANK=0 drops the term for the A/B.
     static const bool enabler_rank = EnvOn("MTG_GOBLIN_ENABLER_RANK", true);   // cached: hot path
-    // ROUND-2 ranking candidate, DEFAULT OFF pending gi44 (see
-    // docs/design/goblins-enabler-worse-games.md). Held-out searched -5.0 turn-units and it recovers
-    // 2 of the 3 tracked regressions, but gi44 is blocked by a separate solver bug (a sac-for-mana
-    // whose mana is never spent survives plan enumeration), and the user's bar is to fix ALL of the
-    // regressions before rebaselining. Flip this default to true once that is done, then rebaseline.
-    static const bool rank_v2 = EnvOn("MTG_GOBLIN_RANK_V2");
+    // ROUND-2 ranking, ADOPTED 2026-08-04 (see docs/design/goblins-enabler-worse-games.md): three
+    // user-directed corrections -- the "stuck" test measured against mana_next rather than untapped
+    // mana, Skirk/Lackey scaled by the board and hand states that actually make each good, and a
+    // duplicate discount applied to copies in HAND only. Shipped together with the lord-amplification
+    // term and the W=4 -> 6 widening it needs; the three recover all three tracked regressions
+    // (gi44, gi573, gi849) and measure -5.0 held-out searched with train agreeing on every tier.
+    static const bool rank_v2 = EnvOn("MTG_GOBLIN_RANK_V2", true);
+    // LORD AMPLIFICATION (MTG_GOBLIN_LORD_AMP, ADOPTED default-on). The enabler channels
+    // below all ask "what makes the stuck bomb ARRIVE sooner", which is only half the question -- a LORD
+    // asks "what is the bomb worth WHEN it arrives", and a Goblin bomb arrives as a CROWD: Muxus puts
+    // roughly half of its six revealed cards onto the battlefield, Siege-Gang shows up as four bodies.
+    // A +1/+1 lord buffs every one of them, and nothing in the ranking sees that: value_of credits a
+    // lord over buff_targets = board + hand, which counts the bomb as the single card it is in hand.
+    //
+    // This is variant 3's insight made LOCAL, which is the one thing that write-up got wrong. Variant 3
+    // widened buff_targets itself, so every lord in every state got the wider count -- it recovered its
+    // target games and cost +20.0 turn-units on held-out searched. Here the extra recipients are read
+    // off the SINGLE best stuck hand card and credited only to a lord, so the term is inert wherever
+    // the enabler term is (nothing stuck -> no amplification) and cannot move a state with no bomb in
+    // hand. See docs/design/goblins-enabler-worse-games.md.
+    //
+    // gi44 is the case: at the T2 Matron the hand holds Muxus, and the ranking scores Chieftain 945 vs
+    // Warchief 1040 -- Warchief takes it on 0.80 x 850 of "arrives sooner" credit while Chieftain's
+    // +1/+1 is priced over four recipients. The Muxus that lands on T4 brings three more Goblins, so
+    // Chieftain's real contribution that swing is +7, not +4, and Chieftain is the fetch that wins a
+    // turn earlier.
+    //
+    // NOT adoptable on its own, and the reason is worth keeping: at the old W=4 this term measured
+    // -114.0 turn-units on held-out d0 and +11.0 on held-out SEARCHED. d0 takes cands[0], so it reads
+    // the ordering directly and says the ranking genuinely improved; the searched loss was the ranking
+    // pushing a still-wanted card out of a four-slot window. Re-measured at W=6 the searched sign flips
+    // to -4.0 with the d0 gain unchanged, which is what identifies it as window membership rather than
+    // a bad order. Hence the paired TutorSearchWidth 4 -> 6 -- see the note there.
+    static const bool lord_amp = EnvOn("MTG_GOBLIN_LORD_AMP", true);
     double stuck_hand_value = 0.0;   // best hand Goblin I cannot cast right now = what to accelerate
     int    stuck_mv         = 0;
+    int    stuck_bodies     = 0;     // extra bodies that bomb brings with it (lord buff recipients)
     for (const Card& h : s.players[controller].hand)
     {
         const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
@@ -3960,7 +3989,15 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         // even collected 378 for accelerating ITSELF. mana_next already includes the Skirk ramp.
         if (hc.m_mana_cost.ManaValue() <= (rank_v2 ? mana_next : untapped_mana)) { continue; }
         const double v = value_of(hd, hc);
-        if (v > stuck_hand_value) { stuck_hand_value = v; stuck_mv = hc.m_mana_cost.ManaValue(); }
+        if (v > stuck_hand_value)
+        {
+            stuck_hand_value = v;
+            stuck_mv         = hc.m_mana_cost.ManaValue();
+            // Bodies this bomb brings ALONGSIDE itself, i.e. the extra recipients a lord would buff.
+            // Muxus reveals N and puts the Goblins among them -- half of a Goblin-dense library is the
+            // same estimate value_of already uses for the reveal ("cheat ~half of N free").
+            stuck_bodies = hd->params.etb_self_creates_tokens + hd->params.etb_reveal_count / 2;
+        }
     }
     // Turns until the stuck card could be HARD-CAST unaided (+1 land/turn). This is what an enabler
     // is competing against: if the answer is 1, we can just cast it next turn and no enabler is
@@ -3974,7 +4011,39 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         const CardParams& p = d->params;
         double frac = 0.0;
         // Warchief: "Goblin spells cost {1} less" -- the stuck bomb arrives a turn early.
-        if (!p.reduces_spell_subtype.empty())                 { frac += 0.50; }
+        //
+        // MEASURED AND REJECTED (2026-08-04), kept as the lever + the reasoning because the DIAGNOSIS
+        // it came from is still the best account of where this term is wrong. The flat 0.50 prices the
+        // cut as if it accelerated exactly ONE card, because the whole enabler credit is anchored on the
+        // single best stuck card. That is about right in gi44 (a hand of Krenko / Siege-Gang / Muxus,
+        // only one anywhere near castable) and badly short in gi131 (King + Stingscourger + Piledriver,
+        // where -{1} each is the difference between two spells and THREE in one turn -- the line that
+        // kills on T4 instead of T5). So: scale the cut by the gas it can actually be spent on, which is
+        // the user's "only capable of helping us use gas in hand" made quantitative.
+        //
+        // It does exactly what it was designed to do on gi131 (T5 -> T4) and simply MOVES the error --
+        // gi44 goes T4 -> T5 and gi573 T3 -> T4 straight back. One scalar cannot separate these states,
+        // which is the useful negative result: "how much gas the cut unlocks" is not the axis that
+        // distinguishes them. Held-out overnight, against the same bundle without it: searched -5.0 ->
+        // 0.0, d0 -95.0 -> +37.0. Worse on both tiers. MTG_GOBLIN_CUT_WIDTH=1 re-enables it.
+        if (!p.reduces_spell_subtype.empty())
+        {
+            static const bool cut_width = EnvOn("MTG_GOBLIN_CUT_WIDTH");
+            if (!cut_width) { frac += 0.50; }
+            else
+            {
+                int deployable = 0;   // hand Goblins the cut could actually be spent on soon
+                for (const Card& h : s.players[controller].hand)
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+                    if (!hd) { continue; }
+                    const Card& hc = hd->card;
+                    if (!hc.IsCreature() || !CardHasSubtype(hc, "Goblin")) { continue; }
+                    if (hc.m_mana_cost.ManaValue() <= mana_next + 1) { ++deployable; }
+                }
+                frac += 0.25 + 0.25 * std::min(3, deployable);
+            }
+        }
         // Warchief again: blanket haste means whatever lands next swings the turn it lands.
         if (p.grants_haste && !p.subtypes_affected.empty())    { frac += 0.30; }
         // Skirk and Lackey are MIRROR-IMAGE enablers, and a flat fraction models neither (user,
@@ -3991,7 +4060,14 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         // castable next turn anyway.
         if (!p.combat_damage_puts_subtype_from_hand.empty())
         { frac += rank_v2 ? std::min(0.60, 0.20 * std::max(0, stuck_turns - 1)) : 0.60; }
-        return frac * stuck_hand_value;
+        // A lord does not make the bomb arrive sooner -- it makes the arrival hit harder, across every
+        // body the bomb brings with it (see the MTG_GOBLIN_LORD_AMP note above). Additive in BODY units
+        // rather than a fraction of stuck_hand_value: this is literal extra power on the swing, not a
+        // share of the bomb's worth.
+        double amp = 0.0;
+        if (lord_amp && p.power_bonus > 0 && !p.subtypes_affected.empty())
+        { amp = p.power_bonus * stuck_bodies * BODY; }
+        return frac * stuck_hand_value + amp;
     };
 
     // --- deploy discount: how many TURNS until it can hit the board, over the best path ---------
