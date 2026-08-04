@@ -228,8 +228,15 @@ def run_incremental(args):
                 if p>0 and lp==lp:
                     c["games"]+=p; c["lp_sum"]+=lp; c["batches"]+=1; c["ms"]+=wall
                     if c["first_wall"] is None: c["first_wall"]=wall
-                    if wall/max(p,1) > args.intractable_sec_per_game:    # tractability, checked every batch
-                        c["intractable"]=True
+                    # Tractability keys on the cell's CUMULATIVE rate, not this batch's. Per-batch was
+                    # wrong twice over: (1) a single unlucky 25-game batch holding one pathological
+                    # game condemned the whole cell -- measured 2026-08-04, dragonstorm H5 seed 11011
+                    # was flagged while averaging 5.5 s/game against a 60 s/game threshold, 11x under;
+                    # and (2) the flag was STICKY, never re-examined as the average recovered, so one
+                    # bad sample truncated the cell for the rest of the run. Cumulative is robust to a
+                    # single bad game and self-corrects, while still capping a cell that is genuinely
+                    # too slow to be production-usable at this depth.
+                    c["intractable"] = (c["ms"] / max(c["games"],1)) > args.intractable_sec_per_game
                 done_batches+=1
                 write_state()
                 if done_batches % 10 == 0:
