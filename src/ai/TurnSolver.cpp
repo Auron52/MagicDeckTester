@@ -12699,9 +12699,22 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
     static const int s_label_budget_ms = EnvInt("MTG_VALUE_LABEL_BUDGET_MS", 1000000);
     SearchBudget     budget = s_label_budget_ms > 0 ? SearchBudget::FromVirtualMs(s_label_budget_ms)
                                                     : SearchBudget();
+    // MTG_LABEL_COLD_CACHE=1 (DIAGNOSTIC, default off): give each candidate a FRESH tt/lc instead of
+    // sharing them. Tests whether a label depends on the ORDER candidates are evaluated in -- it must
+    // not. FSLineWin returns the FIRST in-horizon win it finds, and that shortcut is only sound under
+    // FullSearchLine's ladder ("pass L-1 was a COMPLETE refutation"); this path calls FSLineTail at a
+    // single depth instead, so a cached entry may hold *a* win rather than *the earliest*, and sharing
+    // would then propagate it to later candidates. If cold caches move labels EARLIER, that is the
+    // mechanism behind the MTG_VALUE_LABEL_BNB anomaly and the shipped labels are pessimistic.
+    // Pair with MTG_VALUE_LABEL_BUDGET_MS=0 so budget exhaustion is not a confound.
+    static const bool s_cold_cache = EnvOn("MTG_LABEL_COLD_CACHE");
 
     for (const TurnSolver::Plan& p : pre)
     {
+        TranspositionTable  tt_cold;
+        FSLineCache         lc_cold;
+        TranspositionTable& tt_use = s_cold_cache ? tt_cold : tt;
+        FSLineCache&        lc_use = s_cold_cache ? lc_cold : lc;
         GameState s = state;
         std::vector<Action> bp;
         ApplyPlanDirect(s, p, true, &bp);
@@ -12734,7 +12747,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 {
                     ExpireStagedCards(r);
                     wt = SimulateToEnd(std::move(r), rollout_depth, max_turns, &budget,
-                                       max_turns + 1, second_main, &tt);
+                                       max_turns + 1, second_main, &tt_use);
                 }
             }
             else
@@ -12751,7 +12764,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 const int cutoff = earliest_only ? report.earliest : (max_turns + 1);
                 TurnSolver::SearchLine tail = FSLineTail(s, depth - 1, max_turns,
                                                          cutoff, second_main,
-                                                         &tt, &lc, &budget);
+                                                         &tt_use, &lc_use, &budget);
                 wt = tail.win_turn;
             }
         }
