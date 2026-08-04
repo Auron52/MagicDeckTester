@@ -4068,6 +4068,48 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             stuck_bodies = hd->params.etb_self_creates_tokens + hd->params.etb_reveal_count / 2;
         }
     }
+    // LACKEY AS A REPEATING ENGINE (MTG_GOBLIN_LACKEY_REPEAT). Every other enabler channel is a
+    // fraction of the ONE best stuck card, because each of them accelerates that card by a turn or
+    // two. Goblin Lackey is not that shape: it puts a Goblin from hand onto the battlefield EVERY
+    // combat, for the rest of the game, and 33 of this deck's 61 cards are Goblin creatures -- so its
+    // worth is not bounded by what happens to be stuck right now.
+    //
+    // gi124 is the case the hand-bound model cannot reach. At the T3 Matron the hand holds Krenko,
+    // Matron and Chainwhirler, of which only Krenko counts as stuck and only by one turn, so the
+    // credit is 0.20 x 300 = 60 and Lackey ranks 11th. The fetched Lackey then connects on T4 AND T5,
+    // putting Siege-Gang (MV 5) and Chainwhirler (MV 3) onto the battlefield free -- 8 mana of
+    // creatures, and Siege-Gang was not even in hand when the fetch was made.
+    //
+    // So the second and later drops are priced off what the DECK will supply rather than what the
+    // hand holds: the mean value of the Goblin creatures still in the library. Reading library
+    // COMPOSITION (not order) is deck knowledge a player has, and is what TutorCandidates already
+    // does to build its candidate list -- no clairvoyance about the draw.
+    //
+    // But a LATER drop is worth much less than the first, and not merely by a decay (user,
+    // 2026-08-04): "that Chainwhirler can only attack on turn 6 ... unless the 1 damage from it does
+    // the trick, this isn't so amazing. But yes, it is very much not nothing. And really does ensure
+    // we don't slip much beyond T6." Lackey puts the creature in on COMBAT DAMAGE, so it arrives
+    // summoning-sick and its body does nothing until the following turn. What a late drop DOES buy
+    // immediately is its enter-the-battlefield effect -- Chainwhirler's ping, Siege-Gang's three
+    // tokens and reach. So the later drop is credited on the ETB/payoff half of value_of with the
+    // BODY half struck out, which is exactly the user's "not amazing, very much not nothing": it is
+    // a floor against slipping a turn rather than a tempo gain.
+    static const bool lackey_repeat = EnvOn("MTG_GOBLIN_LACKEY_REPEAT");
+    static const int  lackey_pct    = EnvInt("MTG_GOBLIN_LACKEY_REPEAT_PCT", 35);   // swept, see the doc
+    double lib_goblin_mean = 0.0;
+    if (lackey_repeat)
+    {
+        double sum = 0.0; int n = 0;
+        for (const Card& lc : s.players[controller].library)
+        {
+            const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+            if (!ld || !ld->card.IsCreature() || !CardHasSubtype(ld->card, "Goblin")) { continue; }
+            // ETB/payoff value only -- the body cannot attack the turn a Lackey hit drops it in.
+            sum += std::max(0.0, value_of(ld, ld->card) - ld->card.m_power.value_or(0) * BODY);
+            ++n;
+        }
+        if (n > 0) { lib_goblin_mean = sum / n; }
+    }
     // Turns until the stuck card could be HARD-CAST unaided (+1 land/turn). This is what an enabler
     // is competing against: if the answer is 1, we can just cast it next turn and no enabler is
     // worth a fetch slot (user: "when we are low on gas or can cast what we have anyway neither is
@@ -4127,8 +4169,16 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         // Lackey buys the TURNS we would otherwise spend reaching the stuck card's cost, so it
         // scales with how far out of reach that card is -- and is worth nothing when the card is
         // castable next turn anyway.
+        double repeat = 0.0;
         if (!p.combat_damage_puts_subtype_from_hand.empty())
-        { frac += rank_v2 ? std::min(0.60, 0.20 * std::max(0, stuck_turns - 1)) : 0.60; }
+        {
+            frac += rank_v2 ? std::min(0.60, 0.20 * std::max(0, stuck_turns - 1)) : 0.60;
+            // ... and the drops AFTER the first, priced off the deck rather than the hand (see the
+            // MTG_GOBLIN_LACKEY_REPEAT note above). ONE decayed extra drop, not an unbounded stream:
+            // the goldfish opponent never blocks, but the game is usually over within a turn or two
+            // of the engine coming online, so a second drop is the realistic horizon.
+            repeat = (lackey_pct / 100.0) * lib_goblin_mean;
+        }
         // A lord does not make the bomb arrive sooner -- it makes the arrival hit harder, across every
         // body the bomb brings with it (see the MTG_GOBLIN_LORD_AMP note above). Additive in BODY units
         // rather than a fraction of stuck_hand_value: this is literal extra power on the swing, not a
@@ -4136,7 +4186,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         double amp = 0.0;
         if (lord_amp && p.power_bonus > 0 && !p.subtypes_affected.empty())
         { amp = p.power_bonus * stuck_bodies * BODY; }
-        return frac * stuck_hand_value + amp;
+        return frac * stuck_hand_value + amp + repeat;
     };
 
     // --- deploy discount: how many TURNS until it can hit the board, over the best path ---------

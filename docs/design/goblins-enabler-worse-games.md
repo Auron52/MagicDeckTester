@@ -518,3 +518,55 @@ Self-sac measured: `regret@W=4` **3 → 2**, `@W=6` 2 → 1, top-4 among live de
 Aggregate is searched-NEUTRAL (held-out 0.0, regression -1.0, smoke 0.0) with d0 +6.0 / 12,000. It is
 adopted on the engine-inconsistency and the regret metric, NOT on turn-units. The Lackey
 repeating-deploy model is the one that should actually move turns.
+
+### Lackey as a repeating engine: MEASURED, REJECTED, and it settles the width question
+
+Built as `MTG_GOBLIN_LACKEY_REPEAT` (kept default-OFF in `DecisionProviders.cpp` with the numbers in
+place). Every other enabler channel is a fraction of the ONE best stuck card. Lackey is not that
+shape — it puts a Goblin from hand onto the battlefield every combat, and 33 of this deck's 61 cards
+are Goblin creatures, so its worth is not bounded by what is stuck right now. gi124's second drop
+(Siege-Gang) was not even in hand at the fetch. So the later drops are priced off the mean value of
+the Goblin creatures still in the LIBRARY (composition, not order — the same deck knowledge
+`TutorCandidates` already uses).
+
+Refined by the user mid-build, and the refinement is a model change rather than a constant: *"that
+Chainwhirler can only attack on turn 6 ... unless the 1 damage from it does the trick, this isn't so
+amazing. But yes, it is very much not nothing. And really does ensure we don't slip much beyond T6."*
+Lackey puts the creature in on COMBAT DAMAGE, so it arrives summoning-sick and its body does nothing
+until the following turn. Only its ETB half pays immediately — Chainwhirler's ping, Siege-Gang's
+tokens. So the later drop is credited on `value_of` **minus the body**, a floor against slipping a
+turn rather than a tempo gain.
+
+**Result: far too weak to matter.** Weights of 25 / 35 / 60 % give *identical* held-out numbers
+(searched −2.0, d0 0.0) and gi124's Lackey stays at rank 11. The deck's mean ETB-only Goblin value is
+only ~100–150, so even at 60 % the term adds ~80 to a Lackey scoring ~160 — nowhere near the ~3×
+needed to climb into a four-slot window.
+
+**Do not simply scale it up.** Excluding Lackey from the candidate list *entirely* costs only **+12.0
+turn-units over 16,000 games** (measured in round 2) — that is the total value of Lackey-as-a-fetch
+across the whole suite. Over-crediting it to recover one game risks more than the entire upside
+available. gi124 is left standing deliberately.
+
+### THE RESOLUTION: W=6 is not a crutch for a bad ranking
+
+With every ranking fix above in place, reverting to W=4 was re-measured:
+
+```
+W=4 vs shipped W=6      smoke searched 0.0    regression searched +3.0    overnight searched +14.0
+                        d0 unchanged at every tier
+```
+
+So the width is still worth ~17 turn-units, *more* than the −6.0 it measured before the ranking was
+fixed. Set that against the ranking-side metric, which says W=4 loses only **2 turns per 100 tutor
+decisions** (1 more than W=6). The two disagree because they measure different things:
+
+* `regret@W` measures **fetch quality** — is the best card inside the window.
+* The aggregate also includes **search branching** — a wider axis gives the search more plans to
+  arbitrate, which helps even when no single forced candidate would. gi14 is the proof: T6 at every
+  forced rank 1..16, yet T5 at W=12.
+
+**Conclusion: "move the ranking close enough that W=4 captures everything" is not achievable by
+ranking work alone**, because a material part of the width's value was never about ranking. The
+ranking is now right at #1 in 12 of the 16 decisions that matter and inside the top 4 in 14 of 16;
+the residual belongs to plan diversity, not to candidate ordering. W=6 stays, and this line of
+investigation is closed.
