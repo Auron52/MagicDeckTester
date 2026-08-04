@@ -174,6 +174,14 @@ struct Action
     bool is_noncreature        = true;
     int  card_mv               = 0;
     int  vial_attack_power     = 0;    // power this turn if a hasted Vial drop (wins_this_turn)
+    int  haste_attack_power    = 0;    // power this turn if this is a HARD-CAST haste creature. Same
+                                       // role as vial_attack_power for the other way a creature can
+                                       // attack the turn it arrives; without it the this-turn attack
+                                       // projection silently misses a cast Goblin Guide / Monastery
+                                       // Swiftspear. Stamped once by CollectActions (both enumerators
+                                       // share it), 0 for every non-creature / summoning-sick cast.
+    bool haste_prowess         = false;// ... and it has prowess, so the plan's noncreature casts pump
+                                       // it too (canonical cast order puts prowess creatures first).
     bool is_draw               = false;// DrawSpell / DrawX (Plan-B draw-early variants)
     bool has_spectacle         = false;// has a spectacle alternate cost (Plan-B)
     bool is_draw_until_nonland = false;// Treasure Hunt (Solve's LE/TH combo valuation)

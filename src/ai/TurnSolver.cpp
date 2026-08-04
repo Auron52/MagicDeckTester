@@ -2718,6 +2718,29 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         a.is_draw_until_nonland = (def.tmpl == CardTemplate::DrawUntilNonland);
         a.discard_land_damage   = def.params.discard_land_damage;
         a.max_casts_after       = def.params.max_casts_after;   // Irencrag "one more spell" restriction
+        // HARD-CAST HASTE creature: it attacks the turn it arrives, so it belongs in this turn's
+        // attack projection exactly like a hasted Vial drop (vial_attack_power). Stamped here, once,
+        // because the projection is rebuilt per PLAN and both enumerators share CollectActions.
+        // Gated on power > 0, which is also precisely when every provider's ShouldAttackWith returns
+        // true (Generic always; the AntiLifegain/Hinata overrides hold back only 0-power no-trigger
+        // dorks) -- so the projection cannot claim an attack the real DeclareAttackers won't make.
+        if (def.card.IsCreature()
+            && (def.card.HasKeyword(Keyword::Haste)
+                || HasHasteFromLords(def.card, state.battlefield, state.active_player_index)))
+        {
+            auto [lord_pb, lord_tb] = ComputeLordBonus(def.card, state.battlefield,
+                                                       state.active_player_index);
+            (void)lord_tb;
+            const bool ds = def.card.HasKeyword(Keyword::DoubleStrike)
+                         || HasDoubleStrikeFromLords(def.card, state.battlefield,
+                                                     state.active_player_index);
+            const int power = (def.card.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
+            if (power > 0)
+            {
+                a.haste_attack_power = power;
+                a.haste_prowess      = def.card.HasKeyword(Keyword::Prowess);
+            }
+        }
         if (IsManaRitual(def)) { a.ritual_float = RitualFloatAmount(state, def, a.chosen_x); }  // Irencrag burst
         // Same-turn mana-rock ramp: a non-creature mana rock (Sol Ring) taps the turn it is cast.
         // Stamp the mana it produces (by real colour) so the enumerator can fund the rest of the
@@ -4390,6 +4413,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         int total_eval         = 0;
         int self_damage        = 0;
         int vial_haste_atk     = 0;
+        int haste_cast_atk     = 0;   // hard-cast haste creatures attacking this turn
+        int haste_cast_prowess = 0;   // ... of which have prowess (pumped by this plan's casts)
         int discard_lands_used = 0;  // lands consumed by additional costs (retrace, LE)
 
         for (int j : sel)
@@ -4421,6 +4446,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             direct_dmg        += c.direct_damage;
             total_eval        += c.eval;
             vial_haste_atk    += c.vial_attack_power;
+            haste_cast_atk    += c.haste_attack_power;
+            if (c.haste_prowess) { ++haste_cast_prowess; }
 
             for (const TriggerSource& src : trigger_sources)
             {
@@ -4560,7 +4587,12 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             }
         }
 
-        int projected_atk = pending_atk + vial_haste_atk + noncreature_count * prowess_attackers;
+        // This turn's attack damage. A hard-cast haste creature attacks now (haste_cast_atk) and,
+        // if it has prowess, is pumped by this plan's noncreature casts too -- the canonical cast
+        // order resolves prowess creatures before noncreature spells. Both terms were missing, so
+        // a plan whose lethal turn RELIES on a cast Goblin Guide / Swiftspear did not read as a win.
+        int projected_atk = pending_atk + vial_haste_atk + haste_cast_atk
+                          + noncreature_count * (prowess_attackers + haste_cast_prowess);
         // Deck-specific extra reach toward lethal (Land's Edge ammo + clairvoyant Treasure Hunt),
         // provider-owned. Built only when the deck has such a model (byte-identical otherwise).
         int extra_lethal = 0;
@@ -8398,6 +8430,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         int total_eval         = 0;
         int self_damage        = 0;
         int vial_haste_atk     = 0;
+        int haste_cast_atk     = 0;   // hard-cast haste creatures attacking this turn
+        int haste_cast_prowess = 0;   // ... of which have prowess (pumped by this plan's casts)
         int discard_lands_used = 0;  // lands consumed by additional costs (retrace, LE)
 
         for (int j : sel)
@@ -8426,6 +8460,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             direct_dmg     += c.direct_damage;
             total_eval     += c.eval;
             vial_haste_atk += c.vial_attack_power;
+            haste_cast_atk += c.haste_attack_power;
+            if (c.haste_prowess) { ++haste_cast_prowess; }
             for (const TriggerSource& src : trigger_sources)
             {
                 if (c.card_mv <= src.max_mv) { self_damage += src.damage; }
@@ -8597,7 +8633,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
         }
 
-        int projected_atk = pending_atk + vial_haste_atk + noncreature_count * prowess_attackers;
+        // This turn's attack damage. A hard-cast haste creature attacks now (haste_cast_atk) and,
+        // if it has prowess, is pumped by this plan's noncreature casts too -- the canonical cast
+        // order resolves prowess creatures before noncreature spells. Both terms were missing, so
+        // a plan whose lethal turn RELIES on a cast Goblin Guide / Swiftspear did not read as a win.
+        int projected_atk = pending_atk + vial_haste_atk + haste_cast_atk
+                          + noncreature_count * (prowess_attackers + haste_cast_prowess);
         bool wins = (projected_atk + direct_dmg) >= state.Opponent().life;
         TurnSolver::Plan plan;
         plan.value          = total_eval;
