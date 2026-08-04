@@ -3980,8 +3980,47 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             if (p.power_bonus > 0)              { v += p.power_bonus * buff_targets * BODY; } // King/Chieftain/Rundvelt +1/+1: a buffed Goblin's +1 power is worth a body power point AND recurs+scales
             if (p.grants_haste)                 { v += goblins_sick * 90.0; }        // Warchief/Chieftain: sick attack NOW
             if (!p.reduces_spell_subtype.empty()) { v += 70.0; }                     // Warchief: cost cut -> deploy more
+            // Piledriver: +2/+0 per other ATTACKING Goblin, priced over G = the Goblins on the
+            // battlefield right now.
+            //
+            // MEASURED AND REJECTED (2026-08-04) -- the crowd count is NOT the axis. The motivating
+            // argument was good and is worth keeping: G is read at the instant of the FETCH, which is
+            // when the board is smallest, while a fetched Piledriver enters summoning-sick and cannot
+            // attack until the following turn -- by which point the entering tutor source is a Goblin
+            // on the battlefield, another deploy has landed, and every currently-sick body is ready.
+            // Piledriver is 2 of the 10 past-window commits (MTG_TUTOR_CHOSEN_RANK at W=12), and in
+            // both -- s3003 gi290 and s7007 gi371 -- G is 1 against a buff_targets of 4, so it scores
+            // 190 as a near-vanilla body at rank 9-10 of 14-16. Widening the count to buff_targets
+            // does lift it to rank 3-5, exactly as intended.
+            //
+            // It does not pay. Held-out overnight, 8,000 searched games, against the shipped count:
+            //
+            //     crowd                 per    held-out    games
+            //     G (shipped)            45       0.0      --
+            //     buff_targets           45      -1.0      5 better / 4 WORSE
+            //     G + entering + 1       45      +4.0      0 better / 4 WORSE
+            //     buff_targets           25      +2.0      0 better / 2 WORSE
+            //
+            // The buff_targets arm is noise, not a win: split by seed it is +1 on s4004+s5005 and -2
+            // on s6006+s7007 -- OPPOSITE SIGNS on the two halves -- and stacked on the Skirk fix below
+            // it adds exactly nothing (both together measure the same -3.0 as Skirk alone). The other
+            // two arms hold the magnitude near shipped, to separate "wrong count" from "wrong size",
+            // and both are strictly worse with ZERO games improved. So the term's 45.0 is calibrated
+            // against the undercounted crowd and the product is what the games actually like; no
+            // redistribution of it helps. Same shape of negative result as MTG_GOBLIN_CUT_WIDTH.
+            // d0 was exactly 0.0 in every arm -- across 12,000 greedy games Piledriver never once
+            // changed the top pick, so this only ever moved it around inside the tail.
+            // MTG_GOBLIN_PILEDRIVER_CROWD: 0 = board only (shipped), 1 = buff_targets,
+            // 2 = board + entering source + one more deploy. MTG_GOBLIN_PILEDRIVER_PER scales it.
             if (p.attack_pump_power_per_other_matching > 0)
-            { v += p.attack_pump_power_per_other_matching * G * 45.0; }              // Piledriver: +2 per other Goblin
+            {
+                static const int pile_crowd = EnvInt("MTG_GOBLIN_PILEDRIVER_CROWD", 0);
+                static const int pile_per   = EnvInt("MTG_GOBLIN_PILEDRIVER_PER", 45);
+                const int crowd = pile_crowd == 1 ? buff_targets
+                                : pile_crowd == 2 ? G + entering_fodder + 1
+                                                  : G;
+                v += p.attack_pump_power_per_other_matching * crowd * static_cast<double>(pile_per);
+            }
         }
         // Payoffs.
         if (p.etb_reveal_count > 0)            { v += p.etb_reveal_count * 75.0; }   // Muxus: cheat ~half of N free
@@ -4207,8 +4246,70 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         //
         // Skirk converts BODIES into mana, so its worth scales with the bodies available to sac --
         // the old flat 0.40 behind a G>=2 gate paid full price for a single sacrificeable Goblin.
+        //
+        // But "G - 1" is the WRONG BODY COUNT, in exactly the three ways skirk_ramp was already
+        // corrected (236bb13, c13cbac) -- and this line never got any of them, because skirk_ramp is
+        // gated on skirk_on (a Prospector ALREADY on the battlefield) and so is identically zero in
+        // precisely the states where we are deciding whether to FETCH one. The fodder a fetched
+        // Prospector will actually eat is:
+        //   + the board's EXPENDABLE Goblins (goblin_fodder, not G -- feeding a lord to Skirk
+        //     de-buffs everything else, so lords are fodder only in extremis)
+        //   + the tutor SOURCE, a Goblin creature entering right now, which is the whole reason this
+        //     function is running (the board scan ran while it was still in hand)
+        //   + the PROSPECTOR ITSELF: "Sacrifice a Goblin: Add {R}" is repeatable, needs no tap, and
+        //     Skirk is a Goblin, so the last activation eats it. N bodies convert to N mana, not N-1
+        //     -- which is how CollectActions' own multi-sac burst already counts victims.
+        // The old "-1" was thus doubly wrong here: it subtracted a self-sac that is legal AND omitted
+        // the two bodies that are arriving.
+        //
+        // The measured consequence is stark. Reading the rank the SEARCH commits to (W=12,
+        // MTG_TUTOR_CHOSEN_RANK), Skirk is 3 of the 10 past-window commits -- and in all three
+        // (s3003 gi194, s4004 gi727, s5005 gi920) G is 0 or 1, so 0.13 * max(0, G-1) is EXACTLY
+        // ZERO and Skirk scores 100: a vanilla 1/1, rank 12 of 14-16. That it is the gate and not the
+        // hand is provable from the same dumps -- Goblin Lackey, the other enabler, collects +340
+        // from stuck_hand_value in those very states. With the real count (typically 1 + 1 + 1 = 3)
+        // the fraction is 0.39, just under the cap, so Skirk scores 321 instead of 100 and moves from
+        // rank 12 to rank 5-8, inside or on the edge of the shipped W=6.
+        //
+        // ADOPTED on a replicating measurement, unlike the Piledriver crowd correction above:
+        // regression (train) searched -2.0, overnight (held-out) searched -3.0 over 8,000 games,
+        // 4 games better / 1 worse, d0 exactly 0.0 over 12,000 games. Same sign on both tiers.
+        // MTG_GOBLIN_SKIRK_FETCH_FODDER=0 restores the board-only count for the A/B.
         if (p.sac_outlet_add_mana_amount > 0)
-        { frac += rank_v2 ? std::min(0.40, 0.13 * std::max(0, G - 1)) : (G >= 2 ? 0.40 : 0.0); }
+        {
+            static const bool fetch_fodder = EnvOn("MTG_GOBLIN_SKIRK_FETCH_FODDER", true);
+            // Per-body rate and cap, both in hundredths, TRAINED on s4004+s5005 and read off
+            // s6006+s7007 afterwards (test/goblins_skirk_rate_train.sh -- same split protocol and
+            // same reason as the face-damage weight).
+            //
+            // The CAP is not what binds at the miss states: gi194 credits 0.26 = 0.13 x 2, because
+            // its one board Goblin is a LORD (so goblin_fodder is 0) and only the entering Matron
+            // and the Prospector itself are fodder. Raising the old 0.40 cap would change nothing
+            // there -- the per-body RATE is the lever. The cap is raised to 0.60 alongside purely so
+            // a higher rate cannot silently clip on high-fodder boards; it is inert at the old rate
+            // (13/60 reproduces the 13/40 measurement exactly, train -4.0 / validate +1.0).
+            //
+            //     rate   TRAIN(4000g)   VALIDATE(4000g)   d0(12000g)
+            //      13       -4.0            +1.0             0.0     (the fodder fix alone)
+            //      18       -6.0            +1.0             0.0     <- ADOPTED
+            //      22       -6.0            +1.0             0.0
+            //      26       -6.0            +1.0             0.0
+            //      32       -6.0            +1.0             0.0
+            //
+            // Flat from 18 up: the ordering SATURATES, because past 0.18/body Skirk passes nothing
+            // further that changes an outcome. At gi194, 0.18 x 2 = 0.36 puts it at 406, just over
+            // Goblin Chainwhirler's 400 -- that single crossing is the whole gain. So take the
+            // smallest rate that captures it, the same rule the face-damage weight was picked by.
+            // The +1.0 on validate is one game, s7007 gi588 (T4->T5), and it is CHURN: it recovers
+            // at 16x budget and at unlimited. d0 is 0.0 at every rate -- the greedy top pick never
+            // changes, so this is purely window membership, which is what it was designed to be.
+            static const double rate = EnvInt("MTG_GOBLIN_SKIRK_RATE", 18) / 100.0;
+            static const double cap  = EnvInt("MTG_GOBLIN_SKIRK_CAP",  60) / 100.0;
+            const int fodder = fetch_fodder
+                             ? (use_nolord ? goblin_fodder : G) + entering_fodder + 1
+                             : std::max(0, G - 1);
+            frac += rank_v2 ? std::min(cap, rate * fodder) : (G >= 2 ? 0.40 : 0.0);
+        }
         // Lackey buys the TURNS we would otherwise spend reaching the stuck card's cost, so it
         // scales with how far out of reach that card is -- and is worth nothing when the card is
         // castable next turn anyway.

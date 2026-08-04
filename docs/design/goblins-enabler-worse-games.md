@@ -639,3 +639,118 @@ or discard it from hand for the same damage), so adding them double-counts one c
 
 Held-out: **zero searched slowdowns or play changes**, every searched case better or equal. One
 regression-tier game slower (`s3003 gi156` T4→T5) — CHURN, recovers at 16x budget and at unlimited.
+
+## ROUND 6 (2026-08-04): the last two named misses — Skirk ADOPTED, Piledriver REJECTED
+
+Round 5 left two cards named as past-window commits. Both looked like the *same* defect — a card
+priced on its body because a term was missing or miscounted — and both were tested the same way.
+They came apart completely, and the pair is a good record of why the measurement is not optional.
+
+### Skirk Prospector: the fodder count was never corrected here (ADOPTED)
+
+Skirk's entire ramp credit lives in `enabler_of` as `min(0.40, 0.13 * max(0, G - 1))`. In all three
+of its past-window commits — `s3003 gi194`, `s4004 gi727`, `s5005 gi920` — **G is 0 or 1, so that
+fraction is exactly ZERO** and Skirk scores 100: a vanilla 1/1, rank 12 of 14-16. That the *gate*
+(`stuck_hand_value > 0`) is not the problem is provable from the same dumps: Goblin Lackey, the other
+enabler, collects **+340** from `stuck_hand_value` in those very states.
+
+`G - 1` is wrong in exactly the three ways `skirk_ramp` was already corrected in `236bb13` +
+`c13cbac` — and this line got **none** of them, because `skirk_ramp` is gated on `skirk_on` (a
+Prospector *already* on the battlefield) and is therefore identically zero in precisely the states
+where we are deciding whether to fetch one. The fodder a fetched Prospector will actually eat is the
+board's expendable Goblins (`goblin_fodder`, not `G` — lords de-buff the team) **+ the entering tutor
+source** (a Goblin creature, the reason this function is running) **+ the Prospector itself** (the
+ability is repeatable, needs no tap, and Skirk is a Goblin, so N bodies make N mana, not N-1 — which
+is how `CollectActions`' multi-sac burst already counts victims). The old `-1` was doubly wrong: it
+subtracted a legal self-sac *and* omitted the two arriving bodies.
+
+Typical corrected count is 1 + 1 + 1 = 3 → fraction 0.39, just under the cap. Skirk scores **321
+instead of 100** and moves from rank 12 to rank 5-8.
+
+```
+                     train (regression)   HELD-OUT (overnight, 8000g)   d0 (12000g)
+Skirk fetch-fodder         -2.0                    -3.0                     0.0
+                                            4 games better / 1 worse
+```
+
+Same sign on both tiers — it replicates, which is the bar.
+
+### Goblin Piledriver: the crowd count is NOT the axis (REJECTED)
+
+The argument was the better-looking of the two, and it was wrong. `G` is read at the instant of the
+FETCH, when the board is smallest, but a fetched Piledriver enters **summoning-sick** and cannot
+attack until the following turn — by which point the entering tutor source has landed, another deploy
+has landed, and every sick body is ready. In both of its past-window commits (`s3003 gi290`,
+`s7007 gi371`) G is 1 against a `buff_targets` of 4, so it scores 190 and sits at rank 9-10.
+
+Widening the count does exactly what it was designed to do — Piledriver lifts to rank 3-5 — and it
+does not pay:
+
+```
+crowd                 per    HELD-OUT    games
+G (shipped)            45      0.0       --
+buff_targets           45     -1.0       5 better / 4 WORSE
+G + entering + 1       45     +4.0       0 better / 4 WORSE
+buff_targets           25     +2.0       0 better / 2 WORSE
+```
+
+Three things kill it:
+
+1. **The one non-positive arm is noise.** Split by seed, `buff_targets`/45 is **+1 on s4004+s5005 and
+   −2 on s6006+s7007** — opposite signs on the two halves. Its train result (−4.0 on the regression
+   tier) did not replicate; this is the ~1,325-searched-game resolution limit biting again, exactly as
+   it did once before in this document.
+2. **It is not additive with the Skirk fix.** Skirk alone measures −3.0 held-out; Skirk + Piledriver
+   measures **−3.0**. It contributes nothing on top, while adding 3 more games worse.
+3. **Magnitude, not count, is what the games like.** The two arms that hold the product near shipped —
+   to separate "wrong count" from "wrong size" — are *strictly worse with zero games improved*. So the
+   `45.0` is calibrated against the undercounted crowd, and no redistribution of that product helps.
+
+`d0` was **exactly 0.0 in every Piledriver arm**: across 12,000 greedy games it never once changed the
+top pick, so all of this only ever moved the card around inside the tail.
+
+Same shape of negative result as `MTG_GOBLIN_CUT_WIDTH` — a well-motivated recount that turns out not
+to be the axis the states differ on. Lever kept (`MTG_GOBLIN_PILEDRIVER_CROWD`, `_PER`), default 0.
+
+### The transferable lesson
+
+Two cards, identical symptom (*scored as a bare body, committed to past the window*), identical fix
+shape (*count the crowd/fodder that exists when the card ACTS*), opposite verdicts. The symptom does
+not predict the outcome; only the held-out measurement does. Note also which evidence was decisive in
+each case — for Skirk, a term that was **provably, arithmetically zero** where a sibling enabler
+collected +340; for Piledriver, nothing was zero, the term was merely *small*. A missing term is worth
+fixing; a small term is a tuning question, and tuning questions on this deck mostly come back noise.
+
+### Follow-on: the ramp RATE, trained (`test/goblins_skirk_rate_train.sh`)
+
+The fodder fix moves Skirk from 100 to 321, but the chosen-rank instrument still shows it committed at
+rank 7-9 — better, not inside the window. The reason is *not* the 0.40 cap. At `s3003 gi194` the credit
+is 0.26 = `0.13 x 2`: the single board Goblin there is a **lord**, so `goblin_fodder` is 0 and the only
+fodder is the entering Matron plus the Prospector itself. Raising the cap would change nothing; the
+**per-body rate** is the lever. (The cap is raised to 0.60 alongside purely so a higher rate cannot
+silently clip on high-fodder boards — it is inert at the old rate, 13/60 reproducing 13/40 exactly.)
+
+```
+rate   TRAIN(4000g)   VALIDATE(4000g)   d0(12000g)
+ 13       -4.0            +1.0             0.0      the fodder fix alone
+ 18       -6.0            +1.0             0.0      <- ADOPTED
+ 22       -6.0            +1.0             0.0
+ 26       -6.0            +1.0             0.0
+ 32       -6.0            +1.0             0.0
+```
+
+Flat from 18 up — the ordering **saturates**. At gi194, `0.18 x 2 = 0.36` scores Skirk 406, just over
+Goblin Chainwhirler's 400, and that single crossing is the entire gain; beyond it Skirk passes only
+cards whose position does not change an outcome. So take the smallest rate that captures the effect,
+the same rule the face-damage weight was chosen by. `d0` is 0.0 at every rate: the greedy top pick
+never changes, so this is purely window membership. The `+1.0` on validate is one game, `s7007 gi588`
+(T4→T5), and it is **churn** — recovers at 16x budget and at unlimited.
+
+### A caution about re-reading the miss set after a ranking change
+
+After adopting the fodder fix the instrument reported *more* past-window commits (11, up from 10),
+which looks like a regression and is not one. `MTG_TUTOR_CHOSEN_RANK` forces `MTG_TUTOR_WIDTH=12`, so
+the arm being measured plays a different game from the shipped W=6 engine; change the ranking and both
+the ordering **and the W=12 trajectory** move, so the before/after decisions are not the same decisions
+re-scored. The instrument is sound for "in the games width decides, what rank does the search commit
+to" — it is not a before/after quality metric across an engine change. Turn-units are the ground truth.
