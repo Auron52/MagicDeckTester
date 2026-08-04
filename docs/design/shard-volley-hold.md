@@ -75,10 +75,32 @@ worktree**, so the projection fix and the heuristic are attributed separately. H
 | fix + hold, no prowess exception | −0.00128, t = −11.45, 20/20 better | — |
 | prowess exception's residual | −0.00019, t = −3.05, 12/2/6 | — |
 
-Cost: **+0.14% instructions** (callgrind, deterministic, 60 games single-threaded) for the heuristic.
-Wall clock was indistinguishable — the box's run-to-run spread (±15% on a 1000-game single-threaded
-run) swamps a 0.14% effect, which is precisely the case where Ir is the right instrument: same
-binary, same model, same kind of work, just less of it.
+### Cost: the heuristic does ~15% LESS search work
+
+**Corrected 2026-08-04.** This was first reported as "+0.14% instructions", i.e. a slight cost. That
+number was wrong, and the way it was wrong is worth keeping.
+
+It came from callgrind Ir over **60 games on one seed**. burn's per-game search cost is heavily
+tailed, so a 60-game total is dominated by a couple of outlier games and is not a sample of anything:
+the *same* comparison gives **+0.12% at seed 200000 and −16.6% at seed 800000**, and −12% at seed
+200000 with 40 games instead of 60. Ir was the right *kind* of instrument (deterministic, load-immune,
+same binary) — the sample was far too small, which no amount of determinism fixes.
+
+The right instrument here is the built-in deterministic counter build (`-DMTG_PROFILE=ON`), which
+costs nothing per game and so can run a real sample. Over **20,000 games** (seed 200000, shipped
+config):
+
+| counter | hold OFF | hold ON | delta |
+|---|---|---|---|
+| Search nodes (the budget unit) | 82,151,072 | 69,828,291 | **−15.0%** |
+| ApplyPlanDirect calls | 84,910,430 | 72,419,445 | −14.7% |
+| EnumeratePlans calls | 32,939,831 | 29,789,389 | −9.6% |
+| GameState deep copies | 9,966,701 | 9,220,850 | −7.5% |
+
+So the heuristic is a ~15% reduction in search work *as well as* a quality gain — pruning a card out
+of the hand shrinks the plan powerset at every later decision. **Lesson: for a heavy-tailed deck,
+prefer `MTG_PROFILE` counters over callgrind — determinism is not the same as adequacy, and a
+60-game Ir total can flip sign on the next seed.**
 
 ### What the prowess exception is worth, before and after the bug fix
 
@@ -90,11 +112,28 @@ This is the part worth remembering, because the same numbers mean opposite thing
 | with the projection fixed | **−0.00128**, 20/20 seeds better — *the rule wins* |
 
 So the bug was most of the story, exactly as suspected: fixing it swung the no-prowess variant by
-0.0042 turns. What remains for exception (c) is small (−0.00019, t = −3.05) but real, and it is not
-a fudge — it marks the rule's **domain of validity**. The rule's premise is "the spell's damage is
-worth the same whenever you cast it." With a prowess attacker that premise is simply false: the
-spell is worth 3 + N now and 3 later. Where the premise fails the prune has no licence, so the
-decision goes back to the search — which is the search-primary contract, not an exception to it.
+0.0042 turns. What remains for exception (c) is small but real, and it is not a fudge — it marks the
+rule's **domain of validity**. The rule's premise is "the spell's damage is worth the same whenever
+you cast it." With a prowess attacker that premise is simply false: the spell is worth 3 + N now and
+3 later. Where the premise fails the prune has no licence, so the decision goes back to the search —
+which is the search-primary contract, not an exception to it.
+
+**Is (c) just a budget artifact?** A fair challenge: holding leaves an extra card in hand, which
+enlarges the plan powerset at every later decision, so "allowing the cast is better" could be cheaper
+enumeration rather than real damage. It is not, on two independent counts:
+
+1. Holding *reduces* search work by ~15% (the counter table above), so it cannot be costing budget.
+2. Re-running the (c) A/B at **unbounded budget** (`budget_ms: 0`, depth still 6) reproduces the
+   effect exactly — **−0.00022, t = −3.69, 13/1/6** against −0.00019, t = −3.05, 12/2/6 budgeted.
+   With budget removed entirely the benefit is if anything slightly larger.
+
+The mechanism is concrete. Turn 3, Monastery Swiftspear (1/2, prowess, haste) attacking. Cast Shard
+Volley pre-combat: 3 to the face plus a pumped 2/3 connecting = **5 damage this turn**. Hold it:
+Swiftspear connects for 1, and the 3 arrives on some later turn = **4 damage total**. The prowess
+trigger is use-it-or-lose-it, so casting early is worth one extra damage permanently — the same
+*kind* of same-turn payoff as Spectacle's discount, which is why it passes the "does it buy
+something this turn?" test. What it trades away is a land, which may or may not convert into more
+than that later; the measurement says it narrowly does not.
 
 ## Measured dead end
 
