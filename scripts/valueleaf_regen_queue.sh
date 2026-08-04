@@ -54,6 +54,12 @@ mkdir -p "$DONE" "$ROWDIR" logs/eval
 WORKERS=${WORKERS:-20}            # matrix: ~1 GB/process on a 47 GB box
 MATRIX_TARGET=${MATRIX_TARGET:-400}
 MATRIX_REF=${MATRIX_REF:-50}      # games cap for cells ruled intractable
+VDEPTHS=${VDEPTHS:-"1 2 3 4 5 6 7 8"}
+# Tractability guard, seconds/game. This is a SAFETY VALVE against a genuinely exploding cell, not a
+# budget: at 3.0 it condemned cells running at 4.33 s/game whose full fill cost 4 CORE-HOURS in total
+# -- 0.3% of the run that skipped them -- and left H1-5 unmeasured on two decks, which is what the
+# table is derived from. Set it high enough that only a real explosion trips it.
+INTRACTABLE_SPG=${INTRACTABLE_SPG:-60}
 AB_GAMES=${AB_GAMES:-1000}
 AB_SEEDS=${AB_SEEDS:-"600000 601000 602000 603000 604000 605000 606000 607000"}
 PLAY_GAMES=${PLAY_GAMES:-500}
@@ -220,11 +226,11 @@ phase_matrix() {
     done_p C_matrix && return 0
     local keys; keys=$(staged_keys)
     [ -n "$keys" ] || { log "PHASE C ABORT: no staged models"; return 1; }
-    log "PHASE C: matrix over$keys -- ONE pool, $WORKERS workers, target $MATRIX_TARGET/cell"
+    log "PHASE C: matrix over$keys -- ONE pool, $WORKERS workers, target $MATRIX_TARGET/cell, V=[$VDEPTHS], cutoff ${INTRACTABLE_SPG}s/game"
     python3 scripts/attic/valueleaf_depth_matrix.py --incremental --decks $keys \
-        --hdepths 1 2 3 4 5 --vdepths 1 2 3 4 5 --seeds 8008 9009 10010 11011 \
+        --hdepths 1 2 3 4 5 --vdepths $VDEPTHS --seeds 8008 9009 10010 11011 \
         --target "$MATRIX_TARGET" --reference-target "$MATRIX_REF" --batch 25 --workers "$WORKERS" \
-        --value-min-depth 0 --intractable-sec-per-game 3.0 \
+        --value-min-depth 0 --intractable-sec-per-game "$INTRACTABLE_SPG" \
         --out logs/eval/valueleaf_depth_regen.txt >> "$VLQ/matrix.log" 2>&1
     [ -s logs/eval/valueleaf_depth_regen.txt ] || { log "PHASE C ABORT: no matrix output"; return 1; }
     log "PHASE C done"
