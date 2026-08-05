@@ -3838,6 +3838,12 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
 int
 GoblinsProvider::TutorSearchWidth() const
 {
+    // DIAGNOSTIC (MTG_GOBLIN_TUTOR_WIDTH=n, unset/0 = off): override THIS provider's width for the
+    // width A/B. Distinct from the axis-level MTG_TUTOR_WIDTH, which trims only the search fan-out:
+    // the value-reserve curation below reads this method too, so overriding here moves the reserve's
+    // rescue slots WITH the window (a provider-W=6 arm rescues into ranks 4-5, not 7-8).
+    static const int ovr = EnvInt("MTG_GOBLIN_TUTOR_WIDTH", 0);
+    if (ovr > 0) { return ovr; }
     return TutorAxisResolveEnabled() ? 9 : 6;
 }
 
