@@ -4277,8 +4277,6 @@ static bool SacLandHoldEnabled()
 
 // True => drop this plan. Exception (a) is the caller's `!wins` gate, so this only decides (b)/(c).
 // Callers also gate on `sacrifice_count > 0`, so a deck with no sac-land card never reaches the scan.
-// prowess_attackers = attacking prowess creatures already on the battlefield + any this plan casts
-// with haste (the enumerators' corrected projection term).
 // ---- MTG_SV_LETHAL_AUDIT (diagnostic, default off) -------------------------------------------
 // The prune only runs when the projection says `!wins`, so exception (c) can ONLY ever fire on plans
 // already judged non-lethal. That leaves exactly two possibilities, and they call for opposite fixes:
@@ -4293,7 +4291,9 @@ namespace sv_audit
     inline std::atomic<uint64_t> g_pruned_lethal{0};   //   ... and it was ACTUALLY lethal  <-- a bug
     inline std::atomic<uint64_t> g_rescued{0};         // (c) kept it
     inline std::atomic<uint64_t> g_rescued_lethal{0};
-    inline std::atomic<uint64_t> g_dumped{0};  //   ... and it was ACTUALLY lethal  <-- a bug
+    inline std::atomic<uint64_t> g_dumped{0};
+    inline std::atomic<uint64_t> g_pruned_staged{0};   // strict rule dropped a STAGED (expiring) SV
+    inline std::atomic<uint64_t> g_rescued_staged{0};  // (c) kept a STAGED (expiring) SV  //   ... and it was ACTUALLY lethal  <-- a bug
     struct Report
     {
         ~Report()
@@ -4301,10 +4301,12 @@ namespace sv_audit
             if (!g_pruned.load() && !g_rescued.load()) { return; }
             std::fprintf(stderr,
                 "\n=== SV LETHAL AUDIT ===\n"
-                "  strict-pruned      : %llu   of which ACTUALLY LETHAL: %llu\n"
-                "  prowess-rescued (c): %llu   of which ACTUALLY LETHAL: %llu\n",
+                "  strict-pruned      : %llu   ACTUALLY LETHAL: %llu   STAGED(expiring): %llu\n"
+                "  exception-rescued  : %llu   ACTUALLY LETHAL: %llu   STAGED(expiring): %llu\n",
                 (unsigned long long)g_pruned.load(),  (unsigned long long)g_pruned_lethal.load(),
-                (unsigned long long)g_rescued.load(), (unsigned long long)g_rescued_lethal.load());
+                (unsigned long long)g_pruned_staged.load(),
+                (unsigned long long)g_rescued.load(), (unsigned long long)g_rescued_lethal.load(),
+                (unsigned long long)g_rescued_staged.load());
         }
     };
     inline Report g_report;
@@ -4315,22 +4317,35 @@ inline bool SvLethalAuditOn()
     return on;
 }
 
-// rescued_by_prowess (out, optional): set when exception (c) is what kept the plan -- i.e. the strict
-// rule (a)+(b) would have dropped it. Used only by MTG_SV_LETHAL_AUDIT.
+// rescued_by_exception (out, optional): set when exception (c) is what kept the plan -- i.e. the
+// (a)+(b) rule alone would have dropped it. Used only by MTG_SV_LETHAL_AUDIT.
 static bool HoldSacLandBurn(const GameState& state, const std::vector<Action>& cands,
-                            const std::vector<int>& sel, int prowess_attackers,
-                            bool* rescued_by_prowess = nullptr)
+                            const std::vector<int>& sel, bool* rescued_by_exception = nullptr)
 {
     if (!SacLandHoldEnabled())                                       { return false; }
     if (!ResolveProvider(state).HoldsSacLandBurnUntilLethal())       { return false; }
     if (DecisionUnpruned(UnprunedGate::SacLandHold))                 { return false; }
 
+    const Player& ap = state.ActivePlayer();
     bool has_sac = false, has_spectacle = false, other_face_damage = false;
+    bool sac_is_staged = false, sac_expires_now = false;
     for (int j : sel)
     {
         const Action& c = cands[j];
         if (c.kind != Action::Kind::CastFromHand) { continue; }
-        if (c.sacrifice_land && c.direct_damage > 0) { has_sac = true; continue; }
+        if (c.sacrifice_land && c.direct_damage > 0)
+        {
+            has_sac = true;
+            if (c.hand_index >= 0 && c.hand_index < static_cast<int>(ap.hand.size())
+                && ap.hand[c.hand_index].m_is_staged)
+            {
+                // m_staged_expiry = the LAST turn this card may be played, so it is use-it-or-lose-it
+                // only on that turn. Earlier than that, holding still costs nothing.
+                sac_is_staged  = true;
+                sac_expires_now = (ap.hand[c.hand_index].m_staged_expiry <= state.turn_number);
+            }
+            continue;
+        }
         if (c.has_spectacle)      { has_spectacle = true; }
         if (c.direct_damage > 0)  { other_face_damage = true; }
     }
@@ -4338,14 +4353,14 @@ static bool HoldSacLandBurn(const GameState& state, const std::vector<Action>& c
     // (b) Spectacle enabler. Already-active Spectacle needs no enabler, so the exception is dead
     // there -- and another face-damage cast in the plan is the cheaper enabler (it leaves the land).
     if (has_spectacle && !state.opponent_lost_life_this_turn && !other_face_damage) { return false; }
-    // (c) prowess: the cast pumps every attacker that connects this turn, damage a deferred cast
-    // never recovers -- i.e. the rule's premise ("3 damage now is worth 3 damage later") is simply
-    // FALSE here. See docs/design/shard-volley-hold.md.
-    if (prowess_attackers > 0)
-    {
-        if (rescued_by_prowess) { *rescued_by_prowess = true; }
-        return false;
-    }
+    // (c) EXPIRING: the card is not in our hand -- Light Up the Stage exiled it, and it is playable
+    // only until the end of our next turn (CR 406; Card::m_staged_expiry is that last turn). On the
+    // expiry turn "holding" it does not defer the damage, it DESTROYS the card. That is the ONLY real
+    // drawback to holding, and it is a card-mechanics fact, not a strategic judgement. Before the
+    // expiry turn there is still no reason to cast it early, so the exception is deliberately narrow:
+    // fire on the LAST legal turn, not merely because the card is staged.
+    if (sac_expires_now) { if (rescued_by_exception) { *rescued_by_exception = true; } return false; }
+    (void)sac_is_staged;
     return true;
 }
 
@@ -4721,8 +4736,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 
         // Hold a sac-land burn (Shard Volley) unless it wins this turn or enables Spectacle -- see
         // HoldSacLandBurn. The integer test keeps every deck without such a card off the scan.
-        if (sacrifice_count > 0 && !wins
-            && HoldSacLandBurn(state, cands, sel, prowess_attackers + haste_cast_prowess)) { return; }
+        if (sacrifice_count > 0 && !wins && HoldSacLandBurn(state, cands, sel)) { return; }
 
         // Rituals-for-payoff guard (see the flag above), with the STORM heuristic gate the user asked for.
         // Question: may this plan spend MORE ritual mana than the payoff's cost? Default NO -- so we reject
@@ -8764,8 +8778,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (sacrifice_count > 0 && !wins)
         {
             bool       rescued = false;
-            const bool drop    = HoldSacLandBurn(state, cands, sel,
-                                                 prowess_attackers + haste_cast_prowess, &rescued);
+            const bool drop    = HoldSacLandBurn(state, cands, sel, &rescued);
             if (SvLethalAuditOn() && (drop || rescued))
             {
                 // Was this plan ACTUALLY lethal, despite the projection saying otherwise? Apply it for
@@ -8782,8 +8795,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 ApplyPlanDirect(copy, probe, is_pre_combat);
                 if (is_pre_combat) { SimulateCombat(copy); }
                 const bool really_lethal = (copy.Opponent().life <= 0);
-                if (drop) { ++sv_audit::g_pruned;  if (really_lethal) { ++sv_audit::g_pruned_lethal; } }
-                else      { ++sv_audit::g_rescued; if (really_lethal) { ++sv_audit::g_rescued_lethal; } }
+                // Is the sac-land burn a STAGED (Light Up the Stage) card? Those expire at the end of
+                // our next turn, so "hold it" can mean "lose it" -- the one real drawback to holding.
+                bool staged = false;
+                for (int j : sel)
+                {
+                    const Action& c2 = cands[j];
+                    if (!c2.sacrifice_land || c2.kind != Action::Kind::CastFromHand) { continue; }
+                    if (c2.hand_index >= 0
+                        && c2.hand_index < static_cast<int>(state.ActivePlayer().hand.size())
+                        && state.ActivePlayer().hand[c2.hand_index].m_is_staged) { staged = true; }
+                }
+                if (drop) { ++sv_audit::g_pruned;  if (really_lethal) { ++sv_audit::g_pruned_lethal; }
+                            if (staged) { ++sv_audit::g_pruned_staged; } }
+                else      { ++sv_audit::g_rescued; if (really_lethal) { ++sv_audit::g_rescued_lethal; }
+                            if (staged) { ++sv_audit::g_rescued_staged; } }
                 if (really_lethal && sv_audit::g_dumped.fetch_add(1) < 25)
                 {
                     std::string names;

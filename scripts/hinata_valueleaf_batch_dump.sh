@@ -35,9 +35,18 @@ PROF=$(h_profile Hinata2) || exit 1
 # ---- collect: fold every row source into one deduplicated training file --------------------
 if [ "${1:-}" = "collect" ]; then
     OUT=logs/eval/hinata_rows_B.all.rows
-    # Sources: the pooled dump, the rescued rows from the chunk the tail stranded, every complete
-    # legacy chunk, and the pre-chunking legacy file.
+    # Sources: the pooled dump, the VALUE-LEAF QUEUE's rows for this deck, the rescued rows from the
+    # chunk the tail stranded, every complete legacy chunk, and the pre-chunking legacy file.
+    #
+    # logs/vlq/rows/Hinata2.rows is easy to miss and was: the queue driver
+    # (scripts/valueleaf_row_dump.sh) writes logs/vlq/rows/<Stem>.rows, a DIFFERENT path convention
+    # from this script's logs/eval/*. Omitting it silently trained on the newer rows alone -- 3,954
+    # instead of 8,225, with no warning, because a missing source just contributes nothing. Verified
+    # 2026-08-05: the two sets have disjoint seed ranges (30030+ here vs 100000+ there, zero
+    # (seed,turn) collisions) and the queue's rows REPRODUCE byte-identically under the current
+    # binary (77/77 rows, labels + all features), so pooling them is sound.
     SRC=$( ls logs/eval/hinata_value_pooled.rows \
+              logs/vlq/rows/Hinata2.rows \
               logs/eval/rows_B_rescue_chunk215_564rows.rows \
               logs/eval/rows_B/chunk_*.rows \
               logs/eval/hinata_value_v2b.rows 2>/dev/null )

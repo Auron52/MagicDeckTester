@@ -17,11 +17,15 @@ it buys something **this** turn. Three exceptions, all board-readable (nothing c
 |---|---|---|
 | (a) | the plan **wins this turn** | there is no later |
 | (b) | it turns **Spectacle** on for a spell in the same plan | Light Up the Stage `{2}{R}` → `{R}` is a same-turn discount |
-| (c) | it pumps a **prowess** attacker that connects this turn | the +1/+1 is until end of turn |
+| (c) | the card **expires this turn** | Light Up exiled it; past `m_staged_expiry` it is gone, not deferred |
 
 **Flood is not a fourth exception.** Surplus lands make an early cast *harmless*, never *better* —
 there is no upside to weigh, so the rule needs no flood branch. That also makes deferring free in
 exactly those hands, which is what makes the rule safe to apply unconditionally.
+
+**Neither is prowess** — see the retraction below. And (c) is deliberately narrow: it fires on the
+LAST legal turn, not merely because a card is staged. "Any staged card" was measured and is *worse*
+(−0.00018 vs −0.00044): there is no reason to play it earlier than required.
 
 ## Why it exists
 
@@ -71,9 +75,9 @@ worktree**, so the projection fix and the heuristic are attributed separately. H
 | change | train (block 200000) | held-out (block 800000) |
 |---|---|---|
 | projection fix alone | −0.00004, t = −2.18, 4 better / 0 worse / 16 tied | — |
-| **fix + hold (adopted)** | **−0.00147**, t = −12.00, **20/20 better** | **−0.00176**, t = −11.19, **20/20 better** |
-| fix + hold, no prowess exception | −0.00128, t = −11.45, 20/20 better | — |
-| prowess exception's residual | −0.00019, t = −3.05, 12/2/6 | — |
+| fix + hold, `(a)+(b)` only | −0.00128, t = −11.45, 20/20 better | — |
+| fix + hold with prowess (retracted) | −0.00147, t = −12.00, 20/20 better | −0.00176, t = −11.19, 20/20 better |
+| **fix + hold with expiry (ADOPTED)** | — | **−0.00204**, t = −12.30, **20/20 better** |
 
 ### Cost: the heuristic does ~15% LESS search work
 
@@ -102,69 +106,46 @@ of the hand shrinks the plan powerset at every later decision. **Lesson: for a h
 prefer `MTG_PROFILE` counters over callgrind — determinism is not the same as adequacy, and a
 60-game Ir total can flip sign on the next seed.**
 
-### What the prowess exception is worth, before and after the bug fix
+### RETRACTED: the prowess exception, and what it was really detecting
 
-This is the part worth remembering, because the same numbers mean opposite things either side of it:
+An earlier version of this rule carried a third exception — "the cast pumps a prowess attacker that
+connects this turn" — justified as a same-turn payoff of the same character as Spectacle. **That
+reasoning was wrong, and the user refuted it directly:**
 
-| | rule without exception (c) |
-|---|---|
-| with the projection bug | **+0.00292**, 0/20 seeds better — *the rule loses* |
-| with the projection fixed | **−0.00128**, 20/20 seeds better — *the rule wins* |
+> "We don't kill our prowess creatures, so you can always play shard volley on the final turn and
+> use it to enable prowess. In fact, holding it for later prowess is always as good if not better,
+> since there might be multiple prowess creatures."
 
-So the bug was most of the story, exactly as suspected: fixing it swung the no-prowess variant by
-0.0042 turns. What remains for exception (c) is small but real, and it is not a fudge — it marks the
-rule's **domain of validity**. The rule's premise is "the spell's damage is worth the same whenever
-you cast it." With a prowess attacker that premise is simply false: the spell is worth 3 + N now and
-3 later. Where the premise fails the prune has no licence, so the decision goes back to the search —
-which is the search-primary contract, not an exception to it.
+Exactly right. The goldfish opponent has no removal and no blockers, so a Monastery Swiftspear that
+resolves stays on the board and attacks every turn. The prowess trigger is therefore **not**
+use-it-or-lose-it: casting Shard Volley on turn N+k still pumps, and by then there may be *more*
+prowess creatures, so the same spell is worth *more* later. Holding is weakly better on prowess too.
 
-**Is (c) masking a lethal-calculation bug?** The sharpest challenge, because the prune site only
-runs when the projection says `!wins` — so exception (c) can *only ever* fire on plans already judged
-non-lethal. Either those turns really are non-lethal (and (c) is about accelerating damage), or the
-projection is still under-counting and (c) is papering over a second instance of the bug above. That
-is decidable: `MTG_SV_LETHAL_AUDIT=1` applies every plan the prune touches on a copy, runs the real
-combat, and counts how many actually kill the opponent.
+So why did the prowess exception measure as an improvement at all? Because it was a **proxy** for
+something real that it only partly overlapped. Burn's Light Up the Stage exiles the top two cards
+*playable only until the end of your next turn*; a Shard Volley exiled that way is **destroyed**, not
+deferred, if held past expiry. A prowess attacker is usually on board in this deck, so exception (c)
+incidentally rescued a slice of those expiring casts — the audit counts 7,632 staged casts among the
+237k plans prowess rescued, out of 21,968 among the 728k the strict rule dropped. It was catching
+roughly a third of the real cases, for the wrong reason.
 
-| 2000 games | plans touched | ACTUALLY lethal |
-|---|---|---|
-| strict-pruned, seed 200000 | 728,274 | **0** |
-| prowess-rescued (c), seed 200000 | 237,486 | **0** |
-| strict-pruned, seed 800000 | 912,768 | **0** |
-| prowess-rescued (c), seed 800000 | 256,321 | **0** |
+Replacing the proxy with the actual mechanism is both cleaner and better (100k games per arm, paired,
+against the same strict `(a)+(b)` baseline):
 
-**Zero missed lethals in ~2.1M touched plans.** The lethal calculation is correct after the haste
-fix, and (c) fires exclusively on genuinely non-lethal turns. So (c) is not hiding a bug — it is a
-real heuristic about *acceleration*: the damage arrives earlier, which pulls the eventual win in.
+| rule | delta vs strict | t | seeds b/w/t |
+|---|---|---|---|
+| prowess (retracted) | −0.00019 | −3.05 | 12/2/6 |
+| any staged card | −0.00018 | −3.45 | 15/3/2 |
+| **expires this turn (adopted)** | **−0.00044** | **−6.68** | **19/0/1** |
 
-That distinction matters for the rule as stated. "There is no reason to cast Shard Volley before the
-winning turn" is exactly right about the **card's own damage** — 3 now is 3 later. It does not cover
-the prowess trigger, which is worth 0 later. The quantity that justifies casting is therefore not
-"is this turn lethal" but "is the spell worth MORE now than later", and lethality is only the most
-common way for that to be true.
+Head-to-head, the expiry rule beats the prowess rule by **−0.00025, t = −5.00, 16/1/3**.
 
-**A warning for anyone re-running this audit.** The first version of it reported 45 missed lethals,
-all `Shard Volley + Searing Blaze`, all short by exactly 2. That was the *probe's* bug, not the
-engine's: `EnumeratePlansWithLand` plays the land into a copy before calling `EnumeratePlans` and
-stamps `land_decided` on every plan it returns, so a hand-built probe Plan that leaves
-`land_decided` false makes `ApplyPlanDirect` fall back to greedy `SimulateLandPlay` — which fires
-Searing Blaze's landfall (1 → 3 damage) and fabricates the missing 2. Set `probe.land_decided = true`.
-
-**Is (c) just a budget artifact?** A second fair challenge: holding leaves an extra card in hand, which
-enlarges the plan powerset at every later decision, so "allowing the cast is better" could be cheaper
-enumeration rather than real damage. It is not, on two independent counts:
-
-1. Holding *reduces* search work by ~15% (the counter table above), so it cannot be costing budget.
-2. Re-running the (c) A/B at **unbounded budget** (`budget_ms: 0`, depth still 6) reproduces the
-   effect exactly — **−0.00022, t = −3.69, 13/1/6** against −0.00019, t = −3.05, 12/2/6 budgeted.
-   With budget removed entirely the benefit is if anything slightly larger.
-
-The mechanism is concrete. Turn 3, Monastery Swiftspear (1/2, prowess, haste) attacking. Cast Shard
-Volley pre-combat: 3 to the face plus a pumped 2/3 connecting = **5 damage this turn**. Hold it:
-Swiftspear connects for 1, and the 3 arrives on some later turn = **4 damage total**. The prowess
-trigger is use-it-or-lose-it, so casting early is worth one extra damage permanently — the same
-*kind* of same-turn payoff as Spectacle's discount, which is why it passes the "does it buy
-something this turn?" test. What it trades away is a land, which may or may not convert into more
-than that later; the measurement says it narrowly does not.
+**The lesson is about how the wrong rule survived.** It was adopted because it measured better and I
+supplied a plausible mechanism for it afterwards. The mechanism was never tested — and the number it
+"explained" was real, so the story felt confirmed. A heuristic that measures well is evidence that
+*something* is there, not that the reason you invented is that something. The way out was to ask
+what, concretely, the engine destroys when a card is held: exactly one thing does, and it is not
+prowess.
 
 ## Measured dead end
 
@@ -189,3 +170,8 @@ as reasoned; the permissive branch was deleted.
   (`DecisionProvider::HoldsSacLandBurnUntilLethal`) keys on the deck, and the scan keys on
   `Action::sacrifice_land`, so a second such card is covered without change — but exception (c)
   assumes the payoff is *prowess*, and a different same-turn payoff would need its own clause.
+- Exception (c) generalises to **any** card that can leave the zone it is held in. Today only Light Up
+  the Stage stages cards for this deck, but Apex-of-Power-style impulse exile has the same shape, and
+  `Card::m_staged_expiry` already carries the turn, so the check is card-agnostic as written.
+- `MTG_SV_LETHAL_AUDIT=1` also reports the staged/expiring population, which is how the proxy was
+  caught. Re-run it after any change to Light Up's modelling.
