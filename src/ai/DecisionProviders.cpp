@@ -4393,7 +4393,17 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         // max(), not sum: the ETB ping and the Channel mode are ALTERNATIVES (cast the creature, or
         // discard it from hand for the same damage), so adding them would double-count one card.
         static const bool  face_value = EnvOn("MTG_GOBLIN_FACE_VALUE", true);
-        static const double face_per  = EnvInt("MTG_GOBLIN_FACE_VALUE_PER", 160);
+        // 160 was trained under the LEGACY turn-start states, where the deploy discount separated
+        // Twinshot Sniper (mv2) from Goblin Chainwhirler (mv3). Under the resolve axis both read
+        // t=1 and the pair reduces to raw values, where 160 hands Twinshot the duel (520 vs 460)
+        // -- measured 7 worse / 1 better across the held-out d0 flips. Chainwhirler's third power
+        // point recurs every combat; Twinshot's extra face point is one-shot. Swept under resolve
+        // (goblins overnight, closer on): 160 base; 120 d0 -27 (23/0); 100 -26 (23/1); 90 -129
+        // (31/0); 80 -131 (33/0) -- a plateau below the crossing at 100, so the effect is the
+        // CW>TS ordering itself. 90 = the smallest deviation from the trained value that captures
+        // it (same selection rule the 160 was picked by). Searched untouched at every value.
+        static const double face_per  = EnvInt("MTG_GOBLIN_FACE_VALUE_PER",
+                                               TutorAxisResolveEnabled() ? 90 : 160);
         if (face_value)
         {
             const int face = std::max({ p.etb_damage_any, p.etb_damage_each_opponent, p.channel_damage });
@@ -4878,6 +4888,78 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             // fetch that guarantees the kill this turn sorts ahead of every non-lethal one, best burst first.
             if (burst > 0 && swing_atk < opp_life && opp_life <= swing_atk + burst)
             { sc += 1.0e6 + burst; }
+            // NEXT-TURN LETHAL VIA A FETCHED LORD (MTG_GOBLIN_LORD_CLOSER, default off pending its
+            // A/B). The symmetric override to face_burst's this-turn-lethal above, one turn later,
+            // for the crowd instead of the burn -- and the missing term behind the resolve-mode d0
+            // regressions: dissecting all 30 worse held-out d0 games, the flip legacy->resolve is
+            // 'Chieftain -> Muxus' in 18 of them against ONE better -- the honest state prices
+            // Muxus t=1 correctly (it IS castable next turn off the Skirk sacs) but nothing scores
+            // that the LORD closes the game a turn before Muxus's swing does. s10010 gi4 is the
+            // worked case: T3 fetch, board Skirk+Lackey+Hordemaster+Matron, opp 16 -- Chieftain's
+            // +1/+1 over the (by-then unsick) board plus its own hasty body plus a hand Piledriver
+            // is exactly lethal on T4; Muxus casts T4 and swings T5. The user's own rule, already
+            // encoded in the Piledriver (T-1)/T factor: "if close to lethal and no haste the lord
+            // is better" -- this computes it for real instead of via the swings_left estimate.
+            //
+            // Projection (conservative, same spirit as swing_atk's rules): next turn every body on
+            // the board today attacks (sickness has worn off), each Goblin carries the fetched
+            // lord's +1/+1; the lord's own body counts only if it is hasty or grants itself haste
+            // (cast next turn, it is otherwise sick); no hand deploys are counted. Gated on the
+            // lord actually being deployable next turn (t <= 1) and on the board ALONE not already
+            // being next-turn lethal (then the fetch is not what crosses). Tier 5e5: below the
+            // this-turn kill, above every non-lethal score.
+            // DEFAULT ON under the resolve axis (adopted 2026-08-05 with the face_per recalibration
+            // below it in the file; =0 disables). Held-out: d0 -9 (9 better / 0 worse), searched
+            // untouched (the search already finds these closes -- this is a pure greedy-tier fix),
+            // train-neutral, truth-table regret +4 = exact oracle parity.
+            static const bool lord_closer = EnvOn("MTG_GOBLIN_LORD_CLOSER", TutorAxisResolveEnabled());
+            // copies_in_hand gate: a copy of this lord ALREADY IN HAND provides the close without
+            // spending the fetch on it -- the bonus otherwise bulldozes the duplicate discount
+            // (applied later at a mere x0.55) and takes a redundant copy over a fresh card.
+            // s10010 gi1669 is the case: a Lackey-put Matron fetched a second Chieftain past a
+            // hand Chieftain and the T3 kill became T5 (the baseline fetched Hordemaster and cast
+            // BOTH lords on T3).
+            if (lord_closer && sc < 1.0e6 && d != nullptr
+                && !d->params.subtypes_affected.empty()
+                && (d->params.power_bonus > 0 || d->params.grants_haste)
+                && copies_in_hand(name) == 0
+                && turns_to_deploy(c, /*arriving=*/true) <= 1)
+            {
+                const int bonus = std::max(0, d->params.power_bonus);
+                const int board_next = ready_atk + sick_goblin_power;   // everyone attacks next turn
+                int with_lord  = board_next + bonus * goblins_controlled;
+                int attackers  = goblins_controlled;                    // crowd for a pump deploy
+                const bool lord_haste = c.HasKeyword(Keyword::Haste)
+                    || (d->params.grants_haste && !d->params.lord_excludes_self);
+                if (lord_haste)
+                { with_lord += std::max(0, c.m_power.value_or(0) + bonus); ++attackers; }
+                // ... plus the best ONE hand creature castable ALONGSIDE the lord out of next
+                // turn's mana (the same affordability rule swing_atk uses for this turn). It
+                // attacks only with haste from somewhere -- its own keyword, this lord's grant, or
+                // a haste source already on the battlefield. A pump body (Piledriver) uses its
+                // documented swing formula: base + bonus + 2 per OTHER attacker. gi4's actual T4
+                // close was exactly lord + hand Piledriver; the board-only projection missed it.
+                const int lord_mv = c.m_mana_cost.ManaValue();
+                int best_extra = 0;
+                for (const Card& h : s.players[controller].hand)
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+                    if (!hd || !hd->card.IsCreature()) { continue; }
+                    if (hd->card.m_mana_cost.ManaValue() + lord_mv > mana_next) { continue; }
+                    const bool is_gob = CardHasSubtype(hd->card, "Goblin");
+                    const bool hasty  = hd->card.HasKeyword(Keyword::Haste)
+                        || (d->params.grants_haste && is_gob) || haste_source;
+                    if (!hasty) { continue; }
+                    const int b = is_gob ? bonus : 0;
+                    int contrib = std::max(0, hd->card.m_power.value_or(0)) + b;
+                    if (hd->params.attack_pump_power_per_other_matching > 0 && is_gob)
+                    { contrib += hd->params.attack_pump_power_per_other_matching * attackers; }
+                    best_extra = std::max(best_extra, contrib);
+                }
+                with_lord += best_extra;
+                if (board_next < opp_life && opp_life <= with_lord)
+                { sc += 5.0e5 + with_lord; }
+            }
             // Mode 2 -- "drop it from consideration entirely": sort it below every real
             // candidate rather than removing it, so it stays legal if it is all that is left.
             if (dom_burn_mode == 2 && is_dominated_burn(d) && sc < 1.0e6) { return 1.0; }
