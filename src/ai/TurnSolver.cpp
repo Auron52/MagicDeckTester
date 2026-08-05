@@ -12954,7 +12954,15 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
             if (s.Opponent().life <= 0) { ladder_wt[i] = state.turn_number; settled[i] = 1; continue; }
             ++unsettled;
         }
-        for (int dd = 1; dd <= depth - 1 && unsettled > 0; ++dd)
+        // dd STARTS AT 0, not 1. Pass 0 is `FSLineTail(s, 0)`, which with second_main enumerates
+        // THIS turn's post-combat main and can kill there -- a win at state.turn_number that the
+        // pre-loop above (combat only) does not see. For depth >= 2 pass 1 would catch it anyway
+        // (FSLineTail checks the second main before recursing), so the omission only bit at
+        // depth <= 1, i.e. turn == max_turns, where `dd <= depth - 1` ran NO pass at all and every
+        // candidate fell through as a loss. Caught by the earlier/later gate: Hinata seed 555000
+        // turn 8 labelled 8 by the old path and 9 by the ladder -- the one and only row that has
+        // ever moved LATER.
+        for (int dd = 0; dd <= depth - 1 && unsettled > 0; ++dd)
         {
             const int cut = state.turn_number + dd;
             bool any_new = false;
