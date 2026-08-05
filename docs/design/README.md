@@ -39,6 +39,7 @@ directory is the *engineering record*.
 | [per-deck-folder-layout.md](per-deck-folder-layout.md) | `ADOPTED` | The `decks/<name>/` layout and the raw-artifact policy (commit the gzipped raw, never the uncompressed). *Header still says "deferred/not started" — stale; the move shipped.* |
 | [batch-runner.md](batch-runner.md) | `ADOPTED` | Why every long run must pool into ONE `--batch` manifest instead of a loop of invocations (load-imbalance tail). |
 | [label-horizon-ladder.md](label-horizon-ladder.md) | `ADOPTED` | **Every value/eval label generated before 2026-08-05 is pessimistic.** `FSLineWin`'s first-win shortcut was used outside the ladder that makes it sound; 29% of rows carried a too-late win turn. Offline only (no GT), but it invalidates existing training rows. |
+| [bound-qualified-nowin-memo.md](bound-qualified-nowin-memo.md) | `ADOPTED` | `FSLineWin` now memoizes NO-WINS, qualified by the cutoff they were proved under (Hinata 3.53× at d5/20ms). Not byte-identical: a cache hit costs no budget, so it is a **budget reallocation** that looks like a speedup. Includes the pooled-makespan trap that made it read as *slower*. |
 
 ---
 

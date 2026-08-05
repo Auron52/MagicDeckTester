@@ -11016,13 +11016,28 @@ struct FSLineEntry
 using FSLineCache = std::unordered_map<TranspositionTable::Key, FSLineEntry,
                                        TranspositionTable::KeyHash>;
 
-// MTG_FS_NOWIN_CACHE: DEFAULT OFF for now on the PLAY path. Cache hits consume no budget, so under a
-// bounded search this frees budget for deeper passes -- a play change, not a byte-identical speedup,
-// and it needs its own A/B + ground-truth rebaseline.
+// MTG_FS_NOWIN_CACHE: DEFAULT ON; =0 restores the win-only memo.
 //
-// The OFFLINE labeller is the opposite case and turns it on for itself (see the guard below): there
-// the budget is effectively unbounded, so there is nothing for freed budget to change and the labels
-// come out identical -- while the saving is what makes the horizon ladder affordable at all.
+// This is NOT a byte-identical speedup, and the reason is worth stating precisely: a cache hit
+// consumes no budget, so under a bounded search the memo does not make a decision finish sooner --
+// it makes the same budget go FURTHER. Per decision, either the search converges under budget (the
+// memo saves real work and the answer is identical) or the budget binds (the freed units buy depth
+// and the line moves). Both happen, and the first dominates heavily.
+//
+// Measured before adopting (2026-08-05):
+//   SOUND      unbounded d3, 1800 games, 9 decks -> byte-identical digests. With no budget to
+//              reallocate a sound memo must return the same line, and it does. Corroborated by the
+//              `stale` counter (a query rejected for too narrow a bound) being 0 on every deck.
+//   PLAY       smoke 25/27, regression 38/45. Every changed case is same-avg/different-digest
+//              except hinata_d3_s2002 (5.7150 -> 5.7100 = one game won a turn earlier). Of 15
+//              games that played differently, 1 better and 0 worse. Reference gate: 0 play-drift.
+//   COST       d5/20ms, 200 games: Hinata 58.6s -> 16.6s (3.53x, -58.3% search nodes),
+//              treasure_hunt 22.3s -> 16.9s (1.32x), the rest ~neutral. Do NOT reduce that to one
+//              multiplier -- the aggregate is just Hinata, which dominates every suite's cost.
+//
+// The OFFLINE labeller forces it on for itself regardless (see the guard below): there the budget is
+// effectively unbounded, so there is nothing for freed budget to change and the labels come out
+// identical -- while the saving is what makes the horizon ladder affordable at all.
 inline thread_local bool g_force_nowin_cache = false;
 struct ForceNoWinCacheGuard
 {
@@ -11032,7 +11047,7 @@ struct ForceNoWinCacheGuard
 };
 inline bool FSNoWinCacheOn()
 {
-    static const bool v = EnvOn("MTG_FS_NOWIN_CACHE");
+    static const bool v = EnvOn("MTG_FS_NOWIN_CACHE", true);
     return v || g_force_nowin_cache;
 }
 
@@ -11315,6 +11330,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     {
         key = BuildSimKey(state, depth, max_turns, second_main);
         FSLineCache::const_iterator it = lc->find(key);
+        PROF_INC(fsline_lookups);
+        if (it != lc->end())
+        {
+            if (it->second.nowin_bound == std::numeric_limits<int>::max()) { PROF_INC(fsline_win_hit); }
+            else if (cutoff <= it->second.nowin_bound)                     { PROF_INC(fsline_nowin_hit); }
+            else                                                          { PROF_INC(fsline_nowin_stale); }
+        }
         // A win entry carries nowin_bound = INT_MAX and is always reusable. A no-win entry answers
         // only "no win at turn <= nowin_bound", so a query that asks about a LATER turn than the
         // refutation covered must re-search.
@@ -11677,15 +11699,20 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     {
         FSLineStoreWin(lc, key, best);
     }
-    else if (FSNoWinCacheOn() && g_fs_trunc_events == trunc_at_entry)
+    else if (lc != nullptr)
     {
-        // BOUND-QUALIFIED NO-WIN. The loop ran to completion with nothing truncated anywhere
-        // beneath it, so this node genuinely has no win at turn <= cutoff. Note the bound is the
-        // node's OWN cutoff, not a child's: a no-win result means `best` never improved on
-        // max_turns+1, so `min(cutoff, best.win_turn)` was `cutoff` for every child -- no
-        // incumbent tightening ever happened. Clamped to max_turns+1 (the widest question the
-        // search can be asked) so an unbounded query still hits.
-        FSLineStoreNoWin(lc, key, best, std::min(cutoff, max_turns + 1));
+        PROF_INC(fsline_nowin_result);
+        if (FSNoWinCacheOn() && g_fs_trunc_events == trunc_at_entry)
+        {
+            PROF_INC(fsline_nowin_stored);
+            // BOUND-QUALIFIED NO-WIN. The loop ran to completion with nothing truncated anywhere
+            // beneath it, so this node genuinely has no win at turn <= cutoff. Note the bound is the
+            // node's OWN cutoff, not a child's: a no-win result means `best` never improved on
+            // max_turns+1, so `min(cutoff, best.win_turn)` was `cutoff` for every child -- no
+            // incumbent tightening ever happened. Clamped to max_turns+1 (the widest question the
+            // search can be asked) so an unbounded query still hits.
+            FSLineStoreNoWin(lc, key, best, std::min(cutoff, max_turns + 1));
+        }
     }
     return best;
 }
