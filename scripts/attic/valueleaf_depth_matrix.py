@@ -131,6 +131,18 @@ def run_batch(deck_file, mt, depth, seed, offset, batch, value_on, value_min_dep
         env["MTG_VALUE_MIN_DEPTH"]=str(value_min_depth); env["MTG_VALUE_STARTGATE_ALPHA"]="8"
     else:
         env["MTG_VALUE_MODEL"]="0"
+        # H CELL, LADDERED ON THE CHEAP LEAF. The committed pass is still pure heuristic
+        # (MTG_VALUE_MODEL=0); only the ladder's warm-up passes use the value leaf, and their results
+        # provably cannot reach the committed line -- verified 21/21 cells byte-identical on avg AND
+        # play digest, plus 14 cells avg-identical under the MTG_PROFILE counters. Costs 1.35x-84.8x
+        # less search work, most of it at d5, which is the cell this table could never afford.
+        # Attaching the profile is required: without a model the warm-up passes have nothing cheap to
+        # fall back to and this silently reverts to the slow path (a perf cliff, not a wrong number).
+        # Cells run unbounded, which is the regime the identity holds in. See
+        # docs/design/value-leaf-regeneration-queue.md 8.3(3).
+        if prof and os.path.exists(prof):
+            env["MTG_VALUE_PROFILE"]=prof
+            env["MTG_LADDER_VALUE_LEAF"]="1"
     cmd=[MTG, deck_file, "--seed", str(seed+offset), "--game-index", str(offset), "--games", str(batch),
          "--max-turns", str(mt), "--threads", "1", "--ignore-play-profile", "--depth", str(depth)]
     if deck_profile: cmd += ["--profile", deck_profile]

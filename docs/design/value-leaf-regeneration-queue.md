@@ -418,10 +418,16 @@ path stays byte-identical and **no ground-truth rebaseline is needed**:
 
    | deck | d4 | d5 |
    |---|---|---|
-   | Anti-Lifegain | 1.85x fewer | **39.5x fewer** |
+   | Knights | 1.35x fewer | **84.8x fewer** |
+   | Anti-Lifegain | 1.85x | **39.5x** |
+   | slivers_vial | 3.21x | **35.7x** |
+   | burn | 1.37x | **15.3x** |
    | Dragonstorm | 1.90x | 2.91x |
    | Goblins | 1.42x | 2.19x |
-   | treasure_hunt | 1.36x | — |
+   | treasure_hunt | 1.36x | 1.51x |
+
+   All 14 cells `avg`-identical. The d5 spread (1.5x to 85x) is wide enough that no single figure
+   should be quoted as "the" saving — it depends on how much of each deck's ladder is warm-up.
 
    **A retraction worth keeping, because it nearly shipped a false mechanism.** The first pass at this
    used WALL-CLOCK over 40 games and reported the mode as *slower* at d4 on Goblins and Dragonstorm
@@ -434,6 +440,13 @@ path stays byte-identical and **no ground-truth rebaseline is needed**:
 
    **Under a BOUNDED budget this stops being free** — cheaper warm-ups leave more budget for the deep
    pass, a real (and probably favourable) play change needing its own A/B. It ships OFF for that reason.
+
+   **Remaining caveats, none of them correctness.** (a) It needs the deck's `.value.json`; without one
+   the mode is inert and the cell silently reverts to the slow path — a perf cliff, not a wrong number,
+   but silent. (b) The counters do not include the value model's own evaluation cost, so "fewer nodes"
+   is strong evidence for, not proof of, less wall-clock; both the node count and the per-leaf cost move
+   the same way, so the direction is safe. (c) `scripts/attic/valueleaf_depth_matrix.py` sets it on H
+   cells as of 2026-08-05 — before that wiring the flag existed but delivered nothing.
 
 **Acceptance bar for all three (user, explicit):** digest drift is *expected* and fine; **win-turn
 drift is a bug and blocks adoption until fixed.** Gate on per-game win turns via `MTG_DUMP_WINS`,
