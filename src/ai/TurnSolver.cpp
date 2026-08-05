@@ -1,6 +1,7 @@
 #include "../core/EnvFlags.h"
 #include "TurnSolver.h"
 #include "ManaPayment.h"
+#include "PlanContext.h"
 #include "LandPlay.h"
 #include "Combat.h"
 #include "EngineFlags.h"
@@ -2443,6 +2444,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // the general "heuristic narrows, search decides the rest" pattern.
         if (def.params.tutor_to_hand || def.params.tutor_to_top)
         {
+            // NO PlanContext here, and it is structural rather than an oversight: this runs during
+            // ACTION COLLECTION, before any plan exists, so the base target is necessarily chosen
+            // without knowing what else the turn will do. Only the post-dedup axis in
+            // EnumeratePlansWithLand can supply one (see PlanContext.h). Anything that wants the
+            // base pick to be plan-aware has to move this decision after plan assembly.
             std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index, def.params);
             if (cands.empty()) { cands.push_back(std::string{}); }  // whiff: castable, fetches nothing
             // Emit ONE target here (the provider's best) and search the rest as a post-dedup AXIS
@@ -10197,7 +10203,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     if (TutorAxisEnabled() && TutorAxisWidth(state) > 1 && !HumanPlayActive())
     {
         std::vector<TurnSolver::Plan> extra;
-        // The candidate list depends on the state AFTER THIS PLAN'S LAND DROP, not on the turn-start
+        // MTG_TUTOR_PREFIX_STATS=1: how many DISTINCT prefixes (land played + the casts that precede
+        // the tutor) reach one tutor decision. This is the feasibility number for ranking at the
+        // true per-plan state: the cost of doing it properly is one provider call per distinct
+        // prefix, not per plan, so if tutors sit early in the action order -- as they usually should,
+        // since fetching before you commit mana is normally right -- the land drop is nearly the only
+        // thing that varies and the cache collapses to a handful of entries.
+        static const bool prefix_stats = EnvOn("MTG_TUTOR_PREFIX_STATS");
+        std::set<std::string> distinct_prefix;
+        std::size_t prefix_plans = 0, prefix_pos_sum = 0;
         // `state`. Ranking it pre-land was a real defect: providers feed mana_now / mana_next into a
         // deploy discount, so a turn whose land is still in hand prices every expensive card one turn
         // further away than the plan actually leaves it -- and a card pushed below the axis width is
@@ -10252,6 +10266,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                 if (act.kind != Action::Kind::CastFromHand || act.tutor_target.empty()) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
                 if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top)) { continue; }
+                // The plan this candidate list is FOR -- see PlanContext.h. Providers that ignore it
+                // (all of them today) are byte-identical; the point is that the state mismatch above
+                // is only half the missing information, and the other half is "what else does this
+                // plan do this turn", which the provider currently guesses at.
+                const PlanContext pc{ &p.actions, ai, &p.land_to_play,
+                                      /*land_done=*/axis_postland && !p.land_to_play.empty() };
+                PlanContextScope _pcs(&pc);
+                if (prefix_stats)
+                {
+                    std::string sig = p.land_to_play + "|" + p.fetch_target + "|" + p.land_face + "|";
+                    for (std::size_t j = 0; j < ai; ++j) { sig += p.actions[j].card_name + ";"; }
+                    distinct_prefix.insert(sig);
+                    ++prefix_plans;
+                    prefix_pos_sum += ai;
+                }
                 std::string key = act.card_name;
                 if (axis_postland)
                 {
@@ -10285,6 +10314,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                 }
                 break;   // vary ONE tutor per variant; a second tutor keeps its heuristic target
             }
+        }
+        if (prefix_stats && prefix_plans > 0)
+        {
+            std::fprintf(stderr, "[tutor-prefix] T%d plans=%zu distinct_prefixes=%zu avg_pos=%.2f\n",
+                         state.turn_number, prefix_plans, distinct_prefix.size(),
+                         static_cast<double>(prefix_pos_sum) / static_cast<double>(prefix_plans));
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
                               std::make_move_iterator(extra.end()));
