@@ -4634,11 +4634,16 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         if (hd && hd->card.IsCreature() && turns_to_deploy(hd->card) == 0
             && h.m_name != "Goblin Matron") { hand_has_play = true; break; }
     }
+    // The two curve constants are exposed for the MTG_TUTOR_AXIS_POSTLAND recalibration sweep: that
+    // fix moves cards from t=2 to t=1 wholesale, so if the curve had merely absorbed the old
+    // projection bias, re-fitting these should recover the loss. (Hundredths.)
+    static const double disc_t1   = EnvInt("MTG_GOBLIN_DISC_T1", 85) / 100.0;
+    static const double disc_step = EnvInt("MTG_GOBLIN_DISC_STEP", 45) / 100.0;
     auto discount_of = [&](const Card& c) -> double
     {
         const int t = turns_to_deploy(c);
         double disc = 1.0;
-        if (t >= 1) { disc = 0.85; for (int k = 1; k < t; ++k) { disc *= 0.45; } } // mild t1, steep t>=2
+        if (t >= 1) { disc = disc_t1; for (int k = 1; k < t; ++k) { disc *= disc_step; } } // mild t1, steep t>=2
         if (t > 0 && hand_has_play) { disc *= 0.75; }   // opportunity cost: already have a play
         return disc;
     };

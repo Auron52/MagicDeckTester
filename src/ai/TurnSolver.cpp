@@ -10197,7 +10197,50 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     if (TutorAxisEnabled() && TutorAxisWidth(state) > 1 && !HumanPlayActive())
     {
         std::vector<TurnSolver::Plan> extra;
-        // The candidate list depends only on `state`, so build it at most once per tutor param set.
+        // The candidate list depends on the state AFTER THIS PLAN'S LAND DROP, not on the turn-start
+        // `state`. Ranking it pre-land was a real defect: providers feed mana_now / mana_next into a
+        // deploy discount, so a turn whose land is still in hand prices every expensive card one turn
+        // further away than the plan actually leaves it -- and a card pushed below the axis width is
+        // then EXCLUDED, not merely ranked low. The base plan never had this problem (EnumeratePlans
+        // runs on the post-land `copy`); only this post-dedup fan-out, which supplies the alternatives
+        // the search actually chooses among, used the wrong state. Goblins gi101 is the case: at the
+        // T4 Matron the pre-land ranking puts Siege-Gang 8th (mana_next=4, so {3}{R}{R} reads t=2)
+        // and the post-land ranking puts it 4th (mana_next=5, t=1) -- inside a 6-wide window.
+        // Keyed by the land the plan plays, so it is still one provider call per distinct land.
+        //
+        // DEFAULT OFF -- the defect is real and correctly located, and fixing it is measurably WORSE.
+        // Held-out overnight, goblins (8,000 searched) and hinata (2,800):
+        //
+        //   goblins  postland=1                   +18.0    0 better / 18 worse
+        //   hinata   postland=1                    ~-3      (raw -275 is a GT artifact: three games
+        //                                                    GT recorded as UNWON under batch load
+        //                                                    actually win -- gi90 is a genuine 9->8,
+        //                                                    gi158 is churn that converges 6/6 by
+        //                                                    budget 320. The 99-point loss penalty
+        //                                                    turns a -2 into a -275.)
+        //
+        // The obvious rescue -- the provider's deploy-discount curve was fitted AGAINST the buggy
+        // pre-land projection, so refit it -- does not work. Sweeping the t=1 constant with the fix
+        // ON (MTG_GOBLIN_DISC_T1, train s4004+s5005 / validate s6006+s7007) saturates at +10 and
+        // never approaches baseline, and NOT ONE arm produces a single better game:
+        //
+        //   DISC_T1   85    75    65    55    45    38        (train / validate turn-units)
+        //   train    +10    +6    +6    +6    +6    +8
+        //   valid     +8    +6    +4    +4    +4    +4
+        //   better     0     0     0     0     0     0   <-- across all six arms, every seed
+        //
+        // So this is not a mis-tuned constant absorbing a bias. The pessimistic pre-land view is
+        // acting as a TEMPO PRIOR that suits goldfishing: "the card I can deploy now" beats "the card
+        // I could deploy next turn", and pricing next turn accurately promotes expensive cards a race
+        // deck does not want. Making the projection honest would mean re-deriving the discount from
+        // tempo rather than from turns-to-cast -- a real project, not a constant refit.
+        //
+        // Kept here, default-off, because the defect it fixes is genuine and worth finding again:
+        // the base plan is ranked on the POST-land state (EnumeratePlans runs on `copy`) while these
+        // variants are ranked pre-land, so the two halves of the same plan set disagree, and the
+        // pre-land list's own rank-0 card is silently dropped (the loop below starts at c=1).
+        // MTG_TUTOR_AXIS_POSTLAND=1 enables. See docs/design/goblins-enabler-worse-games.md round 13.
+        static const bool axis_postland = EnvOn("MTG_TUTOR_AXIS_POSTLAND", false);
         std::map<std::string, std::vector<std::string>> cand_cache;
         for (const TurnSolver::Plan& p : all)
         {
@@ -10209,11 +10252,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                 if (act.kind != Action::Kind::CastFromHand || act.tutor_target.empty()) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
                 if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top)) { continue; }
-                std::vector<std::string>& cands = cand_cache[act.card_name];
+                std::string key = act.card_name;
+                if (axis_postland)
+                {
+                    key += '\x1f'; key += p.land_to_play;
+                    key += '\x1f'; key += p.fetch_target;
+                    key += '\x1f'; key += p.land_face;
+                }
+                std::vector<std::string>& cands = cand_cache[key];
                 if (cands.empty())
                 {
-                    cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index,
-                                                                   d->params);
+                    if (axis_postland && !p.land_to_play.empty())
+                    {
+                        GameState ls = state;
+                        PlayLandByName(ls, p.land_to_play, p.fetch_target, true, p.land_face);
+                        cands = ResolveProvider(ls).TutorCandidates(ls, ls.active_player_index,
+                                                                    d->params);
+                    }
+                    else
+                    {
+                        cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index,
+                                                                       d->params);
+                    }
                 }
                 const std::size_t k = std::min(cands.size(), TutorAxisWidth(state));
                 for (std::size_t c = 1; c < k; ++c)

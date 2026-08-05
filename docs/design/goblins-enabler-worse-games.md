@@ -1279,3 +1279,75 @@ forcing it onto the axis costs a real window slot and buys nothing. The shipped 
 byte-identical; `FIX` stays default-off with its number, per the rejected-lever convention.
 
 Naming is now the only thing wrong with it, and the comment says so at the definition.
+
+## ROUND 13 (2026-08-05): the root defect, located and fixed — and the fix is measurably worse
+
+Round 12 rejected `MTG_GOBLIN_PENDING_LAND` (a provider-side patch to `mana_next`) and guessed the
+loss was calibration. Both halves of that were worth testing properly, because the underlying issue is
+a genuine engine defect, not a heuristic taste question.
+
+### The defect (TurnSolver, affects every deck with a tutor)
+
+`EnumeratePlansWithLand` builds a post-land state per land candidate and enumerates the base plans on
+it, so **the base plan's tutor target is ranked correctly**. The post-dedup tutor axis fan-out — which
+supplies the *alternatives the search actually chooses among* — then calls
+`TutorCandidates(state, ...)` on the **pre-land turn-start `state`**, and caches the result keyed by
+card name alone, so one pre-land ranking is reused for every plan regardless of which land it plays.
+
+Two consequences, both real:
+
+1. The provider feeds `mana_now` / `mana_next` into a deploy discount, so a turn whose land is still in
+   hand prices every expensive card one turn further away than the plan actually leaves it — and a
+   card pushed past the axis width is **excluded**, not merely ranked low. This is exactly gi101:
+   Siege-Gang is rank 8 pre-land (`mana_next=4`, `{3}{R}{R}` reads `t=2`) and rank 4 post-land
+   (`mana_next=5`, `t=1`).
+2. The two halves of one plan set disagree, and the pre-land list's own rank-0 card is silently
+   dropped, because the fan-out loop starts at `c = 1` to skip what it assumes is the base target.
+
+Fixed behind `MTG_TUTOR_AXIS_POSTLAND`: rank each plan's axis against that plan's post-land state,
+cache keyed by the land played. It recovers gi101 **with the value reserve off** — the diagnosis is
+right, and this is the root cause rather than the window symptom.
+
+### It loses, and refitting the curve does not save it
+
+Held-out overnight, the two decks that can move (verified: no other deck changed a single game across
+21,000 smoke + regression games, and the code path requires a tutor in the plan):
+
+```
+goblins   postland=1     +18.0     0 better / 18 worse
+hinata    postland=1      ~-3      (see below)
+```
+
+Hinata's raw number is **-275, and it is a GT artifact worth recording**: three games GT stored as
+UNWON actually win. `gi90` is a genuine 9 -> 8 (stable at budgets 20/80/320/1280); `gi158` is pure
+churn that converges to 6/6 by budget 320. Under batch load at 20 ms the baseline simply failed to
+finish them, and the 99-point loss penalty turns a real -2 into -275. **Any single unwon/won flip
+dominates this metric, so always re-run the flipped games standalone across budgets before believing
+an aggregate.**
+
+Then the calibration hypothesis, tested directly — sweep the `t=1` discount constant with the fix ON
+(`MTG_GOBLIN_DISC_T1`, train `s4004+s5005`, validate `s6006+s7007`):
+
+```
+DISC_T1     85    75    65    55    45    38
+train      +10    +6    +6    +6    +6    +8
+validate    +8    +6    +4    +4    +4    +4
+better       0     0     0     0     0     0      <-- every arm, every seed
+```
+
+It saturates at +10 and never approaches baseline, and **not one arm produces a single better game
+anywhere**. So this is not a mis-tuned constant absorbing a bias.
+
+### What that actually means
+
+The pessimistic pre-land view is functioning as a **tempo prior**, and in goldfishing that prior is
+right: "the card I can deploy *now*" beats "the card I could deploy next turn", and pricing next turn
+accurately promotes expensive cards a race deck does not want. This is the third independent result
+this session pointing the same way — the reserve eviction (+20 when corrected), `PENDING_LAND` (+7/+9),
+and now the root fix (+18, unrescuable by refit). All three make the mana projection more accurate;
+all three lose.
+
+Making the projection honest would mean re-deriving the discount from **tempo** rather than from
+turns-to-cast, and re-fitting it as a whole. That is a real project, not a constant sweep, and it is
+the open item this round leaves. The flag stays in the tree default-off so the defect is one env var
+away from being reproduced.
