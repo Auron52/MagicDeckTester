@@ -2,9 +2,13 @@
 # End-to-end LABEL GENERATION throughput: what does a row cost now vs before 2026-08-05?
 #
 # Three arms over identical games, each ONE pooled batch so the box stays saturated to one tail:
-#   old   MTG_LABEL_LADDER=0 MTG_VALUE_LABEL_BNB=0 MTG_FS_NOWIN_CACHE=0   (pre-fix behaviour)
+#   old   MTG_LABEL_LADDER=0 MTG_VALUE_LABEL_BNB=0 MTG_LABEL_NOWIN_CACHE=0  (pre-fix behaviour)
+#
+# NOTE the knob is MTG_LABEL_NOWIN_CACHE, not MTG_FS_NOWIN_CACHE. The labeller forces the memo on for
+# itself regardless of the global play-path flag, so setting MTG_FS_NOWIN_CACHE alone leaves the memo
+# ON in EVERY arm -- which silently contaminated the first run of this script.
 #   new   defaults                                                       (ladder + B&B)
-#   cache defaults + MTG_FS_NOWIN_CACHE=1
+#   cache defaults + MTG_LABEL_NOWIN_CACHE=1  (which is the DEFAULT -- `new` sets it =0)
 #
 # NOTE the arms are not producing the same thing: `old` emits the PESSIMISTIC label (~29% of rows
 # carry a too-late win turn -- docs/design/label-horizon-ladder.md), so this is "cost of a correct
@@ -55,7 +59,7 @@ for spec in $DECKS; do
         rows="$OUT/$s.$arm.rows"; rm -f "$rows"
         st=$(date +%s.%N)
         MTG_DUMP_VALUE_ROWS="$rows" MTG_EVAL_ROWS_K="$K" \
-        MTG_LABEL_LADDER="$env_l" MTG_VALUE_LABEL_BNB="$env_b" MTG_FS_NOWIN_CACHE="$env_n" \
+        MTG_LABEL_LADDER="$env_l" MTG_VALUE_LABEL_BNB="$env_b" MTG_LABEL_NOWIN_CACHE="$env_n" \
             "$BIN" --batch "$man" --threads "$THREADS" > "$OUT/$s.$arm.log" 2>&1
         en=$(date +%s.%N)
         eval "sec_$arm=\$(awk -v a=\$st -v b=\$en 'BEGIN{printf \"%.1f\", b-a}')"

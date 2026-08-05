@@ -64,21 +64,34 @@ games of a heavy-tailed deck is dominated by one or two outlier positions that a
 "+0.14 % instructions" claim from a 60-game callgrind (see `shard-volley-hold.md`). Wall-clock needs
 its own sample size; a correctness gate does not make a timing column trustworthy.
 
-Re-measured properly at **40 games/deck, 20 threads, seed 888000** (`test/label_throughput.sh`),
-against the pre-fix path (`MTG_LABEL_LADDER=0 MTG_VALUE_LABEL_BNB=0`). `cache` adds the
-bound-qualified no-win memo; all three arms produce identical row counts, and `new`/`cache` produce
-identical labels:
+Re-measured at **40 games/deck, 20 threads, seed 888000, idle box** (`test/label_throughput.sh`),
+against the pre-fix path (`MTG_LABEL_LADDER=0 MTG_VALUE_LABEL_BNB=0 MTG_LABEL_NOWIN_CACHE=0`). All
+three arms produce identical row counts, and `ladder`/`ladder+memo` produce identical labels:
 
-| deck | old (s) | ladder (s) | ladder+cache (s) | ladder vs old | +cache vs old |
-|---|---|---|---|---|---|
-| treasure_hunt | 51.3 | 14.4 | 19.9 | **3.6× faster** | 2.6× faster |
-| Dragonstorm | 126.0 | 237.4 | 149.6 | 1.9× slower | 1.2× slower |
-| Knights | 1.4 | 1.9 | 1.7 | 1.4× slower | 1.2× slower |
-| Anti-Lifegain | 4.1 | 26.6 | 10.2 | 6.5× slower | 2.5× slower |
-| slivers_vial | 0.6 | 1.9 | 1.6 | 3.2× slower | 2.7× slower |
-| burn | 0.3 | 3.4 | 1.0 | 11× slower | 3.3× slower |
-| Goblins | 0.9 | 68.7 | 10.1 | 76× slower | 11× slower |
-| **total** | **184.6** | **354.3** | **194.1** | 1.9× slower | **1.05× slower** |
+| deck | old (s) | ladder (s) | ladder+memo (s) | net |
+|---|---|---|---|---|
+| Hinata2 | **hangs** (44 of 51 rows in 68 min, then stalled) | — | **17** | was impossible |
+| treasure_hunt | 38.9 | 25.6 | 22.8 | **1.7x faster** |
+| Dragonstorm | 120.3 | 194.9 | 152.2 | 1.3x slower |
+| Anti-Lifegain | 4.1 | 25.9 | 10.1 | 2.4x slower |
+| Knights | 1.2 | 3.6 | 3.0 | 2.5x slower |
+| slivers_vial | 0.3 | 1.0 | 0.8 | 2.7x slower |
+| burn | 0.3 | 3.2 | 1.0 | 3.3x slower |
+| Goblins | 0.9 | 67.0 | 9.9 | 11x slower |
+
+**Do not summarise this table with one multiplier.** Per-deck cost spans five orders of magnitude, so
+any average is dominated by whichever expensive deck is in the list -- an earlier draft of this file
+reported "1.9x slower overall" on exactly that mistake. Read it per deck: the decks that got slower
+are the ones where 40 games cost under a second to begin with (11x worse on Goblins is 0.9 s ->
+9.9 s), and the decks that got faster, or became possible at all, are the expensive ones. Size a
+regeneration per deck.
+
+**A measurement trap this table fell into twice.** The first run of `test/label_throughput.sh` set
+`MTG_FS_NOWIN_CACHE` to vary the memo. But the labeller forces the memo on for itself, and
+`FSNoWinCacheOn()` is `global || forced` -- so **every arm had it on**, including "old". The tell was
+the `cache` arm coming out *slower* than the `new` arm on Dragonstorm, which is impossible if they
+are the same configuration. The knob is `MTG_LABEL_NOWIN_CACHE`. Generally: when a flag gains a
+second way to be enabled, every harness that varied the first one is silently measuring nothing.
 
 **The cost is real and it is intrinsic.** Finding *a* win is goal-directed and cheap; proving *no
 earlier* win exists means exhausting the subtree at each horizon, and that is what the ladder buys
