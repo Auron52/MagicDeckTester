@@ -404,6 +404,37 @@ path stays byte-identical and **no ground-truth rebaseline is needed**:
    today's H5. Pure-H timings stay reconstructible as `H(d) = H(d−1) + ladder(d) − V(d−1)` with
    H(1) exact, so the timing column survives in approximate form.
 
+   **Identity is by construction, then checked.** Three facts make the committed line independent of
+   the warm-up passes' leaf: every node of pass *k* satisfies `turn + depth == turn0 + k` and the
+   `FSLineCache` key folds both, so two passes can never share an entry; a value-leaf pass returns
+   *before* `SimulateToEnd`, the only writer of the leaf table, so it cannot contaminate that either;
+   and matrix cells run unbounded, so there is no budget coupling. Measured: **21 of 21 cells
+   byte-identical on avg AND play digest** (7 decks x d3/d4/d5, 40 games), plus 7 more at d2.
+   Harness: `test/ladder_value_leaf_check.sh`.
+
+   **Cost: strictly less work, growing with depth.** `-DMTG_PROFILE=ON` search nodes, off -> on,
+   12 games, single thread, unbounded; `ApplyPlanDirect` / `EnumeratePlans` / `GameState` copies all
+   agree within a few percent:
+
+   | deck | d4 | d5 |
+   |---|---|---|
+   | Anti-Lifegain | 1.85x fewer | **39.5x fewer** |
+   | Dragonstorm | 1.90x | 2.91x |
+   | Goblins | 1.42x | 2.19x |
+   | treasure_hunt | 1.36x | — |
+
+   **A retraction worth keeping, because it nearly shipped a false mechanism.** The first pass at this
+   used WALL-CLOCK over 40 games and reported the mode as *slower* at d4 on Goblins and Dragonstorm
+   (0.57x, 0.67x) and 16-26x faster at d5. I explained the regression with a plausible story: the
+   heuristic warm-ups had been *pre-warming* the shared leaf table for the committed pass. There is no
+   such effect. The tell sat in the same table — Goblins ladder-on measured 3.4 s at d5 and 61.4 s at
+   d4, i.e. more depth for 18x less time, which is not a cost model — and it took the user's scepticism
+   to make me look. Both the "regression" and the headline speedups were the same artifact in opposite
+   directions. **On a heavy-tailed deck, wall-clock is not evidence; use the counters.**
+
+   **Under a BOUNDED budget this stops being free** — cheaper warm-ups leave more budget for the deep
+   pass, a real (and probably favourable) play change needing its own A/B. It ships OFF for that reason.
+
 **Acceptance bar for all three (user, explicit):** digest drift is *expected* and fine; **win-turn
 drift is a bug and blocks adoption until fixed.** Gate on per-game win turns via `MTG_DUMP_WINS`,
 not on aggregate LP. The rationale: search returns a *minimum* (order-independent) and the engine
