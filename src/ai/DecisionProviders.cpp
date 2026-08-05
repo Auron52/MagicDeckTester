@@ -13,6 +13,8 @@
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
 #include "../deck/DeckLoader.h"     // Decklist
+#include "TurnSolver.h"             // Action (PlanContext walks the plan's action list)
+#include "PlanContext.h"            // CurrentPlanContext / PlanContextRest
 #include "ManaPayment.h"            // AvailableManaPool (echo "no gas" check; MTG_LACKEY_RANK=uncast)
 
 // Standing unpruned-vs-pruned A/B (search-primary requirement): when MTG_UNPRUNED is set,
@@ -3908,7 +3910,54 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         const Card& hc = hd ? hd->card : h;
         if (hc.IsCreature() && CardHasSubtype(hc, "Goblin")) { ++goblins_in_hand; }
     }
-    const int buff_targets = G + std::min(goblins_in_hand, 3);   // board + near-future (hand) buff recipients
+    // ---- PLAN-AWARE INPUTS (MTG_GOBLIN_PLAN_AWARE=1, default off) -------------------------------
+    // Five of the inputs below are TUNED GUESSES at what the rest of this turn will do, and the plan
+    // being enumerated already knows all five exactly (see PlanContext.h):
+    //
+    //   buff_targets     G + min(goblins_in_hand, 3)      -> G + Goblins the plan actually casts
+    //   entering_fodder  1 if a Goblin tutor is in hand   -> the Goblins the plan actually casts
+    //   haste_avail      "a haste lord we could afford"   -> is one actually cast this turn?
+    //   hand_has_play    "hand holds a deployable body"   -> does the plan actually deploy one?
+    //   mana_next        lands + 1                        -> +1 more if the plan still plays its land
+    //
+    // Deliberately moved TOGETHER. The three earlier attempts to correct this model each made ONE
+    // input honest while the others stayed calibrated to the old wrong value, and all three lost
+    // (+20, +9, +18 held-out). If that diagnosis is right, the cluster is only coherent when it moves
+    // as a unit; if this loses too, the diagnosis was wrong and the whole line is dead.
+    static const bool plan_aware = EnvOn("MTG_GOBLIN_PLAN_AWARE", false);
+    bool plan_known = false, plan_haste_cast = false, plan_deploys = false, plan_land_pending = false;
+    int  plan_goblins_entering = 0;
+    if (plan_aware)
+    {
+        const PlanContext* pc = CurrentPlanContext();
+        if (pc != nullptr && pc->actions != nullptr)
+        {
+            plan_known = true;
+            plan_land_pending = pc->land != nullptr && !pc->land->empty() && !pc->land_done;
+            auto count_cast = [&](const std::string& nm, bool is_source)
+            {
+                const CardDefinition* ad = CardDatabase::Instance().Lookup(nm);
+                if (ad == nullptr || !ad->card.IsCreature()) { return; }
+                if (!is_source) { plan_deploys = true; }
+                if (CardHasSubtype(ad->card, "Goblin")) { ++plan_goblins_entering; }
+                if (ad->params.grants_haste && !ad->params.subtypes_affected.empty())
+                { plan_haste_cast = true; }
+            };
+            // The action being decided is the tutor SOURCE, and it is entering too -- that is the
+            // body the old entering_fodder was standing in for.
+            if (pc->index < pc->actions->size())
+            { count_cast((*pc->actions)[pc->index].card_name, /*is_source=*/true); }
+            const auto rest = PlanContextRest(pc);
+            for (const Action* a = rest.first; a != rest.second; ++a)
+            {
+                if (a->kind != Action::Kind::CastFromHand && a->kind != Action::Kind::ActivateVial)
+                { continue; }
+                count_cast(a->card_name, /*is_source=*/false);
+            }
+        }
+    }
+    const int buff_targets = plan_known ? G + plan_goblins_entering
+                                        : G + std::min(goblins_in_hand, 3);   // board + near-future
     // Skirk ramp: each OTHER Goblin sacs for {R}, so a bomb is reachable ~this turn if Skirk + fodder pay for it.
     //
     // TWO corrections (user, 2026-08-04), both about counting the bodies that will ACTUALLY be
@@ -3948,7 +3997,12 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     const bool use_entering = (skirk_fodder == 1 || skirk_fodder == 2);
     const bool use_nolord   = (skirk_fodder == 1 || skirk_fodder == 3);
     int entering_fodder = 0;
-    if (use_entering)
+    if (plan_known)
+    {
+        // Exact: every Goblin body the plan puts onto the battlefield this turn, source included.
+        entering_fodder = plan_goblins_entering;
+    }
+    else if (use_entering)
     {
         for (const Card& h : s.players[controller].hand)
         {
@@ -3997,8 +4051,9 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // the curve with it, not dropping it in. Same lesson as the reserve eviction below.
     // MTG_GOBLIN_PENDING_LAND=1 enables.
     static const bool pending_land = EnvOn("MTG_GOBLIN_PENDING_LAND", false);
-    bool land_drop_pending = false;
-    if (pending_land && s.players[controller].lands_played_this_turn < s.players[controller].LandDropsAvailable())
+    bool land_drop_pending = plan_known && plan_land_pending;   // exact: does THIS plan still play one
+    if (!plan_known && pending_land
+        && s.players[controller].lands_played_this_turn < s.players[controller].LandDropsAvailable())
     {
         for (const Card& h : s.players[controller].hand)
         {
@@ -4024,8 +4079,8 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         tutor_src_mv = hd->card.m_mana_cost.ManaValue();
         break;
     }
-    bool haste_avail = haste_source;
-    if (!haste_avail)
+    bool haste_avail = haste_source || (plan_known && plan_haste_cast);   // exact when the plan is known
+    if (!haste_avail && !plan_known)
     {
         for (const Card& h : s.players[controller].hand)
         {
@@ -4627,12 +4682,15 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     };
     // Opportunity cost: if the hand ALREADY holds a deployable-this-turn threat, another card we can't
     // play now is redundant gas -- we need to DEPLOY, not draw more. Mild downweight for such candidates.
-    bool hand_has_play = false;
-    for (const Card& h : s.players[controller].hand)
+    bool hand_has_play = plan_known && plan_deploys;   // exact: does the plan actually deploy one
+    if (!plan_known)
     {
-        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
-        if (hd && hd->card.IsCreature() && turns_to_deploy(hd->card) == 0
-            && h.m_name != "Goblin Matron") { hand_has_play = true; break; }
+        for (const Card& h : s.players[controller].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if (hd && hd->card.IsCreature() && turns_to_deploy(hd->card) == 0
+                && h.m_name != "Goblin Matron") { hand_has_play = true; break; }
+        }
     }
     // The two curve constants are exposed for the MTG_TUTOR_AXIS_POSTLAND recalibration sweep: that
     // fix moves cards from t=2 to t=1 wholesale, so if the curve had merely absorbed the old

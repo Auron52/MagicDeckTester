@@ -1405,3 +1405,75 @@ optimal, where essentially every change is a downgrade.
 
 **The tutor ranking is closed.** Future Goblins work should look at decisions with actual headroom,
 not this one.
+
+## ROUND 15 (2026-08-05): plan-aware inputs — the coherence theory is CONFIRMED, and still doesn't pay
+
+Rounds 12-14 each corrected ONE input of the tutor model and each lost (+20, +9, +18 held-out, never
+a single better game). The diagnosis offered was **incoherence**: one input made honest while the
+others stayed calibrated to the old, wrong value. This round tests that diagnosis directly by moving
+the whole cluster at once, on the user's suggestion that the provider should see the plan, not just
+the state.
+
+### The mechanism
+
+`PlanContext` (new, `src/ai/PlanContext.h`) hands the provider the plan it is being asked about: the
+action list, the index being decided, and the land that plan plays. Five inputs stop being guesses:
+
+```
+buff_targets     G + min(goblins_in_hand, 3)     ->  G + Goblins the plan actually casts
+entering_fodder  1 if a Goblin tutor is in hand  ->  the Goblins the plan actually casts
+haste_avail      "a haste lord we could afford"  ->  is one actually cast this turn?
+hand_has_play    "hand holds a deployable body"  ->  does the plan actually deploy one?
+mana_next        lands + 1                       ->  +1 more iff the plan still plays its land
+```
+
+Feasibility first (`MTG_TUTOR_PREFIX_STATS`, 9,572 tutor decisions): the tutor is already almost
+always the FIRST action (mean position 0.01), so distinct prefixes average 1.36 per decision. Ranking
+at the true per-plan state costs ~1.36 provider calls where it now costs 1 — the per-plan cost
+objection was void, and the correct state is reachable at the fan-out without moving ranking into
+every rollout leaf.
+
+### The theory is confirmed — on the metric it targets
+
+Truth table (fetch-choice quality, 429 games, `MTG_GOBLIN_PLAN_AWARE`):
+
+```
+                       regret     + postland
+SHIPPED                  +4          +6        postland costs +2
+PLAN-AWARE               +5          +5        postland costs  0   <- identical histogram
+```
+
+Plan-awareness makes the model **completely insensitive to which state it is ranked at**, which is
+exactly what the coherence theory predicts: once the land drop is read off the plan instead of
+guessed from the state, correcting the state changes nothing.
+
+### And it does not transfer to the suite
+
+Held-out overnight, 8,000 searched games:
+
+```
+postland alone                  +18.0    0 better / 18 worse
+plan-aware alone                 +2.0    3 better /  5 worse
+plan-aware + postland            +9.0    3 better / 12 worse
+```
+
+Plan-awareness HALVES postland's cost (+18 -> +9) and is itself near-neutral — the first two-sided
+result in this whole line of work; every earlier attempt was 0-better. But it does not reach zero.
+
+**Why the discrepancy matters more than the numbers.** The truth table measures only *which card gets
+fetched*, and there postland's cost genuinely goes to zero. The residual +9 on the suite is therefore
+NOT ranking error — it is plan-set churn: changing the ranking changes which variants get emitted,
+which changes what the search has to arbitrate. That is the same "SEARCH BRANCHING" mechanism
+`goblins_width_diagnose.py` identified long ago, where width helps without any better fetch existing.
+No ranking model can fix that, because it is not a ranking problem.
+
+### Disposition
+
+Nothing adopted; baseline is still the best arm. `MTG_GOBLIN_PLAN_AWARE` stays default-off with its
+numbers. The `PlanContext` infrastructure IS kept and is byte-identical with the flag off: it is
+correct, cheap, measured, and it is the only mechanism that would let the genuine root defect
+(`MTG_TUTOR_AXIS_POSTLAND`) ever be turned on at a survivable cost.
+
+The line of work is closed with the diagnosis settled: the model's guesses were not the problem, the
+window/veto was not the problem, and the ranking is 99.1% optimal (round 14). What is left on this
+decision is plan-set churn, which is worth at most the 4 turns of headroom that exist.
