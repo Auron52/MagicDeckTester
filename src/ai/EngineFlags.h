@@ -26,17 +26,21 @@ inline bool LandClosingWindowEnabled()
     return v;
 }
 
-// MTG_TUTOR_AXIS_RESOLVE=1 (default off): bind the searched tutor pick by INDEX resolved at the
-// TRUE per-plan state instead of by NAME ranked at the shared pre-land turn-start state (see the
-// full note at TurnSolver's TutorAxisResolveMode call sites and Plan::tutor_choice). Shared
-// reader because BOTH the plan machinery (TurnSolver) and the provider heuristics
-// (DecisionProviders) branch on it: under resolve mode a tutor ranking runs at MID-TURN states
-// (mana spent, source on the battlefield), and provider terms that conflate "mana unspent right
-// now" with "mana capacity per turn" -- calibrated on turn-start states where the two coincide --
-// must switch to the capacity read (see GoblinsProvider turns_to_deploy).
+// MTG_TUTOR_AXIS_RESOLVE -- DEFAULT ON (adopted 2026-08-05); =0 restores the legacy name-bound
+// axis. Bind the searched tutor pick by INDEX resolved at the TRUE per-plan state instead of by
+// NAME ranked at the shared pre-land turn-start state (see the full note at TurnSolver's
+// TutorAxisResolveMode call sites and Plan::tutor_choice). Shared reader because BOTH the plan
+// machinery (TurnSolver) and the provider heuristics (DecisionProviders) branch on it: under
+// resolve mode a tutor ranking runs at MID-TURN states (mana spent, source on the battlefield),
+// and provider terms that conflate "mana unspent right now" with "mana capacity per turn" --
+// calibrated on turn-start states where the two coincide -- must switch to the capacity read
+// (see GoblinsProvider turns_to_deploy). Adoption numbers (held-out overnight, per-game
+// loss-penalized vs prior GT): antilife d0 -317 (32/0) + searched -3; hinata d0 -11, searched ~0
+// net of the gi90/gi158 GT artifacts; goblins d0 +14 / searched +3 (all churn, recovers at 4x
+// budget) -- the accepted residual, tracked in docs/design/goblins-tutor-handoff.md section 9.
 inline bool TutorAxisResolveEnabled()
 {
-    static const bool v = EnvOn("MTG_TUTOR_AXIS_RESOLVE");
+    static const bool v = EnvOn("MTG_TUTOR_AXIS_RESOLVE", true);
     return v;
 }
 
