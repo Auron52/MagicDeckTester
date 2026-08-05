@@ -1,6 +1,6 @@
-# Regression ground truth -- commit c3e45cc  date 2026-08-04
+# Regression ground truth -- commit 0663886  date 2026-08-05
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-08-04): haste-in-attack-projection (202de5e) + Shard Volley hold (c3e45cc): burn improves on every case (d0 -0.033..-0.044, d3/d5 -0.001..-0.003); slivers/dragonstorm/goblins measured NEUTRAL over 40k games/deck (delta 0.00000/+0.00003) -- their d0 +-0.0005 here is noise
+# accepted-with-regressions (overnight, 2026-08-05): Shard Volley hold, expiry rule (0663886): all changed cases are burn and every one is better or identical -- d0 -0.05..-0.09 (greedy holds a card until it evaporates), d3/d5 -0.002 or same-score
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -8,9 +8,9 @@
 slivers_smoke_d0_s1001=4.6400/8c9b5ac882d6c4c3
 slivers_smoke_d3_s1001=4.2480/cd823752ad949954
 slivers_smoke_d5_s1001=4.1867/84c9f22011ccc27a
-burn_smoke_d0_s1001=4.5500/236b89cacbfba0f5
-burn_smoke_d3_s1001=4.3467/6ce072f1fa48f9c9
-burn_smoke_d5_s1001=4.3600/73061d752f2d1670
+burn_smoke_d0_s1001=4.4620/e667d678badfdd47
+burn_smoke_d3_s1001=4.3467/651787c2f14b8ed9
+burn_smoke_d5_s1001=4.3600/097f64ebacc7737d
 th_smoke_d0_s1001=5.4570/8d7bfc92ba129b2c
 th_smoke_d3_s1001=4.1133/9e1b7512be69504d
 th_smoke_d5_s1001=4.0000/24cce11abbaee0fa
@@ -39,11 +39,11 @@ slivers_regression_d3_s2002=4.2225/5173163dfc3e5ad2
 slivers_regression_d3_s3003=4.2500/edb2df8a91b6fa2d
 slivers_regression_d5_s2002=4.2267/9a7881046751fd73
 slivers_regression_d5_s3003=4.2500/a3530f38aea047ed
-burn_regression_d0_s2002=4.5090/aef246c82b106b41
-burn_regression_d3_s2002=4.3460/bc05e653eb033e0b
-burn_regression_d3_s3003=4.2500/43da0add328744e8
-burn_regression_d5_s2002=4.3460/bc05e653eb033e0b
-burn_regression_d5_s3003=4.2500/8693c256985efcd0
+burn_regression_d0_s2002=4.4260/7758958ee04e5983
+burn_regression_d3_s2002=4.3440/e693c357a77ce752
+burn_regression_d3_s3003=4.2500/5ac4c47e6e46ae43
+burn_regression_d5_s2002=4.3440/e693c357a77ce752
+burn_regression_d5_s3003=4.2500/ddb4e4bf0253d6bf
 th_regression_d0_s2002=5.4540/d43b616331346953
 th_regression_d3_s2002=4.1440/de51b8567179a3b6
 th_regression_d3_s3003=3.9920/71995534d16a1310
@@ -93,18 +93,18 @@ slivers_overnight_d5_s4004=4.2330/35233a8dbdcf0340
 slivers_overnight_d5_s5005=4.2070/8182755742f1f7fe
 slivers_overnight_d5_s6006=4.2370/b09d6ef1aed295b8
 slivers_overnight_d5_s7007=4.2140/41ddabf0e98cf21b
-burn_overnight_d0_s4004=4.5370/5705b23666f450e0
-burn_overnight_d0_s6006=4.5445/bf320cd5ebbe0a92
-burn_overnight_d0_s8008=4.5070/489472e6c05825da
-burn_overnight_d0_s10010=4.5675/497f8f6b962a7210
-burn_overnight_d3_s4004=4.3470/26d21d562c77bbe7
-burn_overnight_d3_s5005=4.3340/8f1bb7ebe45bf551
-burn_overnight_d3_s6006=4.3500/970df5c7ca7e6c22
-burn_overnight_d3_s7007=4.3720/167d30aa99b1d1b7
-burn_overnight_d5_s4004=4.3470/504eea07233b73c2
-burn_overnight_d5_s5005=4.3330/a3ad8ba66378c483
-burn_overnight_d5_s6006=4.3500/6de082266ab52640
-burn_overnight_d5_s7007=4.3720/ddd8ce8030b45db9
+burn_overnight_d0_s4004=4.4825/e8e265b78ef4c976
+burn_overnight_d0_s6006=4.4795/6320a16dc45df728
+burn_overnight_d0_s8008=4.4465/b5f07a9b2947865e
+burn_overnight_d0_s10010=4.5105/84e955c16bc048d6
+burn_overnight_d3_s4004=4.3470/ff10fb759c3cea5e
+burn_overnight_d3_s5005=4.3330/7e64493d89119d17
+burn_overnight_d3_s6006=4.3500/c3d508fa2bfba571
+burn_overnight_d3_s7007=4.3720/16c8463f7f58cce2
+burn_overnight_d5_s4004=4.3470/d52272b69f412057
+burn_overnight_d5_s5005=4.3330/05ca73d15b3f062e
+burn_overnight_d5_s6006=4.3500/b5da99ed0ff84383
+burn_overnight_d5_s7007=4.3720/f1fa03f3d03b4f70
 th_overnight_d0_s4004=5.4420/337f998bbfb4116e
 th_overnight_d0_s6006=5.4070/ef161cf843288d7f
 th_overnight_d0_s8008=5.4290/534c7a06db74e11c
