@@ -884,3 +884,49 @@ commit *inside* W=6 and are plan diversity, which no reordering recovers.
 Note the "W=12 worse" column grew to 4. That is not a regression in shipped play — it counts games
 where widening the axis HURTS, i.e. where the shipped W=6 ranking now beats the wide search
 (`s1001 gi113` T4 vs T5). It is a fact about search instability, not about the ranking.
+
+## ROUND 9 (2026-08-05): Goblin Chainwhirler — the evaluation is right, the engine already agrees
+
+> "Is there any case we really want Chainwhirler? It seems worse than Twinshot in almost every case
+> and worse than a lord in the others ... if you need a good 3-drop threat you want a lord. If you
+> want the immediate damage Twinshot is better ... what makes it playable in a real game is the
+> ability to ping 1 toughness creatures (i.e. like dorks or aggressive 1-drops). So Chainwhirler is
+> pretty bad in this goldfish environment."
+
+The card evaluation is correct, and the card data already concedes the key point — Chainwhirler's ETB
+hits "each creature and each planeswalker your opponents control and each opponent", and against a
+goldfish there are no opponent creatures, so the half that justifies the card is inert (`cards.json`
+notes it "only matters vs opponent spawn tokens"). What is left is **1 damage to the face against
+Twinshot Sniper's 2**, on `{R}{R}{R}` where Twinshot can be **channelled from hand for `{1}{R}`**.
+Both are 1-ofs.
+
+Implemented as a general **dominated-burn** rule rather than by card name: a tutor takes exactly ONE
+card, so a burn payoff only earns its credit when nothing strictly better is still fetchable. It
+self-restores — once Twinshot leaves the library Chainwhirler is the best burn again and gets full
+credit, which is precisely "only taken if Twinshot is gone and we need the 1 damage".
+
+It works exactly as designed and is **not worth shipping**:
+
+```
+mode                              regression searched   HELD-OUT searched   d0(12000g)
+0  off                                   0.0                  0.0              0.0
+1  drop the redundant face credit        0.0                  0.0            +88.0
+2  drop from consideration entirely      0.0                  0.0            +88.0
+```
+
+Chainwhirler drops 460 -> 300, rank 5 -> rank 7, out of the window — and **zero searched games change,
+across 8,000 held-out plus 1,100 regression**. Modes 1 and 2 are indistinguishable, which is itself
+the finding: once the card leaves the window, ranking it dead last buys nothing more. The search never
+wanted it, *and* freeing its window slot helps nobody else either.
+
+The only measurable effect is a cost, and it is a **greedy artifact**: d0 +88.0 is one game
+(`s8008 gi1882`, T8 -> unwon) against two d0 games improved, and at depth 3 and depth 5 both arms win
+on **T5**. d0 takes `cands[0]` with no search, so it is the only policy that can be hurt by demoting a
+card the search would have rejected anyway.
+
+**The transferable point:** a mis-ranked card inside the window is not automatically a bug. The search
+evaluates what the ranking offers it and discards the bad ones; the ranking only has to get a card
+*into* the window, and only matters when a bad card crowds out a good one. Round 8 fixed a real case
+of that (Twinshot losing a tie-break). This is the opposite case — a genuinely weak card that costs
+nothing by being present. Worth knowing before "obviously bad card ranked too high" is treated as a
+defect again. Lever kept at `MTG_GOBLIN_DOMINATED_BURN`, default 0.

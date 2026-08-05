@@ -4008,6 +4008,35 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
 
     // --- per-card value (board impact, incl. payoffs EvalCard misses) --------------------------
     constexpr double BODY = 100.0;   // per power (a damage-equivalent, matching EvalCard's DMG)
+    // Best face damage still FETCHABLE, for the dominated-burn rule in value_of below. A tutor takes
+    // exactly one card, so a burn payoff only earns its credit if nothing strictly better is sitting
+    // in the same library. MTG_GOBLIN_DOMINATED_BURN: 0 = off, 1 = drop the redundant face credit,
+    // 2 = drop the card out of contention entirely (rank it last).
+    static const int dom_burn_mode = EnvInt("MTG_GOBLIN_DOMINATED_BURN", 0);
+    auto face_of = [](const CardParams& q) {
+        return std::max({ q.etb_damage_any, q.etb_damage_each_opponent, q.channel_damage });
+    };
+    int pool_best_face = 0;
+    if (dom_burn_mode > 0)
+    {
+        for (const std::string& n : cands)
+        {
+            for (const Card& lc : s.players[controller].library)
+            {
+                if (lc.m_name != n) { continue; }
+                const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+                if (ld) { pool_best_face = std::max(pool_best_face, face_of(ld->params)); }
+                break;
+            }
+        }
+    }
+    // True when this card's burn is strictly beaten by another fetchable candidate's.
+    auto is_dominated_burn = [&](const CardDefinition* d) -> bool
+    {
+        if (dom_burn_mode == 0 || !d) { return false; }
+        const int f = face_of(d->params);
+        return f > 0 && f < pool_best_face;
+    };
     auto value_of = [&](const CardDefinition* d, const Card& c) -> double
     {
         if (!d) { return 0.0; }
@@ -4170,7 +4199,41 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         if (face_value)
         {
             const int face = std::max({ p.etb_damage_any, p.etb_damage_each_opponent, p.channel_damage });
-            if (face > 0) { v += face * face_per; }
+            // DOMINATED BURN (user, 2026-08-05). A tutor fetches ONE card, so a burn payoff is only
+            // worth its face value if it is the BEST burn still fetchable -- if a strictly better one
+            // is sitting in the same library, this card's damage is not a reason to take it.
+            //
+            // Goblin Chainwhirler is the case, and in this environment it is dominated twice over:
+            // "if you need a good 3-drop threat you want a lord. If you want the immediate damage
+            // Twinshot is better ... what makes it playable in a real game is the ability to ping
+            // 1 toughness creatures (i.e. like dorks or aggressive 1-drops)". Goldfishing has no
+            // opponent creatures, so the half of its ETB that justifies the card is INERT -- the
+            // card data says as much ("only matters vs opponent spawn tokens"). What is left is
+            // 1 damage to the face against Twinshot Sniper's 2, on a card that also costs {R}{R}{R}
+            // where Twinshot can be CHANNELLED from hand for {1}{R}.
+            //
+            // Deliberately by RULE, not by card name: any candidate whose face damage is strictly
+            // beaten by another fetchable candidate loses the credit, so the deck can change without
+            // this going stale. It self-restores -- once Twinshot Sniper has left the library,
+            // Chainwhirler is the best burn again and gets its full credit back, which is exactly
+            // "only taken if twinshot is gone and we need the 1 damage".
+            //
+            // MEASURED AND NOT ADOPTED (default 0) -- the card evaluation is right and the engine
+            // already agrees. Demoting Chainwhirler 460 -> 300 moves it from rank 5 to rank 7, out
+            // of the window, and changes EXACTLY ZERO searched games across 8,000 held-out (and 1,100
+            // regression). Modes 1 and 2 are indistinguishable from each other: once it leaves the
+            // window, ranking it dead last buys nothing further. So the search never wanted it, and
+            // freeing its window slot never helps anyone else either.
+            //
+            // The only measurable effect is a cost: d0 +88.0, which is one game -- s8008 gi1882, T8
+            // -> unwon -- against two d0 games improved. And that game is a GREEDY artifact: at
+            // depth 3 and depth 5 both arms win on T5. d0 takes cands[0] with no search, so it is
+            // the only policy that can be hurt by removing a card the search would have rejected.
+            //
+            // Kept as a lever because the reasoning generalises (a tutor takes ONE card, so a
+            // dominated payoff is not a reason to take it) and because it answers, with numbers, a
+            // question worth not re-asking.
+            if (face > 0 && !is_dominated_burn(d)) { v += face * face_per; }
         }
         return v;
     };
@@ -4583,6 +4646,9 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             // fetch that guarantees the kill this turn sorts ahead of every non-lethal one, best burst first.
             if (burst > 0 && swing_atk < opp_life && opp_life <= swing_atk + burst)
             { sc += 1.0e6 + burst; }
+            // Mode 2 -- "drop it from consideration entirely": sort it below every real
+            // candidate rather than removing it, so it stays legal if it is all that is left.
+            if (dom_burn_mode == 2 && is_dominated_burn(d) && sc < 1.0e6) { return 1.0; }
             // After the lethal override, so a fetch that wins outright is never discounted.
             if (rank_v2 && dup_hand_penalty && sc < 1.0e6)
             {
