@@ -407,3 +407,1175 @@ The useful negative result: **"how much gas the cut unlocks" is not the axis tha
 states.** One scalar trades them against each other. gi131 is the standing item — a better account of
 the cost cut needs to price *multi-spell turns* without inflating the single-bomb case, and neither a
 flat fraction nor a linear count of deployable cards does that.
+
+---
+
+## ROUND 4 (2026-08-04): scoring the ranking against real win turns
+
+Every measurement above is a PROXY — aggregate turn-units, or "what width does the search need".
+`test/goblins_tutor_truth.py` (via `MTG_TUTOR_FORCE_RANK`) measures the thing itself: force the tutor
+to each ranked candidate and record the real win turn. 400 held-out games, 100 with a searched tutor:
+
+```
+all 100 decisions       best at #1: 96   top4: 97   top6: 98
+the 16 where the fetch
+CHANGES the win turn    best at #1: 12   top4: 13   top6: 14
+total regret @W=4: 3 turns / 100 decisions        @W=6: 2 turns
+```
+
+**The ranking is not broadly wrong.** The fetch is a tie in 84% of decisions, and among those that
+matter it picks the best card outright three times in four. The entire W=4 gap is three decisions in
+a hundred. Score the ranking only on the decisions where the fetch changes the win turn — averaging
+in the ties flatters it badly, and a flat row counts as a "hit" purely by argmin convention.
+
+Two earlier claims in this doc were corrected by that measurement:
+
+* *"All 11 persisting regressions recover at W=12, so the ranking put the right card outside the
+  window"* — the recovery numbers were right, the mechanism was not. gi14 is T6 at **every** forced
+  rank 1..16 yet reaches T5 at W=12, so part of what wider W buys is extra search branching, not a
+  better fetch.
+* *"Two of the three W=4 misses are Muxus buried by the deploy discount"* — read off T1
+  search-simulated states rather than the decision. Both winning lines deploy Muxus perfectly well
+  (gi206 hard-casts it off Skirk sacs; gi33 puts it in via a Lackey connect).
+
+**Instrument limitation:** it forces the same rank at every tutor in a game and collapses the axis to
+width 1, so a game needing different picks at two Matrons cannot be represented — gi14 is that shape.
+
+### The real gi206 defect: skirk_ramp counted the wrong bodies (ADOPTED)
+
+At the T3 Matron, `mana_next` reads 4 against a Muxus at MV 6, so the deploy discount prices the
+deck's bomb three turns out and buries it — while the line that wins a turn earlier hard-casts Muxus
+*next turn* off exactly these sacs. Two counting errors, both user-directed:
+
+1. **The entering tutor source was not counted.** Goblin Matron is itself a Goblin creature and is
+   entering right now. The board scan runs while it is still in hand, so it was missed. `606a381`
+   made this same correction on the ATTACK side (the swing projection counts the source as entering);
+   the MANA side never got it.
+2. **Lords were counted as fodder.** Feeding a Chieftain to Skirk de-buffs the whole board, so it is
+   fodder only in extremis — now excluded, matching `CanonicalSacVictim`'s expendability ordering.
+   They stay in `G` for every other purpose; this is only about what Skirk can eat.
+
+Measured separately, because bundling is what hid the harmful component in round 3:
+
+```
+entering source only    held-out searched -2.0   d0 +10.0
+lords-not-fodder only   held-out searched  0.0   d0  -2.0
+both (ADOPTED)          held-out searched -2.0   d0  +1.0     train: smoke +1, regression -2
+```
+
+The entering-source correction carries the searched gain; the lord exclusion is searched-neutral and
+cancels its d0 cost. The aggregate is **inside the noise band** — these are adopted for MODEL
+CORRECTNESS on a measured non-regression, not on turn-units. The sharper evidence is the diagnostic:
+gi206's Muxus climbs **rank 13 → 7**, and the worst miss across the 100 sampled decisions improves
+from 13 to 11.
+
+`regret@W=4` is unchanged at 3 turns — Muxus is closer but still outside a four-slot window. That is
+the standing target: **get regret@W=4 to zero and the W=6 widening can be reverted.**
+
+### Why the ideal card was good, per game (2026-08-04)
+
+Analysing the three `regret@W=4` misses individually, rather than as an aggregate.
+
+**gi206 — Muxus. GENUINE, now fixed.** At the T3 Matron the board is just Skirk, 2 lands, hand holds
+Siege-Gang / Hordemaster / Chieftain. The winning line fetches Muxus, plays a fourth land, sacs two
+Goblins to Skirk for 6 mana, and Muxus converts the top of the library onto the battlefield — lethal
+from 19 in one swing.
+
+The ranking could not see the mana, and the reason is an inconsistency with the engine:
+`skirk_ramp = G - 1`. "Sacrifice a Goblin: Add {R}" is repeatable and needs no tap, and Skirk is
+itself a Goblin, so the last activation eats Skirk and **N bodies convert to N mana, not N-1**.
+`CollectActions`' own multi-sac burst already models it that way (victim count `V` includes the
+source; `k` is capped at `V`), so the ranking was predicting one less mana than the solver would
+find. With `-1`, `mana_next` reads 5 against a MV-6 Muxus and the discount prices the bomb two turns
+out; with the correct count it reads exactly 6 — castable next turn. **Muxus rank 7 → 2**, so the
+full chain on this decision is 13 → 7 → 2.
+
+**gi33 — INSTRUMENT ARTIFACT, not a ranking miss.** The fetched Muxus is never cast; it sits in hand.
+The T3 kill comes from Siege-Gang sacrificing Goblins for damage in main 2 (life 6 → 0). What changed
+is the PLAN: the shipped line spends both mana on Skirk plus a second Lackey, the forced line casts
+only Skirk and keeps mana for the sac kill. Collapsing the tutor axis to width 1 changed the plan's
+value — the documented limitation of `MTG_TUTOR_FORCE_RANK`, showing up in the data. Do not chase it
+as a ranking defect.
+
+**gi124 — Lackey. GENUINE, STILL OPEN, and the clearest remaining modelling gap.** At the T3 Matron:
+Aether Vial out, 2 lands, hand holds Krenko / Chainwhirler. Fetching Lackey deploys it that turn, and
+it then connects on **T4 and again on T5**, putting Siege-Gang (MV 5) and Chainwhirler (MV 3) onto
+the battlefield free — 8 mana of creatures across two combats.
+
+What the ranking pays it: a 1/1 body worth 100, plus `min(0.60, 0.20 x (stuck_turns - 1)) x
+stuck_hand_value`. Only Krenko is out of reach and only by one turn, so `stuck_turns = 2` and the
+fraction is **0.20**, applied to Krenko's 300 — Lackey scores ~160 for two free deploys.
+
+The defect is structural: **the Lackey credit is a fraction of ONE stuck card, but Lackey is a
+REPEATING engine.** It does not accelerate a single bomb by a turn; it deploys a card every combat
+for the rest of the game. The natural representation is the decayed sum of the top-2 hand Goblins it
+can realistically drop, not a fraction of the best one. Muxus has a milder version of the same
+problem: `etb_reveal_count x 75` prices six revealed cards at 450, when 54% of the deck is Goblin
+creatures (33 of 61), so it expects **~3.2 free bodies** whose real average value is several hundred
+each. Both are the lord-amplification family — value that arrives as OTHER CARDS.
+
+Self-sac measured: `regret@W=4` **3 → 2**, `@W=6` 2 → 1, top-4 among live decisions 13/16 → 14/16.
+Aggregate is searched-NEUTRAL (held-out 0.0, regression -1.0, smoke 0.0) with d0 +6.0 / 12,000. It is
+adopted on the engine-inconsistency and the regret metric, NOT on turn-units. The Lackey
+repeating-deploy model is the one that should actually move turns.
+
+### Lackey as a repeating engine: MEASURED, REJECTED, and it settles the width question
+
+Built as `MTG_GOBLIN_LACKEY_REPEAT` (kept default-OFF in `DecisionProviders.cpp` with the numbers in
+place). Every other enabler channel is a fraction of the ONE best stuck card. Lackey is not that
+shape — it puts a Goblin from hand onto the battlefield every combat, and 33 of this deck's 61 cards
+are Goblin creatures, so its worth is not bounded by what is stuck right now. gi124's second drop
+(Siege-Gang) was not even in hand at the fetch. So the later drops are priced off the mean value of
+the Goblin creatures still in the LIBRARY (composition, not order — the same deck knowledge
+`TutorCandidates` already uses).
+
+Refined by the user mid-build, and the refinement is a model change rather than a constant: *"that
+Chainwhirler can only attack on turn 6 ... unless the 1 damage from it does the trick, this isn't so
+amazing. But yes, it is very much not nothing. And really does ensure we don't slip much beyond T6."*
+Lackey puts the creature in on COMBAT DAMAGE, so it arrives summoning-sick and its body does nothing
+until the following turn. Only its ETB half pays immediately — Chainwhirler's ping, Siege-Gang's
+tokens. So the later drop is credited on `value_of` **minus the body**, a floor against slipping a
+turn rather than a tempo gain.
+
+**Result: far too weak to matter.** Weights of 25 / 35 / 60 % give *identical* held-out numbers
+(searched −2.0, d0 0.0) and gi124's Lackey stays at rank 11. The deck's mean ETB-only Goblin value is
+only ~100–150, so even at 60 % the term adds ~80 to a Lackey scoring ~160 — nowhere near the ~3×
+needed to climb into a four-slot window.
+
+**Do not simply scale it up.** Excluding Lackey from the candidate list *entirely* costs only **+12.0
+turn-units over 16,000 games** (measured in round 2) — that is the total value of Lackey-as-a-fetch
+across the whole suite. Over-crediting it to recover one game risks more than the entire upside
+available. gi124 is left standing deliberately.
+
+### THE RESOLUTION: W=6 is not a crutch for a bad ranking
+
+With every ranking fix above in place, reverting to W=4 was re-measured:
+
+```
+W=4 vs shipped W=6      smoke searched 0.0    regression searched +3.0    overnight searched +14.0
+                        d0 unchanged at every tier
+```
+
+So the width is still worth ~17 turn-units, *more* than the −6.0 it measured before the ranking was
+fixed. Set that against the ranking-side metric, which says W=4 loses only **2 turns per 100 tutor
+decisions** (1 more than W=6). The two disagree because they measure different things:
+
+* `regret@W` measures **fetch quality** — is the best card inside the window.
+* The aggregate also includes **search branching** — a wider axis gives the search more plans to
+  arbitrate, which helps even when no single forced candidate would. gi14 is the proof: T6 at every
+  forced rank 1..16, yet T5 at W=12.
+
+**Conclusion: "move the ranking close enough that W=4 captures everything" is not achievable by
+ranking work alone**, because a material part of the width's value was never about ranking. The
+ranking is now right at #1 in 12 of the 16 decisions that matter and inside the top 4 in 14 of 16;
+the residual belongs to plan diversity, not to candidate ordering. W=6 stays, and this line of
+investigation is closed.
+
+---
+
+## ROUND 5 (2026-08-04): reading the rank the SEARCH COMMITS TO, and the face-damage term
+
+### The forced-rank table was unsound — do not rebuild it
+
+`MTG_TUTOR_FORCE_RANK` collapses the tutor axis to width 1, which changes the PLAN, not just the
+fetch. `s7007 gi371` is the proof: forced rank 6 casts Matron on T4 and forced rank 10 casts it on
+T3, **both fetching a Goblin Piledriver**. Same card, two "ranks", two board states whose candidate
+lists never coexist. Any per-rank win-turn table built that way mislabels plan changes as ranking
+misses, and the first version of this analysis did exactly that.
+
+### The sound instrument: MTG_TUTOR_CHOSEN_RANK
+
+Log the ranking position the search **commits to** at real tutor resolution (gated on
+`g_real_resolution`, so rollouts are silent). Run wide and it reads unambiguously: a committed rank
+past the shipped width is a real ranking miss with a trustworthy card name; inside it means the extra
+width bought plan diversity and no reordering will recover that game. Ranks are over NAMES deduped in
+list order, since fetching by name always takes the first matching library card.
+
+```
+the 19 games the width decides, at W=12   21 real tutor decisions, 10 committed PAST W=6:
+   4x Skirk Prospector   ranks 8, 9, 12, 12      2x Goblin Piledriver  ranks 7, 8
+   3x Twinshot Sniper    ranks 11, 12, 13        1x Goblin Lackey      rank 10
+
+BASE RATE, 300 arbitrary games                   80 real tutor decisions, 5 committed PAST W=6:
+   4x Twinshot Sniper        1x Goblin Lackey                     -> 6% of decisions
+```
+
+Past-window commits are a **6% tail** in general, so the shipped W=6 is right for the overwhelming
+majority of decisions. But **Twinshot Sniper is 4 of the 5 unbiased misses** — the deck's single
+largest ranking error. It also explains `s4004 gi14`, which no single forced rank could reach: it has
+TWO tutor decisions, rank 1 at T3 and rank 11 at T5, and the forced instrument pins one rank for the
+whole game by construction.
+
+### Face damage was worth exactly ZERO (ADOPTED, trained)
+
+`value_of` had no `etb_damage_any` / `channel_damage` term at all, and `face_burst` — which does
+compute the damage — is consumed only by the exact-lethal override. So Twinshot Sniper's "deals 2
+damage to any target" paid nothing unless it happened to be the last 2 points; it scored as a 2-power
+body, 200. A plain modelling gap, not a tuning question.
+
+TRAINED rather than guessed (`test/goblins_face_value_train.sh`). Selection used the overnight
+searched cases of seeds **s4004+s5005 only**, reading s6006+s7007 afterwards — sweeping the whole
+overnight tier and taking its minimum is selection on the holdout, and the regression tier's ~1,325
+searched games cannot resolve a delta this size:
+
+```
+per     TRAIN(4000g)   VALIDATE(4000g)   d0(12000g)
+ 80        0.0             0.0             +3        inert -- below a lord's score, nothing reorders
+100       -4.0            -2.0             +4        <- ADOPTED (== BODY)
+120       -4.0            -4.0            +15
+160       -6.0            -3.0            +25        <- train minimum
+200       -4.0            -3.0           +133
+```
+
+Train's minimum is 160, but 160 vs 100 is 2 turn-units over 4,000 games — noise. Searched is flat
+from 100 up; what actually separates the weights is **d0 cost, which climbs steeply**. So take the
+smallest weight that captures the effect: it is statistically indistinguishable from the train
+optimum, by far the cheapest, and the least extreme claim — 100 is exactly `BODY`, i.e. *a point of
+unconditional face damage is worth a point of power on a body*, which deliberately does NOT assert
+that burn beats creatures.
+
+`max()`, not sum, over the ETB ping and the Channel mode: they are alternatives (cast the creature,
+or discard it from hand for the same damage), so adding them double-counts one card.
+
+Held-out: **zero searched slowdowns or play changes**, every searched case better or equal. One
+regression-tier game slower (`s3003 gi156` T4→T5) — CHURN, recovers at 16x budget and at unlimited.
+
+## ROUND 6 (2026-08-04): the last two named misses — Skirk ADOPTED, Piledriver REJECTED
+
+Round 5 left two cards named as past-window commits. Both looked like the *same* defect — a card
+priced on its body because a term was missing or miscounted — and both were tested the same way.
+They came apart completely, and the pair is a good record of why the measurement is not optional.
+
+### Skirk Prospector: the fodder count was never corrected here (ADOPTED)
+
+Skirk's entire ramp credit lives in `enabler_of` as `min(0.40, 0.13 * max(0, G - 1))`. In all three
+of its past-window commits — `s3003 gi194`, `s4004 gi727`, `s5005 gi920` — **G is 0 or 1, so that
+fraction is exactly ZERO** and Skirk scores 100: a vanilla 1/1, rank 12 of 14-16. That the *gate*
+(`stuck_hand_value > 0`) is not the problem is provable from the same dumps: Goblin Lackey, the other
+enabler, collects **+340** from `stuck_hand_value` in those very states.
+
+`G - 1` is wrong in exactly the three ways `skirk_ramp` was already corrected in `236bb13` +
+`c13cbac` — and this line got **none** of them, because `skirk_ramp` is gated on `skirk_on` (a
+Prospector *already* on the battlefield) and is therefore identically zero in precisely the states
+where we are deciding whether to fetch one. The fodder a fetched Prospector will actually eat is the
+board's expendable Goblins (`goblin_fodder`, not `G` — lords de-buff the team) **+ the entering tutor
+source** (a Goblin creature, the reason this function is running) **+ the Prospector itself** (the
+ability is repeatable, needs no tap, and Skirk is a Goblin, so N bodies make N mana, not N-1 — which
+is how `CollectActions`' multi-sac burst already counts victims). The old `-1` was doubly wrong: it
+subtracted a legal self-sac *and* omitted the two arriving bodies.
+
+Typical corrected count is 1 + 1 + 1 = 3 → fraction 0.39, just under the cap. Skirk scores **321
+instead of 100** and moves from rank 12 to rank 5-8.
+
+```
+                     train (regression)   HELD-OUT (overnight, 8000g)   d0 (12000g)
+Skirk fetch-fodder         -2.0                    -3.0                     0.0
+                                            4 games better / 1 worse
+```
+
+Same sign on both tiers — it replicates, which is the bar.
+
+### Goblin Piledriver: the crowd count is NOT the axis (REJECTED)
+
+The argument was the better-looking of the two, and it was wrong. `G` is read at the instant of the
+FETCH, when the board is smallest, but a fetched Piledriver enters **summoning-sick** and cannot
+attack until the following turn — by which point the entering tutor source has landed, another deploy
+has landed, and every sick body is ready. In both of its past-window commits (`s3003 gi290`,
+`s7007 gi371`) G is 1 against a `buff_targets` of 4, so it scores 190 and sits at rank 9-10.
+
+Widening the count does exactly what it was designed to do — Piledriver lifts to rank 3-5 — and it
+does not pay:
+
+```
+crowd                 per    HELD-OUT    games
+G (shipped)            45      0.0       --
+buff_targets           45     -1.0       5 better / 4 WORSE
+G + entering + 1       45     +4.0       0 better / 4 WORSE
+buff_targets           25     +2.0       0 better / 2 WORSE
+```
+
+Three things kill it:
+
+1. **The one non-positive arm is noise.** Split by seed, `buff_targets`/45 is **+1 on s4004+s5005 and
+   −2 on s6006+s7007** — opposite signs on the two halves. Its train result (−4.0 on the regression
+   tier) did not replicate; this is the ~1,325-searched-game resolution limit biting again, exactly as
+   it did once before in this document.
+2. **It is not additive with the Skirk fix.** Skirk alone measures −3.0 held-out; Skirk + Piledriver
+   measures **−3.0**. It contributes nothing on top, while adding 3 more games worse.
+3. **Magnitude, not count, is what the games like.** The two arms that hold the product near shipped —
+   to separate "wrong count" from "wrong size" — are *strictly worse with zero games improved*. So the
+   `45.0` is calibrated against the undercounted crowd, and no redistribution of that product helps.
+
+`d0` was **exactly 0.0 in every Piledriver arm**: across 12,000 greedy games it never once changed the
+top pick, so all of this only ever moved the card around inside the tail.
+
+Same shape of negative result as `MTG_GOBLIN_CUT_WIDTH` — a well-motivated recount that turns out not
+to be the axis the states differ on. Lever kept (`MTG_GOBLIN_PILEDRIVER_CROWD`, `_PER`), default 0.
+
+### The transferable lesson
+
+Two cards, identical symptom (*scored as a bare body, committed to past the window*), identical fix
+shape (*count the crowd/fodder that exists when the card ACTS*), opposite verdicts. The symptom does
+not predict the outcome; only the held-out measurement does. Note also which evidence was decisive in
+each case — for Skirk, a term that was **provably, arithmetically zero** where a sibling enabler
+collected +340; for Piledriver, nothing was zero, the term was merely *small*. A missing term is worth
+fixing; a small term is a tuning question, and tuning questions on this deck mostly come back noise.
+
+### Follow-on: the ramp RATE, trained (`test/goblins_skirk_rate_train.sh`)
+
+The fodder fix moves Skirk from 100 to 321, but the chosen-rank instrument still shows it committed at
+rank 7-9 — better, not inside the window. The reason is *not* the 0.40 cap. At `s3003 gi194` the credit
+is 0.26 = `0.13 x 2`: the single board Goblin there is a **lord**, so `goblin_fodder` is 0 and the only
+fodder is the entering Matron plus the Prospector itself. Raising the cap would change nothing; the
+**per-body rate** is the lever. (The cap is raised to 0.60 alongside purely so a higher rate cannot
+silently clip on high-fodder boards — it is inert at the old rate, 13/60 reproducing 13/40 exactly.)
+
+```
+rate   TRAIN(4000g)   VALIDATE(4000g)   d0(12000g)
+ 13       -4.0            +1.0             0.0      the fodder fix alone
+ 18       -6.0            +1.0             0.0      <- ADOPTED
+ 22       -6.0            +1.0             0.0
+ 26       -6.0            +1.0             0.0
+ 32       -6.0            +1.0             0.0
+```
+
+Flat from 18 up — the ordering **saturates**. At gi194, `0.18 x 2 = 0.36` scores Skirk 406, just over
+Goblin Chainwhirler's 400, and that single crossing is the entire gain; beyond it Skirk passes only
+cards whose position does not change an outcome. So take the smallest rate that captures the effect,
+the same rule the face-damage weight was chosen by. `d0` is 0.0 at every rate: the greedy top pick
+never changes, so this is purely window membership. The `+1.0` on validate is one game, `s7007 gi588`
+(T4→T5), and it is **churn** — recovers at 16x budget and at unlimited.
+
+### A caution about re-reading the miss set after a ranking change
+
+After adopting the fodder fix the instrument reported *more* past-window commits (11, up from 10),
+which looks like a regression and is not one. `MTG_TUTOR_CHOSEN_RANK` forces `MTG_TUTOR_WIDTH=12`, so
+the arm being measured plays a different game from the shipped W=6 engine; change the ranking and both
+the ordering **and the W=12 trajectory** move, so the before/after decisions are not the same decisions
+re-scored. The instrument is sound for "in the games width decides, what rank does the search commit
+to" — it is not a before/after quality metric across an engine change. Turn-units are the ground truth.
+
+## ROUND 7 (2026-08-04): Piledriver re-derived from the user's model — ADOPTED
+
+Round 6 rejected the Piledriver crowd-count fix on a clean held-out measurement. The rejection was
+correct; the *diagnosis* was not. The user supplied the model that was missing:
+
+> "similar to a lord except it does 2 per other goblin and only realized when it attacks ... 2 per
+> other attacking goblin plus the 1 base power, whereas the lord does 1 per other attacking goblin +
+> 1 base power ... pretty close to Rundvelt Hordemaster unless the lord effect can give lethal this
+> turn. Piledriver usually wins if there is haste or there are multiple turns it can attack." And,
+> decisively: **"it's important that the Piledriver is not strictly better."**
+
+### The two halves of the comparison were never on one scale
+
+As swing damage added, with N = other attacking Goblins: **lord = N·1 + 1, Piledriver = N·2 + 1.**
+The lord side was already priced exactly that way (`power_bonus * buff_targets * BODY` + body).
+Piledriver was `G * 2 * 45` — a different crowd (board-only, read at the fetch, when the board is
+smallest) *and* under half the per-point rate. At `buff_targets` 4 that is **190 against the lord's
+500, where the true ratio is 9/5**.
+
+This also explains Round 6's negative result rather than contradicting it: every variant there was
+swept at the old 45/point, and `d0` was **exactly 0.0 in all of them** — across 12,000 greedy games
+Piledriver never once changed the top pick, because 190→460 still lost to every lord. The count was
+never the axis. The **scale** was, and nothing tested moved it far enough to matter.
+
+### The conditionality is derived, then capped — and the cap is the user's call, not a tuned knob
+
+Over T remaining attack steps a lord realizes `T(N+1)` while Piledriver, which cannot attack the turn
+it lands, realizes `(T-1)(2N+1)`. So the pump scales by `(T-1)/T`, and T is estimated from board
+damage against opponent life — "close to lethal" and "plenty of turns left" being one quantity read
+two ways. But the derived factor alone reaches 0.83 by T=6, making Piledriver ~1.67x a lord, and the
+held-out cost is **monotone in how far past parity it goes**:
+
+```
+realization factor          HELD-OUT searched   d0        crowd
+0.50  (== lord parity)            -3.0         -3.0      board + source + 1   <- ADOPTED
+0.65                               0.0        +21.0      board + source + 1
+(T-1)/T, uncapped ~0.83           +2.0        -52.0 *    board + source + 1
+(T-1)/T, uncapped                 +6.0        +55.0      buff_targets
+* not a win: one seed carries it (s4004 -81) while the other three d0 seeds are +13/+8/+8.
+```
+
+So `min(0.50, (T-1)/T)`, which keeps **both** halves: T=1 gives exactly 0.0 (*"if close to lethal and
+no haste the lord is better"*), everything from T=2 up sits at parity, and haste removes the lost
+swing entirely for the full 2x. The user's intuition beat the derivation — the 0.50 anchor is
+*measured*, and "not strictly better" was empirically right.
+
+**Crowd matters too, and `buff_targets` is wrong here.** A lord's buff waits around for hand Goblins
+to land; a pump that fires only on the swing is bounded by what is deployed by then. `buff_targets`
+ranked Piledriver **first on a T1 empty board** off three undeployed hand cards — the same over-reach
+as the rejected variant 3 — and measured +6.0 held-out. Board + entering source + one deploy is the
+honest count.
+
+Shipped: smoke -1.0, regression -3.0, **held-out overnight -3.0 searched and -3.0 d0**.
+
+### Rundvelt Hordemaster x Skirk Prospector: real, and inert here (lever kept, default off)
+
+> "Rundvelt Hordemaster is better if we are sacrificing creatures to Skirk Prospector — the extra
+> effect comes into play ... and the skirk effect can be pretty huge."
+
+True, and `value_of` had no `dies_trigger_impulse_exile` term at all, so it was worth zero. Both
+directions were implemented (fetch the Hordemaster into a Skirk board; fetch the Skirk into a
+Hordemaster board — the commoner state, since Hordemaster ranks 2-4 and is usually the one already
+down) and priced off the sacs actually expected, each self-gating on its partner.
+
+It measures **exactly nothing**: searched 0.0 alone, and with the Piledriver rescale in place the
+arms with and without it are byte-identical. Not a broken gate — a Skirk is live at ~16% of tutor
+decisions (`skirk_ramp` up to 26). The pairing simply never decides a fetch: Hordemaster is already
+ranked high enough that more value does not move it, and where it did move something (d0 +1.0 alone)
+it moved it wrong. `MTG_GOBLIN_IMPULSE_PER`, default 0.
+
+## ROUND 8 (2026-08-04): Twinshot Sniper — the face weight re-trained on the CURRENT ranking
+
+Round 7 left Twinshot Sniper as 3 of the 4 remaining past-window commits. Two things about how this
+was diagnosed are worth keeping.
+
+**The obvious hypothesis was wrong.** All three misses are T5 decisions, so "late, near lethal, and a
+flat face weight cannot see it" was the natural guess — and a near-lethal ramp would have been built
+on it. The states refute it outright: `opp_life` 15 / 19 / 14 against swings of 5 / 3 / 3, i.e. 3-6
+swings still to come. Nothing near lethal. Checking the states before building the fix cost one dump
+and saved a whole mechanism.
+
+**What it actually was: a calibration that had gone stale.** Twinshot scores exactly 400 in all three
+(200 body + 2 x 100 face) and the margins are tiny — in `s4004 gi828` it is *tied on 400* with Goblin
+Chainwhirler and loses only the stable-sort tie-break; in `s6006 gi496` it needs +61 to clear Krenko;
+in `s4004 gi14` it is already inside the window. The weight had been trained in round 5, **before**
+the Skirk and Piledriver fixes reshuffled everything around it, so it was tuned against a ranking that
+no longer existed.
+
+Re-swept with the same train/validate split against the current ranking:
+
+```
+per     TRAIN(4000g)   VALIDATE(4000g)   d0(12000g)
+100        0.0             0.0              0.0     the shipped weight (baseline)
+120       -2.0             0.0            +10.0
+140       -2.0            -2.0            +10.0
+160       -4.0            -2.0            +17.0     <- ADOPTED, interior optimum
+180        0.0            -2.0            +19.0
+200       +2.0            -2.0           +123.0
+```
+
+Train has a genuine interior minimum at 160 with 140 and 180 both worse on either side, so it is an
+optimum rather than a sweep boundary. 160 was **also** the train minimum in round 5's sweep against
+the old ranking — a stable optimum across two different rankings, which is the best evidence available
+that it is real and not selection noise. (Round 5 nonetheless shipped 100, correctly at the time: the
+searched curve was flat from 100 up *then*, so the smallest weight won on the tie-break. It is no
+longer flat.)
+
+Held-out: **searched -6.0 with 6 games better and ZERO worse** — the cleanest searched result of this
+sequence. It is not free: **d0 +17.0, 1 game better and 17 worse**, by far the largest d0 cost adopted
+here (Skirk 0.0, Piledriver -3.0). Taken on the standing priority that searched is what ships and d0 is
+a diagnostic, but it is a genuine trade and is recorded as one.
+
+### Where the width gap stands after rounds 6-8
+
+```
+                       W=12 better   W=12 worse   past-window commits
+start of the sequence       16            3          10 of 21  (48%)
+after Skirk + Piledriver     9            3           4 of 13  (31%)
+after the face weight        6            4           3 of 11  (27%)
+```
+
+Remaining misses are one each of Twinshot Sniper, Goblin Lackey and Rundvelt Hordemaster — no card
+appears twice any more, which is the signal that the systematic mispricings are done and what is left
+is per-state noise. Of the 6 games still better at W=12, only 3 contain a ranking miss at all; the rest
+commit *inside* W=6 and are plan diversity, which no reordering recovers.
+
+Note the "W=12 worse" column grew to 4. That is not a regression in shipped play — it counts games
+where widening the axis HURTS, i.e. where the shipped W=6 ranking now beats the wide search
+(`s1001 gi113` T4 vs T5). It is a fact about search instability, not about the ranking.
+
+## ROUND 9 (2026-08-05): Goblin Chainwhirler — the evaluation is right, the engine already agrees
+
+> "Is there any case we really want Chainwhirler? It seems worse than Twinshot in almost every case
+> and worse than a lord in the others ... if you need a good 3-drop threat you want a lord. If you
+> want the immediate damage Twinshot is better ... what makes it playable in a real game is the
+> ability to ping 1 toughness creatures (i.e. like dorks or aggressive 1-drops). So Chainwhirler is
+> pretty bad in this goldfish environment."
+
+The card evaluation is correct, and the card data already concedes the key point — Chainwhirler's ETB
+hits "each creature and each planeswalker your opponents control and each opponent", and against a
+goldfish there are no opponent creatures, so the half that justifies the card is inert (`cards.json`
+notes it "only matters vs opponent spawn tokens"). What is left is **1 damage to the face against
+Twinshot Sniper's 2**, on `{R}{R}{R}` where Twinshot can be **channelled from hand for `{1}{R}`**.
+Both are 1-ofs.
+
+Implemented as a general **dominated-burn** rule rather than by card name: a tutor takes exactly ONE
+card, so a burn payoff only earns its credit when nothing strictly better is still fetchable. It
+self-restores — once Twinshot leaves the library Chainwhirler is the best burn again and gets full
+credit, which is precisely "only taken if Twinshot is gone and we need the 1 damage".
+
+It works exactly as designed and is **not worth shipping**:
+
+```
+mode                              regression searched   HELD-OUT searched   d0(12000g)
+0  off                                   0.0                  0.0              0.0
+1  drop the redundant face credit        0.0                  0.0            +88.0
+2  drop from consideration entirely      0.0                  0.0            +88.0
+```
+
+Chainwhirler drops 460 -> 300, rank 5 -> rank 7, out of the window — and **zero searched games change,
+across 8,000 held-out plus 1,100 regression**. Modes 1 and 2 are indistinguishable, which is itself
+the finding: once the card leaves the window, ranking it dead last buys nothing more. The search never
+wanted it, *and* freeing its window slot helps nobody else either.
+
+The only measurable effect is a cost, and it is a **greedy artifact**: d0 +88.0 is one game
+(`s8008 gi1882`, T8 -> unwon) against two d0 games improved, and at depth 3 and depth 5 both arms win
+on **T5**. d0 takes `cands[0]` with no search, so it is the only policy that can be hurt by demoting a
+card the search would have rejected anyway.
+
+**The transferable point:** a mis-ranked card inside the window is not automatically a bug. The search
+evaluates what the ranking offers it and discards the bad ones; the ranking only has to get a card
+*into* the window, and only matters when a bad card crowds out a good one. Round 8 fixed a real case
+of that (Twinshot losing a tie-break). This is the opposite case — a genuinely weak card that costs
+nothing by being present. Worth knowing before "obviously bad card ranked too high" is treated as a
+defect again. Lever kept at `MTG_GOBLIN_DOMINATED_BURN`, default 0.
+
+## ROUND 10 (2026-08-05): crowding — "the only task of the heuristic is to figure out 5 to cut"
+
+The framing shift that drove this round (user):
+
+> "With W=6 we should almost always be able to include the best goblins for each role ... at 11
+> goblins [that] is a complete list of cards you might want. So then, the only task of the heuristic
+> is to figure out 5 to cut ... maybe than a ranking what we need is to group these by role and drop
+> the worse one on the current board ... keep cards that are significantly different in utility and
+> drop ones that are similar, but worse in a situation."
+
+### First: the slot IS worth something — an earlier conclusion here was wrong
+
+Round 9 concluded that a weak card inside the window costs nothing, on the evidence that demoting
+Goblin Chainwhirler changed zero searched games. That inference was wrong, and the user pushed back on
+it. Measuring the width directly:
+
+```
+W=4  +26.0      W=5  +11.0      W=6  0.0 (shipped)     held-out searched
+```
+
+**The marginal slot is worth ~11 turn-units.** Chainwhirler measured 0 only because the rank-7 card
+that replaced it was equally unwanted in those particular states — an absence of evidence, not a free
+slot. (The W=4/W=5 arms in that round were also uninformative by construction: Chainwhirler sits at
+index 5, so at W<=5 it is already excluded and both arms are trivially identical.)
+
+Search *cost* is not the mechanism, though: rollout calls are within 0.3% with and without the rule
+(2.984M vs 2.993M), because the window is a fixed six slots and demoting one card just lets another
+in. The cost is purely opportunity cost on a scarce slot.
+
+### Strict dominance: Goblin Chieftain vs Goblin King (ADOPTED, the big win)
+
+Applying "similar but worse" to the roster finds a **provable** case, and it is not a tail card:
+
+| | cost | body | effect |
+|---|---|---|---|
+| Goblin Chieftain | `{1}{R}{R}` | 2/2 | +1/+1 to Goblins, **grants haste**, has haste |
+| Goblin King | `{1}{R}{R}` | 2/2 | +1/+1 to Goblins, mountainwalk |
+
+Identical cost, identical body, identical buff. King's sole differentiator is mountainwalk, which
+`cards.json` itself flags "INERT in goldfishing". King is a **2-of that ranks 1st or 2nd in nearly
+every dump**, so the pair was burning two of six slots to do one card's job — crowding at the TOP of
+the window, not the bottom.
+
+Implemented by rule, not name: B is dropped when some other fetchable A costs no more, has a body no
+smaller, and is >= on every goldfish-relevant capability with a strict edge somewhere. Capabilities are
+compared as a vector, so it survives a decklist change, and it is computed over the LIBRARY — once the
+last Chieftain is drawn, King is no longer dominated and comes back ("if we have removed all of the
+Goblin Chieftains it might make sense in some cases").
+
+### Role cut: Hordemaster vs Piledriver (ADOPTED) — and the tie-break axis matters
+
+> "Rundvelt Hordemaster and Piledriver. We should be able to work out which is better on the current
+> board and drop the other ... an early or hasty piledriver will inevitably be better. The lord wins
+> when the damage add from the turn it is played will be significant."
+
+That rule is already in the round-7 scores, which is why this is a cut and not new judgement:
+Piledriver is `2*crowd*BODY*realized` with realized = 1.0 under haste, 0.0 when the game ends this
+turn, and 0.5 otherwise — algebraically identical to a +1/+1 lord's `1*crowd*BODY`. They tie at parity
+and every condition the user named breaks the tie the way they described.
+
+**The first implementation failed, and the failure was diagnostic** (user: "if our role-cut fails that
+is an indicator we did it wrong. We should evaluate the worse cases"). It cut by TOTAL score, which
+sent `s3003 gi290` from T5 to T6. At that T4 a haste lord is out, so Piledriver should win and does on
+board value (700 vs 500) — but Hordemaster's total is 800, because it collects +300 of enabler/lord-
+amplification credit, which measures how much sooner a stuck bomb in HAND arrives. Letting that settle
+a board duel cut the right card. Comparing on `value_of` alone fixes it.
+
+### The enabler cut fails, in every form tested (NOT adopted)
+
+Cutting Lackey vs Skirk measured **-3.0** held-out against **-9.0** for not cutting them. Fixing the
+tie-break to use the enabler credit (the axis that defines the role) did not help, and neither did
+"sometimes we can drop both" (drop the whole role when its best member contributes nothing). The
+reason is measurable: **in 61% of sampled states BOTH enablers score enable=0**, because nothing in
+hand is stuck — so the duel has no signal and the cut discards a card by coin flip.
+
+### Result
+
+```
+arm                                        regression   HELD-OUT searched   d0
+off                                            0.0            0.0            0.0
+dominance (King out)                           0.0           -7.0          -24.0
+dominance + role cut, total-score tie-break    +1.0           -6.0          -24.0
+dominance + role cut, board-value tie-break    0.0            -9.0          -24.0   <- SHIPPED
+  ... + enabler cut (role_cut=2)               +2.0           -3.0          -24.0
+  ... + drop-both refinement (role_cut=3)      +2.0           -3.0          -24.0
+  ... + Chainwhirler out                       0.0            -9.0          +64.0
+```
+
+**-9.0 held-out searched with 9 games better and ZERO worse**, plus d0 -24.0 — improving on both
+tiers at once, which nothing else this session managed.
+
+Chainwhirler was retested on top of all the other prunes, since a single prune might not be enough to
+let a different card reach the window ("it might need multiple prunes"). It still adds exactly nothing
+(-9.0 either way) and still costs the one d0 game. Three prunes deep, its slot buys nothing.
+
+### Postscript: the three "unresolvable" games were never ranking failures
+
+`s2002 gi299`, `s4004 gi483` and `s7007 gi624` were tracked from round 6 onward as games where W=12
+beats the shipped width and which resisted every ranking change. They are **wall-clock budget churn**,
+not width or ranking effects. Re-run directly across widths and budgets:
+
+```
+             W=6                              W=12
+gi483        bud0 T4  bud20 T5  bud80 T4      bud0 T4  bud20 T5  bud80 T4   <- identical
+gi299        T4 at every budget               T4 at every budget            <- width-independent
+gi624        T5 at every budget               T5, except a single T6 at bud20
+```
+
+The harness's searched cases run under a `budget_ms`, which is wall-clock and therefore load-sensitive
+(the same reason `MTG_ROLLOUT_STATS` exists as the deterministic cost instrument). So a game can be
+recorded T4 in ground truth and T5 in a later run without anything in the engine changing. Treat a
+"W=12 worse" entry as churn until it reproduces at unlimited budget.
+
+With those retired, the width gap is fully closed: W=12 wins 2 games and loses **no real ones**.
+
+### Mogg War Marshal: not the reason gi483 moved (checked, left alone)
+
+The chosen-rank instrument listed a Mogg War Marshal commit at rank 11 in `gi483`, which looked like a
+ranking miss. It is incidental: the shipped W=6 fetches **Goblin Piledriver at rank 1** on T4 and
+reaches T4, the W=12 arm takes a different line that happens to fetch Mogg on T3, and both land on the
+same turn at every budget. The instrument reports whatever the wide arm committed to, and that game is
+decided by the clock.
+
+There is a plausible undervaluation worth recording without acting on it. Mogg scores 190 = 1 power x
+BODY + 1 token x 90, which prices the ETB token *below* a real body and **ignores the death token
+entirely** — even though letting echo lapse sacrifices it and still nets that token (as `cards.json`
+notes). For `{1}{R}` that is two Goblin bodies immediately and three over its life, in a deck where
+bodies are the currency for every lord, for Piledriver's +2-per-other-attacker and for Skirk's fodder.
+
+Not changed, deliberately: the search never reaches for it in any surviving miss, it is absent from
+the user's list of cards worth fetching, and inflating a mediocre card to crowd the window is exactly
+the bug round 10 removed. Revisit only if a measured miss points at it.
+
+### The two survivors are real, width-only, and do NOT recover with depth or budget
+
+Applying the churn test to the two games W=12 still wins, they behave in exactly the opposite way to
+the three retired ones -- perfectly stable, and responsive only to width:
+
+```
+                 W=6                       W=12
+s3003 gi101      d3/d5/d6 = T6             d3/d5/d6 = T5      (budget 0/20/80/320 identical)
+s4004 gi124      d3/d5/d6 = T6             d3/d5/d6 = T5      (budget 0/20/80/320 identical)
+```
+
+Only ONE is a ranking miss. `s4004 gi124` commits to Goblin Lackey at rank 8, outside the window --
+a genuine miss, and the last one left.
+
+`s3003 gi101` is NOT a ranking miss, and the earlier claim here that it was therefore "unrecoverable"
+was wrong (user: "if it isn't a search miss it should be recoverable?"). What actually differs is
+*when the Matron is cast*:
+
+```
+W=6   casts Matron T3 -> Goblin Chieftain      rank 2/13   -> T6
+W=12  casts Matron T4 -> Siege-Gang Commander  rank 3/13   -> T5
+```
+
+Both fetches are INSIDE the shipped W=6, so the ranking never excludes the wanted card. The width is
+changing the search's PLAN -- hold the Matron a turn for the bomb rather than cast it now for the lord
+-- and depth 5 and 6 do not find that line either. So it is recoverable in principle, but through the
+search's plan evaluation, not by reordering tutor candidates.
+
+The plausible mechanism, UNCONFIRMED: the T4 line's value depends on the candidate ranking at that T4
+board state, which differs from T3's, so a 6-wide window can leave the good T4 branch unevaluated even
+though the eventual pick ranks 3rd there. Hard to confirm cheaply -- the W=6 arm never reaches a T4
+Matron state to inspect.
+
+## ROUND 11 (2026-08-05): s3003 gi101 explained — the discount VETOES a bomb from the search
+
+`s3003 gi101` was the last unexplained width gap: W=6 wins T6, W=12 wins T5, stable at every depth
+(3/5/6) and budget. The full causal chain, and it is not what it first looked like.
+
+### Why the Siege-Gang line wins
+
+```
+T4  cast Goblin Matron, fetch Siege-Gang Commander TO HAND, attack
+T5  Goblin Lackey connects -> PUTS Siege-Gang onto the battlefield FREE, attack, win
+```
+
+Siege-Gang was never going to be cast. It is a **Lackey target** — the combat-damage trigger bypasses
+`{3}{R}{R}` entirely, and it arrives with three 1/1 tokens plus a `{1}{R}`, sac-a-Goblin: 2 damage
+outlet to finish. That is the whole reason holding the Matron a turn beats casting it on T3 for a lord.
+
+### The model is NOT mispricing it — the SEARCH cannot see it
+
+`turns_to_deploy` already handles the Lackey path, and prices the card correctly when a Lackey is out:
+
+```
+lackey_persist=0   Siege-Gang  score= 65.8   value=510.0  x disc=0.129 (t=3)   -> rank 10
+lackey_persist=1   Siege-Gang  score=433.5   value=510.0  x disc=0.850 (t=1)   -> rank  3
+```
+
+The failure is at T3. When the search asks "should I hold the Matron and cast it on T4 instead", it
+evaluates projected T4 states in which the Lackey is not yet on the battlefield — and there Siege-Gang
+is rank 10, outside a 6-wide window. The branch is unreachable, the "hold" line is never costed, and
+the search casts on T3. The width threshold is exactly **W=9**, the rank Siege-Gang occupies in those
+projections.
+
+**DISCOUNT-AS-VETO** is the general defect: the deploy discount is a static pre-scorer estimate, but
+the window turns a low rank into an EXCLUSION, so the estimate silently overrules the forward
+simulation that would have judged the line properly. As a ranking signal the discount is sound; as a
+veto it inverts the intended relationship between heuristic and search.
+
+The blind spot is the normal case, not a fluke. Over 35,066 sampled tutor states, **61% have a
+higher-RAW-value card sitting outside the window**, overwhelmingly the deck's two bombs:
+
+```
+12,568x  Muxus, Goblin Grandee      933x  Twinshot Sniper
+ 5,302x  Siege-Gang Commander       750x  Goblin Chainwhirler
+```
+
+### NOT a clairvoyance artifact (checked, because Matron shuffles)
+
+Goblin Matron has `tutor_shuffle_after`, so a tutor line's value depends on a reshuffle the search
+simulates — exactly the situation `MTG_SHUFFLE_SALT_SEARCH` exists to police. Decoupled, so the search
+plans against a reshuffle the real game will not deal, the edge **survives at every salt tried**:
+
+```
+search salt   W=6    W=6+reserve2   W=12
+coupled       T6         T5          T5
+salts 1..5    T6 (all)   T5 (all)    T5 (all)
+```
+
+A decision that only won by foreseeing a specific reshuffle collapses there. This one does not.
+
+### The fix: reserve window slots for the best RAW-value candidates (ADOPTED, narrow)
+
+Two slots, not one — the highest raw value is Muxus (850) but the card that wins is Siege-Gang (510),
+so rescuing only the top one grabs the wrong bomb and gi101 stays T6.
+
+```
+                regression      HELD-OUT (8000 searched)    d0 (12000)
+reserve=1          0.0                   0.0                  0.0     inert
+reserve=2         -2.0                   0.0                  0.0     <- adopted
+```
+
+Held-out is **exactly** zero — not one file changed. The -2.0 on regression IS gi101 (counted at d3 and
+d5), the game this was built for, so it is not independent confirmation. Adopted as a fix for a
+diagnosed mechanism at zero measured cost, **not** as a measured win: it currently moves one game in
+20,000. The honest reading of held-out zero is that the discount is usually RIGHT — forcing the bomb
+onto the axis is harmless because the search rejects it — but it was wrong here and the search never
+got the chance to say so.
+
+Open question worth keeping: the sharper fix may be to the projection rather than the window, since
+the model already ranks the bomb correctly once the Lackey is visible. Reserving slots compensates for
+the projection instead of correcting it.
+
+## ROUND 12 (2026-08-05): gi101 traced end to end — the deciding move is the T2 LAND DROP
+
+Round 11 left two things wrong. The deciding state was recorded as "unpinned", and the reserve's
+mechanism was described as "keep the top-N raw-value cards", which is **not what the code does**. Both
+are now traced.
+
+### The line, in full
+
+Three Tree City taps for `{C}` in base mode (`{2},{T}` is the Goblin-scaled red mode). So *when* it is
+played decides which spells are castable:
+
+```
+W<=8   T2 Three Tree City -> T3 lands are {R}{R}{C}: Chainwhirler ({R}{R}{R}) is UNCASTABLE
+                          -> T3 cast Matron, fetch Goblin Chieftain -> T5 Chieftain -> T6
+W>=9   T2 Mountain        -> T3 lands are {R}{R}{R}: cast Goblin Chainwhirler
+                          -> T4 play Three Tree City, cast Matron (fetch Siege-Gang) + Goblin Lackey
+                          -> T5 Lackey connects, PUTS Siege-Gang in free with three tokens;
+                             Three Tree City now taps {2},{T} for 6 Goblins' worth of {R}, paying
+                             FOUR {1}{R} sac activations = exactly 8 to close                 -> T5
+```
+
+The fetch is not the decision. The decision is the **T2 land drop**, and to value it the search has to
+see the T4 Siege-Gang fetch two turns ahead.
+
+### Why W=9 exactly — and WHICH state binds (corrected)
+
+The first draft of this section blamed a T3 state where Siege-Gang happens to sit at rank 8. That was
+a coincidence. The lookahead **does** re-rank at every projected turn, using the heuristic for that
+particular state, so the deciding state had to be pinned rather than guessed. Two diagnostic gates on
+the reserve do it — `MTG_GOBLIN_RESERVE_TURN` (apply only at turn N) and `MTG_GOBLIN_RESERVE_NEXT`
+(apply only when `mana_next` is N):
+
+```
+reserve at turn=  1   2   3   4   5   6        reserve at T4, mana_next=  2   3   4   5
+gi101 (d3/d5)    T6  T6  T6  T5  T6  T6        gi101 (d3/d5)             T6  T6  T5  T6
+```
+
+It binds at **turn 4, mana_next 4** and nowhere else. T4 is ranked *twice*, because the plan
+enumerator evaluates the Matron both before and after the turn's land drop:
+
+```
+T4 G=1 opp=16 untapped=3 next=4   (3 lands, land STILL IN HAND)   Siege-Gang rank 8   OUTSIDE W=6
+T4 G=1 opp=16 untapped=4 next=5   (4 lands, land played)          Siege-Gang rank 4   inside
+```
+
+`mana_next = CountLandsInPlay + 1` assumes this turn's land drop is already spent. On the pre-land
+copy it is one short, so a `{3}{R}{R}` bomb prices `t=2` (disc 0.287) instead of `t=1` (disc 0.637) —
+and the enumerator binds on that copy. Rank 8 there is also exactly why the width threshold is W=9;
+`MTG_TUTOR_WIDTH` 7 and 8 add only Krenko and Mogg War Marshal and change nothing:
+
+```
+W=6 T6   W=7 T6   W=8 T6   W=9 T5   W=10..13 T5      (d3 and d5, budgets 0/20/80/320/2000)
+```
+
+Stable at every depth and budget, so it is causal rather than tie-break churn.
+
+### The sharper fix is right about the diagnosis and measurably WRONG in practice
+
+Round 11 left an open question: "the sharper fix may be to the projection rather than the window."
+It is now implemented (`MTG_GOBLIN_PENDING_LAND`: credit the pending land drop in `mana_next` when the
+drop is unused and a land is in hand). It **does** recover gi101 on its own with the reserve off — the
+diagnosis is correct. It also loses games everywhere else:
+
+```
+                                       gi101   HELD-OUT (8000 searched)   d0 (12000)
+reserve=2, PENDING_LAND=0 (SHIPPED)      T5           0.0  (baseline)        0.0
+reserve=0, PENDING_LAND=0                T6           0.0                    0.0
+reserve=0, PENDING_LAND=1                T5          +7.0  (0 better/7 worse) 0.0
+reserve=2, PENDING_LAND=1                T5          +9.0  (0 better/9 worse) 0.0
+```
+
+Never better, 7-9 games worse. The likely reason is calibration: the discount curve (0.85 at `t=1`,
+then 0.45/step) was fitted **against** this pessimistic `mana_next`, so the bias is already priced in.
+Crediting the pending drop moves every expensive bomb from `t=2` to `t=1` at every pre-land-drop state
+simultaneously, re-tuning all of the thresholds the curve was fitted to. Making it pay would mean
+refitting the curve with it, not dropping it in. Rejected, kept default-off with its number.
+
+The general lesson, twice over in one round: **a locally-correct fix to one input of a calibrated
+heuristic can be globally worse, because the calibration absorbed the error.**
+
+### The reserve does not do what its name says — and the bug is load-bearing
+
+`cands.insert(cands.begin() + (W - 1 - k), rescued)` shifts the previous rescue from `W-1` to `W`, i.e.
+straight back out of the window. So `reserve=N` rescues raw-value ranks **2..N and drops rank 1**. On
+gi101's T3 state, `reserve=2` holds Siege-Gang and has evicted the Muxus it rescued first.
+
+Implementing the intended semantics (evict the weakest *survivor*, accumulate rescues) behind
+`MTG_GOBLIN_VALUE_RESERVE_FIX=1` and measuring on the held-out overnight tier:
+
+```
+                                             gi101   HELD-OUT (8000 searched)   d0 (12000)
+reserve=1   rescue Muxus only                 T6            0.0                    0.0
+reserve=2   rescue rank 2 only  (SHIPPED)     T5            0.0                    0.0
+reserve=2 + FIX=1  keep ranks 1 AND 2         T5          +20.0  (0 better/20 worse)  0.0
+```
+
+Dropping rank 1 is the *better* rule, and consistently so — 20 games worse, none better. Rank 1 is
+Muxus (raw 850, MV 6), the single card whose "genuinely stuck" discount is most often RIGHT, so
+forcing it onto the axis costs a real window slot and buys nothing. The shipped default is kept
+byte-identical; `FIX` stays default-off with its number, per the rejected-lever convention.
+
+Naming is now the only thing wrong with it, and the comment says so at the definition.
+
+## ROUND 13 (2026-08-05): the root defect, located and fixed — and the fix is measurably worse
+
+Round 12 rejected `MTG_GOBLIN_PENDING_LAND` (a provider-side patch to `mana_next`) and guessed the
+loss was calibration. Both halves of that were worth testing properly, because the underlying issue is
+a genuine engine defect, not a heuristic taste question.
+
+### The defect (TurnSolver, affects every deck with a tutor)
+
+`EnumeratePlansWithLand` builds a post-land state per land candidate and enumerates the base plans on
+it, so **the base plan's tutor target is ranked correctly**. The post-dedup tutor axis fan-out — which
+supplies the *alternatives the search actually chooses among* — then calls
+`TutorCandidates(state, ...)` on the **pre-land turn-start `state`**, and caches the result keyed by
+card name alone, so one pre-land ranking is reused for every plan regardless of which land it plays.
+
+Two consequences, both real:
+
+1. The provider feeds `mana_now` / `mana_next` into a deploy discount, so a turn whose land is still in
+   hand prices every expensive card one turn further away than the plan actually leaves it — and a
+   card pushed past the axis width is **excluded**, not merely ranked low. This is exactly gi101:
+   Siege-Gang is rank 8 pre-land (`mana_next=4`, `{3}{R}{R}` reads `t=2`) and rank 4 post-land
+   (`mana_next=5`, `t=1`).
+2. The two halves of one plan set disagree, and the pre-land list's own rank-0 card is silently
+   dropped, because the fan-out loop starts at `c = 1` to skip what it assumes is the base target.
+
+Fixed behind `MTG_TUTOR_AXIS_POSTLAND`: rank each plan's axis against that plan's post-land state,
+cache keyed by the land played. It recovers gi101 **with the value reserve off** — the diagnosis is
+right, and this is the root cause rather than the window symptom.
+
+### It loses, and refitting the curve does not save it
+
+Held-out overnight, the two decks that can move (verified: no other deck changed a single game across
+21,000 smoke + regression games, and the code path requires a tutor in the plan):
+
+```
+goblins   postland=1     +18.0     0 better / 18 worse
+hinata    postland=1      ~-3      (see below)
+```
+
+Hinata's raw number is **-275, and it is a GT artifact worth recording**: three games GT stored as
+UNWON actually win. `gi90` is a genuine 9 -> 8 (stable at budgets 20/80/320/1280); `gi158` is pure
+churn that converges to 6/6 by budget 320. Under batch load at 20 ms the baseline simply failed to
+finish them, and the 99-point loss penalty turns a real -2 into -275. **Any single unwon/won flip
+dominates this metric, so always re-run the flipped games standalone across budgets before believing
+an aggregate.**
+
+Then the calibration hypothesis, tested directly — sweep the `t=1` discount constant with the fix ON
+(`MTG_GOBLIN_DISC_T1`, train `s4004+s5005`, validate `s6006+s7007`):
+
+```
+DISC_T1     85    75    65    55    45    38
+train      +10    +6    +6    +6    +6    +8
+validate    +8    +6    +4    +4    +4    +4
+better       0     0     0     0     0     0      <-- every arm, every seed
+```
+
+It saturates at +10 and never approaches baseline, and **not one arm produces a single better game
+anywhere**. So this is not a mis-tuned constant absorbing a bias.
+
+### What that actually means
+
+The pessimistic pre-land view is functioning as a **tempo prior**, and in goldfishing that prior is
+right: "the card I can deploy *now*" beats "the card I could deploy next turn", and pricing next turn
+accurately promotes expensive cards a race deck does not want. This is the third independent result
+this session pointing the same way — the reserve eviction (+20 when corrected), `PENDING_LAND` (+7/+9),
+and now the root fix (+18, unrescuable by refit). All three make the mana projection more accurate;
+all three lose.
+
+Making the projection honest would mean re-deriving the discount from **tempo** rather than from
+turns-to-cast, and re-fitting it as a whole. That is a real project, not a constant sweep, and it is
+the open item this round leaves. The flag stays in the tree default-off so the defect is one env var
+away from being reproduced.
+
+## ROUND 14 (2026-08-05): the tempo rewrite is UNNECESSARY — the ranking is already 99.1% optimal
+
+Round 13 left "re-derive the discount from tempo" as the open project. It was attempted, and the
+first thing built to justify it killed it instead. **Recording this so nobody starts it again.**
+
+### A name-keyed truth table (the reusable part)
+
+`MTG_TUTOR_FORCE_CARD="<name>"` collapses the tutor to one card BY NAME, and
+`test/goblins_tutor_truth_table.py` builds a table of the real win turn of fetching each candidate.
+The existing `goblins_tutor_truth.py` probes by RANK, so its table dies the moment the ranking
+changes — rank 4 is a different card before and after. Keyed by name it is model-independent: build
+once, then score any model with ONE run per game instead of one per card.
+
+Built at `--budget-ms 0` (unbounded), so every number is deterministic and load-independent. That
+matters: this session twice had a wall-clock-churn artifact masquerade as signal. Scan of 1,600 games
+(seeds 4004/5005/6006/7007) found **429 with a searched tutor fetch**; 6,864 (game, card) probes.
+
+Regret is scored FORCED-vs-FORCED. Forcing collapses the axis, so a forced run explores fewer plans
+and the same card can win a turn later under force; comparing a model's free run against a forced
+oracle produces negative "regret" that is pure instrument artifact.
+
+### The result
+
+```
+model                     total regret   optimal picks
+SHIPPED                        +4         425/429 = 99.1%
+SHIPPED + postland             +6         423/429 = 98.6%
+TEMPO                          +7         414/421 = 98.3%
+TEMPO + postland               +8         413/421 = 98.1%
+```
+
+**The shipped ranking is 99.1% optimal, and the entire headroom for a perfect oracle is 4 turns
+across 429 tutor games — 0.009 turns/game.** There is nothing to win. Every lever shipped this
+session moved single-digit turn-units over 8,000 games; a total theoretical ceiling of 4 turns is
+below the noise floor of the suite that would have to validate it.
+
+The tempo model (damage before the projected kill: `once + per_team*(H-t) + per_body*(H-t-1)`, which
+DERIVES the hand-tuned Piledriver-vs-lord rule rather than encoding it) also **failed its own
+acceptance test**: it was supposed to get better as the projection got more honest, and instead
+degraded under `postland` in the same direction as the shipped model (+7 -> +8 vs +4 -> +6). Removed
+rather than kept default-off — the headroom number closes the whole area, not just this variant, so
+leaving a parallel scorer in a hot path would be clutter that invites someone to retry a dead lead.
+
+### What this retroactively explains
+
+The value reserve measured exactly 0.0 held-out. That was read as "the discount is usually right".
+It is stronger than that: the discount is right **99.1% of the time on the decision that matters**,
+so forcing bombs onto the axis was always going to be inert. Likewise the three rejected projection
+fixes were not narrowly unlucky — they were perturbing a component that is already very nearly
+optimal, where essentially every change is a downgrade.
+
+**The tutor ranking is closed.** Future Goblins work should look at decisions with actual headroom,
+not this one.
+
+## ROUND 15 (2026-08-05): plan-aware inputs — the coherence theory is CONFIRMED, and still doesn't pay
+
+Rounds 12-14 each corrected ONE input of the tutor model and each lost (+20, +9, +18 held-out, never
+a single better game). The diagnosis offered was **incoherence**: one input made honest while the
+others stayed calibrated to the old, wrong value. This round tests that diagnosis directly by moving
+the whole cluster at once, on the user's suggestion that the provider should see the plan, not just
+the state.
+
+### The mechanism
+
+`PlanContext` (new, `src/ai/PlanContext.h`) hands the provider the plan it is being asked about: the
+action list, the index being decided, and the land that plan plays. Five inputs stop being guesses:
+
+```
+buff_targets     G + min(goblins_in_hand, 3)     ->  G + Goblins the plan actually casts
+entering_fodder  1 if a Goblin tutor is in hand  ->  the Goblins the plan actually casts
+haste_avail      "a haste lord we could afford"  ->  is one actually cast this turn?
+hand_has_play    "hand holds a deployable body"  ->  does the plan actually deploy one?
+mana_next        lands + 1                       ->  +1 more iff the plan still plays its land
+```
+
+Feasibility first (`MTG_TUTOR_PREFIX_STATS`, 9,572 tutor decisions): the tutor is already almost
+always the FIRST action (mean position 0.01), so distinct prefixes average 1.36 per decision. Ranking
+at the true per-plan state costs ~1.36 provider calls where it now costs 1 — the per-plan cost
+objection was void, and the correct state is reachable at the fan-out without moving ranking into
+every rollout leaf.
+
+### The theory is confirmed — on the metric it targets
+
+Truth table (fetch-choice quality, 429 games, `MTG_GOBLIN_PLAN_AWARE`):
+
+```
+                       regret     + postland
+SHIPPED                  +4          +6        postland costs +2
+PLAN-AWARE               +5          +5        postland costs  0   <- identical histogram
+```
+
+Plan-awareness makes the model **completely insensitive to which state it is ranked at**, which is
+exactly what the coherence theory predicts: once the land drop is read off the plan instead of
+guessed from the state, correcting the state changes nothing.
+
+### And it does not transfer to the suite
+
+Held-out overnight, 8,000 searched games:
+
+```
+postland alone                  +18.0    0 better / 18 worse
+plan-aware alone                 +2.0    3 better /  5 worse
+plan-aware + postland            +9.0    3 better / 12 worse
+```
+
+Plan-awareness HALVES postland's cost (+18 -> +9) and is itself near-neutral — the first two-sided
+result in this whole line of work; every earlier attempt was 0-better. But it does not reach zero.
+
+**Why the discrepancy matters more than the numbers.** The truth table measures only *which card gets
+fetched*, and there postland's cost genuinely goes to zero. The residual +9 on the suite is therefore
+NOT ranking error — it is plan-set churn: changing the ranking changes which variants get emitted,
+which changes what the search has to arbitrate. That is the same "SEARCH BRANCHING" mechanism
+`goblins_width_diagnose.py` identified long ago, where width helps without any better fetch existing.
+No ranking model can fix that, because it is not a ranking problem.
+
+### Disposition
+
+Nothing adopted; baseline is still the best arm. `MTG_GOBLIN_PLAN_AWARE` stays default-off with its
+numbers. The `PlanContext` infrastructure IS kept and is byte-identical with the flag off: it is
+correct, cheap, measured, and it is the only mechanism that would let the genuine root defect
+(`MTG_TUTOR_AXIS_POSTLAND`) ever be turned on at a survivable cost.
+
+The line of work is closed with the diagnosis settled: the model's guesses were not the problem, the
+window/veto was not the problem, and the ranking is 99.1% optimal (round 14). What is left on this
+decision is plan-set churn, which is worth at most the 4 turns of headroom that exist.
+
+## ROUND 16 (2026-08-05): the residual dissected — no fix left to make
+
+Round 15 left a residual: plan-awareness zeroed the projection's cost on FETCH QUALITY but only
+halved it on the suite (+18 -> +9). Two candidate causes, both now tested.
+
+### (b) A new incoherence — REFUTED
+
+The base tutor target is chosen during action COLLECTION, before a plan exists, so under
+`MTG_GOBLIN_PLAN_AWARE` the variants are plan-aware while the base pick stays blind — the same
+one-input-honest failure, one level up. `MTG_TUTOR_AXIS_REBASE` re-resolves the base from the same
+list the variants come from (which also fixes the "rank-0 silently dropped" defect, since the loop
+started at `c=1` assuming index 0 was the base):
+
+```
+REBASE alone                   +0.0    0 better /  0 worse   <- completely inert
+plan-aware + rebase            +3.0    2 better /  5 worse   (vs +2.0 without)
+plan-aware + rebase + postland +10.0   2 better / 12 worse   (vs +9.0 without)
+```
+
+Inert on its own — the two rankings essentially never disagree at index 0 in practice — and very
+slightly worse in combination. **The incoherence was real in principle and empirically never fires.**
+
+### (a) Budget-limited arbitration — PARTLY, and the rest is genuine
+
+Every game the residual moves, re-run standalone at budgets 20/80/320/1280 (d3):
+
+```
+             baseline          plan+postland
+gi327        5 4 4 4           4 4 4 4      baseline was CHURN; new arm stable-correct
+gi371        5 5 5 5           4 4 4 4      genuine IMPROVEMENT, budget-independent
+gi352        5 5 5 5           6 5 5 5      churn in the new arm, converges by 80
+gi588        4 4 4 4           5 4 4 4      churn in the new arm, converges by 80
+gi714        4 4 4 4           5 5 5 5      genuine REGRESSION, budget-independent
+gi727        4 4 4 4           5 5 5 5      genuine REGRESSION
+gi768        4 4 4 4           5 5 5 5      genuine REGRESSION
+gi920        4 4 4 4           5 5 5 5      genuine REGRESSION
+gi200        4 4 4 4           5 5 5 5      genuine REGRESSION
+```
+
+About a third of the +9 is wall-clock churn; at high budget the arm is ~+3. The rest is **genuine and
+budget-independent** — 5 real regressions against 2 real improvements. More search cannot recover
+them, because the search is already converged; the two arms simply commit to different lines.
+
+### Disposition: closed, with nothing left to fix
+
+Every layer has now been tested and eliminated:
+
+```
+fetch-choice quality   equal (99.1% optimal; postland's cost -> 0 under plan-awareness)
+model coherence        fixed by PlanContext -- confirmed, no suite gain
+base/axis consistency  inert (REBASE +0.0)
+search budget          not the cause (regressions are budget-independent)
+```
+
+What remains is the model genuinely preferring different lines under an honest projection, and the
+pessimistic version being better by ~3 turns net. Against round 14's total headroom of 4 turns across
+429 tutor games, that IS the headroom. There is no fix left worth making: the "buggy" behaviour is
+the empirically better one, and we now know that at every level rather than by assumption.
+
+`MTG_GOBLIN_PLAN_AWARE`, `MTG_TUTOR_AXIS_POSTLAND`, `MTG_TUTOR_AXIS_REBASE` all stay default-off with
+their numbers. `PlanContext` stays: byte-identical off, cheap, and the only mechanism by which the
+root defect could ever be enabled affordably.
+
+## ROUND 17 (2026-08-05): was it the HANDLING? Partly — and the tighter reading is the better one
+
+User challenge: "Is the problem not our handling of this new setup within the heuristic itself?" It
+is a fair charge and it was half right. Mode 1 did not merely make two inputs honest, it silently
+changed what they MEASURE:
+
+* `buff_targets` is documented "board + **near-future** (hand) buff recipients" — a lord's `+1/+1`
+  persists, so a Goblin still in hand two turns out is a genuine recipient. Mode 1 replaced that with
+  "Goblins the plan casts THIS TURN", discarding every hand Goblin the plan does not cast.
+* `haste_avail` lost its in-hand fallback, so a haste lord cast NEXT turn stopped counting even
+  though it is on the battlefield when a fetched card lands.
+
+Both narrow a future-looking estimate into a this-turn fact. Mode 2 restores the future half.
+
+```
+                        held-out (8000 searched)      + postland
+baseline                     0.0                        +18.0
+plan-aware mode 1 (replace)  +2.0   3 better /  5 worse   +9.0   3 better / 12 worse
+plan-aware mode 2 (union)   +12.0   1 better / 13 worse  +17.0   1 better / 18 worse
+```
+
+**Mode 2 is much worse**, so the narrowing was not the defect it looked like. Two things explain it.
+
+The algebra first, because mode 2 is not the faithful restoration I claimed. Baseline is
+`G + min(goblins_in_hand, 3)`, and `goblins_in_hand = plan_entering + hand_left`, so the faithful
+union is `G + min(plan_entering + hand_left, 3)` — which is **exactly baseline**. What mode 2 actually
+computes is `G + plan_entering + min(hand_left, 3)`, adding the certain bodies ON TOP of an
+already-capped hand count. That is an inflation, not a restoration: it raises `buff_targets`, which
+raises lords, and the ranking drifts the way every losing arm in this file has drifted.
+
+And the part that is a real finding: there is no union that differs from baseline except in where the
+cap lands. The cap at 3 is the whole content of the term. Mode 1's tighter reading — count only
+bodies that certainly arrive — measures better (+2 vs +12), which is the same lesson as rounds 12-16:
+in goldfishing, the tighter/pessimistic reading of a deployment estimate keeps winning.
+
+So the answer to the challenge is: yes, mode 1 changed the terms' meaning, and no, correcting that
+does not unlock anything — the changed meaning was the better one. `MTG_GOBLIN_PLAN_AWARE=2` stays
+in-tree, default-off, with its number, so nobody re-derives this by intuition.

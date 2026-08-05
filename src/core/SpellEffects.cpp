@@ -34,12 +34,32 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
                          const std::string& target_name,
                          const std::string& source_name)
 {
+    // Searched pick by INDEX (Plan::tutor_choice via ScriptedTutor, MTG_TUTOR_AXIS_RESOLVE=1).
+    // Read-and-reset at entry so the FIRST tutor of the apply consumes it on every path (named
+    // replay, whiff, scripted), mirroring g_scripted_etbdig_choice's consumed-once semantics.
+    const int scripted_pick = g_scripted_tutor_choice;
+    g_scripted_tutor_choice = -1;
     std::string want = target_name;
     if (want.empty())
     {
         std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, controller_index, pp);
         if (cands.empty()) { return; }
         want = cands.front();
+        if (scripted_pick >= 0)
+        {
+            // The ranking above ran on the TRUE resolution state -- the whole point of the index
+            // axis. Dedup names in list order before indexing: fetching by name takes the first
+            // matching library card, so three copies are ONE choice (same rule as the human chooser
+            // below and MTG_TUTOR_CHOSEN_RANK). Clamped rather than dropped, because the enumerator
+            // sized the axis off the turn-start state and the resolution-state list can be shorter
+            // (the provider's cuts are state-dependent); clamping makes such a variant a duplicate
+            // of the last candidate instead of a silent whiff.
+            std::vector<std::string> uniq;
+            for (const std::string& c : cands)
+            { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+            want = uniq[std::min<std::size_t>(static_cast<std::size_t>(scripted_pick),
+                                              uniq.size() - 1)];
+        }
         // Human play: a tutor resolving with NO searched target came from a PUT, not a cast (a Goblin
         // Lackey cheat, a Vial deploy, a Muxus reveal) -- there was no plan variant for the human to
         // pick in, so this used to search up cands.front() silently. Ask instead; -1 declines outright
@@ -58,6 +78,46 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
             const int picked = (*g_play_tutor_chooser)(state, controller_index, source_name, uniq, 0);
             if (picked < 0) { return; }                                   // declined the optional search
             if (picked < static_cast<int>(uniq.size())) { want = uniq[picked]; }
+        }
+    }
+    // DIAGNOSTIC (MTG_TUTOR_CHOSEN_RANK, default off): where in the ranking did the SEARCH actually
+    // land? Gated on g_real_resolution, so it reports only the target the engine commits to, never
+    // the thousands of hypothetical tutors inside rollouts.
+    //
+    // This exists because the obvious instrument does not work. Forcing the tutor to rank k
+    // (MTG_TUTOR_FORCE_RANK) and reading the resulting win turn CANNOT distinguish "the ranking put
+    // the right card out of the window" from "restricting the axis changed which turn Matron is cast
+    // in". Goblins s7007 gi371 is the proof: forced rank 6 and forced rank 10 both fetch a Goblin
+    // Piledriver, but rank 6 casts Matron on T4 and rank 10 casts it on T3 -- different decisions,
+    // different board states, so the rank labels refer to candidate lists that never coexist. Any
+    // per-rank table built that way mislabels plan changes as ranking misses.
+    //
+    // Reading the committed choice has no such confound: run wide (MTG_TUTOR_WIDTH=12) and see which
+    // rank the search commits to. Ranks consistently past the shipped width are a real ranking miss
+    // and the card names are trustworthy; ranks inside it mean the extra width bought plan diversity,
+    // not a better fetch, and no reordering will recover those games.
+    //
+    // Ranked over NAMES deduped in list order, because fetching by name always takes the first
+    // matching library card -- three copies of Piledriver are one choice, not three, and counting
+    // them separately would inflate every rank below them.
+    if (g_real_resolution)
+    {
+        static const bool s_chosen_rank = EnvOn("MTG_TUTOR_CHOSEN_RANK");
+        if (s_chosen_rank)
+        {
+            std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, controller_index, pp);
+            std::vector<std::string> uniq;
+            for (const std::string& c : cands)
+            { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+            int rank = -1;
+            for (int i = 0; i < static_cast<int>(uniq.size()); ++i)
+            { if (uniq[i] == want) { rank = i + 1; break; } }
+            std::string top;
+            for (int i = 0; i < static_cast<int>(uniq.size()) && i < 8; ++i)
+            { top += (i ? " | " : "") + uniq[i]; }
+            std::fprintf(stderr, "[tutor-chosen] T%d src=%s chose=%s rank=%d/%d :: %s\n",
+                         state.turn_number, source_name.c_str(), want.c_str(),
+                         rank, static_cast<int>(uniq.size()), top.c_str());
         }
     }
     Player& ap = state.players[controller_index];

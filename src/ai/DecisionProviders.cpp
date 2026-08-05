@@ -1,3 +1,5 @@
+#include <array>
+#include <map>
 #include "../core/EnvFlags.h"
 #include <cstdlib>
 #include <cctype>
@@ -11,6 +13,9 @@
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
 #include "../deck/DeckLoader.h"     // Decklist
+#include "TurnSolver.h"             // Action (PlanContext walks the plan's action list)
+#include "PlanContext.h"            // CurrentPlanContext / PlanContextRest
+#include "EngineFlags.h"            // TutorAxisResolveEnabled (capacity-anchored deploy read)
 #include "ManaPayment.h"            // AvailableManaPool (echo "no gas" check; MTG_LACKEY_RANK=uncast)
 
 // Standing unpruned-vs-pruned A/B (search-primary requirement): when MTG_UNPRUNED is set,
@@ -3828,6 +3833,14 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
 // board impact EvalCard misses (lords over board+hand Goblins, haste, cost-cut, Krenko/Muxus/Siege-Gang);
 // discount = 0.55^turns-to-deploy over the best enabler path (mana + Skirk ramp, Vial charge-gated put,
 // Lackey free-drop) + opportunity-cost downweight. cands[0] (the dedup's default pick) is thus the best.
+// 6 shipped; 9 under the resolve axis -- see the width history note in the header. Byte-identical
+// with the flag off.
+int
+GoblinsProvider::TutorSearchWidth() const
+{
+    return TutorAxisResolveEnabled() ? 9 : 6;
+}
+
 std::vector<std::string>
 GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {
@@ -3849,11 +3862,14 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     if (cands.size() <= 1) { return cands; }
     // --- board scan (done once) ---------------------------------------------------------------
     int  goblins_controlled = 0;   // my Goblin creatures (lord/Krenko/Piledriver scale with this)
+    int  goblin_fodder      = 0;   // ... that are actually EXPENDABLE to a sac outlet (no lords)
     int  goblins_sick       = 0;   // ... that cannot attack yet (the ones a haste grant unlocks NOW)
     int  ready_atk          = 0;   // total power that can already swing at the opponent THIS turn (lethal reach)
     bool lackey_now = false;       // a Goblin Lackey that can attack THIS turn -> free drop this turn
     bool lackey_persist = false;   // any Goblin Lackey on board -> free drop next turn
     bool skirk_on   = false;       // a Skirk Prospector (sac Goblin -> {R}) -> a mana RAMP for bombs
+    bool haste_source = false;     // a Goblin lord granting haste -> a fetched body can attack NOW
+    bool deathwatch_on = false;    // Rundvelt Hordemaster: every Goblin death impulse-digs a card
     int  vial_charge = -1;         // best untapped Aether Vial's charge (-1 = no Vial); puts a creature of MV==charge
     int  sick_goblin_power  = 0;   // power still locked up by summoning sickness (a haste grant frees it)
     for (const Permanent& p : s.battlefield)
@@ -3866,6 +3882,15 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             ++goblins_controlled;
             if (!CanAttackFull(p, s.battlefield, controller))
             { ++goblins_sick; sick_goblin_power += std::max(0, pc.m_power.value_or(0)); }
+            // Sacrificeable BODIES, which is not the same set as "Goblins I control". A lord or a
+            // scaling payoff is fodder only in extremis -- feeding a Chieftain to Skirk de-buffs
+            // everything else on the board -- so it does not count toward the ramp. Same
+            // expendability ordering CanonicalSacVictim uses when it actually picks a victim.
+            const bool scaling = d && ((!d->params.subtypes_affected.empty()
+                                        && (d->params.power_bonus > 0 || d->params.tough_bonus > 0
+                                            || !d->params.reduces_spell_subtype.empty()))
+                                       || d->params.attack_pump_power_per_other_matching > 0);
+            if (!scaling) { ++goblin_fodder; }
         }
         if (pc.IsCreature() && CanAttackFull(p, s.battlefield, controller))
         { ready_atk += std::max(0, pc.m_power.value_or(0)); }   // any ready attacker (goldfish: connects)
@@ -3876,6 +3901,10 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             if (CanAttackFull(p, s.battlefield, controller)) { lackey_now = true; }
         }
         if (d->params.sac_creature_outlet && !d->params.sac_outlet_add_mana_color.empty()) { skirk_on = true; } // Skirk
+        // A Goblin lord granting haste (Warchief / Chieftain): whatever we fetch can attack the
+        // turn it lands, which is the whole difference for an attack-triggered payoff.
+        if (d->params.grants_haste && !d->params.subtypes_affected.empty()) { haste_source = true; }
+        if (d->params.dies_trigger_impulse_exile) { deathwatch_on = true; }
         if (d->params.upkeep_adds_charge && !p.tapped) { vial_charge = std::max(vial_charge, p.charge_counters); } // Vial
     }
     const int G         = goblins_controlled;
@@ -3891,16 +3920,321 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         const Card& hc = hd ? hd->card : h;
         if (hc.IsCreature() && CardHasSubtype(hc, "Goblin")) { ++goblins_in_hand; }
     }
-    const int buff_targets = G + std::min(goblins_in_hand, 3);   // board + near-future (hand) buff recipients
+    // ---- PLAN-AWARE INPUTS (MTG_GOBLIN_PLAN_AWARE=1, default off) -------------------------------
+    // Five of the inputs below are TUNED GUESSES at what the rest of this turn will do, and the plan
+    // being enumerated already knows all five exactly (see PlanContext.h):
+    //
+    //   buff_targets     G + min(goblins_in_hand, 3)      -> G + Goblins the plan actually casts
+    //   entering_fodder  1 if a Goblin tutor is in hand   -> the Goblins the plan actually casts
+    //   haste_avail      "a haste lord we could afford"   -> is one actually cast this turn?
+    //   hand_has_play    "hand holds a deployable body"   -> does the plan actually deploy one?
+    //   mana_next        lands + 1                        -> +1 more if the plan still plays its land
+    //
+    // Deliberately moved TOGETHER. The three earlier attempts to correct this model each made ONE
+    // input honest while the others stayed calibrated to the old wrong value, and all three lost
+    // (+20, +9, +18 held-out). If that diagnosis is right, the cluster is only coherent when it moves
+    // as a unit; if this loses too, the diagnosis was wrong and the whole line is dead.
+    // MODE MATTERS, and mode 1 was WRONG (user, 2026-08-05: "is the problem not our handling of this
+    // new setup within the heuristic itself?"). The plan is exact about THIS TURN; several of these
+    // terms are deliberately about the FUTURE, so substituting one for the other silently narrows
+    // them rather than making them honest:
+    //
+    //   buff_targets is documented "board + NEAR-FUTURE (hand) buff recipients" -- a lord's +1/+1
+    //   persists, so a Goblin still in hand two turns out is a real recipient. Mode 1 replaced that
+    //   with "Goblins the plan casts this turn", dropping every hand Goblin the plan does not cast.
+    //   That UNDERCOUNTS lords, which pushes the ranking toward bombs -- precisely the failure mode
+    //   rounds 12-15 kept measuring. haste_avail had the same flaw: mode 1 gated off the in-hand
+    //   fallback, so a haste lord cast NEXT turn stopped counting even though it is on the
+    //   battlefield when the fetched card lands.
+    //
+    //   1 = replace (measured +2.0 held-out; kept for the A/B, but the narrowing above is a bug)
+    //   2 = UNION: plan-exact for this turn, the old approximation for everything after it
+    static const int plan_aware = EnvInt("MTG_GOBLIN_PLAN_AWARE", 0);
+    bool plan_known = false, plan_haste_cast = false, plan_deploys = false, plan_land_pending = false;
+    int  plan_goblins_entering = 0;
+    if (plan_aware)
+    {
+        const PlanContext* pc = CurrentPlanContext();
+        if (pc != nullptr && pc->actions != nullptr)
+        {
+            plan_known = true;
+            plan_land_pending = pc->land != nullptr && !pc->land->empty() && !pc->land_done;
+            auto count_cast = [&](const std::string& nm, bool is_source)
+            {
+                const CardDefinition* ad = CardDatabase::Instance().Lookup(nm);
+                if (ad == nullptr || !ad->card.IsCreature()) { return; }
+                if (!is_source) { plan_deploys = true; }
+                if (CardHasSubtype(ad->card, "Goblin")) { ++plan_goblins_entering; }
+                if (ad->params.grants_haste && !ad->params.subtypes_affected.empty())
+                { plan_haste_cast = true; }
+            };
+            // The action being decided is the tutor SOURCE, and it is entering too -- that is the
+            // body the old entering_fodder was standing in for.
+            if (pc->index < pc->actions->size())
+            { count_cast((*pc->actions)[pc->index].card_name, /*is_source=*/true); }
+            const auto rest = PlanContextRest(pc);
+            for (const Action* a = rest.first; a != rest.second; ++a)
+            {
+                if (a->kind != Action::Kind::CastFromHand && a->kind != Action::Kind::ActivateVial)
+                { continue; }
+                count_cast(a->card_name, /*is_source=*/false);
+            }
+        }
+    }
+    // Mode 2: the plan's bodies are certain, and the hand Goblins it does NOT cast are still the
+    // near-future recipients the term was always about -- so ADD them, do not discard them.
+    const int hand_left = std::max(0, goblins_in_hand - plan_goblins_entering);
+    const int buff_targets =
+        !plan_known                 ? G + std::min(goblins_in_hand, 3)
+      : plan_aware >= 2             ? G + plan_goblins_entering + std::min(hand_left, 3)
+                                    : G + plan_goblins_entering;
     // Skirk ramp: each OTHER Goblin sacs for {R}, so a bomb is reachable ~this turn if Skirk + fodder pay for it.
-    const int skirk_ramp = skirk_on ? std::max(0, G - 1) : 0;
+    //
+    // TWO corrections (user, 2026-08-04), both about counting the bodies that will ACTUALLY be
+    // available to sacrifice, rather than the board exactly as it stands right now:
+    //
+    // 1. COUNT THE ENTERING TUTOR SOURCE. Goblin Matron is itself a Goblin creature and it is
+    //    entering right now -- that is the whole reason this function is running -- so it is fodder
+    //    for the very turn this ramp predicts. The board scan runs while the source is still in
+    //    hand, so it was missed. 606a381 made exactly this correction on the ATTACK side (the swing
+    //    projection counts the source as entering); the MANA side never got it. Detected the same
+    //    way, by finding the tutor source still in hand, so at real ETB resolution -- when the source
+    //    is already on the battlefield and so already in the scan -- it is not double-counted.
+    //
+    // 2. LORDS ARE NOT FODDER (goblin_fodder, see the board scan). "In most cases you probably would
+    //    not use them, but maybe in a rare case it could happen" -- so they are excluded from the
+    //    ramp while staying in G for every other purpose. This is only about what Skirk can eat.
+    //
+    // gi206 is the case: at the T3 Matron, mana_next reads 4 against a Muxus at MV 6, so the deploy
+    // discount prices the deck's bomb three turns out and buries it -- while the line that wins a
+    // turn earlier hard-casts Muxus next turn off precisely these sacs.
+    // The two corrections are SEPARABLE and were measured separately -- 0 = off, 1 = both (ADOPTED),
+    // 2 = entering source only, 3 = lord-exclusion only. Bundling them unmeasured would have repeated
+    // this session's sharpest mistake, where a bundle's aggregate hid a component that was actively
+    // harmful on the tier that matters. Held-out overnight, 8,000 searched / 12,000 d0 games:
+    //
+    //   entering source only    searched -2.0   d0 +10.0
+    //   lords-not-fodder only   searched  0.0   d0  -2.0
+    //   both (adopted)          searched -2.0   d0  +1.0
+    //
+    // The entering-source correction carries the searched gain; the lord exclusion is searched-neutral
+    // and cancels its d0 cost, so they complement. The aggregate is inside the noise band -- these are
+    // adopted for MODEL CORRECTNESS (both counts were simply wrong about which bodies exist and which
+    // can be eaten) on a measured non-regression, not on the turn-units. The sharper evidence is the
+    // ranking diagnostic: gi206's Muxus climbs rank 13 -> 7, and the worst miss across 100 sampled
+    // decisions improves from 13 to 11 (test/goblins_tutor_truth.py).
+    static const int  skirk_fodder = EnvInt("MTG_GOBLIN_SKIRK_FODDER", 1);
+    const bool use_entering = (skirk_fodder == 1 || skirk_fodder == 2);
+    const bool use_nolord   = (skirk_fodder == 1 || skirk_fodder == 3);
+    int entering_fodder = 0;
+    if (plan_known)
+    {
+        // Exact: every Goblin body the plan puts onto the battlefield this turn, source included.
+        entering_fodder = plan_goblins_entering;
+    }
+    else if (use_entering)
+    {
+        for (const Card& h : s.players[controller].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if (!hd || !(hd->params.tutor_to_hand || hd->params.tutor_to_top)) { continue; }
+            if (hd->card.IsCreature() && CardHasSubtype(hd->card, "Goblin")) { entering_fodder = 1; }
+            break;
+        }
+    }
+    // The "-1" contradicts the engine. "Sacrifice a Goblin: Add {R}" is repeatable and needs no tap,
+    // and Skirk Prospector is itself a Goblin, so the LAST activation can eat Skirk: N bodies convert
+    // to N mana, not N-1. CollectActions' own multi-sac burst already models it that way -- its victim
+    // count V counts every Goblin creature including the source, and k is capped at V -- so the ranking
+    // was predicting one less mana than the solver will actually find. gi206 is exactly that mana: at
+    // the T3 Matron, N-1 puts mana_next at 5 against a Muxus at MV 6 (so the discount prices the bomb
+    // two turns out), while N puts it at 6 -- castable next turn, which is the line that wins a turn
+    // earlier. MTG_GOBLIN_SKIRK_SELFSAC=0 restores the old count for the A/B.
+    static const bool selfsac = EnvOn("MTG_GOBLIN_SKIRK_SELFSAC", true);
+    const int skirk_ramp = !skirk_on ? 0
+                         : std::max(0, (use_nolord ? goblin_fodder : G) - (selfsac ? 0 : 1)
+                                       + entering_fodder);
     const int untapped_mana = AvailableManaPool(s).Total();               // real mana this turn (no Skirk fudge)
     const int mana_now  = untapped_mana + skirk_ramp;
-    const int mana_next = CountLandsInPlay(s, controller) + 1 + skirk_ramp;   // + one land drop next turn
+    // mana_next assumed THIS turn's land drop was already spent. It routinely is NOT: the plan
+    // enumerator ranks a tutor at the pre-land-drop state, so a turn where the land is still to come
+    // reads one mana short next turn, and a 5-drop prices as t=2 ("genuinely stuck", disc 0.287)
+    // instead of t=1 (disc 0.637). Same class of bug as the Skirk self-sac miscount above, and the
+    // same symptom -- gi101 is the case: at the T4 Matron the ranking is computed twice, once with
+    // 3 lands (mana_next=4, Siege-Gang rank 8, OUTSIDE a 6-wide window) and once with 4 (mana_next=5,
+    // rank 4, inside). The 3-land copy is the one the enumerator binds on, so a bomb that IS castable
+    // next turn gets vetoed off the axis. Gated diagnostics MTG_GOBLIN_RESERVE_TURN /
+    // MTG_GOBLIN_RESERVE_NEXT pinned it to exactly that state (turn 4, mana_next 4).
+    // REJECTED, kept default-off with its number. Correcting the projection is measurably WORSE:
+    //
+    //                                        gi101   HELD-OUT (8000 searched)
+    //   reserve=2, PENDING_LAND=0 (shipped)   T5        0.0  (baseline)
+    //   reserve=0, PENDING_LAND=0             T6        0.0
+    //   reserve=0, PENDING_LAND=1             T5       +7.0  (0 better / 7 worse)
+    //   reserve=2, PENDING_LAND=1             T5       +9.0  (0 better / 9 worse)
+    //
+    // It fixes gi101 on its own -- the diagnosis is right -- but never helps anywhere else and costs
+    // 7-9 games. The likely reason: the discount CURVE (0.85 at t=1, then 0.45/step) was calibrated
+    // against this pessimistic mana_next, so the bias is already priced in. Crediting the pending
+    // drop moves EVERY expensive bomb from t=2 to t=1 at every pre-land-drop state at once, which
+    // re-tunes all of the thresholds the curve was fitted to. Making this pay would mean refitting
+    // the curve with it, not dropping it in. Same lesson as the reserve eviction below.
+    // MTG_GOBLIN_PENDING_LAND=1 enables.
+    static const bool pending_land = EnvOn("MTG_GOBLIN_PENDING_LAND", false);
+    bool land_drop_pending = plan_known && plan_land_pending;   // exact: does THIS plan still play one
+    if (!plan_known && pending_land
+        && s.players[controller].lands_played_this_turn < s.players[controller].LandDropsAvailable())
+    {
+        for (const Card& h : s.players[controller].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if (hd != nullptr && hd->card.IsLand()) { land_drop_pending = true; break; }
+        }
+    }
+    const int mana_next = CountLandsInPlay(s, controller) + 1 + (land_drop_pending ? 1 : 0) + skirk_ramp;
     const int opp_life  = s.players[1 - controller].life;
+    // Can a fetched body attack the turn it lands? A Goblin lord granting haste already on the
+    // battlefield, or one in hand we can afford now, is the difference between an attack-triggered
+    // payoff paying immediately and losing a full swing.
+    // Haste only matters for the turn the fetched body LANDS -- after that it is unsick anyway --
+    // so a hand haste-lord counts only if it is castable ALONGSIDE the tutor source out of real
+    // untapped mana, which is the same conservative rule the swing_atk projection below uses. (The
+    // loose "MV <= mana_now" test was wrong: it credited a Chieftain at MV 3 against mana_now 3
+    // while the Matron being cast is already spending exactly that mana.)
+    int tutor_src_mv = 0;
+    for (const Card& h : s.players[controller].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+        if (!hd || !(hd->params.tutor_to_hand || hd->params.tutor_to_top)) { continue; }
+        tutor_src_mv = hd->card.m_mana_cost.ManaValue();
+        break;
+    }
+    bool haste_avail = haste_source || (plan_known && plan_haste_cast);
+    // Mode 2 keeps the in-hand fallback: a haste lord we can still afford will be on the battlefield
+    // when a fetched card lands, whether or not THIS turn's plan is the one that casts it.
+    if (!haste_avail && (!plan_known || plan_aware >= 2))
+    {
+        for (const Card& h : s.players[controller].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if (!hd || !hd->params.grants_haste || hd->params.subtypes_affected.empty()) { continue; }
+            if (hd->card.m_mana_cost.ManaValue() + tutor_src_mv <= untapped_mana)
+            { haste_avail = true; break; }
+        }
+    }
+    // How many more attack steps we expect to need. This is the SAME quantity as "how close to
+    // lethal are we", read the other way round, and it is what decides whether a delayed
+    // attack-trigger payoff is worth anything at all (see the Piledriver note in value_of).
+    // Sick bodies are included: they wake up before a fetched creature could swing anyway.
+    const int per_swing   = std::max(1, ready_atk + sick_goblin_power);
+    const int swings_left = std::max(1, std::min(6, (opp_life + per_swing - 1) / per_swing));
+
+    // --- STRICT DOMINANCE: drop candidates that are "similar but worse" -----------------------
+    // (user, 2026-08-05) "keep cards that are significantly different in utility and drop ones that
+    // are similar, but worse in a situation. With W=6, this should be pretty accurate." The tutor
+    // fetches ONE card and the window holds six, so two cards that do the same job only differently
+    // -badly are burning a slot that measurably matters: held-out, W=5 costs +11.0 turn-units against
+    // W=6 and W=4 costs +26.0, so the marginal slot is worth ~11 turn-units.
+    //
+    // This is the PROVABLE half of that idea -- no heuristics, no card names. B is dropped when some
+    // other fetchable A costs no more, has a body no smaller, and is at least as good on EVERY
+    // goldfish-relevant capability while being strictly better on one. Goblin King is the case in
+    // this deck: identical {1}{R}{R} and 2/2 and +1/+1-to-Goblins as Goblin Chieftain, whose only
+    // difference is that it ALSO grants haste and has haste itself. King's one differentiator is
+    // mountainwalk, which cards.json itself flags "INERT in goldfishing (evasion vs a passive
+    // non-blocking opponent)". And King is a 2-of that ranks 1st or 2nd in nearly every dump, so the
+    // pair burns two of six slots to do one card's job.
+    //
+    // Capabilities are compared as a vector so the rule survives a decklist change; a card with any
+    // capability the other lacks is "significantly different" and both survive.
+    // MTG_GOBLIN_DOMINANCE=0 disables it for the A/B.
+    static const bool dominance_on = EnvOn("MTG_GOBLIN_DOMINANCE", true);
+    auto caps_of = [](const CardParams& q)
+    {
+        return std::array<int, 14>{
+            q.power_bonus, q.tough_bonus, q.grants_haste ? 1 : 0,
+            q.reduces_spell_subtype.empty() ? 0 : 1,
+            q.attack_pump_power_per_other_matching, q.etb_reveal_count, q.etb_self_creates_tokens,
+            std::max({ q.etb_damage_any, q.etb_damage_each_opponent, q.channel_damage }),
+            q.sac_outlet_add_mana_amount, q.sac_outlet_damage,
+            q.combat_damage_puts_subtype_from_hand.empty() ? 0 : 1,
+            q.tap_creates_tokens_per_controlled_subtype.empty() ? 0 : 1,
+            (q.dies_trigger_impulse_exile || q.dies_trigger_damage
+             || q.dies_trigger_creates_tokens) ? 1 : 0,
+            (q.tutor_to_hand || q.tutor_to_top) ? 1 : 0 };
+    };
+    std::set<std::string> dominated_out;
+    if (dominance_on)
+    {
+        auto lookup = [&](const std::string& n) -> const CardDefinition*
+        {
+            for (const Card& lc : s.players[controller].library)
+            { if (lc.m_name == n) { return CardDatabase::Instance().LookupCached(lc); } }
+            return nullptr;
+        };
+        for (const std::string& bn : cands)
+        {
+            const CardDefinition* bd = lookup(bn);
+            if (!bd) { continue; }
+            for (const std::string& an : cands)
+            {
+                if (an == bn) { continue; }
+                const CardDefinition* ad = lookup(an);
+                if (!ad) { continue; }
+                if (ad->card.m_mana_cost.ManaValue() > bd->card.m_mana_cost.ManaValue()) { continue; }
+                if (ad->card.m_power.value_or(0)     < bd->card.m_power.value_or(0))     { continue; }
+                if (ad->card.m_toughness.value_or(0) < bd->card.m_toughness.value_or(0)) { continue; }
+                const auto ca = caps_of(ad->params), cb = caps_of(bd->params);
+                bool ge = true, gt = false;
+                for (std::size_t i = 0; i < ca.size(); ++i)
+                {
+                    if (ca[i] < cb[i]) { ge = false; break; }
+                    if (ca[i] > cb[i]) { gt = true; }
+                }
+                // A tie on every axis would drop one of two identical names arbitrarily; require a
+                // strict edge somewhere, so genuine duplicates both stay.
+                if (ge && gt) { dominated_out.insert(bn); break; }
+            }
+        }
+        if (!dominated_out.empty() && dominated_out.size() < cands.size())
+        {
+            cands.erase(std::remove_if(cands.begin(), cands.end(),
+                        [&](const std::string& n) { return dominated_out.count(n) > 0; }),
+                        cands.end());
+        }
+    }
 
     // --- per-card value (board impact, incl. payoffs EvalCard misses) --------------------------
     constexpr double BODY = 100.0;   // per power (a damage-equivalent, matching EvalCard's DMG)
+    // Best face damage still FETCHABLE, for the dominated-burn rule in value_of below. A tutor takes
+    // exactly one card, so a burn payoff only earns its credit if nothing strictly better is sitting
+    // in the same library. MTG_GOBLIN_DOMINATED_BURN: 0 = off, 1 = drop the redundant face credit,
+    // 2 = drop the card out of contention entirely (rank it last).
+    static const int dom_burn_mode = EnvInt("MTG_GOBLIN_DOMINATED_BURN", 0);
+    auto face_of = [](const CardParams& q) {
+        return std::max({ q.etb_damage_any, q.etb_damage_each_opponent, q.channel_damage });
+    };
+    int pool_best_face = 0;
+    if (dom_burn_mode > 0)
+    {
+        for (const std::string& n : cands)
+        {
+            for (const Card& lc : s.players[controller].library)
+            {
+                if (lc.m_name != n) { continue; }
+                const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+                if (ld) { pool_best_face = std::max(pool_best_face, face_of(ld->params)); }
+                break;
+            }
+        }
+    }
+    // True when this card's burn is strictly beaten by another fetchable candidate's.
+    auto is_dominated_burn = [&](const CardDefinition* d) -> bool
+    {
+        if (dom_burn_mode == 0 || !d) { return false; }
+        const int f = face_of(d->params);
+        return f > 0 && f < pool_best_face;
+    };
     auto value_of = [&](const CardDefinition* d, const Card& c) -> double
     {
         if (!d) { return 0.0; }
@@ -3912,8 +4246,74 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             if (p.power_bonus > 0)              { v += p.power_bonus * buff_targets * BODY; } // King/Chieftain/Rundvelt +1/+1: a buffed Goblin's +1 power is worth a body power point AND recurs+scales
             if (p.grants_haste)                 { v += goblins_sick * 90.0; }        // Warchief/Chieftain: sick attack NOW
             if (!p.reduces_spell_subtype.empty()) { v += 70.0; }                     // Warchief: cost cut -> deploy more
+            // GOBLIN PILEDRIVER IS A LORD-EQUIVALENT, and CONDITIONALLY so (user, 2026-08-04):
+            // "similar to a lord except it does 2 per other goblin and only realized when it
+            // attacks ... 2 per other attacking goblin plus the 1 base power, whereas the lord does
+            // 1 per other attacking goblin + 1 base power ... pretty close to Rundvelt Hordemaster
+            // unless the lord effect can give lethal this turn. Piledriver usually wins if there is
+            // haste or there are multiple turns it can attack." And, decisively: "it's important
+            // that the Piledriver is not strictly better ... If close to lethal and no haste the
+            // lord is better."
+            //
+            // As swing damage added, with N = other ATTACKING Goblins:
+            //       +1/+1 lord   N*1 + 1        Piledriver   N*2 + 1
+            // The lord side is already priced exactly that way (power_bonus * buff_targets * BODY,
+            // plus its own body). Piledriver was priced as G * 2 * 45 -- a DIFFERENT crowd
+            // (board-only, read at the instant of the fetch, when the board is smallest) and UNDER
+            // HALF the per-point rate. At buff_targets 4 that is 190 against the lord's 500, where
+            // the true ratio is 9/5. The two halves of the comparison were never on one scale.
+            //
+            // That also explains the earlier negative result recorded here: the crowd was swept at
+            // the old 45/point (buff_targets -1.0, G+entering+1 +4.0, buff_targets@25 +2.0 held-out)
+            // and d0 was EXACTLY 0.0 in every arm -- across 12,000 greedy games Piledriver never
+            // once changed the top pick, because 190 -> 460 still lost to every lord. The COUNT was
+            // never the axis; the SCALE was, and nothing tested moved it far enough to matter.
+            //
+            // The conditionality is not a tuned constant -- it falls out of how many swings are
+            // left. Over T remaining attack steps a lord realizes T*(N+1) while Piledriver, which
+            // cannot attack the turn it lands, realizes only (T-1)*(2N+1). So the pump is scaled by
+            // (T-1)/T, and every one of the user's conditions drops out of that single factor:
+            //     T = 1 (lethal this turn, no haste) -> 0.00  Piledriver contributes NOTHING,
+            //                                                 the lord is strictly better
+            //     T = 2                              -> 0.50  2N * 0.5 = N: parity with the lord
+            //     T = 3+                             -> 0.67+ Piledriver ahead ("multiple turns")
+            //     haste                              -> 1.00  no lost swing, ~2x the lord
+            // T is estimated from the damage already on the board against the opponent's life, so
+            // "close to lethal" and "plenty of turns left" are the same quantity read two ways.
+            // MTG_GOBLIN_PILEDRIVER_CROWD: 0 = board only, 1 = buff_targets. _PER = per pump point
+            // (100 = BODY = lord parity). _DELAY: 0 = derived (T-1)/T, >0 = that fixed percent.
             if (p.attack_pump_power_per_other_matching > 0)
-            { v += p.attack_pump_power_per_other_matching * G * 45.0; }              // Piledriver: +2 per other Goblin
+            {
+                static const int pile_crowd = EnvInt("MTG_GOBLIN_PILEDRIVER_CROWD", 2);
+                static const int pile_per   = EnvInt("MTG_GOBLIN_PILEDRIVER_PER", static_cast<int>(BODY));
+                static const int pile_delay = EnvInt("MTG_GOBLIN_PILEDRIVER_DELAY", 50);
+                // The crowd is "other ATTACKING Goblins", which is not the lord's crowd: a lord's
+                // buff waits around for hand Goblins to land, but a pump that only fires on the
+                // swing is bounded by what is actually deployed by then -- about one more body per
+                // turn. Mode 1 (buff_targets, board + up to 3 in HAND) ranks Piledriver FIRST on a
+                // T1 empty board off three undeployed hand cards, which is the same over-reach as
+                // the rejected variant 3. Mode 2 is board + the entering source + one deploy.
+                const int crowd = pile_crowd == 1 ? buff_targets
+                                : pile_crowd == 2 ? G + entering_fodder + 1
+                                                  : G;
+                // (T-1)/T from the swings left, CAPPED at lord parity. Both halves are load-bearing
+                // and each was measured: the derived factor alone reaches 0.83 by T=6, which makes
+                // Piledriver ~1.67x a lord and measures WORSE held-out (+2.0 searched) -- the user's
+                // "it's important that the Piledriver is not strictly better" is empirically right,
+                // and the cost is monotone in how far past parity it goes (0.50 -> -3.0, 0.65 -> 0.0,
+                // 0.83 -> +2.0). The cap alone would lose the other half, since a flat 0.50 still
+                // pays half credit when the game ends THIS turn. min() keeps both: T=1 gives exactly
+                // 0.0 ("if close to lethal and no haste the lord is better") and everything from
+                // T=2 up sits at parity.
+                double realized = 1.0;
+                if (!haste_avail)
+                {
+                    const double derived = (swings_left - 1) / static_cast<double>(swings_left);
+                    realized = std::min(pile_delay / 100.0, derived);
+                }
+                v += p.attack_pump_power_per_other_matching * crowd
+                     * static_cast<double>(pile_per) * realized;
+            }
         }
         // Payoffs.
         if (p.etb_reveal_count > 0)            { v += p.etb_reveal_count * 75.0; }   // Muxus: cheat ~half of N free
@@ -3921,6 +4321,118 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         { v += G * 80.0; }                                                           // Krenko: G tokens/tap, snowballs
         if (p.etb_self_creates_tokens > 0)     { v += p.etb_self_creates_tokens * 90.0; } // Siege-Gang(3)/Mogg(1)
         if (p.sac_outlet_damage > 0)           { v += 40.0; }                        // Siege-Gang reach
+        // DEATH-WATCH IMPULSE next to a sac outlet (user, 2026-08-04): "Rundvelt Hordemaster is
+        // better if we are sacrificing creatures to Skirk Prospector -- the extra effect comes into
+        // play ... and the skirk effect can be pretty huge."
+        //
+        // Hordemaster is "Whenever a Goblin you control dies, exile the top card; you may play it if
+        // it's a Goblin", dies_watch_includes_self. On its own that is a slow trickle -- against a
+        // goldfish nothing blocks, so Goblins essentially do not die. Next to a Skirk Prospector it
+        // is a different card: every body converted to mana ALSO digs, and roughly half this deck is
+        // Goblin creatures, so the ramp and the card advantage are the same activation. Worth
+        // exactly ZERO until now -- value_of had no dies_trigger_impulse_exile term at all.
+        //
+        // Priced off the sacs we actually expect: skirk_ramp is the bodies a Skirk on the
+        // battlefield can eat, and it is already 0 when there is no outlet, so the term is
+        // self-gating and cannot inflate Hordemaster in a boardless state. Half of BODY per expected
+        // death is the hit rate -- a dig that whiffs on a non-Goblin is inert deck-thinning.
+        // The pairing is SYMMETRIC and both halves are priced here, because either card can be the
+        // one already on the battlefield when we fetch the other:
+        //   * fetching the Hordemaster INTO a Skirk board  -> skirk_ramp bodies are already eatable
+        //   * fetching the Skirk INTO a Hordemaster board  -> the fetched outlet turns the board
+        //     into mana AND cards, and this is the commoner state of the two, since Hordemaster
+        //     ranks 2-4 and so is usually the one already down
+        // Both are self-gating (each is zero without its partner), so neither can inflate a card in
+        // a state where the combination does not exist.
+        static const double impulse_per = EnvInt("MTG_GOBLIN_IMPULSE_PER", 0);
+        if (p.dies_trigger_impulse_exile && skirk_ramp > 0)
+        {
+            v += skirk_ramp * impulse_per;
+        }
+        if (p.sac_outlet_add_mana_amount > 0 && deathwatch_on)
+        {
+            // Same body count the enabler credit uses for a FETCHED Prospector: the board's
+            // expendable Goblins, the tutor source entering now, and the Prospector itself.
+            const int sacs = (use_nolord ? goblin_fodder : G) + entering_fodder + 1;
+            v += sacs * impulse_per;
+        }
+        // DIRECT DAMAGE TO THE FACE (MTG_GOBLIN_FACE_VALUE). Until now this was worth exactly ZERO
+        // here: value_of had no etb_damage_any / channel_damage term at all, and face_burst -- which
+        // does compute the damage correctly -- is consumed only by the exact-lethal override, so
+        // Twinshot Sniper's "deals 2 damage to any target" paid nothing unless it happened to be the
+        // last 2 points. It was scored as a 2-power body, 200, and the measured consequence is that
+        // it is the deck's single largest ranking miss: reading the rank the SEARCH commits to at
+        // W=12 (MTG_TUTOR_CHOSEN_RANK), Twinshot Sniper is 4 of the 5 past-window commits over an
+        // unbiased 300-game sample, and 3 more in the games the width decides -- always at rank
+        // 11-13 of 14-16.
+        //
+        // The weight is BODY -- one point of face damage is worth one point of power on a creature.
+        // Burn is one-shot where a body's power recurs every combat, but against a goldfish it is
+        // unconditional: nothing blocks, no lifegain, no summoning sickness, no needing to survive,
+        // and it can be aimed at exactly the last points. Parity is the claim; it deliberately does
+        // NOT assert that burn beats bodies.
+        //
+        // TRAINED, not guessed (test/goblins_face_value_train.sh). Selecting on the overnight
+        // searched cases of seeds s4004+s5005 and reading s6006+s7007 only afterwards -- because
+        // sweeping the whole overnight tier and taking its minimum is selection on the holdout, and
+        // the regression tier's ~1,325 searched games cannot resolve a delta this size:
+        //
+        //     per     TRAIN(4000g)   VALIDATE(4000g)   d0(12000g)
+        //      80        0.0             0.0             +3
+        //     100       -4.0            -2.0             +4     <- adopted
+        //     120       -4.0            -4.0            +15
+        //     160       -6.0            -3.0            +25     <- train minimum
+        //     200       -4.0            -3.0           +133
+        //
+        // Train's minimum is 160, but 160 vs 100 is 2 turn-units over 4,000 games -- noise. Searched
+        // is flat from 100 up; what actually separates the weights is d0 cost, which climbs steeply.
+        // So take the smallest weight that captures the effect, which is also the least extreme claim
+        // and the cheapest. Below ~100 the term is inert (80 is byte-identical to off): Twinshot
+        // Sniper's score has to clear a lord's before any ordering changes.
+        //
+        // max(), not sum: the ETB ping and the Channel mode are ALTERNATIVES (cast the creature, or
+        // discard it from hand for the same damage), so adding them would double-count one card.
+        static const bool  face_value = EnvOn("MTG_GOBLIN_FACE_VALUE", true);
+        static const double face_per  = EnvInt("MTG_GOBLIN_FACE_VALUE_PER", 160);
+        if (face_value)
+        {
+            const int face = std::max({ p.etb_damage_any, p.etb_damage_each_opponent, p.channel_damage });
+            // DOMINATED BURN (user, 2026-08-05). A tutor fetches ONE card, so a burn payoff is only
+            // worth its face value if it is the BEST burn still fetchable -- if a strictly better one
+            // is sitting in the same library, this card's damage is not a reason to take it.
+            //
+            // Goblin Chainwhirler is the case, and in this environment it is dominated twice over:
+            // "if you need a good 3-drop threat you want a lord. If you want the immediate damage
+            // Twinshot is better ... what makes it playable in a real game is the ability to ping
+            // 1 toughness creatures (i.e. like dorks or aggressive 1-drops)". Goldfishing has no
+            // opponent creatures, so the half of its ETB that justifies the card is INERT -- the
+            // card data says as much ("only matters vs opponent spawn tokens"). What is left is
+            // 1 damage to the face against Twinshot Sniper's 2, on a card that also costs {R}{R}{R}
+            // where Twinshot can be CHANNELLED from hand for {1}{R}.
+            //
+            // Deliberately by RULE, not by card name: any candidate whose face damage is strictly
+            // beaten by another fetchable candidate loses the credit, so the deck can change without
+            // this going stale. It self-restores -- once Twinshot Sniper has left the library,
+            // Chainwhirler is the best burn again and gets its full credit back, which is exactly
+            // "only taken if twinshot is gone and we need the 1 damage".
+            //
+            // MEASURED AND NOT ADOPTED (default 0) -- the card evaluation is right and the engine
+            // already agrees. Demoting Chainwhirler 460 -> 300 moves it from rank 5 to rank 7, out
+            // of the window, and changes EXACTLY ZERO searched games across 8,000 held-out (and 1,100
+            // regression). Modes 1 and 2 are indistinguishable from each other: once it leaves the
+            // window, ranking it dead last buys nothing further. So the search never wanted it, and
+            // freeing its window slot never helps anyone else either.
+            //
+            // The only measurable effect is a cost: d0 +88.0, which is one game -- s8008 gi1882, T8
+            // -> unwon -- against two d0 games improved. And that game is a GREEDY artifact: at
+            // depth 3 and depth 5 both arms win on T5. d0 takes cands[0] with no search, so it is
+            // the only policy that can be hurt by removing a card the search would have rejected.
+            //
+            // Kept as a lever because the reasoning generalises (a tutor takes ONE card, so a
+            // dominated payoff is not a reason to take it) and because it answers, with numbers, a
+            // question worth not re-asking.
+            if (face > 0 && !is_dominated_burn(d)) { v += face * face_per; }
+        }
         return v;
     };
 
@@ -4000,6 +4512,48 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             stuck_bodies = hd->params.etb_self_creates_tokens + hd->params.etb_reveal_count / 2;
         }
     }
+    // LACKEY AS A REPEATING ENGINE (MTG_GOBLIN_LACKEY_REPEAT). Every other enabler channel is a
+    // fraction of the ONE best stuck card, because each of them accelerates that card by a turn or
+    // two. Goblin Lackey is not that shape: it puts a Goblin from hand onto the battlefield EVERY
+    // combat, for the rest of the game, and 33 of this deck's 61 cards are Goblin creatures -- so its
+    // worth is not bounded by what happens to be stuck right now.
+    //
+    // gi124 is the case the hand-bound model cannot reach. At the T3 Matron the hand holds Krenko,
+    // Matron and Chainwhirler, of which only Krenko counts as stuck and only by one turn, so the
+    // credit is 0.20 x 300 = 60 and Lackey ranks 11th. The fetched Lackey then connects on T4 AND T5,
+    // putting Siege-Gang (MV 5) and Chainwhirler (MV 3) onto the battlefield free -- 8 mana of
+    // creatures, and Siege-Gang was not even in hand when the fetch was made.
+    //
+    // So the second and later drops are priced off what the DECK will supply rather than what the
+    // hand holds: the mean value of the Goblin creatures still in the library. Reading library
+    // COMPOSITION (not order) is deck knowledge a player has, and is what TutorCandidates already
+    // does to build its candidate list -- no clairvoyance about the draw.
+    //
+    // But a LATER drop is worth much less than the first, and not merely by a decay (user,
+    // 2026-08-04): "that Chainwhirler can only attack on turn 6 ... unless the 1 damage from it does
+    // the trick, this isn't so amazing. But yes, it is very much not nothing. And really does ensure
+    // we don't slip much beyond T6." Lackey puts the creature in on COMBAT DAMAGE, so it arrives
+    // summoning-sick and its body does nothing until the following turn. What a late drop DOES buy
+    // immediately is its enter-the-battlefield effect -- Chainwhirler's ping, Siege-Gang's three
+    // tokens and reach. So the later drop is credited on the ETB/payoff half of value_of with the
+    // BODY half struck out, which is exactly the user's "not amazing, very much not nothing": it is
+    // a floor against slipping a turn rather than a tempo gain.
+    static const bool lackey_repeat = EnvOn("MTG_GOBLIN_LACKEY_REPEAT");
+    static const int  lackey_pct    = EnvInt("MTG_GOBLIN_LACKEY_REPEAT_PCT", 35);   // swept, see the doc
+    double lib_goblin_mean = 0.0;
+    if (lackey_repeat)
+    {
+        double sum = 0.0; int n = 0;
+        for (const Card& lc : s.players[controller].library)
+        {
+            const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+            if (!ld || !ld->card.IsCreature() || !CardHasSubtype(ld->card, "Goblin")) { continue; }
+            // ETB/payoff value only -- the body cannot attack the turn a Lackey hit drops it in.
+            sum += std::max(0.0, value_of(ld, ld->card) - ld->card.m_power.value_or(0) * BODY);
+            ++n;
+        }
+        if (n > 0) { lib_goblin_mean = sum / n; }
+    }
     // Turns until the stuck card could be HARD-CAST unaided (+1 land/turn). This is what an enabler
     // is competing against: if the answer is 1, we can just cast it next turn and no enabler is
     // worth a fetch slot (user: "when we are low on gas or can cast what we have anyway neither is
@@ -4054,13 +4608,83 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         //
         // Skirk converts BODIES into mana, so its worth scales with the bodies available to sac --
         // the old flat 0.40 behind a G>=2 gate paid full price for a single sacrificeable Goblin.
+        //
+        // But "G - 1" is the WRONG BODY COUNT, in exactly the three ways skirk_ramp was already
+        // corrected (236bb13, c13cbac) -- and this line never got any of them, because skirk_ramp is
+        // gated on skirk_on (a Prospector ALREADY on the battlefield) and so is identically zero in
+        // precisely the states where we are deciding whether to FETCH one. The fodder a fetched
+        // Prospector will actually eat is:
+        //   + the board's EXPENDABLE Goblins (goblin_fodder, not G -- feeding a lord to Skirk
+        //     de-buffs everything else, so lords are fodder only in extremis)
+        //   + the tutor SOURCE, a Goblin creature entering right now, which is the whole reason this
+        //     function is running (the board scan ran while it was still in hand)
+        //   + the PROSPECTOR ITSELF: "Sacrifice a Goblin: Add {R}" is repeatable, needs no tap, and
+        //     Skirk is a Goblin, so the last activation eats it. N bodies convert to N mana, not N-1
+        //     -- which is how CollectActions' own multi-sac burst already counts victims.
+        // The old "-1" was thus doubly wrong here: it subtracted a self-sac that is legal AND omitted
+        // the two bodies that are arriving.
+        //
+        // The measured consequence is stark. Reading the rank the SEARCH commits to (W=12,
+        // MTG_TUTOR_CHOSEN_RANK), Skirk is 3 of the 10 past-window commits -- and in all three
+        // (s3003 gi194, s4004 gi727, s5005 gi920) G is 0 or 1, so 0.13 * max(0, G-1) is EXACTLY
+        // ZERO and Skirk scores 100: a vanilla 1/1, rank 12 of 14-16. That it is the gate and not the
+        // hand is provable from the same dumps -- Goblin Lackey, the other enabler, collects +340
+        // from stuck_hand_value in those very states. With the real count (typically 1 + 1 + 1 = 3)
+        // the fraction is 0.39, just under the cap, so Skirk scores 321 instead of 100 and moves from
+        // rank 12 to rank 5-8, inside or on the edge of the shipped W=6.
+        //
+        // ADOPTED on a replicating measurement, unlike the Piledriver crowd correction above:
+        // regression (train) searched -2.0, overnight (held-out) searched -3.0 over 8,000 games,
+        // 4 games better / 1 worse, d0 exactly 0.0 over 12,000 games. Same sign on both tiers.
+        // MTG_GOBLIN_SKIRK_FETCH_FODDER=0 restores the board-only count for the A/B.
         if (p.sac_outlet_add_mana_amount > 0)
-        { frac += rank_v2 ? std::min(0.40, 0.13 * std::max(0, G - 1)) : (G >= 2 ? 0.40 : 0.0); }
+        {
+            static const bool fetch_fodder = EnvOn("MTG_GOBLIN_SKIRK_FETCH_FODDER", true);
+            // Per-body rate and cap, both in hundredths, TRAINED on s4004+s5005 and read off
+            // s6006+s7007 afterwards (test/goblins_skirk_rate_train.sh -- same split protocol and
+            // same reason as the face-damage weight).
+            //
+            // The CAP is not what binds at the miss states: gi194 credits 0.26 = 0.13 x 2, because
+            // its one board Goblin is a LORD (so goblin_fodder is 0) and only the entering Matron
+            // and the Prospector itself are fodder. Raising the old 0.40 cap would change nothing
+            // there -- the per-body RATE is the lever. The cap is raised to 0.60 alongside purely so
+            // a higher rate cannot silently clip on high-fodder boards; it is inert at the old rate
+            // (13/60 reproduces the 13/40 measurement exactly, train -4.0 / validate +1.0).
+            //
+            //     rate   TRAIN(4000g)   VALIDATE(4000g)   d0(12000g)
+            //      13       -4.0            +1.0             0.0     (the fodder fix alone)
+            //      18       -6.0            +1.0             0.0     <- ADOPTED
+            //      22       -6.0            +1.0             0.0
+            //      26       -6.0            +1.0             0.0
+            //      32       -6.0            +1.0             0.0
+            //
+            // Flat from 18 up: the ordering SATURATES, because past 0.18/body Skirk passes nothing
+            // further that changes an outcome. At gi194, 0.18 x 2 = 0.36 puts it at 406, just over
+            // Goblin Chainwhirler's 400 -- that single crossing is the whole gain. So take the
+            // smallest rate that captures it, the same rule the face-damage weight was picked by.
+            // The +1.0 on validate is one game, s7007 gi588 (T4->T5), and it is CHURN: it recovers
+            // at 16x budget and at unlimited. d0 is 0.0 at every rate -- the greedy top pick never
+            // changes, so this is purely window membership, which is what it was designed to be.
+            static const double rate = EnvInt("MTG_GOBLIN_SKIRK_RATE", 18) / 100.0;
+            static const double cap  = EnvInt("MTG_GOBLIN_SKIRK_CAP",  60) / 100.0;
+            const int fodder = fetch_fodder
+                             ? (use_nolord ? goblin_fodder : G) + entering_fodder + 1
+                             : std::max(0, G - 1);
+            frac += rank_v2 ? std::min(cap, rate * fodder) : (G >= 2 ? 0.40 : 0.0);
+        }
         // Lackey buys the TURNS we would otherwise spend reaching the stuck card's cost, so it
         // scales with how far out of reach that card is -- and is worth nothing when the card is
         // castable next turn anyway.
+        double repeat = 0.0;
         if (!p.combat_damage_puts_subtype_from_hand.empty())
-        { frac += rank_v2 ? std::min(0.60, 0.20 * std::max(0, stuck_turns - 1)) : 0.60; }
+        {
+            frac += rank_v2 ? std::min(0.60, 0.20 * std::max(0, stuck_turns - 1)) : 0.60;
+            // ... and the drops AFTER the first, priced off the deck rather than the hand (see the
+            // MTG_GOBLIN_LACKEY_REPEAT note above). ONE decayed extra drop, not an unbounded stream:
+            // the goldfish opponent never blocks, but the game is usually over within a turn or two
+            // of the engine coming online, so a second drop is the realistic horizon.
+            repeat = (lackey_pct / 100.0) * lib_goblin_mean;
+        }
         // A lord does not make the bomb arrive sooner -- it makes the arrival hit harder, across every
         // body the bomb brings with it (see the MTG_GOBLIN_LORD_AMP note above). Additive in BODY units
         // rather than a fraction of stuck_hand_value: this is literal extra power on the swing, not a
@@ -4068,7 +4692,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         double amp = 0.0;
         if (lord_amp && p.power_bonus > 0 && !p.subtypes_affected.empty())
         { amp = p.power_bonus * stuck_bodies * BODY; }
-        return frac * stuck_hand_value + amp;
+        return frac * stuck_hand_value + amp + repeat;
     };
 
     // --- deploy discount: how many TURNS until it can hit the board, over the best path ---------
@@ -4078,11 +4702,37 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // Muxus (analysis-goblins.md, the searched-slower audit). Curve (user 2026-08-02): t=1 (NEXT turn)
     // is ACCEPTABLE -- "you don't always have mana for any of them this turn" -- so t1 is only a mild
     // 0.85; the steep 0.45/step decay begins at t>=2 (genuinely stuck): 1.0 / 0.85 / 0.38 / 0.17.
-    auto turns_to_deploy = [&](const Card& c) -> int
+    auto turns_to_deploy = [&](const Card& c, bool arriving = false) -> int
     {
         const int mv = c.m_mana_cost.ManaValue();
-        int t = std::max(0, mv - mana_now);        // via mana (+~1/turn beyond what's available now)
-        if (mv <= mana_next)          { t = std::min(t, 1); }
+        int t;
+        // CAPACITY ANCHOR (MTG_TUTOR_AXIS_RESOLVE only; legacy mode byte-identical). Under resolve
+        // mode this ranking runs at the tutor's RESOLUTION state, where the plan's mana is already
+        // SPENT -- so "mv - mana_now" stops meaning "turns until deployable" and becomes "turns to
+        // re-accumulate from the leftover", a miscount that buried Muxus at t=5 / disc 0.035 (off
+        // leftover 1 where capacity was 5) and cost every one of the resolve-mode held-out goblins
+        // regressions (gi714/727/768/200: the baseline's winning line is Muxus T4 in all four; the
+        // resolve arm never put it on the axis). The honest read for a card ARRIVING IN HAND is
+        // capacity-based: next turn at the earliest -- a to-hand fetch can never be cast this turn,
+        // the plan is frozen before it arrives -- plus one turn per land it needs beyond next
+        // turn's capacity. mana_next (lands + next drop + Skirk ramp) is the same quantity the
+        // t<=1 clamp below always trusted at the boundary; this extends it past the boundary
+        // instead of falling back to the leftover fiction. HAND cards (hand_has_play,
+        // arriving=false) keep the leftover read: for them "castable this turn out of unspent
+        // mana" is the honest question at any state.
+        // MTG_GOBLIN_RESOLVE_CAP=0 restores the leftover-anchored read under resolve mode for the
+        // component A/B (the anchor is model-correct but must carry its own number -- bundles hide
+        // harmful components).
+        static const bool resolve_cap = EnvOn("MTG_GOBLIN_RESOLVE_CAP", true);
+        if (arriving && resolve_cap && TutorAxisResolveEnabled())
+        {
+            t = 1 + std::max(0, mv - mana_next);
+        }
+        else
+        {
+            t = std::max(0, mv - mana_now);        // via mana (+~1/turn beyond what's available now)
+            if (mv <= mana_next)          { t = std::min(t, 1); }
+        }
         if (lackey_now)               { t = 0; }   // free-drop any Goblin this turn (ignores mana)
         else if (lackey_persist)      { t = std::min(t, 1); }
         if (vial_charge >= 0)         { t = std::min(t, std::max(0, mv - vial_charge)); } // Vial: +1 charge/turn
@@ -4090,18 +4740,26 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     };
     // Opportunity cost: if the hand ALREADY holds a deployable-this-turn threat, another card we can't
     // play now is redundant gas -- we need to DEPLOY, not draw more. Mild downweight for such candidates.
-    bool hand_has_play = false;
-    for (const Card& h : s.players[controller].hand)
+    bool hand_has_play = plan_known && plan_deploys;   // exact: does the plan actually deploy one
+    if (!plan_known)
     {
-        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
-        if (hd && hd->card.IsCreature() && turns_to_deploy(hd->card) == 0
-            && h.m_name != "Goblin Matron") { hand_has_play = true; break; }
+        for (const Card& h : s.players[controller].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if (hd && hd->card.IsCreature() && turns_to_deploy(hd->card) == 0
+                && h.m_name != "Goblin Matron") { hand_has_play = true; break; }
+        }
     }
+    // The two curve constants are exposed for the MTG_TUTOR_AXIS_POSTLAND recalibration sweep: that
+    // fix moves cards from t=2 to t=1 wholesale, so if the curve had merely absorbed the old
+    // projection bias, re-fitting these should recover the loss. (Hundredths.)
+    static const double disc_t1   = EnvInt("MTG_GOBLIN_DISC_T1", 85) / 100.0;
+    static const double disc_step = EnvInt("MTG_GOBLIN_DISC_STEP", 45) / 100.0;
     auto discount_of = [&](const Card& c) -> double
     {
-        const int t = turns_to_deploy(c);
+        const int t = turns_to_deploy(c, /*arriving=*/true);   // candidates arrive in HAND
         double disc = 1.0;
-        if (t >= 1) { disc = 0.85; for (int k = 1; k < t; ++k) { disc *= 0.45; } } // mild t1, steep t>=2
+        if (t >= 1) { disc = disc_t1; for (int k = 1; k < t; ++k) { disc *= disc_step; } } // mild t1, steep t>=2
         if (t > 0 && hand_has_play) { disc *= 0.75; }   // opportunity cost: already have a play
         return disc;
     };
@@ -4220,6 +4878,9 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             // fetch that guarantees the kill this turn sorts ahead of every non-lethal one, best burst first.
             if (burst > 0 && swing_atk < opp_life && opp_life <= swing_atk + burst)
             { sc += 1.0e6 + burst; }
+            // Mode 2 -- "drop it from consideration entirely": sort it below every real
+            // candidate rather than removing it, so it stays legal if it is all that is left.
+            if (dom_burn_mode == 2 && is_dominated_burn(d) && sc < 1.0e6) { return 1.0; }
             // After the lethal override, so a fetch that wins outright is never discounted.
             if (rank_v2 && dup_hand_penalty && sc < 1.0e6)
             {
@@ -4234,8 +4895,272 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         return 0.0;   // whiff placeholder ("") or vanished name -> lowest
     };
 
+    // Scores are PURE per name, so compute each once and sort on the cached key -- byte-identical
+    // to calling score_of inside the comparator (stable_sort + identical keys = identical order),
+    // and ~8x fewer library scans. This matters because under MTG_TUTOR_AXIS_RESOLVE the ranking
+    // runs inside every plan apply that casts a tutor (the price of ranking at the true state),
+    // where the comparator's O(n log n) score_of calls -- each a library scan + full value/enabler
+    // evaluation -- were eating wall-clock search budget (the goblins-only all-churn asymmetry in
+    // the resolve-mode A/B).
+    std::map<std::string, double> score_memo;
+    for (const std::string& n : cands)
+    { if (score_memo.find(n) == score_memo.end()) { score_memo.emplace(n, score_of(n)); } }
     std::stable_sort(cands.begin(), cands.end(),
-                     [&](const std::string& a, const std::string& b) { return score_of(a) > score_of(b); });
+                     [&](const std::string& a, const std::string& b)
+                     { return score_memo.find(a)->second > score_memo.find(b)->second; });
+    // --- ROLE CUT: one card per role, best-on-this-board wins ---------------------------------
+    // (user, 2026-08-05) "Rundvelt Hordemaster and Piledriver. We should be able to work out which
+    // is better on the current board and drop the other." Strict dominance above only removes cards
+    // that are worse in EVERY state; this removes the one that is worse in THIS state, which is the
+    // other half of "keep cards that are significantly different in utility and drop ones that are
+    // similar, but worse in a situation".
+    //
+    // The decision rule is already in the scores, which is why this is a cut and not new judgement:
+    // "an early or hasty piledriver will inevitably be better. The lord wins when the damage add
+    // from the turn it is played will be significant. Otherwise the piledriver's +2 effect will
+    // easily win out." Piledriver is 2*crowd*BODY*realized where realized is 1.0 with haste
+    // (hasty -> inevitably better), falls to 0.0 when the game ends this turn (the lord's immediate
+    // damage is all that counts), and sits at 0.5 otherwise -- which is algebraically identical to
+    // a +1/+1 lord's 1*crowd*BODY. So at parity they TIE, and every condition the user named breaks
+    // the tie the way they described. Taking the higher score is exactly "which is better on the
+    // current board".
+    //
+    // Roles are read off capabilities, not names. Haste and cost-reduction are treated as
+    // genuinely different utility and never cut against each other -- Goblin Chieftain must survive
+    // ("a haste lord is very strong in a lot of different situations") and so must Goblin Warchief,
+    // even though all three carry a lord effect. Toughness is deliberately ignored in this grouping:
+    // against a goldfish nothing blocks, so it is not a differentiator.
+    // MTG_GOBLIN_ROLE_CUT: 0 = off, 1 = crowd-scaling payoffs, 2 = also the deploy enablers.
+    static const int role_cut = EnvInt("MTG_GOBLIN_ROLE_CUT", 1);
+    if (role_cut > 0 && cands.size() > 1)
+    {
+        auto role_of = [&](const std::string& n) -> int
+        {
+            for (const Card& lc : s.players[controller].library)
+            {
+                if (lc.m_name != n) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+                if (!d) { return 0; }
+                const CardParams& q = d->params;
+                if (q.grants_haste || !q.reduces_spell_subtype.empty()) { return 0; }  // unique utility
+                if (q.power_bonus > 0 || q.attack_pump_power_per_other_matching > 0) { return 1; }
+                if (role_cut >= 2
+                    && (q.sac_outlet_add_mana_amount > 0
+                        || !q.combat_damage_puts_subtype_from_hand.empty())) { return 2; }
+                return 0;
+            }
+            return 0;
+        };
+        // Pick the survivor of each role on BOARD CONTRIBUTION (value_of), not on the full score.
+        // Comparing totals was wrong and s3003 gi290 is the proof: at that T4 a haste lord is out
+        // (haste=1), so by the user's rule "an early or hasty piledriver will inevitably be better"
+        // -- and on board value it is, 700 to Rundvelt Hordemaster's 500. But Hordemaster's TOTAL is
+        // 800, because it collects +300 of enabler/lord-amplification credit, which is about how
+        // much sooner and harder a stuck bomb in HAND arrives. That is a different axis entirely, so
+        // letting it settle a role duel cut the right card: the game went T5 -> T6.
+        // ... and compare each role on the axis that DEFINES that role. Board value is right for the
+        // crowd payoffs, whose job is damage, and useless for the enablers: Goblin Lackey and Skirk
+        // Prospector are both 1/1 bodies worth exactly 100, so board value cannot tell them apart and
+        // the duel became a coin flip (role_cut=2 measured -3.0 held-out against role_cut=1's -9.0).
+        // What separates them is precisely the enabler credit -- Lackey scales with how far out of
+        // reach the stuck card is, Skirk with the fodder available to eat -- which is the user's
+        // "Lackey better on empty board, Skirk Prospector when there is significant fodder".
+        auto role_metric = [&](const std::string& n, int role) -> double
+        {
+            for (const Card& lc : s.players[controller].library)
+            {
+                if (lc.m_name != n) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+                if (role == 2) { return enabler_of(d); }
+                return value_of(d, d ? d->card : lc);
+            }
+            return 0.0;
+        };
+        std::map<int, std::string> role_keeper;      // role -> the name that survives it
+        for (const std::string& n : cands)
+        {
+            const int r = role_of(n);
+            if (r == 0) { continue; }
+            auto it = role_keeper.find(r);
+            if (it == role_keeper.end() || role_metric(n, r) > role_metric(it->second, r))
+            { role_keeper[r] = n; }
+        }
+        // "Sometimes we can drop both" (user). An enabler with nothing to enable is just a 1/1: in
+        // 61% of sampled states BOTH Goblin Lackey and Skirk Prospector score enable=0, because
+        // nothing in hand is stuck, and there the duel has no signal at all -- which is why cutting
+        // to one of them measured WORSE (-3.0 held-out vs -9.0 without the enabler cut). Mode 3
+        // drops the whole role when its best member is contributing nothing, instead of keeping one
+        // of two identical 1/1 bodies by coin flip.
+        std::set<int> role_dropped;
+        if (role_cut >= 3)
+        {
+            for (const auto& kv : role_keeper)
+            {
+                if (kv.first == 2 && role_metric(kv.second, 2) <= 0.0) { role_dropped.insert(kv.first); }
+            }
+        }
+        std::vector<std::string> kept;
+        kept.reserve(cands.size());
+        for (const std::string& n : cands)
+        {
+            const int r = role_of(n);
+            if (r != 0 && role_dropped.count(r) > 0) { continue; }   // nothing to enable -> drop all
+            if (r != 0 && role_keeper[r] != n) { continue; }         // a better one of this role won
+            kept.push_back(n);
+        }
+        if (!kept.empty()) { cands.swap(kept); }
+    }
+    // --- RESERVE A SLOT FOR THE BEST RAW CARD -------------------------------------------------
+    // The deploy discount is a PRE-SCORER ESTIMATE, and it can hide a bomb from the search entirely
+    // rather than merely ranking it low. s3003 gi101 is the worked case. When the search asks at T3
+    // "should I hold the Matron and cast it on T4 instead", it evaluates projected T4 states that
+    // look like this:
+    //
+    //    8.  Siege-Gang Commander  score=146.3  value=510.0  x disc=0.287 (t=2)
+    //    9.  Muxus, Goblin Grandee score=109.7  value=850.0  x disc=0.129 (t=3)
+    //
+    // Siege-Gang's RAW value (510) is higher than Goblin Chieftain's (500), the card that tops that
+    // list, and Muxus at 850 is the best card in the deck. Both are outside a 6-wide window purely
+    // because a {3}{R}{R} bomb reads as two turns away at untapped=3 / next=4. So the whole "hold
+    // the Matron" branch is unreachable, the search casts on T3 for the lord, and the game ends T6
+    // instead of T5. The width threshold is exactly W=9 -- the rank Siege-Gang occupies there.
+    //
+    // The discount is not wrong as a RANKING signal; it is wrong as an EXCLUSION. Once the bomb is
+    // on the axis the search re-simulates the line and either verifies it or throws it away, which
+    // is the same "optimism proposes, the re-sim disposes" pattern that measured load-bearing for
+    // Dragonstorm's ritual-afford credit. So reserve the last window slot for the highest RAW-value
+    // candidate when the discount has pushed it out, instead of letting an estimate veto it.
+    // ON CLAIRVOYANCE, and a claim retracted. The recovered line turns on a card drawn AFTER the
+    // decision: T3 hold the Matron, T4 DRAW Goblin Lackey + cast it + Matron fetches Siege-Gang,
+    // T5 the Lackey connects and puts Siege-Gang in free. A MTG_SHUFFLE_SALT_SEARCH decouple was run
+    // and the edge survived at salts 1-5, which was reported here as "not a clairvoyance artifact".
+    // That was WRONG: that instrument re-salts MID-GAME shuffles only (the opening library order
+    // comes from MTG_SHUFFLE_SALT_OPENING), so it strips reshuffle clairvoyance -- worth testing,
+    // since Goblin Matron has tutor_shuffle_after -- but a normal draw off the pre-shuffled library
+    // is identical in search and reality at every search salt. It could not have detected this.
+    //
+    // The justification is different, and does hold. First, the searched metric is clairvoyant BY
+    // CONSTRUCTION -- the search simulates the real library, so every searched decision in this
+    // project sees future draws, including the already-shipped W=4 -> 6 widening. Foreknowledge is a
+    // uniform baseline, not something this line uniquely exploits. Second, and decisively: the line
+    // is not merely unfound, it is UNREACHABLE. At W=6 the game stays T6 at depth 3, 5 AND 6 with
+    // unlimited budget, while W=6 + reserve wins T5 at all three. More search cannot evaluate a line
+    // whose key card was never put on the axis, so the window is hard-vetoing a valid play and this
+    // removes an artificial restriction rather than encoding foreknowledge.
+    //
+    // THE BINDING DECISION IS THE T2 LAND DROP, not the fetch (traced 2026-08-05, replacing an
+    // earlier "the deciding state is unpinned" note here -- and an in-hand-Lackey hypothesis that
+    // measured completely inert, for the reason below). Three Tree City taps for {C} in base mode,
+    // so playing it T2 leaves {R}{R}{C} on T3 and Goblin Chainwhirler ({R}{R}{R}) uncastable:
+    //
+    //   W<=8   T2 Three Tree City -> T3 can only cast Matron -> fetch Chieftain            -> T6
+    //   W>=9   T2 Mountain        -> T3 Chainwhirler -> T4 Three Tree City + Matron->Siege-Gang
+    //                              + Lackey -> T5 Lackey connects, Siege-Gang in FREE, and Three
+    //                                Tree City's {2},{T} "add {R} per Goblin" pays 4 sac activations
+    //                                for exactly 8                                          -> T5
+    //
+    // THE BINDING STATE IS THE PRE-LAND-DROP T4 NODE. The lookahead does re-rank at every projected
+    // turn, so an earlier draft of this note blaming a T3 state was wrong -- the rank-8 match there
+    // was a coincidence. Gating the reserve by turn (MTG_GOBLIN_RESERVE_TURN) recovers gi101 ONLY at
+    // turn 4, and gating additionally by mana_next (MTG_GOBLIN_RESERVE_NEXT) ONLY at mana_next=4.
+    // T4 is ranked TWICE, because the enumerator evaluates the cast before and after the land drop:
+    //
+    //   T4 G=1 opp=16 untapped=3 next=4 (3 lands, land STILL IN HAND)  Siege-Gang rank 8  OUTSIDE
+    //   T4 G=1 opp=16 untapped=4 next=5 (4 lands, land played)         Siege-Gang rank 4  inside
+    //
+    // and it binds on the pre-land copy, where mana_next is one short so a {3}{R}{R} bomb prices t=2
+    // instead of t=1. Rank 8 is also why the width threshold is exactly W=9 (W=7 and W=8 add only
+    // Krenko and Mogg War Marshal and change nothing). Crediting that pending drop is the obvious
+    // sharper fix and it DOES recover gi101 with the reserve off -- but it measures +7 to +9 held-out,
+    // so it is rejected; see the MTG_GOBLIN_PENDING_LAND table at the mana_next definition.
+    //
+    // The Lackey that carries the line is DRAWN ON T4, so at the deciding state it is in neither hand
+    // nor play but still in the library -- which is why teaching turns_to_deploy to count an in-hand
+    // Lackey measured inert. The discount is doing its job on the information it has; the defect is
+    // that a fixed window promotes that estimate to a VETO over a search that simulates the draw.
+    //
+    // THE EVICTION BELOW IS DELIBERATE AND MEASURED -- do not "fix" it. Inserting the k-th rescue at
+    // W-1-k shifts the (k-1)-th rescue out of the window, so reserve=N really rescues raw-value ranks
+    // 2..N and DROPS rank 1. That is not what the knob's name suggests, but it is the better rule:
+    // rank 1 is Muxus (raw 850, MV 6), the one bomb whose "genuinely stuck" discount is usually RIGHT.
+    //
+    //   reserve=1  rescue Muxus only          gi101 T6   held-out  0.0    (inert)
+    //   reserve=2  rescue rank 2 only         gi101 T5   held-out  0.0    <- shipped
+    //   reserve=2 + MTG_GOBLIN_VALUE_RESERVE_FIX=1, i.e. keep BOTH ranks 1 and 2:
+    //                                         gi101 T5   held-out +20.0   0 better / 20 worse
+    //
+    // MTG_GOBLIN_VALUE_RESERVE_FIX=1 restores the naive "keep every rescue" semantics (evict the
+    // weakest SURVIVOR rather than the previous rescue). Kept default-off with its number.
+    //
+    // Held-out is EXACTLY 0.0 over 8,000 searched and 12,000 d0 games -- not one file changed -- so
+    // the -2.0 on regression (gi101 at d3 and d5) is the only movement in 20,000 games. Adopted as a
+    // zero-cost fix to a diagnosed mechanism, NOT as a measured win.
+    // MTG_GOBLIN_VALUE_RESERVE=0 disables.
+    static const int value_reserve = EnvInt("MTG_GOBLIN_VALUE_RESERVE", 2);
+    // DIAGNOSTIC: apply the reserve only at states whose turn number is N (0 = every turn, default).
+    // Pins WHICH projected turn's window a width/reserve effect actually binds at -- the ranking is a
+    // pure function of state, so a lookahead re-ranks at every projected turn and the deciding state
+    // is not necessarily the one being played.
+    static const int reserve_turn = EnvInt("MTG_GOBLIN_RESERVE_TURN", 0);
+    static const int reserve_next = EnvInt("MTG_GOBLIN_RESERVE_NEXT", 0);
+    if (value_reserve > 0 && (reserve_turn == 0 || s.turn_number == reserve_turn)
+        && (reserve_next == 0 || mana_next == reserve_next)
+        && static_cast<int>(cands.size()) > TutorSearchWidth())
+    {
+        const int W = TutorSearchWidth();
+        std::map<std::string, double> raw_memo;   // pure per name -- same byte-identical memo as the sort
+        auto raw_value = [&](const std::string& n) -> double
+        {
+            auto it = raw_memo.find(n);
+            if (it != raw_memo.end()) { return it->second; }
+            double v = 0.0;
+            for (const Card& lc : s.players[controller].library)
+            {
+                if (lc.m_name != n) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+                v = value_of(d, d ? d->card : lc);
+                break;
+            }
+            return raw_memo.emplace(n, v).first->second;
+        };
+        // See the eviction note above: the default path's insert at W-1-k pushes the previous rescue
+        // out of the window ON PURPOSE (measured better). MTG_GOBLIN_VALUE_RESERVE_FIX=1 is the
+        // rejected naive form -- drop the weakest SURVIVOR and append at W-1 so rescues accumulate,
+        // with already-rescued slots excluded from the weakest scan. Held-out +20.0, 0/20.
+        static const bool reserve_fix = EnvOn("MTG_GOBLIN_VALUE_RESERVE_FIX", false);
+        std::vector<int> kept;                       // window indices already rescued (fix mode)
+        for (int k = 0; k < value_reserve; ++k)
+        {
+            // Best raw-value candidate currently OUTSIDE the window.
+            int best = -1;
+            for (std::size_t i = W; i < cands.size(); ++i)
+            {
+                if (best < 0 || raw_value(cands[i]) > raw_value(cands[best])) { best = static_cast<int>(i); }
+            }
+            if (best < 0) { break; }
+            // Only if it actually beats the weakest card already inside on raw value -- otherwise the
+            // window is already holding the best cards and there is nothing to rescue.
+            int weakest = -1;
+            for (int i = 0; i < W; ++i)
+            {
+                if (reserve_fix
+                    && std::find(kept.begin(), kept.end(), i) != kept.end()) { continue; }
+                if (weakest < 0 || raw_value(cands[i]) < raw_value(cands[weakest])) { weakest = i; }
+            }
+            if (weakest < 0 || raw_value(cands[best]) <= raw_value(cands[weakest])) { break; }
+            const std::string rescued = cands[best];
+            cands.erase(cands.begin() + best);
+            if (!reserve_fix)
+            {
+                cands.insert(cands.begin() + (W - 1 - k), rescued);
+                continue;
+            }
+            cands.erase(cands.begin() + weakest);        // evict the weakest SURVIVOR, not a rescue
+            cands.insert(cands.begin() + (W - 1), rescued);
+            for (int& idx : kept) { if (idx > weakest) { --idx; } }
+            kept.push_back(W - 1);
+        }
+    }
     if (dump)
     {
         static thread_local std::set<uint64_t> s_seen;
@@ -4252,11 +5177,12 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         std::fprintf(stderr,
                      "[tutor-rank] T%d src=%s | G=%d sick=%d ready_atk=%d swing_atk=%d opp_life=%d | lackey_now=%d "
                      "lackey_persist=%d skirk=%d vial=%d | mana: untapped=%d now=%d next=%d | "
-                     "buff_targets=%d hand_has_play=%d | W=%d\n",
+                     "buff_targets=%d hand_has_play=%d | haste=%d swings_left=%d skirk_ramp=%d | W=%d\n",
                      s.turn_number, pp.tutor_types.empty() ? "?" : pp.tutor_types[0].c_str(),
                      G, goblins_sick, ready_atk, swing_atk, opp_life, (int)lackey_now, (int)lackey_persist,
                      (int)skirk_on, vial_charge, untapped_mana, mana_now, mana_next,
-                     buff_targets, (int)hand_has_play, TutorSearchWidth());
+                     buff_targets, (int)hand_has_play, (int)haste_avail, swings_left, skirk_ramp,
+                     TutorSearchWidth());
         for (std::size_t i = 0; i < cands.size(); ++i)
         {
             const Card* lc = nullptr;
@@ -4268,7 +5194,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             std::fprintf(stderr, "  %2zu.%s %-28s score=%10.1f  value=%7.1f +enable=%7.1f x disc=%.3f (t=%d)  burst=%d\n",
                          i, (int)i < TutorSearchWidth() ? " *" : "  ", cands[i].c_str(),
                          score_of(cands[i]), value_of(d, c), enabler_of(d), discount_of(c),
-                         turns_to_deploy(c), face_burst(d, c));
+                         turns_to_deploy(c, /*arriving=*/true), face_burst(d, c));
         }
     }
     if (unpruned) { return GenericProvider::TutorCandidates(s, controller, pp); }
@@ -4288,6 +5214,24 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     static const int force_rank = EnvInt("MTG_TUTOR_FORCE_RANK", 0);
     if (force_rank > 0 && static_cast<std::size_t>(force_rank) <= cands.size())
     { return { cands[force_rank - 1] }; }
+    // DIAGNOSTIC (MTG_TUTOR_FORCE_CARD="<exact card name>"; unset = off): same collapse, keyed by
+    // NAME rather than rank. FORCE_RANK's ground truth is unusable the moment the ranking changes --
+    // rank 4 is a different card before and after -- so a table built with it cannot be reused to
+    // score a NEW model. Keyed by name it is model-independent: run once per candidate card, record
+    // the real win turn, and the resulting table scores any ranking function offline (top-1 accuracy,
+    // and whether the true best is inside the window) without re-running a single game.
+    // Returns empty (a whiff) when the named card is not among the candidates, so the caller still
+    // sees a legal, deterministic decision instead of silently falling back to the heuristic pick.
+    static const std::string force_card = []() -> std::string
+    {
+        const char* v = std::getenv("MTG_TUTOR_FORCE_CARD");
+        return v == nullptr ? std::string{} : std::string(v);
+    }();
+    if (!force_card.empty())
+    {
+        for (const std::string& c : cands) { if (c == force_card) { return { c }; } }
+        return {};
+    }
     return cands;
 }
 

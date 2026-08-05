@@ -1,6 +1,7 @@
 #include "../core/EnvFlags.h"
 #include "TurnSolver.h"
 #include "ManaPayment.h"
+#include "PlanContext.h"
 #include "LandPlay.h"
 #include "Combat.h"
 #include "EngineFlags.h"
@@ -1514,6 +1515,23 @@ static bool TutorAxisEnabled()
     static const bool on = EnvOn("MTG_TUTOR_AXIS", true);
     return on;
 }
+// MTG_TUTOR_AXIS_RESOLVE=1 (default off): bind the searched tutor pick by INDEX resolved at the
+// TRUE per-plan state, instead of by NAME ranked at the shared pre-land turn-start state. This is
+// the honest form of the located axis defect (see the fan-out note in EnumeratePlansWithLand):
+// collection emits ONE cast with an empty target, the fan-out emits Plan::tutor_choice variants,
+// and the ranking runs inside PerformTutor at each plan's own resolution state -- land played,
+// prefix casts applied and PAID FOR, the source already on the battlefield. Every prior state fix
+// (POSTLAND, PLAN_AWARE, PENDING_LAND) approximated parts of that state from the outside; none of
+// them saw the spent mana, which is what makes "castable this turn" an honest read at resolution
+// (a to-hand fetch can never be cast this turn, and at the resolution state the mana that made
+// t=0 look plausible is genuinely gone). Same index-binding architecture as scry_choice /
+// etbdig_choice / ponder_choice. Base plans keep tutor_choice = -1 == the provider's front at
+// that same state, so base and variants come from ONE ranking at ONE state by construction --
+// the incoherence AXIS_REBASE existed to patch cannot arise.
+static bool TutorAxisResolveMode()
+{
+    return TutorAxisResolveEnabled();   // shared reader (EngineFlags.h) -- providers branch on it too
+}
 // How many tutor targets the axis scores, INCLUDING the provider's best (so 1 == the old
 // heuristic-only behaviour). The provider orders candidates best-first, so this is a pure cost
 // prune in preference order, exactly like MTG_SCRY_WIDTH.
@@ -2450,6 +2468,30 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // the general "heuristic narrows, search decides the rest" pattern.
         if (def.params.tutor_to_hand || def.params.tutor_to_top)
         {
+            // RESOLVE MODE (MTG_TUTOR_AXIS_RESOLVE=1): bind NO name at all. The decision moves to
+            // the tutor's own resolution (PerformTutor -> provider at the true mid-plan state), so
+            // ranking here -- on a pre-land, pre-cast state the plan will never occupy -- would be
+            // both wrong and wasted work. One cast action, empty target; the fan-out in
+            // EnumeratePlansWithLand adds Plan::tutor_choice variants. Human play keeps the name
+            // path: the human picks among named variants, exactly as before.
+            if (TutorAxisResolveMode() && !HumanPlayActive() && TutorAxisEnabled())
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = EffectiveCost(def, state);
+                a.eval           = EvalCard(def, state);
+                a.is_noncreature = !def.card.IsCreature();
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                actions.push_back(std::move(a));
+                continue;
+            }
+            // NO PlanContext here, and it is structural rather than an oversight: this runs during
+            // ACTION COLLECTION, before any plan exists, so the base target is necessarily chosen
+            // without knowing what else the turn will do. Only the post-dedup axis in
+            // EnumeratePlansWithLand can supply one (see PlanContext.h). Anything that wants the
+            // base pick to be plan-aware has to move this decision after plan assembly.
             std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index, def.params);
             if (cands.empty()) { cands.push_back(std::string{}); }  // whiff: castable, fetches nothing
             // Emit ONE target here (the provider's best) and search the rest as a post-dedup AXIS
@@ -5611,6 +5653,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // so a nested breakpoint re-solve restores the outer pin if it has not fired yet. -1 is inert.
     ScriptedEtbDig _sed(plan.etbdig_choice);
     ScriptedReorder _sr(plan.ponder_choice);   // searched Ponder disposition (own pin; see ScriptedReorder)
+    ScriptedTutor _stut(plan.tutor_choice);    // searched tutor pick by index, resolved at the true
+                                               // mid-plan state (MTG_TUTOR_AXIS_RESOLVE); -1 inert
 
     // Searched Goblin Lackey put: copied onto the STATE (not a scoped guard) because the trigger
     // fires later, in this turn's combat-damage step. Only a real variant writes it, so a plan that
@@ -10432,12 +10476,126 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // the card arrives and the fetched card CANNOT be cast this turn. The target therefore cannot
     // interact with the rest of this turn's subset, which is exactly the condition that makes a
     // second axis equivalent to the cross product rather than an approximation of it.
-    if (TutorAxisEnabled() && TutorAxisWidth(state) > 1 && !HumanPlayActive())
+    // RESOLVE MODE (MTG_TUTOR_AXIS_RESOLVE=1): the same additive axis, bound by INDEX instead of by
+    // name. No ranking happens here at all -- the provider runs inside PerformTutor, on each plan's
+    // own resolution state (land played, prefix casts applied and paid for, the source on the
+    // battlefield), which is the state the name axis below only ever approximated (POSTLAND added
+    // the land but not the spent mana; PLAN_AWARE adjusted counts but not the state). The only
+    // state-read here is a SIZING call: how many distinct names the axis could take, so the loop
+    // knows how many variants to emit. A pinned index past the resolution-state list clamps to the
+    // last candidate (see PerformTutor), the same duplicate-not-whiff rule as the ETB dig.
+    // Base plans stay tutor_choice = -1 == the provider's front AT RESOLUTION, so base and variants
+    // are one ranking at one state by construction.
+    if (TutorAxisResolveMode() && TutorAxisEnabled() && TutorAxisWidth(state) > 1
+        && !HumanPlayActive())
     {
         std::vector<TurnSolver::Plan> extra;
-        // The candidate list depends only on `state`, so build it at most once per tutor param set.
-        std::map<std::string, std::vector<std::string>> cand_cache;
+        std::map<std::string, std::size_t> size_cache;   // tutor card name -> distinct-name count
         for (const TurnSolver::Plan& p : all)
+        {
+            // Base plans only -- one axis at a time, so cost stays additive (same trade as scry).
+            if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0) { continue; }
+            for (const Action& act : p.actions)
+            {
+                if (act.kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
+                if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top)) { continue; }
+                auto it = size_cache.find(act.card_name);
+                if (it == size_cache.end())
+                {
+                    // Turn-start sizing only; resolution clamps any drift (a state-dependent cut
+                    // can shorten the list by the time the tutor resolves).
+                    std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(
+                        state, state.active_player_index, d->params);
+                    std::vector<std::string> uniq;
+                    for (const std::string& c : cands)
+                    { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+                    it = size_cache.emplace(act.card_name, uniq.size()).first;
+                }
+                const std::size_t k = std::min(it->second, TutorAxisWidth(state));
+                for (std::size_t c = 1; c < k; ++c)
+                {
+                    TurnSolver::Plan v = p;
+                    v.tutor_choice = static_cast<int>(c);
+                    extra.push_back(std::move(v));
+                }
+                break;   // vary ONE tutor per variant; the first to resolve consumes the pin
+            }
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+    else if (TutorAxisEnabled() && TutorAxisWidth(state) > 1 && !HumanPlayActive())
+    {
+        std::vector<TurnSolver::Plan> extra;
+        // MTG_TUTOR_PREFIX_STATS=1: how many DISTINCT prefixes (land played + the casts that precede
+        // the tutor) reach one tutor decision. This is the feasibility number for ranking at the
+        // true per-plan state: the cost of doing it properly is one provider call per distinct
+        // prefix, not per plan, so if tutors sit early in the action order -- as they usually should,
+        // since fetching before you commit mana is normally right -- the land drop is nearly the only
+        // thing that varies and the cache collapses to a handful of entries.
+        static const bool prefix_stats = EnvOn("MTG_TUTOR_PREFIX_STATS");
+        std::set<std::string> distinct_prefix;
+        std::size_t prefix_plans = 0, prefix_pos_sum = 0;
+        // `state`. Ranking it pre-land was a real defect: providers feed mana_now / mana_next into a
+        // deploy discount, so a turn whose land is still in hand prices every expensive card one turn
+        // further away than the plan actually leaves it -- and a card pushed below the axis width is
+        // then EXCLUDED, not merely ranked low. The base plan never had this problem (EnumeratePlans
+        // runs on the post-land `copy`); only this post-dedup fan-out, which supplies the alternatives
+        // the search actually chooses among, used the wrong state. Goblins gi101 is the case: at the
+        // T4 Matron the pre-land ranking puts Siege-Gang 8th (mana_next=4, so {3}{R}{R} reads t=2)
+        // and the post-land ranking puts it 4th (mana_next=5, t=1) -- inside a 6-wide window.
+        // Keyed by the land the plan plays, so it is still one provider call per distinct land.
+        //
+        // DEFAULT OFF -- the defect is real and correctly located, and fixing it is measurably WORSE.
+        // Held-out overnight, goblins (8,000 searched) and hinata (2,800):
+        //
+        //   goblins  postland=1                   +18.0    0 better / 18 worse
+        //   hinata   postland=1                    ~-3      (raw -275 is a GT artifact: three games
+        //                                                    GT recorded as UNWON under batch load
+        //                                                    actually win -- gi90 is a genuine 9->8,
+        //                                                    gi158 is churn that converges 6/6 by
+        //                                                    budget 320. The 99-point loss penalty
+        //                                                    turns a -2 into a -275.)
+        //
+        // The obvious rescue -- the provider's deploy-discount curve was fitted AGAINST the buggy
+        // pre-land projection, so refit it -- does not work. Sweeping the t=1 constant with the fix
+        // ON (MTG_GOBLIN_DISC_T1, train s4004+s5005 / validate s6006+s7007) saturates at +10 and
+        // never approaches baseline, and NOT ONE arm produces a single better game:
+        //
+        //   DISC_T1   85    75    65    55    45    38        (train / validate turn-units)
+        //   train    +10    +6    +6    +6    +6    +8
+        //   valid     +8    +6    +4    +4    +4    +4
+        //   better     0     0     0     0     0     0   <-- across all six arms, every seed
+        //
+        // So this is not a mis-tuned constant absorbing a bias. The pessimistic pre-land view is
+        // acting as a TEMPO PRIOR that suits goldfishing: "the card I can deploy now" beats "the card
+        // I could deploy next turn", and pricing next turn accurately promotes expensive cards a race
+        // deck does not want. Making the projection honest would mean re-deriving the discount from
+        // tempo rather than from turns-to-cast -- a real project, not a constant refit.
+        //
+        // Kept here, default-off, because the defect it fixes is genuine and worth finding again:
+        // the base plan is ranked on the POST-land state (EnumeratePlans runs on `copy`) while these
+        // variants are ranked pre-land, so the two halves of the same plan set disagree, and the
+        // pre-land list's own rank-0 card is silently dropped (the loop below starts at c=1).
+        // MTG_TUTOR_AXIS_POSTLAND=1 enables. See docs/design/goblins-enabler-worse-games.md round 13.
+        static const bool axis_postland = EnvOn("MTG_TUTOR_AXIS_POSTLAND", false);
+        // MTG_TUTOR_AXIS_REBASE=1: re-resolve the BASE plan's target from the same list the variants
+        // come from, instead of leaving whatever CollectActions picked. Two defects in one:
+        //
+        //   1. The base target is chosen during action COLLECTION, before a plan exists, so it can
+        //      never be plan-aware. With MTG_GOBLIN_PLAN_AWARE on, the variants below become
+        //      plan-aware while the base pick stays blind -- exactly the "one input honest, the rest
+        //      calibrated to the old value" incoherence that cost +20/+9/+18 in rounds 12-14, only
+        //      one level up, in the plan set rather than inside the model.
+        //   2. The loop starts at c=1 on the assumption index 0 IS the base target. When the two
+        //      lists disagree, this list's own top pick is never emitted at all.
+        //
+        // Rebasing makes base and variants come from one ranking at one state, which is the whole
+        // point. Mutates `all` in place; `extra` is a separate vector, so this is safe.
+        static const bool axis_rebase = EnvOn("MTG_TUTOR_AXIS_REBASE", false);
+        std::map<std::string, std::vector<std::string>> cand_cache;
+        for (TurnSolver::Plan& p : all)
         {
             // Base plans only -- one axis at a time, so cost stays additive (same trade as scry).
             if (p.scry_choice >= 0 || p.bp_choice >= 0) { continue; }
@@ -10447,22 +10605,63 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                 if (act.kind != Action::Kind::CastFromHand || act.tutor_target.empty()) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
                 if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top)) { continue; }
-                std::vector<std::string>& cands = cand_cache[act.card_name];
+                // The plan this candidate list is FOR -- see PlanContext.h. Providers that ignore it
+                // (all of them today) are byte-identical; the point is that the state mismatch above
+                // is only half the missing information, and the other half is "what else does this
+                // plan do this turn", which the provider currently guesses at.
+                const PlanContext pc{ &p.actions, ai, &p.land_to_play,
+                                      /*land_done=*/axis_postland && !p.land_to_play.empty() };
+                PlanContextScope _pcs(&pc);
+                if (prefix_stats)
+                {
+                    std::string sig = p.land_to_play + "|" + p.fetch_target + "|" + p.land_face + "|";
+                    for (std::size_t j = 0; j < ai; ++j) { sig += p.actions[j].card_name + ";"; }
+                    distinct_prefix.insert(sig);
+                    ++prefix_plans;
+                    prefix_pos_sum += ai;
+                }
+                std::string key = act.card_name;
+                if (axis_postland)
+                {
+                    key += '\x1f'; key += p.land_to_play;
+                    key += '\x1f'; key += p.fetch_target;
+                    key += '\x1f'; key += p.land_face;
+                }
+                std::vector<std::string>& cands = cand_cache[key];
                 if (cands.empty())
                 {
-                    cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index,
-                                                                   d->params);
+                    if (axis_postland && !p.land_to_play.empty())
+                    {
+                        GameState ls = state;
+                        PlayLandByName(ls, p.land_to_play, p.fetch_target, true, p.land_face);
+                        cands = ResolveProvider(ls).TutorCandidates(ls, ls.active_player_index,
+                                                                    d->params);
+                    }
+                    else
+                    {
+                        cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index,
+                                                                       d->params);
+                    }
                 }
                 const std::size_t k = std::min(cands.size(), TutorAxisWidth(state));
-                for (std::size_t c = 1; c < k; ++c)
+                if (axis_rebase && !cands.empty() && !cands[0].empty())
+                { p.actions[ai].tutor_target = cands[0]; }
+                const std::string& base_tgt = p.actions[ai].tutor_target;
+                for (std::size_t c = (axis_rebase ? 0 : 1); c < k; ++c)
                 {
-                    if (cands[c] == act.tutor_target) { continue; }
+                    if (cands[c] == base_tgt) { continue; }
                     TurnSolver::Plan v = p;
                     v.actions[ai].tutor_target = cands[c];
                     extra.push_back(std::move(v));
                 }
                 break;   // vary ONE tutor per variant; a second tutor keeps its heuristic target
             }
+        }
+        if (prefix_stats && prefix_plans > 0)
+        {
+            std::fprintf(stderr, "[tutor-prefix] T%d plans=%zu distinct_prefixes=%zu avg_pos=%.2f\n",
+                         state.turn_number, prefix_plans, distinct_prefix.size(),
+                         static_cast<double>(prefix_pos_sum) / static_cast<double>(prefix_plans));
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
                               std::make_move_iterator(extra.end()));
