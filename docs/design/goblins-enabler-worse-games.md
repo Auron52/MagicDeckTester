@@ -1025,3 +1025,41 @@ tiers at once, which nothing else this session managed.
 Chainwhirler was retested on top of all the other prunes, since a single prune might not be enough to
 let a different card reach the window ("it might need multiple prunes"). It still adds exactly nothing
 (-9.0 either way) and still costs the one d0 game. Three prunes deep, its slot buys nothing.
+
+### Postscript: the three "unresolvable" games were never ranking failures
+
+`s2002 gi299`, `s4004 gi483` and `s7007 gi624` were tracked from round 6 onward as games where W=12
+beats the shipped width and which resisted every ranking change. They are **wall-clock budget churn**,
+not width or ranking effects. Re-run directly across widths and budgets:
+
+```
+             W=6                              W=12
+gi483        bud0 T4  bud20 T5  bud80 T4      bud0 T4  bud20 T5  bud80 T4   <- identical
+gi299        T4 at every budget               T4 at every budget            <- width-independent
+gi624        T5 at every budget               T5, except a single T6 at bud20
+```
+
+The harness's searched cases run under a `budget_ms`, which is wall-clock and therefore load-sensitive
+(the same reason `MTG_ROLLOUT_STATS` exists as the deterministic cost instrument). So a game can be
+recorded T4 in ground truth and T5 in a later run without anything in the engine changing. Treat a
+"W=12 worse" entry as churn until it reproduces at unlimited budget.
+
+With those retired, the width gap is fully closed: W=12 wins 2 games and loses **no real ones**.
+
+### Mogg War Marshal: not the reason gi483 moved (checked, left alone)
+
+The chosen-rank instrument listed a Mogg War Marshal commit at rank 11 in `gi483`, which looked like a
+ranking miss. It is incidental: the shipped W=6 fetches **Goblin Piledriver at rank 1** on T4 and
+reaches T4, the W=12 arm takes a different line that happens to fetch Mogg on T3, and both land on the
+same turn at every budget. The instrument reports whatever the wide arm committed to, and that game is
+decided by the clock.
+
+There is a plausible undervaluation worth recording without acting on it. Mogg scores 190 = 1 power x
+BODY + 1 token x 90, which prices the ETB token *below* a real body and **ignores the death token
+entirely** — even though letting echo lapse sacrifices it and still nets that token (as `cards.json`
+notes). For `{1}{R}` that is two Goblin bodies immediately and three over its life, in a deck where
+bodies are the currency for every lord, for Piledriver's +2-per-other-attacker and for Skirk's fodder.
+
+Not changed, deliberately: the search never reaches for it in any surviving miss, it is absent from
+the user's list of cards worth fetching, and inflating a mediocre card to crowd the window is exactly
+the bug round 10 removed. Revisit only if a measured miss points at it.
