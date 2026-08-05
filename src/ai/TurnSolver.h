@@ -280,6 +280,20 @@ public:
         // tutor axis additive rather than an approximation of a cross product.
         int etbdig_choice = -1;
 
+        // Searched TUTOR pick by INDEX (MTG_TUTOR_AXIS_RESOLVE=1): which candidate of the
+        // provider's TutorCandidates ranking -- computed AT RESOLUTION, on the true mid-plan state
+        // (land played, prefix casts applied, the source on the battlefield, its mana actually
+        // spent) -- the fetch takes. -1 (default) == the provider's top pick at that same state,
+        // byte-identical to no branch. This is the index-bound form of Action::tutor_target: the
+        // name-bound axis ranks every plan's alternatives against one shared PRE-land turn-start
+        // state (the located defect -- see the fan-out in EnumeratePlansWithLand), while an index
+        // defers the ranking to the state the line actually produces, exactly as scry_choice /
+        // etbdig_choice / ponder_choice already do. Pinned for the apply (ScriptedTutor); the
+        // first tutor resolution consumes it. The fetched card goes to HAND (or top) and is not
+        // castable this turn, so the pick cannot interact with the rest of this turn's subset --
+        // the same property that makes the name axis additive.
+        int tutor_choice = -1;
+
         // Goblin Lackey put (combat_damage_puts_subtype_from_hand): which candidate of the
         // provider's ranked CombatCheatCandidates the trigger puts onto the battlefield. -1
         // (default) == the provider's top pick, byte-identical to no branch. Unlike scry_choice and

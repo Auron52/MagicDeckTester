@@ -2026,6 +2026,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // rest of the phase; the first dig consumes it. -1 (no variant chosen) is inert.
     ScriptedEtbDig _sed_exec(plan.etbdig_choice);
     ScriptedReorder _sr_exec(plan.ponder_choice);   // executor/rollout lockstep for the Ponder disposition
+    ScriptedTutor _stut_exec(plan.tutor_choice);    // executor/rollout lockstep for the searched tutor
+                                                    // pick (index resolved at the true state); -1 inert
 
     // Same for the searched Lackey put -- executor/rollout lockstep: without it the search would
     // score one Goblin entering and the real game would put a different one.

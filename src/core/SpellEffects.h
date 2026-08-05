@@ -4451,6 +4451,24 @@ struct ScriptedEtbDig
     int saved;
 };
 
+// Searched TUTOR pick by index (Plan::tutor_choice, MTG_TUTOR_AXIS_RESOLVE=1): k >= 0 makes the
+// next tutor resolution take the k-th candidate of the provider ranking computed AT THAT
+// RESOLUTION -- i.e. on the true mid-plan state -- instead of the front. Consumed by the first
+// tutor of the apply, mirroring g_scripted_etbdig_choice exactly (a second tutor keeps the
+// provider's default, matching the name axis's vary-ONE-tutor rule).
+extern thread_local int g_scripted_tutor_choice;
+
+// Scoped pin, mirroring ScriptedEtbDig (restores on exit so a nested apply cannot leak its
+// script into the outer one).
+struct ScriptedTutor
+{
+    explicit ScriptedTutor(int k) : saved(g_scripted_tutor_choice) { g_scripted_tutor_choice = k; }
+    ~ScriptedTutor() { g_scripted_tutor_choice = saved; }
+    ScriptedTutor(const ScriptedTutor&) = delete;
+    ScriptedTutor& operator=(const ScriptedTutor&) = delete;
+    int saved;
+};
+
 // MTG_FB_TRACE diagnostic only (no play change): how many firebreathing activations the CURRENT
 // turn's combat paid for. Reset at every Firebreathe call; read by GameEngine::MainPhase to detect
 // a post-combat main that casts on a turn that pumped -- the one situation in which the pump pool's

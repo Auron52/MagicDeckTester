@@ -34,12 +34,32 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
                          const std::string& target_name,
                          const std::string& source_name)
 {
+    // Searched pick by INDEX (Plan::tutor_choice via ScriptedTutor, MTG_TUTOR_AXIS_RESOLVE=1).
+    // Read-and-reset at entry so the FIRST tutor of the apply consumes it on every path (named
+    // replay, whiff, scripted), mirroring g_scripted_etbdig_choice's consumed-once semantics.
+    const int scripted_pick = g_scripted_tutor_choice;
+    g_scripted_tutor_choice = -1;
     std::string want = target_name;
     if (want.empty())
     {
         std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, controller_index, pp);
         if (cands.empty()) { return; }
         want = cands.front();
+        if (scripted_pick >= 0)
+        {
+            // The ranking above ran on the TRUE resolution state -- the whole point of the index
+            // axis. Dedup names in list order before indexing: fetching by name takes the first
+            // matching library card, so three copies are ONE choice (same rule as the human chooser
+            // below and MTG_TUTOR_CHOSEN_RANK). Clamped rather than dropped, because the enumerator
+            // sized the axis off the turn-start state and the resolution-state list can be shorter
+            // (the provider's cuts are state-dependent); clamping makes such a variant a duplicate
+            // of the last candidate instead of a silent whiff.
+            std::vector<std::string> uniq;
+            for (const std::string& c : cands)
+            { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+            want = uniq[std::min<std::size_t>(static_cast<std::size_t>(scripted_pick),
+                                              uniq.size() - 1)];
+        }
         // Human play: a tutor resolving with NO searched target came from a PUT, not a cast (a Goblin
         // Lackey cheat, a Vial deploy, a Muxus reveal) -- there was no plan variant for the human to
         // pick in, so this used to search up cands.front() silently. Ask instead; -1 declines outright
