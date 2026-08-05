@@ -197,3 +197,19 @@ Status: all levers default-off, byte-identical off (smoke 27/27, regression 45/4
 6fd730b..5ee851a. Adoption (default-on + 3-tier rebaseline) is the user's call; the package read
 at adoption config is train searched −93 / d0 −99, held-out searched −273 / d0 −314 (raw), with
 the honest hinata-artifact-corrected searched ≈ −5 held-out.
+
+**ADOPTED 2026-08-05** (404c4b4, GT rebaselined all tiers) — and the goblins residual was then
+closed to net NEGATIVE the same day (aa967fa + a3bf8fd). Dissecting all 47 changed goblins d0
+games gave a two-flip decomposition: `Chieftain → Muxus` 18 worse / 1 better and
+`Chainwhirler → Twinshot` 7 worse / 1 better, while `x → Chieftain` was 12/0 GOOD. Two targeted
+fixes, each with its own number: **MTG_GOBLIN_LORD_CLOSER** (next-turn lethal via a fetched lord —
+the symmetric override to face_burst's this-turn-lethal; needs the no-copy-in-hand gate, see
+s10010 gi1669) d0 −9 (9/0); **face_per 160 → 90 under resolve** (the trained 160 assumed the
+legacy discount separated the mv2/mv3 pair; under resolve both read t=1 and the duel is raw
+values — sweep plateaus below the crossing at 100) d0 −129 (31/0). Combined on the merged tree:
+goblins d0 −130 (32 better / 0 worse), NOTHING else in 44,000+ games. Goblins vs the
+pre-resolve-axis baseline: d0 +14 → ≈−116, searched +3 (all 4×-recoverable churn).
+
+Still open (small): gi350 both depths (winning fetch at resolution rank 2 — NOT a window case;
+unexplored plan arbitration), gi483 d5 (fresh churn under W=9), and the goblins searched
+budget-hungriness class generally (recovers at 4× budget; likely plan-count, not ranking).
