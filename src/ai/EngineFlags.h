@@ -26,6 +26,20 @@ inline bool LandClosingWindowEnabled()
     return v;
 }
 
+// MTG_TUTOR_AXIS_RESOLVE=1 (default off): bind the searched tutor pick by INDEX resolved at the
+// TRUE per-plan state instead of by NAME ranked at the shared pre-land turn-start state (see the
+// full note at TurnSolver's TutorAxisResolveMode call sites and Plan::tutor_choice). Shared
+// reader because BOTH the plan machinery (TurnSolver) and the provider heuristics
+// (DecisionProviders) branch on it: under resolve mode a tutor ranking runs at MID-TURN states
+// (mana spent, source on the battlefield), and provider terms that conflate "mana unspent right
+// now" with "mana capacity per turn" -- calibrated on turn-start states where the two coincide --
+// must switch to the capacity read (see GoblinsProvider turns_to_deploy).
+inline bool TutorAxisResolveEnabled()
+{
+    static const bool v = EnvOn("MTG_TUTOR_AXIS_RESOLVE");
+    return v;
+}
+
 // MTG_BP_TRACE (diagnosis only): print the breakpoint sequences on both sides -- the EXECUTOR's
 // ([bp-exec], AIEngine) and the apply side's ([bp-apply], TurnSolver::ApplyPlanDirect) -- so they
 // can be diffed. A searched continuation landing at a different index on the two sides is the

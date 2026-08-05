@@ -1530,8 +1530,7 @@ static bool TutorAxisEnabled()
 // the incoherence AXIS_REBASE existed to patch cannot arise.
 static bool TutorAxisResolveMode()
 {
-    static const bool on = EnvOn("MTG_TUTOR_AXIS_RESOLVE", false);
-    return on;
+    return TutorAxisResolveEnabled();   // shared reader (EngineFlags.h) -- providers branch on it too
 }
 // How many tutor targets the axis scores, INCLUDING the provider's best (so 1 == the old
 // heuristic-only behaviour). The provider orders candidates best-first, so this is a pure cost

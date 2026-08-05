@@ -15,6 +15,7 @@
 #include "../deck/DeckLoader.h"     // Decklist
 #include "TurnSolver.h"             // Action (PlanContext walks the plan's action list)
 #include "PlanContext.h"            // CurrentPlanContext / PlanContextRest
+#include "EngineFlags.h"            // TutorAxisResolveEnabled (capacity-anchored deploy read)
 #include "ManaPayment.h"            // AvailableManaPool (echo "no gas" check; MTG_LACKEY_RANK=uncast)
 
 // Standing unpruned-vs-pruned A/B (search-primary requirement): when MTG_UNPRUNED is set,
@@ -4692,11 +4693,37 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // Muxus (analysis-goblins.md, the searched-slower audit). Curve (user 2026-08-02): t=1 (NEXT turn)
     // is ACCEPTABLE -- "you don't always have mana for any of them this turn" -- so t1 is only a mild
     // 0.85; the steep 0.45/step decay begins at t>=2 (genuinely stuck): 1.0 / 0.85 / 0.38 / 0.17.
-    auto turns_to_deploy = [&](const Card& c) -> int
+    auto turns_to_deploy = [&](const Card& c, bool arriving = false) -> int
     {
         const int mv = c.m_mana_cost.ManaValue();
-        int t = std::max(0, mv - mana_now);        // via mana (+~1/turn beyond what's available now)
-        if (mv <= mana_next)          { t = std::min(t, 1); }
+        int t;
+        // CAPACITY ANCHOR (MTG_TUTOR_AXIS_RESOLVE only; legacy mode byte-identical). Under resolve
+        // mode this ranking runs at the tutor's RESOLUTION state, where the plan's mana is already
+        // SPENT -- so "mv - mana_now" stops meaning "turns until deployable" and becomes "turns to
+        // re-accumulate from the leftover", a miscount that buried Muxus at t=5 / disc 0.035 (off
+        // leftover 1 where capacity was 5) and cost every one of the resolve-mode held-out goblins
+        // regressions (gi714/727/768/200: the baseline's winning line is Muxus T4 in all four; the
+        // resolve arm never put it on the axis). The honest read for a card ARRIVING IN HAND is
+        // capacity-based: next turn at the earliest -- a to-hand fetch can never be cast this turn,
+        // the plan is frozen before it arrives -- plus one turn per land it needs beyond next
+        // turn's capacity. mana_next (lands + next drop + Skirk ramp) is the same quantity the
+        // t<=1 clamp below always trusted at the boundary; this extends it past the boundary
+        // instead of falling back to the leftover fiction. HAND cards (hand_has_play,
+        // arriving=false) keep the leftover read: for them "castable this turn out of unspent
+        // mana" is the honest question at any state.
+        // MTG_GOBLIN_RESOLVE_CAP=0 restores the leftover-anchored read under resolve mode for the
+        // component A/B (the anchor is model-correct but must carry its own number -- bundles hide
+        // harmful components).
+        static const bool resolve_cap = EnvOn("MTG_GOBLIN_RESOLVE_CAP", true);
+        if (arriving && resolve_cap && TutorAxisResolveEnabled())
+        {
+            t = 1 + std::max(0, mv - mana_next);
+        }
+        else
+        {
+            t = std::max(0, mv - mana_now);        // via mana (+~1/turn beyond what's available now)
+            if (mv <= mana_next)          { t = std::min(t, 1); }
+        }
         if (lackey_now)               { t = 0; }   // free-drop any Goblin this turn (ignores mana)
         else if (lackey_persist)      { t = std::min(t, 1); }
         if (vial_charge >= 0)         { t = std::min(t, std::max(0, mv - vial_charge)); } // Vial: +1 charge/turn
@@ -4721,7 +4748,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     static const double disc_step = EnvInt("MTG_GOBLIN_DISC_STEP", 45) / 100.0;
     auto discount_of = [&](const Card& c) -> double
     {
-        const int t = turns_to_deploy(c);
+        const int t = turns_to_deploy(c, /*arriving=*/true);   // candidates arrive in HAND
         double disc = 1.0;
         if (t >= 1) { disc = disc_t1; for (int k = 1; k < t; ++k) { disc *= disc_step; } } // mild t1, steep t>=2
         if (t > 0 && hand_has_play) { disc *= 0.75; }   // opportunity cost: already have a play
@@ -5142,7 +5169,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             std::fprintf(stderr, "  %2zu.%s %-28s score=%10.1f  value=%7.1f +enable=%7.1f x disc=%.3f (t=%d)  burst=%d\n",
                          i, (int)i < TutorSearchWidth() ? " *" : "  ", cands[i].c_str(),
                          score_of(cands[i]), value_of(d, c), enabler_of(d), discount_of(c),
-                         turns_to_deploy(c), face_burst(d, c));
+                         turns_to_deploy(c, /*arriving=*/true), face_burst(d, c));
         }
     }
     if (unpruned) { return GenericProvider::TutorCandidates(s, controller, pp); }
