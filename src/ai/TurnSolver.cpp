@@ -12814,8 +12814,95 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
     // Pair with MTG_VALUE_LABEL_BUDGET_MS=0 so budget exhaustion is not a confound.
     static const bool s_cold_cache = EnvOn("MTG_LABEL_COLD_CACHE");
 
+    // ---- ITERATIVE-DEEPENING HORIZON (MTG_LABEL_LADDER) -----------------------------------------
+    // DEFAULT ON; =0 restores the old single-depth call.
+    //
+    // FSLineWin stops at the FIRST in-horizon win it finds and returns it as the node optimum. That
+    // shortcut is sound only under FullSearchLine's LADDER, whose premise it names explicitly: pass
+    // L-1 was a complete refutation, so every in-horizon win found at pass L sits exactly at the
+    // horizon edge and the first one is therefore the minimum. Called at a SINGLE deep depth -- which
+    // is what this labeller did -- that premise is simply false: the horizon is `max_turns` away, wins
+    // at many different turns are all "in horizon", and the first one found is *a* win, not *the
+    // earliest*. The label is then silently PESSIMISTIC.
+    //
+    // Measured (antilife seed 555002, turn 1): the single-depth call labels the position 7.00, the
+    // ladder 5.667 -- a 1.33-turn error on one row. This is also the whole of the MTG_VALUE_LABEL_BNB
+    // anomaly ("pruning found an EARLIER win than the unpruned search", which is impossible for a
+    // sound search): B&B's tight cutoff narrows the horizon, which accidentally restores the premise.
+    // It is NOT cache order-dependence -- MTG_LABEL_COLD_CACHE=1 leaves the discrepancy intact.
+    //
+    // So ladder the horizon here the same way FullSearchLine does: pass dd searches dd turns with
+    // cutoff turn+dd, and a candidate's win turn is recorded at the FIRST dd that finds one. Every
+    // node in a pass shares one horizon edge => the shortcut is sound again. The tight per-pass cutoff
+    // is also the free B&B this path never had: earliest_only stops the whole ladder at the first
+    // winning pass, and every pass prunes at `turn > cutoff`.
+    static const bool s_label_ladder = EnvOn("MTG_LABEL_LADDER", true);
+    const bool ladder = s_label_ladder && !rollout_label;
+    std::vector<int> ladder_wt;
+    if (ladder)
+    {
+        ladder_wt.assign(pre.size(), max_turns + 1);
+        std::vector<char> settled(pre.size(), 0);
+        std::size_t unsettled = 0;
+        // Pass 0: the cases that need no search at all -- a plan that kills us via its own on-cast
+        // triggers, and a plan that wins this turn (the floor; no later pass can beat it).
+        for (std::size_t i = 0; i < pre.size(); ++i)
+        {
+            GameState s = state;
+            std::vector<Action> bp;
+            ApplyPlanDirect(s, pre[i], true, &bp);
+            if (s.ActivePlayer().life <= 0) { settled[i] = 1; continue; }   // -> max_turns+1
+            AnimateLandsShared(s, nullptr);
+            ActivateTapTokensShared(s, nullptr);
+            SimulateCombat(s);
+            if (s.Opponent().life <= 0) { ladder_wt[i] = state.turn_number; settled[i] = 1; continue; }
+            ++unsettled;
+        }
+        for (int dd = 1; dd <= depth - 1 && unsettled > 0; ++dd)
+        {
+            const int cut = state.turn_number + dd;
+            bool any_new = false;
+            for (std::size_t i = 0; i < pre.size(); ++i)
+            {
+                if (settled[i]) { continue; }
+                TranspositionTable  tt_cold;
+                FSLineCache         lc_cold;
+                TranspositionTable& tt_use = s_cold_cache ? tt_cold : tt;
+                FSLineCache&        lc_use = s_cold_cache ? lc_cold : lc;
+                // Re-apply per pass rather than caching |candidates| GameStates: the apply is cheap
+                // next to the search, and a plan-count that can reach the thousands makes holding
+                // one board per candidate the expensive choice.
+                GameState s = state;
+                std::vector<Action> bp;
+                ApplyPlanDirect(s, pre[i], true, &bp);
+                AnimateLandsShared(s, nullptr);
+                ActivateTapTokensShared(s, nullptr);
+                SimulateCombat(s);
+                const TurnSolver::SearchLine tail =
+                    FSLineTail(s, dd, max_turns, cut, second_main, &tt_use, &lc_use, &budget);
+                // Exact BECAUSE every shallower pass refuted this candidate: the win is at the
+                // horizon edge, so it is this candidate's earliest. A no-win is just "not yet".
+                if (tail.win_turn <= cut)
+                { ladder_wt[i] = tail.win_turn; settled[i] = 1; --unsettled; any_new = true; }
+            }
+            // earliest_only: the caller reads report.earliest alone, and the first pass to produce
+            // ANY win has produced the minimum over all candidates. Everything still unsettled is a
+            // bound from here on, which is exactly what bounded_candidates advertises.
+            if (earliest_only && any_new) { break; }
+        }
+    }
+
+    std::size_t cand_index = 0;
     for (const TurnSolver::Plan& p : pre)
     {
+        const std::size_t ci = cand_index++;
+        int wt;
+        if (ladder)
+        {
+            wt = ladder_wt[ci];                         // resolved by the pass loop above
+        }
+        else
+        {
         TranspositionTable  tt_cold;
         FSLineCache         lc_cold;
         TranspositionTable& tt_use = s_cold_cache ? tt_cold : tt;
@@ -12824,7 +12911,6 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         std::vector<Action> bp;
         ApplyPlanDirect(s, p, true, &bp);
 
-        int wt;
         if (s.ActivePlayer().life <= 0)                 // self-lethal line -> never a win
         {
             wt = max_turns + 1;
@@ -12873,6 +12959,7 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 wt = tail.win_turn;
             }
         }
+        }   // !ladder
 
         EarliestWinCandidate c;
         c.land           = p.land_to_play;
