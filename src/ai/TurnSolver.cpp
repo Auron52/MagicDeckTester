@@ -12900,6 +12900,21 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
     static const int s_label_budget_ms = EnvInt("MTG_VALUE_LABEL_BUDGET_MS", 1000000);
     SearchBudget     budget = s_label_budget_ms > 0 ? SearchBudget::FromVirtualMs(s_label_budget_ms)
                                                     : SearchBudget();
+    // ARM THE OVERRUN GUARD. Without this the budget only gated whether a FURTHER ladder pass
+    // STARTS; a pass already running had no ceiling at all, so one position could search forever.
+    // Measured: Hinata seed 555005 turn 2 held a worker for 65 minutes and emitted nothing -- and
+    // because rows are produced per position in turn order, it took that game's remaining SEVEN
+    // rows down with it. That is the likely mechanism behind "slivers/treasure_hunt/Knights
+    // produced zero rows in 34 hours": not slow decks, one hung position per game.
+    //
+    // The ceiling is the budget itself, so a run's cost per position is now bounded by the knob
+    // that always claimed to bound it. Unlimited (MTG_VALUE_LABEL_BUDGET_MS=0) stays unarmed and
+    // byte-identical.
+    if (!budget.Unlimited()) { budget.SetOverrunLimit(budget.Limit()); }
+    // Watermark for the truncation test below (see g_fs_trunc_events): every budget abort in the
+    // search bumps it, so a change across this call means some number in this report came back as
+    // a fabricated no-win rather than a searched one.
+    const unsigned long long trunc_at_entry = g_fs_trunc_events;
     // MTG_LABEL_COLD_CACHE=1 (DIAGNOSTIC, default off): give each candidate a FRESH tt/lc instead of
     // sharing them. Tests whether a label depends on the ORDER candidates are evaluated in -- it must
     // not. FSLineWin returns the FIRST in-horizon win it finds, and that shortcut is only sound under
@@ -13093,6 +13108,11 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         if (wt < report.earliest) { report.earliest = wt; }
         report.candidates.push_back(std::move(c));
     }
+    // A truncated search returns max_turns+1, which is EXACTLY what a genuine loss returns. The
+    // report cannot tell the consumer which one it is holding, so it tells it that it cannot tell.
+    // See EarliestWinReport::truncated -- the consumer's job is to drop the position, not to
+    // salvage a number from it.
+    report.truncated = (g_fs_trunc_events != trunc_at_entry) || budget.Overrun();
     return report;
 }
 

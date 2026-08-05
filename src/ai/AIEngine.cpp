@@ -183,8 +183,30 @@ static const bool  s_searched_vial     = EnvOn("MTG_SEARCHED_VIAL", true);
 // Inert unless set. See docs/design/dragonstorm-d0-divergence-digest.md.
 static const char* s_divergence_log = std::getenv("MTG_DIVERGENCE_LOG");
 
+// Positions dropped because their label search was cut short (see EarliestWinReport::truncated).
+// A bounded run that silently emits fewer rows reads as "covered everything" when it did not, so
+// this is reported at exit whenever it is non-zero -- the repo's no-silent-caps rule.
+static std::atomic<long long> g_label_positions_truncated{0};
+static std::atomic<long long> g_label_positions_total{0};
+struct LabelTruncationReport
+{
+    ~LabelTruncationReport()
+    {
+        const long long t = g_label_positions_truncated.load();
+        if (t <= 0) { return; }
+        const long long n = g_label_positions_total.load();
+        std::fprintf(stderr,
+            "[label] DROPPED %lld of %lld positions (%.1f%%): label search hit the budget ceiling "
+            "(MTG_VALUE_LABEL_BUDGET_MS). Their true win turn is unknown, so no row was written -- "
+            "raise the budget to keep them, or accept the gap.\n",
+            t, n, n ? (100.0 * static_cast<double>(t) / static_cast<double>(n)) : 0.0);
+    }
+};
+static LabelTruncationReport g_label_trunc_report;
+
 static void EmitEvalRows(const GameState& state, int max_turns, bool second_main)
 {
+    g_label_positions_total.fetch_add(1, std::memory_order_relaxed);
     // Per-candidate accumulator, keyed by a canonical plan string (stable across reshuffles).
     struct Acc { long long sum = 0; int count = 0; std::vector<std::string> casts, sac; std::string land; };
     std::map<std::string, Acc> acc;
@@ -211,6 +233,14 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
             TurnSolver::EnumerateEarliestWins(s, max_turns, second_main, s_eval_rows_rollout,
                                               s_eval_rollout_depth, s_eval_rows_honest,
                                               earliest_only);
+        // TRUNCATED => DISCARD, never salvage. A budget-cut search reports max_turns+1, which is
+        // byte-identical to "this position is unwinnable" -- so keeping the number would teach the
+        // model that a position we could not AFFORD to solve is a position we cannot WIN from, and
+        // that lie is worst exactly on the hardest positions, which are the ones worth learning.
+        // Dropping the whole position (all K samples) rather than the offending sample keeps the
+        // average over an unbiased K: an expensive position tends to truncate on most of its
+        // samples, so averaging the survivors would quietly re-introduce the same bias.
+        if (rep.truncated) { g_label_positions_truncated.fetch_add(1, std::memory_order_relaxed); return; }
         const int e = (rep.earliest > 0 && rep.earliest <= max_turns) ? rep.earliest : (max_turns + 1);
         earliest_sum += e; ++earliest_n;
         // Belt-and-braces against the one way B&B could corrupt training data: under B&B a losing

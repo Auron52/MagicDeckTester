@@ -648,6 +648,12 @@ public:
         // earliest win (a candidate that could not beat the running incumbent was cut). `earliest`
         // itself is exact. Never feed bounded candidates to a per-candidate consumer (eval rows).
         bool bounded_candidates = false;
+        // The search was CUT SHORT (budget overrun / exhaustion) somewhere under this report, so
+        // every number in it is unreliable in the one direction that matters: a truncated search
+        // returns max_turns+1, which is indistinguishable from a genuine loss. A consumer must
+        // DISCARD the position rather than emit the label -- writing it would teach the model that
+        // a position it could not afford to solve is a position you cannot win from.
+        bool truncated = false;
     };
     // rollout_label: label each candidate by a NON-CLAIRVOYANT greedy d0 rollout (apply plan ->
     // SimulateToEnd under the baseline policy) instead of the clairvoyant earliest-win SEARCH. Used
