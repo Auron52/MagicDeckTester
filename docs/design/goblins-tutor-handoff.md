@@ -243,12 +243,23 @@ not window sizing:
 * **gi32** — needs the remaining closer-matrix cell: NEXT-turn lethal via the fetched card's own
   ETB/channel damage (face_burst = this-turn, lord_closer = next-turn crowd). `f541e37`
   (`MTG_GOBLIN_BURST_CLOSER=0`), suite-inert at W=9; load-bearing for gi32 at W=6.
-* **gi714/gi200** — NOT fetch cases at all. gi714: the arms diverge at a T2 Skirk-sac (the
-  Hordemaster death-impulse exiles the top card → all later draws shift) — width leaked into the
-  LOOKAHEAD's plan arbitration two turns before any real fetch. gi200: the arms bottom a
-  DIFFERENT card on the same mulligan (width leaks into the keep/bottom rollouts) → physically
-  different games from the opening hand. Both persist at 16× budget; classic draw-divergence
-  variance, with same-magnitude games in W=6's favor (gi483/gi624/gi299).
+* **gi714/gi200** — NOT fetch cases at all. gi714 is CLAIRVOYANCE, verified end to end: the T4
+  line is invariant-absent at W≤7 under UNLIMITED budget and depth 3–9 (so not churn) and appears
+  exactly at W=8 — the deciding states are simulated T3 states inside T2's lookahead where
+  Warchief ranks 8th (enabler term 0 there; rank 2–3 at the real T3 root, which is why the
+  FORCE_RANK table looked "inside-window"). But the fetched Warchief is NEVER CAST: the kill is
+  Muxus + Skirk sacs + Hordemaster's death-impulse flipping the SECOND Muxus off the top, and the
+  fetch matters only because Matron's search RESHUFFLES — the clairvoyant search selects the pick
+  whose post-shuffle order leaves that gift on top. No honest state-read justifies ranking
+  Warchief top-6 there; promoting it would launder clairvoyance into the heuristic. (The simple
+  salt test doesn't cleanly kill it because the edge is one step removed from draws.) gi200: the
+  arms bottom a DIFFERENT card on the same mulligan (width leaks into the keep/bottom rollouts;
+  goes away once the exhaustive mulligan profile replaces lookahead bottoming) → physically
+  different games from the opening hand. Same-magnitude games sit in W=6's favor: gi624/gi483
+  (same in-game timing-leak class, opposite sign — identical hands, same fetched card, diverge at
+  a T2 timing choice) and gi299 (pure width COST: both arms play byte-identical T4 wins at budget
+  20, but at the case's budget 10 the W=12 arm's extra variants eat the budget and it loses the
+  line).
 
 With the three levers in, W=6 ≡ W=12 on every real case; residual = noise classes only (net +6
 turn-units across 44k+ games, symmetric classes both directions). **Width dropped 9 → 6**
