@@ -3891,6 +3891,15 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         const int lp = ComputeLordBonus(pc, s.battlefield, controller, p.is_animated, &p).first;
         return std::max(0, p.EffectivePower() + lp);
     };
+    // ... and the ATTACK-PUMP term of the same read (MTG_GOBLIN_BOARD_PUMP_POWER=0 restores):
+    // Goblin Piledriver's +2 per other attacking Goblin is combat-time temp power, invisible to
+    // both printed power and EffectivePower at the main phase. gi828 (overnight d3/d5 s4004): the
+    // real T5 swing was 10 (Piledriver + 2 others) but the scan read 5, so face_burst's
+    // this-turn-lethal test (10 swing + 2 burst >= 12 life) never fired and the T5-closing
+    // Twinshot Sniper stayed outside the W=6 window. In a goldfish every ready body attacks, so
+    // each ready pump body sees (ready Goblin attackers - 1) others. Summed after the scan below.
+    int ready_goblin_attackers = 0;   // ready GOBLIN bodies (the pump's crowd)
+    int ready_pump_per         = 0;   // summed per-other-attacker pump across ready pump bodies
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != controller) { continue; }
@@ -3912,7 +3921,15 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             if (!scaling) { ++goblin_fodder; }
         }
         if (pc.IsCreature() && CanAttackFull(p, s.battlefield, controller))
-        { ready_atk += board_power(p, pc); }   // any ready attacker (goldfish: connects)
+        {
+            ready_atk += board_power(p, pc);   // any ready attacker (goldfish: connects)
+            if (CardHasSubtype(pc, "Goblin"))
+            {
+                ++ready_goblin_attackers;
+                if (d && d->params.attack_pump_power_per_other_matching > 0)
+                { ready_pump_per += d->params.attack_pump_power_per_other_matching; }
+            }
+        }
         if (!d) { continue; }
         if (!d->params.combat_damage_puts_subtype_from_hand.empty())      // Goblin Lackey
         {
@@ -3926,6 +3943,9 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         if (d->params.dies_trigger_impulse_exile) { deathwatch_on = true; }
         if (d->params.upkeep_adds_charge && !p.tapped) { vial_charge = std::max(vial_charge, p.charge_counters); } // Vial
     }
+    static const bool s_board_pump = EnvOn("MTG_GOBLIN_BOARD_PUMP_POWER", true);
+    if (s_board_pump && ready_pump_per > 0 && ready_goblin_attackers >= 2)
+    { ready_atk += ready_pump_per * (ready_goblin_attackers - 1); }   // each pump body: per x others
     const int G         = goblins_controlled;
     // Goblins waiting in hand are near-future lord-buff targets: a +1/+1 lord makes EACH of them hit
     // harder the moment it lands, so a lord's team-buff must be credited over board + hand, not board
