@@ -38,15 +38,15 @@ to the search, and plan counts reach the thousands.
 8 games/deck, K=3, seed 555000, value rows. **Direction is the gate**: a sound fix to a pessimistic
 search can only ever move a label *earlier*, so one label moving later would refute it.
 
-| deck | rows | earlier | **later** | mean shift | sec off → on |
-|---|---|---|---|---|---|
-| burn | 37 | 2 | **0** | −0.018 | 37.6 → 44.3 |
-| Goblins | 30 | 12 | **0** | −0.333 | 0.2 → 1.4 |
-| Anti-Lifegain | 32 | 11 | **0** | −0.406 | 2.8 → 3.3 |
-| Dragonstorm | 39 | 16 | **0** | −0.402 | 1.1 → 1.1 |
-| slivers_vial | 33 | 9 | **0** | −0.111 | 0.2 → 2.7 |
-| treasure_hunt | 35 | 10 | **0** | −0.152 | 1.1 → 1.4 |
-| Knights | 34 | 9 | **0** | −0.098 | 0.3 → 0.6 |
+| deck | rows | earlier | **later** | mean shift |
+|---|---|---|---|---|
+| burn | 37 | 2 | **0** | −0.018 |
+| Goblins | 30 | 12 | **0** | −0.333 |
+| Anti-Lifegain | 32 | 11 | **0** | −0.406 |
+| Dragonstorm | 39 | 16 | **0** | −0.402 |
+| slivers_vial | 33 | 9 | **0** | −0.111 |
+| treasure_hunt | 35 | 10 | **0** | −0.152 |
+| Knights | 34 | 9 | **0** | −0.098 |
 
 **69 of 240 rows (29%) were wrong; none moved later.** Individual errors are much larger than the
 means: antilife seed 555002 turn 1 labelled **7.00, truth 4.00**; dragonstorm seed 555001 turns 3–4
@@ -54,6 +54,49 @@ both labelled **8.00, truth 6.33**.
 
 Harness: `test/label_ladder_ab.sh <tag> [games] [seed]`, which reports the earlier/later split joined
 on `(seed, turn)` so a thread-ordering difference cannot fake a movement.
+
+## What it costs — and a correction
+
+The 8-game run above also produced wall-clock numbers, and they said the ladder was roughly free
+(burn 37.6 s → 44.3 s, Dragonstorm 1.1 s → 1.1 s). **That was published and it was wrong.** Eight
+games of a heavy-tailed deck is dominated by one or two outlier positions that are expensive in
+*both* arms, which masks the ratio completely — the same undersampling that once produced a
+"+0.14 % instructions" claim from a 60-game callgrind (see `shard-volley-hold.md`). Wall-clock needs
+its own sample size; a correctness gate does not make a timing column trustworthy.
+
+Re-measured properly at **40 games/deck, 20 threads, seed 888000** (`test/label_throughput.sh`),
+against the pre-fix path (`MTG_LABEL_LADDER=0 MTG_VALUE_LABEL_BNB=0`). `cache` adds the
+bound-qualified no-win memo; all three arms produce identical row counts, and `new`/`cache` produce
+identical labels:
+
+| deck | old (s) | ladder (s) | ladder+cache (s) | ladder vs old | +cache vs old |
+|---|---|---|---|---|---|
+| treasure_hunt | 51.3 | 14.4 | 19.9 | **3.6× faster** | 2.6× faster |
+| Dragonstorm | 126.0 | 237.4 | 149.6 | 1.9× slower | 1.2× slower |
+| Knights | 1.4 | 1.9 | 1.7 | 1.4× slower | 1.2× slower |
+| Anti-Lifegain | 4.1 | 26.6 | 10.2 | 6.5× slower | 2.5× slower |
+| slivers_vial | 0.6 | 1.9 | 1.6 | 3.2× slower | 2.7× slower |
+| burn | 0.3 | 3.4 | 1.0 | 11× slower | 3.3× slower |
+| Goblins | 0.9 | 68.7 | 10.1 | 76× slower | 11× slower |
+| **total** | **184.6** | **354.3** | **194.1** | 1.9× slower | **1.05× slower** |
+
+**The cost is real and it is intrinsic.** Finding *a* win is goal-directed and cheap; proving *no
+earlier* win exists means exhausting the subtree at each horizon, and that is what the ladder buys
+correctness with. This is the same effect the regeneration queue originally diagnosed for
+`earliest_only` B&B and mistook for B&B being the wrong shape.
+
+**The no-win memo is therefore not optional here** — it is what pays for the ladder, by stopping
+every candidate re-proving the refutations its siblings already proved. Hence
+`MTG_LABEL_NOWIN_CACHE` (default ON) forces it inside `EnumerateEarliestWins` even though the
+global `MTG_FS_NOWIN_CACHE` stays off for play. With it on, correct labels cost **5 % more
+wall-clock in total than wrong ones** — but that total is dominated by Dragonstorm and
+treasure_hunt, and the per-deck spread is 11× worse to 2.6× better, so size a regeneration per
+deck and never from the aggregate.
+
+**treasure_hunt getting 3.6× *faster* is a lead, not a curiosity.** It is one of the three decks
+(with slivers_vial and Knights) that produced zero rows in 34 hours, and the ladder is exactly the
+kind of change that would unblock it: a deck whose positions have no early win pays the old path a
+full deep search per candidate to discover that, where the ladder refutes cheaply and stops.
 
 ## This also closes the MTG_VALUE_LABEL_BNB anomaly
 

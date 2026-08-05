@@ -11016,11 +11016,25 @@ struct FSLineEntry
 using FSLineCache = std::unordered_map<TranspositionTable::Key, FSLineEntry,
                                        TranspositionTable::KeyHash>;
 
-// MTG_FS_NOWIN_CACHE: DEFAULT OFF for now. Cache hits consume no budget, so under a bounded search
-// this frees budget for deeper passes -- a play change, not a byte-identical speedup, and it needs
-// its own A/B + ground-truth rebaseline. The OFFLINE label path runs at an effectively unbounded
-// budget, where it is pure speed at identical labels.
-inline bool FSNoWinCacheOn() { static const bool v = EnvOn("MTG_FS_NOWIN_CACHE"); return v; }
+// MTG_FS_NOWIN_CACHE: DEFAULT OFF for now on the PLAY path. Cache hits consume no budget, so under a
+// bounded search this frees budget for deeper passes -- a play change, not a byte-identical speedup,
+// and it needs its own A/B + ground-truth rebaseline.
+//
+// The OFFLINE labeller is the opposite case and turns it on for itself (see the guard below): there
+// the budget is effectively unbounded, so there is nothing for freed budget to change and the labels
+// come out identical -- while the saving is what makes the horizon ladder affordable at all.
+inline thread_local bool g_force_nowin_cache = false;
+struct ForceNoWinCacheGuard
+{
+    bool prev;
+    explicit ForceNoWinCacheGuard(bool v) : prev(g_force_nowin_cache) { g_force_nowin_cache = v; }
+    ~ForceNoWinCacheGuard() { g_force_nowin_cache = prev; }
+};
+inline bool FSNoWinCacheOn()
+{
+    static const bool v = EnvOn("MTG_FS_NOWIN_CACHE");
+    return v || g_force_nowin_cache;
+}
 
 // Store a WIN: final and cutoff-independent, so it supersedes any bounded no-win a looser earlier
 // query left behind. With the no-win cache off no such entry can exist, so only the emplace branch
@@ -12847,6 +12861,15 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     ShuffleEvalGuard _seg(true);  // decoupling instrument: planning shuffles use shuffle_salt_search
+    // MTG_LABEL_NOWIN_CACHE: DEFAULT ON; =0 disables. The bound-qualified no-win memo is not an
+    // optional speedup here, it is what makes the horizon ladder affordable: the ladder's cost IS
+    // proving absence at each horizon, and this is the only thing that stops every candidate
+    // re-proving the refutations its siblings already proved. Measured over 40 games/deck it is
+    // 6.8x on Goblins, 3.4x on burn, 2.6x on antilife, 1.6x on Dragonstorm -- and 0.7x on
+    // treasure_hunt, the one deck where the bookkeeping outweighs the reuse. Labels are identical
+    // in every arm (unbounded budget => freed budget changes nothing). See
+    // docs/design/label-horizon-ladder.md.
+    ForceNoWinCacheGuard _nwc(EnvOn("MTG_LABEL_NOWIN_CACHE", true));
     // Full-strength honest teacher: decouple the rollout continuation's per-turn lookahead from the
     // real draw order (see g_honest_teacher). Only meaningful with a depth>0 rollout label.
     HonestTeacherGuard _htg(honest && rollout_label && rollout_depth > 0);
