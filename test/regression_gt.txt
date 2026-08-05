@@ -1,6 +1,5 @@
-# Regression ground truth -- commit cfc6e9f  date 2026-08-05
+# Regression ground truth -- commit aa967fa  date 2026-08-05
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-08-05): GT reconciled under the MERGED binary (upstream tutor resolve-axis default-ON + this branch's no-win memo / Shard Volley / projection fixes). Both sides changed play, so neither pre-merge GT matches the merge and both were regenerated rather than picked. Audit: 9 searched-depth slower games, ALL Anti-Lifegain d5 -- 8 classify as churn (recover at 4x and 16x budget) and the 9th (gi954) reaches T6 at 4x/16x vs the old T8, i.e. better given budget. antilife d5 is net -1 over 4650 games (11 better vs 9 worse). d0: 313 faster vs 93 slower. Net over 203,200 games: -0.00125 turns/game.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -29,9 +28,9 @@ dragonstorm_smoke_d5_s1001=4.4667/8cf792208eab7cc6
 auras_smoke_d0_s1001=4.3760/d0a56ce8cb114f9d
 auras_smoke_d3_s1001=4.1400/de66d9efc3f9e6d7
 auras_smoke_d5_s1001=4.1320/876a844b4869aaae
-goblins_smoke_d0_s1001=4.7580/350fd6c0555bced5
-goblins_smoke_d3_s1001=4.2333/262d419b72a19798
-goblins_smoke_d5_s1001=4.1867/ed99a7d07eecf976
+goblins_smoke_d0_s1001=4.7520/a8c3269499094cc8
+goblins_smoke_d3_s1001=4.2333/1b6ecaa83899ec7e
+goblins_smoke_d5_s1001=4.1867/cb154c3735b3e328
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/4ec30ea41e344477
@@ -74,11 +73,11 @@ auras_regression_d3_s2002=4.1080/17175aeea335db68
 auras_regression_d3_s3003=4.2080/ae97a5df84727fa6
 auras_regression_d5_s2002=4.1020/c6baf8d3edf97c1e
 auras_regression_d5_s3003=4.1960/1d233832be2a2284
-goblins_regression_d0_s2002=4.7440/f2cf36f7a55134e1
-goblins_regression_d3_s2002=4.3167/0bebba0669e448be
-goblins_regression_d3_s3003=4.3267/c35d175012c32f28
-goblins_regression_d5_s2002=4.3640/1555c619c81b903a
-goblins_regression_d5_s3003=4.3120/1ffa69a6b06fda4e
+goblins_regression_d0_s2002=4.7430/eff7b84b2cd2f0a7
+goblins_regression_d3_s2002=4.3167/45d3737935e7d4ba
+goblins_regression_d3_s3003=4.3267/4b07a75eb119ab86
+goblins_regression_d5_s2002=4.3640/a04a317f9897b73f
+goblins_regression_d5_s3003=4.3120/a48185c5c0c133ce
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/fe364b007bbfaa56
@@ -177,15 +176,15 @@ auras_overnight_d5_s4004=4.1140/d52af565f8bd31ab
 auras_overnight_d5_s5005=4.1460/9424cf33b61fa6db
 auras_overnight_d5_s6006=4.1150/726e66c3748fa121
 auras_overnight_d5_s7007=4.1520/02d1cf233dc4df6e
-goblins_overnight_d0_s4004=4.7835/d2803577e325c550
-goblins_overnight_d0_s6006=4.7910/48969999b0dab758
-goblins_overnight_d0_s8008=4.7875/10913df85201c3f7
-goblins_overnight_d0_s10010=4.7915/6ed50a0ce888a949
-goblins_overnight_d3_s4004=4.3040/9878545d1587a5c8
-goblins_overnight_d3_s5005=4.3020/b700b2206a1bd3ce
-goblins_overnight_d3_s6006=4.3040/8141d690838cdee0
-goblins_overnight_d3_s7007=4.3810/276c6df2c8addb35
-goblins_overnight_d5_s4004=4.3000/91c1abe2e10ebb66
-goblins_overnight_d5_s5005=4.3030/0d883f5b55c7826e
-goblins_overnight_d5_s6006=4.3000/f4304b2717d94d24
-goblins_overnight_d5_s7007=4.3800/096380f366e8b77b
+goblins_overnight_d0_s4004=4.7810/9661c197974a809e
+goblins_overnight_d0_s6006=4.7875/f5fb218795f2a351
+goblins_overnight_d0_s8008=4.7815/d65699f0e77975b4
+goblins_overnight_d0_s10010=4.7835/55bdaf7105474274
+goblins_overnight_d3_s4004=4.3040/038a0603dc079669
+goblins_overnight_d3_s5005=4.3020/81d258b29344334c
+goblins_overnight_d3_s6006=4.3040/f97d0f4559da1dae
+goblins_overnight_d3_s7007=4.3810/07107754bf20c005
+goblins_overnight_d5_s4004=4.3000/041d10daaec0b7e2
+goblins_overnight_d5_s5005=4.3030/9a4a48a21589dca0
+goblins_overnight_d5_s6006=4.3000/5074761f1e380b58
+goblins_overnight_d5_s7007=4.3800/b07845d939771591
