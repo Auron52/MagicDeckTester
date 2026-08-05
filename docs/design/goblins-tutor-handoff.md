@@ -154,3 +154,46 @@ conclusion.
 * **Do not kill a run past ~10 minutes** — that is the user's call alone.
 * Do not rebuild while a measurement is running: new subprocesses would pick up a different binary.
 * Log/output under `logs/` or `test/logs/`, never the repo root.
+
+## 9. RESOLUTION (2026-08-05, Fable) — the missing thing was the BINDING ARCHITECTURE
+
+The user's directive: stop approximating the plan's state from outside and evaluate the heuristic
+at the real state the line produces. The architectural asymmetry every prior arm missed:
+scry/etbdig/ponder bind an INDEX resolved by the provider at the true mid-line state
+(ScriptedTopChoice / ScriptedEtbDig pins); the tutor bound a NAME ranked at a guessed turn-start
+state. `MTG_TUTOR_AXIS_RESOLVE=1` (commit 6fd730b + 9918622/3ce3bf6/5ee851a) rebinds the tutor the
+same way: `Plan::tutor_choice` is an index into the ranking computed inside PerformTutor at each
+plan's own resolution state — land played, prefix casts applied AND PAID FOR, the source on the
+battlefield. No prior arm had the spent mana (POSTLAND added the land only; PLAN_AWARE adjusted
+counts only), and none touched the d0/collection binding at all.
+
+Held-out (full overnight suite, per-game vs stored GT, loss-penalized):
+
+| deck | searched | d0 (deterministic) |
+|---|---|---|
+| antilife | −3 (3 better / 0 worse) | **−317 (32 better / 0 worse, 3 real unwon→won)** |
+| hinata | ≈0 net of the documented gi90/gi158 GT artifacts; all worse games churn | −11 (12/5) |
+| goblins | +3 (0/3, churn: recover at 4× budget) | +14 (17/30) |
+
+**d0 moved for the first time in the whole investigation** — every prior arm was d0 0.0; binding
+at collection time (turn-start, pre-land, the cast's own mana still counted) was the most wrong
+state of all, and fixing it is worth −314 d0 turn-units held-out.
+
+Two subsequent findings, both by direct game dissection rather than aggregate:
+
+1. **The goblins residual was a WINDOW VETO, not ordering** (answers item 6). In five of six
+   regressed games the baseline's winning fetch sat at exactly resolution rank 8–9 — all cheap
+   ENABLERS. The legacy pre-land state's double mana pessimism buried the bombs, which kept those
+   enablers inside W=6: an accidental diversity mechanism. Width 9 under resolve mode
+   (provider-owned) recovers +13 → +3. This is also why the truth table could not see it —
+   item 2's collapsed-axis blindness, confirmed: the oracle scores the single fetch, not window
+   membership across turns.
+2. **`turns_to_deploy` conflated leftover mana with capacity** at mid-turn states (Muxus t=5 off
+   leftover 1 where capacity was 5). Capacity-anchored under resolve mode
+   (`MTG_GOBLIN_RESOLVE_CAP=0` restores): searched-identical, d0 +3 — adopted on model
+   correctness with its number.
+
+Status: all levers default-off, byte-identical off (smoke 27/27, regression 45/45), commits
+6fd730b..5ee851a. Adoption (default-on + 3-tier rebaseline) is the user's call; the package read
+at adoption config is train searched −93 / d0 −99, held-out searched −273 / d0 −314 (raw), with
+the honest hinata-artifact-corrected searched ≈ −5 held-out.
