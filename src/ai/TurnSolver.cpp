@@ -11077,6 +11077,16 @@ struct ForceHeuristicLeafGuard
     explicit ForceHeuristicLeafGuard(bool v) : prev(g_force_heuristic_leaf) { g_force_heuristic_leaf = v; }
     ~ForceHeuristicLeafGuard() { g_force_heuristic_leaf = prev; }
 };
+// The INVERSE (MTG_LADDER_VALUE_LEAF): use the cheap value leaf even where the caller asked for the
+// heuristic one. Set only on FullSearchLine's NON-committed ladder passes -- the deepest pass, which
+// is the one whose line is committed, always gets the leaf the caller asked for. See LadderValueLeaf().
+inline thread_local bool g_force_value_leaf = false;
+struct ForceValueLeafGuard
+{
+    bool prev;
+    explicit ForceValueLeafGuard(bool v) : prev(g_force_value_leaf) { g_force_value_leaf = v; }
+    ~ForceValueLeafGuard() { g_force_value_leaf = prev; }
+};
 
 // K-predictor state (MTG_ESC_PREDICT). The PROBE ladders d1..committed for free (cheap value leaf) and, per
 // depth, reveals the leaf count -- the quantity the escalation's dominant rollout cost scales with. The
@@ -11272,7 +11282,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // window [this turn, loss]. nullptr / empty / flag-off -> the exact rollout below (byte-identical).
         // Hybrid: the caller forces the exact heuristic leaf (g_force_heuristic_leaf) on the re-run pass
         // when value-leaf committed too shallow; otherwise use the learned leaf as before.
-        const MidGameEvaluator* vm = (!g_force_heuristic_leaf && UseValueModel()
+        // g_force_value_leaf (the ladder's cheap warm-up passes) turns the value leaf on even when
+        // UseValueModel() is off; g_force_heuristic_leaf still wins over it, so the committed pass is
+        // never affected. Both require a model to actually be attached.
+        const MidGameEvaluator* vm = (!g_force_heuristic_leaf && (UseValueModel() || g_force_value_leaf)
                                       && state.m_value_model && !state.m_value_model->empty())
                                    ? state.m_value_model : nullptr;
         if (vm)
@@ -11768,8 +11781,30 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     static const bool s_esc_jump_env = EnvOn("MTG_ESC_JUMP");
     const bool s_esc_jump = s_esc_jump_env && g_force_heuristic_leaf;
 
+    // LADDER ON THE VALUE LEAF (MTG_LADDER_VALUE_LEAF, default OFF).
+    //
+    // The ladder's warm-up passes exist to refute shallow horizons, and their leaf estimates never
+    // reach the committed line -- only pass `depth` does. So paying the exact heuristic rollout for
+    // passes 1..depth-1 buys nothing but time, and on the deep H cells of the value-leaf depth matrix
+    // that time is most of the cell.
+    //
+    // This is byte-identical for the committed line, by construction rather than by hope:
+    //   * FSLineCache cannot carry a warm-up pass's entry into the committed one. Every node of pass
+    //     k satisfies turn + depth == turn0 + k (FSLineWin recurses turn+1 / depth-1), and the key
+    //     folds both -- so the sum is a pass fingerprint and two passes never share a key.
+    //   * The leaf table `tt` is likewise untouched by a value-leaf pass: the value leaf RETURNS
+    //     before SimulateToEnd, which is the only thing in this recursion that writes to it.
+    //   * The remaining coupling is the BUDGET (cheaper warm-ups leave more for the deep pass), so
+    //     identity holds exactly when the budget does not bind -- which is how the matrix runs every
+    //     cell (unbounded, so each config reaches its nominal depth).
+    // Under a bounded budget it is a real (and favourable) change, not a free one: that arm needs its
+    // own A/B, exactly like MTG_FS_NOWIN_CACHE on the play path.
+    static const bool s_ladder_value_leaf = EnvOn("MTG_LADDER_VALUE_LEAF");
+
     for (int pass_depth = (depth >= 1 ? 1 : depth); pass_depth <= depth; ++pass_depth)
     {
+        // Cheap leaf for every pass but the one that commits.
+        ForceValueLeafGuard _lvl(s_ladder_value_leaf && pass_depth < depth);
         // Start gate: skip (and commit the prior pass) when the next pass clearly
         // won't fit. Keyed on the running work-unit count, never the clock, so a
         // deeper search makes the same skip decision and can never come out worse.

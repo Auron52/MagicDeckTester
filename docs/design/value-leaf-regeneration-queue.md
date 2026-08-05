@@ -398,8 +398,9 @@ path stays byte-identical and **no ground-truth rebaseline is needed**:
    on an expensive deck it does bind, silently degrading the label to whatever depth was reached.
    `MTG_VALUE_LABEL_BUDGET_MS` (default 1000000, `0` = unlimited) now exposes it so a label run can
    be checked for budget degradation. Note this was NOT the cause of the B&B disagreement above.
-3. **Ladder-on-value-leaf as an offline matrix mode.** Use the value leaf for passes 1..d−1 and the
-   heuristic only for pass d. Measured saving 49–71% at d5, and it makes H6/H7 cost less than
+3. **Ladder-on-value-leaf as an offline matrix mode.** **BUILT AND VERIFIED 2026-08-05 —
+   `MTG_LADDER_VALUE_LEAF`, default OFF (it is a matrix-generation mode, not a play change).**
+   Use the value leaf for passes 1..d−1 and the heuristic only for pass d. Measured saving 49–71% at d5, and it makes H6/H7 cost less than
    today's H5. Pure-H timings stay reconstructible as `H(d) = H(d−1) + ladder(d) − V(d−1)` with
    H(1) exact, so the timing column survives in approximate form.
 
