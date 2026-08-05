@@ -4279,8 +4279,47 @@ static bool SacLandHoldEnabled()
 // Callers also gate on `sacrifice_count > 0`, so a deck with no sac-land card never reaches the scan.
 // prowess_attackers = attacking prowess creatures already on the battlefield + any this plan casts
 // with haste (the enumerators' corrected projection term).
+// ---- MTG_SV_LETHAL_AUDIT (diagnostic, default off) -------------------------------------------
+// The prune only runs when the projection says `!wins`, so exception (c) can ONLY ever fire on plans
+// already judged non-lethal. That leaves exactly two possibilities, and they call for opposite fixes:
+//   * those turns really are non-lethal  -> (c) is about ACCELERATING damage, and is a real heuristic;
+//   * the projection is still under-counting -> (c) is masking a LETHAL-CALCULATION bug, and the fix
+//     belongs in projected_atk, not in an exception.
+// This audit decides it empirically: for every plan the prune touches, APPLY it on a copy, run the
+// real combat, and see whether the opponent actually dies. Counts are printed at exit.
+namespace sv_audit
+{
+    inline std::atomic<uint64_t> g_pruned{0};          // strict rule dropped it
+    inline std::atomic<uint64_t> g_pruned_lethal{0};   //   ... and it was ACTUALLY lethal  <-- a bug
+    inline std::atomic<uint64_t> g_rescued{0};         // (c) kept it
+    inline std::atomic<uint64_t> g_rescued_lethal{0};
+    inline std::atomic<uint64_t> g_dumped{0};  //   ... and it was ACTUALLY lethal  <-- a bug
+    struct Report
+    {
+        ~Report()
+        {
+            if (!g_pruned.load() && !g_rescued.load()) { return; }
+            std::fprintf(stderr,
+                "\n=== SV LETHAL AUDIT ===\n"
+                "  strict-pruned      : %llu   of which ACTUALLY LETHAL: %llu\n"
+                "  prowess-rescued (c): %llu   of which ACTUALLY LETHAL: %llu\n",
+                (unsigned long long)g_pruned.load(),  (unsigned long long)g_pruned_lethal.load(),
+                (unsigned long long)g_rescued.load(), (unsigned long long)g_rescued_lethal.load());
+        }
+    };
+    inline Report g_report;
+}
+inline bool SvLethalAuditOn()
+{
+    static const bool on = EnvOn("MTG_SV_LETHAL_AUDIT");
+    return on;
+}
+
+// rescued_by_prowess (out, optional): set when exception (c) is what kept the plan -- i.e. the strict
+// rule (a)+(b) would have dropped it. Used only by MTG_SV_LETHAL_AUDIT.
 static bool HoldSacLandBurn(const GameState& state, const std::vector<Action>& cands,
-                            const std::vector<int>& sel, int prowess_attackers)
+                            const std::vector<int>& sel, int prowess_attackers,
+                            bool* rescued_by_prowess = nullptr)
 {
     if (!SacLandHoldEnabled())                                       { return false; }
     if (!ResolveProvider(state).HoldsSacLandBurnUntilLethal())       { return false; }
@@ -4301,10 +4340,12 @@ static bool HoldSacLandBurn(const GameState& state, const std::vector<Action>& c
     if (has_spectacle && !state.opponent_lost_life_this_turn && !other_face_damage) { return false; }
     // (c) prowess: the cast pumps every attacker that connects this turn, damage a deferred cast
     // never recovers -- i.e. the rule's premise ("3 damage now is worth 3 damage later") is simply
-    // FALSE here, so the prune has no licence and the decision goes back to the search. Worth
-    // -0.00019 (t=-3.05, 12/2/6) once the projection above was fixed, and -0.0042 before it: see
-    // docs/design/shard-volley-hold.md, which also gives the one-line change to re-test it.
-    if (prowess_attackers > 0) { return false; }
+    // FALSE here. See docs/design/shard-volley-hold.md.
+    if (prowess_attackers > 0)
+    {
+        if (rescued_by_prowess) { *rescued_by_prowess = true; }
+        return false;
+    }
     return true;
 }
 
@@ -8720,8 +8761,46 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         bool wins = (projected_atk + direct_dmg) >= state.Opponent().life;
         // Sac-land burn hold (mirrors Solve::consider) -- see HoldSacLandBurn.
-        if (sacrifice_count > 0 && !wins
-            && HoldSacLandBurn(state, cands, sel, prowess_attackers + haste_cast_prowess)) { return; }
+        if (sacrifice_count > 0 && !wins)
+        {
+            bool       rescued = false;
+            const bool drop    = HoldSacLandBurn(state, cands, sel,
+                                                 prowess_attackers + haste_cast_prowess, &rescued);
+            if (SvLethalAuditOn() && (drop || rescued))
+            {
+                // Was this plan ACTUALLY lethal, despite the projection saying otherwise? Apply it for
+                // real and run the combat. Diagnostic path only -- one full apply per touched plan.
+                TurnSolver::Plan probe;
+                for (int j : sel) { probe.actions.push_back(cands[j]); }
+                // CRITICAL: EnumeratePlansWithLand plays the land into a COPY before calling this
+                // enumerator and stamps land_decided on every plan it returns, so the real execution
+                // of this plan plays no further land. Leaving land_decided false makes ApplyPlanDirect
+                // fall back to greedy SimulateLandPlay -- which fires Searing Blaze's landfall and
+                // fabricates 2 extra damage, i.e. a phantom "missed lethal" that is the PROBE's bug.
+                probe.land_decided = true;
+                GameState copy = state;
+                ApplyPlanDirect(copy, probe, is_pre_combat);
+                if (is_pre_combat) { SimulateCombat(copy); }
+                const bool really_lethal = (copy.Opponent().life <= 0);
+                if (drop) { ++sv_audit::g_pruned;  if (really_lethal) { ++sv_audit::g_pruned_lethal; } }
+                else      { ++sv_audit::g_rescued; if (really_lethal) { ++sv_audit::g_rescued_lethal; } }
+                if (really_lethal && sv_audit::g_dumped.fetch_add(1) < 25)
+                {
+                    std::string names;
+                    for (int j : sel) { names += cands[j].card_name; names += "|"; }
+                    static std::mutex m; std::lock_guard<std::mutex> lk(m);
+                    std::fprintf(stderr,
+                        "[sv-audit] T%d opp_life=%d -> %d  PROJECTED atk=%d (pending=%d vial=%d hastecast=%d "
+                        "nc=%d*prow=%d) direct=%d  land_played=%d  plan_land=%d  %s  casts=%s\n",
+                        state.turn_number, state.Opponent().life, copy.Opponent().life,
+                        projected_atk, pending_atk, vial_haste_atk, haste_cast_atk,
+                        noncreature_count, prowess_attackers + haste_cast_prowess, direct_dmg,
+                        state.ActivePlayer().lands_played_this_turn, PlanHasLand(cands, sel) ? 1 : 0,
+                        drop ? "PRUNED" : "rescued(c)", names.c_str());
+                }
+            }
+            if (drop) { return; }
+        }
         TurnSolver::Plan plan;
         plan.value          = total_eval;
         plan.wins_this_turn = wins;

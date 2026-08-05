@@ -118,7 +118,38 @@ you cast it." With a prowess attacker that premise is simply false: the spell is
 3 later. Where the premise fails the prune has no licence, so the decision goes back to the search —
 which is the search-primary contract, not an exception to it.
 
-**Is (c) just a budget artifact?** A fair challenge: holding leaves an extra card in hand, which
+**Is (c) masking a lethal-calculation bug?** The sharpest challenge, because the prune site only
+runs when the projection says `!wins` — so exception (c) can *only ever* fire on plans already judged
+non-lethal. Either those turns really are non-lethal (and (c) is about accelerating damage), or the
+projection is still under-counting and (c) is papering over a second instance of the bug above. That
+is decidable: `MTG_SV_LETHAL_AUDIT=1` applies every plan the prune touches on a copy, runs the real
+combat, and counts how many actually kill the opponent.
+
+| 2000 games | plans touched | ACTUALLY lethal |
+|---|---|---|
+| strict-pruned, seed 200000 | 728,274 | **0** |
+| prowess-rescued (c), seed 200000 | 237,486 | **0** |
+| strict-pruned, seed 800000 | 912,768 | **0** |
+| prowess-rescued (c), seed 800000 | 256,321 | **0** |
+
+**Zero missed lethals in ~2.1M touched plans.** The lethal calculation is correct after the haste
+fix, and (c) fires exclusively on genuinely non-lethal turns. So (c) is not hiding a bug — it is a
+real heuristic about *acceleration*: the damage arrives earlier, which pulls the eventual win in.
+
+That distinction matters for the rule as stated. "There is no reason to cast Shard Volley before the
+winning turn" is exactly right about the **card's own damage** — 3 now is 3 later. It does not cover
+the prowess trigger, which is worth 0 later. The quantity that justifies casting is therefore not
+"is this turn lethal" but "is the spell worth MORE now than later", and lethality is only the most
+common way for that to be true.
+
+**A warning for anyone re-running this audit.** The first version of it reported 45 missed lethals,
+all `Shard Volley + Searing Blaze`, all short by exactly 2. That was the *probe's* bug, not the
+engine's: `EnumeratePlansWithLand` plays the land into a copy before calling `EnumeratePlans` and
+stamps `land_decided` on every plan it returns, so a hand-built probe Plan that leaves
+`land_decided` false makes `ApplyPlanDirect` fall back to greedy `SimulateLandPlay` — which fires
+Searing Blaze's landfall (1 → 3 damage) and fabricates the missing 2. Set `probe.land_decided = true`.
+
+**Is (c) just a budget artifact?** A second fair challenge: holding leaves an extra card in hand, which
 enlarges the plan powerset at every later decision, so "allowing the cast is better" could be cheaper
 enumeration rather than real damage. It is not, on two independent counts:
 
