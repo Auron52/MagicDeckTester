@@ -1477,3 +1477,66 @@ correct, cheap, measured, and it is the only mechanism that would let the genuin
 The line of work is closed with the diagnosis settled: the model's guesses were not the problem, the
 window/veto was not the problem, and the ranking is 99.1% optimal (round 14). What is left on this
 decision is plan-set churn, which is worth at most the 4 turns of headroom that exist.
+
+## ROUND 16 (2026-08-05): the residual dissected — no fix left to make
+
+Round 15 left a residual: plan-awareness zeroed the projection's cost on FETCH QUALITY but only
+halved it on the suite (+18 -> +9). Two candidate causes, both now tested.
+
+### (b) A new incoherence — REFUTED
+
+The base tutor target is chosen during action COLLECTION, before a plan exists, so under
+`MTG_GOBLIN_PLAN_AWARE` the variants are plan-aware while the base pick stays blind — the same
+one-input-honest failure, one level up. `MTG_TUTOR_AXIS_REBASE` re-resolves the base from the same
+list the variants come from (which also fixes the "rank-0 silently dropped" defect, since the loop
+started at `c=1` assuming index 0 was the base):
+
+```
+REBASE alone                   +0.0    0 better /  0 worse   <- completely inert
+plan-aware + rebase            +3.0    2 better /  5 worse   (vs +2.0 without)
+plan-aware + rebase + postland +10.0   2 better / 12 worse   (vs +9.0 without)
+```
+
+Inert on its own — the two rankings essentially never disagree at index 0 in practice — and very
+slightly worse in combination. **The incoherence was real in principle and empirically never fires.**
+
+### (a) Budget-limited arbitration — PARTLY, and the rest is genuine
+
+Every game the residual moves, re-run standalone at budgets 20/80/320/1280 (d3):
+
+```
+             baseline          plan+postland
+gi327        5 4 4 4           4 4 4 4      baseline was CHURN; new arm stable-correct
+gi371        5 5 5 5           4 4 4 4      genuine IMPROVEMENT, budget-independent
+gi352        5 5 5 5           6 5 5 5      churn in the new arm, converges by 80
+gi588        4 4 4 4           5 4 4 4      churn in the new arm, converges by 80
+gi714        4 4 4 4           5 5 5 5      genuine REGRESSION, budget-independent
+gi727        4 4 4 4           5 5 5 5      genuine REGRESSION
+gi768        4 4 4 4           5 5 5 5      genuine REGRESSION
+gi920        4 4 4 4           5 5 5 5      genuine REGRESSION
+gi200        4 4 4 4           5 5 5 5      genuine REGRESSION
+```
+
+About a third of the +9 is wall-clock churn; at high budget the arm is ~+3. The rest is **genuine and
+budget-independent** — 5 real regressions against 2 real improvements. More search cannot recover
+them, because the search is already converged; the two arms simply commit to different lines.
+
+### Disposition: closed, with nothing left to fix
+
+Every layer has now been tested and eliminated:
+
+```
+fetch-choice quality   equal (99.1% optimal; postland's cost -> 0 under plan-awareness)
+model coherence        fixed by PlanContext -- confirmed, no suite gain
+base/axis consistency  inert (REBASE +0.0)
+search budget          not the cause (regressions are budget-independent)
+```
+
+What remains is the model genuinely preferring different lines under an honest projection, and the
+pessimistic version being better by ~3 turns net. Against round 14's total headroom of 4 turns across
+429 tutor games, that IS the headroom. There is no fix left worth making: the "buggy" behaviour is
+the empirically better one, and we now know that at every level rather than by assumption.
+
+`MTG_GOBLIN_PLAN_AWARE`, `MTG_TUTOR_AXIS_POSTLAND`, `MTG_TUTOR_AXIS_REBASE` all stay default-off with
+their numbers. `PlanContext` stays: byte-identical off, cheap, and the only mechanism by which the
+root defect could ever be enabled affordably.

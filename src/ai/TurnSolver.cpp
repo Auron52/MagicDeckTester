@@ -10255,8 +10255,22 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         // pre-land list's own rank-0 card is silently dropped (the loop below starts at c=1).
         // MTG_TUTOR_AXIS_POSTLAND=1 enables. See docs/design/goblins-enabler-worse-games.md round 13.
         static const bool axis_postland = EnvOn("MTG_TUTOR_AXIS_POSTLAND", false);
+        // MTG_TUTOR_AXIS_REBASE=1: re-resolve the BASE plan's target from the same list the variants
+        // come from, instead of leaving whatever CollectActions picked. Two defects in one:
+        //
+        //   1. The base target is chosen during action COLLECTION, before a plan exists, so it can
+        //      never be plan-aware. With MTG_GOBLIN_PLAN_AWARE on, the variants below become
+        //      plan-aware while the base pick stays blind -- exactly the "one input honest, the rest
+        //      calibrated to the old value" incoherence that cost +20/+9/+18 in rounds 12-14, only
+        //      one level up, in the plan set rather than inside the model.
+        //   2. The loop starts at c=1 on the assumption index 0 IS the base target. When the two
+        //      lists disagree, this list's own top pick is never emitted at all.
+        //
+        // Rebasing makes base and variants come from one ranking at one state, which is the whole
+        // point. Mutates `all` in place; `extra` is a separate vector, so this is safe.
+        static const bool axis_rebase = EnvOn("MTG_TUTOR_AXIS_REBASE", false);
         std::map<std::string, std::vector<std::string>> cand_cache;
-        for (const TurnSolver::Plan& p : all)
+        for (TurnSolver::Plan& p : all)
         {
             // Base plans only -- one axis at a time, so cost stays additive (same trade as scry).
             if (p.scry_choice >= 0 || p.bp_choice >= 0) { continue; }
@@ -10305,9 +10319,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                     }
                 }
                 const std::size_t k = std::min(cands.size(), TutorAxisWidth(state));
-                for (std::size_t c = 1; c < k; ++c)
+                if (axis_rebase && !cands.empty() && !cands[0].empty())
+                { p.actions[ai].tutor_target = cands[0]; }
+                const std::string& base_tgt = p.actions[ai].tutor_target;
+                for (std::size_t c = (axis_rebase ? 0 : 1); c < k; ++c)
                 {
-                    if (cands[c] == act.tutor_target) { continue; }
+                    if (cands[c] == base_tgt) { continue; }
                     TurnSolver::Plan v = p;
                     v.actions[ai].tutor_target = cands[c];
                     extra.push_back(std::move(v));
