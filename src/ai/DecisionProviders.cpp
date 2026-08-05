@@ -4886,8 +4886,19 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         return 0.0;   // whiff placeholder ("") or vanished name -> lowest
     };
 
+    // Scores are PURE per name, so compute each once and sort on the cached key -- byte-identical
+    // to calling score_of inside the comparator (stable_sort + identical keys = identical order),
+    // and ~8x fewer library scans. This matters because under MTG_TUTOR_AXIS_RESOLVE the ranking
+    // runs inside every plan apply that casts a tutor (the price of ranking at the true state),
+    // where the comparator's O(n log n) score_of calls -- each a library scan + full value/enabler
+    // evaluation -- were eating wall-clock search budget (the goblins-only all-churn asymmetry in
+    // the resolve-mode A/B).
+    std::map<std::string, double> score_memo;
+    for (const std::string& n : cands)
+    { if (score_memo.find(n) == score_memo.end()) { score_memo.emplace(n, score_of(n)); } }
     std::stable_sort(cands.begin(), cands.end(),
-                     [&](const std::string& a, const std::string& b) { return score_of(a) > score_of(b); });
+                     [&](const std::string& a, const std::string& b)
+                     { return score_memo.find(a)->second > score_memo.find(b)->second; });
     // --- ROLE CUT: one card per role, best-on-this-board wins ---------------------------------
     // (user, 2026-08-05) "Rundvelt Hordemaster and Piledriver. We should be able to work out which
     // is better on the current board and drop the other." Strict dominance above only removes cards
@@ -5088,15 +5099,20 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         && static_cast<int>(cands.size()) > TutorSearchWidth())
     {
         const int W = TutorSearchWidth();
+        std::map<std::string, double> raw_memo;   // pure per name -- same byte-identical memo as the sort
         auto raw_value = [&](const std::string& n) -> double
         {
+            auto it = raw_memo.find(n);
+            if (it != raw_memo.end()) { return it->second; }
+            double v = 0.0;
             for (const Card& lc : s.players[controller].library)
             {
                 if (lc.m_name != n) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
-                return value_of(d, d ? d->card : lc);
+                v = value_of(d, d ? d->card : lc);
+                break;
             }
-            return 0.0;
+            return raw_memo.emplace(n, v).first->second;
         };
         // See the eviction note above: the default path's insert at W-1-k pushes the previous rescue
         // out of the window ON PURPOSE (measured better). MTG_GOBLIN_VALUE_RESERVE_FIX=1 is the
