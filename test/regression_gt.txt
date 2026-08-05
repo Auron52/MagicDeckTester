@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 408fe7f  date 2026-08-05
+# Regression ground truth -- commit 3e8ce46  date 2026-08-05
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.

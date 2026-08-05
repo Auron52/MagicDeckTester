@@ -4864,20 +4864,32 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // is the same "optimism proposes, the re-sim disposes" pattern that measured load-bearing for
     // Dragonstorm's ritual-afford credit. So reserve the last window slot for the highest RAW-value
     // candidate when the discount has pushed it out, instead of letting an estimate veto it.
-    // NOT a clairvoyance artifact, which matters because Goblin Matron SHUFFLES after searching, so
-    // a tutor line's value depends on the post-fetch reshuffle the search simulates. Decoupled with
-    // MTG_SHUFFLE_SALT_SEARCH (the search plans against a reshuffle the real game will not deal), the
-    // edge survives at every salt tried: W=6 gives T6 coupled and at salts 1-5, while both W=6+reserve
-    // and W=12 give T5 in all six. A decision that only won by foreseeing a specific reshuffle would
-    // collapse there.
+    // ON CLAIRVOYANCE, and a claim retracted. The recovered line turns on a card drawn AFTER the
+    // decision: T3 hold the Matron, T4 DRAW Goblin Lackey + cast it + Matron fetches Siege-Gang,
+    // T5 the Lackey connects and puts Siege-Gang in free. A MTG_SHUFFLE_SALT_SEARCH decouple was run
+    // and the edge survived at salts 1-5, which was reported here as "not a clairvoyance artifact".
+    // That was WRONG: that instrument re-salts MID-GAME shuffles only (the opening library order
+    // comes from MTG_SHUFFLE_SALT_OPENING), so it strips reshuffle clairvoyance -- worth testing,
+    // since Goblin Matron has tutor_shuffle_after -- but a normal draw off the pre-shuffled library
+    // is identical in search and reality at every search salt. It could not have detected this.
     //
-    // Two slots, not one: the highest RAW value is Muxus (850), but the card that actually wins the
-    // line is Siege-Gang (510) -- rescuing only the top one grabs the wrong bomb and gi101 stays T6.
+    // The justification is different, and does hold. First, the searched metric is clairvoyant BY
+    // CONSTRUCTION -- the search simulates the real library, so every searched decision in this
+    // project sees future draws, including the already-shipped W=4 -> 6 widening. Foreknowledge is a
+    // uniform baseline, not something this line uniquely exploits. Second, and decisively: the line
+    // is not merely unfound, it is UNREACHABLE. At W=6 the game stays T6 at depth 3, 5 AND 6 with
+    // unlimited budget, while W=6 + reserve wins T5 at all three. More search cannot evaluate a line
+    // whose key card was never put on the axis, so the window is hard-vetoing a valid play and this
+    // removes an artificial restriction rather than encoding foreknowledge.
     //
-    // Held-out: EXACTLY 0.0 over 8,000 searched and 12,000 d0 games -- not one file changed. The
-    // -2.0 on the regression tier IS gi101 (counted at d3 and d5), i.e. the game this was built for,
-    // so it is not independent confirmation. Adopted as a fix for a diagnosed mechanism at zero
-    // measured cost, not as a measured win.
+    // NOT fully explained: at the real T4 fetch the Lackey is still in HAND (it is cast after the
+    // Matron), so lackey_persist is 0 and Siege-Gang is priced t=3. Teaching turns_to_deploy to count
+    // a castable in-hand Lackey was tried and is completely INERT (0.0 on regression with it on and
+    // off), so that is not the binding constraint and the exact deciding state is still unpinned.
+    //
+    // Held-out is EXACTLY 0.0 over 8,000 searched and 12,000 d0 games -- not one file changed -- so
+    // the -2.0 on regression (gi101 at d3 and d5) is the only movement in 20,000 games. Adopted as a
+    // zero-cost fix to a diagnosed mechanism, NOT as a measured win.
     // MTG_GOBLIN_VALUE_RESERVE=0 disables; N reserves the top-N by raw value.
     static const int value_reserve = EnvInt("MTG_GOBLIN_VALUE_RESERVE", 2);
     if (value_reserve > 0 && static_cast<int>(cands.size()) > TutorSearchWidth())
