@@ -1096,3 +1096,83 @@ The plausible mechanism, UNCONFIRMED: the T4 line's value depends on the candida
 board state, which differs from T3's, so a 6-wide window can leave the good T4 branch unevaluated even
 though the eventual pick ranks 3rd there. Hard to confirm cheaply -- the W=6 arm never reaches a T4
 Matron state to inspect.
+
+## ROUND 11 (2026-08-05): s3003 gi101 explained — the discount VETOES a bomb from the search
+
+`s3003 gi101` was the last unexplained width gap: W=6 wins T6, W=12 wins T5, stable at every depth
+(3/5/6) and budget. The full causal chain, and it is not what it first looked like.
+
+### Why the Siege-Gang line wins
+
+```
+T4  cast Goblin Matron, fetch Siege-Gang Commander TO HAND, attack
+T5  Goblin Lackey connects -> PUTS Siege-Gang onto the battlefield FREE, attack, win
+```
+
+Siege-Gang was never going to be cast. It is a **Lackey target** — the combat-damage trigger bypasses
+`{3}{R}{R}` entirely, and it arrives with three 1/1 tokens plus a `{1}{R}`, sac-a-Goblin: 2 damage
+outlet to finish. That is the whole reason holding the Matron a turn beats casting it on T3 for a lord.
+
+### The model is NOT mispricing it — the SEARCH cannot see it
+
+`turns_to_deploy` already handles the Lackey path, and prices the card correctly when a Lackey is out:
+
+```
+lackey_persist=0   Siege-Gang  score= 65.8   value=510.0  x disc=0.129 (t=3)   -> rank 10
+lackey_persist=1   Siege-Gang  score=433.5   value=510.0  x disc=0.850 (t=1)   -> rank  3
+```
+
+The failure is at T3. When the search asks "should I hold the Matron and cast it on T4 instead", it
+evaluates projected T4 states in which the Lackey is not yet on the battlefield — and there Siege-Gang
+is rank 10, outside a 6-wide window. The branch is unreachable, the "hold" line is never costed, and
+the search casts on T3. The width threshold is exactly **W=9**, the rank Siege-Gang occupies in those
+projections.
+
+**DISCOUNT-AS-VETO** is the general defect: the deploy discount is a static pre-scorer estimate, but
+the window turns a low rank into an EXCLUSION, so the estimate silently overrules the forward
+simulation that would have judged the line properly. As a ranking signal the discount is sound; as a
+veto it inverts the intended relationship between heuristic and search.
+
+The blind spot is the normal case, not a fluke. Over 35,066 sampled tutor states, **61% have a
+higher-RAW-value card sitting outside the window**, overwhelmingly the deck's two bombs:
+
+```
+12,568x  Muxus, Goblin Grandee      933x  Twinshot Sniper
+ 5,302x  Siege-Gang Commander       750x  Goblin Chainwhirler
+```
+
+### NOT a clairvoyance artifact (checked, because Matron shuffles)
+
+Goblin Matron has `tutor_shuffle_after`, so a tutor line's value depends on a reshuffle the search
+simulates — exactly the situation `MTG_SHUFFLE_SALT_SEARCH` exists to police. Decoupled, so the search
+plans against a reshuffle the real game will not deal, the edge **survives at every salt tried**:
+
+```
+search salt   W=6    W=6+reserve2   W=12
+coupled       T6         T5          T5
+salts 1..5    T6 (all)   T5 (all)    T5 (all)
+```
+
+A decision that only won by foreseeing a specific reshuffle collapses there. This one does not.
+
+### The fix: reserve window slots for the best RAW-value candidates (ADOPTED, narrow)
+
+Two slots, not one — the highest raw value is Muxus (850) but the card that wins is Siege-Gang (510),
+so rescuing only the top one grabs the wrong bomb and gi101 stays T6.
+
+```
+                regression      HELD-OUT (8000 searched)    d0 (12000)
+reserve=1          0.0                   0.0                  0.0     inert
+reserve=2         -2.0                   0.0                  0.0     <- adopted
+```
+
+Held-out is **exactly** zero — not one file changed. The -2.0 on regression IS gi101 (counted at d3 and
+d5), the game this was built for, so it is not independent confirmation. Adopted as a fix for a
+diagnosed mechanism at zero measured cost, **not** as a measured win: it currently moves one game in
+20,000. The honest reading of held-out zero is that the discount is usually RIGHT — forcing the bomb
+onto the axis is harmless because the search rejects it — but it was wrong here and the search never
+got the chance to say so.
+
+Open question worth keeping: the sharper fix may be to the projection rather than the window, since
+the model already ranks the bomb correctly once the Lackey is visible. Reserving slots compensates for
+the projection instead of correcting it.

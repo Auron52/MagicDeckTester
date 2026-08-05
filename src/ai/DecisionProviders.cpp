@@ -4844,6 +4844,75 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         }
         if (!kept.empty()) { cands.swap(kept); }
     }
+    // --- RESERVE A SLOT FOR THE BEST RAW CARD -------------------------------------------------
+    // The deploy discount is a PRE-SCORER ESTIMATE, and it can hide a bomb from the search entirely
+    // rather than merely ranking it low. s3003 gi101 is the worked case. When the search asks at T3
+    // "should I hold the Matron and cast it on T4 instead", it evaluates projected T4 states that
+    // look like this:
+    //
+    //    8.  Siege-Gang Commander  score=146.3  value=510.0  x disc=0.287 (t=2)
+    //    9.  Muxus, Goblin Grandee score=109.7  value=850.0  x disc=0.129 (t=3)
+    //
+    // Siege-Gang's RAW value (510) is higher than Goblin Chieftain's (500), the card that tops that
+    // list, and Muxus at 850 is the best card in the deck. Both are outside a 6-wide window purely
+    // because a {3}{R}{R} bomb reads as two turns away at untapped=3 / next=4. So the whole "hold
+    // the Matron" branch is unreachable, the search casts on T3 for the lord, and the game ends T6
+    // instead of T5. The width threshold is exactly W=9 -- the rank Siege-Gang occupies there.
+    //
+    // The discount is not wrong as a RANKING signal; it is wrong as an EXCLUSION. Once the bomb is
+    // on the axis the search re-simulates the line and either verifies it or throws it away, which
+    // is the same "optimism proposes, the re-sim disposes" pattern that measured load-bearing for
+    // Dragonstorm's ritual-afford credit. So reserve the last window slot for the highest RAW-value
+    // candidate when the discount has pushed it out, instead of letting an estimate veto it.
+    // NOT a clairvoyance artifact, which matters because Goblin Matron SHUFFLES after searching, so
+    // a tutor line's value depends on the post-fetch reshuffle the search simulates. Decoupled with
+    // MTG_SHUFFLE_SALT_SEARCH (the search plans against a reshuffle the real game will not deal), the
+    // edge survives at every salt tried: W=6 gives T6 coupled and at salts 1-5, while both W=6+reserve
+    // and W=12 give T5 in all six. A decision that only won by foreseeing a specific reshuffle would
+    // collapse there.
+    //
+    // Two slots, not one: the highest RAW value is Muxus (850), but the card that actually wins the
+    // line is Siege-Gang (510) -- rescuing only the top one grabs the wrong bomb and gi101 stays T6.
+    //
+    // Held-out: EXACTLY 0.0 over 8,000 searched and 12,000 d0 games -- not one file changed. The
+    // -2.0 on the regression tier IS gi101 (counted at d3 and d5), i.e. the game this was built for,
+    // so it is not independent confirmation. Adopted as a fix for a diagnosed mechanism at zero
+    // measured cost, not as a measured win.
+    // MTG_GOBLIN_VALUE_RESERVE=0 disables; N reserves the top-N by raw value.
+    static const int value_reserve = EnvInt("MTG_GOBLIN_VALUE_RESERVE", 2);
+    if (value_reserve > 0 && static_cast<int>(cands.size()) > TutorSearchWidth())
+    {
+        const int W = TutorSearchWidth();
+        auto raw_value = [&](const std::string& n) -> double
+        {
+            for (const Card& lc : s.players[controller].library)
+            {
+                if (lc.m_name != n) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+                return value_of(d, d ? d->card : lc);
+            }
+            return 0.0;
+        };
+        for (int k = 0; k < value_reserve; ++k)
+        {
+            // Best raw-value candidate currently OUTSIDE the window.
+            int best = -1;
+            for (std::size_t i = W; i < cands.size(); ++i)
+            {
+                if (best < 0 || raw_value(cands[i]) > raw_value(cands[best])) { best = static_cast<int>(i); }
+            }
+            if (best < 0) { break; }
+            // Only if it actually beats the weakest card already inside on raw value -- otherwise the
+            // window is already holding the best cards and there is nothing to rescue.
+            int weakest = 0;
+            for (int i = 1; i < W; ++i)
+            { if (raw_value(cands[i]) < raw_value(cands[weakest])) { weakest = i; } }
+            if (raw_value(cands[best]) <= raw_value(cands[weakest])) { break; }
+            const std::string rescued = cands[best];
+            cands.erase(cands.begin() + best);
+            cands.insert(cands.begin() + (W - 1 - k), rescued);
+        }
+    }
     if (dump)
     {
         static thread_local std::set<uint64_t> s_seen;
