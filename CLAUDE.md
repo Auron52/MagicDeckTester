@@ -36,18 +36,28 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   agent's). This applies to every tool call in this repo: analysis runs, the test
   harness, builds, and ad-hoc scripts.
 
-- **ONLY THE USER cancels a run past ~10 minutes — an agent NEVER does; a question is not a cancel.**
-  The ~10-minute mark is a **detection deadline**. If you spot a *clear* defect in a run
-  within its first ~10 minutes (wrong flags, a methodology bug, obviously-corrupt output),
-  you MAY stop it, fix the cause, and restart right away — little is lost, and that is the
-  right move. **Once a run has been going past ~10 minutes, do NOT `TaskStop`/`kill`/`pkill`/
-  Ctrl-C it for ANY reason** — not to "fix" it, not to restart it more efficiently, and above
-  all not because the user asked a question about it. A question about a run's progress, CPU
-  use, or correctness is NOT a request to cancel it. If you believe a past-10-min run is wrong
-  or inefficient, **let it keep running and surface a question to the user** (flag the problem,
-  propose the fix, note that re-running is their call); the decision to stop it is theirs
-  alone. (This rule exists because agents kill in-flight runs when the user is only inquiring —
+- **ONLY THE USER cancels a USER-REQUESTED run past ~10 minutes — a question is not a cancel.**
+  What this rule protects is a long run **the user asked for**: an overnight sweep, a
+  generation job, a rebaseline, anything they set going or told you to start. For those,
+  the ~10-minute mark is a **detection deadline**. If you spot a *clear* defect within a
+  run's first ~10 minutes (wrong flags, a methodology bug, obviously-corrupt output), you
+  MAY stop it, fix the cause, and restart right away — little is lost, and that is the
+  right move. **Past ~10 minutes, do NOT `TaskStop`/`kill`/`pkill`/Ctrl-C it for ANY
+  reason** — not to "fix" it, not to restart it more efficiently, and above all not because
+  the user asked a question about it. A question about a run's progress, CPU use, or
+  correctness is NOT a request to cancel it. If you believe such a run is wrong or
+  inefficient, **let it keep running and surface a question to the user** (flag the problem,
+  propose the fix, note that re-running is their call); the decision is theirs alone. (This
+  rule exists because agents kill in-flight runs when the user is only inquiring —
   destroying work the user did not ask to discard.)
+
+  **EXCEPTION — your own experiments.** A run *you* started on your own initiative (a probe,
+  a benchmark, an A/B you chose to launch) is yours to kill at any age, no permission needed.
+  Nothing is destroyed that the user asked for, and a superseded probe left running is just
+  noise: kill it, say you did, and move on. The test is *who asked for it*, not how long it
+  has been running. When in doubt about which kind a run is, name it and ask — that is
+  cheap; guessing wrong in the protective direction costs only a couple of cores, guessing
+  wrong the other way destroys user work.
 
 - **Long / multi-item runs MUST batch into ONE pooled work queue — never a loop of
   many small invocations.** Launching a run as many separate per-item commands (e.g.
