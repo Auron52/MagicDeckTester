@@ -1063,3 +1063,36 @@ bodies are the currency for every lord, for Piledriver's +2-per-other-attacker a
 Not changed, deliberately: the search never reaches for it in any surviving miss, it is absent from
 the user's list of cards worth fetching, and inflating a mediocre card to crowd the window is exactly
 the bug round 10 removed. Revisit only if a measured miss points at it.
+
+### The two survivors are real, width-only, and do NOT recover with depth or budget
+
+Applying the churn test to the two games W=12 still wins, they behave in exactly the opposite way to
+the three retired ones -- perfectly stable, and responsive only to width:
+
+```
+                 W=6                       W=12
+s3003 gi101      d3/d5/d6 = T6             d3/d5/d6 = T5      (budget 0/20/80/320 identical)
+s4004 gi124      d3/d5/d6 = T6             d3/d5/d6 = T5      (budget 0/20/80/320 identical)
+```
+
+Only ONE is a ranking miss. `s4004 gi124` commits to Goblin Lackey at rank 8, outside the window --
+a genuine miss, and the last one left.
+
+`s3003 gi101` is NOT a ranking miss, and the earlier claim here that it was therefore "unrecoverable"
+was wrong (user: "if it isn't a search miss it should be recoverable?"). What actually differs is
+*when the Matron is cast*:
+
+```
+W=6   casts Matron T3 -> Goblin Chieftain      rank 2/13   -> T6
+W=12  casts Matron T4 -> Siege-Gang Commander  rank 3/13   -> T5
+```
+
+Both fetches are INSIDE the shipped W=6, so the ranking never excludes the wanted card. The width is
+changing the search's PLAN -- hold the Matron a turn for the bomb rather than cast it now for the lord
+-- and depth 5 and 6 do not find that line either. So it is recoverable in principle, but through the
+search's plan evaluation, not by reordering tutor candidates.
+
+The plausible mechanism, UNCONFIRMED: the T4 line's value depends on the candidate ranking at that T4
+board state, which differs from T3's, so a 6-wide window can leave the good T4 branch unevaluated even
+though the eventual pick ranks 3rd there. Hard to confirm cheaply -- the W=6 arm never reaches a T4
+Matron state to inspect.
