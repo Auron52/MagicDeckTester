@@ -1201,36 +1201,61 @@ W>=9   T2 Mountain        -> T3 lands are {R}{R}{R}: cast Goblin Chainwhirler
 The fetch is not the decision. The decision is the **T2 land drop**, and to value it the search has to
 see the T4 Siege-Gang fetch two turns ahead.
 
-### Why W=9 exactly
+### Why W=9 exactly — and WHICH state binds (corrected)
 
-At the T3 lookahead state (3 mana, empty board) the ranking is:
+The first draft of this section blamed a T3 state where Siege-Gang happens to sit at rank 8. That was
+a coincidence. The lookahead **does** re-rank at every projected turn, using the heuristic for that
+particular state, so the deciding state had to be pinned rather than guessed. Two diagnostic gates on
+the reserve do it — `MTG_GOBLIN_RESERVE_TURN` (apply only at turn N) and `MTG_GOBLIN_RESERVE_NEXT`
+(apply only when `mana_next` is N):
 
 ```
-0 Chieftain 400.0   1 Twinshot 331.5   2 Piledriver 300.0   3 Warchief 270.0
-4 Stingscourger 200.0   5 Pashalik 200.0   6 Krenko 191.2   7 Mogg 190.0
-8 Siege-Gang 146.3  (value 510.0 x disc 0.287, t=2)        9 Muxus 109.7
+reserve at turn=  1   2   3   4   5   6        reserve at T4, mana_next=  2   3   4   5
+gi101 (d3/d5)    T6  T6  T6  T5  T6  T6        gi101 (d3/d5)             T6  T6  T5  T6
 ```
 
-Siege-Gang is rank 8, so the axis needs width 9. Measured, `MTG_TUTOR_WIDTH` with the reserve off:
+It binds at **turn 4, mana_next 4** and nowhere else. T4 is ranked *twice*, because the plan
+enumerator evaluates the Matron both before and after the turn's land drop:
+
+```
+T4 G=1 opp=16 untapped=3 next=4   (3 lands, land STILL IN HAND)   Siege-Gang rank 8   OUTSIDE W=6
+T4 G=1 opp=16 untapped=4 next=5   (4 lands, land played)          Siege-Gang rank 4   inside
+```
+
+`mana_next = CountLandsInPlay + 1` assumes this turn's land drop is already spent. On the pre-land
+copy it is one short, so a `{3}{R}{R}` bomb prices `t=2` (disc 0.287) instead of `t=1` (disc 0.637) —
+and the enumerator binds on that copy. Rank 8 there is also exactly why the width threshold is W=9;
+`MTG_TUTOR_WIDTH` 7 and 8 add only Krenko and Mogg War Marshal and change nothing:
 
 ```
 W=6 T6   W=7 T6   W=8 T6   W=9 T5   W=10..13 T5      (d3 and d5, budgets 0/20/80/320/2000)
 ```
 
-W=7 and W=8 only add Krenko and Mogg and change nothing — the flip lands exactly on Siege-Gang. This
-is causal, not tie-break churn: it is stable at every depth and budget tried.
+Stable at every depth and budget, so it is causal rather than tie-break churn.
 
-### Why the in-hand-Lackey hypothesis was inert
+### The sharper fix is right about the diagnosis and measurably WRONG in practice
 
-Round 11 guessed the Lackey was in hand at the fetch and unpriced. It is not in hand: **it is DRAWN ON
-T4**, after the T2 decision, and at the deciding state it is still in the library. No amount of
-hand/board scanning in `turns_to_deploy` can see it, which is exactly why that experiment measured
-0.0 with the flag on and off.
+Round 11 left an open question: "the sharper fix may be to the projection rather than the window."
+It is now implemented (`MTG_GOBLIN_PENDING_LAND`: credit the pending land drop in `mana_next` when the
+drop is unused and a land is in hand). It **does** recover gi101 on its own with the reserve off — the
+diagnosis is correct. It also loses games everywhere else:
 
-That sharpens `DISCOUNT-AS-VETO`: the discount is *correct* on the information it has (a `{3}{R}{R}`
-bomb genuinely is two turns of mana away). The defect is that a fixed window promotes a
-visible-information estimate into a hard veto over a **search that simulates the draw and knows
-better**. The heuristic is gating the better-informed process.
+```
+                                       gi101   HELD-OUT (8000 searched)   d0 (12000)
+reserve=2, PENDING_LAND=0 (SHIPPED)      T5           0.0  (baseline)        0.0
+reserve=0, PENDING_LAND=0                T6           0.0                    0.0
+reserve=0, PENDING_LAND=1                T5          +7.0  (0 better/7 worse) 0.0
+reserve=2, PENDING_LAND=1                T5          +9.0  (0 better/9 worse) 0.0
+```
+
+Never better, 7-9 games worse. The likely reason is calibration: the discount curve (0.85 at `t=1`,
+then 0.45/step) was fitted **against** this pessimistic `mana_next`, so the bias is already priced in.
+Crediting the pending drop moves every expensive bomb from `t=2` to `t=1` at every pre-land-drop state
+simultaneously, re-tuning all of the thresholds the curve was fitted to. Making it pay would mean
+refitting the curve with it, not dropping it in. Rejected, kept default-off with its number.
+
+The general lesson, twice over in one round: **a locally-correct fix to one input of a calibrated
+heuristic can be globally worse, because the calibration absorbed the error.**
 
 ### The reserve does not do what its name says — and the bug is load-bearing
 

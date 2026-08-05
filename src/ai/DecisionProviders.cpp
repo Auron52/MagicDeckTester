@@ -3972,7 +3972,41 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
                                        + entering_fodder);
     const int untapped_mana = AvailableManaPool(s).Total();               // real mana this turn (no Skirk fudge)
     const int mana_now  = untapped_mana + skirk_ramp;
-    const int mana_next = CountLandsInPlay(s, controller) + 1 + skirk_ramp;   // + one land drop next turn
+    // mana_next assumed THIS turn's land drop was already spent. It routinely is NOT: the plan
+    // enumerator ranks a tutor at the pre-land-drop state, so a turn where the land is still to come
+    // reads one mana short next turn, and a 5-drop prices as t=2 ("genuinely stuck", disc 0.287)
+    // instead of t=1 (disc 0.637). Same class of bug as the Skirk self-sac miscount above, and the
+    // same symptom -- gi101 is the case: at the T4 Matron the ranking is computed twice, once with
+    // 3 lands (mana_next=4, Siege-Gang rank 8, OUTSIDE a 6-wide window) and once with 4 (mana_next=5,
+    // rank 4, inside). The 3-land copy is the one the enumerator binds on, so a bomb that IS castable
+    // next turn gets vetoed off the axis. Gated diagnostics MTG_GOBLIN_RESERVE_TURN /
+    // MTG_GOBLIN_RESERVE_NEXT pinned it to exactly that state (turn 4, mana_next 4).
+    // REJECTED, kept default-off with its number. Correcting the projection is measurably WORSE:
+    //
+    //                                        gi101   HELD-OUT (8000 searched)
+    //   reserve=2, PENDING_LAND=0 (shipped)   T5        0.0  (baseline)
+    //   reserve=0, PENDING_LAND=0             T6        0.0
+    //   reserve=0, PENDING_LAND=1             T5       +7.0  (0 better / 7 worse)
+    //   reserve=2, PENDING_LAND=1             T5       +9.0  (0 better / 9 worse)
+    //
+    // It fixes gi101 on its own -- the diagnosis is right -- but never helps anywhere else and costs
+    // 7-9 games. The likely reason: the discount CURVE (0.85 at t=1, then 0.45/step) was calibrated
+    // against this pessimistic mana_next, so the bias is already priced in. Crediting the pending
+    // drop moves EVERY expensive bomb from t=2 to t=1 at every pre-land-drop state at once, which
+    // re-tunes all of the thresholds the curve was fitted to. Making this pay would mean refitting
+    // the curve with it, not dropping it in. Same lesson as the reserve eviction below.
+    // MTG_GOBLIN_PENDING_LAND=1 enables.
+    static const bool pending_land = EnvOn("MTG_GOBLIN_PENDING_LAND", false);
+    bool land_drop_pending = false;
+    if (pending_land && s.players[controller].lands_played_this_turn < s.players[controller].LandDropsAvailable())
+    {
+        for (const Card& h : s.players[controller].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+            if (hd != nullptr && hd->card.IsLand()) { land_drop_pending = true; break; }
+        }
+    }
+    const int mana_next = CountLandsInPlay(s, controller) + 1 + (land_drop_pending ? 1 : 0) + skirk_ramp;
     const int opp_life  = s.players[1 - controller].life;
     // Can a fetched body attack the turn it lands? A Goblin lord granting haste already on the
     // battlefield, or one in hand we can afford now, is the difference between an attack-triggered
@@ -4893,13 +4927,25 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     //                                Tree City's {2},{T} "add {R} per Goblin" pays 4 sac activations
     //                                for exactly 8                                          -> T5
     //
-    // So the search has to see the T4 Siege-Gang fetch to value the T2 Mountain, and Siege-Gang sits
-    // at natural rank 8 in that lookahead -- hence the exact W=9 threshold (W=7 and W=8, which add
-    // only Krenko and Mogg War Marshal, change nothing). The Lackey that carries the line is DRAWN ON
-    // T4: at the deciding state it is in neither hand nor play but still in the library, which is why
-    // teaching turns_to_deploy to count an in-hand Lackey was inert. The discount is therefore doing
-    // its job on the information it has; the defect is purely that a fixed window promotes that
-    // estimate to a VETO over a search that simulates the draw and knows better.
+    // THE BINDING STATE IS THE PRE-LAND-DROP T4 NODE. The lookahead does re-rank at every projected
+    // turn, so an earlier draft of this note blaming a T3 state was wrong -- the rank-8 match there
+    // was a coincidence. Gating the reserve by turn (MTG_GOBLIN_RESERVE_TURN) recovers gi101 ONLY at
+    // turn 4, and gating additionally by mana_next (MTG_GOBLIN_RESERVE_NEXT) ONLY at mana_next=4.
+    // T4 is ranked TWICE, because the enumerator evaluates the cast before and after the land drop:
+    //
+    //   T4 G=1 opp=16 untapped=3 next=4 (3 lands, land STILL IN HAND)  Siege-Gang rank 8  OUTSIDE
+    //   T4 G=1 opp=16 untapped=4 next=5 (4 lands, land played)         Siege-Gang rank 4  inside
+    //
+    // and it binds on the pre-land copy, where mana_next is one short so a {3}{R}{R} bomb prices t=2
+    // instead of t=1. Rank 8 is also why the width threshold is exactly W=9 (W=7 and W=8 add only
+    // Krenko and Mogg War Marshal and change nothing). Crediting that pending drop is the obvious
+    // sharper fix and it DOES recover gi101 with the reserve off -- but it measures +7 to +9 held-out,
+    // so it is rejected; see the MTG_GOBLIN_PENDING_LAND table at the mana_next definition.
+    //
+    // The Lackey that carries the line is DRAWN ON T4, so at the deciding state it is in neither hand
+    // nor play but still in the library -- which is why teaching turns_to_deploy to count an in-hand
+    // Lackey measured inert. The discount is doing its job on the information it has; the defect is
+    // that a fixed window promotes that estimate to a VETO over a search that simulates the draw.
     //
     // THE EVICTION BELOW IS DELIBERATE AND MEASURED -- do not "fix" it. Inserting the k-th rescue at
     // W-1-k shifts the (k-1)-th rescue out of the window, so reserve=N really rescues raw-value ranks
@@ -4919,7 +4965,15 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // zero-cost fix to a diagnosed mechanism, NOT as a measured win.
     // MTG_GOBLIN_VALUE_RESERVE=0 disables.
     static const int value_reserve = EnvInt("MTG_GOBLIN_VALUE_RESERVE", 2);
-    if (value_reserve > 0 && static_cast<int>(cands.size()) > TutorSearchWidth())
+    // DIAGNOSTIC: apply the reserve only at states whose turn number is N (0 = every turn, default).
+    // Pins WHICH projected turn's window a width/reserve effect actually binds at -- the ranking is a
+    // pure function of state, so a lookahead re-ranks at every projected turn and the deciding state
+    // is not necessarily the one being played.
+    static const int reserve_turn = EnvInt("MTG_GOBLIN_RESERVE_TURN", 0);
+    static const int reserve_next = EnvInt("MTG_GOBLIN_RESERVE_NEXT", 0);
+    if (value_reserve > 0 && (reserve_turn == 0 || s.turn_number == reserve_turn)
+        && (reserve_next == 0 || mana_next == reserve_next)
+        && static_cast<int>(cands.size()) > TutorSearchWidth())
     {
         const int W = TutorSearchWidth();
         auto raw_value = [&](const std::string& n) -> double
