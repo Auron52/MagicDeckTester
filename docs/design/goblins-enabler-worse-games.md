@@ -930,3 +930,98 @@ evaluates what the ranking offers it and discards the bad ones; the ranking only
 of that (Twinshot losing a tie-break). This is the opposite case — a genuinely weak card that costs
 nothing by being present. Worth knowing before "obviously bad card ranked too high" is treated as a
 defect again. Lever kept at `MTG_GOBLIN_DOMINATED_BURN`, default 0.
+
+## ROUND 10 (2026-08-05): crowding — "the only task of the heuristic is to figure out 5 to cut"
+
+The framing shift that drove this round (user):
+
+> "With W=6 we should almost always be able to include the best goblins for each role ... at 11
+> goblins [that] is a complete list of cards you might want. So then, the only task of the heuristic
+> is to figure out 5 to cut ... maybe than a ranking what we need is to group these by role and drop
+> the worse one on the current board ... keep cards that are significantly different in utility and
+> drop ones that are similar, but worse in a situation."
+
+### First: the slot IS worth something — an earlier conclusion here was wrong
+
+Round 9 concluded that a weak card inside the window costs nothing, on the evidence that demoting
+Goblin Chainwhirler changed zero searched games. That inference was wrong, and the user pushed back on
+it. Measuring the width directly:
+
+```
+W=4  +26.0      W=5  +11.0      W=6  0.0 (shipped)     held-out searched
+```
+
+**The marginal slot is worth ~11 turn-units.** Chainwhirler measured 0 only because the rank-7 card
+that replaced it was equally unwanted in those particular states — an absence of evidence, not a free
+slot. (The W=4/W=5 arms in that round were also uninformative by construction: Chainwhirler sits at
+index 5, so at W<=5 it is already excluded and both arms are trivially identical.)
+
+Search *cost* is not the mechanism, though: rollout calls are within 0.3% with and without the rule
+(2.984M vs 2.993M), because the window is a fixed six slots and demoting one card just lets another
+in. The cost is purely opportunity cost on a scarce slot.
+
+### Strict dominance: Goblin Chieftain vs Goblin King (ADOPTED, the big win)
+
+Applying "similar but worse" to the roster finds a **provable** case, and it is not a tail card:
+
+| | cost | body | effect |
+|---|---|---|---|
+| Goblin Chieftain | `{1}{R}{R}` | 2/2 | +1/+1 to Goblins, **grants haste**, has haste |
+| Goblin King | `{1}{R}{R}` | 2/2 | +1/+1 to Goblins, mountainwalk |
+
+Identical cost, identical body, identical buff. King's sole differentiator is mountainwalk, which
+`cards.json` itself flags "INERT in goldfishing". King is a **2-of that ranks 1st or 2nd in nearly
+every dump**, so the pair was burning two of six slots to do one card's job — crowding at the TOP of
+the window, not the bottom.
+
+Implemented by rule, not name: B is dropped when some other fetchable A costs no more, has a body no
+smaller, and is >= on every goldfish-relevant capability with a strict edge somewhere. Capabilities are
+compared as a vector, so it survives a decklist change, and it is computed over the LIBRARY — once the
+last Chieftain is drawn, King is no longer dominated and comes back ("if we have removed all of the
+Goblin Chieftains it might make sense in some cases").
+
+### Role cut: Hordemaster vs Piledriver (ADOPTED) — and the tie-break axis matters
+
+> "Rundvelt Hordemaster and Piledriver. We should be able to work out which is better on the current
+> board and drop the other ... an early or hasty piledriver will inevitably be better. The lord wins
+> when the damage add from the turn it is played will be significant."
+
+That rule is already in the round-7 scores, which is why this is a cut and not new judgement:
+Piledriver is `2*crowd*BODY*realized` with realized = 1.0 under haste, 0.0 when the game ends this
+turn, and 0.5 otherwise — algebraically identical to a +1/+1 lord's `1*crowd*BODY`. They tie at parity
+and every condition the user named breaks the tie the way they described.
+
+**The first implementation failed, and the failure was diagnostic** (user: "if our role-cut fails that
+is an indicator we did it wrong. We should evaluate the worse cases"). It cut by TOTAL score, which
+sent `s3003 gi290` from T5 to T6. At that T4 a haste lord is out, so Piledriver should win and does on
+board value (700 vs 500) — but Hordemaster's total is 800, because it collects +300 of enabler/lord-
+amplification credit, which measures how much sooner a stuck bomb in HAND arrives. Letting that settle
+a board duel cut the right card. Comparing on `value_of` alone fixes it.
+
+### The enabler cut fails, in every form tested (NOT adopted)
+
+Cutting Lackey vs Skirk measured **-3.0** held-out against **-9.0** for not cutting them. Fixing the
+tie-break to use the enabler credit (the axis that defines the role) did not help, and neither did
+"sometimes we can drop both" (drop the whole role when its best member contributes nothing). The
+reason is measurable: **in 61% of sampled states BOTH enablers score enable=0**, because nothing in
+hand is stuck — so the duel has no signal and the cut discards a card by coin flip.
+
+### Result
+
+```
+arm                                        regression   HELD-OUT searched   d0
+off                                            0.0            0.0            0.0
+dominance (King out)                           0.0           -7.0          -24.0
+dominance + role cut, total-score tie-break    +1.0           -6.0          -24.0
+dominance + role cut, board-value tie-break    0.0            -9.0          -24.0   <- SHIPPED
+  ... + enabler cut (role_cut=2)               +2.0           -3.0          -24.0
+  ... + drop-both refinement (role_cut=3)      +2.0           -3.0          -24.0
+  ... + Chainwhirler out                       0.0            -9.0          +64.0
+```
+
+**-9.0 held-out searched with 9 games better and ZERO worse**, plus d0 -24.0 — improving on both
+tiers at once, which nothing else this session managed.
+
+Chainwhirler was retested on top of all the other prunes, since a single prune might not be enough to
+let a different card reach the window ("it might need multiple prunes"). It still adds exactly nothing
+(-9.0 either way) and still costs the one d0 game. Three prunes deep, its slot buys nothing.

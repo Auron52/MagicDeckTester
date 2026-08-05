@@ -1,3 +1,5 @@
+#include <array>
+#include <map>
 #include "../core/EnvFlags.h"
 #include <cstdlib>
 #include <cctype>
@@ -4006,6 +4008,81 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     const int per_swing   = std::max(1, ready_atk + sick_goblin_power);
     const int swings_left = std::max(1, std::min(6, (opp_life + per_swing - 1) / per_swing));
 
+    // --- STRICT DOMINANCE: drop candidates that are "similar but worse" -----------------------
+    // (user, 2026-08-05) "keep cards that are significantly different in utility and drop ones that
+    // are similar, but worse in a situation. With W=6, this should be pretty accurate." The tutor
+    // fetches ONE card and the window holds six, so two cards that do the same job only differently
+    // -badly are burning a slot that measurably matters: held-out, W=5 costs +11.0 turn-units against
+    // W=6 and W=4 costs +26.0, so the marginal slot is worth ~11 turn-units.
+    //
+    // This is the PROVABLE half of that idea -- no heuristics, no card names. B is dropped when some
+    // other fetchable A costs no more, has a body no smaller, and is at least as good on EVERY
+    // goldfish-relevant capability while being strictly better on one. Goblin King is the case in
+    // this deck: identical {1}{R}{R} and 2/2 and +1/+1-to-Goblins as Goblin Chieftain, whose only
+    // difference is that it ALSO grants haste and has haste itself. King's one differentiator is
+    // mountainwalk, which cards.json itself flags "INERT in goldfishing (evasion vs a passive
+    // non-blocking opponent)". And King is a 2-of that ranks 1st or 2nd in nearly every dump, so the
+    // pair burns two of six slots to do one card's job.
+    //
+    // Capabilities are compared as a vector so the rule survives a decklist change; a card with any
+    // capability the other lacks is "significantly different" and both survive.
+    // MTG_GOBLIN_DOMINANCE=0 disables it for the A/B.
+    static const bool dominance_on = EnvOn("MTG_GOBLIN_DOMINANCE", true);
+    auto caps_of = [](const CardParams& q)
+    {
+        return std::array<int, 14>{
+            q.power_bonus, q.tough_bonus, q.grants_haste ? 1 : 0,
+            q.reduces_spell_subtype.empty() ? 0 : 1,
+            q.attack_pump_power_per_other_matching, q.etb_reveal_count, q.etb_self_creates_tokens,
+            std::max({ q.etb_damage_any, q.etb_damage_each_opponent, q.channel_damage }),
+            q.sac_outlet_add_mana_amount, q.sac_outlet_damage,
+            q.combat_damage_puts_subtype_from_hand.empty() ? 0 : 1,
+            q.tap_creates_tokens_per_controlled_subtype.empty() ? 0 : 1,
+            (q.dies_trigger_impulse_exile || q.dies_trigger_damage
+             || q.dies_trigger_creates_tokens) ? 1 : 0,
+            (q.tutor_to_hand || q.tutor_to_top) ? 1 : 0 };
+    };
+    std::set<std::string> dominated_out;
+    if (dominance_on)
+    {
+        auto lookup = [&](const std::string& n) -> const CardDefinition*
+        {
+            for (const Card& lc : s.players[controller].library)
+            { if (lc.m_name == n) { return CardDatabase::Instance().LookupCached(lc); } }
+            return nullptr;
+        };
+        for (const std::string& bn : cands)
+        {
+            const CardDefinition* bd = lookup(bn);
+            if (!bd) { continue; }
+            for (const std::string& an : cands)
+            {
+                if (an == bn) { continue; }
+                const CardDefinition* ad = lookup(an);
+                if (!ad) { continue; }
+                if (ad->card.m_mana_cost.ManaValue() > bd->card.m_mana_cost.ManaValue()) { continue; }
+                if (ad->card.m_power.value_or(0)     < bd->card.m_power.value_or(0))     { continue; }
+                if (ad->card.m_toughness.value_or(0) < bd->card.m_toughness.value_or(0)) { continue; }
+                const auto ca = caps_of(ad->params), cb = caps_of(bd->params);
+                bool ge = true, gt = false;
+                for (std::size_t i = 0; i < ca.size(); ++i)
+                {
+                    if (ca[i] < cb[i]) { ge = false; break; }
+                    if (ca[i] > cb[i]) { gt = true; }
+                }
+                // A tie on every axis would drop one of two identical names arbitrarily; require a
+                // strict edge somewhere, so genuine duplicates both stay.
+                if (ge && gt) { dominated_out.insert(bn); break; }
+            }
+        }
+        if (!dominated_out.empty() && dominated_out.size() < cands.size())
+        {
+            cands.erase(std::remove_if(cands.begin(), cands.end(),
+                        [&](const std::string& n) { return dominated_out.count(n) > 0; }),
+                        cands.end());
+        }
+    }
+
     // --- per-card value (board impact, incl. payoffs EvalCard misses) --------------------------
     constexpr double BODY = 100.0;   // per power (a damage-equivalent, matching EvalCard's DMG)
     // Best face damage still FETCHABLE, for the dominated-burn rule in value_of below. A tutor takes
@@ -4665,6 +4742,108 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
 
     std::stable_sort(cands.begin(), cands.end(),
                      [&](const std::string& a, const std::string& b) { return score_of(a) > score_of(b); });
+    // --- ROLE CUT: one card per role, best-on-this-board wins ---------------------------------
+    // (user, 2026-08-05) "Rundvelt Hordemaster and Piledriver. We should be able to work out which
+    // is better on the current board and drop the other." Strict dominance above only removes cards
+    // that are worse in EVERY state; this removes the one that is worse in THIS state, which is the
+    // other half of "keep cards that are significantly different in utility and drop ones that are
+    // similar, but worse in a situation".
+    //
+    // The decision rule is already in the scores, which is why this is a cut and not new judgement:
+    // "an early or hasty piledriver will inevitably be better. The lord wins when the damage add
+    // from the turn it is played will be significant. Otherwise the piledriver's +2 effect will
+    // easily win out." Piledriver is 2*crowd*BODY*realized where realized is 1.0 with haste
+    // (hasty -> inevitably better), falls to 0.0 when the game ends this turn (the lord's immediate
+    // damage is all that counts), and sits at 0.5 otherwise -- which is algebraically identical to
+    // a +1/+1 lord's 1*crowd*BODY. So at parity they TIE, and every condition the user named breaks
+    // the tie the way they described. Taking the higher score is exactly "which is better on the
+    // current board".
+    //
+    // Roles are read off capabilities, not names. Haste and cost-reduction are treated as
+    // genuinely different utility and never cut against each other -- Goblin Chieftain must survive
+    // ("a haste lord is very strong in a lot of different situations") and so must Goblin Warchief,
+    // even though all three carry a lord effect. Toughness is deliberately ignored in this grouping:
+    // against a goldfish nothing blocks, so it is not a differentiator.
+    // MTG_GOBLIN_ROLE_CUT: 0 = off, 1 = crowd-scaling payoffs, 2 = also the deploy enablers.
+    static const int role_cut = EnvInt("MTG_GOBLIN_ROLE_CUT", 1);
+    if (role_cut > 0 && cands.size() > 1)
+    {
+        auto role_of = [&](const std::string& n) -> int
+        {
+            for (const Card& lc : s.players[controller].library)
+            {
+                if (lc.m_name != n) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+                if (!d) { return 0; }
+                const CardParams& q = d->params;
+                if (q.grants_haste || !q.reduces_spell_subtype.empty()) { return 0; }  // unique utility
+                if (q.power_bonus > 0 || q.attack_pump_power_per_other_matching > 0) { return 1; }
+                if (role_cut >= 2
+                    && (q.sac_outlet_add_mana_amount > 0
+                        || !q.combat_damage_puts_subtype_from_hand.empty())) { return 2; }
+                return 0;
+            }
+            return 0;
+        };
+        // Pick the survivor of each role on BOARD CONTRIBUTION (value_of), not on the full score.
+        // Comparing totals was wrong and s3003 gi290 is the proof: at that T4 a haste lord is out
+        // (haste=1), so by the user's rule "an early or hasty piledriver will inevitably be better"
+        // -- and on board value it is, 700 to Rundvelt Hordemaster's 500. But Hordemaster's TOTAL is
+        // 800, because it collects +300 of enabler/lord-amplification credit, which is about how
+        // much sooner and harder a stuck bomb in HAND arrives. That is a different axis entirely, so
+        // letting it settle a role duel cut the right card: the game went T5 -> T6.
+        // ... and compare each role on the axis that DEFINES that role. Board value is right for the
+        // crowd payoffs, whose job is damage, and useless for the enablers: Goblin Lackey and Skirk
+        // Prospector are both 1/1 bodies worth exactly 100, so board value cannot tell them apart and
+        // the duel became a coin flip (role_cut=2 measured -3.0 held-out against role_cut=1's -9.0).
+        // What separates them is precisely the enabler credit -- Lackey scales with how far out of
+        // reach the stuck card is, Skirk with the fodder available to eat -- which is the user's
+        // "Lackey better on empty board, Skirk Prospector when there is significant fodder".
+        auto role_metric = [&](const std::string& n, int role) -> double
+        {
+            for (const Card& lc : s.players[controller].library)
+            {
+                if (lc.m_name != n) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+                if (role == 2) { return enabler_of(d); }
+                return value_of(d, d ? d->card : lc);
+            }
+            return 0.0;
+        };
+        std::map<int, std::string> role_keeper;      // role -> the name that survives it
+        for (const std::string& n : cands)
+        {
+            const int r = role_of(n);
+            if (r == 0) { continue; }
+            auto it = role_keeper.find(r);
+            if (it == role_keeper.end() || role_metric(n, r) > role_metric(it->second, r))
+            { role_keeper[r] = n; }
+        }
+        // "Sometimes we can drop both" (user). An enabler with nothing to enable is just a 1/1: in
+        // 61% of sampled states BOTH Goblin Lackey and Skirk Prospector score enable=0, because
+        // nothing in hand is stuck, and there the duel has no signal at all -- which is why cutting
+        // to one of them measured WORSE (-3.0 held-out vs -9.0 without the enabler cut). Mode 3
+        // drops the whole role when its best member is contributing nothing, instead of keeping one
+        // of two identical 1/1 bodies by coin flip.
+        std::set<int> role_dropped;
+        if (role_cut >= 3)
+        {
+            for (const auto& kv : role_keeper)
+            {
+                if (kv.first == 2 && role_metric(kv.second, 2) <= 0.0) { role_dropped.insert(kv.first); }
+            }
+        }
+        std::vector<std::string> kept;
+        kept.reserve(cands.size());
+        for (const std::string& n : cands)
+        {
+            const int r = role_of(n);
+            if (r != 0 && role_dropped.count(r) > 0) { continue; }   // nothing to enable -> drop all
+            if (r != 0 && role_keeper[r] != n) { continue; }         // a better one of this role won
+            kept.push_back(n);
+        }
+        if (!kept.empty()) { cands.swap(kept); }
+    }
     if (dump)
     {
         static thread_local std::set<uint64_t> s_seen;
