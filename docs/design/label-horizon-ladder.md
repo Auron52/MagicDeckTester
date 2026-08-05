@@ -23,8 +23,12 @@ out **later than the truth**, i.e. systematically pessimistic, with no signal th
 
 ## The fix
 
-Ladder the horizon the way `FullSearchLine` does. Pass `dd = 1, 2, …` searches `dd` turns with
-cutoff `turn + dd`; a candidate's win turn is recorded at the **first** pass that finds one. Every
+Ladder the horizon the way `FullSearchLine` does. Pass `dd = 0, 1, 2, …` searches `dd` turns with
+cutoff `turn + dd`; a candidate's win turn is recorded at the **first** pass that finds one. Pass 0
+is `FSLineTail(s, 0)`, which with `second_main` enumerates *this* turn's post-combat main and can
+kill there — starting at 1 instead silently labelled every `turn == max_turns` position a loss
+(fixed in `4814b13`; it survived the first round of measurement because at `depth >= 2` pass 1
+covers the second main anyway, so only the final turn of the one deck reaching turn 8 was hit). Every
 node in a pass then shares one horizon edge, so the shortcut's premise holds and the first win found
 is the minimum. Shallower passes are exponentially cheaper than the deepest, so the ladder's overhead
 is the usual iterative-deepening constant, and the per-pass cutoff is a free branch-and-bound the
@@ -101,15 +105,37 @@ correctness with. This is the same effect the regeneration queue originally diag
 **The no-win memo is therefore not optional here** — it is what pays for the ladder, by stopping
 every candidate re-proving the refutations its siblings already proved. Hence
 `MTG_LABEL_NOWIN_CACHE` (default ON) forces it inside `EnumerateEarliestWins` even though the
-global `MTG_FS_NOWIN_CACHE` stays off for play. With it on, correct labels cost **5 % more
-wall-clock in total than wrong ones** — but that total is dominated by Dragonstorm and
-treasure_hunt, and the per-deck spread is 11× worse to 2.6× better, so size a regeneration per
-deck and never from the aggregate.
+global `MTG_FS_NOWIN_CACHE` stays off for play. It is also what makes Hinata labellable at all: the
+pre-fix arm stalled 65 minutes on a single position (seed 555005 turn 2) and never finished, while
+the memo arm completes the same 8 games in 17 s.
 
-**treasure_hunt getting 3.6× *faster* is a lead, not a curiosity.** It is one of the three decks
-(with slivers_vial and Knights) that produced zero rows in 34 hours, and the ladder is exactly the
-kind of change that would unblock it: a deck whose positions have no early win pays the old path a
-full deep search per candidate to discover that, where the ladder refutes cheaply and stops.
+**treasure_hunt getting 1.7× *faster* is a lead, not a curiosity.** It is one of the three decks
+(with slivers_vial and Knights) that produced zero rows in 34 hours — and it is now among the
+cheapest to label, which is worth retesting at scale before assuming those decks are still blocked.
+
+### What predicts whether a deck gets faster or slower
+
+**Not the share of unwinnable positions.** That was the intuitive guess and it is measurably wrong:
+unwon is 0.0 % on treasure_hunt, Goblins, burn and Knights alike, and mean labels sit at 4.3–5.0 for
+all of them. The two decks at the extremes are identical on that axis.
+
+The `-DMTG_PROFILE=ON` counters (deterministic, so immune to the machine contention that muddied the
+wall-clock) give the real answer:
+
+| deck | `EnumeratePlans` calls, old → new |
+|---|---|
+| Goblins | 48,013 → 355,462 (**7.4× more work**) |
+| treasure_hunt | 3,173,936 → 351,006 (**9.0× less work**) |
+
+The old path's cost was *how long until move ordering stumbles into a win*. Goblins is aggro, so
+`MoveOrderPlans` puts lethal-looking plans first and it hit a win almost immediately — 48 k
+enumerations for 4 games. treasure_hunt wins through lands and card draw, which does not look lethal
+to the ordering, so it thrashed through 3.2 M enumerations before one surfaced. The ladder replaces
+"search until you trip over a win" with "prove no earlier win exists", which is dear where the
+ordering is good and cheap where it is bad.
+
+So the predictor is **move-ordering quality on that deck**, and the corollary is the useful part: the
+ladder costs most exactly where the old path was already cheap, and pays exactly where it was not.
 
 ## This also closes the MTG_VALUE_LABEL_BNB anomaly
 
