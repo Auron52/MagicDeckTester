@@ -5082,6 +5082,24 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     static const int force_rank = EnvInt("MTG_TUTOR_FORCE_RANK", 0);
     if (force_rank > 0 && static_cast<std::size_t>(force_rank) <= cands.size())
     { return { cands[force_rank - 1] }; }
+    // DIAGNOSTIC (MTG_TUTOR_FORCE_CARD="<exact card name>"; unset = off): same collapse, keyed by
+    // NAME rather than rank. FORCE_RANK's ground truth is unusable the moment the ranking changes --
+    // rank 4 is a different card before and after -- so a table built with it cannot be reused to
+    // score a NEW model. Keyed by name it is model-independent: run once per candidate card, record
+    // the real win turn, and the resulting table scores any ranking function offline (top-1 accuracy,
+    // and whether the true best is inside the window) without re-running a single game.
+    // Returns empty (a whiff) when the named card is not among the candidates, so the caller still
+    // sees a legal, deterministic decision instead of silently falling back to the heuristic pick.
+    static const std::string force_card = []() -> std::string
+    {
+        const char* v = std::getenv("MTG_TUTOR_FORCE_CARD");
+        return v == nullptr ? std::string{} : std::string(v);
+    }();
+    if (!force_card.empty())
+    {
+        for (const std::string& c : cands) { if (c == force_card) { return { c }; } }
+        return {};
+    }
     return cands;
 }
 

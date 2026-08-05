@@ -1351,3 +1351,57 @@ Making the projection honest would mean re-deriving the discount from **tempo** 
 turns-to-cast, and re-fitting it as a whole. That is a real project, not a constant sweep, and it is
 the open item this round leaves. The flag stays in the tree default-off so the defect is one env var
 away from being reproduced.
+
+## ROUND 14 (2026-08-05): the tempo rewrite is UNNECESSARY — the ranking is already 99.1% optimal
+
+Round 13 left "re-derive the discount from tempo" as the open project. It was attempted, and the
+first thing built to justify it killed it instead. **Recording this so nobody starts it again.**
+
+### A name-keyed truth table (the reusable part)
+
+`MTG_TUTOR_FORCE_CARD="<name>"` collapses the tutor to one card BY NAME, and
+`test/goblins_tutor_truth_table.py` builds a table of the real win turn of fetching each candidate.
+The existing `goblins_tutor_truth.py` probes by RANK, so its table dies the moment the ranking
+changes — rank 4 is a different card before and after. Keyed by name it is model-independent: build
+once, then score any model with ONE run per game instead of one per card.
+
+Built at `--budget-ms 0` (unbounded), so every number is deterministic and load-independent. That
+matters: this session twice had a wall-clock-churn artifact masquerade as signal. Scan of 1,600 games
+(seeds 4004/5005/6006/7007) found **429 with a searched tutor fetch**; 6,864 (game, card) probes.
+
+Regret is scored FORCED-vs-FORCED. Forcing collapses the axis, so a forced run explores fewer plans
+and the same card can win a turn later under force; comparing a model's free run against a forced
+oracle produces negative "regret" that is pure instrument artifact.
+
+### The result
+
+```
+model                     total regret   optimal picks
+SHIPPED                        +4         425/429 = 99.1%
+SHIPPED + postland             +6         423/429 = 98.6%
+TEMPO                          +7         414/421 = 98.3%
+TEMPO + postland               +8         413/421 = 98.1%
+```
+
+**The shipped ranking is 99.1% optimal, and the entire headroom for a perfect oracle is 4 turns
+across 429 tutor games — 0.009 turns/game.** There is nothing to win. Every lever shipped this
+session moved single-digit turn-units over 8,000 games; a total theoretical ceiling of 4 turns is
+below the noise floor of the suite that would have to validate it.
+
+The tempo model (damage before the projected kill: `once + per_team*(H-t) + per_body*(H-t-1)`, which
+DERIVES the hand-tuned Piledriver-vs-lord rule rather than encoding it) also **failed its own
+acceptance test**: it was supposed to get better as the projection got more honest, and instead
+degraded under `postland` in the same direction as the shipped model (+7 -> +8 vs +4 -> +6). Removed
+rather than kept default-off — the headroom number closes the whole area, not just this variant, so
+leaving a parallel scorer in a hot path would be clutter that invites someone to retry a dead lead.
+
+### What this retroactively explains
+
+The value reserve measured exactly 0.0 held-out. That was read as "the discount is usually right".
+It is stronger than that: the discount is right **99.1% of the time on the decision that matters**,
+so forcing bombs onto the axis was always going to be inert. Likewise the three rejected projection
+fixes were not narrowly unlucky — they were perturbing a component that is already very nearly
+optimal, where essentially every change is a downgrade.
+
+**The tutor ranking is closed.** Future Goblins work should look at decisions with actual headroom,
+not this one.
