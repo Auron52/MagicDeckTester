@@ -4999,6 +4999,42 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
                 if (board_next < opp_life && opp_life <= with_lord)
                 { sc += 5.0e5 + with_lord; }
             }
+            // NEXT-TURN LETHAL VIA THE FETCHED BURST (MTG_GOBLIN_BURST_CLOSER, default on under
+            // the resolve axis; =0 disables). The remaining cell of the closer matrix: face_burst
+            // covers the THIS-turn kill, lord_closer the next-turn kill via a lord's crowd -- this
+            // is the next-turn kill where the fetched card's own direct damage supplies what the
+            // board lacks. gi828/gi32 (overnight d3/d5): the deciding lookahead states have the
+            // whole board attacking next turn a couple short of lethal and Twinshot Sniper's ETB 2
+            // crosses -- but on raw value it ranks 7+, so the W=6 lookahead never sees the line and
+            // the root undervalues the Matron plan (gi828's W=6 arm never casts Matron at all).
+            // Projection mirrors lord_closer's: every body on board attacks next turn (sickness
+            // worn off); the burst is payable off NEXT turn's mana (ETB fires on cast, no haste
+            // needed; channel likewise); its own body swings only under an existing haste source.
+            // Siege-Gang's cast+sac path is deliberately omitted (mana_next >= 7 territory -- the
+            // this-turn face_burst already owns that). Same copies_in_hand gate as lord_closer
+            // (a copy in hand closes without spending the fetch), same 5e5 shelf (bigger projected
+            // total wins ties), same board-not-already-lethal gate (else the fetch isn't what
+            // crosses).
+            static const bool burst_closer = EnvOn("MTG_GOBLIN_BURST_CLOSER", TutorAxisResolveEnabled());
+            if (burst_closer && sc < 1.0e6 && d != nullptr && copies_in_hand(name) == 0)
+            {
+                const CardParams& bp = d->params;
+                int nburst = 0;
+                if (bp.channel_damage > 0 && bp.channel_cost
+                    && bp.channel_cost->ManaValue() <= mana_next)
+                { nburst = std::max(nburst, bp.channel_damage); }
+                const int etb_face2 = std::max(bp.etb_damage_any, bp.etb_damage_each_opponent);
+                if (etb_face2 > 0 && c.m_mana_cost.ManaValue() <= mana_next)
+                { nburst = std::max(nburst, etb_face2); }
+                if (nburst > 0)
+                {
+                    int total_next = ready_atk + sick_goblin_power + nburst;
+                    if (haste_source) { total_next += std::max(0, c.m_power.value_or(0)); }
+                    const int board_next2 = ready_atk + sick_goblin_power;
+                    if (board_next2 < opp_life && opp_life <= total_next)
+                    { sc += 5.0e5 + total_next; }
+                }
+            }
             // Mode 2 -- "drop it from consideration entirely": sort it below every real
             // candidate rather than removing it, so it stays legal if it is all that is left.
             if (dom_burn_mode == 2 && is_dominated_burn(d) && sc < 1.0e6) { return 1.0; }
