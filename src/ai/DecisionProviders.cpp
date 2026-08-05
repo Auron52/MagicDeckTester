@@ -3878,6 +3878,19 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     bool deathwatch_on = false;    // Rundvelt Hordemaster: every Goblin death impulse-digs a card
     int  vial_charge = -1;         // best untapped Aether Vial's charge (-1 = no Vial); puts a creature of MV==charge
     int  sick_goblin_power  = 0;   // power still locked up by summoning sickness (a haste grant frees it)
+    // HONEST BOARD POWER (MTG_GOBLIN_BOARD_LORD_POWER=0 restores the printed-power scan): count each
+    // body at its combat-site power -- EffectivePower (counters/temp) + on-board lord buffs -- exactly
+    // what the attack will deal. The printed-power read halves a lord-heavy board: gi496 (overnight
+    // d3/d5 s6006) had Hordemaster+Chieftain+fresh Matron read ready_atk=4 where the real swing was 8,
+    // so face_burst's this-turn-lethal test (8 swing + 2 burst >= 10 life) never fired and the
+    // T5-closing Twinshot Sniper sat at rank 7 -- one outside W=6, invisible to the window.
+    static const bool s_board_lord_power = EnvOn("MTG_GOBLIN_BOARD_LORD_POWER", true);
+    auto board_power = [&](const Permanent& p, const Card& pc) -> int
+    {
+        if (!s_board_lord_power) { return std::max(0, pc.m_power.value_or(0)); }
+        const int lp = ComputeLordBonus(pc, s.battlefield, controller, p.is_animated, &p).first;
+        return std::max(0, p.EffectivePower() + lp);
+    };
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != controller) { continue; }
@@ -3887,7 +3900,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         {
             ++goblins_controlled;
             if (!CanAttackFull(p, s.battlefield, controller))
-            { ++goblins_sick; sick_goblin_power += std::max(0, pc.m_power.value_or(0)); }
+            { ++goblins_sick; sick_goblin_power += board_power(p, pc); }
             // Sacrificeable BODIES, which is not the same set as "Goblins I control". A lord or a
             // scaling payoff is fodder only in extremis -- feeding a Chieftain to Skirk de-buffs
             // everything else on the board -- so it does not count toward the ramp. Same
@@ -3899,7 +3912,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             if (!scaling) { ++goblin_fodder; }
         }
         if (pc.IsCreature() && CanAttackFull(p, s.battlefield, controller))
-        { ready_atk += std::max(0, pc.m_power.value_or(0)); }   // any ready attacker (goldfish: connects)
+        { ready_atk += board_power(p, pc); }   // any ready attacker (goldfish: connects)
         if (!d) { continue; }
         if (!d->params.combat_damage_puts_subtype_from_hand.empty())      // Goblin Lackey
         {
