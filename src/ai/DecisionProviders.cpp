@@ -3844,7 +3844,15 @@ GoblinsProvider::TutorSearchWidth() const
     // rescue slots WITH the window (a provider-W=6 arm rescues into ranks 4-5, not 7-8).
     static const int ovr = EnvInt("MTG_GOBLIN_TUTOR_WIDTH", 0);
     if (ovr > 0) { return ovr; }
-    return TutorAxisResolveEnabled() ? 9 : 6;
+    // Back to 6 (2026-08-05): the 9-under-resolve patch existed because the winning fetches of six
+    // games ranked 7-9 -- all of them CLOSER reads the ranking was blind to. With the honest-swing
+    // reads (lord buffs + attack pump) and the burst-closer in, every one of those games takes the
+    // W=12 line at W=6, and the full W=6-vs-W=12 residual is noise classes only: budget churn
+    // (gi553/gi352, recover at 4x), clairvoyance (gi124, edge dies under MTG_SHUFFLE_SALT_SEARCH
+    // decoupling), and indirect width-leakage into NON-tutor decisions (gi714's T2 self-sac,
+    // gi200's mulligan bottoming) -- with same-magnitude games in W=6's favor (gi483/gi624/gi299).
+    // A width of 9 out of Matron's ~14 distinct names made the ranking nearly a no-op (user).
+    return 6;
 }
 
 std::vector<std::string>
