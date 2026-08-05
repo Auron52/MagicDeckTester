@@ -114,29 +114,22 @@ static const char* s_eval_rows_path = std::getenv("MTG_DUMP_EVAL_ROWS");
 // is the training target for the value model that replaces the search's horizon rollout with the
 // searched result. Shares the same K-reshuffle loop as the eval dump. See learned-d0-policy.md.
 static const char* s_value_rows_path = std::getenv("MTG_DUMP_VALUE_ROWS");
-// MTG_VALUE_LABEL_BNB: DEFAULT OFF; =1 enables. EXPERIMENT -- NOT ADOPTED, and it MUST NOT be turned
-// on for a production label run until the anomaly below is explained.
+// MTG_VALUE_LABEL_BNB: DEFAULT ON; =0 disables. The value row consumes ONLY report.earliest (the MIN
+// over candidates), so carrying the running incumbent as the cross-candidate cutoff is lossless for
+// that label while cutting the work -- the same bound FSLineTail already carries between siblings.
+// Under the horizon ladder it also stops the ladder at the first winning pass.
 //
-// The idea: the value row consumes ONLY report.earliest (the MIN over candidates), so carrying the
-// running incumbent as the cross-candidate cutoff should be lossless for that label while cutting
-// the work -- the same bound FSLineTail already carries between siblings.
+// This flag shipped OFF for a day because it measured as producing EARLIER labels than the unpruned
+// arm (6->4, 7->6.33) -- impossible for a sound search, so it was quarantined as evidence of a latent
+// bug rather than adopted. It was evidence of exactly that, but the bug was in the UNPRUNED arm: the
+// labeller called FSLineWin outside the ladder its first-win shortcut requires, so it returned *a*
+// win rather than *the earliest*. B&B's tight cutoff narrowed the horizon and accidentally restored
+// the premise, which is why the "pruned" arm looked better -- it was the less broken one.
 //
-// MEASURED 2026-08-04, and it does NOT behave that way:
-//   burn         12 games   38-41 s off  ->  51-54 s on   (~30% SLOWER), labels identical
-//   antilife      4 games   2.44 s  off  ->  2.60 s  on,  labels DIFFER on 2 of 15 rows
-//   dragonstorm   4 games   0.75 s  off  ->  128 s   on   (~170x SLOWER), labels DIFFER
-// The slowdown alone would be explicable (a tight cutoff turns cheap "find a win" queries into
-// expensive "prove no better win exists" ones, and a cutoff-aborted no-win is deliberately never
-// cached, so the shared memo stops paying off). The LABELS are the problem: with B&B the labels come
-// out LOWER -- an EARLIER win -- e.g. 6->4 and 7->6.33. Pruning cannot discover a win the unpruned
-// search missed, and `earliest` is a min whose first candidate runs with an identical cutoff and cold
-// caches in both arms, so this should be impossible. It is NOT budget degradation: it persists with
-// MTG_VALUE_LABEL_BUDGET_MS=0 (unlimited). That points at an order-dependence in the shared
-// FSLineCache/TranspositionTable across candidates -- i.e. a result that depends on what a previous
-// candidate happened to populate. If so it is a latent soundness bug in the labeller's caching that
-// this flag merely SURFACED, and it would mean some existing labels are wrong. Investigate before
-// using either arm in anger.
-static const bool  s_value_label_bnb = EnvOn("MTG_VALUE_LABEL_BNB");
+// With MTG_LABEL_LADDER (default ON) the premise holds in both arms and B&B is measured LOSSLESS:
+// identical labels on all 7 suite decks, 0.99x-1.72x faster (test/label_bnb_check.sh).
+// See docs/design/label-horizon-ladder.md.
+static const bool  s_value_label_bnb = EnvOn("MTG_VALUE_LABEL_BNB", true);
 static const int   s_eval_rows_k    = []{ const char* e = std::getenv("MTG_EVAL_ROWS_K");
                                           int v = (e && *e) ? std::atoi(e) : 8; return v < 1 ? 1 : v; }();
 // MTG_EVAL_ROWS_ROLLOUT: label candidates by a non-clairvoyant greedy d0 rollout instead of the

@@ -350,40 +350,44 @@ not a wide-board deck. Do not restart these decks on the current engine; they wi
 Three **offline-only** changes unblock them. All three are gated to the label path, so the in-play
 path stays byte-identical and **no ground-truth rebaseline is needed**:
 
-1. ~~**`earliest_only` branch-and-bound (the big one).**~~ **BUILT AND MEASURED 2026-08-04 —
-   REFUTED. Do not adopt; it is behind `MTG_VALUE_LABEL_BNB`, default OFF.**
+1. **`earliest_only` branch-and-bound (the big one).** **RESOLVED 2026-08-05 — ADOPTED,
+   `MTG_VALUE_LABEL_BNB` now default ON.** The 2026-08-04 refutation above was measuring a bug in
+   the arm it was being compared *against*; both halves of it are now explained.
 
-   The reasoning was sound on paper: a value row consumes only `report.earliest`, the MIN over
-   candidates, so carrying the incumbent as the cutoff should be lossless while cutting the work —
-   the same bound `FSLineTail` already carries between siblings. It is not what happens.
+   The **label difference was the real finding**, exactly as this section said, and the suspect named
+   here (shared-cache order-dependence) was **wrong**: `MTG_LABEL_COLD_CACHE=1` gives every candidate
+   a fresh `tt`/`lc` and leaves the disagreement completely intact. The actual cause is one layer up.
+   `FSLineWin` returns the FIRST in-horizon win it finds, and its own comment states that this is
+   sound only under `FullSearchLine`'s ladder — "it is not a standalone earliest-win finder". The
+   labeller used it as one, via a single `FSLineTail` call at a whole-game depth, so it returned *a*
+   win rather than *the earliest* and **every label was pessimistic**. B&B's tight cutoff narrows the
+   horizon, which accidentally restores the premise — the "pruned" arm was the *less broken* one, so
+   its earlier labels were the correct ones. Fixed by `MTG_LABEL_LADDER` (default ON); measured
+   69 of 240 rows moved earlier and **none later** across 7 decks. See
+   `docs/design/label-horizon-ladder.md`.
 
-   | deck | games | B&B off | B&B on | labels |
-   |---|---|---|---|---|
-   | burn | 12 | 38–41 s | 51–54 s (~**30% slower**) | identical |
-   | antilife | 4 | 2.44 s | 2.60 s | **differ, 2 of 15 rows** |
-   | dragonstorm | 4 | 0.75 s | 128 s (~**170× slower**) | **differ** |
+   The **slowdown** had two causes and both are gone. The reasoning quoted above — "a cutoff-aborted
+   no-win is deliberately never cached, so the shared memo stops paying off" — was correct, and is
+   now fixed rather than worked around: `FSLineCache` stores a no-win **qualified by the cutoff it was
+   proved under** and reuses it for any query asking no more (`MTG_FS_NOWIN_CACHE`). And the ladder
+   supplies cheap shallow refutations before the expensive deep pass, so B&B no longer converts cheap
+   "find a win" queries into cold "prove nothing beats it" ones.
 
-   **The slowdown is explicable.** This search finds *a* win cheaply (it is goal-directed) but
-   proving *no better* win exists requires exhausting the subtree. Tightening the cutoff converts
-   every cheap "find a win" query into an expensive "prove nothing beats the incumbent" one. On top
-   of that, a cutoff-aborted no-win is deliberately never cached (it may be an abort rather than a
-   true dead end), so the shared memo across candidates stops paying off and later candidates
-   re-search what a loose cutoff would have cached as a genuine win. B&B is the wrong shape for this
-   problem.
+   Re-measured under the ladder, 6 games/deck, seed 666000 — B&B is now **lossless on every deck**:
 
-   **The label difference is the real finding, and it is not yet explained.** With B&B the labels
-   come out *lower* — an EARLIER win (6→4, 7→6.33). Pruning cannot discover a win the unpruned
-   search missed, and `earliest` is a min whose first candidate runs with an identical cutoff and
-   cold caches in both arms, so this ought to be impossible. Budget degradation was the obvious
-   suspect and is **ruled out**: the disagreement persists with `MTG_VALUE_LABEL_BUDGET_MS=0`
-   (unlimited). What remains is an **order-dependence in the shared `FSLineCache` /
-   `TranspositionTable` across candidates** — a candidate's result depending on what an earlier
-   candidate happened to populate. If that is right, it is a latent soundness bug in the labeller's
-   caching that this flag merely surfaced, and **some existing labels are wrong**.
+   | deck | B&B off | B&B on | labels |
+   |---|---|---|---|
+   | Goblins | 3.41 s | 1.98 s (**1.72×**) | identical |
+   | treasure_hunt | 5.60 s | 4.49 s (1.25×) | identical |
+   | Dragonstorm | 6.39 s | 5.34 s (1.20×) | identical |
+   | burn | 1.24 s | 1.06 s (1.17×) | identical |
+   | slivers_vial | 0.85 s | 0.73 s (1.16×) | identical |
+   | Knights | 1.42 s | 1.39 s (1.02×) | identical |
+   | Anti-Lifegain | 23.27 s | 23.48 s (0.99×) | identical |
 
-   Next step is to isolate it: re-run one disagreeing position with the shared caches made cold per
-   candidate. If cold-per-candidate agrees with the B&B arm, the cache is unsound and that — not
-   B&B — is the thing to fix.
+   **The lesson worth keeping: a comparison has two arms, and "the new arm disagrees" is not evidence
+   about which arm is wrong.** This one was quarantined for a day on the assumption that the
+   established path was the reference.
 2. **Fix the fabricated loss.** On budget overrun `FSLineWin` returns `{max_turns+1}` — which is
    indistinguishable from a real LOSS and would poison labels. It must instead fall through to the
    1-ply heuristic leaf below it. This is a prerequisite for *any* budgeting of the labeller.
