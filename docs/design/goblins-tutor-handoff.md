@@ -213,3 +213,51 @@ pre-resolve-axis baseline: d0 +14 → ≈−116, searched +3 (all 4×-recoverabl
 Still open (small): gi350 both depths (winning fetch at resolution rank 2 — NOT a window case;
 unexplored plan arbitration), gi483 d5 (fresh churn under W=9), and the goblins searched
 budget-hungriness class generally (recovers at 4× budget; likely plan-count, not ranking).
+
+## 10. WIDTH BACK TO 6 (2026-08-05, same day) — honest swing reads close the window cases
+
+The user's follow-up: get W=6 to W=12 level *ignoring churn and clear clairvoyance* — "why are we
+talking about W=9? … there are only something like 11 goblins worth searching" (W=9 of Matron's
+~14 distinct names made the ranking nearly a no-op). Method: provider-level width A/B
+(`MTG_GOBLIN_TUTOR_WIDTH`, moves the value-reserve WITH the window unlike the axis-level
+`MTG_TUTOR_WIDTH`), full three-tier sweep at W=6/9/12, FORCE_RANK dissection of every separating
+game, then a 4×/16×-budget churn filter and a `MTG_SHUFFLE_SALT_SEARCH` clairvoyance filter.
+
+Eight distinct games separated W=6 from W=12 (each by exactly 1 turn, 7 of 8 at BOTH d3 and d5).
+After filters: gi124 clairvoyant (W=12's Lackey edge dies under both decoupling salts — the only
+game W=9 also missed), gi553/gi352 4×-recoverable churn, and FIVE real: gi496/gi828/gi32
+(Twinshot closers) and gi714/gi200 (apparent Warchief cases).
+
+The real cases were all **ranking blindness to closer lines from a dishonestly small swing read**,
+not window sizing:
+
+* **gi496** — the scan summed PRINTED power: Hordemaster+Chieftain+fresh Matron read `ready_atk=4`
+  where the real swing was 8 (cross-lord +1/+1s, haste-granted fresh body), so face_burst's
+  this-turn-lethal test (8+2 ≥ 10) never fired and the T5-closing Twinshot sat at rank 7. Fix:
+  count bodies at combat-site power — `EffectivePower + ComputeLordBonus` (`0037b2d`,
+  `MTG_GOBLIN_BOARD_LORD_POWER=0` restores). d0 −3 (5/2), searched = GT exactly.
+* **gi828** — same shape, missing term = Piledriver's attack pump (+2 per other attacking Goblin,
+  combat-time temp power): real swing 10, scan read 5. Fix: each ready pump body adds
+  per × (ready Goblin attackers − 1) (`f53666e`, `MTG_GOBLIN_BOARD_PUMP_POWER=0`). **d0 −24
+  (26 better / 2 worse) on top**, searched = GT exactly at W=9.
+* **gi32** — needs the remaining closer-matrix cell: NEXT-turn lethal via the fetched card's own
+  ETB/channel damage (face_burst = this-turn, lord_closer = next-turn crowd). `f541e37`
+  (`MTG_GOBLIN_BURST_CLOSER=0`), suite-inert at W=9; load-bearing for gi32 at W=6.
+* **gi714/gi200** — NOT fetch cases at all. gi714: the arms diverge at a T2 Skirk-sac (the
+  Hordemaster death-impulse exiles the top card → all later draws shift) — width leaked into the
+  LOOKAHEAD's plan arbitration two turns before any real fetch. gi200: the arms bottom a
+  DIFFERENT card on the same mulligan (width leaks into the keep/bottom rollouts) → physically
+  different games from the opening hand. Both persist at 16× budget; classic draw-divergence
+  variance, with same-magnitude games in W=6's favor (gi483/gi624/gi299).
+
+With the three levers in, W=6 ≡ W=12 on every real case; residual = noise classes only (net +6
+turn-units across 44k+ games, symmetric classes both directions). **Width dropped 9 → 6**
+(`0c49939`) and all three tiers re-accepted (searched GT moves only on the four noise-class games,
+noted in the GT provenance header; d0 −24). The transferable lesson repeats §9's: when the search
+"needs" width/budget/depth, first check what the RANKING's state read is blind to — every genuine
+case so far has been a dishonest input (pre-land mana, printed power, missing pump), never the
+window size.
+
+Still open: unchanged from §9 (gi350 arbitration, budget-hungriness class), plus the two known
+width-leakage channels if they ever matter enough to chase: tutor width reaching the keep/bottom
+rollouts and the lookahead's non-tutor plan arbitration.
