@@ -363,7 +363,18 @@ public:
     // (width is irrelevant when you take the top card). Width is cheap here -- the axis is ADDITIVE, not
     // multiplicative -- so 6 buys back the displaced candidate. Held-out searched for the adopted bundle
     // (v2 ranking + amplification + W=6) is -5.0 with train agreeing on every tier.
-    int TutorSearchWidth() const override { return 6; }
+    // ... and 6 -> 9 under MTG_TUTOR_AXIS_RESOLVE (defined in the .cpp; needs EngineFlags.h). The
+    // resolution-state ranking is HONEST about mana where the legacy pre-land state was doubly
+    // pessimistic -- and that pessimism was an accidental diversity mechanism: it buried the bombs,
+    // which kept cheap ENABLERS (Skirk / Warchief / Lackey) inside the 6-wide window. At the honest
+    // state those enablers rank 7-9 (their credit is ~10% under the mid-value bodies), and in five
+    // of the six resolve-mode held-out regressions the baseline's winning fetch sat at EXACTLY
+    // resolution rank 8-9 (gi768/gi727 Skirk 8, gi714/gi200 Warchief 8, gi352 Lackey 9). Same
+    // window-membership-vs-ordering separation as the 4 -> 6 widening above, diagnosed the same way
+    // (MTG_TUTOR_CHOSEN_RANK against the resolution list). Measured: resolve-mode goblins held-out
+    // searched +13 tu at W=6 (0 better / 13 worse, every one recovering at 4x budget) -> +3 at W=9,
+    // d0 untouched (width is irrelevant when you take the top card).
+    int TutorSearchWidth() const override;
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     // WITHDRAWN, and left here only as the hook's one implementation: "turns 1-2, play a Mountain if
     // one is in hand, without branching over the alternatives". Reachable ONLY under

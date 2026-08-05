@@ -3832,6 +3832,14 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
 // board impact EvalCard misses (lords over board+hand Goblins, haste, cost-cut, Krenko/Muxus/Siege-Gang);
 // discount = 0.55^turns-to-deploy over the best enabler path (mana + Skirk ramp, Vial charge-gated put,
 // Lackey free-drop) + opportunity-cost downweight. cands[0] (the dedup's default pick) is thus the best.
+// 6 shipped; 9 under the resolve axis -- see the width history note in the header. Byte-identical
+// with the flag off.
+int
+GoblinsProvider::TutorSearchWidth() const
+{
+    return TutorAxisResolveEnabled() ? 9 : 6;
+}
+
 std::vector<std::string>
 GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {
