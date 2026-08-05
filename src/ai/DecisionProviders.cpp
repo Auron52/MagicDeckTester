@@ -4882,15 +4882,42 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // whose key card was never put on the axis, so the window is hard-vetoing a valid play and this
     // removes an artificial restriction rather than encoding foreknowledge.
     //
-    // NOT fully explained: at the real T4 fetch the Lackey is still in HAND (it is cast after the
-    // Matron), so lackey_persist is 0 and Siege-Gang is priced t=3. Teaching turns_to_deploy to count
-    // a castable in-hand Lackey was tried and is completely INERT (0.0 on regression with it on and
-    // off), so that is not the binding constraint and the exact deciding state is still unpinned.
+    // THE BINDING DECISION IS THE T2 LAND DROP, not the fetch (traced 2026-08-05, replacing an
+    // earlier "the deciding state is unpinned" note here -- and an in-hand-Lackey hypothesis that
+    // measured completely inert, for the reason below). Three Tree City taps for {C} in base mode,
+    // so playing it T2 leaves {R}{R}{C} on T3 and Goblin Chainwhirler ({R}{R}{R}) uncastable:
+    //
+    //   W<=8   T2 Three Tree City -> T3 can only cast Matron -> fetch Chieftain            -> T6
+    //   W>=9   T2 Mountain        -> T3 Chainwhirler -> T4 Three Tree City + Matron->Siege-Gang
+    //                              + Lackey -> T5 Lackey connects, Siege-Gang in FREE, and Three
+    //                                Tree City's {2},{T} "add {R} per Goblin" pays 4 sac activations
+    //                                for exactly 8                                          -> T5
+    //
+    // So the search has to see the T4 Siege-Gang fetch to value the T2 Mountain, and Siege-Gang sits
+    // at natural rank 8 in that lookahead -- hence the exact W=9 threshold (W=7 and W=8, which add
+    // only Krenko and Mogg War Marshal, change nothing). The Lackey that carries the line is DRAWN ON
+    // T4: at the deciding state it is in neither hand nor play but still in the library, which is why
+    // teaching turns_to_deploy to count an in-hand Lackey was inert. The discount is therefore doing
+    // its job on the information it has; the defect is purely that a fixed window promotes that
+    // estimate to a VETO over a search that simulates the draw and knows better.
+    //
+    // THE EVICTION BELOW IS DELIBERATE AND MEASURED -- do not "fix" it. Inserting the k-th rescue at
+    // W-1-k shifts the (k-1)-th rescue out of the window, so reserve=N really rescues raw-value ranks
+    // 2..N and DROPS rank 1. That is not what the knob's name suggests, but it is the better rule:
+    // rank 1 is Muxus (raw 850, MV 6), the one bomb whose "genuinely stuck" discount is usually RIGHT.
+    //
+    //   reserve=1  rescue Muxus only          gi101 T6   held-out  0.0    (inert)
+    //   reserve=2  rescue rank 2 only         gi101 T5   held-out  0.0    <- shipped
+    //   reserve=2 + MTG_GOBLIN_VALUE_RESERVE_FIX=1, i.e. keep BOTH ranks 1 and 2:
+    //                                         gi101 T5   held-out +20.0   0 better / 20 worse
+    //
+    // MTG_GOBLIN_VALUE_RESERVE_FIX=1 restores the naive "keep every rescue" semantics (evict the
+    // weakest SURVIVOR rather than the previous rescue). Kept default-off with its number.
     //
     // Held-out is EXACTLY 0.0 over 8,000 searched and 12,000 d0 games -- not one file changed -- so
     // the -2.0 on regression (gi101 at d3 and d5) is the only movement in 20,000 games. Adopted as a
     // zero-cost fix to a diagnosed mechanism, NOT as a measured win.
-    // MTG_GOBLIN_VALUE_RESERVE=0 disables; N reserves the top-N by raw value.
+    // MTG_GOBLIN_VALUE_RESERVE=0 disables.
     static const int value_reserve = EnvInt("MTG_GOBLIN_VALUE_RESERVE", 2);
     if (value_reserve > 0 && static_cast<int>(cands.size()) > TutorSearchWidth())
     {
@@ -4905,6 +4932,12 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             }
             return 0.0;
         };
+        // See the eviction note above: the default path's insert at W-1-k pushes the previous rescue
+        // out of the window ON PURPOSE (measured better). MTG_GOBLIN_VALUE_RESERVE_FIX=1 is the
+        // rejected naive form -- drop the weakest SURVIVOR and append at W-1 so rescues accumulate,
+        // with already-rescued slots excluded from the weakest scan. Held-out +20.0, 0/20.
+        static const bool reserve_fix = EnvOn("MTG_GOBLIN_VALUE_RESERVE_FIX", false);
+        std::vector<int> kept;                       // window indices already rescued (fix mode)
         for (int k = 0; k < value_reserve; ++k)
         {
             // Best raw-value candidate currently OUTSIDE the window.
@@ -4916,13 +4949,25 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             if (best < 0) { break; }
             // Only if it actually beats the weakest card already inside on raw value -- otherwise the
             // window is already holding the best cards and there is nothing to rescue.
-            int weakest = 0;
-            for (int i = 1; i < W; ++i)
-            { if (raw_value(cands[i]) < raw_value(cands[weakest])) { weakest = i; } }
-            if (raw_value(cands[best]) <= raw_value(cands[weakest])) { break; }
+            int weakest = -1;
+            for (int i = 0; i < W; ++i)
+            {
+                if (reserve_fix
+                    && std::find(kept.begin(), kept.end(), i) != kept.end()) { continue; }
+                if (weakest < 0 || raw_value(cands[i]) < raw_value(cands[weakest])) { weakest = i; }
+            }
+            if (weakest < 0 || raw_value(cands[best]) <= raw_value(cands[weakest])) { break; }
             const std::string rescued = cands[best];
             cands.erase(cands.begin() + best);
-            cands.insert(cands.begin() + (W - 1 - k), rescued);
+            if (!reserve_fix)
+            {
+                cands.insert(cands.begin() + (W - 1 - k), rescued);
+                continue;
+            }
+            cands.erase(cands.begin() + weakest);        // evict the weakest SURVIVOR, not a rescue
+            cands.insert(cands.begin() + (W - 1), rescued);
+            for (int& idx : kept) { if (idx > weakest) { --idx; } }
+            kept.push_back(W - 1);
         }
     }
     if (dump)

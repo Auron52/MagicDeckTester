@@ -1176,3 +1176,81 @@ got the chance to say so.
 Open question worth keeping: the sharper fix may be to the projection rather than the window, since
 the model already ranks the bomb correctly once the Lackey is visible. Reserving slots compensates for
 the projection instead of correcting it.
+
+## ROUND 12 (2026-08-05): gi101 traced end to end — the deciding move is the T2 LAND DROP
+
+Round 11 left two things wrong. The deciding state was recorded as "unpinned", and the reserve's
+mechanism was described as "keep the top-N raw-value cards", which is **not what the code does**. Both
+are now traced.
+
+### The line, in full
+
+Three Tree City taps for `{C}` in base mode (`{2},{T}` is the Goblin-scaled red mode). So *when* it is
+played decides which spells are castable:
+
+```
+W<=8   T2 Three Tree City -> T3 lands are {R}{R}{C}: Chainwhirler ({R}{R}{R}) is UNCASTABLE
+                          -> T3 cast Matron, fetch Goblin Chieftain -> T5 Chieftain -> T6
+W>=9   T2 Mountain        -> T3 lands are {R}{R}{R}: cast Goblin Chainwhirler
+                          -> T4 play Three Tree City, cast Matron (fetch Siege-Gang) + Goblin Lackey
+                          -> T5 Lackey connects, PUTS Siege-Gang in free with three tokens;
+                             Three Tree City now taps {2},{T} for 6 Goblins' worth of {R}, paying
+                             FOUR {1}{R} sac activations = exactly 8 to close                 -> T5
+```
+
+The fetch is not the decision. The decision is the **T2 land drop**, and to value it the search has to
+see the T4 Siege-Gang fetch two turns ahead.
+
+### Why W=9 exactly
+
+At the T3 lookahead state (3 mana, empty board) the ranking is:
+
+```
+0 Chieftain 400.0   1 Twinshot 331.5   2 Piledriver 300.0   3 Warchief 270.0
+4 Stingscourger 200.0   5 Pashalik 200.0   6 Krenko 191.2   7 Mogg 190.0
+8 Siege-Gang 146.3  (value 510.0 x disc 0.287, t=2)        9 Muxus 109.7
+```
+
+Siege-Gang is rank 8, so the axis needs width 9. Measured, `MTG_TUTOR_WIDTH` with the reserve off:
+
+```
+W=6 T6   W=7 T6   W=8 T6   W=9 T5   W=10..13 T5      (d3 and d5, budgets 0/20/80/320/2000)
+```
+
+W=7 and W=8 only add Krenko and Mogg and change nothing — the flip lands exactly on Siege-Gang. This
+is causal, not tie-break churn: it is stable at every depth and budget tried.
+
+### Why the in-hand-Lackey hypothesis was inert
+
+Round 11 guessed the Lackey was in hand at the fetch and unpriced. It is not in hand: **it is DRAWN ON
+T4**, after the T2 decision, and at the deciding state it is still in the library. No amount of
+hand/board scanning in `turns_to_deploy` can see it, which is exactly why that experiment measured
+0.0 with the flag on and off.
+
+That sharpens `DISCOUNT-AS-VETO`: the discount is *correct* on the information it has (a `{3}{R}{R}`
+bomb genuinely is two turns of mana away). The defect is that a fixed window promotes a
+visible-information estimate into a hard veto over a **search that simulates the draw and knows
+better**. The heuristic is gating the better-informed process.
+
+### The reserve does not do what its name says — and the bug is load-bearing
+
+`cands.insert(cands.begin() + (W - 1 - k), rescued)` shifts the previous rescue from `W-1` to `W`, i.e.
+straight back out of the window. So `reserve=N` rescues raw-value ranks **2..N and drops rank 1**. On
+gi101's T3 state, `reserve=2` holds Siege-Gang and has evicted the Muxus it rescued first.
+
+Implementing the intended semantics (evict the weakest *survivor*, accumulate rescues) behind
+`MTG_GOBLIN_VALUE_RESERVE_FIX=1` and measuring on the held-out overnight tier:
+
+```
+                                             gi101   HELD-OUT (8000 searched)   d0 (12000)
+reserve=1   rescue Muxus only                 T6            0.0                    0.0
+reserve=2   rescue rank 2 only  (SHIPPED)     T5            0.0                    0.0
+reserve=2 + FIX=1  keep ranks 1 AND 2         T5          +20.0  (0 better/20 worse)  0.0
+```
+
+Dropping rank 1 is the *better* rule, and consistently so — 20 games worse, none better. Rank 1 is
+Muxus (raw 850, MV 6), the single card whose "genuinely stuck" discount is most often RIGHT, so
+forcing it onto the axis costs a real window slot and buys nothing. The shipped default is kept
+byte-identical; `FIX` stays default-off with its number, per the rejected-lever convention.
+
+Naming is now the only thing wrong with it, and the comment says so at the definition.
