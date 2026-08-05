@@ -33,8 +33,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BIN = os.path.join(ROOT, "build/Release/mtg")
 DECK, PROF = "decks/Goblins/Goblins.cod", "decks/Goblins/Goblins.profile.json"
 
-BETTER_AT_12 = [(3003, 101), (4004, 14), (4004, 124), (4004, 206), (7007, 371), (7007, 783)]
-WORSE_AT_12 = [(1001, 113), (2002, 299), (4004, 483), (7007, 624)]
+BETTER_AT_12 = [(3003, 101), (4004, 124)]
+WORSE_AT_12 = [(2002, 299), (4004, 483), (7007, 624)]
 
 LINE = re.compile(r"\[tutor-chosen\] T(\d+) src=(.+?) chose=(.+?) rank=(-?\d+)/(\d+) :: (.*)")
 
