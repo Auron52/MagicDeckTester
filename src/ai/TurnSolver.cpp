@@ -1856,6 +1856,13 @@ static bool BpSearchInRollouts()
 // robust discriminator -- iterative deepening runs many passes, and each pass's root re-enters at
 // nest 0. Mirrors g_bp_root_enum for the SolveWithLookahead path (enforce_budget).
 static thread_local int g_fsline_nest = 0;
+
+// A no-win is a genuine refutation only if the node actually finished looking. These are the events
+// that make it provisional instead: a budget overrun/exhaustion abort, and a beam that stopped the
+// plan loop short. A node snapshots this counter before its loop and compares after, so a truncation
+// ANYWHERE in the subtree propagates up and suppresses the no-win store at every ancestor.
+// thread_local: each worker searches independently. Wins are unaffected (a win found is a win).
+inline thread_local unsigned long long g_fs_trunc_events = 0;
 struct FsLineNestGuard
 {
     FsLineNestGuard()  { ++g_fsline_nest; }
@@ -9674,7 +9681,10 @@ static bool BpWavesHere(const SearchBudget* budget)
 {
     if (BpWaveMode() <= 0 || BpSearchWidth() <= 0) { return false; }
     if (budget == nullptr || budget->Unlimited()) { return true; }
-    return !budget->Exhausted();
+    // Skipping the phase for lack of budget leaves ranks unexplored -- a truncation, so any
+    // enclosing no-win stops being a refutation (see g_fs_trunc_events).
+    if (budget->Exhausted()) { ++g_fs_trunc_events; return false; }
+    return true;
 }
 
 // COMPLETE NODES (MTG_BP_WAVE_COMPLETE, default ON).
@@ -10812,7 +10822,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // is byte-identical for every non-pathological rollout.
         if (budget) { budget->Consume(1); }
         if (s_rollout_stats) { g_rollout_steps.fetch_add(1, std::memory_order_relaxed); }   // one simulated turn-step
-        if (budget && budget->Overrun()) { return max_turns + 1; }
+        if (budget && budget->Overrun()) { ++g_fs_trunc_events; return max_turns + 1; }
 
         // Expire staged (Light Up the Stage) cards whose play window has passed,
         // mirroring AIEngine::TakeTurn's expiry check (CR 406). Without this the
@@ -10985,12 +10995,58 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
 // another's result instead of re-searching the whole subtree -- the big cost the
 // leaf SimulateToEnd table does NOT touch. Like that table it is per-FullSearchLine
 // scope (one fixed root library, so library size uniquely identifies remaining
-// content -- the cached line's draw-dependent breakpoint_actions stay valid) and
-// caches ONLY genuine wins (win_turn <= max_turns): a winning line is cutoff-
-// independent (pruning never removes a strictly-earlier win, and selection replaces
-// only on strict improvement), whereas a no-win may be a branch-and-bound abort.
-using FSLineCache = std::unordered_map<TranspositionTable::Key, TurnSolver::SearchLine,
+// content -- the cached line's draw-dependent breakpoint_actions stay valid).
+//
+// A genuine WIN is cutoff-independent (pruning never removes a strictly-earlier win, and selection
+// replaces only on strict improvement), so it is stored unconditionally and reused by any query.
+// A NO-WIN used to be discarded entirely, on the grounds that it "may be a branch-and-bound abort".
+// That is true but throws away the commonest result in the search: every dead-end subtree is
+// re-explored from scratch at every transposition. The classic fix is to qualify it -- store the
+// cutoff the refutation was proved under and reuse it only for a query that asks no more. See
+// FSLineEntry::nowin_bound.
+struct FSLineEntry
+{
+    TurnSolver::SearchLine line;
+    // For a NO-WIN: "no win at turn <= nowin_bound exists from here". Sound because a node whose
+    // result is a no-win never tightened its own incumbent (best stays max_turns+1, so every child
+    // was searched at the full cutoff) -- the bound is therefore exactly the cutoff it ran under.
+    // A WIN carries INT_MAX: valid for every query, i.e. byte-identical to the old behaviour.
+    int nowin_bound = std::numeric_limits<int>::max();
+};
+using FSLineCache = std::unordered_map<TranspositionTable::Key, FSLineEntry,
                                        TranspositionTable::KeyHash>;
+
+// MTG_FS_NOWIN_CACHE: DEFAULT OFF for now. Cache hits consume no budget, so under a bounded search
+// this frees budget for deeper passes -- a play change, not a byte-identical speedup, and it needs
+// its own A/B + ground-truth rebaseline. The OFFLINE label path runs at an effectively unbounded
+// budget, where it is pure speed at identical labels.
+inline bool FSNoWinCacheOn() { static const bool v = EnvOn("MTG_FS_NOWIN_CACHE"); return v; }
+
+// Store a WIN: final and cutoff-independent, so it supersedes any bounded no-win a looser earlier
+// query left behind. With the no-win cache off no such entry can exist, so only the emplace branch
+// is ever reached == the old `lc->emplace(key, line)` exactly.
+inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
+                           const TurnSolver::SearchLine& line)
+{
+    if (lc == nullptr) { return; }
+    FSLineCache::iterator it = lc->find(key);
+    if (it == lc->end())
+    { lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max() }); }
+    else if (it->second.nowin_bound != std::numeric_limits<int>::max())
+    { it->second = FSLineEntry{ line, std::numeric_limits<int>::max() }; }
+}
+
+// Store a NO-WIN proved under `bound`. A later, WIDER refutation of the same node supersedes a
+// narrower one; a win entry is never downgraded.
+inline void FSLineStoreNoWin(FSLineCache* lc, const TranspositionTable::Key& key,
+                             const TurnSolver::SearchLine& line, int bound)
+{
+    if (lc == nullptr) { return; }
+    FSLineCache::iterator it = lc->find(key);
+    if (it == lc->end())                                        { lc->emplace(key, FSLineEntry{ line, bound }); }
+    else if (it->second.nowin_bound != std::numeric_limits<int>::max()
+             && it->second.nowin_bound < bound)                 { it->second.nowin_bound = bound; }
+}
 
 // Hybrid value-leaf policy (MTG_VALUE_MIN_DEPTH, read at the caller): the learned value-leaf is
 // exact-parity with the heuristic rollout only at PASS depth >= ~5 (measured; shallower it costs quality:
@@ -11109,7 +11165,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                                          FSLineCache* lc, SearchBudget* budget)
 {
     // Mid-pass overrun guard (see FSLineWin): abort the runaway pass.
-    if (budget && budget->Overrun()) { return { max_turns + 1, {} }; }
+    if (budget && budget->Overrun()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
     if (second_main)
     {
         std::vector<TurnSolver::Plan> post = EnumeratePlans(state, false);
@@ -11134,7 +11190,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         const bool beam_here = (g_esc_beam_width > 0 && depth <= g_esc_beam_leafdepth);
         for (const TurnSolver::Plan& q : post)
         {
-            if (beam_here && _beam_i++ >= g_esc_beam_width) { break; }   // value-guided beam (near-leaf only)
+            // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
+            if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; break; }   // value-guided beam (near-leaf only)
             if (budget) { budget->Consume(1); }   // one interior node (plan applied)
             GameState s2 = state;
             std::vector<Action> bp;
@@ -11191,7 +11248,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     if (state.turn_number > cutoff)    { return { max_turns + 1, {} }; }  // can't beat incumbent
     // Mid-pass overrun: this pass has blown far past its budget estimate; bail out with a
     // no-win so FullSearchLine rolls back to the last completed pass (see SetOverrunLimit).
-    if (budget && budget->Overrun())   { return { max_turns + 1, {} }; }
+    if (budget && budget->Overrun())   { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
     if (depth <= 0)
     {
         ++g_fs_leaf_evals;   // count leaf evaluations (value-leaf or rollout) for the K-predictor's leaf-count model
@@ -11231,8 +11288,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     {
         key = BuildSimKey(state, depth, max_turns, second_main);
         FSLineCache::const_iterator it = lc->find(key);
-        if (it != lc->end()) { return it->second; }
+        // A win entry carries nowin_bound = INT_MAX and is always reusable. A no-win entry answers
+        // only "no win at turn <= nowin_bound", so a query that asks about a LATER turn than the
+        // refutation covered must re-search.
+        if (it != lc->end() && cutoff <= it->second.nowin_bound) { return it->second.line; }
     }
+    // Truncation watermark for this node's own exploration (see g_fs_trunc_events).
+    const unsigned long long trunc_at_entry = g_fs_trunc_events;
 
     // No projected-`wins_this_turn` shortcut: lethality is decided by actually
     // simulating each plan below, so the committed line's win turn always matches
@@ -11313,7 +11375,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
         // near-leaf nodes (beam_here); the top plies keep full exploration so the committed play is never pruned.
         // 0 = unlimited = byte-identical. pre is value-ordered above, so this keeps the best W lines.
-        if (beam_here && _beam_i++ >= g_esc_beam_width) { break; }
+        if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; break; }
         ++scanned;
         if (budget) { budget->Consume(1); }   // one interior node (plan applied)
         if (s_rollout_stats)
@@ -11349,7 +11411,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
             // A this-turn win is the earliest possible from here, so it is the final
             // optimal line for this node -- cache it (cutoff-independent).
-            if (lc != nullptr) { lc->emplace(key, win); }
+            FSLineStoreWin(lc, key, win);
             return win;
         }
 
@@ -11384,7 +11446,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // complete refutation, which a budget-truncated wave phase cannot promise. Break
                 // instead of returning so this node's own deferred ranks get a chance to beat it.
                 if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
-                if (lc != nullptr) { lc->emplace(key, best); }
+                FSLineStoreWin(lc, key, best);
                 return best;
             }
         }
@@ -11420,7 +11482,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // Anytime: a variant only ever wins on a STRICTLY better win turn, so stopping here
                 // keeps `best` exactly as the search left it.
                 if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
-                { if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
+                { ++g_fs_trunc_events;
+                  if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
                 if (BpWaveProbeOn()) { g_bp_wave_probe.scored.fetch_add(1); BpWaveRank(walker.LastRank()); }
 
                 if (budget) { budget->Consume(1); }   // one interior node (plan applied)
@@ -11452,7 +11515,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     TurnSolver::Plan p_rec = v;
                     p_rec.breakpoint_actions = std::move(bp);
                     TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
-                    if (lc != nullptr) { lc->emplace(key, win); }
+                    FSLineStoreWin(lc, key, win);
                     return win;
                 }
                 TurnSolver::SearchLine tail =
@@ -11473,7 +11536,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     // on its own when the slots retire or the budget runs out.
                     if (!BpWaveCompleteNodes() && tail.win_turn <= state.turn_number + depth - 1)
                     {
-                        if (lc != nullptr) { lc->emplace(key, best); }
+                        FSLineStoreWin(lc, key, best);
                         return best;
                     }
                 }
@@ -11583,10 +11646,20 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         }
     }
 
-    // Cache only a genuine win; a no-win (best.win_turn > max_turns) may be a
-    // cutoff abort rather than a true dead end, so it is never stored (mirrors
-    // SimulateToEnd / the leaf table).
-    if (lc != nullptr && best.win_turn <= max_turns) { lc->emplace(key, best); }
+    if (best.win_turn <= max_turns)
+    {
+        FSLineStoreWin(lc, key, best);
+    }
+    else if (FSNoWinCacheOn() && g_fs_trunc_events == trunc_at_entry)
+    {
+        // BOUND-QUALIFIED NO-WIN. The loop ran to completion with nothing truncated anywhere
+        // beneath it, so this node genuinely has no win at turn <= cutoff. Note the bound is the
+        // node's OWN cutoff, not a child's: a no-win result means `best` never improved on
+        // max_turns+1, so `min(cutoff, best.win_turn)` was `cutoff` for every child -- no
+        // incumbent tightening ever happened. Clamped to max_turns+1 (the widest question the
+        // search can be asked) so an unbounded query still hits.
+        FSLineStoreNoWin(lc, key, best, std::min(cutoff, max_turns + 1));
+    }
     return best;
 }
 
@@ -13318,6 +13391,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // --- Overrun guard: finish if almost done, else abort + roll back ---
             if (gate && budget->Exhausted() && candidates_done > 0)
             {
+                ++g_fs_trunc_events;
                 long long pass_used       = budget->Used() - used_before;
                 double    avg_per_cand    = static_cast<double>(pass_used)
                                           / static_cast<double>(candidates_done);
@@ -13438,7 +13512,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 while (walker.Next(candidates, v))
                 {
                     if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
-                    { if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
+                    { ++g_fs_trunc_events;
+                      if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
                     if (BpWaveProbeOn())
                     { g_bp_wave_probe.scored.fetch_add(1); BpWaveRank(walker.LastRank()); }
 
