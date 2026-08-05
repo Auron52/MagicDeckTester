@@ -40,6 +40,16 @@ namespace prof
         uint64_t applyplan_calls  = 0;  // ApplyPlanDirect invocations
         uint64_t search_nodes     = 0;  // rollout turn-steps (budget units) consumed
 
+        // FSLineCache / bound-qualified no-win memo (see FSLineEntry in TurnSolver.cpp). These
+        // answer the question a wall-clock A/B cannot: under a BOUNDED play budget, does the memo
+        // ever get to store anything, or does the truncation guard suppress every store?
+        uint64_t fsline_lookups      = 0;  // FSLineWin interior-node memo probes
+        uint64_t fsline_win_hit      = 0;  // ... returned a stored WIN
+        uint64_t fsline_nowin_hit    = 0;  // ... returned a stored NO-WIN (the new saving)
+        uint64_t fsline_nowin_stale  = 0;  // ... found a NO-WIN whose bound was too narrow -> re-search
+        uint64_t fsline_nowin_result = 0;  // nodes that finished with no win (store candidates)
+        uint64_t fsline_nowin_stored = 0;  // ... that were actually stored (nothing truncated below)
+
         void Add(const Counters& o)
         {
             gamestate_copies += o.gamestate_copies;
@@ -49,6 +59,12 @@ namespace prof
             plans_generated  += o.plans_generated;
             applyplan_calls  += o.applyplan_calls;
             search_nodes     += o.search_nodes;
+            fsline_lookups      += o.fsline_lookups;
+            fsline_win_hit      += o.fsline_win_hit;
+            fsline_nowin_hit    += o.fsline_nowin_hit;
+            fsline_nowin_stale  += o.fsline_nowin_stale;
+            fsline_nowin_result += o.fsline_nowin_result;
+            fsline_nowin_stored += o.fsline_nowin_stored;
         }
     };
 
@@ -105,6 +121,21 @@ namespace prof
         if (c.search_nodes)
         {
             os << "copies / node         : " << (double)c.gamestate_copies / c.search_nodes << "\n";
+        }
+        if (c.fsline_lookups)
+        {
+            os << "FSLine memo probes    : " << c.fsline_lookups
+               << "   win hits: " << c.fsline_win_hit
+               << "   nowin hits: " << c.fsline_nowin_hit
+               << "   nowin stale: " << c.fsline_nowin_stale << "\n";
+            os << "FSLine nowin results  : " << c.fsline_nowin_result
+               << "   stored: " << c.fsline_nowin_stored;
+            if (c.fsline_nowin_result)
+            {
+                os << "   (" << (100.0 * c.fsline_nowin_stored / c.fsline_nowin_result)
+                   << "% stored, rest suppressed by truncation)";
+            }
+            os << "\n";
         }
 
         // Per-game heavy-tail: how concentrated is the cost?
