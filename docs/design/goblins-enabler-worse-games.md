@@ -1540,3 +1540,42 @@ the empirically better one, and we now know that at every level rather than by a
 `MTG_GOBLIN_PLAN_AWARE`, `MTG_TUTOR_AXIS_POSTLAND`, `MTG_TUTOR_AXIS_REBASE` all stay default-off with
 their numbers. `PlanContext` stays: byte-identical off, cheap, and the only mechanism by which the
 root defect could ever be enabled affordably.
+
+## ROUND 17 (2026-08-05): was it the HANDLING? Partly — and the tighter reading is the better one
+
+User challenge: "Is the problem not our handling of this new setup within the heuristic itself?" It
+is a fair charge and it was half right. Mode 1 did not merely make two inputs honest, it silently
+changed what they MEASURE:
+
+* `buff_targets` is documented "board + **near-future** (hand) buff recipients" — a lord's `+1/+1`
+  persists, so a Goblin still in hand two turns out is a genuine recipient. Mode 1 replaced that with
+  "Goblins the plan casts THIS TURN", discarding every hand Goblin the plan does not cast.
+* `haste_avail` lost its in-hand fallback, so a haste lord cast NEXT turn stopped counting even
+  though it is on the battlefield when a fetched card lands.
+
+Both narrow a future-looking estimate into a this-turn fact. Mode 2 restores the future half.
+
+```
+                        held-out (8000 searched)      + postland
+baseline                     0.0                        +18.0
+plan-aware mode 1 (replace)  +2.0   3 better /  5 worse   +9.0   3 better / 12 worse
+plan-aware mode 2 (union)   +12.0   1 better / 13 worse  +17.0   1 better / 18 worse
+```
+
+**Mode 2 is much worse**, so the narrowing was not the defect it looked like. Two things explain it.
+
+The algebra first, because mode 2 is not the faithful restoration I claimed. Baseline is
+`G + min(goblins_in_hand, 3)`, and `goblins_in_hand = plan_entering + hand_left`, so the faithful
+union is `G + min(plan_entering + hand_left, 3)` — which is **exactly baseline**. What mode 2 actually
+computes is `G + plan_entering + min(hand_left, 3)`, adding the certain bodies ON TOP of an
+already-capped hand count. That is an inflation, not a restoration: it raises `buff_targets`, which
+raises lords, and the ranking drifts the way every losing arm in this file has drifted.
+
+And the part that is a real finding: there is no union that differs from baseline except in where the
+cap lands. The cap at 3 is the whole content of the term. Mode 1's tighter reading — count only
+bodies that certainly arrive — measures better (+2 vs +12), which is the same lesson as rounds 12-16:
+in goldfishing, the tighter/pessimistic reading of a deployment estimate keeps winning.
+
+So the answer to the challenge is: yes, mode 1 changed the terms' meaning, and no, correcting that
+does not unlock anything — the changed meaning was the better one. `MTG_GOBLIN_PLAN_AWARE=2` stays
+in-tree, default-off, with its number, so nobody re-derives this by intuition.

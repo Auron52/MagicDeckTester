@@ -3924,7 +3924,22 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     // input honest while the others stayed calibrated to the old wrong value, and all three lost
     // (+20, +9, +18 held-out). If that diagnosis is right, the cluster is only coherent when it moves
     // as a unit; if this loses too, the diagnosis was wrong and the whole line is dead.
-    static const bool plan_aware = EnvOn("MTG_GOBLIN_PLAN_AWARE", false);
+    // MODE MATTERS, and mode 1 was WRONG (user, 2026-08-05: "is the problem not our handling of this
+    // new setup within the heuristic itself?"). The plan is exact about THIS TURN; several of these
+    // terms are deliberately about the FUTURE, so substituting one for the other silently narrows
+    // them rather than making them honest:
+    //
+    //   buff_targets is documented "board + NEAR-FUTURE (hand) buff recipients" -- a lord's +1/+1
+    //   persists, so a Goblin still in hand two turns out is a real recipient. Mode 1 replaced that
+    //   with "Goblins the plan casts this turn", dropping every hand Goblin the plan does not cast.
+    //   That UNDERCOUNTS lords, which pushes the ranking toward bombs -- precisely the failure mode
+    //   rounds 12-15 kept measuring. haste_avail had the same flaw: mode 1 gated off the in-hand
+    //   fallback, so a haste lord cast NEXT turn stopped counting even though it is on the
+    //   battlefield when the fetched card lands.
+    //
+    //   1 = replace (measured +2.0 held-out; kept for the A/B, but the narrowing above is a bug)
+    //   2 = UNION: plan-exact for this turn, the old approximation for everything after it
+    static const int plan_aware = EnvInt("MTG_GOBLIN_PLAN_AWARE", 0);
     bool plan_known = false, plan_haste_cast = false, plan_deploys = false, plan_land_pending = false;
     int  plan_goblins_entering = 0;
     if (plan_aware)
@@ -3956,8 +3971,13 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             }
         }
     }
-    const int buff_targets = plan_known ? G + plan_goblins_entering
-                                        : G + std::min(goblins_in_hand, 3);   // board + near-future
+    // Mode 2: the plan's bodies are certain, and the hand Goblins it does NOT cast are still the
+    // near-future recipients the term was always about -- so ADD them, do not discard them.
+    const int hand_left = std::max(0, goblins_in_hand - plan_goblins_entering);
+    const int buff_targets =
+        !plan_known                 ? G + std::min(goblins_in_hand, 3)
+      : plan_aware >= 2             ? G + plan_goblins_entering + std::min(hand_left, 3)
+                                    : G + plan_goblins_entering;
     // Skirk ramp: each OTHER Goblin sacs for {R}, so a bomb is reachable ~this turn if Skirk + fodder pay for it.
     //
     // TWO corrections (user, 2026-08-04), both about counting the bodies that will ACTUALLY be
@@ -4079,8 +4099,10 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         tutor_src_mv = hd->card.m_mana_cost.ManaValue();
         break;
     }
-    bool haste_avail = haste_source || (plan_known && plan_haste_cast);   // exact when the plan is known
-    if (!haste_avail && !plan_known)
+    bool haste_avail = haste_source || (plan_known && plan_haste_cast);
+    // Mode 2 keeps the in-hand fallback: a haste lord we can still afford will be on the battlefield
+    // when a fetched card lands, whether or not THIS turn's plan is the one that casts it.
+    if (!haste_avail && (!plan_known || plan_aware >= 2))
     {
         for (const Card& h : s.players[controller].hand)
         {
