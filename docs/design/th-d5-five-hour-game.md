@@ -1,9 +1,16 @@
 # One bounded treasure_hunt game cost hours — root-caused and FIXED (2026-08-06)
 
-**Status: FIXED. Smoke 27/27 byte-identical to ground truth at the shipped defaults; regression
-tier + user adoption pending.** The hours-long game was a **product of two independently-adopted
+**Status: FIXED, twice over.** First by the probe depth pin (below — byte-identical at smoke 27/27
++ regression 45/45), then SUPERSEDED for the cleanup discard by the user's design: **the heuristic's
+return IS the searched pass's candidate set** (see "The heuristic-prune redesign" section at the
+bottom). Final state: treasure_hunt's ranking decides its shed outright, the repro game is **0.3 s
+flat d3–d8**, and the ranking (after the retrace-protection fix) is **net BETTER than the
+whole-hand searched fan the old ground truth embodied**. TH ground truth moves; rebaseline pending
+user acceptance.
+
+The hours-long game was a **product of two independently-adopted
 features**, not a defect in either one, and not the mechanism the first investigation named. The
-fix restores a **flat depth curve at today's answers**:
+depth-pin fix restores a **flat depth curve at today's answers**:
 
 | depth | pre-fix (default engine) | post-fix (default: pin 3, fan kept) | `MTG_PROBE_ROLLOUT_BP=0` pin 1 | `MTG_BP_SEARCH=0` (old engine) |
 |---|---|---|---|---|
@@ -138,9 +145,42 @@ build/Release/mtg decks/treasure_hunt/treasure_hunt.txt \
 Legacy arm (reproduces the regression): add `MTG_PROBE_ROLLOUT_DEPTH=-1`.
 Probe scripts and arm logs: `logs/vcell_probe/fable_arms*.{sh,log}`, `fable_sweep*.{sh,log}`.
 
+## The heuristic-prune redesign (user's design, supersedes the pin for the cleanup discard)
+
+The user's objection to the pin — "it goes directly against my design: search with heuristics" —
+led to the real finding: **the TH cleanup ranking was commissioned precisely to prevent this case
+and was never wired as a prune.** `ChooseDiscard` fanned a probe rollout over the ENTIRE hand and
+used the ranking only as a tie-break, despite `DecisionProvider.h` already documenting the
+intended contract ("returning ONE index decides the discard with no branch").
+
+The design as adopted: **the heuristic decides the candidates and returns a list of some size; all
+of those options are searched — no width knobs anywhere.** The base ranking returns the full hand
+(generic decks unchanged, byte-identical); TH returns its top pick (measured: top-2/3 recovered
+almost nothing over top-1). The full ordering survives as `CleanupDiscardFullRanking` for the
+multi-card consumers (Land's Edge pitch, retrace costs).
+
+**Why the ranking's pick lost 4 of ~1800 games to the fan, per the user's mistake-vs-clairvoyance
+test:**
+* **gi=24 (two cases) — a MISTAKE, fixed:** required-piece protection (`CleanupDiscardProtected`)
+  dropped Throes of Chaos from the preference tier, silently overriding the ranking's own band-1
+  rule (a retrace card is not LOST to a discard — the graveyard is where it stays castable from,
+  and the land kept in its place pays the retrace cost). Fixed; `MTG_PROTECT_RETRACE=1` restores.
+* **gi=444 — CLAIRVOYANCE, not worried:** the fan sheds the deck's ONLY visible Land's Edge on
+  turn 2, right only because the fixed deck order is known to bring a replacement.
+* **gi=229 — borderline, noted:** the ranking sheds Temple of Epiphany (tapped ⇒ worst-keep band);
+  the fan keeps it for the ETB scry. One game of evidence; a band tweak is sweepable if wanted.
+
+**Net result vs the old ground truth** (which embodied the whole-hand fan): smoke th_d0 −0.0050,
+regression th_d3_s2002 −0.0020 (gi=392 T7→T5), th_d5_s3003 −0.0033, everything else equal
+(digest-only); every other deck byte-identical; repro game 0.3 s flat d3–d8. The ranking now beats
+the searched fan on net at ~1/10,000th the cost.
+
+The probe depth pin (`MTG_PROBE_ROLLOUT_DEPTH`) stays: it governs the remaining probe consumers
+(generic decks' discard fan, Land's Edge fire count, and any future fat-list provider).
+
 ## Related
 
-- `searched-cleanup-discard.md` — the probe whose trial fidelity this changes.
+- `searched-cleanup-discard.md` — the probe whose candidate set is now provider-pruned.
 - `post-breakpoint-search.md` — the searched continuation whose every-ply fan-out multiplied it.
 - `breakpoint-width-deferred-waves-2026-07-29` — the wave phase (a constant here, kept).
 - `depth-matrix-should-use-batch-pooling.md` — the harness half of the phase-C stall.
