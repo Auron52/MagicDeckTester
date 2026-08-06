@@ -64,10 +64,14 @@ All oracle texts + costs fetched live from Scryfall 2026-08-05 (this run's 2a).
 
 ## Known modelling collapses (for 6a disclosure; bracket-noted in cards.json)
 
-- Massacre Wurm −2/−2-until-EOT ⇒ "destroy opp creatures with toughness−damage ≤ 2 at ETB".
-  Equivalent in goldfish: opponent creatures never block/attack/get buffs, and power
-  reduction on survivors is inert. Not damage → no interaction with damage marks needed
-  beyond counting existing marks.
+- Massacre Wurm −2/−2 is now applied FOR REAL as an until-EOT `temp_tough_bonus` on the
+  creatures present at each sweep resolution (fix `2026-08-06`, replacing the earlier
+  "toughness−damage ≤ 2" collapse): two sweeps in one turn STACK (the second trigger of a
+  simultaneous double-Wurm put kills at cumulative −4/−4 — profile spawns include 3/3s and
+  4/4s, so this matters), and tokens gifted between sweeps only see later ones
+  (CR 611.2c set-locking). Power reduction on survivors is still inert (opp never
+  attacks/blocks). Remaining strict gap: −X/−X kills an indestructible creature only via
+  toughness ≤ 0; no spawn schedule produces one.
 - Varchild's War-Riders cumulative upkeep is ALWAYS paid (never sacrificed): paying is
   weakly dominant vs a passive opponent (tokens only feed our drains/DotH; the 3/4 body is
   kept). Pay-vs-sac not surfaced as a choice; disclosed.
@@ -128,6 +132,31 @@ All oracle texts + costs fetched live from Scryfall 2026-08-05 (this run's 2a).
   vs the clairvoyant search; zero AI-misplay candidates). Drain arithmetic (Priest enters, Wurm
   sweep x2-per-kill, Orchard/War-Riders gifts, Warden lifegain) hand-verified exact by multiple
   agents across full games.
+
+## Post-analysis fix: simultaneous DotH puts + stacking Wurm sweeps (2026-08-06, user-flagged)
+
+The user flagged that a double-Massacre-Wurm Defense of the Heart put must drain 4 per swept
+creature (both Wurms see each death) and kill up to toughness 4 (the two −2/−2s stack). Two
+defects confirmed and fixed, engine + provider scorer together:
+
+- **Sequential puts → simultaneous** (`PerformUpkeepSacTutor`): previously each put fired its
+  cascades before the next entered, so put #1's sweep drained only 2/death (put #2 not yet a
+  watcher). Now pass 1 moves every chosen card onto the battlefield, pass 2 fires the shared
+  cascades in list order (re-found by per-copy card number — a sweep can erase lower slots).
+  Also makes simultaneously-put enter-watchers see each other (paired-Soul-Warden ruling).
+- **Sweep collapse → real until-EOT debuff** (`OnGoblinEnters` 1c): −2/−2 now applied via
+  `temp_tough_bonus` (cleanup-cleared, sim-key/signature-folded), so same-turn sweeps stack:
+  the double put's second trigger kills 3/3 and 4/4 profile spawns at cumulative −4/−4.
+- **`SacTutorPutList` scorer mirrored**: all puts' watchers accumulate before any trigger is
+  scored (W=4 for the Wurm pair), and `small` became a per-creature toughness-margin list that
+  sweeps decrement (gifted tokens appended between sweeps only see later ones). The default
+  pick now goes to Wurm+Wurm whenever its 4×kills beats Phantasm+Wurm's 2×(kills+5); Suture
+  Priest/Warden pairings are already in the same enumeration for Wurm-exhausted libraries.
+
+Verified: smoke 27/27 + regression 45/45 ALL PASS (byte-identical — both paths are param-gated
+to this deck). Probe (d3, seed 1001, 250 games): DotH resolved in 145 games, double-Wurm put
+chosen in 98; game_102 upkeep drop 16 → −36 = 13 swept × exactly 4; game_116 sweeps a 3/3
+(pre-fix survivor) into a −38 empty board. avg turns 4.91 → 4.864.
 
 ## Queued next (user-directed, 2026-08-06 — do after conversation compaction)
 

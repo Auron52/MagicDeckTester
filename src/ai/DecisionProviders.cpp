@@ -612,7 +612,8 @@ std::vector<std::string> DecisionProvider::SacTutorPutList(
     // (the permanent is sacrificed), so the ~O(names^2) scan is cheap.
     const Player& ap  = s.players[controller];
 
-    int enter_drain = 0, death_drain = 0, opp_small = 0;
+    int enter_drain = 0, death_drain = 0;
+    std::vector<int> opp_margin;   // per opp creature: effective toughness - marked damage
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index == controller)
@@ -626,8 +627,7 @@ std::vector<std::string> DecisionProvider::SacTutorPutList(
         }
         else if (p.card.IsCreature() || p.is_animated)
         {
-            // Killable by a -2/-2 sweep (the only sweeper class in the mechanic today).
-            if (p.EffectiveToughness() - p.damage <= 2) { ++opp_small; }
+            opp_margin.push_back(p.EffectiveToughness() - p.damage);
         }
     }
 
@@ -643,24 +643,41 @@ std::vector<std::string> DecisionProvider::SacTutorPutList(
     if (names.empty() || max_puts <= 0) { return {}; }
 
     auto seq_value = [&](const std::vector<const CardDefinition*>& seq) -> long long {
-        int P = enter_drain, W = death_drain, small = opp_small;
+        int P = enter_drain, W = death_drain;
+        std::vector<int> margin = opp_margin;
         long long burst = 0, power = 0;
+        // All puts enter SIMULTANEOUSLY (see PerformUpkeepSacTutor), so EVERY newcomer's
+        // watchers are live before any enter-trigger resolves: a double Massacre Wurm drains
+        // 4 per swept creature, not 2+0.
+        for (const CardDefinition* d : seq)
+        {
+            P += d->params.opp_creature_enters_life_loss;
+            W += d->params.opp_dies_life_loss;
+        }
+        // Then the enter-triggers resolve in list order (gifts before sweeps when we order
+        // them that way -- the ordered-pair enumeration below tries both). Sweeps STACK the
+        // until-EOT debuff on survivors, mirroring the engine's temp_tough_bonus: the second
+        // sweep of a double-Wurm put kills at cumulative -4/-4. Gifted tokens appended after
+        // a sweep only see later sweeps (CR 611.2c set-locking), also mirrored here.
         for (const CardDefinition* d : seq)
         {
             const CardParams& cp = d->params;
-            // The newcomer's own watchers are live for its own resolution (a Massacre Wurm's
-            // death-watch counts its own sweep's kills) and for everything after it.
-            P += cp.opp_creature_enters_life_loss;
-            W += cp.opp_dies_life_loss;
             if (cp.etb_opp_creates_tokens > 0)
             {
                 burst += static_cast<long long>(cp.etb_opp_creates_tokens) * P;
-                small += cp.etb_opp_creates_tokens;   // 1/1 gifts -> sweep fodder
+                for (int k = 0; k < cp.etb_opp_creates_tokens; ++k)   // gifts -> sweep fodder
+                { margin.push_back(std::max(1, cp.etb_created_token_toughness)); }
             }
             if (cp.etb_opp_creatures_debuff > 0)
             {
-                burst += static_cast<long long>(small) * W;
-                small  = 0;   // swept
+                std::size_t live = 0;
+                for (int& m : margin)
+                {
+                    m -= cp.etb_opp_creatures_debuff;
+                    if (m > 0) { margin[live++] = m; }
+                    else       { burst += W; }
+                }
+                margin.resize(live);
             }
             power += std::max(0, d->card.m_power.value_or(0));
         }

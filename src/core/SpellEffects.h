@@ -1766,12 +1766,16 @@ inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
     }
 
     // (1c) ETB opponent-board debuff sweep (Massacre Wurm: "creatures your opponents control get
-    //      -2/-2 until end of turn"), collapsed to "destroy each opponent creature with
-    //      toughness - damage <= N" -- equivalent in goldfish (opponent creatures never
-    //      block/attack/get buffs; the power reduction on survivors is inert; the debuff is not
-    //      damage, so existing marked damage still counts toward the threshold). Each kill fires
+    //      -2/-2 until end of turn"). The until-EOT toughness reduction is applied for real via
+    //      temp_tough_bonus (cleared each cleanup, folded into sim key + board signature), so
+    //      TWO sweeps in one turn STACK: a simultaneous double-Wurm put's second trigger kills
+    //      at cumulative -4/-4 (a 4/4 spawn dies and drains). The affected set is the creatures
+    //      present at THIS resolution (CR 611.2c) -- tokens gifted between sweeps only see later
+    //      ones, which falls out of applying the debuff per-permanent here. A creature dies when
+    //      effective toughness - marked damage <= 0 (the debuff is not damage). Each kill fires
     //      the opponent-death watchers (the Wurm's own clause 2 counts its own sweep's kills --
-    //      it is already on the battlefield when this resolves).
+    //      it is already on the battlefield when this resolves). Strict gap: -X/-X kills an
+    //      indestructible creature only via toughness <= 0; no spawn schedule produces one.
     if (p.etb_opp_creatures_debuff > 0)
     {
         const int opp_ix = 1 - controller;
@@ -1779,10 +1783,8 @@ inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
         {
             Permanent& q = state.battlefield[i];
             if (q.controller_index != opp_ix || !(q.card.IsCreature() || q.is_animated)) { continue; }
-            // Kill threshold: toughness - marked damage <= debuff. (Strictly, -X/-X kills an
-            // indestructible creature only via toughness <= 0, not via damage; no indestructible
-            // opponent creature exists in any spawn schedule, so the collapse is exact today.)
-            if (q.EffectiveToughness() - q.damage > p.etb_opp_creatures_debuff) { continue; }
+            q.temp_tough_bonus -= p.etb_opp_creatures_debuff;
+            if (q.EffectiveToughness() - q.damage > 0) { continue; }
             const int dead_controller = q.controller_index;
             state.players[q.owner_index].graveyard.push_back(q.card);
             state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
@@ -2858,10 +2860,15 @@ inline void PerformUpkeepSacTutor(GameState& state)
             }
         }
 
-        // Put each chosen creature onto the battlefield, in order, through the shared cascades
-        // (mirrors the Muxus put idiom). Re-find per put: earlier puts' ETBs may reshuffle
-        // nothing, but erase shifts library indices.
+        // The chosen creatures enter SIMULTANEOUSLY ("put those cards onto the battlefield"),
+        // then their enter-triggers resolve, in list order. Pass 1 moves every card onto the
+        // battlefield; pass 2 fires the shared cascades. This is what makes a double Massacre
+        // Wurm put drain 4 per swept creature (each death is seen by BOTH Wurms) and lets two
+        // simultaneously-put enter-watchers see each other (the paired-Soul-Warden ruling).
+        // Pass 2 re-finds each put by its per-copy card number: an earlier cascade's sweep can
+        // erase lower battlefield slots (tokens carry no number, so puts are unambiguous).
         int puts = 0;
+        std::vector<std::pair<std::string, int>> placed;   // (name, per-copy number)
         for (const std::string& nm : put_list)
         {
             if (puts >= max_puts) { break; }
@@ -2880,10 +2887,22 @@ inline void PerformUpkeepSacTutor(GameState& state)
             perm.owner_index       = active;
             perm.entered_this_turn = true;
             state.battlefield.push_back(perm);
-            const int slot = static_cast<int>(state.battlefield.size()) - 1;
+            placed.emplace_back(nm, raw.m_number);
+            ++puts;
+        }
+        for (const auto& pl : placed)
+        {
+            int slot = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[i];
+                if (q.controller_index == active && !q.is_token
+                    && q.card.m_number == pl.second && q.card.m_name == pl.first)
+                { slot = i; break; }
+            }
+            if (slot < 0) { continue; }
             OnDragonEnters(state, active, slot);   // universal cascade (enter-watchers fire here)
             OnGoblinEnters(state, active, slot);   // param-gated ETBs: Phantasm gift / Wurm sweep
-            ++puts;
         }
 
         // "...then shuffle" (deterministic + lockstep; inert unless MTG_SEARCH_SHUFFLE).
