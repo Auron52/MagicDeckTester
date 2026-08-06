@@ -1869,6 +1869,22 @@ static bool BpSearchInRollouts()
     static const bool on = !EnvOn("MTG_NO_BP_SEARCH_ROLLOUT");
     return on;
 }
+
+// PROBE-ROLLOUT scope (see TurnSolver.h::ProbeRolloutGuard). MTG_PROBE_ROLLOUT_BP (DEFAULT ON;
+// =0 disables) keeps the searched-breakpoint fan-out inside probe trial games -- consistent with
+// the engine's own leaf rollouts (BpSearchInRollouts) and required for label fidelity (measured:
+// suppressing it flips a TH smoke game the full engine wins a turn earlier, gi=38 T3->T4). The =0
+// arm exists because it is another ~10x cheaper (th-d5-five-hour-game.md); the depth pin in
+// RolloutWinTurnFrom is what makes probe cost flat either way.
+static thread_local int g_probe_rollout = 0;
+TurnSolver::ProbeRolloutGuard::ProbeRolloutGuard()  { ++g_probe_rollout; }
+TurnSolver::ProbeRolloutGuard::~ProbeRolloutGuard() { --g_probe_rollout; }
+bool TurnSolver::InProbeRollout() { return g_probe_rollout > 0; }
+static bool ProbeBpSuppressed()
+{
+    static const bool keep_bp = EnvOn("MTG_PROBE_ROLLOUT_BP", true);   // DEFAULT ON; =0 suppresses
+    return g_probe_rollout > 0 && !keep_bp;
+}
 // Commit-the-line recursion depth. The committed decision is the OUTERMOST FSLineWin node of a
 // pass (its `state` is the real game state); everything below it is lookahead. Nesting is the
 // robust discriminator -- iterative deepening runs many passes, and each pass's root re-enters at
@@ -9621,6 +9637,7 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
 {
     const int w = BpSearchWidth();
     if (w <= 0 || g_bp_enum_depth != 0 || plans.empty()) { return; }
+    if (ProbeBpSuppressed()) { return; }   // probe trial game: adoption-era (pre-fan-out) labels
     if (!g_bp_root_enum && !BpSearchInRollouts()) { return; }   // committed decision only
     const int  s_max_base = BpMaxBase();
     const int  sites  = BpWave0SiteMask();   // wave-0 SELECTION only; the wave phase uses the full mask
@@ -9724,6 +9741,9 @@ static int BpWaveMode()
 static bool BpWavesHere(const SearchBudget* budget)
 {
     if (BpWaveMode() <= 0 || BpSearchWidth() <= 0) { return false; }
+    // Probe trial game (ProbeRolloutGuard): no wave phase either -- the walker would fan the base
+    // plans from rank 0 even with wave 0 suppressed, re-opening the cost this guard exists to close.
+    if (ProbeBpSuppressed()) { return false; }
     if (budget == nullptr || budget->Unlimited()) { return true; }
     // Skipping the phase for lack of budget leaves ranks unexplored -- a truncation, so any
     // enclosing no-win stops being a refutation (see g_fs_trunc_events).
@@ -10853,10 +10873,35 @@ namespace
     }
 }
 
+// MTG_CANON_SIMKEY=1 (EXPERIMENT, default OFF = byte-identical): fold the hand and battlefield as
+// ORDER-INSENSITIVE multisets instead of ordered sequences. The ordered fold means "play Sandbar
+// T3, Cave T4" and "Cave T3, Sandbar T4" -- the SAME position -- never share a memo entry, so with
+// searched breakpoint continuations (which generate every play order) the FSLineCache/TT DAG
+// degenerates into a tree: distinct-state growth counts SEQUENCES, x12/ply on treasure_hunt
+// (docs/design/th-d5-five-hour-game.md). Canonicalizing collapses permutations. NOT provably
+// byte-identical ON: greedy tie-breaks read vector order, so a memo hit may return a line computed
+// under a permuted internal order -- the A/B (same answers?) is the test this flag exists for.
+inline bool CanonSimKeyOn()
+{
+    static const bool v = EnvOn("MTG_CANON_SIMKEY");
+    return v;
+}
+
 static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns,
                                            bool second_main)
 {
     TranspositionTable::Key k;
+    const bool canon = CanonSimKeyOn();
+    // Order-insensitive fold of a section: sub-hash each item into its own Key, sort the
+    // (h1,h2) pairs, fold them in sorted order. Sorting (not a commutative sum) keeps the
+    // multiset exact -- no weaker-than-128-bit collision class is introduced.
+    std::vector<std::pair<uint64_t, uint64_t>> canon_items;
+    auto canon_flush = [&]()
+    {
+        std::sort(canon_items.begin(), canon_items.end());
+        for (const auto& [a, b] : canon_items) { Fold(k, a); Fold(k, b); }
+        canon_items.clear();
+    };
 
     Fold(k, 0x5117); // section tag: scalars
     Fold(k, static_cast<uint64_t>(depth));
@@ -10892,10 +10937,18 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // Full ordered library when shuffle can reorder it (see above). Skipped when OFF.
         if (shuffle_keys) { for (const Card& c : p.library) { Fold(k, c.m_name_hash); } }
 
-        Fold(k, 0x4A00 + static_cast<uint64_t>(pi)); // sub-section: hand (ordered)
+        Fold(k, 0x4A00 + static_cast<uint64_t>(pi)); // sub-section: hand (ordered; multiset when canon)
         Fold(k, static_cast<uint64_t>(p.hand.size()));
         for (const Card& c : p.hand)
         {
+            if (canon)
+            {
+                TranspositionTable::Key ck;
+                Fold(ck, c.m_name_hash);
+                if (c.m_is_staged) { Fold(ck, static_cast<uint64_t>(c.m_staged_expiry)); }
+                canon_items.emplace_back(ck.h1, ck.h2);
+                continue;
+            }
             Fold(k, c.m_name_hash);
             // A staged card's expiry changes when it can still be played, so two hands
             // with identical names but different staged expiries are different rollout
@@ -10903,6 +10956,7 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             // prior key (byte-identical results).
             if (c.m_is_staged) { Fold(k, static_cast<uint64_t>(c.m_staged_expiry)); }
         }
+        if (canon) { canon_flush(); }
 
         Fold(k, 0x57A6 + static_cast<uint64_t>(pi)); // sub-section: staged cards
         Fold(k, static_cast<uint64_t>(p.staged_cards.size()));
@@ -10950,25 +11004,29 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         }
     }
 
-    Fold(k, 0xB1F1); // section tag: battlefield (ordered)
+    Fold(k, 0xB1F1); // section tag: battlefield (ordered; multiset when canon)
     Fold(k, static_cast<uint64_t>(state.battlefield.size()));
     for (const Permanent& perm : state.battlefield)
     {
-        Fold(k, perm.card.m_name_hash);
-        Fold(k, static_cast<uint64_t>(perm.controller_index));
-        Fold(k, perm.tapped ? 1u : 0u);
-        Fold(k, perm.entered_this_turn ? 1u : 0u);
-        Fold(k, perm.is_animated ? 1u : 0u);
-        Fold(k, static_cast<uint64_t>(perm.charge_counters));
-        Fold(k, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_power_bonus)));
-        Fold(k, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_tough_bonus)));
-        Fold(k, static_cast<uint64_t>(static_cast<int64_t>(perm.damage)));
+        TranspositionTable::Key ck;             // canon: per-perm sub-key, folded sorted below
+        TranspositionTable::Key& tk = canon ? ck : k;
+        Fold(tk, perm.card.m_name_hash);
+        Fold(tk, static_cast<uint64_t>(perm.controller_index));
+        Fold(tk, perm.tapped ? 1u : 0u);
+        Fold(tk, perm.entered_this_turn ? 1u : 0u);
+        Fold(tk, perm.is_animated ? 1u : 0u);
+        Fold(tk, static_cast<uint64_t>(perm.charge_counters));
+        Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_power_bonus)));
+        Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_tough_bonus)));
+        Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.damage)));
         for (const Counter& ctr : perm.counters)
         {
-            Fold(k, static_cast<uint64_t>(ctr.type));
-            Fold(k, static_cast<uint64_t>(static_cast<int64_t>(ctr.count)));
+            Fold(tk, static_cast<uint64_t>(ctr.type));
+            Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(ctr.count)));
         }
+        if (canon) { canon_items.emplace_back(ck.h1, ck.h2); }
     }
+    if (canon) { canon_flush(); }
 
     return k;
 }
@@ -11587,9 +11645,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // No projected-`wins_this_turn` shortcut: lethality is decided by actually
     // simulating each plan below, so the committed line's win turn always matches
     // replaying it (the projection can over-count vs ApplyPlanDirect+SimulateCombat).
-    // Searched-breakpoint fan-out is emitted only at the COMMITTED node (nest 0) -- the play this
-    // turn actually makes. Deeper nodes are lookahead and keep the cheap greedy continuation; see
-    // g_bp_root_enum for why fanning out everywhere costs more budget than it buys.
+    // Searched-breakpoint fan-out: `bp_root` marks the COMMITTED node (nest 0), but since
+    // BpSearchInRollouts() defaulted ON the fan-out is emitted at EVERY ply and every rollout turn
+    // (AppendBreakpointVariants gates on `!g_bp_root_enum && !BpSearchInRollouts()`, which never
+    // fires by default) -- root-only was measured to recover none of the gain (see the flag's
+    // comment). bp_root still gates root-only concerns (tie scan, landfan trace). A stale version
+    // of this comment claimed deeper nodes keep the greedy continuation; that mis-aimed the whole
+    // 2026-08-06 depth-curve investigation (th-d5-five-hour-game.md).
     const bool bp_root = (g_fsline_nest == 0);
     FsLineNestGuard _fs_nest;
     g_bp_root_enum = bp_root;
@@ -13987,6 +14049,34 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     return k;
 }
 
+// Probe for the TH depth-curve regression (docs/design/th-d5-five-hour-game.md): is the enum memo
+// below THRASHING (its 8192 cap is cleared wholesale on overflow), and how many DISTINCT breakpoint
+// states does a game really visit? MTG_BP_ENUM_PROBE=1 prints the tallies at exit; the counters are
+// only bumped under the flag, so unset is byte-identical.
+namespace
+{
+    struct BpEnumProbe
+    {
+        std::atomic<uint64_t> hits{0};      // memo returns
+        std::atomic<uint64_t> misses{0};    // full EnumeratePlansWithLand derivations
+        std::atomic<uint64_t> clears{0};    // wholesale cache clears (the suspected thrash)
+        ~BpEnumProbe()
+        {
+            if (!EnvOn("MTG_BP_ENUM_PROBE")) { return; }
+            std::fprintf(stderr, "[bp-enum] hits=%llu misses=%llu clears=%llu\n",
+                         static_cast<unsigned long long>(hits.load()),
+                         static_cast<unsigned long long>(misses.load()),
+                         static_cast<unsigned long long>(clears.load()));
+        }
+    };
+    BpEnumProbe g_bp_enum_probe;
+    inline bool BpEnumProbeOn()
+    {
+        static const bool on = EnvOn("MTG_BP_ENUM_PROBE");
+        return on;
+    }
+}
+
 std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameState& state,
                                                                    bool is_pre_combat)
 {
@@ -13998,18 +14088,25 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
     // Capped so a long game cannot grow it without bound, and thread_local because the batch runner
     // plays games concurrently. MTG_NO_BP_ENUM_CACHE disables it -- results must be identical either
     // way, and the smoke digests are the check. See docs/design/post-breakpoint-search.md.
+    // MTG_BP_ENUM_CACHE_CAP overrides the cap (value-carrying; A/B probe for the memo-thrash
+    // question above -- results must be identical at ANY cap, only the wall clock may move).
     static const bool s_cache = !EnvOn("MTG_NO_BP_ENUM_CACHE");
     using BpEnumMap = std::unordered_map<TranspositionTable::Key, std::vector<Plan>,
                                          TranspositionTable::KeyHash>;
     static thread_local BpEnumMap cache;
-    constexpr std::size_t kBpEnumCacheCap = 8192;
+    static const std::size_t s_bp_enum_cap =
+        static_cast<std::size_t>(std::max(1, EnvInt("MTG_BP_ENUM_CACHE_CAP", 8192)));
 
     TranspositionTable::Key key;
     if (s_cache)
     {
         key = BuildBreakpointKey(state, is_pre_combat);
         BpEnumMap::const_iterator it = cache.find(key);
-        if (it != cache.end()) { return it->second; }
+        if (it != cache.end())
+        {
+            if (BpEnumProbeOn()) { g_bp_enum_probe.hits.fetch_add(1, std::memory_order_relaxed); }
+            return it->second;
+        }
     }
 
     ++g_bp_enum_depth;   // suppress the fan-out: this IS the continuation list, not a new decision
@@ -14018,7 +14115,12 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
 
     if (s_cache)
     {
-        if (cache.size() >= kBpEnumCacheCap) { cache.clear(); }
+        if (BpEnumProbeOn()) { g_bp_enum_probe.misses.fetch_add(1, std::memory_order_relaxed); }
+        if (cache.size() >= s_bp_enum_cap)
+        {
+            if (BpEnumProbeOn()) { g_bp_enum_probe.clears.fetch_add(1, std::memory_order_relaxed); }
+            cache.clear();
+        }
         cache.emplace(key, plans);
     }
     return plans;

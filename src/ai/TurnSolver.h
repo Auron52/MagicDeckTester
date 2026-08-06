@@ -413,6 +413,21 @@ public:
     // executor's fallback breakpoint re-solve (AIEngine::resolve_draw_breakpoint) MUST use this,
     // never EnumerateMainPlans, or the realised play would drift from the searched one.
     static std::vector<Plan> EnumerateBreakpointPlans(const GameState& state, bool is_pre_combat);
+
+    // PROBE-ROLLOUT scope. A trial rollout that LABELS one candidate of an executor micro-decision
+    // (searched cleanup discard, Land's Edge fire count) plays a full engine game whose every turn
+    // runs its own search. Before this guard those searches inherited the FULL matrix depth, so
+    // probe cost = candidates x turns x (breakpoint fan-out ladder) -- the treasure_hunt
+    // hours-long-game regression (docs/design/th-d5-five-hour-game.md: one fat-hand cleanup fired
+    // ~20 trials, each turn re-paying a x12/ply refutation ladder; d5 = 1300s). While the guard is
+    // alive, RolloutWinTurnFrom pins the trial's per-turn lookahead (MTG_PROBE_ROLLOUT_DEPTH,
+    // default 3 -- smoke byte-identical, flat ~7s at every depth on the repro game) and
+    // MTG_PROBE_ROLLOUT_BP=0 can additionally drop the searched-breakpoint fan inside trials
+    // (another ~10x, one TH game flips). The REAL game's committed search never runs under this
+    // guard, so declared-depth completeness is untouched.
+    struct ProbeRolloutGuard { ProbeRolloutGuard(); ~ProbeRolloutGuard(); };
+    static bool InProbeRollout();
+
     // #10 cast-order: canonical (executor clean-set) order of a plan's non-sac hand casts, for the
     // viewer to diff the human's queued order against (equal => don't emit --cast-order).
     static std::vector<std::string> CanonicalNonSacCastOrder(const GameState& state, const Plan& plan);
