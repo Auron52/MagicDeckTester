@@ -183,15 +183,25 @@ Measured (with vs without, per-game; unwon = max_turns+1):
 | held-out d3 s5005 ×250 | 4.8400 | 4.8040 | 7 | 16 | −9 |
 | held-out d5 s4004 ×150 | 4.9533 | 4.9200 | 3 | 8 | −5 |
 
-Every arm (train + held-out) net-improves; every slower game is exactly +1 turn. The slower
-games decompose into (inspected: d3 s1001 gi63; all nine d3 s3003 slower games): (a) the
-dominant class, reshuffle draw-order divergence — a different fetch target reorders the
-post-search shuffle, so later draws differ arm-to-arm (gi63: the without-arm drew DotH t4
-where the with-arm drew a 4th Orchard; gi27 has NO tutor cast in either arm and still flips —
-pure plan-set churn); (b) a real minority, the search's occasional velocity/fixing fetch
-(Windswept Heath, Tree of Tales, Forest) denied by Orchard-first, worth ~1 turn when DotH
-needed the 4th land a turn earlier. The aggregate says Orchard's Spirit-per-turn drain +
-DotH-enablement dominates: smoke 27/27 + regression 45/45 ALL PASS (byte-identical elsewhere).
+Every arm (train + held-out) net-improves. USER-CORRECTED mechanism analysis (2026-08-06):
+there is NO genuine land-quality reason to fetch anything else — every land in the deck taps
+for exactly one mana and Orchard is any-colour, so no fetch accelerates or fixes better. (The
+sole arguable exception, Azorius Chancery's 2-mana-per-card, matters only in the narrow
+"turn 3, no further land drop in hand" case — and it was fetched in ZERO inspected games,
+either arm.) The slower games decompose, verified with the MTG_SHUFFLE_SALT_SEARCH
+clairvoyance-decoupling instrument (salt 12345, d3 s1001 + s3003, both arms):
+- **Clairvoyance** — d3 s1001's four slower games ALL collapse to equal-or-faster when the
+  search can no longer foresee the real reshuffle: the full-list arm was picking fetch
+  targets for the post-shuffle library order it could see, not for the lands themselves.
+- **Plan-set churn** — s3003 gi27 flips (4→6) with NO tutor cast in either arm, and gi235
+  flips with IDENTICAL fetches in both arms: a tutor in hand enumerates 1 vs ~8 cast
+  variants, and that plan-set difference alone tips unrelated search tie-breaks.
+- **Real-draw divergence** — a different fetch target changes library composition and
+  shuffle count, so the two arms simply draw different games afterward; arm-luck that sums
+  AGAINST the full list overall.
+On the clairvoyance-stripped metric Orchard-first stays net-better on both seeds (s1001
+−33, s3003 −6 turn-units; both arms individually worse without clairvoyance, as expected).
+Smoke 27/27 + regression 45/45 ALL PASS (byte-identical elsewhere).
 
 ## Approved deferrals
 
