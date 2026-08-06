@@ -158,18 +158,40 @@ to this deck). Probe (d3, seed 1001, 250 games): DotH resolved in 145 games, dou
 chosen in 98; game_102 upkeep drop 16 → −36 = 13 swept × exactly 4; game_116 sweeps a 3/3
 (pre-fix survivor) into a −38 empty board. avg turns 4.91 → 4.864.
 
-## Queued next (user-directed, 2026-08-06 — do after conversation compaction)
+## CreatureGivingProvider: Orchard-first land tutoring (ADOPTED 2026-08-06, user-directed)
 
-- **Orchard-first land-tutor heuristic (USER-DIRECTED, strong recommendation):** add a
-  `CreatureGivingProvider` (routed by the existing `gift` detection in
-  `SelectDecisionProvider`, currently returning GenericProvider) overriding `TutorCandidates`
-  for the land-typed tutors (Sylvan Scrying `tutor_to_hand` + Crop Rotation
-  `tutor_land_to_battlefield`): **always pick Forbidden Orchard** while a copy remains in the
-  library; fallback ranking when none does. The user was explicit: **0 exceptions — this
-  narrowing lives in the provider** (never a generic cap), per the core invariant.
-  `MTG_UNPRUNED` remains the standing full-search A/B lever. Validate with the 5e step-6
-  with/without per-game A/B (>= 2 seed sets, every regression explained), report, then adopt;
-  add to the 6a disclosure table. Fetchlands unaffected (Orchard has no basic types).
+`CreatureGivingProvider` (routed by the `gift` detection in `SelectDecisionProvider`, formerly
+GenericProvider) overrides `TutorCandidates` for the land-typed tutors only (Sylvan Scrying
+to-hand, Crop Rotation to-battlefield): **while a Forbidden Orchard remains in the library the
+single candidate is Forbidden Orchard** — one cast variant, no search axis. Per the user: 0
+exceptions, the narrowing lives in the provider; `MTG_UNPRUNED` / `MTG_UNPRUNE=tutor` remains
+the standing full-list lever (verified: the tutor-gate arm reproduces the pre-provider batch
+digests byte-for-byte). No Orchard left → Generic full list returns (search picks). The
+non-land Enlightened Tutor keeps the full searched list. Fetchlands unaffected (Orchard has
+no basic types). Inherits Generic elsewhere (incl. the root SacTutorPutList).
+
+Measured (with vs without, per-game; unwon = max_turns+1):
+
+| arm | without | with | slower | faster | net turn-units |
+|---|---|---|---|---|---|
+| d0 s1001 ×1000 | 5.9640 | 5.7690 | 16 | 145 | −195 |
+| d3 s1001 ×250 | 4.8640 | 4.8160 | 4 | 16 | −12 |
+| d3 s2002 ×250 | 4.8440 | 4.8040 | 4 | 14 | −10 |
+| d3 s3003 ×250 | 4.7840 | 4.7600 | 9 | 14 | −6 |
+| d5 s1001 ×150 | 4.8800 | 4.8000 | 1 | 13 | −12 |
+| held-out d3 s4004 ×250 | 4.9080 | 4.8960 | 8 | 11 | −3 |
+| held-out d3 s5005 ×250 | 4.8400 | 4.8040 | 7 | 16 | −9 |
+| held-out d5 s4004 ×150 | 4.9533 | 4.9200 | 3 | 8 | −5 |
+
+Every arm (train + held-out) net-improves; every slower game is exactly +1 turn. The slower
+games decompose into (inspected: d3 s1001 gi63; all nine d3 s3003 slower games): (a) the
+dominant class, reshuffle draw-order divergence — a different fetch target reorders the
+post-search shuffle, so later draws differ arm-to-arm (gi63: the without-arm drew DotH t4
+where the with-arm drew a 4th Orchard; gi27 has NO tutor cast in either arm and still flips —
+pure plan-set churn); (b) a real minority, the search's occasional velocity/fixing fetch
+(Windswept Heath, Tree of Tales, Forest) denied by Orchard-first, worth ~1 turn when DotH
+needed the 4th land a turn earlier. The aggregate says Orchard's Spirit-per-turn drain +
+DotH-enablement dominates: smoke 27/27 + regression 45/45 ALL PASS (byte-identical elsewhere).
 
 ## Approved deferrals
 

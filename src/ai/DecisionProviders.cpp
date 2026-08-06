@@ -5515,20 +5515,42 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     return cands;
 }
 
+// ---- CreatureGivingProvider -------------------------------------------------
+
+std::vector<std::string>
+CreatureGivingProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    // Orchard-first land tutoring (USER-DIRECTED, 2026-08-06; see the class comment). Applies
+    // to any tutor whose type filter is Land (Sylvan Scrying, Crop Rotation); every other
+    // tutor (Enlightened Tutor's artifact/enchantment search) keeps the Generic full list.
+    if (DecisionUnpruned(UnprunedGate::Tutor))
+    { return GenericProvider::TutorCandidates(s, controller, pp); }
+    bool land_tutor = false;
+    for (const std::string& t : pp.tutor_types)
+    { if (t == "Land") { land_tutor = true; break; } }
+    if (!land_tutor) { return GenericProvider::TutorCandidates(s, controller, pp); }
+    for (const Card& lc : s.players[controller].library)
+    { if (lc.m_name.str() == "Forbidden Orchard") { return { "Forbidden Orchard" }; } }
+    // No Orchard left: the full list returns and the search picks (mana fixing is board-
+    // dependent -- exactly the depth a static fallback ranking lacks).
+    return GenericProvider::TutorCandidates(s, controller, pp);
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
 {
     // Stateless, read-only -> single shared const instances are thread-safe (same model as
     // CardDatabase). Process lifetime, so GameState's raw pointer stays valid.
-    const GenericProvider      g_generic;
-    const AntiLifegainProvider g_antilife;
-    const TreasureHuntProvider g_treasure;
-    const VialProvider         g_vial;
-    const HinataProvider       g_hinata;
-    const BurnProvider         g_burn;
-    const DragonstormProvider  g_dragonstorm;
-    const GoblinsProvider      g_goblins;
+    const GenericProvider        g_generic;
+    const AntiLifegainProvider   g_antilife;
+    const TreasureHuntProvider   g_treasure;
+    const VialProvider           g_vial;
+    const HinataProvider         g_hinata;
+    const BurnProvider           g_burn;
+    const DragonstormProvider    g_dragonstorm;
+    const GoblinsProvider        g_goblins;
+    const CreatureGivingProvider g_creature_giving;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -5597,9 +5619,9 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
         // Creature Giving (gift-the-opponent drain): any of its gated params marks the deck. Its
         // Sylvan Scrying (tutor_to_hand) + fetchlands would otherwise trip the anti-lifegain
         // signature below and misroute the whole deck to AntiLifegainProvider (whose tutor
-        // heuristic hunts lifegain_to_loss enablers this deck does not run). Rides
-        // GenericProvider until mined rules justify an archetype subclass; the Defense of the
-        // Heart SacTutorPutList default lives in the DecisionProvider root, so Generic inherits it.
+        // heuristic hunts lifegain_to_loss enablers this deck does not run). Routed to
+        // CreatureGivingProvider (Orchard-first land tutoring, user-directed); the Defense of
+        // the Heart SacTutorPutList default lives in the DecisionProvider root and is inherited.
         if (p.opp_creature_enters_life_loss > 0 || p.etb_opp_creates_tokens > 0
             || p.upkeep_sac_tutor_creatures > 0 || p.cumulative_upkeep_opp_token
             || p.etb_opp_creatures_debuff > 0  || p.opp_dies_life_loss > 0)
@@ -5620,8 +5642,8 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     // Matron tutor width (12, -0.0620 held-out). It derives from GenericProvider and overrides only
     // those, so every other decision still resolves through exactly the code this deck used before.
     if (goblin) { return g_goblins; }
-    // Creature Giving rides Generic; must WIN OVER anti (see the gift detection note above).
-    if (gift) { return g_generic; }
+    // Creature Giving; must WIN OVER anti (see the gift detection note above).
+    if (gift) { return g_creature_giving; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
     if (vial) { return g_vial; }
