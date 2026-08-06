@@ -1,4 +1,4 @@
-# Regression ground truth -- commit d34c0e6  date 2026-08-06
+# Regression ground truth -- commit 7abd526  date 2026-08-06
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -31,6 +31,9 @@ auras_smoke_d5_s1001=4.1320/876a844b4869aaae
 goblins_smoke_d0_s1001=4.7490/0284b3adc33e15ed
 goblins_smoke_d3_s1001=4.2333/23bceaaff366f71a
 goblins_smoke_d5_s1001=4.1867/5ae908830007e5c6
+creature_giving_smoke_d0_s1001=5.7690/dbb02644448bc8af
+creature_giving_smoke_d3_s1001=4.8133/ed038c8229520f4d
+creature_giving_smoke_d5_s1001=4.8400/4e119a2597fa7f04
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/4ec30ea41e344477
@@ -78,6 +81,11 @@ goblins_regression_d3_s2002=4.3167/1ea3e3fa8dcf0294
 goblins_regression_d3_s3003=4.3267/81e45ff362f4eaaf
 goblins_regression_d5_s2002=4.3640/ffc4a3dc91bec747
 goblins_regression_d5_s3003=4.3120/403cf7703231d7d6
+creature_giving_regression_d0_s2002=5.8560/a8133f1f87182c66
+creature_giving_regression_d3_s2002=4.8400/563f3094554313d9
+creature_giving_regression_d3_s3003=4.7733/bcbdddd85691e7c2
+creature_giving_regression_d5_s2002=4.7920/e4774fcff26fe425
+creature_giving_regression_d5_s3003=4.7480/5386d2d0e283fc57
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/fe364b007bbfaa56
@@ -188,3 +196,15 @@ goblins_overnight_d5_s4004=4.3000/bd4f0bf48b7c7f4b
 goblins_overnight_d5_s5005=4.3040/c3556612b2b0856d
 goblins_overnight_d5_s6006=4.3010/242f10e452bc8eca
 goblins_overnight_d5_s7007=4.3800/97939a0245fa684e
+creature_giving_overnight_d0_s4004=5.8900/90b91bbab72530eb
+creature_giving_overnight_d0_s6006=5.8210/34b550257852d657
+creature_giving_overnight_d0_s8008=5.8480/6a1ca369398da6a7
+creature_giving_overnight_d0_s10010=5.8610/49ff9cabcf41c2a7
+creature_giving_overnight_d3_s4004=4.7830/58679417a76db0ec
+creature_giving_overnight_d3_s5005=4.7750/025709e12a450ebc
+creature_giving_overnight_d3_s6006=4.7710/35b23baba8b353bf
+creature_giving_overnight_d3_s7007=4.7780/80d8ae713323cceb
+creature_giving_overnight_d5_s4004=4.7760/ea1797e8e220957e
+creature_giving_overnight_d5_s5005=4.7560/acb158692ab3a6b9
+creature_giving_overnight_d5_s6006=4.7800/acce6120b7e715ef
+creature_giving_overnight_d5_s7007=4.7900/b04e1d4ab071cc50

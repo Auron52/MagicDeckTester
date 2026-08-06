@@ -27,6 +27,7 @@ declare -A DECK_FILE=(
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.cod
   [auras]=decks/Auras/Auras.cod
   [goblins]=decks/Goblins/Goblins.cod
+  [creature_giving]="decks/Creature Giving/Creature Giving.cod"
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
@@ -38,6 +39,7 @@ declare -A DECK_PROF=(
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.profile.json
   [auras]=decks/Auras/Auras.profile.json
   [goblins]=decks/Goblins/Goblins.profile.json
+  [creature_giving]="decks/Creature Giving/Creature Giving.profile.json"
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -91,6 +93,14 @@ SMOKE_CASES=(
   "goblins 0 1001 1000 0"
   "goblins 3 1001  150 10"
   "goblins 5 1001   75 20"
+  # creature_giving: gift-the-opponent drain (wins ~turn 4.8). Dragonstorm-class cost
+  # (measured 2026-08-06 single-thread: d0 ~0.14 ms/game, d3 b10 ~0.23 s/game, d5 b20
+  # ~0.48 s/game) -> th/dragonstorm smoke sizing (~70 s ST added). Covers engine paths no
+  # other deck exercises: enter-watchers, stacking Wurm sweeps, DotH upkeep sac-tutor,
+  # cumulative upkeep, tutor_land_to_battlefield.
+  "creature_giving 0 1001 1000 0"
+  "creature_giving 3 1001  150 10"
+  "creature_giving 5 1001   75 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -150,6 +160,12 @@ REGRESSION_CASES=(
   "goblins 3 3003  300 10"
   "goblins 5 2002  250 20"
   "goblins 5 3003  250 20"
+  # creature_giving: dragonstorm-mirror sizing (~6.5 min ST added; see SMOKE block for costs).
+  "creature_giving 0 2002 1000 0"
+  "creature_giving 3 2002  300 10"
+  "creature_giving 3 3003  300 10"
+  "creature_giving 5 2002  250 20"
+  "creature_giving 5 3003  250 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -300,4 +316,20 @@ OVERNIGHT_CASES=(
   "goblins 5 5005 1000 40"
   "goblins 5 6006 1000 40"
   "goblins 5 7007 1000 40"
+  # creature_giving: goblins-style generosity (d3 b20 / d5 b40, ~2x the gate budgets) at
+  # dragonstorm-style d5 counts -- d5 b40 is the deck's expensive axis (~1 s/game ST est.),
+  # so 500g x 4 seeds keeps it ~35 min ST. d3 1000g <= 1001 seed spacing; d0 2000g on the
+  # 2002-spaced bases (see SEED SPACING note above).
+  "creature_giving 0 4004 2000 0"
+  "creature_giving 0  6006 2000 0"
+  "creature_giving 0  8008 2000 0"
+  "creature_giving 0 10010 2000 0"
+  "creature_giving 3 4004 1000 20"
+  "creature_giving 3 5005 1000 20"
+  "creature_giving 3 6006 1000 20"
+  "creature_giving 3 7007 1000 20"
+  "creature_giving 5 4004  500 40"
+  "creature_giving 5 5005  500 40"
+  "creature_giving 5 6006  500 40"
+  "creature_giving 5 7007  500 40"
 )
