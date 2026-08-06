@@ -270,6 +270,17 @@ private:
     // this AIEngine by reference, so its play must not consume the real game's line).
     std::deque<TurnSolver::PhasePlan> m_committed_line;
 
+    // Cleanup-discard LOCKSTEP (Plan::discard_choice, the searched axis): the choice pinned by
+    // the plan this turn is EXECUTING, consumed by the first shed of the real cleanup
+    // (ChooseDiscard) exactly as the rollout consumes GameState::scripted_discard_choice in
+    // SimulateEndAndStartNextTurn -- so the realised shed is the one the scored line assumed.
+    // An ENGINE member, not a GameState ride, so trial-state copies (probes, keep rollouts)
+    // can never inherit the real game's pin; write-when->=0 / consume-and-clear-on-first-shed
+    // mirrors the rollout semantics byte-for-byte. -1 = no pin (heuristic / probe as before).
+    // Saved/restored around shared-engine rollouts alongside m_committed_line.
+    // See docs/design/searched-discard-as-search-node.md (stage 1).
+    int m_discard_choice_pin = -1;
+
     // Oracle (MTG_FD_ORACLE): earliest searched win predicted this game and the turn
     // it was predicted, to flag when a later recompute degrades below it (divergence).
     int m_fd_best_win  = 21;

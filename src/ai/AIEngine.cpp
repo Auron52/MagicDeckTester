@@ -398,6 +398,7 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
 
     // New game: drop any committed full-depth line from a previous game.
     m_committed_line.clear();
+    m_discard_choice_pin = -1;
     m_fd_best_win  = max_turns + 1;
     m_fd_best_turn = 0;
 
@@ -1006,6 +1007,8 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
     // real game is mid-way through replaying.
     std::deque<TurnSolver::PhasePlan> saved_line = std::move(m_committed_line);
     m_committed_line.clear();
+    const int saved_discard_pin = m_discard_choice_pin;
+    m_discard_choice_pin = -1;
     GameEngine engine(*this);
     int win_turn = engine.PlayOutFrom(trial, max_turns, from);
     if (lands_out)
@@ -1016,6 +1019,7 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
         *lands_out = n;
     }
     m_committed_line = std::move(saved_line);
+    m_discard_choice_pin = saved_discard_pin;
     m_in_rollout = false;
     m_logger     = saved;
     return win_turn > 0 ? win_turn : max_turns + 1;
@@ -1892,6 +1896,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             PROF_ADD_NODES(budget.Used());
             PROF_RECORD_DECISION(state.turn_number, is_pre_combat_main, budget.Used());
+
+            // Cleanup-discard lockstep: pin the executing plan's searched shed choice for this
+            // turn's real cleanup (ChooseDiscard). Write-when->=0, exactly like ApplyPlanDirect's
+            // scripted_discard_choice write on the rollout side, so a second main's plan without
+            // the axis leaves a pre-combat pin standing -- the same last-writer-wins the scored
+            // line saw. Inert while every provider's axis width is 1 (no plan carries the field).
+            if (plan.discard_choice >= 0) { m_discard_choice_pin = plan.discard_choice; }
 
             // Divergence log (MTG_DIVERGENCE_LOG): on the search-driven path, compare the search's
             // committed plan to what greedy d0 would do at this SAME untouched state (diagnosis only;
@@ -3402,6 +3413,21 @@ Card* AIEngine::ChooseDiscard(GameState& state)
     const int heur = cand.empty() ? -1 : cand.front();
     if (heur < 0) { return &ap.hand[0]; }
     const int hand_size = static_cast<int>(ap.hand.size());
+
+    // LOCKSTEP (stage 1, docs/design/searched-discard-as-search-node.md): the executing plan's
+    // searched shed (Plan::discard_choice via m_discard_choice_pin) decides the FIRST shed of the
+    // real cleanup -- the search already chose among the provider's candidates under the same
+    // assumptions the committed line encodes, so re-deciding here (probe or heuristic) would
+    // deviate from the scored line. Consume-and-clear on first shed, clamped -- byte-for-byte the
+    // rollout's semantics (TurnSolver::SimulateEndAndStartNextTurn). Never inside a rollout: a
+    // shared-engine playout saves/restores the pin and sheds heuristically, as it always has.
+    if (!m_in_rollout && m_discard_choice_pin >= 0)
+    {
+        const std::size_t pick = std::min(static_cast<std::size_t>(m_discard_choice_pin),
+                                          cand.size() - 1);
+        m_discard_choice_pin = -1;
+        return &ap.hand[cand[pick]];
+    }
 
     // SEARCHED cleanup discard (mirrors the lookahead bottomer, BottomCards): roll out a full
     // clairvoyant game for discarding each candidate (the card truly goes to the GRAVEYARD, unlike
