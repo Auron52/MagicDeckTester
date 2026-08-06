@@ -114,6 +114,16 @@ MANIFEST = {
     # chooser (g_play_echo_chooser in AIEngine echo resolution, mirroring vial_charge). Default = pay
     # if affordable (the heuristic). Binary: 1 = pay, 0 = let it die.
     "echo_cost":              ("echo",                 truthy),
+    # Defense of the Heart: at upkeep (opp >= 3 creatures), sacrifice + put up to two library
+    # creature cards onto the battlefield -- WHICH creatures is a real multi-pick human choice ->
+    # its own `sac_tutor` type (WriteSacTutorDecisionJson / sacTutorPanelHtml), an upkeep chooser
+    # (g_play_sac_tutor_chooser in PerformUpkeepSacTutor, same reply shape as `dragon`). Default =
+    # the provider's SacTutorPutList (closed-form immediate-drain maximisation).
+    "upkeep_sac_tutor_creatures": ("sac_tutor",        positive),
+    # Crop Rotation: search a land onto the battlefield -- the target is a searched tutor-axis
+    # sub-decision surfaced inside the main_phase plan variants (like tutor_to_hand/fetch), plus
+    # the sacrifice_land additional cost surfaces the shared `sacrifice` decision.
+    "tutor_land_to_battlefield": ("main_phase",        truthy),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
 
@@ -195,6 +205,19 @@ INERT_PARAMS = {
     "target_own_creature": "targeting modifier; choice rides `targeting` (can also hit opponent creatures)",
     # self-declared
     "goldfish_inert": "self-declared inert marker",
+    # --- Creature Giving (gift-the-opponent drain) -----------------------------------------
+    # Every trigger here is automatic (no player choice): the enter-watchers are mandatory-taken
+    # "you may" beneficials, the gifts are fixed-count opponent tokens, the sweep hits every
+    # qualifying opponent creature, and the cumulative upkeep is a disclosed always-paid
+    # auto-decision (weakly dominant vs the passive opponent; see the War-Riders bracket note).
+    "etb_opp_creates_tokens": "automatic ETB gift (fixed count, single opponent -> no target)",
+    "any_creature_enters_lifegain": "automatic enter trigger (Wardens)",
+    "own_creature_enters_lifegain": "automatic enter trigger (Suture Priest, may-always-taken)",
+    "opp_creature_enters_life_loss": "automatic enter trigger (Suture Priest, may-always-taken)",
+    "etb_opp_creatures_debuff": "automatic ETB sweep, hits every qualifying opponent creature",
+    "opp_dies_life_loss": "automatic death trigger",
+    "cumulative_upkeep_opp_token": "always-paid auto-decision (disclosed; weakly dominant in goldfish)",
+    "upkeep_sac_tutor_opp_min": "trigger threshold (rides upkeep_sac_tutor_creatures -> sac_tutor)",
     # --- Dragonstorm (mono-red ritual/storm combo) -----------------------------------------
     # Token creation is automatic (no choice); its P/T/subtypes are computed detail.
     "attack_per_matching_creates_tokens": "automatic attack trigger (Utvara: per-attacking-Dragon token)",

@@ -1,0 +1,96 @@
+{
+  "card_scores": {
+    "Azorius Chancery": [
+      -0.18684777804836283
+    ],
+    "Birds of Paradise": [
+      0.5638517254340254,
+      -0.061459380936417674
+    ],
+    "Breeding Pool": [
+      -0.04442232213527397
+    ],
+    "City of Brass": [
+      0.05611836843508389
+    ],
+    "Crop Rotation": [
+      -0.02313438996202688,
+      -0.12286324786324787
+    ],
+    "Defense of the Heart": [
+      0.15476196851953983,
+      -0.3639174229580133
+    ],
+    "Enlightened Tutor": [
+      0.028593445149443397
+    ],
+    "Essence Warden": [
+      -0.16876979799553382,
+      -0.18327330932372998
+    ],
+    "Forbidden Orchard": [
+      0.2784553232844864,
+      0.07095209217707676
+    ],
+    "Forest": [
+      0.018874773139745393
+    ],
+    "Hunted Phantasm": [
+      0.10883557354145612,
+      -0.02494172494172453
+    ],
+    "Massacre Wurm": [
+      -0.11431944908077085
+    ],
+    "Misty Rainforest": [
+      -0.03888636345511287
+    ],
+    "Overgrown Tomb": [
+      -0.12244897959183643
+    ],
+    "Reflecting Pool": [
+      -0.12965186074429802
+    ],
+    "Soul Warden": [
+      -0.17369058098591506,
+      -0.1094933712121211
+    ],
+    "Stomping Ground": [
+      -0.007382454128440408
+    ],
+    "Suture Priest": [
+      -0.10487490041447778,
+      0.026129443421611498
+    ],
+    "Sylvan Scrying": [
+      -0.07323848641784281,
+      -0.22390984811366987
+    ],
+    "Temple Garden": [
+      -0.008126746725932499
+    ],
+    "Tree of Tales": [
+      -0.06000508517671044
+    ],
+    "Varchild's War-Riders": [
+      0.024595196070907654,
+      -0.07650602409638552
+    ],
+    "Windswept Heath": [
+      0.07792010058642695,
+      0.030272519801315845
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

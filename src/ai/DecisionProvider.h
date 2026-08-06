@@ -104,6 +104,21 @@ public:
     TutorToBattlefieldPutOrder(const GameState& /*s*/, int /*controller*/,
                                const CardParams& /*pp*/, int /*max_puts*/) const { return {}; }
 
+    // SacTutorPutList -- Defense of the Heart upkeep sac-tutor ("search your library for up to two
+    // creature cards, put those cards onto the battlefield"): which creature cards (by NAME, an
+    // ordered multiset like TutorToBattlefieldPutOrder -- repeats honour multiplicity) to put, in
+    // ENTER order. This is an UPKEEP decision the search cannot branch over (same architectural
+    // position as the Vial charge heuristic), so the default is a deterministic closed-form
+    // immediate-drain maximisation over singles and ordered pairs of library creature names:
+    // gift-token makers (etb_opp_creates_tokens) score tokens x enter-drain watchers, sweepers
+    // (etb_opp_creatures_debuff) score killable-opp-creatures x death-drain watchers, watcher
+    // newcomers raise the multipliers for cards entering AFTER them; total power tiebreak.
+    // Human play overrides via g_play_sac_tutor_chooser. Only called for a permanent with
+    // upkeep_sac_tutor_creatures > 0 -> never invoked for any other deck. Disclosed in the
+    // Creature Giving Stage-6a table; A/B-able like any provider heuristic.
+    virtual std::vector<std::string>
+    SacTutorPutList(const GameState& s, int controller, const CardParams& pp, int max_puts) const;
+
     // FetchCandidates -- fetch priority: ordered land-name candidates for a fetchland.
     virtual std::vector<std::string>
     FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const = 0;

@@ -143,9 +143,11 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // a one-card reveal "kept" by the tutor (the fetched-to-hand/top card).
     if (RevealVisible())
     {
+        // Disposition must match the tutor's actual placement: Enlightened/Idyllic Tutor put the
+        // card on TOP of the library, not in hand (2026-08-06 claude-play sweep flag, seed 9005).
         EmitReveal(state.turn_number, source_name + " (searched)",
                    { fetched_num }, { fetched_name }, { fetched_num }, {},
-                   /*dispositions*/ { "to hand" });
+                   /*dispositions*/ { pp.tutor_to_top ? "to top" : "to hand" });
     }
 
     // Gamble: "then discard a card at random." Deterministic so the rollout and the real executor

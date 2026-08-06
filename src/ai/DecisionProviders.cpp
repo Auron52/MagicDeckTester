@@ -597,6 +597,121 @@ std::vector<int> DecisionProvider::LightPawsAuraCandidates(
     return out;
 }
 
+std::vector<std::string> DecisionProvider::SacTutorPutList(
+    const GameState& s, int controller, const CardParams& /*pp*/, int max_puts) const
+{
+    // Defense of the Heart default: deterministic closed-form immediate-drain maximisation.
+    // Enumerate singles + ordered pairs of library creature NAMES (repeats allowed up to copy
+    // count) and score the burst each sequence realises the moment it enters, using the same
+    // arithmetic the engine's resolution applies (see PerformUpkeepSacTutor):
+    //   - a gift-maker's tokens each drain the CURRENT enter-watch total (Suture Priests);
+    //   - a sweeper kills every opp creature with toughness - damage <= debuff, each death
+    //     draining the CURRENT death-watch total (Massacre Wurms, incl. the newcomer itself);
+    //   - a watcher entering EARLIER in the sequence raises the multiplier for later cards.
+    // Total printed power breaks ties (attack value). Fires at most once per game per copy
+    // (the permanent is sacrificed), so the ~O(names^2) scan is cheap.
+    const Player& ap  = s.players[controller];
+
+    int enter_drain = 0, death_drain = 0;
+    std::vector<int> opp_margin;   // per opp creature: effective toughness - marked damage
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d)
+            {
+                enter_drain += d->params.opp_creature_enters_life_loss;
+                death_drain += d->params.opp_dies_life_loss;
+            }
+        }
+        else if (p.card.IsCreature() || p.is_animated)
+        {
+            opp_margin.push_back(p.EffectiveToughness() - p.damage);
+        }
+    }
+
+    // Distinct library creature names + copy counts.
+    std::vector<const CardDefinition*> names;
+    std::map<std::string, int>         copies;
+    for (const Card& lc : ap.library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+        if (!d || !d->card.IsCreature()) { continue; }
+        if (copies[lc.m_name.str()]++ == 0) { names.push_back(d); }
+    }
+    if (names.empty() || max_puts <= 0) { return {}; }
+
+    auto seq_value = [&](const std::vector<const CardDefinition*>& seq) -> long long {
+        int P = enter_drain, W = death_drain;
+        std::vector<int> margin = opp_margin;
+        long long burst = 0, power = 0;
+        // All puts enter SIMULTANEOUSLY (see PerformUpkeepSacTutor), so EVERY newcomer's
+        // watchers are live before any enter-trigger resolves: a double Massacre Wurm drains
+        // 4 per swept creature, not 2+0.
+        for (const CardDefinition* d : seq)
+        {
+            P += d->params.opp_creature_enters_life_loss;
+            W += d->params.opp_dies_life_loss;
+        }
+        // Then the enter-triggers resolve in list order (gifts before sweeps when we order
+        // them that way -- the ordered-pair enumeration below tries both). Sweeps STACK the
+        // until-EOT debuff on survivors, mirroring the engine's temp_tough_bonus: the second
+        // sweep of a double-Wurm put kills at cumulative -4/-4. Gifted tokens appended after
+        // a sweep only see later sweeps (CR 611.2c set-locking), also mirrored here.
+        for (const CardDefinition* d : seq)
+        {
+            const CardParams& cp = d->params;
+            if (cp.etb_opp_creates_tokens > 0)
+            {
+                burst += static_cast<long long>(cp.etb_opp_creates_tokens) * P;
+                for (int k = 0; k < cp.etb_opp_creates_tokens; ++k)   // gifts -> sweep fodder
+                { margin.push_back(std::max(1, cp.etb_created_token_toughness)); }
+            }
+            if (cp.etb_opp_creatures_debuff > 0)
+            {
+                std::size_t live = 0;
+                for (int& m : margin)
+                {
+                    m -= cp.etb_opp_creatures_debuff;
+                    if (m > 0) { margin[live++] = m; }
+                    else       { burst += W; }
+                }
+                margin.resize(live);
+            }
+            power += std::max(0, d->card.m_power.value_or(0));
+        }
+        return burst * 64 + power;   // burst dominates; power is a pure tiebreak
+    };
+
+    std::vector<const CardDefinition*> best_seq;
+    long long best_val = -1;
+    // Singles.
+    for (const CardDefinition* a : names)
+    {
+        std::vector<const CardDefinition*> seq{a};
+        long long v = seq_value(seq);
+        if (v > best_val) { best_val = v; best_seq = seq; }
+    }
+    // Ordered pairs (same-name pairs allowed when >= 2 copies remain in the library).
+    if (max_puts >= 2)
+    {
+        for (const CardDefinition* a : names)
+        for (const CardDefinition* b : names)
+        {
+            if (a == b && copies[a->card.m_name.str()] < 2) { continue; }
+            std::vector<const CardDefinition*> seq{a, b};
+            long long v = seq_value(seq);
+            if (v > best_val) { best_val = v; best_seq = seq; }
+        }
+    }
+
+    std::vector<std::string> out;
+    out.reserve(best_seq.size());
+    for (const CardDefinition* d : best_seq) { out.push_back(d->card.m_name.str()); }
+    return out;
+}
+
 std::vector<int> DecisionProvider::SacrificeLandCandidates(
     const GameState& s, int /*controller*/, const std::vector<int>& land_indices) const
 {
@@ -3873,7 +3988,21 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
 int
 GoblinsProvider::TutorSearchWidth() const
 {
-    return TutorAxisResolveEnabled() ? 9 : 6;
+    // DIAGNOSTIC (MTG_GOBLIN_TUTOR_WIDTH=n, unset/0 = off): override THIS provider's width for the
+    // width A/B. Distinct from the axis-level MTG_TUTOR_WIDTH, which trims only the search fan-out:
+    // the value-reserve curation below reads this method too, so overriding here moves the reserve's
+    // rescue slots WITH the window (a provider-W=6 arm rescues into ranks 4-5, not 7-8).
+    static const int ovr = EnvInt("MTG_GOBLIN_TUTOR_WIDTH", 0);
+    if (ovr > 0) { return ovr; }
+    // Back to 6 (2026-08-05): the 9-under-resolve patch existed because the winning fetches of six
+    // games ranked 7-9 -- all of them CLOSER reads the ranking was blind to. With the honest-swing
+    // reads (lord buffs + attack pump) and the burst-closer in, every one of those games takes the
+    // W=12 line at W=6, and the full W=6-vs-W=12 residual is noise classes only: budget churn
+    // (gi553/gi352, recover at 4x), clairvoyance (gi124, edge dies under MTG_SHUFFLE_SALT_SEARCH
+    // decoupling), and indirect width-leakage into NON-tutor decisions (gi714's T2 self-sac,
+    // gi200's mulligan bottoming) -- with same-magnitude games in W=6's favor (gi483/gi624/gi299).
+    // A width of 9 out of Matron's ~14 distinct names made the ranking nearly a no-op (user).
+    return 6;
 }
 
 std::vector<std::string>
@@ -3907,6 +4036,28 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     bool deathwatch_on = false;    // Rundvelt Hordemaster: every Goblin death impulse-digs a card
     int  vial_charge = -1;         // best untapped Aether Vial's charge (-1 = no Vial); puts a creature of MV==charge
     int  sick_goblin_power  = 0;   // power still locked up by summoning sickness (a haste grant frees it)
+    // HONEST BOARD POWER (MTG_GOBLIN_BOARD_LORD_POWER=0 restores the printed-power scan): count each
+    // body at its combat-site power -- EffectivePower (counters/temp) + on-board lord buffs -- exactly
+    // what the attack will deal. The printed-power read halves a lord-heavy board: gi496 (overnight
+    // d3/d5 s6006) had Hordemaster+Chieftain+fresh Matron read ready_atk=4 where the real swing was 8,
+    // so face_burst's this-turn-lethal test (8 swing + 2 burst >= 10 life) never fired and the
+    // T5-closing Twinshot Sniper sat at rank 7 -- one outside W=6, invisible to the window.
+    static const bool s_board_lord_power = EnvOn("MTG_GOBLIN_BOARD_LORD_POWER", true);
+    auto board_power = [&](const Permanent& p, const Card& pc) -> int
+    {
+        if (!s_board_lord_power) { return std::max(0, pc.m_power.value_or(0)); }
+        const int lp = ComputeLordBonus(pc, s.battlefield, controller, p.is_animated, &p).first;
+        return std::max(0, p.EffectivePower() + lp);
+    };
+    // ... and the ATTACK-PUMP term of the same read (MTG_GOBLIN_BOARD_PUMP_POWER=0 restores):
+    // Goblin Piledriver's +2 per other attacking Goblin is combat-time temp power, invisible to
+    // both printed power and EffectivePower at the main phase. gi828 (overnight d3/d5 s4004): the
+    // real T5 swing was 10 (Piledriver + 2 others) but the scan read 5, so face_burst's
+    // this-turn-lethal test (10 swing + 2 burst >= 12 life) never fired and the T5-closing
+    // Twinshot Sniper stayed outside the W=6 window. In a goldfish every ready body attacks, so
+    // each ready pump body sees (ready Goblin attackers - 1) others. Summed after the scan below.
+    int ready_goblin_attackers = 0;   // ready GOBLIN bodies (the pump's crowd)
+    int ready_pump_per         = 0;   // summed per-other-attacker pump across ready pump bodies
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != controller) { continue; }
@@ -3916,7 +4067,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         {
             ++goblins_controlled;
             if (!CanAttackFull(p, s.battlefield, controller))
-            { ++goblins_sick; sick_goblin_power += std::max(0, pc.m_power.value_or(0)); }
+            { ++goblins_sick; sick_goblin_power += board_power(p, pc); }
             // Sacrificeable BODIES, which is not the same set as "Goblins I control". A lord or a
             // scaling payoff is fodder only in extremis -- feeding a Chieftain to Skirk de-buffs
             // everything else on the board -- so it does not count toward the ramp. Same
@@ -3928,7 +4079,15 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             if (!scaling) { ++goblin_fodder; }
         }
         if (pc.IsCreature() && CanAttackFull(p, s.battlefield, controller))
-        { ready_atk += std::max(0, pc.m_power.value_or(0)); }   // any ready attacker (goldfish: connects)
+        {
+            ready_atk += board_power(p, pc);   // any ready attacker (goldfish: connects)
+            if (CardHasSubtype(pc, "Goblin"))
+            {
+                ++ready_goblin_attackers;
+                if (d && d->params.attack_pump_power_per_other_matching > 0)
+                { ready_pump_per += d->params.attack_pump_power_per_other_matching; }
+            }
+        }
         if (!d) { continue; }
         if (!d->params.combat_damage_puts_subtype_from_hand.empty())      // Goblin Lackey
         {
@@ -3942,6 +4101,9 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         if (d->params.dies_trigger_impulse_exile) { deathwatch_on = true; }
         if (d->params.upkeep_adds_charge && !p.tapped) { vial_charge = std::max(vial_charge, p.charge_counters); } // Vial
     }
+    static const bool s_board_pump = EnvOn("MTG_GOBLIN_BOARD_PUMP_POWER", true);
+    if (s_board_pump && ready_pump_per > 0 && ready_goblin_attackers >= 2)
+    { ready_atk += ready_pump_per * (ready_goblin_attackers - 1); }   // each pump body: per x others
     const int G         = goblins_controlled;
     // Goblins waiting in hand are near-future lord-buff targets: a +1/+1 lord makes EACH of them hit
     // harder the moment it lands, so a lord's team-buff must be credited over board + hand, not board
@@ -4428,7 +4590,17 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
         // max(), not sum: the ETB ping and the Channel mode are ALTERNATIVES (cast the creature, or
         // discard it from hand for the same damage), so adding them would double-count one card.
         static const bool  face_value = EnvOn("MTG_GOBLIN_FACE_VALUE", true);
-        static const double face_per  = EnvInt("MTG_GOBLIN_FACE_VALUE_PER", 160);
+        // 160 was trained under the LEGACY turn-start states, where the deploy discount separated
+        // Twinshot Sniper (mv2) from Goblin Chainwhirler (mv3). Under the resolve axis both read
+        // t=1 and the pair reduces to raw values, where 160 hands Twinshot the duel (520 vs 460)
+        // -- measured 7 worse / 1 better across the held-out d0 flips. Chainwhirler's third power
+        // point recurs every combat; Twinshot's extra face point is one-shot. Swept under resolve
+        // (goblins overnight, closer on): 160 base; 120 d0 -27 (23/0); 100 -26 (23/1); 90 -129
+        // (31/0); 80 -131 (33/0) -- a plateau below the crossing at 100, so the effect is the
+        // CW>TS ordering itself. 90 = the smallest deviation from the trained value that captures
+        // it (same selection rule the 160 was picked by). Searched untouched at every value.
+        static const double face_per  = EnvInt("MTG_GOBLIN_FACE_VALUE_PER",
+                                               TutorAxisResolveEnabled() ? 90 : 160);
         if (face_value)
         {
             const int face = std::max({ p.etb_damage_any, p.etb_damage_each_opponent, p.channel_damage });
@@ -4913,6 +5085,114 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             // fetch that guarantees the kill this turn sorts ahead of every non-lethal one, best burst first.
             if (burst > 0 && swing_atk < opp_life && opp_life <= swing_atk + burst)
             { sc += 1.0e6 + burst; }
+            // NEXT-TURN LETHAL VIA A FETCHED LORD (MTG_GOBLIN_LORD_CLOSER, default off pending its
+            // A/B). The symmetric override to face_burst's this-turn-lethal above, one turn later,
+            // for the crowd instead of the burn -- and the missing term behind the resolve-mode d0
+            // regressions: dissecting all 30 worse held-out d0 games, the flip legacy->resolve is
+            // 'Chieftain -> Muxus' in 18 of them against ONE better -- the honest state prices
+            // Muxus t=1 correctly (it IS castable next turn off the Skirk sacs) but nothing scores
+            // that the LORD closes the game a turn before Muxus's swing does. s10010 gi4 is the
+            // worked case: T3 fetch, board Skirk+Lackey+Hordemaster+Matron, opp 16 -- Chieftain's
+            // +1/+1 over the (by-then unsick) board plus its own hasty body plus a hand Piledriver
+            // is exactly lethal on T4; Muxus casts T4 and swings T5. The user's own rule, already
+            // encoded in the Piledriver (T-1)/T factor: "if close to lethal and no haste the lord
+            // is better" -- this computes it for real instead of via the swings_left estimate.
+            //
+            // Projection (conservative, same spirit as swing_atk's rules): next turn every body on
+            // the board today attacks (sickness has worn off), each Goblin carries the fetched
+            // lord's +1/+1; the lord's own body counts only if it is hasty or grants itself haste
+            // (cast next turn, it is otherwise sick); no hand deploys are counted. Gated on the
+            // lord actually being deployable next turn (t <= 1) and on the board ALONE not already
+            // being next-turn lethal (then the fetch is not what crosses). Tier 5e5: below the
+            // this-turn kill, above every non-lethal score.
+            // DEFAULT ON under the resolve axis (adopted 2026-08-05 with the face_per recalibration
+            // below it in the file; =0 disables). Held-out: d0 -9 (9 better / 0 worse), searched
+            // untouched (the search already finds these closes -- this is a pure greedy-tier fix),
+            // train-neutral, truth-table regret +4 = exact oracle parity.
+            static const bool lord_closer = EnvOn("MTG_GOBLIN_LORD_CLOSER", TutorAxisResolveEnabled());
+            // copies_in_hand gate: a copy of this lord ALREADY IN HAND provides the close without
+            // spending the fetch on it -- the bonus otherwise bulldozes the duplicate discount
+            // (applied later at a mere x0.55) and takes a redundant copy over a fresh card.
+            // s10010 gi1669 is the case: a Lackey-put Matron fetched a second Chieftain past a
+            // hand Chieftain and the T3 kill became T5 (the baseline fetched Hordemaster and cast
+            // BOTH lords on T3).
+            if (lord_closer && sc < 1.0e6 && d != nullptr
+                && !d->params.subtypes_affected.empty()
+                && (d->params.power_bonus > 0 || d->params.grants_haste)
+                && copies_in_hand(name) == 0
+                && turns_to_deploy(c, /*arriving=*/true) <= 1)
+            {
+                const int bonus = std::max(0, d->params.power_bonus);
+                const int board_next = ready_atk + sick_goblin_power;   // everyone attacks next turn
+                int with_lord  = board_next + bonus * goblins_controlled;
+                int attackers  = goblins_controlled;                    // crowd for a pump deploy
+                const bool lord_haste = c.HasKeyword(Keyword::Haste)
+                    || (d->params.grants_haste && !d->params.lord_excludes_self);
+                if (lord_haste)
+                { with_lord += std::max(0, c.m_power.value_or(0) + bonus); ++attackers; }
+                // ... plus the best ONE hand creature castable ALONGSIDE the lord out of next
+                // turn's mana (the same affordability rule swing_atk uses for this turn). It
+                // attacks only with haste from somewhere -- its own keyword, this lord's grant, or
+                // a haste source already on the battlefield. A pump body (Piledriver) uses its
+                // documented swing formula: base + bonus + 2 per OTHER attacker. gi4's actual T4
+                // close was exactly lord + hand Piledriver; the board-only projection missed it.
+                const int lord_mv = c.m_mana_cost.ManaValue();
+                int best_extra = 0;
+                for (const Card& h : s.players[controller].hand)
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+                    if (!hd || !hd->card.IsCreature()) { continue; }
+                    if (hd->card.m_mana_cost.ManaValue() + lord_mv > mana_next) { continue; }
+                    const bool is_gob = CardHasSubtype(hd->card, "Goblin");
+                    const bool hasty  = hd->card.HasKeyword(Keyword::Haste)
+                        || (d->params.grants_haste && is_gob) || haste_source;
+                    if (!hasty) { continue; }
+                    const int b = is_gob ? bonus : 0;
+                    int contrib = std::max(0, hd->card.m_power.value_or(0)) + b;
+                    if (hd->params.attack_pump_power_per_other_matching > 0 && is_gob)
+                    { contrib += hd->params.attack_pump_power_per_other_matching * attackers; }
+                    best_extra = std::max(best_extra, contrib);
+                }
+                with_lord += best_extra;
+                if (board_next < opp_life && opp_life <= with_lord)
+                { sc += 5.0e5 + with_lord; }
+            }
+            // NEXT-TURN LETHAL VIA THE FETCHED BURST (MTG_GOBLIN_BURST_CLOSER, default on under
+            // the resolve axis; =0 disables). The remaining cell of the closer matrix: face_burst
+            // covers the THIS-turn kill, lord_closer the next-turn kill via a lord's crowd -- this
+            // is the next-turn kill where the fetched card's own direct damage supplies what the
+            // board lacks. gi828/gi32 (overnight d3/d5): the deciding lookahead states have the
+            // whole board attacking next turn a couple short of lethal and Twinshot Sniper's ETB 2
+            // crosses -- but on raw value it ranks 7+, so the W=6 lookahead never sees the line and
+            // the root undervalues the Matron plan (gi828's W=6 arm never casts Matron at all).
+            // Projection mirrors lord_closer's: every body on board attacks next turn (sickness
+            // worn off); the burst is payable off NEXT turn's mana (ETB fires on cast, no haste
+            // needed; channel likewise); its own body swings only under an existing haste source.
+            // Siege-Gang's cast+sac path is deliberately omitted (mana_next >= 7 territory -- the
+            // this-turn face_burst already owns that). Same copies_in_hand gate as lord_closer
+            // (a copy in hand closes without spending the fetch), same 5e5 shelf (bigger projected
+            // total wins ties), same board-not-already-lethal gate (else the fetch isn't what
+            // crosses).
+            static const bool burst_closer = EnvOn("MTG_GOBLIN_BURST_CLOSER", TutorAxisResolveEnabled());
+            if (burst_closer && sc < 1.0e6 && d != nullptr && copies_in_hand(name) == 0)
+            {
+                const CardParams& bp = d->params;
+                int nburst = 0;
+                if (bp.channel_damage > 0 && bp.channel_cost
+                    && bp.channel_cost->ManaValue() <= mana_next)
+                { nburst = std::max(nburst, bp.channel_damage); }
+                const int etb_face2 = std::max(bp.etb_damage_any, bp.etb_damage_each_opponent);
+                if (etb_face2 > 0 && c.m_mana_cost.ManaValue() <= mana_next)
+                { nburst = std::max(nburst, etb_face2); }
+                if (nburst > 0)
+                {
+                    int total_next = ready_atk + sick_goblin_power + nburst;
+                    if (haste_source) { total_next += std::max(0, c.m_power.value_or(0)); }
+                    const int board_next2 = ready_atk + sick_goblin_power;
+                    if (board_next2 < opp_life && opp_life <= total_next)
+                    { sc += 5.0e5 + total_next; }
+                }
+            }
             // Mode 2 -- "drop it from consideration entirely": sort it below every real
             // candidate rather than removing it, so it stays legal if it is all that is left.
             if (dom_burn_mode == 2 && is_dominated_burn(d) && sc < 1.0e6) { return 1.0; }
@@ -5270,20 +5550,42 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     return cands;
 }
 
+// ---- CreatureGivingProvider -------------------------------------------------
+
+std::vector<std::string>
+CreatureGivingProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    // Orchard-first land tutoring (USER-DIRECTED, 2026-08-06; see the class comment). Applies
+    // to any tutor whose type filter is Land (Sylvan Scrying, Crop Rotation); every other
+    // tutor (Enlightened Tutor's artifact/enchantment search) keeps the Generic full list.
+    if (DecisionUnpruned(UnprunedGate::Tutor))
+    { return GenericProvider::TutorCandidates(s, controller, pp); }
+    bool land_tutor = false;
+    for (const std::string& t : pp.tutor_types)
+    { if (t == "Land") { land_tutor = true; break; } }
+    if (!land_tutor) { return GenericProvider::TutorCandidates(s, controller, pp); }
+    for (const Card& lc : s.players[controller].library)
+    { if (lc.m_name.str() == "Forbidden Orchard") { return { "Forbidden Orchard" }; } }
+    // No Orchard left: the full list returns and the search picks (mana fixing is board-
+    // dependent -- exactly the depth a static fallback ranking lacks).
+    return GenericProvider::TutorCandidates(s, controller, pp);
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
 {
     // Stateless, read-only -> single shared const instances are thread-safe (same model as
     // CardDatabase). Process lifetime, so GameState's raw pointer stays valid.
-    const GenericProvider      g_generic;
-    const AntiLifegainProvider g_antilife;
-    const TreasureHuntProvider g_treasure;
-    const VialProvider         g_vial;
-    const HinataProvider       g_hinata;
-    const BurnProvider         g_burn;
-    const DragonstormProvider  g_dragonstorm;
-    const GoblinsProvider      g_goblins;
+    const GenericProvider        g_generic;
+    const AntiLifegainProvider   g_antilife;
+    const TreasureHuntProvider   g_treasure;
+    const VialProvider           g_vial;
+    const HinataProvider         g_hinata;
+    const BurnProvider           g_burn;
+    const DragonstormProvider    g_dragonstorm;
+    const GoblinsProvider        g_goblins;
+    const CreatureGivingProvider g_creature_giving;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -5296,7 +5598,7 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
-    bool goblin = false;
+    bool goblin = false, gift = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -5348,6 +5650,19 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
             th = true;
         }
         if (p.upkeep_adds_charge) { vial = true; }
+
+        // Creature Giving (gift-the-opponent drain): any of its gated params marks the deck. Its
+        // Sylvan Scrying (tutor_to_hand) + fetchlands would otherwise trip the anti-lifegain
+        // signature below and misroute the whole deck to AntiLifegainProvider (whose tutor
+        // heuristic hunts lifegain_to_loss enablers this deck does not run). Routed to
+        // CreatureGivingProvider (Orchard-first land tutoring, user-directed); the Defense of
+        // the Heart SacTutorPutList default lives in the DecisionProvider root and is inherited.
+        if (p.opp_creature_enters_life_loss > 0 || p.etb_opp_creates_tokens > 0
+            || p.upkeep_sac_tutor_creatures > 0 || p.cumulative_upkeep_opp_token
+            || p.etb_opp_creatures_debuff > 0  || p.opp_dies_life_loss > 0)
+        {
+            gift = true;
+        }
     }
 
     if (dragonstorm) { return g_dragonstorm; }
@@ -5362,6 +5677,8 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     // Matron tutor width (12, -0.0620 held-out). It derives from GenericProvider and overrides only
     // those, so every other decision still resolves through exactly the code this deck used before.
     if (goblin) { return g_goblins; }
+    // Creature Giving; must WIN OVER anti (see the gift detection note above).
+    if (gift) { return g_creature_giving; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
     if (vial) { return g_vial; }

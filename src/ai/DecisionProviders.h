@@ -424,6 +424,22 @@ public:
     // GenericProvider's full-candidate TutorCandidates. See analysis-goblins.md.)
 };
 
+// Creature Giving (gift-the-opponent drain: Suture Priest / Massacre Wurm / Defense of the
+// Heart / Forbidden Orchard). One override, USER-DIRECTED (2026-08-06, "0 exceptions -- these
+// live in the provider"): the deck's LAND tutors (Sylvan Scrying to-hand, Crop Rotation
+// to-battlefield) always fetch Forbidden Orchard while a copy remains in the library -- the
+// Orchard's per-turn Spirit gift is the drain engine's fuel and the Defense of the Heart
+// trigger enabler, so it strictly dominates the fixing any other land offers. A single
+// candidate means the tutor emits ONE cast variant (no search axis); MTG_UNPRUNED remains
+// the standing full-list A/B lever. With no Orchard left the full Generic list returns
+// (search picks). Non-land tutors (Enlightened Tutor) are untouched. Inherits Generic for
+// everything else, including the root SacTutorPutList burst scorer.
+class CreatureGivingProvider : public GenericProvider
+{
+public:
+    std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
+};
+
 // Process-lifetime default provider (stateless, shared across threads). Used as the
 // nullptr fallback so any raw-GameState path stays valid.
 const DecisionProvider& DefaultProvider();

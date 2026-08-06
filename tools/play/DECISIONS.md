@@ -62,6 +62,7 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `replicate` | `g_play_replicate_chooser` (`ReplicateChooser`) | `ApplyPlan` `apply_one` replicate loop | `WriteReplicateDecisionJson` | `replicatePanelHtml` | modal |
 | `land_entry` | `g_play_land_entry_chooser` (`LandEntryChooser`) | `TurnSolver::PlayLandByName` (shared land drop) | `WriteLandEntryDecisionJson` | `landEntryPanelHtml` | modal |
 | `dragon` | `g_play_dragon_chooser` (`DragonChooser`) | `PerformTutorToBattlefield` (SpellEffects.h, shared executor+rollout) | `WriteDragonDecisionJson` | `dragonPanelHtml` | modal |
+| `sac_tutor` | `g_play_sac_tutor_chooser` (`SacTutorChooser`) | `PerformUpkeepSacTutor` (SpellEffects.h, shared executor+rollout) | `WriteSacTutorDecisionJson` | `sacTutorPanelHtml` | modal |
 | `lightpaws` | `g_play_lightpaws_chooser` (`LightPawsChooser`) | `PerformLightPawsAttach` (SpellEffects.h, shared executor+rollout) | `WriteLightPawsDecisionJson` | `lightPawsPanelHtml` | modal |
 | `vial_charge` | `AIEngine::SetExternalVialChooser` | Vial upkeep charge | `WriteVialDecisionJson` | `promptPanelHtml` | board |
 | `firebreathe` | `g_play_firebreathe_chooser` (`FirebreatheChooser`) | `AIEngine::Firebreathe` (combat, `GameEngine.cpp:361`) | `WriteFirebreatheDecisionJson` | `firebreathePanelHtml` | modal |
@@ -88,6 +89,14 @@ reply is ONE int per candidate (1 = put this copy), read positionally like `divi
 subset is expressible; `heuristic_subset` / `ai_set` = the rule's default (pre-checked). The
 `tutor_to_battlefield` param maps to `dragon` in the auditor manifest (was `main_phase` while the
 selection was search-only). The SELECTION is the human's; the ORDER stays the rule's.
+
+**Defense of the Heart `sac_tutor` upkeep put:** at the controller's upkeep with the opponent on
+3+ creatures, the enchantment sacrifices itself and puts up to two library creature cards onto the
+battlefield. The human picks WHICH creature copies (same reply shape as `dragon`: one 0/1 flag per
+candidate, read positionally; candidates enter in ascending candidate order). `ai_set` = the
+provider's `SacTutorPutList` default (closed-form immediate-drain maximisation — token-makers enter
+before a Massacre Wurm so its sweep catches the fresh tokens). "Up to two": an empty selection is
+legal. The `upkeep_sac_tutor_creatures` param maps to `sac_tutor` in the auditor manifest.
 
 **Light-Paws `lightpaws` tutor-attach:** when an Aura you CAST resolves, Light-Paws, Emperor's Voice
 searches your library for an Aura (MV ≤ the cast Aura's, a name you don't already control, whose own

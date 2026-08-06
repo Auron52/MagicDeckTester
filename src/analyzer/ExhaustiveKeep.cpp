@@ -1412,13 +1412,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // Append rollouts [r0,r1) to cell `w`, mode `pd`, folding into its sum/sumsq/cnt accumulators.
     // Each (w,pd) is scheduled at most once per wave, so the direct writes are race-free. The seed is a
     // pure function of (seed_base, r, w, pd) -- extending r for a later batch never reuses a draw.
-    // Slow-rollout capture (diagnostic, off by default): time each rollout; if it exceeds
+    // Slow-rollout capture (diagnostic, ON by default at 30 s): time each rollout; if it exceeds
     // MTG_KEEP_SLOW_MS, log the exact degenerate game -- hand (bucket composition), side, rollout index
-    // and the seed that fully reproduces it -- so the pathological combo game can be replayed/profiled.
-    // Threshold <= 0 disables it (a single steady_clock read per rollout is the only overhead).
-    // Logged to stderr.
+    // and the seed that fully reproduces it -- so the pathological combo game can be replayed/profiled
+    // LIVE rather than discovered in the end-of-run top-12 hours later (user-directed default,
+    // 2026-08-07). 30 s is far above any healthy rollout (~0.3-2 s even on heavy decks) so a quiet
+    // stream means no degenerate cells. MTG_KEEP_SLOW_MS=0 disables; any explicit value overrides.
+    // A single steady_clock read per rollout is the only overhead. Logged to stderr.
     const long long slow_ms = []{ const char* s = std::getenv("MTG_KEEP_SLOW_MS");
-        return (s && *s) ? std::atoll(s) : 0LL; }();
+        return (s && *s) ? std::atoll(s) : 30000LL; }();
     std::mutex slow_mtx;
     // Guards the accumulator COMMIT in run_batch (t.sum/sumsq/cnt) so a mid-flight checkpoint can read a
     // consistent snapshot WHILE workers keep running -- this is what lets the floor pass be one continuous

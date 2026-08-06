@@ -1552,6 +1552,61 @@ inline int CountAttackTriggerLifeLoss(
     return total;
 }
 
+// ---- Creature-enter watchers (Creature Giving: Soul/Essence Warden, Suture Priest) ------------
+// "Whenever [another] creature [you control / an opponent controls] enters ..." -- fired for EVERY
+// creature entering on EITHER side. Called from the universal enter cascade (OnDragonEnters' top,
+// which every enter site already invokes: cast resolution, CreateToken, battlefield puts,
+// off-suspend) plus the two opponent-spawn materialisation sites (GameEngine / TurnSolver
+// turn-start, lockstep). Gated per-watcher on the params, so a board with no watcher permanents is
+// a cheap cached-lookup scan and every other deck is byte-identical.
+//
+// The "you may" on Suture Priest's triggers is always taken (strictly beneficial). Multiple
+// watchers stack (each is its own trigger). The entered permanent itself is excluded ("another");
+// a watcher entering alongside others still sees THEIR enters (each enter fires separately).
+inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, int entered_index)
+{
+    const int n = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n; ++i)
+    {
+        if (i == entered_index) { continue; }   // "another creature"
+        const Permanent& w = state.battlefield[i];
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (!wd) { continue; }
+        const CardParams& wp = wd->params;
+        // "Whenever another creature enters, you gain N" (Soul Warden / Essence Warden: ANY side).
+        if (wp.any_creature_enters_lifegain > 0)
+        { state.players[w.controller_index].life += wp.any_creature_enters_lifegain; }
+        // "Whenever another creature you control enters, you [may] gain N" (Suture Priest cl. 1).
+        if (wp.own_creature_enters_lifegain > 0 && w.controller_index == entered_controller)
+        { state.players[w.controller_index].life += wp.own_creature_enters_lifegain; }
+        // "Whenever a creature an opponent controls enters, that player loses N" (Suture Priest
+        // clause 2 -- the drain engine; life LOSS, not damage).
+        if (wp.opp_creature_enters_life_loss > 0 && w.controller_index != entered_controller)
+        {
+            state.players[entered_controller].life -= wp.opp_creature_enters_life_loss;
+            if (entered_controller != state.active_player_index)
+            { state.opponent_lost_life_this_turn = true; }
+        }
+    }
+}
+
+// Opponent-creature-death watchers (Massacre Wurm clause 2: "whenever a creature an opponent
+// controls dies, that player loses 2"). Call AFTER the dead creature has been removed from the
+// battlefield, at every site that kills an OPPONENT creature (the -2/-2 sweep below, the
+// etb_damage_each_opponent ping prune). Gated on the param -> byte-identical elsewhere.
+inline void FireOppCreatureDies(GameState& state, int dead_controller)
+{
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index == dead_controller) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (!wd || wd->params.opp_dies_life_loss <= 0) { continue; }
+        state.players[dead_controller].life -= wd->params.opp_dies_life_loss;
+        if (dead_controller != state.active_player_index)
+        { state.opponent_lost_life_this_turn = true; }
+    }
+}
+
 // Creates a creature token with the given stats and adds it to the active battlefield.
 // The token enters with entered_this_turn = true (subject to summoning sickness unless
 // given haste by a lord). Tokens have no card number and an auto-generated name.
@@ -1619,6 +1674,13 @@ inline int CountControlledDragons(const GameState& state, int controller)
 inline void OnDragonEnters(GameState& state, int controller, int entered_index)
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    // Creature-enter watchers (Creature Giving: Wardens / Suture Priest). This function is the
+    // UNIVERSAL enter cascade -- every enter site already calls it -- so the watcher fire lives at
+    // its top, BEFORE the Dragon-subtype early-out, gated on the newcomer being a creature. A gift
+    // token created for the OPPONENT (CreateToken -> here) therefore drains through Suture Priest
+    // exactly like a cast creature. Param-gated scan -> byte-identical for every other deck.
+    if (state.battlefield[entered_index].card.IsCreature())
+    { FireCreatureEnterWatchers(state, state.battlefield[entered_index].controller_index, entered_index); }
     // Early out for every non-Dragon enter (keeps all other token/creature decks byte-identical).
     if (!CardHasSubtype(state.battlefield[entered_index].card, "Dragon")) { return; }
     const bool entered_is_token = state.battlefield[entered_index].is_token;
@@ -1706,6 +1768,43 @@ inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
                     p.etb_created_token_toughness, p.etb_created_token_subtypes);
     }
 
+    // (1b) ETB OPPONENT-token gift (Hunted Phantasm: "target opponent creates five 1/1 red Goblin
+    //      creature tokens"; single opponent -> no target choice). Same etb_created_token_* spec.
+    //      Each gift enters through CreateToken -> the universal enter cascade, so it drains
+    //      through Suture Priest and feeds Defense of the Heart / Massacre Wurm automatically.
+    for (int k = 0; k < p.etb_opp_creates_tokens; ++k)
+    {
+        CreateToken(state, 1 - controller, p.etb_created_token_power,
+                    p.etb_created_token_toughness, p.etb_created_token_subtypes);
+    }
+
+    // (1c) ETB opponent-board debuff sweep (Massacre Wurm: "creatures your opponents control get
+    //      -2/-2 until end of turn"). The until-EOT toughness reduction is applied for real via
+    //      temp_tough_bonus (cleared each cleanup, folded into sim key + board signature), so
+    //      TWO sweeps in one turn STACK: a simultaneous double-Wurm put's second trigger kills
+    //      at cumulative -4/-4 (a 4/4 spawn dies and drains). The affected set is the creatures
+    //      present at THIS resolution (CR 611.2c) -- tokens gifted between sweeps only see later
+    //      ones, which falls out of applying the debuff per-permanent here. A creature dies when
+    //      effective toughness - marked damage <= 0 (the debuff is not damage). Each kill fires
+    //      the opponent-death watchers (the Wurm's own clause 2 counts its own sweep's kills --
+    //      it is already on the battlefield when this resolves). Strict gap: -X/-X kills an
+    //      indestructible creature only via toughness <= 0; no spawn schedule produces one.
+    if (p.etb_opp_creatures_debuff > 0)
+    {
+        const int opp_ix = 1 - controller;
+        for (std::size_t i = state.battlefield.size(); i-- > 0; )
+        {
+            Permanent& q = state.battlefield[i];
+            if (q.controller_index != opp_ix || !(q.card.IsCreature() || q.is_animated)) { continue; }
+            q.temp_tough_bonus -= p.etb_opp_creatures_debuff;
+            if (q.EffectiveToughness() - q.damage > 0) { continue; }
+            const int dead_controller = q.controller_index;
+            state.players[q.owner_index].graveyard.push_back(q.card);
+            state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+            FireOppCreatureDies(state, dead_controller);
+        }
+    }
+
     // (2) ETB single-target burn ("deals N damage to any target" -> opponent face; Twinshot 2)
     //     and (3) "each opponent" ping (Chainwhirler 1: face + each opponent creature/pw).
     const int opp = 1 - controller;
@@ -1728,8 +1827,12 @@ inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
             if (q.damage >= q.EffectiveToughness()
                 && !q.card.HasKeyword(Keyword::Indestructible))
             {
+                const int dead_controller = q.controller_index;
                 state.players[q.owner_index].graveyard.push_back(q.card);
                 state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+                // Opponent-death watchers (Massacre Wurm clause 2). Param-gated scan ->
+                // byte-identical for every deck without a watcher (incl. all Goblins GT).
+                FireOppCreatureDies(state, dead_controller);
             }
         }
     }
@@ -2659,6 +2762,172 @@ inline int CreatureCount(const GameState& state, int controller_index)
         if (p.card.IsCreature() || p.is_animated)   { ++count; }
     }
     return count;
+}
+
+// ---- Creature Giving upkeep triggers (Varchild's War-Riders / Defense of the Heart) -----------
+// Both are UPKEEP effects of the active player, applied IDENTICALLY at the executor's upkeep
+// (GameEngine::RestOfUpkeep) and the rollout's simulated turn-start (TurnSolver::
+// SimulateEndAndStartNextTurn), in this order: cumulative-upkeep gifts FIRST, then the Defense of
+// the Heart check -- the controller-optimal trigger ordering (the fresh Survivors count toward
+// DotH's "opponent controls three or more creatures"). Param-gated -> byte-identical elsewhere.
+
+// Varchild's War-Riders cumulative upkeep: +1 age counter, then the OPPONENT creates age_counters
+// tokens (upkeep_token_* spec; 1/1 red Survivor). ALWAYS PAID -- weakly dominant vs the passive
+// opponent (the gifts only feed our drains / DotH, and the 3/4 body is kept); pay-vs-sacrifice is
+// a disclosed auto-decision. Each gift enters via CreateToken -> the enter-watcher cascade
+// (Suture Priest drains). Iterates over the pre-existing battlefield size only (the created
+// tokens are appended and must not re-trigger anything here).
+inline void PerformUpkeepCumulativeGifts(GameState& state)
+{
+    const int active = state.active_player_index;
+    const int n = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n; ++i)
+    {
+        Permanent& p = state.battlefield[i];
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.cumulative_upkeep_opp_token) { continue; }
+        ++p.age_counters;
+        for (int k = 0; k < p.age_counters; ++k)
+        {
+            CreateToken(state, 1 - active, d->params.upkeep_token_power,
+                        d->params.upkeep_token_toughness, d->params.upkeep_token_subtypes);
+        }
+    }
+}
+
+// Defense of the Heart: "At the beginning of your upkeep, if an opponent controls three or more
+// creatures, sacrifice this enchantment, search your library for up to two creature cards, put
+// those cards onto the battlefield, then shuffle." The intervening-if is checked here (trigger
+// time == resolution time in this engine's upkeep). WHICH creatures + their enter ORDER is the
+// provider's SacTutorPutList (default: closed-form immediate-drain maximisation); a human
+// override rides g_play_sac_tutor_chooser (nulled by RevealLogPause -> search/rollout
+// byte-identical). Each put creature enters through the shared cascades, so a put Hunted
+// Phantasm gifts its Goblins (draining per Suture Priest) and a put Massacre Wurm sweeps.
+inline void PerformUpkeepSacTutor(GameState& state)
+{
+    const int active = state.active_player_index;
+    // Snapshot the triggering copies first: resolving one (sacrifice + puts) mutates the
+    // battlefield. Two copies both fire if the condition holds for each in turn.
+    for (;;)
+    {
+        int   src_index = -1;
+        const CardDefinition* src_def = nullptr;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != active) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d || d->params.upkeep_sac_tutor_creatures <= 0) { continue; }
+            if (CreatureCount(state, 1 - active) < d->params.upkeep_sac_tutor_opp_min) { continue; }
+            src_index = i; src_def = d; break;
+        }
+        if (src_index < 0) { return; }
+
+        const CardParams& pp       = src_def->params;
+        const int         max_puts = pp.upkeep_sac_tutor_creatures;
+        const std::string src_name = state.battlefield[src_index].card.m_name.str();
+        Player&           ap       = state.players[active];
+
+        // Sacrifice the enchantment (the cost of the resolution) BEFORE the search.
+        ap.graveyard.push_back(state.battlefield[src_index].card);
+        state.battlefield.erase(state.battlefield.begin() + src_index);
+
+        // The put-list: provider heuristic, overridable by the human chooser.
+        std::vector<std::string> put_list =
+            ResolveProvider(state).SacTutorPutList(state, active, pp, max_puts);
+        if (g_play_sac_tutor_chooser)
+        {
+            // Candidates = every library creature card (one entry per copy), in library order.
+            std::vector<Card> candidates;
+            std::vector<int>  lib_slots;
+            for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
+                if (d && d->card.IsCreature()) { candidates.push_back(ap.library[i]); lib_slots.push_back(i); }
+            }
+            if (!candidates.empty())
+            {
+                // The heuristic's subset, mapped onto candidate indices (first matching copies).
+                std::vector<int> heur;
+                {
+                    std::vector<bool> used(candidates.size(), false);
+                    for (const std::string& nm : put_list)
+                    {
+                        for (int c = 0; c < static_cast<int>(candidates.size()); ++c)
+                        {
+                            if (used[c] || candidates[c].m_name.str() != nm) { continue; }
+                            used[c] = true; heur.push_back(c); break;
+                        }
+                    }
+                }
+                std::vector<int> chosen = (*g_play_sac_tutor_chooser)(
+                    state, active, src_name, candidates, max_puts, heur);
+                put_list.clear();
+                for (int c : chosen)
+                {
+                    if (c >= 0 && c < static_cast<int>(candidates.size())
+                        && static_cast<int>(put_list.size()) < max_puts)
+                    { put_list.push_back(candidates[c].m_name.str()); }
+                }
+            }
+        }
+
+        // The chosen creatures enter SIMULTANEOUSLY ("put those cards onto the battlefield"),
+        // then their enter-triggers resolve, in list order. Pass 1 moves every card onto the
+        // battlefield; pass 2 fires the shared cascades. This is what makes a double Massacre
+        // Wurm put drain 4 per swept creature (each death is seen by BOTH Wurms) and lets two
+        // simultaneously-put enter-watchers see each other (the paired-Soul-Warden ruling).
+        // Pass 2 re-finds each put by its per-copy card number: an earlier cascade's sweep can
+        // erase lower battlefield slots (tokens carry no number, so puts are unambiguous).
+        int puts = 0;
+        std::vector<std::pair<std::string, int>> placed;   // (name, per-copy number)
+        for (const std::string& nm : put_list)
+        {
+            if (puts >= max_puts) { break; }
+            int idx = -1;
+            for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
+            { if (ap.library[i].m_name == nm) { idx = i; break; } }
+            if (idx < 0) { continue; }
+            Card raw = ap.library[idx];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(raw);
+            if (!d || !d->card.IsCreature()) { continue; }
+            ap.library.erase(ap.library.begin() + idx);
+            Permanent perm;
+            perm.card              = d->card;
+            perm.card.m_number     = raw.m_number;
+            perm.controller_index  = active;
+            perm.owner_index       = active;
+            perm.entered_this_turn = true;
+            state.battlefield.push_back(perm);
+            placed.emplace_back(nm, raw.m_number);
+            ++puts;
+        }
+        for (const auto& pl : placed)
+        {
+            int slot = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[i];
+                if (q.controller_index == active && !q.is_token
+                    && q.card.m_number == pl.second && q.card.m_name == pl.first)
+                { slot = i; break; }
+            }
+            if (slot < 0) { continue; }
+            OnDragonEnters(state, active, slot);   // universal cascade (enter-watchers fire here)
+            OnGoblinEnters(state, active, slot);   // param-gated ETBs: Phantasm gift / Wurm sweep
+        }
+
+        // "...then shuffle" (deterministic + lockstep; inert unless MTG_SEARCH_SHUFFLE).
+        ShuffleAfterSearch(state, active);
+
+        if (g_play_event_sink)   // nulled by RevealLogPause during search/rollout -> byte-identical
+        {
+            EmitPlayEvent(state.turn_number, "tutor",
+                          "\xF0\x9F\x92\x9A " + src_name + ": " + std::to_string(puts)
+                          + " creature(s) onto the battlefield");
+        }
+    }
 }
 
 // Extra base power from a characteristic-defining ability (Adeline: power = number of
@@ -4868,6 +5137,101 @@ inline void PerformFetch(GameState& state, int controller_index,
     }
     // Searching the library shuffles it (CR 701.19). Deterministic + lockstep; no-op
     // unless MTG_SEARCH_SHUFFLE is set.
+    ShuffleAfterSearch(state, controller_index);
+}
+
+// Sacrifice-a-land ADDITIONAL COST resolution (Shard Volley / Crop Rotation) for the
+// rollout + ApplyPlan-executor path (AIEngine's autonomous cast path has its own pre-resolution
+// site). WHICH land is provider-owned (SacrificeLandCandidates: tapped-first, the historical
+// rule) with the human-play chooser override (g_play_sacrifice_chooser, nulled for search/
+// rollout scopes). For a tutor_land_to_battlefield spell (Crop Rotation) the caller MUST run
+// this BEFORE the search puts the fetched land onto the battlefield -- additional costs are paid
+// at cast time, before resolution (CR 601.2h), so the just-fetched land is never a legal
+// sacrifice target (2026-08-06 claude-play sweep flag, seeds 9012/9015).
+inline void PerformSacrificeLandCost(GameState& state, const std::string& spell_name)
+{
+    Player& ap = state.players[state.active_player_index];
+    std::vector<int> lands;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != state.active_player_index || !p.card.IsLand()) { continue; }
+        lands.push_back(i);
+    }
+    int idx = -1;
+    if (!lands.empty())
+    {
+        const std::vector<int> ranked = ResolveProvider(state).SacrificeLandCandidates(
+            state, state.active_player_index, lands);
+        if (!ranked.empty()) { idx = ranked.front(); }
+    }
+    if (g_play_sacrifice_chooser && lands.size() > 1 && idx >= 0)
+    {
+        int def_opt = 0;
+        for (int k = 0; k < static_cast<int>(lands.size()); ++k)
+        { if (lands[k] == idx) { def_opt = k; break; } }
+        int chosen = (*g_play_sacrifice_chooser)(state, state.active_player_index, spell_name,
+                                                 lands, def_opt);
+        if (chosen >= 0 && chosen < static_cast<int>(lands.size())) { idx = lands[chosen]; }
+    }
+    if (idx >= 0)
+    {
+        ap.graveyard.push_back(state.battlefield[idx].card);
+        state.battlefield.erase(state.battlefield.begin() + idx);
+    }
+}
+
+// Crop Rotation resolution (CardParams::tutor_land_to_battlefield): "Search your library for a
+// land card, put that card onto the battlefield, then shuffle." Like PerformFetch but WITHOUT the
+// 1-life fetch payment, with the tutor axis choosing the target (target_name = the searched
+// StackEntry::tutor_target; empty -> the provider's TutorCandidates front pick), and with the
+// Forbidden Orchard on-play hook mirrored: a fetched Orchard is tapped for mana this same turn, so
+// it spawns the opponent's Spirit on entry exactly like LandPlay's freshly-played copy (scoped
+// HERE, not in EnterLand, so existing fetchland behaviour stays byte-identical -- basic-typed
+// fetches can never pull an Orchard). Shared by the executor (EffectHandler) and the rollout
+// (TurnSolver::ApplyPlanDirect), lockstep.
+inline void PerformLandTutorToBattlefield(GameState& state, int controller_index,
+                                          const CardParams& pp, const std::string& target_name = "")
+{
+    Player& ap = state.players[controller_index];
+
+    std::string want = target_name;
+    if (want.empty())
+    {
+        std::vector<std::string> cands =
+            ResolveProvider(state).TutorCandidates(state, controller_index, pp);
+        if (cands.empty()) { return; }   // whiff: no land left in the library
+        want = cands.front();
+    }
+    int idx = -1;
+    for (int i = 0; i < static_cast<int>(ap.library.size()); ++i)
+    {
+        if (ap.library[i].m_name == want) { idx = i; break; }
+    }
+    if (idx < 0) { return; }   // chosen target no longer present (search/real drift guard)
+    Card lc = ap.library[idx];
+    if (!lc.IsLand())
+    {
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(lc);
+        if (!pd || !pd->card.IsLand()) { return; }   // guard: only a land card may be put
+    }
+    ap.library.erase(ap.library.begin() + idx);
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
+    if (def)
+    {
+        EnterLand(state, *def, lc.m_number);
+        if (IsForbiddenOrchard(def)) { SpawnOpponentSpirit(state); }
+    }
+    else
+    {
+        Permanent perm;
+        perm.card              = lc;
+        perm.controller_index  = controller_index;
+        perm.owner_index       = controller_index;
+        perm.entered_this_turn = true;
+        state.battlefield.push_back(perm);
+    }
+    // "...then shuffle" (CR 701.19); deterministic + lockstep; inert unless MTG_SEARCH_SHUFFLE.
     ShuffleAfterSearch(state, controller_index);
 }
 

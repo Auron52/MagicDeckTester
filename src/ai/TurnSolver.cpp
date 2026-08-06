@@ -273,6 +273,7 @@ static std::string BoardSignature(const GameState& s)
         e += p.entered_this_turn ? "/S" : "/R";     // summoning sickness
         e += "/c" + std::to_string(p.counters.size());
         e += "/ch" + std::to_string(p.charge_counters) + "," + std::to_string(p.storage_counters);
+        if (p.age_counters > 0) { e += "/g" + std::to_string(p.age_counters); }   // cumulative upkeep
         e += "/p" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus);
         e += "/d" + std::to_string(p.damage);
         e += "/a" + std::to_string(p.aura_attached_to);
@@ -2467,8 +2468,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // hand_index, hence mutually exclusive in the plan enumerator) and let the search pick.
         // Narrowing to the few cards that matter keeps the search's branching factor small --
         // the general "heuristic narrows, search decides the rest" pattern.
-        if (def.params.tutor_to_hand || def.params.tutor_to_top)
+        if (def.params.tutor_to_hand || def.params.tutor_to_top
+            || def.params.tutor_land_to_battlefield)
         {
+            // Crop Rotation's "sacrifice a land" ADDITIONAL COST makes the cast illegal with no
+            // land on the battlefield (a {G} off a mana dork alone cannot legally cast it) --
+            // skip emission entirely in that state. Inert for every existing tutor (none carries
+            // sacrifice_land).
+            if (def.params.sacrifice_land)
+            {
+                bool has_land = false;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index == state.active_player_index && p.card.IsLand())
+                    { has_land = true; break; }
+                }
+                if (!has_land) { continue; }
+            }
             // RESOLVE MODE (MTG_TUTOR_AXIS_RESOLVE=1): bind NO name at all. The decision moves to
             // the tutor's own resolution (PerformTutor -> provider at the true mid-plan state), so
             // ranking here -- on a pre-land, pre-cast state the plan will never occupy -- would be
@@ -2485,6 +2501,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.eval           = EvalCard(def, state);
                 a.is_noncreature = !def.card.IsCreature();
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.sacrifice_land = def.params.sacrifice_land;   // Crop Rotation's additional cost
                 actions.push_back(std::move(a));
                 continue;
             }
@@ -2521,6 +2538,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.is_noncreature = !def.card.IsCreature();
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
                 a.tutor_target   = tgt;
+                a.sacrifice_land = def.params.sacrifice_land;   // Crop Rotation's additional cost
                 actions.push_back(std::move(a));
             }
             continue;
@@ -6818,6 +6836,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // so the clairvoyant rollout sees the same fetched card.
             PerformTutor(state, state.active_player_index, def.params, tutor_target, def.card.m_name);
         }
+        else if (def.params.tutor_land_to_battlefield)
+        {
+            // Crop Rotation: the sacrifice-a-land ADDITIONAL COST is paid FIRST (CR 601.2h --
+            // costs precede resolution), so the fetched land is never a sacrifice candidate
+            // (2026-08-06 sweep flag); then search a land card and put it onto the battlefield.
+            // The trailing generic is_sacrifice block skips this spell (already paid here).
+            if (is_sacrifice) { PerformSacrificeLandCost(state, name); }
+            PerformLandTutorToBattlefield(state, state.active_player_index, def.params, tutor_target);
+        }
         else if (def.params.tutor_to_battlefield)
         {
             // Dragonstorm (Storm): mirror EffectHandler -- put min(spells_cast_this_turn, Dragons-
@@ -6989,40 +7016,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             ap.graveyard.push_back(def.card);
         }
 
-        if (is_sacrifice)
+        if (is_sacrifice && !def.params.tutor_land_to_battlefield)
         {
-            // Heuristic default: sacrifice a tapped land if any (keeps untapped mana available),
-            // else the first land. Under --claude-play the human picks WHICH land (Shard Volley's
-            // additional cost); g_play_sacrifice_chooser is nulled by RevealLogPause for the
-            // rollout/search, so autonomous play keeps this pick and stays byte-identical.
-            // WHICH land is provider-owned (SacrificeLandCandidates); the base rule is the
-            // historical "first tapped land if any, else the first land", so this is byte-identical.
-            std::vector<int> lands;
-            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
-            {
-                const Permanent& p = state.battlefield[i];
-                if (p.controller_index != state.active_player_index || !p.card.IsLand()) { continue; }
-                lands.push_back(i);
-            }
-            int idx = -1;
-            if (!lands.empty())
-            {
-                const std::vector<int> ranked = ResolveProvider(state).SacrificeLandCandidates(
-                    state, state.active_player_index, lands);
-                if (!ranked.empty()) { idx = ranked.front(); }
-            }
-            if (g_play_sacrifice_chooser && lands.size() > 1 && idx >= 0)
-            {
-                int def_opt = 0;
-                for (int k = 0; k < static_cast<int>(lands.size()); ++k) { if (lands[k] == idx) { def_opt = k; break; } }
-                int chosen = (*g_play_sacrifice_chooser)(state, state.active_player_index, name, lands, def_opt);
-                if (chosen >= 0 && chosen < static_cast<int>(lands.size())) { idx = lands[chosen]; }
-            }
-            if (idx >= 0)
-            {
-                ap.graveyard.push_back(state.battlefield[idx].card);
-                state.battlefield.erase(state.battlefield.begin() + idx);
-            }
+            // Shard Volley's additional cost: paid post-resolution here (order-irrelevant for a
+            // damage spell -- the sacrificed land and the effect never interact). Crop Rotation
+            // paid its sacrifice PRE-resolution in the tutor_land_to_battlefield branch above
+            // (the fetched land must not be a candidate), so it skips this. Body extracted to
+            // the shared PerformSacrificeLandCost (SpellEffects.h) -- byte-identical logic:
+            // provider-ranked tapped-first default + human chooser override.
+            PerformSacrificeLandCost(state, name);
         }
     };
 
@@ -7747,6 +7749,10 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             perm.controller_index = opp_index;
             perm.owner_index      = opp_index;
             state.battlefield.push_back(perm);
+            // Enter-watchers (Suture Priest / Wardens): mirrors the executor's spawn site
+            // (GameEngine turn-start), lockstep. Param-gated -> byte-identical elsewhere.
+            FireCreatureEnterWatchers(state, opp_index,
+                                      static_cast<int>(state.battlefield.size()) - 1);
         }
     }
 
@@ -7788,6 +7794,13 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
                         def->params.upkeep_token_subtypes);
         }
     }
+
+    // Creature Giving upkeep triggers, in controller-optimal order: Varchild's War-Riders
+    // cumulative-upkeep gifts FIRST (the fresh Survivors count toward DotH's >= 3), then the
+    // Defense of the Heart sac-tutor check. Mirrors GameEngine::UpkeepTail's identical block
+    // (lockstep); param-gated -> byte-identical for every other deck.
+    PerformUpkeepCumulativeGifts(state);
+    PerformUpkeepSacTutor(state);
 
     // Echo (Mogg War Marshal {1}{R}, Stingscourger {3}{R}): "At the beginning of your upkeep, if this
     // came under your control since your last upkeep, sacrifice it unless you pay its echo cost."
@@ -10500,7 +10513,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             {
                 if (act.kind != Action::Kind::CastFromHand) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
-                if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top)) { continue; }
+                if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top
+                                      || d->params.tutor_land_to_battlefield)) { continue; }
                 auto it = size_cache.find(act.card_name);
                 if (it == size_cache.end())
                 {
@@ -10605,7 +10619,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                 const Action& act = p.actions[ai];
                 if (act.kind != Action::Kind::CastFromHand || act.tutor_target.empty()) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
-                if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top)) { continue; }
+                if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top
+                                      || d->params.tutor_land_to_battlefield)) { continue; }
                 // The plan this candidate list is FOR -- see PlanContext.h. Providers that ignore it
                 // (all of them today) are byte-identical; the point is that the state mismatch above
                 // is only half the missing information, and the other half is "what else does this
@@ -10997,6 +11012,12 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         Fold(tk, perm.entered_this_turn ? 1u : 0u);
         Fold(tk, perm.is_animated ? 1u : 0u);
         Fold(tk, static_cast<uint64_t>(perm.charge_counters));
+        // Cumulative-upkeep age (Varchild's War-Riders): future-determining across simulated turns
+        // (a rollout's later upkeeps gift age x tokens), so two states differing only in age must
+        // not share a TT entry. Folded ONLY when nonzero, so every deck without a cumulative-upkeep
+        // permanent keeps the EXACT prior key (byte-identical).
+        if (perm.age_counters > 0)
+        { Fold(tk, 0xA6E0); Fold(tk, static_cast<uint64_t>(perm.age_counters)); }
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_power_bonus)));
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_tough_bonus)));
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.damage)));
@@ -14535,7 +14556,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         // X and tutor lines still can't be honestly modelled by this affordability check. Alt-cost
         // (Invigorate) IS handled: if we control the required subtype (a Forest), the alt cost is a
         // free payment (opponent gains life), so it costs no mana; else fall back to the hard cost.
-        if (mc.has_x || def->params.tutor_to_hand || def->params.tutor_to_top)
+        if (mc.has_x || def->params.tutor_to_hand || def->params.tutor_to_top
+            || def->params.tutor_land_to_battlefield)
         {
             out.verdict = V::Unsupported; out.failed_action = "cast=" + name;
             out.reason = "'" + name + "' uses an action kind (X / tutor) the v1 "

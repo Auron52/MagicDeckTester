@@ -31,6 +31,7 @@ thread_local ReplicateChooser* g_play_replicate_chooser = nullptr;
 thread_local LandEntryChooser* g_play_land_entry_chooser = nullptr;
 thread_local SoulfireTargetChooser* g_play_soulfire_chooser = nullptr;
 thread_local DragonChooser*  g_play_dragon_chooser = nullptr;
+thread_local SacTutorChooser* g_play_sac_tutor_chooser = nullptr;
 thread_local LackeyChooser*  g_play_lackey_chooser = nullptr;
 thread_local TutorChooser*   g_play_tutor_chooser  = nullptr;
 thread_local std::vector<PlayReveal>* g_play_reveal_sink = nullptr;

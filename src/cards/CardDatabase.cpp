@@ -215,6 +215,8 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Hexproof")      { return Keyword::Hexproof; } // inert tag; provably inert vs passive opp
     if (s == "Enchant")       { return Keyword::Enchant; }   // inert tag; aura attach is param-modelled
     if (s == "Umbra armor")   { return Keyword::UmbraArmor; } // inert tag; provably inert vs passive opp
+    if (s == "Rampage")       { return Keyword::Rampage; }    // inert tag; provably inert vs passive opp
+    if (s == "Cumulative upkeep") { return Keyword::CumulativeUpkeep; } // inert tag; param-modelled
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -528,6 +530,19 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.reduces_spell_color       = params.value("reduces_spell_color", std::string());
     p.max_casts_after           = params.value("max_casts_after", -1);
     p.taps_spawn_opp_token      = params.value("taps_spawn_opp_token", false);
+
+    // Creature Giving (gift-the-opponent drain)
+    p.etb_opp_creates_tokens        = params.value("etb_opp_creates_tokens", 0);
+    p.any_creature_enters_lifegain  = params.value("any_creature_enters_lifegain", 0);
+    p.own_creature_enters_lifegain  = params.value("own_creature_enters_lifegain", 0);
+    p.opp_creature_enters_life_loss = params.value("opp_creature_enters_life_loss", 0);
+    p.etb_opp_creatures_debuff      = params.value("etb_opp_creatures_debuff", 0);
+    p.opp_dies_life_loss            = params.value("opp_dies_life_loss", 0);
+    p.cumulative_upkeep_opp_token   = params.value("cumulative_upkeep_opp_token", false);
+    p.upkeep_sac_tutor_creatures    = params.value("upkeep_sac_tutor_creatures", 0);
+    p.upkeep_sac_tutor_opp_min      = params.value("upkeep_sac_tutor_opp_min", 0);
+    p.tutor_land_to_battlefield     = params.value("tutor_land_to_battlefield", false);
+
     p.expressive_iteration      = params.value("expressive_iteration", false);
     p.cast_draw                 = params.value("cast_draw", 0);
 

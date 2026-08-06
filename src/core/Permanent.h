@@ -47,6 +47,12 @@ struct Permanent
                                            // mana -> stays untapped -> charges +1 at end of turn. Set only
                                            // via the human StorageHoldChooser; reset each UntapStep. Never
                                            // set autonomously -> byte-identical for the search/rollout.
+    int       age_counters         = 0;    // Cumulative upkeep (Varchild's War-Riders; CardParams::
+                                           // cumulative_upkeep_opp_token): one added at each of the
+                                           // controller's upkeeps, and the upkeep cost is paid once per
+                                           // counter. Only read for a permanent whose card sets a
+                                           // cumulative-upkeep param, so it is inert (never inspected)
+                                           // for every other deck -> byte-identical.
     bool      is_animated          = false; // land animated as a creature (e.g. Mutavault); reset each cleanup
     bool      is_token             = false; // created by a token-making effect (CreateToken). Lathliss's
                                             // "nontoken Dragon" gate reads this so a created 5/5 Dragon

@@ -608,6 +608,61 @@ struct CardParams
     // turn) -- created at turn start for existing copies + on-play for a freshly-played copy. The
     // Spirits are real opponent creatures -> first-class Soulfire/Crackle/removal targets.
     bool taps_spawn_opp_token = false;
+
+    // ================= Creature Giving (gift-the-opponent drain) =================
+    // The deck gives the opponent creatures (Forbidden Orchard above, Hunted Phantasm,
+    // Varchild's War-Riders) and drains for each enter (Suture Priest) / death (Massacre
+    // Wurm). Every param is 0/false by default -> byte-identical for every other deck.
+    //
+    // ETB opponent-token gift (Hunted Phantasm: "When this enters, target opponent creates
+    // five 1/1 red Goblin creature tokens"). Uses the shared etb_created_token_* spec (a card
+    // sets exactly one ETB-token gate, same reuse rule as Lathliss/Mogg). The tokens are real
+    // opponent creatures -> they fire the enter-watchers below and feed DotH / Massacre Wurm.
+    int  etb_opp_creates_tokens = 0;
+    // Enter-watchers ("whenever a creature enters ..."), fired for every creature entering on
+    // EITHER side via FireCreatureEnterWatchers (called from the universal enter cascade +
+    // the opponent-spawn sites, lockstep executor + rollout):
+    //   any_creature_enters_lifegain   -- "another creature enters, you gain N" (Soul Warden,
+    //                                     Essence Warden: any controller, excludes itself).
+    //   own_creature_enters_lifegain   -- "another creature YOU control enters, gain N"
+    //                                     (Suture Priest clause 1; "you may" always taken).
+    //   opp_creature_enters_life_loss  -- "a creature an OPPONENT controls enters, that player
+    //                                     loses N" (Suture Priest clause 2 -- the drain engine).
+    int  any_creature_enters_lifegain  = 0;
+    int  own_creature_enters_lifegain  = 0;
+    int  opp_creature_enters_life_loss = 0;
+    // Massacre Wurm ETB: "creatures your opponents control get -2/-2 until end of turn",
+    // collapsed to "destroy each opponent creature with toughness - damage <= N at ETB"
+    // (equivalent in goldfish: opp creatures never block/attack/get buffs, and the power
+    // reduction on survivors is inert). Each kill fires FireOppCreatureDies.
+    int  etb_opp_creatures_debuff = 0;
+    // Massacre Wurm clause 2: "whenever a creature an opponent controls dies, that player
+    // loses N". Summed over all watchers at every opponent-creature death site.
+    int  opp_dies_life_loss = 0;
+    // Varchild's War-Riders cumulative upkeep ("Have an opponent create a 1/1 red Survivor
+    // token" per age counter). Modelled as ALWAYS PAID (weakly dominant vs the passive
+    // opponent: the tokens only feed our drains/DotH and the body is kept): at each of the
+    // controller's upkeeps, +1 Permanent::age_counters, then the OPPONENT creates
+    // age_counters tokens using the shared upkeep_token_* spec. Pay-vs-sacrifice is a
+    // disclosed auto-decision, not a surfaced choice.
+    bool cumulative_upkeep_opp_token = false;
+    // Defense of the Heart: "At the beginning of your upkeep, if an opponent controls three
+    // or more creatures, sacrifice this enchantment, search your library for up to two
+    // creature cards, put those cards onto the battlefield, then shuffle."
+    //   upkeep_sac_tutor_creatures -- max creature cards put (2); 0 = not this mechanic.
+    //   upkeep_sac_tutor_opp_min   -- the intervening-if threshold (3).
+    // WHICH creatures (and their enter ORDER) = DecisionProvider::SacTutorPutList (default:
+    // closed-form immediate-drain maximisation, token-makers enter before sweepers), with a
+    // human-play chooser override.
+    int  upkeep_sac_tutor_creatures = 0;
+    int  upkeep_sac_tutor_opp_min   = 0;
+    // Crop Rotation: "search your library for a land card, put it onto the battlefield"
+    // (with the existing sacrifice_land additional cost). Resolved by
+    // PerformLandTutorToBattlefield through EnterLand (the fetched land resolves its own
+    // shock/enters-tapped choice; a fetched Forbidden Orchard spawns its Spirit on entry,
+    // mirroring the on-play hook). Target = the searched tutor axis (tutor_types [Land]).
+    bool tutor_land_to_battlefield = false;
+
     // Expressive Iteration: "look at the top 3; 1 to hand, 1 to bottom, 1 exiled & playable THIS
     // turn." Resolved by ResolveExpressiveIteration (NOT the normal draw/scry path). A DrawSpell so
     // the existing draw-breakpoint re-solve lets the staged (this-turn-only) card be played.
