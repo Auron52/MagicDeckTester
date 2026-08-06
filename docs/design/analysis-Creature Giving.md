@@ -158,6 +158,33 @@ to this deck). Probe (d3, seed 1001, 250 games): DotH resolved in 145 games, dou
 chosen in 98; game_102 upkeep drop 16 → −36 = 13 swept × exactly 4; game_116 sweeps a 3/3
 (pre-fix survivor) into a −38 empty board. avg turns 4.91 → 4.864.
 
+## Value-leaf model: built, play-adoption REJECTED, sidecar installed disabled (2026-08-06)
+
+Pipeline on frozen `33cb148` (user-directed: value-leaf before the mulligan profile — the
+model's purpose is the generation cost lever):
+- **Rows**: 2500 games, ONE pooled batch, seeds 900000+ → 11,989 unique rows (searched K=3
+  labels under the adopted ladder+B&B path). GBDT (120 trees, depth 4): held-out RMSE
+  **0.457 turns**.
+- **Matrix** (unbounded, 4 seeds × 400g, incremental): h_conv = **4.7762 at H3** — the
+  search SATURATES at depth 3 (H4 = H3 exactly; H8 == V8 == H3-level verified EXACTLY on
+  seed 8008, 400 paired games → at full horizon neither leaf ever fires, per the user's
+  prediction). The leaf reaches the same plateau at V6–V7 (+0.0007..0.0013, inside tol) but
+  not at in-play depths (V5 +0.0038) → `value_trust_depth` UNSET, crossover
+  1→1 2→1 3→1 4→2 5→3 6→3 7→3 8→6. Two cells tractability-capped at 50g (H5/9009, V8/11011).
+- **Adoption A/B at the play point** (block d5/b20, 4 × 1000g, seeds 600000–603000):
+  hybrid slower-to-win on ALL FOUR seeds — 90 slower / 50 faster, net +46 turn-units
+  (+0.0115 avg) for a 1.27× wall speedup (58.7s vs 74.4s /1000g). **REJECTED for play.**
+- **Shipped**: `Creature Giving.value.DISABLED.json` (committed, NOT the auto-resolved
+  sibling name). First attempt installed it as `<stem>.value.json` with
+  `value_play.enabled=false` — the suite went RED: **sidecar PRESENCE activates the
+  depth-aware hybrid in play** (`enabled` only releases depth ownership), reproducing the
+  A/B regression (d5 s2002 4.792→4.804). The engine resolves strictly `<stem>.value.json`,
+  so the DISABLED name is inert (suite-verified green); the mulligan-generation step
+  copies/renames it into place when it wants the gen-cost lever. Interim-read lesson
+  repeated twice in this run: partial matrix cells and 100-game seed subsets both produced
+  confident-looking phantom structure ("H4/H5 improve past the plateau") that full counts
+  erased.
+
 ## CreatureGivingProvider: Orchard-first land tutoring (ADOPTED 2026-08-06, user-directed)
 
 `CreatureGivingProvider` (routed by the `gift` detection in `SelectDecisionProvider`, formerly
