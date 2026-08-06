@@ -8,6 +8,19 @@ artifacts sit in `logs/eval/<stem>.value.STAGED.json` with the live sidecars unt
 Driver: `scripts/valueleaf_regen_queue.sh` (a pooled rewrite of the serial queue below —
 see §8 for why the serial design in §4 was abandoned).
 
+**Update 2026-08-06 — treasure_hunt COMPLETED on frozen `ba5f1b1`.** The TH cleanup-discard
+redesign (heuristic return = trial set, `e6beb73`..`6fdf180`) removed the probe-rollout blowup
+that made TH unlabellable and its deep cells intractable. Fresh full matrix
+(`logs/eval/valueleaf_depth_th_redesign.txt`): all 52 cells at 400 games, **0 intractable** —
+V6 went from 413 s/game (50-game reference cell) to 254 ms/game. Ladder clean and monotone;
+h_conv 4.0687 (H converges at d4); V8 = h_conv exactly. Derivation → STAGED sidecar: trust
+stays UNSET (V5 gap 0.0044 > tol), deep crossover `take@hc` for c=6/7/8 moved [6,9,9] → [4,4,6]
+(the old entries rested on starved pre-redesign cells). Staged-vs-live A/B at shipped play
+(8 × 1000 games, `logs/vlq_th_ab/`): **−0.00063, t=−0.89, 4/3/1** — neutral, consistent with
+every other deck in this queue. Depth sweep re-confirms shipped d5 (d6 identical on all 4
+seeds, d4 ~+0.005 worse). NOT adopted — awaiting user decision; note the pre-redesign TH cells
+in `valueleaf_depth_regen.txt(.cells.json)` are stale for TH and must not be resumed or pooled.
+
 Owner: whichever agent takes the queue — it is designed to be run
 by **ONE agent, one job at a time**, because every job wants the whole box.
 
