@@ -1241,6 +1241,30 @@ static void WriteDragonDecisionJson(std::ostream& os, const GameState& s, const 
            "The engine keeps the rule's play order. Default = the AI's pick.");
 }
 
+// Defense of the Heart upkeep sac-tutor decision: the player picks WHICH library creature cards
+// (up to `max_puts`, possibly none -- "up to two") are put onto the battlefield when the
+// enchantment's upkeep trigger resolves. Same payload + reply shape as the Dragon put override:
+// candidates are library creature copies (image options), the reply is ONE int per candidate
+// (1 = put this copy), `ai_set` = the provider heuristic's default subset (pre-checked).
+static void WriteSacTutorDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                      const std::vector<Card>& candidates, int max_puts,
+                                      const std::vector<int>& heuristic_subset, int decision_index)
+{
+    std::vector<bool> is_def(candidates.size(), false);
+    for (int di : heuristic_subset)
+    { if (di >= 0 && di < static_cast<int>(candidates.size())) { is_def[di] = true; } }
+    DecisionJson d(os, decision_index);
+    d.Type("sac_tutor").Source(source).Turn(s.turn_number).Board(s).Int("max_puts", max_puts);
+    d.Array("ai_set", heuristic_subset.size(), [&](std::size_t i) { os << heuristic_subset[i]; });
+    d.Array("candidates", candidates.size(), [&](std::size_t i)
+    {
+        os << "{ \"index\": " << i << ", \"def\": " << (is_def[i] ? "true" : "false")
+           << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
+    });
+    d.Note("reply one int per candidate (1 = put this creature onto the battlefield), up to "
+           "max_puts total. They enter in ascending candidate order. Default = the AI's pick.");
+}
+
 // Cleanup-discard decision (#2): the player picks WHICH hand card to discard down to maximum hand
 // size. Emits every hand card as an image option; the reply is the hand index to discard. One such
 // decision fires per over-limit card.
@@ -1556,6 +1580,7 @@ g_play_retrace_chooser = nullptr;
 g_play_replicate_chooser = nullptr;
 g_play_land_entry_chooser = nullptr;
 g_play_dragon_chooser = nullptr;
+g_play_sac_tutor_chooser = nullptr;
 g_play_lackey_chooser = nullptr;
 g_play_tutor_chooser = nullptr;
 g_play_lightpaws_chooser = nullptr;
@@ -1727,6 +1752,7 @@ struct ClaudePlayHarness
     LackeyChooser         lackey_chooser;
     TutorChooser          tutor_chooser;
     DragonChooser         dragon_chooser;
+    SacTutorChooser       sac_tutor_chooser;
     DiscardChooser        discard_chooser;
     EIChooser             ei_chooser;
     RetraceDiscardChooser retrace_chooser;
@@ -2415,6 +2441,45 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_dragon_chooser = &dragon_chooser;
+
+    // Defense of the Heart upkeep sac-tutor: the player picks WHICH library creature cards enter
+    // (up to max_puts). Same reply shape as the Dragon put override: one 0/1 flag per candidate,
+    // read positionally from the --choices stream. Default = the provider's SacTutorPutList pick.
+    sac_tutor_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+            const std::vector<Card>& candidates, int max_puts,
+            const std::vector<int>& heuristic_subset) -> std::vector<int>
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            const int need = static_cast<int>(candidates.size());
+            if (cursor + need <= static_cast<int>(choices.size()))
+            {
+                std::vector<int> flags(need);
+                for (int i = 0; i < need; ++i) { flags[i] = choices[cursor++]; }
+                ++decisions_made;
+                std::vector<int> picked;
+                for (int i = 0; i < need; ++i)
+                { if (flags[i] > 0 && static_cast<int>(picked.size()) < max_puts) { picked.push_back(i); } }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": [";
+                    for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << flags[i]; }
+                    ss << "], \"decision\": ";
+                    WriteSacTutorDecisionJson(ss, s, source, candidates, max_puts, heuristic_subset, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return picked;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteSacTutorDecisionJson(std::cout, s, source, candidates, max_puts, heuristic_subset, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_sac_tutor_chooser = &sac_tutor_chooser;
 
     // Cleanup discard (#2): the player picks which hand card to discard to max hand size. Shares the
     // --choices stream; the reply is a hand index. Default = the engine's heuristic pick.

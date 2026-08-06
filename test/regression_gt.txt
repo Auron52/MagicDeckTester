@@ -1,6 +1,5 @@
-# Regression ground truth -- commit 0c49939  date 2026-08-05
+# Regression ground truth -- commit d34c0e6  date 2026-08-06
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-08-05): goblins W9->6 + honest-swing levers: gi714/gi200 draw-divergence from width leakage into non-tutor decisions (T2 sac / bottoming), gi553/gi352 4x-recoverable churn; zero real fetch cases (see goblins-tutor-handoff.md sec 9)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -17,9 +16,9 @@ th_smoke_d5_s1001=4.0000/7f1f65ef6852db25
 knights_smoke_d0_s1001=4.5440/765ed59dbea166cf
 knights_smoke_d3_s1001=4.3960/d3d46a3e982ea9bb
 knights_smoke_d5_s1001=4.3933/160dd7e447cde867
-antilife_smoke_d0_s1001=5.5710/07db583573cca895
-antilife_smoke_d3_s1001=4.2200/70f8873b6c2f2510
-antilife_smoke_d5_s1001=4.1800/9ed24093c55636aa
+antilife_smoke_d0_s1001=5.5710/cf85c08fe5e724f9
+antilife_smoke_d3_s1001=4.2200/0cc7d6923b47092b
+antilife_smoke_d5_s1001=4.1800/61988ced76be591c
 hinata_smoke_d0_s1001=7.0310/027421352a870c74
 hinata_smoke_d3_s1001=5.7400/c069e2bc6a05bd4c
 hinata_smoke_d5_s1001=5.8933/e88cd20951c85e11
@@ -54,11 +53,11 @@ knights_regression_d3_s2002=4.3033/9d2742142774295a
 knights_regression_d3_s3003=4.3600/90f04d5fd5e5b5ef
 knights_regression_d5_s2002=4.2760/da6b112380f3eca2
 knights_regression_d5_s3003=4.3680/8cf116acdd2536a4
-antilife_regression_d0_s2002=5.7110/4fca256dcb6cf453
-antilife_regression_d3_s2002=4.2867/5d00d6cab73743fb
-antilife_regression_d3_s3003=4.2567/40829b355decf7f2
-antilife_regression_d5_s2002=4.3040/7afd8489b4baed23
-antilife_regression_d5_s3003=4.2360/daa3c8689bfe7e43
+antilife_regression_d0_s2002=5.7110/3d067b979627e162
+antilife_regression_d3_s2002=4.2867/53dd14268d3fd15e
+antilife_regression_d3_s3003=4.2567/8e1381897ded25a2
+antilife_regression_d5_s2002=4.3040/ac827169894969d4
+antilife_regression_d5_s3003=4.2360/92f283ce2f9c3a00
 hinata_regression_d0_s2002=7.1070/4c4c5ab6eff3ead5
 hinata_regression_d3_s2002=5.7150/4698d5eab858af7f
 hinata_regression_d3_s3003=5.7450/9f7d33c2daa87eeb
@@ -129,18 +128,18 @@ knights_overnight_d5_s4004=4.3260/dad12f45fab0b31c
 knights_overnight_d5_s5005=4.3560/4f4c688fb55f4207
 knights_overnight_d5_s6006=4.3420/e1da54fc293df617
 knights_overnight_d5_s7007=4.3390/6fed1005ceef752e
-antilife_overnight_d0_s4004=5.5860/4e2d6238b2697c51
-antilife_overnight_d0_s6006=5.6365/a6c87d28b05cade8
-antilife_overnight_d0_s8008=5.7010/c912d9ab81a71045
-antilife_overnight_d0_s10010=5.5405/be612de3f66c87ea
-antilife_overnight_d3_s4004=4.2480/fdc8e0663ce8c581
-antilife_overnight_d3_s5005=4.2720/c9b2e4118d840ec0
-antilife_overnight_d3_s6006=4.2380/f0bb5dc998c4538d
-antilife_overnight_d3_s7007=4.2140/23cc806cb92f82cf
-antilife_overnight_d5_s4004=4.2340/ff93f8046bb6c634
-antilife_overnight_d5_s5005=4.2630/bbbfebdf89ed8cd1
-antilife_overnight_d5_s6006=4.2280/6a00131c9b7e3050
-antilife_overnight_d5_s7007=4.1960/b34d5b8d9bac97f0
+antilife_overnight_d0_s4004=5.5860/986b0ed8314c809e
+antilife_overnight_d0_s6006=5.6365/d94c39569747e81a
+antilife_overnight_d0_s8008=5.7010/55d89e936cc04192
+antilife_overnight_d0_s10010=5.5405/6bf5bcd6276dd976
+antilife_overnight_d3_s4004=4.2480/8f7b61cb0d58b227
+antilife_overnight_d3_s5005=4.2720/5d50f770ddd974ab
+antilife_overnight_d3_s6006=4.2380/4f9b8f9684e51395
+antilife_overnight_d3_s7007=4.2140/28be3bfb1bb05104
+antilife_overnight_d5_s4004=4.2340/8006bd685d22ee87
+antilife_overnight_d5_s5005=4.2630/72d47dc09fa702c0
+antilife_overnight_d5_s6006=4.2280/d1a965a12e901bb2
+antilife_overnight_d5_s7007=4.1960/b06bd633d4b76436
 hinata_overnight_d0_s4004=7.0955/f75969d7d4ec2096
 hinata_overnight_d0_s6006=7.0605/d8a9600f22d308dd
 hinata_overnight_d0_s8008=7.0815/fd8692014d89dd92

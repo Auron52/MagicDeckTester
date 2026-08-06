@@ -597,6 +597,104 @@ std::vector<int> DecisionProvider::LightPawsAuraCandidates(
     return out;
 }
 
+std::vector<std::string> DecisionProvider::SacTutorPutList(
+    const GameState& s, int controller, const CardParams& /*pp*/, int max_puts) const
+{
+    // Defense of the Heart default: deterministic closed-form immediate-drain maximisation.
+    // Enumerate singles + ordered pairs of library creature NAMES (repeats allowed up to copy
+    // count) and score the burst each sequence realises the moment it enters, using the same
+    // arithmetic the engine's resolution applies (see PerformUpkeepSacTutor):
+    //   - a gift-maker's tokens each drain the CURRENT enter-watch total (Suture Priests);
+    //   - a sweeper kills every opp creature with toughness - damage <= debuff, each death
+    //     draining the CURRENT death-watch total (Massacre Wurms, incl. the newcomer itself);
+    //   - a watcher entering EARLIER in the sequence raises the multiplier for later cards.
+    // Total printed power breaks ties (attack value). Fires at most once per game per copy
+    // (the permanent is sacrificed), so the ~O(names^2) scan is cheap.
+    const Player& ap  = s.players[controller];
+
+    int enter_drain = 0, death_drain = 0, opp_small = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d)
+            {
+                enter_drain += d->params.opp_creature_enters_life_loss;
+                death_drain += d->params.opp_dies_life_loss;
+            }
+        }
+        else if (p.card.IsCreature() || p.is_animated)
+        {
+            // Killable by a -2/-2 sweep (the only sweeper class in the mechanic today).
+            if (p.EffectiveToughness() - p.damage <= 2) { ++opp_small; }
+        }
+    }
+
+    // Distinct library creature names + copy counts.
+    std::vector<const CardDefinition*> names;
+    std::map<std::string, int>         copies;
+    for (const Card& lc : ap.library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+        if (!d || !d->card.IsCreature()) { continue; }
+        if (copies[lc.m_name.str()]++ == 0) { names.push_back(d); }
+    }
+    if (names.empty() || max_puts <= 0) { return {}; }
+
+    auto seq_value = [&](const std::vector<const CardDefinition*>& seq) -> long long {
+        int P = enter_drain, W = death_drain, small = opp_small;
+        long long burst = 0, power = 0;
+        for (const CardDefinition* d : seq)
+        {
+            const CardParams& cp = d->params;
+            // The newcomer's own watchers are live for its own resolution (a Massacre Wurm's
+            // death-watch counts its own sweep's kills) and for everything after it.
+            P += cp.opp_creature_enters_life_loss;
+            W += cp.opp_dies_life_loss;
+            if (cp.etb_opp_creates_tokens > 0)
+            {
+                burst += static_cast<long long>(cp.etb_opp_creates_tokens) * P;
+                small += cp.etb_opp_creates_tokens;   // 1/1 gifts -> sweep fodder
+            }
+            if (cp.etb_opp_creatures_debuff > 0)
+            {
+                burst += static_cast<long long>(small) * W;
+                small  = 0;   // swept
+            }
+            power += std::max(0, d->card.m_power.value_or(0));
+        }
+        return burst * 64 + power;   // burst dominates; power is a pure tiebreak
+    };
+
+    std::vector<const CardDefinition*> best_seq;
+    long long best_val = -1;
+    // Singles.
+    for (const CardDefinition* a : names)
+    {
+        std::vector<const CardDefinition*> seq{a};
+        long long v = seq_value(seq);
+        if (v > best_val) { best_val = v; best_seq = seq; }
+    }
+    // Ordered pairs (same-name pairs allowed when >= 2 copies remain in the library).
+    if (max_puts >= 2)
+    {
+        for (const CardDefinition* a : names)
+        for (const CardDefinition* b : names)
+        {
+            if (a == b && copies[a->card.m_name.str()] < 2) { continue; }
+            std::vector<const CardDefinition*> seq{a, b};
+            long long v = seq_value(seq);
+            if (v > best_val) { best_val = v; best_seq = seq; }
+        }
+    }
+
+    std::vector<std::string> out;
+    out.reserve(best_seq.size());
+    for (const CardDefinition* d : best_seq) { out.push_back(d->card.m_name.str()); }
+    return out;
+}
+
 std::vector<int> DecisionProvider::SacrificeLandCandidates(
     const GameState& s, int /*controller*/, const std::vector<int>& land_indices) const
 {
@@ -5426,7 +5524,7 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
-    bool goblin = false;
+    bool goblin = false, gift = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -5478,6 +5576,19 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
             th = true;
         }
         if (p.upkeep_adds_charge) { vial = true; }
+
+        // Creature Giving (gift-the-opponent drain): any of its gated params marks the deck. Its
+        // Sylvan Scrying (tutor_to_hand) + fetchlands would otherwise trip the anti-lifegain
+        // signature below and misroute the whole deck to AntiLifegainProvider (whose tutor
+        // heuristic hunts lifegain_to_loss enablers this deck does not run). Rides
+        // GenericProvider until mined rules justify an archetype subclass; the Defense of the
+        // Heart SacTutorPutList default lives in the DecisionProvider root, so Generic inherits it.
+        if (p.opp_creature_enters_life_loss > 0 || p.etb_opp_creates_tokens > 0
+            || p.upkeep_sac_tutor_creatures > 0 || p.cumulative_upkeep_opp_token
+            || p.etb_opp_creatures_debuff > 0  || p.opp_dies_life_loss > 0)
+        {
+            gift = true;
+        }
     }
 
     if (dragonstorm) { return g_dragonstorm; }
@@ -5492,6 +5603,8 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     // Matron tutor width (12, -0.0620 held-out). It derives from GenericProvider and overrides only
     // those, so every other decision still resolves through exactly the code this deck used before.
     if (goblin) { return g_goblins; }
+    // Creature Giving rides Generic; must WIN OVER anti (see the gift detection note above).
+    if (gift) { return g_generic; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
     if (vial) { return g_vial; }

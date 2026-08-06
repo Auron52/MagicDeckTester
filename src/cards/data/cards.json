@@ -2333,6 +2333,206 @@
                 "mana_per_creature_subtype": "Goblin",
                 "mana_per_creature_feeder_generic": 2
             }
+        },
+        {
+            "name": "Hunted Phantasm",
+            "mana_cost": "{1}{U}{U}",
+            "types": ["Creature"],
+            "subtypes": ["Spirit"],
+            "keywords": [],
+            "power": 4,
+            "toughness": 6,
+            "oracle_text": "This creature can't be blocked.\nWhen this creature enters, target opponent creates five 1/1 red Goblin creature tokens. [\"Can't be blocked\" is inert vs the passive goldfish opponent (it never blocks). The ETB gift is etb_opp_creates_tokens 5: five real opponent 1/1 Goblin tokens created through the shared enter cascade, so each drains per Suture Priest, counts toward Defense of the Heart's condition, and dies to a Massacre Wurm sweep. Single opponent -> \"target opponent\" is no choice.]",
+            "template": "custom",
+            "parameters": {
+                "etb_opp_creates_tokens": 5,
+                "etb_created_token_power": 1,
+                "etb_created_token_toughness": 1,
+                "etb_created_token_subtypes": ["Goblin"]
+            }
+        },
+        {
+            "name": "Suture Priest",
+            "mana_cost": "{1}{W}",
+            "types": ["Creature"],
+            "subtypes": ["Phyrexian", "Cleric"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "Whenever another creature you control enters, you may gain 1 life.\nWhenever a creature an opponent controls enters, you may have that player lose 1 life. [Both \"you may\" triggers are always taken (strictly beneficial): own_creature_enters_lifegain 1 + opp_creature_enters_life_loss 1 (life LOSS, not damage), fired by the shared enter-watcher cascade for every creature entering on either side (gift tokens, Orchard Spirits, opponent spawns). Multiple copies stack.]",
+            "template": "custom",
+            "parameters": {
+                "own_creature_enters_lifegain": 1,
+                "opp_creature_enters_life_loss": 1
+            }
+        },
+        {
+            "name": "Massacre Wurm",
+            "mana_cost": "{3}{B}{B}{B}",
+            "types": ["Creature"],
+            "subtypes": ["Phyrexian", "Wurm"],
+            "keywords": [],
+            "power": 6,
+            "toughness": 5,
+            "oracle_text": "When this creature enters, creatures your opponents control get -2/-2 until end of turn.\nWhenever a creature an opponent controls dies, that player loses 2 life. [ETB -2/-2-until-EOT collapsed to \"destroy each opponent creature with toughness - damage <= 2 at ETB\" (etb_opp_creatures_debuff 2) -- equivalent in goldfish: opponent creatures never block/attack or get buffs, so the debuff on survivors is inert and only the kills matter. Death drain via opp_dies_life_loss 2, fired at every opponent-creature death site; the Wurm counts its own sweep's kills (it is on the battlefield when its ETB resolves). Multiple Wurms stack per death.]",
+            "template": "custom",
+            "parameters": {
+                "etb_opp_creatures_debuff": 2,
+                "opp_dies_life_loss": 2
+            }
+        },
+        {
+            "name": "Soul Warden",
+            "mana_cost": "{W}",
+            "types": ["Creature"],
+            "subtypes": ["Human", "Cleric"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "Whenever another creature enters, you gain 1 life. [any_creature_enters_lifegain 1 -- fires for every OTHER creature entering on EITHER side (including the deck's own gift tokens entering under the opponent). Our lifegain is goldfish-inert for the clock (opponent life is the wincon) but faithful as a resource vs our own pain/shock/fetch life costs.]",
+            "template": "custom",
+            "parameters": {
+                "any_creature_enters_lifegain": 1
+            }
+        },
+        {
+            "name": "Essence Warden",
+            "mana_cost": "{G}",
+            "types": ["Creature"],
+            "subtypes": ["Elf", "Shaman"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "Whenever another creature enters, you gain 1 life. [any_creature_enters_lifegain 1 -- same model as Soul Warden: fires for every OTHER creature entering on either side; lifegain is a resource vs our own pain/shock/fetch life costs, not a clock.]",
+            "template": "custom",
+            "parameters": {
+                "any_creature_enters_lifegain": 1
+            }
+        },
+        {
+            "name": "City of Brass",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Whenever this land becomes tapped, it deals 1 damage to you.\n{T}: Add one mana of any color. [WUBRG pain land: tap_self_damage 1 (mandatory whenever tapped for mana, applied at the shared tap sites). Our life loss is inert for the goldfish clock; it interacts only with our own life-cost accounting.]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": ["W", "U", "B", "R", "G"],
+                "tap_self_damage": 1
+            }
+        },
+        {
+            "name": "Defense of the Heart",
+            "mana_cost": "{3}{G}",
+            "types": ["Enchantment"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "At the beginning of your upkeep, if an opponent controls three or more creatures, sacrifice this enchantment, search your library for up to two creature cards, put those cards onto the battlefield, then shuffle. [upkeep_sac_tutor_creatures 2 + upkeep_sac_tutor_opp_min 3; the intervening-if is checked at the upkeep (trigger time == resolution time in this engine). WHICH creatures + their enter ORDER = DecisionProvider::SacTutorPutList (default: closed-form immediate-drain maximisation -- token-makers enter before sweepers); a human overrides via the sac_tutor chooser. Each put creature resolves its own ETB through the shared cascades (a put Hunted Phantasm gifts, a put Massacre Wurm sweeps), then the library is shuffled.]",
+            "template": "custom",
+            "parameters": {
+                "upkeep_sac_tutor_creatures": 2,
+                "upkeep_sac_tutor_opp_min": 3
+            }
+        },
+        {
+            "name": "Sylvan Scrying",
+            "mana_cost": "{1}{G}",
+            "types": ["Sorcery"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Search your library for a land card, reveal it, put it into your hand, then shuffle. [tutor_to_hand + tutor_types [Land]: the target is the searched tutor axis (GenericProvider returns every distinct library land name; the search picks). Reveal is unobservable in goldfishing.]",
+            "template": "custom",
+            "parameters": {
+                "tutor_to_hand": true,
+                "tutor_types": ["Land"],
+                "tutor_shuffle_after": true
+            }
+        },
+        {
+            "name": "Breeding Pool",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": ["Forest", "Island"],
+            "keywords": [],
+            "oracle_text": "({T}: Add {G} or {U}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+            "template": "basic_land",
+            "parameters": {
+                "produces": ["G", "U"],
+                "etb_pay_life_to_untap": 2
+            }
+        },
+        {
+            "name": "Crop Rotation",
+            "mana_cost": "{G}",
+            "types": ["Instant"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "As an additional cost to cast this spell, sacrifice a land.\nSearch your library for a land card, put that card onto the battlefield, then shuffle. [sacrifice_land = the shared additional-cost path (WHICH land = provider SacrificeLandCandidates, human chooser override) + tutor_land_to_battlefield: the searched tutor axis picks the land, which enters resolving its own shock/enters-tapped choice; a fetched Forbidden Orchard spawns its opponent Spirit on entry (it is tapped for mana this same turn, mirroring the on-play hook).]",
+            "template": "custom",
+            "parameters": {
+                "sacrifice_land": true,
+                "tutor_land_to_battlefield": true,
+                "tutor_types": ["Land"],
+                "tutor_shuffle_after": true
+            }
+        },
+        {
+            "name": "Varchild's War-Riders",
+            "mana_cost": "{1}{R}",
+            "types": ["Creature"],
+            "subtypes": ["Human", "Warrior"],
+            "keywords": ["Trample", "Rampage", "Cumulative upkeep"],
+            "power": 3,
+            "toughness": 4,
+            "oracle_text": "Cumulative upkeep—Have an opponent create a 1/1 red Survivor creature token. (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)\nTrample; rampage 1 (Whenever this creature becomes blocked, it gets +1/+1 until end of turn for each creature blocking it beyond the first.) [Cumulative upkeep modelled ALWAYS PAID (cumulative_upkeep_opp_token + Permanent::age_counters): +1 age counter at each of our upkeeps, then the opponent creates age x 1/1 red Survivor through the enter-watcher cascade. Always paying is weakly dominant vs the passive opponent (the gifts only feed our drains / Defense of the Heart and the 3/4 body is kept) -- pay-vs-sacrifice is a disclosed auto-decision, not a surfaced choice. Trample and rampage are inert (the opponent never blocks).]",
+            "template": "custom",
+            "parameters": {
+                "cumulative_upkeep_opp_token": true,
+                "upkeep_token_power": 1,
+                "upkeep_token_toughness": 1,
+                "upkeep_token_subtypes": ["Survivor"]
+            }
+        },
+        {
+            "name": "Azorius Chancery",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {W}{U}. [Karoo bounce land: enters tapped, makes 2 mana ({W}{U}, modelled as wild like other duals), and on ETB returns one of your lands to hand (BounceKarooLand prefers a tapped land so no mana is lost this turn; the returned land must be replayed, the real tempo cost).]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": ["W", "U"],
+                "produces_amount": 2,
+                "enters_tapped": true,
+                "etb_bounce_land": true
+            }
+        },
+        {
+            "name": "Tree of Tales",
+            "mana_cost": "",
+            "types": ["Artifact", "Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}: Add {G}. [Artifact land: a legal Enlightened Tutor target (type Artifact), otherwise a plain {G} source. No other artifact synergy exists in this deck.]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": ["G"]
+            }
+        },
+        {
+            "name": "Misty Rainforest",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Island card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (this deck's Forest/Island-typed targets reach all five colours via its duals); it never taps for mana (never reaches the battlefield).]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": ["W", "U", "B", "R", "G"],
+                "fetch_land_types": ["Forest", "Island"]
+            }
         }
     ]
 }

@@ -463,6 +463,22 @@ using DragonChooser = std::function<std::vector<int>(const GameState& state, int
                                                      const std::vector<int>& heuristic_subset)>;
 extern thread_local DragonChooser* g_play_dragon_chooser;
 
+// Defense of the Heart upkeep sac-tutor chooser (--claude-play / viewer). "Sacrifice this
+// enchantment, search your library for up to two creature cards, put those cards onto the
+// battlefield." WHICH creature cards (up to max_puts, possibly fewer or none -- "up to") is a real
+// human choice. `candidates` = the distinct-by-copy creature cards in the library (one Card per
+// library slot, pre-sorted into the engine's enter order), `heuristic_subset` = the indices (into
+// candidates) the provider's SacTutorPutList default would put. The chooser returns the chosen
+// indices into `candidates` (taken in ascending order = enter order). Nulled by RevealLogPause for
+// every search/rollout/enumeration scope, so it fires only on the REAL upkeep resolution and
+// autonomous/search play is byte-identical (chooser null -> the provider heuristic is untouched).
+using SacTutorChooser = std::function<std::vector<int>(const GameState& state, int controller,
+                                                       const std::string& source,
+                                                       const std::vector<Card>& candidates,
+                                                       int max_puts,
+                                                       const std::vector<int>& heuristic_subset)>;
+extern thread_local SacTutorChooser* g_play_sac_tutor_chooser;
+
 // Goblin Lackey combat-cheat chooser (--claude-play / viewer). "Whenever Goblin Lackey deals combat
 // damage to a player, you MAY put a Goblin permanent card from your hand onto the battlefield." WHICH
 // card (or decline -- it is a "may") is a real human choice. `candidates` = the matching Goblin
@@ -603,6 +619,7 @@ struct RevealLogPause
     ReplicateChooser* saved_repchooser;
     LandEntryChooser* saved_lechooser;
     DragonChooser* saved_dragchooser;
+    SacTutorChooser* saved_sacttchooser;
     LackeyChooser* saved_lackeychooser;
     LightPawsChooser* saved_lpchooser;
     FirebreatheChooser* saved_fbchooser;
@@ -619,7 +636,8 @@ struct RevealLogPause
                        saved_evsink(g_play_event_sink), saved_dropsink(g_play_dropped_cast_sink),
                        saved_sacchooser(g_play_sacrifice_chooser),
                        saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser),
-                       saved_dragchooser(g_play_dragon_chooser), saved_lackeychooser(g_play_lackey_chooser),
+                       saved_dragchooser(g_play_dragon_chooser), saved_sacttchooser(g_play_sac_tutor_chooser),
+                       saved_lackeychooser(g_play_lackey_chooser),
                        saved_lpchooser(g_play_lightpaws_chooser),
                        saved_fbchooser(g_play_firebreathe_chooser),
                        saved_cochooser(g_play_cast_order_chooser),
@@ -631,6 +649,7 @@ struct RevealLogPause
       g_play_draw_sink = nullptr; g_play_reveal_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
       g_play_sacrifice_chooser = nullptr;
       g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr;
+      g_play_sac_tutor_chooser = nullptr;
       g_play_lackey_chooser = nullptr;
       g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
       g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr;
@@ -644,7 +663,8 @@ struct RevealLogPause
                         g_play_event_sink = saved_evsink; g_play_dropped_cast_sink = saved_dropsink;
                         g_play_sacrifice_chooser = saved_sacchooser;
                         g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
-                        g_play_dragon_chooser = saved_dragchooser; g_play_lackey_chooser = saved_lackeychooser;
+                        g_play_dragon_chooser = saved_dragchooser; g_play_sac_tutor_chooser = saved_sacttchooser;
+                        g_play_lackey_chooser = saved_lackeychooser;
                         g_play_lightpaws_chooser = saved_lpchooser;
                         g_play_firebreathe_chooser = saved_fbchooser;
                         g_play_cast_order_chooser = saved_cochooser;

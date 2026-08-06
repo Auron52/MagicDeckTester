@@ -724,7 +724,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','echo','land_entry','tutor_etb'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','echo','land_entry','tutor_etb','sac_tutor'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -1499,7 +1499,7 @@ function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
-                || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon'
+                || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor'
                 || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold'
                 || dec==='lackey_put' || dec==='echo' || dec==='tutor_etb'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
@@ -1514,6 +1514,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='mulligan' ? mulliganPanelHtml(d)
                   : dec==='bottom' ? bottomPanelHtml(d)
                   : dec==='dragon' ? dragonPanelHtml(d)
+                  : dec==='sac_tutor' ? sacTutorPanelHtml(d)
                   : dec==='lackey_put' ? lackeyPanelHtml(d)
                   : dec==='tutor_etb' ? tutorPanelHtml(d)
                   : dec==='echo' ? echoPanelHtml(d)
@@ -2003,6 +2004,11 @@ function wireDecisionPanel(d, dec){
     const ai=panel.querySelector('#dragonai'); if (ai) ai.onclick=()=>{ S.dragonSel=new Set(aiDragonSet(d)); renderDecisionPanel(d,'dragon'); };
     const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitDragonBatch(d);
   }
+  else if (dec==='sac_tutor'){
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>toggleSacTutor(d, +b.dataset.opt));
+    const ai=panel.querySelector('#sactutai'); if (ai) ai.onclick=()=>{ S.sacTutorSel=new Set(aiDragonSet(d)); renderDecisionPanel(d,'sac_tutor'); };
+    const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitSacTutorBatch(d);
+  }
   else if (dec==='divide')
     { const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitDivide(d); }
   else if (dec==='expressive_iteration')
@@ -2096,6 +2102,43 @@ function commitDragonBatch(d){
   const names=(d.candidates||[]).filter(c=>sel.has(c.index)).map(c=>c.name);
   S._dragonFor=null; S.dragonSel=null;        // clear the per-decision selection guard
   pushChoices(d, flags, `Dragonstorm: put ${names.length?names.join(', '):'nothing'}`);
+}
+// Defense of the Heart upkeep sac-tutor: same multi-select shape as the Dragon put override
+// (candidates + ai_set + max_puts; reply = one 0/1 flag per candidate). "Up to two" -- putting
+// fewer (or none) is legal, so the confirm button is never blocked by an under-cap selection.
+function sacTutorPanelHtml(d){
+  const cap=d.max_puts||0;
+  if (S._sacTutorFor !== d.decision_index){ S._sacTutorFor=d.decision_index; S.sacTutorSel=new Set(aiDragonSet(d)); }
+  const sel=S.sacTutorSel, aiSet=new Set(aiDragonSet(d));
+  let h=`<h3>${esc(d.source||'Defense of the Heart')} — put which creatures?</h3>`;
+  h+=`<div class="sub">Search your library for up to <b>${cap}</b> creature card${cap===1?'':'s'} and put them onto the battlefield. They enter in the order shown (left to right) — enter token-makers before a Massacre Wurm so its sweep catches the new tokens. The AI’s picks are preselected.</div>`;
+  h+=`<div class="tutgrid">`;
+  (d.candidates||[]).forEach(c=>{
+    const isSel=sel.has(c.index), isAI=aiSet.has(c.index);
+    h+=`<span class="cardmini tdig${isSel?' sel':''}${isAI?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       (isAI?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  h+=`</div>`;
+  const n=sel.size, ok=(n<=cap);
+  h+=`<div class="pbtns"><span class="pcount">${n} / ${cap} selected</span>`+
+     `<button class="ghost" id="sactutai">Follow AI</button><span class="spacer"></span>`+
+     `<button id="decconfirm" class="primary" ${ok?'':'disabled'}>Put ${n} creature${n===1?'':'s'}</button></div>`;
+  return h;
+}
+function toggleSacTutor(d, oi){
+  const cap=d.max_puts||0, sel=S.sacTutorSel||(S.sacTutorSel=new Set());
+  if (sel.has(oi)) { sel.delete(oi); }
+  else { if (sel.size>=cap){ flashHint(`Up to ${cap} — deselect one first.`); return; } sel.add(oi); }
+  renderDecisionPanel(d,'sac_tutor');
+}
+function commitSacTutorBatch(d){
+  const cap=d.max_puts||0, sel=S.sacTutorSel||new Set();
+  if (sel.size>cap){ flashHint(`Pick up to ${cap}.`); return; }
+  const flags=(d.candidates||[]).map(c=>sel.has(c.index)?1:0);
+  const names=(d.candidates||[]).filter(c=>sel.has(c.index)).map(c=>c.name);
+  S._sacTutorFor=null; S.sacTutorSel=null;    // clear the per-decision selection guard
+  pushChoices(d, flags, `${d.source||'Defense of the Heart'}: put ${names.length?names.join(', '):'nothing'}`);
 }
 // Divide: send one integer per legal target (in legal order = the order the engine reads them).
 function commitDivide(d){

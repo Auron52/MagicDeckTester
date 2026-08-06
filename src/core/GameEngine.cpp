@@ -219,6 +219,11 @@ void GameEngine::UntapStep(GameState& state)
         // entered_this_turn = false: passive creatures are treated as already present,
         // not subject to summoning sickness (irrelevant since they never attack).
         state.battlefield.push_back(perm);
+        // Enter-watchers (Suture Priest / Wardens): a scheduled opponent spawn IS a creature
+        // entering under the opponent's control. This site does not run the universal enter
+        // cascade, so fire the watchers directly (mirrors the rollout's spawn site, lockstep).
+        FireCreatureEnterWatchers(state, opp_index,
+                                  static_cast<int>(state.battlefield.size()) - 1);
     }
 
     // Forbidden Orchard: one opponent 1/1 Spirit per Orchard the active player controls this turn
@@ -308,6 +313,13 @@ void GameEngine::UpkeepTail(GameState& state)
                         def->params.upkeep_token_subtypes);
         }
     }
+
+    // Creature Giving upkeep triggers, in controller-optimal order: Varchild's War-Riders
+    // cumulative-upkeep gifts FIRST (the fresh Survivors count toward DotH's >= 3), then the
+    // Defense of the Heart sac-tutor check. Mirrors the rollout's identical block in
+    // TurnSolver::SimulateEndAndStartNextTurn (lockstep); param-gated -> byte-identical elsewhere.
+    PerformUpkeepCumulativeGifts(state);
+    PerformUpkeepSacTutor(state);
 
     ResolveStack(state);
 }

@@ -39,7 +39,16 @@ enum class Keyword
     // Umbra armor (Hyena/Spider/Lion Umbra): an INERT keyword-ability tag -- "if enchanted creature would be
     // destroyed, instead destroy this Aura." Provably inert vs the passive goldfish opponent (no removal /
     // combat damage ever destroys our creatures). Kept only so the Scryfall keywords field stays faithful.
-    UmbraArmor
+    UmbraArmor,
+    // Rampage (Varchild's War-Riders): an INERT keyword-ability tag -- "+1/+1 per blocker beyond the
+    // first." Provably inert vs the passive goldfish opponent (it never blocks). Kept only so the
+    // Scryfall keywords field stays faithful; no engine code reads it.
+    Rampage,
+    // Cumulative upkeep (Varchild's War-Riders): an INERT keyword-ability tag -- the mechanic is
+    // modelled structurally via CardParams::cumulative_upkeep_opp_token + Permanent::age_counters
+    // (always-paid opponent-token gifts), not by this enum. Kept only so the Scryfall keywords field
+    // ["Cumulative upkeep"] stays faithful; no engine code reads it.
+    CumulativeUpkeep
 };
 enum class Supertype { Legendary, Basic, Snow, World };
 

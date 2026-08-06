@@ -44,6 +44,11 @@ KNOWN_TYPES = {
     "main_phase", "mulligan", "bottom", "vial_charge",
     "scry", "surveil", "reorder", "divide", "target", "bounce",
     "dig", "discard", "expressive_iteration", "retrace_discard", "replicate", "land_entry",
+    # sac-land additional cost (Shard Volley / Crop Rotation): single-int, engine default exposed.
+    "sacrifice",
+    # multi-consume put overrides (one 0/1 int per candidate): Dragonstorm put + Defense of the
+    # Heart upkeep sac-tutor. Replied via the candidates' `def` flags (the AI's subset).
+    "dragon", "sac_tutor",
 }
 D_START, D_END = "<<<CLAUDE_DECISION>>>", "<<<END_DECISION>>>"
 R_START, R_END = "<<<CLAUDE_RESULT>>>", "<<<END_RESULT>>>"
@@ -98,6 +103,12 @@ def reply_for(dec):
         return [int(ai.get("index", 0) if isinstance(ai, dict) else ai)]
     if t == "vial_charge":
         return [int(dec.get("heuristic_default", 0))]
+    if t in ("dragon", "sac_tutor"):
+        # Multi-consume put override: ONE 0/1 int per candidate (in candidate order), following
+        # the AI's default subset (each candidate's `def` flag). Like `divide`, the engine reads
+        # len(candidates) ints from the stream, so supplying them all at once is required.
+        cands = dec.get("candidates", [])
+        return [1 if c.get("def") else 0 for c in cands] if cands else [0]
     if t == "divide":
         # One int per legal target (in order), each = its engine default (all-to-face).
         # This is the ONLY multi-consume decision: it reads `need` ints from the stream,

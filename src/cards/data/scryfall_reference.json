@@ -110,6 +110,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Azorius Chancery": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {W}{U}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Benalish Marshal": {
     "cmc": 3.0,
     "keywords": [],
@@ -157,6 +166,15 @@
     "toughness": null,
     "type_line": "Land // Land"
   },
+  "Breeding Pool": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {G} or {U}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Forest Island"
+  },
   "Brushland": {
     "cmc": 0.0,
     "keywords": [],
@@ -184,6 +202,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "City of Brass": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "Whenever this land becomes tapped, it deals 1 damage to you.\n{T}: Add one mana of any color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Cloudshredder Sliver": {
     "cmc": 2.0,
     "keywords": [],
@@ -201,6 +228,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Crop Rotation": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "As an additional cost to cast this spell, sacrifice a land.\nSearch your library for a land card, put that card onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Crystalline Sliver": {
     "cmc": 2.0,
@@ -230,6 +266,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
+  },
+  "Defense of the Heart": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G}",
+    "oracle_text": "At the beginning of your upkeep, if an opponent controls three or more creatures, sacrifice this enchantment, search your library for up to two creature cards, put those cards onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Desperate Ritual": {
     "cmc": 2.0,
@@ -300,6 +345,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Essence Warden": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "Whenever another creature enters, you gain 1 life.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf Shaman"
   },
   "Ethereal Armor": {
     "cmc": 1.0,
@@ -403,6 +457,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Gladecover Scout": {
+    "cmc": 1.0,
+    "keywords": [
+      "Hexproof"
+    ],
+    "mana_cost": "{G}",
+    "oracle_text": "Hexproof (This creature can't be the target of spells or abilities your opponents control.)",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf Scout"
   },
   "Goblin Chainwhirler": {
     "cmc": 3.0,
@@ -564,6 +629,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Hunted Phantasm": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}{U}",
+    "oracle_text": "This creature can't be blocked.\nWhen this creature enters, target opponent creates five 1/1 red Goblin creature tokens.",
+    "power": "4",
+    "toughness": "6",
+    "type_line": "Creature — Spirit"
   },
   "Hyena Umbra": {
     "cmc": 1.0,
@@ -824,6 +898,15 @@
     "toughness": "2",
     "type_line": "Creature — Human Knight"
   },
+  "Massacre Wurm": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{3}{B}{B}{B}",
+    "oracle_text": "When this creature enters, creatures your opponents control get -2/-2 until end of turn.\nWhenever a creature an opponent controls dies, that player loses 2 life.",
+    "power": "6",
+    "toughness": "5",
+    "type_line": "Creature — Phyrexian Wurm"
+  },
   "Memory Lapse": {
     "cmc": 2.0,
     "keywords": [],
@@ -838,6 +921,15 @@
     "keywords": [],
     "mana_cost": "",
     "oracle_text": "This land enters tapped.\n{T}: Put a storage counter on this land.\n{T}, Remove any number of storage counters from this land: Add {R} for each storage counter removed this way.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Misty Rainforest": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Island card, put it onto the battlefield, then shuffle.",
     "power": null,
     "toughness": null,
     "type_line": "Land"
@@ -1231,6 +1323,17 @@
     "toughness": "2",
     "type_line": "Creature — Beast"
   },
+  "Slippery Bogle": {
+    "cmc": 1.0,
+    "keywords": [
+      "Hexproof"
+    ],
+    "mana_cost": "{G/U}",
+    "oracle_text": "Hexproof (This creature can't be the target of spells or abilities your opponents control.)",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Beast"
+  },
   "Sliver Hive": {
     "cmc": 0.0,
     "keywords": [],
@@ -1248,6 +1351,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact"
+  },
+  "Soul Warden": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "Whenever another creature enters, you gain 1 life.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Cleric"
   },
   "Soulfire Eruption": {
     "cmc": 9.0,
@@ -1330,6 +1442,15 @@
     "toughness": "1",
     "type_line": "Creature — Sliver"
   },
+  "Suture Priest": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Whenever another creature you control enters, you may gain 1 life.\nWhenever a creature an opponent controls enters, you may have that player lose 1 life.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Phyrexian Cleric"
+  },
   "Swords to Plowshares": {
     "cmc": 1.0,
     "keywords": [],
@@ -1338,6 +1459,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Sylvan Scrying": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Search your library for a land card, reveal it, put it into your hand, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Tainted Remedy": {
     "cmc": 3.0,
@@ -1429,6 +1559,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Tree of Tales": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact Land"
+  },
   "Twinshot Sniper": {
     "cmc": 4.0,
     "keywords": [
@@ -1460,6 +1599,19 @@
     "power": "6",
     "toughness": "6",
     "type_line": "Creature — Dragon"
+  },
+  "Varchild's War-Riders": {
+    "cmc": 2.0,
+    "keywords": [
+      "Cumulative upkeep",
+      "Rampage",
+      "Trample"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Cumulative upkeep—Have an opponent create a 1/1 red Survivor creature token. (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)\nTrample; rampage 1 (Whenever this creature becomes blocked, it gets +1/+1 until end of turn for each creature blocking it beyond the first.)",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Creature — Human Warrior"
   },
   "Venerable Knight": {
     "cmc": 1.0,

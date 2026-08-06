@@ -199,6 +199,14 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     PerformTutor(state, entry.controller_index, def.params, entry.tutor_target,
                                  def.card.m_name);
                 }
+                // Crop Rotation: search a land card, put it onto the battlefield (the sacrifice-a-
+                // land additional cost is handled by the shared sacrifice_land cast path). Target =
+                // the searched tutor axis (entry.tutor_target). Lockstep with ApplyPlanDirect.
+                if (def.params.tutor_land_to_battlefield)
+                {
+                    PerformLandTutorToBattlefield(state, entry.controller_index, def.params,
+                                                  entry.tutor_target);
+                }
                 // Dragonstorm (Storm): put min(spells_cast_this_turn, Dragons-in-library) Dragons
                 // onto the battlefield, each through the shared OnDragonEnters cascade (Scourge ping
                 // + Lathliss token), then shuffle. spells_cast_this_turn was incremented at THIS
