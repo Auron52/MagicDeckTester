@@ -118,8 +118,42 @@ from the line), GT rebaseline all three tiers, update this doc + memory.
   unbounded-budget recovery check on every slower game.
 - The unpruned benchmark: base provider full-hand candidates at unbounded budget = free-rein arm.
 
+## Measurements (2026-08-06) — stages 1–3
+
+- **Stage 1 COMMITTED `c408ddd`** (lockstep, engine-member pin, byte-identical: smoke 30/30).
+- **Stage 2 COMMITTED `6d44a04`** (`MTG_DISCARD_NODE`, default OFF; off = byte-identical).
+  **A/B (flag on, axis dormant): the probe's measured value is hinata +0.0050..+0.0100 (all 4
+  d3/d5 train cases) and antilife +0.0066/+0.0080 (2 cases); all 39 other cases byte-identical.**
+  So the probe cannot be deleted without recovering those two decks somehow.
+- **Stage 3 width sweep: THE BLIND AXIS IS THE WRONG MECHANISM — measured strictly harmful.**
+  `MTG_DISCARD_WIDTH` (temporary base-hook lever, uncommitted) at W=2/4/8 under
+  `MTG_DISCARD_NODE=1`, regression tier: monotonically worse with W on nearly EVERY deck
+  (hinata +0.085→+0.25, antilife +0.017→+0.068, dragonstorm/slivers/goblins/creature_giving all
+  degrade; makespan 132s→380s). Textbook budget dilution (the bp "site 3" lesson): the axis
+  emits W−1 variants BLIND on every base plan of every deck, while the discard fires on a tiny
+  fraction of turns — unlike `AppendBreakpointVariants`, which fans only plans that actually
+  OPEN a breakpoint. `logs/vlq_all_ab/regression_dnode*.log`.
+
+## The fork (presented to the user 2026-08-06 — DO NOT proceed without their pick)
+
+A. **Accept the small loss and retire the probe now**: default `MTG_DISCARD_NODE=1` at width 1
+   everywhere. Cost: hinata +0.005..0.010, antilife +0.007..0.008 on train seeds (held-out
+   unmeasured). Buys: the oracle class is gone, reline gone, architecture clean.
+B. **Rebuild the axis bp-style before retiring**: emit discard variants only when a plan's
+   simulation actually reaches an over-limit cleanup with >1 candidates (apply-time discovery,
+   like breakpoints; wave-compatible; memoizable). Structurally right per the ruling; a real
+   build — the cleanup fires inside SimulateEndAndStartNextTurn's turn loop, not inside
+   ApplyPlanDirect, so it needs its own discovery→fan plumbing (this is exactly why the original
+   builder chose blind emission).
+C. **Keep the probe** (status quo): measured-good, architecturally unsanctioned.
+D. **Gate the blind emission on a provider predicate** ("will this plan plausibly flood?" —
+   hand size + planned draws): cheaper than B, keeps some blindness, still per-deck tuning.
+
+The temporary `MTG_DISCARD_WIDTH` base-hook lever is LOCAL/UNCOMMITTED (DecisionProvider.h) —
+revert or keep per the pick.
+
 ## Session state (for resume)
 
-- 2026-08-06: doc written; stage 1 implementation next. Background probes in flight this session
-  (unrelated): Knights live-model matrix (`logs/eval/valueleaf_depth_kn_live.txt`) + its trust
-  callgrind (t4 = −2.10% Ir on live model, `logs/vlq_all_ab/kn_live_cg/`).
+- 2026-08-06: stages 1–2 committed; stage-3 sweep refuted the blind axis; fork presented.
+  Knights live-model matrix closed separately (trust=5 honest at 2000g; t4's −2.1% Ir not
+  available on the live model).
