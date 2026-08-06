@@ -167,13 +167,20 @@ test:**
   and the land kept in its place pays the retrace cost). Fixed; `MTG_PROTECT_RETRACE=1` restores.
 * **gi=444 — CLAIRVOYANCE, not worried:** the fan sheds the deck's ONLY visible Land's Edge on
   turn 2, right only because the fixed deck order is known to bring a replacement.
-* **gi=229 — borderline, noted:** the ranking sheds Temple of Epiphany (tapped ⇒ worst-keep band);
-  the fan keeps it for the ETB scry. One game of evidence; a band tweak is sweepable if wanted.
+* **gi=229 — a second MISTAKE, fixed (user's question found it: "don't we potentially keep a
+  Temple?"):** the keep set DOES buy a Temple (scry lands are diggers, dig_rank 3/4), but the dup
+  rule banded EVERY copy of a duplicated name spare — `copies_seen` is symmetric, so it cannot
+  tell "the second copy" from the first — and it preempts the keep-slot band, so Temple×2 shed
+  BOTH and kept a surplus basic Island (T6 vs T5). Fixed: a kept copy is the first copy; only
+  unkept duplicates band spare.
 
-**Net result vs the old ground truth** (which embodied the whole-hand fan): smoke th_d0 −0.0050,
-regression th_d3_s2002 −0.0020 (gi=392 T7→T5), th_d5_s3003 −0.0033, everything else equal
-(digest-only); every other deck byte-identical; repro game 0.3 s flat d3–d8. The ranking now beats
-the searched fan on net at ~1/10,000th the cost.
+**Net result vs the old ground truth** (which embodied the whole-hand fan), with both ranking
+fixes stacked: smoke th_d0 −0.0060, regression th_d3_s2002 −0.0040 (gi=273 T6→T5, gi=392 T7→T5),
+th_d3_s3003 −0.0020, th_d5_s3003 −0.0033, everything else equal on avg (digest-only); every other
+deck byte-identical; repro game 0.3 s flat d3–d8. **Every TH case is now net better or equal: the
+ranking beats the searched fan it replaced**, at ~1/10,000th the cost — the fan's remaining
+per-game wins are clairvoyant (gi=444). The method that got here is the loop to reuse: run the fan
+as a DIAGNOSTIC referee on disagreement games, classify mistake-vs-clairvoyance, fix rankings.
 
 The probe depth pin (`MTG_PROBE_ROLLOUT_DEPTH`) stays: it governs the remaining probe consumers
 (generic decks' discard fan, Land's Edge fire count, and any future fat-list provider).
