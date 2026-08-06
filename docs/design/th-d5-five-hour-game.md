@@ -1,162 +1,162 @@
-# A single treasure_hunt game costs ~5 hours at d5 unbounded — OPEN (one contributor found and fixed)
+# One bounded treasure_hunt game costs hours — a REGRESSION in the depth curve
 
-**Status: STILL OPEN (2026-08-06).** The user's read was right: there is no reason a bounded 8-turn
-goldfish game should cost hours, and it is a defect.
+**Status: ROOT-CAUSED, NOT FIXED (2026-08-06).** Handing off. The user's read was right at every
+step: a `max_turns=8` goldfish game must never cost hours, and this is a regression, not the honest
+price of a hard position.
 
-**A dead leaf cache was found and fixed, and it was NOT the cause.** An earlier revision of this file
-called it the root cause; that was wrong and is corrected below. The fix
-(`MTG_TT_NOWIN_CACHE`, default off) is sound and worth keeping -- 44,970 memo hits where there were
-zero, byte-identical result -- but it buys only **8%** (89.2 s -> 82.2 s at d4). The blow-up is
-elsewhere.
+## The headline: the depth curve used to be FLAT
 
-## Contributor #1 (found, fixed, ~8%): the leaf transposition table only stores WINS
+Same game (`--seed 9010 --game-index 1`, i.e. base seed 9009 game index 1), V arm, one core:
 
-`SimulateToEnd` (`TurnSolver.cpp`, the leaf rollout) ends with:
-
-```cpp
-int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
-if (tt != nullptr && result <= max_turns) { tt->Store(key, result); }
-```
-
-A rollout that finds no win returns `max_turns + 1` and is **never cached**. Measured on the
-pathological game (`--seed 9010 --game-index 1 --depth 4`):
-
-```
-TT lookups : 138,346   hits: 0   (0% hit)
-TT stores  : 0         nowin NOT stored: 138,346   (100%)
-```
-
-**Every one of the 138,346 leaf rollouts returned a no-win, so the table was written zero times.**
-There is no leaf memoisation at all in this position: every leaf re-rolls from scratch. Measured cost
-of one extra ply on this game:
-
-| depth | wall | search nodes | EnumeratePlans |
-|---|---|---|---|
-| 3 | 7.7 s | 123,076 | 31,973 |
-| 4 | 88.0 s | 1,349,112 | 624,163 |
-| 5, 6, 7 | did not finish | — | — |
-
-Both depths return the same answer (`avg = 3.0000`, a turn-3 win), so the extra work buys nothing.
-
-The overhead is worse than "a cache that misses": with search-shuffle enabled (default),
-`BuildSimKey` folds **the entire ordered library of both players** into the key — ~120 hashes — and
-that key is computed 138,346 times to consult a table that is always empty.
-
-**This is the same bug class as the `FSLineCache` no-win asymmetry fixed one layer up on
-2026-08-05** (`bound-qualified-nowin-memo.md`) — "a no-win may be a branch-and-bound abort, so
-discard it" — except the leaf table was never revisited, and unlike `FSLineCache` the store site
-carries no comment justifying the restriction.
-
-## Where the cost actually is -- the open question
-
-With the leaf fix ON, the same d4 game still costs 82 s and reports:
-
-```
-EnumeratePlans calls  :   593,144      <- the driver
-ApplyPlanDirect calls : 1,930,548
-GameState deep copies : 1,012,589
-FSLine memo probes    :    19,916      <- the INTERIOR memo is barely exercised
-```
-
-593,144 plan enumerations for ONE game, against only 19,916 interior-memo probes. Whatever is wrong
-is in the interior search -- the plan enumeration rate and/or the interior memo failing to collapse
-it -- not in leaf rollouts. That ratio is the next thing to explain. Note also that `Search nodes`
-is bit-identical with the leaf fix on and off (1,349,112), because it is recorded as
-`PROF_ADD_NODES(budget.Used())` once per decision (`AIEngine.cpp:1893`) rather than per rollout, so
-it is NOT a proxy for work done here -- use EnumeratePlans/ApplyPlanDirect instead.
-
-## The fix that WAS applied (contributor #1)
-
-Apply the same bound qualification that worked for `FSLineCache`:
-
-* store a no-win with the `cutoff_turn` it was proved under, and reuse it only for a query asking
-  `cutoff <= stored_bound`. `cutoff_turn` is NOT part of `BuildSimKey`, which is precisely why an
-  unqualified no-win would be unsound to store — the same reasoning that made the interior memo work;
-* suppress the store when the rollout was cut short by the budget, or the "no win" is not a proof but
-  "I ran out" — the `g_fs_trunc_events` watermark pattern already exists for this;
-* gate behind a flag (`EnvOn`, default off until measured), verify byte-identity at an unbounded
-  budget first (with no budget to reallocate, a sound memo must return the same line), then A/B.
-
-Implemented as `MTG_TT_NOWIN_CACHE` (default OFF) in `TranspositionTable.h` (a separate `m_nowin` map
-so the win path is untouched) and `SimulateToEnd`. Measured at d4 on the pathological game:
-
-| | OFF | ON |
+| depth | pre-07-28 (`MTG_BP_SEARCH=0`) | today |
 |---|---|---|
-| TT lookups | 138,346 | 85,082 |
-| no-wins stored | 0 | 40,112 |
-| no-win hits | 0 | **44,970** |
-| wall | 89.2 s | 82.2 s |
-| result | 3.0000 | 3.0000 |
+| d3 | 0.44 s | 5.2 s |
+| d4 | 0.43 s | 89.9 s |
+| d5 | 0.41 s | 1300.6 s |
+| d6 | 0.42 s | never finished |
+| d7 | 0.41 s | never finished |
+| d8 | **0.44 s** | never finished |
 
-Sound and worth having, but 8% -- it does not make the pathological cells tractable, and restarting
-the V6/V7/V8 cells on the strength of it would simply hang again.
+**Flat at every depth before the breakpoint search; ×12–15 per ply after.** This is a regression in
+the EXPONENT, not a constant factor. Extra depth used to cost nothing on this game, and correctly so:
+the game ends on turn 3–4, so once the horizon covers the remaining game there is nothing left to
+search. That property is what broke.
 
-## Ruled out along the way
+The regression is a *quality* feature working as designed — `MTG_BP_SEARCH=0` also gives a WORSE
+answer (turn 4 vs turn 3) — so this is not "revert it". It is "the same quality must cost vastly
+less".
 
-* **`MTG_LADDER_VALUE_LEAF`** — initially ranked first suspect because it shipped 2026-08-05 and its
-  identity sweep never covered TH at d5. Wrong, and the evidence was already available: seeds
-  8008/10010 ran 400 games with the ladder equally ON, and an in-horizon win is found by simulation
-  rather than by the leaf estimate, so the leaf cannot change which pass commits. The pathological
-  game reproduces in the V arm, where the ladder is not even enabled.
-* **Search-shuffle key folding.** Re-running with `MTG_NO_SEARCH_SHUFFLE=1`: 138,346 lookups / 0
-  hits / 1,345,156 nodes / 85.3 s versus 138,346 / 0 / 1,349,112 / 88.0 s. Identical. The full-library
-  fold makes each key expensive but is not why the table never hits.
-* **CPU starvation.** Contention does not turn a 2.5 s batch into a 5 h one.
+## Mechanism
 
-## The observation
+Breakpoint continuations recurse with `depth - 1`, so **breakpoints consume depth plies inside a
+single turn**. `--depth 8` stops meaning "look 8 turns ahead" and becomes "explore 8 nested
+decisions", which on a flood turn subdivides a turn whose game is already won. The 40-wide plan
+enumeration (below) is then re-paid at every one of those plies, where before 2026-07-28 it was paid
+about once per turn.
 
-Phase C of the regeneration measured `TH_staged` H5 across four seeds. Two of them are ordinary; two
-are dominated entirely by their FIRST 25-game batch:
+## The measurements (all on the one game, d4, `-DMTG_PROFILE=ON` build)
 
-| seed | games | total | s/game | first batch (25 games) |
-|---|---|---|---|---|
-| 8008 | 400 | 5,919 s | 14.8 | 4.4 s |
-| **9009** | 50 | 17,912 s | 358.2 | **17,875 s = 4.96 h** |
-| 10010 | 400 | 6,137 s | 15.3 | 1.9 s |
-| **11011** | 50 | 10,671 s | 213.4 | **10,668 s = 2.96 h** |
+Arm comparison:
 
-Every *other* game in those two cells is trivially cheap: once the first batch was carried over, the
-fill run took 9009 from 50 → 150 and 11011 from 50 → 400 in minutes (~0.03–0.12 s/game). So the cost
-is not spread across the cell — it is one or a few individual games inside `[0, 25)`.
+| arm | wall | nodes | answer |
+|---|---|---|---|
+| baseline | 89.9 s | 1,349,112 | T3 |
+| `MTG_BP_WAVES=0` | 26.8 s | 494,142 | T3 — identical |
+| `MTG_BP_SEARCH=0` | 0.72 s | 554 | T4 — worse |
 
-For scale: a 4.4 s batch on one seed versus 17,875 s on another, for the same deck, depth and game
-count, is a **4,000×** spread.
+Search tree shape:
 
-## Why this matters beyond the matrix
+```
+FSLineWin nodes : 17,411   candidates: 707,266   (40.6 branching)
+by game turn    : t3=73  t4=215  t5=1385  t6=10341  t7=3926  t8=4068
+by depth left   : d0=110  d1=17905  d2=1860  d3=138  d4=8
+```
 
-It is what condemned the cells. The tractability guard keys on the cumulative rate, which was the fix
-for an earlier per-batch version (see the comment at the condemnation site), but a cumulative average
-over 50 games cannot dilute a five-hour batch: 17912/50 = 358 > 60. The cell was capped at
-reference-only, discarding ~350 cheap games to avoid re-running one expensive game **already paid
-for**. `--never-condemn-at-or-below 5` now prevents that for the depths the trust-depth decision
-reads, but the underlying game is still there and will be paid again by any future run that does not
-resume from a seeded state.
+Wave phase:
+
+```
+[bp-waves] nodes=28044 slots=286714 scored=1070393 rolled=422434
+           improved=0  max-rank=48  nested-scored=42328  max-at=2
+```
+
+Breakpoint sites:
+
+```
+[bp-cands] DrawUntilNonland (Treasure Hunt)  n=177044 mean=5.71 max=49
+           capped=41719 (23.6%)  unreachable=779910 (77.1% of all continuations)
+   len: 1=122579  2=12746  3=1280  5-8=214  9-16=14889  17-32=23426  33-64=1910
+```
+
+### What those say
+
+* **Branching is 40.6 candidates per node** — ~14 distinct land names × ~3 cast options.
+* **`improved=0`.** Not one of 1,070,393 scored wave candidates ever beat its node's incumbent.
+* **`max-at=2`.** Nesting never exceeds depth 2; nested candidates are 4% of the total.
+* **177,044 Treasure Hunt breakpoint evaluations** in a game that casts Treasure Hunt 2–3 times.
+* **69% of breakpoints (122,579) have exactly ONE continuation** — not a decision at all.
+* **77.1% of continuations are never reached.**
+
+## RULED OUT (each measured, not reasoned)
+
+* **The retrained STAGED value model** — 91.2 s vs baseline 89.9 s. Not the cause.
+* **`MTG_FS_NOWIN_CACHE`** — 92.5 s with it off. Not the cause.
+* **Cycling lands / Fiery Islet opening breakpoints** (the intuitive suspect, and the user's own
+  hypothesis). The site probe shows the dig-through-lands class firing **zero** times; only
+  DrawUntilNonland appears. Cycling in the autonomous search is not branched at all —
+  `SelectDigSource` returns a single card NAME, so copies can never split — and `ShouldConsiderDig`
+  already declines to cycle when a draw engine is in hand.
+* **Copy-level duplication** (Lonely Sandbar 1 vs 2, Fiery Islet 1 vs 2). Already deduped: dig is
+  name-keyed, land plays collapse through `land_sig`, whose signature is identical across copies.
+  The 40.6 branching is 14 DISTINCT land names, not 53 copies.
+* **Nesting depth.** A `MTG_BP_NEST_MAX` cap was written and reverted: `max-at=2` means any cap ≥ 3
+  never binds, so it was pure reachability risk for zero speedup. **Measure the axis before capping
+  it.**
+* **The leaf TT no-win cache** (`MTG_TT_NOWIN_CACHE`, committed `1612bc0`, default off) — sound and
+  real (44,970 memo hits where there were zero) but worth only 8%. Not related to this.
+
+## What is implemented but NOT shipped
+
+Two sound cutoff prunes, currently uncommitted in the working tree, worth **1.63× together**
+(89.9 → 55.0 s, same T3 answer):
+
+1. The wave loop handed its continuation `cutoff = best.win_turn` while the acceptance test is
+   strictly `<`, so every line winning exactly AT the incumbent turn was searched and discarded.
+   Tightened to `best.win_turn - 1`.
+2. `FSLineTail` was missing the `state.turn_number > cutoff` guard its sibling `FSLineWin` has at
+   entry, so it enumerated and recursed to reach a no-win it would return anyway.
+
+The same tightening was applied to the main loop too. **Caveat:** the main loop records
+`tail.win_turn` into `node_vals` for the beam reorder, so coarsening a non-improving value to
+`max_turns + 1` makes previously-distinguishable plans tie — a RANKING change that can move play.
+Smoke: **26 passed, 1 failed** ("2 searched play-changed at same score" on analyze). That is the
+expected budget-reallocation effect (a work-saving prune frees budget the search spends elsewhere,
+exactly as `MTG_FS_NOWIN_CACHE` did), but it means these need an **unbounded identity check** plus a
+GT rebaseline before shipping — not a byte-identical claim.
+
+They are a constant factor. They do not fix the exponent.
+
+## The two proposed fixes (NOT implemented — this is the handoff)
+
+**Fix 1 — don't emit variants past the continuation list's length.** Wave 0 emits `W=2` variants
+*blind*, before knowing `n`. For the 69% of breakpoints with `n == 1`, the second variant re-applies
+the whole plan, discovers it is past the end, falls back to greedy and is discarded as a copy of its
+own base. The length is already memoised per breakpoint state (`EnumerateBreakpointPlans`, keyed on
+`BuildBreakpointKey`) and the wave walker already learns it — wave 0 simply does not consult it.
+Emitting `min(W, n)` is strictly lossless: the dropped variant was provably a duplicate. Removes a
+wasted `ApplyPlanDirect` on more than two thirds of all breakpoints.
+
+**Fix 2 — 177k breakpoint derivations for ~3 real casts.** The same breakpoint state is re-derived
+across the tree. The memo that should collapse this (`EnumerateBreakpointPlans`) is `thread_local`,
+capped at `kBpEnumCacheCap = 8192`, and **cleared wholesale on overflow** rather than evicting. This
+is the one that plausibly restores the flat curve.
+
+A third, lower-confidence direction: the 61% post-apply dedup rate (`rolled` 422,434 of `scored`
+1,070,393) means most continuations converge to states already seen — they are applied and rolled
+out *before* being recognised as duplicates. Deduping at enumeration by outcome-equivalence (not
+`land_sig`'s static signature, which does not collapse TH's 14 differently-shaped lands) would remove
+work that provably cannot change an answer.
+
+## Method notes / traps hit in this investigation
+
+* **A counter on one `return` of a multi-return function lies.** "2.4 plans/call" was measured on
+  `EnumeratePlansWithLand`'s final `return all`, but the `!drop_available` early return takes most
+  traffic. True branching is **40.6**. The wrong number made the enumeration look narrow and sent the
+  investigation at the nesting axis instead.
+* **`Search nodes` is not a work proxy here** — `PROF_ADD_NODES(budget.Used())` fires once per
+  DECISION (`AIEngine.cpp`), not per rollout. Use `EnumeratePlans` / `ApplyPlanDirect` / the
+  tree-shape counters added in this session.
+* **A prune is never byte-identical under a budget.** Freed budget gets respent; the soundness test
+  is the UNBOUNDED identity check.
+* The Bash tool's 120 s default timeout kills probes — background them.
+
+## Instrumentation added (uncommitted, keep it)
+
+* `Profiler.h`: per-DECISION cost (turn, pre/post, nodes); search tree shape (`fsw_by_turn`,
+  `fsw_by_depth`, `fsw_nodes`, `fsw_cands` ⇒ mean branching).
+* `TurnSolver.cpp`: `PROF_ADD(plans_generated, all.size())`, and the tree-shape bumps at
+  `FSLineWin`'s entry / candidate loop.
 
 ## Exact repro
-
-```
-MTG_VALUE_MODEL=0 \
-MTG_VALUE_PROFILE=logs/eval/treasure_hunt.value.STAGED.json \
-MTG_LADDER_VALUE_LEAF=1 \
-build/Release/mtg decks/treasure_hunt/treasure_hunt.txt \
-    --profile decks/treasure_hunt/treasure_hunt.profile.json \
-    --seed 9009 --game-index 0 --games 25 --max-turns 8 --threads 1 \
-    --ignore-play-profile --depth 5
-```
-
-(`MTG_EVAL_MODEL`, `MTG_EVAL_PROFILE`, `MTG_NC_SEARCH`, `MTG_VALUE_MIN_DEPTH`, `MTG_VALUE_REDO_MODE`,
-`MTG_VALUE_STARTGATE_ALPHA` are cleared from the environment by `run_batch`.) Seed 11011 with the
-same arguments is the second instance. Engine frozen at `94c917f`, src-tree `4cd06296`.
-
-**The single game is already identified** (2026-08-06). Running indices 0..24 of the `TH V7 s9009`
-batch as 25 separate one-game processes at d7 gave:
-
-```
-24 of 25 games:  total 54.4 s   mean 2.27 s   max 2.60 s
-game index 1  :  did not finish while the other 24 completed
-```
-
-So the culprit is **base seed 9009, game index 1** — reproduce it alone with:
 
 ```
 MTG_VALUE_MODEL=1 MTG_VALUE_PROFILE=logs/eval/treasure_hunt.value.STAGED.json \
@@ -164,24 +164,25 @@ MTG_VALUE_MIN_DEPTH=0 MTG_VALUE_STARTGATE_ALPHA=8 \
 build/Release/mtg decks/treasure_hunt/treasure_hunt.txt \
     --profile decks/treasure_hunt/treasure_hunt.profile.json \
     --seed 9010 --game-index 1 --games 1 --max-turns 8 --threads 1 \
-    --ignore-play-profile --depth 7
+    --ignore-play-profile --depth 4
 ```
 
-One game, one core, and every sibling game in its batch costs ~2.3 s — so ANY instrumentation of
-this is cheap to set up and the contrast is stark. Note this is the d7 V-cell instance; the d5 H-cell
-instance (`--depth 5`, `MTG_VALUE_MODEL=0` + `MTG_LADDER_VALUE_LEAF=1`) is a separate reproduction
-worth checking against it, since it tells us whether the blow-up is depth-specific or arm-specific.
+Every sibling game in its batch costs ~2.3 s, so the contrast is stark and any instrumentation is
+cheap to set up. Probe flags: `MTG_BP_WAVE_PROBE=1`, `MTG_BP_CANDS_PROBE=1`, and the
+`-DMTG_PROFILE=ON` build in `build-instr/`.
 
-## Method note
+## Why it mattered operationally
 
-Use the `-DMTG_PROFILE=ON` build (`build-instr/`) for counters rather than wall-clock — the counters
-are deterministic and load-immune, which matters because this box was running two matrix jobs when
-the anomaly was recorded. Note the sibling lesson from the same day: wall-clock on heavy-tailed decks
-produced two separate retracted claims (`bound-qualified-nowin-memo.md`).
+It is what stalled phase C of the value-leaf regeneration: TH V7/V8 cells sat at `games=0` for 13
+hours. Note the deep cells are NOT decision-relevant — **V6–V8 are already complete at 400 games for
+seven of eight decks**, and TH's V column has converged by d4 (V 4.0838 vs H 4.0713). The reason to
+fix this is the engine defect itself, not the table.
 
 ## Related
 
-- `bound-qualified-nowin-memo.md` — the memo measured ~1.00× on treasure_hunt at every depth, so it
-  is not the cause here.
-- `label-horizon-ladder.md` — why TH is expensive to search at all, and the ladder this flag extends.
-- `value-leaf-regeneration-queue.md` — the queue whose phase C surfaced this.
+- `post-breakpoint-search.md` — the searched continuation (`52d7faa`, 2026-07-31, "nested
+  breakpoints are searched by default") whose cost this is.
+- `breakpoint-width-deferred-waves-2026-07-29` / `abdecb4` — the wave phase; `improved=0` here is one
+  game, not a verdict on the feature (held-out −0.00228, 21 better / 0 worse).
+- `bound-qualified-nowin-memo.md` — the leaf/interior no-win memos, measured ~1.00× on TH.
+- `depth-matrix-should-use-batch-pooling.md` — the harness half of the phase-C stall.

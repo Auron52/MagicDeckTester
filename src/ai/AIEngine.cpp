@@ -1891,6 +1891,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                       &committed_win, &committed_sub_depth);
             }
             PROF_ADD_NODES(budget.Used());
+            PROF_RECORD_DECISION(state.turn_number, is_pre_combat_main, budget.Used());
 
             // Divergence log (MTG_DIVERGENCE_LOG): on the search-driven path, compare the search's
             // committed plan to what greedy d0 would do at this SAME untouched state (diagnosis only;
