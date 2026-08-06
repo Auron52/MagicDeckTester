@@ -163,6 +163,11 @@ static const bool  s_searched_discard = EnvOn("MTG_SEARCHED_DISCARD", true);
 // Drop the committed line when the searched discard deviates from the heuristic pick (the line was
 // searched assuming the heuristic shed). MTG_DISCARD_RELINE=0 keeps replaying the stale line.
 static const bool  s_discard_reline    = EnvOn("MTG_DISCARD_RELINE", true);
+// MTG_DISCARD_NODE (stage 2, docs/design/searched-discard-as-search-node.md): retire the probe --
+// the cleanup shed is decided IN-SEARCH (Plan::discard_choice, replayed by the lockstep pin above)
+// or by the provider's top pick; the out-of-band trial games never run. Default OFF until the A/B
+// adopts it; =0 keeps today's probe exactly.
+static const bool  s_discard_node      = EnvOn("MTG_DISCARD_NODE");
 // MTG_SEARCHED_VIAL: the Aether Vial upkeep charge is a real BRANCH (charge / hold), not a rule.
 // Holding at the current count keeps this turn's free deploy of an MV-k creature; charging trades it
 // for an MV-(k+1) deploy next turn. The heuristic (WantVialCharge: hold while a creature of the
@@ -3447,8 +3452,8 @@ Card* AIEngine::ChooseDiscard(GameState& state)
     // 15-25-card cleanups and, until now, never consulted here) decides the shed outright with
     // zero trial games: comparing one option to nothing is a no-op, so the rollout is skipped.
     // The base ranking returns the full hand, so generic decks keep the historical fan.
-    if (s_searched_discard && LookaheadBottoming() && !m_in_rollout && hand_size > 1
-        && cand.size() > 1)
+    if (!s_discard_node && s_searched_discard && LookaheadBottoming() && !m_in_rollout
+        && hand_size > 1 && cand.size() > 1)
     {
         // Un-trialed entries keep INT_MAX so they can never read as win-optimal below. (best_win
         // is always <= max_turns + 1 once any trial ran, and the heuristic pick always runs.)
