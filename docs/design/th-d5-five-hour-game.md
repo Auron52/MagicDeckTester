@@ -1,12 +1,17 @@
 # One bounded treasure_hunt game cost hours — root-caused and FIXED (2026-08-06)
 
-**Status: FIXED, twice over.** First by the probe depth pin (below — byte-identical at smoke 27/27
-+ regression 45/45), then SUPERSEDED for the cleanup discard by the user's design: **the heuristic's
-return IS the searched pass's candidate set** (see "The heuristic-prune redesign" section at the
-bottom). Final state: treasure_hunt's ranking decides its shed outright, the repro game is **0.3 s
-flat d3–d8**, and the ranking (after the retrace-protection fix) is **net BETTER than the
-whole-hand searched fan the old ground truth embodied**. TH ground truth moves; rebaseline pending
-user acceptance.
+**Status: FIXED — by the heuristic-prune redesign alone.** The user's design ("the heuristic
+decides the candidates and returns a list; all of those options are searched") is the entire fix:
+treasure_hunt's ranking decides its shed outright, the repro game is **flat ≤0.7 s at every depth
+d3–d8**, and the ranking (after two rule fixes it exposed) is **net BETTER than the whole-hand
+searched fan the old ground truth embodied**. Ground truth rebaselined (user-accepted).
+
+An interim **probe-trial depth pin** (`MTG_PROBE_ROLLOUT_DEPTH`, default 3) shipped first and was
+then **REMOVED at the user's direction**: it meant "search different decisions at a different
+depth" — a fidelity fork the search-with-heuristics architecture has nowhere else — and once the
+redesign landed it was unnecessary (the flat curve holds without it; its one held-out deviation,
+antilife s7007 gi=382, reverts to ground truth on removal). Probe trials inherit the full engine,
+uniformly.
 
 The hours-long game was a **product of two independently-adopted
 features**, not a defect in either one, and not the mechanism the first investigation named. The
@@ -182,8 +187,11 @@ ranking beats the searched fan it replaced**, at ~1/10,000th the cost — the fa
 per-game wins are clairvoyant (gi=444). The method that got here is the loop to reuse: run the fan
 as a DIAGNOSTIC referee on disagreement games, classify mistake-vs-clairvoyance, fix rankings.
 
-The probe depth pin (`MTG_PROBE_ROLLOUT_DEPTH`) stays: it governs the remaining probe consumers
-(generic decks' discard fan, Land's Edge fire count, and any future fat-list provider).
+The probe depth pin was subsequently REMOVED (see the status header): with the redesign in place
+it bought nothing on any measured game, and it violated the one-engine-one-depth principle. If a
+future fat-list provider re-creates the explosion, the remedy is the same one that worked here —
+make that provider's ranking return the candidates it actually wants searched — not a fidelity
+knob.
 
 ## Related
 
