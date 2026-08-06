@@ -152,6 +152,19 @@ inline bool CleanupDiscardProtected(const GameState& state, const Card& c,
     for (const std::string& piece : *required_pieces)
     { if (c.m_name == piece) { is_req = true; break; } }
     if (!is_req) { return false; }
+    // A RETRACE required piece is NOT lost to a discard -- it stays castable from the graveyard,
+    // and this helper only guards FORCED discards (cleanup shed / pitch costs), where the land shed
+    // in its place would have paid the retrace cost anyway (weak dominance; see the band-1 rule in
+    // TreasureHuntProvider::CleanupDiscardFullRanking). This protection was silently overriding
+    // that rule: the provider ranked Throes of Chaos first and the protection dropped it from the
+    // preference tier, keeping it in hand and shedding a land -- measured a full turn slower
+    // (th s3003 gi=24: T4 vs T3, found by the searched pass trialling past the protection).
+    // MTG_PROTECT_RETRACE=1 restores the old blanket protection (the A/B hatch).
+    {
+        static const bool s_protect_retrace = EnvOn("MTG_PROTECT_RETRACE");
+        const CardDefinition* rdef = CardDatabase::Instance().LookupCached(c);
+        if (!s_protect_retrace && rdef != nullptr && rdef->params.retrace) { return false; }
+    }
     // A redundant required piece stays discardable (and, being high-MV, is picked ahead of the
     // rituals). Count copies in hand -- staged included, since a staged copy is already committed to
     // a line, which is exactly what makes the loose one spare -- plus, under the `deck` scope, the
