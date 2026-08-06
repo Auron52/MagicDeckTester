@@ -1,160 +1,128 @@
-# One bounded treasure_hunt game costs hours — a REGRESSION in the depth curve
+# One bounded treasure_hunt game cost hours — root-caused and FIXED (2026-08-06)
 
-**Status: ROOT-CAUSED, NOT FIXED (2026-08-06).** Handing off. The user's read was right at every
-step: a `max_turns=8` goldfish game must never cost hours, and this is a regression, not the honest
-price of a hard position.
+**Status: FIXED. Smoke 27/27 byte-identical to ground truth at the shipped defaults; regression
+tier + user adoption pending.** The hours-long game was a **product of two independently-adopted
+features**, not a defect in either one, and not the mechanism the first investigation named. The
+fix restores a **flat depth curve at today's answers**:
 
-## The headline: the depth curve used to be FLAT
+| depth | pre-fix (default engine) | post-fix (default: pin 3, fan kept) | `MTG_PROBE_ROLLOUT_BP=0` pin 1 | `MTG_BP_SEARCH=0` (old engine) |
+|---|---|---|---|---|
+| d3 | 5.2–7.2 s | 7.1 s (pin ≥ depth: unchanged by construction) | 0.55 s | 0.44 s (but answers T4, worse) |
+| d4 | 60.9–89.9 s | **7.2 s** | 0.58 s | 0.43 s |
+| d5 | ~1300 s | **7.2 s** | 0.60 s | 0.41 s |
+| d6–d8 | never finished | **7.1–7.2 s FLAT** | 0.58–0.68 s | 0.41–0.44 s |
 
-Same game (`--seed 9010 --game-index 1`, i.e. base seed 9009 game index 1), V arm, one core:
+Answer is T3 at every depth, in every arm. The legacy hatch (`MTG_PROBE_ROLLOUT_DEPTH=-1`)
+reproduces the pre-fix cost exactly (88.6 s at d4). Repro game: `--seed 9010 --game-index 1`,
+V arm, one core (full command at the bottom).
 
-| depth | pre-07-28 (`MTG_BP_SEARCH=0`) | today |
+## The real root cause: probe rollouts × per-turn full-depth fan-out ladders
+
+The **searched cleanup discard** (`MTG_SEARCHED_DISCARD`, adopted default-ON ~2026-07-08) labels
+each discard candidate by playing a **full clairvoyant engine game** (`RolloutWinTurnFrom` →
+`PlayOutFrom` → `TakeTurn` per turn). Each trial-game turn runs its own **full unbounded depth-d
+ladder**. The **Land's Edge fire-count probe** does the same (2 trials per ambiguous activation).
+
+When the probe was adopted, those internal searches were nearly free. The 2026-07-28 searched
+breakpoint continuation then made **every enumeration fan out** (`BpSearchInRollouts()` default ON
+— wave-0 variants at every ply and every rollout turn, waves walking all remaining ranks at every
+node under an unlimited budget). A late-game refutation ladder went from ~500 nodes to ~18k+
+(×12/ply). Neither feature regressed alone; the **product regime** — fat hands × unbounded ×
+depth — was never measured:
+
+```
+cost ≈ (#discard candidates) × (#trial turns) × ladder(depth) × fan-out
+     ≈ 20 × 5 × (×12 per ply)        on treasure_hunt, whose whole mechanism
+                                      is ballooning its hand to 15–25 cards
+```
+
+Attribution evidence (all on the repro game):
+* `MTG_SEARCHED_DISCARD=0`: d4 drops 60.9 s → **0.58 s**, answer unchanged (T3), and the curve is
+  flat 0.46–0.49 s through d8 **with the full current engine** (breakpoint search, waves, all
+  ranks, unbounded). The core committed search was never the problem.
+* Per-decision profiling: the real turn-3 decision costs **370 nodes**; >99% of all nodes are
+  decisions at turns 3–7 **inside `m_in_rollout` trial games** (e.g. "turn 6 pre: 18,546 nodes"
+  in a game that ends at turn 3).
+* The t6–t8 node mass (t7=138,274 at d4) is the trials' internal refutation ladders sweeping fat
+  late-game states, not the committed search.
+
+## The fix (commit this doc rides with)
+
+One concept: **probe trials are estimators — their cost must not scale with the matrix depth.**
+
+1. **Depth pin** in `RolloutWinTurnFrom`: guarded trials pin their per-turn lookahead to
+   `MTG_PROBE_ROLLOUT_DEPTH` (**default 3**, chosen empirically — see the sweep below;
+   `-1` restores the old inherit-full-depth behaviour = the legacy arm). Inheriting the matrix
+   depth is what coupled probe cost to `--depth`. This is the piece that flattens the curve.
+2. **`TurnSolver::ProbeRolloutGuard`** — RAII scope set at the two probe sites (searched cleanup
+   discard, Land's Edge fire count), read by the pin above and by the optional fan suppression:
+   `MTG_PROBE_ROLLOUT_BP` (**default ON** — trials keep the searched-breakpoint fan-out, matching
+   the engine's own leaf rollouts / `BpSearchInRollouts`; `=0` drops it inside trials for another
+   ~10×, verified to cut bp resolutions 1.6M → 190).
+
+**The fidelity sweep** (smoke suite; only TH cases ever moved, every other deck byte-identical in
+all arms):
+
+| trial regime | TH smoke vs GT | repro-game cost (flat in all arms) |
 |---|---|---|
-| d3 | 0.44 s | 5.2 s |
-| d4 | 0.43 s | 89.9 s |
-| d5 | 0.41 s | 1300.6 s |
-| d6 | 0.42 s | never finished |
-| d7 | 0.41 s | never finished |
-| d8 | **0.44 s** | never finished |
+| pin 3 + fan (**DEFAULT**) | **byte-identical, 27/27** | 7.1–7.2 s |
+| pin 1–2 + fan | gi=68 d3: 7→8 (+0.007 on that case) | 0.63–0.68 s |
+| pin 1–3, fan suppressed | gi=38 3→4 (d3+d5), gi=68 7→8 (d3) | 0.55–0.60 s |
+| pin 3, fan suppressed | gi=38 3→4 only | ~0.6 s |
 
-**Flat at every depth before the breakpoint search; ×12–15 per ply after.** This is a regression in
-the EXPONENT, not a constant factor. Extra depth used to cost nothing on this game, and correctly so:
-the game ends on turn 3–4, so once the horizon covers the remaining game there is nothing left to
-search. That property is what broke.
+So gi=38 needs the fan inside trials (the trial's own TH casts must play searched continuations)
+and gi=68 needs trial depth ≥ 3. The default takes the strongest-fidelity flat point; the cheaper
+arms remain one env var away for bulk generation where ±0.007 on one case is acceptable.
 
-The regression is a *quality* feature working as designed — `MTG_BP_SEARCH=0` also gives a WORSE
-answer (turn 4 vs turn 3) — so this is not "revert it". It is "the same quality must cost vastly
-less".
+**Scope guarantees:** the REAL game's committed search never runs under the guard — declared-depth
+completeness is untouched (the user's bar: "no result unreachable within our depth"). The
+keep/bottom **generator** (`RolloutKeepWinTurn`) and the un-guarded probe sites (lookahead
+bottoming, searched vial/echo upkeep) never set the guard and are byte-unchanged — keep-profile
+fingerprints are not invalidated.
 
-## Mechanism
+**Behavioural scope:** at the defaults the smoke suite is byte-identical to ground truth (27/27).
+In principle a pin-3 trial can still label differently than an inherit-full-depth trial at engine
+depths > 3 on other seeds — the regression tier (disjoint seeds) is the wider check, and GT
+acceptance stays the user's call.
 
-Breakpoint continuations recurse with `depth - 1`, so **breakpoints consume depth plies inside a
-single turn**. `--depth 8` stops meaning "look 8 turns ahead" and becomes "explore 8 nested
-decisions", which on a flood turn subdivides a turn whose game is already won. The 40-wide plan
-enumeration (below) is then re-paid at every one of those plies, where before 2026-07-28 it was paid
-about once per turn.
+## What the first investigation got wrong (kept so it is not re-trodden)
 
-## The measurements (all on the one game, d4, `-DMTG_PROFILE=ON` build)
+* **"Breakpoints consume depth plies inside a turn" was not the mechanism.** True as a statement
+  about `depth - 1` recursion, but the ladder stops at the first verified win, real decisions are
+  cheap (t1=3, t2=10, t3=370 nodes), and probes-off is flat to d8 with the full fan-out engine.
+* **The `EnumerateBreakpointPlans` memo thrash (cleared wholesale at 8192) is real but worth ~8%**
+  (misses 178k→68k with a big cap; d4 65.8→60.9 s). Refuted as the restorer. Cap is now
+  overridable (`MTG_BP_ENUM_CACHE_CAP`) with probe counters (`MTG_BP_ENUM_PROBE=1`:
+  hits/misses/clears). A proper eviction remains a small follow-up.
+* **Wave-0 `min(W, n)` emission** (Opus fix 1): root-only waste, post-apply dedup already catches
+  the duplicate's rollout; small constant. Not implemented.
+* **Order-sensitive `BuildSimKey`** (hand and battlefield folded in order, so play-order
+  permutations never share a memo entry): real, measured **~10%** + 45% fewer distinct bp states
+  via the `MTG_CANON_SIMKEY=1` experiment (kept in-tree, default OFF — not provably byte-identical
+  because tie-breaks read vector order). Worth a separate look, not the exponent.
+* **Waves** are a ~3.5× constant on this game (`MTG_BP_WAVES=0`: 26.8 s at d4, still ×9.7/ply).
+  `improved=0` over 1.07M wave candidates here is one game, not a verdict on the feature.
+* **A counter on one `return` of a multi-return function lies** (the "2.4 branching" that was
+  really 40.6) — and **a stale comment lies harder**: `FSLineWin`'s "deeper nodes keep the cheap
+  greedy continuation" predated `BpSearchInRollouts()` defaulting ON and mis-aimed the entire
+  first pass. Both are corrected in-tree.
+* Ruled out by measurement: the STAGED value model (91.2 vs 89.9 s), `MTG_FS_NOWIN_CACHE`
+  (92.5 s), cycling/Fiery Islet as breakpoint sites (class fires zero times), copy-level plan
+  duplication (name-keyed), nesting depth (`max-at=2`; a `MTG_BP_NEST_MAX` cap was written and
+  reverted — measure an axis before capping it).
 
-Arm comparison:
+## Follow-ups
 
-| arm | wall | nodes | answer |
-|---|---|---|---|
-| baseline | 89.9 s | 1,349,112 | T3 |
-| `MTG_BP_WAVES=0` | 26.8 s | 494,142 | T3 — identical |
-| `MTG_BP_SEARCH=0` | 0.72 s | 554 | T4 — worse |
-
-Search tree shape:
-
-```
-FSLineWin nodes : 17,411   candidates: 707,266   (40.6 branching)
-by game turn    : t3=73  t4=215  t5=1385  t6=10341  t7=3926  t8=4068
-by depth left   : d0=110  d1=17905  d2=1860  d3=138  d4=8
-```
-
-Wave phase:
-
-```
-[bp-waves] nodes=28044 slots=286714 scored=1070393 rolled=422434
-           improved=0  max-rank=48  nested-scored=42328  max-at=2
-```
-
-Breakpoint sites:
-
-```
-[bp-cands] DrawUntilNonland (Treasure Hunt)  n=177044 mean=5.71 max=49
-           capped=41719 (23.6%)  unreachable=779910 (77.1% of all continuations)
-   len: 1=122579  2=12746  3=1280  5-8=214  9-16=14889  17-32=23426  33-64=1910
-```
-
-### What those say
-
-* **Branching is 40.6 candidates per node** — ~14 distinct land names × ~3 cast options.
-* **`improved=0`.** Not one of 1,070,393 scored wave candidates ever beat its node's incumbent.
-* **`max-at=2`.** Nesting never exceeds depth 2; nested candidates are 4% of the total.
-* **177,044 Treasure Hunt breakpoint evaluations** in a game that casts Treasure Hunt 2–3 times.
-* **69% of breakpoints (122,579) have exactly ONE continuation** — not a decision at all.
-* **77.1% of continuations are never reached.**
-
-## RULED OUT (each measured, not reasoned)
-
-* **The retrained STAGED value model** — 91.2 s vs baseline 89.9 s. Not the cause.
-* **`MTG_FS_NOWIN_CACHE`** — 92.5 s with it off. Not the cause.
-* **Cycling lands / Fiery Islet opening breakpoints** (the intuitive suspect, and the user's own
-  hypothesis). The site probe shows the dig-through-lands class firing **zero** times; only
-  DrawUntilNonland appears. Cycling in the autonomous search is not branched at all —
-  `SelectDigSource` returns a single card NAME, so copies can never split — and `ShouldConsiderDig`
-  already declines to cycle when a draw engine is in hand.
-* **Copy-level duplication** (Lonely Sandbar 1 vs 2, Fiery Islet 1 vs 2). Already deduped: dig is
-  name-keyed, land plays collapse through `land_sig`, whose signature is identical across copies.
-  The 40.6 branching is 14 DISTINCT land names, not 53 copies.
-* **Nesting depth.** A `MTG_BP_NEST_MAX` cap was written and reverted: `max-at=2` means any cap ≥ 3
-  never binds, so it was pure reachability risk for zero speedup. **Measure the axis before capping
-  it.**
-* **The leaf TT no-win cache** (`MTG_TT_NOWIN_CACHE`, committed `1612bc0`, default off) — sound and
-  real (44,970 memo hits where there were zero) but worth only 8%. Not related to this.
-
-## What is implemented but NOT shipped
-
-Two sound cutoff prunes, currently uncommitted in the working tree, worth **1.63× together**
-(89.9 → 55.0 s, same T3 answer):
-
-1. The wave loop handed its continuation `cutoff = best.win_turn` while the acceptance test is
-   strictly `<`, so every line winning exactly AT the incumbent turn was searched and discarded.
-   Tightened to `best.win_turn - 1`.
-2. `FSLineTail` was missing the `state.turn_number > cutoff` guard its sibling `FSLineWin` has at
-   entry, so it enumerated and recursed to reach a no-win it would return anyway.
-
-The same tightening was applied to the main loop too. **Caveat:** the main loop records
-`tail.win_turn` into `node_vals` for the beam reorder, so coarsening a non-improving value to
-`max_turns + 1` makes previously-distinguishable plans tie — a RANKING change that can move play.
-Smoke: **26 passed, 1 failed** ("2 searched play-changed at same score" on analyze). That is the
-expected budget-reallocation effect (a work-saving prune frees budget the search spends elsewhere,
-exactly as `MTG_FS_NOWIN_CACHE` did), but it means these need an **unbounded identity check** plus a
-GT rebaseline before shipping — not a byte-identical claim.
-
-They are a constant factor. They do not fix the exponent.
-
-## The two proposed fixes (NOT implemented — this is the handoff)
-
-**Fix 1 — don't emit variants past the continuation list's length.** Wave 0 emits `W=2` variants
-*blind*, before knowing `n`. For the 69% of breakpoints with `n == 1`, the second variant re-applies
-the whole plan, discovers it is past the end, falls back to greedy and is discarded as a copy of its
-own base. The length is already memoised per breakpoint state (`EnumerateBreakpointPlans`, keyed on
-`BuildBreakpointKey`) and the wave walker already learns it — wave 0 simply does not consult it.
-Emitting `min(W, n)` is strictly lossless: the dropped variant was provably a duplicate. Removes a
-wasted `ApplyPlanDirect` on more than two thirds of all breakpoints.
-
-**Fix 2 — 177k breakpoint derivations for ~3 real casts.** The same breakpoint state is re-derived
-across the tree. The memo that should collapse this (`EnumerateBreakpointPlans`) is `thread_local`,
-capped at `kBpEnumCacheCap = 8192`, and **cleared wholesale on overflow** rather than evicting. This
-is the one that plausibly restores the flat curve.
-
-A third, lower-confidence direction: the 61% post-apply dedup rate (`rolled` 422,434 of `scored`
-1,070,393) means most continuations converge to states already seen — they are applied and rolled
-out *before* being recognised as duplicates. Deduping at enumeration by outcome-equivalence (not
-`land_sig`'s static signature, which does not collapse TH's 14 differently-shaped lands) would remove
-work that provably cannot change an answer.
-
-## Method notes / traps hit in this investigation
-
-* **A counter on one `return` of a multi-return function lies.** "2.4 plans/call" was measured on
-  `EnumeratePlansWithLand`'s final `return all`, but the `!drop_available` early return takes most
-  traffic. True branching is **40.6**. The wrong number made the enumeration look narrow and sent the
-  investigation at the nesting axis instead.
-* **`Search nodes` is not a work proxy here** — `PROF_ADD_NODES(budget.Used())` fires once per
-  DECISION (`AIEngine.cpp`), not per rollout. Use `EnumeratePlans` / `ApplyPlanDirect` / the
-  tree-shape counters added in this session.
-* **A prune is never byte-identical under a budget.** Freed budget gets respent; the soundness test
-  is the UNBOUNDED identity check.
-* The Bash tool's 120 s default timeout kills probes — background them.
-
-## Instrumentation added (uncommitted, keep it)
-
-* `Profiler.h`: per-DECISION cost (turn, pre/post, nodes); search tree shape (`fsw_by_turn`,
-  `fsw_by_depth`, `fsw_nodes`, `fsw_cands` ⇒ mean branching).
-* `TurnSolver.cpp`: `PROF_ADD(plans_generated, all.size())`, and the tree-shape bumps at
-  `FSLineWin`'s entry / candidate loop.
+* **Suite A/B + GT rebaseline** for the probe fix (user decision).
+* **Lookahead bottoming and searched vial/echo upkeep probes** share the same product structure
+  (unguarded): bottoming fires once per mulligan game, vial/echo per upkeep on Vial decks. Extend
+  the guard with its own digest check if V-cell generation on those decks shows the same tail.
+* Name-dedup of discard candidates (same-name discards are identical trials): lossless ~2.5× on
+  fat hands, now second-order.
+* `EnumerateBreakpointPlans` eviction (don't clear wholesale) — ~8%.
+* The three cutoff prunes preserved on `wip/th-bp-cutoff-prunes` (1.63× on the OLD cost shape;
+  re-evaluate need at all post-fix).
+* `MTG_TT_NOWIN_CACHE` (default OFF, `1612bc0`) — measured ~8%, decide separately.
 
 ## Exact repro
 
@@ -167,22 +135,12 @@ build/Release/mtg decks/treasure_hunt/treasure_hunt.txt \
     --ignore-play-profile --depth 4
 ```
 
-Every sibling game in its batch costs ~2.3 s, so the contrast is stark and any instrumentation is
-cheap to set up. Probe flags: `MTG_BP_WAVE_PROBE=1`, `MTG_BP_CANDS_PROBE=1`, and the
-`-DMTG_PROFILE=ON` build in `build-instr/`.
-
-## Why it mattered operationally
-
-It is what stalled phase C of the value-leaf regeneration: TH V7/V8 cells sat at `games=0` for 13
-hours. Note the deep cells are NOT decision-relevant — **V6–V8 are already complete at 400 games for
-seven of eight decks**, and TH's V column has converged by d4 (V 4.0838 vs H 4.0713). The reason to
-fix this is the engine defect itself, not the table.
+Legacy arm (reproduces the regression): add `MTG_PROBE_ROLLOUT_DEPTH=-1`.
+Probe scripts and arm logs: `logs/vcell_probe/fable_arms*.{sh,log}`, `fable_sweep*.{sh,log}`.
 
 ## Related
 
-- `post-breakpoint-search.md` — the searched continuation (`52d7faa`, 2026-07-31, "nested
-  breakpoints are searched by default") whose cost this is.
-- `breakpoint-width-deferred-waves-2026-07-29` / `abdecb4` — the wave phase; `improved=0` here is one
-  game, not a verdict on the feature (held-out −0.00228, 21 better / 0 worse).
-- `bound-qualified-nowin-memo.md` — the leaf/interior no-win memos, measured ~1.00× on TH.
+- `searched-cleanup-discard.md` — the probe whose trial fidelity this changes.
+- `post-breakpoint-search.md` — the searched continuation whose every-ply fan-out multiplied it.
+- `breakpoint-width-deferred-waves-2026-07-29` — the wave phase (a constant here, kept).
 - `depth-matrix-should-use-batch-pooling.md` — the harness half of the phase-C stall.

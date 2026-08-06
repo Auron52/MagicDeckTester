@@ -1006,8 +1006,23 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
     // real game is mid-way through replaying.
     std::deque<TurnSolver::PhasePlan> saved_line = std::move(m_committed_line);
     m_committed_line.clear();
+    // PROBE-scope trials (ProbeRolloutGuard set at the call site) pin the trial game's per-turn
+    // lookahead to MTG_PROBE_ROLLOUT_DEPTH (DEFAULT 3; -1 restores the old inherit-full-depth
+    // behaviour). Inheriting the matrix depth made probe cost = candidates x turns x
+    // ladder(depth) -- the treasure_hunt hours-long-game regression (th-d5-five-hour-game.md:
+    // d5 1300s -> 7s, d6-d8 never-finished -> 7s FLAT). 3 is empirical: the smoke suite is
+    // byte-identical to ground truth at 3 (27/27, incl. every TH case), while 1-2 flip one TH
+    // game (+0.007 on that case) for another ~10x -- a sweepable trade. Keep-generator rollouts
+    // (RolloutKeepWinTurn) and un-guarded callers never set the guard, so they are untouched.
+    static const int s_probe_depth = EnvInt("MTG_PROBE_ROLLOUT_DEPTH", 3);
+    const int saved_depth = m_lookahead_depth;
+    if (TurnSolver::InProbeRollout() && s_probe_depth >= 0 && m_lookahead_depth > s_probe_depth)
+    {
+        m_lookahead_depth = s_probe_depth;
+    }
     GameEngine engine(*this);
     int win_turn = engine.PlayOutFrom(trial, max_turns, from);
+    m_lookahead_depth = saved_depth;
     if (lands_out)
     {
         int n = 0;
@@ -3417,6 +3432,11 @@ Card* AIEngine::ChooseDiscard(GameState& state)
     //     top-level discard decision.
     if (s_searched_discard && LookaheadBottoming() && !m_in_rollout && hand_size > 1)
     {
+        // Trial games label at the pre-breakpoint-search engine (flat in depth) -- see
+        // TurnSolver::ProbeRolloutGuard. On treasure_hunt a fat post-draw hand fires ~20 trials
+        // per cleanup; with the fan-out inherited into every trial turn's ladder, one bounded
+        // game cost hours (89.9s at d4, x12-15 per further ply -- th-d5-five-hour-game.md).
+        TurnSolver::ProbeRolloutGuard _probe_bp;
         std::vector<int> win_turn(hand_size, 0);
         int best_win = std::numeric_limits<int>::max();
         for (int j = 0; j < hand_size; ++j)
@@ -3517,6 +3537,8 @@ void AIEngine::ActivateLandsEdge(GameState& state)
     // the search handles the ambiguous "hold" case where early activation might win faster.
     if (m_lookahead_depth > 0 && !m_in_rollout && fire_count < lands_in_hand)
     {
+        // Same probe-trial labelling regime as the searched cleanup discard (see there).
+        TurnSolver::ProbeRolloutGuard _probe_bp;
         GameState trial_heuristic = state;
         DoActivateLandsEdge(trial_heuristic, fire_count, rate, /*log=*/false);
         int w_heuristic = RolloutWinTurn(std::move(trial_heuristic), m_max_turns);
