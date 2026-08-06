@@ -1,9 +1,73 @@
-# A single treasure_hunt game costs ~5 hours at d5 unbounded — open investigation
+# A single treasure_hunt game costs ~5 hours at d5 unbounded — ROOT-CAUSED
 
-**Status: OPEN, deferred to after the 2026-08-05 value-leaf regeneration finishes.** Nothing is
-being changed on the strength of this yet. The user's read is the right one: *there should be no
-reason for one goldfish game to cost that much*, so this is a suspected defect, not a heavy tail to
-be accepted.
+**Status: ROOT CAUSE FOUND (2026-08-06). Fix proposed, NOT implemented.** The user's read was
+right: there is no reason a bounded 8-turn goldfish game should cost hours, and it is a defect.
+
+## Root cause: the leaf transposition table only stores WINS
+
+`SimulateToEnd` (`TurnSolver.cpp`, the leaf rollout) ends with:
+
+```cpp
+int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
+if (tt != nullptr && result <= max_turns) { tt->Store(key, result); }
+```
+
+A rollout that finds no win returns `max_turns + 1` and is **never cached**. Measured on the
+pathological game (`--seed 9010 --game-index 1 --depth 4`):
+
+```
+TT lookups : 138,346   hits: 0   (0% hit)
+TT stores  : 0         nowin NOT stored: 138,346   (100%)
+```
+
+**Every one of the 138,346 leaf rollouts returned a no-win, so the table was written zero times.**
+There is no leaf memoisation at all in this position: every leaf re-rolls from scratch, and the
+search grows exponentially with depth unchecked. Measured cost of one extra ply on this game:
+
+| depth | wall | search nodes | EnumeratePlans |
+|---|---|---|---|
+| 3 | 7.7 s | 123,076 | 31,973 |
+| 4 | 88.0 s | 1,349,112 | 624,163 |
+| 5, 6, 7 | did not finish | — | — |
+
+Both depths return the same answer (`avg = 3.0000`, a turn-3 win), so the extra work buys nothing.
+
+The overhead is worse than "a cache that misses": with search-shuffle enabled (default),
+`BuildSimKey` folds **the entire ordered library of both players** into the key — ~120 hashes — and
+that key is computed 138,346 times to consult a table that is always empty.
+
+**This is the same bug class as the `FSLineCache` no-win asymmetry fixed one layer up on
+2026-08-05** (`bound-qualified-nowin-memo.md`) — "a no-win may be a branch-and-bound abort, so
+discard it" — except the leaf table was never revisited, and unlike `FSLineCache` the store site
+carries no comment justifying the restriction.
+
+## Proposed fix (not yet implemented)
+
+Apply the same bound qualification that worked for `FSLineCache`:
+
+* store a no-win with the `cutoff_turn` it was proved under, and reuse it only for a query asking
+  `cutoff <= stored_bound`. `cutoff_turn` is NOT part of `BuildSimKey`, which is precisely why an
+  unqualified no-win would be unsound to store — the same reasoning that made the interior memo work;
+* suppress the store when the rollout was cut short by the budget, or the "no win" is not a proof but
+  "I ran out" — the `g_fs_trunc_events` watermark pattern already exists for this;
+* gate behind a flag (`EnvOn`, default off until measured), verify byte-identity at an unbounded
+  budget first (with no budget to reallocate, a sound memo must return the same line), then A/B.
+
+Expected payoff is large exactly where the engine currently hurts most: treasure_hunt's search cost is
+the reason it produced zero label rows in 34 h, thrashed 3.2 M enumerations in the labeller, and
+holds the matrix's only intractable cells.
+
+## Ruled out along the way
+
+* **`MTG_LADDER_VALUE_LEAF`** — initially ranked first suspect because it shipped 2026-08-05 and its
+  identity sweep never covered TH at d5. Wrong, and the evidence was already available: seeds
+  8008/10010 ran 400 games with the ladder equally ON, and an in-horizon win is found by simulation
+  rather than by the leaf estimate, so the leaf cannot change which pass commits. The pathological
+  game reproduces in the V arm, where the ladder is not even enabled.
+* **Search-shuffle key folding.** Re-running with `MTG_NO_SEARCH_SHUFFLE=1`: 138,346 lookups / 0
+  hits / 1,345,156 nodes / 85.3 s versus 138,346 / 0 / 1,349,112 / 88.0 s. Identical. The full-library
+  fold makes each key expensive but is not why the table never hits.
+* **CPU starvation.** Contention does not turn a 2.5 s batch into a 5 h one.
 
 ## The observation
 
@@ -73,38 +137,6 @@ One game, one core, and every sibling game in its batch costs ~2.3 s — so ANY 
 this is cheap to set up and the contrast is stark. Note this is the d7 V-cell instance; the d5 H-cell
 instance (`--depth 5`, `MTG_VALUE_MODEL=0` + `MTG_LADDER_VALUE_LEAF=1`) is a separate reproduction
 worth checking against it, since it tells us whether the blow-up is depth-specific or arm-specific.
-
-## Hypotheses
-
-**The shape of the evidence points at ONE GAME STATE, not at a global setting.** Whatever the cause,
-it has to explain why two seeds of the same deck at the same depth under the same flags finished 400
-games at ~15 s/game while two others spent hours inside their first 25. Any explanation that would
-apply uniformly is already contradicted by seeds 8008 and 10010.
-
-1. **A specific board state that explodes the enumerator** — e.g. many Treasure Hunt / Land's Edge
-   activations producing a combinatorial plan set at a single node. This is the hypothesis that fits
-   the per-seed spread. `MTG_PROFILE=ON` counters (`EnumeratePlans`, `plans/call`, `Search nodes`) on
-   the isolated game separate "huge but healthy tree" from "pathological enumeration at one node".
-2. **Unbounded d5 on a deck with bad move ordering.** treasure_hunt wins through lands and card draw,
-   which never looks lethal to `MoveOrderPlans`, so the search cannot prune and must exhaust — the
-   documented reason TH thrashed 3.2 M enumerations in the labeller (`label-horizon-ladder.md`). A
-   contributing factor rather than a cause: it applies to all four seeds, only two of which explode.
-3. **A non-terminating or near-non-terminating loop.** The game is bounded by `--max-turns 8`, so the
-   cost is inside ONE decision's search. Worth confirming the process is making progress at all
-   rather than spinning.
-4. **`MTG_LADDER_VALUE_LEAF` (a 2026-08-05 change, ON in H cells).** Kept on the list only because it
-   is new and its identity sweep covered 7 decks at depths 1–4 with **treasure_hunt at d5 absent**, so
-   its cost there is formally unmeasured. But it is a **weak** suspect and an earlier draft of this
-   file wrongly ranked it first:
-   * seeds 8008/10010 ran 400 games at ~15 s/game **with the ladder equally ON** — a global flag does
-     not produce a per-seed 4,000× spread;
-   * an in-horizon win is detected by real simulation, not by the leaf estimate, so the leaf cannot
-     change *which* pass commits (consistent with the observed 21/21 identity). It can only weaken
-     B&B pruning in the WARM-UP passes;
-   * the committed pass uses the heuristic leaf in both arms, and a five-hour game is almost certainly
-     dominated by that pass, which the flag does not touch.
-   Still cheap to falsify — re-run the repro with `MTG_LADDER_VALUE_LEAF=0` — so do it early to close
-   the question, not because it is likely.
 
 ## Method note
 

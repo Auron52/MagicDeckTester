@@ -35,6 +35,8 @@ namespace prof
         uint64_t gamestate_copies = 0;  // explicit GameState deep clones in the search
         uint64_t tt_lookups       = 0;  // TranspositionTable::Lookup calls
         uint64_t tt_hits          = 0;  // ... that hit
+        uint64_t tt_stores        = 0;  // TranspositionTable::Store calls (WINS ONLY -- see SimulateToEnd)
+        uint64_t tt_nowin         = 0;  // ... rollouts that returned no-win and were therefore NOT stored
         uint64_t enumerate_calls  = 0;  // EnumeratePlans invocations
         uint64_t plans_generated  = 0;  // candidate plans produced by EnumeratePlans
         uint64_t applyplan_calls  = 0;  // ApplyPlanDirect invocations
@@ -55,6 +57,8 @@ namespace prof
             gamestate_copies += o.gamestate_copies;
             tt_lookups       += o.tt_lookups;
             tt_hits          += o.tt_hits;
+            tt_stores        += o.tt_stores;
+            tt_nowin         += o.tt_nowin;
             enumerate_calls  += o.enumerate_calls;
             plans_generated  += o.plans_generated;
             applyplan_calls  += o.applyplan_calls;
@@ -117,6 +121,10 @@ namespace prof
         os << "TT lookups            : " << c.tt_lookups
            << "   hits: " << c.tt_hits;
         if (c.tt_lookups) { os << "   (" << (100.0 * c.tt_hits / c.tt_lookups) << "% hit)"; }
+        os << "\n";
+        os << "TT stores             : " << c.tt_stores
+           << "   nowin NOT stored: " << c.tt_nowin;
+        if (c.tt_lookups) { os << "   (" << (100.0 * c.tt_stores / c.tt_lookups) << "% of lookups stored)"; }
         os << "\n";
         if (c.search_nodes)
         {

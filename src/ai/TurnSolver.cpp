@@ -11175,7 +11175,8 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
 
     int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
 
-    if (tt != nullptr && result <= max_turns) { tt->Store(key, result); }
+    if (tt != nullptr && result <= max_turns) { PROF_INC(tt_stores); tt->Store(key, result); }
+    else if (tt != nullptr)                     { PROF_INC(tt_nowin); }
     return result;
 }
 
