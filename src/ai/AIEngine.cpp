@@ -3430,17 +3430,28 @@ Card* AIEngine::ChooseDiscard(GameState& state)
     //     same cleanup, so a nested searched pass would blow up exponentially. Rollout cleanups use
     //     the heuristic (as before), so rollout labels are unchanged and this only refines the REAL
     //     top-level discard decision.
-    if (s_searched_discard && LookaheadBottoming() && !m_in_rollout && hand_size > 1)
+    // THE RETURNED LIST IS THE TRIAL SET (user design 2026-08-06: the heuristic decides the
+    // candidates and returns a list of some size; ALL of those options are searched, no more).
+    // A single-entry return (TreasureHunt's keep-set rule -- commissioned for exactly its
+    // 15-25-card cleanups and, until now, never consulted here) decides the shed outright with
+    // zero trial games: comparing one option to nothing is a no-op, so the rollout is skipped.
+    // The base ranking returns the full hand, so generic decks keep the historical fan.
+    if (s_searched_discard && LookaheadBottoming() && !m_in_rollout && hand_size > 1
+        && cand.size() > 1)
     {
         // Trial games label at the pre-breakpoint-search engine (flat in depth) -- see
         // TurnSolver::ProbeRolloutGuard. On treasure_hunt a fat post-draw hand fires ~20 trials
         // per cleanup; with the fan-out inherited into every trial turn's ladder, one bounded
         // game cost hours (89.9s at d4, x12-15 per further ply -- th-d5-five-hour-game.md).
         TurnSolver::ProbeRolloutGuard _probe_bp;
-        std::vector<int> win_turn(hand_size, 0);
+        // Un-trialed entries keep INT_MAX so they can never read as win-optimal below. (best_win
+        // is always <= max_turns + 1 once any trial ran, and the heuristic pick always runs.)
+        std::vector<int> win_turn(hand_size, std::numeric_limits<int>::max());
         int best_win = std::numeric_limits<int>::max();
-        for (int j = 0; j < hand_size; ++j)
+        for (int j : cand)
         {
+            if (j < 0 || j >= hand_size) { continue; }
+            if (win_turn[j] != std::numeric_limits<int>::max()) { continue; }   // duplicate entry
             GameState trial = state;
             Player& tap = trial.ActivePlayer();
             tap.graveyard.push_back(tap.hand[j]);
@@ -3463,6 +3474,7 @@ Card* AIEngine::ChooseDiscard(GameState& state)
                       << " depth=" << m_lookahead_depth << " heur=" << ap.hand[heur].m_name << "]\n";
             for (int j = 0; j < hand_size; ++j)
             {
+                if (win_turn[j] == std::numeric_limits<int>::max()) { continue; }   // not offered by the heuristic
                 std::cerr << "  discard " << ap.hand[j].m_name << " -> win=" << win_turn[j]
                           << (win_turn[j] == best_win ? " *" : "") << "\n";
             }

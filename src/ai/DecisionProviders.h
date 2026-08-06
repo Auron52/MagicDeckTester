@@ -175,6 +175,12 @@ public:
     // lands, two ETB-scry lands and four duals. Those are different cards, not copies of "a land".
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
+    // The FULL keep-set ranking (every hand index, preference order) behind the hook above. The
+    // hook returns only the TOP pick -- the ranking IS the decision, so the searched pass has
+    // nothing to fan over (user design 2026-08-06) -- but the multi-card consumers (Land's Edge
+    // pitch, Throes retrace cost) need the whole ordering and call this directly.
+    std::vector<int> CleanupDiscardFullRanking(
+        const GameState&, const std::vector<std::string>*) const;
     // The only deck that opts into branching the ROLLOUT's cleanup shed. MTG_TH_DISCARD_WIDTH
     // overrides for the sweep; see the definition for the measured value.
     int CleanupDiscardSearchWidth() const override;

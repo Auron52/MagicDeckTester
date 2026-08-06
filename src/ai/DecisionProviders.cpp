@@ -1941,7 +1941,30 @@ static ThDiscard ThDiscardVariant()
     return v;
 }
 
+// The hook: the ranking IS the decision (user design 2026-08-06 -- "the heuristic decides
+// everything and returns a list of some size; all of those options are searched"). This provider
+// returns exactly ONE index, so the executor's searched pass has nothing to fan over and the
+// keep-set rule below decides the shed outright -- which is what it was commissioned for: without
+// this prune the searched pass fanned a probe rollout per HAND CARD over this deck's 15-25-card
+// cleanups, and (x each trial turn's full-depth ladder) one bounded game cost hours
+// (docs/design/th-d5-five-hour-game.md). The legacy Base variant keeps the full fan: it exists to
+// A/B the ranking rules, and its historical meaning includes the searched pass choosing.
 std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    std::vector<int> full = CleanupDiscardFullRanking(s, required_pieces);
+    if (ThDiscardVariant() == ThDiscard::Base) { return full; }
+    // ONE candidate -- measured, not assumed (2026-08-06 sweep, regression tier, vs the whole-hand
+    // fan the ground truth embodied): top-1 flipped 4 of ~1800 games +1 turn; top-2/3 recovered
+    // only one of them; and after the retrace-protection fix (CleanupDiscardProtected) top-1 is
+    // NET BETTER than the fan (smoke d0 -0.0050, regression -0.0020/-0.0033, rest equal) at 0.3s
+    // flat vs hours. The residual fan wins were clairvoyant (shedding the only Land's Edge because
+    // a replacement is known to be coming) or a one-game scry-valuation edge (gi=229).
+    if (full.size() > 1) { full.resize(1); }
+    return full;
+}
+
+std::vector<int> TreasureHuntProvider::CleanupDiscardFullRanking(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
     const ThDiscard variant = ThDiscardVariant();
@@ -2467,7 +2490,9 @@ std::vector<int> TreasureHuntProvider::RetraceDiscardCandidates(
     // Rank the WHOLE hand, then keep only the lands this caller offered, in ranked order. Filtering
     // after ranking (rather than ranking a filtered list) matters: the ranking's bands are relative
     // to the whole hand -- the Tower rule, for instance, asks what else is in play and in hand.
-    const std::vector<int> ranked = CleanupDiscardCandidates(s, s.m_required_pieces);
+    // Full ranking, NOT the hook: the hook now returns only the top pick (the searched pass's
+    // candidate set), and this multi-land cost needs the complete ordering.
+    const std::vector<int> ranked = CleanupDiscardFullRanking(s, s.m_required_pieces);
     std::vector<int> out;
     out.reserve(hand_land_indices.size());
     for (int i : ranked)
@@ -2496,6 +2521,7 @@ int TreasureHuntProvider::CleanupDiscardSearchWidth() const
     }();
     return w;
 }
+
 
 bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controller,
                                                 const CardDefinition& def) const
