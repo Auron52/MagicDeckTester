@@ -41,6 +41,7 @@ NAME2VALUE = {
     "dragonstorm": "decks/Dragonstorm/Dragonstorm.value.json",
     "auras":    "decks/Auras/Auras.value.json",
     "goblins":  "decks/Goblins/Goblins.value.json",
+    "creature_giving": "decks/Creature Giving/Creature Giving.value.json",
 }
 
 # STAGED targets, matching the "<deck>_staged" keys in valueleaf_depth_matrix.py. A regenerated table

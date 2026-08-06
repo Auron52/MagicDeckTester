@@ -45,6 +45,10 @@ DECKS = {
     # goblins (aggro): board-driven like burn/slivers/auras -> value leaf expected inert on quality,
     # a search SPEED win. hdepths capped at 3 (heuristic converges by d3 for aggro). value model 2026-07-31.
     "goblins":  ("decks/Goblins/Goblins.cod",             "decks/Goblins/Goblins.value.json",             8),
+    # creature_giving (gift-the-opponent drain engine): first model 2026-08-06 (no live sidecar yet --
+    # use the _staged key until adoption). Deck folder name contains a space.
+    "creature_giving": ("decks/Creature Giving/Creature Giving.cod",
+                        "decks/Creature Giving/Creature Giving.value.json",                             8),
 }
 
 # STAGED variants: "<deck>_staged" is the same deck + the same mulligan profile, but its V cells read
@@ -75,6 +79,8 @@ PROFILES = {
     "auras":       "decks/Auras/Auras.profile.json",
     "hinata_staged":   "decks/Hinata2/Hinata2.profile.json",
     "antilife_staged": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
+    "creature_giving":        "decks/Creature Giving/Creature Giving.profile.json",
+    "creature_giving_staged": "decks/Creature Giving/Creature Giving.profile.json",
 }
 
 def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_depth,
