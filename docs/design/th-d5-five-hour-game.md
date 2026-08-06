@@ -1,9 +1,15 @@
-# A single treasure_hunt game costs ~5 hours at d5 unbounded — ROOT-CAUSED
+# A single treasure_hunt game costs ~5 hours at d5 unbounded — OPEN (one contributor found and fixed)
 
-**Status: ROOT CAUSE FOUND (2026-08-06). Fix proposed, NOT implemented.** The user's read was
-right: there is no reason a bounded 8-turn goldfish game should cost hours, and it is a defect.
+**Status: STILL OPEN (2026-08-06).** The user's read was right: there is no reason a bounded 8-turn
+goldfish game should cost hours, and it is a defect.
 
-## Root cause: the leaf transposition table only stores WINS
+**A dead leaf cache was found and fixed, and it was NOT the cause.** An earlier revision of this file
+called it the root cause; that was wrong and is corrected below. The fix
+(`MTG_TT_NOWIN_CACHE`, default off) is sound and worth keeping -- 44,970 memo hits where there were
+zero, byte-identical result -- but it buys only **8%** (89.2 s -> 82.2 s at d4). The blow-up is
+elsewhere.
+
+## Contributor #1 (found, fixed, ~8%): the leaf transposition table only stores WINS
 
 `SimulateToEnd` (`TurnSolver.cpp`, the leaf rollout) ends with:
 
@@ -21,8 +27,8 @@ TT stores  : 0         nowin NOT stored: 138,346   (100%)
 ```
 
 **Every one of the 138,346 leaf rollouts returned a no-win, so the table was written zero times.**
-There is no leaf memoisation at all in this position: every leaf re-rolls from scratch, and the
-search grows exponentially with depth unchecked. Measured cost of one extra ply on this game:
+There is no leaf memoisation at all in this position: every leaf re-rolls from scratch. Measured cost
+of one extra ply on this game:
 
 | depth | wall | search nodes | EnumeratePlans |
 |---|---|---|---|
@@ -41,7 +47,25 @@ that key is computed 138,346 times to consult a table that is always empty.
 discard it" — except the leaf table was never revisited, and unlike `FSLineCache` the store site
 carries no comment justifying the restriction.
 
-## Proposed fix (not yet implemented)
+## Where the cost actually is -- the open question
+
+With the leaf fix ON, the same d4 game still costs 82 s and reports:
+
+```
+EnumeratePlans calls  :   593,144      <- the driver
+ApplyPlanDirect calls : 1,930,548
+GameState deep copies : 1,012,589
+FSLine memo probes    :    19,916      <- the INTERIOR memo is barely exercised
+```
+
+593,144 plan enumerations for ONE game, against only 19,916 interior-memo probes. Whatever is wrong
+is in the interior search -- the plan enumeration rate and/or the interior memo failing to collapse
+it -- not in leaf rollouts. That ratio is the next thing to explain. Note also that `Search nodes`
+is bit-identical with the leaf fix on and off (1,349,112), because it is recorded as
+`PROF_ADD_NODES(budget.Used())` once per decision (`AIEngine.cpp:1893`) rather than per rollout, so
+it is NOT a proxy for work done here -- use EnumeratePlans/ApplyPlanDirect instead.
+
+## The fix that WAS applied (contributor #1)
 
 Apply the same bound qualification that worked for `FSLineCache`:
 
@@ -53,9 +77,19 @@ Apply the same bound qualification that worked for `FSLineCache`:
 * gate behind a flag (`EnvOn`, default off until measured), verify byte-identity at an unbounded
   budget first (with no budget to reallocate, a sound memo must return the same line), then A/B.
 
-Expected payoff is large exactly where the engine currently hurts most: treasure_hunt's search cost is
-the reason it produced zero label rows in 34 h, thrashed 3.2 M enumerations in the labeller, and
-holds the matrix's only intractable cells.
+Implemented as `MTG_TT_NOWIN_CACHE` (default OFF) in `TranspositionTable.h` (a separate `m_nowin` map
+so the win path is untouched) and `SimulateToEnd`. Measured at d4 on the pathological game:
+
+| | OFF | ON |
+|---|---|---|
+| TT lookups | 138,346 | 85,082 |
+| no-wins stored | 0 | 40,112 |
+| no-win hits | 0 | **44,970** |
+| wall | 89.2 s | 82.2 s |
+| result | 3.0000 | 3.0000 |
+
+Sound and worth having, but 8% -- it does not make the pathological cells tractable, and restarting
+the V6/V7/V8 cells on the strength of it would simply hang again.
 
 ## Ruled out along the way
 

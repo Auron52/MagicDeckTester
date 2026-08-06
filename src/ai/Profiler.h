@@ -37,6 +37,8 @@ namespace prof
         uint64_t tt_hits          = 0;  // ... that hit
         uint64_t tt_stores        = 0;  // TranspositionTable::Store calls (WINS ONLY -- see SimulateToEnd)
         uint64_t tt_nowin         = 0;  // ... rollouts that returned no-win and were therefore NOT stored
+        uint64_t tt_nowin_stored  = 0;  // ... no-wins stored under MTG_TT_NOWIN_CACHE (nothing truncated)
+        uint64_t tt_nowin_hit     = 0;  // bound-qualified no-win entries that answered a query
         uint64_t enumerate_calls  = 0;  // EnumeratePlans invocations
         uint64_t plans_generated  = 0;  // candidate plans produced by EnumeratePlans
         uint64_t applyplan_calls  = 0;  // ApplyPlanDirect invocations
@@ -59,6 +61,8 @@ namespace prof
             tt_hits          += o.tt_hits;
             tt_stores        += o.tt_stores;
             tt_nowin         += o.tt_nowin;
+            tt_nowin_stored  += o.tt_nowin_stored;
+            tt_nowin_hit     += o.tt_nowin_hit;
             enumerate_calls  += o.enumerate_calls;
             plans_generated  += o.plans_generated;
             applyplan_calls  += o.applyplan_calls;
@@ -122,6 +126,8 @@ namespace prof
            << "   hits: " << c.tt_hits;
         if (c.tt_lookups) { os << "   (" << (100.0 * c.tt_hits / c.tt_lookups) << "% hit)"; }
         os << "\n";
+        os << "TT nowin stored       : " << c.tt_nowin_stored
+           << "   nowin hits: " << c.tt_nowin_hit << "\n";
         os << "TT stores             : " << c.tt_stores
            << "   nowin NOT stored: " << c.tt_nowin;
         if (c.tt_lookups) { os << "   (" << (100.0 * c.tt_stores / c.tt_lookups) << "% of lookups stored)"; }

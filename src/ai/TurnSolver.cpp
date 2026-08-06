@@ -10977,6 +10977,17 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
 // pre-combat decisions. A post-combat (second) main is played only when
 // second_main is set (greedy, via Solve) — see AIEngine::TakeTurn for why it is
 // otherwise skipped. Returns the win turn, or max_turns+1 if not won in time.
+// MTG_TT_NOWIN_CACHE: DEFAULT OFF pending measurement. The LEAF table (TranspositionTable, written by
+// SimulateToEnd) has the same asymmetry FSLineCache had before 2026-08-05 -- it stores only WINS, so a
+// position whose rollouts never find a win caches nothing and every leaf re-rolls from scratch.
+// Measured on treasure_hunt seed 9010 gi 1: 138,346 lookups, 0 stores, 100% no-win.
+// See docs/design/th-d5-five-hour-game.md.
+inline bool TTNoWinCacheOn()
+{
+    static const bool v = EnvOn("MTG_TT_NOWIN_CACHE");
+    return v;
+}
+
 static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                              SearchBudget* budget, int cutoff_turn,
                              bool second_main, TranspositionTable* tt)
@@ -11171,12 +11182,35 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             }
             return *cached;
         }
+        // Bound-qualified NO-WIN. The entry answers only "no win at turn <= bound", so a query asking
+        // about a LATER turn than the refutation covered must re-roll. Cheap: one extra map probe on
+        // the miss path, and only when the flag is on.
+        if (TTNoWinCacheOn())
+        {
+            const int* bound = tt->LookupNoWinBound(key);
+            if (bound != nullptr && cutoff_turn <= *bound) { PROF_INC(tt_nowin_hit); return max_turns + 1; }
+        }
     }
+
+    // Watermark: SimulateToEndImpl returns a FALSE no-win when the budget overruns (it bumps
+    // g_fs_trunc_events at that site). Such a result is "I ran out", not "there is no win", and
+    // storing it would poison the table with fabricated losses.
+    const unsigned long long trunc_at_entry = g_fs_trunc_events;
 
     int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
 
     if (tt != nullptr && result <= max_turns) { PROF_INC(tt_stores); tt->Store(key, result); }
-    else if (tt != nullptr)                     { PROF_INC(tt_nowin); }
+    else if (tt != nullptr)
+    {
+        PROF_INC(tt_nowin);
+        // The rollout aborts at `turn > cutoff_turn`, so the refutation covers exactly cutoff_turn --
+        // clamped to max_turns+1, the widest question the search can ask, so an unbounded query hits.
+        if (TTNoWinCacheOn() && g_fs_trunc_events == trunc_at_entry)
+        {
+            PROF_INC(tt_nowin_stored);
+            tt->StoreNoWin(key, std::min(cutoff_turn, max_turns + 1));
+        }
+    }
     return result;
 }
 
