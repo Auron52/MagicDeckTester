@@ -129,6 +129,19 @@ All oracle texts + costs fetched live from Scryfall 2026-08-05 (this run's 2a).
   sweep x2-per-kill, Orchard/War-Riders gifts, Warden lifegain) hand-verified exact by multiple
   agents across full games.
 
+## Queued next (user-directed, 2026-08-06 — do after conversation compaction)
+
+- **Orchard-first land-tutor heuristic (USER-DIRECTED, strong recommendation):** add a
+  `CreatureGivingProvider` (routed by the existing `gift` detection in
+  `SelectDecisionProvider`, currently returning GenericProvider) overriding `TutorCandidates`
+  for the land-typed tutors (Sylvan Scrying `tutor_to_hand` + Crop Rotation
+  `tutor_land_to_battlefield`): **always pick Forbidden Orchard** while a copy remains in the
+  library; fallback ranking when none does. The user was explicit: **0 exceptions — this
+  narrowing lives in the provider** (never a generic cap), per the core invariant.
+  `MTG_UNPRUNED` remains the standing full-search A/B lever. Validate with the 5e step-6
+  with/without per-game A/B (>= 2 seed sets, every regression explained), report, then adopt;
+  add to the 6a disclosure table. Fetchlands unaffected (Orchard has no basic types).
+
 ## Approved deferrals
 
 - `viewer:auditor` — Crop Rotation `sacrifice` HARD MISS is an **auditor artifact; the decision
