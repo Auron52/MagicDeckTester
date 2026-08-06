@@ -185,6 +185,34 @@ model's purpose is the generation cost lever):
   confident-looking phantom structure ("H4/H5 improve past the plateau") that full counts
   erased.
 
+## Mulligan-profile prep: scout findings + gen wiring (2026-08-07, gen NOT started)
+
+Recommend-mode scouting (`--gen-mulligan recommend`) ran twice and was stopped twice; the
+findings and wiring are in place for whoever launches the real gen:
+
+- **Gen settings (user-directed): d3/b10 rollouts + the fetches merged.** Wired via a
+  GEN-ONLY `Creature Giving.value.json` carrying `value_play.mull_gen_depth=3` /
+  `mull_gen_budget_ms=10` and **no eval_model** (play-inert, deck-restricted smoke verified
+  twice; the trained model stays parked in `Creature Giving.value.DISABLED.json`). GOTCHA
+  found: the profile loader ignores the whole `value_play` block unless a `target_depth`
+  key is present — the sidecar carries `target_depth:0` for that reason. Launch with
+  `MTG_EQUIV_FORCE_MERGE="Windswept Heath, Misty Rainforest"` — at d3 discovery the
+  fetches merge on their own (21 raw buckets), but pinning the spec keeps the bucket_fp
+  contract explicit.
+- **Measured scout economics** (this box, 24 threads): d5/b20 sustained 41–44 rollouts/s
+  (1,243,366 tasks — an ~8 h scout; `complete` R40 infeasible). d3/b10 + merge: 21 buckets,
+  789,092 distinct hands × 2 pd = 1,578,184 tasks, 122/s first-minute decaying to ~78/s
+  sustained → **R=1 floor pass ≈ 5.5–6.5 h**; rollout-config play digest `d8f71a4f27ed93ee`
+  (pooling parity). The adaptive complete/fast projection requires letting the scout FINISH
+  (stopped at 24% for the slow-stream default below; no slow-cell list was captured).
+- **`MTG_KEEP_SLOW_MS` now defaults ON at 30 s** (user-directed): degenerate rollouts stream
+  live with the reproducing seed instead of surfacing only in the end-of-run top-12.
+  `=0` still disables; explicit values override. Analyzer-only, results unchanged.
+- **Next step when resuming:** relaunch the scout (same launch line as above), read its
+  complete/fast projection + slowest cells, pick a recipe (or the value-leaf gen lever /
+  secondary-machine chunking if projections bust the ~8 h window), then generate on a
+  frozen commit per the mulligan-profile skill.
+
 ## CreatureGivingProvider: Orchard-first land tutoring (ADOPTED 2026-08-06, user-directed)
 
 `CreatureGivingProvider` (routed by the `gift` detection in `SelectDecisionProvider`, formerly
