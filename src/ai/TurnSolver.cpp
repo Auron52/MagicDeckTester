@@ -1870,21 +1870,6 @@ static bool BpSearchInRollouts()
     return on;
 }
 
-// PROBE-ROLLOUT scope (see TurnSolver.h::ProbeRolloutGuard). MTG_PROBE_ROLLOUT_BP (DEFAULT ON;
-// =0 disables) keeps the searched-breakpoint fan-out inside probe trial games -- consistent with
-// the engine's own leaf rollouts (BpSearchInRollouts) and required for label fidelity (measured:
-// suppressing it flips a TH smoke game the full engine wins a turn earlier, gi=38 T3->T4). The =0
-// arm exists because it is another ~10x cheaper (th-d5-five-hour-game.md); the depth pin in
-// RolloutWinTurnFrom is what makes probe cost flat either way.
-static thread_local int g_probe_rollout = 0;
-TurnSolver::ProbeRolloutGuard::ProbeRolloutGuard()  { ++g_probe_rollout; }
-TurnSolver::ProbeRolloutGuard::~ProbeRolloutGuard() { --g_probe_rollout; }
-bool TurnSolver::InProbeRollout() { return g_probe_rollout > 0; }
-static bool ProbeBpSuppressed()
-{
-    static const bool keep_bp = EnvOn("MTG_PROBE_ROLLOUT_BP", true);   // DEFAULT ON; =0 suppresses
-    return g_probe_rollout > 0 && !keep_bp;
-}
 // Commit-the-line recursion depth. The committed decision is the OUTERMOST FSLineWin node of a
 // pass (its `state` is the real game state); everything below it is lookahead. Nesting is the
 // robust discriminator -- iterative deepening runs many passes, and each pass's root re-enters at
@@ -9637,7 +9622,6 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
 {
     const int w = BpSearchWidth();
     if (w <= 0 || g_bp_enum_depth != 0 || plans.empty()) { return; }
-    if (ProbeBpSuppressed()) { return; }   // probe trial game: adoption-era (pre-fan-out) labels
     if (!g_bp_root_enum && !BpSearchInRollouts()) { return; }   // committed decision only
     const int  s_max_base = BpMaxBase();
     const int  sites  = BpWave0SiteMask();   // wave-0 SELECTION only; the wave phase uses the full mask
@@ -9741,9 +9725,6 @@ static int BpWaveMode()
 static bool BpWavesHere(const SearchBudget* budget)
 {
     if (BpWaveMode() <= 0 || BpSearchWidth() <= 0) { return false; }
-    // Probe trial game (ProbeRolloutGuard): no wave phase either -- the walker would fan the base
-    // plans from rank 0 even with wave 0 suppressed, re-opening the cost this guard exists to close.
-    if (ProbeBpSuppressed()) { return false; }
     if (budget == nullptr || budget->Unlimited()) { return true; }
     // Skipping the phase for lack of budget leaves ranks unexplored -- a truncation, so any
     // enclosing no-win stops being a refutation (see g_fs_trunc_events).
