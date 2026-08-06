@@ -1,4 +1,4 @@
-# Regression ground truth -- commit b195761  date 2026-08-06
+# Regression ground truth -- commit df4dab8  date 2026-08-06
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -104,18 +104,18 @@ burn_overnight_d5_s4004=4.3470/d52272b69f412057
 burn_overnight_d5_s5005=4.3330/05ca73d15b3f062e
 burn_overnight_d5_s6006=4.3500/b5da99ed0ff84383
 burn_overnight_d5_s7007=4.3720/f1fa03f3d03b4f70
-th_overnight_d0_s4004=5.4420/337f998bbfb4116e
-th_overnight_d0_s6006=5.4070/ef161cf843288d7f
-th_overnight_d0_s8008=5.4290/534c7a06db74e11c
-th_overnight_d0_s10010=5.4555/2ba1cd977b768f7a
-th_overnight_d3_s4004=4.0740/e8ea289993369439
-th_overnight_d3_s5005=4.0490/68c7740f8aca0ad8
-th_overnight_d3_s6006=4.0250/087e0018afe2bbb5
-th_overnight_d3_s7007=4.0670/44e846e2db47b0d9
-th_overnight_d5_s4004=4.0660/a1db488aaa57c672
-th_overnight_d5_s5005=4.0450/d72c503ea84c2d46
-th_overnight_d5_s6006=4.0250/491a8c8c8e030ed3
-th_overnight_d5_s7007=4.0640/0c2dc2c1893f9628
+th_overnight_d0_s4004=5.4405/74f3bf616485070f
+th_overnight_d0_s6006=5.4035/97ece63a13457246
+th_overnight_d0_s8008=5.4265/3b5b0a151657fd6e
+th_overnight_d0_s10010=5.4565/1b4354a3808a67ce
+th_overnight_d3_s4004=4.0730/7d211008298b5e07
+th_overnight_d3_s5005=4.0510/c1888c0a0aef131c
+th_overnight_d3_s6006=4.0260/ebc1b0e2e558e3e2
+th_overnight_d3_s7007=4.0690/bcf0b00fad20abe3
+th_overnight_d5_s4004=4.0640/e86d16375b1e5f9d
+th_overnight_d5_s5005=4.0470/5d364fdd3c5e57a0
+th_overnight_d5_s6006=4.0250/4e3e2830f5221b15
+th_overnight_d5_s7007=4.0650/b85ab0ae37db3962
 knights_overnight_d0_s4004=4.5505/10e5b0740d04c414
 knights_overnight_d0_s6006=4.5560/a93bc45f6a6209e7
 knights_overnight_d0_s8008=4.5650/3aae625483538fbb
