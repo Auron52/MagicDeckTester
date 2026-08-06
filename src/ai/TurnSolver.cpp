@@ -11438,19 +11438,6 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                                          int cutoff, bool second_main, TranspositionTable* tt,
                                          FSLineCache* lc, SearchBudget* budget)
 {
-    // Past the incumbent's cutoff -- the SAME guard FSLineWin applies at its entry, which this
-    // sibling was missing. A game only moves forward, so a node at turn > cutoff cannot produce a
-    // win at turn <= cutoff. Without it the node enumerates its second main and recurses in full,
-    // and every FSLineWin it reaches returns no-win off that identical test: the same answer, paid
-    // for. Pure prune, not a heuristic -- the value returned here is the one the search computed
-    // anyway.
-    //
-    // This is what let breakpoint plies subdivide an ALREADY-WON turn. Breakpoint continuations
-    // recurse with depth - 1, so on a flood turn --depth 8 spends its plies inside turns 3-5 rather
-    // than looking further ahead; with no cutoff guard here, each of those plies re-enumerated a
-    // position that could not improve. See docs/design/th-d5-five-hour-game.md.
-    if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
-    if (state.turn_number > cutoff)    { return { max_turns + 1, {} }; }
     // Mid-pass overrun guard (see FSLineWin): abort the runaway pass.
     if (budget && budget->Overrun()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
     if (second_main)
@@ -11718,22 +11705,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             return win;
         }
 
-        // best.win_turn - 1, not best.win_turn: the acceptance test below is STRICT, so a line that
-        // wins exactly at the incumbent's turn can never be adopted and searching for one is waste.
-        // This is the cutoff that matters -- with a turn-3 incumbent it makes the cutoff 2, so
-        // FSLineWin's `turn_number > cutoff` guard retires every turn-3 node at once, which is where
-        // a flood turn's entire within-turn subdivision lives. Sound: best starts at max_turns + 1,
-        // giving max_turns, already the last turn a win may occur on.
-        //
-        // COST: node_vals below feeds the beam reorder, and a non-improving tail that used to report
-        // its real win turn now reports max_turns + 1, so plans that were distinguishable can tie.
-        // That is a RANKING coarsening, not a correctness change -- the node's own answer is
-        // identical -- but it can move play, so it is A/B'd rather than claimed byte-identical.
-        // Under a budget it also frees budget the search spends elsewhere (the same reallocation
-        // MTG_FS_NOWIN_CACHE showed). See docs/design/th-d5-five-hour-game.md.
         TurnSolver::SearchLine tail =
-            FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn - 1), second_main,
-                       tt, lc, budget);
+            FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget);
         if (rec_vals) { node_vals.push_back(tail.win_turn); }   // value-rank for the beam reorder
         if (tie_scan_here) { tie_scan.emplace_back(tail.win_turn, PlanActionKeys(p)); }
         if (tail.win_turn < best.win_turn)
@@ -11835,23 +11808,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     FSLineStoreWin(lc, key, win);
                     return win;
                 }
-                // A wave variant only ever wins on a STRICTLY better win turn (the test below), so a
-                // line that wins exactly AT best.win_turn cannot be adopted -- searching for one is
-                // pure waste. Hand the continuation best.win_turn - 1, the latest turn that could
-                // actually pass. Sound in all cases: best starts at max_turns + 1, so the initial
-                // cutoff is max_turns, which is already the last turn a win may occur on.
-                //
-                // Confined to the WAVE loop on purpose. The main loop records tail.win_turn into
-                // node_vals for the beam reorder, where coarsening a non-improving value to
-                // max_turns + 1 would change a RANKING and move play; the wave phase never extends
-                // node_vals (see the comment at its head), so tightening here cannot.
-                //
-                // MEASURED (treasure_hunt seed 9010 game 1): the wave phase scores 1,070,393
-                // candidates and improves 0 of them, so every rollout it spends at the incumbent's
-                // own turn is waste. See docs/design/th-d5-five-hour-game.md.
                 TurnSolver::SearchLine tail =
-                    FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn - 1),
-                               second_main, tt, lc, budget);
+                    FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main,
+                               tt, lc, budget);
                 if (tail.win_turn < best.win_turn)
                 {
                     if (BpWaveProbeOn()) { g_bp_wave_probe.improved.fetch_add(1); }
