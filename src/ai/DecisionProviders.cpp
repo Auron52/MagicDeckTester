@@ -2369,7 +2369,16 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardFullRanking(
         // A duplicate LAND is the safest land discard -- the second copy is the one card in hand
         // guaranteed to be doing nothing the first is not -- but it still ranks behind the two
         // spare nonlands above, because a land is at least ammunition and they are not.
-        if (variant >= ThDiscard::Dup && copies_seen(c.m_name) > 1) { return 2; }
+        //
+        // "The second copy", NOT every copy: copies_seen() is symmetric across copies, so banding
+        // on it alone marked BOTH Temples of Epiphany spare and shed the pair while the keep set
+        // had bought one (keeping a surplus basic Island instead) -- the dup rule silently
+        // outranking the shopping list, the same failure shape as the Tower and band-9 bugs (th
+        // s3003 gi=229: T6 vs the keep-one-Temple line's T5, found by the searched fan). A copy
+        // the keep set bought IS the first copy: it falls through to its slot band; only UNKEPT
+        // duplicates are spare. Variants below Keep have no keep set and are unchanged.
+        if (variant >= ThDiscard::Dup && copies_seen(c.m_name) > 1
+            && !(variant >= ThDiscard::Keep && kept[static_cast<std::size_t>(i)])) { return 2; }
 
         // Rung 6 -- QUOTAS per role, not a static category order. A flooded hand's real mistake is
         // not "kept the wrong land", it is "kept ten lands that all do the same job", so each role
