@@ -149,6 +149,20 @@ out silent no-ops.
 - Stage 5 sanity re-run on the shipped profile, same 1000 seeds: monotone in depth
   (d0 6.2640 > d3 5.3370 ≥ d5 5.3350) and not budget-starved (d5/b100 5.3210, −0.014 vs b20).
 - Verify battery: **GATE PASS**, all checks green including `claude_sweep` 0 unresolved.
+
+### Cost-reframe A/B — SETTLED: COST_NEUTRAL (no lever to pull)
+
+The `analyze_deck.py` cost diagnostic finally ran CLEAN — both arms on the same final binary
+(333ab17), 200 games, seed 90001, d3: **avg_base 5.24 vs avg_reframe 5.24, delta 0.0 →
+COST_NEUTRAL**. "reframe neither helps nor hurts within noise -- cost interactions are already
+handled by the base aggregate's generic credits." The deck's only cost mechanic is Ancient
+Cornucopia's mana-rock ramp, which the base aggregate already credits.
+
+This RETIRES the open question: `MTG_COST_REFRAME` is **not** worth enabling for FiveColour, and
+there is no user decision left here. History: run 1 COST_NEUTRAL (pre-fix binary), run 2
+REFRAME_HELPS −0.055 — that one was **INVALID**, its two arms straddled a rebuild. Run 3 was killed
+for the same reason (it straddled the ZoneCard rebuilds). LESSON: an A/B whose arms run
+sequentially must not span a `build.sh`; check for an in-flight A/B before rebuilding.
 - Deathrite now genuinely accelerates: at the flag's own repro (seed 7801 gi1) Faeburrow Elder lands
   a turn EARLIER, and the T3 fetch putting a land in the graveyard turns Deathrite on for exactly the
   7th mana that casts Bloom Tender + Cosmic Spider-Man together (90 plans offered, was 14 land-only).
