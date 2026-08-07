@@ -306,3 +306,31 @@ I. Planeswalker loyalty subsystem (Jared/Bolas/Oko + Elk transform + Kavu/Food/T
 J. Garth One-Eye (PerformGarthActivate, CastConjuredCopy, Regrowth gy→hand, Terror destroy, 6 entries).
 K. Unite the Coalition split machinery.
 Each phase builds cleanly before the next; 2d review + audits after all phases.
+
+## Claude-play sweep
+- commit: `abdb9a0` (confirmation pass; the find sweep ran at `10f3541`)
+- seeds: 7777 games: 18 (find sweep; NOTE: shared one shuffle, spawn patterns varied) + seeds
+  7800-7807 games: 8 (confirmation, distinct shuffles)
+- flags: 2 unresolved
+  - **Deathrite-funded creature casts not offered (enumeration coverage, tempo-only).** Repro:
+    `./build/Release/mtg decks/FiveColour/FiveColour.cod --profile decks/FiveColour/FiveColour.profile.json
+    --claude-play --seed 7801 --game-index 1 --max-turns 12 --reveal 6 --choices "0,1,2,1,1,6"` →
+    T3 board Bloom Tender + Deathrite (both untapped, castable since T2) + Mountain + Overgrown
+    Tomb, gy = 1 land (fuel 1), hand Faeburrow Elder {1}{W}{G}: payable (W←Deathrite gy-mana,
+    G←Tomb, {1}←Mountain) but ALL 14 plans are land-only. Verified NOT: the colour gate
+    (ComputeAvailableColors credits Deathrite W), the pools (AvailableManaPool /
+    BuildNonCreaturePool both fuel-credit it), PermanentManaYield (1), prunes (MTG_UNPRUNED
+    unchanged), family grouping (off-switch unchanged). Root cause still open — somewhere between
+    action emission and eval_and_push feasibility. Seen independently in confirmation games gi1 +
+    gi4 (agents' own triage). NOT a lockstep divergence (mismatch harness green; nothing illegal
+    is played) — the AI loses tempo in these states (ai_win 6 where 5 looks reachable).
+  - **Stranded-equip plan noise (cosmetic/UX).** The same-turn Equip enumeration (abdb9a0) offers
+    "equip X → Y" variants whose equipment/host are hand cards the plan does NOT cast; selecting
+    one is a silent no-op (stranded-outlet by design). Harmless to search quality (rollout scores
+    it as a pass) but pollutes the human-facing plan list (confirmation gi0). Fix sketch: subsets
+    containing a hand-sourced Equip must also contain that card's CastFromHand (needs a
+    hand-slot marker on the Equip action + a duplicate-guard clause).
+- Sweep verdict otherwise: the find sweep's 2 CONFIRMED bugs (domain-mana payment losslessness,
+  missing same-turn equip) are FIXED in `abdb9a0` and re-verified by the confirmation pass
+  (gi2/gi3/gi6 match the AI exactly; gi7 Claude beat the AI by a turn via the free-cast-banked
+  Unite — the banking design working as intended; zero dropped_casts post-fix in any game).
