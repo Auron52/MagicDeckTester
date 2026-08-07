@@ -1,0 +1,115 @@
+{
+  "card_scores": {
+    "Ancient Cornucopia": [
+      -0.12222222222222179
+    ],
+    "Birds of Paradise": [
+      0.2945359834490908,
+      -0.09699614029199477
+    ],
+    "Blood Crypt": [
+      0.06268203115107074
+    ],
+    "Bloom Tender": [
+      0.214613269755354
+    ],
+    "Breeding Pool": [
+      0.17196476085709644
+    ],
+    "Cosmic Spider-Man": [
+      -0.0036919290329198162
+    ],
+    "Deathrite Shaman": [
+      -0.14149722735674697,
+      -0.2603448275862075
+    ],
+    "Faeburrow Elder": [
+      0.3187925998052581,
+      -0.431146912159571
+    ],
+    "Garth One-Eye": [
+      -0.16594996379542248
+    ],
+    "Godless Shrine": [
+      0.033961715883912724
+    ],
+    "Island": [
+      -0.22577845177639588
+    ],
+    "Jared Carthalion": [
+      -0.1274437758747391
+    ],
+    "Jetmir's Garden": [
+      0.04155614500442084
+    ],
+    "Lightning Greaves": [
+      -0.3541372398102016
+    ],
+    "Maelstrom Archangel": [
+      -0.09562802032134154,
+      -0.27240717029449435
+    ],
+    "Mana Cannons": [
+      0.11302148368712572
+    ],
+    "Misty Rainforest": [
+      0.14328612563906606
+    ],
+    "Mountain": [
+      -0.16519962096562502
+    ],
+    "Nicol Bolas, Planeswalker": [
+      -0.1577810806084985
+    ],
+    "Oko, Thief of Crowns": [
+      -0.1498971021747595
+    ],
+    "Overgrown Tomb": [
+      0.12222222222222268
+    ],
+    "Progenitus": [
+      -0.14450338394000362
+    ],
+    "Scalding Tarn": [
+      0.10339976434259679,
+      -0.21560214529497834
+    ],
+    "Steam Vents": [
+      -0.1122638999733967
+    ],
+    "Stomping Ground": [
+      0.024814917781278645
+    ],
+    "Two-Headed Hellkite": [
+      -0.03353855174435605
+    ],
+    "Unite the Coalition": [
+      0.0361782763586751
+    ],
+    "Verdant Catacombs": [
+      -0.0005281460294099816
+    ],
+    "Windswept Heath": [
+      0.009669083937651202
+    ],
+    "Wooded Foothills": [
+      0.13183673469387802,
+      -0.03826530612244916
+    ],
+    "Zagoth Triome": [
+      0.02709558399631007
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
