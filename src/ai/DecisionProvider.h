@@ -169,6 +169,13 @@ public:
     // makes lands ammunition. An INPUT to CleanupDiscardCandidates below, not a separate decision.
     virtual bool DiscardLandsFirst(const GameState& s) const = 0;
 
+    // SpareCopyDiscardBand -- cleanup-discard ranking: does the spare-copy band (shed a name with
+    // 2+ hand copies before any unique card; CleanupDiscardRankingWithOrder tier A2) apply to this
+    // deck? Default yes -- the band's premise, "a duplicate is redundant", holds for the decks whose
+    // duplicates are interchangeable engine pieces. It is FALSE for a deck whose whole payoff
+    // consumes copies cumulatively; that judgment is archetype knowledge, so it lives here.
+    virtual bool SpareCopyDiscardBand(const GameState& s) const { (void)s; return true; }
+
     // CleanupDiscardCandidates -- cleanup discard (hand over its size limit): WHICH card to shed,
     // as hand indices in PREFERENCE order. This is the whole rule, provider-owned: the engine keeps
     // only the mechanism (move the chosen card to the graveyard).
@@ -176,6 +183,13 @@ public:
     // [heuristic-then-search]: index 0 is what a non-branching caller takes, so returning ONE index
     // decides the discard with no branch (and is byte-identical to the historical single answer);
     // returning several is what lets the search choose among them instead of trusting the ranking.
+    // THE RETURN IS THE WHOLE CANDIDATE SET: the executor's searched cleanup pass
+    // (AIEngine::ChooseDiscard) trials exactly the returned indices -- no more. (Until 2026-08-06
+    // it fanned a probe rollout over the ENTIRE hand and used this ranking only as a tie-break,
+    // which on treasure_hunt's 15-25-card cleanups is what made one bounded game cost hours; see
+    // docs/design/th-d5-five-hour-game.md.) A provider needing the full ordering for a DIFFERENT
+    // question (multi-card pitches: Land's Edge, retrace costs) keeps that ranking internal rather
+    // than widening this return -- see TreasureHuntProvider::CleanupDiscardFullRanking.
     //
     // `required_pieces` is the deck's protected combo-piece list. It is passed in rather than read
     // off the state because the executor sources it from its own MulliganProfile while the rollout
@@ -490,6 +504,11 @@ public:
     // dead in most decks -- per 400 d0 games, five of nine suite decks never reach a cleanup
     // discard at all and three more are under 40 -- so a global width would buy plan variants that
     // pin an index nothing ever consumes. A deck that actually makes this decision opts in.
+    // Width > 1 was SWEPT AND REFUTED as a blind per-plan emission (2026-08-06: monotonically
+    // worse on nearly every deck at W=2/4/8 -- budget dilution; the decision fires on a tiny
+    // fraction of turns while every base plan pays a variant). If the axis is ever widened it
+    // must be bp-style -- fan only plans whose simulation actually reaches an over-limit
+    // cleanup. See docs/design/searched-discard-as-search-node.md.
     virtual int CleanupDiscardSearchWidth() const { return 1; }
 
     // ManaSourceRank -- mana-source TAP ORDER: flexibility rank of a mana source (LOWER = tap earlier).

@@ -254,7 +254,28 @@ def run_incremental(args):
                     # bad sample truncated the cell for the rest of the run. Cumulative is robust to a
                     # single bad game and self-corrects, while still capping a cell that is genuinely
                     # too slow to be production-usable at this depth.
-                    c["intractable"] = (c["ms"] / max(c["games"],1)) > args.intractable_sec_per_game
+                    # DEPTH FLOOR (--never-condemn-at-or-below). Shallow cells are the ones the trust-depth
+                    # decision is derived from, so condemning one is not a saved cost -- it is a hole in
+                    # the answer.
+                    #
+                    # And the cumulative average, which was itself the fix for a STICKY per-batch flag
+                    # (see below), still cannot survive a heavy tail. Measured 2026-08-05, TH H5:
+                    #   seed 8008   400g   14.8 s/game   first batch     4.4 s
+                    #   seed 9009    50g  358.2 s/game   first batch 17875   s  (4.96 HOURS, 25 games)
+                    #   seed 10010  400g   15.3 s/game   first batch     1.9 s
+                    #   seed 11011   50g  213.4 s/game   first batch 10668   s  (2.96 hours)
+                    # ONE pathological game made its batch cost five hours; 17912/50 = 358 > 60 and the
+                    # cell was condemned. Every OTHER game in those cells runs at ~0.1 s/game -- the fill
+                    # run took them 50 -> 325 in minutes. So condemning threw away ~350 cheap games to
+                    # avoid re-running one expensive game that had ALREADY BEEN PAID FOR.
+                    #
+                    # (An earlier draft of this comment blamed oversubscription -- 20 single-threaded
+                    # workers on a 12-core box. That is real but nowhere near sufficient: contention does
+                    # not turn a 2.5 s batch into a 5 h one. The cause is the tail, not the load.)
+                    #
+                    # So: never condemn at or below this depth; let deep cells absorb the trimming.
+                    c["intractable"] = (c["depth"] > args.never_condemn_at_or_below
+                                        and (c["ms"] / max(c["games"],1)) > args.intractable_sec_per_game)
                 done_batches+=1
                 write_state()
                 if done_batches % 10 == 0:
@@ -310,6 +331,11 @@ def main():
     ap.add_argument("--intractable-sec-per-game",type=float,default=2.0,
                     help="a batch slower than this (wall sec / game, single-threaded) marks its cell intractable "
                          "-> capped at --reference-target. Checked on every batch (first batch is the main signal).")
+    ap.add_argument("--never-condemn-at-or-below",type=int,default=0,
+                    help="cells at or below this DEPTH are never marked intractable, however slow they measure. "
+                         "These are the cells the trust-depth decision reads, so condemning one leaves a hole in "
+                         "the answer rather than saving cost -- and since the check is on WALL time it can fire "
+                         "purely because the box was oversubscribed. Set to 5 to protect the d<=5 ladder.")
     ap.add_argument("--workers",type=int,default=(os.cpu_count() or 8),
                     help="concurrent single-threaded batch processes (work-stealing pool). Each is a separate "
                          "process loading the keep model (~1GB for antilife); size to RAM. Default = CPU count.")

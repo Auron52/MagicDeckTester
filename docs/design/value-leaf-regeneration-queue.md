@@ -8,6 +8,39 @@ artifacts sit in `logs/eval/<stem>.value.STAGED.json` with the live sidecars unt
 Driver: `scripts/valueleaf_regen_queue.sh` (a pooled rewrite of the serial queue below —
 see §8 for why the serial design in §4 was abandoned).
 
+**Update 2026-08-06 — treasure_hunt COMPLETED on frozen `ba5f1b1`.** The TH cleanup-discard
+redesign (heuristic return = trial set, `e6beb73`..`6fdf180`) removed the probe-rollout blowup
+that made TH unlabellable and its deep cells intractable. Fresh full matrix
+(`logs/eval/valueleaf_depth_th_redesign.txt`): all 52 cells at 400 games, **0 intractable** —
+V6 went from 413 s/game (50-game reference cell) to 254 ms/game. Ladder clean and monotone;
+h_conv 4.0687 (H converges at d4); V8 = h_conv exactly. Derivation → STAGED sidecar: trust
+stays UNSET (V5 gap 0.0044 > tol), deep crossover `take@hc` for c=6/7/8 moved [6,9,9] → [4,4,6]
+(the old entries rested on starved pre-redesign cells). Staged-vs-live A/B at shipped play
+(8 × 1000 games, `logs/vlq_th_ab/`): **−0.00063, t=−0.89, 4/3/1** — neutral, consistent with
+every other deck in this queue. Depth sweep re-confirms shipped d5 (d6 identical on all 4
+seeds, d4 ~+0.005 worse). Note the pre-redesign TH cells
+in `valueleaf_depth_regen.txt(.cells.json)` are stale for TH and must not be resumed or pooled.
+
+**Resolution 2026-08-06 (user-approved): SEVEN of eight adopted; Knights declined.** The full
+`94c917f` regen (all 8 models retrained on ~10–12k rows each at shipped play; matrix at 400 g ×
+4 seeds, TH's fresh at `ba5f1b1`) was derived and A/B'd staged-vs-live at shipped play (8 ×
+1000 g paired per deck): Hinata2 **−0.00525 t=−4.52 8/0/0** (the thin-model deck — a real win);
+antilife −0.00087, TH −0.00063, dragonstorm −0.00038, auras −0.00025, slivers −0.00012 (all
+neutral); burn 0.00000 exact 0/0/8 with **trust 6→5** (callgrind paired 240 games: −0.07% Ir —
+instruction-clean). **Knights DECLINED**: its 400-g derivation flipped trust 5→UNSET on 4
+boundary games (noise — a 2000 g/seed top-up re-derived trust=4, V4 gap 0.0019), but at-scale
+verification on 16 FRESH seeds × 2500 g showed the staged artifact itself costs quality
+one-sidedly (**+0.00020 t=+2.74, 0/16 seeds better**; trust-4-vs-5 = 1 game in 40k, 15/16
+byte-identical — the scalar was innocent, the retrained model/crossover is the cost). Live
+Knights kept; its staged sidecar remains in `logs/eval/` for diagnosis. Gates: smoke 24/27,
+regression 38/45, overnight 89/108 — every move an installed deck, d5-only (one digest-only
+slivers d3), burn byte-identical at all 180k suite games, net −0.0067 summed; all three tiers
+accepted. LESSONS: (1) an 8-seed "inert" read can hide a one-sided +0.0002 — verify trust/model
+moves on MORE, FRESH seeds before adopting; (2) the trust derivation's hard 0.002 threshold on
+a noisy cell flip-flops near the boundary — a noise-aware margin (clear tol by > cell SE) is a
+deferred improvement; (3) re-deriving trust for the LIVE Knights table at higher sample might
+recover the ~0.7% Ir saving without the model swap (open follow-up).
+
 Owner: whichever agent takes the queue — it is designed to be run
 by **ONE agent, one job at a time**, because every job wants the whole box.
 

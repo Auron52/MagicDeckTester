@@ -127,13 +127,36 @@ public:
         }
     }
 
+    // BOUND-QUALIFIED NO-WINS (MTG_TT_NOWIN_CACHE; see SimulateToEnd). A win is cutoff-independent
+    // and lives in m_map above. A NO-WIN is not: SimulateToEndImpl aborts with `if (turn >
+    // cutoff_turn) return max_turns+1`, so the result means only "no win at turn <= cutoff_turn".
+    // Store that cutoff alongside it and reuse the entry only for a query asking no more. Kept in a
+    // SEPARATE map so the win path above is untouched -- with the flag off nothing here is ever
+    // called and behaviour is byte-identical.
+    const int* LookupNoWinBound(const Key& k) const
+    {
+        std::unordered_map<Key, int, KeyHash>::const_iterator it = m_nowin.find(k);
+        return (it != m_nowin.end()) ? &it->second : nullptr;
+    }
+
+    // A wider refutation supersedes a narrower one; never narrows an existing bound.
+    void StoreNoWin(const Key& k, int bound)
+    {
+        static const std::size_t cap = Cap();
+        if (cap && m_nowin.size() >= cap) { return; }
+        std::unordered_map<Key, int, KeyHash>::iterator it = m_nowin.find(k);
+        if (it == m_nowin.end())      { m_nowin.emplace(k, bound); }
+        else if (it->second < bound)  { it->second = bound; }
+    }
+
     std::size_t Size() const { return m_map.size(); }
 
     // Drop all entries (the game-persistent leaf cache is cleared per game).
-    void Clear() { m_map.clear(); }
+    void Clear() { m_map.clear(); m_nowin.clear(); }
 
 private:
     std::unordered_map<Key, int, KeyHash> m_map;
+    std::unordered_map<Key, int, KeyHash> m_nowin;   // key -> cutoff the refutation was proved under
 };
 
 // Print the aggregate lookup/hit totals once at exit when MTG_TT_STATS is set.

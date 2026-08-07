@@ -2056,7 +2056,30 @@ static ThDiscard ThDiscardVariant()
     return v;
 }
 
+// The hook: the ranking IS the decision (user design 2026-08-06 -- "the heuristic decides
+// everything and returns a list of some size; all of those options are searched"). This provider
+// returns exactly ONE index, so the executor's searched pass has nothing to fan over and the
+// keep-set rule below decides the shed outright -- which is what it was commissioned for: without
+// this prune the searched pass fanned a probe rollout per HAND CARD over this deck's 15-25-card
+// cleanups, and (x each trial turn's full-depth ladder) one bounded game cost hours
+// (docs/design/th-d5-five-hour-game.md). The legacy Base variant keeps the full fan: it exists to
+// A/B the ranking rules, and its historical meaning includes the searched pass choosing.
 std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    std::vector<int> full = CleanupDiscardFullRanking(s, required_pieces);
+    if (ThDiscardVariant() == ThDiscard::Base) { return full; }
+    // ONE candidate -- measured, not assumed (2026-08-06 sweep, regression tier, vs the whole-hand
+    // fan the ground truth embodied): top-1 flipped 4 of ~1800 games +1 turn; top-2/3 recovered
+    // only one of them; and after the retrace-protection fix (CleanupDiscardProtected) top-1 is
+    // NET BETTER than the fan (smoke d0 -0.0050, regression -0.0020/-0.0033, rest equal) at 0.3s
+    // flat vs hours. The residual fan wins were clairvoyant (shedding the only Land's Edge because
+    // a replacement is known to be coming) or a one-game scry-valuation edge (gi=229).
+    if (full.size() > 1) { full.resize(1); }
+    return full;
+}
+
+std::vector<int> TreasureHuntProvider::CleanupDiscardFullRanking(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
     const ThDiscard variant = ThDiscardVariant();
@@ -2461,7 +2484,16 @@ std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
         // A duplicate LAND is the safest land discard -- the second copy is the one card in hand
         // guaranteed to be doing nothing the first is not -- but it still ranks behind the two
         // spare nonlands above, because a land is at least ammunition and they are not.
-        if (variant >= ThDiscard::Dup && copies_seen(c.m_name) > 1) { return 2; }
+        //
+        // "The second copy", NOT every copy: copies_seen() is symmetric across copies, so banding
+        // on it alone marked BOTH Temples of Epiphany spare and shed the pair while the keep set
+        // had bought one (keeping a surplus basic Island instead) -- the dup rule silently
+        // outranking the shopping list, the same failure shape as the Tower and band-9 bugs (th
+        // s3003 gi=229: T6 vs the keep-one-Temple line's T5, found by the searched fan). A copy
+        // the keep set bought IS the first copy: it falls through to its slot band; only UNKEPT
+        // duplicates are spare. Variants below Keep have no keep set and are unchanged.
+        if (variant >= ThDiscard::Dup && copies_seen(c.m_name) > 1
+            && !(variant >= ThDiscard::Keep && kept[static_cast<std::size_t>(i)])) { return 2; }
 
         // Rung 6 -- QUOTAS per role, not a static category order. A flooded hand's real mistake is
         // not "kept the wrong land", it is "kept ten lands that all do the same job", so each role
@@ -2582,7 +2614,9 @@ std::vector<int> TreasureHuntProvider::RetraceDiscardCandidates(
     // Rank the WHOLE hand, then keep only the lands this caller offered, in ranked order. Filtering
     // after ranking (rather than ranking a filtered list) matters: the ranking's bands are relative
     // to the whole hand -- the Tower rule, for instance, asks what else is in play and in hand.
-    const std::vector<int> ranked = CleanupDiscardCandidates(s, s.m_required_pieces);
+    // Full ranking, NOT the hook: the hook now returns only the top pick (the searched pass's
+    // candidate set), and this multi-land cost needs the complete ordering.
+    const std::vector<int> ranked = CleanupDiscardFullRanking(s, s.m_required_pieces);
     std::vector<int> out;
     out.reserve(hand_land_indices.size());
     for (int i : ranked)
@@ -2611,6 +2645,7 @@ int TreasureHuntProvider::CleanupDiscardSearchWidth() const
     }();
     return w;
 }
+
 
 bool TreasureHuntProvider::ShouldCastDrawEngine(const GameState& s, int controller,
                                                 const CardDefinition& def) const
@@ -5516,6 +5551,28 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
 }
 
 // ---- CreatureGivingProvider -------------------------------------------------
+
+// The cleanup shed must never pitch the engine. Defense of the Heart is the deck's whole plan
+// (fetch Hunted Phantasm + Wurm; the drain chain follows), and the generic highest-MV rule ranks
+// it FIRST when the hand floods -- the probe-retirement classification (2026-08-06, gi564/gi798:
+// shedding DotH rolled out a turn worse than shedding ANY other card) is the measurement. Rank
+// every DotH copy last among the otherwise-ranked candidates; the spare-copy band and MV rule
+// order the rest. Visible information only. docs/design/searched-discard-as-search-node.md.
+std::vector<int> CreatureGivingProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    std::vector<int> base = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
+    const Player& ap = s.players[s.active_player_index];
+    std::vector<int> out, doth;
+    for (int i : base)
+    {
+        if (i >= 0 && i < static_cast<int>(ap.hand.size())
+            && ap.hand[i].m_name == "Defense of the Heart") { doth.push_back(i); }
+        else { out.push_back(i); }
+    }
+    out.insert(out.end(), doth.begin(), doth.end());
+    return out;
+}
 
 std::vector<std::string>
 CreatureGivingProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const

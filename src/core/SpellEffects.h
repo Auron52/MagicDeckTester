@@ -173,6 +173,19 @@ inline bool CleanupDiscardProtected(const GameState& state, const Card& c,
     for (const std::string& piece : *required_pieces)
     { if (c.m_name == piece) { is_req = true; break; } }
     if (!is_req) { return false; }
+    // A RETRACE required piece is NOT lost to a discard -- it stays castable from the graveyard,
+    // and this helper only guards FORCED discards (cleanup shed / pitch costs), where the land shed
+    // in its place would have paid the retrace cost anyway (weak dominance; see the band-1 rule in
+    // TreasureHuntProvider::CleanupDiscardFullRanking). This protection was silently overriding
+    // that rule: the provider ranked Throes of Chaos first and the protection dropped it from the
+    // preference tier, keeping it in hand and shedding a land -- measured a full turn slower
+    // (th s3003 gi=24: T4 vs T3, found by the searched pass trialling past the protection).
+    // MTG_PROTECT_RETRACE=1 restores the old blanket protection (the A/B hatch).
+    {
+        static const bool s_protect_retrace = EnvOn("MTG_PROTECT_RETRACE");
+        const CardDefinition* rdef = CardDatabase::Instance().LookupCached(c);
+        if (!s_protect_retrace && rdef != nullptr && rdef->params.retrace) { return false; }
+    }
     // A redundant required piece stays discardable (and, being high-MV, is picked ahead of the
     // rituals). Count copies in hand -- staged included, since a staged copy is already committed to
     // a line, which is exactly what makes the loose one spare -- plus, under the `deck` scope, the
@@ -235,6 +248,48 @@ inline std::vector<int> CleanupDiscardRankingWithOrder(
     {
         for (int i = 0; i < n; ++i)
         { if (!ap.hand[i].m_is_staged && CleanupDiscardIsLand(ap.hand[i])) { push(i); } }
+    }
+
+    // Tier A2 -- SPARE COPIES first (MTG_SPARE_COPY_BAND=0 restores the pre-band ranking).
+    // A name with two-plus non-staged copies in hand sheds a copy before any unique card:
+    // across the probe-retirement classification (2026-08-06, 16 surviving games,
+    // docs/design/searched-discard-as-search-node.md) the clairvoyant probe's win-optimal shed
+    // was a duplicate in game after game (Reality Spasm x4, Crackle x3, Plague Drone x3,
+    // Preordain/Wake/Invigorate/Idyllic x2) while the MV rule pitched a unique engine card --
+    // hinata gi21 shed its SINGLETON Hinata into a loss holding four Spasms. Visible
+    // information only: hand copy counts, no library order. Exclusions, each load-bearing:
+    //   * lands -- shedding mana measured catastrophic on the mana-hungry decks (antilife
+    //     fetch sheds rolled out 9 = unwon);
+    //   * required pieces -- their redundant-copy semantics are DiscardProtectScope's,
+    //     measured per-deck (protecting every Dragonstorm copy once turned three wins unwon;
+    //     see the scope comment above). A required-name dup stays a tier-B decision.
+    // MV descending within the band (a dup'd dork ranks behind a dup'd spell -- antilife gi188:
+    // the Ignoble Hierarch pair rolled out 9, the Skyshroud Cutter pair 8).
+    // Provider opt-out (SpareCopyDiscardBand): the premise fails deck-wide where duplicates are
+    // cumulative fuel -- the adoption gate measured dragonstorm worse in 11/12 overnight cells
+    // (+0.063 net, 0 better) with the band on, byte-identical to pre-band with it off.
+    static const bool s_spare_copy_band = EnvOn("MTG_SPARE_COPY_BAND", true);
+    if (s_spare_copy_band && ResolveProvider(state).SpareCopyDiscardBand(state))
+    {
+        std::vector<int> dup_band;
+        for (int i = 0; i < n; ++i)
+        {
+            const Card& c = ap.hand[i];
+            if (c.m_is_staged || CleanupDiscardIsLand(c)) { continue; }
+            // Protection is the ONLY required-piece filter: under the deck's DiscardProtectScope a
+            // redundant required copy is discardable (antilife sheds its spare Tainted Remedy /
+            // Plague Drone / Idyllic Tutor -- measured optimal in 3 of its 6 classified games),
+            // and the scope re-engages at the last copy. Dragonstorm's history (protect-every-copy
+            // regressed) is a SCOPE lesson, already honored here by deferring to it.
+            if (CleanupDiscardProtected(state, c, required_pieces)) { continue; }
+            int copies = 0;
+            for (int j = 0; j < n; ++j)
+            { if (!ap.hand[j].m_is_staged && ap.hand[j].m_name == c.m_name) { ++copies; } }
+            if (copies >= 2) { dup_band.push_back(i); }
+        }
+        std::stable_sort(dup_band.begin(), dup_band.end(), [&](int a, int b)
+        { return CleanupDiscardManaValue(ap.hand[a]) > CleanupDiscardManaValue(ap.hand[b]); });
+        for (int i : dup_band) { push(i); }
     }
 
     // Tier B -- eligible cards, descending mana value, ties keeping the earlier card.

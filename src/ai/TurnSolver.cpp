@@ -1960,6 +1960,7 @@ static bool BpSearchInRollouts()
     static const bool on = !EnvOn("MTG_NO_BP_SEARCH_ROLLOUT");
     return on;
 }
+
 // Commit-the-line recursion depth. The committed decision is the OUTERMOST FSLineWin node of a
 // pass (its `state` is the real game state); everything below it is lookahead. Nesting is the
 // robust discriminator -- iterative deepening runs many passes, and each pass's root re-enters at
@@ -11460,6 +11461,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
 
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
           state.turn_number, all.size(), land_names.size(), ap.hand.size());
+    PROF_ADD(plans_generated, all.size());
     return all;
 }
 
@@ -11487,10 +11489,35 @@ namespace
     }
 }
 
+// MTG_CANON_SIMKEY=1 (EXPERIMENT, default OFF = byte-identical): fold the hand and battlefield as
+// ORDER-INSENSITIVE multisets instead of ordered sequences. The ordered fold means "play Sandbar
+// T3, Cave T4" and "Cave T3, Sandbar T4" -- the SAME position -- never share a memo entry, so with
+// searched breakpoint continuations (which generate every play order) the FSLineCache/TT DAG
+// degenerates into a tree: distinct-state growth counts SEQUENCES, x12/ply on treasure_hunt
+// (docs/design/th-d5-five-hour-game.md). Canonicalizing collapses permutations. NOT provably
+// byte-identical ON: greedy tie-breaks read vector order, so a memo hit may return a line computed
+// under a permuted internal order -- the A/B (same answers?) is the test this flag exists for.
+inline bool CanonSimKeyOn()
+{
+    static const bool v = EnvOn("MTG_CANON_SIMKEY");
+    return v;
+}
+
 static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns,
                                            bool second_main)
 {
     TranspositionTable::Key k;
+    const bool canon = CanonSimKeyOn();
+    // Order-insensitive fold of a section: sub-hash each item into its own Key, sort the
+    // (h1,h2) pairs, fold them in sorted order. Sorting (not a commutative sum) keeps the
+    // multiset exact -- no weaker-than-128-bit collision class is introduced.
+    std::vector<std::pair<uint64_t, uint64_t>> canon_items;
+    auto canon_flush = [&]()
+    {
+        std::sort(canon_items.begin(), canon_items.end());
+        for (const auto& [a, b] : canon_items) { Fold(k, a); Fold(k, b); }
+        canon_items.clear();
+    };
 
     Fold(k, 0x5117); // section tag: scalars
     Fold(k, static_cast<uint64_t>(depth));
@@ -11526,10 +11553,18 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // Full ordered library when shuffle can reorder it (see above). Skipped when OFF.
         if (shuffle_keys) { for (const Card& c : p.library) { Fold(k, c.m_name_hash); } }
 
-        Fold(k, 0x4A00 + static_cast<uint64_t>(pi)); // sub-section: hand (ordered)
+        Fold(k, 0x4A00 + static_cast<uint64_t>(pi)); // sub-section: hand (ordered; multiset when canon)
         Fold(k, static_cast<uint64_t>(p.hand.size()));
         for (const Card& c : p.hand)
         {
+            if (canon)
+            {
+                TranspositionTable::Key ck;
+                Fold(ck, c.m_name_hash);
+                if (c.m_is_staged) { Fold(ck, static_cast<uint64_t>(c.m_staged_expiry)); }
+                canon_items.emplace_back(ck.h1, ck.h2);
+                continue;
+            }
             Fold(k, c.m_name_hash);
             // A staged card's expiry changes when it can still be played, so two hands
             // with identical names but different staged expiries are different rollout
@@ -11537,6 +11572,7 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             // prior key (byte-identical results).
             if (c.m_is_staged) { Fold(k, static_cast<uint64_t>(c.m_staged_expiry)); }
         }
+        if (canon) { canon_flush(); }
 
         Fold(k, 0x57A6 + static_cast<uint64_t>(pi)); // sub-section: staged cards
         Fold(k, static_cast<uint64_t>(p.staged_cards.size()));
@@ -11584,31 +11620,35 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         }
     }
 
-    Fold(k, 0xB1F1); // section tag: battlefield (ordered)
+    Fold(k, 0xB1F1); // section tag: battlefield (ordered; multiset when canon)
     Fold(k, static_cast<uint64_t>(state.battlefield.size()));
     for (const Permanent& perm : state.battlefield)
     {
-        Fold(k, perm.card.m_name_hash);
-        Fold(k, static_cast<uint64_t>(perm.controller_index));
-        Fold(k, perm.tapped ? 1u : 0u);
-        Fold(k, perm.entered_this_turn ? 1u : 0u);
-        Fold(k, perm.is_animated ? 1u : 0u);
-        Fold(k, static_cast<uint64_t>(perm.charge_counters));
+        TranspositionTable::Key ck;             // canon: per-perm sub-key, folded sorted below
+        TranspositionTable::Key& tk = canon ? ck : k;
+        Fold(tk, perm.card.m_name_hash);
+        Fold(tk, static_cast<uint64_t>(perm.controller_index));
+        Fold(tk, perm.tapped ? 1u : 0u);
+        Fold(tk, perm.entered_this_turn ? 1u : 0u);
+        Fold(tk, perm.is_animated ? 1u : 0u);
+        Fold(tk, static_cast<uint64_t>(perm.charge_counters));
         // Cumulative-upkeep age (Varchild's War-Riders): future-determining across simulated turns
         // (a rollout's later upkeeps gift age x tokens), so two states differing only in age must
         // not share a TT entry. Folded ONLY when nonzero, so every deck without a cumulative-upkeep
         // permanent keeps the EXACT prior key (byte-identical).
         if (perm.age_counters > 0)
-        { Fold(k, 0xA6E0); Fold(k, static_cast<uint64_t>(perm.age_counters)); }
-        Fold(k, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_power_bonus)));
-        Fold(k, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_tough_bonus)));
-        Fold(k, static_cast<uint64_t>(static_cast<int64_t>(perm.damage)));
+        { Fold(tk, 0xA6E0); Fold(tk, static_cast<uint64_t>(perm.age_counters)); }
+        Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_power_bonus)));
+        Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_tough_bonus)));
+        Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.damage)));
         for (const Counter& ctr : perm.counters)
         {
-            Fold(k, static_cast<uint64_t>(ctr.type));
-            Fold(k, static_cast<uint64_t>(static_cast<int64_t>(ctr.count)));
+            Fold(tk, static_cast<uint64_t>(ctr.type));
+            Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(ctr.count)));
         }
+        if (canon) { canon_items.emplace_back(ck.h1, ck.h2); }
     }
+    if (canon) { canon_flush(); }
 
     return k;
 }
@@ -11618,6 +11658,17 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
 // pre-combat decisions. A post-combat (second) main is played only when
 // second_main is set (greedy, via Solve) — see AIEngine::TakeTurn for why it is
 // otherwise skipped. Returns the win turn, or max_turns+1 if not won in time.
+// MTG_TT_NOWIN_CACHE: DEFAULT OFF pending measurement. The LEAF table (TranspositionTable, written by
+// SimulateToEnd) has the same asymmetry FSLineCache had before 2026-08-05 -- it stores only WINS, so a
+// position whose rollouts never find a win caches nothing and every leaf re-rolls from scratch.
+// Measured on treasure_hunt seed 9010 gi 1: 138,346 lookups, 0 stores, 100% no-win.
+// See docs/design/th-d5-five-hour-game.md.
+inline bool TTNoWinCacheOn()
+{
+    static const bool v = EnvOn("MTG_TT_NOWIN_CACHE");
+    return v;
+}
+
 static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                              SearchBudget* budget, int cutoff_turn,
                              bool second_main, TranspositionTable* tt)
@@ -11812,11 +11863,35 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             }
             return *cached;
         }
+        // Bound-qualified NO-WIN. The entry answers only "no win at turn <= bound", so a query asking
+        // about a LATER turn than the refutation covered must re-roll. Cheap: one extra map probe on
+        // the miss path, and only when the flag is on.
+        if (TTNoWinCacheOn())
+        {
+            const int* bound = tt->LookupNoWinBound(key);
+            if (bound != nullptr && cutoff_turn <= *bound) { PROF_INC(tt_nowin_hit); return max_turns + 1; }
+        }
     }
+
+    // Watermark: SimulateToEndImpl returns a FALSE no-win when the budget overruns (it bumps
+    // g_fs_trunc_events at that site). Such a result is "I ran out", not "there is no win", and
+    // storing it would poison the table with fabricated losses.
+    const unsigned long long trunc_at_entry = g_fs_trunc_events;
 
     int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
 
-    if (tt != nullptr && result <= max_turns) { tt->Store(key, result); }
+    if (tt != nullptr && result <= max_turns) { PROF_INC(tt_stores); tt->Store(key, result); }
+    else if (tt != nullptr)
+    {
+        PROF_INC(tt_nowin);
+        // The rollout aborts at `turn > cutoff_turn`, so the refutation covers exactly cutoff_turn --
+        // clamped to max_turns+1, the widest question the search can ask, so an unbounded query hits.
+        if (TTNoWinCacheOn() && g_fs_trunc_events == trunc_at_entry)
+        {
+            PROF_INC(tt_nowin_stored);
+            tt->StoreNoWin(key, std::min(cutoff_turn, max_turns + 1));
+        }
+    }
     return result;
 }
 
@@ -12125,6 +12200,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
 {
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
     if (state.turn_number > cutoff)    { return { max_turns + 1, {} }; }  // can't beat incumbent
+#ifdef MTG_PROFILE
+    if (state.turn_number >= 0 && state.turn_number < 12) { PROF_INC(fsw_by_turn[state.turn_number]); }
+    if (depth >= 0 && depth < 12)                         { PROF_INC(fsw_by_depth[depth]); }
+#endif
     // Mid-pass overrun: this pass has blown far past its budget estimate; bail out with a
     // no-win so FullSearchLine rolls back to the last completed pass (see SetOverrunLimit).
     if (budget && budget->Overrun())   { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
@@ -12188,9 +12267,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // No projected-`wins_this_turn` shortcut: lethality is decided by actually
     // simulating each plan below, so the committed line's win turn always matches
     // replaying it (the projection can over-count vs ApplyPlanDirect+SimulateCombat).
-    // Searched-breakpoint fan-out is emitted only at the COMMITTED node (nest 0) -- the play this
-    // turn actually makes. Deeper nodes are lookahead and keep the cheap greedy continuation; see
-    // g_bp_root_enum for why fanning out everywhere costs more budget than it buys.
+    // Searched-breakpoint fan-out: `bp_root` marks the COMMITTED node (nest 0), but since
+    // BpSearchInRollouts() defaulted ON the fan-out is emitted at EVERY ply and every rollout turn
+    // (AppendBreakpointVariants gates on `!g_bp_root_enum && !BpSearchInRollouts()`, which never
+    // fires by default) -- root-only was measured to recover none of the gain (see the flag's
+    // comment). bp_root still gates root-only concerns (tie scan, landfan trace). A stale version
+    // of this comment claimed deeper nodes keep the greedy continuation; that mis-aimed the whole
+    // 2026-08-06 depth-curve investigation (th-d5-five-hour-game.md).
     const bool bp_root = (g_fsline_nest == 0);
     FsLineNestGuard _fs_nest;
     g_bp_root_enum = bp_root;
@@ -12259,6 +12342,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     static const bool s_trace_tie = TRACE_ON("tie");
     const bool tie_scan_here = s_trace_tie && bp_root;
     std::vector<std::pair<int, std::vector<std::string>>> tie_scan;
+    PROF_INC(fsw_nodes);
+    PROF_ADD(fsw_cands, pre.size());
     for (const TurnSolver::Plan& p : pre)
     {
         // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
@@ -14586,6 +14671,34 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     return k;
 }
 
+// Probe for the TH depth-curve regression (docs/design/th-d5-five-hour-game.md): is the enum memo
+// below THRASHING (its 8192 cap is cleared wholesale on overflow), and how many DISTINCT breakpoint
+// states does a game really visit? MTG_BP_ENUM_PROBE=1 prints the tallies at exit; the counters are
+// only bumped under the flag, so unset is byte-identical.
+namespace
+{
+    struct BpEnumProbe
+    {
+        std::atomic<uint64_t> hits{0};      // memo returns
+        std::atomic<uint64_t> misses{0};    // full EnumeratePlansWithLand derivations
+        std::atomic<uint64_t> clears{0};    // wholesale cache clears (the suspected thrash)
+        ~BpEnumProbe()
+        {
+            if (!EnvOn("MTG_BP_ENUM_PROBE")) { return; }
+            std::fprintf(stderr, "[bp-enum] hits=%llu misses=%llu clears=%llu\n",
+                         static_cast<unsigned long long>(hits.load()),
+                         static_cast<unsigned long long>(misses.load()),
+                         static_cast<unsigned long long>(clears.load()));
+        }
+    };
+    BpEnumProbe g_bp_enum_probe;
+    inline bool BpEnumProbeOn()
+    {
+        static const bool on = EnvOn("MTG_BP_ENUM_PROBE");
+        return on;
+    }
+}
+
 std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameState& state,
                                                                    bool is_pre_combat)
 {
@@ -14597,18 +14710,25 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
     // Capped so a long game cannot grow it without bound, and thread_local because the batch runner
     // plays games concurrently. MTG_NO_BP_ENUM_CACHE disables it -- results must be identical either
     // way, and the smoke digests are the check. See docs/design/post-breakpoint-search.md.
+    // MTG_BP_ENUM_CACHE_CAP overrides the cap (value-carrying; A/B probe for the memo-thrash
+    // question above -- results must be identical at ANY cap, only the wall clock may move).
     static const bool s_cache = !EnvOn("MTG_NO_BP_ENUM_CACHE");
     using BpEnumMap = std::unordered_map<TranspositionTable::Key, std::vector<Plan>,
                                          TranspositionTable::KeyHash>;
     static thread_local BpEnumMap cache;
-    constexpr std::size_t kBpEnumCacheCap = 8192;
+    static const std::size_t s_bp_enum_cap =
+        static_cast<std::size_t>(std::max(1, EnvInt("MTG_BP_ENUM_CACHE_CAP", 8192)));
 
     TranspositionTable::Key key;
     if (s_cache)
     {
         key = BuildBreakpointKey(state, is_pre_combat);
         BpEnumMap::const_iterator it = cache.find(key);
-        if (it != cache.end()) { return it->second; }
+        if (it != cache.end())
+        {
+            if (BpEnumProbeOn()) { g_bp_enum_probe.hits.fetch_add(1, std::memory_order_relaxed); }
+            return it->second;
+        }
     }
 
     ++g_bp_enum_depth;   // suppress the fan-out: this IS the continuation list, not a new decision
@@ -14617,7 +14737,12 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
 
     if (s_cache)
     {
-        if (cache.size() >= kBpEnumCacheCap) { cache.clear(); }
+        if (BpEnumProbeOn()) { g_bp_enum_probe.misses.fetch_add(1, std::memory_order_relaxed); }
+        if (cache.size() >= s_bp_enum_cap)
+        {
+            if (BpEnumProbeOn()) { g_bp_enum_probe.clears.fetch_add(1, std::memory_order_relaxed); }
+            cache.clear();
+        }
         cache.emplace(key, plans);
     }
     return plans;

@@ -163,6 +163,13 @@ static const bool  s_searched_discard = EnvOn("MTG_SEARCHED_DISCARD", true);
 // Drop the committed line when the searched discard deviates from the heuristic pick (the line was
 // searched assuming the heuristic shed). MTG_DISCARD_RELINE=0 keeps replaying the stale line.
 static const bool  s_discard_reline    = EnvOn("MTG_DISCARD_RELINE", true);
+// MTG_DISCARD_NODE (docs/design/searched-discard-as-search-node.md): the probe is RETIRED -- the
+// cleanup shed is decided IN-SEARCH (Plan::discard_choice, replayed by the lockstep pin above) or
+// by the provider's top pick; the out-of-band trial games never run. DEFAULT ON (user, 2026-08-06:
+// the probe is an oracle replacing search judgment -- neither of the two sanctioned roles; its
+// measured value, hinata +0.005..0.010 / antilife +0.007..0.008 on train seeds, is accepted as
+// the price of removing the class). =0 is the exact legacy hatch (probe + reline restored).
+static const bool  s_discard_node      = EnvOn("MTG_DISCARD_NODE", true);
 // MTG_SEARCHED_VIAL: the Aether Vial upkeep charge is a real BRANCH (charge / hold), not a rule.
 // Holding at the current count keeps this turn's free deploy of an MV-k creature; charging trades it
 // for an MV-(k+1) deploy next turn. The heuristic (WantVialCharge: hold while a creature of the
@@ -398,6 +405,7 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
 
     // New game: drop any committed full-depth line from a previous game.
     m_committed_line.clear();
+    m_discard_choice_pin = -1;
     m_fd_best_win  = max_turns + 1;
     m_fd_best_turn = 0;
 
@@ -1006,6 +1014,8 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
     // real game is mid-way through replaying.
     std::deque<TurnSolver::PhasePlan> saved_line = std::move(m_committed_line);
     m_committed_line.clear();
+    const int saved_discard_pin = m_discard_choice_pin;
+    m_discard_choice_pin = -1;
     GameEngine engine(*this);
     int win_turn = engine.PlayOutFrom(trial, max_turns, from);
     if (lands_out)
@@ -1016,6 +1026,7 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
         *lands_out = n;
     }
     m_committed_line = std::move(saved_line);
+    m_discard_choice_pin = saved_discard_pin;
     m_in_rollout = false;
     m_logger     = saved;
     return win_turn > 0 ? win_turn : max_turns + 1;
@@ -1891,6 +1902,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                       &committed_win, &committed_sub_depth);
             }
             PROF_ADD_NODES(budget.Used());
+            PROF_RECORD_DECISION(state.turn_number, is_pre_combat_main, budget.Used());
+
+            // Cleanup-discard lockstep: pin the executing plan's searched shed choice for this
+            // turn's real cleanup (ChooseDiscard). Write-when->=0, exactly like ApplyPlanDirect's
+            // scripted_discard_choice write on the rollout side, so a second main's plan without
+            // the axis leaves a pre-combat pin standing -- the same last-writer-wins the scored
+            // line saw. Inert while every provider's axis width is 1 (no plan carries the field).
+            if (plan.discard_choice >= 0) { m_discard_choice_pin = plan.discard_choice; }
 
             // Divergence log (MTG_DIVERGENCE_LOG): on the search-driven path, compare the search's
             // committed plan to what greedy d0 would do at this SAME untouched state (diagnosis only;
@@ -3445,6 +3464,21 @@ Card* AIEngine::ChooseDiscard(GameState& state)
     if (heur < 0) { return &ap.hand[0]; }
     const int hand_size = static_cast<int>(ap.hand.size());
 
+    // LOCKSTEP (stage 1, docs/design/searched-discard-as-search-node.md): the executing plan's
+    // searched shed (Plan::discard_choice via m_discard_choice_pin) decides the FIRST shed of the
+    // real cleanup -- the search already chose among the provider's candidates under the same
+    // assumptions the committed line encodes, so re-deciding here (probe or heuristic) would
+    // deviate from the scored line. Consume-and-clear on first shed, clamped -- byte-for-byte the
+    // rollout's semantics (TurnSolver::SimulateEndAndStartNextTurn). Never inside a rollout: a
+    // shared-engine playout saves/restores the pin and sheds heuristically, as it always has.
+    if (!m_in_rollout && m_discard_choice_pin >= 0)
+    {
+        const std::size_t pick = std::min(static_cast<std::size_t>(m_discard_choice_pin),
+                                          cand.size() - 1);
+        m_discard_choice_pin = -1;
+        return &ap.hand[cand[pick]];
+    }
+
     // SEARCHED cleanup discard (mirrors the lookahead bottomer, BottomCards): roll out a full
     // clairvoyant game for discarding each candidate (the card truly goes to the GRAVEYARD, unlike
     // bottoming which puts it on the library bottom) and keep only the discards that preserve the
@@ -3457,12 +3491,23 @@ Card* AIEngine::ChooseDiscard(GameState& state)
     //     same cleanup, so a nested searched pass would blow up exponentially. Rollout cleanups use
     //     the heuristic (as before), so rollout labels are unchanged and this only refines the REAL
     //     top-level discard decision.
-    if (s_searched_discard && LookaheadBottoming() && !m_in_rollout && hand_size > 1)
+    // THE RETURNED LIST IS THE TRIAL SET (user design 2026-08-06: the heuristic decides the
+    // candidates and returns a list of some size; ALL of those options are searched, no more).
+    // A single-entry return (TreasureHunt's keep-set rule -- commissioned for exactly its
+    // 15-25-card cleanups and, until now, never consulted here) decides the shed outright with
+    // zero trial games: comparing one option to nothing is a no-op, so the rollout is skipped.
+    // The base ranking returns the full hand, so generic decks keep the historical fan.
+    if (!s_discard_node && s_searched_discard && LookaheadBottoming() && !m_in_rollout
+        && hand_size > 1 && cand.size() > 1)
     {
-        std::vector<int> win_turn(hand_size, 0);
+        // Un-trialed entries keep INT_MAX so they can never read as win-optimal below. (best_win
+        // is always <= max_turns + 1 once any trial ran, and the heuristic pick always runs.)
+        std::vector<int> win_turn(hand_size, std::numeric_limits<int>::max());
         int best_win = std::numeric_limits<int>::max();
-        for (int j = 0; j < hand_size; ++j)
+        for (int j : cand)
         {
+            if (j < 0 || j >= hand_size) { continue; }
+            if (win_turn[j] != std::numeric_limits<int>::max()) { continue; }   // duplicate entry
             GameState trial = state;
             Player& tap = trial.ActivePlayer();
             tap.graveyard.push_back(tap.hand[j]);
@@ -3485,6 +3530,7 @@ Card* AIEngine::ChooseDiscard(GameState& state)
                       << " depth=" << m_lookahead_depth << " heur=" << ap.hand[heur].m_name << "]\n";
             for (int j = 0; j < hand_size; ++j)
             {
+                if (win_turn[j] == std::numeric_limits<int>::max()) { continue; }   // not offered by the heuristic
                 std::cerr << "  discard " << ap.hand[j].m_name << " -> win=" << win_turn[j]
                           << (win_turn[j] == best_win ? " *" : "") << "\n";
             }
