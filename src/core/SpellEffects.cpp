@@ -732,6 +732,12 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         int b = SourceMaxNet(pp, dd);
         if (IsScaledManaLand(dd))
         { b = std::max(b, ScaledManaCreatureCount(state) - dd.params.mana_per_creature_feeder_generic); }
+        // Domain source (Faeburrow / Bloom Tender): one tap yields |domain| mana (2-5), but the
+        // static bound reads ManaProducedPerTap = 1 -- the under-count made this LOSSY: the gate
+        // pruned payable WUBRG costs and the executor silently dropped legal casts the search had
+        // committed (the FiveColour claude-play sweep's convergent finding, 14/18 games).
+        if (dd.params.domain_mana)
+        { b = std::max(b, static_cast<int>(EffectiveProduces(state, active, dd).size())); }
         return b;
     };
 
@@ -973,13 +979,17 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 : 0;
             // Domain source (Faeburrow / Bloom Tender): one tap yields one mana of EACH colour
             // among controlled permanents -- handled as its own branch (the single-colour loop
-            // below would misprice it as amt-of-one-colour).
+            // below would misprice it as amt-of-one-colour). MUST use the DYNAMIC domain
+            // (EffectiveProduces -> DomainColors), not the static `produces` hint (WUBRG): the
+            // static list both over-credits colours the board doesn't have (an illegal payment
+            // the greedy path would never make) and diverges from tap_source/the enumeration.
             if (def->params.domain_mana)
             {
-                if (!produces.empty())
+                const std::vector<Color>& dom = EffectiveProduces(state, active, *def);
+                if (!dom.empty())
                 {
                     ManaPool f = floating;
-                    for (Color c : produces) { f.Add(c, 1); }
+                    for (Color c : dom) { f.Add(c, 1); }
                     if (activate(f)) { return true; }
                 }
                 continue;

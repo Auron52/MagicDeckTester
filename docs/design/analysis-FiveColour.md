@@ -189,6 +189,23 @@ banking caveat (phase-crossing mana), Archangel/Hellkite flip second main on.
   docs/design/enumeration-product-backstop.md. analyze_deck.py gained --analyzer-seed
   (mtg-analyze --seed passthrough) so profile runs are reproducible; Stage 4 relaunched
   with seed 42.
+- **5d claude-play sweep (2026-08-07, 18 Sonnet agents @ commit 10f3541) — 2 REAL BUGS FOUND,
+  BOTH FIXED:** 14/18 games independently converged on a domain_mana payment bug: the
+  backtracker's B&B total-mana gate read a domain source (Faeburrow/Bloom Tender) as 1 mana
+  (static ManaProducedPerTap) instead of |domain| (2-5), pruning payable WUBRG costs -> the
+  executor silently DROPPED legal committed casts (Cosmic Spider-Man stuck a full turn, T3->T4,
+  across many games); the same branch also credited the static WUBRG `produces` hint instead of
+  the dynamic domain colours (an over-credit that could pay colours the board lacks). Both fixed
+  in SpellEffects.cpp (source_max_net domain branch + EffectiveProduces in the domain tap).
+  gi15 also exposed a search-space gap: Equip variants only paired battlefield pieces, so
+  "cast Greaves + Archangel, equip {0}, attack with haste" was unreachable -> Equip enumeration
+  now draws BOTH sides from battlefield + hand (aura same-turn-target precedent; ApplyEquip is
+  already stranded-safe). gi12's Claude-faster game (T4 vs AI T5) is attributed to the payment
+  bug taxing the AI's committed lines (re-checked post-fix). NOTE: the sweep's 18 protocol games
+  shared one shuffle (seed fixed, only --game-index/spawns varied) -- coverage was 1 opening
+  played 18 ways; the confirmation pass uses distinct seeds. Post-fix: smoke 30/30 + regression
+  50/50 byte-identical (no existing deck has domain_mana/equipment); 18-shuffle d5/b200
+  benchmark avg 5.3889; profile REGENERATED (seed 42) for the play change.
 - **Battery GATE PASS (2026-08-07, post-fix rerun):** coverage/card_fields/viewer/viewer_wiring/
   mismatch/play_invariants ALL PASS; mismatch clean across seeds 7001+7002 x 60 games; zero play
   advisories. Only claude_sweep outstanding (5d).

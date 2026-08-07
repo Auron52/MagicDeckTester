@@ -3156,35 +3156,58 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             actions.push_back(std::move(a));
         }
 
-        // Equipment (Lightning Greaves): one Equip action per (controlled Equipment, controlled
-        // creature it is not already attached to). Sorcery-speed, no tap; variants of one
-        // Equipment are mutually exclusive per plan (shared sac_source_id). The search decides
-        // whether re-pointing (usually onto a summoning-sick bomb, for equip_grants_haste) beats
-        // leaving it -- a no-op re-point onto the current host is not emitted.
-        for (const Permanent& eq : state.battlefield)
+        // Equipment (Lightning Greaves): one Equip action per (Equipment, creature host) pair.
+        // BOTH sides may be same-turn casts still in HAND (aura same-turn-target precedent): the
+        // trailing apply locates equipment + host on the battlefield by card number, so a pair
+        // whose pieces the plan casts earlier in the same main resolves normally, and a stranded
+        // pick (piece not cast) is a no-op. Without the hand side, the deck's marquee line --
+        // cast Greaves + Maelstrom Archangel, equip {0}, attack with haste NOW -- was structurally
+        // unreachable (claude-play sweep gi15). Sorcery-speed, no tap; variants of one Equipment
+        // are mutually exclusive per plan (shared sac_source_id -> one PlanGroupKey family).
         {
-            if (eq.controller_index != state.active_player_index) { continue; }
-            const CardDefinition* ed = CardDatabase::Instance().LookupCached(eq.card);
-            if (!ed || !ed->params.is_equipment) { continue; }
-            for (const Permanent& cr : state.battlefield)
+            // (id, def, entered_this_turn) for each equipment / host candidate, battlefield + hand.
+            std::vector<std::pair<const CardDefinition*, const Card*>> equips;
+            struct Host { int id; bool fresh; bool haste; };
+            std::vector<Host> hosts;
+            std::vector<int>  attached_to;   // parallel to equips: current host id (battlefield only)
+            for (const Permanent& p : state.battlefield)
             {
-                if (cr.controller_index != state.active_player_index) { continue; }
-                if (!cr.card.IsCreature() && !cr.is_animated) { continue; }
-                if (eq.equipped_to == cr.card.m_number) { continue; }   // already attached: no-op
-                Action a;
-                a.kind           = Action::Kind::Equip;
-                a.card_name      = eq.card.m_name;
-                a.hand_index     = -1;
-                a.cost           = ManaCost{};
-                a.cost.generic   = ed->params.equip_cost_generic;
-                a.sac_source_id  = eq.card.m_number;
-                a.sac_victim_id  = cr.card.m_number;
-                // Haste onto a fresh creature = enabling a whole attack; anything else is a
-                // repositioning nicety the search can still take.
-                a.eval           = (ed->params.equip_grants_haste && cr.entered_this_turn
-                                    && !cr.card.HasKeyword(Keyword::Haste)) ? DMG : 1;
-                a.is_noncreature = true;
-                actions.push_back(std::move(a));
+                if (p.controller_index != state.active_player_index) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (!d) { continue; }
+                if (d->params.is_equipment) { equips.push_back({ d, &p.card }); attached_to.push_back(p.equipped_to); }
+                if (p.card.IsCreature() || p.is_animated)
+                { hosts.push_back({ p.card.m_number, p.entered_this_turn, p.card.HasKeyword(Keyword::Haste) }); }
+            }
+            for (const Card& c : ap.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (!d) { continue; }
+                if (d->params.is_equipment) { equips.push_back({ d, &c }); attached_to.push_back(0); }
+                if (d->card.IsCreature())
+                { hosts.push_back({ c.m_number, /*fresh=*/true, d->card.HasKeyword(Keyword::Haste) }); }
+            }
+            for (std::size_t e = 0; e < equips.size(); ++e)
+            {
+                const CardDefinition* ed = equips[e].first;
+                for (const Host& h : hosts)
+                {
+                    if (attached_to[e] == h.id && h.id != 0) { continue; }   // already attached: no-op
+                    if (equips[e].second->m_number == h.id)  { continue; }   // never self
+                    Action a;
+                    a.kind           = Action::Kind::Equip;
+                    a.card_name      = equips[e].second->m_name;
+                    a.hand_index     = -1;
+                    a.cost           = ManaCost{};
+                    a.cost.generic   = ed->params.equip_cost_generic;
+                    a.sac_source_id  = equips[e].second->m_number;
+                    a.sac_victim_id  = h.id;
+                    // Haste onto a fresh creature = enabling a whole attack; anything else is a
+                    // repositioning nicety the search can still take.
+                    a.eval           = (ed->params.equip_grants_haste && h.fresh && !h.haste) ? DMG : 1;
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
             }
         }
 
