@@ -1,6 +1,17 @@
 # Cleanup discard as a search node (retire the probe oracle)
 
-**Status: IN PROGRESS 2026-08-06 (Fable). Stage 1 not yet committed.**
+**Status: ADOPTED 2026-08-06 — the probe is RETIRED (`MTG_DISCARD_NODE` default ON; `=0` is the
+exact legacy hatch). User's call, made with the cost in hand ("I want to drop the probe as I
+have said many times"): train hinata +0.005..0.010 ×4 / antilife +0.007..0.008 ×2; held-out
+overnight SMALLER per case (+0.001..0.007 across 15 of 120 cases, discard-reaching decks only,
+all other decks byte-identical at every tier). Per the user's bar the regressions were then
+CLASSIFIED (4 budget churn, 16 visible-info ranking mistakes, 0 clairvoyance) and two shed
+heuristics adopted with them: the SPARE-COPY discard band (`MTG_SPARE_COPY_BAND`, provider
+opt-out `SpareCopyDiscardBand` — dragonstorm opts out) and CreatureGiving's DotH-ranked-last,
+recovering 12 of the 16 (hinata overnight −0.072 net, 11/0) with 0 worse. GT accepted all three
+tiers on the final binary. The blind width axis
+stays at 1 everywhere (refuted below); any future widening must be bp-style apply-time
+discovery→fan — that is the open follow-up, not a requirement.**
 User-directed redesign; the architectural ruling and the agreed shape are recorded below verbatim
 so this survives context loss. Predecessors: `docs/design/th-d5-five-hour-game.md` (the probe
 blowup + the heuristic-prune fix), `docs/design/post-breakpoint-search.md` (the `bp_choice`
@@ -152,8 +163,74 @@ D. **Gate the blind emission on a provider predicate** ("will this plan plausibl
 The temporary `MTG_DISCARD_WIDTH` base-hook lever is LOCAL/UNCOMMITTED (DecisionProvider.h) —
 revert or keep per the pick.
 
+## Classification of the retirement's regressions (2026-08-06) — MISTAKES, not clairvoyance
+
+User's bar: regressions must be classified before accepting (budget churn OK; clairvoyance OK
+and does not block adoption; mistakes get provider heuristics). Of 22 distinct changed games:
+**4 recover at depth 9 / unbounded** (churn: antilife gi218, ds gi415, hinata gi99/gi286);
+**16 SURVIVE** — expected, since the discard is not in the search space in either arm; the gap
+is heuristic-vs-clairvoyant-probe and no budget can cross it. `MTG_DISCARD_TRACE` trial tables
+(`logs/vlq_all_ab/dnode_unbounded/trace_*`) show the survivors are almost all VISIBLE-INFORMATION
+ranking mistakes:
+- hinata 6/6: heuristic sheds highest-MV (often the SINGLETON Hinata — gi21 sheds it into a
+  loss holding Reality Spasm ×4); optimal is a spare copy every time (Spasm×4, Crackle×3,
+  Preordain×2, Wake×2, Hinata's own dup).
+- antilife 4/6 same shape (Plague Drone×3, Tainted Remedy×2, Invigorate×2); gi188/gi382 not
+  reachable by the dup rule (stay at today's level).
+- creature_giving 2/2: sheds Defense of the Heart (the engine) for being highest-MV.
+- dragonstorm gi79: the INVERSE — copy-discardable protection sheds one of Dragonstorm×2 and
+  either shed is a loss (Apex chain wants both); gi112 subtle (optimal sheds Apex, unclear rule).
+
+**The fixes (all provider/base-ranking, honest information only):**
+1. Base ranking: a SPARE-COPY band before highest-MV — shed a name with ≥2 hand copies first
+   (protection is the ONLY required-piece filter, so DiscardProtectScope's redundant-copy
+   semantics carry over; lands excluded), MV-desc within the band. Hatch `MTG_SPARE_COPY_BAND=0`.
+   (TH overrides its own ranking — unaffected.)
+2. CreatureGivingProvider: Defense of the Heart ranked last (`CleanupDiscardCandidates` override).
+3. ~~DragonstormProvider: ALL copies of Dragonstorm protected~~ — REFUTED before it was written:
+   the ranking's own history records that protecting every Dragonstorm copy turned three wins
+   unwon (s7007 gi79/gi193/gi379, comment block above `CleanupDiscardProtected`). ds gi79/gi112
+   stay at the accepted level; the real fix is ritual-VALUE shed ranking (follow-up below).
+
+**Verified on the 16 survivors (unbounded, per-game): 12 recover to the probe's result**
+(hinata 6/6 incl. gi21 loss→T8; creature_giving 2/2; antilife 4/6, gi727 BEATING the probe 4v5),
+4 hold at the accepted level (antilife gi188/gi382, ds gi112/gi79), 0 worse. Naive per-first-shed
+projections were wrong twice — the band changes ROLLOUT sheds too, so whole lines move; only
+measured games count.
+
+**The adoption gate then caught a deck-wide band regression the survivor games could not see:**
+dragonstorm worse in 11/12 overnight cells (+0.063 net, 0 better; +0.012 smoke, +0.012
+regression), entirely the band (`MTG_SPARE_COPY_BAND=0` → byte-identical to the pre-band accept,
+confirmed on cell d0 s4004). The band's premise — a duplicate is a spare — is false for a storm
+deck, whose go-off consumes ritual copies cumulatively (storm count + float). A card-level
+`IsManaRitual` exclusion would undo hinata gi21 (Reality Spasm classifies as a ritual, and
+shedding the spare Spasm is that game's fix), so the fix is the archetype hook:
+`DecisionProvider::SpareCopyDiscardBand` (default true), `DragonstormProvider` → false, which is
+byte-identical to pre-band for ds and touches nothing else (hinata d5 s7007 cell unchanged).
+
+**Final gate (heuristics vs the probe-retired baseline, avg-win-turn net across cells):**
+overnight hinata −0.0716 (11 better / 0 worse of 12), antilife −0.0140 (6/3),
+creature_giving −0.0075 (5/0), slivers −0.0010, auras ~0, dragonstorm 0.0000 after the opt-out;
+regression hinata −0.0600 (4/0), antilife −0.0113 (3/0); smoke digest-churn only at equal or
+±0.001 averages. Everything not discard-reaching is byte-identical.
+
+## Follow-ups (recorded, none block adoption — user)
+
+- **Dragonstorm ritual-VALUE shed ranking**: gi79's optimal shed is Pyretic Ritual, not Seething
+  Song / Desperate Ritual — visible logic (splice value, net mana per copy) the MV rule cannot
+  see; gi112 is the subtler Apex-vs-Utvara call. This, not copy-protection and not the spare-copy
+  band, is the honest fix for the two ds survivors.
+- **antilife gi188/gi382 residuals**: not reachable by the dup rule; trial tables show no simple
+  visible-info predicate separating their optimal sheds.
+- **bp-style apply-time discovery→fan** if the discard axis is ever widened past 1 (the blind
+  per-plan emission is refuted above; fan only plans whose cleanup actually fires).
+
 ## Session state (for resume)
 
-- 2026-08-06: stages 1–2 committed; stage-3 sweep refuted the blind axis; fork presented.
-  Knights live-model matrix closed separately (trust=5 honest at 2000g; t4's −2.1% Ir not
-  available on the live model).
+- 2026-08-06: stages 1–2 committed; blind axis refuted; probe-retirement default flip built and
+  gated (3 tiers run, accepts UNCOMMITTED pending this classification); fixes above being
+  implemented, then re-gate → accept → commit → push. Knights live-model matrix closed
+  separately (trust=5 honest at 2000g).
+- 2026-08-07: spare-copy band + CG override verified (12/16 recover, 0 worse); dragonstorm
+  band regression caught at the gate, root-caused, fixed via the provider opt-out; final 3-tier
+  gate re-run under the opt-out binary → accepted → adopted in ONE commit with GT + this doc.

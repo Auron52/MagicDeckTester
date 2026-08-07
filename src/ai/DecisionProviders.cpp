@@ -5552,6 +5552,28 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
 
 // ---- CreatureGivingProvider -------------------------------------------------
 
+// The cleanup shed must never pitch the engine. Defense of the Heart is the deck's whole plan
+// (fetch Hunted Phantasm + Wurm; the drain chain follows), and the generic highest-MV rule ranks
+// it FIRST when the hand floods -- the probe-retirement classification (2026-08-06, gi564/gi798:
+// shedding DotH rolled out a turn worse than shedding ANY other card) is the measurement. Rank
+// every DotH copy last among the otherwise-ranked candidates; the spare-copy band and MV rule
+// order the rest. Visible information only. docs/design/searched-discard-as-search-node.md.
+std::vector<int> CreatureGivingProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    std::vector<int> base = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
+    const Player& ap = s.players[s.active_player_index];
+    std::vector<int> out, doth;
+    for (int i : base)
+    {
+        if (i >= 0 && i < static_cast<int>(ap.hand.size())
+            && ap.hand[i].m_name == "Defense of the Heart") { doth.push_back(i); }
+        else { out.push_back(i); }
+    }
+    out.insert(out.end(), doth.begin(), doth.end());
+    return out;
+}
+
 std::vector<std::string>
 CreatureGivingProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {

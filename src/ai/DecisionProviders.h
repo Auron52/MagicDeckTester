@@ -321,6 +321,15 @@ public:
     // CastCheapestFirstWithinTier: NOT overridden -- cheapest-first among same-tier accelerants is now
     // the ROOT default (DecisionProvider::CastCheapestFirstWithinTier), shared with every ritual deck.
 
+    // Spare-copy discard band: OFF. The band's premise -- a name with 2+ hand copies has a spare --
+    // fails for a storm deck: the go-off consumes ritual copies CUMULATIVELY (storm count + float),
+    // so a "spare" Rite of Flame is next turn's mana and storm. Card-level exclusion via
+    // IsManaRitual is NOT usable instead: Reality Spasm classifies as a ritual, and shedding a
+    // spare Spasm is exactly the band's biggest measured win (hinata gi21 loss->T8). Adoption gate
+    // 2026-08-06: band-on measured dragonstorm worse in 11/12 overnight cells (+0.063 net, 0
+    // better); off is byte-identical to pre-band. See docs/design/searched-discard-as-search-node.md.
+    bool SpareCopyDiscardBand(const GameState&) const override { return false; }
+
     // Float-colour collapse (Hook: ImpulseFloatColorRedOnly / RestrictSacColorsToHasteAndRed). Apex of
     // Power floats RED only; Lotus Bloom floats RED unless a HASTE Dragon (Karrthus {4}{B}{R}{G} /
     // Kolaghan {4}{B}{R}) is castable this turn (in hand or Apex-staged). Collapses the per-colour
@@ -438,6 +447,8 @@ class CreatureGivingProvider : public GenericProvider
 {
 public:
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

@@ -169,6 +169,13 @@ public:
     // makes lands ammunition. An INPUT to CleanupDiscardCandidates below, not a separate decision.
     virtual bool DiscardLandsFirst(const GameState& s) const = 0;
 
+    // SpareCopyDiscardBand -- cleanup-discard ranking: does the spare-copy band (shed a name with
+    // 2+ hand copies before any unique card; CleanupDiscardRankingWithOrder tier A2) apply to this
+    // deck? Default yes -- the band's premise, "a duplicate is redundant", holds for the decks whose
+    // duplicates are interchangeable engine pieces. It is FALSE for a deck whose whole payoff
+    // consumes copies cumulatively; that judgment is archetype knowledge, so it lives here.
+    virtual bool SpareCopyDiscardBand(const GameState& s) const { (void)s; return true; }
+
     // CleanupDiscardCandidates -- cleanup discard (hand over its size limit): WHICH card to shed,
     // as hand indices in PREFERENCE order. This is the whole rule, provider-owned: the engine keeps
     // only the mechanism (move the chosen card to the graveyard).
@@ -497,6 +504,11 @@ public:
     // dead in most decks -- per 400 d0 games, five of nine suite decks never reach a cleanup
     // discard at all and three more are under 40 -- so a global width would buy plan variants that
     // pin an index nothing ever consumes. A deck that actually makes this decision opts in.
+    // Width > 1 was SWEPT AND REFUTED as a blind per-plan emission (2026-08-06: monotonically
+    // worse on nearly every deck at W=2/4/8 -- budget dilution; the decision fires on a tiny
+    // fraction of turns while every base plan pays a variant). If the axis is ever widened it
+    // must be bp-style -- fan only plans whose simulation actually reaches an over-limit
+    // cleanup. See docs/design/searched-discard-as-search-node.md.
     virtual int CleanupDiscardSearchWidth() const { return 1; }
 
     // ManaSourceRank -- mana-source TAP ORDER: flexibility rank of a mana source (LOWER = tap earlier).

@@ -163,11 +163,13 @@ static const bool  s_searched_discard = EnvOn("MTG_SEARCHED_DISCARD", true);
 // Drop the committed line when the searched discard deviates from the heuristic pick (the line was
 // searched assuming the heuristic shed). MTG_DISCARD_RELINE=0 keeps replaying the stale line.
 static const bool  s_discard_reline    = EnvOn("MTG_DISCARD_RELINE", true);
-// MTG_DISCARD_NODE (stage 2, docs/design/searched-discard-as-search-node.md): retire the probe --
-// the cleanup shed is decided IN-SEARCH (Plan::discard_choice, replayed by the lockstep pin above)
-// or by the provider's top pick; the out-of-band trial games never run. Default OFF until the A/B
-// adopts it; =0 keeps today's probe exactly.
-static const bool  s_discard_node      = EnvOn("MTG_DISCARD_NODE");
+// MTG_DISCARD_NODE (docs/design/searched-discard-as-search-node.md): the probe is RETIRED -- the
+// cleanup shed is decided IN-SEARCH (Plan::discard_choice, replayed by the lockstep pin above) or
+// by the provider's top pick; the out-of-band trial games never run. DEFAULT ON (user, 2026-08-06:
+// the probe is an oracle replacing search judgment -- neither of the two sanctioned roles; its
+// measured value, hinata +0.005..0.010 / antilife +0.007..0.008 on train seeds, is accepted as
+// the price of removing the class). =0 is the exact legacy hatch (probe + reline restored).
+static const bool  s_discard_node      = EnvOn("MTG_DISCARD_NODE", true);
 // MTG_SEARCHED_VIAL: the Aether Vial upkeep charge is a real BRANCH (charge / hold), not a rule.
 // Holding at the current count keeps this turn's free deploy of an MV-k creature; charging trades it
 // for an MV-(k+1) deploy next turn. The heuristic (WantVialCharge: hold while a creature of the
