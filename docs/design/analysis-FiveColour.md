@@ -149,6 +149,9 @@ out silent no-ops.
 - Stage 5 sanity re-run on the shipped profile, same 1000 seeds: monotone in depth
   (d0 6.2640 > d3 5.3370 ≥ d5 5.3350) and not budget-starved (d5/b100 5.3210, −0.014 vs b20).
 - Verify battery: **GATE PASS**, all checks green including `claude_sweep` 0 unresolved.
+- **Post-merge (418fbb8, origin's 27 commits — discard-node + value-model regen): 5.3340**
+  on the same 1000 seeds (−0.001 vs pre-merge; their engine changes, not a FiveColour move).
+  Smoke 30/30 + regression 50/50 PASS on the merged binary against THEIR rebaselined GT.
 
 ### Cost-reframe A/B — SETTLED: COST_NEUTRAL (no lever to pull)
 
