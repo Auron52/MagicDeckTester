@@ -103,6 +103,38 @@ targets. Resolve by reading GoldFishRunner spawn logic + Combat.cpp before writi
 has no `"subtypes": ["Mountain"]` (Island/Plains/Forest have theirs) → unreachable by any
 fetchland's subtype match. Matters here (Scalding Tarn / Wooded Foothills → basic Mountain).
 
+## RESUME STATE 2 (2026-08-07 ~08:30 UTC, second pre-compaction checkpoint)
+
+**Where we are:** the ENTIRE pipeline is done except the Stage 6 report + ONE user decision.
+Commits (phase-1-2-deck-analyzer, all local/unpushed): `0d16691` (cards + engine subsystems +
+atom fix + Unite executor fix), `d50fe0b` (audit tooling + snapshot), `10f3541` (profile +
+ledger + backstop doc), `abdb9a0` (domain-mana payment + same-turn Equip, from the sweep),
+plus a docs commit for the sweep record (in-flight in task b4ulxyho3 — VERIFY it landed:
+`git log --oneline -2`). Smoke 30/30 + regression 50/50 byte-identical at every step.
+
+**In flight (check on resume):**
+- Final verify battery: `logs/fivec_dbg/verify3.out` (task b4ulxyho3; the same command also ran
+  the docs commit first). EXPECTED result: all gates PASS except claude_sweep FAIL (2 unresolved
+  flags -- BY DESIGN, pending the user decision below).
+- Clean cost-reframe A/B (task bcd1kf085): `MTG_COST_REFRAME=0 vs 1`, 200 games d3 seed 90001;
+  arm 0 was still grinding (slow d3 tail is normal for this deck). Earlier verdicts: run 1
+  COST_NEUTRAL (pre-fix binary), run 2 REFRAME_HELPS -0.055 (INVALID -- arms straddled rebuilds).
+  Fold the clean result into the report when it lands; if REFRAME_HELPS repeats, it is a
+  user-decision lever (enable MTG_COST_REFRAME for this deck), not a gate.
+
+**THE remaining user decision (surface in the Stage 6 report):** the 2 unresolved sweep flags in
+'## Claude-play sweep' (Deathrite-funded casts not offered = tempo-only enumeration-coverage gap
+with exact repro; stranded-equip plan noise = cosmetic). Ask: root-cause + fix now, or sign off
+as approved deferrals (add keys under '## Approved deferrals') so the claude_sweep gate goes
+DEFERRED and the deck ships.
+
+**Then:** write the Stage 6 report (numbers: d5/b20 avg 5.5300 @ seeds 4200000+0..999, monotone
+d0 6.6950 > d3 5.5300 = d5 5.5300, not budget-starved (b100 5.5150), 18-shuffle d5/b200 avg
+5.3889 @ 7777; disclosure = '## Approved deferrals' + 'Key disclosure items for 6a' below +
+the battery's Stage 6a disclosure block in logs/fivec_dbg/verify3.out). Registration in
+test/regression_cases.sh tiers = SEPARATE user-initiated step (Creature Giving precedent);
+mulligan profile gen = user-initiated later (mulligan-profile.md).
+
 ## RESUME STATE (2026-08-06, pre-compaction checkpoint)
 
 **Where we are:** ALL implementation phases A–K are DONE and each was smoke-green
