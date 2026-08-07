@@ -972,6 +972,44 @@ static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::
     return has_ritual && !has_payoff;
 }
 
+// Reject a subset whose Equip has a STRANDED piece: the equipment or the host is still in hand and
+// this subset does not cast it. The Equip enumeration deliberately draws both sides from the
+// battlefield AND hand (that is what makes "cast Greaves + Archangel, equip, attack with haste NOW"
+// reachable), and the trailing apply locates both by card number -- so a pick whose piece is never
+// cast simply resolves to nothing. Harmless to search quality (the rollout scores it as a pass) but
+// it pollutes the human-facing plan list with silent no-ops (claude-play sweep, confirmation gi0).
+// Mirrors SubsetHasAuraOnUncastCreature. No Equip candidate -> byte-identical for every deck without
+// equipment.
+static bool SubsetHasStrandedEquip(const GameState& state,
+                                   const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    const Player& ap     = state.ActivePlayer();
+    const int     active = state.active_player_index;
+    auto on_bf = [&](int num) {
+        for (const Permanent& p : state.battlefield)
+            if (p.controller_index == active && p.card.m_number == num) { return true; }
+        return false;
+    };
+    auto cast_here = [&](int num) {
+        for (int jdx : sel)
+        {
+            const Action& d = cands[jdx];
+            if (d.kind != Action::Kind::CastFromHand || d.hand_index < 0
+                || d.hand_index >= (int)ap.hand.size()) { continue; }
+            if (ap.hand[d.hand_index].m_number == num) { return true; }
+        }
+        return false;
+    };
+    auto live = [&](int num) { return num > 0 && (on_bf(num) || cast_here(num)); };
+    for (int idx : sel)
+    {
+        const Action& c = cands[idx];
+        if (c.kind != Action::Kind::Equip) { continue; }
+        if (!live(c.sac_source_id) || !live(c.sac_victim_id)) { return true; }
+    }
+    return false;
+}
+
 // Reject a subset that selects two SacForMana actions for the SAME source (its colour variants are
 // mutually exclusive -- a given Lotus can be tapped+sacrificed for exactly one colour, once). The
 // colour variants are enumerated as independent actions, so this is the analogue of the Vial per-charge
@@ -3303,7 +3341,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 else if (ab.effect == "regrow_multicolored")
                 {
                     bool fuel = false;
-                    for (const Card& c : gy) { if (c.IsMulticolored()) { fuel = true; break; } }
+                    for (const Card& c : gy) { if (ZoneCard(c).IsMulticolored()) { fuel = true; break; } }
                     if (!fuel) { continue; }
                     ev = 2 * DMG;
                 }
@@ -3359,7 +3397,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (pd->params.gy_exile_instant_sorcery_drain > 0)
             {
                 bool fuel = false;
-                for (const Card& c : gy) { if (c.IsInstant() || c.IsSorcery()) { fuel = true; break; } }
+                for (const Card& c : gy) { const Card& z = ZoneCard(c); if (z.IsInstant() || z.IsSorcery()) { fuel = true; break; } }
                 if (fuel)
                 {
                     Action a;
@@ -3377,7 +3415,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (pd->params.gy_exile_creature_lifegain > 0)
             {
                 bool fuel = false;
-                for (const Card& c : gy) { if (c.IsCreature()) { fuel = true; break; } }
+                for (const Card& c : gy) { if (ZoneCard(c).IsCreature()) { fuel = true; break; } }
                 if (fuel)
                 {
                     Action a;
@@ -5052,6 +5090,9 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
+        // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
+        // Inert without an Equip candidate -> byte-identical. Kept in lockstep with the twin below.
+        if (SubsetHasStrandedEquip(state, cands, sel)) { return; }
         // Reject a creature sac-for-mana whose float nothing spends (see the helper). Solve's
         // rituals-for-payoff guard already covers this on the credited/pool path; this also catches
         // the filter fallback, and keeps the rule identical on both sides. Inert without a creature
@@ -9143,6 +9184,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (SubsetHasDuplicateSacSource(cands, sel)) { return; }
+        // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
+        // Inert without an Equip candidate -> byte-identical. Kept in lockstep with Solve's twin.
+        if (SubsetHasStrandedEquip(state, cands, sel)) { return; }
         // Reject a creature sac-for-mana whose float nothing spends -- the dominated branch this
         // enumeration otherwise hands the search (Goblins gi44). Unlike the rituals-for-payoff guard
         // above, declining an in-play outlet keeps BOTH the outlet and the body, so there is no

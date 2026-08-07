@@ -22,6 +22,27 @@
 #include <unordered_map>
 #include <unordered_set>
 
+// ---- Characteristics of a card OUTSIDE the battlefield -----------------------------------------
+// DeckLoader::MakePlaceholder builds every library/hand/graveyard Card from its NAME alone, so the
+// type / colour / mana-cost masks on such a Card are all EMPTY -- `gy_card.IsLand()` is false for a
+// fetchland, `.ManaValue()` is 0 for a 5-drop, `.IsMulticolored()` is false for a gold card. Only a
+// BATTLEFIELD Permanent carries real masks (PlayLandFromHand / CastSpell copy `def.card`). So any
+// characteristic read on a hand/library/graveyard card MUST go through the database definition;
+// this is the single accessor for that. Falls back to the card itself for a synthesized identity
+// with no DB entry (tokens), which does carry its own masks.
+//
+// This bit every graveyard-interaction card added for FiveColour: Deathrite's three abilities never
+// fired (a self-sacrificed fetchland in the graveyard read as a non-land, so the fuel gate was
+// always 0), Garth's Regrowth always took graveyard slot 0 (every MV read as 0), and Jared's -6
+// never found a multicolored card. Pre-existing code already used the equivalent
+// `LookupCached(c) ? d->card.IsLand() : c.IsLand()` idiom inline at its graveyard/hand scans, so no
+// other deck's behaviour moves. See analysis-FiveColour.md (claude-play sweep, seed 7801 gi1).
+inline const Card& ZoneCard(const Card& c)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    return d ? d->card : c;
+}
+
 // A/B opt-out (default ON): retain leftover / over-produced mana (depletion + filter
 // lands forced to over-tap) into the turn-scoped reserve state.floating_mana, so a later
 // same-(main-)phase cast can spend it (CR 500.4). MTG_NO_FLOAT_LEFTOVER=1 disables the
@@ -2120,7 +2141,7 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
         int best = -1, best_mv = -1;
         for (int g = 0; g < static_cast<int>(gy.size()); ++g)
         {
-            const int mv = gy[g].m_mana_cost.ManaValue();
+            const int mv = ZoneCard(gy[g]).m_mana_cost.ManaValue();   // placeholder cost is empty
             if (mv > best_mv) { best_mv = mv; best = g; }
         }
         if (best >= 0)
@@ -2251,15 +2272,16 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         int best = -1, best_mv = -1;
         for (int g = 0; g < static_cast<int>(gy.size()); ++g)
         {
-            if (!gy[g].IsMulticolored()) { continue; }
-            const int mv = gy[g].m_mana_cost.ManaValue();
+            const Card& gc = ZoneCard(gy[g]);   // placeholder colour/cost masks are empty
+            if (!gc.IsMulticolored()) { continue; }
+            const int mv = gc.m_mana_cost.ManaValue();
             if (mv > best_mv) { best_mv = mv; best = g; }
         }
         if (best >= 0)
         {
             Card back = gy[best];
             gy.erase(gy.begin() + best);
-            const bool all5 = back.ColorCount() == 5;
+            const bool all5 = ZoneCard(back).ColorCount() == 5;
             state.players[controller].hand.push_back(std::move(back));
             if (all5)
             {
@@ -2411,8 +2433,9 @@ inline void ApplyGraveyardExileAbility(GameState& state, int controller, int sou
     std::vector<Card>& gy = state.players[controller].graveyard;
     for (std::size_t i = 0; i < gy.size(); ++i)
     {
-        const bool match = (mode == 1) ? (gy[i].IsInstant() || gy[i].IsSorcery())
-                                       : gy[i].IsCreature();
+        const Card& gc    = ZoneCard(gy[i]);   // graveyard cards are name-only placeholders
+        const bool  match = (mode == 1) ? (gc.IsInstant() || gc.IsSorcery())
+                                        : gc.IsCreature();
         if (!match) { continue; }
         gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(i));
         src->tapped = true;   // the {T} part of the cost
@@ -3666,7 +3689,7 @@ inline int ManaProducedPerTap(const CardDefinition& def)
 inline int GraveyardLandFuel(const GameState& state, int controller)
 {
     int n = 0;
-    for (const Card& c : state.players[controller].graveyard) { if (c.IsLand()) { ++n; } }
+    for (const Card& c : state.players[controller].graveyard) { if (ZoneCard(c).IsLand()) { ++n; } }
     return n;
 }
 
@@ -3686,7 +3709,7 @@ inline bool ExileGraveyardLandForMana(GameState& state, int controller)
     std::vector<Card>& gy = state.players[controller].graveyard;
     for (std::size_t i = 0; i < gy.size(); ++i)
     {
-        if (gy[i].IsLand())
+        if (ZoneCard(gy[i]).IsLand())
         {
             gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(i));
             return true;
