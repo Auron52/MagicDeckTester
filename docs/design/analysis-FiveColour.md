@@ -103,37 +103,60 @@ targets. Resolve by reading GoldFishRunner spawn logic + Combat.cpp before writi
 has no `"subtypes": ["Mountain"]` (Island/Plains/Forest have theirs) → unreachable by any
 fetchland's subtype match. Matters here (Scalding Tarn / Wooded Foothills → basic Mountain).
 
-## RESUME STATE 2 (2026-08-07 ~08:30 UTC, second pre-compaction checkpoint)
+## Both sweep flags RESOLVED (2026-08-07) — user chose "fix both now"
 
-**Where we are:** the ENTIRE pipeline is done except the Stage 6 report + ONE user decision.
-Commits (phase-1-2-deck-analyzer, all local/unpushed): `0d16691` (cards + engine subsystems +
-atom fix + Unite executor fix), `d50fe0b` (audit tooling + snapshot), `10f3541` (profile +
-ledger + backstop doc), `abdb9a0` (domain-mana payment + same-turn Equip, from the sweep),
-plus a docs commit for the sweep record (in-flight in task b4ulxyho3 — VERIFY it landed:
-`git log --oneline -2`). Smoke 30/30 + regression 50/50 byte-identical at every step.
+### Flag 1 root cause: characteristics of a card OUTSIDE the battlefield are EMPTY
 
-**In flight (check on resume):**
-- Final verify battery: `logs/fivec_dbg/verify3.out` (task b4ulxyho3; the same command also ran
-  the docs commit first). EXPECTED result: all gates PASS except claude_sweep FAIL (2 unresolved
-  flags -- BY DESIGN, pending the user decision below).
-- Clean cost-reframe A/B (task bcd1kf085): `MTG_COST_REFRAME=0 vs 1`, 200 games d3 seed 90001;
-  arm 0 was still grinding (slow d3 tail is normal for this deck). Earlier verdicts: run 1
-  COST_NEUTRAL (pre-fix binary), run 2 REFRAME_HELPS -0.055 (INVALID -- arms straddled rebuilds).
-  Fold the clean result into the report when it lands; if REFRAME_HELPS repeats, it is a
-  user-decision lever (enable MTG_COST_REFRAME for this deck), not a gate.
+`DeckLoader::MakePlaceholder` builds every library / hand / graveyard `Card` from its **name alone**
+— `m_type_mask`, `m_color_mask` and `m_mana_cost` are all default. Only a BATTLEFIELD `Permanent`
+carries real masks (`PlayLandFromHand` / cast paths copy `def.card`). So a raw `gy_card.IsLand()` is
+**false for a fetchland**, `.ManaValue()` is **0 for a 5-drop**, `.IsMulticolored()` is **false for a
+gold card**. Pre-existing engine code already worked around this inline
+(`LookupCached(c) ? d->card.IsLand() : c.IsLand()` at the hand/graveyard scans), but every
+graveyard-interaction card added for THIS deck read the raw card and was therefore silently dead:
 
-**THE remaining user decision (surface in the Stage 6 report):** the 2 unresolved sweep flags in
-'## Claude-play sweep' (Deathrite-funded casts not offered = tempo-only enumeration-coverage gap
-with exact repro; stranded-equip plan noise = cosmetic). Ask: root-cause + fix now, or sign off
-as approved deferrals (add keys under '## Approved deferrals') so the claude_sweep gate goes
-DEFERRED and the deck ships.
+| Card | Symptom before the fix |
+|---|---|
+| Deathrite Shaman (all 3 abilities) | fuel gate always 0 → the mana ability never live, the two exile abilities never enumerated |
+| Garth One-Eye → Regrowth | every MV read as 0 → always returned graveyard **slot 0**, not the highest-MV card |
+| Jared Carthalion −6 | never found a multicolored card → the ability resolved to nothing |
 
-**Then:** write the Stage 6 report (numbers: d5/b20 avg 5.5300 @ seeds 4200000+0..999, monotone
-d0 6.6950 > d3 5.5300 = d5 5.5300, not budget-starved (b100 5.5150), 18-shuffle d5/b200 avg
-5.3889 @ 7777; disclosure = '## Approved deferrals' + 'Key disclosure items for 6a' below +
-the battery's Stage 6a disclosure block in logs/fivec_dbg/verify3.out). Registration in
-test/regression_cases.sh tiers = SEPARATE user-initiated step (Creature Giving precedent);
-mulligan profile gen = user-initiated later (mulligan-profile.md).
+Deathrite's is the one the sweep saw: FiveColour's only graveyard lands are **self-sacrificed
+fetchlands**, which arrive via `PlayLandFromHand` pushing the *hand* card, so the fuel was 0 in
+every game — hence "T3 Faeburrow Elder payable but all 14 plans land-only". (The earlier
+"verified NOT the colour gate" note in the sweep record was **wrong**: `ComputeAvailableColors`
+returned `W0` in *every* state of that game, because it gates the Deathrite source on the same
+fuel count. Re-probing the gate directly is what found this.)
+
+**Fix:** one accessor, `ZoneCard(const Card&)` in `SpellEffects.h` (definition-backed, falls back to
+the card itself for a token with no DB entry), applied at the 6 raw-read sites: `GraveyardLandFuel`,
+`ExileGraveyardLandForMana`, the Deathrite gy-exile resolution (`SpellEffects.h`), Garth's Regrowth
+MV pick, Jared's −6 multicolored pick + its all-5-colours rider, and the three enumeration-side fuel
+checks in `TurnSolver.cpp`. All are FiveColour-only code paths → other decks byte-identical.
+
+### Flag 2: stranded-equip plan noise
+
+`SubsetHasStrandedEquip` (TurnSolver, mirrors `SubsetHasAuraOnUncastCreature`) rejects any subset
+whose Equip has an equipment or host still in hand that the subset does not cast. Wired into BOTH
+enumerators (Solve::consider + eval_and_push) in lockstep. Not merely cosmetic: it rejected
+**158,354,396** dominated subsets across 200 games — real search breadth previously spent rolling
+out silent no-ops.
+
+### Measured effect
+
+- **d5/b20 avg win turn, seeds 4200000+0..999: 5.5300 → 5.3350** (−0.195), 0 unwon.
+  (5.3360 on the pre-regen profile; 5.3350 with the shipped seed-42 profile.)
+- Stage 5 sanity re-run on the shipped profile, same 1000 seeds: monotone in depth
+  (d0 6.2640 > d3 5.3370 ≥ d5 5.3350) and not budget-starved (d5/b100 5.3210, −0.014 vs b20).
+- Verify battery: **GATE PASS**, all checks green including `claude_sweep` 0 unresolved.
+- Deathrite now genuinely accelerates: at the flag's own repro (seed 7801 gi1) Faeburrow Elder lands
+  a turn EARLIER, and the T3 fetch putting a land in the graveyard turns Deathrite on for exactly the
+  7th mana that casts Bloom Tender + Cosmic Spider-Man together (90 plans offered, was 14 land-only).
+- **Smoke 30/30 + regression 50/50 byte-identical, 0 play-changed** — no other deck moves.
+
+## RESUME STATE 2 — SUPERSEDED (2026-08-07): the pipeline finished. Both flags fixed
+(see above), profile regenerated on the fixed binary, verify battery GATE PASS. Kept only for
+the commit trail: 0d16691, d50fe0b, 10f3541, abdb9a0, a351a89, 59a050e, 333ab17 (all local).
 
 ## RESUME STATE (2026-08-06, pre-compaction checkpoint)
 
@@ -343,8 +366,9 @@ Each phase builds cleanly before the next; 2d review + audits after all phases.
 - commit: `abdb9a0` (confirmation pass; the find sweep ran at `10f3541`)
 - seeds: 7777 games: 18 (find sweep; NOTE: shared one shuffle, spawn patterns varied) + seeds
   7800-7807 games: 8 (confirmation, distinct shuffles)
-- flags: 2 unresolved
-  - **Deathrite-funded creature casts not offered (enumeration coverage, tempo-only).** Repro:
+- flags: 0 unresolved  (both found flags ROOT-CAUSED + FIXED 2026-08-07 — see "Both sweep flags
+  RESOLVED" above for the root cause, the fix, and the measured −0.194 avg-win-turn effect)
+  - **[FIXED]** **Deathrite-funded creature casts not offered (enumeration coverage, tempo-only).** Repro:
     `./build/Release/mtg decks/FiveColour/FiveColour.cod --profile decks/FiveColour/FiveColour.profile.json
     --claude-play --seed 7801 --game-index 1 --max-turns 12 --reveal 6 --choices "0,1,2,1,1,6"` →
     T3 board Bloom Tender + Deathrite (both untapped, castable since T2) + Mountain + Overgrown
@@ -356,7 +380,7 @@ Each phase builds cleanly before the next; 2d review + audits after all phases.
     action emission and eval_and_push feasibility. Seen independently in confirmation games gi1 +
     gi4 (agents' own triage). NOT a lockstep divergence (mismatch harness green; nothing illegal
     is played) — the AI loses tempo in these states (ai_win 6 where 5 looks reachable).
-  - **Stranded-equip plan noise (cosmetic/UX).** The same-turn Equip enumeration (abdb9a0) offers
+  - **[FIXED]** **Stranded-equip plan noise (cosmetic/UX).** The same-turn Equip enumeration (abdb9a0) offers
     "equip X → Y" variants whose equipment/host are hand cards the plan does NOT cast; selecting
     one is a silent no-op (stranded-outlet by design). Harmless to search quality (rollout scores
     it as a pass) but pollutes the human-facing plan list (confirmation gi0). Fix sketch: subsets
