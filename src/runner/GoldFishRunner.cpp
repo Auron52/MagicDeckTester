@@ -69,6 +69,17 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         //     post-combat main, so the deck needs a searched second main to sequence its follow-ups.
         //     Mirrors spectacle_cost / hinata_cost_reducer detection above.
         if (!def->params.combat_damage_puts_subtype_from_hand.empty()) { return true; }
+
+        //   * TWO-HEADED HELLKITE (attack-trigger draw): "Whenever this creature attacks, draw two
+        //     cards" -- the drawn cards are a resource GENERATED DURING COMBAT (2c-bis); they are
+        //     only spendable in a post-combat main, so the deck needs a searched second main or the
+        //     engine silently wastes the trigger every turn.
+        if (def->params.attack_draw_cards > 0) { return true; }
+
+        //   * MAELSTROM ARCHANGEL (combat-damage free cast): connecting banks a free cast
+        //     (free_casts_available) that is only spendable in the post-combat main -- without the
+        //     second main the resource silently evaporates each turn.
+        if (def->params.combat_damage_free_cast) { return true; }
     }
     return false;
 }

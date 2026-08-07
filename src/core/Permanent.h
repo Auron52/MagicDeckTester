@@ -47,6 +47,27 @@ struct Permanent
                                            // mana -> stays untapped -> charges +1 at end of turn. Set only
                                            // via the human StorageHoldChooser; reset each UntapStep. Never
                                            // set autonomously -> byte-identical for the search/rollout.
+    uint8_t   garth_chosen_mask    = 0;    // Garth One-Eye: bit i = name i already chosen by THIS
+                                           // permanent object (per WotC ruling; a second/returned
+                                           // Garth starts fresh). Bit order in CardParams::
+                                           // garth_copy_ability's comment.
+    int       loyalty              = 0;    // Planeswalker loyalty (source of truth; the generic
+                                           // Counter{Loyalty} entry is a display mirror for the
+                                           // viewer badge). Set from loyalty_start on entry; only
+                                           // changes via our own activations (the passive opponent
+                                           // never attacks or damages a walker).
+    bool      loyalty_activated_this_turn = false; // one loyalty ability per walker per turn
+                                           // (CR 606.3); reset at BOTH untap sites (lockstep).
+    int       equipped_to          = 0;    // Equipment (Lightning Greaves): card.m_number of the
+                                           // creature this Equipment is attached to; 0 = unattached.
+                                           // Mirrors aura_attached_to, but an Equipment merely FALLS
+                                           // OFF when its host leaves (CR 301.5c) -- the executor SBA
+                                           // zeroes it; it is never sacrificed for a missing host.
+    bool      colored_cast_lifegain_used_this_turn = false; // Ancient Cornucopia's once-each-turn
+                                           // colored-cast lifegain fired already this turn. Set in
+                                           // FireOnCastTriggers (both cast paths), reset at BOTH untap
+                                           // sites (GameEngine::UntapStep + TurnSolver's per-turn reset)
+                                           // -- rollout/executor lockstep or [fd-diverge].
     int       age_counters         = 0;    // Cumulative upkeep (Varchild's War-Riders; CardParams::
                                            // cumulative_upkeep_opp_token): one added at each of the
                                            // controller's upkeeps, and the upkeep cost is paid once per

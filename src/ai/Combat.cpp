@@ -56,6 +56,10 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         {
             state.opponent_lost_life_this_turn = true;
             damaging_idx.push_back(idx);   // Goblin Lackey: dealt combat damage to a player
+            // Maelstrom Archangel: connecting banks one free cast for the post-combat main
+            // (user-approved banking model; see GameState::free_casts_available). Shared combat
+            // core -> executor and rollout bank identically.
+            if (adef && adef->params.combat_damage_free_cast) { ++state.free_casts_available; }
             // Lifelink (modeled): combat damage also gains the controller that much life. Inert vs
             // the passive opponent's clock, tracked for life-total decks.
             if (CreatureHasLifelink(p, state)) { state.players[active].life += power; }

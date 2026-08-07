@@ -4,6 +4,7 @@
             "name": "Mountain",
             "mana_cost": "",
             "types": ["Land"],
+            "subtypes": ["Mountain"],
             "keywords": [],
             "oracle_text": "{T}: Add {R}.",
             "template": "basic_land",
@@ -2533,6 +2534,369 @@
                 "produces": ["W", "U", "B", "R", "G"],
                 "fetch_land_types": ["Forest", "Island"]
             }
+        },
+        {
+            "name": "Zagoth Triome",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": ["Swamp", "Forest", "Island"],
+            "keywords": [],
+            "oracle_text": "({T}: Add {B}, {G}, or {U}.) This land enters tapped. Cycling {3} ({3}, Discard this card: Draw a card.)",
+            "template": "basic_land",
+            "parameters": {
+                "produces": ["B", "G", "U"],
+                "enters_tapped": true,
+                "cycling_cost": "{3}"
+            }
+        },
+        {
+            "name": "Jetmir's Garden",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": ["Mountain", "Forest", "Plains"],
+            "keywords": [],
+            "oracle_text": "({T}: Add {R}, {G}, or {W}.) This land enters tapped. Cycling {3} ({3}, Discard this card: Draw a card.)",
+            "template": "basic_land",
+            "parameters": {
+                "produces": ["R", "G", "W"],
+                "enters_tapped": true,
+                "cycling_cost": "{3}"
+            }
+        },
+        {
+            "name": "Verdant Catacombs",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Swamp or Forest card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Swamp/Forest-typed targets -- Stomping Ground, Overgrown Tomb, Breeding Pool, Godless Shrine, Blood Crypt, Jetmir's Garden, Zagoth Triome -- reach all five colours); it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": ["W", "U", "B", "R", "G"],
+                "fetch_land_types": ["Swamp", "Forest"]
+            }
+        },
+        {
+            "name": "Scalding Tarn",
+            "mana_cost": "",
+            "types": ["Land"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for an Island or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Island/Mountain-typed targets -- Steam Vents, Stomping Ground, Blood Crypt, Breeding Pool, Jetmir's Garden, Zagoth Triome, basic Island/Mountain -- reach all five colours); it never taps for mana (never reaches the battlefield). Library order/thinning past the fetched card not modelled (goldfish-irrelevant).]",
+            "template": "basic_land",
+            "parameters": {
+                "produces": ["W", "U", "B", "R", "G"],
+                "fetch_land_types": ["Island", "Mountain"]
+            }
+        },
+        {
+            "name": "Cosmic Spider-Man",
+            "mana_cost": "{W}{U}{B}{R}{G}",
+            "types": ["Creature"],
+            "supertypes": ["Legendary"],
+            "subtypes": ["Spider", "Human", "Hero"],
+            "keywords": ["Flying", "First Strike", "Trample", "Lifelink", "Haste"],
+            "power": 5,
+            "toughness": 5,
+            "oracle_text": "Flying, first strike, trample, lifelink, haste\nAt the beginning of combat on your turn, other Spiders you control gain flying, first strike, trample, lifelink, and haste until end of turn. [Combat-trigger Spider anthem DEFERRED (user-approved 2026-08-06): FiveColour runs no other Spider and the legend rule caps this card to 1 on the battlefield, so 'other Spiders you control' provably has zero targets in this deck; implement when a Spider-tribal deck arrives. Flying/first strike/trample structurally inert vs the passive never-blocking opponent; lifelink and haste live. Legend rule engine-enforced (x2 copies).]",
+            "template": "vanilla_creature",
+            "parameters": {}
+        },
+        {
+            "name": "Mana Cannons",
+            "mana_cost": "{2}{R}",
+            "types": ["Enchantment"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Whenever you cast a multicolored spell, this enchantment deals X damage to any target, where X is the number of colors that spell is. ['Any target' collapsed to the opponent's face -- provably optimal vs the passive opponent (etb_damage_any precedent). Damage = the cast spell's color count from the colors pass (m_color_mask). Fired in FireOnCastTriggers, both cast paths; never self-fires (not on battlefield while being cast).]",
+            "template": "custom",
+            "parameters": {
+                "multicolor_cast_damage_per_color": true
+            }
+        },
+        {
+            "name": "Ancient Cornucopia",
+            "mana_cost": "{2}{G}",
+            "types": ["Artifact"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Whenever you cast a spell that's one or more colors, you may gain 1 life for each of that spell's colors. Do this only once each turn.\n{T}: Add one mana of any color. [Mana ability = mana_rock + produces WUBRG (Sol Ring/Izzet Signet pattern; the real card has NO spend restriction -- colored_creature_only deliberately NOT set). Lifegain trigger: 'may' always taken (free resource, no anti-lifegain tech in-deck), once each turn per permanent (colored_cast_lifegain_used_this_turn, reset at both untap sites), life gained = cast spell's color count; live-ish resource against this deck's shock/fetch self-damage.]",
+            "template": "custom",
+            "parameters": {
+                "mana_rock": true,
+                "produces": ["W", "U", "B", "R", "G"],
+                "colored_cast_lifegain": true
+            }
+        },
+        {
+            "name": "Two-Headed Hellkite",
+            "mana_cost": "{1}{W}{U}{B}{R}{G}",
+            "types": ["Creature"],
+            "subtypes": ["Dragon"],
+            "keywords": ["Flying", "Menace", "Haste"],
+            "power": 5,
+            "toughness": 5,
+            "oracle_text": "Flying, menace, haste\nWhenever this creature attacks, draw two cards. [Not legendary (x3 copies coexist). Flying/menace structurally inert vs the never-blocking opponent; haste live. Attack trigger modelled via attack_draw_cards=2, applied per attacking copy at declare-attackers (ApplyAttackDrawTriggers, executor+rollout lockstep); flips DeckUsesSecondMain (combat-generated resource).]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "attack_draw_cards": 2
+            }
+        },
+        {
+            "name": "Progenitus",
+            "mana_cost": "{W}{W}{U}{U}{B}{B}{R}{R}{G}{G}",
+            "types": ["Creature"],
+            "supertypes": ["Legendary"],
+            "subtypes": ["Hydra", "Avatar"],
+            "keywords": [],
+            "power": 10,
+            "toughness": 10,
+            "oracle_text": "Protection from everything\nIf Progenitus would be put into a graveyard from anywhere, reveal Progenitus and shuffle it into its owner's library instead. [Protection from everything provably inert vs the passive goldfish opponent (nothing ever damages, targets, enchants, or blocks our creatures) -- same class as Hexproof/UmbraArmor; no Keyword::Protection exists or is needed. Graveyard replacement IS live (a 10-mana card realistically discards to cleanup hand-size): graveyard_replace_shuffle_library, wired at both cleanup-discard sites (executor + rollout). Legend rule modelled but inert (1 copy).]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "graveyard_replace_shuffle_library": true
+            }
+        },
+        {
+            "name": "Faeburrow Elder",
+            "mana_cost": "{1}{G}{W}",
+            "types": ["Creature"],
+            "subtypes": ["Treefolk", "Druid"],
+            "keywords": ["Vigilance"],
+            "power": 0,
+            "toughness": 0,
+            "oracle_text": "Vigilance\nThis creature gets +1/+1 for each color among permanents you control.\n{T}: For each color among permanents you control, add one mana of that color. [Dynamic domain source (domain_mana): EffectiveProduces = DomainColors (union of card colors over controlled permanents, needs the colors pass), yield = one of EACH such color per tap (2..5, variable-Karoo model). Static produces WUBRG kept only as the in-hand fixing hint. P/T is characteristic (domain_self_pump, base 0/0 + color count, always >= 2 on the battlefield via its own G/W): applied in ComputeLordBonus + the SBA zero-toughness guard. Vigilance live (attacks without tapping -> still a mana source).]",
+            "template": "mana_dork",
+            "parameters": {
+                "produces": ["W", "U", "B", "R", "G"],
+                "domain_mana": true,
+                "domain_self_pump": true
+            }
+        },
+        {
+            "name": "Bloom Tender",
+            "mana_cost": "{1}{G}",
+            "types": ["Creature"],
+            "subtypes": ["Elf", "Druid"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 1,
+            "oracle_text": "{T}: For each color among permanents you control, add one mana of that color. [Same dynamic domain source model as Faeburrow Elder (domain_mana; static produces = in-hand hint only); fixed 1/1 body, no self-pump.]",
+            "template": "mana_dork",
+            "parameters": {
+                "produces": ["W", "U", "B", "R", "G"],
+                "domain_mana": true
+            }
+        },
+        {
+            "name": "Deathrite Shaman",
+            "mana_cost": "{B/G}",
+            "types": ["Creature"],
+            "subtypes": ["Elf", "Shaman"],
+            "keywords": [],
+            "power": 1,
+            "toughness": 2,
+            "oracle_text": "{T}: Exile target land card from a graveyard. Add one mana of any color.\n{B}, {T}: Exile target instant or sorcery card from a graveyard. Each opponent loses 2 life.\n{G}, {T}: Exile target creature card from a graveyard. You gain 2 life. [Hybrid {B/G} paid with EITHER color (ManaCost hybrid_pair, user-directed). 'A graveyard' collapses to the controller's own (the passive opponent's is always empty; disclosed). Ability 1 = gy_land_exile_mana: live mana source only while a land card sits in the graveyard (13 fetches = fuel), each tap exiles one (fungible pick, both worlds). Abilities 2/3 = GraveyardExileAbility actions, mutually exclusive with the mana tap via the shared {T}; the exiled fuel card is fungible within its type filter (deterministic first-match).]",
+            "template": "mana_dork",
+            "parameters": {
+                "produces": ["W", "U", "B", "R", "G"],
+                "gy_land_exile_mana": true,
+                "gy_exile_instant_sorcery_drain": 2,
+                "gy_exile_creature_lifegain": 2
+            }
+        },
+        {
+            "name": "Lightning Greaves",
+            "mana_cost": "{2}",
+            "types": ["Artifact"],
+            "subtypes": ["Equipment"],
+            "keywords": ["Equip"],
+            "oracle_text": "Equipped creature has haste and shroud. (It can't be the target of spells or abilities.)\nEquip {0} [Equipment subsystem: Permanent::equipped_to + Action::Kind::Equip (sorcery-speed, one action per (Equipment, controlled creature), mutually exclusive per plan; Equip {0} = free re-point each turn). Haste read by CanAttackFull via HasHasteFromEquip. Shroud documented-inert (the passive opponent never targets our permanents). LIMITATION (disclosed): equip-granted haste enables ATTACKS only, not same-turn tap abilities (a Greaves'd fresh mana dork still can't tap this turn) -- conservative under-credit. Falls off a dead host (SBA), never sacrificed.]",
+            "template": "custom",
+            "parameters": {
+                "is_equipment": true,
+                "equip_cost_generic": 0,
+                "equip_grants_haste": true,
+                "equip_grants_shroud": true
+            }
+        },
+        {
+            "name": "Maelstrom Archangel",
+            "mana_cost": "{W}{U}{B}{R}{G}",
+            "types": ["Creature"],
+            "subtypes": ["Angel"],
+            "keywords": ["Flying"],
+            "power": 5,
+            "toughness": 5,
+            "oracle_text": "Flying\nWhenever this creature deals combat damage to a player, you may cast a spell from your hand without paying its mana cost. [Flying structurally inert (opponent never blocks). Free cast modelled as BANKING (user-approved 2026-08-06): connecting increments free_casts_available (Combat.cpp, shared executor+rollout core); the post-combat main offers a free_cast plan variant per hand card (X=0 for {X} spells per ruling; mandatory additional costs still paid; 'may' = the decline variant is simply not taking one). Equivalent vs a passive opponent: nothing occurs between the combat-damage step and the second main. Flips DeckUsesSecondMain.]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "combat_damage_free_cast": true
+            }
+        },
+        {
+            "name": "Jared Carthalion",
+            "mana_cost": "{W}{U}{B}{R}{G}",
+            "types": ["Planeswalker"],
+            "supertypes": ["Legendary"],
+            "subtypes": ["Jared"],
+            "keywords": [],
+            "oracle_text": "+1: Create a 3/3 Kavu creature token with trample that's all colors.\n-3: Choose up to two target creatures. For each of them, put a number of +1/+1 counters on it equal to the number of colors it is.\n-6: Return target multicolored card from your graveyard to your hand. If that card was all colors, draw a card and create two Treasure tokens. [Planeswalker subsystem: enters L5, one loyalty ability/turn (ActivateLoyalty plan variants), dies at loyalty<=0. -3 AUTO-RESOLVED to the two highest-color-count own creatures (max-total provably optimal vs a never-blocking opponent; disclosed). -6 AUTO-RESOLVED to the highest-MV multicolored graveyard card (disclosed); all-colors rider makes 2 live Treasure Tokens (sac-for-mana entry). Legend rule engine-enforced (x2).]",
+            "template": "custom",
+            "parameters": {
+                "loyalty_start": 5,
+                "loyalty_abilities": [
+                    {"delta": 1, "effect": "kavu_token"},
+                    {"delta": -3, "effect": "counters_up_to_two", "amount": 2},
+                    {"delta": -6, "effect": "regrow_multicolored"}
+                ]
+            }
+        },
+        {
+            "name": "Nicol Bolas, Planeswalker",
+            "mana_cost": "{4}{U}{B}{B}{R}",
+            "types": ["Planeswalker"],
+            "supertypes": ["Legendary"],
+            "subtypes": ["Bolas"],
+            "keywords": [],
+            "oracle_text": "+3: Destroy target noncreature permanent.\n-2: Gain control of target creature.\n-9: Nicol Bolas, Planeswalker deals 7 damage to target player or planeswalker. That player or that planeswalker's controller discards seven cards, then sacrifices seven permanents. [Enters L5. +3 implemented FAITHFULLY: vs a permanent-less passive opponent its only legal targets are OUR OWN noncreature permanents -- a real, costly ramp toward -9 the search prices; AUTO-RESOLVED pick = first own land, else first own noncreature non-walker (disclosed). -2 NOT ENUMERATED (user-approved): the only possible targets are opponent spawn tokens that never attack/block for anyone -- a pure loyalty sink. -9: 7 face damage implemented; discard-7/sac-7 riders inert vs a hand-less opponent (user-approved). Legend rule engine-enforced (x2).]",
+            "template": "custom",
+            "parameters": {
+                "loyalty_start": 5,
+                "loyalty_abilities": [
+                    {"delta": 3, "effect": "destroy_own_noncreature"},
+                    {"delta": -9, "effect": "face_damage", "amount": 7}
+                ]
+            }
+        },
+        {
+            "name": "Oko, Thief of Crowns",
+            "mana_cost": "{1}{G}{U}",
+            "types": ["Planeswalker"],
+            "supertypes": ["Legendary"],
+            "subtypes": ["Oko"],
+            "keywords": [],
+            "oracle_text": "+2: Create a Food token. (It's an artifact with \"{2}, {T}, Sacrifice this artifact: You gain 3 life.\")\n+1: Target artifact or creature loses all abilities and becomes a green Elk creature with base power and toughness 3/3.\n-5: Exchange control of target artifact or creature you control and target creature an opponent controls with power 3 or less. [Enters L4. +2 Food token created (its {2},{T},Sac: gain 3 ability = user-approved inert deferral; modeled value = Elk fodder). +1 NARROWED to the value line: transform an own Food token into a 3/3 green Elk (summoning-sick if the Food is fresh); Elking a real creature is strictly worse here and is not offered (disclosed). -5 NOT ENUMERATED (user-approved): requires an opponent creature; the only candidates are spawn tokens that never attack/block -- worse than useless to steal at -5. Legend rule engine-enforced (x1).]",
+            "template": "custom",
+            "parameters": {
+                "loyalty_start": 4,
+                "loyalty_abilities": [
+                    {"delta": 2, "effect": "food_token"},
+                    {"delta": 1, "effect": "elk_transform"}
+                ]
+            }
+        },
+        {
+            "name": "Treasure Token",
+            "mana_cost": "",
+            "types": ["Artifact"],
+            "subtypes": ["Treasure"],
+            "keywords": [],
+            "oracle_text": "{T}, Sacrifice this artifact: Add one mana of any color. [Token definition (created by Jared Carthalion's -6 all-colors rider; never in a decklist). Modeled via the Lotus-Bloom sac-for-mana machinery: sac_for_mana_amount=1, colour searched (chosen_float_color variants).]",
+            "template": "custom",
+            "parameters": {
+                "sac_for_mana_amount": 1
+            }
+        },
+        {
+            "name": "Garth One-Eye",
+            "mana_cost": "{W}{U}{B}{R}{G}",
+            "types": ["Creature"],
+            "supertypes": ["Legendary"],
+            "subtypes": ["Human", "Wizard"],
+            "keywords": [],
+            "power": 5,
+            "toughness": 5,
+            "oracle_text": "{T}: Choose a card name that hasn't been chosen -- Disenchant, Braingeyser, Terror, Shivan Dragon, Regrowth, or Black Lotus. Create a copy of the card with the chosen name. You may cast the copy. (You still pay its costs. Timing rules still apply.) [garth_copy_ability: GarthActivate plan variants, one per un-chosen affordable name; the copy is cast AS THE ABILITY RESOLVES (WotC ruling -- no 'this turn' holding); per-PERMANENT once-per-game-per-name tracking (garth_chosen_mask). Disenchant never enumerated (structurally target-less vs this opponent model -- user-approved stub, the choice-to-deny-future-picks is worthless solo). Braingeyser = single max-X variant (X = spare pool - UU, the 5f goldfish-optimal-X precedent; disclosed). Regrowth pick = highest-MV graveyard card (disclosed). Terror pick = largest opponent spawn creature (payoff ~0, faithful). Legend rule engine-enforced (x1).]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "garth_copy_ability": true
+            }
+        },
+        {
+            "name": "Black Lotus",
+            "mana_cost": "{0}",
+            "types": ["Artifact"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "{T}, Sacrifice this artifact: Add three mana of any one color. [Garth One-Eye conjure target only (never in a decklist). Modeled via the Lotus-Bloom sac-for-mana machinery: sac_for_mana_amount=3, colour searched (chosen_float_color variants).]",
+            "template": "custom",
+            "parameters": {
+                "sac_for_mana_amount": 3
+            }
+        },
+        {
+            "name": "Braingeyser",
+            "mana_cost": "{X}{U}{U}",
+            "types": ["Sorcery"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Target player draws X cards. [Garth One-Eye conjure target only. 'Target player' = self (giving the passive opponent cards is strictly pointless). Drawn inside ApplyGarthActivate with the variant's auto-maxed X.]",
+            "template": "draw_x",
+            "parameters": {}
+        },
+        {
+            "name": "Terror",
+            "mana_cost": "{1}{B}",
+            "types": ["Instant"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Destroy target nonartifact, nonblack creature. It can't be regenerated. [Garth One-Eye conjure target only. destroy_target_creature: the engine's first hard single-target destroy; only legal targets are opponent spawn creatures (they never attack/block, so the payoff is ~0 -- implemented faithfully per user direction). 'Can't be regenerated' inert (no regeneration modeled).]",
+            "template": "custom",
+            "parameters": {
+                "destroy_target_creature": true
+            }
+        },
+        {
+            "name": "Shivan Dragon",
+            "mana_cost": "{4}{R}{R}",
+            "types": ["Creature"],
+            "subtypes": ["Dragon"],
+            "keywords": ["Flying"],
+            "power": 5,
+            "toughness": 5,
+            "oracle_text": "Flying\n{R}: Shivan Dragon gets +1/+0 until end of turn. [Garth One-Eye conjure target only. Flying inert (no blockers). Firebreathing reuses the Scourge/Lathliss machinery (firebreathing_cost/power). Enters summoning-sick as a conjured copy.]",
+            "template": "vanilla_creature",
+            "parameters": {
+                "firebreathing_cost": "{R}",
+                "firebreathing_power": 1
+            }
+        },
+        {
+            "name": "Regrowth",
+            "mana_cost": "{1}{G}",
+            "types": ["Sorcery"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Return target card from your graveyard to your hand. [Garth One-Eye conjure target only. return_target_from_graveyard: AUTO-RESOLVED pick = highest mana value (disclosed).]",
+            "template": "custom",
+            "parameters": {
+                "return_target_from_graveyard": true
+            }
+        },
+        {
+            "name": "Unite the Coalition",
+            "mana_cost": "{2}{W}{U}{B}{R}{G}",
+            "types": ["Instant"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Choose five. You may choose the same mode more than once.\n- Target permanent phases out.\n- Target player draws a card.\n- Exile target player's graveyard.\n- Unite the Coalition deals 2 damage to any target.\n- Destroy target artifact or enchantment. [USER-APPROVED COLLAPSE (2026-08-06): modeled as a SEARCHED split S in [0..5] -> S x (2 damage to the opponent face; 'any target' collapses to face, etb_damage_any precedent) + (5-S) x (draw a card; 'target player' = self). The three dead modes are dropped: phase-out has nothing to dodge, the opponent's graveyard is always empty (exiling our own strips Deathrite fuel), and no opponent artifact/enchantment ever exists (destroying our own is never right). One plan variant per S; distinct splits are signature-distinct.]",
+            "template": "custom",
+            "parameters": {
+                "modal_choose_n": 5,
+                "modal_damage_per_choice": 2,
+                "modal_draw_per_choice": 1
+            }
+        },
+        {
+            "name": "Disenchant",
+            "mana_cost": "{1}{W}",
+            "types": ["Instant"],
+            "subtypes": [],
+            "keywords": [],
+            "oracle_text": "Destroy target artifact or enchantment. [Garth One-Eye conjure target only. NEVER ENUMERATED (user-approved stub): the opponent model never has an artifact or enchantment in any spawn pattern, and destroying our own is never right -- a structurally target-less cast. The entry exists so the name resolves and audits stay faithful.]",
+            "template": "custom",
+            "parameters": {}
         }
     ]
 }

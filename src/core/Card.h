@@ -36,6 +36,10 @@ enum class Keyword
     // reads it; kept so the Scryfall keywords field ["Hexproof"] stays faithful.
     Hexproof,
     Enchant,
+    // Equip (Lightning Greaves): an INERT keyword-ability tag -- the equip mechanic is modelled
+    // structurally via CardParams::is_equipment + Permanent::equipped_to + Action::Kind::Equip,
+    // not by this enum. Kept only so the Scryfall keywords field ["Equip"] stays faithful.
+    Equip,
     // Umbra armor (Hyena/Spider/Lion Umbra): an INERT keyword-ability tag -- "if enchanted creature would be
     // destroyed, instead destroy this Aura." Provably inert vs the passive goldfish opponent (no removal /
     // combat damage ever destroys our creatures). Kept only so the Scryfall keywords field stays faithful.
@@ -65,12 +69,62 @@ struct ManaCost
     int  x_pips   = 0;  // number of {X} symbols (Crackle with Power = {X}{X}{X} -> 3). The chosen
                         // X is paid x_pips times as generic; max affordable X divides by x_pips.
 
-    // X counts as 0 outside the stack (CR 202.3)
+    // Two-colour hybrid pips ({B/G}: pay with EITHER colour; Deathrite Shaman, user-directed
+    // 2026-08-06). REPRESENTATION: the pip's FIRST listed colour is baked into the flat colour
+    // ints above exactly as the historical collapse did (so every flat reader -- ManaValue,
+    // colour-demand heuristics, equality, signatures -- is BYTE-IDENTICAL to the pre-hybrid
+    // engine; the smoke suite proved churn otherwise on Slippery Bogle). The metadata below only
+    // ADDS payable assignments: ExpandHybrids(bits) moves a first-colour pip over to the second
+    // colour per set bit, and the affordability/payment sites (ManaPool::CanPay, TapForCostShared,
+    // PayFromPool) try assignments in bits order -- bits==0 IS the old flat cost, so behaviour
+    // changes only where the old collapse could not pay at all. Each entry packs the two colours
+    // as (first << 4) | second in printed order; > 4 hybrid pips unsupported (no such card).
+    // {2/W} / Phyrexian remain unsupported.
+    uint8_t hybrid_count   = 0;
+    uint8_t hybrid_pair[4] = {0, 0, 0, 0};
+
+    // X counts as 0 outside the stack (CR 202.3). Hybrid pips are already counted in their
+    // first colour's flat int.
     int ManaValue() const { return generic + white + blue + black + red + green + colorless; }
+
+    // Flat copy with hybrid pip i moved from its FIRST colour to its SECOND when bit i of `bits`
+    // is set (bits == 0 returns the plain flat cost). Result carries no hybrid metadata.
+    ManaCost ExpandHybrids(unsigned bits) const
+    {
+        ManaCost c = *this;
+        c.hybrid_count = 0;
+        for (int i = 0; i < 4; ++i) { c.hybrid_pair[i] = 0; }
+        auto bump = [&c](int col, int delta)
+        {
+            switch (static_cast<Color>(col))
+            {
+                case Color::White:     c.white     += delta; break;
+                case Color::Blue:      c.blue      += delta; break;
+                case Color::Black:     c.black     += delta; break;
+                case Color::Red:       c.red       += delta; break;
+                case Color::Green:     c.green     += delta; break;
+                case Color::Colorless: c.colorless += delta; break;
+            }
+        };
+        for (int i = 0; i < hybrid_count; ++i)
+        {
+            if ((bits >> i) & 1u)
+            {
+                bump(hybrid_pair[i] >> 4, -1);
+                bump(hybrid_pair[i] & 0xF, +1);
+            }
+        }
+        return c;
+    }
 
     // Canonical MTG notation: {X}{N}{W}{U}{B}{R}{G}{C}
     std::string ToString() const
     {
+        // NOTE: hybrid pips render as their FIRST colour's plain pip (they are baked into the
+        // flat ints below). Deliberate: the regression play digest folds this string
+        // (GameLogger::LogCastSpell manaPaid), so rendering {G/U} would phantom-churn every
+        // existing digest (proved on the auras deck). Payment semantics are unaffected; the
+        // authoritative printed cost lives in cards.json's mana_cost/oracle_text.
         std::string s;
         if (has_x)    { s += "{X}"; }
         if (generic > 0) { s += "{" + std::to_string(generic) + "}"; }
@@ -168,4 +222,16 @@ struct Card
     bool HasSupertype(Supertype s) const { return (m_supertype_mask & Bit(s)) != 0; }
     bool HasColor(Color c)         const { return (m_color_mask     & Bit(c)) != 0; }
     bool HasKeyword(Keyword k)     const { return (m_keyword_mask   & Bit(k)) != 0; }
+
+    // Number of colors this card is (popcount of the color mask; 0 = colorless, CR 105.2).
+    // Used by Mana Cannons (damage = colors of cast spell), Ancient Cornucopia (lifegain),
+    // and Jared Carthalion's -3 (+1/+1 counters = target's color count).
+    int ColorCount() const
+    {
+        uint32_t m = m_color_mask;
+        int n = 0;
+        while (m) { m &= m - 1; ++n; }
+        return n;
+    }
+    bool IsMulticolored() const { return ColorCount() >= 2; }
 };

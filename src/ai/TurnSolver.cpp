@@ -321,6 +321,7 @@ static const bool s_cco_noncreature_pool = EnvOn("MTG_CCO_NONCREATURE_POOL");
 static ManaPool BuildNonCreaturePool(const GameState& state)
 {
     ManaPool pool;
+    int gy_fuel = -1;   // Deathrite fuel: lazily counted, decremented per credited source
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
@@ -329,6 +330,13 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap()) || def->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
+        // Deathrite: credit at most #graveyard-lands such sources (mirrors AvailableManaPool).
+        if (def->params.gy_land_exile_mana)
+        {
+            if (gy_fuel < 0) { gy_fuel = GraveyardLandFuel(state, state.active_player_index); }
+            if (gy_fuel <= 0) { continue; }
+            --gy_fuel;
+        }
         if (s_cco_noncreature_pool && def->params.colored_creature_only)
         {
             // Only the unrestricted "{T}: Add {C}" mode is legal for a noncreature spell. Book it as
@@ -385,6 +393,7 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
                    || (def->tmpl == CardTemplate::ManaDork && p.CanTap())
                    || def->params.mana_rock;
         if (!is_src) { continue; }
+        if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land
         for (Color c : EffectiveProduces(state, active, *def))   // RP -> union of other lands
         {
             switch (c)
@@ -971,11 +980,54 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
 {
     for (size_t a = 0; a < sel.size(); ++a)
     {
-        if (cands[sel[a]].kind != Action::Kind::SacForMana) { continue; }
-        for (size_t b = a + 1; b < sel.size(); ++b)
+        if (cands[sel[a]].kind == Action::Kind::SacForMana)
         {
-            if (cands[sel[b]].kind == Action::Kind::SacForMana
-                && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+            for (size_t b = a + 1; b < sel.size(); ++b)
+            {
+                if (cands[sel[b]].kind == Action::Kind::SacForMana
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+            }
+        }
+        // Free-cast bank slots (Maelstrom Archangel): two free casts may not share a slot, so a
+        // plan spends at most free_casts_available of them.
+        if (cands[sel[a]].free_cast)
+        {
+            for (size_t b = a + 1; b < sel.size(); ++b)
+            {
+                if (cands[sel[b]].free_cast
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+            }
+        }
+        // Free variants live in their bank-SLOT group (PlanGroupKey), not their card's group, so
+        // the odometer can now pair a card's paid cast with its own free variant -- the same
+        // physical card cast twice. Reject the pair here (inert for every deck without free casts:
+        // free_cast is never set for them).
+        if (cands[sel[a]].kind == Action::Kind::CastFromHand && cands[sel[a]].hand_index >= 0)
+        {
+            for (size_t b = a + 1; b < sel.size(); ++b)
+            {
+                if (cands[sel[b]].kind == Action::Kind::CastFromHand
+                    && cands[sel[b]].hand_index == cands[sel[a]].hand_index
+                    && cands[sel[b]].free_cast != cands[sel[a]].free_cast) { return true; }
+            }
+        }
+        // Planeswalkers: one loyalty ability per walker per turn (CR 606.3).
+        if (cands[sel[a]].kind == Action::Kind::ActivateLoyalty)
+        {
+            for (size_t b = a + 1; b < sel.size(); ++b)
+            {
+                if (cands[sel[b]].kind == Action::Kind::ActivateLoyalty
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+            }
+        }
+        // Garth One-Eye: one activation per Garth per plan (the {T} cost).
+        if (cands[sel[a]].kind == Action::Kind::GarthActivate)
+        {
+            for (size_t b = a + 1; b < sel.size(); ++b)
+            {
+                if (cands[sel[b]].kind == Action::Kind::GarthActivate
+                    && cands[sel[b]].sac_source_id == cands[sel[a]].sac_source_id) { return true; }
+            }
         }
     }
     return false;
@@ -2769,6 +2821,30 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
 
+        // Unite the Coalition (approved collapse): one CastFromHand variant per split S in
+        // [0..N] -- S x face damage + (N-S) draws. Shared hand_index -> mutually exclusive; the
+        // signature folds S so the autonomous dedup never collapses distinct splits.
+        if (def.params.modal_choose_n > 0)
+        {
+            for (int sN = 0; sN <= def.params.modal_choose_n; ++sN)
+            {
+                Action ma;
+                ma.kind           = Action::Kind::CastFromHand;
+                ma.card_name      = ap.hand[i].m_name;
+                ma.hand_index     = i;
+                ma.cost           = EffectiveCost(def, state);
+                ma.chosen_x       = sN;
+                ma.eval           = sN * def.params.modal_damage_per_choice * 100
+                                    + (def.params.modal_choose_n - sN)
+                                      * def.params.modal_draw_per_choice * 60;
+                ma.direct_damage  = sN * def.params.modal_damage_per_choice;
+                ma.is_noncreature = true;
+                ma.card_mv        = def.card.m_mana_cost.ManaValue();
+                actions.push_back(std::move(ma));
+            }
+            continue;
+        }
+
         Action a;
         a.kind                  = Action::Kind::CastFromHand;
         a.card_name             = ap.hand[i].m_name;
@@ -3080,6 +3156,221 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             actions.push_back(std::move(a));
         }
 
+        // Equipment (Lightning Greaves): one Equip action per (controlled Equipment, controlled
+        // creature it is not already attached to). Sorcery-speed, no tap; variants of one
+        // Equipment are mutually exclusive per plan (shared sac_source_id). The search decides
+        // whether re-pointing (usually onto a summoning-sick bomb, for equip_grants_haste) beats
+        // leaving it -- a no-op re-point onto the current host is not emitted.
+        for (const Permanent& eq : state.battlefield)
+        {
+            if (eq.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* ed = CardDatabase::Instance().LookupCached(eq.card);
+            if (!ed || !ed->params.is_equipment) { continue; }
+            for (const Permanent& cr : state.battlefield)
+            {
+                if (cr.controller_index != state.active_player_index) { continue; }
+                if (!cr.card.IsCreature() && !cr.is_animated) { continue; }
+                if (eq.equipped_to == cr.card.m_number) { continue; }   // already attached: no-op
+                Action a;
+                a.kind           = Action::Kind::Equip;
+                a.card_name      = eq.card.m_name;
+                a.hand_index     = -1;
+                a.cost           = ManaCost{};
+                a.cost.generic   = ed->params.equip_cost_generic;
+                a.sac_source_id  = eq.card.m_number;
+                a.sac_victim_id  = cr.card.m_number;
+                // Haste onto a fresh creature = enabling a whole attack; anything else is a
+                // repositioning nicety the search can still take.
+                a.eval           = (ed->params.equip_grants_haste && cr.entered_this_turn
+                                    && !cr.card.HasKeyword(Keyword::Haste)) ? DMG : 1;
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
+            }
+        }
+
+        // Garth One-Eye: one GarthActivate variant per un-chosen, goldfish-live name (Disenchant
+        // never -- structurally target-less, user-approved stub). The copy is cast as the ability
+        // resolves; its cost rides a.cost so the subset math reserves the mana. Braingeyser is
+        // the single max-X variant (X = pool total - {U}{U}; the goldfish-optimal X per the 5f
+        // precedent; disclosed).
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            if (!p.CanTap()) { continue; }   // summoning sickness (Garth is a creature)
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || !pd->params.garth_copy_ability) { continue; }
+            const ManaPool garth_pool = BuildNonCreaturePool(state);
+            static const char* kGarthNames[6] =
+            { "Disenchant", "Braingeyser", "Terror", "Shivan Dragon", "Regrowth", "Black Lotus" };
+            for (int gi = 0; gi < 6; ++gi)
+            {
+                if (p.garth_chosen_mask & (1u << gi)) { continue; }
+                const std::string name = kGarthNames[gi];
+                if (name == "Disenchant") { continue; }   // never castable here (approved stub)
+                const CardDefinition* cd = CardDatabase::Instance().Lookup(name);
+                if (!cd) { continue; }
+                Action a;
+                a.kind          = Action::Kind::GarthActivate;
+                a.card_name     = p.card.m_name;
+                a.hand_index    = -1;
+                a.cost          = cd->card.m_mana_cost;
+                a.tutor_target  = name;
+                a.sac_source_id = p.card.m_number;
+                a.is_noncreature = true;
+                if (name == "Braingeyser")
+                {
+                    const int x = garth_pool.Total() - 2;   // {U}{U} reserved
+                    if (x < 1) { continue; }
+                    a.chosen_x     = x;
+                    a.cost.has_x   = false;                 // fold the chosen X into generic
+                    a.cost.generic += x;
+                    a.eval         = x * 40;
+                }
+                else if (name == "Terror")
+                {
+                    bool tgt = false;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != state.active_player_index && q.card.IsCreature()
+                            && !q.card.HasType(CardType::Artifact)
+                            && !q.card.HasColor(Color::Black)) { tgt = true; break; }
+                    }
+                    if (!tgt) { continue; }
+                    a.eval = 1;   // opponent spawns never attack/block: near-zero payoff
+                }
+                else if (name == "Regrowth")
+                {
+                    if (state.players[state.active_player_index].graveyard.empty()) { continue; }
+                    a.eval = DMG;
+                }
+                else if (name == "Shivan Dragon") { a.eval = 5 * DMG; }
+                else if (name == "Black Lotus")   { a.eval = DMG / 2; }
+                actions.push_back(std::move(a));
+            }
+        }
+
+        // Planeswalker loyalty activations: one action per (controlled walker that hasn't
+        // activated this turn, legal ability). Legality = the loyalty cost is payable and the
+        // effect has fuel/targets. Same-walker variants are mutually exclusive per plan
+        // (exclusivity clause) and across the turn (loyalty_activated_this_turn).
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            if (p.loyalty_activated_this_turn) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || pd->params.loyalty_abilities.empty()) { continue; }
+            const std::vector<Card>& gy = state.players[state.active_player_index].graveyard;
+            for (int li = 0; li < static_cast<int>(pd->params.loyalty_abilities.size()); ++li)
+            {
+                const CardParams::LoyaltyAbilityParam& ab = pd->params.loyalty_abilities[li];
+                if (ab.delta < 0 && p.loyalty < -ab.delta) { continue; }   // cost unpayable
+                int ev = 1;
+                if (ab.effect == "kavu_token") { ev = 3 * DMG; }
+                else if (ab.effect == "counters_up_to_two")
+                {
+                    bool fuel = false;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index == state.active_player_index
+                            && q.card.IsCreature() && q.card.ColorCount() > 0) { fuel = true; break; }
+                    }
+                    if (!fuel) { continue; }
+                    ev = 4 * DMG;
+                }
+                else if (ab.effect == "regrow_multicolored")
+                {
+                    bool fuel = false;
+                    for (const Card& c : gy) { if (c.IsMulticolored()) { fuel = true; break; } }
+                    if (!fuel) { continue; }
+                    ev = 2 * DMG;
+                }
+                else if (ab.effect == "destroy_own_noncreature")
+                {
+                    bool fuel = false;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index == state.active_player_index
+                            && !q.card.IsCreature() && q.card.m_number != p.card.m_number) { fuel = true; break; }
+                    }
+                    if (!fuel) { continue; }
+                    ev = 1;   // a real cost -- the search prices the destroyed permanent itself
+                }
+                else if (ab.effect == "face_damage") { ev = ab.amount * DMG; }
+                else if (ab.effect == "food_token") { ev = DMG / 3; }
+                else if (ab.effect == "elk_transform")
+                {
+                    bool fuel = false;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index == state.active_player_index
+                            && q.card.m_name.str() == "Food Token") { fuel = true; break; }
+                    }
+                    if (!fuel) { continue; }
+                    ev = 2 * DMG;
+                }
+                Action a;
+                a.kind            = Action::Kind::ActivateLoyalty;
+                a.card_name       = p.card.m_name;
+                a.hand_index      = -1;
+                a.cost            = ManaCost{};   // the cost is the loyalty delta
+                a.sac_source_id   = p.card.m_number;
+                a.loyalty_ability = li;
+                a.eval            = ev;
+                a.is_noncreature  = true;
+                actions.push_back(std::move(a));
+            }
+        }
+
+        // Deathrite Shaman graveyard-exile value outlets (abilities 2/3): one action per untapped,
+        // non-summoning-sick Deathrite per fueled mode. Mutually exclusive with its mana tap and
+        // with each other via the shared {T} (sac_source_id keys the source; a plan taking one
+        // makes the apply of the other a no-op, and the mana solver sees the source tapped).
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            if (p.entered_this_turn && !p.card.HasKeyword(Keyword::Haste)
+                && !HasHasteFromLords(p.card, state.battlefield, state.active_player_index)) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd) { continue; }
+            const std::vector<Card>& gy = state.players[state.active_player_index].graveyard;
+            if (pd->params.gy_exile_instant_sorcery_drain > 0)
+            {
+                bool fuel = false;
+                for (const Card& c : gy) { if (c.IsInstant() || c.IsSorcery()) { fuel = true; break; } }
+                if (fuel)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::GraveyardExileAbility;
+                    a.card_name      = p.card.m_name;
+                    a.hand_index     = -1;
+                    a.cost           = ManaCost{}; a.cost.black = 1;   // "{B}, {T}: ..."
+                    a.sac_source_id  = p.card.m_number;
+                    a.gy_exile_mode  = 1;
+                    a.eval           = pd->params.gy_exile_instant_sorcery_drain * DMG;  // real face clock
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
+            if (pd->params.gy_exile_creature_lifegain > 0)
+            {
+                bool fuel = false;
+                for (const Card& c : gy) { if (c.IsCreature()) { fuel = true; break; } }
+                if (fuel)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::GraveyardExileAbility;
+                    a.card_name      = p.card.m_name;
+                    a.hand_index     = -1;
+                    a.cost           = ManaCost{}; a.cost.green = 1;   // "{G}, {T}: ..."
+                    a.sac_source_id  = p.card.m_number;
+                    a.gy_exile_mode  = 2;
+                    a.eval           = 1;   // lifegain: near-zero value vs a passive opponent
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
+        }
+
         // Costed VALUE outlets (Siege-Gang "{1}{R}, Sac a Goblin: 2 damage"; Pashalik "{3}{R}, Sac a
         // Goblin: two 1/1 Goblins"): one action per (outlet source, candidate Goblin victim). The mana
         // cost rides on a.cost so the subset math reserves it; the trailing apply pass pays it (both
@@ -3241,6 +3532,36 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
+    // Maelstrom Archangel free-cast variants: with N banked free casts (post-combat main only --
+    // the counter is 0 pre-combat), every CastFromHand candidate gains one variant per bank SLOT
+    // with its mana cost cleared. Same-card variants share hand_index (mutually exclusive with the
+    // paid variant); two free casts may not share a slot (SubsetHasDuplicateSacSource's free-slot
+    // clause), so a plan spends at most N free casts. Gated on the counter -> byte-identical for
+    // every deck without combat_damage_free_cast.
+    if (state.free_casts_available > 0)
+    {
+        const int slots = state.free_casts_available;
+        const std::size_t base_n = actions.size();
+        for (int slot = 0; slot < slots; ++slot)
+        {
+            for (std::size_t i = 0; i < base_n; ++i)
+            {
+                if (actions[i].kind != Action::Kind::CastFromHand) { continue; }
+                if (actions[i].alt_cost) { continue; }        // alt-cost casts are already free
+                Action f = actions[i];
+                f.cost          = ManaCost{};                 // cast without paying its mana cost
+                if (f.card_mv > 0 && f.def && f.def->card.m_mana_cost.has_x)
+                {
+                    // Ruling: an {X} spell cast without paying its cost has X = 0.
+                    f.chosen_x = 0;
+                }
+                f.free_cast     = true;
+                f.sac_source_id = -1000 - slot;               // bank slot (mutual exclusion)
+                actions.push_back(std::move(f));
+            }
+        }
+    }
+
     // Resolve each action's card definition ONCE so the per-node subset evaluators read the
     // cached pointer instead of re-hashing card_name. Equivalent to Lookup(card_name) at each
     // use site (every kind's card_name is a real DB name: hand-cast/vial creature/dig source).
@@ -3273,6 +3594,83 @@ bool GroupCapDisabled()
 {
     static const bool v = EnvOn("MTG_NO_GROUP_CAP");
     return v;
+}
+
+// ---- Activation families (shared by Solve's and EnumeratePlans' partition passes) --------------
+// The four battlefield-activation kinds whose variants are mutually exclusive per SOURCE permanent
+// within one plan (Garth: one name per tap; a planeswalker: one loyalty ability per turn; an
+// Equipment: one host per plan; Deathrite: one {T} across its modes). Enumerated as independent
+// bits they cost the odometer 2^k subsets, of which the duplicate-sac-source guard rejects all but
+// k+1 -- the confirmed FiveColour degenerate atom (a single scoring game ran 3.4h inside one
+// EnumeratePlanPositions; see analysis-FiveColour.md). Grouping them makes the same selections
+// k+1 odometer states. Keys are <= -1000 so they can never collide with a hand_index group key
+// (>= 0); distinct sources stay distinct groups. New-kind gate -> byte-identical for every deck
+// without these kinds.
+static int ActivationFamilyKey(const Action& a)
+{
+    // MTG_NO_ACTIVATION_FAMILY_GROUPS=1 restores the independent-bit enumeration (A/B lever for
+    // measuring the collapse; the two enumerate the same legal selections, so results should
+    // match -- only cost differs).
+    static const bool s_off = EnvOn("MTG_NO_ACTIVATION_FAMILY_GROUPS");
+    if (s_off) { return 0; }
+    switch (a.kind)
+    {
+        case Action::Kind::GarthActivate:
+        case Action::Kind::ActivateLoyalty:
+        case Action::Kind::Equip:
+        case Action::Kind::GraveyardExileAbility:
+            return (a.sac_source_id >= 0) ? -1000 - a.sac_source_id : 0;
+        default:
+            return 0;
+    }
+}
+
+// The full group key for the plan-position odometer, or kIndependentAction for a lone bit.
+//  - Paid hand casts group by hand slot (>= 0), as always.
+//  - Free-cast variants (Maelstrom Archangel bank) group by bank SLOT: every free variant of one
+//    slot is mutually exclusive with every other (SubsetHasDuplicateSacSource's free-slot clause),
+//    so keeping them inside their card's group DOUBLED every group (2^#castable blowup -- the
+//    FiveColour atom's dominant factor). One slot group costs (#castable+1) states instead. The
+//    freed paid-vs-free same-card pair is rejected by the same guard's same-hand-slot clause.
+//  - SacForMana colour variants of one MULTI-variant source group per source (FiveColour's
+//    conjured Black Lotus: 5 colour variants = 2^5 bits -> 6 states). `multi_sac` carries the
+//    sac_source_ids with >= 2 variants; single-variant sources (Dragonstorm's mono-colour Lotus
+//    Bloom) stay independent bits -> byte-identical for every existing deck.
+static constexpr int kIndependentAction = std::numeric_limits<int>::min();
+static int PlanGroupKey(const Action& a, const std::vector<int>& multi_sac)
+{
+    static const bool s_off = EnvOn("MTG_NO_ACTIVATION_FAMILY_GROUPS");
+    if (!s_off && a.free_cast)
+    { return -1000000 + a.sac_source_id; }   // sac_source_id = -1000 - slot -> unique, <= -1001000
+    if (a.hand_index >= 0) { return a.hand_index; }
+    if (!s_off && a.kind == Action::Kind::SacForMana
+        && std::binary_search(multi_sac.begin(), multi_sac.end(), a.sac_source_id))
+    { return -1000 - a.sac_source_id; }
+    int fam = ActivationFamilyKey(a);
+    return fam != 0 ? fam : kIndependentAction;
+}
+
+// Pre-pass for PlanGroupKey: the sac_source_ids holding SacForMana variants in >= 2 DISTINCT
+// colours (sorted). The colour requirement is what keeps goblins byte-identical: a Skirk
+// Prospector source emits multiple SacForMana actions too (single-sac + the bounded multi-sac
+// burst), but all in "R" -- grouping those reordered goblins' enumeration (2 same-score digest
+// churns in the regression tier). True COLOUR-variant families (FiveColour's conjured Black
+// Lotus / Treasure: one variant per colour, 2^5 independent bits) are the atom this collapses.
+static void CollectMultiVariantSacSources(const std::vector<Action>& cands, std::vector<int>& out)
+{
+    out.clear();
+    std::vector<std::pair<int, const std::string*>> seen;   // (id, first colour); tiny -> linear scan
+    for (const Action& a : cands)
+    {
+        if (a.kind != Action::Kind::SacForMana) { continue; }
+        const auto it = std::find_if(seen.begin(), seen.end(),
+                                     [&](const auto& s) { return s.first == a.sac_source_id; });
+        if (it == seen.end()) { seen.push_back({ a.sac_source_id, &a.chosen_float_color }); continue; }
+        if (*it->second != a.chosen_float_color
+            && std::find(out.begin(), out.end(), a.sac_source_id) == out.end())
+        { out.push_back(a.sac_source_id); }
+    }
+    std::sort(out.begin(), out.end());
 }
 
 static void CapGroupsBySituationalRank(const GameState& state, const std::vector<Action>& cands,
@@ -3318,6 +3716,46 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
     }
     groups.swap(kept_groups);
     group_hand_index.swap(kept_hand_index);
+}
+
+// ---- MTG_ENUM_STATS: degenerate-atom diagnosis (inert by default) ------------------------------
+// Prints the odometer SHAPE (group sizes + member kinds/names, independent bits) whenever a plan
+// enumeration's position product crosses an escalating per-thread watermark. Used to pin down WHICH
+// actions blow up a pathological hand (the FiveColour 3.4h analyzer atom); see analysis-FiveColour.md.
+static bool EnumStatsOn()
+{
+    static const bool v = EnvOn("MTG_ENUM_STATS");
+    return v;
+}
+
+static void ReportEnumBound(const std::vector<Action>& cands,
+                            const std::vector<std::vector<int>>& groups,
+                            const std::vector<int>& independent)
+{
+    double bound = std::ldexp(1.0, static_cast<int>(independent.size()));
+    for (const std::vector<int>& g : groups) { bound *= 1.0 + static_cast<double>(g.size()); }
+    static const double s_min = []{ const char* e = std::getenv("MTG_ENUM_STATS_MIN");
+        return (e && *e) ? std::atof(e) : 1e8; }();
+    static thread_local double watermark = s_min;   // only ever-larger shapes print (no spam)
+    if (bound < watermark) { return; }
+    watermark = bound * 4.0;
+    std::string desc;
+    char buf[160];
+    for (const std::vector<int>& g : groups)
+    {
+        const Action& a0 = cands[g.front()];
+        std::snprintf(buf, sizeof buf, " [g%zu k%d %s]", g.size(),
+                      static_cast<int>(a0.kind), a0.card_name.c_str());
+        desc += buf;
+    }
+    for (int j : independent)
+    {
+        std::snprintf(buf, sizeof buf, " (k%d %s)", static_cast<int>(cands[j].kind),
+                      cands[j].card_name.c_str());
+        desc += buf;
+    }
+    std::fprintf(stderr, "[enum-stats] bound=%.3g groups=%zu ind=%zu%s\n",
+                 bound, groups.size(), independent.size(), desc.c_str());
 }
 
 // Conservative upper bound on this turn's TOTAL available mana: the current pool plus ALL ritual/rock
@@ -5111,6 +5549,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // gate (burn/TH/Knights/Anti-Lifegain hold no ritual, rock or reducer at all, so the scan always
     // answered "no"). Set BEFORE the independent-action continue so a Lotus SacForMana still counts.
     bool gate_relevant = false;
+    static thread_local std::vector<int> multi_sac;   // >=2-variant SacForMana sources (PlanGroupKey)
+    CollectMultiVariantSacSources(cands, multi_sac);
     for (int j = 0; j < m; ++j)
     {
         if (!gate_relevant
@@ -5118,17 +5558,20 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
                 || (cands[j].def && (cands[j].def->params.affinity_for_subtype
                                      || !cands[j].def->params.reduces_spell_color.empty()))))
         { gate_relevant = true; }
-        if (cands[j].hand_index < 0) { independent.push_back(j); continue; }
+        // The group key: hand slot / free-cast bank slot / mutually-exclusive activation or
+        // multi-variant-sac family (PlanGroupKey), else -> independent bit.
+        const int gkey = PlanGroupKey(cands[j], multi_sac);
+        if (gkey == kIndependentAction) { independent.push_back(j); continue; }
 
         int gi = -1;
         for (int g = 0; g < static_cast<int>(groups.size()); ++g)
         {
-            if (group_hand_index[g] == cands[j].hand_index) { gi = g; break; }
+            if (group_hand_index[g] == gkey) { gi = g; break; }
         }
         if (gi < 0)
         {
             groups.push_back({});
-            group_hand_index.push_back(cands[j].hand_index);
+            group_hand_index.push_back(gkey);
             gi = static_cast<int>(groups.size()) - 1;
         }
         // Collapse all same-charge Vial deploys of one card to a single representative.
@@ -5152,6 +5595,8 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // Feasible-aware early ritual-drop: when no payoff is reachable this turn, remove the ritual groups
     // before the odometer enumerates their powerset (byte-identical; see DropRitualGroupsIfNoPayoff).
     DropRitualGroupsIfNoPayoff(state, pool, cands, groups, group_hand_index, independent);
+
+    if (EnumStatsOn()) { ReportEnumBound(cands, groups, independent); }
 
     int num_groups = static_cast<int>(groups.size());
     int num_ind    = static_cast<int>(independent.size());
@@ -6005,6 +6450,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
     // cascade cast). Consumed at the top of apply_one so it applies to exactly one cast.
     bool cascade_free = false;
+    // Maelstrom Archangel: a plan action marked free_cast spends one banked free cast -- arm the
+    // one-shot cascade_free so exactly its apply_one skips payment. A stranded marker (bank empty
+    // because the combat line diverged) falls through to a paid attempt, mirroring the executor.
+    auto prep_free = [&](const Action& act)
+    {
+        if (act.free_cast && state.free_casts_available > 0)
+        { cascade_free = true; --state.free_casts_available; }
+    };
     std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
@@ -6828,6 +7281,28 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // EffectHandler ApplyRitualFloat off the same k -> lockstep. copies=1 for a plain ritual.
             ApplyRitualFloat(state, def, chosen_x, splice_count + 1);
         }
+        else if (def.params.modal_choose_n > 0)
+        {
+            // Unite the Coalition (user-approved collapse): the searched split S (chosen_x) ->
+            // S x damage-per-choice to the opponent face + (N - S) draws. Lockstep with the
+            // executor's EffectHandler modal branch.
+            const int sN  = chosen_x;
+            const int dmg = sN * def.params.modal_damage_per_choice;
+            if (dmg > 0)
+            {
+                state.players[opp_idx].life -= dmg;
+                state.opponent_lost_life_this_turn = true;
+            }
+            const int draws = (def.params.modal_choose_n - sN) * def.params.modal_draw_per_choice;
+            std::size_t before = ap.hand.size();
+            for (int k = 0; k < draws && !ap.library.empty(); ++k)
+            { ap.library.DrawN(1, ap.hand); }
+            if (g_play_draw_sink)
+            {
+                for (std::size_t hi = before; hi < ap.hand.size(); ++hi)
+                { g_play_draw_sink->push_back({ state.turn_number, ap.hand[hi].m_name.str() }); }
+            }
+        }
         else if (def.params.tutor_to_hand || def.params.tutor_to_top)
         {
             // Tutor (Idyllic / Enlightened): fetch the SEARCHED target (tutor_target); empty
@@ -6977,6 +7452,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             perm.controller_index  = state.active_player_index;
             perm.owner_index       = state.active_player_index;
             perm.entered_this_turn = true;
+            // Planeswalker: starting loyalty + display-mirror counter (lockstep w/ EffectHandler).
+            if (def.params.loyalty_start > 0)
+            {
+                perm.loyalty = def.params.loyalty_start;
+                perm.counters.push_back(Counter{Counter::Type::Loyalty, def.params.loyalty_start});
+            }
             state.battlefield.push_back(perm);
             // Aura (Bogles): attach to the searched creature (enchant_target), then fire Light-Paws.
             // Set aura_attached_to BEFORE PerformLightPawsAttach push_backs the fetched aura. Lockstep
@@ -7053,6 +7534,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
+                    prep_free(a);
                     apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
                 }
             }
@@ -7080,7 +7562,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (opaque)
             {
                 for (const Action& a : acts)
-                { if (is_enabler(a)) { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); } }
+                { if (is_enabler(a)) { prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); } }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -7103,6 +7585,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[ai];
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
+                        prep_free(a);
                         apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
                         spec_hoisted_sac.insert(ai);
                     }
@@ -7110,7 +7593,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (const Action& a : acts)
                 {
                     if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
-                    { apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); }
+                    { prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); }
                 }
             }
             else
@@ -7130,6 +7613,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i : order)
                 {
                     const Action& a = acts[i];
+                    prep_free(a);
                     apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
                 }
             }
@@ -7140,6 +7624,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const Action& a = acts[ai];
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
+                prep_free(a);
                 apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
             }
         }
@@ -7338,6 +7823,29 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             { ApplyChannel(state, state.active_player_index, a.hand_index, a.card_name, a.direct_damage); }
+        }
+        else if (a.kind == Action::Kind::GraveyardExileAbility)
+        {
+            // Deathrite abilities 2/3: pay the colored cost, then tap+exile+effect (no-op if the
+            // source got tapped for mana or the fuel got exiled meanwhile -- stranded-outlet safe).
+            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            { ApplyGraveyardExileAbility(state, state.active_player_index, a.sac_source_id, a.gy_exile_mode); }
+        }
+        else if (a.kind == Action::Kind::Equip)
+        {
+            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            { ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
+        }
+        else if (a.kind == Action::Kind::ActivateLoyalty)
+        {
+            // Planeswalker loyalty: no mana cost (the cost is the loyalty delta, paid inside).
+            ApplyLoyaltyAbility(state, state.active_player_index, a.sac_source_id, a.loyalty_ability);
+        }
+        else if (a.kind == Action::Kind::GarthActivate)
+        {
+            // Garth One-Eye: pay the conjured copy's cost, then tap + choose + cast it.
+            if (TapForCostDirect(state, a.cost, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
+            { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x); }
         }
     }
 
@@ -7550,6 +8058,10 @@ static void SimulateCombat(GameState& state)
     // as until-end-of-turn temp bonuses. Mirrors GameEngine::CombatPhase (executor). Gated inert.
     ApplyAttackSelfPumps(state, active, atk_idx);
 
+    // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
+    // so the cards are in hand for the post-combat main. Mirrors GameEngine::CombatPhase.
+    ApplyAttackDrawTriggers(state, active, atk_idx);
+
     // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to a creature attacking ALONE.
     int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
                         ? CountExalted(state.battlefield, active) : 0;
@@ -7665,7 +8177,12 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
                                   [](const Card& c) { return !c.m_is_staged; });
             if (victim == ap.hand.end()) { break; }
         }
-        ap.graveyard.push_back(*victim);
+        // Progenitus: shuffled into its owner's library instead of the graveyard (replacement) --
+        // lockstep with GameEngine::CleanupStep's identical check.
+        if (!MaybeReplaceGraveyardWithLibraryShuffle(state, state.active_player_index, *victim))
+        {
+            ap.graveyard.push_back(*victim);
+        }
         ap.hand.erase(victim);
     }
 
@@ -7712,8 +8229,13 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         {
             p.tapped            = false;
             p.entered_this_turn = false;
+            p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
+            p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }
     }
+    // Maelstrom Archangel: an unspent banked free cast expires with the turn (lockstep with
+    // GameEngine::UntapStep).
+    state.free_casts_available = 0;
     // Materialise any passive opponent creatures scheduled for this turn, mirroring
     // GameEngine::StartTurnStep. Without this the rollout never sees the opponent's
     // board, so creature-targeted burn (Searing Blaze / Searing Blood) is wrongly
@@ -8523,6 +9045,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // gate (burn/TH/Knights/Anti-Lifegain hold no ritual, rock or reducer at all, so the scan always
     // answered "no"). Set BEFORE the independent-action continue so a Lotus SacForMana still counts.
     bool gate_relevant = false;
+    static thread_local std::vector<int> multi_sac;   // >=2-variant SacForMana sources (PlanGroupKey)
+    CollectMultiVariantSacSources(cands, multi_sac);
     for (int j = 0; j < m; ++j)
     {
         if (!gate_relevant
@@ -8530,17 +9054,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 || (cands[j].def && (cands[j].def->params.affinity_for_subtype
                                      || !cands[j].def->params.reduces_spell_color.empty()))))
         { gate_relevant = true; }
-        if (cands[j].hand_index < 0) { independent.push_back(j); continue; }
+        // The group key: hand slot / free-cast bank slot / mutually-exclusive activation or
+        // multi-variant-sac family (PlanGroupKey), else -> independent bit.
+        // Kept in lockstep with Solve's partition pass above -- change one, change both.
+        const int gkey = PlanGroupKey(cands[j], multi_sac);
+        if (gkey == kIndependentAction) { independent.push_back(j); continue; }
 
         int gi = -1;
         for (int g = 0; g < static_cast<int>(groups.size()); ++g)
         {
-            if (group_hand_index[g] == cands[j].hand_index) { gi = g; break; }
+            if (group_hand_index[g] == gkey) { gi = g; break; }
         }
         if (gi < 0)
         {
             groups.push_back({});
-            group_hand_index.push_back(cands[j].hand_index);
+            group_hand_index.push_back(gkey);
             gi = static_cast<int>(groups.size()) - 1;
         }
         // Collapse all same-charge Vial deploys of one card to a single representative.
@@ -8564,6 +9092,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Feasible-aware early ritual-drop: when no payoff is reachable this turn, remove the ritual groups
     // before the odometer enumerates their powerset (byte-identical; see DropRitualGroupsIfNoPayoff).
     DropRitualGroupsIfNoPayoff(state, pool, cands, groups, group_hand_index, independent);
+
+    if (EnumStatsOn()) { ReportEnumBound(cands, groups, independent); }
 
     int num_groups = static_cast<int>(groups.size());
     int num_ind    = static_cast<int>(independent.size());
@@ -9241,9 +9771,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     // autonomous dedup never collapses the colour decision (core invariant -- same as
                     // SacForMana below). Empty colour (every non-impulse cast) -> just the card name ->
                     // byte-identical for every other deck.
+                    // Free-cast (Archangel bank): paying vs not paying for the same card are
+                    // DISTINCT plans (the freed mana funds other casts) -- keep it in the signature.
+                    // Modal split (Unite the Coalition): distinct splits are DISTINCT plans (core
+                    // invariant); gated on the modal param so no existing deck's signature moves.
                     (act.sacrifice_land ? a : s).push_back(
-                        act.chosen_float_color.empty() ? act.card_name
-                                                       : act.card_name + "#" + act.chosen_float_color); break;
+                        (act.chosen_float_color.empty() ? act.card_name
+                                                        : act.card_name + "#" + act.chosen_float_color)
+                        + (act.free_cast ? "#FREE" : "")
+                        + ((act.def && act.def->params.modal_choose_n > 0)
+                           ? ("#S" + std::to_string(act.chosen_x)) : "")); break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
@@ -9266,6 +9803,22 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                   + "x" + std::to_string(act.sac_count)); break;
                 case Action::Kind::Channel:
                     s.push_back("CHANNEL#" + act.card_name); break;
+                // Deathrite gy-exile outlet: which source AND which mode are distinct decisions.
+                case Action::Kind::GraveyardExileAbility:
+                    msf.push_back("DRE#" + std::to_string(act.sac_source_id)
+                                  + "m" + std::to_string(act.gy_exile_mode)); break;
+                // Equip: which Equipment AND which host are distinct decisions (core invariant).
+                case Action::Kind::Equip:
+                    msf.push_back("EQ#" + std::to_string(act.sac_source_id)
+                                  + ">" + std::to_string(act.sac_victim_id)); break;
+                // Planeswalker: which walker AND which ability are distinct decisions.
+                case Action::Kind::ActivateLoyalty:
+                    msf.push_back("PW#" + std::to_string(act.sac_source_id)
+                                  + "a" + std::to_string(act.loyalty_ability)); break;
+                // Garth: which name is a distinct decision (once-per-game each -- core invariant).
+                case Action::Kind::GarthActivate:
+                    msf.push_back("GARTH#" + std::to_string(act.sac_source_id)
+                                  + "#" + act.tutor_target); break;
             }
         }
         std::sort(v.begin(), v.end());

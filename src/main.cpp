@@ -242,6 +242,20 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             case Action::Kind::PlayLand:          tag = a.card_name + " (land)"; break;
             case Action::Kind::DigDraw:
                 tag = (a.dig_sacrifice ? "sacrifice " : "cycle ") + a.card_name + " to draw"; break;
+            // Battlefield activations (FiveColour): label as abilities, not bare card names --
+            // a bare name reads as a CAST of a card that is not in hand (it confused the
+            // play_invariants hand check and any human reading the plan list).
+            case Action::Kind::GarthActivate:
+                tag = a.card_name + ": conjure " + a.tutor_target; break;
+            case Action::Kind::ActivateLoyalty:
+                tag = a.card_name + " loyalty#" + std::to_string(a.loyalty_ability); break;
+            case Action::Kind::Equip:
+                tag = "equip " + a.card_name + " \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id);
+                break;
+            case Action::Kind::GraveyardExileAbility:
+                tag = a.card_name + (a.gy_exile_mode == 1 ? ": exile instant/sorcery (drain 2)"
+                                                          : ": exile creature (gain 2)");
+                break;
             default:                              tag = a.card_name + " (other)"; break;
         }
         if (a.sacrifice_land) { tag += " +sac-land"; }
@@ -657,18 +671,39 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // are NOT casts -- they are surfaced via the action's "landsedge" count below and the
         // top-level "lands_edge" object, so the GUI's cast match doesn't treat them as spells.
         os << ", \"casts\": [";
+        auto is_activation = [](Action::Kind k)
+        {
+            return k == Action::Kind::GarthActivate || k == Action::Kind::ActivateLoyalty
+                || k == Action::Kind::Equip         || k == Action::Kind::GraveyardExileAbility;
+        };
         {
             bool first = true;
             for (size_t a = 0; a < p.actions.size(); ++a)
             {
                 if (p.actions[a].kind == Action::Kind::DiscardToLandsEdge) { continue; }
                 if (p.actions[a].kind == Action::Kind::DigDraw)            { continue; }  // a dig, not a cast
+                if (is_activation(p.actions[a].kind))                      { continue; }  // ability, not a cast
                 if (!first) { os << ", "; }
                 first = false;
                 JsonStr(os, p.actions[a].card_name);
             }
         }
         os << "]";
+        // Battlefield activations, set apart from casts so the GUI's land+cast multiset match and
+        // the play_invariants hand check stay honest (a loyalty/equip/Garth/Deathrite action names
+        // a PERMANENT, not a castable card). Key emitted only when the plan has one -> the decision
+        // JSON of every deck without these kinds is unchanged.
+        {
+            bool any = false;
+            for (size_t a = 0; a < p.actions.size(); ++a)
+            {
+                if (!is_activation(p.actions[a].kind)) { continue; }
+                os << (any ? ", " : ", \"activations\": [");
+                any = true;
+                JsonStr(os, p.actions[a].card_name);
+            }
+            if (any) { os << "]"; }
+        }
         // #10 cast-order: the CANONICAL execution order of this plan's non-sac hand casts, so the viewer
         // can tell whether the human's queued order is a REORDER (=> emit --cast-order) or already
         // canonical (=> omit, keeping references byte-identical). Emitted only when >=2 non-sac casts.

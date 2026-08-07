@@ -52,6 +52,24 @@ struct Action
         Channel,             // Twinshot Sniper "Channel -- {1}{R}, Discard this: 2 damage to any target":
                              // a from-HAND ability. Pay channel_cost + discard card_name (hand_index) ->
                              // channel_damage to the opponent face. cost = channel_cost.
+        GarthActivate,       // Garth One-Eye: tap Garth (sac_source_id), choose the un-chosen name
+                             // carried on tutor_target, conjure + CAST the copy as the ability
+                             // resolves. cost = the copy's mana cost (Braingeyser: {U}{U} + the
+                             // auto-maxed X as generic, X on chosen_x). One per Garth per plan.
+        ActivateLoyalty,     // Planeswalker: activate loyalty ability #loyalty_ability of the walker
+                             // (sac_source_id = its card.m_number). cost = {0} (the cost is the
+                             // loyalty delta, paid inside ApplyLoyaltyAbility). One per walker per
+                             // plan (exclusivity clause) and per turn (loyalty_activated_this_turn).
+        Equip,               // Lightning Greaves: pay equip_cost_generic (as a.cost; {0} for Greaves)
+                             // and attach the Equipment (sac_source_id = its card.m_number) to a
+                             // controlled creature (sac_victim_id = the host's card.m_number).
+                             // Sorcery-speed; variants of one Equipment are mutually exclusive per
+                             // plan via the shared sac_source_id.
+        GraveyardExileAbility, // Deathrite Shaman abilities 2/3: pay the colored cost ({B}/{G}) + tap
+                             // the source (sac_source_id = its card.m_number), exile the first
+                             // matching graveyard card, then drain 2 (gy_exile_mode 1) or gain 2
+                             // (gy_exile_mode 2). Mutually exclusive with the source's mana tap via
+                             // the shared {T} (the apply is a no-op if the source is already tapped).
     };
 
     Kind        kind           = Kind::CastFromHand;
@@ -125,6 +143,15 @@ struct Action
                                        // >1 = the multi-sac BURST (Siege-Gang saccing the swarm for
                                        // sac_count*damage lethal): the apply loops the canonical victim
                                        // pick sac_count times; cost/direct_damage are pre-scaled by k.
+    int         gy_exile_mode  = 0;    // GraveyardExileAbility: 1 = exile instant/sorcery -> opponent
+                                       // loses N (Deathrite {B}); 2 = exile creature -> gain N ({G}).
+    int         loyalty_ability = -1;  // ActivateLoyalty: index into the walker's loyalty_abilities.
+    bool        free_cast      = false; // Maelstrom Archangel: this CastFromHand variant spends one
+                                       // banked free cast (GameState::free_casts_available) instead
+                                       // of paying mana (a.cost cleared; sac_source_id = the bank
+                                       // SLOT id -1000-slot so two free casts never share a slot).
+                                       // Emitted by CollectActions' free-variant post-pass only when
+                                       // the counter is > 0 (the post-combat main).
     int         soulfire_own_targets = 0;
                                        // Soulfire Eruption: searched COUNT of own creatures to add
                                        // as extra targets (0..#own creatures). CollectActions emits

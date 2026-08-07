@@ -18,6 +18,13 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     perm.controller_index  = entry.controller_index;
     perm.owner_index       = entry.controller_index;
     perm.entered_this_turn = true;
+    // Planeswalker: enters with its starting loyalty (dedicated int + a display-mirror counter
+    // the existing viewer badge code picks up). Mirrors the rollout's non-creature enter branch.
+    if (def.params.loyalty_start > 0)
+    {
+        perm.loyalty = def.params.loyalty_start;
+        perm.counters.push_back(Counter{Counter::Type::Loyalty, def.params.loyalty_start});
+    }
     state.battlefield.push_back(perm);
 
     // Dragonstorm kill-engine (executor side): a Dragon entering fires the shared cascade --
@@ -166,7 +173,8 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
             // Unknown or Tier 3 custom card — no built-in effect.
             // Move non-permanents to graveyard; permanents enter the battlefield.
             if (def.card.IsCreature() || def.card.HasType(CardType::Enchantment)
-                || def.card.HasType(CardType::Artifact) || def.card.IsLand())
+                || def.card.HasType(CardType::Artifact) || def.card.IsLand()
+                || def.card.HasType(CardType::Planeswalker))
             {
                 EnterBattlefield(state, entry, def);
                 // Aura (Bogles): attach to the searched creature (enchant_target), then fire
@@ -254,6 +262,30 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 if (def.params.destroy_all_enchantments)
                 {
                     DestroyAllEnchantments(state);
+                }
+                // Unite the Coalition (user-approved collapse): the searched split S (on
+                // chosen_x) of the five mode-picks -> S x damage-per-choice to the opponent
+                // face + (N - S) draws. Lockstep with the rollout's apply_one modal branch.
+                if (def.params.modal_choose_n > 0)
+                {
+                    const int sN  = entry.chosen_x.value_or(0);
+                    const int dmg = sN * def.params.modal_damage_per_choice;
+                    if (dmg > 0)
+                    {
+                        state.players[1 - entry.controller_index].life -= dmg;
+                        state.opponent_lost_life_this_turn = true;
+                    }
+                    const int draws = (def.params.modal_choose_n - sN)
+                                      * def.params.modal_draw_per_choice;
+                    Player& mp = state.players[entry.controller_index];
+                    std::size_t before = mp.hand.size();
+                    for (int k = 0; k < draws && !mp.library.empty(); ++k)
+                    { mp.library.DrawN(1, mp.hand); }
+                    if (g_play_draw_sink)
+                    {
+                        for (std::size_t hi = before; hi < mp.hand.size(); ++hi)
+                        { g_play_draw_sink->push_back({ state.turn_number, mp.hand[hi].m_name.str() }); }
+                    }
                 }
                 if (def.params.cascade_max_mv > 0)
                 {

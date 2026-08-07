@@ -698,6 +698,22 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
     ++state.search_count;
 }
 
+// ---- Progenitus: "If ~ would be put into a graveyard from anywhere, reveal it and shuffle it
+// into its owner's library instead." (CardParams::graveyard_replace_shuffle_library, CR 614 self-
+// replacement.) Called at the graveyard-push sites reachable for a hand card in this engine (the
+// cleanup discard, executor + rollout -- Progenitus cannot die or be otherwise discarded here).
+// Returns true if the replacement fired: the card went into the library (then a shuffle) and the
+// caller must NOT push it to the graveyard.
+inline bool MaybeReplaceGraveyardWithLibraryShuffle(GameState& state, int controller_index,
+                                                    const Card& c)
+{
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+    if (!def || !def->params.graveyard_replace_shuffle_library) { return false; }
+    state.players[controller_index].library.push_back(c);
+    ShuffleAfterSearch(state, controller_index);
+    return true;
+}
+
 // PerformTutor -- body in SpellEffects.cpp (see the header note above).
 void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
                          const std::string& target_name = "",
@@ -1273,6 +1289,38 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
             state.players[active].life -= def->params.on_cast_trigger_damage;
         }
 
+        // Mana Cannons: casting a multicolored spell deals (its color count) damage to any
+        // target -- collapsed to the opponent's face (provably optimal vs the passive
+        // opponent; the etb_damage_any precedent). Real damage, like Aria's verse damage.
+        // Mana Cannons is not on the battlefield while itself being cast -> never self-fires.
+        if (def->params.multicolor_cast_damage_per_color && cast_def.card.IsMulticolored())
+        {
+            const int before = state.players[1 - active].life;
+            const int dmg = cast_def.card.ColorCount();
+            state.players[1 - active].life -= dmg;
+            state.opponent_lost_life_this_turn = true;
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "damage",
+                              "\xF0\x9F\x94\xA5 Mana Cannons (" + cast_def.card.m_name.str() + ", "
+                              + std::to_string(dmg) + " colors): " + std::to_string(dmg)
+                              + " to opponent (" + std::to_string(before)
+                              + "\xE2\x86\x92" + std::to_string(before - dmg) + ")");
+            }
+        }
+
+        // Ancient Cornucopia: the first spell that's one or more colors cast each turn gains
+        // its controller life equal to that spell's color count ("may" always taken -- a free
+        // resource with no anti-lifegain tech in-deck). Once each turn per permanent; the
+        // used-flag resets at both untap sites (executor + rollout, lockstep).
+        if (def->params.colored_cast_lifegain
+            && !state.battlefield[i].colored_cast_lifegain_used_this_turn
+            && cast_def.card.ColorCount() > 0)
+        {
+            state.players[active].life += cast_def.card.ColorCount();
+            state.battlefield[i].colored_cast_lifegain_used_this_turn = true;
+        }
+
         // Aria of Flame verse engine: casting an instant or sorcery puts a verse counter on
         // this enchantment, then it deals (verse counters) damage to the opponent. This is
         // real damage (not a lifegain event), so Tainted Remedy does not touch it. Aria is
@@ -1357,6 +1405,30 @@ inline std::pair<int,int> ComputeLordBonus(
     const Permanent*               self               = nullptr)
 {
     int pb = 0, tb = 0;
+
+    // Faeburrow Elder characteristic P/T (domain_self_pump): +1/+1 for each color among the
+    // controller's permanents -- the creature's OWN buff, not a lord effect, but computed here so
+    // every existing combat/eval/SBA call site picks it up. For a hand-card evaluation (the card
+    // not yet on the battlefield) this slightly under-counts by the card's own colours -- a
+    // conservative projection; exact once it is a permanent (it then counts itself).
+    {
+        const CardDefinition* sdef = CardDatabase::Instance().LookupCached(creature);
+        if (sdef && sdef->params.domain_self_pump)
+        {
+            bool have[5] = {false, false, false, false, false};
+            for (const Permanent& q : battlefield)
+            {
+                if (q.controller_index != controller_index) { continue; }
+                for (int ci = 0; ci < 5; ++ci)
+                {
+                    if (q.card.HasColor(static_cast<Color>(ci))) { have[ci] = true; }
+                }
+            }
+            const int n = have[0] + have[1] + have[2] + have[3] + have[4];
+            pb += n; tb += n;
+        }
+    }
+
     for (const Permanent& lord : battlefield)
     {
         if (lord.controller_index != controller_index) { continue; }
@@ -1482,6 +1554,24 @@ inline bool HasHasteFromLords(
 // Returns true if the permanent can attack, considering lord-granted haste as well as
 // card-level haste and animation. Use this in place of Permanent::CanAttack() anywhere
 // the battlefield context is available (declare attackers, combat lookahead).
+// Lightning Greaves: true when an equip_grants_haste Equipment the controller owns is attached
+// to this creature (identity = the host's per-instance card.m_number). Sibling of
+// HasHasteFromLords, consulted by CanAttackFull only -- see the CardParams::is_equipment note for
+// the tap-ability limitation (disclosed).
+inline bool HasHasteFromEquip(const Permanent& creature,
+                              const std::vector<Permanent>& battlefield,
+                              int controller_index)
+{
+    for (const Permanent& e : battlefield)
+    {
+        if (e.controller_index != controller_index) { continue; }
+        if (e.equipped_to == 0 || e.equipped_to != creature.card.m_number) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.card);
+        if (d && d->params.is_equipment && d->params.equip_grants_haste) { return true; }
+    }
+    return false;
+}
+
 inline bool CanAttackFull(
     const Permanent&               p,
     const std::vector<Permanent>&  battlefield,
@@ -1497,7 +1587,8 @@ inline bool CanAttackFull(
     // which hastes the animated land as it is every creature type) grants it.
     if (!p.entered_this_turn)                   { return true; }
     if (p.card.HasKeyword(Keyword::Haste))      { return true; }
-    return HasHasteFromLords(p.card, battlefield, controller_index, p.is_animated);
+    if (HasHasteFromLords(p.card, battlefield, controller_index, p.is_animated)) { return true; }
+    return HasHasteFromEquip(p, battlefield, controller_index);
 }
 
 // Returns the total LIFE the opponent LOSES from attack triggers (e.g. Leeching Sliver:
@@ -1951,6 +2042,393 @@ inline void ApplyTapForTokens(GameState& state, int controller, int source_id)
     }
 }
 
+// ---- Garth One-Eye: choose an un-chosen name, conjure the copy, cast it as the ability resolves -
+// The six names (mask bit order): Disenchant(0), Braingeyser(1), Terror(2), Shivan Dragon(3),
+// Regrowth(4), Black Lotus(5). The enumeration only offers names whose cast is affordable and
+// goldfish-live NOW (Disenchant never -- structurally target-less, user-approved stub), so this
+// apply both marks the name chosen AND casts the copy. The copy's mana cost was reserved by the
+// plan's subset math (a.cost) and is paid here via the caller's TapForCost* (except Black Lotus,
+// {0}). Braingeyser's X is auto-maxed from the mana left after payment of {U}{U} (disclosed).
+inline int GarthNameBit(const std::string& name)
+{
+    if (name == "Disenchant")    { return 0; }
+    if (name == "Braingeyser")   { return 1; }
+    if (name == "Terror")        { return 2; }
+    if (name == "Shivan Dragon") { return 3; }
+    if (name == "Regrowth")      { return 4; }
+    if (name == "Black Lotus")   { return 5; }
+    return -1;
+}
+
+inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
+                               const std::string& name, int braingeyser_x)
+{
+    const int bit = GarthNameBit(name);
+    if (bit < 0) { return; }
+    Permanent* garth = nullptr;
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != garth_id) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (!pd || !pd->params.garth_copy_ability) { continue; }
+        if (p.tapped || !p.CanTap()) { return; }                       // stranded: no-op
+        if (p.garth_chosen_mask & (1u << bit)) { return; }             // name already chosen
+        garth = &p;
+        break;
+    }
+    if (!garth) { return; }
+    garth->tapped = true;
+    garth->garth_chosen_mask |= static_cast<uint8_t>(1u << bit);
+
+    const CardDefinition* cd = CardDatabase::Instance().Lookup(name);
+    if (!cd) { return; }
+    // The copy is CAST: it counts toward storm-style counters and fires on-cast triggers
+    // (a multicolored conjure would ping Mana Cannons -- none of the six is multicolored).
+    ++state.spells_cast_this_turn;
+    FireOnCastTriggers(state, *cd);
+
+    if (name == "Black Lotus" || name == "Shivan Dragon")
+    {
+        // Permanent copies enter the battlefield (Lotus's sac-for-mana and Shivan's
+        // firebreathing are param-driven from their cards.json entries; the token-copy is a new
+        // object with a fresh id 0 -- ids only matter for targeting/equip, neither applies).
+        Permanent perm;
+        perm.card              = cd->card;
+        perm.controller_index  = controller;
+        perm.owner_index       = controller;
+        perm.entered_this_turn = true;
+        perm.is_token          = true;   // a conjured copy ceases to exist in other zones anyway
+        state.battlefield.push_back(perm);
+        OnDragonEnters(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+    }
+    else if (name == "Braingeyser")
+    {
+        Player& pl = state.players[controller];
+        std::size_t before = pl.hand.size();
+        for (int k = 0; k < braingeyser_x && !pl.library.empty(); ++k)
+        { pl.library.DrawN(1, pl.hand); }
+        if (g_play_draw_sink)
+        {
+            for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
+            { g_play_draw_sink->push_back({ state.turn_number, pl.hand[hi].m_name.str() }); }
+        }
+    }
+    else if (name == "Regrowth")
+    {
+        // Return the highest-MV graveyard card to hand (AUTO-RESOLVED pick, disclosed).
+        std::vector<Card>& gy = state.players[controller].graveyard;
+        int best = -1, best_mv = -1;
+        for (int g = 0; g < static_cast<int>(gy.size()); ++g)
+        {
+            const int mv = gy[g].m_mana_cost.ManaValue();
+            if (mv > best_mv) { best_mv = mv; best = g; }
+        }
+        if (best >= 0)
+        {
+            state.players[controller].hand.push_back(gy[best]);
+            gy.erase(gy.begin() + best);
+        }
+    }
+    else if (name == "Terror")
+    {
+        // Destroy the largest opponent nonartifact (spawn tokens are colorless, never black)
+        // creature. Payoff ~0 vs a passive opponent, but faithful.
+        int pick = -1, best_pw = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.controller_index == controller || !q.card.IsCreature()) { continue; }
+            if (q.card.HasType(CardType::Artifact) || q.card.HasColor(Color::Black)) { continue; }
+            const int pw = q.EffectivePower();
+            if (pw > best_pw) { best_pw = pw; pick = i; }
+        }
+        if (pick >= 0)
+        {
+            const Permanent dead = state.battlefield[pick];
+            if (!dead.is_token)
+            { state.players[dead.owner_index].graveyard.push_back(dead.card); }
+            state.battlefield.erase(state.battlefield.begin() + pick);
+        }
+    }
+    // Disenchant: never enumerated (user-approved choose-but-never-cast stub).
+}
+
+// ---- Planeswalker loyalty activation (Jared Carthalion / Nicol Bolas / Oko) ---------------------
+// One loyalty ability per walker per turn (CR 606.3), sorcery-speed, usable the turn the walker
+// enters. Pays the loyalty delta first (CR 606.5); a walker left at loyalty <= 0 goes to its
+// owner's graveyard immediately (the only loyalty-death path vs a passive opponent -- nothing
+// else ever damages a walker here). Effects are scripted primitives; auto-resolved sub-choices
+// (which creatures get Jared's counters, which card Regrowth returns, which own permanent Bolas
+// destroys, which Food becomes an Elk) use deterministic provably-reasonable picks, disclosed in
+// the deck's 6a table. Applied identically by the rollout and executor trailing passes (lockstep).
+inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id, int ability_index)
+{
+    int wi = -1;
+    const CardDefinition* d = nullptr;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        Permanent& p = state.battlefield[i];
+        if (p.controller_index != controller || p.card.m_number != walker_id) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (!pd || pd->params.loyalty_abilities.empty()) { continue; }
+        if (p.loyalty_activated_this_turn) { return; }   // stranded duplicate: no-op
+        wi = i; d = pd;
+        break;
+    }
+    if (wi < 0 || !d) { return; }
+    if (ability_index < 0
+        || ability_index >= static_cast<int>(d->params.loyalty_abilities.size())) { return; }
+    const CardParams::LoyaltyAbilityParam& ab = d->params.loyalty_abilities[ability_index];
+    Permanent& w = state.battlefield[wi];
+    if (ab.delta < 0 && w.loyalty < -ab.delta) { return; }   // can't pay the cost
+    w.loyalty += ab.delta;
+    w.loyalty_activated_this_turn = true;
+    for (Counter& c : w.counters)
+    {
+        if (c.type == Counter::Type::Loyalty) { c.count = w.loyalty; break; }   // viewer mirror
+    }
+
+    auto make_token = [&](const char* nm, bool creature, int pw, int tf,
+                          const std::vector<std::string>& subs, bool all_colors, bool green_only,
+                          bool trample)
+    {
+        Permanent token;
+        token.card.m_name = nm;
+        token.card.RehashName();
+        token.card.AddType(creature ? CardType::Creature : CardType::Artifact);
+        token.card.m_subtypes = subs;
+        if (creature) { token.card.m_power = pw; token.card.m_toughness = tf; }
+        if (trample)  { token.card.AddKeyword(Keyword::Trample); }
+        if (all_colors)
+        {
+            token.card.AddColor(Color::White); token.card.AddColor(Color::Blue);
+            token.card.AddColor(Color::Black); token.card.AddColor(Color::Red);
+            token.card.AddColor(Color::Green);
+        }
+        if (green_only) { token.card.AddColor(Color::Green); }
+        token.controller_index  = controller;
+        token.owner_index       = controller;
+        token.entered_this_turn = true;
+        token.is_token          = true;
+        state.battlefield.push_back(token);
+    };
+
+    if (ab.effect == "kavu_token")
+    {
+        // Jared +1: a 3/3 Kavu with trample that's ALL colors (its colors feed domain mana,
+        // Jared's -3 counter count, and the -6 all-colors check on other cards).
+        make_token("Kavu Token", true, 3, 3, {"Kavu"}, /*all_colors=*/true, false, /*trample=*/true);
+    }
+    else if (ab.effect == "counters_up_to_two")
+    {
+        // Jared -3: up to `amount` target creatures each get +1/+1 counters equal to their color
+        // count. AUTO-RESOLVED collapse: the amount highest-color-count own creatures (total
+        // stats are additive vs a never-blocking opponent, so max-total is provably optimal;
+        // ties by battlefield order). Disclosed 6a.
+        std::vector<std::pair<int, int>> ranked;   // (color_count, index)
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
+            const int cc = q.card.ColorCount();
+            if (cc > 0) { ranked.push_back({cc, i}); }
+        }
+        std::stable_sort(ranked.begin(), ranked.end(),
+                         [](const std::pair<int, int>& x, const std::pair<int, int>& y)
+                         { return x.first > y.first; });
+        for (int k = 0; k < ab.amount && k < static_cast<int>(ranked.size()); ++k)
+        {
+            state.battlefield[ranked[k].second].counters.push_back(
+                Counter{Counter::Type::PlusOnePlusOne, ranked[k].first});
+        }
+    }
+    else if (ab.effect == "regrow_multicolored")
+    {
+        // Jared -6: return the highest-MV multicolored card from the graveyard to hand
+        // (AUTO-RESOLVED pick, disclosed); if it was ALL colors, draw a card and make two
+        // Treasures ("Treasure Token" has a cards.json entry -> its sac-for-mana is live).
+        std::vector<Card>& gy = state.players[controller].graveyard;
+        int best = -1, best_mv = -1;
+        for (int g = 0; g < static_cast<int>(gy.size()); ++g)
+        {
+            if (!gy[g].IsMulticolored()) { continue; }
+            const int mv = gy[g].m_mana_cost.ManaValue();
+            if (mv > best_mv) { best_mv = mv; best = g; }
+        }
+        if (best >= 0)
+        {
+            Card back = gy[best];
+            gy.erase(gy.begin() + best);
+            const bool all5 = back.ColorCount() == 5;
+            state.players[controller].hand.push_back(std::move(back));
+            if (all5)
+            {
+                Player& pl = state.players[controller];
+                if (!pl.library.empty())
+                {
+                    std::size_t before = pl.hand.size();
+                    pl.library.DrawN(1, pl.hand);
+                    if (g_play_draw_sink)
+                    {
+                        for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
+                        { g_play_draw_sink->push_back({ state.turn_number, pl.hand[hi].m_name.str() }); }
+                    }
+                }
+                make_token("Treasure Token", false, 0, 0, {"Treasure"}, false, false, false);
+                make_token("Treasure Token", false, 0, 0, {"Treasure"}, false, false, false);
+            }
+        }
+    }
+    else if (ab.effect == "destroy_own_noncreature")
+    {
+        // Bolas +3 ("destroy target noncreature permanent"): vs a permanent-less passive opponent
+        // the only legal targets are OUR OWN noncreature permanents -- a real, costly loyalty
+        // ramp the search prices holistically. AUTO-RESOLVED pick (disclosed): the first own
+        // LAND in battlefield order (most replaceable), else the first own noncreature
+        // non-planeswalker permanent, excluding the activating walker itself.
+        int pick = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.controller_index != controller || q.card.IsCreature()) { continue; }
+            if (q.card.m_number == walker_id) { continue; }
+            if (q.card.IsLand()) { pick = i; break; }
+            if (pick < 0 && !q.card.HasType(CardType::Planeswalker)) { pick = i; }
+        }
+        if (pick >= 0)
+        {
+            Permanent dead = state.battlefield[pick];
+            for (Permanent& q : state.battlefield)
+            { if (q.equipped_to == dead.card.m_number) { q.equipped_to = 0; } }
+            if (!dead.is_token)
+            { state.players[dead.owner_index].graveyard.push_back(dead.card); }
+            state.battlefield.erase(state.battlefield.begin() + pick);
+        }
+    }
+    else if (ab.effect == "face_damage")
+    {
+        // Bolas -9: 7 damage to the opponent's face (the discard-7 / sacrifice-7 riders are
+        // inert vs a hand-less opponent whose only permanents are spawn tokens; user-approved).
+        state.players[1 - controller].life -= ab.amount;
+        state.opponent_lost_life_this_turn = true;
+    }
+    else if (ab.effect == "food_token")
+    {
+        // Oko +2: a Food artifact token. Its own "{2},{T},Sac: gain 3 life" ability is a
+        // user-approved inert deferral; the token's modeled value is Elk fodder (+1) and body
+        // count.
+        make_token("Food Token", false, 0, 0, {"Food"}, false, false, false);
+    }
+    else if (ab.effect == "elk_transform")
+    {
+        // Oko +1 ("target artifact or creature loses all abilities, becomes a 3/3 green Elk"):
+        // NARROWED to the value line -- transform an own Food token into a 3/3 body (enumerated
+        // only when a Food exists; Elking a real creature is strictly worse here and is not
+        // offered -- disclosed 6a). Keeps entered_this_turn (a fresh Food makes a summoning-sick
+        // Elk, faithful).
+        for (Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller) { continue; }
+            if (q.card.m_name.str() != "Food Token") { continue; }
+            q.card.m_name = "Elk";
+            q.card.RehashName();
+            q.card.m_type_mask    = 0;
+            q.card.AddType(CardType::Creature);
+            q.card.m_subtypes     = {"Elk"};
+            q.card.m_power        = 3;
+            q.card.m_toughness    = 3;
+            q.card.m_keyword_mask = 0;
+            q.card.m_color_mask   = 0;
+            q.card.AddColor(Color::Green);
+            break;
+        }
+    }
+
+    // Loyalty cost paid the walker to death (a minus ability at exactly its loyalty): CR 704.5i.
+    // Re-locate by id first -- the effect above may have reallocated (token push_back) or shifted
+    // (destroy erase) the battlefield, so `wi`/`w` are no longer trustworthy.
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        Permanent& q = state.battlefield[i];
+        if (q.controller_index != controller || q.card.m_number != walker_id) { continue; }
+        if (q.loyalty > 0) { break; }
+        const Card dead_card = q.card;
+        state.players[q.owner_index].graveyard.push_back(dead_card);
+        state.battlefield.erase(state.battlefield.begin() + i);
+        break;
+    }
+}
+
+// ---- Equipment attach (Lightning Greaves) -------------------------------------------------------
+// Equip: sorcery-speed re-point of an is_equipment permanent onto a controlled creature (CR 701.3;
+// equip ATTACHES, it does not target -- the goldfish has no targeting restrictions anyway). The
+// generic cost is paid by the caller (the trailing outlet apply pass, both worlds); {0} for
+// Greaves. No-op if either permanent is missing (stranded-action safe, lockstep).
+inline void ApplyEquip(GameState& state, int controller, int equip_id, int creature_id)
+{
+    Permanent* eq = nullptr;
+    bool host_ok = false;
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (p.card.m_number == equip_id)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.is_equipment) { eq = &p; }
+        }
+        if (p.card.m_number == creature_id && (p.card.IsCreature() || p.is_animated))
+        { host_ok = true; }
+    }
+    if (eq && host_ok) { eq->equipped_to = creature_id; }
+}
+
+// ---- Deathrite Shaman graveyard-exile value outlets (abilities 2/3) -----------------------------
+// "{B},{T}: exile an instant/sorcery card from a graveyard -> each opponent loses 2 life" (mode 1)
+// "{G},{T}: exile a creature card from a graveyard -> you gain 2 life"                     (mode 2)
+// The colored cost is paid by the caller (mirrors SacCreatureOutlet's trailing apply pass, both
+// worlds); here we tap the source, exile the first matching fuel card from the controller's own
+// graveyard (fungible within the type filter -- deterministic in both worlds), and realise the
+// effect. A source that is tapped/missing or has no fuel makes this a no-op -> stranded-outlet
+// safe, lockstep.
+inline void ApplyGraveyardExileAbility(GameState& state, int controller, int source_id, int mode)
+{
+    Permanent* src = nullptr;
+    const CardDefinition* d = nullptr;
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.tapped) { continue; }
+        if (p.card.m_number != source_id) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (!pd) { continue; }
+        if (mode == 1 && pd->params.gy_exile_instant_sorcery_drain <= 0) { continue; }
+        if (mode == 2 && pd->params.gy_exile_creature_lifegain <= 0) { continue; }
+        if (p.entered_this_turn && !p.card.HasKeyword(Keyword::Haste)
+            && !HasHasteFromLords(p.card, state.battlefield, controller)) { continue; }
+        src = &p; d = pd;
+        break;
+    }
+    if (!src || !d) { return; }
+    std::vector<Card>& gy = state.players[controller].graveyard;
+    for (std::size_t i = 0; i < gy.size(); ++i)
+    {
+        const bool match = (mode == 1) ? (gy[i].IsInstant() || gy[i].IsSorcery())
+                                       : gy[i].IsCreature();
+        if (!match) { continue; }
+        gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(i));
+        src->tapped = true;   // the {T} part of the cost
+        if (mode == 1)
+        {
+            state.players[1 - controller].life -= d->params.gy_exile_instant_sorcery_drain;
+            state.opponent_lost_life_this_turn = true;
+        }
+        else
+        {
+            state.players[controller].life += d->params.gy_exile_creature_lifegain;
+        }
+        return;
+    }
+}
+
 // Sacrifice-a-creature outlet (Skirk Prospector -> {R}; Siege-Gang -> 2 face damage; Pashalik -> two
 // tokens). The mana cost is paid by the caller (subset math); here we SACRIFICE the chosen victim,
 // apply the outlet payload from the source's params, and fire the victim's death-watchers.
@@ -2188,6 +2666,40 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
     }
 }
 
+// ---- Two-Headed Hellkite: "Whenever this creature attacks, draw two cards." ---------------------
+// Self-only attack-trigger draw (CardParams::attack_draw_cards), applied once per attacking copy at
+// declare-attackers alongside ApplyAttackSelfPumps, in BOTH worlds (GameEngine::CombatPhase executor
+// + TurnSolver::SimulateCombat rollout) so search and execution agree on the drawn resources.
+// Drawing from an empty library loses the game -- same player_lost_on_draw flag as the draw step.
+// Gated: an attacker whose def leaves attack_draw_cards at 0 is untouched -> other decks
+// byte-identical.
+inline void ApplyAttackDrawTriggers(GameState& state, int controller,
+                                    const std::vector<int>& attacker_indices)
+{
+    if (attacker_indices.empty()) { return; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    Player& pl = state.players[controller];
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        const Permanent& self = state.battlefield[idx];
+        if (self.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(self.card);
+        if (!d || d->params.attack_draw_cards <= 0) { continue; }
+        for (int k = 0; k < d->params.attack_draw_cards; ++k)
+        {
+            if (pl.library.empty()) { state.player_lost_on_draw = true; return; }
+            std::size_t before = pl.hand.size();
+            pl.library.DrawN(1, pl.hand);
+            if (g_play_draw_sink)
+            {
+                for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
+                { g_play_draw_sink->push_back({ state.turn_number, pl.hand[hi].m_name.str() }); }
+            }
+        }
+    }
+}
+
 // ---- Goblin Lackey: cheat a Goblin permanent into play on combat damage --------------------------
 // "Whenever this creature deals combat damage to a player, you may put a Goblin permanent card from
 // your hand onto the battlefield." Fired at the combat-damage step (both worlds) for each of the
@@ -2402,8 +2914,21 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
 // Consume `cost` from a flat ManaPool (assumes pool.CanPay(cost) is true). Colored pips are paid
 // from their own colour first (wild covers a shortfall); generic is paid from off-colours / wild
 // first, red last, so scarce coloured mana is preserved for coloured firebreathing pips.
-inline void PayFromPool(ManaPool& pool, const ManaCost& cost)
+inline void PayFromPool(ManaPool& pool, const ManaCost& cost_in)
 {
+    // Hybrid pips: resolve to the first concrete assignment the pool can actually pay (bits==0 =
+    // first-listed-colour preference), then pay flat. CanPay(cost_in) was the caller's guarantee,
+    // so an assignment exists.
+    ManaCost cost = cost_in;
+    if (cost_in.hybrid_count > 0)
+    {
+        cost = cost_in.ExpandHybrids(0);
+        for (unsigned bits = 0; bits < (1u << cost_in.hybrid_count); ++bits)
+        {
+            ManaCost c = cost_in.ExpandHybrids(bits);
+            if (pool.CanPayFlat(c)) { cost = c; break; }
+        }
+    }
     auto pay_colored = [&](int need, int& src)
     {
         int use = std::min(need, src); src -= use; need -= use;
@@ -3133,6 +3658,43 @@ inline int ManaProducedPerTap(const CardDefinition& def)
     return std::max(1, def.params.produces_amount);
 }
 
+// ---- Deathrite Shaman graveyard-land fuel (gy_land_exile_mana) ---------------------------------
+// Ability 1's mana tap exiles a land card from the controller's own graveyard; without one the
+// source is not live. GraveyardLandFuel counts the fuel (pool builders credit at most this many
+// such sources); ExileGraveyardLandForMana consumes one (deterministic first-match, both worlds)
+// and returns its index for exact restore on a failed payment attempt.
+inline int GraveyardLandFuel(const GameState& state, int controller)
+{
+    int n = 0;
+    for (const Card& c : state.players[controller].graveyard) { if (c.IsLand()) { ++n; } }
+    return n;
+}
+
+// True when `def` is currently a live mana source w.r.t. Deathrite's graveyard-land fuel gate
+// (trivially true for every other source -- byte-identical).
+inline bool GraveyardFuelLive(const GameState& state, int controller, const CardDefinition& def)
+{
+    if (!def.params.gy_land_exile_mana) { return true; }
+    return GraveyardLandFuel(state, controller) > 0;
+}
+
+// Exile (erase) the first land card in the controller's graveyard. Returns true if one was
+// removed. The removed card is gone for good (no exile zone bookkeeping needed -- nothing reads
+// exiled cards); callers that may FAIL the surrounding payment snapshot/restore the graveyard.
+inline bool ExileGraveyardLandForMana(GameState& state, int controller)
+{
+    std::vector<Card>& gy = state.players[controller].graveyard;
+    for (std::size_t i = 0; i < gy.size(); ++i)
+    {
+        if (gy[i].IsLand())
+        {
+            gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(i));
+            return true;
+        }
+    }
+    return false;
+}
+
 // Per-permanent mana yield for a single tap. A storage-counter land (Dwarven Hold, Mercadian
 // Bazaar) bursts its CURRENT storage_counters worth of {R} in one tap (0 when uncharged -> not a
 // live source); every other source is its static per-tap amount. Threaded through every mana-
@@ -3178,6 +3740,7 @@ inline int ScaledManaFeederMana(const GameState& state)
 {
     const int active = state.active_player_index;
     int total = 0;
+    int gy_fuel = -1;   // Deathrite fuel: lazily counted, decremented per credited source
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active || p.tapped) { continue; }
@@ -3188,6 +3751,13 @@ inline int ScaledManaFeederMana(const GameState& state)
                          || (d->tmpl == CardTemplate::ManaDork && p.CanTap())
                          || d->params.mana_rock;
         if (!is_src) { continue; }
+        // Deathrite: credit at most #graveyard-lands such sources.
+        if (d->params.gy_land_exile_mana)
+        {
+            if (gy_fuel < 0) { gy_fuel = GraveyardLandFuel(state, active); }
+            if (gy_fuel <= 0) { continue; }
+            --gy_fuel;
+        }
         total += PermanentManaYield(p, *d);
     }
     return total;
@@ -4031,12 +4601,35 @@ inline const std::vector<Color>& ReflectedColors(const GameState& state, int con
     return buf;
 }
 
+// "For each color among permanents you control" (Faeburrow Elder / Bloom Tender): the union of
+// card COLORS over the controller's battlefield permanents, in WUBRG order. Thread_local buffer
+// with the same safety contract as ReflectedColors (consume within one source's loop; do not hold
+// across another Produces* call). Colorless permanents contribute nothing (CR 105.2c).
+inline const std::vector<Color>& DomainColors(const GameState& state, int controller)
+{
+    static thread_local std::vector<Color> cols;
+    cols.clear();
+    bool have[5] = {false, false, false, false, false};
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if (p.card.HasColor(static_cast<Color>(ci))) { have[ci] = true; }
+        }
+    }
+    for (int ci = 0; ci < 5; ++ci) { if (have[ci]) { cols.push_back(static_cast<Color>(ci)); } }
+    return cols;
+}
+
 // The colours a mana source currently produces. Identical to def.params.produces (by const ref,
 // zero cost, byte-identical) for every normal source; the dynamic Reflecting-Pool union only for
-// a `reflecting` source. controller = the source's controller (active player on the battlefield).
+// a `reflecting` source; the dynamic colour-domain union for a `domain_mana` source (Faeburrow /
+// Bloom Tender). controller = the source's controller (active player on the battlefield).
 inline const std::vector<Color>& EffectiveProduces(const GameState& state, int controller,
                                                    const CardDefinition& def, bool in_hand = false)
 {
+    if (def.params.domain_mana) { return DomainColors(state, controller); }
     if (!def.params.reflecting) { return def.params.produces; }
     return ReflectedColors(state, controller, in_hand);
 }
@@ -4173,6 +4766,7 @@ inline bool HasUntappedNonFilterSourceProducing(const GameState& state,
                    || (def->tmpl == CardTemplate::ManaDork && p.CanTap())
                    || def->params.mana_rock;
         if (!is_src) { continue; }
+        if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land
         for (Color pc : EffectiveProduces(state, active, *def))   // RP -> union of other lands
         {
             for (Color want : colors)
@@ -4268,7 +4862,9 @@ inline bool HasUntappedRampFeeder(const GameState& state)
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
                    || (def->tmpl == CardTemplate::ManaDork && p.CanTap())
                    || def->params.mana_rock;
-        if (is_src) { return true; }
+        if (!is_src) { continue; }
+        if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land
+        return true;
     }
     return false;
 }
@@ -4321,6 +4917,10 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
     // Reflecting Pool: its colours are the union of the controller's other lands (empty -> adds
     // nothing, the solo-RP dead case). For every normal source this is the static produces[].
     const std::vector<Color>& prod = EffectiveProduces(state, state.active_player_index, def);
+    // Domain source (Faeburrow / Bloom Tender): one mana of EACH colour among your permanents
+    // from a single tap -- the yield is the dynamic colour count, ignoring the static amount.
+    // Credited as wild like a Karoo (the one-of-each nuance is exact at tap time in tap_source).
+    if (def.params.domain_mana) { amt = static_cast<int>(prod.size()); }
     if (prod.size() == 1)      { pool.Add(prod[0], amt); }
     else if (!prod.empty())    { pool.wild += amt; }
 }
@@ -4332,6 +4932,7 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
 inline int SpareUntappedMana(const GameState& state, int controller)
 {
     ManaPool pool;
+    int gy_fuel = -1;   // Deathrite fuel: lazily counted, decremented per credited source
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller || p.tapped) { continue; }
@@ -4340,6 +4941,13 @@ inline int SpareUntappedMana(const GameState& state, int controller)
         const bool is_land = (d->tmpl == CardTemplate::BasicLand);
         const bool is_dork = (d->tmpl == CardTemplate::ManaDork && p.CanTap()) || d->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
+        // Deathrite: credit at most #graveyard-lands such sources (mirrors AvailableManaPool).
+        if (d->params.gy_land_exile_mana)
+        {
+            if (gy_fuel < 0) { gy_fuel = GraveyardLandFuel(state, controller); }
+            if (gy_fuel <= 0) { continue; }
+            --gy_fuel;
+        }
         AddSourceToPool(pool, state, *d, PermanentManaYield(p, *d));
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }

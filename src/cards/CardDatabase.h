@@ -49,6 +49,40 @@ struct CardParams
     int on_cast_trigger_max_mv  = 0;
     int on_cast_trigger_damage  = 0;
 
+    // Mana Cannons: whenever the controller casts a multicolored spell, this permanent deals
+    // (that spell's color count) damage "to any target" -- collapsed to the opponent's face,
+    // provably optimal vs the passive opponent (etb_damage_any precedent). Fired from
+    // FireOnCastTriggers alongside Eidolon/Aria. Needs card colors populated (BuildCardFromJson
+    // colors pass).
+    bool multicolor_cast_damage_per_color = false;
+
+    // Ancient Cornucopia: whenever the controller casts a spell that's one or more colors,
+    // gain life equal to its color count ("may" always taken -- free resource, no anti-lifegain
+    // tech in-deck). ONCE each turn per permanent (Permanent::colored_cast_lifegain_used_this_turn,
+    // reset at both untap sites). Fired from FireOnCastTriggers.
+    bool colored_cast_lifegain = false;
+
+    // Two-Headed Hellkite: "Whenever this creature attacks, draw two cards." Self-only attack
+    // trigger, once per attacking copy, applied at declare-attackers alongside
+    // ApplyAttackSelfPumps (ApplyAttackDrawTriggers) in BOTH executor and rollout. Also flips
+    // DeckUsesSecondMain (cards drawn in combat are a combat-generated resource, 2c-bis).
+    int attack_draw_cards = 0;
+
+    // Progenitus: "If ~ would be put into a graveyard from anywhere, reveal it and shuffle it
+    // into its owner's library instead." Wired at the cleanup-discard sites (executor
+    // CleanupStep + rollout scripted-discard mirror) -- the only graveyard path reachable for
+    // this card in the current engine (it cannot die: no opponent damage/removal, no self-sac).
+    bool graveyard_replace_shuffle_library = false;
+
+    // Maelstrom Archangel: "Whenever this creature deals combat damage to a player, you may cast
+    // a spell from your hand without paying its mana cost." Modelled as BANKING (user-approved
+    // 2026-08-06): connecting increments GameState::free_casts_available (Combat.cpp, shared
+    // rollout+executor), spent as a free-cast plan variant in the post-combat main. CAUTION
+    // (user): banking is only safe because the free cast itself carries nothing across a phase
+    // boundary -- a future card producing MANA mid-combat (or otherwise benefiting from resolving
+    // in a different phase) must NOT reuse this pattern blindly. Also flips DeckUsesSecondMain.
+    bool combat_damage_free_cast = false;
+
     // Landfall: if > 0 and a land entered the battlefield under the caster's control
     // this turn, use this value instead of `damage` (e.g. Searing Blaze).
     int  landfall_damage = 0;
@@ -448,6 +482,104 @@ struct CardParams
     // runtime as the union of the controller's OTHER non-reflecting lands (EffectiveProduces),
     // nothing if it controls no other land. Gated false -> every other card uses static produces.
     bool reflecting = false;
+
+    // Faeburrow Elder / Bloom Tender: "{T}: For each color among permanents you control, add one
+    // mana of that color." A DYNAMIC source like `reflecting`, but (a) the union is over card
+    // COLORS of ALL controlled permanents (DomainColors, needs the colors pass), not land
+    // produces, and (b) the YIELD is dynamic too -- one mana of EACH such colour per tap (2..5),
+    // like a variable Karoo. EffectiveProduces returns DomainColors; AddSourceToPool / the greedy
+    // tap_source / the backtracker override the static per-tap amount with the colour count.
+    // The static `produces` list is kept (WUBRG) only as the in-hand fixing-heuristic hint.
+    bool domain_mana = false;
+
+    // Planeswalkers (Jared Carthalion / Nicol Bolas, Planeswalker / Oko, Thief of Crowns).
+    // loyalty_start > 0 marks a planeswalker card (enters with that many loyalty; the dedicated
+    // Permanent::loyalty int is the source of truth, mirrored into Counter{Loyalty} for the
+    // existing viewer badge). loyalty_abilities lists the once-per-turn choices as {delta,
+    // effect, amount}; each is an Action::Kind::ActivateLoyalty plan variant (sorcery-speed,
+    // usable the turn the walker enters -- loyalty abilities have no summoning sickness), applied
+    // in ApplyLoyaltyAbility (both worlds). A walker at loyalty <= 0 after paying a cost goes to
+    // its owner's graveyard there (the only loyalty-loss path vs a passive opponent). Effects are
+    // small scripted primitives; per-ability modeling/deferral notes live on the cards.json entry.
+    int loyalty_start = 0;
+    struct LoyaltyAbilityParam
+    {
+        int         delta  = 0;   // signed loyalty change, paid as the activation cost (CR 606.5)
+        std::string effect;       // kavu_token | counters_up_to_two | regrow_multicolored |
+                                  // destroy_own_noncreature | face_damage | food_token | elk_transform
+        int         amount = 0;   // effect-specific magnitude (face_damage 7, counters cap 2, ...)
+    };
+    std::vector<LoyaltyAbilityParam> loyalty_abilities;
+
+    // Unite the Coalition (user-approved collapse 2026-08-06): "Choose five. You may choose the
+    // same mode more than once." -> a SEARCHED split S in [0..modal_choose_n]: S picks of "deal
+    // modal_damage_per_choice to any target" (collapsed to the opponent face) + (N-S) picks of
+    // "target player draws modal_draw_per_choice" (self). The three dead modes (phase out /
+    // exile a graveyard / destroy artifact-or-enchantment) are dropped -- provably dead vs this
+    // opponent model; disclosed. S rides Action::chosen_x / StackEntry::chosen_x; one CastFromHand
+    // variant per S (shared hand_index -> mutually exclusive).
+    int modal_choose_n          = 0;
+    int modal_damage_per_choice = 0;
+    int modal_draw_per_choice   = 0;
+
+    // Garth One-Eye: "{T}: Choose a card name that hasn't been chosen -- Disenchant, Braingeyser,
+    // Terror, Shivan Dragon, Regrowth, or Black Lotus. Create a copy of the card with the chosen
+    // name. You may cast the copy." Modeled as GarthActivate plan variants (one per un-chosen,
+    // affordable, goldfish-live name; the copy is cast AS THE ABILITY RESOLVES per the WotC
+    // ruling -- no holding it). Once-per-game-per-name tracking is PER PERMANENT OBJECT
+    // (Permanent::garth_chosen_mask). Name order for the mask bits: Disenchant=0, Braingeyser=1,
+    // Terror=2, Shivan Dragon=3, Regrowth=4, Black Lotus=5. Disenchant is never enumerated
+    // (structurally target-less vs this opponent model -- user-approved stub); Braingeyser's X is
+    // auto-maxed from leftover mana at apply (disclosed).
+    bool garth_copy_ability = false;
+
+    // Regrowth (Garth conjure): "Return target card from your graveyard to your hand."
+    // AUTO-RESOLVED pick = highest mana value (disclosed).
+    bool return_target_from_graveyard = false;
+
+    // Terror (Garth conjure): "Destroy target nonartifact, nonblack creature." First hard
+    // single-target destroy primitive; vs this opponent model its only targets are opponent
+    // spawn creatures (payoff ~0, but faithful and reusable). Pick = largest opponent creature.
+    bool destroy_target_creature = false;
+
+    // Equipment (Lightning Greaves). is_equipment marks an attach-to-creature artifact; the attach
+    // state is Permanent::equipped_to and re-equipping is Action::Kind::Equip (sorcery-speed, cost
+    // equip_cost_generic -- {0} for Greaves; promote to a full ManaCost if a costed Equipment ever
+    // arrives). equip_grants_haste is read by CanAttackFull (HasHasteFromEquip). LIMITATION
+    // (disclosed 6a): equip-granted haste enables ATTACKS only, not same-turn TAP abilities
+    // (Permanent::CanTap has no battlefield context) -- a Greaves'd fresh mana dork still can't tap
+    // this turn; conservative under-credit. equip_grants_shroud is documented-inert (the passive
+    // opponent never targets us).
+    bool is_equipment       = false;
+    int  equip_cost_generic = 0;
+    bool equip_grants_haste = false;
+    bool equip_grants_shroud = false;
+
+    // Deathrite Shaman ability 1: "{T}: Exile target land card from a graveyard. Add one mana of
+    // any color." The {T} mana ability is FUELED by exiling a land card from the controller's OWN
+    // graveyard ("a graveyard" collapses to ours -- the passive opponent's is always empty;
+    // disclosed). NOT a live mana source while the graveyard holds no land card; each tap exiles
+    // one (fungible -- the ability adds any color regardless of which land goes). Gated at the
+    // payment usable()/backtracker sites (exact, sequential) and fuel-counted in the pool
+    // builders (N Deathrites credit at most #graveyard-lands sources).
+    bool gy_land_exile_mana = false;
+
+    // Deathrite Shaman abilities 2/3 (GraveyardExileAbility actions, mutually exclusive with the
+    // mana tap via the shared {T}):
+    //   "{B}, {T}: Exile target instant or sorcery card from a graveyard. Each opponent loses
+    //    2 life."  -> gy_exile_instant_sorcery_drain = 2 (cost fixed {B})
+    //   "{G}, {T}: Exile target creature card from a graveyard. You gain 2 life."
+    //    -> gy_exile_creature_lifegain = 2 (cost fixed {G})
+    // The exiled card is fungible within its type filter (deterministic first-match pick, both
+    // worlds).
+    int gy_exile_instant_sorcery_drain = 0;
+    int gy_exile_creature_lifegain     = 0;
+
+    // Faeburrow Elder: "This creature gets +1/+1 for each color among permanents you control."
+    // A characteristic P/T buff on the creature ITSELF (not a lord effect); applied in
+    // ComputeLordBonus (back-fills every combat/eval call site) and in the executor's SBA
+    // toughness check (base 0/0 must not die on ETB -- it always counts its own G/W).
+    bool domain_self_pump = false;
 
     // Scry-on-resolution for a draw spell (Preordain "Scry 2, then draw a card"). Scry lets you
     // put any of the top N on the BOTTOM and the rest on top: ScryTop keeps the wanted cards on

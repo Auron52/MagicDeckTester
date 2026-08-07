@@ -194,8 +194,13 @@ void GameEngine::UntapStep(GameState& state)
             p.tapped            = false;
             p.entered_this_turn = false;
             p.storage_hold_this_turn = false;   // #6: the tap-vs-charge hold is a per-turn human choice
+            p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
+            p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }
     }
+    // Maelstrom Archangel: an unspent banked free cast expires with the turn (lockstep with the
+    // rollout's per-turn reset).
+    state.free_casts_available = 0;
 
     // Materialise any passive opponent creatures scheduled for this turn.
     int opp_index = 1 - state.active_player_index;
@@ -465,6 +470,10 @@ void GameEngine::CombatPhase(GameState& state)
     // as until-end-of-turn temp bonuses. Mirrors TurnSolver::SimulateCombat (lockstep). Gated inert.
     ApplyAttackSelfPumps(state, state.active_player_index, atk_idx);
 
+    // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
+    // so the cards are in hand for the post-combat main. Mirrors TurnSolver::SimulateCombat.
+    ApplyAttackDrawTriggers(state, state.active_player_index, atk_idx);
+
     // Firebreathing (Scourge {R}:+1/+0 self, Lathliss {1}{R}: Dragons +1/+0 team): spend LEFTOVER
     // combat mana on attacker pumps BEFORE the damage loop reads their power. Delegated to the
     // AIEngine (it owns BuildAvailableMana/TapForCost); the shared ApplyFirebreathing reads a pool
@@ -560,7 +569,11 @@ void GameEngine::CleanupStep(GameState& state)
             if (chosen >= 0 && chosen < static_cast<int>(ap.hand.size())) { discard = &ap.hand[chosen]; }
         }
         if (m_logger) { m_logger->LogDiscard(discard->m_number, discard->m_name); }
-        ap.graveyard.push_back(*discard);
+        // Progenitus: shuffled into its owner's library instead of the graveyard (replacement).
+        if (!MaybeReplaceGraveyardWithLibraryShuffle(state, state.active_player_index, *discard))
+        {
+            ap.graveyard.push_back(*discard);
+        }
         ap.hand.erase(std::find_if(ap.hand.begin(), ap.hand.end(),
             [discard](const Card& c) { return &c == discard; }));
     }
@@ -660,8 +673,19 @@ void GameEngine::CheckStateBasedActions(GameState& state)
             const bool is_creature = p.card.IsCreature();
             if (is_creature)
             {
-                if (p.EffectiveToughness() <= 0) { destroy = true; }
-                if (p.damage >= p.EffectiveToughness()
+                int tough = p.EffectiveToughness();
+                if (tough <= 0)
+                {
+                    // Characteristic P/T (Faeburrow Elder, base 0/0 + domain self-pump): the SBA
+                    // must see the same static buffs combat/eval do (ComputeLordBonus), or a
+                    // freshly-cast Faeburrow dies on ETB despite always counting its own G/W.
+                    // Entered only when the raw toughness is already <= 0 -> byte-identical for
+                    // every ordinary creature (their damage check keeps the raw value).
+                    tough += ComputeLordBonus(p.card, state.battlefield,
+                                              p.controller_index, p.is_animated, &p).second;
+                    if (tough <= 0) { destroy = true; }
+                }
+                if (p.damage >= tough
                     && !p.card.HasKeyword(Keyword::Indestructible)) { destroy = true; }
             }
             if (destroy)
@@ -672,6 +696,15 @@ void GameEngine::CheckStateBasedActions(GameState& state)
                 changed = true;
             }
             else { ++it; }
+        }
+        // Equipment falls off a dead host (CR 301.5c): zero equipped_to for every died creature.
+        // The Equipment itself stays on the battlefield.
+        for (const std::pair<Card, int>& dd : died)
+        {
+            for (Permanent& q : state.battlefield)
+            {
+                if (q.equipped_to == dd.first.m_number) { q.equipped_to = 0; }
+            }
         }
         for (const std::pair<Card, int>& d : died)
         {

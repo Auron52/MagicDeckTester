@@ -224,6 +224,14 @@ struct GameState
     // Consumed by the first shed (later sheds of the same cleanup use the ranked default) and
     // cleared there, so it cannot leak into a later turn. -1 == the provider's top pick.
     int                      scripted_discard_choice = -1;
+    // Maelstrom Archangel free-cast BANK (user-approved 2026-08-06): each copy that deals combat
+    // damage to the player increments this (Combat.cpp ResolveCombatDamage, the shared combat
+    // core), and the post-combat main may cast that many hand spells without paying mana (a
+    // free_cast plan variant per hand card; spent in apply_one via the cascade_free mechanism /
+    // the executor's CastSpellFromHand skip). Reset at the start of every turn in BOTH worlds.
+    // CAUTION (user): banking is only safe because the free cast carries nothing across a phase
+    // boundary -- a future card producing MANA mid-combat must NOT reuse this pattern blindly.
+    int                      free_casts_available = 0;
     bool                     on_the_play           = false; // if true, skip the turn-1 draw step (player is on the play)
     // Non-owning pointer to the deck's decision heuristics (set in GoldFishRunner::SetupGame,
     // propagated through every deep copy). Never folded into BuildSimKey. nullptr -> callers

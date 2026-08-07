@@ -40,11 +40,23 @@ struct ManaPool
         green += o.green; colorless += o.colorless; wild += o.wild;
     }
 
-    // Returns true if this pool can pay the given cost.
+    // Returns true if this pool can pay the given cost. Two-colour hybrid pips are handled by
+    // expanding every concrete assignment (2^hybrid_count, <= 16) over the flat check.
+    bool CanPay(const ManaCost& cost) const
+    {
+        if (cost.hybrid_count == 0) { return CanPayFlat(cost); }
+        for (unsigned bits = 0; bits < (1u << cost.hybrid_count); ++bits)
+        {
+            if (CanPayFlat(cost.ExpandHybrids(bits))) { return true; }
+        }
+        return false;
+    }
+
+    // Flat (hybrid-free) affordability.
     // Multi-color land taps are stored in `wild` — each unit satisfies exactly one
     // pip (colored or generic). Specific-color sources pay their own color first;
     // wild covers any shortfall. Assumes no hybrid or Phyrexian mana.
-    bool CanPay(const ManaCost& cost) const
+    bool CanPayFlat(const ManaCost& cost) const
     {
         // Deficit per color after using specific-color sources.
         int deficit =  std::max(0, cost.white     - white)

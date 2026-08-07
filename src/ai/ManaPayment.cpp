@@ -49,6 +49,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         if (!is_src) { return false; }
         if (def.params.creature_mana_only && !for_creature) { return false; }
         if (!StorageSourceLive(p, def)) { return false; }   // uncharged storage land makes no mana
+        if (!GraveyardFuelLive(state, active, def)) { return false; }   // Deathrite: no gy land = no mana
         return true;
     };
 
@@ -59,6 +60,9 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         CcoAuditTap(def, col, for_creature);   // legality audit (MTG_CCO_AUDIT); inert when off
         p.tapped = true;
         DecrementDepletionOnTap(p);
+        // Deathrite Shaman ability 1: the mana tap exiles a graveyard land (usable() guaranteed
+        // one exists). A failed payment restores the graveyard from gy_pre below.
+        if (def.params.gy_land_exile_mana) { ExileGraveyardLandForMana(state, active); }
         if (def.params.tap_self_damage > 0) { state.players[active].life -= def.params.tap_self_damage; }
         // Grove of the Burnwillows: the COLOURED tap ({R}/{G}) makes the opponent gain 1 (-> 1 damage
         // with Tainted Remedy out). A `col == Colorless` tap is the painless "{T}: Add {C}" mode --
@@ -89,6 +93,11 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         {
             amt = consumed = p.storage_counters;   // burst ALL counters on tap
             p.storage_counters = 0;
+        }
+        else if (def.params.domain_mana)
+        {
+            // Faeburrow / Bloom Tender: one mana of EACH colour among controlled permanents.
+            amt = consumed = static_cast<int>(EffectiveProduces(state, active, def).size());
         }
         else { amt = consumed = ManaProducedPerTap(def); }
         const std::vector<Color>& prod = EffectiveProduces(state, active, def);
@@ -355,6 +364,8 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     const int life_pre = state.players[active].life;
     const int opp_pre = state.players[1 - active].life;
     const bool oll_pre = state.opponent_lost_life_this_turn;
+    // Deathrite: a tap may exile a graveyard land; failed attempts must put it back.
+    const std::vector<Card> gy_pre = state.players[active].graveyard;
     // Retain over-produced mana (forced filter/depletion over-tap) into the turn-scoped
     // reserve so a later same-(main-)phase cast can spend it (CR 500.4). state.floating_mana
     // already holds the un-spent reserve after SpendFloatingTowardCost; add the leftover on top.
@@ -377,6 +388,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // Greedy failed: try the backtracking solver from a clean board.
     state.battlefield        = bf_pre;
     state.players[active].life = life_pre;
+    state.players[active].graveyard = gy_pre;
     ManaPool bt_leftover;
     if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover,
                             /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
@@ -393,6 +405,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     {
         state.battlefield          = bf_pre;
         state.players[active].life  = life_pre;
+        state.players[active].graveyard = gy_pre;
         ManaPool bt2_leftover;
         if (TapForCostBacktrack(state, cost_in, for_creature, reserve_pre, nullptr, nullptr,
                                 &bt2_leftover, /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
@@ -409,6 +422,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // (The executor's `available` accounting is deliberately NOT restored -- see ManaPayment.h.)
     state.battlefield                  = bf_pre;
     state.players[active].life         = life_pre;
+    state.players[active].graveyard    = gy_pre;
     state.players[1 - active].life     = opp_pre;
     state.opponent_lost_life_this_turn = oll_pre;
     state.floating_mana                = reserve_pre;   // payment failed -> return the reserve untouched
@@ -578,6 +592,7 @@ bool OrderingOpaque(const std::string& name)
 ManaPool AvailableManaPool(const GameState& state)
 {
     ManaPool pool;
+    int gy_fuel = -1;   // Deathrite fuel: lazily counted, decremented per credited source
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
@@ -586,6 +601,13 @@ ManaPool AvailableManaPool(const GameState& state)
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap()) || def->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
+        // Deathrite: credit at most #graveyard-lands such sources (fuel-counted, lazily).
+        if (def->params.gy_land_exile_mana)
+        {
+            if (gy_fuel < 0) { gy_fuel = GraveyardLandFuel(state, state.active_player_index); }
+            if (gy_fuel <= 0) { continue; }
+            --gy_fuel;
+        }
         AddSourceToPool(pool, state, *def, PermanentManaYield(p, *def));
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
@@ -599,6 +621,49 @@ ManaPool AvailableManaPool(const GameState& state)
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
 {
+    // Two-colour hybrid pips ({B/G}, Deathrite Shaman): expand into concrete-colour assignments
+    // and try each through the (hybrid-unaware) full pipeline below. bits==0 IS the flat cost the
+    // historical first-colour collapse produced, tried first and UNsnapshotted -- so whenever it
+    // succeeds or every assignment fails, behaviour (including the executor's deliberately-not-
+    // restored accounting pool -- the smoke suite caught churn when it was restored) is
+    // byte-identical to the pre-hybrid engine. Alternative assignments run snapshot/restored in
+    // between; on total failure the bits==0 attempt is REPLAYED so its historical failure side
+    // effects land exactly as before.
+    if (cost_in.hybrid_count > 0)
+    {
+        const int a = state.active_player_index;
+        const std::vector<Permanent> bf_snap = state.battlefield;
+        const ManaPool               fm_snap = state.floating_mana;
+        const ManaPool               av_snap = available ? *available : ManaPool{};
+        const std::vector<Card>      gy_snap = state.players[a].graveyard;   // Deathrite exile
+        const int  la  = state.players[a].life;
+        const int  lo  = state.players[1 - a].life;
+        const bool oll = state.opponent_lost_life_this_turn;
+        auto restore = [&]()
+        {
+            state.battlefield                  = bf_snap;
+            state.floating_mana                = fm_snap;
+            if (available) { *available = av_snap; }
+            state.players[a].graveyard         = gy_snap;
+            state.players[a].life              = la;
+            state.players[1 - a].life          = lo;
+            state.opponent_lost_life_this_turn = oll;
+        };
+        if (TapForCostShared(state, cost_in.ExpandHybrids(0), for_creature,
+                             available, honor_legacy_cco)) { return true; }
+        for (unsigned bits = 1; bits < (1u << cost_in.hybrid_count); ++bits)
+        {
+            restore();
+            if (TapForCostShared(state, cost_in.ExpandHybrids(bits), for_creature,
+                                 available, honor_legacy_cco)) { return true; }
+        }
+        restore();
+        // Total failure: replay the flat attempt (deterministic) so the state ends exactly as the
+        // historical single-attempt failure left it.
+        TapForCostShared(state, cost_in.ExpandHybrids(0), for_creature, available, honor_legacy_cco);
+        return false;
+    }
+
     const std::uint64_t rmask = ReservableSpecialMask(state);
     if (rmask != 0)
     {
@@ -606,6 +671,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         const std::vector<Permanent> bf_snap  = state.battlefield;
         const ManaPool               fm_snap  = state.floating_mana;
         const ManaPool               av_snap  = available ? *available : ManaPool{};
+        const std::vector<Card>      gy_snap  = state.players[a].graveyard;   // Deathrite exile
         const int  la  = state.players[a].life;
         const int  lo  = state.players[1 - a].life;
         const bool oll = state.opponent_lost_life_this_turn;
@@ -614,6 +680,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         state.battlefield                  = bf_snap;
         state.floating_mana                = fm_snap;
         if (available) { *available = av_snap; }
+        state.players[a].graveyard         = gy_snap;
         state.players[a].life              = la;
         state.players[1 - a].life          = lo;
         state.opponent_lost_life_this_turn = oll;

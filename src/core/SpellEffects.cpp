@@ -804,6 +804,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 if (!is_src) { continue; }
                 if (d->params.creature_mana_only && !for_creature) { continue; }
                 if (!StorageSourceLive(p, *d)) { continue; }   // uncharged storage land makes no mana
+                if (!GraveyardFuelLive(state, active, *d)) { continue; }   // Deathrite: no gy land
                 untapped_max += source_max_net(p, *d);
             }
         }
@@ -841,6 +842,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         if (!is_src) { continue; }
         if (def->params.creature_mana_only && !for_creature) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }   // uncharged storage: no mana
+        if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land = no mana
 
         // Reflecting Pool -> the shared, hoisted union (empty = solo RP = no mana); every other
         // source -> its static produces[]. (Inlined EffectiveProduces so the union is reused.)
@@ -895,6 +897,23 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             if (def->params.storage_land) { state.battlefield[i].storage_counters -= storage_burn; }
             if (def->params.tap_self_damage > 0)
             { state.players[active].life -= def->params.tap_self_damage; }
+            // Deathrite Shaman: the tap exiles a graveyard land (eligibility guaranteed one).
+            // Remember which slot so a failed branch re-inserts it exactly (byte-identical undo).
+            int gy_exiled_at = -1; Card gy_exiled_card;
+            if (def->params.gy_land_exile_mana)
+            {
+                std::vector<Card>& gy = state.players[active].graveyard;
+                for (std::size_t g = 0; g < gy.size(); ++g)
+                {
+                    if (gy[g].IsLand())
+                    {
+                        gy_exiled_at = static_cast<int>(g);
+                        gy_exiled_card = gy[g];
+                        gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(g));
+                        break;
+                    }
+                }
+            }
             // Grove of the Burnwillows drip (opponent gains -> loses with Remedy). Restored
             // below on failure alongside the active player's life.
             if (drip_ok && def->params.tap_opponent_lifegain > 0)
@@ -906,6 +925,11 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             state.battlefield[i].tapped = tapped_snap;   // only this source was touched at this level
             if (has_counters) { state.battlefield[i].counters = counters_snap; }
             state.battlefield[i].storage_counters = storage_snap;
+            if (gy_exiled_at >= 0)
+            {
+                std::vector<Card>& gy = state.players[active].graveyard;
+                gy.insert(gy.begin() + static_cast<std::ptrdiff_t>(gy_exiled_at), gy_exiled_card);
+            }
             state.players[active].life = life_snap;
             state.players[1 - active].life      = opp_life_snap;
             state.opponent_lost_life_this_turn  = oll_snap;
@@ -947,6 +971,19 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 ? std::min(state.battlefield[i].storage_counters,
                            std::max(1, cost.ManaValue() - floating.Total()))
                 : 0;
+            // Domain source (Faeburrow / Bloom Tender): one tap yields one mana of EACH colour
+            // among controlled permanents -- handled as its own branch (the single-colour loop
+            // below would misprice it as amt-of-one-colour).
+            if (def->params.domain_mana)
+            {
+                if (!produces.empty())
+                {
+                    ManaPool f = floating;
+                    for (Color c : produces) { f.Add(c, 1); }
+                    if (activate(f)) { return true; }
+                }
+                continue;
+            }
             const int amt = def->params.storage_land ? storage_burn : ManaProducedPerTap(*def);
             if (produces.empty())
             {
