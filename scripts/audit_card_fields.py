@@ -53,6 +53,9 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # Keyword abilities this engine models via params / oracle logic, not a tag:
     "cycling", "scry", "surveil", "cascade", "retrace", "replicate",
     "affinity", "treasure",
+    # Food: token-type keyword (like treasure) -- Oko's Food-making is modeled structurally
+    # via his loyalty effects, not a keyword tag.
+    "food",
     # Echo (echo_cost param, upkeep pay-or-sac decision) and Channel (channel_cost/
     # channel_damage, a from-hand discard-activated ability) are modeled STRUCTURALLY
     # via params, not as a keyword tag -- neither is a combat/evasion keyword, so
@@ -110,6 +113,8 @@ def do_update(cards, throttle):
     for i, c in enumerate(cards):
         name = c.get("name")
         if not name:
+            continue
+        if name.endswith(" Token"):   # runtime-token definition, no Scryfall card
             continue
         sf = acc.fetch(name)
         if "_error" in sf:
@@ -231,10 +236,17 @@ def do_audit(cards, as_json):
     ref = json.loads(REFERENCE.read_text())
     allow = load_allowlist()
     mismatches, unfetched, advisories, allowed_all, checked = [], [], [], [], 0
+    token_defs = []   # runtime-token definitions: no Scryfall paper card exists -> disclosed skip
     used_allow = set()  # (card, field) allowlist entries that actually fired
     for c in cards:
         name = c.get("name")
         if not name or not norm_cost(c.get("mana_cost")) and not c.get("types"):
+            continue
+        # Runtime-token definitions (e.g. "Treasure Token", created in play, never in a
+        # decklist) have no Scryfall card under that name -- skip, but DISCLOSE (a silent
+        # skip reads as "covered"). Mirrors audit_card_costs' token skip.
+        if name.endswith(" Token"):
+            token_defs.append(name)
             continue
         if name not in ref:
             unfetched.append(name)
@@ -262,6 +274,7 @@ def do_audit(cards, as_json):
             "allowlisted": [{"name": n, "field": f, "detail": d, "reason": r}
                             for n, f, d, r in allowed_all],
             "stale_allowlist": [{"name": n, "field": f} for n, f in stale],
+            "token_definitions_skipped": token_defs,
             "oracle_advisories": [{"name": n, "detail": a} for n, a in advisories],
         }, indent=2))
         return 1 if (mismatches or unfetched) else 0
@@ -289,6 +302,11 @@ def do_audit(cards, as_json):
     if unfetched:
         print(f"\nUNFETCHED ({len(unfetched)}) -- not in the snapshot; run --update (fails closed):")
         for n in unfetched:
+            print(f"  {n}")
+    if token_defs:
+        print(f"\nTOKEN DEFINITIONS SKIPPED ({len(token_defs)}) -- runtime tokens, no Scryfall "
+              f"card by that name (fields reviewed by hand at authoring time):")
+        for n in token_defs:
             print(f"  {n}")
     if advisories:
         print(f"\nORACLE-TEXT ADVISORIES ({len(advisories)}) -- verbatim divergence (fuzzy; verify):")

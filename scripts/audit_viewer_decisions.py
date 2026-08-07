@@ -294,6 +294,22 @@ INERT_PARAMS = {
     # Static cost reducer / mana restriction -- no choice:
     "reduces_spell_subtype": "static Goblin-spell cost reducer (Warchief, {1} less), no choice",
     "colored_creature_only": "Cavern of Souls mana restriction (spend only on creature spells), no choice",
+    # --- FiveColour: automatic triggers / mana production / detail params (NO player choice) ---
+    # (Choice-bearing FiveColour params are in MAINPHASE_PARAMS below; the underlying resolution
+    # decisions -- Archangel banking, Unite mode collapse, Deathrite fungible-fuel picks, the
+    # planeswalker/Garth heuristic sub-picks -- were user-approved 2026-08-06, disclosed in 6a.)
+    "attack_draw_cards": "automatic attack trigger (Two-Headed Hellkite: draw on attack), no choice",
+    "colored_cast_lifegain": "automatic on-cast lifegain (Ancient Cornucopia, once per turn), no choice",
+    "multicolor_cast_damage_per_color": "automatic on-cast trigger (Mana Cannons); 'any target' -> face in goldfish (disclosed)",
+    "domain_mana": "domain-scaled mana production (Faeburrow/Bloom Tender); color/amount auto-resolved in payment (left to engine)",
+    "domain_self_pump": "computed P/T (Faeburrow Elder +1/+1 per color among permanents), no choice",
+    "equip_cost_generic": "equip cost detail (rides is_equipment)",
+    "equip_grants_haste": "static grant detail (rides is_equipment)",
+    "equip_grants_shroud": "static grant detail (goldfish-inert; rides is_equipment)",
+    "graveyard_replace_shuffle_library": "automatic replacement effect (Progenitus shuffle-in), no choice",
+    "loyalty_start": "starting loyalty stat, no choice",
+    "modal_damage_per_choice": "modal payload detail (rides modal_choose_n)",
+    "modal_draw_per_choice": "modal payload detail (rides modal_choose_n)",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click
@@ -317,6 +333,15 @@ MAINPHASE_PARAMS = {
     "sac_creature_outlet": "sac-a-Goblin outlet activation (Skirk {R}/Siege-Gang {1}{R}/Pashalik {3}{R}) = a main_phase plan action (SacForMana / SacCreatureOutlet / Channel actions); which victim is a heuristic sub-choice (disclosed 6a)",
     "channel_cost":        "Twinshot Sniper Channel = a from-HAND {1}{R}-discard activation = a main_phase plan action (Channel action)",
     "tap_creates_tokens_per_controlled_subtype": "Krenko {T}: make X Goblins = a main_phase tap activation (TapForTokens action)",
+    # --- FiveColour: activations / choices the search enumerates as main_phase plan variants ---
+    "combat_damage_free_cast": "Maelstrom Archangel free cast: banked charge -> #FREE plan variants (one per castable hand card); WHICH card = the plan pick; banking approved w/ caveat (user 2026-08-06)",
+    "gy_land_exile_mana": "Deathrite land-exile mana activation = a main_phase plan action (DRE#); which land = fungible-fuel heuristic sub-choice (disclosed 6a)",
+    "gy_exile_instant_sorcery_drain": "Deathrite instant/sorcery-exile drain activation = a main_phase plan action (DRE#); which card = fungible (disclosed 6a)",
+    "gy_exile_creature_lifegain": "Deathrite creature-exile lifegain activation = a main_phase plan action (DRE#); which card = fungible (disclosed 6a)",
+    "is_equipment": "Equip = a main_phase plan action (EQ#), one variant per legal creature target",
+    "loyalty_abilities": "planeswalker loyalty activation = a main_phase plan action (PW#), one variant per affordable ability; ability sub-targets heuristic-resolved (disclosed 6a)",
+    "garth_copy_ability": "Garth One-Eye conjure-cast = a main_phase plan action (GARTH#), one variant per un-used name; conjured-card sub-targets heuristic-resolved (disclosed 6a)",
+    "modal_choose_n": "Unite the Coalition: S in [0..5] mode-count split = main_phase plan variants (#S); mode collapse user-approved 2026-08-06 (disclosed 6a)",
 }
 
 # DEFAULT after onboarding = SURFACE every decision (user 2026-07-17). "Let the AI decide" is a

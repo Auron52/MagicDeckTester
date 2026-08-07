@@ -60,6 +60,11 @@ def ParseArgs():
                    help="Skip the same-turn cost-handling A/B diagnostic (reframe off vs on)")
     p.add_argument("--cost-diag-games", type=int, default=200,
                    help="Games per condition for the cost-diagnostic A/B (default 200)")
+    p.add_argument("--analyzer-seed", type=int, default=None,
+                   help="Base seed passed to mtg-analyze (omit = analyzer randomizes per "
+                        "invocation). Pin it to make a profile run reproducible -- e.g. to "
+                        "re-examine a degenerate scoring game (the FiveColour 3.4h atom's "
+                        "seed was unrecoverable because the run was unseeded).")
     return p.parse_args()
 
 # ---------------------------------------------------------------------------
@@ -296,7 +301,7 @@ def RebuildProject() -> bool:
 # Run C++ analyzer
 # ---------------------------------------------------------------------------
 
-def RunAnalyzer(deck_path: Path, cards_json: Path) -> dict:
+def RunAnalyzer(deck_path: Path, cards_json: Path, seed: int | None = None) -> dict:
     # The analyzer is a fixed-recipe profile generator: it takes no game-count,
     # depth, or budget knobs. Win-rate evaluation is the regression suite's job.
     if not ANALYZER_BIN.exists():
@@ -306,6 +311,8 @@ def RunAnalyzer(deck_path: Path, cards_json: Path) -> dict:
         str(deck_path),
         "--cards-json", str(cards_json),
     ]
+    if seed is not None:
+        cmd += ["--seed", str(seed)]
     # Capture ONLY stdout (the AnalysisResultToJson we must parse); let the analyzer's
     # stderr INHERIT our stderr so its phase-by-phase progress ("Analysing required
     # pieces...", "Computing card scores...", "Grid-searching...", "Done.") streams LIVE.
@@ -490,7 +497,7 @@ def Main():
 
     # 6. Analyze
     print("  Running analyzer (generating profile)...", file=sys.stderr)
-    analysis = RunAnalyzer(deck_path, cards_json)
+    analysis = RunAnalyzer(deck_path, cards_json, seed=args.analyzer_seed)
 
     # Write card scores and threshold into the profile if the analyzer produced them.
     profile_updates: dict = {}

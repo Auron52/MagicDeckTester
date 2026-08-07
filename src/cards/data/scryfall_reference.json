@@ -61,6 +61,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Ancient Cornucopia": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Whenever you cast a spell that's one or more colors, you may gain 1 life for each of that spell's colors. Do this only once each turn.\n{T}: Add one mana of any color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
   "Ancient Ziggurat": {
     "cmc": 0.0,
     "keywords": [],
@@ -139,6 +148,15 @@
     "toughness": "1",
     "type_line": "Creature — Bird"
   },
+  "Black Lotus": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "{0}",
+    "oracle_text": "{T}, Sacrifice this artifact: Add three mana of any one color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
   "Blood Crypt": {
     "cmc": 0.0,
     "keywords": [],
@@ -156,6 +174,26 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Bloom Tender": {
+    "cmc": 2.0,
+    "keywords": [
+      "Vivid"
+    ],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Vivid — {T}: For each color among permanents you control, add one mana of that color.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf Druid"
+  },
+  "Braingeyser": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{X}{U}{U}",
+    "oracle_text": "Target player draws X cards.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Branchloft Pathway": {
     "cmc": 0.0,
@@ -220,6 +258,21 @@
     "toughness": "1",
     "type_line": "Creature — Sliver"
   },
+  "Cosmic Spider-Man": {
+    "cmc": 5.0,
+    "keywords": [
+      "First strike",
+      "Flying",
+      "Haste",
+      "Lifelink",
+      "Trample"
+    ],
+    "mana_cost": "{W}{U}{B}{R}{G}",
+    "oracle_text": "Flying, first strike, trample, lifelink, haste\nAt the beginning of combat on your turn, other Spiders you control gain flying, first strike, trample, lifelink, and haste until end of turn.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Legendary Creature — Spider Human Hero"
+  },
   "Crackle with Power": {
     "cmc": 2.0,
     "keywords": [],
@@ -267,6 +320,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Deathrite Shaman": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{B/G}",
+    "oracle_text": "{T}: Exile target land card from a graveyard. Add one mana of any color.\n{B}, {T}: Exile target instant or sorcery card from a graveyard. Each opponent loses 2 life.\n{G}, {T}: Exile target creature card from a graveyard. You gain 2 life.",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Creature — Elf Shaman"
+  },
   "Defense of the Heart": {
     "cmc": 4.0,
     "keywords": [],
@@ -286,6 +348,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant — Arcane"
+  },
+  "Disenchant": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Destroy target artifact or enchantment.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Distorting Wake": {
     "cmc": 3.0,
@@ -375,6 +446,17 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Faeburrow Elder": {
+    "cmc": 3.0,
+    "keywords": [
+      "Vigilance"
+    ],
+    "mana_cost": "{1}{G}{W}",
+    "oracle_text": "Vigilance\nThis creature gets +1/+1 for each color among permanents you control.\n{T}: For each color among permanents you control, add one mana of that color.",
+    "power": "0",
+    "toughness": "0",
+    "type_line": "Creature — Treefolk Druid"
+  },
   "Ferrous Lake": {
     "cmc": 0.0,
     "keywords": [],
@@ -457,6 +539,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Garth One-Eye": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{W}{U}{B}{R}{G}",
+    "oracle_text": "{T}: Choose a card name that hasn't been chosen from among Disenchant, Braingeyser, Terror, Shivan Dragon, Regrowth, and Black Lotus. Create a copy of the card with the chosen name. You may cast the copy. (You still pay its costs.)",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Legendary Creature — Human Wizard"
   },
   "Gladecover Scout": {
     "cmc": 1.0,
@@ -736,6 +827,28 @@
     "toughness": null,
     "type_line": "Artifact"
   },
+  "Jared Carthalion": {
+    "cmc": 5.0,
+    "keywords": [
+      "Treasure"
+    ],
+    "mana_cost": "{W}{U}{B}{R}{G}",
+    "oracle_text": "+1: Create a 3/3 Kavu creature token with trample that's all colors.\n−3: Choose up to two target creatures. For each of them, put a number of +1/+1 counters on it equal to the number of colors it is.\n−6: Return target multicolored card from your graveyard to your hand. If that card was all colors, draw a card and create two Treasure tokens.\nJared Carthalion can be your commander.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Planeswalker — Jared"
+  },
+  "Jetmir's Garden": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {R}, {G}, or {W}.)\nThis land enters tapped.\nCycling {3} ({3}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Mountain Forest Plains"
+  },
   "Karrthus, Tyrant of Jund": {
     "cmc": 7.0,
     "keywords": [
@@ -835,6 +948,17 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Lightning Greaves": {
+    "cmc": 2.0,
+    "keywords": [
+      "Equip"
+    ],
+    "mana_cost": "{2}",
+    "oracle_text": "Equipped creature has haste and shroud. (It can't be the target of spells or abilities.)\nEquip {0}",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact — Equipment"
+  },
   "Lion Umbra": {
     "cmc": 2.0,
     "keywords": [
@@ -869,6 +993,17 @@
     "toughness": null,
     "type_line": "Artifact"
   },
+  "Maelstrom Archangel": {
+    "cmc": 5.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{W}{U}{B}{R}{G}",
+    "oracle_text": "Flying\nWhenever this creature deals combat damage to a player, you may cast a spell from your hand without paying its mana cost.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Creature — Angel"
+  },
   "Magma Opus": {
     "cmc": 8.0,
     "keywords": [
@@ -879,6 +1014,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Mana Cannons": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Whenever you cast a multicolored spell, this enchantment deals X damage to any target, where X is the number of colors that spell is.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Marsh Flats": {
     "cmc": 0.0,
@@ -1002,6 +1146,26 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Nicol Bolas, Planeswalker": {
+    "cmc": 8.0,
+    "keywords": [],
+    "mana_cost": "{4}{U}{B}{B}{R}",
+    "oracle_text": "+3: Destroy target noncreature permanent.\n−2: Gain control of target creature.\n−9: Nicol Bolas deals 7 damage to target player or planeswalker. That player or that planeswalker's controller discards seven cards, then sacrifices seven permanents of their choice.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Planeswalker — Bolas"
+  },
+  "Oko, Thief of Crowns": {
+    "cmc": 3.0,
+    "keywords": [
+      "Food"
+    ],
+    "mana_cost": "{1}{G}{U}",
+    "oracle_text": "+2: Create a Food token. (It's an artifact with \"{2}, {T}, Sacrifice this token: You gain 3 life.\")\n+1: Target artifact or creature loses all abilities and becomes a green Elk creature with base power and toughness 3/3.\n−5: Exchange control of target artifact or creature you control and target creature an opponent controls with power 3 or less.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Planeswalker — Oko"
+  },
   "Ornithopter of Paradise": {
     "cmc": 2.0,
     "keywords": [
@@ -1090,6 +1254,17 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Progenitus": {
+    "cmc": 10.0,
+    "keywords": [
+      "Protection"
+    ],
+    "mana_cost": "{W}{W}{U}{U}{B}{B}{R}{R}{G}{G}",
+    "oracle_text": "Protection from everything\nIf Progenitus would be put into a graveyard from anywhere, reveal Progenitus and shuffle it into its owner's library instead.",
+    "power": "10",
+    "toughness": "10",
+    "type_line": "Legendary Creature — Hydra Avatar"
+  },
   "Pyretic Ritual": {
     "cmc": 2.0,
     "keywords": [],
@@ -1136,6 +1311,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Regrowth": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Return target card from your graveyard to your hand.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Reliquary Tower": {
     "cmc": 0.0,
@@ -1220,6 +1404,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Scalding Tarn": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for an Island or Mountain card, put it onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Scourge of Valkas": {
     "cmc": 5.0,
     "keywords": [
@@ -1277,6 +1470,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Shivan Dragon": {
+    "cmc": 6.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{4}{R}{R}",
+    "oracle_text": "Flying\n{R}: This creature gets +1/+0 until end of turn.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Creature — Dragon"
   },
   "Siege-Gang Commander": {
     "cmc": 5.0,
@@ -1498,6 +1702,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Terror": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}",
+    "oracle_text": "Destroy target nonartifact, nonblack creature. It can't be regenerated.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Three Tree City": {
     "cmc": 0.0,
     "keywords": [],
@@ -1580,6 +1793,19 @@
     "toughness": "3",
     "type_line": "Artifact Creature — Goblin Archer"
   },
+  "Two-Headed Hellkite": {
+    "cmc": 6.0,
+    "keywords": [
+      "Flying",
+      "Haste",
+      "Menace"
+    ],
+    "mana_cost": "{1}{W}{U}{B}{R}{G}",
+    "oracle_text": "Flying, menace, haste\nWhenever this creature attacks, draw two cards.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Creature — Dragon"
+  },
   "Unclaimed Territory": {
     "cmc": 0.0,
     "keywords": [],
@@ -1588,6 +1814,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Unite the Coalition": {
+    "cmc": 7.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}{U}{B}{R}{G}",
+    "oracle_text": "Choose five. You may choose the same mode more than once.\n• Target permanent phases out.\n• Target player draws a card.\n• Exile target player's graveyard.\n• Unite the Coalition deals 2 damage to any target.\n• Destroy target artifact or enchantment.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Utvara Hellkite": {
     "cmc": 8.0,
@@ -1622,6 +1857,15 @@
     "toughness": "1",
     "type_line": "Creature — Human Knight"
   },
+  "Verdant Catacombs": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Swamp or Forest card, put it onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Windswept Heath": {
     "cmc": 0.0,
     "keywords": [],
@@ -1648,5 +1892,16 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Human Knight"
+  },
+  "Zagoth Triome": {
+    "cmc": 0.0,
+    "keywords": [
+      "Cycling"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {B}, {G}, or {U}.)\nThis land enters tapped.\nCycling {3} ({3}, Discard this card: Draw a card.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Swamp Forest Island"
   }
 }

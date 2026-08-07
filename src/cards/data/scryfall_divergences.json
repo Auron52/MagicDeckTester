@@ -1,18 +1,24 @@
 {
- "_README": "Intentional, reviewed divergences between cards.json and the Scryfall snapshot (src/cards/data/scryfall_reference.json). audit_card_fields.py downgrades a HARD mismatch to an ALLOWLISTED divergence when the card+field appears here. Keyed by card name -> field ('keywords'|'subtypes'|'supertypes'|'types'|'P/T'|'mana_cost') -> reason. This is NOT for systematic conventions (ability words, land subtypes, Basic/World supertypes, CDA * power) -- those are stripped in-code. An entry that no longer mismatches is reported as STALE so this file stays honest. Adding an entry is an explicit, reviewed decision that the divergence is correct.",
- "Galerider Sliver": {
-  "keywords": "Keyword-lord: 'Sliver creatures you control have flying' grants flying to your Slivers INCLUDING itself, so the card functionally has flying (modeled self-innate). Scryfall lists no innate keyword. Anthem-to-other-Slivers inert in goldfishing (no blockers). See oracle bracket-note."
- },
- "Striking Sliver": {
-  "keywords": "Keyword-lord: grants first strike to your Slivers incl. itself (modeled self-innate). First strike is inert in goldfishing (no blockers). See oracle bracket-note."
- },
- "Cloudshredder Sliver": {
-  "keywords": "Keyword-lord: grants flying+haste to your Slivers incl. itself. Flying self-innate + inert in goldfishing; haste additionally granted to other Slivers via grants_haste param. See oracle bracket-note."
- },
- "Haytham Kenway": {
-  "keywords": "'Protection from Assassins' is a real keyword but inert in goldfishing (no Assassins in play); the protection-to-other-Knights is an anthem grant, not an innate keyword Scryfall would list on this card's other Knights."
- },
- "Goblin Piledriver": {
-  "keywords": "'Protection from blue' is a real keyword but inert in goldfishing (the passive opponent has no blue sources or blockers to target); the attack-trigger +2/+0 per other attacking Goblin is modeled via attack_pump_power_per_other_matching. See the card's oracle bracket-note."
- }
+  "_README": "Intentional, reviewed divergences between cards.json and the Scryfall snapshot (src/cards/data/scryfall_reference.json). audit_card_fields.py downgrades a HARD mismatch to an ALLOWLISTED divergence when the card+field appears here. Keyed by card name -> field ('keywords'|'subtypes'|'supertypes'|'types'|'P/T'|'mana_cost') -> reason. This is NOT for systematic conventions (ability words, land subtypes, Basic/World supertypes, CDA * power) -- those are stripped in-code. An entry that no longer mismatches is reported as STALE so this file stays honest. Adding an entry is an explicit, reviewed decision that the divergence is correct.",
+  "Galerider Sliver": {
+    "keywords": "Keyword-lord: 'Sliver creatures you control have flying' grants flying to your Slivers INCLUDING itself, so the card functionally has flying (modeled self-innate). Scryfall lists no innate keyword. Anthem-to-other-Slivers inert in goldfishing (no blockers). See oracle bracket-note."
+  },
+  "Striking Sliver": {
+    "keywords": "Keyword-lord: grants first strike to your Slivers incl. itself (modeled self-innate). First strike is inert in goldfishing (no blockers). See oracle bracket-note."
+  },
+  "Cloudshredder Sliver": {
+    "keywords": "Keyword-lord: grants flying+haste to your Slivers incl. itself. Flying self-innate + inert in goldfishing; haste additionally granted to other Slivers via grants_haste param. See oracle bracket-note."
+  },
+  "Haytham Kenway": {
+    "keywords": "'Protection from Assassins' is a real keyword but inert in goldfishing (no Assassins in play); the protection-to-other-Knights is an anthem grant, not an innate keyword Scryfall would list on this card's other Knights."
+  },
+  "Goblin Piledriver": {
+    "keywords": "'Protection from blue' is a real keyword but inert in goldfishing (the passive opponent has no blue sources or blockers to target); the attack-trigger +2/+0 per other attacking Goblin is modeled via attack_pump_power_per_other_matching. See the card's oracle bracket-note."
+  },
+  "Progenitus": {
+    "keywords": "'Protection from everything' is a real keyword but inert in goldfishing (the passive opponent never targets, blocks, or damages); the graveyard shuffle-in replacement IS modeled (graveyard_replace_shuffle_library). Mirrors the Haytham/Piledriver protection precedent."
+  },
+  "Bloom Tender": {
+    "keywords": "Scryfall lists 'vivid' in keywords -- a data quirk (no rules-meaningful innate keyword on this card); the each-color-among-permanents mana ability is modeled via domain_mana."
+  }
 }
