@@ -131,6 +131,22 @@
   ],
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "All That Glitters", "idx": 6, "num": 1, "is_aura": true, "attached_to": 27, "is_land": false }, { "name": "Audacity", "idx": 5, "num": 8, "is_aura": true, "attached_to": 27, "is_land": false }, { "name": "Boulderloft Pathway", "idx": 7, "num": 10, "tapped": true, "is_land": true }, { "name": "Branchloft Pathway", "idx": 1, "num": 9, "is_land": true }, { "name": "Daybreak Coronet", "idx": 8, "num": 17, "is_aura": true, "attached_to": 27, "is_land": false }, { "name": "Ethereal Armor", "idx": 4, "num": 21, "is_aura": true, "attached_to": 27, "is_land": false }, { "name": "Gladecover Scout", "idx": 2, "num": 27, "is_land": false }, { "name": "Plains", "idx": 3, "num": 43, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 38, "name": "Light-Paws, Emperor's Voice", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Slippery Bogle", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Spirit Link", "cost": "{W}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 49 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Slippery Bogle", "land": null, "casts": ["Slippery Bogle"], "actions": [{ "card": "Slippery Bogle" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
 }
   ]
 }

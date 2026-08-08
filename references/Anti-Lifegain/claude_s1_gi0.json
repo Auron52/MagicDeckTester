@@ -84,6 +84,22 @@
   "main_ordinal": 2,
   "type": "main_phase",
   "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 16, "battlefield": [{ "name": "Blood Crypt", "idx": 2, "num": 9, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 22, "tapped": true, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "num": 49, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Aria of Flame", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }, { "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 26, "name": "Invigorate", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Invigorate", "land": null, "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 2,
   "phase": "post_main",
   "on_the_play": false,
   "mdfc_backs": ["Boulderloft Pathway"],
@@ -96,8 +112,8 @@
 }
 },
     { "chosen": 8, "decision": {
-  "decision_index": 5,
-  "main_ordinal": 3,
+  "decision_index": 6,
+  "main_ordinal": 4,
   "type": "main_phase",
   "turn": 3,
   "phase": "pre_main",
@@ -123,11 +139,11 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 6,
-  "main_ordinal": 4,
+  "decision_index": 7,
+  "main_ordinal": 5,
   "type": "main_phase",
   "turn": 3,
-  "phase": "post_main",
+  "phase": "pre_main",
   "on_the_play": false,
   "events": [{ "turn": 3, "kind": "lifeloss", "text": "🩸 opponent −10 life (via Tainted Remedy)" }],
   "mdfc_backs": ["Boulderloft Pathway"],
@@ -140,9 +156,26 @@
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
 },
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 16, "battlefield": [{ "name": "Aria of Flame", "idx": 4, "num": 1, "is_land": false }, { "name": "Blood Crypt", "idx": 2, "num": 9, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 1, "num": 22, "tapped": true, "is_land": false }, { "name": "Tainted Remedy", "idx": 3, "num": 49, "is_land": false }, { "name": "Temple Garden", "idx": 0, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 26, "name": "Invigorate", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 33, "name": "Plague Drone", "cost": "{3}{B}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }, { "num": 51, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 10, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Invigorate", "land": null, "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
     { "chosen": 14, "decision": {
-  "decision_index": 7,
-  "main_ordinal": 5,
+  "decision_index": 9,
+  "main_ordinal": 7,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
@@ -191,7 +224,7 @@
 }
 },
     { "chosen": [5, 0, 0], "decision": {
-  "decision_index": 8,
+  "decision_index": 10,
   "type": "divide",
   "source": "Fiery Justice",
   "turn": 4,
@@ -204,8 +237,8 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 11,
-  "main_ordinal": 6,
+  "decision_index": 13,
+  "main_ordinal": 8,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
