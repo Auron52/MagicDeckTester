@@ -316,3 +316,41 @@ Now ~6x the next-heaviest deck rather than 25x. §3's mana backtracker is still 
 component and §4's tail still exists (one game over 30 s per 100 at each regression seed, down from
 two), but a smoke-sized d3 case is now roughly 2-4 min single-thread rather than 8+, so registration
 is worth re-sizing next.
+
+
+## NEXT UP (user-directed, 2026-08-08)
+
+### A. Decompose the +0.004 quality loss
+
+The Greaves commit (aff6768) bundled THREE changes, and the reported +0.004 avg is their NET. It
+has not been attributed, so "the heuristic pick costs us play" is an assumption, not a measurement:
+
+1. the `grants_something` filter (drop equips that confer nothing) — should be exactly play-neutral,
+   since those variants are literal no-ops the rollout scored as a pass;
+2. `CanTapNow` (equip haste unlocks {T}) — should be a play GAIN (more mana available);
+3. the single heuristic host pick — the only one that can LOSE play, by collapsing a set the search
+   used to choose from.
+
+Decompose with three arms over the same 3x500-game seed sets (4200000 / 90001 / 555000), baseline
+5.1280 / 5.0900 / 5.1000:
+  * arm 1: `MTG_EQUIP_ALL_HOSTS=1` on HEAD  -> isolates (3) alone, since ALL_HOSTS restores every
+    host while leaving CanTapNow live.
+  * arm 2: HEAD with CanTapNow reverted     -> isolates (2).
+  * arm 3: HEAD                             -> the shipped combination.
+If (3) is the cost, the lever is the RANKING (power + mana-if-tapped, ties by card number), not the
+collapse — try width 2 before widening further, and check whether the losing games are ones where a
+LOWER-scored host was correct (e.g. equipping the attacker when the dork's mana was not needed).
+
+### B. Fix lord-granted haste (the same gap CanTapNow closed for equipment)
+
+`CanTapNow` covers equipment only. `HasHasteFromLords` has the identical latent gap: a Sliver mana
+dork hasted by Cloudshredder Sliver still cannot tap the turn it lands, because
+`Permanent::CanTap()` sees only the card's own Haste keyword. CR 302.6 says haste removes the {T}
+restriction regardless of source, so this is a rules under-credit, not a heuristic.
+
+Deliberately NOT bundled into aff6768 because it moves EXISTING decks' ground truth (slivers and
+goblins both run haste lords), which needs its own inspect-and-accept cycle rather than riding along
+with a FiveColour perf change. Steps: extend `CanTapNow` with
+`HasHasteFromLords(p.card, battlefield, p.controller_index, p.is_animated)`, run the suites, read
+the per-game audit for every searched-depth SLOWER game, and rebaseline only on a reviewed NET
+delta (see regression-testing.md — never `--accept` on an aggregate fingerprint alone).
