@@ -28,7 +28,7 @@ trained sidecar uses. Run once per value model, right after its depth matrix is 
     # hinata, once its (expensive) matrix finishes
     scripts/valueleaf_table_to_metadata.py logs/eval/valueleaf_depth_matrix_hinata.txt --decks hinata
 """
-import argparse, collections, json, re, sys
+import argparse, collections, glob, json, os, re, sys
 
 # deck name (as printed in the matrix log) -> its model metadata file
 NAME2VALUE = {
@@ -43,6 +43,23 @@ NAME2VALUE = {
     "goblins":  "decks/Goblins/Goblins.value.json",
     "creature_giving": "decks/Creature Giving/Creature Giving.value.json",
 }
+
+# AUTO-DISCOVERY, mirroring valueleaf_depth_matrix.py's, and keyed identically (slug of the folder
+# name). Without it this dict is hand-maintained, and an unlisted deck does not error -- write_deck
+# prints "SKIP (no metadata path mapped)" and phase D writes nothing, so the run completes with a
+# staged model that has no table and no crossover, and phase E then A/Bs it as if it did. The matrix
+# script was given auto-discovery for the same reason; leaving it out of THIS one meant FiveColour
+# would have measured 52 cells over ~8 hours and then thrown the derivation away.
+def _slug(name):
+    return "".join(c.lower() if c.isalnum() else "_" for c in name)
+
+for _dir in sorted(glob.glob("decks/*")):
+    if not os.path.isdir(_dir):
+        continue
+    _stem = os.path.basename(_dir)
+    if not os.path.exists("%s/%s.profile.json" % (_dir, _stem)):
+        continue          # no profile -> never measured at shipped play -> nothing to write here
+    NAME2VALUE.setdefault(_slug(_stem), "%s/%s.value.json" % (_dir, _stem))
 
 # STAGED targets, matching the "<deck>_staged" keys in valueleaf_depth_matrix.py. A regenerated table
 # CHANGES PLAY, so it must be measured against the live one before being installed; writing it here
