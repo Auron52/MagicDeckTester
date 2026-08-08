@@ -1,50 +1,76 @@
-# `viewer_validate_check.js` stream alignment — remaining work
+# `viewer_validate_check.js` — how it broke, and the fix
 
-Status: **partially fixed 2026-08-08**; 13 residual failures, all Goblins. Not a blocker — the two
-suite-wired viewer checks are green on all 178 references.
+Status: **RESOLVED 2026-08-08.** 713 accept / 72 choose / **0 known-fail / 0 REGRESSION** over all
+178 references, and the check is now wired into `test/viewer_checks.sh` (full mode).
 
-## What this check is, and why it was lying
+## Why this happened at all
 
 `test/viewer_validate_check.js` is the only check that exercises `--validate-line`
 (`TurnSolver::CheckLine`). It rebuilds each reference's played line exactly as the GUI would
-(`linebuild.js`), replays the recorded choices as a positional `--choices` prefix, and asserts the
-verdict is `accept` / `choose`.
+(`linebuild.js`), replays a choices prefix, and asserts the verdict is `accept` / `choose`.
 
-It is **not wired into any suite** (`viewer_checks.sh` runs the decision-type, parity, line-build
-and protocol layers, not this one), so it drifted unnoticed.
+**It was wired into no suite.** `viewer_checks.sh` ran the decision-type, parity, line-build and
+protocol layers — not this one. So it drifted to **141 failures on an untouched tree** with a
+116-line "known-fail" baseline that had absorbed the drift. An unrun check is not a check; that is
+the root cause behind all four bugs below.
 
-### Bug 1 — no `--force-mulligan` (FIXED)
+## The four bugs
+
+### 1. No `--force-mulligan`
 
 The check never reconstructed the recorded opening hand, so a reference recorded after mulliganing
-to 5 was validated against a 7-card game. Every positional choice then indexed a different decision
-and the verdicts were meaningless.
+to 5 was validated against a 7-card game and every positional choice indexed a different decision.
 
-This hid behind an accident: references that carried mulligan/bottom **decision frames** had those
-recorded answers replayed positionally *as* the live mulligan, which re-aligned the stream by luck.
+Hidden by an accident: references carrying mulligan/bottom **frames** had those recorded answers
+replayed positionally *as* the live mulligan, which re-aligned the stream by luck.
 `scripts/ref_regenerate.py` folds those frames into the `mulligan` header, so regenerating 69
-references removed the accident and the breakage surfaced all at once.
+references removed the accident and a long-latent bug surfaced all at once.
 
-Measured on `treasure_hunt/claude_s4_gi3` T2 — the same line, same prefix:
+`treasure_hunt/claude_s4_gi3` T2, same line and prefix: `illegal (land drop unavailable)` →
+**`accept`** once forced.
 
-| | verdict |
-|---|---|
-| without `--force-mulligan` | `illegal (can't play land 'Reliquary Tower': land drop unavailable)` |
-| with `--force-mulligan 4:41,1,20,16` | **`accept`** |
+### 2. Positional replay could not absorb an inserted breakpoint
 
-Fixed by mirroring `viewer_protocol_check.py`'s `force_arg()` + `FORCED_MULLIGAN_TYPES`.
+`MTG_PLAY_SEGMENT_ALWAYS` re-prompts inside a main phase, so a pre-segment recording has no answer
+for the new frame and every later choice slips by one.
 
-### Bug 2 — no tolerance for inserted breakpoints (PARTIALLY FIXED)
+`Goblins/claude_s22_gi21`: at prefix `[0,1]` the engine offers **T2/pre_main a second time**, so the
+recorded prefix `[0,1,-1]` lands on T2/post_main and the T3 line reports "land drop unavailable".
+Prefix `[0,1,-1,-1]` → **`accept`**.
 
-`MTG_PLAY_SEGMENT_ALWAYS` makes Commit Line re-prompt inside a main phase. A reference recorded
-before it has no answer for the new segment, so every later choice slips by one.
+Fixed by **sharing one alignment implementation** instead of growing a second: the check now calls
+`viewer_protocol_check.py --emit-resolved`, which walks each reference against the current engine
+and returns the content-resolved pick stream plus every recorded main-phase frame's offset into it.
+The protocol checker already did this correctly (`frame_ident` alignment: pass an unaligned
+main-phase frame, answer any other unaligned frame as the unattended engine would, re-anchor stale
+indices by plan content). Two divergent copies of this logic is exactly how the check drifted.
 
-Proven on `Goblins/claude_s22_gi21`: at prefix `[0,1]` the engine offers **T2/pre_main a second
-time**, so the recorded prefix `[0,1,-1]` lands on T2/post_main and the T3 line reports "land drop
-unavailable". Insert one pass — prefix `[0,1,-1,-1]` — and the identical line returns **`accept`**.
+### 3. 40 references were never replayed — by either check
 
-`alignPrefix` now probes the offered frame and passes extra main-phase segments until the recorded
-frame lines up. It does not absorb a **sub-decision** (`lackey_put` / `tutor_etb` / `echo`)
-interleaved at the shift point: the probe stops there and the line reports `NO_VALIDATION_BLOCK`.
+`viewer_protocol_check.py` resolves a reference's deck through a hardcoded `DECKS` map and returned
+**`ok`, "skip (unknown deck dir)"** for anything missing from it. Missing: `Goblins` (30 refs) and
+`Creature_Giving` (10) — the latter because the reference dir is `Creature_Giving` while the deck
+folder is `decks/Creature Giving` (a space). So 40 references, including every one of the Goblins
+games a 13-issue viewer batch was built against, were reported as verified without being run.
+
+Both decks are now in the map, and an unresolvable deck dir is a **contract failure**, not an `ok`.
+The validate check no longer keeps its own name→path guess either; it takes the deck and profile
+from the resolver.
+
+### 4. Aether Vial deploys were encoded as casts
+
+A vialled card is in hand but is never cast and pays no mana. Encoding it as `cast=` asks CheckLine
+to pay a cost that never existed — `Goblins/claude_s18_gi17` T4 read `illegal (can't pay {1}{R}{R}
+for 'Goblin Chieftain')` on a line played by putting it onto the battlefield with a vial.
+
+The plan JSON carries no structured flag for this (unlike `activate` / `sacout`), only the emitter's
+`" (vial)"` summary tag, so the check cursor-matches cast names through the summary in plan order.
+A plan can hold two copies of one card with only the second vialled ("cast: Marshal of Zhalfir,
+Marshal of Zhalfir (vial)"), so a naive `summary.includes(name + " (vial)")` marks both — that
+produced four bogus `vial=X;vial=X` failures on Knights before the cursor walk replaced it.
+
+**Worth doing later:** emit a structured `"vial": true` on the action, as `activate`/`sacout`
+already do, and drop the summary parsing.
 
 ## Measurements (178 refs)
 
@@ -52,33 +78,16 @@ interleaved at the shift point: the probe stops there and the line reports `NO_V
 |---|---|---|
 | pre-change tree `337d1b1`, check as-was | 451 | 141 |
 | HEAD, check as-was | 301 | 306 |
-| HEAD, `--force-mulligan` fix | 628 | 15 |
-| HEAD, + `alignPrefix` | **631** | **13** |
-| pre-change tree `337d1b1`, both fixes | 639 | 4 |
+| + `--force-mulligan` | 628 | 15 |
+| + shared resolver alignment | 676 | 2 |
+| + vial encoding | **713** | **0** |
 
-So 141 of the original failures predate this work entirely; the fixes clear all but 13, and 10 of
-those 13 are the A1 stream shift on **Goblins** references (Goblins lines create new play mid-phase,
-so it is the deck A1 re-prompts most, and none of its references were regenerated — the protocol
-checker already rated them `ok`, so `ref_regenerate.py` skipped them by design).
+The baseline file is now empty: nothing is a known fail. `test/viewer_protocol_check.py --strict`
+over the same 178 (now including the 40 previously skipped) reports 156 ok / 22 repaired /
+0 play-drift / 0 shuffle-dead / 0 enum-gap / 0 mull-drift / 0 contract-fail.
 
-## Options for the remainder, cheapest first
+## Lesson
 
-1. **Regenerate the Goblins references.** They would then record A1's segments literally and the
-   positional stream would align with no code change. `ref_regenerate.py` skips `ok` references
-   deliberately ("no churn"), so this needs an explicit opt-in flag. Touches user-owned files under
-   `references/` — **requires the user's say-so** (see the commit-only rule in CLAUDE.md), and it
-   would fold their mulligan frames into the header, as the 69 already regenerated did.
-2. **Rebaseline.** `node test/viewer_validate_check.js --update-baseline` records the 13 as known
-   fails. Cheap, but it enshrines artifacts as expected and blunts the check.
-3. **Finish the driver (the real fix).** Drive the engine decision-by-decision and answer *any*
-   unaligned frame — including sub-decisions — from the recorded stream by content rather than by
-   position, i.e. what `viewer_protocol_check.py` already does with `frame_ident`. The two checks
-   would then share one alignment implementation instead of having two divergent ones. This is the
-   durable answer and the reason the residue is Goblins-only.
-
-## Also worth doing
-
-Wire this check into `test/viewer_checks.sh` once it is green. It was written to close a real blind
-spot ("nobody validates the reconstructed line against the engine") and then left out of the suite,
-which is how it reached 141 stale failures without anyone noticing. Runtime is ~4–5 min after the
-alignment probe (roughly double, one extra binary invocation per validated line).
+Every bug here was invisible for the same reason: **the check was not in the suite, and its failure
+mode was to report `ok`.** Prefer loud failure over a silent skip — bug 3 in particular passed 40
+unverified references for as long as the map was stale.

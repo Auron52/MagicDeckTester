@@ -57,6 +57,11 @@ DECKS = {
     "treasure_hunt": ("decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.profile.json"),
     "Auras":         ("decks/Auras/Auras.cod",                 "decks/Auras/Auras.profile.json"),
     "Dragonstorm":   ("decks/Dragonstorm/Dragonstorm.cod",     "decks/Dragonstorm/Dragonstorm.profile.json"),
+    "Goblins":       ("decks/Goblins/Goblins.cod",             "decks/Goblins/Goblins.profile.json"),
+    # The reference dir is Creature_Giving; the deck folder has a SPACE. That mismatch is why this
+    # deck was never added -- and why 40 references (30 Goblins + 10 Creature Giving) sat unchecked.
+    "Creature_Giving": ("decks/Creature Giving/Creature Giving.cod",
+                        "decks/Creature Giving/Creature Giving.profile.json"),
 }
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", re.S)
@@ -303,7 +308,12 @@ def check_reference(path, collect=None):
     ref = json.load(open(path))
     deck_dir = os.path.basename(os.path.dirname(path))
     if deck_dir not in DECKS:
-        return True, "ok", f"skip (unknown deck dir {deck_dir})"
+        # LOUD, not `ok`. This used to return ok/"skip", so a reference dir missing from DECKS was
+        # counted as verified while never being replayed at all -- 30 Goblins + 10 Creature Giving
+        # references sat in that blind spot, including the deck a 13-issue viewer batch was built
+        # against. A reference we cannot resolve a deck for is UNVERIFIED, and must say so.
+        return False, "play", (f"unknown deck dir {deck_dir!r} -- NOT replayed; add it to DECKS "
+                               f"in this file (note references/<dir> need not match decks/<dir>)")
     deck, prof = DECKS[deck_dir]
     seed, gi = ref["seed"], ref["game_index"]
     side = side_channel_args(ref["decisions"])   # --firebreathe / --storage-hold / --cast-order the ref used
@@ -318,9 +328,17 @@ def check_reference(path, collect=None):
     mt = max(8, ref.get("win_turn") or 0)
 
     resolved = []        # the pick stream actually sent (content-resolved + defaults filled in)
+    # Aligned MAIN-PHASE frames, in walk order: where each one sits in `resolved`. This is the
+    # alignment that viewer_validate_check.js needs and used to approximate on its own -- it lets
+    # that check replay the exact prefix that lands the engine on a given recorded frame, instead
+    # of assuming the recording's positional indices still line up. Sharing this walk is the point:
+    # two independent alignment implementations is how the validate check silently drifted to 141
+    # stale failures (docs/design/viewer-validate-stream-alignment.md).
+    frames = []
     if collect is not None:
         collect.update(deck=deck, prof=prof, seed=seed, gi=gi, force=force, side=side, mt=mt,
-                       resolved=resolved)   # 'resolved' is THIS list; it fills in as the walk runs
+                       resolved=resolved,   # 'resolved' is THIS list; it fills in as the walk runs
+                       frames=frames)
     ri = 0               # how many of the reference's own decisions have been consumed
     inserted, shifted = [], []
     hand_checked = False
@@ -397,6 +415,10 @@ def check_reference(path, collect=None):
         rec_list = rec if isinstance(rec, list) else [rec]
         if dec.get("type") == "main_phase":
             p = int(rec_list[0])
+            # Record the prefix BEFORE this frame's own pick: replaying resolved[:prefix_len]
+            # leaves the engine offering exactly this frame.
+            frames.append({"turn": dec.get("turn"), "phase": dec.get("phase"),
+                           "prefix_len": len(resolved), "ri": ri, "recorded_index": p})
             if p == -1:                      # pass / cast-nothing is always legal
                 resolved.append(-1)
             else:
@@ -476,7 +498,29 @@ def check_reference(path, collect=None):
     return True, "unresolvable", f"replay did not terminate within 400 decisions ({len(resolved)} picks sent)"
 
 
+def emit_resolved(paths):
+    """--emit-resolved <ref.json>...: print this walk's ALIGNMENT as JSON, one object per line.
+
+    Consumed by test/viewer_validate_check.js so that check replays the same content-resolved
+    stream this one does rather than the recording's raw positional indices. Fields: the replay
+    invariants (deck/prof/seed/gi/force/side/mt), `resolved` (the full pick stream), and `frames`
+    (each aligned main_phase frame's turn/phase and its prefix_len into `resolved`).
+    """
+    for path in paths:
+        c = {}
+        ok, kind, detail = check_reference(path, collect=c)
+        print(json.dumps({"path": path, "ok": ok, "kind": kind, "detail": detail,
+                          "deck": c.get("deck"), "prof": c.get("prof"), "seed": c.get("seed"),
+                          "gi": c.get("gi"), "force": c.get("force"), "side": c.get("side", []),
+                          "mt": c.get("mt"), "resolved": c.get("resolved", []),
+                          "frames": c.get("frames", [])}))
+    return 0
+
+
 def main():
+    if "--emit-resolved" in sys.argv[1:]:
+        i = sys.argv.index("--emit-resolved")
+        return emit_resolved([a for a in sys.argv[i + 1:] if not a.startswith("--")])
     # The one-level glob deliberately covers only the VERIFIED set, references/<deck>/claude_*.json.
     # Aspirational "known-slow" games live one level deeper (references/suboptimal/<deck>/…, see that
     # folder's README) and are excluded here: their win turn is knowingly beatable, so gating on them
