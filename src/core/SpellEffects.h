@@ -6139,12 +6139,20 @@ namespace tapstats
 {
     inline bool Enabled() { static const bool v = EnvOn("MTG_TAP_STATS"); return v; }
     inline std::atomic<std::uint64_t> g_backtrack_entries{0};
+    inline std::atomic<std::uint64_t> g_nodes{0};          // ALL recursion nodes (top-level + deep)
+    inline std::atomic<std::uint64_t> g_top_memo_off{0};   // top-level calls with n>64 (fail-memo disabled)
+    inline std::atomic<std::uint64_t> g_max_n{0};          // max battlefield size seen at a top-level call
     struct Dumper {
         ~Dumper()
         {
             if (!Enabled()) { return; }
-            std::fprintf(stderr, "\n=== TAP STATS: TapForCostBacktrack top-level entries = %llu ===\n",
-                         (unsigned long long)g_backtrack_entries.load());
+            const unsigned long long top = g_backtrack_entries.load();
+            const unsigned long long nodes = g_nodes.load();
+            std::fprintf(stderr,
+                "\n=== TAP STATS: top-level entries=%llu  total nodes=%llu  nodes/entry=%.1f"
+                "  memo-off(n>64) top-level=%llu  max board n=%llu ===\n",
+                top, nodes, top ? (double)nodes / (double)top : 0.0,
+                (unsigned long long)g_top_memo_off.load(), (unsigned long long)g_max_n.load());
         }
     };
     inline Dumper g_dumper;
@@ -6237,6 +6245,13 @@ inline std::uint64_t ReservableSpecialMask(const GameState& state)
 }
 
 // TapForCostBacktrack -- body in SpellEffects.cpp (see the header note above).
+// `src_cands` (threaded, nullptr at the top-level call) is the controller's structural mana sources
+// {battlefield index, cached def}, enumerated ONCE at the top-level call and reused by every recursion
+// node -- so a token-flooded OPPONENT board (Forbidden Orchard Spirits / Hunted Phantasm / Varchild's
+// Survivors) is skipped instead of rescanned (with a fresh LookupCached hash lookup) at every one of the
+// millions of backtrack nodes. Invariant during a payment (no permanent enters/leaves), so this is a
+// pure byte-identical speedup: every per-node liveness check (tapped / CanTapNow / storage / graveyard
+// fuel / reservation) still runs, only the O(battlefield) filter + LookupCached are hoisted.
 bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
                                 const std::vector<Color>* rp_colors = nullptr,
@@ -6245,7 +6260,8 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                 std::uint64_t tapped_mask = 0,
                                 int untapped_max = -1,
                                 std::uint64_t reserved_mask = 0,
-                                ManaPool* out_full_pool = nullptr);
+                                ManaPool* out_full_pool = nullptr,
+                                const std::vector<std::pair<int, const CardDefinition*>>* src_cands = nullptr);
 
 // Sacrifices any land whose depletion counters have run out (count 0): the depletion
 // lands' "If there are no depletion counters on it, sacrifice it." Safe to call after

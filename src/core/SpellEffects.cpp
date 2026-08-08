@@ -726,7 +726,8 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                 std::uint64_t tapped_mask,
                                 int untapped_max,
                                 std::uint64_t reserved_mask,
-                                ManaPool* out_full_pool)
+                                ManaPool* out_full_pool,
+                                const std::vector<std::pair<int, const CardDefinition*>>* src_cands)
 {
     TapSpeculationScope _spec;   // suppress phantom drip-land life events from speculative taps
     if (floating.CanPay(cost))
@@ -774,9 +775,55 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // stored as the full pair (not a lossy hash) so a hash collision can never cause a false prune.
     // Set up once at the top-level call and threaded down; disabled when n>64 (bitmask won't fit).
     const bool top_level = (fail_memo == nullptr);
-    if (top_level && tapstats::Enabled()) { tapstats::g_backtrack_entries.fetch_add(1, std::memory_order_relaxed); }
-    TapBacktrackMemo memo_local;
-    if (top_level && n <= 64) { fail_memo = &memo_local; }
+    if (tapstats::Enabled())
+    {
+        tapstats::g_nodes.fetch_add(1, std::memory_order_relaxed);   // every recursion node
+        if (top_level)
+        {
+            tapstats::g_backtrack_entries.fetch_add(1, std::memory_order_relaxed);
+            if (n > 64) { tapstats::g_top_memo_off.fetch_add(1, std::memory_order_relaxed); }
+            std::uint64_t prev = tapstats::g_max_n.load(std::memory_order_relaxed);
+            while (static_cast<std::uint64_t>(n) > prev &&
+                   !tapstats::g_max_n.compare_exchange_weak(prev, static_cast<std::uint64_t>(n),
+                                                            std::memory_order_relaxed)) {}
+        }
+    }
+    // Reuse the failure-memo's bucket allocation across the (hundreds of thousands of) top-level calls
+    // instead of constructing/destructing a fresh unordered_set each time. clear() retains the bucket
+    // array (libstdc++), so after warm-up there is no per-call bucket alloc/free and no rehash growth --
+    // which the profile showed as a real slice (operator new/delete + _M_rehash) on a token-heavy deck
+    // where the greedy strands ~400k times per rollout. Byte-identical: each top-level call sees an
+    // empty memo and inserts exactly the same proven-failure keys, so every prune is unchanged. Safe as
+    // thread_local (each gen worker has its own) because no nested top-level backtrack runs in a subtree.
+    static thread_local TapBacktrackMemo s_memo_tl;
+    if (top_level && n <= 64) { s_memo_tl.clear(); fail_memo = &s_memo_tl; }
+
+    // Structural mana-source list (the controller's BasicLand / ManaDork / mana_rock permanents +
+    // their cached def), enumerated ONCE at the top-level call and threaded to every node. The
+    // recursion then iterates ~sources instead of the whole battlefield and never re-runs the
+    // LookupCached hash: a token-flooded OPPONENT board (Forbidden Orchard / Hunted Phantasm /
+    // Varchild's) is skipped entirely instead of rescanned at each of the millions of nodes. This is
+    // a SUPERSET of the per-node `is_src` structural test (ManaDork's CanTapNow check stays per-node),
+    // and the battlefield is invariant during a payment, so it is byte-identical. thread_local buffer:
+    // rebuilt at each top-level call, reused via the threaded pointer by that call's subtree (no nested
+    // top-level backtrack exists within a subtree, so the buffer is never clobbered mid-iteration).
+    static thread_local std::vector<std::pair<int, const CardDefinition*>> s_src_cands_buf;
+    if (top_level)
+    {
+        s_src_cands_buf.clear();
+        for (int i = 0; i < n; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != active) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d) { continue; }
+            if (d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
+                || d->params.mana_rock)
+            { s_src_cands_buf.push_back({ i, d }); }
+        }
+        src_cands = &s_src_cands_buf;
+    }
+    const std::vector<std::pair<int, const CardDefinition*>>& cands = *src_cands;
 
     std::pair<std::uint64_t, std::uint64_t> key{0, 0};
     if (fail_memo)
@@ -855,14 +902,12 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // (the stl_vector alloc churn in the combo-turn callgrind).
     bool rp_ready = (rp_colors != nullptr);
 
-    for (int i = 0; i < n; ++i)
+    for (const std::pair<int, const CardDefinition*>& cand : cands)
     {
-        if (state.battlefield[i].controller_index != active || state.battlefield[i].tapped)
-        { continue; }
+        const int i = cand.first;
+        if (state.battlefield[i].tapped) { continue; }
         if (reserved_mask & (1ull << i)) { continue; }   // reservation audit: this source is held (not tappable)
-        const CardDefinition* def =
-            CardDatabase::Instance().LookupCached(state.battlefield[i].card);
-        if (!def) { continue; }
+        const CardDefinition* def = cand.second;   // hoisted: controller==active filter + LookupCached done once
         const bool is_src = (def->tmpl == CardTemplate::BasicLand)
                          || (def->tmpl == CardTemplate::ManaDork && CanTapNow(state.battlefield[i], state.battlefield))
                          || def->params.mana_rock;
@@ -955,7 +1000,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             if (TapForCostBacktrack(state, cost, for_creature, next, rp_colors, fail_memo, out_leftover,
                                     tapped_mask | (1ull << i),
                                     untapped_max < 0 ? -1 : untapped_max - src_max_net,
-                                    reserved_mask, out_full_pool)) { return true; }
+                                    reserved_mask, out_full_pool, src_cands)) { return true; }
             state.battlefield[i].tapped = tapped_snap;   // only this source was touched at this level
             if (has_counters) { state.battlefield[i].counters = counters_snap; }
             state.battlefield[i].storage_counters = storage_snap;
