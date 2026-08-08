@@ -3506,7 +3506,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // value sac is >= as good AFTER attacking, so this is near-lossless while dropping them from the
             // pre-combat O(2^candidates) subset. GenericProvider returns false -> byte-identical for every
             // non-Goblins deck. See the hook doc for the Skirk haste-gate rationale.
-            if (is_pre_combat && ResolveProvider(state).DeferSacOutletPreCombat(state, src, is_mana_outlet))
+            // ... but NOT in human play (viewer issue #2): this is a PERF prune, measured win-turn
+            // neutral at searched depth, and its whole justification is that the SEARCH reaches the
+            // same outcome from the second main. A human is not a search -- to them the outlet
+            // simply vanishes from main 1 and reappears in main 2 ("sacrificing to Siege-Gang
+            // inconsistently isn't available"), and the Krenko-tap -> Skirk-sac line the re-prompt
+            // loop now enables is a PRE-combat line. Same carve-out shape as
+            // DragonstormProvider::TutorToBattlefieldPutOrder. HumanPlayActive() is false in every
+            // rollout (HumanPlaySuppress) and in every autonomous run -> GT-neutral.
+            if (is_pre_combat && !HumanPlayActive()
+                && ResolveProvider(state).DeferSacOutletPreCombat(state, src, is_mana_outlet))
             { continue; }
             const std::string& need_sub = sd->params.sac_creature_requires_subtype;
             // BOUNDED victim selection (heuristic narrowing -- NOT one action per victim, which makes
@@ -8454,6 +8463,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // sacrificed. This is the rollout/search world; it mirrors the executor block at the top of
     // AIEngine::TakeTurn using TapForCostDirect (the byte-identical mirror of AIEngine::TapForCost)
     // and OnCreatureDies -> lockstep. Gated on echo_cost, so it is a no-op for every non-echo deck.
+    bool echo_processed = false;   // did an echo obligation actually come due this upkeep?
     for (std::size_t i = 0; i < state.battlefield.size(); )
     {
         Permanent& p = state.battlefield[i];
@@ -8462,6 +8472,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         const CardDefinition* edef = CardDatabase::Instance().LookupCached(p.card);
         if (!edef || !edef->params.echo_cost) { ++i; continue; }
         p.echo_resolved = true;   // obligation resolved this upkeep, whatever the outcome
+        echo_processed  = true;
         const CardParams& ep = edef->params;
         // Pay-vs-decline JUDGEMENT is provider-owned (PayEchoToKeep) -- the SAME decision the executor
         // (AIEngine) uses, so autonomous play and this rollout stay in lockstep. Default reproduces the
@@ -8482,6 +8493,12 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         OnCreatureDies(state, ctrl, dead);   // may append a token at the end -> safe (no echo_cost)
         // Do not advance i: the erased slot now holds the next permanent.
     }
+    // END OF THE UPKEEP STEP (CR 500.4): the pool empties, so an echo cost paid off a lumpy source
+    // cannot leave spendable mana behind. Lockstep partner: the same clear at the top of the
+    // pre-combat main in AIEngine::TakeTurn -- both worlds must drop it at the same point, and on
+    // the same CONDITION, or the rollout scores a line the executor cannot pay. See
+    // UpkeepFloatClearEnabled (viewer issue #6).
+    if (echo_processed && UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; }
 
     // Draw
     if (ap.library.empty()) { return false; }
@@ -14840,6 +14857,15 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p)
         if (a.kind == Action::Kind::DiscardToLandsEdge) { le_count += a.discard_lands; }
         else if (a.kind == Action::Kind::DigDraw)
         { cast_names.push_back((a.dig_sacrifice ? "sacrifice " : "cycle ") + a.card_name); }
+        // Sac outlets: say HOW MANY creatures the activation eats. Without the count a 1-sac and a
+        // 3-sac Skirk Prospector burst produced byte-identical summaries, so the viewer offered the
+        // human two indistinguishable menu entries with very different results (viewer issue #4).
+        else if (a.kind == Action::Kind::SacForMana || a.kind == Action::Kind::SacCreatureOutlet)
+        {
+            const int k = std::max(1, a.sac_count);
+            cast_names.push_back(a.card_name + ": sac " + std::to_string(k)
+                                 + (k == 1 ? " creature" : " creatures"));
+        }
         else { cast_names.push_back(a.card_name); }
     }
     s += "cast: ";
@@ -14893,7 +14919,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // A line that only activates Land's Edge / deploys via Vial / retraces (no land, no hand
     // casts) is NOT a pass -- those are real actions committed via their own verbs.
     if (spec.pass || (!spec.has_land && spec.casts.empty() && spec.lands_edge == 0 &&
-                      spec.vial_deploys.empty() && spec.retrace_casts.empty()))
+                      spec.vial_deploys.empty() && spec.retrace_casts.empty() &&
+                      spec.sac_outlets.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -14907,6 +14934,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     std::sort(sortedVial.begin(), sortedVial.end());
     std::vector<std::string> sortedRetrace = spec.retrace_casts;
     std::sort(sortedRetrace.begin(), sortedRetrace.end());
+    std::vector<std::string> sortedSacOut = spec.sac_outlets;
+    std::sort(sortedSacOut.begin(), sortedSacOut.end());
+    // Did the human DECLARE sac-outlet activations? If so both outlet kinds are matched against
+    // that multiset; if not, legacy matching applies (SacForMana implicit via planSacs,
+    // SacCreatureOutlet inside the ordinary `cast=` multiset) so saved references are unaffected.
+    const bool sacout_declared = !spec.sac_outlets.empty();
 
     // --- 1) Does the line match a plan (or several variants) the model would play? ----
     // A "match" is same land + same multiset of cast card names. Several enumerated plans can
@@ -14942,16 +14975,32 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         //                         multiset. planSacs counts them so a line affordable WITHOUT saccing
         //                         prefers the no-sac plan (saving the one-shot source; see the pool sort).
         int planLE = 0, planSacs = 0;
-        std::vector<std::string> orderNames, vialNames, retraceNames;
+        std::vector<std::string> orderNames, vialNames, retraceNames, sacOutNames;
         for (const Action& a : p.actions)
         {
             if (a.kind == Action::Kind::DiscardToLandsEdge) { planLE += a.discard_lands; continue; }
             if (a.kind == Action::Kind::ActivateVial)       { vialNames.push_back(a.card_name); continue; }
             if (a.kind == Action::Kind::CastFromGraveyard)  { retraceNames.push_back(a.card_name); continue; }
+            // A declared sac-outlet line matches BOTH outlet kinds against spec.sac_outlets, with
+            // one entry per ACTIVATION (a burst of k sacs is k entries -- sac_count is how many
+            // creatures one activation eats, and the human declared each of them).
+            if (sacout_declared && (a.kind == Action::Kind::SacForMana
+                                 || a.kind == Action::Kind::SacCreatureOutlet))
+            {
+                const int reps = std::max(1, a.sac_count);
+                for (int r = 0; r < reps; ++r) { sacOutNames.push_back(a.card_name); }
+                continue;
+            }
             if (a.kind == Action::Kind::SacForMana)         { ++planSacs; continue; }
             orderNames.push_back(a.card_name);
         }
         if (planLE != spec.lands_edge) { continue; }
+        if (sacout_declared)
+        {
+            std::vector<std::string> sortedSacNames = sacOutNames;
+            std::sort(sortedSacNames.begin(), sortedSacNames.end());
+            if (sortedSacNames != sortedSacOut) { continue; }
+        }
         std::vector<std::string> sortedNames = orderNames;
         std::sort(sortedNames.begin(), sortedNames.end());
         if (sortedNames != sortedCasts) { continue; }
@@ -15243,7 +15292,29 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         bool alt_free;                    // alt cost payable (controls the subtype) -> costs no mana
     };
     std::vector<PendingCast> pending;
-    for (const std::string& name : spec.casts)
+    // `cast=` is ALSO the verb for a battlefield ACTIVATION (Krenko's "{T}: create X Goblins" -- see
+    // WriteDecisionJson's `activate` flag), because the GUI had no other way to express one. Those
+    // names are not in hand, so charging them as hand casts produced the nonsense verdict "'Krenko,
+    // Mob Boss' is not in hand (already cast, or never there)" for a perfectly ordinary line. Peel
+    // them off first: a name is an activation when the hand cannot cover it but a permanent we
+    // control has that name. They cost no mana here (the tap abilities that use this verb are free;
+    // the costed sac outlets go through `sacout=` instead), so they simply drop out of the sim.
+    std::vector<std::string> line_casts;   // spec.casts MINUS the battlefield activations
+    {
+        std::map<std::string, int> hand_left;
+        for (const Card& c : s.ActivePlayer().hand) { ++hand_left[c.m_name.str()]; }
+        for (const std::string& name : spec.casts)
+        {
+            auto it = hand_left.find(name);
+            if (it != hand_left.end() && it->second > 0) { --it->second; line_casts.push_back(name); continue; }
+            bool on_battlefield = false;
+            for (const Permanent& p : s.battlefield)
+            { if (p.controller_index == s.active_player_index && p.card.m_name == name)
+              { on_battlefield = true; break; } }
+            if (!on_battlefield) { line_casts.push_back(name); }   // genuinely missing -> reported below
+        }
+    }
+    for (const std::string& name : line_casts)
     {
         const CardDefinition* def = CardDatabase::Instance().Lookup(name);
         if (!def)
@@ -15253,14 +15324,28 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             return out;
         }
         const ManaCost& mc = def->card.m_mana_cost;
-        // X and tutor lines still can't be honestly modelled by this affordability check. Alt-cost
-        // (Invigorate) IS handled: if we control the required subtype (a Forest), the alt cost is a
-        // free payment (opponent gains life), so it costs no mana; else fall back to the hard cost.
-        if (mc.has_x || def->params.tutor_to_hand || def->params.tutor_to_top
-            || def->params.tutor_land_to_battlefield)
+        // {X} still can't be honestly modelled by this affordability check (the cost depends on a
+        // value the line does not carry). Alt-cost (Invigorate) IS handled: if we control the
+        // required subtype (a Forest), the alt cost is a free payment (opponent gains life), so it
+        // costs no mana; else fall back to the hard cost.
+        //
+        // TUTORS are no longer unsupported (viewer issue #9 / #1). They were lumped in with {X},
+        // but a tutor's COST is an ordinary mana cost -- searching a library changes zone contents,
+        // not affordability -- so this sim can grade them exactly like any other spell. Reporting
+        // "unsupported" instead actively MISLED: the Creature Giving artifacts (s3/s5) and the
+        // Goblins s6 artifact all reached stage 2 for a completely different reason (the line was
+        // not enumerated, or was genuinely unpayable) and the tutor bail hid it behind "v1 can't
+        // validate this". Stage 1 has always matched tutor lines fine; only this fallback bailed.
+        //
+        // Deliberately NOT modelled: the mana a tutor_land_to_battlefield (Crop Rotation) fetch adds.
+        // Which land it gets is a plan sub-decision the line spec does not carry, so any credit would
+        // be invented -- and inventing it turns a genuinely unpayable line into the softer
+        // "legal, not enumerated", i.e. a WORSE diagnostic. Playing off the fetched land is served by
+        // the segment re-prompt instead (commit the Crop Rotation, the land enters, cast off it).
+        if (mc.has_x)
         {
             out.verdict = V::Unsupported; out.failed_action = "cast=" + name;
-            out.reason = "'" + name + "' uses an action kind (X / tutor) the v1 "
+            out.reason = "'" + name + "' uses an action kind ({X}) the v1 "
                          "line check cannot validate yet";
             return out;
         }

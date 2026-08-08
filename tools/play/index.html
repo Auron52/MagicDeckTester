@@ -111,6 +111,7 @@
   .thumb .cnt.loyalty{ background:var(--warn); } .thumb .cnt.poison{ background:#9a6ad1; }
   .thumb .cnt.depletion{ background:var(--land); } .thumb .cnt.charge{ background:var(--acc); }
   .thumb .cnt.verse{ background:#e69a5a; } .thumb .cnt.storage{ background:#e3b23c; }
+  .thumb .cnt.age{ background:#8a7fb5; }   /* cumulative upkeep (Varchild's War-Riders) */
   /* floating (unspent) mana, shown beside the Lands header */
   .floatmana { margin-left:10px; display:inline-flex; gap:3px; vertical-align:middle; }
   .mpip { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px;
@@ -338,10 +339,30 @@
   #decpanel button.optcard.shuffle { justify-content:center; color:var(--muted); font-size:13px; padding:11px; }
   #decpanel .grp { display:flex; gap:5px; }
   #decpanel .grp.away { opacity:.55; }
-  #decpanel .cardmini { width:54px; text-align:center; }
+  /* inline-block (not plain inline) so `width` APPLIES even when the parent is not a flex
+     container. .cardmini is a <span>: in .optgrid/.tutgrid it is blockified by the flex parent and
+     the width takes effect, but a plain wrapper (the echo panel's .cardrow) left it inline, `width`
+     was dropped, and `img{width:100%}` then resolved against the 640px panel -- rendering a *small*
+     Scryfall JPEG at full panel width (viewer issue #5). Blockifying here fixes the whole class;
+     flex items are blockified anyway, so every existing dialog is pixel-identical. */
+  #decpanel .cardmini { width:54px; text-align:center; display:inline-block; vertical-align:top; }
   #decpanel .cardmini img { width:100%; border-radius:5px; background:#0b0c0e; min-height:40px; box-shadow:0 0 0 1px var(--line); display:block; }
   #decpanel .cardmini em { font-style:normal; font-size:9px; color:var(--muted); display:block; line-height:1.05; margin-top:2px;
       max-width:54px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* single-card row (the echo pay-or-die modal): one card, so show it at readable size rather than
+     upscaling the 54px thumbnail. Paired with cardMini(name, cls, ver) asking for 'normal' art. */
+  /* choose-variant dialog header: source card art + title + "decision N of M" (viewer issue #13) */
+  #decpanel .dimhead { display:flex; gap:12px; align-items:flex-start; margin-bottom:6px; }
+  #decpanel .dimhead .dimtext { flex:1; min-width:0; }
+  #decpanel .dimhead .cardmini.dimsrc { width:64px; }
+  #decpanel .dimhead .cardmini.dimsrc em { max-width:64px; }
+  #decpanel .chosen { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 8px; }
+  #decpanel .chosen .crumb { font-size:11px; color:var(--muted); background:#15171b;
+      border:1px solid var(--line); border-radius:6px; padding:2px 7px; }
+  #decpanel .chosen .crumb b { color:var(--ink); font-weight:600; }
+  #decpanel .cardrow { display:flex; gap:8px; }
+  #decpanel .cardrow .cardmini { width:150px; }
+  #decpanel .cardrow .cardmini em { max-width:150px; font-size:11px; margin-top:4px; }
   #decpanel .optcard .gi { position:absolute; top:-7px; left:-7px; background:var(--acc); color:#0c1116; width:18px; height:18px;
       border-radius:10px; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 2px var(--panel); }
   #decpanel .optcard .div { font-size:11px; color:var(--bad); font-weight:600; white-space:nowrap; }
@@ -594,15 +615,24 @@ function activatableSources(){
   const d = S.decision;
   if (!d) return {};
   if (S._actSrcFor === d.decision_index && S._actSrc) return S._actSrc;
-  const max = {};
+  const max = {}, sacout = {};
   (d.plans||[]).forEach(p=>{
     const per = {};
-    (p.actions||[]).forEach(a=>{ if (a && a.activate && a.card) per[a.card]=(per[a.card]||0)+1; });
+    // A sac outlet contributes its sac_count, not 1: one Skirk Prospector action with sac_count:3
+    // is THREE creatures sacrificed, and the line verb carries one token per creature — so the cap
+    // on how many times the human may click it is the largest burst any plan offers.
+    (p.actions||[]).forEach(a=>{ if (a && a.activate && a.card) {
+      per[a.card]=(per[a.card]||0)+(a.sacout ? Math.max(1, a.sac_count||1) : 1);
+      if (a.sacout) sacout[a.card]=true;
+    }});
     Object.keys(per).forEach(n=>{ if (!(max[n]>=per[n])) max[n]=per[n]; });
   });
-  S._actSrcFor = d.decision_index; S._actSrc = max;
+  S._actSrcFor = d.decision_index; S._actSrc = max; S._sacOutSrc = sacout;
   return max;
 }
+// Is this battlefield permanent a SAC OUTLET (its activation eats a creature) rather than a plain
+// activated ability? Decides the line verb (sacout= vs cast=) and the hint wording.
+function isSacOutletSource(name){ activatableSources(); return !!(S._sacOutSrc||{})[name]; }
 function activateCount(name){ return S.plan.filter(p=>p.kind==='activate' && p.name===name).length; }
 // Queue (or unqueue) one activation of a battlefield permanent's ability. Toggles the LAST queued
 // activation off when already at the cap, so a click always does something visible.
@@ -615,8 +645,11 @@ function toggleActivate(name){
     if (i>=0) { S.plan.splice(i,1); flashHint(`Removed ${name}’s ability from this turn’s line.`); renderBoard(); }
     return;
   }
-  S.plan.push({name, kind:'activate'});
-  flashHint(`Activating ${name}’s ability${cap>1?` (${have+1}/${cap})`:''}. Commit the phase to resolve it.`);
+  const sac = isSacOutletSource(name);
+  S.plan.push(sac ? {name, kind:'activate', sacout:true} : {name, kind:'activate'});
+  flashHint(sac
+    ? `${name}: sacrificing ${have+1} creature${have?'s':''}${cap>1?` (max ${cap})`:''} — click again to sac another, then commit. You pick WHICH creature as each one resolves.`
+    : `Activating ${name}’s ability${cap>1?` (${have+1}/${cap})`:''}. Commit the phase to resolve it.`);
   renderBoard();
 }
 function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
@@ -1184,24 +1217,16 @@ function renderChooseDialog(v, line){
   const variants=(v.variants||[]).slice();
   // Fallback: a variant with no structured subs can't be decomposed (degenerate / older engine).
   if (!variants.length || variants.some(x=>!x.subs || !x.subs.length)) return renderChooseFlat(v, line);
-  const KIND={face:-1,fetch:0,tutor:1,enchant:1.5,x:2,soulfire:3,crackle:4,splice:5};
-  const kindPri=k=>(KIND[k]===undefined?9:KIND[k]);
-  const subOf=(x,key)=>(x.subs||[]).filter(s=>s.key===key)[0];
-  const choiceOf=(x,key)=>{ const s=subOf(x,key); return s?s.choice:'—'; };
+  // The dimension walk itself lives in linebuild.js (shared + headlessly testable) -- see the note
+  // there. index.html keeps only the rendering and the auto-resolve shortcuts.
+  const subOf=(x,key)=>LB.subOf(x,key);
+  const choiceOf=(x,key)=>LB.choiceOf(x,key);
 
   function stepChoose(remaining, picks){
     if (remaining.length===1){ hideDecPanel(); return applyAccepted(remaining[0].plan_index, remaining[0].label); }
-    // Ordered unique dimension keys among the remaining variants (fetch before tutor before X …).
-    const keys=[];
-    remaining.forEach(x=>(x.subs||[]).forEach(s=>{ if(!keys.some(k=>k.key===s.key)) keys.push({key:s.key,kind:s.kind}); }));
-    keys.sort((a,b)=>kindPri(a.kind)-kindPri(b.kind));
     // First dimension (by priority) that still has more than one distinct choice is the one to ask.
-    let dim=null, choices=null;
-    for (const k of keys){
-      const seen=[];
-      remaining.forEach(x=>{ const c=choiceOf(x,k.key); if(!seen.some(z=>z.choice===c)){ const s=subOf(x,k.key); seen.push({choice:c, card:s?s.card:''}); } });
-      if (seen.length>1){ dim=k; choices=seen; break; }
-    }
+    const nd = LB.nextDimension(remaining);
+    let dim = nd ? nd.dim : null, choices = nd ? nd.choices : null;
     // No distinguishing dimension left (shouldn't happen — distinct variants differ in some sub) —
     // commit the first remaining plan defensively.
     if (!dim){ hideDecPanel(); return applyAccepted(remaining[0].plan_index, remaining[0].label); }
@@ -1233,8 +1258,22 @@ function renderChooseDialog(v, line){
   function renderDimPick(dim, choices, remaining, picks){
     const panel=$('decpanel'), back=$('decback');
     back.className='modal'; back.style.display='block'; panel.className='show modal';
-    const crumb=picks.length?`<div class="sub">${picks.map(p=>esc(p.key)+' '+esc(p.choice)).join(' · ')}</div>`:'';
-    let h=`<h3>${esc(dim.key)}?</h3>`+crumb+`<div class="tutgrid">`;
+    // DISAMBIGUATION (viewer issue #13). Two tutors in one line (Crop Rotation + Sylvan Scrying)
+    // produce two consecutive grids of the SAME 12 land images; the only thing telling them apart
+    // used to be a small "<card> →?" heading, so the second pick read as a repeat of the first and
+    // the run was reported as "I only got to choose one land". Now the SOURCE card's art leads the
+    // dialog, and a step counter says how many decisions this line still holds.
+    const step = picks.length + 1, total = picks.length + LB.dimensionsRemaining(remaining);
+    // dim.key is "<card> →" / "<land> fetches" / "<card> X" / "<card> own targets" -- the leading
+    // card name is the source. Strip the trailing relation word to get the art to show.
+    const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|face)\s*$/,'').trim();
+    const crumbs = picks.length
+      ? `<div class="chosen">${picks.map(p=>`<span class="crumb">${esc(p.key)} <b>${esc(p.choice)}</b></span>`).join('')}</div>`
+      : '';
+    let h=`<div class="dimhead">${srcName?cardMini(srcName,'dimsrc'):''}`+
+          `<div class="dimtext"><h3>${esc(dim.key)}?</h3>`+
+          `<div class="sub">${total>1?`Decision ${step} of ${total} for this line — `:''}`+
+          `pick one of ${choices.length}.</div></div></div>`+crumbs+`<div class="tutgrid">`;
     choices.forEach((c,i)=>{
       // The badge only adds value when the choice differs from the card name shown below (X=2,
       // +2 own). For fetch/tutor the choice IS the card name, so the badge just duplicates the
@@ -1532,9 +1571,10 @@ function renderDecisionPanel(d, dec){
 }
 function hideDecPanel(){ const p=$('decpanel'); p.className=''; p.innerHTML=''; const b=$('decback'); b.className=''; b.style.display='none'; }
 
-// A small card-art tile (image + truncated name) for the dialogs.
-function cardMini(name, extraCls){ return `<span class="cardmini ${extraCls||''}" data-name="${esc(name)}">`+
-  `<img loading="lazy" src="${scryImg(name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(name)}</em></span>`; }
+// A small card-art tile (image + truncated name) for the dialogs. `ver` is the Scryfall image
+// version: default 'small' (the 54px grids), 'normal' for a dialog that shows ONE card large.
+function cardMini(name, extraCls, ver){ return `<span class="cardmini ${extraCls||''}" data-name="${esc(name)}">`+
+  `<img loading="lazy" src="${scryImg(name,ver||'small')}" onerror="this.style.opacity=.15"/><em>${esc(name)}</em></span>`; }
 
 // Look-at-top panel (#4/#5): IMAGE-based. Each disposition option is a row of card art — the cards
 // kept on top (left, numbered in their final order) then a divider and the cards binned to the
@@ -1629,7 +1669,7 @@ function echoPanelHtml(d){
   const pay=d.heuristic_default?1:0;
   let h=`<h3>Echo — ${esc(d.creature||'')}</h3>`;
   h+=`<div class="sub">This creature has echo: pay <b>${esc(d.echo_cost||'')}</b> to keep it, or let it be sacrificed (its death triggers still happen).</div>`;
-  h+=`<div class="cardrow" style="justify-content:center;margin:8px 0">${cardMini(d.creature||'')}</div>`;
+  h+=`<div class="cardrow" style="justify-content:center;margin:8px 0">${cardMini(d.creature||'', '', 'normal')}</div>`;
   h+=`<div class="pbtns"><span class="spacer"></span>`+
      `<button class="primary" data-echo="1">Pay ${esc(d.echo_cost||'')} — keep${pay===1?'  ·  AI':''}</button>`+
      `<button class="ghost" data-echo="0">Let it die${pay===0?'  ·  AI':''}</button></div>`;

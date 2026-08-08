@@ -160,8 +160,15 @@ def hand_names(hand):
 def frame_ident(d):
     """WHAT a decision frame is, independent of which option was picked. Alignment is done on
     this, never on stream position: position is what made references fragile (a decision point
-    added later shifts every downstream pick; see the module docstring)."""
-    return (d.get("type"), d.get("turn"), d.get("source"))
+    added later shifts every downstream pick; see the module docstring).
+
+    `phase` is part of the identity, and load-bearing. Without it a turn's PRE-combat and
+    POST-combat main phases share an ident, so an extra pre-combat frame (the engine now re-prompts
+    after every committed line rather than ending the phase) aligned with the recorded POST-combat
+    pick and tried to play it a phase early -- reported as a bogus ENUM-GAP ("recorded plan 'cast:
+    Light Up the Stage' no longer enumerated", nplans 5->2, hand identical) or as play-drift on the
+    decks with a real second main. They are different decisions; identity must say so."""
+    return (d.get("type"), d.get("turn"), d.get("phase"), d.get("source"))
 
 
 def plan_key(p):

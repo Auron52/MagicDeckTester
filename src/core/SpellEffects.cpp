@@ -70,12 +70,33 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         {
             // Offer each NAME once: TutorCandidates lists library order, so a deck with three copies
             // of a card would otherwise show it three times, and picking any of them fetches the same
-            // first matching library card anyway. Dedup preserves first-occurrence order, so index 0
-            // is still cands.front() -- the heuristic default the viewer pre-selects.
+            // first matching library card anyway. Dedup preserves first-occurrence order.
             std::vector<std::string> uniq;
             for (const std::string& c : cands)
             { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
-            const int picked = (*g_play_tutor_chooser)(state, controller_index, source_name, uniq, 0);
+            // The badged "AI pick" must be the provider's RANKED pick, not uniq[0] (viewer issue #7).
+            // --claude-play forces MTG_UNPRUNED, and an archetype TutorCandidates returns the UNRANKED
+            // GenericProvider list under that gate -- so `cands` here is raw LIBRARY ORDER and the old
+            // hard-coded default of 0 badged whatever happened to be first (Goblins s22: Stingscourger,
+            // over Krenko / Muxus / every lord). Re-ask the provider inside a HumanPlaySuppress scope,
+            // which is exactly the guard that makes DecisionUnpruned() false, to get the real ranking.
+            //
+            // Only the DEFAULT INDEX changes -- the offered list keeps library order. Reordering it
+            // would silently re-point every `tutor_etb` index already recorded under references/
+            // (s22 recorded 11 = Goblin Chieftain), so the human still sees the same grid in the same
+            // places and only the badge moves. Falls back to 0 if the ranked pick is somehow absent.
+            int def = 0;
+            {
+                HumanPlaySuppress pruned;   // ranked (pruned) view; restores on scope exit
+                const std::vector<std::string> ranked =
+                    ResolveProvider(state).TutorCandidates(state, controller_index, pp);
+                if (!ranked.empty())
+                {
+                    auto it = std::find(uniq.begin(), uniq.end(), ranked.front());
+                    if (it != uniq.end()) { def = static_cast<int>(it - uniq.begin()); }
+                }
+            }
+            const int picked = (*g_play_tutor_chooser)(state, controller_index, source_name, uniq, def);
             if (picked < 0) { return; }                                   // declined the optional search
             if (picked < static_cast<int>(uniq.size())) { want = uniq[picked]; }
         }
@@ -1053,4 +1074,71 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // re-exploring. State is unchanged here (the invariant), so this is byte-identical.
     if (fail_memo) { fail_memo->insert(key); }
     return false;
+}
+
+// Format the one aggregated life-watcher event for the play viewer (viewer issue #11). See the
+// declaration in SpellEffects.h for why this is out-of-line: it runs only on a real human-play
+// resolution (the event sink is nulled in every search/rollout), so it is cold by construction.
+//
+// `subject_index >= 0` names the creature that ENTERED (the enter-watcher case); -1 means the
+// subject is a creature that DIED (the Massacre Wurm case -- the dead card has already left the
+// battlefield, so there is no index left to name it by). Both read the same way in the history:
+// what happened, which watchers saw it (with multiplicity), and the resulting life swing.
+//
+//   "<drop> 1/1 Spirit Token entered under the opponent -- Suture Priest x2: opponent -2 (12->10)"
+//   "<drop> Birds of Paradise entered -- Essence Warden: you +1 (20->21)"
+std::string DescribeLifeWatchers(const GameState& state, int subject_controller, int subject_index,
+                                 const std::vector<std::pair<std::string, int>>& on_subject,
+                                 const std::vector<std::pair<std::string, int>>& on_other,
+                                 int life_before_subject, int life_before_other)
+{
+    auto who = [&](int idx) { return idx == state.active_player_index ? "you" : "opponent"; };
+    auto list = [](const std::vector<std::pair<std::string, int>>& v)
+    {
+        std::string s;
+        for (const auto& e : v)
+        {
+            if (!s.empty()) { s += ", "; }
+            s += e.first;
+            if (e.second > 1) { s += " \xC3\x97" + std::to_string(e.second); }   // " x2"
+        }
+        return s;
+    };
+    auto swing = [&](int idx, int before)
+    {
+        const int now = state.players[idx].life, d = now - before;
+        return std::string(who(idx)) + " " + (d >= 0 ? "+" : "\xE2\x88\x92")   // U+2212 MINUS SIGN
+             + std::to_string(std::abs(d)) + " (" + std::to_string(before)
+             + "\xE2\x86\x92" + std::to_string(now) + ")";                     // U+2192 arrow
+    };
+
+    std::string head;
+    if (subject_index >= 0 && subject_index < static_cast<int>(state.battlefield.size()))
+    {
+        head = state.battlefield[subject_index].card.m_name.str() + " entered";
+        if (subject_controller != state.active_player_index) { head += " under the opponent"; }
+    }
+    else
+    {
+        head = std::string("a creature the ") + who(subject_controller) + " controlled died";
+    }
+
+    // One clause per side whose life actually moved, subject side first (that is the side the
+    // event is ABOUT). A side with no watcher contributes nothing rather than a "+0".
+    std::string body;
+    if (!on_subject.empty())
+    { body += list(on_subject) + ": " + swing(subject_controller, life_before_subject); }
+    if (!on_other.empty())
+    {
+        if (!body.empty()) { body += "; "; }
+        body += list(on_other) + ": " + swing(1 - subject_controller, life_before_other);
+    }
+    // Icon by what actually happened to the OPPONENT: a drain reads as blood, a pure lifegain
+    // (Essence Warden / Suture Priest clause 1 off our own creature) reads as a heart -- matching
+    // the lifegain/lifeloss split the ApplyOpponentLifegain event already uses.
+    const int opp = 1 - state.active_player_index;
+    const int opp_before = (opp == subject_controller) ? life_before_subject : life_before_other;
+    const bool drained = state.players[opp].life < opp_before;
+    return (drained ? "\xF0\x9F\xA9\xB8 " : "\xF0\x9F\x92\x9A ")   // U+1FA78 blood / U+1F49A heart
+         + head + " \xE2\x80\x94 " + body;                          // em dash
 }

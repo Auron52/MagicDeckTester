@@ -1354,6 +1354,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // affordable, else is sacrificed. Gated on echo_cost -> byte-identical for every non-echo deck.
     if (is_pre_combat_main)
     {
+        bool echo_processed = false;   // did an echo obligation actually come due THIS pass?
         for (std::size_t i = 0; i < state.battlefield.size(); )
         {
             Permanent& p = state.battlefield[i];
@@ -1362,6 +1363,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             const CardDefinition* edef = CardDatabase::Instance().LookupCached(p.card);
             if (!edef || !edef->params.echo_cost) { ++i; continue; }
             p.echo_resolved = true;   // obligation resolved this upkeep, whatever the outcome
+            echo_processed  = true;
             const CardParams& ep = edef->params;
             // Affordability decided up front so the human-play chooser is offered only a REAL choice
             // (paying is possible); if unaffordable the creature is simply sacrificed (no decision).
@@ -1389,6 +1391,21 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             OnCreatureDies(state, ctrl, dead);   // may append a token at the end -> safe (no echo_cost)
             // Do not advance i: the erased slot now holds the next permanent.
         }
+        // END OF THE UPKEEP STEP (CR 500.4): the pool empties. Echo is resolved here rather than in
+        // GameEngine::UpkeepStep (see the note above) purely so it can tap through AIEngine's mana
+        // API -- but its TIMING is still the upkeep, so mana over-produced paying an echo cost must
+        // NOT survive into this main phase. Lockstep partner: TurnSolver::SimulateEndAndStartNextTurn.
+        // See UpkeepFloatClearEnabled (viewer issue #6, Goblins s19 gi18 T4 floated {R}x5).
+        //
+        // Gated on echo_processed, and that gate is LOAD-BEARING, not caution: TakeTurn can be
+        // called a SECOND time with is_pre_combat_main still true (the staged-draw / depth-0 second
+        // pass -- see the `return true` sites below), so an unconditional clear here fires again
+        // MID-main-phase and wipes a ritual float the first pass built up. Measured: it cost
+        // Dragonstorm d0 85 slower / 37 play-changed games (gi11 6->loss) while Goblins, the deck
+        // this fixes, was untouched. The echo loop is idempotent via Permanent::echo_resolved, so
+        // keying on "an obligation actually came due in THIS pass" inherits that once-per-turn
+        // latch. Nothing else floats mana during upkeep, so this is exactly the echo leftover.
+        if (echo_processed && UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; }
     }
 
     // Enumerate-all-earliest-wins dump (offline rule-miner; inert unless MTG_DUMP_EWINS).
@@ -1474,25 +1491,39 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // terminates when the library empties or the human passes. In the autonomous (search) AI
         // path ApplyPlan resolves draws inline and never shrinks the library across a no-draw
         // plan, so non-human external choosers still see exactly one decision per phase.
-        // #12 "Commit Line": the phase re-prompts not only after a DRAW (the classic breakpoint below)
-        // but also when the committed line's plays put a NEW permanent with a player-activated ability
-        // into play -- e.g. playing Horizon Canopy (a land) this turn enables its same-turn
-        // "{1},{T},Sacrifice: draw" dig, which the old draw-only breakpoint skipped (playing a land
-        // draws nothing), forcing the sac to the next turn. Human-play only (inside use_external) ->
-        // GT-neutral; the autonomous search never enters this branch. "Commit turn" naturally skips this
-        // breakpoint: its auto-pass (index.html advanceTo) fires on every same-turn main_phase decision.
-        // Two signals decide the #12 breakpoint precisely -- their INTERSECTION on a source that
-        // BECAME both this segment:
+        // "COMMIT LINE STOPS AT THE LINE, NOT AT THE PHASE" (viewer issue #3, user-directed
+        // 2026-08-08). Committing a line applies it and then RE-ASKS, for as long as there is
+        // anything left to do; only an explicit PASS (idx < 0) ends the main phase. That is what
+        // makes resource-generating plays usable by the SAME phase that generated them, which the
+        // old draw-only / new-sac-source breakpoints could not express:
+        //   * tap Krenko for N Goblin tokens, THEN sacrifice those tokens to Skirk Prospector,
+        //   * Vial in a Mogg War Marshal, THEN sac it + its token for the mana to cast Goblin King,
+        //   * Crop Rotation a land into play, THEN cast off the mana it makes.
+        // Each of those needs a board state that does not exist when the line is being assembled,
+        // so no single atomic commit can contain it. The old rule ended the phase the moment a
+        // committed plan neither drew a card nor put a new sac-to-draw source into play, which is
+        // exactly why those lines were unreachable by hand.
+        //
+        // The ONLY stop condition besides the human passing is "there is genuinely nothing to do"
+        // (no enumerated plan has an action or a land drop) -- a fact, not a judgement, and the
+        // same any_play test the post-combat first entry already used. Without it every phase would
+        // end with a mandatory click through a menu whose only entry is "cast nothing".
+        //
+        // Human-play only (this whole branch is inside use_external && !m_in_rollout) -> GT-neutral;
+        // the autonomous search never enters here. Saved references gain one PASS frame per main
+        // phase, which viewer_protocol_check.py already absorbs (an unaligned main_phase frame is
+        // answered -1, consuming no recorded pick) -> they replay as `repaired`, not drift.
+        //
+        // MTG_PLAY_SEGMENT_ALWAYS=0 restores the previous behaviour (re-prompt only after a DRAW or
+        // a newly-played, affordable sac-to-draw source) for anyone who finds the extra pass click
+        // worse than the reach. The two signals that rule used:
         //   inplay_sac(state) -- sac-to-draw sources IN PLAY and UNTAPPED (Horizon Canopy, Fiery Islet).
         //     A source appears here the segment you PLAY it untapped; a STANDING one is present at
         //     phase start (so it never counts as "new"), which is what stops per-turn re-prompt spam.
         //   offer_sac(plans)  -- sac-to-draw digs actually OFFERED among the enumerated plans
         //     (AppendHumanPlayDigPlans additionally gates on the {1}-style sac cost being affordable
         //     THIS phase). This is the affordability signal.
-        // Re-prompt iff a source is NEWLY in inplay_sac (just played untapped) AND currently in
-        // offer_sac (its sac is affordable). Requiring BOTH excludes: (a) a standing source whose sac
-        // merely became affordable when you played a second land -- spam, not "a just-played ability";
-        // and (b) a source you played untapped but cannot yet pay to sac -- a pointless re-prompt.
+        static const bool s_segment_always = EnvOn("MTG_PLAY_SEGMENT_ALWAYS", true);
         auto inplay_sac = [](const GameState& gs) -> std::set<std::string>
         {
             std::set<std::string> s;
@@ -1551,26 +1582,46 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (plans.empty()) { break; }
             std::set<std::string> cur_inplay = inplay_sac(state);
             std::set<std::string> cur_offer  = offer_sac(plans);
-            // Phase complete once a committed plan neither DREW (draw breakpoint) nor put a NEW,
-            // AFFORDABLE sac source into play (#12 breakpoint). seg==0 is the initial prompt, shown.
-            if (seg > 0 && !drew_last)
+            // Is there any real play on offer (a cast, an activation, or a land drop)? "Cast nothing"
+            // is always enumerated, so a menu with no action is a menu with nothing in it.
+            bool any_play = false;
+            for (const TurnSolver::Plan& p : plans)
+            { if (!p.actions.empty() || !p.land_to_play.empty()) { any_play = true; break; } }
+
+            if (s_segment_always)
             {
-                bool new_activation = false;
-                for (const std::string& name : cur_inplay)
-                { if (!prev_inplay.count(name) && cur_offer.count(name)) { new_activation = true; break; } }
-                if (!new_activation) { break; }
+                // Re-prompt after every committed segment until the human passes or nothing is left.
+                // Three ways a frame is shown, and the set is a strict SUPERSET of the legacy rule --
+                // which is the point: a reference must only ever GAIN frames (absorbed as `repaired`),
+                // never lose one, or the recorded pick stream desyncs and the rest of the game is
+                // replayed wrong.
+                //   * seg 0 of the PRE-combat main -- the turn's first decision, always.
+                //   * drew_last -- the legacy DRAW breakpoint. Kept even when no play is available,
+                //     because that post-draw look is a frame the references RECORD (Kor Spiritdancer
+                //     draws on every Aura cast; Light Up the Stage stages cards). Gating it on
+                //     any_play dropped those frames and cost Auras s16 / burn s21 / Anti-Lifegain s4
+                //     a recorded win turn apiece -- caught by the reference sweep, not by smoke.
+                //   * any_play -- the new reach: something is still castable/activatable/playable.
+                // Stop otherwise; "cast nothing" is always enumerated, so a menu with no action is a
+                // menu with nothing in it and forcing a click through it every turn is pure noise.
+                const bool first_pre = (seg == 0 && is_pre_combat_main);
+                if (!first_pre && !drew_last && !any_play) { break; }
             }
-            // Post-combat (second) main: on the FIRST entry, only prompt when there is a real play
-            // available (a Spectacle spell unlocked by combat, a castable spell, or a land drop) --
-            // with nothing to do the second main is a no-op, so skip it silently rather than asking
-            // the human to "pass" every single turn. A seg>0 re-prompt (draw or #12 new-activation)
-            // is handled above and always shows -- matching the first main, which never suppresses.
-            if (!is_pre_combat_main && seg == 0)
+            else
             {
-                bool any_play = false;
-                for (const TurnSolver::Plan& p : plans)
-                { if (!p.actions.empty() || !p.land_to_play.empty()) { any_play = true; break; } }
-                if (!any_play) { break; }
+                // Legacy: phase complete once a committed plan neither DREW nor put a NEW, AFFORDABLE
+                // sac source into play. seg==0 is the initial prompt, shown.
+                if (seg > 0 && !drew_last)
+                {
+                    bool new_activation = false;
+                    for (const std::string& name : cur_inplay)
+                    { if (!prev_inplay.count(name) && cur_offer.count(name)) { new_activation = true; break; } }
+                    if (!new_activation) { break; }
+                }
+                // Post-combat (second) main: on the FIRST entry, only prompt when there is a real play
+                // available -- with nothing to do the second main is a no-op, so skip it silently
+                // rather than asking the human to "pass" every single turn.
+                if (!is_pre_combat_main && seg == 0 && !any_play) { break; }
             }
             size_t lib_before = state.ActivePlayer().library.size();
             const int this_main_ordinal = m_ext_main_ordinal++;   // #10 side-channel key

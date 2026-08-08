@@ -44,6 +44,26 @@ inline bool TutorAxisResolveEnabled()
     return v;
 }
 
+// MTG_UPKEEP_FLOAT_CLEAR -- DEFAULT ON; =0 restores the legacy carry-over. Empty the mana pool at
+// the END OF THE UPKEEP STEP (CR 500.4), i.e. right after the echo pay-or-sacrifice pass, so mana
+// over-produced paying an echo cost cannot fund the main phase.
+//
+// The bug it fixes (viewer issue #6): floating_mana was only cleared at untap and on entering
+// combat, and echo is paid off a possibly LUMPY source. Goblins s19 gi18 T4 recorded
+// floating_mana {"R": 5} in the pre-combat main -- Three Tree City produced 9 red for a {3}{R}
+// echo and the 5 left over stayed spendable. That is not just a display artifact: AvailableManaPool
+// adds the reserve, so the SEARCH enumerated lines funded by mana the rules say no longer exists.
+//
+// Shared reader because the two worlds resolve echo in different files and must clear at the same
+// point or diverge: the executor at the top of the pre-combat main (AIEngine::TakeTurn) and the
+// rollout at simulated turn-start (TurnSolver::SimulateEndAndStartNextTurn). GT-affecting for decks
+// with echo creatures; inert everywhere else (nothing else floats mana during upkeep).
+inline bool UpkeepFloatClearEnabled()
+{
+    static const bool v = EnvOn("MTG_UPKEEP_FLOAT_CLEAR", true);
+    return v;
+}
+
 // MTG_BP_TRACE (diagnosis only): print the breakpoint sequences on both sides -- the EXECUTOR's
 // ([bp-exec], AIEngine) and the apply side's ([bp-apply], TurnSolver::ApplyPlanDirect) -- so they
 // can be diffed. A searched continuation landing at a different index on the two sides is the

@@ -1765,8 +1765,45 @@ inline int CountAttackTriggerLifeLoss(
 // The "you may" on Suture Priest's triggers is always taken (strictly beneficial). Multiple
 // watchers stack (each is its own trigger). The entered permanent itself is excluded ("another");
 // a watcher entering alongside others still sees THEIR enters (each enter fires separately).
+// DescribeLifeWatchers -- body in SpellEffects.cpp (see the header note above). Formats the one
+// aggregated enter/death life-watcher event. COLD by construction: it runs only when a human-play
+// event sink is attached, never in a rollout, so keeping it out of this 15-TU header costs nothing.
+//
+// The watcher lists are keyed by WHICH PLAYER'S LIFE MOVED, not by who controls the watcher -- the
+// two differ (Essence Warden's "whenever ANOTHER creature enters" gains for ITS controller no matter
+// whose creature entered, while Suture Priest's drain hits the entering creature's controller). So
+// `on_subject` = watchers that changed subject_controller's life, `on_other` = the other player's.
+// subject_index >= 0 names the creature that ENTERED; -1 = the subject creature DIED.
+std::string DescribeLifeWatchers(const GameState& state, int subject_controller, int subject_index,
+                                 const std::vector<std::pair<std::string, int>>& on_subject,
+                                 const std::vector<std::pair<std::string, int>>& on_other,
+                                 int life_before_subject, int life_before_other);
+
 inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, int entered_index)
 {
+    // Play-viewer history (viewer issue #11): this is the DRAIN ENGINE, and it used to move life
+    // totals silently -- so a Creature Giving game read as if the engine were inventing damage
+    // (issue #10: Suture Priest x2 x (Orchard Spirits + Varchild's Survivors) is exactly the 12->6
+    // and 1->-7 that looked invented). Log ONE aggregated event per enter rather than one per
+    // watcher, so a two-Priest board reads "Suture Priest x2: opponent -2" instead of two lines.
+    // Nothing is collected unless a real human-play sink is attached: g_play_event_sink is nulled
+    // by RevealLogPause for every search/rollout/enumeration scope, and this is a per-enter HOT
+    // path -- so autonomous play does one predictable null check and is byte-identical.
+    // !g_tap_speculating mirrors the lifegain site: never log a phantom that gets backtracked.
+    const bool log = (g_play_event_sink != nullptr) && !g_tap_speculating;
+    const int life_before_entered = state.players[entered_controller].life;
+    const int life_before_other   = state.players[1 - entered_controller].life;
+    // Keyed by WHOSE LIFE MOVED, not by who controls the watcher -- Essence Warden gains for ITS
+    // controller whichever side the creature entered on, while Suture Priest's drain always hits
+    // the entering creature's controller. See DescribeLifeWatchers.
+    std::vector<std::pair<std::string, int>> on_entered, on_other;   // watcher name -> trigger count
+    auto note = [&](int affected, const std::string& nm)
+    {
+        auto& v = (affected == entered_controller) ? on_entered : on_other;
+        for (auto& e : v) { if (e.first == nm) { ++e.second; return; } }
+        v.emplace_back(nm, 1);
+    };
+
     const int n = static_cast<int>(state.battlefield.size());
     for (int i = 0; i < n; ++i)
     {
@@ -1777,10 +1814,16 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         const CardParams& wp = wd->params;
         // "Whenever another creature enters, you gain N" (Soul Warden / Essence Warden: ANY side).
         if (wp.any_creature_enters_lifegain > 0)
-        { state.players[w.controller_index].life += wp.any_creature_enters_lifegain; }
+        {
+            state.players[w.controller_index].life += wp.any_creature_enters_lifegain;
+            if (log) { note(w.controller_index, w.card.m_name.str()); }
+        }
         // "Whenever another creature you control enters, you [may] gain N" (Suture Priest cl. 1).
         if (wp.own_creature_enters_lifegain > 0 && w.controller_index == entered_controller)
-        { state.players[w.controller_index].life += wp.own_creature_enters_lifegain; }
+        {
+            state.players[w.controller_index].life += wp.own_creature_enters_lifegain;
+            if (log) { note(w.controller_index, w.card.m_name.str()); }
+        }
         // "Whenever a creature an opponent controls enters, that player loses N" (Suture Priest
         // clause 2 -- the drain engine; life LOSS, not damage).
         if (wp.opp_creature_enters_life_loss > 0 && w.controller_index != entered_controller)
@@ -1788,7 +1831,16 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             state.players[entered_controller].life -= wp.opp_creature_enters_life_loss;
             if (entered_controller != state.active_player_index)
             { state.opponent_lost_life_this_turn = true; }
+            if (log) { note(entered_controller, w.card.m_name.str()); }
         }
+    }
+
+    if (log && (!on_entered.empty() || !on_other.empty()))
+    {
+        EmitPlayEvent(state.turn_number, "drain",
+                      DescribeLifeWatchers(state, entered_controller, entered_index,
+                                           on_entered, on_other,
+                                           life_before_entered, life_before_other));
     }
 }
 
@@ -1798,6 +1850,12 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
 // etb_damage_each_opponent ping prune). Gated on the param -> byte-identical elsewhere.
 inline void FireOppCreatureDies(GameState& state, int dead_controller)
 {
+    // Same silent-life-change class as FireCreatureEnterWatchers above (viewer issue #11): log ONE
+    // aggregated event, only when a human-play sink is attached (nulled by RevealLogPause in every
+    // search/rollout scope -> autonomous play byte-identical).
+    const bool log = (g_play_event_sink != nullptr) && !g_tap_speculating;
+    const int life_before = state.players[dead_controller].life;
+    std::vector<std::pair<std::string, int>> on_dead;   // watcher name -> trigger count
     for (const Permanent& w : state.battlefield)
     {
         if (w.controller_index == dead_controller) { continue; }
@@ -1806,6 +1864,20 @@ inline void FireOppCreatureDies(GameState& state, int dead_controller)
         state.players[dead_controller].life -= wd->params.opp_dies_life_loss;
         if (dead_controller != state.active_player_index)
         { state.opponent_lost_life_this_turn = true; }
+        if (log)
+        {
+            const std::string nm = w.card.m_name.str();
+            bool seen = false;
+            for (auto& e : on_dead) { if (e.first == nm) { ++e.second; seen = true; break; } }
+            if (!seen) { on_dead.emplace_back(nm, 1); }
+        }
+    }
+    if (log && !on_dead.empty())
+    {
+        // subject_index = -1: the subject already left the battlefield, so it has no index to name.
+        EmitPlayEvent(state.turn_number, "drain",
+                      DescribeLifeWatchers(state, dead_controller, -1, on_dead, {},
+                                           life_before, state.players[1 - dead_controller].life));
     }
 }
 
@@ -2597,6 +2669,54 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
     return victim_id;
 }
 
+// Sacrifice the permanent at battlefield index `idx`: to the graveyard, off the battlefield, then
+// its death-watchers (Pashalik ping / Rundvelt impulse / Mogg death token). Factored out because
+// the sac-outlet paths below each open-coded it, and the human-victim override needs to sacrifice
+// by INDEX rather than by card number (see ChooseSacOutletVictimIndex).
+inline void SacrificePermanentAt(GameState& state, int controller, int idx)
+{
+    if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return; }
+    const Card dead = state.battlefield[idx].card;
+    state.players[controller].graveyard.push_back(dead);
+    state.battlefield.erase(state.battlefield.begin() + idx);
+    OnCreatureDies(state, controller, dead);
+}
+
+// HUMAN-PLAY victim override for a creature-sac outlet (viewer issue #4). Autonomously the victim is
+// CanonicalSacVictim's expendability pick and the human never saw it -- but "which Goblin dies" is a
+// real decision (feeding a lord to Skirk de-buffs the whole board; feeding Mogg War Marshal is nearly
+// free; feeding Rundvelt Hordemaster is how you buy its impulse dig). Reuses the existing `sacrifice`
+// board-click decision (g_play_sacrifice_chooser), so no new decision type is introduced.
+//
+// Returns a BATTLEFIELD INDEX, or -1 when there is no chooser (autonomous / search / rollout -- the
+// pointer is nulled by RevealLogPause) so the caller keeps its byte-identical heuristic path. Indices
+// rather than card numbers deliberately: TOKENS all carry m_number 0, so the card-number lookup the
+// heuristic path uses cannot distinguish two different tokens -- fine when they are fungible, not
+// fine when a human is pointing at one.
+inline int ChooseSacOutletVictimIndex(GameState& state, int controller, int source_id,
+                                      const std::string& need_sub, int heuristic_vid,
+                                      const std::string& source_name)
+{
+    if (!g_play_sacrifice_chooser) { return -1; }
+    std::vector<int> cands;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& v = state.battlefield[i];
+        if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
+        if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
+        cands.push_back(i);
+    }
+    if (cands.empty())     { return -1; }
+    if (cands.size() == 1) { return cands[0]; }   // forced -- do not prompt for a non-choice
+    int def_opt = 0;
+    for (int k = 0; k < static_cast<int>(cands.size()); ++k)
+    { if (state.battlefield[cands[k]].card.m_number == heuristic_vid) { def_opt = k; break; } }
+    const int chosen = (*g_play_sacrifice_chooser)(state, controller, source_name, cands, def_opt);
+    if (chosen >= 0 && chosen < static_cast<int>(cands.size())) { return cands[chosen]; }
+    return cands[def_opt];
+    (void)source_id;
+}
+
 inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_id, int victim_id)
 {
     const CardParams* op = nullptr;
@@ -2610,9 +2730,23 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         }
     }
     if (!op) { return; }
+    // Human play re-asks WHICH creature dies against the real resolution board (viewer issue #4);
+    // with no chooser this is -1 and the card-number search below runs byte-identically.
+    std::string src_name;
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == controller && p.card.m_number == source_id)
+      { src_name = p.card.m_name.str(); break; } }
+    const int hidx = ChooseSacOutletVictimIndex(state, controller, source_id,
+                                                op->sac_creature_requires_subtype, victim_id, src_name);
     // Find + remove the chosen victim (a controlled creature of the required subtype; self-inclusive).
     Card victim; bool found = false;
-    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    if (hidx >= 0)
+    {
+        victim = state.battlefield[hidx].card; found = true;
+        state.players[controller].graveyard.push_back(victim);
+        state.battlefield.erase(state.battlefield.begin() + hidx);
+    }
+    for (int i = 0; !found && i < static_cast<int>(state.battlefield.size()); ++i)
     {
         Permanent& q = state.battlefield[i];
         if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
@@ -3278,6 +3412,9 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         // each (Pashalik ping / Rundvelt impulse / Mogg death token per Goblin). count==1 falls through
         // to the single-sac path below (BYTE-IDENTICAL). Shared by executor + rollout (every caller passes
         // a.ritual_float), so lockstep is automatic.
+        // Captured BEFORE any sacrifice below: erasing from the battlefield invalidates `p`.
+        const std::string src_name = p.card.m_name.str();
+        const std::string need_sub = d->params.sac_creature_requires_subtype;
         if (skirk)
         {
             const int per = std::max(1, d->params.sac_outlet_add_mana_amount);
@@ -3286,18 +3423,19 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
             {
                 for (int n = 0; n < count; ++n)
                 {
-                    const int vid = CanonicalSacVictim(state, controller, sac_source_id,
-                                                       d->params.sac_creature_requires_subtype);
+                    const int vid = CanonicalSacVictim(state, controller, sac_source_id, need_sub);
                     if (vid < 0) { break; }   // ran out of Goblins to sacrifice
+                    // Human play picks each victim in turn (one prompt per sac in the burst); with no
+                    // chooser this is -1 and the card-number path below runs byte-identically.
+                    const int bidx = ChooseSacOutletVictimIndex(state, controller, sac_source_id,
+                                                                need_sub, vid, src_name);
                     AddChosenColorFloat(state, color, per);
+                    if (bidx >= 0) { SacrificePermanentAt(state, controller, bidx); continue; }
                     for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
                     {
                         Permanent& q = state.battlefield[j];
                         if (q.controller_index != controller || q.card.m_number != vid) { continue; }
-                        const Card dead = q.card;
-                        state.players[controller].graveyard.push_back(dead);
-                        state.battlefield.erase(state.battlefield.begin() + j);
-                        OnCreatureDies(state, controller, dead);   // per-sac death triggers (lockstep)
+                        SacrificePermanentAt(state, controller, j);   // per-sac death triggers (lockstep)
                         break;
                     }
                 }
@@ -3313,15 +3451,18 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         }
         if (victim_id != 0 && skirk)
         {
-            // Skirk: the source stays; sacrifice the chosen victim Goblin.
+            // Skirk: the source stays; sacrifice the chosen victim Goblin. The victim was picked at
+            // ENUMERATION time (CanonicalSacVictim, baked into Action::sac_victim_id), so human play
+            // re-asks here against the real resolution board -- otherwise the human's only say in a
+            // single-sac activation would be that they made it at all.
+            const int bidx = ChooseSacOutletVictimIndex(state, controller, sac_source_id,
+                                                        need_sub, victim_id, src_name);
+            if (bidx >= 0) { SacrificePermanentAt(state, controller, bidx); return; }
             for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
             {
                 Permanent& q = state.battlefield[j];
                 if (q.controller_index != controller || q.card.m_number != victim_id) { continue; }
-                const Card dead = q.card;
-                state.players[controller].graveyard.push_back(dead);
-                state.battlefield.erase(state.battlefield.begin() + j);
-                OnCreatureDies(state, controller, dead);   // fires Pashalik ping / death token etc.
+                SacrificePermanentAt(state, controller, j);   // Pashalik ping / death token etc.
                 return;
             }
             return;

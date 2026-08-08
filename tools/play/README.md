@@ -1,10 +1,18 @@
 # Play GUI — human-played reference games
 
 A browser GUI for **playing a simulated game by hand** and **probing the engine's model**.
-You assemble a main-phase line atomically — **double-click or drag** a hand card into the
+You assemble a main-phase line — **double-click or drag** a hand card into the
 **Casting this phase** zone (single-click is reserved for ability activation), drag it back or
-✕ to undo — then **Commit phase**. The engine reconciles your whole line against what its model
-would do and returns one of:
+✕ to undo — then **Commit phase**. **Committing does not end the phase**: the engine applies the
+line, re-enumerates from the resulting board and asks again, for as long as there is anything left
+to do. Only **Pass** ends the main phase. That is what makes a resource you generate mid-phase
+usable by that phase — tap Krenko for tokens *then* sacrifice them to Skirk Prospector, Vial in a
+Mogg War Marshal *then* eat it and its token for the mana to cast Goblin King, Crop Rotation a land
+into play *then* cast off it. None of those fit in one atomic line, because the board they need does
+not exist while the line is being assembled. (`MTG_PLAY_SEGMENT_ALWAYS=0` restores the old
+end-the-phase-on-commit behaviour.)
+
+Each committed segment is reconciled against what the model would do and returns one of:
 
 - **accept** — the line matches a plan the model plays → the game advances.
 - **choose** — the line resolves several ways (tutor target / X value / Ponder keep-vs-shuffle /
@@ -141,6 +149,9 @@ node    test/viewer_linebuild_check.js     # browser line-building layer
   (exiled-but-playable, Soulfire dig / Light Up the Stage) cast that `queueCard` silently drops:
   the engine still enumerates it, so the contract check is green while the GUI can't build the line.
   That is exactly why the line-building logic lives in the shared `linebuild.js` and not inline.
+  It also walks the **choose-variant picker** (`LineBuild.nextDimension`) over a two-tutor payload
+  and asserts BOTH dimensions are asked with every choice offered — the shape of viewer issue #13,
+  and the same blind spot: the engine emits all 144 variants, so only a client-side check sees it.
 
 ## Scope today, and what's next
 
@@ -156,15 +167,17 @@ external-chooser surface exposes:
 - **Next:**
   - **Ability activation by single-click** — cycle/dig and Land's Edge discard as committable
     line actions (new `LineSpec` kinds in `ParseLineSpec` + `CheckLine` matching/affordability).
-    Today single-click just hints; cast/play is double-click/drag.
+    Today single-click just hints; cast/play is double-click/drag. *(Creature-sac outlets — Skirk
+    Prospector, Siege-Gang, Pashalik — are DONE: single-click queues one `sacout=` activation per
+    creature, and you pick which creature dies as each sacrifice resolves. See `DECISIONS.md`.)*
   - **Higher-fidelity resolved effects** — the "what changed" strip is a client-side state diff,
     so it can't show *which* card Gamble discarded or Soulfire's per-target flips. Faithful detail
     needs the `claude-play` apply path to emit the `tools/replay/` action log (Gamble discard /
     Soulfire reveals / targets) and the GUI to render that step.
   - Route **mulligan/keep/bottom** and **combat (attackers/blockers)** through the chooser too,
     for a fully human-controlled game.
-- **v1 line-check limits:** validates land + plain casts; **X / alt-cost / tutor** casts report
-  *unsupported*. The affordability sim models same-turn rock ramp + colour availability but uses the
+- **v1 line-check limits:** validates land + plain casts + tutors + sac-outlet activations;
+  only **{X}** casts report *unsupported*. The affordability sim models same-turn rock ramp + colour availability but uses the
   enumerator's over-approximate multi-colour "wild" mana, so a rare colour-contention line could
   read *legal* when the real payment can't make it — caught on artifact review. Reconciliation is
   **end-of-main-phase** (not end-of-turn).

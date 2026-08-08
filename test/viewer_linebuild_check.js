@@ -101,6 +101,41 @@ function checkReference(p) {
   return res;
 }
 
+// ---- Multi-dimension choose-picker walk (viewer issue #13) -----------------------------------
+// A committed line with TWO independent sub-decisions (Crop Rotation + Sylvan Scrying, each
+// searching for a land) must produce TWO pickers, each offering every land. It was reported as
+// producing one; replaying the real game showed the engine emits 144 variants carrying both
+// dimensions, so any loss would be here in the client walk -- exactly the blind spot the engine-side
+// checks cannot see. Driven on a synthetic payload shaped like that real one (2 tutor dimensions x
+// 12 choices) so the check stays binary-free and sub-second.
+function checkDimensionWalk() {
+  const LANDS = ['Windswept Heath','Breeding Pool','Forbidden Orchard','Tree of Tales','City of Brass',
+                 'Azorius Chancery','Forest','Temple Garden','Reflecting Pool','Misty Rainforest',
+                 'Overgrown Tomb','Stomping Ground'];
+  const variants = [];
+  let pi = 0;
+  for (const b of LANDS) for (const a of LANDS) {
+    variants.push({ plan_index: pi++, label: `Crop Rotation -> ${a}; Sylvan Scrying -> ${b}`, cards: [a, b],
+                    subs: [{ key: 'Crop Rotation \u2192', choice: a, card: a, kind: 'tutor' },
+                           { key: 'Sylvan Scrying \u2192', choice: b, card: b, kind: 'tutor' }] });
+  }
+  const fails = [];
+  if (LB.dimensionsRemaining(variants) !== 2)
+    fails.push(`dimensionsRemaining = ${LB.dimensionsRemaining(variants)}, expected 2 (both tutors must be asked)`);
+  // Walk it the way the dialog does: ask, pick, filter, ask again.
+  let remaining = variants, asked = [];
+  for (let guard = 0; guard < 8; guard++) {
+    const nd = LB.nextDimension(remaining);
+    if (!nd) break;
+    asked.push({ key: nd.dim.key, n: nd.choices.length });
+    remaining = LB.filterByChoice(remaining, nd.dim.key, nd.choices[2].choice);   // pick the 3rd
+  }
+  if (asked.length !== 2) fails.push(`walk asked ${asked.length} picker(s), expected 2: ${JSON.stringify(asked)}`);
+  asked.forEach(a => { if (a.n !== 12) fails.push(`picker ${a.key} offered ${a.n} choices, expected 12`); });
+  if (remaining.length !== 1) fails.push(`after both picks ${remaining.length} variants remain, expected exactly 1`);
+  return fails;
+}
+
 function main() {
   const refs = collectRefs();
   if (!refs.length) { console.log('no reference games found under references/'); return 0; }
@@ -123,7 +158,11 @@ function main() {
     console.log('  FAIL = the GUI cannot rebuild a line the user actually played -> a viewer regression ' +
                 '(a card that queueCard/encodeLine drops). Fix the shared logic in tools/play/linebuild.js.');
   }
-  return fail ? 1 : 0;
+  const dimFails = checkDimensionWalk();
+  dimFails.forEach(m => console.log(`  FAIL  choose-picker walk: ${m}`));
+  console.log(`Viewer choose-picker: 2-tutor line asks ${dimFails.length ? 'WRONG' : '2 pickers x 12 choices'} ` +
+              `(${dimFails.length} FAIL)`);
+  return (fail + dimFails.length) ? 1 : 0;
 }
 
 process.exit(main());
