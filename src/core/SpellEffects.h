@@ -1670,11 +1670,44 @@ inline bool HasHasteFromEquip(const Permanent& creature,
 //
 // Note p.CanTap() returns true for a non-creature permanent, which is correct: summoning sickness
 // applies only to creatures, so a freshly-played artifact/land may tap immediately.
+// MTG_HASTE_TAP_STATS (off by default = zero cost): how often a summoning-sick permanent is
+// rescued into using a {T} ability by each GRANTED haste source. Prints one line at exit. This
+// exists to keep "no deck pairs these" separate from "the pairing exists and is already handled" --
+// conflating them once produced a wrong claim that lord haste was unreachable, when Goblins runs
+// Krenko under Chieftain/Warchief.
+namespace HasteTapStats
+{
+    inline bool Enabled() { static const bool v = EnvOn("MTG_HASTE_TAP_STATS"); return v; }
+    inline std::atomic<std::uint64_t> g_lords{0};
+    inline std::atomic<std::uint64_t> g_equip{0};
+    struct Dumper {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            std::fprintf(stderr, "\n=== HASTE-TAP STATS: rescued by lord=%llu  by equipment=%llu ===\n",
+                         (unsigned long long)g_lords.load(), (unsigned long long)g_equip.load());
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 inline bool CanTapNow(const Permanent& p, const std::vector<Permanent>& battlefield)
 {
     if (p.CanTap()) { return true; }
-    if (HasHasteFromLords(p.card, battlefield, p.controller_index, p.is_animated)) { return true; }
-    return HasHasteFromEquip(p, battlefield, p.controller_index);
+    if (HasHasteFromLords(p.card, battlefield, p.controller_index, p.is_animated))
+    {
+        // MTG_HASTE_TAP_STATS: how often a summoning-sick permanent is rescued by each haste
+        // source. Distinguishes "this pairing does not exist in any deck" from "it exists and is
+        // already handled" -- the two were conflated once (see the Goblins/Krenko note).
+        if (HasteTapStats::Enabled()) { HasteTapStats::g_lords.fetch_add(1, std::memory_order_relaxed); }
+        return true;
+    }
+    if (HasHasteFromEquip(p, battlefield, p.controller_index))
+    {
+        if (HasteTapStats::Enabled()) { HasteTapStats::g_equip.fetch_add(1, std::memory_order_relaxed); }
+        return true;
+    }
+    return false;
 }
 
 inline bool CanAttackFull(

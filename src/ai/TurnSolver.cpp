@@ -3177,9 +3177,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-            if (!CanTapNow(p, state.battlefield)) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (!pd || pd->params.tap_creates_tokens_per_controlled_subtype.empty()) { continue; }
+            if (!CanTapNow(p, state.battlefield)) { continue; }
             const int x = CountControlledSubtype(state, state.active_player_index,
                               pd->params.tap_creates_tokens_per_controlled_subtype);
             if (x <= 0) { continue; }
@@ -3504,9 +3504,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-            if (!CanTapNow(p, state.battlefield)) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (!pd) { continue; }
+            // Cheap param check before the battlefield-scanning haste predicate: this loop only
+            // ever emits for the two graveyard-exile modes.
+            if (pd->params.gy_exile_instant_sorcery_drain <= 0
+                && pd->params.gy_exile_creature_lifegain <= 0) { continue; }
+            if (!CanTapNow(p, state.battlefield)) { continue; }
             const std::vector<Card>& gy = state.players[state.active_player_index].graveyard;
             if (pd->params.gy_exile_instant_sorcery_drain > 0)
             {

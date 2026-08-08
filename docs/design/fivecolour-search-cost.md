@@ -397,7 +397,7 @@ at width 1.
 only by the held-out seed set moving the right way (5.1060 → 5.1020). If a future deck leans on
 equipment, re-sweep them rather than trusting these values.
 
-### Also fixed — the {T}-ability haste gap was SYMMETRIC (and is latent)
+### Also fixed — the {T}-ability haste gap was SYMMETRIC
 
 `CanTapNow` is now the single predicate for "may this permanent use a {T} ability now", covering
 own-keyword / lord / equipment haste, and the three inline gates (Krenko's token tap, Deathrite's
@@ -406,14 +406,39 @@ had the gap in *both* directions — mana-source sites saw equipment but not lor
 sites saw lords but not equipment — which nothing distinguishes at the rules level (CR 302.6 is one
 restriction lifted by haste from any source).
 
-**It is currently latent, and that was verified rather than assumed.** No deck in `decks/` pairs a
-haste lord with a mana creature of the granted subtype, so that half is unreachable; and only
-FiveColour has both an equipment and a qualifying {T}-value card (Greaves + Deathrite Shaman),
-where 1500 games and the counter run came back byte-identical. The prior note claiming this "moves
-slivers/goblins ground truth and needs its own accept cycle" was wrong on both counts.
+**Both granted-haste paths are LIVE in the deck pool** (`MTG_HASTE_TAP_STATS`, 60 games, seed 2002 —
+counts a summoning-sick permanent rescued into a {T} ability, at a gate that actually emits):
 
-Smoke 30/30 and regression 50/50 byte-identical, 0 play-changed — no registered deck runs an
-equipment, so none of this reaches them.
+| deck | rescued by lord | rescued by equipment |
+|---|---|---|
+| Goblins | **2,199** | 0 |
+| FiveColour | 0 | **1,020,138** |
+| slivers_vial | 0 | 0 |
+| Dragonstorm | 0 | 0 |
+
+Goblins is Krenko, Mob Boss tapping the turn it lands under Goblin Chieftain / Goblin Warchief —
+a heavily-exercised line, NOT a hypothetical. FiveColour is Greaves on a fresh mana dork (the
+aff6768 win). So this is not a latent fix in general: **it is byte-identical only because each live
+pairing was already covered by the site that needed it** — the Krenko gate already called
+`HasHasteFromLords`, and the mana sites already called `CanTapNow` with the equipment term.
+
+What unification actually ADDS is the two CROSS terms, and only those are latent today:
+* lords at mana-source sites — no deck pairs a haste lord with a mana creature of the granted
+  subtype, so it is currently unreachable;
+* equipment at the {T}-value gates — only FiveColour has both (Greaves + Deathrite Shaman), and it
+  never changed an outcome across 1500 games or the counter run.
+
+An earlier note in this doc claimed the whole thing was latent and that lord haste "moves
+slivers/goblins ground truth". Both were wrong, in opposite directions, and both came from
+filtering the card data instead of counting what the engine actually does. The counter above is
+the check to run before making that kind of claim again.
+
+While wiring this up, both {T}-value gates were reordered to test their cheap param predicate
+BEFORE the battlefield-scanning haste predicate. That is behaviour-identical and strictly less
+work: on Goblins the lord-rescue count at those gates fell from 271,426 to 2,199, i.e. ~99% of the
+successful lord scans were being done for permanents with no {T} ability at all.
+
+Smoke 30/30 and regression 50/50 byte-identical, 0 play-changed.
 
 ### Still open
 
