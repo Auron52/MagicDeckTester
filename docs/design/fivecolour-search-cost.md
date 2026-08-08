@@ -1,9 +1,10 @@
 # FiveColour search cost — why it is 25× the suite, and what to do before registering it
 
-**Status: PARTLY RESOLVED (2026-08-07).** Section 6 (the provider misroute) is FIXED and adopted --
-see "Resolution" at the bottom, which also bought a 2x cost cut. Sections 3-5 (the mana backtracker
-and the straggler tail) remain OPEN and still block registering FiveColour in the tiers.
-Measured on 840ba15, single-thread throughout.
+**Status: PARTLY RESOLVED.** Section 6 (provider misroute) FIXED + adopted; section 7 (tooling gap)
+CLOSED. Sections 3-5 (the mana backtracker and the straggler tail) remain OPEN and still block
+registering FiveColour in the tiers -- but the cost is down ~40% from where this started. See
+"Where it stands now" at the bottom for the current numbers and the refuted levers.
+Measured on 840ba15 and later, single-thread throughout.
 
 ## 1. The measurement
 
@@ -192,3 +193,65 @@ Smoke 30/30 + regression 50/50 byte-identical, 0 play-changed: no other deck is 
 **Still open:** even at 4.97 s/game FiveColour is ~22x the next-heaviest deck, so §3/§4/§5 stand
 and registration stays deferred. Next cheapest lever is still memoising `DomainColors` out of the
 backtracker recursion.
+
+
+## Resolution of section 7 — MTG_SLOW_GAME_MS (44285cd)
+
+`GoldFishRunner` now times every game and streams any that exceeds `MTG_SLOW_GAME_MS` (ON by
+default at 30 s, `=0` disables), mirroring the keep generator's `MTG_KEEP_SLOW_MS`:
+
+```
+[goldfish] SLOW-GAME 161159ms  gi=42 wt=5  repro: --seed 2002 --game-index 42 --games 1
+```
+
+Validated end-to-end: run blind over 100 games at seed 2002 it independently flagged **exactly**
+gi=36 and gi=42 — the same two games the `-DMTG_PROFILE=ON` counters build had identified in §4,
+without needing that separate build. One `steady_clock` read per game; nothing feeds a decision.
+
+## Also fixed: the backtracker never exiled Deathrite's graveyard land (44285cd)
+
+`TapForCostBacktrack` carries its own inline copy of `ExileGraveyardLandForMana`, and it read
+`gy[g].IsLand()` on a graveyard placeholder — always false, so the loop exiled nothing. The fuel
+gate said "live" and the tap took the mana while the land stayed in the graveyard, so **N Deathrites
+could all tap off ONE graveyard land in a single payment** (this deck runs four). Same placeholder
+class as 333ab17; a repo-wide sweep for raw `.IsLand()/.IsCreature()/.ManaValue()/.IsMulticolored()`
+on hand/library/graveyard cards now finds none left in the engine. Play-neutral (+0.001 avg over
+3x500 games), as expected for removing an advantage that was never legal.
+
+## REFUTED lever — colour-aware B&B gate (do NOT retry)
+
+Hypothesis: the total-mana gate has no colour awareness, so a `{W}{U}{B}{R}{G}` probe on a board
+with five lands but three colours passes it (5 >= 5) and then walks the whole tap tree to prove
+what one colour count already knew. Implemented as a lossless top-level per-colour capacity check
+(each source's full max net credited to every colour it can make — a deliberate over-count;
+colours read through `ProducesForPayment`).
+
+**Measured: 0.28%** (paired callgrind Ir, 2 games seed 2002: 24,177,852,448 -> 24,109,381,014).
+Inside the noise band this repo already burned itself on (see `shard-volley-hold.md`, where a
++0.14% Ir claim was retracted). REVERTED rather than shipped.
+
+*Why it failed, so the next person does not re-derive it:* the greedy scarcity-first payer already
+handles the colour-easy cases, so `TapForCostBacktrack` is entered precisely when the colours ARE
+available and only the assignment is hard. A colour-feasibility gate therefore almost never fires
+at the point it is checked. Any future attack has to prune INSIDE the tree, not at its root.
+
+## Where it stands now
+
+Single-thread, 100 games, d3/b10, current HEAD:
+
+| seed | before (start of this work) | now | change |
+|---|---|---|---|
+| 2002 | 5.578 s/game | **3.318** | −40% |
+| 3003 | — | **2.423** | |
+| 1001 | 1.81 (at 150 games) | **1.039** | −43% |
+
+Still ~15x the next-heaviest deck (creature_giving 0.222), and **the tail still dominates**: at
+seed 2002 two games out of a hundred (gi 36 at 44 s, gi 42 at 161 s) account for 205 s of the
+331.8 s total — 62% of the run in 2% of the games.
+
+**Sizing verdict — still deferred, but closer.** A 300-game d3 regression case would be ~12-17 min
+at the regression seeds, against a 45-min budget shared by ten decks. Options when this is revisited:
+1. Attack the tail directly (it is 62% of the cost; the two reproducers above are cheap to profile).
+2. Register d0-only now (0.0007 s/game) — affordable immediately, but exercises no search.
+3. Register a SMALL d3/d5 case (~50 games) and accept ~2-3 min, after checking the chosen seed
+   range has no straggler (`MTG_SLOW_GAME_MS` now makes that a one-line check).
