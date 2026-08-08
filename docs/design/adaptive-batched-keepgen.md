@@ -21,6 +21,18 @@ get wrong. The gen is **always**:
 
 Every other `MTG_KEEP_*` / `MTG_EQUIV_*` knob and the uniform/round/wave code paths are to be **removed**.
 
+> **REMOVAL COMPLETE — 2026-08-08 (`phase-1-2-deck-analyzer`).** Continuous is now the **only** path:
+> `continuous = adaptive` unconditionally, journal is the sole persistence, the wave whole-table path and
+> the snapshot-checkpoint machinery are **deleted**, and the 8 execution flags below are **retired**
+> (`MTG_KEEP_CONTINUOUS`, `MTG_KEEP_JOURNAL`, `MTG_KEEP_CHECKPOINT_SEC`, `MTG_KEEP_FLOOR_GROUPS`,
+> `MTG_KEEP_SWEEP_SEC`, `MTG_KEEP_CONTINUOUS_LOOKAHEAD` → baked = 4, `MTG_KEEP_NO_FLOOR_SPEC`,
+> `MTG_KEEP_NO_SUB_FUSE`). `recommend` is ported to the continuous floor phase and a **rolling-vg** freeze
+> target is added (`MTG_KEEP_REFS_OFFSET`, default 2). The **one remaining piece** is folding the
+> `sub_floor` (fast/keep-only) adaptive sub-refine into the pool so `run_refine_waves` can be deleted —
+> see `docs/design/continuous-only-keepgen.md`, which is the authoritative status + plan. The historical
+> sections below (with their `MTG_KEEP_CONTINUOUS=1` gating and temporary A/B knobs) are the SHIPPED-2026-07-24
+> record; the flags they cite as "temporary A/B knob" are the ones now retired.
+
 **Persistence = per-cell incremental journal, NOT periodic full-snapshot checkpoints — SHIPPED 2026-07-24.**
 Because a cell completes atomically (floor reached, or terminal freeze/cap), durability is a per-cell append
 log: persist each cell-side the moment it finishes. Records key by `(H, cell-index, pd)` — valid because a
@@ -205,19 +217,27 @@ snapshot stores `cnt` not the frozen flag).
 
 ## Flags
 
-- `MTG_KEEP_CONTINUOUS=1` — select the continuous pool (requires `adaptive`, i.e. `r0 < r_max`). Unset →
-  wave/barrier path (byte-identical; smoke/regression and every other deck unaffected).
-- `MTG_KEEP_CONTINUOUS_LOOKAHEAD` (default 4) — max rollouts a cell may be fed past its committed prefix
-  (also the floor-tail speculation budget `spec_budget`).
-- `MTG_KEEP_NO_FLOOR_SPEC=1` — disable floor-tail speculation (revert to the old floor→refine barrier:
-  `in_flight==0` wait, no speculation). Byte-identical to speculation-on; temporary A/B knob.
-- `MTG_KEEP_NO_SUB_FUSE=1` — disable sub-table fusion (revert to the separate Pass-A sub-cap join, then
-  a size-7-only pool). Byte-identical to fusion-on; temporary A/B knob.
-- `MTG_KEEP_JOURNAL` (default 1 for the continuous path) — per-cell journal persistence. `=0` reverts to the
-  periodic full-raw snapshot (A/B + fallback). Temporary knob: the target design (top) is journal-only.
-- `MTG_KEEP_SWEEP_SEC` (default 20) — snapshot interval, used only by the `MTG_KEEP_JOURNAL=0` fallback.
-- Reuses `MTG_KEEP_CUTOFF_P` / `MTG_KEEP_CUTOFF_R` (low-prob freeze arm), `MTG_KEEP_R_FLOOR`,
-  `MTG_KEEP_ROLLOUTS`, `MTG_KEEP_ADAPTIVE_BOTTOM`.
+**All of the execution-path/tuning flags in this section are RETIRED as of 2026-08-08** (see the
+REMOVAL COMPLETE banner at the top). They are listed here only as the historical record of the
+SHIPPED-2026-07-24 flag-gated form; a current build consults none of them.
+
+- ~~`MTG_KEEP_CONTINUOUS=1`~~ — RETIRED. Continuous is unconditional (`continuous = adaptive`); there is
+  no wave/barrier path to select.
+- ~~`MTG_KEEP_CONTINUOUS_LOOKAHEAD`~~ — RETIRED. Baked to the constant `cont_lookahead = 4` (also the
+  floor-tail speculation budget `spec_budget`).
+- ~~`MTG_KEEP_NO_FLOOR_SPEC=1`~~ — RETIRED. Floor-tail speculation is always on (except `recommend`, which
+  must leave every cell at exactly r0 for the R=1 probe).
+- ~~`MTG_KEEP_NO_SUB_FUSE=1`~~ — RETIRED. Sub-table fusion is mandatory where it applies (`complete`).
+- ~~`MTG_KEEP_JOURNAL`~~ — RETIRED. The per-cell journal is the sole persistence
+  (`journal_on = continuous && !out_raw.empty()`); the periodic full-raw snapshot branch is deleted.
+- ~~`MTG_KEEP_SWEEP_SEC`~~, ~~`MTG_KEEP_CHECKPOINT_SEC`~~, ~~`MTG_KEEP_FLOOR_GROUPS`~~ — RETIRED with the
+  snapshot-checkpoint machinery and the 32-group floor barrier.
+- **NEW `MTG_KEEP_REFS_OFFSET`** (default 2) — rolling-vg lag: re-derive the freeze shrink target `vg`
+  from the current accumulators once the completed level advances this far past the last recompute.
+  `0` = the old floor-pinned `vg` (byte-identical to the pre-rolling continuous path).
+- Still consulted (describe the WORK, not the path): `MTG_KEEP_CUTOFF_P` / `MTG_KEEP_CUTOFF_R` (low-prob
+  freeze arm), `MTG_KEEP_R_FLOOR`, `MTG_KEEP_ROLLOUTS`, `MTG_KEEP_ADAPTIVE_BOTTOM`, and the
+  `MTG_EQUIV_*` bucketing/pooling identity set.
 
 ## Validation (done)
 

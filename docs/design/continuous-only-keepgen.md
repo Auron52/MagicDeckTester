@@ -1,10 +1,61 @@
 # Continuous-only keep-gen — delete the wave/uniform paths and their knobs
 
-**Status:** design (no code yet). **Goal:** make the *continuous single-queue* keep-gen
-(`docs/design/adaptive-batched-keepgen.md`, SHIPPED 2026-07-24) the **only** execution path, and
-**delete** the toggle + the now-dead knobs that select or tune the old paths. An agent reading the
-analyzer should not be able to run gen the wrong way, and should not have to know a single execution
-knob to run it right.
+**Status:** **IMPLEMENTED 2026-08-08** (footgun removal + `recommend` port + wave-path delete +
+auto-commit-stamp + rolling-vg), on branch `phase-1-2-deck-analyzer`. The **one remaining piece** is
+the `sub_floor` sub-table fusion (delete `run_refine_waves`) — see "Implementation status" below.
+**Goal:** make the *continuous single-queue* keep-gen (`docs/design/adaptive-batched-keepgen.md`,
+SHIPPED 2026-07-24) the **only** execution path, and **delete** the toggle + the now-dead knobs that
+select or tune the old paths. An agent reading the analyzer should not be able to run gen the wrong
+way, and should not have to know a single execution knob to run it right.
+
+## Implementation status (2026-08-08)
+
+**DONE** (in `src/analyzer/ExhaustiveKeep.cpp` + `main.cpp`):
+- **`continuous = adaptive` unconditionally** — the execution-path toggle is gone. Journal is the sole
+  persistence (`journal_on = continuous && !out_raw.empty()`); the snapshot-checkpoint machinery
+  (`maybe_checkpoint`, the inner `checkpoint()` lambda, `t_last_ck`, the `!journal_on` snapshot block)
+  is **deleted**.
+- **8 execution flags RETIRED:** `MTG_KEEP_CONTINUOUS`, `MTG_KEEP_JOURNAL`, `MTG_KEEP_CHECKPOINT_SEC`,
+  `MTG_KEEP_FLOOR_GROUPS`, `MTG_KEEP_SWEEP_SEC`, `MTG_KEEP_CONTINUOUS_LOOKAHEAD` (baked = 4),
+  `MTG_KEEP_NO_FLOOR_SPEC` (floor-spec always on except `recommend`), `MTG_KEEP_NO_SUB_FUSE`
+  (fusion mandatory where it applies).
+- **`recommend` ported to the continuous floor phase** — `floor_report_maybe_stop` fires at
+  floor-complete (projection + degenerate-cell diagnostic + R=1 probe write + early stop); the old
+  uniform-R scout path is deleted. `recommend` disables floor speculation so the probe is exactly r0.
+- **Wave whole-table path deleted** — `run_refine_waves(false)` call site and the dead
+  `adaptive && !continuous` projection/recommend block are gone.
+- **Commit auto-stamped** from `git rev-parse --short HEAD` (+`+dirty` on an unclean tree) in the recipe
+  block, so the sidecar's pooling identity is recorded without `MTG_COMMIT`.
+- **Rolling-vg** (`MTG_KEEP_REFS_OFFSET`, default 2; see the section below).
+
+**PENDING** — the `sub_floor` sub-table fusion (the one engineering task). NOTE the `fast`/`complete`
+labels in the older text below were **swapped** relative to the code: in the code
+`sub_floor = (adaptive && (!bottoming_enabled || adaptive_bottom)) || change_detect`, so `fuse_sub`
+(`continuous && !sub_floor`) is TRUE only for **`complete`** — which is therefore **already fused**.
+The case still on `run_refine_waves(true)` (a pre-pool barrier) is **`fast`/keep-only/change-detect**
+(`sub_floor == true`). The remaining task is to route *that* adaptive sub-refine through the
+`feed_sub`/kind-1 pool machinery, concurrent with the size-7 floor, then delete `run_refine_waves`. It
+is byte-identical-able (the adaptive sub-refine's marking reads only sub-table V/vg + `Dopt`, which
+read only sub-tables — never size-7 — so running it concurrent with the size-7 floor preserves its
+exact wave sequence). Land it behind a temporary toggle, A/B byte-identical vs the barriered output,
+and only then delete `run_refine_waves`.
+
+## Rolling-vg (freeze shrink target re-derived from a completed level)
+
+The size-7 freeze test shrinks each cell's win-turn variance toward a pooled target `vg`. The wave path
+recomputed `vg` every wave (from the current accumulators); the continuous path originally **pinned**
+`vg` at the noisy r0 floor for the whole refine — the source of the (benign, play-neutral) continuous↔wave
+divergence. Rolling-vg re-derives `vg` from the **current** accumulators as the *completed level*
+(min committed cnt among still-live cells) advances `MTG_KEEP_REFS_OFFSET` past the last recompute, so
+freeze decisions past the first few R use a `vg` from the refined state — exactly the wave's own formula,
+lagged a safe offset behind the frontier so the reference level is always a completed wave.
+- `MTG_KEEP_REFS_OFFSET` default **2**; **`0` = the old floor-pinned path by construction**
+  (`recompute_vg` no-ops), i.e. byte-identical to the pre-rolling continuous behavior.
+- `Dopt_ref` does **not** roll — it reads only sub-tables, which are final before the size-7 refine.
+- **Not byte-identical run-to-run at offset > 0** (the recompute is timing-triggered on the completed
+  level); the user accepted "a little variance" for this, bounded by the conservative offset. The
+  **floor `vg` remains the journal/resume anchor** (`vg_roll` re-derives from the reloaded accumulators
+  after a resume), so resume determinism is unaffected.
 
 ## Why
 

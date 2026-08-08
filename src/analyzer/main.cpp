@@ -23,6 +23,7 @@
 #include "../cards/CardDatabase.h"
 #include "../ai/MulliganProfileIO.h"
 #include <cstdlib>
+#include <cstdio>
 
 static void PrintUsage(const char* prog)
 {
@@ -224,6 +225,26 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
         // (12345, 700001, 900001, 10000001, 20000001, date-like 2026xxxx). It reads as "the recipe
         // default" and won't be mistaken for a hand-played or test seed.
         if (!a.seed_provided) { cfg.seed = 1000000; }
+        // Auto-stamp the gen commit from the repo HEAD, so the poolable raw sidecar records its
+        // build identity WITHOUT anyone having to remember MTG_COMMIT. Appends +dirty when the work-tree
+        // isn't clean (a dirty tree makes the fingerprint unreliable for cross-machine pooling). MTG_COMMIT
+        // still overrides (captured above) when reproducing a specific historical identity.
+        if (cfg.commit.empty())
+        {
+            auto sh = [](const char* cmd) -> std::string {
+                std::string out; FILE* p = popen(cmd, "r"); if (!p) { return out; }
+                char buf[256]; while (std::fgets(buf, sizeof buf, p)) { out += buf; }
+                pclose(p);
+                while (!out.empty() && (out.back() == '\n' || out.back() == '\r' || out.back() == ' ')) { out.pop_back(); }
+                return out;
+            };
+            const std::string head = sh("git rev-parse --short HEAD 2>/dev/null");
+            if (!head.empty())
+            {
+                const std::string dirty = sh("git status --porcelain --untracked-files=no 2>/dev/null");
+                cfg.commit = head + (dirty.empty() ? "" : "+dirty");
+            }
+        }
         // (max_mull is fixed at 6 for every path -- see the cfg.max_mull note above; not a recipe knob.)
         // Resolve rollout depth/budget from value_play (mull_gen_* override -> play -> built-in default).
         const auto& vp = profile.value_play;

@@ -8,6 +8,11 @@ Hinata-specific recipe: feasibility, chunk config, seed allocation, pool + R-det
 Hinata is the **hardest** profile we've attempted (combo deck, expensive rollout lines), so the whole
 point is to have every efficiency + correctness piece in place *before* the secondary spends days on it.
 
+> **Note (2026-08-08):** the `MTG_KEEP_CHECKPOINT_SEC` periodic-snapshot checkpoint referenced below is
+> **retired** — persistence is now the per-cell journal (auto-on, no flag), and crash-resume is "re-run
+> the same recipe command." This doc is kept as the historical recipe; see
+> `docs/design/continuous-only-keepgen.md` for the current (zero-execution-knob) gen path.
+
 ## Pieces status (what makes this efficient + correct)
 
 | piece | mechanism | status |
