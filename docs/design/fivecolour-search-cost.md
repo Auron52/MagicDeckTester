@@ -698,17 +698,50 @@ Unbounded heuristic ms/game, every deck that has a matrix log:
 | **fivecolour** | **542.0** | **5,925.7** | **36,489.2** | **161,447.4** | **324,585.2** | **8.9x** |
 
 Two tiers, not a continuum: five decks finish H3 in 7-21 **ms**, three take 4.4-36.5 **s**. FiveColour
-is 5,446x burn at H3 — but only 4.6x creature_giving and 8.2x dragonstorm, so it is the worst of a
-group, not a category of its own.
+is the worst, but only 4.6x creature_giving and 8.2x dragonstorm — the worst of a group, not a
+category of its own.
 
-**The gap is per-decision cost, not the depth ladder, and it is already fully present at H1.** H5/H3
-is 8.9x here against 7.8-8.4x for the other two expensive decks — the same growth. At **H1**, where
-there is barely any search to grow, FiveColour is already **1,807x** burn. So of the 5,446x gap at
-H3, ~1,800x is there before the ladder starts and only ~3x comes from search growth: roughly 97% of
-the difference is work done *per decision*, paid identically at every depth.
+> **CORRECTION (same day).** The cheap-tier columns of that table are **not comparable** to the
+> FiveColour row, and the cross-deck ratios first derived from it (1,807x at H1, "97% of the gap is
+> per-decision") were wrong. Those logs predate the 2026-07-31 change that started attaching
+> `--profile` at all, so they measure a deck with no keep model and no card scores. Re-measured on
+> ONE binary with the profile attached for both decks, burn's H3 is **193.8 ms**, not 6.7 — a 29x
+> difference in the baseline alone. Never mix matrix logs across that change.
 
-That points at §3's mana backtracker, which is per-decision and which a five-colour manabase with
-many differently-restricted sources exercises hardest — the same component that makes this deck
-1.403 s/game at d3/b10 where burn is 0.021. It is not a matrix problem to be configured around: the
-one lever fixes generation cost and play cost together, and dragonstorm and creature_giving sit in
-the same tier and would move with it.
+### The same comparison, measured properly
+
+Same binary, same flags, `--profile` attached to both (`logs/fc_prof/ladder.txt`):
+
+| deck | H1 | H2 | H3 | H3/H1 |
+|---|---|---|---|---|
+| burn | 7.2 ms | 41.8 ms | 193.8 ms | 27x |
+| fivecolour | 265.6 ms | 1,846.6 ms | 18,550 ms | 70x |
+| **fivecolour / burn** | **37x** | **44x** | **96x** | |
+
+So the gap is **both** things, and it *grows* with depth: 37x of it is per-decision cost, already
+present at depth 1 where there is barely any search; the remaining 2.6x by H3 is FiveColour's search
+growing faster (70x vs 27x from H1 to H3). The earlier claim that depth contributed almost nothing
+came entirely from the contaminated baseline.
+
+**Callgrind says the per-decision half is not a hotspot — it is everything, uniformly.** At H1, with
+build/Profile (Release codegen + symbols), FiveColour runs 943 M Ir/game against burn's 32 M. The
+biggest single self-cost contributor to that gap is `TurnSolver::Solve` at 6.6% of it; nothing else
+reaches 3%. The whole search does ~30x more work:
+
+| function | x burn | share of gap |
+|---|---|---|
+| `TurnSolver::Solve` | 49x | 6.6% |
+| `CollectActions` | 22x | 2.5% |
+| **`TapForCostBacktrack`** | **387x** | 2.4% |
+| `EffectiveSpellCost` | 33x | 1.9% |
+| `operator new` | 23x | 1.8% |
+| `EffectiveProduces` | 48x | 1.2% |
+| `BuildSimKey` | 11x | 1.4% |
+
+A flat profile where every function scales together is the signature of **more candidate plans**, not
+of a slow routine — five colours of differently-restricted sources multiplied against the castable
+set. `TapForCostBacktrack` is the one component whose ratio (387x) is far above the ~30x background,
+which is what §3 already identified, but at H1 it is only 2.4% of the gap: fixing it alone will not
+deliver 30x. The lever that would is **enumerating fewer plans**, and it moves generation and play
+together (this deck is 1.403 s/game at d3/b10 where burn is 0.021 — a 67x ratio in the shipped
+configuration, consistent with the 37-96x measured here).
