@@ -3526,12 +3526,26 @@ Card* AIEngine::ChooseDiscard(GameState& state)
         static const bool s_discard_trace = EnvOn("MTG_DISCARD_TRACE");
         if (TurnSolver::GetTraceSolve() || s_discard_trace)
         {
+            // Machine-parsed by the analyzer's discard-analysis stage (scripts/analyze_deck.py):
+            // per-candidate mv / hand-copy count / land / protected let the parser evaluate
+            // candidate RULES (spare-copy band, name orders) against the searched labels without
+            // re-deriving card data. Keep the fields in sync with the parser.
             std::cerr << "[discard_trace turn=" << state.turn_number
-                      << " depth=" << m_lookahead_depth << " heur=" << ap.hand[heur].m_name << "]\n";
+                      << " depth=" << m_lookahead_depth << " seed=" << state.game_seed
+                      << " handsize=" << hand_size << " heur=" << ap.hand[heur].m_name << "]\n";
             for (int j = 0; j < hand_size; ++j)
             {
                 if (win_turn[j] == std::numeric_limits<int>::max()) { continue; }   // not offered by the heuristic
-                std::cerr << "  discard " << ap.hand[j].m_name << " -> win=" << win_turn[j]
+                int copies = 0;
+                for (int k = 0; k < hand_size; ++k)
+                { if (!ap.hand[k].m_is_staged && ap.hand[k].m_name == ap.hand[j].m_name) { ++copies; } }
+                std::cerr << "  discard " << ap.hand[j].m_name
+                          << " mv=" << CleanupDiscardManaValue(ap.hand[j])
+                          << " copies=" << copies
+                          << " land=" << (CleanupDiscardIsLand(ap.hand[j]) ? 1 : 0)
+                          << " prot=" << (CleanupDiscardProtected(state, ap.hand[j],
+                                                                  &m_profile.required_pieces) ? 1 : 0)
+                          << " -> win=" << win_turn[j]
                           << (win_turn[j] == best_win ? " *" : "") << "\n";
             }
         }

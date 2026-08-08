@@ -6,10 +6,15 @@ have said many times"): train hinata +0.005..0.010 ×4 / antilife +0.007..0.008 
 overnight SMALLER per case (+0.001..0.007 across 15 of 120 cases, discard-reaching decks only,
 all other decks byte-identical at every tier). Per the user's bar the regressions were then
 CLASSIFIED (4 budget churn, 16 visible-info ranking mistakes, 0 clairvoyance) and two shed
-heuristics adopted with them: the SPARE-COPY discard band (`MTG_SPARE_COPY_BAND`, provider
-opt-out `SpareCopyDiscardBand` — dragonstorm opts out) and CreatureGiving's DotH-ranked-last,
-recovering 12 of the 16 (hinata overnight −0.072 net, 11/0) with 0 worse. GT accepted all three
-tiers on the final binary. The blind width axis
+heuristics adopted with them: the SPARE-COPY discard band and CreatureGiving's
+DotH-ranked-last, recovering 12 of the 16 (hinata overnight −0.072 net, 11/0) with 0 worse.
+GT accepted all three tiers on the final binary. SUPERSEDED WIRING (user ruling 2026-08-07):
+the band is NOT a general rule — it is **opt-in per deck via the PROFILE**
+(`mulligan.spare_copy_band`, default false; `MTG_SPARE_COPY_BAND=0` stays the global force-off
+hatch), set only by the analyzer's per-deck DISCARD ANALYSIS stage with user approval — see
+`docs/design/per-deck-discard-analysis-phase.md`. That stage (search-labelled evidence →
+AI-authored rule → paired A/B → approval) is the durable mechanism; a per-deck
+`mulligan.discard_order` (tier-A shed order) is part of its rule vocabulary. The blind width axis
 stays at 1 everywhere (refuted below); any future widening must be bp-style apply-time
 discovery→fan — that is the open follow-up, not a requirement.**
 User-directed redesign; the architectural ruling and the agreed shape are recorded below verbatim

@@ -668,6 +668,26 @@ Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
 
 Only a deck that satisfies all of these is "analyzed." Report (Stage 6) must state which checks were run and their outcomes.
 
+### 5i. Discard analysis (search-informed per-deck discard policy)
+
+`scripts/analyze_deck.py <deck> --discard-analysis` (also stage 8 of the full script run)
+derives the deck's cleanup-discard policy empirically instead of inheriting any global rule
+(user ruling 2026-08-07: no general discard heuristic; every deck gets an AI-authored,
+measured one). It re-enables the retired discard probe OFFLINE as a label generator
+(`MTG_DISCARD_NODE=0 MTG_DISCARD_TRACE=1`: every real cleanup shed emits a searched trial
+table), scores candidate visible-info rules against those labels (status quo, spare-copy
+band as a label-only hypothesis, a derived shed-order), then paired-seed A/Bs a surviving
+order via the testing-only `MTG_DISCARD_ORDER` env lever. **Report only** — on the user's
+approval the rule is implemented as the deck provider's `CleanupDiscardCandidates`
+override (ALL discard rules are provider-owned; simple case = a static order deferring to
+the shared ranking, see HinataProvider; state-dependent case = buckets, see
+AntiLifegainProvider), validated rule-vs-searched at unbounded budget (d3–d4,
+apples-to-apples; probe-better games classified — only churn/clairvoyance acceptable),
+then re-gated. A deck whose provider owns its ranking (TreasureHunt) reports
+`DISCARD_INERT`; `NO_RULE_CONSIDER_SEARCH` flags a candidate for another authoring
+attempt, then a small labelled model, then the searched-width escalation. See
+`docs/design/per-deck-discard-analysis-phase.md`.
+
 ---
 
 ## Stage 6 — Report to User

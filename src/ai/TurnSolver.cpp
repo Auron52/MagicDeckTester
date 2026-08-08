@@ -10784,6 +10784,29 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     // a reject. Gated on MTG_HUMAN_PLAY -> byte-identical for every autonomous goldfish/search run,
     // which keeps deduping by signature for enumeration economy.
     const bool s_human_play_lands = HumanPlayActive();
+    // A Karoo (etb_bounce_land) played while you control NO other land must return ITSELF -- the
+    // bounce is mandatory and it is the only legal target -- so the board is unchanged and the
+    // land drop is consumed. That is strictly dominated by playing any other land and no better
+    // than passing, i.e. a provably dead branch, never a judgement call. BOTH greedy paths already
+    // reject it (LandPlay.cpp, TurnSolver greedy land drop) but the SEARCH enumerated it, so at
+    // d>0 the engine could pick it -- and did: Hinata gi226 replayed Izzet Boilerworks on T1-T4
+    // with Island and Reflecting Pool sitting in hand, never developing a board, in a game that is
+    // a turn-8 win once the Karoo is gone. It survives because every line scores the same when the
+    // rollouts fail to find the win, and nothing in the tie-break prefers a developed board.
+    // Human play is exempt: the GUI must be able to offer any legal drop, including a bad one.
+    // MTG_LEGACY_KAROO_SELFBOUNCE=1 restores the old enumeration for a byte-identical A/B.
+    static const bool s_karoo_selfbounce = EnvOn("MTG_LEGACY_KAROO_SELFBOUNCE");
+    bool has_other_land_enum = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index && p.card.IsLand())
+        { has_other_land_enum = true; break; }
+    }
+    auto karoo_self_bounce = [&](const CardDefinition* def)
+    {
+        return !s_karoo_selfbounce && !s_human_play_lands
+            && def->params.etb_bounce_land && !has_other_land_enum;
+    };
     std::vector<std::string>        land_names;   // representatives, in hand order
     std::unordered_set<std::string> seen_key;
     if (s_human_play_lands || s_legacy_land_sig)
@@ -10793,6 +10816,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: castable as a SPELL only, not enumerable as a land play
             const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
             if (!def || !def->card.IsLand()) { continue; }
+            if (karoo_self_bounce(def)) { continue; }
             const std::string key = s_human_play_lands ? c.m_name : land_sig(def->params);
             if (seen_key.insert(key).second) { land_names.push_back(c.m_name); }
         }
@@ -10812,6 +10836,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
             if (c.m_impulse_no_land) { continue; }
             const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
             if (!def || !def->card.IsLand()) { continue; }
+            if (karoo_self_bounce(def)) { continue; }
             const std::string sg = land_sig(def->params);
             auto it = slot.find(sg);
             if (it == slot.end())

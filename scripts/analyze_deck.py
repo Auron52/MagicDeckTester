@@ -65,6 +65,17 @@ def ParseArgs():
                         "invocation). Pin it to make a profile run reproducible -- e.g. to "
                         "re-examine a degenerate scoring game (the FiveColour 3.4h atom's "
                         "seed was unrecoverable because the run was unseeded).")
+    p.add_argument("--discard-analysis", action="store_true",
+                   help="Run ONLY the discard-analysis stage: search-labelled evidence run, "
+                        "candidate-rule derivation, paired outcome A/B, recommendation report. "
+                        "Report only — adoption means writing a PROVIDER override, user-approved.")
+    p.add_argument("--discard-evidence-games", type=int, default=400,
+                   help="Evidence-run games (searched trial tables, d3, single-thread; default 400)")
+    p.add_argument("--discard-ab-games", type=int, default=4000,
+                   help="Outcome-A/B games per arm at d0 (default 4000); play-config arm uses 1/5th")
+    p.add_argument("--discard-ab-threads", type=int, default=0,
+                   help="Threads for the outcome-A/B batch (0 = all cores). Lower this when "
+                        "running several decks' analyses concurrently.")
     return p.parse_args()
 
 # ---------------------------------------------------------------------------
@@ -436,6 +447,263 @@ def CostAggregateDiagnostic(deck_path: Path, cards_json: Path, card_names: list[
     return out
 
 # ---------------------------------------------------------------------------
+# Discard analysis — per-deck cleanup-discard policy, search-informed
+# ---------------------------------------------------------------------------
+# Process (user design 2026-08-07, docs/design/per-deck-discard-analysis-phase.md):
+#   1. EVIDENCE: replay the deck with the retired probe re-enabled offline
+#      (MTG_DISCARD_NODE=0 + MTG_DISCARD_TRACE=1) so every real cleanup discard emits a
+#      searched trial table (per-candidate rollout win turn). The search LABELS the decision;
+#      no rule is invented from scratch.
+#   2. RULES: evaluate candidate visible-info rules against those labels (status quo = the
+#      deck's current ranking; spare-copy band; a derived shed-order of names the search
+#      likes shedding). Only rules that beat the status quo ON LABELS go to step 3.
+#   3. OUTCOME A/B: paired-seed pooled batch, one arm per surviving rule (profile variants in
+#      scratch dirs with symlinked sibling models, so arms differ ONLY in discard policy).
+#   4. REPORT ONLY: prints the evidence, the label table, the A/B, and a recommendation.
+#      Adoption (writing mulligan.spare_copy_band / mulligan.discard_order) is a separate,
+#      USER-APPROVED step — this stage never touches the profile.
+# A deck whose provider owns its ranking (TreasureHunt) reports DISCARD_INERT here: the probe
+# fans the provider's candidate return, which is a single card.
+
+DISCARD_TRACE_HEADER = re.compile(
+    r"^\[discard_trace turn=(\d+) depth=(\d+) seed=(\d+) handsize=(\d+) heur=(.+)\]$")
+DISCARD_TRACE_CAND = re.compile(
+    r"^  discard (.+?) mv=(-?\d+) copies=(\d+) land=([01]) prot=([01]) -> win=(\d+)( \*)?$")
+
+LOSS_TURN = 9   # THE metric: unwon = max_turns + 1
+
+
+def _RunBatch(manifest: dict, log_dir: Path, threads: int, extra_env: dict) -> str:
+    """Run one pooled mtg --batch over `manifest`, return its stderr text."""
+    log_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = log_dir / "manifest.json"
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=1)
+    env = os.environ.copy()
+    env.update(extra_env)
+    cmd = [str(MTG_BIN), "--batch", str(manifest_path), "--threads", str(threads),
+           "--game-log-dir", str(log_dir / "wins")]
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, env=env, cwd=REPO_ROOT)
+    if result.returncode != 0:
+        raise RuntimeError(f"batch exited {result.returncode}: {result.stderr[-500:]}")
+    return result.stderr
+
+
+def _ParseWins(path: Path) -> dict[int, int]:
+    """Parse a harness-format .wins file (gi wt digest); losses (wt=-1) -> LOSS_TURN."""
+    out: dict[int, int] = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            gi, wt = int(parts[0]), int(parts[1])
+            out[gi] = LOSS_TURN if wt < 0 else wt
+    return out
+
+
+def _ParseTraceDecisions(stderr_text: str) -> list[dict]:
+    """Parse [discard_trace] blocks into decision dicts."""
+    decisions: list[dict] = []
+    cur = None
+    for line in stderr_text.splitlines():
+        h = DISCARD_TRACE_HEADER.match(line)
+        if h:
+            cur = {"turn": int(h.group(1)), "depth": int(h.group(2)), "seed": int(h.group(3)),
+                   "handsize": int(h.group(4)), "heur": h.group(5), "cands": []}
+            decisions.append(cur)
+            continue
+        c = DISCARD_TRACE_CAND.match(line)
+        if c and cur is not None:
+            cur["cands"].append({"name": c.group(1), "mv": int(c.group(2)),
+                                 "copies": int(c.group(3)), "land": c.group(4) == "1",
+                                 "prot": c.group(5) == "1", "win": int(c.group(6)),
+                                 "opt": c.group(7) is not None})
+    return [d for d in decisions if d["cands"]]
+
+
+def _RulePick(decision: dict, rule: str, order: list[str]) -> dict | None:
+    """The candidate a rule sheds at this decision (None -> falls back to status quo)."""
+    cands = decision["cands"]
+    if rule == "status_quo":
+        for c in cands:
+            if c["name"] == decision["heur"]:
+                return c
+        return cands[0]
+    if rule == "band":
+        band = [c for c in cands if c["copies"] >= 2 and not c["land"] and not c["prot"]]
+        if band:
+            return max(band, key=lambda c: c["mv"])
+        return None
+    if rule == "order":
+        for name in order:
+            for c in cands:
+                if c["name"] == name and not c["prot"]:
+                    return c
+        return None
+    raise ValueError(rule)
+
+
+def _LabelStats(decisions: list[dict], rule: str, order: list[str]) -> dict:
+    """Mean regret (rule pick win - best win) and optimal rate of `rule` over the labels."""
+    regret_sum, optimal, n = 0.0, 0, 0
+    for d in decisions:
+        pick = _RulePick(d, rule, order) or _RulePick(d, "status_quo", order)
+        best = min(c["win"] for c in d["cands"])
+        regret_sum += pick["win"] - best
+        optimal += 1 if pick["win"] == best else 0
+        n += 1
+    return {"mean_regret": round(regret_sum / n, 4) if n else 0.0,
+            "optimal_rate": round(optimal / n, 3) if n else 1.0, "decisions": n}
+
+
+def _PairedDelta(base: dict[int, int], arm: dict[int, int]) -> dict:
+    """Paired per-game stats: mean delta (negative = arm better), t-stat, games changed."""
+    gis = sorted(set(base) & set(arm))
+    diffs = [arm[g] - base[g] for g in gis]
+    n = len(diffs)
+    if n == 0:
+        return {"n": 0, "mean_delta": 0.0, "t": 0.0, "changed": 0}
+    mean = sum(diffs) / n
+    var = sum((d - mean) ** 2 for d in diffs) / (n - 1) if n > 1 else 0.0
+    t = mean / ((var / n) ** 0.5) if var > 0 else 0.0
+    return {"n": n, "mean_delta": round(mean, 5), "t": round(t, 2),
+            "changed": sum(1 for d in diffs if d != 0)}
+
+
+def DiscardAnalysis(deck_path: Path, evidence_games: int, ab_games: int,
+                    ab_threads: int = 0) -> dict:
+    deck_name = deck_path.stem
+    profile_path = deck_path.parent / (deck_name + ".profile.json")
+    scratch = REPO_ROOT / "logs" / "discard_analysis" / deck_name
+    out: dict = {"deck": deck_name}
+
+    # -- 1. EVIDENCE: searched trial tables from the offline probe -----------------------
+    print(f"  [discard] evidence run: {evidence_games} games d3, single-thread, probe as "
+          f"offline labeller...", file=sys.stderr)
+    ev_manifest = {"jobs": [{
+        "name": f"{deck_name}_evidence", "deck": str(deck_path), "profile": str(profile_path),
+        "games": evidence_games, "seed": 930000, "depth": 3, "budget_ms": 10,
+        "ignore_play_profile": True, "weight": 0}]}
+    stderr_text = _RunBatch(ev_manifest, scratch / "evidence", threads=1,
+                            extra_env={"MTG_DISCARD_NODE": "0", "MTG_DISCARD_TRACE": "1"})
+    # Persist the trial tables: the residual-case audit (which label-suboptimal decisions are
+    # clairvoyance vs a visible-info miss) needs them after the fact.
+    with open(scratch / "evidence" / "trace.log", "w", encoding="utf-8") as f:
+        f.write(stderr_text)
+    decisions = _ParseTraceDecisions(stderr_text)
+    out["evidence"] = {"games": evidence_games, "decisions": len(decisions)}
+    if not decisions:
+        out["verdict"] = "DISCARD_INERT"
+        out["detail"] = ("no cleanup-discard decisions reached (or the provider owns its "
+                         "ranking and returns a single candidate); no policy to derive.")
+        return out
+
+    # Hand-size buckets: =8 is the easy shed-1-of-8 cleanup; bigger hands (and any future
+    # pitch-site labels) are the harder small-margin cases the rule must also survive.
+    by_bucket: dict[str, int] = {}
+    for d in decisions:
+        b = "hand8" if d["handsize"] == 8 else "hand9plus"
+        by_bucket[b] = by_bucket.get(b, 0) + 1
+    out["evidence"]["by_handsize"] = by_bucket
+
+    # Ambiguity: how often the searched labels themselves near-tie (multiple optimal sheds).
+    multi_opt = sum(1 for d in decisions if sum(1 for c in d["cands"] if c["opt"]) > 1)
+    out["evidence"]["multi_optimal_rate"] = round(multi_opt / len(decisions), 3)
+
+    # -- 2. RULES vs labels --------------------------------------------------------------
+    # Per-name shed stats -> derived shed order (names the search prefers shedding).
+    name_stats: dict[str, dict] = {}
+    for d in decisions:
+        best = min(c["win"] for c in d["cands"])
+        seen = set()
+        for c in d["cands"]:
+            if c["name"] in seen:
+                continue
+            seen.add(c["name"])
+            s = name_stats.setdefault(c["name"], {"offered": 0, "optimal": 0, "regret": 0.0})
+            s["offered"] += 1
+            s["optimal"] += 1 if c["win"] == best else 0
+            s["regret"] += c["win"] - best
+    sq = _LabelStats(decisions, "status_quo", [])
+    eligible = {n: s for n, s in name_stats.items() if s["offered"] >= 5}
+    order = sorted((n for n, s in eligible.items()
+                    if s["regret"] / s["offered"] < sq["mean_regret"]),
+                   key=lambda n: eligible[n]["regret"] / eligible[n]["offered"])[:8]
+    label_table = {"status_quo": sq,
+                   "band": _LabelStats(decisions, "band", []),
+                   "order": _LabelStats(decisions, "order", order) if order else None}
+    out["label_table"] = label_table
+    out["derived_order"] = order
+    out["name_stats"] = {n: {"offered": s["offered"], "optimal": s["optimal"],
+                             "mean_regret": round(s["regret"] / s["offered"], 3)}
+                         for n, s in sorted(eligible.items(),
+                                            key=lambda kv: kv[1]["regret"] / kv[1]["offered"])}
+
+    # -- 3. OUTCOME A/B: the derived order, trialled via the MTG_DISCARD_ORDER test lever ---
+    # (Shipped rules are PROVIDER-owned -- user ruling 2026-08-07 -- so the arm uses the
+    # testing-only env lever, not a shipped config. The band is a LABEL-ONLY hypothesis: it
+    # lost to authored orders on every deck where duplicates mattered, so it has no engine
+    # support; if a deck's labels ever demand it, implement it in that deck's provider.)
+    out["ab"] = {}
+    if order and label_table["order"]["mean_regret"] < sq["mean_regret"]:
+        def _arm_jobs(tag: str) -> list[dict]:
+            return [{"name": f"{deck_name}_{tag}_d0", "deck": str(deck_path),
+                     "profile": str(profile_path), "games": ab_games, "seed": 910000,
+                     "depth": 0, "budget_ms": 0, "ignore_play_profile": True, "weight": 0},
+                    {"name": f"{deck_name}_{tag}_d3", "deck": str(deck_path),
+                     "profile": str(profile_path), "games": ab_games // 5, "seed": 920000,
+                     "depth": 3, "budget_ms": 10, "ignore_play_profile": True, "weight": 0}]
+        print("  [discard] outcome A/B: order arm (MTG_DISCARD_ORDER lever) vs control, "
+              "paired seeds...", file=sys.stderr)
+        threads = ab_threads or os.cpu_count() or 8
+        _RunBatch({"jobs": _arm_jobs("control")}, scratch / "ab", threads=threads, extra_env={})
+        _RunBatch({"jobs": _arm_jobs("order")}, scratch / "ab_order", threads=threads,
+                  extra_env={"MTG_DISCARD_ORDER": ";".join(order)})
+        res = {}
+        for cfg in ("d0", "d3"):
+            base = _ParseWins(scratch / "ab" / "wins" / f"{deck_name}_control_{cfg}.wins")
+            arm = _ParseWins(scratch / "ab_order" / "wins" / f"{deck_name}_order_{cfg}.wins")
+            res[cfg] = _PairedDelta(base, arm)
+        out["ab"]["order"] = res
+        arms = {"order": {"discard_order": order}}
+    else:
+        arms = {}
+
+    # -- 4. RECOMMENDATION (report only; adoption is user-approved) ----------------------
+    best_tag, best_delta = None, 0.0
+    for tag, res in out["ab"].items():
+        # Adopt-worthy: SIGNIFICANTLY better (|t| >= 2) in at least one config and
+        # significantly worse in none -- an insignificant positive delta is noise, not a veto.
+        deltas = [res[c]["mean_delta"] for c in res]
+        ts = [res[c]["t"] for c in res]
+        if (any(d < 0 and abs(t) >= 2 for d, t in zip(deltas, ts))
+                and not any(d > 0 and abs(t) >= 2 for d, t in zip(deltas, ts))):
+            total = sum(deltas)
+            if total < best_delta:
+                best_tag, best_delta = tag, total
+    if best_tag:
+        out["verdict"] = "RULE_FOUND"
+        out["recommendation"] = {"policy": arms[best_tag], "arm": best_tag,
+                                 "summed_delta": round(best_delta, 5)}
+        out["detail"] = (f"'{best_tag}' beats the current ranking on search labels AND on the "
+                         f"paired outcome A/B; on user approval, implement it as the deck "
+                         f"provider's CleanupDiscardCandidates override (rules are "
+                         f"provider-owned; see HinataProvider for the simple-order shape).")
+    elif sq["mean_regret"] > 0.1 and sq["optimal_rate"] < 0.9:
+        out["verdict"] = "NO_RULE_CONSIDER_SEARCH"
+        out["detail"] = (f"status quo leaves {sq['mean_regret']:.2f} mean label regret "
+                         f"({(1-sq['optimal_rate'])*100:.0f}% of decisions suboptimal) but no "
+                         f"candidate rule captured it -- a candidate for the searched-width "
+                         f"escalation (a few options searched via Plan::discard_choice).")
+    else:
+        out["verdict"] = "STATUS_QUO_OK"
+        out["detail"] = "the current ranking is at or near the searched optimum on this deck."
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -447,6 +715,14 @@ def Main():
     if not deck_path.exists():
         print(f"Error: decklist not found: {deck_path}", file=sys.stderr)
         sys.exit(1)
+
+    # Standalone discard-analysis stage (also runs as stage 8 of the full flow). Report only;
+    # adoption of the recommended policy is a separate, user-approved provider override.
+    if args.discard_analysis:
+        result = DiscardAnalysis(deck_path, args.discard_evidence_games, args.discard_ab_games,
+                                 args.discard_ab_threads)
+        print(json.dumps(result, indent=2))
+        return
 
     # 1. Parse
     deck_counts = LoadDeckCounts(deck_path)
@@ -520,6 +796,17 @@ def Main():
             diag = {"verdict": "ERROR", "detail": str(e)}
         report["cost_diagnostic"] = diag
         print(f"  Cost diagnostic: {diag.get('verdict')} — {diag.get('detail', '')}", file=sys.stderr)
+
+    # 8. Discard analysis — search-informed per-deck discard policy (report only; adoption of
+    # the recommendation is a separate, user-approved profile edit).
+    print("  Running discard analysis (search-labelled evidence + rule A/B)...", file=sys.stderr)
+    try:
+        da = DiscardAnalysis(deck_path, args.discard_evidence_games, args.discard_ab_games,
+                             args.discard_ab_threads)
+    except Exception as e:  # never let the diagnostic sink the analysis
+        da = {"verdict": "ERROR", "detail": str(e)}
+    report["discard_analysis"] = da
+    print(f"  Discard analysis: {da.get('verdict')} — {da.get('detail', '')}", file=sys.stderr)
 
     print(json.dumps(report, indent=2))
 

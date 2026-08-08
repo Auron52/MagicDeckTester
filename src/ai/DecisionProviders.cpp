@@ -1508,6 +1508,158 @@ bool AntiLifegainProvider::ShouldAttackWith(const GameState& s, const Permanent&
     return (p_idx == lone_idx);
 }
 
+// Cleanup discard: the USER-AUTHORED bucket policy (2026-08-07). Three buckets -- ENABLER,
+// MANA, PAYOFF -- keep 1 enabler and enough mana, maximize payoffs. The discard-analysis
+// stage's static name order (Idyllic, StP, ...) measured d0 -0.00525 t=-4.21 but the user's
+// review rejected it as a flattened shadow of this state-dependent policy:
+//   1. Keep ONE enabler: Tainted Remedy preferred; with 2+ Reverent Silence in hand and a
+//      Plague Drone available, prefer the Drone (RS destroys our own enchantments, so under a
+//      Remedy enabler the extra Silences are dead). No enabler anywhere -> keep one tutor
+//      (Idyllic over Enlightened: to hand beats to top).
+//   2. Keep mana to GUARANTEE 3 ON BOARD: hand mana kept = max(0, 3 - board lands/dorks),
+//      fetches preferred, then dorks, then plain lands. Excess mana is shed early.
+//   3. Everything else is PAYOFF, kept biggest-first: free spells (Invigorate / Skyshroud
+//      Cutter / the one allowed Silence) over Aria/Fiery Justice (strong but mana-competing)
+//      over payoff-search tutors (slow) over StP (dead unless the opponent has a creature).
+// Shed order = reverse keep priority; omission = keep (falls to tier B/C, where required-piece
+// protection still guards last copies). MTG_AL_BUCKET_DISCARD=0 -> generic base ranking (A/B).
+const std::vector<std::string>*
+AntiLifegainProvider::InterchangeableRequiredGroup(const std::string& name) const
+{
+    // One role, two cards: both replace opponent lifegain with life LOSS. Keeping either makes
+    // the other spare, so redundancy must be counted across the pair (see the header note and
+    // CleanupDiscardProtected). Idyllic Tutor is NOT in the group: it only FETCHES an enabler,
+    // so it is not itself a live enabler.
+    static const std::vector<std::string> kEnablers = { "Tainted Remedy", "Plague Drone" };
+    if (name == "Tainted Remedy" || name == "Plague Drone") { return &kEnablers; }
+    return nullptr;
+}
+
+std::vector<int> AntiLifegainProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    static const bool s_bucket = EnvOn("MTG_AL_BUCKET_DISCARD", true);
+    if (!s_bucket) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    const Player& ap = s.players[s.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+    auto def_of  = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto is_dork = [&](const Card& c)
+    { const CardDefinition* d = def_of(c); return d != nullptr && d->tmpl == CardTemplate::ManaDork; };
+    auto is_fetch = [&](const Card& c)
+    { const CardDefinition* d = def_of(c); return d != nullptr && !d->params.fetch_land_types.empty(); };
+    auto is_land = [&](const Card& c)
+    { const CardDefinition* d = def_of(c); return d != nullptr ? d->card.IsLand() : c.IsLand(); };
+    auto is_mana = [&](const Card& c) { return is_land(c) || is_dork(c); };
+    auto is_tutor = [](const Card& c)
+    { return c.m_name == "Idyllic Tutor" || c.m_name == "Enlightened Tutor"; };
+
+    // Board state the buckets key on.
+    int  board_sources = 0;
+    bool remedy_board = false, drone_board = false, opp_creature = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == s.active_player_index)
+        {
+            if (is_mana(p.card)) { ++board_sources; }
+            if (p.card.m_name == "Tainted Remedy") { remedy_board = true; }
+            if (p.card.m_name == "Plague Drone")   { drone_board  = true; }
+        }
+        else
+        {
+            const CardDefinition* d = def_of(p.card);
+            if (d != nullptr && d->card.IsCreature()) { opp_creature = true; }
+        }
+    }
+
+    // Hand census (staged cards are in exile -- never bucketed).
+    std::vector<int> remedies, drones, tutors, silences;
+    int rs_count = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[i];
+        if (c.m_is_staged) { continue; }
+        if (c.m_name == "Tainted Remedy")    { remedies.push_back(i); }
+        if (c.m_name == "Plague Drone")      { drones.push_back(i); }
+        if (c.m_name == "Reverent Silence")  { silences.push_back(i); ++rs_count; }
+        if (is_tutor(c)) { tutors.push_back(i); }
+    }
+    // Prefer Idyllic (to hand) over Enlightened (to top) as the kept tutor.
+    std::stable_sort(tutors.begin(), tutors.end(), [&](int a, int b)
+    { return (ap.hand[a].m_name == "Idyllic Tutor") > (ap.hand[b].m_name == "Idyllic Tutor"); });
+
+    // Bucket 1 -- the kept enabler. Board enabler counts; from hand, Remedy unless the
+    // 2+-Silence-and-Drone-available exception applies.
+    const bool enabler_on_board = remedy_board || drone_board;
+    int kept_enabler = -1, kept_tutor = -1;
+    if (!enabler_on_board)
+    {
+        const bool prefer_drone = rs_count >= 2 && !drones.empty();
+        if (prefer_drone)             { kept_enabler = drones.front(); }
+        else if (!remedies.empty())   { kept_enabler = remedies.front(); }
+        else if (!drones.empty())     { kept_enabler = drones.front(); }
+        else if (!tutors.empty())     { kept_tutor = tutors.front(); }
+    }
+    const bool drone_secured  = drone_board || (kept_enabler >= 0 && ap.hand[kept_enabler].m_name == "Plague Drone");
+    const bool remedy_effective = !drone_secured
+        && (remedy_board || (kept_enabler >= 0 && ap.hand[kept_enabler].m_name == "Tainted Remedy"));
+
+    std::vector<int> shed;
+    // S1 -- dead payoffs: StP with no opponent creature to hit; Silence copies past the first
+    // while the effective enabler is a Remedy (casting one destroys it -- the rest never fire).
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged) { continue; }
+        if (!opp_creature && ap.hand[i].m_name == "Swords to Plowshares") { shed.push_back(i); }
+    }
+    if (remedy_effective)
+    { for (std::size_t k = 1; k < silences.size(); ++k) { shed.push_back(silences[k]); } }
+
+    // S2 -- excess mana beyond the 3-on-board guarantee: shed plain lands, then dorks, then
+    // fetches, keeping the best `need` (the reverse of that order).
+    const int need = std::max(0, 3 - board_sources);
+    std::vector<int> mana;
+    for (int i = 0; i < n; ++i)
+    { if (!ap.hand[i].m_is_staged && is_mana(ap.hand[i])) { mana.push_back(i); } }
+    auto mana_shed_rank = [&](int i)   // lower = shed sooner
+    { return is_fetch(ap.hand[i]) ? 2 : (is_dork(ap.hand[i]) ? 1 : 0); };
+    std::stable_sort(mana.begin(), mana.end(), [&](int a, int b)
+    { return mana_shed_rank(a) < mana_shed_rank(b); });
+    const int excess = static_cast<int>(mana.size()) - need;
+    for (int k = 0; k < excess; ++k) { shed.push_back(mana[static_cast<std::size_t>(k)]); }
+
+    // S3 -- redundant enablers and tutors (protection scope re-checks last copies below).
+    for (int i : remedies) { if (i != kept_enabler) { shed.push_back(i); } }
+    for (int i : drones)   { if (i != kept_enabler) { shed.push_back(i); } }
+    for (int i : tutors)   { if (i != kept_tutor)   { shed.push_back(i); } }
+
+    // S4 -- strong but mana-competing payoffs go before the free ones.
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged) { continue; }
+        if (ap.hand[i].m_name == "Aria of Flame" || ap.hand[i].m_name == "Fiery Justice")
+        { shed.push_back(i); }
+    }
+
+    // S5 -- the free payoffs, LEAST wanted first. USER keep priority (2026-08-07) is
+    // Skyshroud Cutter > Invigorate > Reverent Silence, so they are shed in reverse. Naming them
+    // matters: left unnamed they fell through to the generic highest-mana-value tier, which is the
+    // wrong yardstick for cards cast by having an opponent GAIN LIFE -- their printed cost is
+    // irrelevant and MV ordering pitched the biggest payoff (Cutter, 5 life -> 5 damage under the
+    // enabler) while keeping the smallest (Invigorate, 3). Reverent Silence ranks last because it
+    // destroys ALL enchantments including your own Tainted Remedy.
+    static const char* const kPayoffShedOrder[] = {
+        "Reverent Silence", "Invigorate", "Skyshroud Cutter" };
+    for (const char* name : kPayoffShedOrder)
+    {
+        for (int i = 0; i < n; ++i)
+        { if (!ap.hand[i].m_is_staged && ap.hand[i].m_name == name) { shed.push_back(i); } }
+    }
+
+    // Omitted (kept): the kept enabler/tutor and the needed mana.
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 // ---- TreasureHuntProvider ---------------------------------------------------
 
 bool TreasureHuntProvider::HasAnyDigSource (const GameState& s) const { return ::HasAnyDigSource(s); }
@@ -3085,6 +3237,251 @@ double AntiLifegainProvider::NcLandDropTempoBonus(const GameState& s, int contro
 }
 
 // ---- HinataProvider ---------------------------------------------------------
+
+// Cleanup discard: the AI-authored shed order (discard-analysis stage, 2026-08-07). The five
+// named cards are dead or near-dead against a passive goldfish opponent -- Memory Lapse / Remand
+// counter spells that are never cast, Distorting Wake / Icy Blast are X-tempo with nothing to
+// bounce or tap that matters -- so they shed before anything else; omission keeps the rest on
+// the shared MV ranking, where the required-piece scope protects the singleton Hinata (the
+// pre-rule base shed her into a loss holding four Reality Spasms, gi21). Searched trial tables:
+// 98.3% label-optimal vs base 95.7%; outcome d0 -0.0070 t=-2.99 with every worsened game
+// churn-classified at unbounded (gi472 is BETTER unbounded under the rule).
+std::vector<int> HinataProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    static const bool s_order = EnvOn("MTG_HINATA_DISCARD_ORDER", true);
+    if (!s_order) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    // USER-AUTHORED KEEP PRIORITY (2026-08-07), expressed as ranks: 1 = keep hardest, 13 =
+    // shed first. The shed list below is this list read backwards. Cantrips and Soulfire move
+    // between ranks with the board, which is why this is a rank assignment and not a static
+    // name order.
+    //
+    //    1 Hinata #1                    8  Soulfire Eruption #1 without Hinata
+    //    2 Reality Spasm #1             9  Magma Opus
+    //    3 Crackle with Power #1        10 extra mana / extra cantrips
+    //    4 Sol Ring (never shed)        11 extra Crackle
+    //    5 Reality Spasm #2 or Irencrag 12 anything else
+    //    6 mana up to 5 + colours       13 inert spells (always shed if available)
+    //    7 1-2 cantrips if pieces missing
+    //
+    // MANA-SCREWED override (USER 2026-08-07, from vs-searched residuals gi541/gi1848): when the
+    // mana requirement is NOT met we cannot cast Hinata, let alone Soulfire Eruption, so the fat
+    // spells stop being assets and the cheap digging does the work. Soulfire drops below the
+    // cantrips (but stays above Magma Opus, which the list already values less), and TWO cantrips
+    // are held instead of one, Ponder first. Consequence worth naming: holding the second cantrip
+    // is what lets Magma Opus reach the top of the shed list at all -- with only one held, the
+    // spare cantrip outranks it and Magma Opus is never shed (gi541).
+    // Ranks are spaced so a variant can slot between two of them without renumbering.
+    enum Keep {
+        kHinata1 = 10, kSpasm1 = 20, kCrackle1 = 30, kSolRing = 35, kSpasm2OrIrencrag = 40,
+        kManaNeeded = 50, kSoulfireWithHinata = 60, kCantripNeeded = 70,
+        kSoulfireNoHinata = 80, kSoulfireScrewed = 85, kMagmaOpus = 90,
+        kExtraManaOrCantrip = 100, kExtraCrackle = 110, kAnythingElse = 120, kInert = 130 };
+    static const char* const kInertNames[] = {
+        "Distorting Wake", "Icy Blast", "Memory Lapse", "Remand" };
+    auto is_cantrip = [](const std::string_view nm)
+    { return nm == "Expressive Iteration" || nm == "Ponder" || nm == "Preordain"; };
+    // Which cantrip earns a kept slot: Ponder first (USER), then Preordain, then the 2-mana
+    // Expressive Iteration -- the cheapest, deepest dig goes first when we are digging for land.
+    auto cantrip_pref = [](const std::string_view nm)
+    { return nm == "Ponder" ? 0 : (nm == "Preordain" ? 1 : 2); };
+
+    const Player& ap = s.players[s.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+
+    // ---- Mana census (USER: "up to 5 mana ... 2 blue, 1 red and 1 white at least, including
+    // what is on board"). EVERY producer counts -- land, dork, or rock -- by the TOTAL mana it
+    // provides (Sol Ring 2, bounce lands 2), colours per-pip (a wild source counts toward every
+    // colour; slightly optimistic, which is acceptable for a shed preference).
+    // `quality` (lower = keep sooner) breaks ties between sources the amount/colour census scores
+    // as equal but that are NOT interchangeable in play. Measured, not assumed: a naive
+    // "untapped first" tie-break tested WORSE (0 better / 2 worse over 12000 games) because
+    // enters_tapped=false is a bad proxy for usable-now -- it is also false for a summoning-sick
+    // 2-mana dork (gi1595) and for Reflecting Pool, which only makes what your OTHER lands make,
+    // i.e. no white off Island + Boilerworks (gi2869). The tiers below say what those games say.
+    // Tiers in shed-later-to-shed-sooner order. The CONDITIONAL lands rank below the dork: a filter
+    // land makes nothing by itself and a Reflecting Pool only makes what your OTHER lands make -- a
+    // spare copy next to one already on the battlefield adds no colour at all (gi2869) -- whereas
+    // the dork, once it resolves, taps for any colour.
+    enum SrcQuality { kSrcUntappedLand = 0, kSrcTappedLand = 1, kSrcDork = 2, kSrcConditional = 3 };
+    struct Contrib { int amt = 0, w = 0, r = 0, u = 0; int quality = kSrcDork; };
+    auto contrib_of = [](const CardDefinition* d) -> Contrib
+    {
+        Contrib c;
+        if (d == nullptr) { return c; }
+        const bool src = d->card.IsLand() || d->tmpl == CardTemplate::ManaDork
+                         || d->params.mana_rock;
+        if (!src) { return c; }
+        const auto& prod = d->params.produces;
+        if (prod.empty() && !d->card.IsLand()) { return c; }
+        c.amt = std::max(1, d->params.produces_amount);
+        c.quality = !d->card.IsLand()                              ? kSrcDork
+                  : (d->params.reflecting || d->params.is_filter)  ? kSrcConditional
+                  : d->params.enters_tapped                        ? kSrcTappedLand
+                                                                   : kSrcUntappedLand;
+        auto makes = [&](Color col)
+        { return prod.empty() || std::find(prod.begin(), prod.end(), col) != prod.end(); };
+        c.w = makes(Color::White) ? 1 : 0;
+        c.r = makes(Color::Red)   ? 1 : 0;
+        c.u = makes(Color::Blue)  ? 1 : 0;
+        return c;
+    };
+    int need_amt = 5, need_w = 1, need_r = 1, need_u = 2;    // deficits, decremented below
+    auto apply = [&](const Contrib& c)
+    {
+        need_amt -= c.amt;
+        need_w -= c.w; need_r -= c.r; need_u -= c.u;
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        apply(contrib_of(CardDatabase::Instance().LookupCached(p.card)));
+    }
+    const bool hinata_board = HinataInPlay(s);
+
+    // Hand census: which cards exist, and (greedily) which mana sources are the ones we need.
+    // mana_pick[i] is the 1-based order the greedy kept source i in; 0 = not needed.
+    std::vector<int> mana_pick(static_cast<std::size_t>(std::max(0, n)), 0);
+    std::vector<int> mana_idx;
+    int hinata_hand = 0, crackle_hand = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[i]);
+        if (d == nullptr) { continue; }
+        if (d->params.hinata_cost_reducer) { ++hinata_hand; }
+        if (ap.hand[i].m_name == "Crackle with Power") { ++crackle_hand; }
+        // Sol Ring is never shed (USER: "the card is amazing"), so its mana is guaranteed --
+        // charge it to the requirement up front and leave it out of the greedy.
+        if (ap.hand[i].m_name == "Sol Ring") { apply(contrib_of(d)); continue; }
+        if (contrib_of(d).amt > 0) { mana_idx.push_back(i); }
+    }
+    // Greedy: repeatedly keep the hand source that closes the most of the remaining deficit
+    // (colours weighted, so a needed colour beats raw quantity), until the requirement is met.
+    // Quantity and colour are what the requirement asks for, so source quality stays a pure
+    // TIE-BREAK: a worse-quality source that closes a colour the better one cannot still wins.
+    // The case that motivated it (regression d0 gi523): board Island + Izzet Boilerworks = 3 mana,
+    // no white; hand held Forbidden Orchard (untapped, any colour) and Mystic Monastery (tapped,
+    // U/R/W). The census scored them equal, hand order shed the ORCHARD, and turn 4 could not cast
+    // Hinata ({1}{U}{R}{W}) off a freshly-tapped Monastery -- keeping the Orchard wins on 5.
+    // MTG_HINATA_SRC_TIEBREAK=0 restores the pre-change pure hand order for an exact A/B.
+    // (Two other orderings were swept and lost: a naive "untapped first" -- which measured 0 better
+    // / 2 WORSE over 12000 games, because enters_tapped=false is a bad proxy for usable-now, being
+    // equally false for a summoning-sick dork and for Reflecting Pool -- and one ranking the
+    // conditional lands ABOVE the dork. See docs/design/per-deck-discard-analysis-phase.md.)
+    static const bool s_src_tiebreak = EnvOn("MTG_HINATA_SRC_TIEBREAK", true);
+    int picks = 0;
+    while (need_amt > 0 || need_w > 0 || need_r > 0 || need_u > 0)
+    {
+        int best = -1, best_gain = 0, best_amt = 0, best_key = kSrcConditional + 1;
+        for (int i : mana_idx)
+        {
+            if (mana_pick[static_cast<std::size_t>(i)]) { continue; }
+            const Contrib c = contrib_of(CardDatabase::Instance().LookupCached(ap.hand[i]));
+            const int gain = std::min(c.amt, std::max(0, need_amt))
+                           + 2 * (std::min(c.w, std::max(0, need_w))
+                                + std::min(c.r, std::max(0, need_r))
+                                + std::min(c.u, std::max(0, need_u)));
+            const bool better = gain > best_gain
+                || (gain == best_gain && gain > 0
+                    && (c.amt > best_amt
+                        || (c.amt == best_amt && s_src_tiebreak && c.quality < best_key)));
+            if (better)
+            { best = i; best_gain = gain; best_amt = c.amt; best_key = c.quality; }
+        }
+        if (best < 0) { break; }                       // nothing left that helps
+        mana_pick[static_cast<std::size_t>(best)] = ++picks;
+        apply(contrib_of(CardDatabase::Instance().LookupCached(ap.hand[best])));
+    }
+    const bool mana_ok = need_amt <= 0 && need_w <= 0 && need_r <= 0 && need_u <= 0;
+    // Cantrips are for FINDING what is missing: pieces or lands (USER). With Hinata, a Crackle
+    // and the mana already assembled, they dig for nothing and drop to the "extra" rank.
+    // How many to hold (USER): "1 cantrip if missing a combo piece and 2 if missing Hinata" --
+    // and 2 whenever the MANA is what is missing, since digging for land is the whole plan then.
+    const bool have_hinata = hinata_board || hinata_hand > 0;
+    const bool combo_ready = have_hinata && crackle_hand > 0 && mana_ok;
+    const int  cantrip_limit = combo_ready ? 0 : ((have_hinata && mana_ok) ? 1 : 2);
+    // Hand out the kept cantrip slots by preference (Ponder > Preordain > Expressive Iteration)
+    // rather than by hand order.
+    std::vector<char> cantrip_keep(static_cast<std::size_t>(std::max(0, n)), 0);
+    {
+        std::vector<int> cantrips;
+        for (int i = 0; i < n; ++i)
+        {
+            if (ap.hand[i].m_is_staged) { continue; }
+            if (is_cantrip(ap.hand[i].m_name.str())) { cantrips.push_back(i); }
+        }
+        std::stable_sort(cantrips.begin(), cantrips.end(), [&](int a, int b)
+        { return cantrip_pref(ap.hand[a].m_name.str()) < cantrip_pref(ap.hand[b].m_name.str()); });
+        const int keep = std::min<int>(cantrip_limit, static_cast<int>(cantrips.size()));
+        for (int k = 0; k < keep; ++k) { cantrip_keep[static_cast<std::size_t>(cantrips[k])] = 1; }
+    }
+
+    // ---- Rank every hand card. First-copy slots are consumed in hand order.
+    bool hinata1_taken = hinata_board;   // a Hinata already in play satisfies the #1 slot
+    bool spasm1_taken = false, spasm2_taken = false, crackle1_taken = false;
+    bool soulfire1_taken = false, irencrag_taken = false;
+    std::vector<std::pair<int, int>> ranked;   // (rank, hand index)
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged) { continue; }
+        const std::string_view nm = ap.hand[i].m_name.str();
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[i]);
+        int rank = kAnythingElse;
+        bool inert = false;
+        for (const char* in : kInertNames) { if (nm == in) { inert = true; break; } }
+        if (inert)                                        { rank = kInert; }
+        else if (d != nullptr && d->params.hinata_cost_reducer)
+        { rank = hinata1_taken ? kAnythingElse : kHinata1; hinata1_taken = true; }
+        else if (nm == "Reality Spasm")
+        {
+            if (!spasm1_taken)      { rank = kSpasm1;            spasm1_taken = true; }
+            else if (!spasm2_taken) { rank = kSpasm2OrIrencrag;  spasm2_taken = true; }
+            else                    { rank = kAnythingElse; }
+        }
+        else if (nm == "Crackle with Power")
+        { rank = crackle1_taken ? kExtraCrackle : kCrackle1; crackle1_taken = true; }
+        else if (nm == "Irencrag Feat")
+        {
+            // Shares the #4 slot with the second Spasm -- whichever the hand actually has.
+            if (!spasm2_taken && !irencrag_taken) { rank = kSpasm2OrIrencrag; irencrag_taken = true; }
+            else                                  { rank = kAnythingElse; }
+        }
+        else if (nm == "Sol Ring")                    { rank = kSolRing; }
+        else if (nm == "Soulfire Eruption")
+        {
+            if (soulfire1_taken) { rank = kAnythingElse; }
+            else { rank = !mana_ok       ? kSoulfireScrewed
+                        : have_hinata    ? kSoulfireWithHinata
+                                         : kSoulfireNoHinata;
+                   soulfire1_taken = true; }
+        }
+        else if (nm == "Magma Opus")                  { rank = kMagmaOpus; }
+        else if (is_cantrip(nm))
+        {
+            // Note the flood case (USER): mana BEYOND the 5+colours requirement is already
+            // kExtraManaOrCantrip, which sheds ahead of a needed cantrip -- so a flooding hand
+            // pitches the surplus land, not the cantrip.
+            rank = cantrip_keep[static_cast<std::size_t>(i)] ? kCantripNeeded
+                                                             : kExtraManaOrCantrip;
+        }
+        else if (contrib_of(d).amt > 0)
+        {
+            rank = mana_pick[static_cast<std::size_t>(i)] ? kManaNeeded : kExtraManaOrCantrip;
+        }
+        ranked.emplace_back(rank, i);
+    }
+    // Shed order = keep order reversed: highest rank first, mana value descending within a rank.
+    std::stable_sort(ranked.begin(), ranked.end(), [&](const auto& a, const auto& b)
+    {
+        if (a.first != b.first) { return a.first > b.first; }
+        return CleanupDiscardManaValue(ap.hand[a.second]) > CleanupDiscardManaValue(ap.hand[b.second]);
+    });
+    std::vector<int> pref;
+    pref.reserve(ranked.size());
+    for (const auto& r : ranked) { pref.push_back(r.second); }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, pref);
+}
 
 std::vector<std::string>
 HinataProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const

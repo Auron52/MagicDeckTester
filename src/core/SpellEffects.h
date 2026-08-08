@@ -193,10 +193,25 @@ inline bool CleanupDiscardProtected(const GameState& state, const Card& c,
     const Player& ap = state.players[state.active_player_index];
     const DiscardProtectScope scope = EffectiveDiscardProtectScope(state);
     if (scope == DiscardProtectScope::All) { return true; }
+    // Redundancy is counted over the piece's INTERCHANGEABLE GROUP, not just its own name. Some
+    // required pieces are different cards filling ONE role -- Anti-Lifegain's Tainted Remedy and
+    // Plague Drone are both "opponent lifegain becomes loss", and you only need one at a time
+    // (USER 2026-08-07). Counting by name alone protected BOTH as "last copy", which vetoed the
+    // provider's own bucket decision to shed the redundant enabler and made it pitch a payoff
+    // instead (antilife s3003 gi226: shed Skyshroud Cutter = 5, shedding the spare enabler or a
+    // lesser payoff = 4). Groups are deck knowledge, so the archetype provider supplies them;
+    // the default is empty, i.e. name-only counting exactly as before.
+    const std::vector<std::string>* group = ResolveProvider(state).InterchangeableRequiredGroup(c.m_name);
+    auto same_role = [&](const std::string& other)
+    {
+        if (other == c.m_name) { return true; }
+        if (group == nullptr)  { return false; }
+        return std::find(group->begin(), group->end(), other) != group->end();
+    };
     int copies = 0;
-    for (const Card& h : ap.hand) { if (h.m_name == c.m_name) { ++copies; } }
+    for (const Card& h : ap.hand) { if (same_role(h.m_name.str())) { ++copies; } }
     if (scope == DiscardProtectScope::LastInDeck)
-    { for (const Card& l : ap.library) { if (l.m_name == c.m_name) { ++copies; } } }
+    { for (const Card& l : ap.library) { if (same_role(l.m_name.str())) { ++copies; } } }
     return copies <= 1;
 }
 
@@ -210,6 +225,31 @@ inline bool CleanupDiscardIsLand(const Card& c)
 {
     const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
     return def != nullptr ? def->card.IsLand() : c.IsLand();
+}
+
+// MTG_DISCARD_ORDER (value-carrying, parsed once): the discard-analysis stage's TESTING-ONLY
+// shed-order lever -- "Name;Name;..." trialled as a tier-A order per A/B arm without code.
+// nullptr when unset/empty (the shipped path). Shipped orders are provider overrides.
+inline const std::vector<std::string>* DiscardOrderTestLever()
+{
+    static const std::vector<std::string> s_order = []
+    {
+        std::vector<std::string> out;
+        const char* e = std::getenv("MTG_DISCARD_ORDER");
+        if (e == nullptr || *e == '\0') { return out; }
+        std::string cur;
+        for (const char* p = e;; ++p)
+        {
+            if (*p == ';' || *p == '\0')
+            {
+                if (!cur.empty()) { out.push_back(cur); cur.clear(); }
+                if (*p == '\0') { break; }
+            }
+            else { cur += *p; }
+        }
+        return out;
+    }();
+    return s_order.empty() ? nullptr : &s_order;
 }
 
 // The base ranking. `preferred`, when non-empty, is the provider's OWN order for the cards it has an
@@ -244,53 +284,38 @@ inline std::vector<int> CleanupDiscardRankingWithOrder(
             push(i);
         }
     }
+    else if (const std::vector<std::string>* test_order = DiscardOrderTestLever())
+    {
+        // MTG_DISCARD_ORDER="Name;Name;..." -- TESTING-ONLY lever for the analyzer's
+        // discard-analysis stage to trial a candidate shed order WITHOUT code (per-arm env in
+        // its outcome A/B). Shipped rules are always PROVIDER-owned (user ruling 2026-08-07):
+        // an adopted order becomes a provider CleanupDiscardCandidates override deferring to
+        // this ranking via `preferred` (see HinataProvider). Never set outside the stage.
+        // Semantics match a provider order: named cards shed first, in order (all hand copies,
+        // hand order); omission = keep; staged and protected entries dropped.
+        for (const std::string& name : *test_order)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                if (ap.hand[i].m_name != name || ap.hand[i].m_is_staged) { continue; }
+                if (CleanupDiscardProtected(state, ap.hand[i], required_pieces)) { continue; }
+                push(i);
+            }
+        }
+    }
     else if (ResolveProvider(state).DiscardLandsFirst(state))
     {
         for (int i = 0; i < n; ++i)
         { if (!ap.hand[i].m_is_staged && CleanupDiscardIsLand(ap.hand[i])) { push(i); } }
     }
 
-    // Tier A2 -- SPARE COPIES first (MTG_SPARE_COPY_BAND=0 restores the pre-band ranking).
-    // A name with two-plus non-staged copies in hand sheds a copy before any unique card:
-    // across the probe-retirement classification (2026-08-06, 16 surviving games,
-    // docs/design/searched-discard-as-search-node.md) the clairvoyant probe's win-optimal shed
-    // was a duplicate in game after game (Reality Spasm x4, Crackle x3, Plague Drone x3,
-    // Preordain/Wake/Invigorate/Idyllic x2) while the MV rule pitched a unique engine card --
-    // hinata gi21 shed its SINGLETON Hinata into a loss holding four Spasms. Visible
-    // information only: hand copy counts, no library order. Exclusions, each load-bearing:
-    //   * lands -- shedding mana measured catastrophic on the mana-hungry decks (antilife
-    //     fetch sheds rolled out 9 = unwon);
-    //   * required pieces -- their redundant-copy semantics are DiscardProtectScope's,
-    //     measured per-deck (protecting every Dragonstorm copy once turned three wins unwon;
-    //     see the scope comment above). A required-name dup stays a tier-B decision.
-    // MV descending within the band (a dup'd dork ranks behind a dup'd spell -- antilife gi188:
-    // the Ignoble Hierarch pair rolled out 9, the Skyshroud Cutter pair 8).
-    // Provider opt-out (SpareCopyDiscardBand): the premise fails deck-wide where duplicates are
-    // cumulative fuel -- the adoption gate measured dragonstorm worse in 11/12 overnight cells
-    // (+0.063 net, 0 better) with the band on, byte-identical to pre-band with it off.
-    static const bool s_spare_copy_band = EnvOn("MTG_SPARE_COPY_BAND", true);
-    if (s_spare_copy_band && ResolveProvider(state).SpareCopyDiscardBand(state))
-    {
-        std::vector<int> dup_band;
-        for (int i = 0; i < n; ++i)
-        {
-            const Card& c = ap.hand[i];
-            if (c.m_is_staged || CleanupDiscardIsLand(c)) { continue; }
-            // Protection is the ONLY required-piece filter: under the deck's DiscardProtectScope a
-            // redundant required copy is discardable (antilife sheds its spare Tainted Remedy /
-            // Plague Drone / Idyllic Tutor -- measured optimal in 3 of its 6 classified games),
-            // and the scope re-engages at the last copy. Dragonstorm's history (protect-every-copy
-            // regressed) is a SCOPE lesson, already honored here by deferring to it.
-            if (CleanupDiscardProtected(state, c, required_pieces)) { continue; }
-            int copies = 0;
-            for (int j = 0; j < n; ++j)
-            { if (!ap.hand[j].m_is_staged && ap.hand[j].m_name == c.m_name) { ++copies; } }
-            if (copies >= 2) { dup_band.push_back(i); }
-        }
-        std::stable_sort(dup_band.begin(), dup_band.end(), [&](int a, int b)
-        { return CleanupDiscardManaValue(ap.hand[a]) > CleanupDiscardManaValue(ap.hand[b]); });
-        for (int i : dup_band) { push(i); }
-    }
+    // (A "spare-copy band" tier lived here 2026-08-06/07 -- shed any name with 2+ hand copies
+    // before unique cards. REMOVED as an engine rule: the discard-analysis stage scores it as a
+    // label-only hypothesis, and it lost to authored per-deck rules on every deck where dups
+    // mattered (hinata/antilife orders beat it head-to-head; dragonstorm it actively hurt,
+    // +0.063 overnight -- ritual copies are cumulative fuel). If a future deck's labels ever
+    // demand it, implement it in THAT deck's provider. See
+    // docs/design/per-deck-discard-analysis-phase.md.)
 
     // Tier B -- eligible cards, descending mana value, ties keeping the earlier card.
     std::vector<int> tier_b;
