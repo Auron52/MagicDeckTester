@@ -161,6 +161,9 @@ def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_dept
 # mtg process that loads the deck's keep model; antilife is ~1GB/process (post the share+stream-parse memory
 # fix, 82859f7), so --workers 24 ~ 24GB -- was ~6GB/proc before the fix (would OOM). Tune --workers to RAM.
 
+_slow_lock = threading.Lock()   # run_batch is called from a thread pool
+
+
 def run_batch(deck_file, mt, depth, seed, offset, batch, value_on, value_min_depth, prof,
               deck_profile=None):
     """Run global games [offset, offset+batch) for this cell's base `seed`. Returns (lp, wall_s, games)."""
@@ -188,7 +191,19 @@ def run_batch(deck_file, mt, depth, seed, offset, batch, value_on, value_min_dep
     cmd=[MTG, deck_file, "--seed", str(seed+offset), "--game-index", str(offset), "--games", str(batch),
          "--max-turns", str(mt), "--threads", "1", "--ignore-play-profile", "--depth", str(depth)]
     if deck_profile: cmd += ["--profile", deck_profile]
-    t0=time.time(); out=subprocess.run(cmd,capture_output=True,text=True,env=env).stdout; wall=time.time()-t0
+    t0=time.time(); _cp=subprocess.run(cmd,capture_output=True,text=True,env=env); out=_cp.stdout; wall=time.time()-t0
+    # SLOW-GAME capture. The engine reports any game over MTG_SLOW_GAME_MS on STDERR, which this
+    # function used to discard -- so a matrix run knew a CELL was slow but never which GAME. Each
+    # line already carries a self-contained repro; tag it with the cell so a pathological game can be
+    # attributed to an arm/depth/seed and replayed directly. Append-only, so a resumed run accumulates.
+    if os.environ.get("MTG_SLOW_GAME_MS") and _cp.stderr:
+        arm = "V" if value_on else "H"
+        rows = [l for l in _cp.stderr.splitlines() if "SLOW-GAME" in l]
+        if rows:
+            with _slow_lock:
+                with open(os.environ.get("MTG_SLOW_GAME_LOG", "logs/eval/slow_games.log"), "a") as fh:
+                    for l in rows:
+                        fh.write("%s%d seed=%d  %s\n" % (arm, depth, seed, l.strip()))
     pm=re.search(r"Games played\s*:\s*(\d+)",out); p=int(pm.group(1)) if pm else 0
     m=re.search(r"avg \(turns\)\s*:\s*([\d.]+)",out); lp=float(m.group(1)) if m else float("nan")
     return lp, wall, p

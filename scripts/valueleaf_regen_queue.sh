@@ -63,6 +63,11 @@ MATRIX_REF=${MATRIX_REF:-50}      # games cap for cells ruled intractable
 # 400. That makes crossover entries for c=4..8 unfounded for a deck that ships at d5. The guard is
 # also wall-clock based, so it can fire purely because the box was busy.
 NEVER_CONDEMN=${NEVER_CONDEMN:-5}
+# Report any game slower than this (ms) with a self-contained repro, tagged by cell. Off-by-default
+# in the engine; here it is ON, because an expensive deck's cost is concentrated in a few
+# pathological games and knowing WHICH ones is the whole input to an optimization pass. 0 disables.
+SLOW_GAME_MS=${SLOW_GAME_MS:-30000}
+SLOW_GAME_LOG=${SLOW_GAME_LOG:-$VLQ/slow_games.log}
 VDEPTHS=${VDEPTHS:-"1 2 3 4 5 6 7 8"}
 # Tractability guard, seconds/game. This is a SAFETY VALVE against a genuinely exploding cell, not a
 # budget: at 3.0 it condemned cells running at 4.33 s/game whose full fill cost 4 CORE-HOURS in total
@@ -260,6 +265,7 @@ phase_matrix() {
     local keys; keys=$(staged_keys)
     [ -n "$keys" ] || { log "PHASE C ABORT: no staged models"; return 1; }
     log "PHASE C: matrix over$keys -- ONE pool, $WORKERS workers, target $MATRIX_TARGET/cell, V=[$VDEPTHS], cutoff ${INTRACTABLE_SPG}s/game"
+    MTG_SLOW_GAME_MS="$SLOW_GAME_MS" MTG_SLOW_GAME_LOG="$SLOW_GAME_LOG" \
     python3 scripts/attic/valueleaf_depth_matrix.py --incremental --decks $keys \
         --hdepths 1 2 3 4 5 --vdepths $VDEPTHS --seeds 8008 9009 10010 11011 \
         --target "$MATRIX_TARGET" --reference-target "$MATRIX_REF" --batch 25 --workers "$WORKERS" \
