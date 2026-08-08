@@ -350,7 +350,8 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                 // Diagnostic (MTG_DUMP_WINS, inert by default): per-game win turn, for
                 // per-game A/B diffs between builds (e.g. `join` two runs to find the
                 // games a change moved). Single-thread for ordered output.
-                if (std::getenv("MTG_DUMP_WINS"))
+                static const bool s_dump_wins = EnvOn("MTG_DUMP_WINS");
+                if (s_dump_wins)
                 { std::fprintf(stderr, "[win] gi=%d wt=%d\n", gi, win_turn); }
 
                 if (logging)

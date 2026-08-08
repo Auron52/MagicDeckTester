@@ -3177,8 +3177,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-            if (p.entered_this_turn && !p.card.HasKeyword(Keyword::Haste)
-                && !HasHasteFromLords(p.card, state.battlefield, state.active_player_index)) { continue; }
+            if (!CanTapNow(p, state.battlefield)) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (!pd || pd->params.tap_creates_tokens_per_controlled_subtype.empty()) { continue; }
             const int x = CountControlledSubtype(state, state.active_player_index,
@@ -3214,7 +3213,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // Elder (a domain-sized body AND domain-sized mana) over a 5/5 beater over Birds of
             // Paradise, which is the intended order for this deck. A pure judgment call with no
             // correct answer -> a heuristic, A/B-able via MTG_EQUIP_ALL_HOSTS=1 (emit every host).
-            struct Host { int id; bool fresh; bool haste; int score; };
+            struct Host { int id; bool fresh; bool haste; int score; bool in_hand; };
+            // Castability gate for HAND hosts (see the push_back below). Default ON; =0 restores
+            // the printed-power-only ranking for A/B.
+            static const bool s_afford_gate = EnvOn("MTG_EQUIP_HOST_AFFORD", true);
+            const int spare_mana = s_afford_gate
+                                 ? SpareUntappedMana(state, state.active_player_index) : 0;
+            // The "and/or EFFECT creature" half of the ranking rule (user-directed 2026-08-08).
+            // Haste's value is not just the body swinging -- on a creature whose payoff triggers
+            // on ATTACKING it also pulls that payoff a full turn forward, which is why Maelstrom
+            // Archangel (free-cast on combat damage) is a better Greaves host than an equal-sized
+            // vanilla body. Scale is "power points": a free spell in this deck is a ~5-drop, so a
+            // free cast ~= one extra body (+5), and a drawn card ~= +1.
+            static const bool s_effect_bonus = EnvOn("MTG_EQUIP_HOST_EFFECT", true);
+            auto attack_payoff = [](const CardDefinition& d) {
+                if (!s_effect_bonus) { return 0; }
+                return (d.params.combat_damage_free_cast ? 5 : 0) + d.params.attack_draw_cards;
+            };
             std::vector<Host> hosts;
             std::vector<int>  attached_to;   // parallel to equips: current host id (battlefield only)
             for (const Permanent& p : state.battlefield)
@@ -3226,9 +3241,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (p.card.IsCreature() || p.is_animated)
                 {
                     const bool src = (d->tmpl == CardTemplate::ManaDork) || d->params.mana_rock;
-                    const int  sc  = p.EffectivePower() + (src ? PermanentManaYield(p, *d) : 0);
+                    const int  sc  = p.EffectivePower() + (src ? PermanentManaYield(p, *d) : 0)
+                                   + attack_payoff(*d);
                     hosts.push_back({ p.card.m_number, p.entered_this_turn,
-                                      p.card.HasKeyword(Keyword::Haste), sc });
+                                      p.card.HasKeyword(Keyword::Haste), sc, /*in_hand=*/false });
                 }
             }
             for (const Card& c : ap.hand)
@@ -3238,13 +3254,22 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (d->params.is_equipment) { equips.push_back({ d, &c }); attached_to.push_back(0); }
                 if (d->card.IsCreature())
                 {
+                    // A hand host only becomes a real host if the plan also CASTS it this turn, so
+                    // ranking it on printed power alone lets an unaffordable fatty win the single
+                    // Equip slot and strand it. FiveColour seed 4200000 gi119: Progenitus
+                    // ({W}{W}{U}{U}{B}{B}{R}{R}{G}{G}, score 10) beat Maelstrom Archangel (score 5)
+                    // in nearly every state, so the Archangel free-cast line was never offered and
+                    // the game took a turn longer. Gate on the turn's whole untapped pool -- an
+                    // upper bound on what we could cast, so it never excludes a reachable host.
+                    if (s_afford_gate && d->card.m_mana_cost.ManaValue() > spare_mana) { continue; }
                     // In hand there is no Permanent yet, so the body is the printed power (a
                     // domain_self_pump card reads 0 here and is ranked on its mana instead).
                     const bool src = (d->tmpl == CardTemplate::ManaDork) || d->params.mana_rock;
                     const int  sc  = d->card.m_power.value_or(0)
-                                   + (src ? std::max(1, d->params.produces_amount) : 0);
+                                   + (src ? std::max(1, d->params.produces_amount) : 0)
+                                   + attack_payoff(*d);
                     hosts.push_back({ c.m_number, /*fresh=*/true,
-                                      d->card.HasKeyword(Keyword::Haste), sc });
+                                      d->card.HasKeyword(Keyword::Haste), sc, /*in_hand=*/true });
                 }
             }
             for (std::size_t e = 0; e < equips.size(); ++e)
@@ -3254,14 +3279,42 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // equip would actually benefit, ties broken by lowest card number for determinism.
                 // Computed per equipment because the already-attached / never-self exclusions below
                 // differ per equipment. -1 when nothing qualifies -> no Equip variant at all.
-                int best_host = -1, best_score = -1;
+                // MTG_EQUIP_HOST_WIDTH: how many of the top-scored benefiting hosts to offer.
+                // 1 (default) = the single heuristic pick; <=0 = every benefiting host. Sweeping
+                // it is how the play/cost trade below was measured -- width 1 reproduces the
+                // single-pick behaviour exactly, since `ranked` then holds only the best host.
+                static const int s_host_width = []{
+                    const char* s = std::getenv("MTG_EQUIP_HOST_WIDTH");
+                    return (s && *s) ? std::atoi(s) : 1; }();
+                std::vector<std::pair<int, int>> ranked;   // (score, id) of benefiting hosts
                 for (const Host& h : hosts)
                 {
                     if (attached_to[e] == h.id && h.id != 0) { continue; }
                     if (equips[e].second->m_number == h.id)  { continue; }
                     if (!(ed->params.equip_grants_haste && h.fresh && !h.haste)) { continue; }
-                    if (h.score > best_score || (h.score == best_score && h.id < best_host))
-                    { best_score = h.score; best_host = h.id; }
+                    ranked.push_back({ h.score, h.id });
+                }
+                std::sort(ranked.begin(), ranked.end(),
+                          [](const std::pair<int, int>& a, const std::pair<int, int>& b)
+                          { return a.first != b.first ? a.first > b.first : a.second < b.second; });
+                if (s_host_width > 0 && ranked.size() > static_cast<std::size_t>(s_host_width))
+                { ranked.resize(static_cast<std::size_t>(s_host_width)); }
+                // Diagnostic (MTG_EQUIP_PICK_STATS): which host the ranking chose, and from what
+                // pool. Used to show that a hand fatty the plan cannot cast outranks the dork
+                // actually on the battlefield -- see docs/design/fivecolour-search-cost.md.
+                static const bool s_pick_stats = EnvOn("MTG_EQUIP_PICK_STATS");
+                if (s_pick_stats && !ranked.empty())
+                {
+                    std::string pool;
+                    for (const Host& h : hosts)
+                    {
+                        if (!(ed->params.equip_grants_haste && h.fresh && !h.haste)) { continue; }
+                        pool += " " + std::to_string(h.id) + "(" + (h.in_hand ? "hand" : "bf")
+                              + ",s=" + std::to_string(h.score) + ")";
+                    }
+                    std::fprintf(stderr, "[equip-pick] %s -> host %d (score %d) | pool:%s\n",
+                                 equips[e].second->m_name.str().c_str(),
+                                 ranked[0].second, ranked[0].first, pool.c_str());
                 }
                 for (const Host& h : hosts)
                 {
@@ -3287,7 +3340,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     static const bool s_all_hosts = EnvOn("MTG_EQUIP_ALL_HOSTS");
                     const bool grants_something = ed->params.equip_grants_haste && h.fresh && !h.haste;
                     if (!grants_something && !s_all_hosts) { continue; }
-                    if (!s_all_hosts && h.id != best_host) { continue; }   // the single heuristic pick
+                    if (!s_all_hosts)
+                    {
+                        bool kept = false;
+                        for (const std::pair<int, int>& r : ranked)
+                        { if (r.second == h.id) { kept = true; break; } }
+                        if (!kept) { continue; }   // outside the top-width heuristic pick
+                    }
                     Action a;
                     a.kind           = Action::Kind::Equip;
                     a.card_name      = equips[e].second->m_name;
@@ -3445,8 +3504,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-            if (p.entered_this_turn && !p.card.HasKeyword(Keyword::Haste)
-                && !HasHasteFromLords(p.card, state.battlefield, state.active_player_index)) { continue; }
+            if (!CanTapNow(p, state.battlefield)) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (!pd) { continue; }
             const std::vector<Card>& gy = state.players[state.active_player_index].graveyard;

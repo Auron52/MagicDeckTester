@@ -318,39 +318,106 @@ two), but a smoke-sized d3 case is now roughly 2-4 min single-thread rather than
 is worth re-sizing next.
 
 
-## NEXT UP (user-directed, 2026-08-08)
+## RESOLVED (2026-08-08) — the +0.012 was a ranking bug, not a width trade
 
-### A. Decompose the +0.004 quality loss
+The Greaves commit (aff6768) bundled three changes and reported their NET as "+0.004". Both the
+sign and the size were re-measured here, and the attribution turned out to be the opposite of the
+assumption in the old NEXT UP section: the loss is real, it is bigger than the net, and it is
+**fixable without giving back any of the cost win**.
 
-The Greaves commit (aff6768) bundled THREE changes, and the reported +0.004 avg is their NET. It
-has not been attributed, so "the heuristic pick costs us play" is an assumption, not a measurement:
+### Method
 
-1. the `grants_something` filter (drop equips that confer nothing) — should be exactly play-neutral,
-   since those variants are literal no-ops the rollout scored as a pass;
-2. `CanTapNow` (equip haste unlocks {T}) — should be a play GAIN (more mana available);
-3. the single heuristic host pick — the only one that can LOSE play, by collapsing a set the search
-   used to choose from.
+All arms ran on ONE binary behind temporary levers, so no A/B ever straddled a `build.sh` (the
+trap that invalidated the earlier cost-reframe runs). Metric is the sum of avg-win-turn over three
+500-game seed sets (4200000 / 90001 / 555000-held-out), 1500 games per arm; lower is better.
+`max_turns` is 8 here, so an unwon game scores 9 — confirmed by rebuilding each arm's reported
+average from its own per-game `MTG_DUMP_WINS` stream.
 
-Decompose with three arms over the same 3x500-game seed sets (4200000 / 90001 / 555000), baseline
-5.1280 / 5.0900 / 5.1000:
-  * arm 1: `MTG_EQUIP_ALL_HOSTS=1` on HEAD  -> isolates (3) alone, since ALL_HOSTS restores every
-    host while leaving CanTapNow live.
-  * arm 2: HEAD with CanTapNow reverted     -> isolates (2).
-  * arm 3: HEAD                             -> the shipped combination.
-If (3) is the cost, the lever is the RANKING (power + mana-if-tapped, ties by card number), not the
-collapse — try width 2 before widening further, and check whether the losing games are ones where a
-LOWER-scored host was correct (e.g. equipping the attacker when the dork's mana was not needed).
+The **control arm** (`MTG_EQUIP_ALL_HOSTS=1` + equip-tap disabled) reproduced the pre-commit
+baseline exactly — 5.1280 / 5.0900 / 5.1000 — which is what licenses reading the other arms.
 
-### B. Fix lord-granted haste (the same gap CanTapNow closed for equipment)
+### Attribution of aff6768
 
-`CanTapNow` covers equipment only. `HasHasteFromLords` has the identical latent gap: a Sliver mana
-dork hasted by Cloudshredder Sliver still cannot tap the turn it lands, because
-`Permanent::CanTap()` sees only the card's own Haste keyword. CR 302.6 says haste removes the {T}
-restriction regardless of source, so this is a rules under-credit, not a heuristic.
+| arm | 4200000 | 90001 | 555000 | sum | vs pre |
+|---|---|---|---|---|---|
+| pre (control, reconstructed) | 5.1280 | 5.0900 | 5.1000 | 15.3180 | — |
+| no-op filter + equip-tap, all hosts | 5.1240 | 5.0860 | 5.0980 | 15.3080 | −0.0100 |
+| shipped (adds the single host pick) | 5.1320 | 5.0920 | 5.1060 | 15.3300 | +0.0120 |
+| single pick, equip-tap reverted | 5.1320 | 5.0940 | 5.1080 | 15.3340 | +0.0160 |
 
-Deliberately NOT bundled into aff6768 because it moves EXISTING decks' ground truth (slivers and
-goblins both run haste lords), which needs its own inspect-and-accept cycle rather than riding along
-with a FiveColour perf change. Steps: extend `CanTapNow` with
-`HasHasteFromLords(p.card, battlefield, p.controller_index, p.is_animated)`, run the suites, read
-the per-game audit for every searched-depth SLOWER game, and rebaseline only on a reviewed NET
-delta (see regression-testing.md — never `--accept` on an aggregate fingerprint alone).
+So, isolated: the **no-op filter gained** ~0.006, **equip-tap gained** 0.004 (as predicted — more
+mana available), and the **single host pick lost 0.022**. The pick alone is the whole regression.
+
+### Root cause — an unaffordable host wins the slot
+
+Only 7 games in 1000 differ between width 1 and all-hosts, every one by exactly one turn, so the
+mechanism had to be found by inspection rather than aggregates. `MTG_EQUIP_PICK_STATS` dumps the
+chosen host and the pool it was chosen from. On seed 4200000 gi119 (width 1 wins T6, all-hosts T5)
+it shows the same pick in nearly every state:
+
+```
+[equip-pick] Lightning Greaves -> host 41 (score 10) | pool: 27(hand,s=5) 28(hand,s=5) 41(hand,s=10)
+```
+
+Host 41 is **Progenitus** — `{W}{W}{U}{U}{B}{B}{R}{R}{G}{G}`, uncastable on turn 3 — and it beat
+host 27, **Maelstrom Archangel**, on printed power. The single Equip slot went to a host the plan
+could never produce, so the Archangel line (attack with haste → `combat_damage_free_cast` → free
+Two-Headed Hellkite) was never even offered. Two distinct defects in one ranking:
+
+1. a HAND host was ranked on printed power with no regard for whether it can be cast this turn;
+2. the score was power + mana only — the "**and/or effect creature**" half of the rule was never
+   encoded, so an attack-triggered payoff counted for nothing.
+
+### Fix — both halves of the ranking, cost-neutral
+
+* `MTG_EQUIP_HOST_AFFORD` (default on): a hand host must satisfy `ManaValue <=
+  SpareUntappedMana(...)`. The bound is the turn's whole untapped pool, i.e. an over-estimate, so
+  it can never exclude a host the plan could actually reach.
+* `MTG_EQUIP_HOST_EFFECT` (default on): add the payoff haste pulls a turn forward —
+  `combat_damage_free_cast` +5 (a free spell in this deck is a ~5-drop, so ≈ one extra body),
+  `attack_draw_cards` +1/card. Scale is "power points", matching the existing power + mana term.
+
+| arm (width 1 unless noted) | 4200000 | 90001 | 555000 | sum | backtracker entries |
+|---|---|---|---|---|---|
+| shipped | 5.1320 | 5.0920 | 5.1060 | 15.3300 | 1,027,057 |
+| + afford gate | 5.1300 | 5.0860 | 5.1040 | 15.3200 | — |
+| **+ afford + effect (ADOPTED)** | 5.1260 | 5.0860 | 5.1020 | **15.3140** | 1,042,497 |
+| all hosts (play ceiling) | 5.1240 | 5.0860 | 5.0980 | 15.3080 | 1,246,708 |
+
+The adopted ranking recovers **73% of the width-0 play at +1.5% backtracker work**, improves all
+three seed sets including the held-out one, and lands *below the original pre-aff6768 play*
+(15.3140 vs 15.3180) while keeping the commit's ~31% cost win. Widening instead would cost +21%
+backtracker and +17–19% wall on the deck whose cost is the very thing blocking registration.
+
+Note `MTG_EQUIP_HOST_WIDTH=0` measures the same 15.3080 with or without the ranking fix — once
+every host is offered the search does the choosing, which is exactly why the ranking only matters
+at width 1.
+
+**Honest limit on the constants:** +5 / +1 were read off gi119, a single game. They are validated
+only by the held-out seed set moving the right way (5.1060 → 5.1020). If a future deck leans on
+equipment, re-sweep them rather than trusting these values.
+
+### Also fixed — the {T}-ability haste gap was SYMMETRIC (and is latent)
+
+`CanTapNow` is now the single predicate for "may this permanent use a {T} ability now", covering
+own-keyword / lord / equipment haste, and the three inline gates (Krenko's token tap, Deathrite's
+two graveyard-exile modes) now call it instead of re-deriving the condition. The engine previously
+had the gap in *both* directions — mana-source sites saw equipment but not lords, the {T}-value
+sites saw lords but not equipment — which nothing distinguishes at the rules level (CR 302.6 is one
+restriction lifted by haste from any source).
+
+**It is currently latent, and that was verified rather than assumed.** No deck in `decks/` pairs a
+haste lord with a mana creature of the granted subtype, so that half is unreachable; and only
+FiveColour has both an equipment and a qualifying {T}-value card (Greaves + Deathrite Shaman),
+where 1500 games and the counter run came back byte-identical. The prior note claiming this "moves
+slivers/goblins ground truth and needs its own accept cycle" was wrong on both counts.
+
+Smoke 30/30 and regression 50/50 byte-identical, 0 play-changed — no registered deck runs an
+equipment, so none of this reaches them.
+
+### Still open
+
+The tail is untouched and is now the dominant cost: at width 1 the worst single game in a 500-game
+seed-4200000 run is **235 s** (gi=61), and 60-game probes at seeds 2002/2044 show worst games of
+115 s / 62 s. That is the mana backtracker (§3), not Greaves — the Greaves atom is closed. Sizing
+for regression registration (§5) still depends on that tail, so registration stays deferred.

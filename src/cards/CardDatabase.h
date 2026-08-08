@@ -545,11 +545,12 @@ struct CardParams
     // Equipment (Lightning Greaves). is_equipment marks an attach-to-creature artifact; the attach
     // state is Permanent::equipped_to and re-equipping is Action::Kind::Equip (sorcery-speed, cost
     // equip_cost_generic -- {0} for Greaves; promote to a full ManaCost if a costed Equipment ever
-    // arrives). equip_grants_haste is read by CanAttackFull (HasHasteFromEquip). LIMITATION
-    // (disclosed 6a): equip-granted haste enables ATTACKS only, not same-turn TAP abilities
-    // (Permanent::CanTap has no battlefield context) -- a Greaves'd fresh mana dork still can't tap
-    // this turn; conservative under-credit. equip_grants_shroud is documented-inert (the passive
-    // opponent never targets us).
+    // arrives). equip_grants_haste is read by CanAttackFull (attacking) and CanTapNow ({T}
+    // abilities) -- CR 302.6 lifts one restriction covering both, so both consult the same three
+    // haste sources (own keyword / lord / equipment). The former attack-only LIMITATION is FIXED;
+    // a Greaves'd fresh mana dork taps this turn, and a Greaves'd fresh Deathrite may use its
+    // graveyard-exile modes. equip_grants_shroud is documented-inert (the passive opponent never
+    // targets us).
     bool is_equipment       = false;
     int  equip_cost_generic = 0;
     bool equip_grants_haste = false;

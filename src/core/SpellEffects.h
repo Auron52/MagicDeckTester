@@ -1660,14 +1660,20 @@ inline bool HasHasteFromEquip(const Permanent& creature,
 // 2026-08-08: "for mana dorks and creatures with activated abilities it also means they can be
 // activated").
 //
-// SCOPE: equipment haste only. Lord-granted haste (HasHasteFromLords) has the SAME latent gap --
-// a hasted Sliver mana dork cannot tap today either -- but wiring it in here would move existing
-// decks' ground truth, so it is deliberately left alone and recorded as a separate finding. Only
-// a deck with an is_equipment card can observe any difference here -> every other deck stays
-// byte-identical.
+// This is the ONE predicate for "may this permanent use a {T} ability now", covering all three
+// haste sources (own keyword, lord, equipment). It exists because the engine previously had the
+// gap in BOTH directions: the mana-source sites consulted equipment but not lords, while the
+// {T}-value sites (Krenko's token tap, Deathrite's graveyard-exile modes) consulted lords but not
+// equipment. Nothing distinguishes those two families at the rules level -- CR 302.6 is a single
+// restriction lifted by haste from ANY source -- so they now share this predicate. Use it at every
+// {T}-ability gate; do NOT re-derive the condition inline.
+//
+// Note p.CanTap() returns true for a non-creature permanent, which is correct: summoning sickness
+// applies only to creatures, so a freshly-played artifact/land may tap immediately.
 inline bool CanTapNow(const Permanent& p, const std::vector<Permanent>& battlefield)
 {
     if (p.CanTap()) { return true; }
+    if (HasHasteFromLords(p.card, battlefield, p.controller_index, p.is_animated)) { return true; }
     return HasHasteFromEquip(p, battlefield, p.controller_index);
 }
 
@@ -2502,8 +2508,7 @@ inline void ApplyGraveyardExileAbility(GameState& state, int controller, int sou
         if (!pd) { continue; }
         if (mode == 1 && pd->params.gy_exile_instant_sorcery_drain <= 0) { continue; }
         if (mode == 2 && pd->params.gy_exile_creature_lifegain <= 0) { continue; }
-        if (p.entered_this_turn && !p.card.HasKeyword(Keyword::Haste)
-            && !HasHasteFromLords(p.card, state.battlefield, controller)) { continue; }
+        if (!CanTapNow(p, state.battlefield)) { continue; }
         src = &p; d = pd;
         break;
     }

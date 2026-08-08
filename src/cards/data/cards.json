@@ -2711,7 +2711,7 @@
             "types": ["Artifact"],
             "subtypes": ["Equipment"],
             "keywords": ["Equip"],
-            "oracle_text": "Equipped creature has haste and shroud. (It can't be the target of spells or abilities.)\nEquip {0} [Equipment subsystem: Permanent::equipped_to + Action::Kind::Equip (sorcery-speed, one action per (Equipment, controlled creature), mutually exclusive per plan; Equip {0} = free re-point each turn). Haste read by CanAttackFull via HasHasteFromEquip. Shroud documented-inert (the passive opponent never targets our permanents). LIMITATION (disclosed): equip-granted haste enables ATTACKS only, not same-turn tap abilities (a Greaves'd fresh mana dork still can't tap this turn) -- conservative under-credit. Falls off a dead host (SBA), never sacrificed.]",
+            "oracle_text": "Equipped creature has haste and shroud. (It can't be the target of spells or abilities.)\nEquip {0} [Equipment subsystem: Permanent::equipped_to + Action::Kind::Equip (sorcery-speed, one action per (Equipment, controlled creature), mutually exclusive per plan; Equip {0} = free re-point each turn). Haste read by CanAttackFull (attacks) and CanTapNow ({T} abilities) -- CR 302.6 lifts a single restriction covering both, so equip haste now unlocks same-turn tap abilities too (a Greaves'd fresh mana dork taps; a Greaves'd fresh Deathrite Shaman may use its graveyard-exile modes). Shroud documented-inert (the passive opponent never targets our permanents). Falls off a dead host (SBA), never sacrificed.]",
             "template": "custom",
             "parameters": {
                 "is_equipment": true,
