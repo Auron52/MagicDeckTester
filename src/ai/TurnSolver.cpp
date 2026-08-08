@@ -328,7 +328,7 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
         auto def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.creature_mana_only) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
-        bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap()) || def->params.mana_rock;
+        bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || def->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
         // Deathrite: credit at most #graveyard-lands such sources (mirrors AvailableManaPool).
         if (def->params.gy_land_exile_mana)
@@ -390,7 +390,7 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
-                   || (def->tmpl == CardTemplate::ManaDork && p.CanTap())
+                   || (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                    || def->params.mana_rock;
         if (!is_src) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land
@@ -3206,7 +3206,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         {
             // (id, def, entered_this_turn) for each equipment / host candidate, battlefield + hand.
             std::vector<std::pair<const CardDefinition*, const Card*>> equips;
-            struct Host { int id; bool fresh; bool haste; };
+            // `score` ranks hosts for the single heuristic pick below (USER-DIRECTED 2026-08-08:
+            // "equip to the largest power and/or effect creature that doesn't already have haste
+            // and is summoning sick"). Haste unlocks TWO things for a sick creature -- attacking and
+            // its {T} abilities (CR 302.6, now modelled: see CanTapNow) -- so the score adds the
+            // body to what the tap would produce: power + mana-if-tapped. That ranks Faeburrow
+            // Elder (a domain-sized body AND domain-sized mana) over a 5/5 beater over Birds of
+            // Paradise, which is the intended order for this deck. A pure judgment call with no
+            // correct answer -> a heuristic, A/B-able via MTG_EQUIP_ALL_HOSTS=1 (emit every host).
+            struct Host { int id; bool fresh; bool haste; int score; };
             std::vector<Host> hosts;
             std::vector<int>  attached_to;   // parallel to equips: current host id (battlefield only)
             for (const Permanent& p : state.battlefield)
@@ -3216,7 +3224,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (!d) { continue; }
                 if (d->params.is_equipment) { equips.push_back({ d, &p.card }); attached_to.push_back(p.equipped_to); }
                 if (p.card.IsCreature() || p.is_animated)
-                { hosts.push_back({ p.card.m_number, p.entered_this_turn, p.card.HasKeyword(Keyword::Haste) }); }
+                {
+                    const bool src = (d->tmpl == CardTemplate::ManaDork) || d->params.mana_rock;
+                    const int  sc  = p.EffectivePower() + (src ? PermanentManaYield(p, *d) : 0);
+                    hosts.push_back({ p.card.m_number, p.entered_this_turn,
+                                      p.card.HasKeyword(Keyword::Haste), sc });
+                }
             }
             for (const Card& c : ap.hand)
             {
@@ -3224,15 +3237,57 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (!d) { continue; }
                 if (d->params.is_equipment) { equips.push_back({ d, &c }); attached_to.push_back(0); }
                 if (d->card.IsCreature())
-                { hosts.push_back({ c.m_number, /*fresh=*/true, d->card.HasKeyword(Keyword::Haste) }); }
+                {
+                    // In hand there is no Permanent yet, so the body is the printed power (a
+                    // domain_self_pump card reads 0 here and is ranked on its mana instead).
+                    const bool src = (d->tmpl == CardTemplate::ManaDork) || d->params.mana_rock;
+                    const int  sc  = d->card.m_power.value_or(0)
+                                   + (src ? std::max(1, d->params.produces_amount) : 0);
+                    hosts.push_back({ c.m_number, /*fresh=*/true,
+                                      d->card.HasKeyword(Keyword::Haste), sc });
+                }
             }
             for (std::size_t e = 0; e < equips.size(); ++e)
             {
                 const CardDefinition* ed = equips[e].first;
+                // The single heuristic host for THIS equipment: highest score among the hosts the
+                // equip would actually benefit, ties broken by lowest card number for determinism.
+                // Computed per equipment because the already-attached / never-self exclusions below
+                // differ per equipment. -1 when nothing qualifies -> no Equip variant at all.
+                int best_host = -1, best_score = -1;
+                for (const Host& h : hosts)
+                {
+                    if (attached_to[e] == h.id && h.id != 0) { continue; }
+                    if (equips[e].second->m_number == h.id)  { continue; }
+                    if (!(ed->params.equip_grants_haste && h.fresh && !h.haste)) { continue; }
+                    if (h.score > best_score || (h.score == best_score && h.id < best_host))
+                    { best_score = h.score; best_host = h.id; }
+                }
                 for (const Host& h : hosts)
                 {
                     if (attached_to[e] == h.id && h.id != 0) { continue; }   // already attached: no-op
                     if (equips[e].second->m_number == h.id)  { continue; }   // never self
+                    // Offer only an equip that actually DOES something. The equipment model has
+                    // exactly ONE modeled effect today -- equip_grants_haste (Lightning Greaves'
+                    // shroud is documented-inert vs the passive opponent, and no equipment carries a
+                    // P/T or other rider) -- so a pair whose host is already able to act, or already
+                    // hasty, is a literal no-op that the rollout scores as a pass.
+                    //
+                    // Emitting them anyway is what made Greaves the deck's worst search atom: every
+                    // controlled creature plus every hand creature became an option in ONE
+                    // mutually-exclusive group, so a wide board multiplied the ENTIRE plan odometer by
+                    // (1 + #hosts). Seed 2044 game 42 hit a 13-option Greaves group -- 2.55e9 odometer
+                    // positions, 84% of them Greaves-driven, 161 s for a single game (see
+                    // docs/design/fivecolour-search-cost.md). The stranded-equip subset guard could not
+                    // help: it rejects a position AFTER the odometer has already produced it.
+                    //
+                    // MAINTENANCE BREADCRUMB: when equipment gains a P/T rider (or any effect beyond
+                    // haste), widen this predicate -- otherwise those equips silently stop being
+                    // offered. MTG_EQUIP_ALL_HOSTS=1 restores the old emit-every-pair behaviour for A/B.
+                    static const bool s_all_hosts = EnvOn("MTG_EQUIP_ALL_HOSTS");
+                    const bool grants_something = ed->params.equip_grants_haste && h.fresh && !h.haste;
+                    if (!grants_something && !s_all_hosts) { continue; }
+                    if (!s_all_hosts && h.id != best_host) { continue; }   // the single heuristic pick
                     Action a;
                     a.kind           = Action::Kind::Equip;
                     a.card_name      = equips[e].second->m_name;
@@ -6106,7 +6161,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             const Permanent& bp = state.battlefield[best];
             const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
             const bool mana_src = bd && !bp.tapped
-                && ((bd->tmpl == CardTemplate::ManaDork && bp.CanTap()) || bd->params.mana_rock);
+                && ((bd->tmpl == CardTemplate::ManaDork && CanTapNow(bp, state.battlefield)) || bd->params.mana_rock);
             if (mana_src) { reserved |= (1ull << best); }
         }
     }

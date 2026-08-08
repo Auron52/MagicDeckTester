@@ -805,7 +805,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
                 if (!d) { continue; }
                 const bool is_src = (d->tmpl == CardTemplate::BasicLand)
-                                 || (d->tmpl == CardTemplate::ManaDork && p.CanTap())
+                                 || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                                  || d->params.mana_rock;
                 if (!is_src) { continue; }
                 if (d->params.creature_mana_only && !for_creature) { continue; }
@@ -843,7 +843,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             CardDatabase::Instance().LookupCached(state.battlefield[i].card);
         if (!def) { continue; }
         const bool is_src = (def->tmpl == CardTemplate::BasicLand)
-                         || (def->tmpl == CardTemplate::ManaDork && state.battlefield[i].CanTap())
+                         || (def->tmpl == CardTemplate::ManaDork && CanTapNow(state.battlefield[i], state.battlefield))
                          || def->params.mana_rock;
         if (!is_src) { continue; }
         if (def->params.creature_mana_only && !for_creature) { continue; }

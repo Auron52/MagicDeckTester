@@ -44,7 +44,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             if (idx < 64 && (reserved_mask & (1ull << idx))) { return false; }
         }
         bool is_src = (def.tmpl == CardTemplate::BasicLand)
-                   || (def.tmpl == CardTemplate::ManaDork && p.CanTap())
+                   || (def.tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                    || def.params.mana_rock;
         if (!is_src) { return false; }
         if (def.params.creature_mana_only && !for_creature) { return false; }
@@ -599,7 +599,7 @@ ManaPool AvailableManaPool(const GameState& state)
         auto def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
-        bool is_dork = (def->tmpl == CardTemplate::ManaDork && p.CanTap()) || def->params.mana_rock;
+        bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || def->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
         // Deathrite: credit at most #graveyard-lands such sources (fuel-counted, lazily).
         if (def->params.gy_land_exile_mana)

@@ -1648,6 +1648,29 @@ inline bool HasHasteFromEquip(const Permanent& creature,
     return false;
 }
 
+// Can this permanent use a {T} ability RIGHT NOW? Battlefield-aware companion to
+// Permanent::CanTap(), which is a context-free member and therefore cannot see equipment.
+//
+// CR 302.6: summoning sickness blocks BOTH attacking and {T} abilities, and haste removes both.
+// The engine modelled only half of that for equipment -- HasHasteFromEquip was consulted by
+// CanAttackFull alone, so a freshly-cast mana dork wearing Lightning Greaves could attack but
+// still could not tap for mana (the limitation disclosed in CardParams::is_equipment). That made
+// equip-granted haste a strictly attack-only effect, which is wrong at the rules level and, for a
+// deck whose creatures are mostly mana dorks, understates the equipment badly (user-directed,
+// 2026-08-08: "for mana dorks and creatures with activated abilities it also means they can be
+// activated").
+//
+// SCOPE: equipment haste only. Lord-granted haste (HasHasteFromLords) has the SAME latent gap --
+// a hasted Sliver mana dork cannot tap today either -- but wiring it in here would move existing
+// decks' ground truth, so it is deliberately left alone and recorded as a separate finding. Only
+// a deck with an is_equipment card can observe any difference here -> every other deck stays
+// byte-identical.
+inline bool CanTapNow(const Permanent& p, const std::vector<Permanent>& battlefield)
+{
+    if (p.CanTap()) { return true; }
+    return HasHasteFromEquip(p, battlefield, p.controller_index);
+}
+
 inline bool CanAttackFull(
     const Permanent&               p,
     const std::vector<Permanent>&  battlefield,
@@ -3826,7 +3849,7 @@ inline int ScaledManaFeederMana(const GameState& state)
         if (!d) { continue; }
         if (IsScaledManaLand(*d) || d->params.ramp_filter) { continue; }
         const bool is_src = (d->tmpl == CardTemplate::BasicLand)
-                         || (d->tmpl == CardTemplate::ManaDork && p.CanTap())
+                         || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                          || d->params.mana_rock;
         if (!is_src) { continue; }
         // Deathrite: credit at most #graveyard-lands such sources.
@@ -4158,7 +4181,7 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (!d) { continue; }
             const bool is_land = (d->tmpl == CardTemplate::BasicLand);
-            const bool is_dork = (d->tmpl == CardTemplate::ManaDork && p.CanTap()) || d->params.mana_rock;
+            const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || d->params.mana_rock;
             if (!is_land && !is_dork) { continue; }
             ManaPool one; AddSourceToPool(one, state, *d);
             if (one.Total() <= 0) { continue; }
@@ -4304,7 +4327,7 @@ inline int RitualRefloatMana(const GameState& state, int count)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         const bool is_src = d->card.IsLand()
-                         || (d->tmpl == CardTemplate::ManaDork && p.CanTap())
+                         || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                          || d->params.mana_rock;
         if (!is_src) { continue; }
         outs.push_back(ManaProducedPerTap(*d));
@@ -4326,7 +4349,7 @@ inline int ManaSourceCount(const GameState& state)
         if (p.controller_index != active) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
-        if (d->card.IsLand() || (d->tmpl == CardTemplate::ManaDork && p.CanTap()) || d->params.mana_rock) { ++n; }
+        if (d->card.IsLand() || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || d->params.mana_rock) { ++n; }
     }
     return n;
 }
@@ -4841,7 +4864,7 @@ inline bool HasUntappedNonFilterSourceProducing(const GameState& state,
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.is_filter || def->params.ramp_filter) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
-                   || (def->tmpl == CardTemplate::ManaDork && p.CanTap())
+                   || (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                    || def->params.mana_rock;
         if (!is_src) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land
@@ -4938,7 +4961,7 @@ inline bool HasUntappedRampFeeder(const GameState& state)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.ramp_filter) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
-                   || (def->tmpl == CardTemplate::ManaDork && p.CanTap())
+                   || (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                    || def->params.mana_rock;
         if (!is_src) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land
@@ -5017,7 +5040,7 @@ inline int SpareUntappedMana(const GameState& state, int controller)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         const bool is_land = (d->tmpl == CardTemplate::BasicLand);
-        const bool is_dork = (d->tmpl == CardTemplate::ManaDork && p.CanTap()) || d->params.mana_rock;
+        const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || d->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
         // Deathrite: credit at most #graveyard-lands such sources (mirrors AvailableManaPool).
         if (d->params.gy_land_exile_mana)
@@ -6019,7 +6042,7 @@ inline std::uint64_t ReservableSpecialMask(const GameState& state)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         bool reserve = false;
-        if (d->tmpl == CardTemplate::ManaDork && p.CanTap())
+        if (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
         {
             // Only reserve a dork whose mana is INFLEXIBLE (<=1 colour): holding it costs no colour
             // fixing. A flexible (dual/tri/rainbow) dork is deliberately NOT reserved -- holding it

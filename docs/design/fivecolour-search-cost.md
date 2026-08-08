@@ -255,3 +255,64 @@ at the regression seeds, against a 45-min budget shared by ten decks. Options wh
 2. Register d0-only now (0.0007 s/game) — affordable immediately, but exercises no search.
 3. Register a SMALL d3/d5 case (~50 games) and accept ~2-3 min, after checking the chosen seed
    range has no straggler (`MTG_SLOW_GAME_MS` now makes that a one-line check).
+
+
+## The tail atom: Lightning Greaves (2026-08-08) — FIXED
+
+Profiling the two real stragglers (the earlier §4 repro line was WRONG -- see below) found the tail
+is an ENUMERATION atom after all, not backtracker cost:
+
+| game | wall | odometer positions | rollout calls |
+|---|---|---|---|
+| 42 (seed 2044) | 161 s | **2,550,027,672** | 1,251,137 |
+| 36 (seed 2038) | 44 s | 877,079,390 | 380,103 |
+| 0 (seed 2002, median) | 0.90 s | 929,433 | 37,494 |
+| 1 (seed 2003, median) | 1.22 s | 3,089,558 | 31,049 |
+
+~1000x the positions of a normal game. `MTG_BRANCH_STATS` named the driver: **Lightning Greaves,
+84% of game 42's odometer** (avg 1032, max 43,008), and `MTG_ENUM_STATS` showed the shape --
+`[g13 k13 Lightning Greaves]`, a **13-option Equip group multiplying the ENTIRE odometer by 14**.
+One equipment on a wide board made every controlled creature plus every hand creature an option in
+one mutually-exclusive group. The stranded-equip subset guard could not help: it rejects a position
+*after* the odometer has produced it.
+
+**Fix (user-directed).** Two parts:
+
+1. **Only offer an equip that does something, and only to ONE host.** A pair whose host is not
+   summoning-sick or already hasty is a literal no-op (haste is the only modeled equipment effect).
+   Among the hosts that DO benefit, a heuristic picks a single one: highest `power + mana-if-tapped`,
+   ties by lowest card number. User's framing: "the largest power and/or effect creature that
+   doesn't already have haste and is summoning sick -- most of the time this will be exactly one or
+   zero creatures." `MTG_EQUIP_ALL_HOSTS=1` restores emit-every-host for A/B.
+2. **`CanTapNow`** -- equip-granted haste now unlocks {T} ABILITIES, not just attacks (CR 302.6).
+   `HasHasteFromEquip` was consulted by `CanAttackFull` alone, so a Greaves'd fresh mana dork could
+   attack but not tap. This retires the limitation disclosed in `CardParams::is_equipment` and is
+   what makes the "or effect" half of the ranking real. Applied at the ~16 mana-source `CanTap()`
+   sites; `KeepModel` deliberately untouched (trained-model features).
+
+**Measured.** Stragglers: game 42 176 s -> 45 s (3.9x), game 36 44 s -> 6.3 s (7.0x), same win turns.
+Whole-deck cost, single-thread 100 games d3/b10: **seed 2002 3.318 -> 1.403 s/game (2.4x), seed 3003
+2.423 -> 1.670**. Quality essentially unchanged: 5.1280/5.0900/5.1000 -> 5.1320/5.0920/5.1060
+(+0.004 avg -- the price of collapsing a searched host set to one heuristic pick, offset by the
+CanTapNow gain). Smoke 30/30 + regression 50/50 byte-identical.
+
+### Instrument bug found and fixed
+
+`MTG_SLOW_GAME_MS` printed `--seed <base_seed>` instead of `--seed <base_seed + gi>`. The runner
+shuffles on `base_seed + gi` while spawns use `base_game_index + gi`, so the printed line silently
+replayed game 0 -- which is why an early profiling pass had gi=36 and gi=0 producing identical
+statistics. Corrected to match the "Unwon games" convention in main.cpp. **Any repro line captured
+before 2026-08-08 is suspect.**
+
+## Cost standing after all of this
+
+| deck | s/game (d3/b10, seed 2002, 1 thread) |
+|---|---|
+| burn | 0.021 |
+| creature_giving | 0.222 |
+| **fivecolour** | **1.403**  (was 5.578 at the start of this work -- **4.0x faster**) |
+
+Now ~6x the next-heaviest deck rather than 25x. §3's mana backtracker is still the largest single
+component and §4's tail still exists (one game over 30 s per 100 at each regression seed, down from
+two), but a smoke-sized d3 case is now roughly 2-4 min single-thread rather than 8+, so registration
+is worth re-sizing next.

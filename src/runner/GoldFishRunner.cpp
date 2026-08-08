@@ -332,10 +332,17 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                         std::chrono::steady_clock::now() - game_t0).count();
                     if (ms >= s_slow_game_ms)
                     {
+                        // The replay seed is base_seed + gi, NOT base_seed: SetupGame above shuffles
+                        // on base_seed + gi while PopulateOpponentSpawns uses base_game_index + gi,
+                        // so a single-game replay needs --seed (base_seed+gi) --game-index gi (which
+                        // then runs loop index 0 against that same shuffle + spawn pattern). Same
+                        // convention as the "Unwon games" repro list in main.cpp. Printing the bare
+                        // base_seed silently replays game 0 instead.
                         std::fprintf(stderr,
                             "[goldfish] SLOW-GAME %lldms  gi=%d wt=%d  repro: --seed %llu "
                             "--game-index %d --games 1\n",
-                            ms, gi, win_turn, static_cast<unsigned long long>(base_seed), gi);
+                            ms, gi, win_turn,
+                            static_cast<unsigned long long>(base_seed + static_cast<uint64_t>(gi)), gi);
                         std::fflush(stderr);
                     }
                 }
