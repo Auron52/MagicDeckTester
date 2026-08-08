@@ -511,3 +511,32 @@ but 5.6x the backtracker entries — so its mana problems are individually ~5.6x
 and its mana-side symmetry collapse is 1.00x vs Hinata2's 1.05x: with five colours almost no two
 sources are interchangeable, so there is nothing to dedup). That is inherent to the archetype, not
 an obvious bug.
+
+### Tail reproducers to investigate (captured 2026-08-08)
+
+The value-row dump (2500 games, shipped play d5/b20, K=3 searched labels) finished 2498 games and
+then spent **over 109 minutes** on the last two, with 23 of 24 cores idle. Rows carry `(seed, turn)`,
+so the unfinished games are exactly the seeds that produced none:
+
+| game | repro |
+|---|---|
+| A | `--seed 920937 --game-index 187 --games 1` |
+| B | `--seed 922346 --game-index 96  --games 1` |
+
+Full command (the labelling regime they were slow in — K=3 searched labels is 3 full searches per
+position, which is NOT the same regime as normal play):
+
+```bash
+MTG_DUMP_VALUE_ROWS=/tmp/x.rows MTG_EVAL_ROWS_K=3 MTG_EVAL_ROWS_ROLLOUT=0 \
+build/Release/mtg decks/FiveColour/FiveColour.cod \
+  --profile decks/FiveColour/FiveColour.profile.json \
+  --seed 920937 --game-index 187 --games 1 --threads 1
+```
+
+Both `--seed` and `--game-index` matter: the runner uses `base_seed + gi` for the shuffle and
+`base_game_index + gi` for opponent spawns, so dropping either replays a different game.
+
+**Worth checking first:** whether they are also slow in PLAIN play (no labeller env). If yes this is
+the same tail as the 235 s gi=61 game above and belongs to the mana backtracker; if they are slow
+only under labelling, the cost is in the K=3 label path and is offline-only. That distinction decides
+whether fixing it helps the shipped engine or only generation.
