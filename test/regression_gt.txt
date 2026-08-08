@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 33d9e52  date 2026-08-08
+# Regression ground truth -- commit f546646  date 2026-08-08
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -184,18 +184,18 @@ auras_overnight_d5_s4004=4.1140/92c00dcd4a1a243f
 auras_overnight_d5_s5005=4.1460/faaeb492e70f23ff
 auras_overnight_d5_s6006=4.1150/b6e32aefad9ab220
 auras_overnight_d5_s7007=4.1520/f7a8a209c1db565a
-goblins_overnight_d0_s4004=4.7785/585633ec2865b007
-goblins_overnight_d0_s6006=4.7865/b681919246844979
-goblins_overnight_d0_s8008=4.7790/8f33b872353702eb
-goblins_overnight_d0_s10010=4.7805/6830ea7ba12cda10
-goblins_overnight_d3_s4004=4.3050/23de822f80af5343
-goblins_overnight_d3_s5005=4.3030/ae1433dd4d24422d
-goblins_overnight_d3_s6006=4.3060/1595100a8a872f0a
-goblins_overnight_d3_s7007=4.3810/b946f4eb4b20fbbd
-goblins_overnight_d5_s4004=4.3000/3882cd8481e499a3
-goblins_overnight_d5_s5005=4.3040/c3556612b2b0856d
-goblins_overnight_d5_s6006=4.3010/242f10e452bc8eca
-goblins_overnight_d5_s7007=4.3800/97939a0245fa684e
+goblins_overnight_d0_s4004=4.1760/152e76853930b8aa
+goblins_overnight_d0_s6006=4.1490/b7294e792535bcaa
+goblins_overnight_d0_s8008=4.1425/40292e4729c434a2
+goblins_overnight_d0_s10010=4.1555/d377a77daeaab444
+goblins_overnight_d3_s4004=3.8420/790eaf29bccddc99
+goblins_overnight_d3_s5005=3.8020/2d71e49b6c2ad198
+goblins_overnight_d3_s6006=3.8180/2105caac5e6d869d
+goblins_overnight_d3_s7007=3.8170/8f3bb68d1464af0f
+goblins_overnight_d5_s4004=3.8420/68eacef7c9797057
+goblins_overnight_d5_s5005=3.8030/c6288f9c2b069fcd
+goblins_overnight_d5_s6006=3.8180/2fa8b3c270880ecd
+goblins_overnight_d5_s7007=3.8200/4f3bcadc0b3321fc
 creature_giving_overnight_d0_s4004=5.8895/3d10400577024c2a
 creature_giving_overnight_d0_s6006=5.8180/8c20bf2cca34ea9f
 creature_giving_overnight_d0_s8008=5.8470/73f1567c4cf293c4
