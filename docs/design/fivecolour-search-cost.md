@@ -745,3 +745,55 @@ which is what §3 already identified, but at H1 it is only 2.4% of the gap: fixi
 deliver 30x. The lever that would is **enumerating fewer plans**, and it moves generation and play
 together (this deck is 1.403 s/game at d3/b10 where burn is 0.021 — a 67x ratio in the shipped
 configuration, consistent with the 37-96x measured here).
+
+## The optimization target, measured (2026-08-08) — 90.7% of enumerated lines can never be paid for
+
+`MTG_ENUM_STATS` already instruments this; it just had not been pointed at the question. FiveColour,
+depth 1, 3 games, profile attached:
+
+```
+enumeration calls          : 40480   (with a mana side: 6250)
+odometer positions         : 2127694
+mana-side combos KEPT      : 12998   (after the existing symmetry prunes)
+  distinct exact           : 12740   (collapse 1.02x)
+--- two-stage gating potential ---
+payoff-side lines          : 197526   (unaffordable under EVERY mana line: 179103 = 90.7%)
+(mana x payoff) pairs      : 406314
+  pairs that are payable   : 24823   (6.1%)
+  => two-stage visits      : 235347   vs flat 406314   (1.73x fewer)
+```
+
+Two findings, and the second is the big one.
+
+**1. The mana side is FiveColour's alone.** Same instrument, same depth, `--profile` attached:
+
+| deck | enumeration calls | with a mana side |
+|---|---|---|
+| burn | 19,716 | **0** |
+| knights | 16,008 | **0** |
+| fivecolour | 40,480 | **6,250** |
+
+Burn and Knights never enter the mana odometer at all. So this is not "FiveColour does more of what
+every deck does" — it is a code path only this deck takes, which is why `TapForCostBacktrack` shows a
+387x ratio against a ~30x background.
+
+**2. Nine tenths of the payoff side is enumerated and then thrown away.** 179,103 of 197,526
+payoff-side lines (90.7%) are unaffordable under *every* mana line, and only 6.1% of (mana x payoff)
+pairs are payable. The two-stage design the instrument was written to size is scored at 1.73x — but
+that figure is dominated by the 197,526 payoff lines it still walks. Skip the 90.7% *before* pairing
+and the visit count goes from 235,347 to roughly 56,000: **~7x rather than 1.73x**.
+
+**The prune looks byte-identical, which is why it is the right first move.** Compute an OPTIMISTIC
+upper bound on mana available across all mana lines (per colour and total), then drop any payoff line
+that bound cannot pay for. A bound that never under-states available mana can only remove lines that
+were genuinely unplayable, so play is unchanged and only speed moves. That also respects the standing
+warning in `dragonstorm-ritual-afford-optimism-loadbearing`: the optimism the pre-scorer relies on is
+*preserved* here, because we prune only what even the optimistic bound rejects — the opposite of
+tightening the afford test, which measurably hurt Dragonstorm.
+
+Depth compounds it: this is per enumeration call, and the same enumeration runs at every node, so a
+7x at the leaf is why H3 is 96x burn while H1 is 37x.
+
+**Measure it with counters, not the clock.** `MTG_ENUM_STATS` and callgrind `Ir` are both
+load-independent, so this whole loop can be run while the box is busy with something else — which is
+how it was done here, alongside a 20-worker matrix.
