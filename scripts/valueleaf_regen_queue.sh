@@ -39,12 +39,14 @@
 # is recorded at start and re-checked before every phase; if it moves the run STOPS rather than mixing
 # engine states within one table.
 #
-#   bash scripts/valueleaf_regen_queue.sh run      # start / resume
-#   bash scripts/valueleaf_regen_queue.sh status   # progress, touches nothing
+#   bash scripts/valueleaf_regen_queue.sh run                     # the 8-deck fleet
+#   bash scripts/valueleaf_regen_queue.sh run decks/FiveColour    # ONE deck (new or existing)
+#   bash scripts/valueleaf_regen_queue.sh status decks/FiveColour # progress, touches nothing
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 . test/lib/harness.sh
 
+VLQ_EXPLICIT=${VLQ:+1}    # remember whether the caller chose one, so single-deck mode can scope it
 VLQ=${VLQ:-logs/vlq}
 DONE=$VLQ/done
 ROWDIR=$VLQ/rows          # queue-owned: logs/eval collides case-insensitively on this filesystem
@@ -81,7 +83,23 @@ DECK_TABLE=(
   "burn|decks/burn|burn|burn|700000|2500"
   "auras|decks/Auras|Auras|auras|800000|2500"
 )
+# SINGLE-DECK MODE. `run <deck-dir>` replaces the table above with one row derived from the folder,
+# so a NEW deck goes through exactly this pipeline instead of a hand-rolled one. Nothing else differs:
+# same phases, same staging, same freeze rule. Its own VLQ dir keeps it from colliding with a fleet run.
+DECK_DIR=${DECK_DIR:-${2:-}}
+if [ -n "$DECK_DIR" ]; then
+    _stem=$(basename "$DECK_DIR")
+    _key=$(echo "$_stem" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '_')
+    [ -d "$DECK_DIR" ] || { echo "no such deck dir: $DECK_DIR"; exit 2; }
+    [ -e "$DECK_DIR/$_stem.profile.json" ] || { echo "no profile at $DECK_DIR/$_stem.profile.json -- run analyze_deck.py first"; exit 2; }
+    DECK_TABLE=("$_key|$DECK_DIR|$_stem|$_key|900000|${ROW_GAMES:-2500}")
+    [ -n "${VLQ_EXPLICIT:-}" ] || VLQ=logs/vlq_$_key
+    DONE=$VLQ/done; ROWDIR=$VLQ/rows
+    mkdir -p "$DONE" "$ROWDIR" logs/eval
+fi
+
 ALL_ROWS=$ROWDIR/all.rows
+MATRIX_TXT=$VLQ/matrix.txt          # per-run: a single-deck run must not overwrite the fleet table
 
 log() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$VLQ/driver.log"; }
 done_p() { [ -e "$DONE/$1" ]; }
@@ -109,7 +127,11 @@ make_variant_deck() {   # dest src-dir stem value.json
         b=$(basename "$f"); [ "$b" = "$stem.value.json" ] && continue
         ln -sf "$(realpath "$f")" "$dest/$b"
     done
-    cp "$val" "$dest/$stem.value.json"
+    # A missing/empty source means NO sidecar -- which is exactly the live arm for a deck that has
+    # never had one. Placing nothing is correct: sidecar PRESENCE alone activates the depth-aware
+    # hybrid in play, so copying an empty file would silently make the "live" arm the staged arm.
+    [ -s "$val" ] && cp "$val" "$dest/$stem.value.json"
+    return 0
 }
 
 # ------------------------------------------------------------------------- phase 0: freeze + build
@@ -189,10 +211,14 @@ phase_train() {
             --regression --trees 120 --depth 4 --lr 0.15 --min-leaf 20 >> "$VLQ/train_$key.log" 2>&1
         if [ ! -s "$staged.raw" ]; then log "  $key SKIPPED: trainer produced nothing"; continue; fi
         python3 - "$dir/$stem.value.json" "$staged.raw" "$staged" "$(cat "$VLQ/freeze.commit")" "$n" <<'PY'
-import json, sys
+import json, os, sys
 live, raw, out, commit, n = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
-L = json.load(open(live)); R = json.load(open(raw))
-L["eval_model"] = R["eval_model"]
+R = json.load(open(raw))
+if os.path.exists(live):
+    L = json.load(open(live))          # REgeneration: keep value_play/table/crossover until measured
+    L["eval_model"] = R["eval_model"]
+else:
+    L = R                              # FIRST model for this deck: nothing prior to preserve
 L.setdefault("provenance", {}).update({
     "regenerated_commit": commit, "rows": n,
     "note": "eval_model retrained on rows dumped at SHIPPED play WITH the deck profile, so the "
@@ -231,8 +257,8 @@ phase_matrix() {
         --hdepths 1 2 3 4 5 --vdepths $VDEPTHS --seeds 8008 9009 10010 11011 \
         --target "$MATRIX_TARGET" --reference-target "$MATRIX_REF" --batch 25 --workers "$WORKERS" \
         --value-min-depth 0 --intractable-sec-per-game "$INTRACTABLE_SPG" \
-        --out logs/eval/valueleaf_depth_regen.txt >> "$VLQ/matrix.log" 2>&1
-    [ -s logs/eval/valueleaf_depth_regen.txt ] || { log "PHASE C ABORT: no matrix output"; return 1; }
+        --out "$MATRIX_TXT" >> "$VLQ/matrix.log" 2>&1
+    [ -s "$MATRIX_TXT" ] || { log "PHASE C ABORT: no matrix output"; return 1; }
     log "PHASE C done"
     mark C_matrix
 }
@@ -242,7 +268,7 @@ phase_meta() {
     done_p D_meta && return 0
     local keys; keys=$(staged_keys)
     log "PHASE D: crossover + trust depth ->$keys"
-    python3 scripts/attic/valueleaf_table_to_metadata.py logs/eval/valueleaf_depth_regen.txt \
+    python3 scripts/attic/valueleaf_table_to_metadata.py "$MATRIX_TXT" \
         --decks $keys --average-seeds 2>&1 | tee -a "$VLQ/driver.log"
     mark D_meta
 }
@@ -329,18 +355,60 @@ finish|run)
     log "=== COMPLETE -- nothing adopted; review the A/B + sweep reports above ==="
     ;;
 status)
-    echo "frozen at : $(cat "$VLQ/freeze.commit" 2>/dev/null || echo '(not started)')"
-    echo "src now   : $(src_fingerprint | cut -c1-12)   frozen: $( [ -e "$VLQ/freeze.src" ] && cut -c1-12 "$VLQ/freeze.src" || echo - )"
-    echo "phases    : $(ls "$DONE" 2>/dev/null | tr '\n' ' ')"
-    echo "pooled rows: $(grep -vc '^#' "$ALL_ROWS" 2>/dev/null || echo 0)"
+    # A real progress report: where the run is, what is left, and how to resume. Reads only files the
+    # phases already write, so it is safe to run against a live run.
+    ph_label() { case $1 in
+        00_freeze) echo "0 freeze+build";; A_rows)   echo "A rows        ";;
+        A_split)   echo "A split       ";; B_train)  echo "B train       ";;
+        C_matrix)  echo "C matrix      ";; D_meta)   echo "D metadata    ";;
+        E_measure) echo "E measure     ";; esac; }
+    echo "queue dir  : $VLQ"
+    echo "frozen at  : $(cat "$VLQ/freeze.commit" 2>/dev/null || echo '(not started)')"
+    now=$(src_fingerprint); frz=$(cat "$VLQ/freeze.src" 2>/dev/null || echo "")
+    if [ -n "$frz" ] && [ "$now" != "$frz" ]; then
+        echo "freeze     : VIOLATED -- src/ moved since this run started. Measurements taken before"
+        echo "             and after describe different engines: restart, do not resume."
+    elif [ -n "$frz" ]; then
+        echo "freeze     : intact ($(cut -c1-12 "$VLQ/freeze.src"))"
+    fi
+    echo
+    echo "phases:"
+    for p in 00_freeze A_rows A_split B_train C_matrix D_meta E_measure; do
+        if done_p "$p"; then printf "  [x] %s  %s\n" "$(ph_label "$p")" "$(cat "$DONE/$p")"
+        else                 printf "  [ ] %s\n" "$(ph_label "$p")"; fi
+    done
+    echo
     for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
-        printf "  %-12s rows=%-7s staged=%s\n" "$key" \
-            "$(grep -vc '^#' "$ROWDIR/$stem.rows" 2>/dev/null || echo 0)" \
-            "$( [ -s "logs/eval/$stem.value.STAGED.json" ] && echo yes || echo no )"
+        r=$(grep -vc '^#' "$ROWDIR/$stem.rows" 2>/dev/null || echo 0)
+        if [ "$r" = 0 ]; then
+            r=$(awk -v b="$(( base / 100000 ))" '!/^#/ && int($(NF-1)/100000)==b' "$ALL_ROWS" 2>/dev/null | wc -l)
+        fi
+        if [ -e "$dir/$stem.value.json" ]; then sc="live sidecar=yes (regeneration)"
+        else                                    sc="live sidecar=no (first model)"; fi
+        printf "  %-14s rows %-7s of %-5s games   staged=%-4s %s\n" \
+            "$key" "$r" "$games" \
+            "$( [ -s "logs/eval/$stem.value.STAGED.json" ] && echo yes || echo no )" "$sc"
+        rmse=$(grep -oE 'heldout_RMSE=[0-9.]+' "$VLQ/train_$key.log" 2>/dev/null | tail -1)
+        [ -n "$rmse" ] && printf "  %-14s %s\n" "" "$rmse"
     done
-    echo "mtg procs : $(pgrep -c -x mtg 2>/dev/null || echo 0)"
+    echo
+    echo "pooled rows: $(grep -vc '^#' "$ALL_ROWS" 2>/dev/null || echo 0)"
+    if [ -s "$MATRIX_TXT" ]; then
+        echo "matrix     : $(grep -c '^ *[HV][0-9]' "$MATRIX_TXT" 2>/dev/null || echo 0) table rows written -> $MATRIX_TXT"
+    fi
+    live=$(pgrep -c -x mtg 2>/dev/null || echo 0)
+    if [ "$live" != 0 ]; then echo "running    : yes ($live mtg) -- a games phase is active"
+    else                      echo "running    : no"; fi
+    echo
+    echo "resume     : bash $0 run ${DECK_DIR:-}"
+    echo "             Re-running is SAFE and incremental: finished phases are skipped via marker"
+    echo "             files in $DONE, and rows dedupe on (seed,turn), so an interrupted dump loses"
+    echo "             only in-flight games. To redo one phase, delete its marker and re-run."
+    echo "             If the CLOCK (not the data) ran out inside phase A, use 'finish' instead:"
+    echo "             it accepts the rows on disk as final and runs B..E on them."
     tail -5 "$VLQ/driver.log" 2>/dev/null
+    exit 0
     ;;
-*) echo "usage: $0 {run|status}"; exit 2 ;;
+*) echo "usage: $0 {run|status} [deck-dir]"; echo "  $0 run                    # regenerate the 8-deck fleet"; echo "  $0 run decks/FiveColour   # one deck, new or existing"; exit 2 ;;
 esac

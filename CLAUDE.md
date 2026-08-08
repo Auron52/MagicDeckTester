@@ -214,6 +214,25 @@ Read `.claude/skills/heuristic-optimization.md` and [propose variants / sweep / 
 
 **Rule 0 it enforces:** this is for HEURISTIC judgment (no correct answer, only measurably-better), NOT correctness/modeling bugs — if the engine models a card or rule wrong, that is a bug to fix against the MTG Rules skill, not a heuristic to tune. The skill drives the loop: AI authors motivated variants, exposes them behind a temporary runtime selector, sweeps the regression suite (train seeds) for win%/avg-win-turn, validates the winner on held-out (overnight) seeds, **reports the decision to the user**, and adopts only on approval — in the archetype provider, never the root. The value proposition: the alternative is a human inventing every ordering/constant; here AI proposes and the harness decides. Its worked example (measurement refuting an intuitive "rank Grove last" simplification) shows why you measure instead of assume.
 
+## Value-Leaf Skill
+
+When the user asks to **build / generate / regenerate / evaluate / adopt a value-leaf (value sidecar)
+model** for a deck, read `.claude/skills/value-leaf.md` first. The value leaf is a learned O(1)
+evaluator that replaces the search's horizon rollout.
+
+```
+Read `.claude/skills/value-leaf.md` and [build / measure / adopt] the value leaf for <deck> ...
+```
+
+**The whole interface is one command** — `bash scripts/valueleaf_regen_queue.sh run decks/<Deck>`
+(and `status decks/<Deck>` for progress). It handles a brand-new deck and a regeneration identically,
+runs all five phases pooled, resumes incrementally, and stages everything without adopting anything.
+**Do not hand-roll the phases**: doing so is how the profile-less-measurement bug and the silent
+H-cell perf cliff both happened. Rule 0 it enforces: generate on ONE frozen commit (artifacts are
+engine-state fingerprints). Two traps it documents: sidecar PRESENCE activates the hybrid in play
+(`enabled: false` is NOT off — ship a rejected model as `<stem>.value.DISABLED.json`), and the
+H-cell ladder is guarded on the sidecar EXISTING, so a missing model silently costs 1.35–84.8x.
+
 ## Mulligan Profile Generation Skill
 
 When the user asks to **generate / regenerate / pool / A-B / adopt a mulligan (keep or bottom) profile**, or to **hand profile generation to the secondary machine**, read `.claude/skills/mulligan-profile.md` first. It is the authoritative guide for the **exhaustive bucketed mulligan profile** — the separate, expensive, hand-off-able mulligan stage (distinct from `analyze-deck`, which does cards/coverage/play).

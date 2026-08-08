@@ -20,7 +20,7 @@ See learned-d0-policy.md.
     scripts/valueleaf_depth_matrix.py --games 1000 --seeds 8008 9009 10010 11011 \
         --hdepths 1 2 3 4 5 --vdepths 1 2 3 4 5 --value-min-depth 0
 """
-import argparse, json, os, re, subprocess, sys, threading, time
+import argparse, glob, json, os, re, subprocess, sys, threading, time
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
 MTG = "build/Release/mtg"
@@ -50,6 +50,35 @@ DECKS = {
     "creature_giving": ("decks/Creature Giving/Creature Giving.cod",
                         "decks/Creature Giving/Creature Giving.value.json",                             8),
 }
+
+# AUTO-REGISTER every deck folder that is not named above, keyed by its lower-cased folder name with
+# non-alphanumerics collapsed to "_" (so "decks/FiveColour" -> "fivecolour", "decks/Creature Giving"
+# -> "creature_giving"). Adding a deck to this table used to be a hand edit, and forgetting it was a
+# silent trap: the H-cell ladder is guarded on `os.path.exists(<value.json>)`, so an unregistered or
+# mis-pathed deck does not error -- it quietly runs every H cell on the slow path. Explicit entries
+# above still win, because several carry a non-default max_turns or a comment worth keeping.
+PROFILES_AUTO = {}
+
+
+def _slug(name):
+    return "".join(c.lower() if c.isalnum() else "_" for c in name)
+
+_explicit_decks = {v[0] for v in DECKS.values()}
+for _dir in sorted(glob.glob("decks/*")):
+    if not os.path.isdir(_dir):
+        continue
+    _stem = os.path.basename(_dir)
+    _deck = next((p for p in ("%s/%s.cod" % (_dir, _stem), "%s/%s.txt" % (_dir, _stem))
+                  if os.path.exists(p)), None)
+    if not _deck or _deck in _explicit_decks:
+        continue
+    if not os.path.exists("%s/%s.profile.json" % (_dir, _stem)):
+        continue          # no profile -> cannot be measured at shipped play; skip rather than guess
+    _key = _slug(_stem)
+    if _key in DECKS:
+        continue
+    DECKS[_key] = (_deck, "%s/%s.value.json" % (_dir, _stem), 8)
+    PROFILES_AUTO[_key] = "%s/%s.profile.json" % (_dir, _stem)
 
 # STAGED variants: "<deck>_staged" is the same deck + the same mulligan profile, but its V cells read
 # a value model that is NOT yet installed in the deck folder (logs/eval/<stem>.value.STAGED.json). The
@@ -82,6 +111,13 @@ PROFILES = {
     "creature_giving":        "decks/Creature Giving/Creature Giving.profile.json",
     "creature_giving_staged": "decks/Creature Giving/Creature Giving.profile.json",
 }
+
+# Auto-discovered decks (above) supply their own profile, for both the plain and _staged keys.
+# Attaching the profile is not optional: measuring profile-less silently describes a deck we do not
+# ship, which invalidated every value-leaf table in this repo once already.
+for _k, _p in PROFILES_AUTO.items():
+    PROFILES.setdefault(_k, _p)
+    PROFILES.setdefault(_k + "_staged", _p)
 
 def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_depth,
         deck_profile=None):
