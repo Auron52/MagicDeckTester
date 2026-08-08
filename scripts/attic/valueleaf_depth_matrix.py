@@ -382,10 +382,14 @@ def main():
                     help="pass through to the profile writer: write even a truncated/inconclusive table "
                          "(--write-profile only). Use only when an UNSET trust depth is intentional.")
     # --- incremental / tractability-aware mode ---
-    ap.add_argument("--incremental",action="store_true",
-                    help="Round-robin 50-game BATCHES across every cell (breadth-first), written incrementally, "
-                         "with per-cell tractability marking + cross-cell work-stealing. The way to build a "
-                         "table on decks whose deep unbounded search has a heavy tail (antilife). Resumable.")
+    ap.add_argument("--incremental",action="store_true",default=True,
+                    help="THE ONLY ROUTE, and now the default -- accepted for compatibility and ignored. "
+                         "Round-robin BATCHES across every cell (breadth-first), written incrementally, "
+                         "resumable, with cross-cell work-stealing and concurrent batches per cell. The "
+                         "monolithic path was removed: it paid a load-imbalance tail PER CELL and could not "
+                         "resume, which is how a run ended up at 3 of 24 cores for hours.")
+    ap.add_argument("--no-incremental",dest="incremental",action="store_false",
+                    help=argparse.SUPPRESS)
     ap.add_argument("--batch",type=int,default=50,help="games per incremental batch (default 50)")
     ap.add_argument("--target",type=int,default=None,help="full-sample target games/cell (default = --games)")
     ap.add_argument("--reference-target",type=int,default=100,
@@ -394,7 +398,7 @@ def main():
     ap.add_argument("--intractable-sec-per-game",type=float,default=2.0,
                     help="a batch slower than this (wall sec / game, single-threaded) marks its cell intractable "
                          "-> capped at --reference-target. Checked on every batch (first batch is the main signal).")
-    ap.add_argument("--never-condemn-at-or-below",type=int,default=0,
+    ap.add_argument("--never-condemn-at-or-below",type=int,default=5,
                     help="cells at or below this DEPTH are never marked intractable, however slow they measure. "
                          "These are the cells the trust-depth decision reads, so condemning one leaves a hole in "
                          "the answer rather than saving cost -- and since the check is on WALL time it can fire "
@@ -403,6 +407,12 @@ def main():
                     help="concurrent single-threaded batch processes (work-stealing pool). Each is a separate "
                          "process loading the keep model (~1GB for antilife); size to RAM. Default = CPU count.")
     args=ap.parse_args()
+    if not args.incremental:
+        sys.exit("the monolithic path is REMOVED -- incremental batching is the only route "
+                 "(one pooled queue, resumable, no per-cell tail). Drop --no-incremental.")
+    if args.never_condemn_at_or_below < 5:
+        sys.exit("--never-condemn-at-or-below must be >= 5: the d<=5 H cells ARE the crossover, so "
+                 "condemning one leaves a hole in the answer rather than saving cost.")
     if args.incremental:
         args.target = args.target if args.target is not None else args.games
         os.makedirs(os.path.dirname(args.out),exist_ok=True)

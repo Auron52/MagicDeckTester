@@ -224,11 +224,13 @@ evaluator that replaces the search's horizon rollout.
 Read `.claude/skills/value-leaf.md` and [build / measure / adopt] the value leaf for <deck> ...
 ```
 
-**The whole interface is one command** — `bash scripts/valueleaf_regen_queue.sh run decks/<Deck>`
+**The whole interface is one command** — `bash scripts/valueleaf.sh run decks/<Deck>`
 (and `status decks/<Deck>` for progress). It handles a brand-new deck and a regeneration identically,
 runs all five phases pooled, resumes incrementally, and stages everything without adopting anything.
-**Do not hand-roll the phases**: doing so is how the profile-less-measurement bug and the silent
-H-cell perf cliff both happened. Rule 0 it enforces: generate on ONE frozen commit (artifacts are
+**Do not hand-roll the phases and do not add knobs**: there is ONE route (incremental batching, no
+condemnation at d<=5, profile always attached), fixed inside the script. Hand-rolling is how the
+profile-less-measurement bug, the silent H-cell perf cliff, and a run stuck at 3 of 24 cores all
+happened. Rule 0 it enforces: generate on ONE frozen commit (artifacts are
 engine-state fingerprints). Two traps it documents: sidecar PRESENCE activates the hybrid in play
 (`enabled: false` is NOT off — ship a rejected model as `<stem>.value.DISABLED.json`), and the
 H-cell ladder is guarded on the sidecar EXISTING, so a missing model silently costs 1.35–84.8x.

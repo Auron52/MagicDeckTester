@@ -582,6 +582,9 @@ on. Fixing it first would plausibly have made the H arm ~4x cheaper and turned a
 **The tractability guard must protect the d<=5 ladder.** `--never-condemn-at-or-below` defaults to 0
 and the queue driver never passed it; it now defaults to 5. The H cells ARE the crossover — they
 decide which evaluator escalation uses at each rung it climbs to — so condemning one leaves a hole in
-the answer rather than saving cost. Un-condemning an existing run needs
-`scripts/valueleaf_uncondemn.sh`: a capped cell sits at `games == reference_target`, so `needs()` is
-false, so it is never rescheduled, so the condemnation check never re-runs.
+the answer rather than saving cost. **Since resolved by removing the choice:** condemnation at d<=5 is now impossible
+(`scripts/valueleaf.sh` clamps the guard and the matrix refuses a value below 5), and the recovery
+helpers were deleted because there is nothing left to recover from. The trap they existed for is
+worth remembering: a capped cell sat at `games == reference_target`, so `needs()` was false, so it
+was never rescheduled, so the condemnation check never re-ran -- raising the guard on a resume did
+nothing by itself.

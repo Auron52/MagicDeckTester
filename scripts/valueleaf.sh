@@ -1,47 +1,35 @@
 #!/usr/bin/env bash
-# Value-leaf + play-profile regeneration for all suite decks except Goblins.
-# Runbook this implements: docs/design/value-leaf-regeneration-queue.md
+# THE value-leaf pipeline. One script, one route, for ONE deck or the whole fleet.
 #
-# THREE POOLED PHASES, THREE TAILS TOTAL -- one at the end of each phase, and nowhere else.
+#   bash scripts/valueleaf.sh run    decks/<Deck>     # build a model (new deck or regeneration)
+#   bash scripts/valueleaf.sh status decks/<Deck>     # progress, touches nothing
+#   bash scripts/valueleaf.sh run                     # the whole fleet
 #
-#   A  rows      ONE `mtg --batch` covering EVERY deck's row games
-#   B  train     no games, no tail
-#   C  matrix    ONE work-stealing pool covering EVERY deck's cells
-#   D  metadata  no games, no tail
-#   E  measure   ONE `mtg --batch` covering EVERY deck's A/B arms AND play-sweep arms
+# There are no other knobs you need. The settings that matter are FIXED here rather than left to a
+# caller to remember, because every one of them has already gone wrong once:
 #
-# WHY THIS SHAPE. A `--batch` invocation is a BARRIER: it returns only when its slowest game finishes,
-# and near the end the pool drains until one game runs alone with 23 of 24 cores idle. That tail costs
-# roughly the same wall-clock whether the batch held 5000 games or 13 -- it is one pathological game
-# either way -- so the only thing that matters is HOW MANY TIMES you pay it. Per-deck staging pays it
-# 3x per deck (rows, matrix, measure) = 24 times, plus once per calibration slice and per top-up round.
-# Measured 2026-08-02: a 48-game calibration slice sat at exactly 100% CPU -- one thread of 24 -- for
-# its last 8+ minutes, and that was one of the CHEAPEST items in the queue. Pooling across decks makes
-# it 3 tails total. Three is the floor: the phase boundaries are real dependencies (the matrix measures
-# the model; the A/B measures the table), not bookkeeping.
+#   * INCREMENTAL BATCHING, ALWAYS. Every phase is one pooled queue, resumable, with concurrent
+#     batches per cell. The monolithic path is removed. A per-item loop pays a load-imbalance tail
+#     PER ITEM, and one-batch-per-cell scheduling starved a live run to 3 of 24 cores for hours.
+#   * NO CONDEMNATION AT d<=5. The H cells ARE the crossover -- they decide which evaluator
+#     escalation uses at each rung it climbs to -- so condemning one leaves a HOLE in the answer
+#     rather than saving cost. The guard is wall-clock based, so which cells it hits is partly luck
+#     (H3 measured 219.8 s/game on one seed and ~30 on two others). Clamped, not just defaulted.
+#   * THE PROFILE IS ALWAYS ATTACHED. Measuring profile-less describes a deck we do not ship; it
+#     invalidated every value-leaf table in this repo once already.
+#   * THE STAGED MODEL EXISTS BEFORE THE MATRIX. The H-cell ladder is guarded on the sidecar
+#     existing, so a missing one does not error -- it silently runs every H cell on the slow path.
+#   * SLOW GAMES ARE RECORDED. Anything over SLOW_GAME_MS lands in <queue>/slow_games.log with a
+#     self-contained repro, tagged by cell.
 #
-# HOW ONE BATCH SERVES MANY DECKS. The row dump writes to ONE file (MTG_DUMP_VALUE_ROWS is a
-# process-global static), but every row carries `<seed> <turn>` as its last two fields, so giving each
-# deck a disjoint seed range makes the pooled file trivially splittable afterwards.
+# NOTHING IS ADOPTED: artifacts land in logs/eval/<stem>.value.STAGED.json. Phase E produces the
+# numbers an adoption decision needs; the decision is yours.
 #
-# THE ONE REAL CONSEQUENCE, recorded rather than hidden: MTG_EVAL_ROWS_K and MTG_EVAL_ROWS_ROLLOUT are
-# process-global too, so a pooled dump forces ONE label mode on every deck -- uniform K=3 searched
-# labels (the "faster B option"). Dragonstorm therefore loses the cheap non-clairvoyant d0-rollout
-# labels its shipped model was built with (docs/design/dragonstorm-d5-default-and-value-leaf.md). That
-# doc called rollout-vs-searched provisional and said "searched labels remain an untried alternative
-# worth an A/B later" -- phase E is that A/B, since it measures the regenerated model against the live
-# one. If dragonstorm is the one deck that comes out worse, the label mode is the first suspect.
+# New deck and regeneration are the SAME command -- the script detects whether a live sidecar exists
+# and adapts (merge into a copy vs. use the fresh model directly; A/B against "no sidecar" vs. the
+# old one). Resume is safe and incremental: finished phases are skipped via marker files, and rows
+# dedupe on (seed,turn). See .claude/skills/value-leaf.md.
 #
-# NOTHING IS ADOPTED. Every artifact lands in logs/eval/<stem>.value.STAGED.json; the live sidecars are
-# never written. Phase E produces the numbers an adoption decision needs.
-#
-# THE FREEZE RULE. Artifacts are engine-state fingerprints, so the run must sit on ONE commit. HEAD:src
-# is recorded at start and re-checked before every phase; if it moves the run STOPS rather than mixing
-# engine states within one table.
-#
-#   bash scripts/valueleaf_regen_queue.sh run                     # the 8-deck fleet
-#   bash scripts/valueleaf_regen_queue.sh run decks/FiveColour    # ONE deck (new or existing)
-#   bash scripts/valueleaf_regen_queue.sh status decks/FiveColour # progress, touches nothing
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 . test/lib/harness.sh
@@ -63,6 +51,14 @@ MATRIX_REF=${MATRIX_REF:-50}      # games cap for cells ruled intractable
 # 400. That makes crossover entries for c=4..8 unfounded for a deck that ships at d5. The guard is
 # also wall-clock based, so it can fire purely because the box was busy.
 NEVER_CONDEMN=${NEVER_CONDEMN:-5}
+# Clamped, not merely defaulted. The d<=5 H cells ARE the crossover -- they decide which evaluator
+# escalation uses at each rung it climbs to -- so condemning one leaves a HOLE in the answer rather
+# than saving cost, and the guard is wall-clock based so which cells it hits is partly luck. There is
+# exactly ONE route here: incremental batching, no condemnation at d<=5.
+if [ "$NEVER_CONDEMN" -lt 5 ] 2>/dev/null; then
+    echo "NEVER_CONDEMN=$NEVER_CONDEMN is below the floor; forcing 5 (see docs/design/value-leaf-regeneration-queue.md)"
+    NEVER_CONDEMN=5
+fi
 # Report any game slower than this (ms) with a self-contained repro, tagged by cell. Off-by-default
 # in the engine; here it is ON, because an expensive deck's cost is concentrated in a few
 # pathological games and knowing WHICH ones is the whole input to an optimization pass. 0 disables.

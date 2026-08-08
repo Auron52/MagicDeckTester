@@ -5,7 +5,7 @@ this document was written to fix turned out to cost nothing measurable.** 4 deck
 (Anti-Lifegain, Dragonstorm, burn, Auras), 1 thin (Hinata), 3 could not be labelled at all
 (slivers_vial, treasure_hunt, Knights — **zero rows in 34 h**; see §8). Nothing adopted; staged
 artifacts sit in `logs/eval/<stem>.value.STAGED.json` with the live sidecars untouched.
-Driver: `scripts/valueleaf_regen_queue.sh` (a pooled rewrite of the serial queue below —
+Driver: `scripts/valueleaf.sh` (a pooled rewrite of the serial queue below —
 see §8 for why the serial design in §4 was abandoned).
 
 **Update 2026-08-06 — treasure_hunt COMPLETED on frozen `ba5f1b1`.** The TH cleanup-discard
@@ -181,7 +181,7 @@ most risk from a wrong table. Decks showing `–` still use the table via
 ## 4. The queue, in order
 
 **SUPERSEDED as an execution plan — kept for the per-deck cost estimates.** The serial "one job at a
-time" design below was replaced by `scripts/valueleaf_regen_queue.sh`, which pools *every* game of
+time" design below was replaced by `scripts/valueleaf.sh`, which pools *every* game of
 *every* deck into three batches (rows → matrix → measurement). The reason is the repo's standing
 batching rule: a serial queue pays a load-imbalance tail **per job**, and the slow decks here all
 have long-tail games, so a nine-job queue meant nine tails plus an idle box during every
@@ -208,6 +208,17 @@ The matrix is now incremental and resumable (`<out>.cells.json`), so a killed ru
 ---
 
 ## 5. Commands
+
+> **SUPERSEDED (2026-08-08): there is now exactly ONE route.**
+> ```bash
+> bash scripts/valueleaf.sh run    decks/<Deck>
+> bash scripts/valueleaf.sh status decks/<Deck>
+> ```
+> Incremental batching always, no condemnation at d<=5 (clamped), profile always attached, staged
+> model before the matrix, slow games recorded. The hand-run commands below are kept for historical
+> context only — do not assemble a run from them. See `.claude/skills/value-leaf.md`.
+
+### Historical: the hand-run commands
 
 Rebuild first — a stale binary invalidates everything downstream:
 

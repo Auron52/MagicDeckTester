@@ -7,13 +7,25 @@ to ship it.
 ## Rule 0 — one command, one frozen commit
 
 ```bash
-bash scripts/valueleaf_regen_queue.sh run    decks/<Deck>     # build (start / resume)
-bash scripts/valueleaf_regen_queue.sh status decks/<Deck>     # progress, touches nothing
+bash scripts/valueleaf.sh run    decks/<Deck>     # build (start / resume)
+bash scripts/valueleaf.sh status decks/<Deck>     # progress, touches nothing
 ```
 
-That is the entire interface. **Do not hand-roll the phases** — a hand-rolled run is how the
-profile-less-measurement bug and the silent H-cell perf cliff both happened. If something the
-pipeline needs is missing, fix the pipeline, not your invocation.
+That is the entire interface, and there are no other knobs you need. **Do not hand-roll the phases
+and do not add settings** — if something the pipeline needs is missing, fix the pipeline, not your
+invocation.
+
+The settings that matter are FIXED inside the script, because each has already gone wrong once:
+
+| fixed setting | why it is not a knob |
+|---|---|
+| incremental batching, always | a per-item loop pays a load-imbalance tail PER ITEM; one-batch-per-cell scheduling starved a live run to 3 of 24 cores for hours |
+| no condemnation at d<=5 | the H cells ARE the crossover; condemning one leaves a HOLE in the answer rather than saving cost, and the guard is wall-clock based so which cells it hits is partly luck |
+| profile always attached | measuring profile-less describes a deck we do not ship — it invalidated every table in this repo once |
+| staged model before the matrix | the H-cell ladder is guarded on the sidecar EXISTING; missing it does not error, it silently runs every H cell on the slow path |
+| slow games recorded | an expensive deck's cost is concentrated in a few pathological games; the repro list is the input to any optimization pass |
+
+The monolithic matrix path is removed and `--never-condemn-at-or-below < 5` is refused outright.
 
 The run must sit on ONE commit, because these artifacts are engine-state fingerprints: a play change
 midway produces a table whose rows disagree with each other. The driver records `HEAD:src` at start
