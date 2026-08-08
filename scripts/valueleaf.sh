@@ -75,21 +75,19 @@ PLAY_GAMES=${PLAY_GAMES:-500}
 PLAY_SEEDS=${PLAY_SEEDS:-"610000 611000 612000 613000"}
 ROW_K=${ROW_K:-3}
 
-# key | deck-dir | stem | matrix-key | row-seed-base | row-games
-# Row seed bases are 100k apart and row-games never approaches that, so `seed / 100000` recovers the
-# deck exactly when splitting the pooled file. Games are sized to OVERSHOOT the ~11k-row knee (~5-6
-# rows/game measured on hinata and auras), because overshoot inside one pooled batch is free -- it adds
-# no tail -- whereas undershooting would need a second batch and therefore a second tail.
-DECK_TABLE=(
-  "hinata|decks/Hinata2|Hinata2|hinata|100000|2200"
-  "antilife|decks/Anti-Lifegain|Anti-Lifegain|antilife|200000|2500"
-  "dragonstorm|decks/Dragonstorm|Dragonstorm|dragonstorm|300000|2500"
-  "slivers|decks/slivers_vial|slivers_vial|slivers|400000|2500"
-  "th|decks/treasure_hunt|treasure_hunt|TH|500000|2500"
-  "knights|decks/Knights|Knights|knights|600000|2500"
-  "burn|decks/burn|burn|burn|700000|2500"
-  "auras|decks/Auras|Auras|auras|800000|2500"
-)
+# key | deck-dir | stem | matrix-key | row-seed-base | row-games -- GENERATED, never edited.
+#
+# scripts/deck_registry.py discovers decks/*/ and derives every path from the folder, so a new deck
+# needs no entry anywhere. Row seed bases are distinct multiples of 100k (row-games never approaches
+# 100k), so `seed / 100000` recovers the deck when splitting the pooled file; the registry derives
+# each from a hash of the deck key rather than from position, so adding or removing a deck cannot
+# renumber the others and orphan rows already on disk.
+#
+# Games OVERSHOOT the ~11k-row knee (~5-6 rows/game measured on hinata and auras) because overshoot
+# inside one pooled batch is free -- it adds no tail -- whereas undershooting needs a second batch and
+# therefore a second tail.
+mapfile -t DECK_TABLE < <(python3 scripts/deck_registry.py --shell "${ROW_GAMES:-2500}")
+[ ${#DECK_TABLE[@]} -gt 0 ] || { echo "no decks discovered under decks/ -- each needs <stem>.cod|.txt AND <stem>.profile.json"; exit 2; }
 # SINGLE-DECK MODE. `run <deck-dir>` replaces the table above with one row derived from the folder,
 # so a NEW deck goes through exactly this pipeline instead of a hand-rolled one. Nothing else differs:
 # same phases, same staging, same freeze rule. Its own VLQ dir keeps it from colliding with a fleet run.
@@ -221,15 +219,6 @@ phase_train() {
         python3 scripts/attic/train_eval_gbdt.py --rows "$src" --out "$staged.raw" \
             --regression --trees 120 --depth 4 --lr 0.15 --min-leaf 20 >> "$VLQ/train_$key.log" 2>&1
         if [ ! -s "$staged.raw" ]; then log "  $key SKIPPED: trainer produced nothing"; continue; fi
-        # Generalization number, as a SECOND pass to a scratch path. --holdout trains on 75% of the
-        # rows, so folding it into the run above would ship a model fitted on less data purely to
-        # print a diagnostic. Without this pass the log carried only train_RMSE -- an in-sample
-        # number that cannot show overfitting -- while the skill and `status` both quote a held-out
-        # one. Same recipe, so the number describes the model that ships. Costs no games.
-        python3 scripts/attic/train_eval_gbdt.py --rows "$src" --out "$VLQ/holdout_$key.json" \
-            --regression --trees 120 --depth 4 --lr 0.15 --min-leaf 20 --holdout \
-            >> "$VLQ/train_$key.log" 2>&1 || true
-        rm -f "$VLQ/holdout_$key.json"
         python3 - "$dir/$stem.value.json" "$staged.raw" "$staged" "$(cat "$VLQ/freeze.commit")" "$n" <<'PY'
 import json, os, sys
 live, raw, out, commit, n = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])

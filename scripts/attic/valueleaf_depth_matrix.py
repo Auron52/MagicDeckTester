@@ -24,100 +24,30 @@ import argparse, glob, json, os, re, subprocess, sys, threading, time
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
 MTG = "build/Release/mtg"
-# Per-deck folder layout (decks/<name>/<name>...): the analyzer writes the profile/value next to the deck
-# and the engine resolves siblings directory-relative. (Earlier flat paths decks/<name>.value.json are stale.)
-DECKS = {
-    "antilife": ("decks/Anti-Lifegain/Anti-Lifegain.cod", "decks/Anti-Lifegain/Anti-Lifegain.value.json", 8),
-    "slivers":  ("decks/slivers_vial/slivers_vial.txt",   "decks/slivers_vial/slivers_vial.value.json",   8),
-    "TH":       ("decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.value.json", 8),
-    "burn":     ("decks/burn/burn.txt",                   "decks/burn/burn.value.json",                   8),
-    "knights":  ("decks/Knights/Knights.cod",             "decks/Knights/Knights.value.json",             8),
-    # hinata (combo): heuristic is EXPENSIVE at deep depths (H5 ~4.8 s/game vs H2 ~0.1 s) while the value
-    # leaf is cheap at every depth. Use separate --hdepths (cap at 3) / --vdepths (1..5) to keep it tractable;
-    # the fallback decision only needs V5-vs-H2 and H_conv (heuristic converges by d3). See value.json note.
-    "hinata":   ("decks/Hinata2/Hinata2.cod",             "decks/Hinata2/Hinata2.value.json",             8),
-    # dragonstorm (storm/combo): like hinata/antilife the deep heuristic is expensive; use capped --hdepths
-    # and --vdepths 1..5 for the fallback calibration (V5-vs-H_conv). value model generated 2026-07-22.
-    "dragonstorm": ("decks/Dragonstorm/Dragonstorm.cod",  "decks/Dragonstorm/Dragonstorm.value.json",     8),
-    # auras (Bogles hexproof-aura aggro): board-driven like burn/slivers -> the value leaf is inert on
-    # quality (win decided by visible board+hand, not library uncertainty), a pure search SPEED win.
-    "auras":    ("decks/Auras/Auras.cod",                 "decks/Auras/Auras.value.json",                 8),
-    # goblins (aggro): board-driven like burn/slivers/auras -> value leaf expected inert on quality,
-    # a search SPEED win. hdepths capped at 3 (heuristic converges by d3 for aggro). value model 2026-07-31.
-    "goblins":  ("decks/Goblins/Goblins.cod",             "decks/Goblins/Goblins.value.json",             8),
-    # creature_giving (gift-the-opponent drain engine): first model 2026-08-06 (no live sidecar yet --
-    # use the _staged key until adoption). Deck folder name contains a space.
-    "creature_giving": ("decks/Creature Giving/Creature Giving.cod",
-                        "decks/Creature Giving/Creature Giving.value.json",                             8),
-}
 
-# AUTO-REGISTER every deck folder that is not named above, keyed by its lower-cased folder name with
-# non-alphanumerics collapsed to "_" (so "decks/FiveColour" -> "fivecolour", "decks/Creature Giving"
-# -> "creature_giving"). Adding a deck to this table used to be a hand edit, and forgetting it was a
-# silent trap: the H-cell ladder is guarded on `os.path.exists(<value.json>)`, so an unregistered or
-# mis-pathed deck does not error -- it quietly runs every H cell on the slow path. Explicit entries
-# above still win, because several carry a non-default max_turns or a comment worth keeping.
-PROFILES_AUTO = {}
+# Deck locations come from scripts/deck_registry.py -- pure discovery of decks/*/, no list to maintain.
+# There used to be two hand-written dicts here (DECKS and PROFILES) plus an auto-discovery pass that
+# patched around them. An unlisted deck did not error: the H-cell ladder is guarded on
+# os.path.exists(<value.json>), so a missing entry quietly ran every H cell on the slow path.
+#
+# A "<deck>_staged" key is the same decklist and the same profile pointing at a model that is NOT yet
+# installed in the deck folder (logs/eval/<stem>.value.STAGED.json); the model reaches the engine via
+# MTG_VALUE_PROFILE. That is the order the pipeline requires -- measure, then adopt. H cells set
+# MTG_VALUE_MODEL=0, so a staged key's H cells are byte-identical to the plain key's; only V moves.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+import deck_registry
 
-
-def _slug(name):
-    return "".join(c.lower() if c.isalnum() else "_" for c in name)
-
-_explicit_decks = {v[0] for v in DECKS.values()}
-for _dir in sorted(glob.glob("decks/*")):
-    if not os.path.isdir(_dir):
-        continue
-    _stem = os.path.basename(_dir)
-    _deck = next((p for p in ("%s/%s.cod" % (_dir, _stem), "%s/%s.txt" % (_dir, _stem))
-                  if os.path.exists(p)), None)
-    if not _deck or _deck in _explicit_decks:
-        continue
-    if not os.path.exists("%s/%s.profile.json" % (_dir, _stem)):
-        continue          # no profile -> cannot be measured at shipped play; skip rather than guess
-    _key = _slug(_stem)
-    if _key in DECKS:
-        continue
-    DECKS[_key] = (_deck, "%s/%s.value.json" % (_dir, _stem), 8)
-    PROFILES_AUTO[_key] = "%s/%s.profile.json" % (_dir, _stem)
-
-# STAGED variants: "<deck>_staged" is the same deck + the same mulligan profile, but its V cells read
-# a value model that is NOT yet installed in the deck folder (logs/eval/<stem>.value.STAGED.json). The
-# model reaches the engine via MTG_VALUE_PROFILE, so pointing a deck key at the staged path is all it
-# takes to measure a table for a model BEFORE adopting it -- the order the regeneration queue requires
-# (measure, then adopt). H cells set MTG_VALUE_MODEL=0, so they are byte-identical to the plain key;
-# only V cells move. Derived for every deck rather than listed, so a new deck gets one for free.
-for _k, (_deck, _val, _mt) in list(DECKS.items()):
-    _stem = os.path.basename(_val).replace(".value.json", "")
-    DECKS[_k + "_staged"] = (_deck, "logs/eval/%s.value.STAGED.json" % _stem, _mt)
-
-
-# DECK PROFILE (<name>.profile.json). ADDED 2026-07-31: neither run() nor run_batch() used to pass
-# --profile at all, so EVERY value-leaf depth table in this repo was measured on a deck with NO
-# profile -- no mulligan/keep model, no card_scores. That is not the deck we ship, and it is exactly
-# why Hinata's table needed regenerating once its exhaustive keep model existed. The engine resolves
-# the keepmodel/value/eval siblings directory-relative off this path (see CLAUDE.md), so passing the
-# profile is all that is needed to measure SHIPPED play.
-PROFILES = {
-    "antilife":    "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
-    "slivers":     "decks/slivers_vial/slivers_vial.profile.json",
-    "TH":          "decks/treasure_hunt/treasure_hunt.profile.json",
-    "burn":        "decks/burn/burn.profile.json",
-    "knights":     "decks/Knights/Knights.profile.json",
-    "hinata":      "decks/Hinata2/Hinata2.profile.json",
-    "dragonstorm": "decks/Dragonstorm/Dragonstorm.profile.json",
-    "auras":       "decks/Auras/Auras.profile.json",
-    "hinata_staged":   "decks/Hinata2/Hinata2.profile.json",
-    "antilife_staged": "decks/Anti-Lifegain/Anti-Lifegain.profile.json",
-    "creature_giving":        "decks/Creature Giving/Creature Giving.profile.json",
-    "creature_giving_staged": "decks/Creature Giving/Creature Giving.profile.json",
-}
-
-# Auto-discovered decks (above) supply their own profile, for both the plain and _staged keys.
+_REG = deck_registry.discover()
+# key -> (decklist, value-model path, max_turns).  PROFILES is the same keys -> the deck profile.
 # Attaching the profile is not optional: measuring profile-less silently describes a deck we do not
 # ship, which invalidated every value-leaf table in this repo once already.
-for _k, _p in PROFILES_AUTO.items():
-    PROFILES.setdefault(_k, _p)
-    PROFILES.setdefault(_k + "_staged", _p)
+DECKS, PROFILES = {}, {}
+for _k, _d in _REG.items():
+    DECKS[_k] = (_d.deck_file, _d.value, _d.max_turns)
+    DECKS[_k + deck_registry.STAGED_SUFFIX] = (_d.deck_file, _d.staged, _d.max_turns)
+    PROFILES[_k] = _d.profile
+    PROFILES[_k + deck_registry.STAGED_SUFFIX] = _d.profile
+
 
 def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_depth,
         deck_profile=None):

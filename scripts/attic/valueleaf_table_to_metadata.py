@@ -30,43 +30,22 @@ trained sidecar uses. Run once per value model, right after its depth matrix is 
 """
 import argparse, collections, glob, json, os, re, sys
 
-# deck name (as printed in the matrix log) -> its model metadata file
-NAME2VALUE = {
-    "antilife": "decks/Anti-Lifegain/Anti-Lifegain.value.json",
-    "slivers":  "decks/slivers_vial/slivers_vial.value.json",
-    "TH":       "decks/treasure_hunt/treasure_hunt.value.json",
-    "burn":     "decks/burn/burn.value.json",
-    "knights":  "decks/Knights/Knights.value.json",
-    "hinata":   "decks/Hinata2/Hinata2.value.json",
-    "dragonstorm": "decks/Dragonstorm/Dragonstorm.value.json",
-    "auras":    "decks/Auras/Auras.value.json",
-    "goblins":  "decks/Goblins/Goblins.value.json",
-    "creature_giving": "decks/Creature Giving/Creature Giving.value.json",
-}
+# Deck locations come from scripts/deck_registry.py -- pure discovery of decks/*/, no list to maintain.
+# This used to be a hand-written NAME2VALUE dict, and an unlisted deck did NOT error: write_deck
+# printed "SKIP (no metadata path mapped)" and returned success, so the phase reported done having
+# written nothing. FiveColour would have measured 52 cells over ~8 hours and then thrown the
+# derivation away, with phase E going on to A/B a model that had no table and no crossover.
+#
+# A "<deck>_staged" key targets logs/eval/<stem>.value.STAGED.json instead of the live sidecar: a
+# regenerated table CHANGES PLAY, so it is measured against the live one before being installed.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+import deck_registry
 
-# AUTO-DISCOVERY, mirroring valueleaf_depth_matrix.py's, and keyed identically (slug of the folder
-# name). Without it this dict is hand-maintained, and an unlisted deck does not error -- write_deck
-# prints "SKIP (no metadata path mapped)" and phase D writes nothing, so the run completes with a
-# staged model that has no table and no crossover, and phase E then A/Bs it as if it did. The matrix
-# script was given auto-discovery for the same reason; leaving it out of THIS one meant FiveColour
-# would have measured 52 cells over ~8 hours and then thrown the derivation away.
-def _slug(name):
-    return "".join(c.lower() if c.isalnum() else "_" for c in name)
-
-for _dir in sorted(glob.glob("decks/*")):
-    if not os.path.isdir(_dir):
-        continue
-    _stem = os.path.basename(_dir)
-    if not os.path.exists("%s/%s.profile.json" % (_dir, _stem)):
-        continue          # no profile -> never measured at shipped play -> nothing to write here
-    NAME2VALUE.setdefault(_slug(_stem), "%s/%s.value.json" % (_dir, _stem))
-
-# STAGED targets, matching the "<deck>_staged" keys in valueleaf_depth_matrix.py. A regenerated table
-# CHANGES PLAY, so it must be measured against the live one before being installed; writing it here
-# keeps the live sidecar untouched until that A/B has run. Adopt by copying the staged file over the
-# live one once the measurement justifies it. Derived so a new deck gets one for free.
-for _k, _v in list(NAME2VALUE.items()):
-    NAME2VALUE[_k + "_staged"] = "logs/eval/%s.value.STAGED.json" % _v.rsplit("/", 1)[-1][:-len(".value.json")]
+_REG = deck_registry.discover()
+NAME2VALUE = {}
+for _k, _d in _REG.items():
+    NAME2VALUE[_k] = _d.value
+    NAME2VALUE[_k + deck_registry.STAGED_SUFFIX] = _d.staged
 
 HDR = re.compile(r"games=(\d+)\s+seeds=\[([^\]]+)\]\s+value_min_depth=(\d+)")
 HGAMES = re.compile(r"hgames=(\d+)")

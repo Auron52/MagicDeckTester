@@ -137,8 +137,6 @@ def main():
     ap.add_argument("--depth", type=int, default=4)
     ap.add_argument("--lr", type=float, default=0.15)
     ap.add_argument("--min-leaf", type=int, default=20)
-    ap.add_argument("--holdout", action="store_true",
-                    help="hold out every 4th DECISION; report held-out pairwise acc as it boosts")
     ap.add_argument("--init-model", default=None,
                     help="warm-start from an EXISTING linear sidecar (e.g. the faithful-anchor "
                          "linear d0) instead of a free rank_fit; boosts trees on THAT base's residual "
@@ -173,67 +171,76 @@ def main():
         lin_coefs_wt, _ = _tm.rank_fit(X, y, groups, 0.001, 600, 0.3)
         print("warm-started from linear rank model", file=sys.stderr)
 
-    reg_intercept = 0.0
-    F = [0.0] * n
-    pairs = te_pairs = None
-    tr_idx = list(range(n)); te_idx = []
-    if args.regression:
-        # VALUE model: init F at the mean win turn, boost squared-error residuals toward y.
-        # --holdout in REGRESSION mode: hold out every 4th DECISION and report held-out RMSE as it
-        # boosts. Without this there was no held-out metric at all in regression mode -- only train
-        # RMSE, which falls monotonically as trees are added and so cannot tell "learning" from
-        # "memorising". That gap is why nobody could say where the value model SATURATES, i.e. how
-        # many rows a dump actually needs. Added 2026-08-01.
-        if args.holdout:
-            gids = sorted(set(groups)); held = set(gids[::4])
-            tr_idx = [i for i in range(n) if groups[i] not in held]
-            te_idx = [i for i in range(n) if groups[i] in held]
-        reg_intercept = sum(y[i] for i in tr_idx) / max(len(tr_idx), 1)
-        F = [reg_intercept] * n
-    else:
-        if args.holdout:
-            gids = sorted(set(groups)); held = set(gids[::4])
-            pairs_all = build_pairs([groups[i] for i in range(n)], y)
-            te_pairs = [(a, j, w) for (a, j, w) in pairs_all if groups[a] in held]
-            pairs = [(a, j, w) for (a, j, w) in pairs_all if groups[a] not in held]
-        else:
-            pairs = build_pairs(groups, y)
-        print("pairs=%d" % len(pairs), file=sys.stderr)
-        if lin_coefs_wt is not None:
-            for i in range(n):
-                F[i] = sum(-lin_coefs_wt[j] * X[i][j] for j in range(d))    # linear goodness init
-
-    def rmse(idxs=None):
-        ii = range(n) if idxs is None else idxs
-        cnt = len(list(ii)) if idxs is not None else n
-        if cnt == 0: return float("nan")
-        ii = range(n) if idxs is None else idxs
-        return math.sqrt(sum((F[i] - y[i]) ** 2 for i in ii) / cnt)
-
-    trees = []
-    for rnd in range(args.trees):
+    def boost(tr_idx, te_idx, held_groups, report):
+        """Boost on tr_idx, reporting held-out metrics on te_idx. Returns (trees, reg_intercept)."""
+        reg_intercept = 0.0
+        F = [0.0] * n
+        pairs = te_pairs = None
         if args.regression:
-            resid = [y[i] - F[i] for i in range(n)]                        # squared-error negative gradient
+            # VALUE model: init F at the mean win turn, boost squared-error residuals toward y.
+            reg_intercept = sum(y[i] for i in tr_idx) / max(len(tr_idx), 1)
+            F = [reg_intercept] * n
         else:
-            resid, _ = pairwise_residuals(pairs, F, n)
-        nodes = fit_tree(X, resid, tr_idx, args.depth, args.min_leaf, d)
-        for i in range(n):
-            F[i] += args.lr * tree_predict(nodes, X[i])
-        # scale leaves by lr for serving (so serving sums the same increments)
-        for nd in nodes:
-            if nd[0] < 0:
-                nd[4] *= args.lr
-        trees.append(nodes)
-        if rnd % 20 == 0 or rnd == args.trees - 1:
-            if args.regression:
-                msg = "round %3d  train_RMSE=%.4f turns" % (rnd, rmse(tr_idx))
-                if te_idx: msg += "  heldout_RMSE=%.4f  (n_tr=%d n_te=%d)" % (rmse(te_idx), len(tr_idx), len(te_idx))
-                print(msg, file=sys.stderr)
+            pairs_all = build_pairs(groups, y)
+            if held_groups:
+                te_pairs = [(a, j, w) for (a, j, w) in pairs_all if groups[a] in held_groups]
+                pairs    = [(a, j, w) for (a, j, w) in pairs_all if groups[a] not in held_groups]
             else:
-                msg = "round %3d  train_pair_acc=%.1f%%" % (rnd, pairwise_acc(pairs, F))
-                if te_pairs is not None:
-                    msg += "  heldout_pair_acc=%.1f%%" % pairwise_acc(te_pairs, F)
-                print(msg, file=sys.stderr)
+                pairs = pairs_all
+            if report:
+                print("pairs=%d" % len(pairs), file=sys.stderr)
+            if lin_coefs_wt is not None:
+                for i in range(n):
+                    F[i] = sum(-lin_coefs_wt[j] * X[i][j] for j in range(d))    # linear goodness init
+
+        def rmse(idxs):
+            if not idxs: return float("nan")
+            return math.sqrt(sum((F[i] - y[i]) ** 2 for i in idxs) / len(idxs))
+
+        trees = []
+        for rnd in range(args.trees):
+            if args.regression:
+                resid = [y[i] - F[i] for i in range(n)]                    # squared-error negative gradient
+            else:
+                resid, _ = pairwise_residuals(pairs, F, n)
+            nodes = fit_tree(X, resid, tr_idx, args.depth, args.min_leaf, d)
+            for i in range(n):
+                F[i] += args.lr * tree_predict(nodes, X[i])
+            # scale leaves by lr for serving (so serving sums the same increments)
+            for nd in nodes:
+                if nd[0] < 0:
+                    nd[4] *= args.lr
+            trees.append(nodes)
+            if report and (rnd % 20 == 0 or rnd == args.trees - 1):
+                if args.regression:
+                    msg = "round %3d  train_RMSE=%.4f turns" % (rnd, rmse(tr_idx))
+                    if te_idx:
+                        msg += "  heldout_RMSE=%.4f  (n_tr=%d n_te=%d)" % (rmse(te_idx), len(tr_idx), len(te_idx))
+                    print(msg, file=sys.stderr)
+                else:
+                    msg = "round %3d  train_pair_acc=%.1f%%" % (rnd, pairwise_acc(pairs, F))
+                    if te_pairs is not None:
+                        msg += "  heldout_pair_acc=%.1f%%" % pairwise_acc(te_pairs, F)
+                    print(msg, file=sys.stderr)
+        return trees, reg_intercept
+
+    # TWO passes, always, with no flag to get either one wrong.
+    #
+    # A held-out number is the only thing that separates learning from memorising -- train RMSE falls
+    # monotonically as trees are added whatever the model is doing -- so it is not optional and there
+    # is no reason a caller would want it off. But the split trains on 75% of the rows, so measuring
+    # and SHIPPING in one pass would mean shipping a model deliberately fitted on less data just to
+    # print a diagnostic. Hence: measure on the split, then refit on everything and ship that. Same
+    # recipe both times, so the reported number describes the model that ships.
+    #
+    # This used to be a --holdout flag, off by default. Nothing passed it, so every value model in
+    # this repo was accepted on an in-sample RMSE alone.
+    gids = sorted(set(groups))
+    held_groups = set(gids[::4])                                  # every 4th DECISION, not every 4th row
+    tr_idx = [i for i in range(n) if groups[i] not in held_groups]
+    te_idx = [i for i in range(n) if groups[i] in held_groups]
+    boost(tr_idx, te_idx, held_groups, report=True)                # measured, then discarded
+    trees, reg_intercept = boost(list(range(n)), [], set(), report=False)   # shipped
 
     # Quantize to fixed-point integer trees and emit the sidecar.
     jtrees = []

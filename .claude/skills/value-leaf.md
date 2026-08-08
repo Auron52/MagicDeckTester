@@ -92,8 +92,13 @@ d5/s2002 moved 4.792 → 4.804.
 ladder's warm-up passes on the cheap leaf and only the committed pass on the heuristic — worth
 1.35×–84.8× less search work, most of it at d5. It is guarded on
 `os.path.exists(<value.json>)`, so a deck whose model is missing or mis-pathed does not error: every
-H cell silently takes the slow path. This is why phase B must precede phase C, and why the matrix
-registry now auto-discovers `decks/*/` instead of needing a hand edit.
+H cell silently takes the slow path. This is why phase B must precede phase C.
+
+**There is no deck registry to edit.** `scripts/deck_registry.py` discovers `decks/*/` and derives
+every path from the folder — decklist, profile, live sidecar, staged sidecar, row seed base. The
+matrix and metadata scripts both import it. The three hand-maintained dicts it replaced each failed
+the same silent way: an unlisted deck did not error, it was skipped. The stale fleet list was missing
+three decks that have live sidecars.
 
 Using the model under test to accelerate its own baseline is safe **by construction**: a value-leaf
 pass returns before `SimulateToEnd` (the only writer of the leaf table), pass-*k* nodes all satisfy
