@@ -446,3 +446,68 @@ The tail is untouched and is now the dominant cost: at width 1 the worst single 
 seed-4200000 run is **235 s** (gi=61), and 60-game probes at seeds 2002/2044 show worst games of
 115 s / 62 s. That is the mana backtracker (§3), not Greaves — the Greaves atom is closed. Sizing
 for regression registration (§5) still depends on that tail, so registration stays deferred.
+
+## Where the cost actually is now (2026-08-08) — lookahead BOTTOMING, not the play search
+
+Re-measured every deck on the current build (40 games, seed 2002, d3/b10, one thread, pooled):
+
+| deck | s/game | rollout calls | backtracker entries |
+|---|---|---|---|
+| burn | 0.027 | 33,445 | 39,094 |
+| Knights | 0.036 | 61,980 | 43,596 |
+| slivers_vial | 0.041 | 69,142 | 60,341 |
+| treasure_hunt | 0.052 | 30,460 | 26,866 |
+| Dragonstorm | 0.053 | 25,178 | 56,338 |
+| Auras | 0.072 | 33,673 | 49,600 |
+| Anti-Lifegain | 0.100 | 32,511 | 37,323 |
+| Goblins | 0.153 | 161,923 | 111,316 |
+| Hinata2 | 0.233 | 75,024 | 185,476 |
+| **FiveColour** | **0.880** | **824,487** | **1,042,497** |
+
+FiveColour is still **3.8x the next-heaviest deck**. But the earlier framing ("the mana backtracker
+is the top cost") was reading EXCLUSIVE self-cost. Inclusively (callgrind, 3 games, contention-free
+— the metric to trust on this box):
+
+```
+21,760,137,271 (78.43%)  AIEngine::BottomCards(GameState&, int, int)   [2 calls in 3 games]
+```
+
+**Bottoming is 78% of the runtime.** `BottomCards` falls through to the lookahead path whenever the
+deck has no exhaustive table with `bottoming_enabled` (FiveColour has no mulligan profile at all),
+and that path rolls out **a full game per candidate card, per bottom step** — 7 rollouts for a
+one-mulligan game, 13 for two. One bottoming decision costs ~5.5x an entire game of play. The
+backtracker work the earlier sections chased is mostly *underneath* this.
+
+A cross-deck wall check corroborates (`--force-mulligan "0:"`, FiveColour 22.3s -> 9.5s over 30
+games, Goblins 5.2s -> 1.7s) but is NOT a clean attribution: forcing a keep also changes which
+hands are played, which is why several decks come out negative. Trust the callgrind number.
+
+### Levers, sized
+
+1. **A mulligan profile with `bottoming_enabled` turns this into an O(1) table lookup** — the
+   architecture already does this (`ExhaustiveKeep::DecideBottom`). This is the single biggest win
+   available for FiveColour, and it is user-gated work (generation is expensive and commit-bound).
+   Note the mulligan skill ships `bottoming_enabled` OFF until a validated high-R run, so a profile
+   alone does not automatically collect it. Goblins has a profile being generated now.
+2. **Duplicate-candidate collapse** (lossless-ish): two copies of the same card are the same
+   removal. Expected distinct names in a 7-card hand — burn 4.57/7 (**35%** fewer rollouts),
+   Goblins 5.24/7 (**25%**), FiveColour 6.47/7 (**8%**). A good general win, but small on the deck
+   that needs it most, and not strictly byte-identical (which physical `m_number` stays in hand can
+   move a downstream tie-break).
+3. **Pre-filter candidates by the heuristic before rolling out** — today all 7 get a full-game
+   rollout and the heuristic only tiebreaks among win-optimal removals. Restricting to the K worst
+   heuristic candidates would cut rollouts ~57% at K=3. This CHANGES PLAY for every deck, so it
+   needs its own sweep + accept cycle; it is not a free win.
+4. **Two-stage mana/payoff gating** — `MTG_ENUM_STATS` reports that **76.6%** of FiveColour's
+   enumerated payoff lines are unaffordable under EVERY mana line (Hinata2 74.4%, Goblins 74.8%,
+   Dragonstorm 62.6%), with an estimated 1.4–1.8x fewer visits. This is a general engine win, not a
+   FiveColour one, and is a known deliberately-unimplemented design (see the ceiling instrument at
+   `TurnSolver.cpp` "two-stage gating potential").
+
+### What is NOT the differentiator
+
+FiveColour runs essentially the SAME number of mana-side enumerations as Hinata2 (85,663 vs 84,735)
+but 5.6x the backtracker entries — so its mana problems are individually ~5.6x harder (five colours,
+and its mana-side symmetry collapse is 1.00x vs Hinata2's 1.05x: with five colours almost no two
+sources are interchangeable, so there is nothing to dedup). That is inherent to the archetype, not
+an obvious bug.
