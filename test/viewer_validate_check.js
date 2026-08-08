@@ -26,12 +26,18 @@
 // CAVEAT (positional --choices replay): a FEW baseline entries are NOT CheckLine limitations but
 // CHOICE-STREAM SHIFTS from adding a human-play decision point. This check rebuilds each line by
 // replaying the recorded `chosen` indices positionally; if the CURRENT engine emits a human-play
-// breakpoint the recording predates (e.g. #12 Commit Line's same-turn sac re-prompt --
-// treasure_hunt/claude_s4_gi3 T7/T8), that inserted decision desyncs the recording's later choices,
-// so downstream lines validate against a shifted state. Verify such a fail is a stream-shift (not a
-// real CheckLine bug) by reverting the engine change and re-running: it should vanish. A robust fix
-// (drive the engine decision-by-decision and auto-pass extra breakpoints) is deferred; see
-// docs/design/viewer-fixes-2026-07-27.md (batch 4).
+// breakpoint the recording predates (e.g. MTG_PLAY_SEGMENT_ALWAYS's intra-phase re-prompt), that
+// inserted decision desyncs the recording's later choices, so downstream lines validate against a
+// shifted state. Verify such a fail is a stream-shift (not a real CheckLine bug) by reverting the
+// engine change and re-running: it should vanish.
+//
+// PARTIALLY FIXED (2026-08-08): `alignPrefix` below implements the auto-pass half of the deferred
+// robust fix -- it probes what the engine is really offering and passes extra MAIN-PHASE segments
+// until the recorded frame lines up. What it still cannot absorb is a SUB-DECISION (lackey_put /
+// tutor_etb / echo) interleaved at the shift point: the probe stops there, so the line reports
+// NO_VALIDATION_BLOCK. That residue is Goblins-shaped (its lines create new play mid-phase, so it
+// is the deck A1 re-prompts most) -- see docs/design/viewer-validate-stream-alignment.md for the
+// remaining work and the two cheaper alternatives.
 //
 // Usage:  node test/viewer_validate_check.js [--update-baseline] [deckFilter ...]
 'use strict';
@@ -68,6 +74,25 @@ function flatten(chosen) { return Array.isArray(chosen) ? chosen.slice() : [chos
 // reconstructed as --firebreathe / --storage-hold / --cast-order (keyed by turn / land# / main-ordinal).
 const SIDE_CHANNEL = new Set(['firebreathe', 'storage_hold']);
 
+// Types --force-mulligan resolves INTERNALLY: under force the engine never calls the external
+// chooser for keep/bottom, so they consume no --choices slot. Mirrors viewer_protocol_check.py's
+// FORCED_MULLIGAN_TYPES -- flatten and forceArg MUST agree or the positional stream desyncs.
+const FORCED_MULLIGAN_TYPES = new Set(['mulligan', 'bottom']);
+
+// Reconstruct the recorded opening hand. WITHOUT this the check replays the LIVE mulligan, so a
+// reference recorded after mulliganing to 3 is validated against a 7-card game -- every positional
+// choice then indexes a different decision and the verdicts are meaningless. That was this check's
+// dominant failure mode: references carrying mulligan FRAMES accidentally compensated (their
+// recorded keep/bottom answers were replayed positionally AS the live mulligan), so the breakage
+// stayed hidden until ref_regenerate.py folded those frames into the `mulligan` header and removed
+// the accident. Measured on treasure_hunt/claude_s4_gi3 T2: `illegal (land drop unavailable)`
+// without force, `accept` with it.
+function forceArg(ref) {
+  const m = ref.mulligan;
+  if (!m) { return null; }   // predates mulligan recording -> the engine's live mulligan is used
+  return `${m.count || 0}:` + (m.bottom || []).join(',');
+}
+
 function sideChannelArgs(decisions) {
   const fb = [], sh = [], co = [];
   for (const de of decisions) {
@@ -83,12 +108,13 @@ function sideChannelArgs(decisions) {
   return extra;
 }
 
-function runValidate(dk, seed, gi, maxTurns, choices, line, extra) {
+function runValidate(dk, seed, gi, maxTurns, choices, line, extra, force) {
   const args = [dk.deckPath];
   if (dk.profilePath) args.push('--profile', dk.profilePath);
   args.push('--cards-json', CARDS, '--claude-play', '--seed', String(seed),
             '--game-index', String(gi), '--max-turns', String(maxTurns), '--depth', '0',
             '--choices', choices.join(','), '--validate-line', line);
+  if (force !== null && force !== undefined) args.push('--force-mulligan', force);
   if (extra && extra.length) args.push(...extra);
   let out;
   try { out = execFileSync(BIN, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); }
@@ -96,6 +122,50 @@ function runValidate(dk, seed, gi, maxTurns, choices, line, extra) {
   const m = /<<<CLAUDE_VALIDATION>>>([\s\S]*?)<<<END_VALIDATION>>>/.exec(out);
   if (!m) return { verdict: 'NO_VALIDATION_BLOCK' };
   try { return JSON.parse(m[1]); } catch (e) { return { verdict: 'PARSE_ERROR' }; }
+}
+
+// Which decision does the engine actually present after `choices`? Returns {type,turn,phase} or null.
+function probeFrame(dk, seed, gi, maxTurns, choices, extra, force) {
+  const args = [dk.deckPath];
+  if (dk.profilePath) args.push('--profile', dk.profilePath);
+  args.push('--cards-json', CARDS, '--claude-play', '--seed', String(seed),
+            '--game-index', String(gi), '--max-turns', String(maxTurns), '--depth', '0',
+            '--choices', choices.join(','));
+  if (force !== null && force !== undefined) args.push('--force-mulligan', force);
+  if (extra && extra.length) args.push(...extra);
+  let out;
+  try { out = execFileSync(BIN, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); }
+  catch (e) { out = (e.stdout || '') + (e.stderr || ''); }   // exit 70 is expected (decision)
+  const m = /<<<CLAUDE_DECISION>>>([\s\S]*?)<<<END_DECISION>>>/.exec(out);
+  if (!m) return null;
+  try { const d = JSON.parse(m[1]); return { type: d.type, turn: d.turn, phase: d.phase }; }
+  catch (e) { return null; }
+}
+
+// Absorb main-phase frames the RECORDING does not have an answer for, by passing them (-1).
+//
+// The positional --choices stream assumes the engine presents exactly the frames the reference
+// recorded. MTG_PLAY_SEGMENT_ALWAYS breaks that for references recorded before it: Commit Line now
+// re-prompts inside a main phase, so a pre-segment recording of "T2: play Mountain" is followed by
+// a SECOND T2/pre_main frame nobody answered. Every later choice then slips by one and validates
+// against the wrong board -- e.g. Goblins/claude_s22_gi21's T3 line reported "land drop
+// unavailable" because the prefix had landed on T2/post_main.
+//
+// Fix (this is the "auto-pass extra breakpoints" the header deferred): before validating a recorded
+// frame, probe what the engine is actually offering; while that is a DIFFERENT main-phase frame,
+// answer it with a pass and probe again. Pass is the right answer -- the human's recorded line for
+// that phase is already committed in the previous segment -- and it is what
+// viewer_protocol_check.py does for the same unaligned frame. Bounded, and it only ever inserts
+// passes, so a genuinely unenumerated or unpayable line still reports its real verdict.
+const MAX_AUTOPASS = 8;
+function alignPrefix(dk, ref, maxTurns, choices, want, extra, force) {
+  for (let i = 0; i < MAX_AUTOPASS; i++) {
+    const f = probeFrame(dk, ref.seed, ref.game_index, maxTurns, choices, extra, force);
+    if (!f || f.type !== 'main_phase') { return 0; }             // sub-decision / terminal: leave it
+    if (f.turn === want.turn && f.phase === want.phase) { return i; }   // aligned
+    choices.push(-1);
+  }
+  return MAX_AUTOPASS;
 }
 
 function collectRefs() {
@@ -117,6 +187,7 @@ function main() {
   if (!refs.length) { console.log('no references found'); return 0; }
   const tally = { accept: 0, choose: 0, unsupported: 0, skipped: 0 };
   const fails = [];
+  let autopassed = 0;   // extra main-phase segments absorbed (see alignPrefix)
   for (const { deck, file } of refs) {
     const dk = resolveDeck(deck);
     if (!dk) { console.log(`  SKIP  ${deck} (deck file not found)`); continue; }
@@ -124,11 +195,14 @@ function main() {
     const maxTurns = Math.max(8, (ref.win_turn || 8) + 1);
     const rel = path.relative(REFROOT, file);
     const extra = sideChannelArgs(ref.decisions || []);   // --firebreathe / --storage-hold / --cast-order the ref used
+    const force = forceArg(ref);   // reconstruct the recorded opening hand (see forceArg)
     const choices = [];
     for (const de of ref.decisions || []) {
       const d = de.decision || {};
       const ch = de.chosen;
       if (SIDE_CHANNEL.has(d.type)) { continue; }   // side-channel: no --choices slot, no line to validate
+      // Under force the engine answers keep/bottom itself -> those frames carry no positional slot.
+      if (force !== null && FORCED_MULLIGAN_TYPES.has(d.type)) { continue; }
       if (d.type === 'main_phase' && typeof ch === 'number' && ch >= 0 && ch < (d.plans || []).length) {
         const plan = d.plans[ch];
         const casts = plan.casts || [];
@@ -141,7 +215,8 @@ function main() {
           if (plan.land) built = LB.queueCard(d, built, plan.land, 'land');
           for (const nm of casts) { const hc = hand.find(c => c.name === nm); built = LB.queueCard(d, built, nm, hc.kind); }
           const line = LB.encodeLine(built);
-          const v = runValidate(dk, ref.seed, ref.game_index, maxTurns, choices, line, extra);
+          autopassed += alignPrefix(dk, ref, maxTurns, choices, { turn: d.turn, phase: d.phase }, extra, force);
+          const v = runValidate(dk, ref.seed, ref.game_index, maxTurns, choices, line, extra, force);
           const verdict = v.verdict;
           if (verdict === 'accept' || verdict === 'choose' || verdict === 'unsupported') { tally[verdict]++; }
           else {
@@ -173,7 +248,8 @@ function main() {
   }
   console.log(`\nViewer validate-line: ${tally.accept} accept, ${tally.choose} choose, ` +
               `${tally.unsupported} unsupported, ${tally.skipped} skipped (non-hand cast), ` +
-              `${fails.length} known-fail(v1 limits), ${regressions.length} REGRESSION  (${refs.length} refs)`);
+              `${fails.length} known-fail(v1 limits), ${regressions.length} REGRESSION  (${refs.length} refs)` +
+              (autopassed ? `  [${autopassed} extra segment(s) auto-passed]` : ''));
   if (regressions.length) {
     console.log('  REGRESSION = a played line that USED TO validate now fails (not in the baseline) -> a real');
     console.log('  CheckLine regression. If intended, inspect then rebaseline: node test/viewer_validate_check.js --update-baseline');
