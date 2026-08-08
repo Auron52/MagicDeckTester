@@ -644,3 +644,44 @@ single-deck run appended to the shared fleet file. The FiveColour run's slow gam
 `logs/vlq/slow_games.log` while its own queue dir showed none, which reads as "no slow games" rather
 than "wrong file". The derivation now happens after `VLQ` is final, next to `MATRIX_TXT`, which was
 already correct for the same reason.
+
+### ANSWERED (2026-08-08) — the tail belongs to UNBOUNDED search, not to these games
+
+Question 1 above turned out to be the whole question, and the answer changes what the work-list is.
+
+The matrix H cells run **unbounded**: `--depth N` with no `--budget-ms` (its own header says
+"DEPTH MATRIX (UNBOUNDED, ...)"). The regression suite never does that — every case carries a
+per-decision budget (d3=10, d5=20), and this deck's standing **1.403 s/game is a d3/b10 number**. So a
+"333 s d3 game" and a "1.4 s d3 game" were never the same configuration.
+
+Each of the six worst games, re-run on one core in both arms (`logs/fc_tail/probe.log`):
+
+| seed / gi | d | matrix ms | unbounded ms | budgeted ms | ratio |
+|---|---|---|---|---|---|
+| 8139 / 6 | 3 | 333,190 | 351,956 | **659** | **534x** |
+| 8133 / 0 | 3 | 306,590 | 347,558 | 2,311 | 150x |
+| 8122 / 14 | 3 | 218,685 | 253,519 | 2,131 | 119x |
+| 8152 / 19 | 3 | 155,980 | 172,206 | 3,125 | 55x |
+| 9078 / 19 | 4 | 152,668 | 173,920 | 3,930 | 44x |
+| 11079 / 18 | 3 | 151,311 | 160,290 | 4,962 | 32x |
+| **total** | | | **1,459 s** | **17.1 s** | **85x** |
+
+Every unbounded reproduction lands within 6-16% of the matrix's own figure, so the repro is faithful
+and the effect is not load. And **every budgeted arm is under 5 s** — the single worst game of the
+entire run costs 0.66 s at the configuration the deck actually ships and is tested at, *below* the
+1.403 s deck mean. Under a budget these games are not a tail at all.
+
+**So this is a GENERATION-cost item, not a play-cost bug.** Nothing here argues for an engine fix:
+optimizing the deck would not have made phase C meaningfully cheaper, because what phase C is paying
+for is the absence of a budget, not slow play. The earlier "optimize the deck, then measure it"
+sequencing lesson was aimed at the wrong target.
+
+**The open design question is the H arm itself.** At d3 the H cells average 55.8 s/game unbounded
+against ~1.4 s/game budgeted — about 40x on the mean, 85x on the tail. Budgeting them would take
+phase C's H side from ~150 core-hours to roughly 4. The counter-argument is real and is why the arm
+is unbounded: with a budget the comparison confounds evaluator QUALITY with throughput, since the
+cheap leaf buys more nodes for the same budget and would win partly for that reason, whereas at equal
+unbounded depth only quality differs. But the crossover is consumed by escalation, which *is*
+budgeted in play, so the unbounded table may be answering a question adjacent to the one being asked.
+**Decide this before the next deck's matrix** — it is the difference between an overnight job and a
+half-hour one.
