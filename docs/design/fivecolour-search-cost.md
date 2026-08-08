@@ -676,12 +676,39 @@ optimizing the deck would not have made phase C meaningfully cheaper, because wh
 for is the absence of a budget, not slow play. The earlier "optimize the deck, then measure it"
 sequencing lesson was aimed at the wrong target.
 
-**The open design question is the H arm itself.** At d3 the H cells average 55.8 s/game unbounded
-against ~1.4 s/game budgeted — about 40x on the mean, 85x on the tail. Budgeting them would take
-phase C's H side from ~150 core-hours to roughly 4. The counter-argument is real and is why the arm
-is unbounded: with a budget the comparison confounds evaluator QUALITY with throughput, since the
-cheap leaf buys more nodes for the same budget and would win partly for that reason, whereas at equal
-unbounded depth only quality differs. But the crossover is consumed by escalation, which *is*
-budgeted in play, so the unbounded table may be answering a question adjacent to the one being asked.
-**Decide this before the next deck's matrix** — it is the difference between an overnight job and a
-half-hour one.
+**The H arm stays unbounded — that is settled** (user, 2026-08-08): the table has to say how useful
+that depth *is* for escalation, and under a budget the comparison would confound evaluator quality
+with throughput (the cheap leaf buys more nodes for the same budget and would win partly for that
+reason). The real question is the one the user asked next: other decks measure the same unbounded
+ladder far faster, so why is this one so expensive?
+
+### Why FiveColour's unbounded ladder costs what it does
+
+Unbounded heuristic ms/game, every deck that has a matrix log:
+
+| deck | H1 | H2 | H3 | H4 | H5 | H5/H3 |
+|---|---|---|---|---|---|---|
+| burn | 0.3 | 1.4 | 6.7 | 12.3 | 21.1 | 3.1x |
+| TH | 2.2 | 4.0 | 10.5 | 25.8 | 56.1 | 5.3x |
+| knights | 1.1 | 2.7 | 11.3 | 38.2 | 36.8 | 3.3x |
+| slivers | 0.5 | 3.9 | 19.7 | 50.8 | 73.3 | 3.7x |
+| antilife | 10.2 | 11.7 | 21.4 | 53.2 | 115.6 | 5.4x |
+| dragonstorm | 250.9 | 1,493.9 | 4,445.8 | 16,025.3 | 37,538.7 | 8.4x |
+| creature_giving | 132.3 | 1,120.2 | 7,963.4 | 29,022.9 | 61,979.6 | 7.8x |
+| **fivecolour** | **542.0** | **5,925.7** | **36,489.2** | **161,447.4** | **324,585.2** | **8.9x** |
+
+Two tiers, not a continuum: five decks finish H3 in 7-21 **ms**, three take 4.4-36.5 **s**. FiveColour
+is 5,446x burn at H3 — but only 4.6x creature_giving and 8.2x dragonstorm, so it is the worst of a
+group, not a category of its own.
+
+**The gap is per-decision cost, not the depth ladder, and it is already fully present at H1.** H5/H3
+is 8.9x here against 7.8-8.4x for the other two expensive decks — the same growth. At **H1**, where
+there is barely any search to grow, FiveColour is already **1,807x** burn. So of the 5,446x gap at
+H3, ~1,800x is there before the ladder starts and only ~3x comes from search growth: roughly 97% of
+the difference is work done *per decision*, paid identically at every depth.
+
+That points at §3's mana backtracker, which is per-decision and which a five-colour manabase with
+many differently-restricted sources exercises hardest — the same component that makes this deck
+1.403 s/game at d3/b10 where burn is 0.021. It is not a matrix problem to be configured around: the
+one lever fixes generation cost and play cost together, and dragonstorm and creature_giving sit in
+the same tier and would move with it.
