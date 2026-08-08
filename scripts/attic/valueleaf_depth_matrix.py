@@ -260,8 +260,19 @@ def run_incremental(args):
         print("resumed %d cells from %s" % (sum(1 for c in cells if c["batches"]), state_path))
 
     lock=threading.Lock()
+    for c in cells: c["inflight"]=0; c["submitted"]=c["batches"]
     def target(c): return min(args.reference_target,args.target) if c["intractable"] else args.target
-    def needs(c):  return (not c["running"]) and c["games"] < target(c)
+    def wanted(c): return c["games"] + c["inflight"]*args.batch < target(c)
+    def cell_cap():
+        # How many batches of ONE cell may be in flight. Batches are DISJOINT game ranges (offset =
+        # submitted*batch), so concurrency within a cell is safe -- and the old one-batch-per-cell
+        # rule starved the pool the moment the matrix narrowed to a few expensive cells: measured 3
+        # of 24 cores busy with 10 cells left, because max parallelism WAS the cell count. Spread the
+        # workers over whatever still needs games.
+        n=sum(1 for c in cells if wanted(c))
+        if n<=0: return 1
+        return max(1, -(-args.workers // n))
+    def needs(c):  return wanted(c) and c["inflight"] < cell_cap()
 
     def write_state():
         tmp=state_path+".tmp"
@@ -275,9 +286,10 @@ def run_incremental(args):
     def submit_next():
         cand=[c for c in cells if needs(c)]
         if not cand: return False
-        c=min(cand,key=lambda x:(x["games"],x["depth"]))    # breadth-first: fewest games first
-        c["running"]=True
-        off=c["batches"]*args.batch
+        c=min(cand,key=lambda x:(x["games"]+x["inflight"]*args.batch,x["depth"]))  # breadth-first
+        c["inflight"]+=1
+        off=c["submitted"]*args.batch      # NOT batches: several may be in flight for this cell
+        c["submitted"]+=1
         deck_file,prof,mt=DECKS[c["deck"]]
         futs[ex.submit(run_batch,deck_file,mt,c["depth"],c["seed"],off,args.batch,
                        c["arm"]=="V",args.value_min_depth,prof,
@@ -293,7 +305,7 @@ def run_incremental(args):
             try: lp,wall,p=fut.result()
             except Exception: lp,wall,p=float("nan"),0.0,0
             with lock:
-                c["running"]=False
+                c["inflight"]-=1
                 if p>0 and lp==lp:
                     c["games"]+=p; c["lp_sum"]+=lp; c["batches"]+=1; c["ms"]+=wall
                     if c["first_wall"] is None: c["first_wall"]=wall
