@@ -588,3 +588,59 @@ helpers were deleted because there is nothing left to recover from. The trap the
 worth remembering: a capped cell sat at `games == reference_target`, so `needs()` was false, so it
 was never rescheduled, so the condemnation check never re-ran -- raising the guard on a resume did
 nothing by itself.
+
+## Optimization work-list — the 17 pathological games of the matrix run (2026-08-08)
+
+The user asked for every terrible-performance game to be kept for a later optimization pass. These
+are the games the value-leaf matrix reported over the 30 s threshold. They are the whole input to
+that pass: this deck's cost is concentrated in a handful of games, so a fix that only moves the mean
+is not the fix worth making.
+
+Every one is on the **H arm** (pure heuristic, fixed depth) — the V arm never produced a slow game at
+any depth, which is the same story the cost table above tells, seen from the tail instead of the mean.
+All finish (`wt` 4-6); they are expensive, not hung.
+
+Reproduce with the matrix's own invocation — the repro line from the log plus the cell's depth:
+
+```
+build/Release/mtg decks/FiveColour/FiveColour.cod --seed <S> --game-index <GI> --games 1 \
+  --max-turns 8 --threads 1 --ignore-play-profile --depth <D> \
+  --profile decks/FiveColour/FiveColour.profile.json
+```
+
+| cell | ms | repro seed / gi | win turn |
+|---|---|---|---|
+| H3 s8008 | **218,685** | 8122 / 14 | 5 |
+| H4 s9009 | 152,668 | 9078 / 19 | 5 |
+| H3 s11011 | 151,311 | 11079 / 18 | 5 |
+| H4 s9009 | 117,415 | 9075 / 16 | 5 |
+| H3 s11011 | 91,410 | 11077 / 16 | 5 |
+| H4 s9009 | 81,146 | 9065 / 6 | 5 |
+| H3 s8008 | 78,462 | 8167 / 9 | 5 |
+| H4 s9009 | 55,284 | 9074 / 15 | 6 |
+| H4 s9009 | 49,190 | 9077 / 18 | 5 |
+| H3 s8008 | 48,419 | 8124 / 16 | 5 |
+| H3 s11011 | 44,922 | 11099 / 13 | 5 |
+| H3 s8008 | 40,415 | 8161 / 3 | 5 |
+| H4 s9009 | 37,570 | 9062 / 3 | 5 |
+| H3 s11011 | 38,182 | 11085 / 24 | 4 |
+| H3 s11011 | 35,192 | 11074 / 13 | 5 |
+| H3 s8008 | 33,121 | 8179 / 21 | 4 |
+| H3 s11011 | 32,295 | 11103 / 17 | 5 |
+
+The worst is 3.6 minutes for ONE game at depth 3 — where the cell mean is 55 s and the deck's shipped
+play is ~1.4 s. Two open questions to settle before optimizing, both cheap:
+
+1. **Are they slow in PLAIN play, or only under this fixed-depth arm?** Re-run each without
+   `--ignore-play-profile --depth`. If they are fast at shipped play, the tail belongs to deep fixed
+   depth and matters for generation cost only; if they are slow both ways, it is a play-cost bug.
+2. **Is it the same atom as the earlier tail work?** Sections above traced the tail to the mana
+   backtracker and to Lightning Greaves. Check `MTG_ENUM_STATS` / backtracker entries on the worst
+   game before assuming a new cause.
+
+**Instrument bug fixed while collecting these.** `SLOW_GAME_LOG` was derived from `VLQ` at the top of
+`scripts/valueleaf.sh`, before single-deck mode reassigns `VLQ` to `logs/vlq_<deck>` — so every
+single-deck run appended to the shared fleet file. The FiveColour run's slow games were in
+`logs/vlq/slow_games.log` while its own queue dir showed none, which reads as "no slow games" rather
+than "wrong file". The derivation now happens after `VLQ` is final, next to `MATRIX_TXT`, which was
+already correct for the same reason.

@@ -63,7 +63,6 @@ fi
 # in the engine; here it is ON, because an expensive deck's cost is concentrated in a few
 # pathological games and knowing WHICH ones is the whole input to an optimization pass. 0 disables.
 SLOW_GAME_MS=${SLOW_GAME_MS:-30000}
-SLOW_GAME_LOG=${SLOW_GAME_LOG:-$VLQ/slow_games.log}
 VDEPTHS=${VDEPTHS:-"1 2 3 4 5 6 7 8"}
 # Tractability guard, seconds/game. This is a SAFETY VALVE against a genuinely exploding cell, not a
 # budget: at 3.0 it condemned cells running at 4.33 s/game whose full fill cost 4 CORE-HOURS in total
@@ -108,6 +107,10 @@ fi
 
 ALL_ROWS=$ROWDIR/all.rows
 MATRIX_TXT=$VLQ/matrix.txt          # per-run: a single-deck run must not overwrite the fleet table
+# Derived AFTER single-deck mode has finalised VLQ. Set beside SLOW_GAME_MS above, it captured the
+# fleet default (logs/vlq/slow_games.log) and every single-deck run appended to the same shared file
+# -- the FiveColour run's 17 slow games landed there while its own queue dir showed none.
+SLOW_GAME_LOG=${SLOW_GAME_LOG:-$VLQ/slow_games.log}
 
 log() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$VLQ/driver.log"; }
 done_p() { [ -e "$DONE/$1" ]; }
@@ -404,12 +407,45 @@ status)
     done
     echo
     echo "pooled rows: $(grep -vc '^#' "$ALL_ROWS" 2>/dev/null || echo 0)"
-    if [ -s "$MATRIX_TXT" ]; then
-        mrows=$(grep -c '^ *[HV][0-9]' "$MATRIX_TXT" 2>/dev/null); mrows=${mrows:-0}
-        mprog=$(grep -oE '[0-9]+ batches, [0-9]+ games total, [0-9]+ cells intractable' "$VLQ/matrix.log" 2>/dev/null | tail -1)
-        echo "matrix     : ${mprog:-starting}"
-        echo "             $mrows table rows -> $MATRIX_TXT"
+    # Matrix progress comes from the CELLS file, not from matrix.log. The log is append-only across
+    # resumes, so its last line is whatever the PREVIOUS run said -- it reported "9 cells intractable"
+    # for half an hour after a resume that had made condemnation impossible. The cells file is the
+    # live state the scheduler itself reads.
+    if [ -s "$MATRIX_TXT.cells.json" ]; then
+        python3 - "$MATRIX_TXT.cells.json" "$MATRIX_TARGET" <<'PY'
+import json, sys, collections
+cells = json.load(open(sys.argv[1])); target = int(sys.argv[2])
+done = sum(1 for c in cells if (c.get("games") or 0) >= target)
+cond = sum(1 for c in cells if c.get("intractable"))
+have = sum(c.get("games") or 0 for c in cells); want = target * len(cells)
+print("matrix     : %d/%d cells at %d games, %d condemned  (%d/%d games, %.0f%%)"
+      % (done, len(cells), target, cond, have, want, 100.0 * have / max(want, 1)))
+# A cell with 0 games has no rate of its own; borrowing its depth's mean keeps it in the estimate
+# instead of costing 0, which is how "123 core-h left" hid a 150 core-h job.
+rate = {}
+for c in cells:
+    if c.get("games"):
+        rate.setdefault((c["arm"], c["depth"]), []).append(c["ms"] / c["games"])
+short = collections.defaultdict(list)
+total = 0.0
+for c in sorted(cells, key=lambda c: (c["arm"], c["depth"], c["seed"])):
+    g = c.get("games") or 0
+    if g >= target:
+        continue
+    peers = rate.get((c["arm"], c["depth"]), [])
+    spg = c["ms"] / g if g else (sum(peers) / len(peers) if peers else 0.0)
+    total += (target - g) * spg
+    short["%s%d" % (c["arm"], c["depth"])].append((c["seed"], g, spg))
+for k, v in short.items():
+    left = sum((target - g) * s for _, g, s in v) / 3600.0
+    print("             %-3s short on %d seed(s): %s   ~%.1f core-h left"
+          % (k, len(v), " ".join("%s:%dg" % (s, g) for s, g, _ in v), left))
+if total:
+    print("             ~%.0f core-h remaining -> ~%.1f h wall at %d workers"
+          % (total / 3600.0, total / 3600.0 / 20, 20))
+PY
     fi
+    [ -s "$MATRIX_TXT" ] && echo "             table -> $MATRIX_TXT"
     live=$(pgrep -c -x mtg 2>/dev/null || echo 0)
     if [ "$live" != 0 ]; then echo "running    : yes ($live mtg) -- a games phase is active"
     else                      echo "running    : no"; fi
