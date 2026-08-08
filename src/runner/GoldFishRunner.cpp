@@ -303,15 +303,42 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                 }
 
                 PROF_RESET_GAME();
+                // Slow-game capture (diagnostic, ON by default at 30 s): time each game and stream any
+                // that exceeds MTG_SLOW_GAME_MS, with the seed + index that fully reproduce it. Mirrors
+                // the keep generator's MTG_KEEP_SLOW_MS. Without this a degenerate game is INVISIBLE --
+                // the FiveColour Stage-4 atom presented as "the analyzer is hung" for 3.4 h because
+                // nothing in a Release build reports per-game time (the PROF_RECORD_GAME below is
+                // #ifdef MTG_PROFILE, i.e. a separate instrumented build). 30 s is far above any healthy
+                // goldfish game, so a quiet stream means no degenerate games. MTG_SLOW_GAME_MS=0
+                // disables; any explicit value overrides. One steady_clock read per game is the only
+                // overhead, and nothing here feeds a decision -> byte-identical.
+                static const long long s_slow_game_ms = []{
+                    const char* s = std::getenv("MTG_SLOW_GAME_MS");
+                    return (s && *s) ? std::atoll(s) : 30000LL; }();
+                std::chrono::steady_clock::time_point game_t0;
+                if (s_slow_game_ms > 0) { game_t0 = std::chrono::steady_clock::now(); }
 #ifdef MTG_PROFILE
-                std::chrono::steady_clock::time_point game_t0 = std::chrono::steady_clock::now();
+                std::chrono::steady_clock::time_point prof_t0 = std::chrono::steady_clock::now();
 #endif
                 int win_turn = engine.RunGame(state, max_turns);
 #ifdef MTG_PROFILE
                 double game_ms = std::chrono::duration<double, std::milli>(
-                    std::chrono::steady_clock::now() - game_t0).count();
+                    std::chrono::steady_clock::now() - prof_t0).count();
                 PROF_RECORD_GAME(gi, game_ms);
 #endif
+                if (s_slow_game_ms > 0)
+                {
+                    const long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - game_t0).count();
+                    if (ms >= s_slow_game_ms)
+                    {
+                        std::fprintf(stderr,
+                            "[goldfish] SLOW-GAME %lldms  gi=%d wt=%d  repro: --seed %llu "
+                            "--game-index %d --games 1\n",
+                            ms, gi, win_turn, static_cast<unsigned long long>(base_seed), gi);
+                        std::fflush(stderr);
+                    }
+                }
                 result.win_turns[gi] = win_turn;
                 // Diagnostic (MTG_DUMP_WINS, inert by default): per-game win turn, for
                 // per-game A/B diffs between builds (e.g. `join` two runs to find the

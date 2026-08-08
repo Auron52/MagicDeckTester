@@ -911,7 +911,14 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 std::vector<Card>& gy = state.players[active].graveyard;
                 for (std::size_t g = 0; g < gy.size(); ++g)
                 {
-                    if (gy[g].IsLand())
+                    // ZoneCard: a graveyard card is a name-only placeholder with an EMPTY type mask,
+                    // so the raw gy[g].IsLand() here was always false -- this loop never exiled
+                    // anything. The fuel gate (GraveyardFuelLive) said "live" and the tap took the
+                    // mana, but the land stayed in the graveyard, so N Deathrites could all tap off
+                    // ONE graveyard land in a single payment (this deck runs four). The pool builders
+                    // were already correct (they cap credited sources at GraveyardLandFuel); only this
+                    // inline copy of ExileGraveyardLandForMana had the raw read.
+                    if (ZoneCard(gy[g]).IsLand())
                     {
                         gy_exiled_at = static_cast<int>(g);
                         gy_exiled_card = gy[g];
