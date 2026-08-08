@@ -1,7 +1,9 @@
 # FiveColour search cost — why it is 25× the suite, and what to do before registering it
 
-**Status: OPEN.** Measured 2026-08-07 on the merged binary (840ba15), single-thread throughout.
-Blocks registering FiveColour in `test/regression_cases.sh`. Nothing here changes behaviour yet.
+**Status: PARTLY RESOLVED (2026-08-07).** Section 6 (the provider misroute) is FIXED and adopted --
+see "Resolution" at the bottom, which also bought a 2x cost cut. Sections 3-5 (the mana backtracker
+and the straggler tail) remain OPEN and still block registering FiveColour in the tiers.
+Measured on 840ba15, single-thread throughout.
 
 ## 1. The measurement
 
@@ -148,3 +150,45 @@ from a mystery hang into a one-line reproducer.
 3. Attack the backtracker (§3). Cheapest first: memoise `DomainColors` per (battlefield, controller)
    instead of rescanning inside the recursion, and confirm with a paired callgrind Ir A/B.
 4. Re-measure §1/§5 and only then size the regression entries.
+
+
+## Resolution of section 6 — FiveColourProvider ADOPTED (2026-08-07)
+
+`FiveColourProvider` (archetype signature `domain_mana`, detected ABOVE the `anti` check exactly
+like the Goblins and Creature Giving escapes) now owns `FetchCandidates`. The policy is
+user-directed: get the colours that let us cast early ACCELERATION first, spread the five colours
+over different sources, then build toward two sources of each. Encoded as a strict lexicographic
+key (accel_new > spell_new > breadth > untapped > depth > colours > name) so the ordering is total
+and deterministic, with no float weights to re-tune. It returns the full ordered list; the engine's
+`FetchSearchCap` (2) decides how much of it the search branches on.
+
+**Quality — improves on every seed set tried, including held-out:**
+
+| seed set | old (AntiLifegain) | new (FiveColour) | delta |
+|---|---|---|---|
+| 4200000 (500 games) | 5.3400 | 5.1280 | **−0.212** |
+| 90001 (500 games) | 5.3300 | 5.0880 | **−0.242** |
+| 555000 (500 games, held out) | 5.3180 | 5.0980 | **−0.220** |
+
+**Cost — it is also ~2x CHEAPER.** Deterministic, contention-immune counters (20 games, seed 2002,
+one thread), which is the metric to trust on this box:
+
+| counter | old | new | change |
+|---|---|---|---|
+| rollout calls | 990,802 | 524,203 | −47% |
+| rollout turn steps | 1,136,565 | 580,015 | −49% |
+| `TapForCostBacktrack` entries | 1,882,968 | 670,306 | **−64%** |
+
+Wall clock agrees (100 games, seed 2002, one thread: 10.44 → 4.97 s/game) but the counters are the
+evidence; absolute wall on this box drifts between runs.
+
+The cost win and the quality win are the same effect: fetching for **coverage** means the greedy
+scarcity-first payer finds a legal payment far more often, so the exponential backtracker is
+entered a third as much. That is the mechanism section 3 predicted — the backtracker is expensive
+*because* the mana base is under-fixed, and fixing the fetch policy attacks it at the source.
+
+Smoke 30/30 + regression 50/50 byte-identical, 0 play-changed: no other deck is on this provider.
+
+**Still open:** even at 4.97 s/game FiveColour is ~22x the next-heaviest deck, so §3/§4/§5 stand
+and registration stays deferred. Next cheapest lever is still memoising `DomainColors` out of the
+backtracker recursion.

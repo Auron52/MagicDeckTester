@@ -5593,6 +5593,135 @@ CreatureGivingProvider::TutorCandidates(const GameState& s, int controller, cons
     return GenericProvider::TutorCandidates(s, controller, pp);
 }
 
+// ---- FiveColourProvider -----------------------------------------------------
+//
+// Fetch policy for the 5-colour domain shell (USER-DIRECTED 2026-08-07; see the class comment):
+// get the colours that let us cast our EARLY ACCELERATION (and then anything else) first, spread
+// the five colours over DIFFERENT sources, and once every colour is covered start building toward
+// TWO sources of each.
+//
+// Implemented as a strict lexicographic key so the intent stays readable and the ordering is
+// total + deterministic (no float weights to re-tune). Per candidate land, in priority order:
+//
+//   1. accel_new  -- colours it adds that we have NO source for and an ACCELERANT in hand wants.
+//                    A turn-2 Bloom Tender / Faeburrow Elder compounds; missing its pip is the
+//                    single most expensive fixing failure in the deck.
+//   2. spell_new  -- same, for any other castable-cost card in hand.
+//   3. breadth    -- colours it adds that we have no source for at all (the "all 5 spread out"
+//                    half of the directive), regardless of what is in hand right now.
+//   4. untapped   -- tiebreak that only bites while some wanted colour is still uncovered: a
+//                    triome enters TAPPED and cannot pay for anything this turn, so between two
+//                    otherwise-equal picks take the one that can actually be spent now.
+//   5. depth      -- colours it takes from exactly one source toward two (the second half of the
+//                    directive), double-counted for a colour the hand wants more than once.
+//   6. colours    -- raw colour count (triome > shock > basic) as a generic flexibility tiebreak.
+//   7. name       -- determinism.
+//
+// Returns the FULL ordered list rather than a single pick: the engine's FetchSearchCap (2) decides
+// how many the search actually branches on, so the policy stays a ranking and the search keeps its
+// say. MTG_UNPRUNED opens the whole list, as everywhere else.
+std::vector<std::string>
+FiveColourProvider::FetchCandidates(const GameState& s, int controller,
+                                    const CardParams& fetch_pp) const
+{
+    std::vector<std::string> all = GenericProvider::FetchCandidates(s, controller, fetch_pp);
+    if (all.size() < 2 || DecisionUnpruned(UnprunedGate::Fetch)) { return all; }
+
+    constexpr int NC = 6;                    // W,U,B,R,G,C
+    std::array<int, NC> src_cnt{};           // distinct sources that already make each colour
+    auto count = [&](const std::vector<Color>& prod)
+    { for (Color c : prod) { ++src_cnt[static_cast<int>(c)]; } };
+
+    // Sources we control. EffectiveProduces (not the static `produces` hint) so a domain source
+    // contributes the colours it ACTUALLY makes right now, and Deathrite only counts while its
+    // graveyard-land fuel is live.
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (!(d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock)) { continue; }
+        if (!GraveyardFuelLive(s, controller, *d)) { continue; }
+        count(EffectiveProduces(s, controller, *d));
+    }
+    // Plus non-fetch lands already in hand (a land we are about to play is a near-future source,
+    // so fetching to re-cover a colour it already brings is wasted fixing).
+    const Player& ap = s.players[controller];
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->card.IsLand() && d->params.fetch_land_types.empty()) { count(d->params.produces); }
+    }
+
+    // What the hand wants to cast, split into accelerants (mana dorks/rocks -- the compounding
+    // early plays) and everything else. `want` counts PIPS, so a {W}{W} cost asks for two white
+    // sources and feeds the depth term below.
+    std::array<int, NC> want{}, accel_want{};
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->card.IsLand()) { continue; }
+        const bool accel = (d->tmpl == CardTemplate::ManaDork) || d->params.mana_rock;
+        const ManaCost& mc = d->card.m_mana_cost;
+        const int pips[NC] = { mc.white, mc.blue, mc.black, mc.red, mc.green, 0 };
+        for (int i = 0; i < NC; ++i)
+        {
+            if (pips[i] <= 0) { continue; }
+            want[i] = std::max(want[i], pips[i]);
+            if (accel) { accel_want[i] = std::max(accel_want[i], pips[i]); }
+        }
+    }
+    bool any_uncovered_want = false;
+    for (int i = 0; i < NC; ++i) { if (want[i] > 0 && src_cnt[i] == 0) { any_uncovered_want = true; } }
+
+    struct Key { int accel_new, spell_new, breadth, untapped, depth, colours; std::string name; };
+    std::vector<Key> keys;
+    keys.reserve(all.size());
+    for (const std::string& nm : all)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (!d) { keys.push_back({ 0, 0, 0, 0, 0, 0, nm }); continue; }
+        Key k{ 0, 0, 0, 0, 0, 0, nm };
+        for (Color col : d->params.produces)
+        {
+            const int i = static_cast<int>(col);
+            if (i < 0 || i >= NC) { continue; }
+            ++k.colours;
+            if (src_cnt[i] == 0)
+            {
+                ++k.breadth;
+                if (accel_want[i] > 0) { ++k.accel_new; }
+                else if (want[i] > 0)  { ++k.spell_new; }
+            }
+            else if (src_cnt[i] == 1)
+            {
+                k.depth += (want[i] >= 2) ? 2 : 1;   // a second source, wanted twice over
+            }
+        }
+        // Only a land that can enter UNTAPPED can pay for something this turn. A shock pays 2 life
+        // for the privilege, which the engine's own entry choice already weighs; here it is just a
+        // tiebreak, and only while a wanted colour is still missing.
+        k.untapped = (any_uncovered_want && !d->params.enters_tapped) ? 1 : 0;
+        keys.push_back(std::move(k));
+    }
+
+    std::stable_sort(keys.begin(), keys.end(), [](const Key& a, const Key& b)
+    {
+        if (a.accel_new != b.accel_new) { return a.accel_new > b.accel_new; }
+        if (a.spell_new != b.spell_new) { return a.spell_new > b.spell_new; }
+        if (a.breadth   != b.breadth)   { return a.breadth   > b.breadth;   }
+        if (a.untapped  != b.untapped)  { return a.untapped  > b.untapped;  }
+        if (a.depth     != b.depth)     { return a.depth     > b.depth;     }
+        if (a.colours   != b.colours)   { return a.colours   > b.colours;   }
+        return a.name < b.name;
+    });
+
+    std::vector<std::string> out;
+    out.reserve(keys.size());
+    for (const Key& k : keys) { out.push_back(k.name); }
+    return out;
+}
+
 // ---- instances + selection --------------------------------------------------
 
 namespace
@@ -5608,6 +5737,7 @@ namespace
     const DragonstormProvider    g_dragonstorm;
     const GoblinsProvider        g_goblins;
     const CreatureGivingProvider g_creature_giving;
+    const FiveColourProvider     g_fivecolour;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -5620,7 +5750,7 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
-    bool goblin = false, gift = false;
+    bool goblin = false, gift = false, fivec = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -5653,6 +5783,15 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
         // Mono-red Burn: Searing Blaze's landfall damage is unique to this deck; it drives the
         // land-banking heuristic (bank spare lands for a future Blaze's landfall).
         if (p.landfall_damage > 0) { burn = true; }
+
+        // FiveColour (5-colour domain goodstuff): the dynamic domain source (Faeburrow Elder /
+        // Bloom Tender, "one mana of each colour among permanents you control") is the archetype
+        // signature -- no other suite deck carries domain_mana. Detected BEFORE the anti check for
+        // the same reason Goblins and Creature Giving are: this deck's eleven fetchlands set
+        // `anti` on their own, which silently routed the whole deck to AntiLifegainProvider and
+        // ranked its fetches with a 4-colour anti-lifegain shell's tiebreaks. See the fivec return
+        // below and docs/design/fivecolour-search-cost.md section 6.
+        if (p.domain_mana) { fivec = true; }
 
         if (p.lifegain_to_loss || p.verse_damage || p.alt_lifegain_cost > 0
             || p.tutor_to_hand || p.tutor_to_top || !p.fetch_land_types.empty())
@@ -5701,6 +5840,9 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     if (goblin) { return g_goblins; }
     // Creature Giving; must WIN OVER anti (see the gift detection note above).
     if (gift) { return g_creature_giving; }
+    // FiveColour; must WIN OVER anti (its fetchlands set that signature on their own -- see the
+    // domain_mana detection above). No other deck has domain_mana, so exclusivity is preserved.
+    if (fivec) { return g_fivecolour; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }
     if (vial) { return g_vial; }

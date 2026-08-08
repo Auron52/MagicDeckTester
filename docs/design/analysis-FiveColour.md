@@ -149,6 +149,11 @@ out silent no-ops.
 - Stage 5 sanity re-run on the shipped profile, same 1000 seeds: monotone in depth
   (d0 6.2640 > d3 5.3370 ≥ d5 5.3350) and not budget-starved (d5/b100 5.3210, −0.014 vs b20).
 - Verify battery: **GATE PASS**, all checks green including `claude_sweep` 0 unresolved.
+- **FiveColourProvider ADOPTED (2026-08-07): d5/b20 avg 5.3340 → 5.1070** on the same 1000 seeds.
+  The deck had been riding AntiLifegainProvider by accident (its fetchlands alone set the `anti`
+  signature); a purpose-built provider whose fetch policy is coverage-first then redundancy-to-two
+  improved all three seed sets tried (−0.212 / −0.242 / −0.220 incl. held-out) AND cut the mana
+  backtracker's work 64%. Full A/B in docs/design/fivecolour-search-cost.md.
 - **Post-merge (418fbb8, origin's 27 commits — discard-node + value-model regen): 5.3340**
   on the same 1000 seeds (−0.001 vs pre-merge; their engine changes, not a FiveColour move).
   Smoke 30/30 + regression 50/50 PASS on the merged binary against THEIR rebaselined GT.

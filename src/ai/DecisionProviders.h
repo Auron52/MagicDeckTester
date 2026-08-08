@@ -451,6 +451,30 @@ public:
         const GameState&, const std::vector<std::string>*) const override;
 };
 
+// FiveColour (5-colour domain/goodstuff): eleven fetchlands feeding six shocks, two triomes and
+// three basics, with two dynamic domain sources (Faeburrow Elder / Bloom Tender) and Deathrite's
+// any-colour tap. Its ONLY archetype-specific decision is which land a fetch pulls, and the
+// generic "return every legal target" default is wrong for it in both directions: it branches the
+// search over up to eight targets on a deck that is already the most expensive in the suite, and
+// it applies no colour reasoning at all.
+//
+// Before this provider existed the deck rode AntiLifegainProvider by accident -- `fetch_land_types`
+// alone sets the `anti` signature in SelectDecisionProvider, and FiveColour carries no other
+// archetype marker -- so its fetches were ranked by tiebreaks tuned to a 4-colour anti-lifegain
+// shell (which needs black exactly once and white twice). Third deck to hit that trap after
+// Goblins and Creature Giving. See docs/design/fivecolour-search-cost.md section 6.
+//
+// The fetch policy is USER-DIRECTED (2026-08-07): "prioritize getting the colours to cast early
+// acceleration or other spells while aiming to have all 5 colours spread out over different
+// sources; once we have this, aim to be able to generate 2 of each colour." Encoded as a strict
+// lexicographic key in FetchCandidates -- coverage first (weighted by what the hand actually wants
+// to cast, accelerants first), then redundancy toward two sources per colour.
+class FiveColourProvider : public GenericProvider
+{
+public:
+    std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
+};
+
 // Process-lifetime default provider (stateless, shared across threads). Used as the
 // nullptr fallback so any raw-GameState path stays valid.
 const DecisionProvider& DefaultProvider();
