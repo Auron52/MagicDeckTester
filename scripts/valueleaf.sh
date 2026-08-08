@@ -221,6 +221,15 @@ phase_train() {
         python3 scripts/attic/train_eval_gbdt.py --rows "$src" --out "$staged.raw" \
             --regression --trees 120 --depth 4 --lr 0.15 --min-leaf 20 >> "$VLQ/train_$key.log" 2>&1
         if [ ! -s "$staged.raw" ]; then log "  $key SKIPPED: trainer produced nothing"; continue; fi
+        # Generalization number, as a SECOND pass to a scratch path. --holdout trains on 75% of the
+        # rows, so folding it into the run above would ship a model fitted on less data purely to
+        # print a diagnostic. Without this pass the log carried only train_RMSE -- an in-sample
+        # number that cannot show overfitting -- while the skill and `status` both quote a held-out
+        # one. Same recipe, so the number describes the model that ships. Costs no games.
+        python3 scripts/attic/train_eval_gbdt.py --rows "$src" --out "$VLQ/holdout_$key.json" \
+            --regression --trees 120 --depth 4 --lr 0.15 --min-leaf 20 --holdout \
+            >> "$VLQ/train_$key.log" 2>&1 || true
+        rm -f "$VLQ/holdout_$key.json"
         python3 - "$dir/$stem.value.json" "$staged.raw" "$staged" "$(cat "$VLQ/freeze.commit")" "$n" <<'PY'
 import json, os, sys
 live, raw, out, commit, n = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
