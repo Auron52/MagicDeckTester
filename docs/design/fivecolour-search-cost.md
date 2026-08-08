@@ -797,3 +797,34 @@ Depth compounds it: this is per enumeration call, and the same enumeration runs 
 **Measure it with counters, not the clock.** `MTG_ENUM_STATS` and callgrind `Ir` are both
 load-independent, so this whole loop can be run while the box is busy with something else — which is
 how it was done here, alongside a 20-worker matrix.
+
+### Implementation note — and why this is NOT the refuted colour-aware gate
+
+The row-skip test the instrument measures is already written out at `src/ai/TurnSolver.cpp:4469-4494`:
+
+```cpp
+int max_avail = pool_total;
+for (int a : m_avail) { max_avail = std::max(max_avail, a); }   // best mana line, over ALL lines
+...
+if (need > max_avail) { ++p_rowskip; continue; }                // whole row dies in ONE test
+```
+
+`need` is a plain sum of `cost.ManaValue()` over the chosen payoff actions and `max_avail` is the
+maximum total any mana line can produce, so the test is colour-blind and can only reject lines that
+are unpayable under *every* assignment. Lossless by construction.
+
+The 1.73x ceiling exists because the diagnostic still *walks* all 197,526 rows to test them. `need`
+is monotone as actions are added, so the same bound prunes whole subtrees if the payoff side is
+enumerated depth-first instead of as a flat odometer: the moment a partial line's cumulative
+`ManaValue` exceeds `max_avail`, every extension of it is unpayable and never needs generating. That
+is what turns "test 179,103 dead rows" into "never build them", and it is where the ~7x lives.
+
+**This is a different lever from the refuted colour-aware B&B gate above.** That one added a
+*colour-feasibility* check at the ROOT of `TapForCostBacktrack` and measured 0.28%, because the
+backtracker is entered precisely when the colours are available and only the assignment is hard. Its
+own conclusion was "any future attack has to prune INSIDE the tree, not at its root" — which is
+exactly what this is: a *total-mana* bound pruning inside the PAYOFF odometer, a different structure
+and a different quantity, with a measured 90.7% fire rate rather than a hypothesis.
+
+Gate it the usual way (`MTG_PAYOFF_BB`, `EnvOn(..., true)` once measured) and verify byte-identity on
+per-game win turns with `MTG_DUMP_WINS`, not on aggregate averages.
