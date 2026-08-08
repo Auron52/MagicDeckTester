@@ -540,3 +540,48 @@ Both `--seed` and `--game-index` matter: the runner uses `base_seed + gi` for th
 the same tail as the 235 s gi=61 game above and belongs to the mana backtracker; if they are slow
 only under labelling, the cost is in the K=3 label path and is offline-only. That distinction decides
 whether fixing it helps the shipped engine or only generation.
+
+### Why the value-leaf matrix is so expensive here (2026-08-08)
+
+The H arm dwarfs the V arm. Measured per-cell, 400 games x 4 seeds:
+
+| depth | H s/game | V s/game | leaf advantage |
+|---|---|---|---|
+| 2 | 5.9 | 0.1 | 59x |
+| 3 | 30.7 | 0.4 | 77x |
+| 4 | 113.4 | 2.1 | 54x |
+| 5 | 190.4 | 5.9 | 32x |
+
+The whole 8-deep V ladder cost ~14 core-hours; the H ladder to d5 costs ~151 — about 11x the entire
+V side. That is why 8 cells hit the tractability guard and ALL of them were H (H4 on every seed, H5
+on three, one with zero games) while all 20 V cells finished.
+
+**The ladder IS engaged — verified, not assumed.** `MTG_LADDER_VALUE_LEAF=1` with the staged model
+attached, committed pass at `MTG_VALUE_MODEL=0`, H5/seed 8008, 2 games:
+
+| ladder | rollout calls | wall | avg |
+|---|---|---|---|
+| ON | 807,129 | 38.9 s | 4.5000 |
+| OFF | 1,646,972 | 76.2 s | 4.5000 |
+
+Half the rollout calls vanish and the result is identical — passes 1..d-1 on the leaf, only the
+committed pass on the heuristic, exactly as designed.
+
+**But it is only 2.0x here, against 84.8x on Knights and 39.5x on Anti-Lifegain at d5.** The reason
+is in the residual: 807k rollout calls REMAIN with the ladder on, and those are the committed d5
+pass, which is irreducible because that pass *is* the H measurement. Where a deck's ladder is mostly
+warm-up, the mode is enormous; FiveColour's cost is concentrated in the committed pass, so there is
+little to skip. Do not expect the published 15-85x range to transfer to an expensive deck.
+
+**Sequencing lesson.** Bottoming is 78% of this deck's runtime (section above) and the matrix pays it
+in every game of every cell, with the bottoming rollouts themselves running at the cell's depth. The
+78% was measured BEFORE this pipeline was started and then written up as a "lever" rather than acted
+on. Fixing it first would plausibly have made the H arm ~4x cheaper and turned an 8-hour job into a
+2-hour one. Optimize the deck, then measure it.
+
+**The tractability guard must protect the d<=5 ladder.** `--never-condemn-at-or-below` defaults to 0
+and the queue driver never passed it; it now defaults to 5. The H cells ARE the crossover — they
+decide which evaluator escalation uses at each rung it climbs to — so condemning one leaves a hole in
+the answer rather than saving cost. Un-condemning an existing run needs
+`scripts/valueleaf_uncondemn.sh`: a capped cell sits at `games == reference_target`, so `needs()` is
+false, so it is never rescheduled, so the condemnation check never re-runs.

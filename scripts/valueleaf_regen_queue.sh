@@ -56,6 +56,13 @@ mkdir -p "$DONE" "$ROWDIR" logs/eval
 WORKERS=${WORKERS:-20}            # matrix: ~1 GB/process on a 47 GB box
 MATRIX_TARGET=${MATRIX_TARGET:-400}
 MATRIX_REF=${MATRIX_REF:-50}      # games cap for cells ruled intractable
+# Protect the d<=5 ladder from the tractability guard. The H cells ARE the crossover: they decide
+# which evaluator escalation uses at each rung it climbs to, so condemning one leaves a HOLE in the
+# answer rather than saving cost. FiveColour 2026-08-08 is the worked example -- 8 capped cells, all
+# of them H (H4 on every seed, H5 on three, one with zero games), while all 20 V cells finished at
+# 400. That makes crossover entries for c=4..8 unfounded for a deck that ships at d5. The guard is
+# also wall-clock based, so it can fire purely because the box was busy.
+NEVER_CONDEMN=${NEVER_CONDEMN:-5}
 VDEPTHS=${VDEPTHS:-"1 2 3 4 5 6 7 8"}
 # Tractability guard, seconds/game. This is a SAFETY VALVE against a genuinely exploding cell, not a
 # budget: at 3.0 it condemned cells running at 4.33 s/game whose full fill cost 4 CORE-HOURS in total
@@ -257,6 +264,7 @@ phase_matrix() {
         --hdepths 1 2 3 4 5 --vdepths $VDEPTHS --seeds 8008 9009 10010 11011 \
         --target "$MATRIX_TARGET" --reference-target "$MATRIX_REF" --batch 25 --workers "$WORKERS" \
         --value-min-depth 0 --intractable-sec-per-game "$INTRACTABLE_SPG" \
+        --never-condemn-at-or-below "$NEVER_CONDEMN" \
         --out "$MATRIX_TXT" >> "$VLQ/matrix.log" 2>&1
     [ -s "$MATRIX_TXT" ] || { log "PHASE C ABORT: no matrix output"; return 1; }
     log "PHASE C done"
@@ -386,7 +394,7 @@ status)
         fi
         if [ -e "$dir/$stem.value.json" ]; then sc="live sidecar=yes (regeneration)"
         else                                    sc="live sidecar=no (first model)"; fi
-        printf "  %-14s rows %-7s of %-5s games   staged=%-4s %s\n" \
+        printf "  %-14s %s labelled rows (from %s games)   staged=%-4s %s\n" \
             "$key" "$r" "$games" \
             "$( [ -s "logs/eval/$stem.value.STAGED.json" ] && echo yes || echo no )" "$sc"
         rmse=$(grep -oE 'heldout_RMSE=[0-9.]+' "$VLQ/train_$key.log" 2>/dev/null | tail -1)
@@ -395,7 +403,10 @@ status)
     echo
     echo "pooled rows: $(grep -vc '^#' "$ALL_ROWS" 2>/dev/null || echo 0)"
     if [ -s "$MATRIX_TXT" ]; then
-        echo "matrix     : $(grep -c '^ *[HV][0-9]' "$MATRIX_TXT" 2>/dev/null || echo 0) table rows written -> $MATRIX_TXT"
+        mrows=$(grep -c '^ *[HV][0-9]' "$MATRIX_TXT" 2>/dev/null); mrows=${mrows:-0}
+        mprog=$(grep -oE '[0-9]+ batches, [0-9]+ games total, [0-9]+ cells intractable' "$VLQ/matrix.log" 2>/dev/null | tail -1)
+        echo "matrix     : ${mprog:-starting}"
+        echo "             $mrows table rows -> $MATRIX_TXT"
     fi
     live=$(pgrep -c -x mtg 2>/dev/null || echo 0)
     if [ "$live" != 0 ]; then echo "running    : yes ($live mtg) -- a games phase is active"
