@@ -1,9 +1,23 @@
 # Unite the Coalition split — resume state (2026-08-09)
 
-**Status:** heuristic ADOPTED and live (`ca9c50b`), honest lethal detector landed (`14185a0`).
-One decision outstanding, then a rebaseline.
+**Status:** SETTLED. Heuristic adopted (`ca9c50b`), honest lethal detector landed (`14185a0`), and
+the `MTG_FIVEC_UNITE_ALLIN` question below is now answered: **keep the net (default 1)**.
 
-## The outstanding decision
+## RESOLVED (2026-08-09): keep the all-in net
+
+5 held-out seeds x 250 games, honest detector on both arms:
+
+| seed | 2002 | 3003 | 5005 | 6006 | 7007 | mean | core-ms |
+|---|---|---|---|---|---|---|---|
+| search | 5.0320 | 5.1160 | 5.1080 | 5.1120 | 5.1040 | 5.09440 | 2,373,727 |
+| ALLIN=1 | 5.0320 | 5.1080 | 5.1080 | 5.1120 | 5.1040 | **5.09280** | **1,909,377** |
+| ALLIN=0 | 5.0320 | 5.1120 | 5.1080 | 5.1120 | 5.1080 | 5.09440 | 2,068,020 |
+
+`ALLIN=0` is worse on two seeds, never better, ties the search, and is 7.7% MORE expensive. The
+s6006-only read had it cheaper -- the third single-seed reversal of that session, which is why the
+decision rule below says to sum. No code change: the shipped default was already right.
+
+## The decision, as it stood
 
 `MTG_FIVEC_UNITE_ALLIN` — whether the non-lethal branch keeps the all-in split.
 
