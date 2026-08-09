@@ -1230,3 +1230,39 @@ period where the odometer is actually large.
 There is precedent for the marginal-gain measurement already in the tree: `TurnSolver.cpp:3628` computes
 `const int base = AvailableManaPool(state).Total();   // mana this turn WITHOUT Skirk` for exactly this
 kind of "what does this source actually add" question. Reuse that shape rather than inventing one.
+
+## CORRECTION + generalisation (2026-08-09) — lands are not domain, and reducers never enable
+
+**Lands do not widen domain, and the engine already models this correctly.** User: *"The land doesn't
+add anything for Faeburrow Elder or Bloom Tender. It is not actual domain. Only coloured permanents on
+board do."* Confirmed in `DomainColors` (`src/core/SpellEffects.h:4747`), which unions
+`p.card.HasColor(...)` over the battlefield and documents it: *"Colorless permanents contribute nothing
+(CR 105.2c)."* A land has no mana cost, so it is colorless and contributes nothing.
+
+My "+2 from a free land drop" was **wrong**, and its removal collapses the whole domain concern:
+widening requires casting a **coloured permanent**, which costs mana, so with one dork it is at best
+break-even — the user's original argument, now with no land loophole. The clause reduces to *two or
+more untapped dorks AND a coloured permanent castable this turn that adds a missing colour and costs
+less than the number of dorks it feeds*. It also means the correctness question is narrower than
+stated above: it is about a coloured permanent, not a land drop.
+
+**Cost reducers can never enable an otherwise-uncastable spell — unless they are cheated in.** The
+user's generalisation, with the arithmetic: a reducer deployed this turn with cost `C` and per-spell
+discount `D` leaves total `C + (cost - D)`. For that to fit a budget that `cost` alone does not needs
+`D > C`. Ruby Medallion is `D = 1`, `C = 2` — it is net-negative at two spells and net-positive at
+three, but it **never** lets you cast a spell you could not cast on its own. `D > C` is essentially
+only reachable when `C = 0`, i.e. the reducer is cheated onto the board by Aether Vial or Goblin
+Lackey. That is exactly case 4 of the user's list, and nothing else.
+
+(A reducer ALREADY on the battlefield is not an exception: its discount is baked into
+`EffectiveCost(def, state)`, so the "castable on its own" test already sees the reduced cost.)
+
+**So the rule generalises past this deck.** Dragonstorm plans containing a Dragonstorm nobody can cast
+alone are prunable *whenever rituals are absent* — of limited use there, since rituals usually are
+present, but it means the predicate is about the BUDGET, not about the deck's identity. `BudgetCanGrow`
+clause 2 therefore tightens to: *a cost reducer deployable for less than its per-spell discount* —
+in practice, one that can be cheated in free.
+
+**Next step beyond this** (user): test castability of individual cards first, then of combinations of
+the survivors. Single-card castability is the cheap filter that makes the combination pass affordable;
+the combination pass is where the remaining payable-but-dominated lines would go.
