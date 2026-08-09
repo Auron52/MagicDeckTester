@@ -2302,11 +2302,94 @@ static void ApplyCantripFirstOrder(std::vector<Action>& acts)
 // MTG_NO_GOBLIN_SAC_2ND); the guard in the sac-outlet loop below calls it. GenericProvider returns
 // false, so every non-Goblins deck enumerates sac outlets pre-combat byte-identically.
 
+// An OPTIMISTIC ceiling on the mana this turn could ever produce. Used only to drop hand casts that
+// no line could pay for (see the emission prune below), so every term here is deliberately GENEROUS:
+// over-estimating costs a prune we could have made, while under-estimating would drop a legal play.
+//
+// Why this is worth computing at all. There is no affordability filter at candidate emission --
+// CollectActions emits a CastFromHand for every hand card and affordability is settled downstream by
+// the mana gate, which prunes SELECTIONS, not DIGITS. So an uncastable card still becomes an odometer
+// digit and still multiplies the product. Measured on a FiveColour opening board (2026-08-09): seven
+// groups giving 7 x 2 x 2 x 2 x 2 x 2 x 3 = 672 positions, of which Unite the Coalition (7 mana
+// WUBRG), Nicol Bolas (8), Two-Headed Hellkite (6+) and Maelstrom Archangel (5) cannot be cast at
+// all -- drop those four digits and it is 2 x 2 x 3 = 12. 56x on that call.
+//
+// This shrinks ENUMERATION, not the search: the plans it removes were never payable, so they never
+// reached a rollout. sum_final and rollout calls are unchanged by construction.
+static constexpr int kNoManaCeiling = std::numeric_limits<int>::max();
+
+static int OptimisticTurnMana(const GameState& state)
+{
+    const Player& ap = state.ActivePlayer();
+    int m = AvailableManaPool(state).Total() + state.floating_mana.Total();
+
+    // BUDGET-CAN-GROW BAIL-OUT. The gate downstream can afford an exact net-mana model because it
+    // works on ACTIONS, whose ritual_float / rock_mana / block terms are already computed. Here the
+    // actions do not exist yet -- only the static card params -- and those systematically UNDER-count:
+    // measured 2026-08-09, a bound built from them broke 12 smoke cases across four decks, because
+    //   * Rite of Flame floats more than its static 2 (ritual_float_gy_self_bonus escalates per copy),
+    //   * Skirk Prospector makes mana off the BATTLEFIELD by saccing goblins, and sac outlets are
+    //     deliberately absent from AvailableManaPool (they are modelled as an ACTION, not a source),
+    //   * hinata_cost_reducer discounts spells and is not one of the reduces_* params.
+    // Each of those is a legal play the prune then dropped. So rather than chase every mechanism with
+    // a slack constant -- fragile, and wrong once more than the next one is missed -- detect whether
+    // the turn's budget could grow AT ALL, and simply decline to prune when it could. The prune then
+    // only ever fires on states where mana is what the board plainly produces.
+    auto budget_can_grow = [](const CardDefinition& d)
+    {
+        return d.params.ritual_floating_mana > 0 || d.params.mana_rock
+            || d.params.sac_creature_outlet   || d.params.hinata_cost_reducer
+            || d.params.affinity_for_subtype  || !d.params.reduces_spell_color.empty()
+            || !d.params.reduces_spell_subtype.empty()
+            || d.params.alt_lifegain_cost > 0 || !d.params.alt_cost_requires_subtype.empty()
+            || d.params.suspend_time_counters > 0;
+    };
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && budget_can_grow(*d)) { return kNoManaCeiling; }
+    }
+    bool any_land_in_hand = false;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { return kNoManaCeiling; }               // unknown card: assume it could
+        if (d->card.IsLand()) { any_land_in_hand = true; continue; }
+        if (budget_can_grow(*d)) { return kNoManaCeiling; }
+    }
+    if (any_land_in_hand) { m += 3; } // a land drop, at more than any single land in any deck produces
+
+    // SCALING SOURCES (domain_mana: Faeburrow Elder / Bloom Tender). Each taps for one mana of every
+    // colour among permanents, so a coloured permanent played this turn RAISES their yield -- the
+    // bound has to cover the widened value or it would drop a spell the play-then-tap line affords.
+    // Credited at the maximum: every live dork going to all five colours. See
+    // docs/design/scaling-source-widening.md (that line is not currently offered by the search, which
+    // is a separate bug -- the bound stays sound under either behaviour, and deliberately does not
+    // bake in the defect).
+    int live_dorks = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.domain_mana && CanTapNow(p, state.battlefield)) { ++live_dorks; }
+    }
+    if (live_dorks > 0)
+    {
+        const int have = static_cast<int>(DomainColors(state, state.active_player_index).size());
+        m += live_dorks * std::max(0, 5 - have);
+    }
+    return m;
+}
+
+static const bool g_emit_prune = EnvOn("MTG_EMIT_PRUNE");   // DEFAULT OFF -- see the measurement above
+
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     const Player& ap = state.ActivePlayer();
     bool has_creature_target = HasLegalCreatureTarget(state);
     int  n = static_cast<int>(ap.hand.size());
+    const int mana_ceiling = g_emit_prune ? OptimisticTurnMana(state) : kNoManaCeiling;
 
     std::vector<Action> actions;
 
@@ -2337,6 +2420,29 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                       || def.card.HasKeyword(Keyword::Flash)
                       || state.stack.empty();
         if (!timing_ok) { continue; }
+
+        // EMISSION PRUNE: no line this turn could pay for this card, so it is a dead odometer digit.
+        // Compared against an OPTIMISTIC ceiling (see OptimisticTurnMana), so this can only drop
+        // cards that were unplayable under EVERY line -- play is unchanged and the search sees the
+        // same set of payable plans, just without the positions that could never have been paid for.
+        //
+        // The exclusion is cards payable by something OTHER than their printed mana cost, where mana
+        // value is not the right test: alt_lifegain_cost (pay life instead), its subtype-gated form,
+        // and spectacle_cost (Light Up the Stage is {2}{R} but {R} once an opponent has lost life --
+        // this one cost two burn smoke cases before it was listed).
+        //
+        // MAINTENANCE CONTRACT: any future param that lets a card be cast for less than
+        // EffectiveCost says must be added here. Missing one is not silent -- it drops a legal play
+        // and the suite goes red, which is how both of the entries above were found.
+        // Suspend-only cards are already skipped above (empty mana_cost), and {X} spells are safe
+        // here because EffectiveCost returns the FIXED part -- if that alone is unaffordable, no
+        // value of X helps. Aether Vial does not enter into it: putting a creature onto the
+        // battlefield is an ActivateVial action, a different kind, which this does not touch.
+        if (g_emit_prune && def.params.alt_lifegain_cost <= 0
+            && def.params.alt_cost_requires_subtype.empty()
+            && !def.params.spectacle_cost.has_value()
+            && EffectiveCost(def, state).ManaValue() > mana_ceiling)
+        { continue; }
 
         // Flood-engine gate: a Treasure Hunt (DrawUntilNonland) or a cascade/retrace card
         // that can cascade INTO Treasure Hunt (Throes of Chaos) is only offered when its
