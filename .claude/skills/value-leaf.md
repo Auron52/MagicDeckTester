@@ -42,6 +42,24 @@ model *is* the staged artifact, and the A/B's "live" arm is the deck with **no s
 which is the correct baseline, since presence alone activates the hybrid. You do not pass a flag for
 this and there is no separate path to remember.
 
+## Play mismatch: the unit of consistency is the SEED
+
+Generation is frozen to one commit because the artifacts are engine-state fingerprints. When that
+freeze is broken anyway -- a merge lands, an optimization ships mid-run -- the run does not have to be
+thrown away. The rule (user, 2026-08-09):
+
+> Continue under the mismatch, but **regenerate any seed that is not completely done**, at every level
+> that had completed for it previously.
+
+The seed is the unit because the table averages over seeds: a seed measured entirely on one engine is
+internally consistent, and mixing engines *between* seeds only widens the spread. Mixing them *within*
+a seed corrupts the H-vs-V comparison the crossover is derived from, because the two arms would
+describe different engines at the same depth.
+
+So on a mismatch: keep every 100%-complete seed, and re-run every cell of every incomplete seed --
+not just the cells that were short. Size it before committing: on FiveColour, 3 short cells were 75
+games, but the two seeds owning them are 26 cells and ~10,400 games.
+
 ## Progress and restarts
 
 `status` prints the frozen commit and whether the freeze still holds, a per-phase checklist with
