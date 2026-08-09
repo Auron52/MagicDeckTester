@@ -1266,3 +1266,27 @@ in practice, one that can be cheated in free.
 **Next step beyond this** (user): test castability of individual cards first, then of combinations of
 the survivors. Single-card castability is the cheap filter that makes the combination pass affordable;
 the combination pass is where the remaining payable-but-dominated lines would go.
+
+### Terminology: these cards are NOT domain, and the code name says otherwise
+
+User: *"the domain keyword is based on the basic land types you control, whereas Bloom Tender and
+Faeburrow Elder look at permanent colours."* Correct, and they are genuinely different quantities:
+
+| | counts | a Triome is worth | a fetchland is worth |
+|---|---|---|---|
+| **domain** (Tribal Flames, Territorial Kavu) | basic land TYPES you control | **3** | 0 (until it fetches) |
+| **Bloom Tender / Faeburrow Elder** | COLOURS among permanents you control | **0** (lands are colorless) | 0 |
+
+The divergence is maximal on exactly this deck: its triomes carry three basic land types each and would
+feed real domain hard, while contributing nothing to Bloom Tender.
+
+The engine's *behaviour* is right — `DomainColors` unions `p.card.HasColor(...)` over permanents, which
+is the colour rule, not the land-type rule. Only the **naming** is wrong: `domain_mana`,
+`domain_self_pump`, `DomainColors`. No live bug (a check of `cards.json` finds exactly two cards using
+the name, both of them the colour kind), but it is a landmine: implementing a real domain card by
+reusing `DomainColors` would silently count the wrong thing, and this repo's decks are full of triomes
+and fetchlands that make the two answers differ.
+
+Rename when the freeze lifts: `DomainColors` -> `ColorsAmongPermanents`, `domain_mana` ->
+`permanent_colors_mana`, `domain_self_pump` -> `permanent_colors_self_pump`. Mechanical, byte-identical,
+and it keeps the name free for the mechanic that actually owns it.
