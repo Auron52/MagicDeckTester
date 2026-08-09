@@ -24,6 +24,8 @@
 #include "TurnSolver.h"   // Action
 #include <cstdint>
 #include <string>
+#include <utility>
+#include <vector>
 
 bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_creature,
                           std::uint64_t reserved_mask, ManaPool* available,
@@ -46,7 +48,13 @@ bool OrderingOpaque(const std::string& name);
 // THE accounting mana pool (C1 unit 4): everything the active player's untapped sources could
 // produce this phase, plus the turn-scoped floating reserve. Was a byte-identical twin pair
 // (TurnSolver's file-static BuildPool / AIEngine::BuildAvailableMana); both sides now call this.
-ManaPool AvailableManaPool(const GameState& state);
+// `skip`, when non-null, EXCLUDES that one permanent's contribution -- the "what would I still be
+// able to pay if this source were tapped?" question. Used by the combat hold-back rule to tell a
+// dork whose mana is actually funding a play from one whose tap nothing needs. nullptr (the default,
+// and every pre-existing call site) is byte-identical to the original.
+// (core/SpellEffects.h forward-declares this WITHOUT the default -- the default may be given only
+// once, and this header is the canonical declaration everything else includes.)
+ManaPool AvailableManaPool(const GameState& state, const Permanent* skip = nullptr);
 
 // THE public payment entry (C1 unit 5). Mana-source RESERVATION ("leaving sources up"): FIRST try
 // to pay while HOLDING the special sources (dorks / {C}-manlands / depletion) untapped; only if the
@@ -57,6 +65,40 @@ ManaPool AvailableManaPool(const GameState& state);
 // rollout: nullptr,true).
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco);
+
+// PLAN-SCOPED source reservation -- the card numbers of battlefield sources the plan being applied
+// must hold untapped for a LATER cast in the same plan. It rides the SAME reserve-then-fallback
+// retry as ReservableSpecialMask (try holding them; if the cost cannot be met, pay normally), so it
+// can only ever change WHICH sources pay, never whether a cost is payable.
+//
+// The one producer today is the same-turn mana-unlock equip (TurnSolver::ManaUnlockColorReserve):
+// the plan casts a dork, equips haste onto it and spends its mana on a later cast -- but the dork's
+// colours are not the later cast's colours, so the per-cast greedy would happily spend the line's
+// ONLY red source on a generic pip of the ENABLERS and strand the payoff (FiveColour seed 3 turn 3:
+// Bloom Tender makes {W}{B}{G}, Mana Cannons needs {R} off the lone Steam Vents). The whole-turn
+// batch pre-pay cannot cover this: it declines, because before the unlock the turn's combined cost
+// is unaffordable. See docs/design/mana-source-reservation.md.
+//
+// Empty for every other plan -> byte-identical. Set/cleared by PlanSourceReserveScope.
+extern thread_local std::vector<int> g_plan_reserved_sources;
+
+// RAII for g_plan_reserved_sources: sets it for the plan's cast section and restores the previous
+// value on scope exit (nested plan applications -- a rollout inside an apply -- restore correctly).
+// Release() drops the reservation early, which the unlock hoist calls the moment the dork is hasted:
+// from then on the reserved source is exactly what the payoff wants to tap.
+class PlanSourceReserveScope
+{
+public:
+    explicit PlanSourceReserveScope(std::vector<int> nums)
+        : m_prev(std::move(g_plan_reserved_sources))
+    { g_plan_reserved_sources = std::move(nums); }
+    ~PlanSourceReserveScope() { g_plan_reserved_sources = std::move(m_prev); }
+    static void Release() { g_plan_reserved_sources.clear(); }
+    PlanSourceReserveScope(const PlanSourceReserveScope&)            = delete;
+    PlanSourceReserveScope& operator=(const PlanSourceReserveScope&) = delete;
+private:
+    std::vector<int> m_prev;
+};
 
 // Post-spell mana sinks (C1 unit 5): animate manlands (Mutavault) / tap-and-pay token abilities
 // (Sliver Hive), run pre-combat so the creatures can attack. Twin pairs

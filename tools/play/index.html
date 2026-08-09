@@ -757,7 +757,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','echo','land_entry','tutor_etb','sac_tutor'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','echo','land_entry','tutor_etb','sac_tutor'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -1270,21 +1270,41 @@ function renderChooseDialog(v, line){
     const crumbs = picks.length
       ? `<div class="chosen">${picks.map(p=>`<span class="crumb">${esc(p.key)} <b>${esc(p.choice)}</b></span>`).join('')}</div>`
       : '';
+    // WHICH SHAPE? A grid of card art only communicates something when the choices ARE different
+    // cards (fetch/tutor/enchant/face). For a dimension whose every choice is the SAME card -- a
+    // mode split (Unite the Coalition), an X value, a splice count, pay-vs-free, a loyalty ability --
+    // the grid renders N identical images distinguished only by a `varbadge`, and that badge is a
+    // nowrap pill: long text ("10 damage + 0 cards") overflows into the neighbouring tile. That is
+    // the reported "it overlaps". Those dimensions get the LIST shape instead -- the same
+    // .optlist/button.opt rows the Ponder / scry / surveil reorder dialog uses -- with the source
+    // card shown ONCE in the header where it is actually informative.
+    const sameCard = choices.every(c => (c.card||'') === (choices[0].card||''));
+    const listShape = sameCard || ['modal','x','splice','free','loyalty'].indexOf(dim.kind) >= 0;
     let h=`<div class="dimhead">${srcName?cardMini(srcName,'dimsrc'):''}`+
           `<div class="dimtext"><h3>${esc(dim.key)}?</h3>`+
           `<div class="sub">${total>1?`Decision ${step} of ${total} for this line — `:''}`+
-          `pick one of ${choices.length}.</div></div></div>`+crumbs+`<div class="tutgrid">`;
-    choices.forEach((c,i)=>{
-      // The badge only adds value when the choice differs from the card name shown below (X=2,
-      // +2 own). For fetch/tutor the choice IS the card name, so the badge just duplicates the
-      // <em> label and its nowrap pill overflows into neighbours -- skip it there.
-      const showBadge = c.card && c.choice!==c.card;
-      h+=`<span class="cardmini varpick" data-i="${i}"${c.card?` data-name="${esc(c.card)}"`:''} title="${esc(c.choice)}">`+
-         (showBadge?`<span class="varbadge">${esc(c.choice)}</span>`:'')+
-         (c.card?`<img loading="lazy" src="${scryImg(c.card,'small')}" onerror="this.style.opacity=.15"/>`:`<span style="display:block;height:96px"></span>`)+
-         `<em>${esc(c.card||c.choice)}</em></span>`;
-    });
-    h+=`</div><div class="pbtns" style="margin-top:10px">`+
+          `pick one of ${choices.length}.</div></div></div>`+crumbs;
+    if (listShape){
+      h+=`<div class="optlist">`;
+      choices.forEach((c,i)=>{
+        h+=`<button class="opt varpick" data-i="${i}" title="${esc(c.choice)}">${esc(c.choice)}</button>`;
+      });
+      h+=`</div>`;
+    } else {
+      h+=`<div class="tutgrid">`;
+      choices.forEach((c,i)=>{
+        // The badge only adds value when the choice differs from the card name shown below (X=2,
+        // +2 own). For fetch/tutor the choice IS the card name, so the badge just duplicates the
+        // <em> label and its nowrap pill overflows into neighbours -- skip it there.
+        const showBadge = c.card && c.choice!==c.card;
+        h+=`<span class="cardmini varpick" data-i="${i}"${c.card?` data-name="${esc(c.card)}"`:''} title="${esc(c.choice)}">`+
+           (showBadge?`<span class="varbadge">${esc(c.choice)}</span>`:'')+
+           (c.card?`<img loading="lazy" src="${scryImg(c.card,'small')}" onerror="this.style.opacity=.15"/>`:`<span style="display:block;height:96px"></span>`)+
+           `<em>${esc(c.card||c.choice)}</em></span>`;
+      });
+      h+=`</div>`;
+    }
+    h+=`<div class="pbtns" style="margin-top:10px">`+
        (picks.length?`<button id="chooseback" class="ghost">Back</button>`:'')+
        `<span class="spacer"></span><button id="choosecancel" class="ghost">Cancel</button></div>`;
     panel.innerHTML=h;
@@ -1540,7 +1560,7 @@ function renderDecisionPanel(d, dec){
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor'
                 || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold'
-                || dec==='lackey_put' || dec==='echo' || dec==='tutor_etb'; // centered card-image modals
+                || dec==='lackey_put' || dec==='free_cast' || dec==='echo' || dec==='tutor_etb'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
@@ -1555,6 +1575,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='dragon' ? dragonPanelHtml(d)
                   : dec==='sac_tutor' ? sacTutorPanelHtml(d)
                   : dec==='lackey_put' ? lackeyPanelHtml(d)
+                  : dec==='free_cast' ? freeCastPanelHtml(d)
                   : dec==='tutor_etb' ? tutorPanelHtml(d)
                   : dec==='echo' ? echoPanelHtml(d)
                   : dec==='lightpaws' ? lightPawsPanelHtml(d)
@@ -1633,6 +1654,31 @@ function lackeyPanelHtml(d){
   h+=`<div class="sub"><b>${esc(d.source||'Goblin Lackey')}</b> dealt combat damage — you may put a Goblin permanent card from your hand onto the battlefield. Click one, or decline.</div>`;
   h+=`<div class="tutgrid">`;
   if(!cands.length) h+=`<span class="hint">No Goblin permanent in hand.</span>`;
+  cands.forEach(c=>{
+    const def=c.index===aiPick && c.name===defName;
+    h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+       `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+       (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+     `<button class="ghost" data-opt="-1">Decline</button></div>`;
+  return h;
+}
+// Maelstrom Archangel free cast: the combat-damage trigger's "you MAY cast a spell from your hand
+// without paying its mana cost". A ONE-TIME choice asked once at the top of the post-combat main --
+// it is deliberately NOT a standing plan-menu option (that let the charge be spent at any moment, or
+// silently lost when the paid variant of the same card won the dedup). Same shape as the Lackey put.
+function freeCastPanelHtml(d){
+  const cands=d.candidates||[];
+  // The BADGE follows ai_pick (the engine's suggestion); heuristic_default is -1/decline, because a
+  // "may" trigger must default to the no-op for references that predate this decision -- see
+  // WriteFreeCastDecisionJson.
+  const aiPick=(d.ai_pick===undefined? d.heuristic_default : d.ai_pick);
+  const defName=(cands.find(c=>c.index===aiPick)||{}).name;
+  let h=`<h3>Maelstrom Archangel — cast a spell for free</h3>`;
+  h+=`<div class="sub"><b>${esc(d.source||'Maelstrom Archangel')}</b> dealt combat damage — you may cast one spell from your hand <b>without paying its mana cost</b>. This is a one-time trigger: click a spell, or decline.</div>`;
+  h+=`<div class="tutgrid">`;
+  if(!cands.length) h+=`<span class="hint">No castable spell in hand.</span>`;
   cands.forEach(c=>{
     const def=c.index===d.heuristic_default && c.name===defName;
     h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
@@ -2030,6 +2076,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitLightPaws(d, +b.dataset.opt));
   else if (dec==='lackey_put')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitLackey(d, +b.dataset.opt));
+  else if (dec==='free_cast')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFreeCast(d, +b.dataset.opt));
   else if (dec==='tutor_etb')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitTutor(d, +b.dataset.opt));
   else if (dec==='echo')
@@ -2102,6 +2150,10 @@ function commitLightPaws(d, oi){
 function commitLackey(d, oi){
   const c=(d.candidates||[]).find(x=>x.index===oi);
   pushChoice(d, oi, `${d.source||'Goblin Lackey'}: ${oi<0||!c?'decline':'put '+c.name}`);
+}
+function commitFreeCast(d, oi){
+  const c=(d.candidates||[]).find(x=>x.index===oi);
+  pushChoice(d, oi, `${d.source||'Maelstrom Archangel'}: ${oi<0||!c?'declined the free cast':'cast '+c.name+' for free'}`);
 }
 function commitTutor(d, oi){
   const c=(d.candidates||[]).find(x=>x.index===oi);

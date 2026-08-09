@@ -458,6 +458,24 @@ public:
     // so the two stay in lockstep. Off-switch: MTG_NO_BATCH_PAY.
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts);
 
+    // Fire every planned Equip that UNLOCKS MANA -- a haste-granting Equipment onto a mana dork
+    // that cannot tap yet (CR 302.6: haste lifts the {T} restriction too) -- as soon as both of its
+    // pieces are on the battlefield, rather than in the trailing equip pass that runs after the
+    // main casts. That ordering is what makes EnumeratePlans' same-turn hasted-dork mana credit
+    // realisable: the plan is offered BECAUSE the hasted dork pays for a later cast in it. Called
+    // before the casts and again after each one, by the rollout (ApplyPlanDirect) and the executor
+    // (AIEngine::TakeTurn), through this one function so the two stay in lockstep. Self-gating on
+    // "the host is a still-locked mana source", so an equip onto a beater is untouched and still
+    // fires in the trailing pass. Returns how many fired. Off-switch: MTG_NO_HASTE_DORK_CREDIT.
+    static int ApplyManaUnlockEquips(GameState& state, const std::vector<Action>& acts);
+
+    // Card numbers of battlefield sources a plan with a mana-unlock equip must hold untapped until
+    // that equip fires -- the "reserve red" half of the same line. Empty for every other plan.
+    // Fed to PlanSourceReserveScope by the rollout and the executor. See the definition for the
+    // scarcity rule and why the batch pre-pay cannot cover this case.
+    static std::vector<int> ManaUnlockColorReserve(const GameState& state,
+                                                   const std::vector<Action>& acts);
+
     // --- Human-play line reconciliation (tools/play GUI) ------------------------
     // A human assembles a free-form main-phase line by hand (play a land, cast some
     // spells) and commits it at the phase breakpoint. CheckLine reconciles that line

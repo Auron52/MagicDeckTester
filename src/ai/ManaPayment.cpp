@@ -589,12 +589,13 @@ bool OrderingOpaque(const std::string& name)
 // spendable on later same-phase casts, so it counts toward affordability; empty for non-floating
 // decks, and MTG_NO_FLOAT_LEFTOVER restores the legacy board-only pool. Was a byte-identical twin
 // pair (TurnSolver's BuildPool / AIEngine::BuildAvailableMana).
-ManaPool AvailableManaPool(const GameState& state)
+ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
 {
     ManaPool pool;
     int gy_fuel = -1;   // Deathrite fuel: lazily counted, decremented per credited source
     for (const Permanent& p : state.battlefield)
     {
+        if (&p == skip) { continue; }   // "as if this source were tapped" (see the header note)
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
         auto def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
@@ -612,6 +613,29 @@ ManaPool AvailableManaPool(const GameState& state)
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     return pool;
+}
+
+// Plan-scoped source reservation (see g_plan_reserved_sources). Stored as CARD NUMBERS, not
+// battlefield indices: a main phase can push new permanents and remove others (a sacrifice, a Karoo
+// bounce), so an index captured before the casts is not stable across them. Resolved to the
+// bitmask the payment path wants here, where the board is in scope. Empty vector -> 0 -> the
+// reserve-then-fallback below is byte-identical to before for every other plan.
+thread_local std::vector<int> g_plan_reserved_sources;
+
+static std::uint64_t PlanReserveMask(const GameState& state)
+{
+    if (g_plan_reserved_sources.empty()) { return 0; }
+    const int n = static_cast<int>(state.battlefield.size());
+    if (n > 64) { return 0; }                    // bitmask limit, matching ReservableSpecialMask
+    std::uint64_t mask = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        for (int num : g_plan_reserved_sources)
+        { if (p.card.m_number == num) { mask |= (1ull << i); break; } }
+    }
+    return mask;
 }
 
 // THE public payment entry (C1 unit 5) -- reserved-first retry around TapForCostSharedOnce.
@@ -664,7 +688,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         return false;
     }
 
-    const std::uint64_t rmask = ReservableSpecialMask(state);
+    const std::uint64_t rmask = ReservableSpecialMask(state) | PlanReserveMask(state);
     if (rmask != 0)
     {
         const int a = state.active_player_index;

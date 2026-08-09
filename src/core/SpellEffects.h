@@ -2618,6 +2618,21 @@ inline void ApplyEquip(GameState& state, int controller, int equip_id, int creat
     if (eq && host_ok) { eq->equipped_to = creature_id; }
 }
 
+// True when `equip_id` is ALREADY attached to `creature_id`. The Equip enumeration never offers a
+// pair that is already attached, so DURING a plan application this can only mean the mana-unlock
+// hoist (TurnSolver::ApplyManaUnlockEquips) fired it mid-casts -- which is how the trailing equip
+// pass in the rollout and the executor knows to skip it (re-firing would pay the cost a 2nd time).
+inline bool EquipmentAttachedTo(const GameState& state, int controller, int equip_id, int creature_id)
+{
+    if (equip_id <= 0 || creature_id <= 0) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (p.card.m_number == equip_id) { return p.equipped_to == creature_id; }
+    }
+    return false;
+}
+
 // ---- Deathrite Shaman graveyard-exile value outlets (abilities 2/3) -----------------------------
 // "{B},{T}: exile an instant/sorcery card from a graveyard -> each opponent loses 2 life" (mode 1)
 // "{G},{T}: exile a creature card from a graveyard -> you gain 2 life"                     (mode 2)
@@ -3013,8 +3028,9 @@ inline void ApplyAttackDrawTriggers(GameState& state, int controller,
 inline void EnforceLegendRule(GameState& state, int controller_index);
 
 // Forward declaration only (ai/ManaPayment.h cannot be included here -- it includes this header).
-// Used solely by the MTG_LACKEY_PREF diagnostic below, never by game logic.
-ManaPool AvailableManaPool(const GameState& state);
+// Used solely by the MTG_LACKEY_PREF diagnostic below, never by game logic. MUST match the real
+// signature in ManaPayment.h, default argument included, or every call site becomes ambiguous.
+ManaPool AvailableManaPool(const GameState& state, const Permanent* skip);
 
 inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
                                           const std::vector<int>& damaging_attacker_indices)
@@ -3127,7 +3143,7 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
             // free put (the Lackey slot is for what you cannot pay for).
             std::string affordable;
             {
-                ManaPool pool_now = AvailableManaPool(state);
+                ManaPool pool_now = AvailableManaPool(state, nullptr);
                 for (int ci : cand_hand)
                 {
                     const CardDefinition* cd = CardDatabase::Instance().LookupCached(ap.hand[ci]);

@@ -92,7 +92,10 @@
   // issue #13 was reported as "Crop Rotation + Sylvan Scrying only let me choose ONE land" -- the
   // engine offers both dimensions (verified: 144 variants, 12 lands each), so any regression here
   // silently eats a human decision while every engine-side check stays green.
-  const SUBKIND_PRI = { face: -1, fetch: 0, tutor: 1, enchant: 1.5, x: 2, soulfire: 3, crackle: 4, splice: 5 };
+  // `free` (Maelstrom Archangel pay-vs-bank) is asked FIRST among the per-spell dimensions: it
+  // decides how much mana the rest of the line has, so every later sub-decision reads in that
+  // context. `modal` (Unite the Coalition's mode split) sits where the old generic `x` sub used to.
+  const SUBKIND_PRI = { face: -1, fetch: 0, free: 0.5, tutor: 1, enchant: 1.5, x: 2, modal: 2.5, soulfire: 3, crackle: 4, splice: 5 };
   function subKindPri(k) { return SUBKIND_PRI[k] === undefined ? 9 : SUBKIND_PRI[k]; }
   function subOf(v, key) { return (v.subs || []).filter(s => s.key === key)[0]; }
   function choiceOf(v, key) { const s = subOf(v, key); return s ? s.choice : '—'; }

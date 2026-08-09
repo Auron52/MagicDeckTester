@@ -62,6 +62,7 @@ DECKS = {
     # deck was never added -- and why 40 references (30 Goblins + 10 Creature Giving) sat unchecked.
     "Creature_Giving": ("decks/Creature Giving/Creature Giving.cod",
                         "decks/Creature Giving/Creature Giving.profile.json"),
+    "FiveColour":    ("decks/FiveColour/FiveColour.cod",       "decks/FiveColour/FiveColour.profile.json"),
 }
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", re.S)
@@ -270,6 +271,44 @@ def engine_default(d):
     return 0, "fallback"
 
 
+def free_cast_intent(dec, kept, ri):
+    """Answer an unaligned `free_cast` frame from the RECORDED INTENT, not from a blind default.
+
+    Maelstrom Archangel's "you may cast a spell without paying its mana cost" used to be spent as a
+    `#FREE` variant folded into the main-phase plan list, so a reference saved then recorded the free
+    cast as an ordinary `cast: <card>` pick -- indistinguishable from a paid cast (the `(free)` marker
+    did not exist yet). Moving it to its own one-time decision inserts a frame those references
+    predate, and NO fixed default is right for all of them: seed 6 passed (declining is faithful)
+    while seeds 4 and 7 free-cast Unite the Coalition to win a turn earlier (declining costs them
+    that turn). So read the reference's own line for the phase this trigger fires in -- the
+    post-combat main of the same turn -- and cast whatever it cast, else decline.
+
+    Returns (pick, source) or None when the reference has nothing to say (caller falls back).
+    """
+    turn = dec.get("turn")
+    cands = dec.get("candidates") or []
+    if not cands:
+        return None
+    by_name = {c.get("name"): c.get("index") for c in cands}
+    for rec in kept[ri:]:
+        rd = rec.get("decision") or {}
+        if rd.get("type") != "main_phase" or rd.get("turn") != turn:
+            continue
+        if rd.get("phase") != "post_main":
+            continue
+        chosen = rec.get("chosen")
+        if not isinstance(chosen, int) or chosen < 0:
+            return -1, "recorded-intent(pass)"        # the reference declined this phase
+        plan = next((p for p in (rd.get("plans") or []) if p.get("index") == chosen), None)
+        if not plan:
+            return None
+        for nm in (plan.get("casts") or []):
+            if nm in by_name:
+                return by_name[nm], f"recorded-intent({nm})"
+        return -1, "recorded-intent(no free cast)"
+    return None
+
+
 def check_reference(path, collect=None):
     """Replay one reference by INTENT, validating the contract at every step.
 
@@ -393,6 +432,12 @@ def check_reference(path, collect=None):
             # line needs later. For every other type, answer as the unattended engine would.
             if dec.get("type") == "main_phase":
                 pick, src = -1, "pass"
+            elif dec.get("type") == "free_cast":
+                # A "may" trigger the reference predates: replay what its own line did (see
+                # free_cast_intent). Falls back to the engine default (decline) when the reference
+                # says nothing about that phase.
+                intent = free_cast_intent(dec, kept, ri)
+                pick, src = intent if intent else engine_default(dec)
             else:
                 pick, src = engine_default(dec)
             inserted.append(f"{frame_ident(dec)}<-{pick}({src})")

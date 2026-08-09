@@ -390,6 +390,13 @@ static int CountLands(const GameState& state)
 static const bool g_domain_widen_gate = EnvOn("MTG_DOMAIN_WIDEN_GATE");
 static bool DomainWidenGateEnabled() { return g_domain_widen_gate; }
 
+// Same-turn HASTED mana dork credit (EnumeratePlans) + the execution hoist that realises it.
+// Default ON; MTG_NO_HASTE_DORK_CREDIT=1 restores the un-credited, trailing-equip behaviour for the
+// standing A/B. Inert unless a plan equips a haste-granting Equipment onto a currently-untappable
+// mana dork -> byte-identical for every deck without that pairing. See HasteUnlockedManaOf.
+static const bool g_no_haste_dork_credit = EnvOn("MTG_NO_HASTE_DORK_CREDIT");
+static bool HasteDorkCreditEnabled() { return !g_no_haste_dork_credit; }
+
 static void ComputeAvailableColors(const GameState& state, bool have[5])
 {
     have[0] = have[1] = have[2] = have[3] = have[4] = false;
@@ -489,11 +496,24 @@ static bool SubsetPayable(const bool have[5], const std::vector<Action>& cands,
     {
         const Action& a = cands[j];
         if (a.kind == Action::Kind::ActivateVial) { continue; }
-        if (a.cost.white > 0) { need[0] = true; any = true; }
-        if (a.cost.blue  > 0) { need[1] = true; any = true; }
-        if (a.cost.black > 0) { need[2] = true; any = true; }
-        if (a.cost.red   > 0) { need[3] = true; any = true; }
-        if (a.cost.green > 0) { need[4] = true; any = true; }
+        int pips[5] = { a.cost.white, a.cost.blue, a.cost.black, a.cost.red, a.cost.green };
+        // HYBRID pips ({B/G}) are payable with EITHER colour, but Card.h bakes each one into its
+        // FIRST colour's flat int -- so reading the flat pips alone demands the first colour and
+        // rejects a subset a green-only board pays fine (Deathrite Shaman off a Breeding Pool: the
+        // whole cast was never enumerated). Peel each hybrid pip out of its first colour and
+        // require only that ONE of its two colours is available. This stays a pure NECESSARY
+        // condition -- the real allocation is still ManaPool::CanPay, which expands assignments --
+        // and hybrid_count == 0 for every other card, so non-hybrid decks are byte-identical.
+        for (int h = 0; h < a.cost.hybrid_count; ++h)
+        {
+            const int c1 = a.cost.hybrid_pair[h] >> 4;
+            const int c2 = a.cost.hybrid_pair[h] & 0xF;
+            if (c1 >= 0 && c1 < 5) { --pips[c1]; }              // un-bake the first-colour pip
+            const bool have1 = (c1 >= 0 && c1 < 5) ? have[c1] : false;
+            const bool have2 = (c2 >= 0 && c2 < 5) ? have[c2] : false;
+            if (!have1 && !have2) { return false; }             // neither half available -> unpayable
+        }
+        for (int i = 0; i < 5; ++i) { if (pips[i] > 0) { need[i] = true; any = true; } }
     }
     if (!any) { return true; }
 
@@ -681,6 +701,91 @@ static bool HasUntappedFilterSource(const GameState& state)
         if (d && (d->params.is_filter || d->params.ramp_filter || IsScaledManaLand(*d))) { return true; }
     }
     return false;
+}
+
+// ---- Attackers that are ALSO mana sources (the tap-vs-swing tension) --------------------------
+// PendingAttackDamage is computed ONCE per enumeration, on the pre-plan board, and fed unchanged
+// into every subset's score. That silently credits a plan with the damage of the very creatures it
+// taps to PAY for itself: the search believed it could cast the spell AND still swing with the dork
+// it just tapped. Measured (FiveColour, 4 lands + Deathrite + a 3/3 Faeburrow Elder, Unite the
+// Coalition in hand): casting pre-combat scored as 10 damage + a 3-power attack it does not get, so
+// the engine cast in main 1 and left the opponent at 9, where attacking first and casting in the
+// SECOND main reaches 6. Vigilance does NOT rescue this -- vigilance only stops the ATTACK from
+// tapping the creature; one tapped for mana is simply not a legal attacker.
+//
+// This collects the creatures that PendingAttackDamage counted AND that could be tapped for mana,
+// so a subset can discount the ones it must spend. Sorted by attack power ASCENDING: that is the
+// order a competent payment spends them (cover the cost losing as little combat damage as possible),
+// so the discount stays the smallest honest one rather than a worst case.
+struct AttackingManaSource { int power; int yield; };
+static std::vector<AttackingManaSource> CollectAttackingManaSources(const GameState& state)
+{
+    std::vector<AttackingManaSource> out;
+    const int active = state.active_player_index;
+    int gy_fuel = -1;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        if (!p.card.IsCreature()) { continue; }              // only a creature's tap costs an attack
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+        if (!def) { continue; }
+        const bool is_src = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                         || def->params.mana_rock;
+        if (!is_src) { continue; }
+        // Deathrite-style fuel gating, mirroring AvailableManaPool: an unfuelled source yields
+        // nothing, so tapping it is never how a cost gets paid.
+        if (def->params.gy_land_exile_mana)
+        {
+            if (gy_fuel < 0) { gy_fuel = GraveyardLandFuel(state, active); }
+            if (gy_fuel <= 0) { continue; }
+            --gy_fuel;
+        }
+        // Only creatures PendingAttackDamage actually counted can be discounted from it.
+        if (!CanAttackFull(p, state.battlefield, active)) { continue; }
+        if (!ResolveProvider(state).ShouldAttackWith(state, p)) { continue; }
+
+        const bool animated = p.is_animated;
+        auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state.battlefield, active, animated, &p);
+        (void)lord_tb;
+        const bool ds = animated
+            ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true)
+            : (p.card.HasKeyword(Keyword::DoubleStrike)
+               || HasDoubleStrikeFromLords(p.card, state.battlefield, active));
+        int base_pw = p.EffectivePower() + lord_pb;
+        if (animated) { base_pw += def->params.animate_power; }
+        base_pw += DynamicBasePower(*def, state, active);
+        base_pw += AuraBonusFor(p, state).first;
+        const int power = base_pw * (ds ? 2 : 1);            // mirrors PendingAttackDamage exactly
+
+        const int y = PermanentManaYield(p, *def);
+        out.push_back({ power, y >= 0 ? y : ManaProducedPerTap(*def) });
+    }
+    std::sort(out.begin(), out.end(),
+              [](const AttackingManaSource& a, const AttackingManaSource& b)
+              { return a.power < b.power; });
+    return out;
+}
+
+// The attack damage a subset FORFEITS by tapping creature mana sources to pay for itself. `need` is
+// the mana this subset must draw from creature sources (its cost beyond what non-creature sources
+// cover). Spends the least-powerful sources first; returns the summed power of those spent.
+// MTG_NO_ATK_TAP_DISCOUNT=1 restores the old (over-crediting) projection for the standing A/B.
+static bool AttackTapDiscountEnabled()
+{
+    static const bool v = !EnvOn("MTG_NO_ATK_TAP_DISCOUNT");
+    return v;
+}
+static int AttackTapDiscount(const std::vector<AttackingManaSource>& srcs, int need)
+{
+    if (need <= 0 || srcs.empty() || !AttackTapDiscountEnabled()) { return 0; }
+    int covered = 0, lost = 0;
+    for (const AttackingManaSource& s : srcs)
+    {
+        if (covered >= need) { break; }
+        covered += s.yield;
+        lost    += s.power;
+    }
+    return lost;
 }
 
 static int PendingAttackDamage(const GameState& state)
@@ -1057,6 +1162,213 @@ static bool SubsetHasStrandedEquip(const GameState& state,
         if (!live(c.sac_source_id) || !live(c.sac_victim_id)) { return true; }
     }
     return false;
+}
+
+// ---- Same-turn HASTED mana dork ---------------------------------------------------------------
+// A mana dork is summoning-sick the turn it arrives, which is exactly why the same-turn ROCK credit
+// (EnumeratePlans, `sel_rock`) excludes creatures. But a haste-granting Equipment attached this same
+// turn lifts that restriction for its {T} abilities too (CR 302.6, modelled in CanTapNow) -- so the
+// dork DOES tap, and its mana can fund the rest of the plan. Without crediting it, the FiveColour
+// line
+//     land=Jetmir's Garden ; cast Bloom Tender ; cast Lightning Greaves ; equip {0} ; cast Mana Cannons
+// is never enumerated: the four costs total 7 and the board makes only 5 without Bloom Tender's own
+// tap, so the subset dies on `!mana_ok` before anything can offer it (user report, seed 3 turn 3).
+// See docs/design/scaling-source-widening.md, "Sibling gap".
+//
+// Returns what the Equip's HOST adds to THIS turn's pool once hasted (empty when the host is not a
+// mana source that is currently locked). `out_nc` is the same credit for the NON-creature pool,
+// mirroring BuildNonCreaturePool's creature_mana_only exclusion.
+//
+// Both host locations are covered, because the Equip enumeration only ever offers a `fresh` host:
+//   * in HAND  -- cast by this same subset (the reproducer above),
+//   * on the BATTLEFIELD but summoning-sick (cast in the pre-combat main, equipped post-combat).
+// A host that can ALREADY tap is skipped: it is in `pool` / `pool_noncreature` already, so crediting
+// it here would double-count (reachable via a haste LORD, which the equip predicate does not test).
+static void HasteUnlockedManaOf(const GameState& state, int host_id, ManaPool& out, ManaPool& out_nc)
+{
+    if (host_id <= 0) { return; }
+    const int             active = state.active_player_index;
+    const Permanent*      perm   = nullptr;
+    const CardDefinition* d      = nullptr;
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == active && p.card.m_number == host_id) { perm = &p; break; } }
+    if (perm)
+    {
+        if (perm->tapped) { return; }                       // already spent this turn
+        d = CardDatabase::Instance().LookupCached(perm->card);
+        // Only a ManaDork can be locked: AvailableManaPool credits a mana_rock unconditionally, so a
+        // (hypothetical) creature rock is in the pool already -- crediting it here would double it.
+        if (!d || d->tmpl != CardTemplate::ManaDork) { return; }
+        if (CanTapNow(*perm, state.battlefield)) { return; }  // not locked -> already credited
+    }
+    else
+    {
+        for (const Card& c : state.players[active].hand)
+        { if (c.m_number == host_id) { d = CardDatabase::Instance().LookupCached(c); break; } }
+        if (!d || !d->card.IsCreature()) { return; }
+        if (d->tmpl != CardTemplate::ManaDork && !d->params.mana_rock) { return; }
+    }
+    // Deathrite-style mana is fuel-gated on a land in a graveyard and the fuel is SHARED with the
+    // copies the pool already credited, so it is deliberately not credited here (conservative).
+    if (d->params.gy_land_exile_mana) { return; }
+    ManaPool add;
+    AddSourceToPool(add, state, *d, perm ? PermanentManaYield(*perm, *d) : -1);
+    if (add.Total() <= 0) { return; }
+    out.AddPool(add);
+    if (!d->params.creature_mana_only) { out_nc.AddPool(add); }
+}
+
+// Fire every planned Equip that UNLOCKS MANA -- a haste-granting Equipment onto a mana dork that
+// cannot tap yet -- the moment both of its pieces are on the battlefield, instead of leaving it to
+// the trailing equip pass that runs AFTER the main casts. That ordering is what makes the credit in
+// EnumeratePlans (see HasteUnlockedManaOf) realisable: the enumerator offers the plan because the
+// hasted dork pays for a later cast, so the equip has to happen before that cast, not after it.
+// Called before the casts and again after each one, by BOTH the rollout (ApplyPlanDirect) and the
+// executor (AIEngine::TakeTurn), through this one function -- so the two stay in lockstep.
+//
+// Self-gating and cheap: the guard is "the host is a mana source that cannot tap yet", so an equip
+// onto a beater (Greaves -> Maelstrom Archangel) is untouched and still fires in the trailing pass.
+// Returns how many fired.
+int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action>& acts)
+{
+    if (!HasteDorkCreditEnabled()) { return 0; }
+    const int active = state.active_player_index;
+    int fired = 0;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::Equip) { continue; }
+        const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (!ed || !ed->params.equip_grants_haste) { continue; }
+        if (EquipmentAttachedTo(state, active, a.sac_source_id, a.sac_victim_id)) { continue; }
+        // The Equipment must already be on the battlefield; the host must be on it too, and be a
+        // still-locked mana source (HasteUnlockedManaOf returns nothing for a hand host, a tapped
+        // one, a non-dork, or one that can tap already). A piece still in hand just means the cast
+        // that completes the pair has not resolved yet -- the next call picks it up.
+        bool have_equipment = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == active && p.card.m_number == a.sac_source_id)
+            { have_equipment = true; break; }
+        }
+        if (!have_equipment) { continue; }
+        bool have_host = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == active && p.card.m_number == a.sac_victim_id)
+            { have_host = true; break; }
+        }
+        if (!have_host) { continue; }
+        ManaPool add, add_nc;
+        HasteUnlockedManaOf(state, a.sac_victim_id, add, add_nc);
+        if (add.Total() <= 0) { continue; }
+        if (!TapForCostDirect(state, a.cost, /*for_creature=*/false)) { continue; }
+        ApplyEquip(state, active, a.sac_source_id, a.sac_victim_id);
+        ++fired;
+    }
+    // The colour reservation exists only to carry the payoff's scarce colour PAST the enabler casts
+    // (see ManaUnlockColorReserve). Once the dork is hasted the payoff is the next thing to pay, and
+    // the reserved source is exactly what it wants to tap -- so drop the hold rather than make every
+    // remaining payment try the reserved attempt first and fall back.
+    if (fired > 0) { PlanSourceReserveScope::Release(); }
+    return fired;
+}
+
+// The card numbers of battlefield sources a plan with a mana-unlock equip must hold untapped until
+// that equip fires. Without it the per-cast greedy spends the line's scarce colour on a GENERIC pip
+// of the enablers and strands the payoff: FiveColour seed 3 turn 3 casts Bloom Tender {1}{G} and
+// Lightning Greaves {2} off Breeding Pool + Steam Vents + Faeburrow Elder, and the greedy takes
+// Steam Vents -- the only red source -- for one of those generic pips, so the {R} of Mana Cannons is
+// gone before the hasted Bloom Tender ever taps. Bloom Tender's own mana cannot substitute: a domain
+// dork makes {W}{B}{G} here, no red.
+//
+// The rule is deliberately narrow -- reserve only what is PROVABLY needed:
+//   * `need[c]` = coloured pips of c required by the plan's casts OTHER than the unlock's two
+//     pieces, minus what the unlocked dork itself will produce of c (it makes one of each colour),
+//   * reserve every untapped source that can make c only when the number of such sources is <=
+//     need[c] -- i.e. the colour is SCARCE and each of those sources is load-bearing. With slack
+//     (more sources than pips) nothing is reserved, so the greedy keeps its freedom.
+// It rides the payment path's existing reserve-then-fallback, so over-reserving can never make a
+// cost unpayable -- at worst the held attempt fails and the normal payment runs, exactly as today.
+std::vector<int> TurnSolver::ManaUnlockColorReserve(const GameState& state,
+                                                    const std::vector<Action>& acts)
+{
+    std::vector<int> out;
+    if (!HasteDorkCreditEnabled()) { return out; }
+    const int     active = state.active_player_index;
+    const Player& ap     = state.players[active];
+
+    // The unlock's two pieces (equipment + host) and what the host will produce once hasted.
+    std::vector<int> pieces;
+    int dork_makes[5] = { 0, 0, 0, 0, 0 };
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::Equip) { continue; }
+        const CardDefinition* ed = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (!ed || !ed->params.equip_grants_haste) { continue; }
+        ManaPool add, add_nc;
+        HasteUnlockedManaOf(state, a.sac_victim_id, add, add_nc);
+        if (add.Total() <= 0) { continue; }        // not a locked mana source -> not an unlock
+        pieces.push_back(a.sac_source_id);
+        pieces.push_back(a.sac_victim_id);
+        const CardDefinition* hd = nullptr;
+        for (const Permanent& p : state.battlefield)
+        { if (p.controller_index == active && p.card.m_number == a.sac_victim_id)
+          { hd = CardDatabase::Instance().LookupCached(p.card); break; } }
+        if (!hd)
+        {
+            for (const Card& c : ap.hand)
+            { if (c.m_number == a.sac_victim_id) { hd = CardDatabase::Instance().LookupCached(c); break; } }
+        }
+        if (!hd) { continue; }
+        for (Color c : EffectiveProduces(state, active, *hd))
+        { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { ++dork_makes[ci]; } }
+    }
+    if (pieces.empty()) { return out; }
+
+    // Coloured pips the PAYOFF casts need (everything but the unlock's own pieces).
+    int need[5] = { 0, 0, 0, 0, 0 };
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.free_cast) { continue; }
+        if (a.hand_index < 0 || a.hand_index >= static_cast<int>(ap.hand.size())) { continue; }
+        const int num = ap.hand[a.hand_index].m_number;
+        bool is_piece = false;
+        for (int pn : pieces) { if (pn == num) { is_piece = true; break; } }
+        if (is_piece) { continue; }
+        need[0] += a.cost.white; need[1] += a.cost.blue; need[2] += a.cost.black;
+        need[3] += a.cost.red;   need[4] += a.cost.green;
+    }
+    for (int i = 0; i < 5; ++i) { need[i] = std::max(0, need[i] - dork_makes[i]); }
+
+    // A colour is SCARCE when the untapped sources that can make it are no more numerous than the
+    // pips still needed; then every one of them is load-bearing and must survive the enabler casts.
+    for (int ci = 0; ci < 5; ++ci)
+    {
+        if (need[ci] <= 0) { continue; }
+        std::vector<int> makers;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d) { continue; }
+            const bool is_land = (d->tmpl == CardTemplate::BasicLand);
+            const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                              || d->params.mana_rock;
+            if (!is_land && !is_dork) { continue; }
+            // Deathrite-style fuel-gated mana is not a dependable source of the colour.
+            if (d->params.gy_land_exile_mana) { continue; }
+            for (Color c : EffectiveProduces(state, active, *d))
+            { if (static_cast<int>(c) == ci) { makers.push_back(p.card.m_number); break; } }
+        }
+        if (makers.empty() || static_cast<int>(makers.size()) > need[ci]) { continue; }   // slack
+        for (int num : makers)
+        {
+            bool dup = false;
+            for (int have : out) { if (have == num) { dup = true; break; } }
+            if (!dup) { out.push_back(num); }
+        }
+    }
+    return out;
 }
 
 // Reject a subset that selects two SacForMana actions for the SAME source (its colour variants are
@@ -4274,7 +4586,12 @@ static int SequencedRitualCredit(const ManaPool& pool, const std::vector<Action>
     return credit + ManaGateTriangular(gy);
 }
 
-static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands)
+// `extra_credit` = same-turn mana the bound cannot derive from `cands` alone. Today that is only
+// EnumeratePlans' hasted-dork unlock (a dork cast this turn taps once this plan equips haste onto
+// it); Solve passes 0, so its bound is byte-identical. This is an UPPER bound on the turn's mana, so
+// adding to it can only LOOSEN the prune -- it can never drop a payable plan.
+static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands,
+                          int extra_credit = 0)
 {
     static const bool on = EnvOn("MTG_MANA_PRUNE", true);   // DEFAULT ON; =0 disables
     if (!on) { return std::numeric_limits<int>::max(); }
@@ -4286,7 +4603,7 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     // scalar bound cannot see (like a same-turn affinity enabler), so bail when one is among the cands.
     for (const Action& a : cands)
     { if (a.def && !a.def->params.reduces_spell_color.empty()) { return std::numeric_limits<int>::max(); } }
-    long long b = pool.Total();
+    long long b = pool.Total() + extra_credit;
     int gy = 0;
     for (const Action& a : cands)
     {
@@ -5227,6 +5544,9 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     ManaPool pool_noncreature = BuildNonCreaturePool(state);
     int total_lands  = CountLands(state);
     int pending_atk  = PendingAttackDamage(state);
+    // Creature mana sources counted in pending_atk -- a subset that taps them to pay loses their
+    // attack (see CollectAttackingManaSources).
+    const std::vector<AttackingManaSource> atk_mana_srcs = CollectAttackingManaSources(state);
     int prowess_attackers   = CountProwessAttackers(state);
     std::vector<TriggerSource> trigger_sources = CollectTriggerSources(state);
 
@@ -5577,7 +5897,15 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // if it has prowess, is pumped by this plan's noncreature casts too -- the canonical cast
         // order resolves prowess creatures before noncreature spells. Both terms were missing, so
         // a plan whose lethal turn RELIES on a cast Goblin Guide / Swiftspear did not read as a win.
-        int projected_atk = pending_atk + vial_haste_atk + haste_cast_atk
+        // Discount the attack this subset spends on its own MANA: a creature tapped to pay is not a
+        // legal attacker, so crediting pending_atk in full over-scored every cast-now line against
+        // the "attack first, cast in the second main" alternative -- the measured FiveColour miss
+        // (see CollectAttackingManaSources). `need` = the mana this subset must draw from creature
+        // sources, i.e. its cost beyond what the non-creature pool covers; zero whenever the lands
+        // alone pay, so a deck that never taps creatures for mana is byte-identical.
+        const int atk_tap_need = combined.ManaValue() - pool_noncreature.Total();
+        const int atk_tap_lost = AttackTapDiscount(atk_mana_srcs, atk_tap_need);
+        int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         // Deck-specific extra reach toward lethal (Land's Edge ammo + clairvoyant Treasure Hunt),
         // provider-owned. Built only when the deck has such a model (byte-identical otherwise).
@@ -7876,6 +8204,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (a.kind == Action::Kind::ActivateVial) { apply_vial(a.card_name); }
         }
+        // MANA-UNLOCK equip (see TurnSolver::ApplyManaUnlockEquips): the haste it grants is what
+        // pays for a later cast in this plan, so it must fire the moment both pieces are on the
+        // battlefield -- not in the trailing equip pass, which runs after every cast. Once up front
+        // (both pieces may already be out) and once after each cast below. The reserve scope is the
+        // other half: it stops the enabler casts from spending the payoff's scarce colour before the
+        // unlock lands. Mirrored in AIEngine::TakeTurn through the same two functions -> lockstep.
+        // Both no-ops for every other plan.
+        PlanSourceReserveScope _unlock_reserve(TurnSolver::ManaUnlockColorReserve(state, acts));
+        auto fire_unlock = [&]() { TurnSolver::ApplyManaUnlockEquips(state, acts); };
+        fire_unlock();
         if (explicit_order)
         {
             // Cast-ordering search: play the non-sacrifice hand casts in the EXACT vector
@@ -7887,6 +8225,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     prep_free(a);
                     apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
+                    fire_unlock();
                 }
             }
         }
@@ -7913,7 +8252,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (opaque)
             {
                 for (const Action& a : acts)
-                { if (is_enabler(a)) { prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); } }
+                { if (is_enabler(a)) { prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); fire_unlock(); } }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -7944,7 +8283,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (const Action& a : acts)
                 {
                     if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
-                    { prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); }
+                    { prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); fire_unlock(); }
                 }
             }
             else
@@ -7966,6 +8305,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[i];
                     prep_free(a);
                     apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
+                    fire_unlock();
                 }
             }
         }
@@ -8184,7 +8524,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         else if (a.kind == Action::Kind::Equip)
         {
-            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            // Skip one the mana-unlock hoist already fired mid-casts -- it is attached to this exact
+            // host already, so re-firing would pay the equip cost a second time.
+            if (!EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
+                && TapForCostDirect(state, a.cost, /*for_creature=*/false))
             { ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
         }
         else if (a.kind == Action::Kind::ActivateLoyalty)
@@ -9264,6 +9607,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     ManaPool      pool_noncreature = BuildNonCreaturePool(state);
     int           total_lands     = CountLands(state);
     int           pending_atk     = PendingAttackDamage(state);
+    const std::vector<AttackingManaSource> atk_mana_srcs = CollectAttackingManaSources(state);
     int           prowess_attackers    = CountProwessAttackers(state);
     std::vector<TriggerSource> trigger_sources = CollectTriggerSources(state);
 
@@ -9296,6 +9640,30 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Same-turn mana-rock ramp scan (mirrors Solve). Inert without a non-creature rock.
     bool any_rock = false;
     for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
+    // Same-turn HASTED mana dork scan (EnumeratePlans ONLY -- see the credit below). `haste_unlock[j]`
+    // is what Equip candidate j's host adds to this turn's pool once the equip grants it haste; the
+    // parallel _nc vector is the same credit for the non-creature pool. State-only, so it is built
+    // ONCE here and the per-subset path is a bool test plus a walk of the selection. The vectors are
+    // allocated only when an UNLOCKING equip actually exists, so every other deck/state pays just the
+    // kind check in this loop.
+    std::vector<ManaPool> haste_unlock, haste_unlock_nc;
+    bool any_haste_dork = false;
+    if (HasteDorkCreditEnabled())
+    {
+        for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+        {
+            if (cands[j].kind != Action::Kind::Equip) { continue; }
+            if (!cands[j].def || !cands[j].def->params.equip_grants_haste) { continue; }
+            ManaPool add, add_nc;
+            HasteUnlockedManaOf(state, cands[j].sac_victim_id, add, add_nc);
+            if (add.Total() <= 0) { continue; }
+            if (haste_unlock.empty())
+            { haste_unlock.resize(cands.size()); haste_unlock_nc.resize(cands.size()); }
+            haste_unlock[j]    = add;
+            haste_unlock_nc[j] = add_nc;
+            any_haste_dork     = true;
+        }
+    }
     // Same-turn affinity scan (mirrors Solve). Inert without an affinity card (Thrumming Hivepool).
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
@@ -9596,6 +9964,48 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
             if (sel_rock && pool.CanPay(rock_costs)) { eff.AddPool(rock_prod); eff_nc.AddPool(rock_prod); credited = true; }
         }
+        // Same-turn HASTED dork credit. The rock credit above excludes creatures because a dork cast
+        // this turn is summoning-sick -- but when THIS subset attaches a haste-granting Equipment to
+        // it, it taps this turn after all. Conservative in exactly the way the rock rule is ("a rock
+        // never funds its own cost"): the ENABLERS -- the equip activation plus whichever of the two
+        // pieces this subset casts -- must be payable from the UN-hasted pool, so the unlocked mana
+        // can never pay for the unlock. The pieces' own costs are already in `combined`, so the credit
+        // stays net. EnumeratePlans only: an optimistic affordability hint is sound only where a
+        // rollout validates the line, and Solve's d0 greedy has none (the Medallion precedent).
+        // The rollout and the executor realise it via the ordering hoist in ApplyManaUnlockEquips.
+        if (any_haste_dork)
+        {
+            ManaPool dork_prod, dork_prod_nc; ManaCost enable_costs; bool sel_dork = false;
+            for (int j : sel)
+            {
+                if (haste_unlock[j].Total() <= 0) { continue; }
+                const ManaCost& eq = cands[j].cost;              // the equip activation ({0} for Greaves)
+                enable_costs.white += eq.white; enable_costs.blue      += eq.blue;
+                enable_costs.black += eq.black; enable_costs.red       += eq.red;
+                enable_costs.green += eq.green; enable_costs.colorless += eq.colorless;
+                enable_costs.generic += eq.generic;
+                // Whichever of the Equipment / host this subset casts. A surviving subset has both
+                // pieces live (SubsetHasStrandedEquip already rejected the rest), so an in-hand piece
+                // is necessarily cast HERE and its cost belongs to the enabling set.
+                for (int k : sel)
+                {
+                    const Action& c = cands[k];
+                    if (c.kind != Action::Kind::CastFromHand || c.hand_index < 0
+                        || c.hand_index >= static_cast<int>(ap.hand.size())) { continue; }
+                    const int num = ap.hand[c.hand_index].m_number;
+                    if (num != cands[j].sac_source_id && num != cands[j].sac_victim_id) { continue; }
+                    enable_costs.white += c.cost.white; enable_costs.blue      += c.cost.blue;
+                    enable_costs.black += c.cost.black; enable_costs.red       += c.cost.red;
+                    enable_costs.green += c.cost.green; enable_costs.colorless += c.cost.colorless;
+                    enable_costs.generic += c.cost.generic;
+                }
+                dork_prod.AddPool(haste_unlock[j]);
+                dork_prod_nc.AddPool(haste_unlock_nc[j]);
+                sel_dork = true;
+            }
+            if (sel_dork && pool.CanPay(enable_costs))
+            { eff.AddPool(dork_prod); eff_nc.AddPool(dork_prod_nc); credited = true; }
+        }
         // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
         if (any_affinity)
         {
@@ -9727,7 +10137,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // if it has prowess, is pumped by this plan's noncreature casts too -- the canonical cast
         // order resolves prowess creatures before noncreature spells. Both terms were missing, so
         // a plan whose lethal turn RELIES on a cast Goblin Guide / Swiftspear did not read as a win.
-        int projected_atk = pending_atk + vial_haste_atk + haste_cast_atk
+        // Discount the attack this subset spends on its own MANA: a creature tapped to pay is not a
+        // legal attacker, so crediting pending_atk in full over-scored every cast-now line against
+        // the "attack first, cast in the second main" alternative -- the measured FiveColour miss
+        // (see CollectAttackingManaSources). `need` = the mana this subset must draw from creature
+        // sources, i.e. its cost beyond what the non-creature pool covers; zero whenever the lands
+        // alone pay, so a deck that never taps creatures for mana is byte-identical.
+        const int atk_tap_need = combined.ManaValue() - pool_noncreature.Total();
+        const int atk_tap_lost = AttackTapDiscount(atk_mana_srcs, atk_tap_need);
+        int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         bool wins = (projected_atk + direct_dmg) >= state.Opponent().life;
         // Sac-land burn hold (mirrors Solve::consider) -- see HoldSacLandBurn.
@@ -9814,13 +10232,23 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Odometer over per-card choices (0 = skip the card, v >= 1 selects
     // groups[g][v-1]), crossed with the 2^num_ind powerset of independent actions.
     // The empty combination (skip everything) is not a plan and is dropped.
-    const int mana_bound = ManaPruneBound(pool, cands);   // legacy scalar bound (MTG_LEGACY_MANA_BOUND)
+    // Legacy scalar bound (MTG_LEGACY_MANA_BOUND), plus the hasted-dork unlock the per-subset credit
+    // below can grant. Without that addend the bound -- pool.Total() alone -- rejects the very subset
+    // the credit exists to rescue BEFORE consider() ever sees it (the seed-3 line costs 7 off a
+    // 5-mana board), so the two must move together. 0 for every plan without an unlocking equip.
+    int haste_unlock_bound = 0;
+    for (const ManaPool& u : haste_unlock) { haste_unlock_bound += u.Total(); }
+    const int mana_bound = ManaPruneBound(pool, cands, haste_unlock_bound);
     // Both indices are allocated ONLY when the deck actually uses them. Solve is the rollout leaf --
     // called once per node -- so even default-constructing their (empty) vectors on every call cost a
     // measurable ~1% on decks that use neither (Hinata/TH/burn A/B, 2026-07-29). A null pointer plus a
     // branch is the price now; the allocation happens on the rare call that needs it.
     std::unique_ptr<ManaGateIndex> gate_owned;            // selection-exact bound; see BuildManaGateIndex
-    if (SelectionExactManaGateEnabled() && gate_relevant)
+    // The selection-exact gate models ritual/rock float only, so it cannot see the hasted-dork
+    // unlock -- bail to the (now unlock-aware) scalar bound when one exists, the same way
+    // ManaPruneBound bails on affinity / a same-turn reducer. DEFAULT-OFF gate, so this is inert
+    // today; it exists so turning MTG_SEL_MANA_GATE=1 on cannot silently re-introduce the bug.
+    if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork)
     {
         auto idx = std::make_unique<ManaGateIndex>();
         if (BuildManaGateIndex(pool, cands, independent, *idx)) { gate_owned = std::move(idx); }
@@ -15088,6 +15516,10 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p)
             cast_names.push_back(a.card_name + ": sac " + std::to_string(k)
                                  + (k == 1 ? " creature" : " creatures"));
         }
+        // Maelstrom Archangel: a free cast and a paid cast of the same card produced BYTE-IDENTICAL
+        // summaries, so the viewer offered two indistinguishable menu entries with very different
+        // mana consequences (same defect the sac-outlet count fixed for viewer issue #4).
+        else if (a.free_cast) { cast_names.push_back(a.card_name + " (free)"); }
         else { cast_names.push_back(a.card_name); }
     }
     s += "cast: ";
@@ -15272,7 +15704,25 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                 if (!etn.empty())
                     addSub(a.card_name + " \xE2\x86\x92 " + etn, a.card_name + " \xE2\x86\x92", etn, etn, "enchant");
             }
-            if (a.chosen_x > 0)            { addSub(a.card_name + " X=" + std::to_string(a.chosen_x), a.card_name + " X", "X=" + std::to_string(a.chosen_x), a.card_name, "x"); }
+            // Unite the Coalition (modal_choose_n): the MODE SPLIT rides Action::chosen_x, so the
+            // generic {X} branch below labelled it "X=3" -- which tells a player nothing (there is
+            // no {X} in the cost). Worse, that branch only fires for chosen_x > 0, so the all-draws
+            // S=0 variant carried NO sub at all: the entries overlapped and the mixed sub/no-sub set
+            // dropped renderChooseDialog into its flat fallback picker. Emit a dedicated `modal` sub
+            // for EVERY split including 0 (the soulfire/crackle/splice precedent) and spell the
+            // modes out, so the dialog reads as an explicit list of what each split actually does.
+            const CardDefinition* mdef = CardDatabase::Instance().Lookup(a.card_name);
+            const bool is_modal = mdef && mdef->params.modal_choose_n > 0;
+            if (is_modal && a.chosen_x >= 0)
+            {
+                const int n     = mdef->params.modal_choose_n;
+                const int dmg   = a.chosen_x * mdef->params.modal_damage_per_choice;
+                const int draws = (n - a.chosen_x) * mdef->params.modal_draw_per_choice;
+                const std::string desc = std::to_string(dmg) + " damage + " + std::to_string(draws)
+                                       + " card" + (draws == 1 ? "" : "s");
+                addSub(a.card_name + " " + desc, a.card_name + " modes", desc, a.card_name, "modal");
+            }
+            else if (a.chosen_x > 0)       { addSub(a.card_name + " X=" + std::to_string(a.chosen_x), a.card_name + " X", "X=" + std::to_string(a.chosen_x), a.card_name, "x"); }
             // NOTE: a.ponder_keep is deliberately NOT a variant token. The Ponder reorder (keep-top
             // vs shuffle, and the full ordering) is re-asked at REAL resolution via the look-at-top
             // chooser (g_play_top_chooser), so pre-selecting it here just stacked a redundant "choose
@@ -15313,6 +15763,49 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     addSub(a.card_name + " splice+" + std::to_string(a.splice_count),
                            a.card_name + " splice", "+" + std::to_string(a.splice_count),
                            a.card_name, "splice");
+                }
+                // Maelstrom Archangel FREE CAST: with a banked charge, "pay for this spell" and
+                // "spend the bank on it" are two genuinely different lines (the freed mana funds
+                // other casts), and WHICH card eats the charge is the player's call. Without a sub
+                // both variants shared a signature, the dedup collapsed them to the first
+                // enumerated (always the PAID one), and the banked cast silently evaporated with no
+                // dialog -- the reported "it should bring up a dialog to cast something from hand".
+                // Emitted for BOTH variants (like the soulfire/crackle/splice counts) so the pair
+                // splits cleanly into a proper choose grid instead of the flat fallback picker.
+                // Gated on the bank being live -> byte-identical for every deck without one.
+                // PLANESWALKER loyalty ability: WHICH ability is the player's decision, and every
+                // ability of one walker enumerates as an ActivateLoyalty action carrying the SAME
+                // card_name -- so without a sub they shared a signature, the dedup kept the
+                // first-enumerated one and the human silently got ability #0 with no dialog (Oko's
+                // "+2 Food" always, never "+1 Elk"). Describe the ability the way the card prints
+                // it (signed loyalty delta + what it does) rather than a raw "loyalty#0" index.
+                if (a.kind == Action::Kind::ActivateLoyalty && adef
+                    && a.loyalty_ability >= 0
+                    && a.loyalty_ability < static_cast<int>(adef->params.loyalty_abilities.size()))
+                {
+                    const auto& ab = adef->params.loyalty_abilities[a.loyalty_ability];
+                    std::string what =
+                        ab.effect == "kavu_token"            ? "create a 3/3 Kavu" :
+                        ab.effect == "counters_up_to_two"    ? "put +1/+1 counters" :
+                        ab.effect == "regrow_multicolored"   ? "return a multicolored card" :
+                        ab.effect == "destroy_own_noncreature" ? "destroy a noncreature permanent" :
+                        ab.effect == "face_damage"           ? (std::to_string(ab.amount) + " damage") :
+                        ab.effect == "food_token"            ? "create a Food token" :
+                        ab.effect == "elk_transform"         ? "turn a permanent into a 3/3 Elk" :
+                                                               ab.effect;
+                    const std::string desc = (ab.delta >= 0 ? "+" : "") + std::to_string(ab.delta)
+                                           + ": " + what;
+                    addSub(a.card_name + " " + desc, a.card_name + " ability", desc,
+                           a.card_name, "loyalty");
+                }
+                if (state.free_casts_available > 0
+                    && a.kind == Action::Kind::CastFromHand && !a.alt_cost)
+                {
+                    const std::string cost_str = adef ? adef->card.m_mana_cost.ToString() : "its cost";
+                    addSub(a.card_name + (a.free_cast ? " FREE" : " paid"),
+                           a.card_name + " cost",
+                           a.free_cast ? "free (Archangel)" : ("pay " + cost_str),
+                           a.card_name, "free");
                 }
             }
         }
@@ -15484,6 +15977,16 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // --- 2) Not enumerated: is it rules-legal (modelling same-turn ramp)? ------
     GameState s = state;   // work on a copy; CheckLine must not mutate the real game
 
+    // Stage 2 is a HYPOTHETICAL simulation -- it must be as side-effect-free as plan_pays' trial
+    // apply. Without this pause the live human choosers stay armed inside it: PlayLandByName sets
+    // honor_entry_chooser, so grading an unenumerated shockland line FIRED the viewer's land-entry
+    // prompt from inside the legality check. The process then emitted a stray `land_entry` decision
+    // (exit 70) instead of a <<<CLAUDE_VALIDATION>>> verdict -- the viewer never cleared its cast
+    // list, and answering the orphan prompt desynced the --choices stream so the replay committed a
+    // DIFFERENT plan (Breeding Pool + Deathrite Shaman came back as "Wooded Foothills fetches
+    // Overgrown Tomb"). Function-scope RAII: every `return out` below restores the choosers.
+    RevealLogPause pause_stage2;
+
     if (spec.has_land)
     {
         if (!PlayLandByName(s, spec.land))
@@ -15654,10 +16157,30 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         {
             if (pc.alt_free) { continue; }   // alt cost pays no mana -> no colored requirement
             const ManaCost& c = pc.full_cost;
-            const bool needs[5] = { c.white > 0, c.blue > 0, c.black > 0, c.red > 0, c.green > 0 };
+            int pips[5] = { c.white, c.blue, c.black, c.red, c.green };
+            // Hybrid pips ({B/G}) are baked into their FIRST colour (Card.h) but payable with
+            // EITHER -- same un-baking as SubsetPayable, else this gate calls a green-paid
+            // Deathrite Shaman "no untapped source produces black mana".
+            for (int h = 0; h < c.hybrid_count; ++h)
+            {
+                const int c1 = c.hybrid_pair[h] >> 4;
+                const int c2 = c.hybrid_pair[h] & 0xF;
+                if (c1 >= 0 && c1 < 5) { --pips[c1]; }
+                const bool have1 = (c1 >= 0 && c1 < 5) ? have[c1] : false;
+                const bool have2 = (c2 >= 0 && c2 < 5) ? have[c2] : false;
+                if (!have1 && !have2)
+                {
+                    out.verdict = V::Illegal; out.failed_action = "cast=" + pc.name;
+                    out.reason = "can't pay for '" + pc.name + "': no untapped source produces " +
+                                 std::string(kColorName[(c1 >= 0 && c1 < 5) ? c1 : 0]) + " or " +
+                                 std::string(kColorName[(c2 >= 0 && c2 < 5) ? c2 : 0]) +
+                                 " mana (a multi-color land makes only its own colors)";
+                    return out;
+                }
+            }
             for (int i = 0; i < 5; ++i)
             {
-                if (needs[i] && !have[i])
+                if (pips[i] > 0 && !have[i])
                 {
                     out.verdict = V::Illegal; out.failed_action = "cast=" + pc.name;
                     out.reason = "can't pay for '" + pc.name + "': no untapped source produces " +

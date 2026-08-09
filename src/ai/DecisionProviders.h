@@ -495,6 +495,10 @@ public:
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
     void ModalSplitCandidates(const GameState&, const CardDefinition&,
                               std::vector<int>&) const override;
+    // Hold a live UTILITY mana dork (Deathrite Shaman / Bloom Tender / Birds) out of combat when
+    // its tap is worth more than its chip damage -- see the .cpp note. Vigilant sources (Faeburrow
+    // Elder) still always attack: attacking never costs them their tap.
+    bool ShouldAttackWith(const GameState& s, const Permanent& attacker) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the
