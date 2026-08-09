@@ -19,7 +19,7 @@ The settings that matter are FIXED inside the script, because each has already g
 
 | fixed setting | why it is not a knob |
 |---|---|
-| incremental batching, always | a per-item loop pays a load-imbalance tail PER ITEM; one-batch-per-cell scheduling starved a live run to 3 of 24 cores for hours |
+| pooled batching, always | a per-item loop pays a load-imbalance tail PER ITEM; one-batch-per-cell scheduling starved a live run to 3 of 24 cores for fifteen hours. Phase C now hands every chunk to ONE `mtg --batch` per (deck, arm), in two waves (floor, then refine, so condemnation still has its barrier), so the whole wave has one tail and it is one GAME long |
 | no condemnation at d<=5 | the H cells ARE the crossover; condemning one leaves a HOLE in the answer rather than saving cost, and the guard is wall-clock based so which cells it hits is partly luck |
 | profile always attached | measuring profile-less describes a deck we do not ship — it invalidated every table in this repo once |
 | staged model before the matrix | the H-cell ladder is guarded on the sidecar EXISTING; missing it does not error, it silently runs every H cell on the slow path |
@@ -96,7 +96,7 @@ run's rows, table or markers.
 | A rows | dump labelled positions at SHIPPED play (K=3 searched labels) | yes — one pooled batch |
 | A split | bucket by seed, dedupe on `(seed, turn)`, sort | no |
 | B train | GBDT → `logs/eval/<stem>.value.STAGED.json` | no |
-| C matrix | H×V depth matrix, one work-stealing pool | yes — one pool |
+| C matrix | H×V depth matrix, pooled `--batch` per arm | yes — one pool per arm per wave |
 | D metadata | derive crossover + `value_trust_depth` into the staged sidecar | no |
 | E measure | staged-vs-live A/B + play sweep | yes — one pooled batch |
 
