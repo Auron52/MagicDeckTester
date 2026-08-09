@@ -116,3 +116,67 @@ subsets the gate currently rejects. It is not to be conflated with the emission-
 `fivecolour-search-cost.md`, which is the opposite trade (drop never-payable lines, byte-identical).
 The two interact: `BudgetCanGrow` must treat a live scaling source with `n > c` as a way the budget
 can grow, or the prune would re-introduce this same bug from the other direction.
+
+---
+
+# Sibling gap: a dork CAST THIS TURN whose tap is unlocked THIS TURN (haste)
+
+**Status:** diagnosed and reproduced 2026-08-09, not implemented. Distinct from the widening gap
+above and NOT fixed by it — verified: `MTG_DOMAIN_WIDEN_GATE=1` changes nothing on this reproducer.
+
+**The user's report (seed 3, hand-played artifact `logs/play/rejections/FiveColour_cod_s3_gi2_t3.json`):**
+*"we should be able to reserve red and use it to cast Mana Cannons in conjunction with the hasty
+Bloom Tender."*
+
+## The line
+
+Board (T3 pre-main, all untapped): Breeding Pool, Steam Vents, Deathrite Shaman, Faeburrow Elder.
+Hand: Bloom Tender, Jetmir's Garden, Lightning Greaves, Mana Cannons, Nicol Bolas, Unite the Coalition.
+
+    land=Jetmir's Garden ; cast=Bloom Tender ; cast=Lightning Greaves ; cast=Mana Cannons
+
+1. Jetmir's Garden enters **tapped** — contributes nothing this turn.
+2. Cast Bloom Tender `{1}{G}` and Lightning Greaves `{2}` off Faeburrow Elder (`{W}{B}{G}` — the
+   domain is `{W,B,G}`: Faeburrow is G/W, Deathrite is B/G) plus Breeding Pool.
+3. **Equip Lightning Greaves onto Bloom Tender for `{0}` → haste → Bloom Tender can tap**, adding
+   `{W}{B}{G}`.
+4. Cast Mana Cannons `{2}{R}`: `{R}` from Steam Vents, the two generic off Bloom Tender.
+
+## Why the totals make this a REAL gap, not just a reservation one
+
+Costs are `{1}{G}` + `{2}` + `{2}{R}` = **7 mana**. Without Bloom Tender's own tap the board makes at
+most **5** (Breeding Pool 1 + Steam Vents 1 + Faeburrow 3; Deathrite is dead — its mana ability is
+fuel-gated on a land in the graveyard and none is there). So reserving red is **necessary but not
+sufficient**: the line cannot be paid at all unless the dork cast this turn taps this turn.
+
+Reproduced: the engine casts Bloom Tender + Lightning Greaves, **never equips**, spends Steam Vents
+(the only red source) on a generic pip, and never reaches Mana Cannons. `CheckLine` grades the
+hand-played line `illegal: can't pay {2}{R} ... with the mana available this phase`, and the plan
+menu offers `{Bloom Tender, Mana Cannons}` and `{Bloom Tender, Greaves, equip}` but never the
+four-action line.
+
+## The fix
+
+The template is in the same function as the widening credit: the **same-turn mana-rock credit**
+(`TurnSolver.cpp`, `if (sel_rock && pool.CanPay(rock_costs))` — "a rock never funds its own cost").
+Rocks cast this turn ARE credited; a creature dork is not, correctly, because it is summoning-sick —
+*unless this very plan gives it haste*.
+
+Per subset, when the selection contains BOTH a mana dork cast from hand AND a haste-granting
+equipment (`equip_grants_haste`) equipped onto that dork (or the dork has haste natively):
+
+1. require the enabling casts (dork + equipment) to be payable from the **un-hasted** pool — the rock
+   rule, and what keeps the credit conservative,
+2. credit `eff`/`eff_nc` with the dork's tap output (its `PermanentManaYield` under the domain the
+   board will have once it resolves — compose with the widening credit above),
+3. gate on the equip actually targeting that dork, so it is inert for every other selection.
+
+**`EnumeratePlans` only, never `Solve`** — same reason the doc gives above: an optimistic
+affordability hint is sound only when a rollout validates the line, and Solve's d0 greedy has no
+rollout. It carries the same ordering obligation on the executor (cast dork → equip → tap), which is
+**unverified** and must be checked before any credit reaches `Solve`.
+
+Colour **reservation** is a separate, additive requirement: even once the line is enumerated, the
+payment must not spend the only red source on a generic pip. See `mana-source-reservation.md` —
+whole-turn batch payment (`BatchPrepayMainCasts`) is the mechanism that should already handle it once
+the subset is offered, so verify against it before adding anything new.
