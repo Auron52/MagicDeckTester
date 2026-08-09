@@ -1075,3 +1075,37 @@ search actually commits to; if it concentrates at the ends, emit two variants (a
 one heuristic pick. That cuts x7 to x3 or x2 exactly where the payable plans are — which is the half
 that pruning cannot touch. Play-affecting: full A/B, rebaseline, and it invalidates a value-leaf table
 generated before it.
+
+### The precondition holds for this deck — verified
+
+User: *"If there are no cost reducers or rituals our model should be much simpler. If we can't cast a
+spell on its own, we cannot cast any plan that includes it."*
+
+That is exactly the soundness argument, and it is the one the existing gate already relies on. Scanned
+all 32 distinct cards in `decks/FiveColour/FiveColour.cod` against `cards.json` for anything that adds
+mana or reduces cost:
+
+| class | present? |
+|---|---|
+| rituals (`ritual_floating_mana`, `ritual_float_gy_self_bonus`) | **none** |
+| cost reducers (medallion / affinity / delve / convoke / improvise) | **none** |
+| mana rocks | **one** — Ancient Cornucopia (`mana_rock`) |
+
+So the guard conditions are trivially satisfied here: `block` (per-subset discount) never fires because
+no card has one, and the single `gain` source is already credited by `best_head`, which is the maximum
+`gain + Tri(gy) - cost` over all mana lines. `cost.ManaValue() > pool_total + best_head` therefore
+proves unplayable-in-any-plan for this deck, exactly as stated.
+
+Costs are additive and non-negative, so the theorem generalises: it needs only that no *selected*
+action can raise the budget (`gain`/`gy`) or lower another's cost (`block`) — which is why the check
+must stay guarded rather than assumed, for decks like Dragonstorm that are all rituals.
+
+**Where it does and does not pay.** Per game the enumeration walk is ~4,333 mana lines + ~65,842 payoff
+rows + ~8,274 payable pairs = ~78k visits, against 943 M Ir/game total and **5,141 simulated turn
+steps**. Even at 300 Ir per visit the whole walk is ~2.5%. The model is *already* simple where it
+counts — the gate keeps 5,695 payable plans out of 67,675 odometer positions — and what costs 943 M is
+simulating those 5,695 plans' futures. Pruning dead digits cannot change that number, by construction:
+the plans it removes were never payable and were never rolled out.
+
+So: implement it (sound, general, and the deck's precondition is verified), expect low single digits,
+and keep the rollout count as the number to attack for anything larger.
