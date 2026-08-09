@@ -6317,6 +6317,14 @@ void FiveColourProvider::ModalSplitCandidates(const GameState& s, const CardDefi
     const bool go_face = (s.players[opp].life <= face_damage + board_power) || (threats >= 2);
     if (go_face) { out.push_back(N); return; }
 
-    // Otherwise draw 3-5 and spend the remainder on damage: S = 0, 1, 2.
+    // Otherwise draw 3-5 and spend the remainder on damage: S = 0, 1, 2 -- PLUS the all-in split,
+    // always. This hook is consulted at EVERY search node, including hypothetical future turns, so
+    // dropping S=N does not merely decline it now: it deletes the all-in finish from the search's
+    // model of the future, and lines whose value is SETTING UP that finish stop evaluating as
+    // lethal. Measured on s6006 gi209: without S=N here the arms diverged on TURN 3 -- the search
+    // played Jared Carthalion (-> Kavu token -> swing 11 with the all-in on turn 4, win t4), the
+    // narrowed arm could not see that finish, played Deathrite + Greaves instead, and won on t5.
+    // The dominated MIDDLE (S=3,4) is what is safe to cut; the extremes carry the deck's reach.
     for (int k = 0; k <= 2 && k <= N; ++k) { out.push_back(k); }
+    out.push_back(N);
 }
