@@ -292,7 +292,7 @@ phase_measure() {
     done_p E_measure && return 0
     local vroot=$VLQ/variants; rm -rf "$vroot"; mkdir -p "$vroot"
     rm -f "$VLQ/play_baseline"
-    local row key dir stem mkey base games staged s d bd
+    local row key dir stem mkey base games staged s d bd drives bl
     { for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
         staged=logs/eval/$stem.value.STAGED.json
@@ -306,15 +306,36 @@ phase_measure() {
         # play-profile sweep: target_depth around the shipped one, on the REGENERATED model.
         # escalation_cap tracks target_depth because every deck ships them equal (measured: the cap
         # never binds), so moving depth alone would silently change what the cap does.
-        bd=$(python3 -c "
-import json; print((json.load(open('$staged')).get('value_play') or {}).get('target_depth') or 5)")
-        echo "$key $bd" >> "$VLQ/play_baseline"
+        read -r bd drives <<< "$(python3 -c "
+import json; vp = json.load(open('$staged')).get('value_play') or {}
+print(vp.get('target_depth') or 5, 1 if (vp.get('target_depth') and vp.get('enabled')) else 0)")"
+        # A staged model with no ENABLED block ships the BUILT-IN default (d5, budget 20, no
+        # escalation cap) -- exactly what the A/B above measured -- so THAT is the honest baseline
+        # and the enabled arms below measure "is an adopted play policy worth it at all?", not just
+        # which depth. For a regeneration the live block already drives, so d<bd> IS that baseline.
+        if [ "$drives" = 0 ]; then
+            make_variant_deck "$vroot/$key/pdflt" "$dir" "$stem" "$staged"
+            for s in $PLAY_SEEDS; do
+                h_job "$key-dflt_s$s" "$(deck_file "$vroot/$key/pdflt" "$stem")" "$vroot/$key/pdflt/$stem.profile.json" "$PLAY_GAMES" "$s"
+            done
+            echo "$key dflt" >> "$VLQ/play_baseline"
+        else
+            echo "$key d$bd" >> "$VLQ/play_baseline"
+        fi
         for d in $((bd-1)) $bd $((bd+1)); do
             [ "$d" -ge 3 ] || continue
             python3 - "$staged" "$vroot/$key/d$d.value.json" "$d" <<'PY'
 import json, sys
+# ENABLED, deliberately. A value_play block steers play ONLY when enabled==true (ValuePlay::drives());
+# writing target_depth alone leaves it a pure RECOMMENDATION, so the d-1/d/d+1 arms came out
+# BYTE-IDENTICAL and the sweep reported "+0.00000, depth does not matter" having tested nothing
+# (FiveColour 2026-08-09, its first model -- a deck WITH a live enabled block never showed the bug).
+# budget_ms comes along because an enabled block OWNS the budget too: omit it and it resolves to 0,
+# confounding the depth comparison with a resource change. 20 = BuiltinDefaultPlay().budget_ms.
 v = json.load(open(sys.argv[1])); vp = v.setdefault("value_play", {})
 vp["target_depth"] = int(sys.argv[3]); vp["escalation_cap"] = int(sys.argv[3])
+vp["enabled"] = True
+vp["budget_ms"] = vp.get("budget_ms") or 20
 json.dump(v, open(sys.argv[2], "w"), indent=1)
 PY
             make_variant_deck "$vroot/$key/pd$d" "$dir" "$stem" "$vroot/$key/d$d.value.json"
@@ -330,13 +351,13 @@ PY
         grep "^$key-" "$VLQ/measure.log" > "$VLQ/m_$key.log" 2>/dev/null
         [ -s "$VLQ/m_$key.log" ] || continue
         sed -i "s/^$key-//" "$VLQ/m_$key.log"
-        bd=$(awk -v k="$key" '$1==k{print $2}' "$VLQ/play_baseline" | tail -1)
+        bl=$(awk -v k="$key" '$1==k{print $2}' "$VLQ/play_baseline" | tail -1)
         echo "=== $key: regenerated value-leaf vs live ===" | tee -a "$VLQ/driver.log"
         grep -E "^(live|staged)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_ab.log"
         python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_ab.log" live 2>&1 | tee -a "$VLQ/driver.log"
-        echo "=== $key: play-profile target_depth sweep (baseline d$bd = shipped) ===" | tee -a "$VLQ/driver.log"
-        grep -E "^d[0-9]+_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_play.log"
-        python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_play.log" "d$bd" 2>&1 | tee -a "$VLQ/driver.log"
+        echo "=== $key: play-profile target_depth sweep (baseline $bl = shipped) ===" | tee -a "$VLQ/driver.log"
+        grep -E "^(d[0-9]+|dflt)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_play.log"
+        python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_play.log" "$bl" 2>&1 | tee -a "$VLQ/driver.log"
     done
     mark E_measure
 }

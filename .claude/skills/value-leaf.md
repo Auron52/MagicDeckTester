@@ -107,7 +107,7 @@ are real dependencies (the matrix measures the model; the A/B measures the table
 **Nothing is adopted.** Every artifact lands in `logs/eval/<stem>.value.STAGED.json`; live sidecars
 are never written. Phase E produces the numbers an adoption decision needs — you make the call.
 
-## The two traps that cost real time
+## The three traps that cost real time
 
 **1. Sidecar PRESENCE activates the hybrid — `enabled: false` is not off.** The engine resolves
 strictly `<stem>.value.json`. A model you decided NOT to adopt must be committed under a different
@@ -120,6 +120,18 @@ ladder's warm-up passes on the cheap leaf and only the committed pass on the heu
 1.35×–84.8× less search work, most of it at d5. It is guarded on
 `os.path.exists(<value.json>)`, so a deck whose model is missing or mis-pathed does not error: every
 H cell silently takes the slow path. This is why phase B must precede phase C.
+
+**3. There are TWO `enabled` meanings, and they are opposites.** Trap 1 is about the *sidecar*:
+its mere presence turns the hybrid on, so `enabled: false` does not disable it. `value_play.enabled`
+is the other thing entirely — the *play policy* (depth/budget/escalation cap), which steers play ONLY
+when `enabled == true` (`ValuePlay::drives()`); unenabled it is a pure recommendation and is
+byte-identical. Phase E's depth sweep wrote `target_depth` without `enabled`, so d-1/d/d+1 all came
+out byte-identical and the sweep reported "+0.00000, depth does not matter" having tested nothing
+(FiveColour 2026-08-09). A deck WITH a live enabled block never shows this — it only bites a deck's
+FIRST model, i.e. exactly the case the sweep is most needed for. Fixed: the arms are written enabled
+and carry `budget_ms` (an enabled block owns the budget too; omit it and it resolves to 0, confounding
+depth with a resource change), plus a `dflt` arm running the staged model as-is so the sweep also
+answers "is an adopted play policy worth it at all?"
 
 **There is no deck registry to edit.** `scripts/deck_registry.py` discovers `decks/*/` and derives
 every path from the folder — decklist, profile, live sidecar, staged sidecar, row seed base. The
