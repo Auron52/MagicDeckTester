@@ -870,3 +870,59 @@ building the frontier at all.
 So: right neighbourhood, and the instrument has already told us which half pays. Worth keeping the
 frontier on the deferred list for the correctness reasons its own doc gives (it deletes `SubsetPayable`
 and `SubsetPayableWithFilters`, net-negative LOC) — just not as the speed fix.
+
+## RETRACTION (2026-08-09) — the two-stage gate is already SHIPPED; the ~7x was not real
+
+User: *"Don't we already have a maximum mana prune?"* Yes. Both of them, and the whole-row skip too.
+
+`EnumeratePlanPositions` (`src/ai/TurnSolver.cpp:4557+`) already implements exactly the design the
+sections above proposed:
+
+- **Stage A** enumerates the mana side once into `mlines`, then computes `best_head` — the most spare
+  mana any single line leaves after paying for itself.
+- **Stage B** enumerates the payoff side and applies the whole-row skip, in the code and commented as
+  such: *"if the most generous mana line cannot fund this payoff line, no pair can, so drop it here
+  instead of re-rejecting it against every mana line"* —
+  `if (!any_block && L.agg.cost > gate->pool_total + best_head) { continue; }`
+- **Pairing** then applies the exact per-selection gate `payable(M, P)`.
+
+And the bound itself is the selection-exact `ManaGateIndex` (`MTG_SEL_MANA_GATE`, default ON since
+2026-07-30), which is strictly better than the whole-list `ManaPruneBound` scalar it superseded.
+
+**So the error was reading the diagnostic as a description of the engine.** `MTG_ENUM_STATS`'s
+two-stage block measures a *flat odometer* baseline — its header says so ("Measures the CEILING of the
+two-stage design **before committing to it** … delete once the design lands"). The design landed. The
+"179,103 payoff lines (90.7%) unaffordable under every mana line" is therefore **what the shipped
+row-skip already catches**, not waste sitting in the hot path, and the 1.73x is banked, not available.
+`MTG_PAYOFF_BB` should not be implemented; it exists.
+
+The one residual is negligible: Stage B still *builds* a row before dropping it (push digits, fold the
+agg, test, `continue`). A DFS with an incremental bound would skip the fold, worth roughly 3M of
+943M Ir/game — 0.3%. Not a lever.
+
+**The diagnostic should be deleted or relabelled**, per its own instruction. Leaving a measurement of a
+superseded baseline in the tree is what produced this mistake.
+
+### What the numbers actually say, with that removed
+
+| | fivecolour | burn | ratio |
+|---|---|---|---|
+| Ir / game (H1) | 943 M | 32 M | **29x** |
+| rollout calls / game | 2,871 | 179 | **16x** |
+| turn steps / game | 5,141 | 305 | **17x** |
+| ⇒ work per node | | | **~1.8x** |
+
+The deck runs **16x more search nodes** and each node costs ~1.8x. That is the whole gap, and it is
+why the callgrind profile is flat: `Solve` 49x, `CollectActions` 22x, `EffectiveSpellCost` 33x,
+`EffectiveProduces` 48x — everything scales with the node count. Even zeroing BOTH mana-side entries
+(`TapForCostBacktrack` 2.4% + `EffectiveProduces` 1.2%) removes ~4% of the gap.
+
+**There is no hotspot left to fix.** A large win has to come from running fewer nodes, which is a
+search-shape change and therefore play-affecting — not the byte-identical freebie the previous
+sections claimed. The honest remaining candidates, in order of measured support:
+
+1. **`DomainColors` memoisation** (§3, never refuted): Faeburrow Elder / Bloom Tender / Deathrite make
+   `EffectiveProduces` rescan the battlefield inside the backtracker's recursion. Byte-identical, but
+   sized at ~1-3% by the profile above — worth doing, not worth expecting much from.
+2. **Fewer nodes.** 16x is the number that matters. Play-affecting, needs the full A/B and a
+   rebaseline, and would invalidate a value-leaf table generated before it.
