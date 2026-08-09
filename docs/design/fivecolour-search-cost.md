@@ -982,3 +982,38 @@ waste — they pass the exact gate, and each one gets rolled out. Trimming them 
 or better ordering among genuinely castable lines, which is **play-affecting**: a full A/B, a
 rebaseline, and it invalidates any value-leaf table generated before it. There is no version of this
 that is byte-identical.
+
+### Correction to that table — everything below Unite the Coalition is an attribution artifact
+
+`MTG_BRANCH_STATS` attributes a call's ENTIRE odometer to one card (`TurnSolver.cpp:10077-10082`):
+
+```cpp
+int max_opts = 0; std::string driver = "(casts<=1)";
+for (const std::vector<int>& gp : groups)
+    if ((int)gp.size() > max_opts) { max_opts = gp.size(); driver = cands[gp[0]].card_name; }
+```
+
+The comparison is strict `>`, so **the FIRST group of maximal size wins**. When every group has one
+option — the normal case — the "driver" is just whichever card happens to be enumerated first. It is
+not the cause of anything.
+
+**Mana Cannons cannot be a branching driver at all.** It is a `{2}{R}` enchantment whose only parameter
+is `multicolor_cast_damage_per_color`; it has no modal split, no X, no target choice, so it emits
+exactly ONE `CastFromHand` action and its group size is always 1. Its 29,908 sum_odo is 100%
+misattribution: it is cheap and castable early, so it is a frequent candidate and often lands first in
+`groups`.
+
+The giveaway is in the number itself — avg_odo 30.3 ~= 2^5, exactly the product of five independent
+size-1 groups. That is the combinatorics of "five castable things", not anything Mana Cannons does.
+Two-Headed Hellkite (28.8), Faeburrow Elder (39.0) and Deathrite Shaman (60.7) read the same way.
+
+**Only the Unite the Coalition row survives**, because g6 wins the driver slot on merit (6 > 1). So the
+corrected picture is:
+
+- **Unite the Coalition contributes a x7 factor** — real, and it is the only card-specific one.
+- **Everything else contributes x2 each**, and the rest of the branching is `2^n` in the number of
+  simultaneously castable options. That is the irreducible combinatorics of a toolbox deck, and it is
+  exactly why burn — which rarely has five different castable things at once — is cheap.
+
+Fix the instrument before quoting it again: record ties as ambiguous, or attribute the product to the
+groups that actually contribute a factor > 1. As written it invites precisely the misreading above.
