@@ -1017,3 +1017,61 @@ corrected picture is:
 
 Fix the instrument before quoting it again: record ties as ambiguous, or attribute the product to the
 groups that actually contribute a factor > 1. As written it invites precisely the misreading above.
+
+## Why an uncastable card is still a decision (2026-08-09)
+
+User: *"we usually can't cast Unite the Coalition until later in the game and it should be immediately
+pruned"* — *"I just don't understand why this is even something to think about when we can't cast it."*
+
+**There is no affordability filter at candidate emission.** `CollectActions` emits a `CastFromHand`
+action for every hand card regardless of cost; affordability is handled downstream by the mana gate,
+which prunes **selections**, not **digits**. So an uncastable card still becomes an odometer digit and
+still multiplies the product. That is a design choice — push the test to one exact place — not an
+oversight, but it leaves provably dead digits in the odometer.
+
+The turn-one shapes show how far it goes. Second enumeration of the game:
+
+```
+[enum-stats] bound=672 groups=7 [g6 Unite the Coalition] [g1 Two-Headed Hellkite]
+             [g1 Maelstrom Archangel] [g1 Nicol Bolas, Planeswalker] [g1 Bloom Tender]
+             [g1 Lightning Greaves(equip)] [g2 Oko, Thief of Crowns]
+```
+
+Unite is 7 mana WUBRG; Nicol Bolas is 8; Maelstrom Archangel 5; Two-Headed Hellkite 6+. On an opening
+board none of them can be cast. Drop those four digits and the product is `2 x 2 x 3 = 12` instead of
+`7 x 2 x 2 x 2 x 2 x 2 x 3 = 672` — **56x on that call**, and it is not Unite alone: it is x7 from
+Unite times x2 for each uncastable fatty.
+
+### The fix, and its honest ceiling
+
+In `CollectActions`, skip a hand cast whose `EffectiveCost(def, state).ManaValue()` exceeds an
+OPTIMISTIC bound on the mana the board could produce this turn. Optimistic keeps it sound: it can only
+drop cards that were unplayable under every line, so play is unchanged. It generalises past Unite to
+every expensive card in every deck.
+
+**But it will not deliver 56x of runtime, and the earlier "~0.3%" was a lower bound measured on the
+wrong term.** That figure counted only Stage B's row walk; the fix also removes 6-9 `Action`
+constructions per call (each with a `card_name` string copy — `operator new` is 1.83% of total and 23x
+burn's), their `ManaGateIndex` terms, and their group partitioning. Low single digits is the realistic
+range, and it needs measuring rather than estimating — twice tonight an estimate from an instrument's
+framing has been wrong.
+
+The reason it CANNOT be large is structural, and it is the same reason the two-stage retraction landed:
+`sum_final` (5,695 plans/game) and rollout calls (2,871/game) are **unaffected** by pruning lines that
+were never payable. Those dominate, and they are where the 16x node gap lives. Pruning dead digits
+makes the cheap part cheaper.
+
+### The separate, larger lever: decide the split instead of searching it
+
+The user's other suggestion — *"we could probably come up with a heuristic for Unite the Coalition"* —
+is the one with real headroom, and this file already contains the precedent. **Ponder was the #1
+branching source at ~47% of all enumeration**, and the fix was to emit ONE variant chosen by heuristic
+instead of the searched alternatives (`TurnSolver.cpp:2932+`, and the 2026-08-01 cost fix below it).
+
+Unite's six variants all carry the SAME cost and are strictly ordered by static eval
+(300/440/580/720/860/1000 for S=0..5), so on the turns it IS castable the search is rolling out six
+same-cost lines that differ only in a damage-vs-draw trade against a goldfish. Measure which S the
+search actually commits to; if it concentrates at the ends, emit two variants (all-damage, all-draw) or
+one heuristic pick. That cuts x7 to x3 or x2 exactly where the payable plans are — which is the half
+that pruning cannot touch. Play-affecting: full A/B, rebaseline, and it invalidates a value-leaf table
+generated before it.
