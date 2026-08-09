@@ -231,6 +231,11 @@ def resync_engine_change(cells, target, src_now, log=print):
     arm-difference is computed from games that agree. Re-running whole cells buys nothing extra and
     cost 140x more here (26 cells / 10,400 games against 24 chunks / ~590).
 
+    The result is a SLIGHTLY MIXED matrix and that is deliberate (user, 2026-08-09): the prefix
+    below B keeps its original engine in every cell, and only the games that were never finished
+    are regenerated -- in each cell where they exist. Re-running whole cells to remove the mixing
+    would cost 10,400 games against 587 for the same per-game agreement across cells.
+
     B is per (deck, seed), and is the lowest offset any cell still owes:
       * a seed whose cells are ALL at target is already consistent -- untouched, whatever its engine.
       * cells that never reached B keep everything (a condemned cell capped at 50 has nothing at or
@@ -343,7 +348,9 @@ def run_incremental(args):
     for c in cells: c["inflight_games"]=0
     def target(c): return min(args.reference_target,args.target) if c["intractable"] else args.target
 
-    # A play change since these results were written is absorbed here, at chunk granularity.
+    # A play change since these results were written is absorbed here, at chunk granularity: the
+    # unfinished games are regenerated in each cell where they exist, and the prefix below them keeps
+    # its original engine. That is what makes landing an optimization mid-table affordable.
     resync_engine_change(cells, target, src_now)
 
     # ---------------------------------------------------------------- PROPER BATCHING: one work QUEUE
