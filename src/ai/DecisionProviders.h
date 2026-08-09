@@ -493,6 +493,8 @@ class FiveColourProvider : public GenericProvider
 {
 public:
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
+    void ModalSplitCandidates(const GameState&, const CardDefinition&,
+                              std::vector<int>&) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

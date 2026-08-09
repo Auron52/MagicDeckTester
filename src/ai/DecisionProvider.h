@@ -465,6 +465,20 @@ public:
     // non-Hinata deck, HinataProvider returns HinataInPlay(s).
     virtual bool ShouldEmitUntapRitual(const GameState& s) const { (void)s; return false; }
 
+    // ModalSplitCandidates -- which splits S of a "choose N, repeats allowed" modal spell to EMIT.
+    // Unite the Coalition is {2}{W}{U}{B}{R}{G} modelled as S x (2 damage to face) + (N-S) x (draw),
+    // so the solver branches on all N+1 splits. They share a cost and are strictly ordered by static
+    // eval, so the search rolls out six same-cost lines differing only in a damage-vs-draw trade --
+    // measured as a x7 group factor and the single largest branching source on the deck. Narrowing
+    // the emission is the same move that retired Ponder's variants (the #1 source at ~47%).
+    // Default = every split, so every deck without an override is byte-identical.
+    virtual void ModalSplitCandidates(const GameState& s, const CardDefinition& def,
+                                      std::vector<int>& out) const
+    {
+        (void)s;
+        for (int k = 0; k <= def.params.modal_choose_n; ++k) { out.push_back(k); }
+    }
+
     // BranchSoulfireOwnTargets -- branch on Soulfire Eruption's OWN-creature target count (0..K)?
     // Own-targeting only pays off with Hinata's per-target discount (which can enable an
     // otherwise-unaffordable cast) plus a deeper dig; without it the K+1 variants are dead weight every

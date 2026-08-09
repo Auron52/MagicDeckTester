@@ -3020,7 +3020,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // signature folds S so the autonomous dedup never collapses distinct splits.
         if (def.params.modal_choose_n > 0)
         {
-            for (int sN = 0; sN <= def.params.modal_choose_n; ++sN)
+            // WHICH splits to branch on is provider-owned (see ModalSplitCandidates). The default
+            // returns every S, so this stays byte-identical for any deck without an override.
+            static thread_local std::vector<int> split_buf;
+            split_buf.clear();
+            ResolveProvider(state).ModalSplitCandidates(state, def, split_buf);
+            for (int sN : split_buf)
             {
                 Action ma;
                 ma.kind           = Action::Kind::CastFromHand;

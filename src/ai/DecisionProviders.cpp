@@ -6246,3 +6246,77 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     if (burn) { return g_burn; }
     return g_generic;
 }
+
+// ---- FiveColourProvider::ModalSplitCandidates -------------------------------
+//
+// Unite the Coalition, {2}{W}{U}{B}{R}{G}: "choose five, repeats allowed", modelled as
+// S x (2 damage to the face) + (5-S) x (draw a card). The solver branched on all six splits, which
+// measured as a x7 group factor -- the single largest branching source on this deck -- for six
+// same-cost lines that differ only in a damage-vs-draw trade. Same shape as Ponder's variants, and
+// the same fix: decide the split instead of searching it.
+//
+// The rule is the user's (2026-08-09): "you want to hit them for 10 when we will have lethal on
+// board this turn or next. If we have at least 2 other castable creature threats in hand I would
+// also hit them for full damage. Otherwise, we should draw 3-5 cards and deal damage with any left
+// over" -- with the explicit caveat "sometimes the damage can hit breakpoints like multiples of 5,
+// so I don't want to restrict this decision too much", which is why the draw case keeps all three
+// of S=0,1,2 rather than committing to one. Six variants become one or three.
+void FiveColourProvider::ModalSplitCandidates(const GameState& s, const CardDefinition& def,
+                                              std::vector<int>& out) const
+{
+    const int N = def.params.modal_choose_n;
+    if (N <= 0) { return; }
+    if (DecisionUnpruned(UnprunedGate::Fetch) || !EnvOn("MTG_FIVEC_UNITE_SPLIT"))
+    {
+        GenericProvider::ModalSplitCandidates(s, def, out);
+        return;
+    }
+
+    const int me  = s.active_player_index;
+    const int opp = 1 - me;
+    const int face_damage = N * def.params.modal_damage_per_choice;   // all-in: 10
+
+    // Board damage we could add on top, counting creatures that can attack this turn or next --
+    // summoning sickness wears off, so a creature that entered this turn still counts for "next".
+    int board_power = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || !p.card.IsCreature()) { continue; }
+        board_power += std::max(0, p.EffectivePower());
+    }
+
+    // Other castable creature threats in hand: a body we could actually deploy, not just hold.
+    // A haste enabler counts whether it is already down OR castable from hand -- the question is
+    // about OUR PLAN this turn, the same reading GoblinsProvider::DeferSacOutletPreCombat takes of
+    // grants_haste ("or one is castable from hand this turn"). Without it this test read only the
+    // creatures already on the battlefield and missed lethal assembled in the same main phase:
+    // measured on seed 6006 gi209, the search cast Deathrite + Unite + Lightning Greaves on turn 4
+    // and won there, while this heuristic saw 2 power on board, declined the all-in split, and won
+    // on turn 5 instead.
+    int threats = 0, hand_power = 0;
+    bool haste_enabler = false;
+    const ManaPool pool = AvailableManaPool(s);
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.grants_haste) { haste_enabler = true; break; }
+    }
+    for (const Card& c : s.players[me].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        if (d->params.grants_haste && pool.CanPay(EffectiveSpellCost(*d, s))) { haste_enabler = true; }
+        if (!d->card.IsCreature()) { continue; }
+        if (pool.CanPay(EffectiveSpellCost(*d, s))) { ++threats; hand_power += std::max(0, d->card.m_power.value_or(0)); }
+    }
+    // With haste available, a body deployed this turn can attack, so it counts toward lethal NOW.
+    if (haste_enabler) { board_power += hand_power; }
+
+    // Lethal on board this turn or next, once Unite's 10 is added; or two more threats to deploy.
+    const bool go_face = (s.players[opp].life <= face_damage + board_power) || (threats >= 2);
+    if (go_face) { out.push_back(N); return; }
+
+    // Otherwise draw 3-5 and spend the remainder on damage: S = 0, 1, 2.
+    for (int k = 0; k <= 2 && k <= N; ++k) { out.push_back(k); }
+}
