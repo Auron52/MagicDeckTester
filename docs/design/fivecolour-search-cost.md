@@ -1194,3 +1194,39 @@ That makes the correction nearly free, and it lands on the right side of the cos
 
 So the sequencing is: answer the correctness question first (is the land-then-tap line even offered?),
 then implement the prune with a saturation test, and expect to lose essentially none of its strength.
+
+## Spec: `BudgetCanGrow` — decide when caution is needed, be exact otherwise
+
+Order of work, per the user: **the correctness question first**, the cost work after it. The prune is
+then gated on one predicate rather than on a list of card types.
+
+```cpp
+// Can ANY same-turn action raise this turn's total mana, or its colour reach?
+//   false -> pool_total + best_head is COMPLETE: prune uncastable candidates at emission
+//   true  -> a same-turn action can grow the budget: keep today's conservative treatment
+bool BudgetCanGrow(const GameState& state, const std::vector<Action>& cands);
+```
+
+True iff any of:
+
+1. **A net-positive mana action** — `gain > cost`, not `gain > 0`. Sol Ring (`{1}` for `{C}{C}`, +1),
+   any ritual, and Skirk Prospector (its marginal mana is free once the bodies are on board). Ancient
+   Cornucopia is the counterexample that makes the distinction load-bearing: `{2}{G}` for **one** mana,
+   **net -2**, so it can never fund anything the turn it lands — yet today's `IsManaSideAction`
+   (`gain > 0`) treats it as a budget-raiser.
+2. **A per-subset cost reducer** — the `block` term: medallion/affinity discounts, and reducers that
+   can be cheated onto the board (Aether Vial, Goblin Lackey) without paying for them.
+3. **A domain source that can widen PROFITABLY** — an untapped Bloom Tender / Faeburrow Elder whose
+   domain is missing a colour *and* a same-turn play can add it for less than it yields. The user's
+   argument is the sharp part: **with one dork, widening via a spell costs at least the +1 it returns**,
+   so a lone Faeburrow Elder missing domain is not grounds for caution. It takes two or more dorks —
+   or a land, which is free, and only if the pool projection does not already include the land drop
+   (which is exactly the correctness question above).
+
+Otherwise false, and the exact bound applies. On FiveColour every clause is false once the domain
+saturates — which the user notes is turn 2-3 — so the deck gets the aggressive path for the whole
+period where the odometer is actually large.
+
+There is precedent for the marginal-gain measurement already in the tree: `TurnSolver.cpp:3628` computes
+`const int base = AvailableManaPool(state).Total();   // mana this turn WITHOUT Skirk` for exactly this
+kind of "what does this source actually add" question. Reuse that shape rather than inventing one.
