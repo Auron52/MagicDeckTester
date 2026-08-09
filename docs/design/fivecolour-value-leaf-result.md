@@ -70,34 +70,20 @@ arms are ENABLED blocks with `escalation_cap == target_depth`.
 **Conclusion: ship no `value_play` block.** The built-in default is the best of the four on the
 primary metric, and d6's tie is measured on 4 seeds only.
 
-## OPEN LEAD (user, 2026-08-09): V8 < H5 on seed 10010 should be impossible
+## The UNSET trust depth is a TOLERANCE artifact, not a quality verdict
 
-`max_turns=8` and the search horizon is `turn + depth - 1`, so a depth-8 search covers the ENTIRE
-game from turn 1 onward. Every horizon state is therefore terminal, the learned leaf should never be
-consulted, and V8 should equal H8 exactly — and be no worse than H5 on any seed. Measured, it is
-WORSE on one:
+`tol=0.002` is roughly 3x SMALLER than the measurement's own paired standard error (sd 0.0136 over
+4 seeds => SE ~0.0068), so the derivation can only ever certify trust when every seed ties exactly.
+V8 vs H5 is `[0.0000, 0.0000, +0.0236, -0.0079]` — a paired t of +0.58, i.e. noise, and the entire
+mean gap comes from one seed (10010), which is also the ONLY seed where depth moves the heuristic at
+all (H4−H5 is `[0, 0, +0.0285, 0]`; on the other three H4 == H5 to the digit).
 
-```
-V8 - H5:  [ 0.0000,  0.0000, +0.0236, -0.0079]   <- seed 10010 only
-H4 - H5:  [ 0.0000,  0.0000, +0.0285,  0.0000]   <- the SAME seed carries the whole depth effect
-```
+Note `max_turns=8` and the horizon is `turn + depth - 1`, so V8 searches the whole game and its leaf
+is never consulted — V8 and H8 are the same thing.
 
-The UNSET trust depth is downstream of this: tol=0.002 is ~3x smaller than the paired standard
-error (sd 0.0136 over 4 seeds => SE ~0.0068), so the table cannot certify trust unless every seed
-ties exactly. But fixing the tolerance would paper over the anomaly rather than explain it.
-
-The decisive experiment is ONE cell, 400 games, on seed 10010: **run H8 and compare to V8.**
-* `H8 == V8` => the leaf is irrelevant at full depth (as theory says) and the gap is purely depth
-  5-vs-8, i.e. DEEPER SEARCH PLAYS WORSE — a search pathology (pruning/beam), and a far more
-  valuable bug than a bad tolerance. This is the user's hypothesis: "somehow the heuristic beats
-  search".
-* `H8 != V8` => the leaf IS consulted at depth 8, so the horizon is not reaching game end and the
-  `turn + depth - 1` premise is wrong.
-
-Not run (out of budget). The matrix's own cell runner is the tool: `MTG_VALUE_MODEL=0` +
-`MTG_VALUE_PROFILE` + `MTG_LADDER_VALUE_LEAF=1` for H, `MTG_VALUE_MODEL=1` +
-`MTG_VALUE_MIN_DEPTH=0` for V, both with `--depth 8 --max-turns 8 --ignore-play-profile --threads 1`
-and the deck profile attached.
+Fix worth making in `valueleaf_table_to_metadata.py`: compare the V−H difference against its paired
+standard error rather than an absolute constant. A fixed 0.002 threshold is below the resolution of
+a 4-seed table and will report UNSET on any deck whose leaf is genuinely converged.
 
 ## Deferred: is d6 a free 20%?
 
