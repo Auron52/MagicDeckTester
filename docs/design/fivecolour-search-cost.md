@@ -1290,3 +1290,37 @@ and fetchlands that make the two answers differ.
 Rename when the freeze lifts: `DomainColors` -> `ColorsAmongPermanents`, `domain_mana` ->
 `permanent_colors_mana`, `domain_self_pump` -> `permanent_colors_self_pump`. Mechanical, byte-identical,
 and it keeps the name free for the mechanic that actually owns it.
+
+### Generalised: SCALING sources, and the 2-or-untap rule
+
+User: *"most dorks don't scale at all. But Bloom Tender and Faeburrow Elder are scaling dorks and
+Elves and Defenders (neither of which are implemented yet) also have a similar ability to scale based
+on what you play. However, they can never scale more than your existing mana without 2 of these
+scaling dorks or an untap."*
+
+That is the general form, and it is worth writing down before those decks exist:
+
+| kind | example | scales on |
+|---|---|---|
+| **fixed** | Birds of Paradise, Llanowar Elves | nothing — a constant already inside `pool_total` |
+| **scaling: colours** | Bloom Tender, Faeburrow Elder | colours among permanents you control |
+| **scaling: tribe count** | Priest of Titania, Elvish Archdruid *(not implemented)* | Elves you control |
+| **scaling: defender count** | Overgrown Battlement, Axebane Guardian *(not implemented)* | creatures with defender |
+
+The arithmetic is identical across all three scaling kinds, which is why one predicate covers them.
+For a scaling class `S` with `n` untapped sources, a same-turn play that increments `S`'s scale yields
+`+n` mana for the play's cost `c`. It raises the budget iff **`n > c`**. With `n = 1` and any spell
+costing `c >= 1`, that is never — exactly the user's rule. So caution is needed only when:
+
+- **`n >= 2`** and some same-turn play increments `S` for less than `n`, **or**
+- an **untap** effect can re-tap a scaling source after the board has widened.
+
+**Fixed dorks are never a reason for caution at all** — their output is a constant already counted in
+`pool_total`, so they cannot make an uncastable spell castable. That is most mana creatures in most
+decks, and it is why the aggressive path should be the common case rather than the exception.
+
+The untap escape is currently **vacuous in this repo**: a scan of `cards.json` for untap effects finds
+only land-ETB forms (`etb_pay_life_to_untap` on the shocklands, `etb_untap_reveal_subtypes` on Frostboil
+Snarl), which govern whether a land ENTERS untapped — none of them re-taps a mana source mid-turn. It
+belongs in the predicate anyway, because the first Elves or Defenders deck will bring both halves at
+once: two-plus scaling sources AND cheap creatures that increment the count.
