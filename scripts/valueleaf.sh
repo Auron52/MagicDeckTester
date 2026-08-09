@@ -64,6 +64,14 @@ fi
 # pathological games and knowing WHICH ones is the whole input to an optimization pass. 0 disables.
 SLOW_GAME_MS=${SLOW_GAME_MS:-30000}
 VDEPTHS=${VDEPTHS:-"1 2 3 4 5 6 7 8"}
+# The HEURISTIC ladder. Default 1-5 because the shipped play depth is 5 and the H cells cost ~2.2x
+# per rung (measured on FiveColour: 0.54s, 5.9s, 36s, 160s, 348s per game at H1..H5). Extend it only
+# when a deeper target_depth is on the table: the crossover CLAMPS to the deepest measured hdepth, so
+# `6->5 7->5 8->5` in a derived table is the clamp, NOT a measurement, and cannot justify d6 play.
+# Note H_maxturns == V_maxturns is the SAME cell: at depth >= max_turns the horizon covers the whole
+# game, so every leaf is terminal and the learned evaluator is never consulted. FiveColour has
+# max_turns=8, so H8 == V8 -- never pay ~68 core-hours to re-measure a cell the V arm already has.
+HDEPTHS=${HDEPTHS:-"1 2 3 4 5"}
 # Tractability guard, seconds/game. This is a SAFETY VALVE against a genuinely exploding cell, not a
 # budget: at 3.0 it condemned cells running at 4.33 s/game whose full fill cost 4 CORE-HOURS in total
 # -- 0.3% of the run that skipped them -- and left H1-5 unmeasured on two decks, which is what the
@@ -261,10 +269,10 @@ phase_matrix() {
     done_p C_matrix && return 0
     local keys; keys=$(staged_keys)
     [ -n "$keys" ] || { log "PHASE C ABORT: no staged models"; return 1; }
-    log "PHASE C: matrix over$keys -- ONE pool, $WORKERS workers, target $MATRIX_TARGET/cell, V=[$VDEPTHS], cutoff ${INTRACTABLE_SPG}s/game"
+    log "PHASE C: matrix over$keys -- ONE pool, $WORKERS workers, target $MATRIX_TARGET/cell, H=[$HDEPTHS], V=[$VDEPTHS], cutoff ${INTRACTABLE_SPG}s/game, never-condemn<=$NEVER_CONDEMN"
     MTG_SLOW_GAME_MS="$SLOW_GAME_MS" MTG_SLOW_GAME_LOG="$SLOW_GAME_LOG" \
     python3 scripts/attic/valueleaf_depth_matrix.py --incremental --decks $keys \
-        --hdepths 1 2 3 4 5 --vdepths $VDEPTHS --seeds 8008 9009 10010 11011 \
+        --hdepths $HDEPTHS --vdepths $VDEPTHS --seeds 8008 9009 10010 11011 \
         --target "$MATRIX_TARGET" --reference-target "$MATRIX_REF" --batch 25 --workers "$WORKERS" \
         --value-min-depth 0 --intractable-sec-per-game "$INTRACTABLE_SPG" \
         --never-condemn-at-or-below "$NEVER_CONDEMN" \
