@@ -1,0 +1,48 @@
+{
+  "deck": "decks/FiveColour/FiveColour.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "max_turns": 5,
+  "active_life": 15,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Deathrite Shaman",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Faeburrow Elder",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Breeding Pool",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Steam Vents",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Bloom Tender",
+    "Jetmir's Garden",
+    "Lightning Greaves",
+    "Mana Cannons",
+    "Nicol Bolas, Planeswalker",
+    "Unite the Coalition"
+  ],
+  "library_filler": "Progenitus",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "validate_line": "land=Jetmir's Garden;cast=Bloom Tender;cast=Lightning Greaves;cast=Mana Cannons;cast=Lightning Greaves",
+  "expect_verdict": "accept",
+  "log_out": "logs/play/fivecolour_haste_dork_mana.json",
+  "_comment": "Issue 6 (user report, seed 3 turn 3). The line is: play Jetmir's Garden (enters tapped, adds nothing), cast Bloom Tender {1}{G} and Lightning Greaves {2} off Faeburrow Elder + Breeding Pool, equip {0} onto Bloom Tender -> HASTE unlocks its {T} (CR 302.6), tap it for {W}{B}{G}, cast Mana Cannons {2}{R} with the {R} off Steam Vents. The trailing 'cast=Lightning Greaves' IS the equip -- that is how the viewer commits one (a second click on the Equipment). Costs total 7; the board makes only 5 without Bloom Tender's own tap (Jetmir's Garden enters tapped; Deathrite's mana is fuel-gated on a graveyard land and there is none), so the dork cast THIS turn must tap THIS turn or the line is unpayable. Three separate things had to change for this verdict to be 'accept' instead of 'illegal': the ManaPruneBound addend (the odometer dropped the 7-mana subset before consider() saw it), the per-subset hasted-dork credit in EnumeratePlans, and the execution side (fire the equip mid-casts + reserve the lone red source across the enabler casts). ASSERTED VIA validate_line, NOT a win turn: against a passive goldfish Lightning Greaves is worth nothing, so the search legitimately prefers the cheaper Bloom Tender + Mana Cannons line and no win-turn assertion can see this at all. See docs/design/scaling-source-widening.md, 'Sibling gap'."
+}

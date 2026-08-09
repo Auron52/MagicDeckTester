@@ -66,6 +66,8 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `lightpaws` | `g_play_lightpaws_chooser` (`LightPawsChooser`) | `PerformLightPawsAttach` (SpellEffects.h, shared executor+rollout) | `WriteLightPawsDecisionJson` | `lightPawsPanelHtml` | modal |
 | `vial_charge` | `AIEngine::SetExternalVialChooser` | Vial upkeep charge | `WriteVialDecisionJson` | `promptPanelHtml` | board |
 | `firebreathe` | `g_play_firebreathe_chooser` (`FirebreatheChooser`) | `AIEngine::Firebreathe` (combat, `GameEngine.cpp:361`) | `WriteFirebreatheDecisionJson` | `firebreathePanelHtml` | modal |
+| `lackey_put` | `g_play_lackey_chooser` (`LackeyChooser`) | `FireCombatDamageCheatIntoPlay` (SpellEffects.h, shared executor+rollout) | `WriteLackeyDecisionJson` | `lackeyPanelHtml` | modal |
+| `free_cast` | `g_play_free_cast_chooser` (`FreeCastChooser`) | `AIEngine` post-combat main, before the plan menu | `WriteFreeCastDecisionJson` | `freeCastPanelHtml` | modal |
 
 **Firebreathe amount (#4) — the first COMBAT-phase decision, and the first on a KEYED SIDE-CHANNEL.**
 At combat, leftover mana is spent greedily on attacker pumps (`ApplyFirebreathing`). The human instead
@@ -161,6 +163,21 @@ and `PlayLandByName`/`TryPlaySpecificLand` enter the chosen face's identity in l
 The human-play `plan_signature` keys on `|face=` so the two faces don't collapse; the autonomous dedup
 stays cast-name-only (this IS a modeling change, so autonomous GT shifts — Pathway now commits to one
 colour instead of a dual).
+
+**Archangel free cast (`free_cast`) — a one-time TRIGGER, not a menu option.** Maelstrom Archangel's
+"whenever this creature deals combat damage to a player, you may cast a spell from your hand without
+paying its mana cost" is modelled as a banked charge (`GameState::free_casts_available`) spent in the
+post-combat main: against a passive opponent nothing happens between the combat damage step and the
+second main, so the timing is equivalent. The charge was originally spent through `#FREE` **plan
+variants** in the ordinary main-phase menu, and that was wrong in two ways the player hit directly:
+a one-time trigger became a standing option castable at any point in the phase, and because the paid
+and free variants of one card carried the same `CheckLine` signature the dedup kept the PAID one, so
+simply queuing the card silently threw the charge away. It is now asked ONCE, before the plan menu,
+with a decline option ("may") -- exactly the shape of the Lackey put above. The chosen spell is applied
+through the normal commit path (`ApplyPlan` on the enumerated single-action free plan), and the bank is
+zeroed either way, so no `#FREE` variant ever reaches the plan menu in human play. The AUTONOMOUS search
+still uses the plan-variant path (the chooser is null there, and nulled by `RevealLogPause` in every
+rollout), so ground truth is unaffected.
 
 ## Surfacing options (viewer "⚙ Options" menu)
 

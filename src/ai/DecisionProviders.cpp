@@ -6017,6 +6017,102 @@ CreatureGivingProvider::TutorCandidates(const GameState& s, int controller, cons
 // Returns the FULL ordered list rather than a single pick: the engine's FetchSearchCap (2) decides
 // how many the search actually branches on, so the policy stays a ranking and the search keeps its
 // say. MTG_UNPRUNED opens the whole list, as everywhere else.
+// Hold a live UTILITY mana source out of combat when its TAP is worth more than its chip damage
+// (USER-REPORTED 2026-08-09: "Deathrite only very rarely wants to attack, because it has abilities
+// which are more useful"). The reported misplay: Deathrite Shaman (a 1/2) swung for 1, which tapped
+// it, and the post-combat Unite the Coalition {2}{W}{U}{B}{R}{G} then went uncastable -- Deathrite's
+// "add one mana of any color" was the board's ONLY white source, so 1 damage cost a 7-mana spell.
+//
+// The rule is deliberately narrow, and the two guards are what keep it from ever losing damage:
+//   * VIGILANCE is exempt. Faeburrow Elder attacks AND still taps for mana afterwards, so holding
+//     it back would be pure loss -- which is exactly why the user singled it out as always wanting
+//     to attack and then cast in the second main.
+//   * LETHAL is exempt. If the eligible attackers together already kill, everything swings; a
+//     held-back dork can never cost a kill this turn.
+// Everything else about combat stays the generic goldfish behaviour. Gated to this archetype's
+// provider (the root stays generic per the search-primary bar) and behind MTG_NO_5C_HOLD_DORK for
+// the standing A/B.
+bool FiveColourProvider::ShouldAttackWith(const GameState& s, const Permanent& p) const
+{
+    static const bool enabled = !EnvOn("MTG_NO_5C_HOLD_DORK");
+    if (!enabled) { return GenericProvider::ShouldAttackWith(s, p); }
+
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (!d) { return true; }
+
+    // Is this a live utility source -- something whose {T} we would rather spend on mana or on one
+    // of its activated abilities than on combat damage?
+    const bool taps_for_mana = (d->tmpl == CardTemplate::ManaDork) && !d->params.produces.empty();
+    const bool gy_abilities  = d->params.gy_land_exile_mana
+                            || d->params.gy_exile_instant_sorcery_drain > 0
+                            || d->params.gy_exile_creature_lifegain > 0;
+    if (!taps_for_mana && !gy_abilities) { return true; }        // a real attacker -> swing
+
+    // Vigilance: attacking costs it nothing, so never hold it back.
+    if (p.card.HasKeyword(Keyword::Vigilance)) { return true; }
+    if (AttackHasNonPowerValue(s, p))          { return true; }  // attack-trigger value
+
+    // Never forfeit a kill: if everything that CAN attack already adds up to lethal, swing with all
+    // of it. Eligibility uses CanAttackFull (not ShouldAttackWith) to avoid recursion.
+    const int active   = s.active_player_index;
+    const int opp_life = s.players[1 - active].life;
+    int total = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != active) { continue; }
+        if (!CanAttackFull(q, s.battlefield, active)) { continue; }
+        total += AttackPowerOf(s, q);
+    }
+    if (total >= opp_life) { return true; }
+
+    // Hold whenever the mana can still BUY something this turn. The bar is deliberately low, per the
+    // user: "Deathrite only very rarely wants to attack, because it has abilities which are more
+    // useful" -- one chip damage is worth far less than a mana of any colour in a 5-colour deck.
+    //
+    // The previous, tighter test asked "is some ONE hand card payable WITH this source and unpayable
+    // WITHOUT it?" and was reported as inconsistent, correctly: it judges each card ALONE against the
+    // full pool, so it holds for a single expensive card but swings whenever the second main's plan
+    // needs the extra mana spread across SEVERAL casts, or when the card is payable without this
+    // source yet its mana is still wanted for the rest of the line. Both are exactly the case the
+    // player hits by passing main 1 and casting after combat.
+    //
+    // So: hold if any nonland card in hand is castable off the full pool. The measured loss case that
+    // motivated the tighter test is still covered -- with nothing castable the tap buys nothing, so it
+    // swings (verified: empty hand -> Deathrite attacks, opponent 19 not 20).
+    // A LIVE graveyard ability beats one chip damage outright (Deathrite's drain-2 / gain-2 need a
+    // matching card in the graveyard to be worth anything; with none, the ability is dead).
+    if (gy_abilities)
+    {
+        for (const Card& g : s.players[active].graveyard)
+        {
+            const CardDefinition* gd = CardDatabase::Instance().LookupCached(g);
+            if (!gd) { continue; }
+            if (d->params.gy_exile_instant_sorcery_drain > 0
+                && (gd->card.IsInstant() || gd->card.IsSorcery()))            { return false; }
+            if (d->params.gy_exile_creature_lifegain > 0 && gd->card.IsCreature()) { return false; }
+        }
+    }
+
+    // Does tapping it actually PRODUCE mana right now? Deathrite's mana ability is fuel-gated on a
+    // land in the graveyard, so an unfuelled one makes nothing and holding it buys nothing -- it
+    // should take the chip damage. AvailableManaPool already models the fuel, so the difference the
+    // source makes to the pool IS the test.
+    const ManaPool with    = AvailableManaPool(s);
+    const ManaPool without = AvailableManaPool(s, &p);
+    if (with.Total() <= without.Total()) { return true; }   // contributes no mana -> swing
+
+    for (const Card& h : s.players[active].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+        if (!hd || hd->card.IsLand()) { continue; }
+        const ManaCost& mc = hd->card.m_mana_cost;
+        // {X} spells are always "castable" for X=0, so they count: the tap raises X, which is the
+        // whole point of holding for them.
+        if (mc.has_x || with.CanPay(mc)) { return false; }   // the mana has somewhere to go -> hold
+    }
+    return true;   // nothing castable at all -> the tap buys nothing, take the chip damage
+}
+
 std::vector<std::string>
 FiveColourProvider::FetchCandidates(const GameState& s, int controller,
                                     const CardParams& fetch_pp) const

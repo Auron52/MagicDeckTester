@@ -1264,6 +1264,35 @@ static void WriteLackeyDecisionJson(std::ostream& os, const GameState& s, const 
     d.Note("reply a candidate index to put that Goblin permanent from hand onto the battlefield, or -1 to decline. Default = the AI's pick.");
 }
 
+// Maelstrom Archangel free-cast decision: the combat-damage trigger's "you MAY cast a spell from your
+// hand without paying its mana cost". A ONE-TIME choice (see AIEngine's fire point and the
+// FreeCastChooser note) -- not a standing plan-menu option, which is what let the charge be spent at
+// any moment in the phase or silently lost. Emits the castable hand cards as image options; the reply
+// is a candidate index to cast that spell for free, or -1 to decline. `heuristic_default` = the
+// engine's highest-MV pick (the charge is worth most on what you could least afford).
+static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
+                                      const std::vector<Card>& candidates, int heuristic_default,
+                                      int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    // heuristic_default is DELIBERATELY -1 (decline), not the AI's pick. It is the answer used for
+    // any reference that PREDATES this decision type, and a newly-added "may" trigger must default to
+    // the NO-OP or it silently rewrites recorded games: with the highest-MV pick as the default, the
+    // seed-6 FiveColour reference had Faeburrow Elder cast for free at T4, so its recorded T5 line
+    // ("land=Wooded Foothills; cast: Faeburrow Elder") became unplayable and the protocol checker --
+    // which infers a reshuffle from a hand difference -- misreported it as `shuffle-dead`. Nothing had
+    // reshuffled; the default had spent a card. The AI's suggestion still ships as `ai_pick` for the
+    // viewer's badge, so the player keeps the hint without it being the silent answer.
+    d.Type("free_cast").Source("Maelstrom Archangel").Turn(s.turn_number).Board(s)
+     .HeuristicDefault(-1);
+    d.Int("ai_pick", heuristic_default);
+    d.Array("candidates", candidates.size(), [&](std::size_t i)
+    {
+        os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
+    });
+    d.Note("reply a candidate index to cast that spell from hand WITHOUT paying its mana cost, or -1 to decline. Default = the AI's pick.");
+}
+
 // ETB tutor fired off a PUT rather than a cast (a Lackey combat cheat / Vial deploy / Muxus reveal
 // dropping a Goblin Matron): the player picks WHICH card to search up, or declines. A tutor resolved
 // from a CAST never reaches here -- the search enumerates one plan variant per candidate and the
@@ -1651,6 +1680,7 @@ g_play_land_entry_chooser = nullptr;
 g_play_dragon_chooser = nullptr;
 g_play_sac_tutor_chooser = nullptr;
 g_play_lackey_chooser = nullptr;
+g_play_free_cast_chooser = nullptr;
 g_play_tutor_chooser = nullptr;
 g_play_lightpaws_chooser = nullptr;
 g_play_firebreathe_chooser = nullptr;
@@ -1819,6 +1849,7 @@ struct ClaudePlayHarness
     DigChooser            dig_chooser;
     LightPawsChooser      lightpaws_chooser;
     LackeyChooser         lackey_chooser;
+    FreeCastChooser       free_cast_chooser;
     TutorChooser          tutor_chooser;
     DragonChooser         dragon_chooser;
     SacTutorChooser       sac_tutor_chooser;
@@ -2434,6 +2465,39 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_lackey_chooser = &lackey_chooser;
+
+    // Maelstrom Archangel free cast (one-time triggered choice; see WriteFreeCastDecisionJson).
+    // Default = the engine's highest-MV pick. Human-play only, so ground truth is unaffected.
+    free_cast_chooser =
+        [this](const GameState& s, int controller,
+            const std::vector<Card>& candidates, int heuristic_index) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                bool ok = (chosen == -1)
+                       || (chosen >= 0 && chosen < static_cast<int>(candidates.size()));
+                if (!ok) { chosen = -1; }        // unusable index -> decline (the no-op), never a cast
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteFreeCastDecisionJson(ss, s, candidates, heuristic_index, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteFreeCastDecisionJson(std::cout, s, candidates, heuristic_index, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_free_cast_chooser = &free_cast_chooser;
 
     // ETB tutor off a PUT (Lackey cheat / Vial deploy / Muxus reveal drops a Goblin Matron): the human
     // picks WHICH card to search up, or -1 to decline ("you MAY search"). A tutor from a CAST carries a
@@ -3263,6 +3327,11 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //     "depth": 5, "budget_ms": 100, "max_turns": 4,
 //     "expect_win_turn": 4,          // optional: nonzero exit if the actual win turn is later (a FAIL)
 //     "expect_no_win": true,         // optional: nonzero exit if the engine DID win (negative guard)
+//     "validate_line": "land=X;cast=A;cast=B",   // optional: run TurnSolver::CheckLine on this board
+//     "expect_verdict": "accept",    // ... and fail unless the verdict matches (default "accept").
+//                                    // Guards a line the SEARCH would not pick on its own (a
+//                                    // goldfish values a do-nothing permanent at 0), which a
+//                                    // win-turn assertion structurally cannot see.
 //     "log_out": "logs/play/scenario.json" }            // optional: write the per-turn trace
 static int RunScenario(const std::filesystem::path& scenario_path)
 {
@@ -3302,10 +3371,17 @@ static int RunScenario(const std::filesystem::path& scenario_path)
 
     // Resolve a full Card (P/T, cost, types, keywords) from its name -- the definition's own card, the
     // same object play/cast copies onto a Permanent. Placeholder-by-name would be 0/0 with no cost.
-    auto make_card = [](const std::string& name) -> Card {
+    // Card::m_number is the engine's per-INSTANCE identity: an Equip names its Equipment and host by
+    // number, an Aura its target, the free-cast bank its slot. The definition's card carries 0, so
+    // building every scenario card from it gave the whole board the SAME number -- and the Equip
+    // enumeration's "never equip an Equipment to itself" guard (equipment number == host number)
+    // then rejected every pair, so NO equip line existed in any fixture. Hand out distinct numbers
+    // in construction order (battlefield, then hand, then library) so a fixture can express one.
+    int next_num = 1;
+    auto make_card = [&next_num](const std::string& name) -> Card {
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         if (!d) { throw std::runtime_error("scenario: unknown card \"" + name + "\""); }
-        Card c = d->card; c.RehashName(); return c;
+        Card c = d->card; c.m_number = next_num++; c.RehashName(); return c;
     };
 
     GameState state;
@@ -3345,10 +3421,48 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     }
     catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 2; }
 
+    // Optional LINE assertion: reconcile a hand-assembled main-phase line against the model on this
+    // exact board (TurnSolver::CheckLine -- the same path the play viewer and --validate-line use).
+    // This is the only way to regression-guard a line the SEARCH will not choose on its own: against
+    // a passive goldfish an extra do-nothing permanent is worth nothing, so a fixture asserting only
+    // a win turn cannot tell "the line is legal and offered" from "the line does not exist". Issue 6
+    // (the hasted-dork mana unlock) is exactly that shape. Runs on the board as authored -- no untap
+    // or draw step -- which is what makes it a deterministic statement about THIS position.
+    if (j.contains("validate_line"))
+    {
+        GameState s = state;
+        s.turn_number = turn;                 // the main phase OF `turn`, not the step into it
+        TurnSolver::LineSpec  spec = ParseLineSpec(j.at("validate_line").get<std::string>());
+        TurnSolver::LineCheck chk  = TurnSolver::CheckLine(s, /*is_pre_combat=*/true, spec);
+        using Vd = TurnSolver::LineCheck::Verdict;
+        const char* got =
+            chk.verdict == Vd::Accept             ? "accept" :
+            chk.verdict == Vd::Choose             ? "choose" :
+            chk.verdict == Vd::LegalNotEnumerated ? "legal_not_enumerated" :
+            chk.verdict == Vd::Unsupported        ? "unsupported" :
+                                                    "illegal";
+        const std::string want = j.value("expect_verdict", std::string("accept"));
+        std::cout << "scenario: validate_line verdict=" << got
+                  << (chk.reason.empty() ? "" : (" reason=\"" + chk.reason + "\"")) << "\n";
+        if (want != got)
+        {
+            std::cout << "scenario: FAIL expected line verdict " << want << ", got " << got << "\n";
+            return 1;
+        }
+        std::cout << "scenario: PASS (line " << got << ")\n";
+    }
+
     const std::map<std::string, std::vector<int>> numbering = GoldFishRunner::BuildCardNumbering(deck);
     GameLogger logger;
     logger.StartGame("scenario", 0, deck_path.stem().string(), state.game_seed, numbering);
     AIEngine   ai(profile, depth, budget_ms);
+    // A scenario must model the SAME turn structure the real goldfish runner does, or a fixture
+    // silently misrepresents any deck whose combat generates resources: without this the post-combat
+    // main is never searched, so a Maelstrom Archangel free cast / Two-Headed Hellkite draw / a
+    // vigilant Faeburrow Elder's "attack first, then tap for mana" line simply do not exist inside
+    // the fixture and it reports a worse turn than the engine really plays. Mirrors
+    // GoldFishRunner::RunGames and the analyzer, which have always set it.
+    ai.SetSearchPostCombat(GoldFishRunner::DeckUsesSecondMain(deck));
     ai.SetLogger(&logger);
     GameEngine engine(ai);
     engine.SetLogger(&logger);

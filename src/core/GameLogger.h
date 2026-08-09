@@ -491,6 +491,20 @@ using LackeyChooser = std::function<int(const GameState& state, int controller, 
                                         const std::vector<Card>& candidates, int heuristic_index)>;
 extern thread_local LackeyChooser* g_play_lackey_chooser;
 
+// Maelstrom Archangel free-cast chooser (--claude-play / viewer). "Whenever this creature deals combat
+// damage to a player, you MAY cast a spell from your hand without paying its mana cost." Modeled as a
+// banked charge spent in the post-combat main (GameState::free_casts_available, user-approved), but it
+// is a ONE-TIME triggered choice, not a standing menu option: offering a "#FREE" variant of every hand
+// card inside the ordinary main-phase plan list let the player cast anything at any point in that
+// phase, and -- worse -- silently collapsed to the PAID variant when they simply queued the card, so
+// the charge evaporated unused. This chooser asks once, exactly like the Lackey put above: WHICH spell
+// (or decline, it is a "may"). `candidates` = the castable-for-free cards in hand, one per hand slot;
+// the chooser returns an index into it, or -1 to decline. Nulled by RevealLogPause for every
+// search/rollout scope, so autonomous play keeps the plan-variant path and stays byte-identical.
+using FreeCastChooser = std::function<int(const GameState& state, int controller,
+                                          const std::vector<Card>& candidates, int heuristic_index)>;
+extern thread_local FreeCastChooser* g_play_free_cast_chooser;
+
 // ---- Human-play ETB tutor chooser (Goblin Matron entering OFF a cast) ----------------------
 // A tutor resolved from a CAST already has its target decided: the search enumerates one plan
 // variant per candidate, so the human picks it in the viewer's variant dialog and PerformTutor
@@ -621,6 +635,7 @@ struct RevealLogPause
     DragonChooser* saved_dragchooser;
     SacTutorChooser* saved_sacttchooser;
     LackeyChooser* saved_lackeychooser;
+    FreeCastChooser* saved_freecastchooser;
     LightPawsChooser* saved_lpchooser;
     FirebreatheChooser* saved_fbchooser;
     CastOrderChooser* saved_cochooser;
@@ -638,6 +653,7 @@ struct RevealLogPause
                        saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser),
                        saved_dragchooser(g_play_dragon_chooser), saved_sacttchooser(g_play_sac_tutor_chooser),
                        saved_lackeychooser(g_play_lackey_chooser),
+                       saved_freecastchooser(g_play_free_cast_chooser),
                        saved_lpchooser(g_play_lightpaws_chooser),
                        saved_fbchooser(g_play_firebreathe_chooser),
                        saved_cochooser(g_play_cast_order_chooser),
@@ -650,7 +666,7 @@ struct RevealLogPause
       g_play_sacrifice_chooser = nullptr;
       g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr;
       g_play_sac_tutor_chooser = nullptr;
-      g_play_lackey_chooser = nullptr;
+      g_play_lackey_chooser = nullptr; g_play_free_cast_chooser = nullptr;
       g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
       g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr;
       g_play_tutor_chooser = nullptr; }
@@ -665,6 +681,7 @@ struct RevealLogPause
                         g_play_replicate_chooser = saved_repchooser; g_play_land_entry_chooser = saved_lechooser;
                         g_play_dragon_chooser = saved_dragchooser; g_play_sac_tutor_chooser = saved_sacttchooser;
                         g_play_lackey_chooser = saved_lackeychooser;
+                        g_play_free_cast_chooser = saved_freecastchooser;
                         g_play_lightpaws_chooser = saved_lpchooser;
                         g_play_firebreathe_chooser = saved_fbchooser;
                         g_play_cast_order_chooser = saved_cochooser;

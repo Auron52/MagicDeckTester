@@ -1545,6 +1545,62 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 { s.insert(a.card_name); } } }
             return s;
         };
+        // MAELSTROM ARCHANGEL free cast -- a ONE-TIME triggered choice, asked before the plan menu.
+        // The trigger is "you MAY cast a spell from your hand without paying its mana cost" on combat
+        // damage; the approved model banks a charge (free_casts_available) and spends it in the
+        // post-combat main, because against a passive opponent nothing happens in between. What it
+        // must NOT do is behave like a standing menu option: offering a #FREE variant of every hand
+        // card throughout the phase let the player cast anything at any moment, and when they simply
+        // queued a card the paid and free variants shared a signature so the dedup kept the PAID one
+        // and the charge silently evaporated. So ask once, here, exactly like the Goblin Lackey put:
+        // which spell, or decline. The chosen cast is applied through the ordinary commit path
+        // (ApplyPlan on the enumerated single-action free plan) so ETBs/triggers/logging are the real
+        // ones, and the bank is zeroed either way -- the trigger resolves once. Afterwards
+        // free_casts_available is 0, so no #FREE variants reach the plan menu at all.
+        //
+        // Human play only (this whole branch is use_external && !m_in_rollout, and the chooser is
+        // nulled by RevealLogPause everywhere else), so the autonomous search keeps the plan-variant
+        // path and every deck without a live bank is byte-identical.
+        if (!is_pre_combat_main && state.free_casts_available > 0 && g_play_free_cast_chooser)
+        {
+            // One enumerated plan per castable hand card, each a single free CastFromHand.
+            std::vector<TurnSolver::Plan> fc_plans = TurnSolver::EnumerateMainPlans(state, is_pre_combat_main);
+            std::vector<int>  fc_idx;      // plan index per candidate
+            std::vector<Card> fc_cards;    // the hand card each one casts
+            for (size_t pi = 0; pi < fc_plans.size(); ++pi)
+            {
+                const TurnSolver::Plan& fp = fc_plans[pi];
+                if (!fp.land_to_play.empty() || fp.actions.size() != 1) { continue; }
+                const Action& fa = fp.actions[0];
+                if (!fa.free_cast || fa.kind != Action::Kind::CastFromHand) { continue; }
+                if (fa.hand_index < 0
+                    || fa.hand_index >= static_cast<int>(state.ActivePlayer().hand.size())) { continue; }
+                const Card& hc = state.ActivePlayer().hand[fa.hand_index];
+                bool dup = false;   // one entry per CARD; sub-decisions stay the plan menu's job
+                for (const Card& seen : fc_cards) { if (seen.m_number == hc.m_number) { dup = true; break; } }
+                if (dup) { continue; }
+                fc_idx.push_back(static_cast<int>(pi));
+                fc_cards.push_back(hc);
+            }
+            if (!fc_cards.empty())
+            {
+                // Default = the highest mana value (the charge is worth most on what you could least
+                // afford), mirroring the Lackey put's highest-MV heuristic.
+                int heur = 0, best_mv = -1;
+                for (size_t ci = 0; ci < fc_cards.size(); ++ci)
+                {
+                    const CardDefinition* cd = CardDatabase::Instance().LookupCached(fc_cards[ci]);
+                    const int mv = cd ? cd->card.m_mana_cost.ManaValue() : 0;
+                    if (mv > best_mv) { best_mv = mv; heur = static_cast<int>(ci); }
+                }
+                const int picked = (*g_play_free_cast_chooser)(state, state.active_player_index,
+                                                               fc_cards, heur);
+                if (picked >= 0 && picked < static_cast<int>(fc_idx.size()))
+                { TurnSolver::ApplyPlan(state, fc_plans[fc_idx[picked]], is_pre_combat_main); }
+            }
+            state.free_casts_available = 0;   // the trigger resolved (cast or declined) -- once only
+        }
+
         std::set<std::string> prev_inplay;  // untapped in-play sac sources before the last applied plan
         bool drew_last = false;             // did the last applied plan draw (library shrank)?
         for (int seg = 0; seg < 64; ++seg)
@@ -2588,6 +2644,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // the trailing sac loop skips them so they are not double-cast. Empty unless a Spectacle
     // enabler is hoisted below.
     std::set<size_t> spec_hoisted_sac;
+    // MANA-UNLOCK equip -- executor mirror of ApplyPlanDirect (lockstep, same two functions): a
+    // haste-granting Equipment onto a still-locked mana dork is what pays for a later cast in this
+    // plan, so it fires the moment both pieces are on the battlefield rather than in the trailing
+    // equip pass below. Once up front (both pieces may already be out) and once after each cast.
+    // The reserve scope is the other half -- it stops the enabler casts from spending the payoff's
+    // scarce colour before the unlock lands. Both no-ops for every plan without that pairing.
+    // See TurnSolver::ApplyManaUnlockEquips / ::ManaUnlockColorReserve.
+    PlanSourceReserveScope _unlock_reserve(TurnSolver::ManaUnlockColorReserve(state, plan.actions));
+    auto fire_unlock = [&]() { TurnSolver::ApplyManaUnlockEquips(state, plan.actions); };
+    fire_unlock();
     // Cast-ordering search (C): a committed plan with searched_order set carries an
     // EXPLICIT interleaving the search scored (e.g. enabler/destroy-all-payload rebuild);
     // replay the non-sacrifice hand casts in plan.actions VECTOR ORDER so the executor
@@ -2599,7 +2665,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -2631,7 +2697,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
             && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
         }
     }
     // Spectacle hoist (mirror of ApplyPlanDirect): a sac-land damage source (Shard Volley) would
@@ -2653,7 +2719,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
             spec_hoisted_sac.insert(ai);
         }
     }
@@ -2666,7 +2732,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
                  && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -2696,7 +2762,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const Action& a = plan.actions[oi];
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-        cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now();
+        cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
     }
     }
     }
@@ -2706,7 +2772,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now(); }
+        { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now(); fire_unlock(); }
     }
     for (const Action& a : plan.actions)
     {
@@ -2773,9 +2839,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         else if (a.kind == Action::Kind::Equip)
         {
-            // Lightning Greaves (executor mirror).
+            // Lightning Greaves (executor mirror). Skip one the mana-unlock hoist already fired
+            // mid-casts -- it is attached to this exact host already, so re-firing would pay the
+            // equip cost a second time (mirrors ApplyPlanDirect).
             ManaPool avail = AvailableManaPool(state);
-            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            if (!EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
+                && TapForCost(state, a.cost, avail, /*for_creature=*/false))
             { ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
         }
         else if (a.kind == Action::Kind::ActivateLoyalty)

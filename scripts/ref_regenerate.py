@@ -29,13 +29,25 @@ _spec.loader.exec_module(vpc)
 
 
 def semantic_line(ref):
-    """(turn, land, sorted casts) of every chosen main-phase plan -- the human's line."""
+    """(turn, land, sorted casts) of every chosen main-phase plan -- the human's line.
+
+    A Maelstrom Archangel free cast is normalised into the SAME shape whichever way it was
+    recorded. It used to be a `#FREE` variant inside the main-phase plan list, so an older
+    reference has it as an ordinary main_phase cast; it is now its own one-time `free_cast`
+    decision. Without this the two forms compare as different lines and a faithful regeneration
+    is rejected for "changing" a line it actually preserved exactly.
+    """
     out = []
     for d in ref.get("decisions", []):
         dec = d.get("decision", {})
+        c = d.get("chosen")
+        if dec.get("type") == "free_cast":
+            cands = dec.get("candidates") or []
+            if isinstance(c, int) and 0 <= c < len(cands):
+                out.append((dec.get("turn"), None, (cands[c].get("name"),)))
+            continue
         if dec.get("type") != "main_phase":
             continue
-        c = d.get("chosen")
         plans = dec.get("plans") or []
         if isinstance(c, int) and 0 <= c < len(plans):
             p = plans[c]

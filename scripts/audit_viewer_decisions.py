@@ -109,6 +109,13 @@ MANIFEST = {
     # (WriteLackeyDecisionJson / lackeyPanelHtml), a resolution-time chooser (g_play_lackey_chooser in
     # FireCombatDamageCheatIntoPlay). Heuristic default = highest-MV matching hand card.
     "combat_damage_puts_subtype_from_hand": ("lackey_put", truthy),
+    # Maelstrom Archangel: "you MAY cast a spell from your hand without paying its mana cost" on
+    # combat damage. Was modelled as #FREE plan variants inside the ordinary main-phase menu, which
+    # made a one-time TRIGGER behave like a standing option (castable at any moment in the phase) and
+    # silently lost the charge whenever the paid variant of the same card won CheckLine's dedup. Now
+    # its own `free_cast` type (WriteFreeCastDecisionJson / freeCastPanelHtml + g_play_free_cast_chooser),
+    # asked once at the top of the post-combat main -- same shape as the Lackey put above.
+    "combat_damage_free_cast": ("free_cast", truthy),
     # Echo (Mogg War Marshal {1}{R}, Stingscourger {3}{R}): at upkeep, pay the echo cost OR sacrifice --
     # a real human choice -> its own `echo` type (WriteEchoDecisionJson / echoPanelHtml), an upkeep
     # chooser (g_play_echo_chooser in AIEngine echo resolution, mirroring vial_charge). Default = pay
@@ -334,7 +341,6 @@ MAINPHASE_PARAMS = {
     "channel_cost":        "Twinshot Sniper Channel = a from-HAND {1}{R}-discard activation = a main_phase plan action (Channel action)",
     "tap_creates_tokens_per_controlled_subtype": "Krenko {T}: make X Goblins = a main_phase tap activation (TapForTokens action)",
     # --- FiveColour: activations / choices the search enumerates as main_phase plan variants ---
-    "combat_damage_free_cast": "Maelstrom Archangel free cast: banked charge -> #FREE plan variants (one per castable hand card); WHICH card = the plan pick; banking approved w/ caveat (user 2026-08-06)",
     "gy_land_exile_mana": "Deathrite land-exile mana activation = a main_phase plan action (DRE#); which land = fungible-fuel heuristic sub-choice (disclosed 6a)",
     "gy_exile_instant_sorcery_drain": "Deathrite instant/sorcery-exile drain activation = a main_phase plan action (DRE#); which card = fungible (disclosed 6a)",
     "gy_exile_creature_lifegain": "Deathrite creature-exile lifegain activation = a main_phase plan action (DRE#); which card = fungible (disclosed 6a)",
