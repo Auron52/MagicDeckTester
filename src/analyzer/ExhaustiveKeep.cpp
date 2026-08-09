@@ -2087,6 +2087,13 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // Always fuses when applicable (the separate-Pass-A opt-out MTG_KEEP_NO_SUB_FUSE is retired).
     // run_batch's whole-batch one-thread accumulation is scheduling-independent, so fusing is byte-identical.
     const bool fuse_sub = continuous && !sub_floor;
+    // Sub_floor FUSION: the ADAPTIVE sub-refine (fast/keep-only/change-detect) also runs INSIDE the
+    // continuous size-7 pool -- producer-driven waves fed as kind-2 tasks, concurrent with the size-7
+    // floor -- so no barrier strands cores before the floor. Byte-identical to the old run_refine_waves
+    // barrier: the sub_only wave marking reads only sub-table V/cnt + Dopt[1..M] + sub vg[m>=1], all
+    // size-7-independent, and run_batch is deterministic on (seed,r,w,pd) (validated byte-identical +
+    // resume-correct on Slivers). Unconditional now (the run_refine_waves barrier is deleted).
+    const bool fuse_subfloor = continuous && sub_floor && !cfg.recommend_only;
     std::vector<Task> fused_sub_tasks;                 // sub-cap tasks handed to the continuous pool
     {   // Pass A: size-7 to the floor; sub-tables to the floor (keep-only) or straight to the cap.
         std::vector<Task> tasks;
@@ -2230,83 +2237,92 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // continuous size-7 freeze can then gate against an exact, fixed threshold.
     int refine_waves = 0;
     long long refined_rollouts = 0;
-    auto run_refine_waves = [&](bool sub_only)
+
+    // ---- fuse_subfloor helpers (producer-driven sub-refine, concurrent with the size-7 floor) --------
+    // Sub-only recompute (skip size-7 tables[0]): the fused sub-refine runs WHILE the pool folds size-7,
+    // so it must never touch size-7 accumulators/V (the pool owns those). Identical to recompute() on the
+    // sub-tables. Held under acc_mtx to stay consistent with a concurrent journal commit (run_batch).
+    auto recompute_sub = [&]()
     {
-        const double SQRT2 = 1.4142135623730951;
-        for (;;)
+        std::lock_guard<std::mutex> ak(acc_mtx);
+        for (int H = HAND - 1; H >= min_size; --H)
         {
-            const std::array<std::vector<double>, 2> Dopt = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) };
-            // Pooled win-turn variance per table per pd -- the shrink target for the stop gate (variance
-            // scales with hand size, so it is per-table). Recomputed each wave; cheap vs the rollouts.
-            std::vector<std::array<double, 2>> vg(tables.size(), { 0.0, 0.0 });
-            for (int H = HAND; H >= min_size; --H)
-            {
-                const SizeTable& t = tables[HAND - H]; std::array<long long, 2> ng = { 0, 0 };
-                for (std::size_t i = 0; i < t.comps.size(); ++i)
-                    for (int pd = 0; pd < 2; ++pd)
-                    { const long long c = t.cnt[i][pd];
-                      if (c > 1) { const double mn = t.V[i][pd];
-                                   vg[HAND - H][pd] += std::max(0.0, t.sumsq[i][pd] / c - mn * mn); ++ng[pd]; } }
-                for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[HAND - H][pd] /= ng[pd]; } }
-            }
-            // Mark cells to top up this wave, keyed (tableIdx = HAND-H, cellIdx, pd) so a sub-cell that is
-            // the argmin for several hands is marked once.
-            std::set<std::array<int, 3>> mark;
-            for (int pd = 0; pd < 2; ++pd)
-                for (std::size_t i = 0; i < H7.comps.size(); ++i)
+            SizeTable& t = tables[HAND - H];
+            for (std::size_t i = 0; i < t.comps.size(); ++i)
+                for (int pd = 0; pd < 2; ++pd)
                 {
-                    // m=0: size-7 flip gate. Skipped in sub_only mode (the continuous pool owns size-7).
-                    // Pruned (frozen) or change-detection-RESOLVED cells are never refined.
-                    if (!sub_only && !prune.frozen7[i][pd] && !pc.resolved[0][i][pd] && H7.cnt[i][pd] < r_max)
-                    {
-                        const double se = gate_se(H7, static_cast<int>(i), pd, vg[0][pd]);
-                        const double d  = std::abs(H7.V[i][pd] - Dopt[pd][1]);
-                        const double flip = (se > 0) ? 0.5 * std::erfc(d / (se * SQRT2)) : (d == 0 ? 0.5 : 0.0);
-                        if (flip > cfg.flip_eps) { mark.insert({ 0, static_cast<int>(i), pd }); }
-                    }
-                    // m>=1: the argmin sub-cell is needed unless h is a confident mulligan at m.
-                    for (int m = 1; m <= cfg.max_mull; ++m)
-                    {
-                        const int arg = ArgminSub(tables, K, H7.comps[i], m, pd);
-                        if (arg < 0) { continue; }
-                        if (pc.resolved[m][arg][pd]) { continue; }       // change-detection: unmoved -> prior
-                        const SizeTable& t = tables[m];               // size-(7-m) table
-                        if (t.cnt[arg][pd] >= r_max) { continue; }
-                        if (m == cfg.max_mull) { mark.insert({ m, arg, pd }); continue; }   // terminal: always
-                        // With bottoming enabled the sub-table also serves the argmin (which subhand to
-                        // keep), which needs the full sub-table accurate -- so skip the confident-mull
-                        // shortcut and drive every sub-cell to the cap. Keep-only (bottoming off) profiles
-                        // may skip confident-mulligan sub-cells (their value is never read via min).
-                        const double kv  = t.V[arg][pd];              // = KeepVal(h,m)
-                        const double thr = Dopt[pd][m + 1];
-                        const double se  = gate_se(t, arg, pd, vg[m][pd]);
-                        const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
-                                                     : (kv == thr ? 0.5 : 0.0);
-                        const bool confident_mull = (!cfg.bottoming_enabled || cfg.adaptive_bottom)
-                                                  && (kv - thr > 0.0) && (flip <= cfg.flip_eps);
-                        if (!confident_mull) { mark.insert({ m, arg, pd }); }
-                    }
+                    const long long c = t.cnt[i][pd];
+                    if (c <= 0) { continue; }
+                    const double mean = t.sum[i][pd] / c;
+                    const double var  = c > 1 ? std::max(0.0, t.sumsq[i][pd] / c - mean * mean) : 0.0;
+                    t.V[i][pd]  = mean;
+                    t.se[i][pd] = c > 1 ? std::sqrt(var / c) : 0.0;
                 }
-            if (mark.empty()) { break; }
-            std::vector<Task> tasks;
-            tasks.reserve(mark.size());
-            for (const std::array<int, 3>& mk : mark)
-            {
-                const int H_idx = mk[0], arg = mk[1], pd = mk[2];
-                const long long c   = tables[H_idx].cnt[arg][pd];
-                const long long add = std::min<long long>(cfg.r_batch, r_max - c);
-                if (add <= 0) { continue; }
-                tasks.push_back({ work_idx[H_idx][arg], pd, c, c + add });
-                refined_rollouts += add;
-            }
-            if (tasks.empty()) { break; }
-            const std::string wlabel = std::string(sub_only ? "sub-refine-wave-" : "refine-wave-")
-                                     + std::to_string(refine_waves + 1);
-            process_tasks(tasks, wlabel.c_str());
-            recompute();
-            apply_prior_override();   // recompute derives V from fresh accumulators -> restore prior on resolved cells
-            ++refine_waves;
-            // (sub-table cells are journaled per-commit via run_batch; no full-raw snapshot checkpoint.)
+        }
+    };
+    // Sub-only prior override (skip size-7): the size-7 change-detection/carry override is the pool's
+    // concern (compute_refs would clobber a size-7 override set here anyway); this restores only sub-cell
+    // prior values, byte-identical to apply_prior_override() on the sub-tables. Inert unless change_detect.
+    auto apply_prior_override_sub = [&]()
+    {
+        if (!pc.change_detect) { return; }
+        for (int H = HAND - 1; H >= min_size; --H)
+        {
+            SizeTable& t = tables[HAND - H];
+            for (std::size_t i = 0; i < t.comps.size(); ++i)
+                for (int pd = 0; pd < 2; ++pd)
+                    if (pc.resolved[HAND - H][i][pd]) { t.V[i][pd] = pc.pri_V[HAND - H][i][pd]; }
+        }
+    };
+    // Compute ONE adaptive sub-refine wave's tasks (sub_only): the argmin sub-cells whose keep decision
+    // could still flip, each bumped by r_batch toward the cap. Mirrors the sub_only branch of the wave
+    // loop below EXACTLY, but skips size-7 (the vg[0] pool + the m=0 gate) -- both unused for sub-cells --
+    // so it never reads size-7 accumulators and is safe to run concurrent with the size-7 floor. Returns
+    // the tasks in `out` (empty => the sub-tables have converged). refined_rollouts is bumped as marked.
+    auto compute_sub_wave_tasks = [&](std::vector<Task>& out)
+    {
+        out.clear();
+        const double SQRT2 = 1.4142135623730951;
+        const std::array<std::vector<double>, 2> Dopt = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) };
+        std::vector<std::array<double, 2>> vg(tables.size(), { 0.0, 0.0 });
+        for (int H = HAND - 1; H >= min_size; --H)   // skip size-7: vg[0] is unused in sub_only and reading it races the pool
+        {
+            const SizeTable& t = tables[HAND - H]; std::array<long long, 2> ng = { 0, 0 };
+            for (std::size_t i = 0; i < t.comps.size(); ++i)
+                for (int pd = 0; pd < 2; ++pd)
+                { const long long c = t.cnt[i][pd];
+                  if (c > 1) { const double mn = t.V[i][pd];
+                               vg[HAND - H][pd] += std::max(0.0, t.sumsq[i][pd] / c - mn * mn); ++ng[pd]; } }
+            for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[HAND - H][pd] /= ng[pd]; } }
+        }
+        std::set<std::array<int, 3>> mark;
+        for (int pd = 0; pd < 2; ++pd)
+            for (std::size_t i = 0; i < H7.comps.size(); ++i)
+                for (int m = 1; m <= cfg.max_mull; ++m)
+                {
+                    const int arg = ArgminSub(tables, K, H7.comps[i], m, pd);
+                    if (arg < 0) { continue; }
+                    if (pc.resolved[m][arg][pd]) { continue; }
+                    const SizeTable& t = tables[m];
+                    if (t.cnt[arg][pd] >= r_max) { continue; }
+                    if (m == cfg.max_mull) { mark.insert({ m, arg, pd }); continue; }
+                    const double kv  = t.V[arg][pd];
+                    const double thr = Dopt[pd][m + 1];
+                    const double se  = gate_se(t, arg, pd, vg[m][pd]);
+                    const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
+                                                 : (kv == thr ? 0.5 : 0.0);
+                    const bool confident_mull = (!cfg.bottoming_enabled || cfg.adaptive_bottom)
+                                              && (kv - thr > 0.0) && (flip <= cfg.flip_eps);
+                    if (!confident_mull) { mark.insert({ m, arg, pd }); }
+                }
+        for (const std::array<int, 3>& mk : mark)
+        {
+            const int H_idx = mk[0], arg = mk[1], pd = mk[2];
+            const long long c   = tables[H_idx].cnt[arg][pd];
+            const long long add = std::min<long long>(cfg.r_batch, r_max - c);
+            if (add <= 0) { continue; }
+            out.push_back({ work_idx[H_idx][arg], pd, c, c + add });
+            refined_rollouts += add;
         }
     };
 
@@ -2385,17 +2401,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // its own confidence crosses (flip<=flip_eps / low-prob), evaluated inside the fold on the fixed
     // refs. A cell's freeze level is a pure function of its own rollouts + the fixed refs, so two runs are
     // byte-identical regardless of scheduling timing, and no cell waits on any other -> cores stay full
-    // to the last live cell. Sub-tables are already at their final values before Dopt is fixed: capped by
-    // Pass A (bottoming-on) or converged by run_refine_waves(sub_only) just below (sub_floor cases).
+    // to the last live cell. Sub-tables reach their final values before Dopt is fixed: capped by Pass A
+    // (bottoming-on / fuse_sub) or, for the sub_floor cases, converged by the producer-driven fused
+    // sub-refine below (fuse_subfloor), which runs concurrent with the size-7 floor -- so the floor gate
+    // (sub_converged) holds Dopt back until they are final. recommend is a floor-only scout (no sub-refine).
     if (continuous)
     {
-        // Converge sub-tables first so Dopt_ref (fixed after the size-7 floor below) is exact. Dopt is
-        // one-directional (reads only sub-tables), so this needs no size-7 samples. sub_floor is false for
-        // bottoming-on decks (Pass A already capped the sub-tables) -> skipped, and the validated
-        // size-7-only path stays byte-identical. Barrier-bound, but sub-tables are small vs size-7.
-        // recommend is a floor-only scout: skip sub-table convergence (it only needs every cell floored
-        // once, not the sub-tables driven to the cap) so the probe stays cheap.
-        if (sub_floor && !cfg.recommend_only) { run_refine_waves(true); }
         const double SQRT2 = 1.4142135623730951;
         SizeTable& S7 = tables[0];
         const int NC  = static_cast<int>(S7.comps.size());
@@ -2440,14 +2451,19 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
         std::mutex fold_mtx;                         // guards the fold (sum/sumsq/cnt + slot/have + frozen7)
         std::mutex qmtx; std::condition_variable q_ne, q_nf;
-        // Task = {kind, x, pd, y}: kind 0 size-7 rollout {i, pd, r}; kind 1 sub-cap batch {w, pd, r1}
-        // (fusion filler -> worker runs run_batch(w,pd,0,r1), scheduling-independent). kind 1 only in fuse_sub.
-        std::deque<std::array<long long, 4>> q;
+        // Task = {kind, x, pd, a, b}: kind 0 size-7 rollout {i, pd, r, 0}; kind 1 fuse_sub sub-cap batch
+        // {w, pd, 0, r1}; kind 2 fuse_subfloor adaptive sub-wave batch {w, pd, have, target}. kinds 1/2
+        // run run_batch(w,pd,a,b) (a whole batch on one thread, self-committing), scheduling-independent.
+        std::deque<std::array<long long, 5>> q;
         const std::size_t QCAP = static_cast<std::size_t>(8 * nthreads);
         std::atomic<long long> in_flight{ 0 };
         // Sub-cap tasks still to complete (fusion): the size-7 refs cannot be fixed until every sub-table is
         // at the cap (Dopt reads sub-table V). Zero unless fuse_sub. Decremented after each run_batch commits.
         std::atomic<long long> sub_remaining{ static_cast<long long>(fused_sub_tasks.size()) };
+        // fuse_subfloor: rollouts still outstanding in the CURRENT producer-driven sub-refine wave. The
+        // producer computes the next wave only once this hits 0 (the wave's sub-cell commits are all in),
+        // so its recompute_sub/mark never races a kind-2 worker; meanwhile the size-7 floor fills cores.
+        std::atomic<long long> sub_wave_pending{ 0 };
         std::atomic<bool> producing{ true };
         std::atomic<bool> refs_ready{ false };       // false = floor phase (no freezing); true = refine phase
         std::mutex prod_mtx; std::condition_variable prod_cv;
@@ -2485,7 +2501,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             ai.SetSearchPostCombat(second_main);
             for (;;)
             {
-                std::array<long long, 4> task;
+                std::array<long long, 5> task;
                 {
                     std::unique_lock<std::mutex> lk(qmtx);
                     q_ne.wait(lk, [&]{ return !q.empty() || !producing.load(); });
@@ -2493,10 +2509,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     task = q.front(); q.pop_front();
                 }
                 q_nf.notify_one();
-                if (task[0] == 1)   // sub-cap batch (fusion filler): whole batch on one thread, self-committing
+                if (task[0] >= 1)   // sub-table batch (fusion filler): whole batch on one thread, self-committing
                 {
-                    run_batch(ai, static_cast<int>(task[1]), static_cast<int>(task[2]), 0, task[3]);
-                    sub_remaining.fetch_sub(1);
+                    run_batch(ai, static_cast<int>(task[1]), static_cast<int>(task[2]), task[3], task[4]);
+                    if (task[0] == 1) { sub_remaining.fetch_sub(1); }     // fuse_sub fixed-cap batch
+                    else              { sub_wave_pending.fetch_sub(1); }  // fuse_subfloor adaptive wave batch
                     in_flight.fetch_sub(1);
                     prod_cv.notify_one();
                     continue;
@@ -2673,6 +2690,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
         long long fed_total = 0, last_report = 0;
         bool any_fed = false;
+        // fuse_subfloor: the producer-driven adaptive sub-refine converges when compute_sub_wave_tasks
+        // yields no more marks. Non-fused runs start converged -- their sub-tables are already final
+        // (fuse_sub caps them via the kind-1 filler; recommend is floor-only and skips the sub-refine).
+        bool sub_converged = !fuse_subfloor;
         auto feed_upto = [&](int i, int pd, long long limit)   // enqueue size-7 rollouts [fed, limit)
         {
             long long& f = fed[static_cast<std::size_t>(i) * 2 + pd];
@@ -2680,7 +2701,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             {
                 { std::unique_lock<std::mutex> lk(qmtx);
                   q_nf.wait(lk, [&]{ return q.size() < QCAP; });
-                  q.push_back({ 0, static_cast<long long>(i), static_cast<long long>(pd), f }); }
+                  q.push_back({ 0, static_cast<long long>(i), static_cast<long long>(pd), f, 0 }); }
                 q_ne.notify_one();
                 ++f; in_flight.fetch_add(1); ++fed_total; any_fed = true;
             }
@@ -2695,10 +2716,35 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 const Task& st = fused_sub_tasks[sub_cursor];
                 { std::unique_lock<std::mutex> lk(qmtx);
                   q_nf.wait(lk, [&]{ return q.size() < QCAP; });
-                  q.push_back({ 1, static_cast<long long>(st.w), static_cast<long long>(st.pd), st.r1 }); }
+                  q.push_back({ 1, static_cast<long long>(st.w), static_cast<long long>(st.pd), 0, st.r1 }); }
                 q_ne.notify_one();
                 ++sub_cursor; in_flight.fetch_add(1); ++fed_total; any_fed = true;
             }
+        };
+        // fuse_subfloor: advance the adaptive sub-refine ONE wave at a time, driven from the producer so it
+        // shares the pool with the size-7 floor (kind-2 tasks) -- byte-identical to the run_refine_waves
+        // barrier, but the size-7 floor fills cores during each wave's serial recompute/mark instead of the
+        // barrier stranding them. Only steps when the current wave has fully committed (sub_wave_pending==0),
+        // so recompute_sub/compute_sub_wave_tasks never race a kind-2 worker; size-7 workers never touch the
+        // sub-tables it reads. No-op unless fuse_subfloor.
+        auto sub_refine_step = [&]()
+        {
+            if (sub_converged || sub_wave_pending.load() != 0) { return; }
+            recompute_sub();               // fold the just-finished wave's sub-cell samples into V/se
+            apply_prior_override_sub();     // change-detection: restore prior V on resolved sub-cells
+            std::vector<Task> wave;
+            compute_sub_wave_tasks(wave);   // next wave's argmin sub-cells (empty => converged)
+            if (wave.empty()) { sub_converged = true; return; }
+            sub_wave_pending.store(static_cast<long long>(wave.size()));
+            for (const Task& st : wave)
+            {
+                { std::unique_lock<std::mutex> lk(qmtx);
+                  q_nf.wait(lk, [&]{ return q.size() < QCAP; });
+                  q.push_back({ 2, static_cast<long long>(st.w), static_cast<long long>(st.pd), st.r0, st.r1 }); }
+                q_ne.notify_one();
+                in_flight.fetch_add(1); ++fed_total; any_fed = true;
+            }
+            ++refine_waves;
         };
         for (;;)
         {
@@ -2719,11 +2765,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // FUSION filler: drain sub-cap batch tasks into the pool (overlaps the size-7 floor with
                 // the sub-table capping the old Pass A did before the pool). No-op unless fuse_sub.
                 feed_sub();
-                // Floor pass 2 (speculation filler): while the floor phase is INCOMPLETE for EITHER reason
-                // (a size-7 cell still finishing r0, OR sub-tables still capping) -> feed already-floored
-                // size-7 cells up to r0+spec_budget so idle cores stay busy. No freezing yet; compute_refs
-                // reconciles this speculation. This is what keeps cores full during the sub-cap tail.
-                const bool floor_incomplete = any_below_floor || sub_remaining.load() > 0;
+                // fuse_subfloor: advance the adaptive sub-refine one wave when its prior wave has committed.
+                sub_refine_step();
+                // Floor pass 2 (speculation filler): while the floor phase is INCOMPLETE for ANY reason
+                // (a size-7 cell still finishing r0, sub-tables still capping, or the fused sub-refine not
+                // yet converged) -> feed already-floored size-7 cells up to r0+spec_budget so idle cores
+                // stay busy. No freezing yet; compute_refs reconciles this speculation. This is what keeps
+                // cores full during the sub-cap / sub-refine tail.
+                const bool floor_incomplete = any_below_floor || sub_remaining.load() > 0 || !sub_converged;
                 if (floor_spec && floor_incomplete)
                 {
                     for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
@@ -2755,11 +2804,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // fold_mtx). any_live guards the all-frozen tail (min_live_c stays r_max -> harmless).
                 if (any_live) { recompute_vg(min_live_c); }
             }
-            // Floor complete = every size-7 cell folded to >= r0 AND every sub-cap batch done (fusion:
-            // Dopt reads sub-table V, so refs cannot be fixed until the sub-tables are final). -> fix refs +
-            // reconcile floor-tail speculation + publish refs_ready (inside compute_refs, under fold_mtx).
-            // NO size-7 in_flight wait: speculation still in flight is harmless (reconcile handles it).
-            if (!refine && !any_below_floor && sub_remaining.load() == 0)
+            // Floor complete = every size-7 cell folded to >= r0 AND every sub-cap batch done AND the fused
+            // sub-refine converged (Dopt reads sub-table V, so refs cannot be fixed until the sub-tables are
+            // final). -> fix refs + reconcile floor-tail speculation + publish refs_ready (inside
+            // compute_refs, under fold_mtx). NO size-7 in_flight wait: speculation still in flight is
+            // harmless (reconcile handles it).
+            if (!refine && !any_below_floor && sub_remaining.load() == 0 && sub_converged)
             {
                 compute_refs();     // fixes Dopt/vg, reconciles speculation, sets refs_ready
                 journal_refs();     // persist the fixed refs (byte-identical resume marker)
@@ -2815,9 +2865,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // (The post-floor GEN-TIME PROJECTION + degenerate-cell diagnostic + --gen-mulligan recommend
     // early-stop now fire inside the continuous pool at floor-complete, via floor_report_maybe_stop.)
 
-    // (The wave whole-table refine -- run_refine_waves(false) -- and its post-floor snapshot are retired:
-    // adaptive is unconditionally continuous, which owns the size-7 floor+refine in its pool above and
-    // persists via the journal. run_refine_waves survives only as the continuous sub-table converger.)
+    // (The wave whole-table/sub-table refine (run_refine_waves) is retired entirely: adaptive is
+    // unconditionally continuous, which owns the size-7 floor+refine AND -- via the producer-driven
+    // fuse_subfloor sub-refine -- the sub-table convergence, all in one pool, persisted via the journal.)
 
     if (adaptive)
     {

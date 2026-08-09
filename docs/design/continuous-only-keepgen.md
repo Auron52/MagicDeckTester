@@ -1,8 +1,10 @@
 # Continuous-only keep-gen — delete the wave/uniform paths and their knobs
 
-**Status:** **IMPLEMENTED 2026-08-08** (footgun removal + `recommend` port + wave-path delete +
-auto-commit-stamp + rolling-vg), on branch `phase-1-2-deck-analyzer`. The **one remaining piece** is
-the `sub_floor` sub-table fusion (delete `run_refine_waves`) — see "Implementation status" below.
+**Status:** **COMPLETE 2026-08-09** on branch `phase-1-2-deck-analyzer`. The 2026-08-08 work landed the
+footgun removal + `recommend` port + wave-path delete + auto-commit-stamp + rolling-vg; the final piece —
+the `sub_floor` sub-table fusion (**delete `run_refine_waves`**) — landed 2026-08-09 as the producer-driven
+`fuse_subfloor` path (see "Implementation status" below). There is now **one execution path, zero
+execution knobs**, and `run_refine_waves` is gone.
 **Goal:** make the *continuous single-queue* keep-gen (`docs/design/adaptive-batched-keepgen.md`,
 SHIPPED 2026-07-24) the **only** execution path, and **delete** the toggle + the now-dead knobs that
 select or tune the old paths. An agent reading the analyzer should not be able to run gen the wrong
@@ -28,17 +30,20 @@ way, and should not have to know a single execution knob to run it right.
   block, so the sidecar's pooling identity is recorded without `MTG_COMMIT`.
 - **Rolling-vg** (`MTG_KEEP_REFS_OFFSET`, default 2; see the section below).
 
-**PENDING** — the `sub_floor` sub-table fusion (the one engineering task). NOTE the `fast`/`complete`
-labels in the older text below were **swapped** relative to the code: in the code
+**DONE (2026-08-09)** — the `sub_floor` sub-table fusion. In the code
 `sub_floor = (adaptive && (!bottoming_enabled || adaptive_bottom)) || change_detect`, so `fuse_sub`
-(`continuous && !sub_floor`) is TRUE only for **`complete`** — which is therefore **already fused**.
-The case still on `run_refine_waves(true)` (a pre-pool barrier) is **`fast`/keep-only/change-detect**
-(`sub_floor == true`). The remaining task is to route *that* adaptive sub-refine through the
-`feed_sub`/kind-1 pool machinery, concurrent with the size-7 floor, then delete `run_refine_waves`. It
-is byte-identical-able (the adaptive sub-refine's marking reads only sub-table V/vg + `Dopt`, which
-read only sub-tables — never size-7 — so running it concurrent with the size-7 floor preserves its
-exact wave sequence). Land it behind a temporary toggle, A/B byte-identical vs the barriered output,
-and only then delete `run_refine_waves`.
+(`continuous && !sub_floor`) was already TRUE for **`complete`** (fused). The case still on the
+`run_refine_waves(true)` pre-pool barrier was **`fast`/keep-only/change-detect** (`sub_floor == true`).
+That adaptive sub-refine now runs producer-driven INSIDE the continuous pool (`fuse_subfloor`),
+concurrent with the size-7 floor, fed as **kind-2** tasks `{2, w, pd, have, target}` (the pool task
+array widened 4→5). The producer advances one wave per `sub_wave_pending==0`, via a shared
+`compute_sub_wave_tasks` (byte-identical to the old barrier's sub_only marking, minus the size-7 vg[0]
++ m=0 gate it never used), a sub-only `recompute_sub`/`apply_prior_override_sub`, and the floor-complete
+gate now also waits on `sub_converged`. `run_refine_waves`, the barrier call, and the temp
+`MTG_KEEP_FUSE_SUBFLOOR` A/B toggle are **deleted**. Validated on Slivers (`adaptive_bottom`, offset=0,
+fixed seed): barrier-OFF == fused-ON == committed-`e164ac0` cell-data byte-identical, and a
+kill-and-resume mid-refine reproduces the uninterrupted raw. So: continuous is a total superset; there
+is no non-continuous path left.
 
 ## Rolling-vg (freeze shrink target re-derived from a completed level)
 
