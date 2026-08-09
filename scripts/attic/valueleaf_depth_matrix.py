@@ -190,9 +190,25 @@ def run_incremental(args):
         print("resumed %d cells from %s" % (sum(1 for c in cells if c["batches"]), state_path))
 
     lock=threading.Lock()
-    for c in cells: c["inflight"]=0; c["submitted"]=c["batches"]
+    for c in cells: c["inflight"]=0; c["inflight_games"]=0; c["next_off"]=c["games"]   # resume cursor: where the completed games end (sizes now vary)
     def target(c): return min(args.reference_target,args.target) if c["intractable"] else args.target
-    def wanted(c): return c["games"] + c["inflight"]*args.batch < target(c)
+    def wanted(c): return c["games"] + c["inflight_games"] < target(c)
+
+    # ADAPTIVE BATCH SIZE. A batch runs its games SERIALLY inside one subprocess, so the batch size is
+    # the granularity of the tail: with 25-game batches and three cells left, the machine ran 3 of 24
+    # cores for FIFTEEN HOURS while each process ground through its 25 games one at a time. Shrink the
+    # batch as the work runs out so there are always at least `workers` pieces to hand out. No knob --
+    # a knob is how it was wrong in the first place.
+    #
+    # This is a MITIGATION, not the design. The right shape is CLAUDE.md's: one `mtg --batch` manifest
+    # per arm, every game of every cell in ONE process pooling across threads, so the phase pays ONE
+    # tail instead of one per subprocess. That needs a `game_index` field the batch manifest does not
+    # have yet (BatchRunner.cpp takes name/deck/profile/games/seed/depth/budget_ms/weight/max_turns/
+    # ignore_play_profile), so it is a src change and is queued behind the value-leaf freeze.
+    def batch_size():
+        rem=sum(max(0,target(c)-c["games"]-c["inflight_games"]) for c in cells)
+        if rem<=0: return args.batch
+        return max(1,min(args.batch,rem//max(1,args.workers)))
     def cell_cap():
         # How many batches of ONE cell may be in flight. Batches are DISJOINT game ranges (offset =
         # submitted*batch), so concurrency within a cell is safe -- and the old one-batch-per-cell
@@ -201,7 +217,7 @@ def run_incremental(args):
         # workers over whatever still needs games.
         n=sum(1 for c in cells if wanted(c))
         if n<=0: return 1
-        return max(1, -(-args.workers // n))
+        return max(1, -(-args.workers // n))   # ceil(workers/n)
     def needs(c):  return wanted(c) and c["inflight"] < cell_cap()
 
     def write_state():
@@ -216,14 +232,15 @@ def run_incremental(args):
     def submit_next():
         cand=[c for c in cells if needs(c)]
         if not cand: return False
-        c=min(cand,key=lambda x:(x["games"]+x["inflight"]*args.batch,x["depth"]))  # breadth-first
-        c["inflight"]+=1
-        off=c["submitted"]*args.batch      # NOT batches: several may be in flight for this cell
-        c["submitted"]+=1
+        c=min(cand,key=lambda x:(x["games"]+x["inflight_games"],x["depth"]))  # breadth-first
+        n=min(batch_size(), max(1, target(c)-c["games"]-c["inflight_games"]))
+        c["inflight"]+=1; c["inflight_games"]+=n
+        off=c["next_off"]                  # per-cell cursor: batches are DISJOINT game ranges even
+        c["next_off"]+=n                   # when their sizes differ, so concurrency stays safe
         deck_file,prof,mt=DECKS[c["deck"]]
-        futs[ex.submit(run_batch,deck_file,mt,c["depth"],c["seed"],off,args.batch,
+        futs[ex.submit(run_batch,deck_file,mt,c["depth"],c["seed"],off,n,
                        c["arm"]=="V",args.value_min_depth,prof,
-                       PROFILES.get(c["deck"]))]=c
+                       PROFILES.get(c["deck"]))]=(c,n)
         return True
 
     while len(futs)<args.workers and submit_next(): pass
@@ -231,11 +248,11 @@ def run_incremental(args):
     while futs:
         done,_=wait(list(futs),return_when=FIRST_COMPLETED)
         for fut in done:
-            c=futs.pop(fut)
+            c,nsub=futs.pop(fut)
             try: lp,wall,p=fut.result()
             except Exception: lp,wall,p=float("nan"),0.0,0
             with lock:
-                c["inflight"]-=1
+                c["inflight"]-=1; c["inflight_games"]-=nsub
                 if p>0 and lp==lp:
                     c["games"]+=p; c["lp_sum"]+=lp; c["batches"]+=1; c["ms"]+=wall
                     if c["first_wall"] is None: c["first_wall"]=wall
