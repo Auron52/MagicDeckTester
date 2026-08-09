@@ -1,0 +1,42 @@
+{
+  "deck": "decks/FiveColour/FiveColour.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "max_turns": 6,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Faeburrow Elder",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Bloom Tender",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Breeding Pool",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Jetmir's Garden",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Deathrite Shaman",
+    "Cosmic Spider-Man"
+  ],
+  "library_filler": "Progenitus",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "log_out": "logs/play/fivecolour_domain_widen.json",
+  "_comment": "KNOWN GAP (2026-08-09), not yet a passing fixture. Two scaling dorks (domain {G,W}) + Breeding Pool + Jetmir's Garden = 6 mana but NO black. Cosmic Spider-Man {W}{U}{B}{R}{G} is payable only via the widening: tap Bloom Tender for {G}, cast Deathrite Shaman {B/G}, the domain gains BLACK, and Faeburrow Elder then taps {W}{B}{G} which with the two lands is exactly WUBRG. The engine casts NOTHING. See docs/design/scaling-source-widening.md."
+}

@@ -380,10 +380,21 @@ static int CountLands(const GameState& state)
 // Colors at least one untapped source can produce (W,U,B,R,G). State-only -- it does not depend
 // on which subset is being tested -- so callers compute it ONCE before the subset-enumeration
 // loop and pass the result to SubsetPayable, instead of re-scanning the battlefield per subset.
+// Repairs the state-only assumption below for a `domain_mana` scaling source -- STAGE 1 of the fix,
+// and DEFAULT OFF, so the tree is byte-identical until the rest of it lands. On its own it changes
+// nothing on the measured reproducer: the flat-pool `mana_ok` test rejects the subset before this
+// gate is ever consulted, and that pool is state-only for the same reason (see
+// docs/design/scaling-source-widening.md). Turning it on alone is therefore not a fix, only a
+// loosened gate -- which is exactly why it does not ship on.
+// Namespace scope: read once per enumeration, not per node.
+static const bool g_domain_widen_gate = EnvOn("MTG_DOMAIN_WIDEN_GATE");
+static bool DomainWidenGateEnabled() { return g_domain_widen_gate; }
+
 static void ComputeAvailableColors(const GameState& state, bool have[5])
 {
     have[0] = have[1] = have[2] = have[3] = have[4] = false;
     int active = state.active_player_index;
+    bool scaling_source = false;         // controls a live "colors among permanents" mana source
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active || p.tapped) { continue; }
@@ -411,6 +422,44 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
         // Empty subtype on every board without the land -> byte-identical.
         if (ScaledManaNetYield(state, *def) > 0)
         { have[0] = have[1] = have[2] = have[3] = have[4] = true; }
+        if (def->params.domain_mana && CanTapNow(p, state.battlefield)) { scaling_source = true; }
+    }
+
+    // SCALING SOURCE WIDENING (domain_mana: Faeburrow Elder / Bloom Tender).
+    //
+    // Everything above is state-only, which is what lets the caller compute it ONCE for every
+    // subset -- and that is exactly wrong for a scaling source. "For each color among permanents you
+    // control" is not a fixed list: a coloured permanent cast EARLIER IN THE SAME PLAN widens it, so
+    // the colours this source can produce depend on the subset after all.
+    //
+    // Measured 2026-08-09 (test/scenarios/fivecolour_domain_widen.json). Board: Faeburrow Elder +
+    // Bloom Tender (domain {G,W}), Breeding Pool, Jetmir's Garden; hand Deathrite Shaman +
+    // Cosmic Spider-Man {W}{U}{B}{R}{G}. The line is exactly payable -- tap Tender for {G}, cast
+    // Deathrite {B/G}, the domain gains BLACK, and the Elder now taps {W}{B}{G} which with the two
+    // lands is precisely WUBRG. The engine cast NOTHING. `have[Black]` was false, so every subset
+    // containing the payoff was rejected as needing a colour "no untapped source can produce at
+    // all". With Deathrite already on the battlefield the same board casts the payoff fine, so the
+    // payment path was never the problem -- only this gate's state-only assumption.
+    //
+    // The gate is a NECESSARY condition (over-approximating can only keep lines, never invent them),
+    // so the repair is to credit what a coloured permanent in hand WOULD contribute once it resolves.
+    // No castability test: a looser necessary condition is still sound, and the genuinely-unpayable
+    // lines fall to the rollout's real payment, which already no-ops them -- the same division of
+    // labour the count/contention cases above rely on. Guarded on actually controlling a live
+    // scaling source, so every deck without one is byte-identical.
+    //
+    // Hand cards are NAME-ONLY placeholders with empty masks, so the colours must be read from the
+    // definition, never from the Card itself (a raw hand HasColor() is always false).
+    if (scaling_source && DomainWidenGateEnabled())
+    {
+        for (const Card& hc : state.players[active].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+            if (!hd) { continue; }
+            if (hd->card.IsInstant() || hd->card.IsSorcery()) { continue; }   // never enters play
+            for (int ci = 0; ci < 5; ++ci)
+            { if (hd->card.HasColor(static_cast<Color>(ci))) { have[ci] = true; } }
+        }
     }
     // Floating mana (turn-scoped reserve) also satisfies colored pips: a floated {U} pays a {U}
     // pip even when no untapped land produces blue. AvailableManaPool already credits floating into the
