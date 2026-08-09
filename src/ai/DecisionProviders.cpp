@@ -6266,7 +6266,7 @@ void FiveColourProvider::ModalSplitCandidates(const GameState& s, const CardDefi
 {
     const int N = def.params.modal_choose_n;
     if (N <= 0) { return; }
-    if (DecisionUnpruned(UnprunedGate::Fetch) || !EnvOn("MTG_FIVEC_UNITE_SPLIT"))
+    if (DecisionUnpruned(UnprunedGate::Fetch) || !EnvOn("MTG_FIVEC_UNITE_SPLIT", true))
     {
         GenericProvider::ModalSplitCandidates(s, def, out);
         return;
@@ -6326,5 +6326,7 @@ void FiveColourProvider::ModalSplitCandidates(const GameState& s, const CardDefi
     // narrowed arm could not see that finish, played Deathrite + Greaves instead, and won on t5.
     // The dominated MIDDLE (S=3,4) is what is safe to cut; the extremes carry the deck's reach.
     for (int k = 0; k <= 2 && k <= N; ++k) { out.push_back(k); }
-    out.push_back(N);
+    // A/B lever: MTG_FIVEC_UNITE_ALLIN=0 drops the all-in from the non-lethal case, which is the
+    // arm that deletes the finish from the lookahead (see above). Default ON.
+    if (EnvOn("MTG_FIVEC_UNITE_ALLIN", true)) { out.push_back(N); }
 }
