@@ -926,3 +926,59 @@ sections claimed. The honest remaining candidates, in order of measured support:
    sized at ~1-3% by the profile above — worth doing, not worth expecting much from.
 2. **Fewer nodes.** 16x is the number that matters. Play-affecting, needs the full A/B and a
    rebaseline, and would invalidate a value-leaf table generated before it.
+
+## Which branches are heaviest (2026-08-09) — one card is 72% of the odometer
+
+`MTG_BRANCH_STATS`, depth 1, 3 games, profile attached. By driver card (biggest option-group):
+
+| driver | calls | sum_odo | share | avg_odo | max_odo |
+|---|---|---|---|---|---|
+| **Unite the Coalition** | 1,831 | **146,482** | **72%** | 80.0 | 672 |
+| Mana Cannons | 987 | 29,908 | 15% | 30.3 | 256 |
+| Two-Headed Hellkite | 277 | 7,968 | 4% | 28.8 | 756 |
+| Deathrite Shaman | 107 | 6,496 | 3% | 60.7 | 128 |
+| Faeburrow Elder | 119 | 4,640 | 2% | 39.0 | 64 |
+| everything else | — | 7,532 | 4% | — | — |
+
+**Unite the Coalition is `{2}{W}{U}{B}{R}{G}` — 7 mana, one of every colour** — and it is modelled as a
+searched split S in [0..5] (the user-approved 2026-08-06 collapse), so it contributes a **6-option
+group**: a 7x multiplier on the whole odometer product.
+
+The user's intuition was right, and the shapes confirm it directly. This is the **first enumeration of
+the game**, on an opening board (Birds of Paradise, Lightning Greaves):
+
+```
+[enum-stats] bound=112 groups=5 [g1 Oko] [g6 Unite the Coalition] [g1 Birds of Paradise]
+                                [g1 Lightning Greaves] [g1 Lightning Greaves(equip)]
+```
+
+112 = 2 x **7** x 2 x 2 x 2. Without the Unite digit it is 16. A seven-mana five-colour instant is
+multiplying turn-one branching by 7x, on a board that cannot produce two colours yet.
+
+### The available trim, honestly sized
+
+A candidate whose OWN `ManaValue` already exceeds `pool_total + best_head` (the most generous budget
+any mana line can produce) can never appear in a payable selection — costs are additive and
+non-negative — so it should never become an odometer digit. That shrinks the **product**, where the
+existing whole-row skip only avoids re-testing a row against every mana line. Soundness guards are the
+ones the row-skip already uses: apply only to payoff-side actions with `gain == 0, gy == 0, block == 0`.
+
+**But it is worth ~0.3%, not 7x.** Stage B row-building is cheap: 65,842 rows/game at roughly 50
+instructions each is ~3.3 M of 943 M Ir. Dropping six sevenths of them saves about what the DFS variant
+saves, and for the same reason — the rows being dropped were already being dropped, just slightly later.
+Do it because it is free and obvious, not because it moves the number.
+
+### Where the 16x actually is
+
+| per game | fivecolour | burn | ratio |
+|---|---|---|---|
+| EnumeratePlans calls (decision points) | 1,239 | 178 | **7.0x** |
+| final plans | 5,695 | 304 | **18.7x** |
+| final plans per call | 4.6 | 1.7 | 2.7x |
+| rollout calls | 2,871 | 179 | 16.0x |
+
+The cost is 7x more decision points, each yielding 2.7x more **payable** plans. Those plans are not
+waste — they pass the exact gate, and each one gets rolled out. Trimming them means dominance pruning
+or better ordering among genuinely castable lines, which is **play-affecting**: a full A/B, a
+rebaseline, and it invalidates any value-leaf table generated before it. There is no version of this
+that is byte-identical.
