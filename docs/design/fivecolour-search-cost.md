@@ -1175,3 +1175,22 @@ land-then-tap line, which is a play bug worth more than any of the performance w
 this deck's whole manabase is built to enable it. Construct the state directly (Bloom Tender untapped,
 a land in hand adding a new colour, a spell castable only with the extra mana) and check whether the
 line is offered, before implementing any prune on top of it.
+
+**And the widening SATURATES** (user): *"usually we will cast something to make them fully active after
+1 or 2 dorks and then turns after they will just tap for all 5 colours."* Once the controlled
+permanents already show every colour the dork can produce, no further play widens anything — the term
+goes to zero and stays there.
+
+That makes the correction nearly free, and it lands on the right side of the cost curve:
+
+- **Test saturation, do not assume it.** Compute the current domain; if it already covers every colour
+  the untapped domain sources can produce, no same-turn play can widen it and the plain
+  `pool_total + best_head` bound is exact.
+- **Otherwise credit the widening optimistically** — `(untapped domain sources) x (colours a playable
+  land could add)`, an over-estimate, so the prune stays sound.
+- **The unsound window is the first two or three turns**, which is exactly where the odometer is
+  smallest and the prune matters least. By the time a call carries 5-8 groups and a 672-position
+  product, the domain is saturated and the correction is a no-op.
+
+So the sequencing is: answer the correctness question first (is the land-then-tap line even offered?),
+then implement the prune with a saturation test, and expect to lose essentially none of its strength.
