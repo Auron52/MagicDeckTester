@@ -1143,3 +1143,35 @@ strongest form of the prune applies unconditionally to this deck.
 (The *bound* is already net-correct: `best_head = max over lines of gain + Tri(gy) - cost`. Only the
 *classification* is gross rather than net. Reclassifying moves a card between stages and so changes
 enumeration order — verify byte-identity on per-game win turns, do not assume it.)
+
+### The hole in "provably lossless": domain dorks scale with what you PLAY this turn
+
+User: *"the dorks on the field (Bloom Tender, Faeburrow Elder) can add more mana based on what we
+play."* This is the case that breaks the naive form of the prune, and it is not covered by any term
+above — it is neither `ritual_float` nor `rock_mana` nor `block`, but `EffectiveProduces` /
+`DomainColors` recomputed live from the battlefield (§3).
+
+**And it is net positive with ONE dork, not several — because the land drop is free.** With a Bloom
+Tender already on board and untapped, playing a land that adds a colour it did not already see gives
+`+1` from the land plus `+1` from the dork's widened domain: **+2 this turn, for no mana**. In a deck
+with 11 fetchlands and a pile of duals/triomes, that is not a corner case, it is the normal curve. So
+the guard cannot be "do we have multiple dorks"; it has to be "can a same-turn PLAY widen a domain
+source".
+
+Consequence for the prune: the bound must be computed over **the plan's land drop as well**, not just
+the current pool. `ManaGateIndex.pool_total` is `AvailableManaPool(state).Total()` — a pre-land
+snapshot — so an emission-time prune keyed on it would drop a spell that the land-then-tap line can
+actually cast. Optimism keeps it sound: bound with the BEST available land drop and the largest domain
+widening it could produce, and only prune what even that cannot afford.
+
+**This bears on correctness, not just speed** — the user's second point: *"sometimes the play is to
+play a rainbow permanent and then cast another with one of these dorks."* Both questions have the same
+root, and it is a single testable one:
+
+> Does the enumerator's mana projection account for a same-turn land drop's effect on domain sources?
+
+If yes, the prune just needs the wider bound. If no, then the engine is *already* missing the
+land-then-tap line, which is a play bug worth more than any of the performance work in this file —
+this deck's whole manabase is built to enable it. Construct the state directly (Bloom Tender untapped,
+a land in hand adding a new colour, a spell castable only with the extra mana) and check whether the
+line is offered, before implementing any prune on top of it.
