@@ -397,6 +397,55 @@ static bool DomainWidenGateEnabled() { return g_domain_widen_gate; }
 static const bool g_no_haste_dork_credit = EnvOn("MTG_NO_HASTE_DORK_CREDIT");
 static bool HasteDorkCreditEnabled() { return !g_no_haste_dork_credit; }
 
+// ---- The second main inside the search is SEARCHED, not greedy --------------------------------
+// USER BAR (2026-08-09): "we can't afford to have second main be greedy ... I want no greedy steps
+// except attack decisions [and] mana allocation."
+//
+// Three sites played the post-combat main with the d0 greedy `Solve(state, false)` -- marked
+// "(speed). The real game searches it." That made the search blind to the exact trade it exists to
+// make. The value of PASSING the pre-combat main IS the second main it buys, so scoring that second
+// main with the greedy answered the question with the heuristic the search was meant to replace: if
+// the greedy did not find the post-combat cast, holding mana looked worthless and the search cast
+// pre-combat instead. The reported case is FiveColour -- attack with vigilant Faeburrow Elder, THEN
+// spend its mana on Unite the Coalition -- but the shape is deck-agnostic (it is the same reason
+// the full-search path FSLineTail has always enumerated the second main properly).
+//
+// DEFAULT OFF (opt in with MTG_SEARCH_SECOND_MAIN=1) -- the mechanism is real and the code is
+// right, but on the only two suite decks whose play it changes it MEASURED WORSE and does not
+// recover with budget, so it has not earned default-on yet:
+//
+//   summed delta vs greedy (positive = searched WORSE), antilife d3/d5 + hinata d3/d5, seed 1001:
+//     gate budget  +0.0240      4x  +0.0174      16x  +0.0173      cost only 0.91..1.15x
+//
+// Not budget dilution, which was the obvious hypothesis and is WRONG here: dilution shrinks as the
+// budget grows, and this does not. The other eight decks are byte-identical -- including burn
+// (spectacle) and Goblins (Lackey), which both take the second-main path -- so the suite as it
+// stands simply has no deck whose post-combat main carries a real decision. Anti-Lifegain's whole
+// -0.0040 is ONE game (gi139) that diverges at a turn-3 fetch, i.e. variance by the harness's own
+// classification rule, not a like-for-like slowdown.
+//
+// See docs/design/second-main-greedy.md for the full write-up and what to do next.
+static const bool g_search_second_main = EnvOn("MTG_SEARCH_SECOND_MAIN");
+static bool GreedySecondMainEnabled() { return !g_search_second_main; }
+
+// Play a post-combat main INSIDE the search. ONE function for all three sites (the candidate loop,
+// the deferred-wave loop, and the rollout's future turns) so they cannot drift apart -- the drift
+// between two copies of a decision is how this codebase has lost lockstep before.
+//
+// `depth <= 0` still takes the greedy: at depth 0 there IS no search (that is the d0 runner
+// configuration, and SolveWithLookahead itself returns Solve() there), so every d0 case stays
+// byte-identical. The shared SearchBudget is threaded through, so this spends from the same
+// per-decision allowance rather than running unbounded -- it buys second-main fidelity by making
+// the rest of the pass shallower, which is exactly the trade the A/B has to judge.
+static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int depth, int max_turns,
+                                                SearchBudget* budget, bool second_main,
+                                                TranspositionTable* tt)
+{
+    if (depth <= 0 || GreedySecondMainEnabled()) { return TurnSolver::Solve(state, false); }
+    return TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/false, depth, max_turns, budget,
+                                          /*enforce_budget=*/false, second_main, tt);
+}
+
 static void ComputeAvailableColors(const GameState& state, bool have[5])
 {
     have[0] = have[1] = have[2] = have[3] = have[4] = false;
@@ -12544,8 +12593,11 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             }
             else
             {
-                // Default rollout: greedy second main (speed). The real game searches it.
-                post_plan = TurnSolver::Solve(state, false);
+                // SEARCHED, like the pre-combat main above (see SolveSecondMainInSearch). This was
+                // the rollout's last greedy plan step: every future turn's second main was decided
+                // by the d0 heuristic, so a rollout could not see a future turn holding mana for a
+                // post-combat finisher any more than this turn could.
+                post_plan = SolveSecondMainInSearch(state, depth, max_turns, budget, second_main, tt);
             }
             ApplyPlanDirect(state, post_plan, false);
             if (state.Opponent().life <= 0) { return state.turn_number; }
@@ -15218,10 +15270,14 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 SimulateCombat(copy);
                 if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return plan; }
 
-                // Post-combat (second) main if this deck wants one (greedy here).
+                // Post-combat (second) main if this deck wants one. SEARCHED, not greedy: this is
+                // the decisive site for "cast now vs hold for after combat" -- the candidate being
+                // scored here IS the pre-combat choice, and its second main is what pays for
+                // passing. See SolveSecondMainInSearch.
                 if (second_main)
                 {
-                    Plan post = Solve(copy, false);
+                    Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
+                                                        second_main, tt);
                     ApplyPlanDirect(copy, post, false);
                     if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return plan; }
                 }
@@ -15319,7 +15375,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return v; }
                         if (second_main)
                         {
-                            Plan post = Solve(copy, false);
+                            // Searched, exactly as in the main candidate loop above -- a deferred
+                            // wave's variants must be scored on the same footing as wave 0's.
+                            Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
+                                                                second_main, tt);
                             ApplyPlanDirect(copy, post, false);
                             if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return v; }
                         }
