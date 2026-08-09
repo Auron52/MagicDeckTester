@@ -202,9 +202,52 @@
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
 },
-    { "chosen": 6, "decision": {
+    { "chosen": -1, "decision": {
   "decision_index": 7,
   "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Monastery Swiftspear", "idx": 1, "num": 18, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 27, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 37, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 34, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Eidolon of the Great Revel", "cost": "{R}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 11, "name": "Light Up the Stage", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent", "is_draw": true, "is_staged": true, "staged_until": 4 }, { "num": 14, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 35, "name": "Mountain", "cost": "", "mv": 0, "kind": "land", "is_staged": true, "staged_until": 4 }, { "num": 48, "name": "Searing Blaze", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent", "is_staged": true, "staged_until": 4 }, { "num": 54, "name": "Shard Volley", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 59, "name": "Skullcrack", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Light Up the Stage", "Light Up the Stage", "Light Up the Stage"], "library_size": 44 },
+  "opponent": { "life": 17, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Eidolon of the Great Revel, Lightning Bolt", "land": null, "casts": ["Eidolon of the Great Revel", "Lightning Bolt"], "cast_order_canonical": ["Lightning Bolt", "Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }, { "card": "Lightning Bolt" }] },
+    { "index": 1, "summary": "land=none; cast: Lightning Bolt, Eidolon of the Great Revel", "land": null, "casts": ["Lightning Bolt", "Eidolon of the Great Revel"], "cast_order_canonical": ["Lightning Bolt", "Eidolon of the Great Revel"], "actions": [{ "card": "Lightning Bolt" }, { "card": "Eidolon of the Great Revel" }] },
+    { "index": 2, "summary": "land=none; cast: Shard Volley +sac-land, Eidolon of the Great Revel", "land": null, "casts": ["Shard Volley", "Eidolon of the Great Revel"], "actions": [{ "card": "Shard Volley" }, { "card": "Eidolon of the Great Revel" }] },
+    { "index": 3, "summary": "land=none; cast: Lightning Bolt, Skullcrack", "land": null, "casts": ["Lightning Bolt", "Skullcrack"], "cast_order_canonical": ["Lightning Bolt", "Skullcrack"], "actions": [{ "card": "Lightning Bolt" }, { "card": "Skullcrack" }] },
+    { "index": 4, "summary": "land=none; cast: Shard Volley +sac-land, Skullcrack", "land": null, "casts": ["Shard Volley", "Skullcrack"], "actions": [{ "card": "Shard Volley" }, { "card": "Skullcrack" }] },
+    { "index": 5, "summary": "land=none; cast: Shard Volley +sac-land, Lightning Bolt", "land": null, "casts": ["Shard Volley", "Lightning Bolt"], "actions": [{ "card": "Shard Volley" }, { "card": "Lightning Bolt" }] },
+    { "index": 6, "summary": "land=none; cast: Light Up the Stage, Lightning Bolt", "land": null, "casts": ["Light Up the Stage", "Lightning Bolt"], "cast_order_canonical": ["Light Up the Stage", "Lightning Bolt"], "actions": [{ "card": "Light Up the Stage" }, { "card": "Lightning Bolt" }] },
+    { "index": 7, "summary": "land=none; cast: Lightning Bolt, Light Up the Stage", "land": null, "casts": ["Lightning Bolt", "Light Up the Stage"], "cast_order_canonical": ["Lightning Bolt", "Light Up the Stage"], "actions": [{ "card": "Lightning Bolt" }, { "card": "Light Up the Stage" }] },
+    { "index": 8, "summary": "land=none; cast: Light Up the Stage, Skullcrack", "land": null, "casts": ["Light Up the Stage", "Skullcrack"], "cast_order_canonical": ["Light Up the Stage", "Skullcrack"], "actions": [{ "card": "Light Up the Stage" }, { "card": "Skullcrack" }] },
+    { "index": 9, "summary": "land=none; cast: Skullcrack, Light Up the Stage", "land": null, "casts": ["Skullcrack", "Light Up the Stage"], "cast_order_canonical": ["Skullcrack", "Light Up the Stage"], "actions": [{ "card": "Skullcrack" }, { "card": "Light Up the Stage" }] },
+    { "index": 10, "summary": "land=none; cast: Shard Volley +sac-land, Light Up the Stage", "land": null, "casts": ["Shard Volley", "Light Up the Stage"], "actions": [{ "card": "Shard Volley" }, { "card": "Light Up the Stage" }] },
+    { "index": 11, "summary": "land=none; cast: Eidolon of the Great Revel", "land": null, "casts": ["Eidolon of the Great Revel"], "actions": [{ "card": "Eidolon of the Great Revel" }] },
+    { "index": 12, "summary": "land=none; cast: Skullcrack", "land": null, "casts": ["Skullcrack"], "actions": [{ "card": "Skullcrack" }] },
+    { "index": 13, "summary": "land=none; cast: Lightning Bolt", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 14, "summary": "land=none; cast: Shard Volley +sac-land", "land": null, "casts": ["Shard Volley"], "actions": [{ "card": "Shard Volley" }] },
+    { "index": 15, "summary": "land=none; cast: Light Up the Stage", "land": null, "casts": ["Light Up the Stage"], "actions": [{ "card": "Light Up the Stage" }] },
+    { "index": 16, "summary": "land=none; cast: Light Up the Stage, Lightning Bolt", "land": null, "casts": ["Light Up the Stage", "Lightning Bolt"], "cast_order_canonical": ["Light Up the Stage", "Lightning Bolt"], "actions": [{ "card": "Light Up the Stage" }, { "card": "Lightning Bolt" }] },
+    { "index": 17, "summary": "land=none; cast: Light Up the Stage, Lightning Bolt", "land": null, "casts": ["Light Up the Stage", "Lightning Bolt"], "cast_order_canonical": ["Light Up the Stage", "Lightning Bolt"], "actions": [{ "card": "Light Up the Stage" }, { "card": "Lightning Bolt" }] },
+    { "index": 18, "summary": "land=none; cast: Lightning Bolt, Light Up the Stage", "land": null, "casts": ["Lightning Bolt", "Light Up the Stage"], "cast_order_canonical": ["Lightning Bolt", "Light Up the Stage"], "actions": [{ "card": "Lightning Bolt" }, { "card": "Light Up the Stage" }] },
+    { "index": 19, "summary": "land=none; cast: Lightning Bolt, Light Up the Stage", "land": null, "casts": ["Lightning Bolt", "Light Up the Stage"], "cast_order_canonical": ["Lightning Bolt", "Light Up the Stage"], "actions": [{ "card": "Lightning Bolt" }, { "card": "Light Up the Stage" }] },
+    { "index": 20, "summary": "land=none; cast: Light Up the Stage, Skullcrack", "land": null, "casts": ["Light Up the Stage", "Skullcrack"], "cast_order_canonical": ["Light Up the Stage", "Skullcrack"], "actions": [{ "card": "Light Up the Stage" }, { "card": "Skullcrack" }] },
+    { "index": 21, "summary": "land=none; cast: Light Up the Stage, Skullcrack", "land": null, "casts": ["Light Up the Stage", "Skullcrack"], "cast_order_canonical": ["Light Up the Stage", "Skullcrack"], "actions": [{ "card": "Light Up the Stage" }, { "card": "Skullcrack" }] },
+    { "index": 22, "summary": "land=none; cast: Skullcrack, Light Up the Stage", "land": null, "casts": ["Skullcrack", "Light Up the Stage"], "cast_order_canonical": ["Skullcrack", "Light Up the Stage"], "actions": [{ "card": "Skullcrack" }, { "card": "Light Up the Stage" }] },
+    { "index": 23, "summary": "land=none; cast: Skullcrack, Light Up the Stage", "land": null, "casts": ["Skullcrack", "Light Up the Stage"], "cast_order_canonical": ["Skullcrack", "Light Up the Stage"], "actions": [{ "card": "Skullcrack" }, { "card": "Light Up the Stage" }] },
+    { "index": 24, "summary": "land=none; cast: Shard Volley +sac-land, Light Up the Stage", "land": null, "casts": ["Shard Volley", "Light Up the Stage"], "actions": [{ "card": "Shard Volley" }, { "card": "Light Up the Stage" }] },
+    { "index": 25, "summary": "land=none; cast: Shard Volley +sac-land, Light Up the Stage", "land": null, "casts": ["Shard Volley", "Light Up the Stage"], "actions": [{ "card": "Shard Volley" }, { "card": "Light Up the Stage" }] },
+    { "index": 26, "summary": "land=none; cast: Light Up the Stage", "land": null, "casts": ["Light Up the Stage"], "actions": [{ "card": "Light Up the Stage" }] },
+    { "index": 27, "summary": "land=none; cast: Light Up the Stage", "land": null, "casts": ["Light Up the Stage"], "actions": [{ "card": "Light Up the Stage" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 8,
   "type": "main_phase",
   "turn": 4,
   "phase": "post_main",
@@ -250,8 +293,8 @@
 }
 },
     { "chosen": 0, "decision": {
-  "decision_index": 8,
-  "main_ordinal": 8,
+  "decision_index": 9,
+  "main_ordinal": 9,
   "type": "main_phase",
   "turn": 5,
   "phase": "pre_main",
@@ -287,7 +330,7 @@
 }
 },
     { "chosen": 0, "decision": {
-  "decision_index": 9,
+  "decision_index": 10,
   "type": "target",
   "source": "Lightning Bolt",
   "turn": 5,
@@ -302,7 +345,7 @@
 }
 },
     { "chosen": 0, "decision": {
-  "decision_index": 10,
+  "decision_index": 11,
   "type": "target",
   "source": "Skullcrack",
   "turn": 5,
@@ -317,7 +360,7 @@
 }
 },
     { "chosen": 0, "decision": {
-  "decision_index": 11,
+  "decision_index": 12,
   "type": "target",
   "source": "Shard Volley",
   "turn": 5,
@@ -332,7 +375,7 @@
 }
 },
     { "chosen": 0, "decision": {
-  "decision_index": 12,
+  "decision_index": 13,
   "type": "sacrifice",
   "source": "Shard Volley",
   "turn": 5,
@@ -345,8 +388,8 @@
 }
 },
     { "chosen": 1, "decision": {
-  "decision_index": 13,
-  "main_ordinal": 9,
+  "decision_index": 14,
+  "main_ordinal": 10,
   "type": "main_phase",
   "turn": 6,
   "phase": "pre_main",
@@ -367,7 +410,7 @@
 }
 },
     { "chosen": 0, "decision": {
-  "decision_index": 14,
+  "decision_index": 15,
   "type": "target",
   "source": "Skullcrack",
   "turn": 6,

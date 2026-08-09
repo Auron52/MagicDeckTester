@@ -84,9 +84,26 @@
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
 },
-    { "chosen": 1, "decision": {
+    { "chosen": -1, "decision": {
   "decision_index": 4,
   "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 1, "num": 5, "is_land": false }, { "name": "Goblin Guide", "idx": 3, "num": 6, "is_land": false }, { "name": "Monastery Swiftspear", "idx": 4, "num": 17, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 21, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 22, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Light Up the Stage", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent", "is_draw": true, "is_staged": true, "staged_until": 3 }, { "num": 23, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Searing Blaze", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 46, "name": "Searing Blaze", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Light Up the Stage"], "library_size": 49 },
+  "opponent": { "life": 14, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 5,
   "type": "main_phase",
   "turn": 3,
   "phase": "post_main",
@@ -109,8 +126,8 @@
 }
 },
     { "chosen": 0, "decision": {
-  "decision_index": 5,
-  "main_ordinal": 5,
+  "decision_index": 6,
+  "main_ordinal": 6,
   "type": "main_phase",
   "turn": 3,
   "phase": "post_main",
@@ -127,8 +144,8 @@
 }
 },
     { "chosen": 2, "decision": {
-  "decision_index": 6,
-  "main_ordinal": 6,
+  "decision_index": 7,
+  "main_ordinal": 7,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
@@ -146,8 +163,8 @@
 }
 },
     { "chosen": 7, "decision": {
-  "decision_index": 7,
-  "main_ordinal": 7,
+  "decision_index": 8,
+  "main_ordinal": 8,
   "type": "main_phase",
   "turn": 5,
   "phase": "pre_main",
@@ -174,6 +191,24 @@
     { "index": 13, "summary": "land=none; cast: Light Up the Stage", "land": null, "casts": ["Light Up the Stage"], "actions": [{ "card": "Light Up the Stage" }] },
     { "index": 14, "summary": "land=Mountain; cast: Light Up the Stage", "land": "Mountain", "casts": ["Light Up the Stage"], "actions": [{ "card": "Light Up the Stage" }] },
     { "index": 15, "summary": "land=Mountain; cast: Light Up the Stage", "land": "Mountain", "casts": ["Light Up the Stage"], "actions": [{ "card": "Light Up the Stage" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 1, "num": 5, "is_land": false }, { "name": "Goblin Guide", "idx": 3, "num": 6, "is_land": false }, { "name": "Monastery Swiftspear", "idx": 4, "num": 17, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 21, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 22, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 25, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 23, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 24, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Light Up the Stage", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 45, "name": "Searing Blaze", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 46, "name": "Searing Blaze", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 49, "name": "Searing Blood", "cost": "{R}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Light Up the Stage", "Light Up the Stage"], "library_size": 45 },
+  "opponent": { "life": 4, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Light Up the Stage", "land": null, "casts": ["Light Up the Stage"], "actions": [{ "card": "Light Up the Stage" }] },
+    { "index": 1, "summary": "land=none; cast: Light Up the Stage", "land": null, "casts": ["Light Up the Stage"], "actions": [{ "card": "Light Up the Stage" }] },
+    { "index": 2, "summary": "land=none; cast: Light Up the Stage", "land": null, "casts": ["Light Up the Stage"], "actions": [{ "card": "Light Up the Stage" }] }
   ],
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }

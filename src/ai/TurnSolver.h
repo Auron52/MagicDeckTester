@@ -489,6 +489,17 @@ public:
                                                 // Vial (MV == the Vial's charge counters), free
         std::vector<std::string> retrace_casts; // spells cast from the graveyard via Retrace
                                                 // (pay cost + discard a land each)
+        // Sac-outlet ACTIVATIONS of a permanent already on the battlefield: one entry per
+        // activation, naming the outlet (Skirk Prospector / Siege-Gang Commander / Pashalik Mons).
+        // Needed as its own verb because these are neither hand casts nor a pass: Skirk's
+        // "Sacrifice a Goblin: Add {R}" was previously only ever an IMPLICIT mana source the
+        // enumerator added when a cast needed it (LineCheck's `planSacs`), so a human could not ask
+        // for one -- and a line consisting ONLY of sacs read as "cast nothing" at stage 0 (viewer
+        // issue #4). WHICH creature dies is not encoded here: it is answered at resolution by the
+        // `sacrifice` board-click decision, so the human sees the real board when choosing.
+        // EMPTY => legacy matching (SacForMana stays implicit, SacCreatureOutlet stays matched via
+        // `cast=<name>`), which is what keeps every saved reference validating unchanged.
+        std::vector<std::string> sac_outlets;
     };
     // One concrete plan variant the human's line matched -- when several enumerated plans
     // share the same land + cast names but differ in a per-spell sub-decision (tutor target,

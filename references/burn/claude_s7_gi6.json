@@ -62,9 +62,26 @@
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
 },
-    { "chosen": 2, "decision": {
+    { "chosen": -1, "decision": {
   "decision_index": 2,
   "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Guide", "idx": 2, "num": 5, "is_land": false }, { "name": "Monastery Swiftspear", "idx": 4, "num": 17, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 21, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 22, "is_land": true }], "vial_counters": [], "hand": [{ "num": 9, "name": "Light Up the Stage", "cost": "{2}{R}", "mv": 3, "kind": "nonpermanent", "is_draw": true }, { "num": 13, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 23, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Shard Volley", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "3/3 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightning Bolt", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 1, "summary": "land=none; cast: Shard Volley +sac-land", "land": null, "casts": ["Shard Volley"], "actions": [{ "card": "Shard Volley" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 3,
   "type": "main_phase",
   "turn": 2,
   "phase": "post_main",
@@ -84,8 +101,8 @@
 }
 },
     { "chosen": 3, "decision": {
-  "decision_index": 3,
-  "main_ordinal": 3,
+  "decision_index": 4,
+  "main_ordinal": 4,
   "type": "main_phase",
   "turn": 3,
   "phase": "pre_main",
@@ -125,7 +142,7 @@
 }
 },
     { "chosen": 0, "decision": {
-  "decision_index": 4,
+  "decision_index": 5,
   "type": "target",
   "source": "Lightning Bolt",
   "turn": 3,
@@ -140,7 +157,7 @@
 }
 },
     { "chosen": 0, "decision": {
-  "decision_index": 5,
+  "decision_index": 6,
   "type": "target",
   "source": "Lightning Bolt",
   "turn": 3,
@@ -155,8 +172,8 @@
 }
 },
     { "chosen": 1, "decision": {
-  "decision_index": 6,
-  "main_ordinal": 4,
+  "decision_index": 7,
+  "main_ordinal": 5,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
@@ -180,7 +197,7 @@
 }
 },
     { "chosen": 0, "decision": {
-  "decision_index": 7,
+  "decision_index": 8,
   "type": "target",
   "source": "Skullcrack",
   "turn": 4,
@@ -195,7 +212,7 @@
 }
 },
     { "chosen": 0, "decision": {
-  "decision_index": 8,
+  "decision_index": 9,
   "type": "target",
   "source": "Shard Volley",
   "turn": 4,
@@ -210,7 +227,7 @@
 }
 },
     { "chosen": 0, "decision": {
-  "decision_index": 9,
+  "decision_index": 10,
   "type": "sacrifice",
   "source": "Shard Volley",
   "turn": 4,

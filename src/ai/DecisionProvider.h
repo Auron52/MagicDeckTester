@@ -169,12 +169,16 @@ public:
     // makes lands ammunition. An INPUT to CleanupDiscardCandidates below, not a separate decision.
     virtual bool DiscardLandsFirst(const GameState& s) const = 0;
 
-    // SpareCopyDiscardBand -- cleanup-discard ranking: does the spare-copy band (shed a name with
-    // 2+ hand copies before any unique card; CleanupDiscardRankingWithOrder tier A2) apply to this
-    // deck? Default yes -- the band's premise, "a duplicate is redundant", holds for the decks whose
-    // duplicates are interchangeable engine pieces. It is FALSE for a deck whose whole payoff
-    // consumes copies cumulatively; that judgment is archetype knowledge, so it lives here.
-    virtual bool SpareCopyDiscardBand(const GameState& s) const { (void)s; return true; }
+    // InterchangeableRequiredGroup -- required pieces that are DIFFERENT CARDS filling ONE role,
+    // so holding one makes the others redundant ("you only need one of the enabler pieces at a
+    // time", user 2026-08-07). Returns the group containing `name`, or nullptr when the card has
+    // no interchangeable partners. Consumed by CleanupDiscardProtected, which counts redundancy
+    // over the whole group instead of by name: without this, two distinct enablers each look like
+    // a "last copy" and BOTH are protected, which silently vetoes a provider's own decision to
+    // shed the spare one. Deck knowledge, so it lives in the archetype provider; default nullptr
+    // keeps name-only counting (byte-identical for every deck that does not override).
+    virtual const std::vector<std::string>* InterchangeableRequiredGroup(const std::string&) const
+    { return nullptr; }
 
     // CleanupDiscardCandidates -- cleanup discard (hand over its size limit): WHICH card to shed,
     // as hand indices in PREFERENCE order. This is the whole rule, provider-owned: the engine keeps

@@ -52,11 +52,20 @@
     return Math.max(0, Math.min(avail, lethal));
   }
 
+  // A queued SAC-OUTLET activation (Skirk Prospector / Siege-Gang / Pashalik). Tagged with a flag
+  // rather than given its own `kind` so every existing renderer that special-cases kind==='activate'
+  // (the planbar chip, the ⟳ badge, the "puts no card onto the battlefield" checks) keeps working
+  // untouched; only the encoding differs. One entry == one creature sacrificed.
+  function isSacOut(p) { return p.kind === 'activate' && !!p.sacout; }
+
   function encodeLine(plan) {
     const parts = []; const l = planLand(plan); if (l) parts.push('land=' + l.name);
-    for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace') parts.push('cast=' + p.name);
+    for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && !isSacOut(p)) parts.push('cast=' + p.name);
     for (const p of plan) if (p.kind === 'vial') parts.push('vial=' + p.name);
     for (const p of plan) if (p.kind === 'retrace') parts.push('retrace=' + p.name);
+    // Sac outlets need their own verb: they are neither a hand cast nor a pass, and a line made up
+    // ONLY of sacs used to encode as 'pass' (CheckLine stage 0) -- see LineSpec::sac_outlets.
+    for (const p of plan) if (isSacOut(p)) parts.push('sacout=' + p.name);
     const n = leCount(plan); if (n > 0) parts.push('landsedge=' + n);
     return parts.length ? parts.join(';') : 'pass';
   }
@@ -77,5 +86,50 @@
     return plan;
   }
 
-  return { planLand, handCounts, stagedCounts, castableCount, plannedCount, leCount, leMax, encodeLine, queueCard };
+  // ---- Choose-variant dimension walk (the multi-sub-decision picker) -------------------------
+  // Lives here, not inline in index.html, for the same reason queueCard does: it decides how many
+  // dialogs a committed line produces, and that was un-testable while it sat in the page. Viewer
+  // issue #13 was reported as "Crop Rotation + Sylvan Scrying only let me choose ONE land" -- the
+  // engine offers both dimensions (verified: 144 variants, 12 lands each), so any regression here
+  // silently eats a human decision while every engine-side check stays green.
+  const SUBKIND_PRI = { face: -1, fetch: 0, tutor: 1, enchant: 1.5, x: 2, soulfire: 3, crackle: 4, splice: 5 };
+  function subKindPri(k) { return SUBKIND_PRI[k] === undefined ? 9 : SUBKIND_PRI[k]; }
+  function subOf(v, key) { return (v.subs || []).filter(s => s.key === key)[0]; }
+  function choiceOf(v, key) { const s = subOf(v, key); return s ? s.choice : '—'; }
+
+  // The next dimension to ask about, given the variants still in play: the highest-priority one
+  // that still has MORE THAN ONE distinct choice. null => nothing left to disambiguate.
+  function nextDimension(remaining) {
+    const keys = [];
+    remaining.forEach(x => (x.subs || []).forEach(s => {
+      if (!keys.some(k => k.key === s.key)) keys.push({ key: s.key, kind: s.kind });
+    }));
+    keys.sort((a, b) => subKindPri(a.kind) - subKindPri(b.kind));
+    for (const k of keys) {
+      const seen = [];
+      remaining.forEach(x => {
+        const c = choiceOf(x, k.key);
+        if (!seen.some(z => z.choice === c)) { const s = subOf(x, k.key); seen.push({ choice: c, card: s ? s.card : '' }); }
+      });
+      if (seen.length > 1) return { dim: k, choices: seen };
+    }
+    return null;
+  }
+  function filterByChoice(remaining, key, choice) { return remaining.filter(x => choiceOf(x, key) === choice); }
+
+  // How many dimensions REMAIN to be asked (including the current one) -- drives the "step N of M"
+  // counter, which is what makes two identical-looking 12-land grids tellable apart.
+  function dimensionsRemaining(remaining) {
+    let n = 0, cur = remaining;
+    while (n < 16) {
+      const d = nextDimension(cur);
+      if (!d) break;
+      n++;
+      cur = filterByChoice(cur, d.dim.key, d.choices[0].choice);
+    }
+    return n;
+  }
+
+  return { planLand, handCounts, stagedCounts, castableCount, plannedCount, leCount, leMax, encodeLine, queueCard, isSacOut,
+           nextDimension, filterByChoice, dimensionsRemaining, choiceOf, subOf };
 });

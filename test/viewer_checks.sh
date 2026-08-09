@@ -98,5 +98,26 @@ if [ "$MODE" != line ]; then
   fi
 fi
 
+# 3) CheckLine / --validate-line (node + python + binary). Skipped in --line-only and --sample:
+#    it validates EVERY main-phase line of EVERY reference, so it is the slowest layer (~5 min).
+#    WIRED IN 2026-08-08 -- it existed for weeks outside this script and nobody ran it, so it
+#    quietly accumulated 141 stale failures (docs/design/viewer-validate-stream-alignment.md).
+#    An unrun check is not a check; keep it in the suite.
+if [ "$MODE" = full ]; then
+  if command -v node >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1 \
+     && [ -f "$HERE/viewer_validate_check.js" ]; then
+    if [ ! -f "$BIN" ]; then
+      echo "FAIL: validate-line check needs the binary but '$BIN' is missing."
+      rc=1
+    else
+      echo "--- viewer validate-line check (engine CheckLine) ---"
+      if MTG_BIN="$BIN" node "$HERE/viewer_validate_check.js"; then :; else
+        echo "FAIL: a line a human actually played no longer validates (CheckLine regression)."
+        rc=1
+      fi
+    fi
+  fi
+fi
+
 if [ $rc -eq 0 ]; then echo "viewer checks: PASS"; else echo "viewer checks: FAIL"; fi
 exit $rc

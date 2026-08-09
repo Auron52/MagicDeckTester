@@ -70,12 +70,33 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         {
             // Offer each NAME once: TutorCandidates lists library order, so a deck with three copies
             // of a card would otherwise show it three times, and picking any of them fetches the same
-            // first matching library card anyway. Dedup preserves first-occurrence order, so index 0
-            // is still cands.front() -- the heuristic default the viewer pre-selects.
+            // first matching library card anyway. Dedup preserves first-occurrence order.
             std::vector<std::string> uniq;
             for (const std::string& c : cands)
             { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
-            const int picked = (*g_play_tutor_chooser)(state, controller_index, source_name, uniq, 0);
+            // The badged "AI pick" must be the provider's RANKED pick, not uniq[0] (viewer issue #7).
+            // --claude-play forces MTG_UNPRUNED, and an archetype TutorCandidates returns the UNRANKED
+            // GenericProvider list under that gate -- so `cands` here is raw LIBRARY ORDER and the old
+            // hard-coded default of 0 badged whatever happened to be first (Goblins s22: Stingscourger,
+            // over Krenko / Muxus / every lord). Re-ask the provider inside a HumanPlaySuppress scope,
+            // which is exactly the guard that makes DecisionUnpruned() false, to get the real ranking.
+            //
+            // Only the DEFAULT INDEX changes -- the offered list keeps library order. Reordering it
+            // would silently re-point every `tutor_etb` index already recorded under references/
+            // (s22 recorded 11 = Goblin Chieftain), so the human still sees the same grid in the same
+            // places and only the badge moves. Falls back to 0 if the ranked pick is somehow absent.
+            int def = 0;
+            {
+                HumanPlaySuppress pruned;   // ranked (pruned) view; restores on scope exit
+                const std::vector<std::string> ranked =
+                    ResolveProvider(state).TutorCandidates(state, controller_index, pp);
+                if (!ranked.empty())
+                {
+                    auto it = std::find(uniq.begin(), uniq.end(), ranked.front());
+                    if (it != uniq.end()) { def = static_cast<int>(it - uniq.begin()); }
+                }
+            }
+            const int picked = (*g_play_tutor_chooser)(state, controller_index, source_name, uniq, def);
             if (picked < 0) { return; }                                   // declined the optional search
             if (picked < static_cast<int>(uniq.size())) { want = uniq[picked]; }
         }
@@ -697,7 +718,177 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
     state.battlefield.erase(state.battlefield.begin() + pick);
 }
 
-bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
+// ---- Flow-prune oracle (byte-identical infeasibility test) ------------------------------------
+// Run ONCE at the top-level backtracker entry. The flat ManaPool::CanPay treats every flexible
+// source as `wild` (any single pip), so an unpayable COLOUR pattern -- e.g. two {R/G} duals asked
+// for {W}{W} -- slips the cheap affordability gate and drops to the exponential backtracker, which
+// then spends ~2000 nodes PROVING the negative (measured: 97.5% of all backtracker nodes on the
+// Creature Giving gen rollout are spent proving costs UNPAYABLE). This oracle proves such costs
+// infeasible up front with a small max-flow (colours as a bipartite assignment), letting the worker
+// return the SAME false without the proof -- byte-identical, since a failed payment leaves state
+// unchanged either way and the DFS's first solution (when one exists) is never reached here.
+//
+// SAFETY: the oracle is a strict UNDER-approximation of feasibility. It models each untapped source
+// as "one tap -> one mana of a fixed colour set" and each source's colour set as a SUPERSET of what
+// it can really make (over-credit only). It prunes ONLY when even this generous model admits no
+// assignment, and BAILS (never prunes) on any source it cannot model exactly this way (>1 mana per
+// tap, filters, ramp-filters, domain, storage, scaled) or on a hybrid/{X} cost. So it can never
+// prune a payable cost. Returns true => DEFINITELY infeasible (prune); false => feasible OR not
+// modellable (fall through to the real backtracker).
+//
+// Flow graph (small, ~<=30 nodes, flow <= ManaValue): S -> src_i (cap 1) -> colour_c (cap 1) for
+// each colour c the source may make; S -> colour_c (cap floating.c); S -> WILD (cap floating.wild)
+// -> colour_c (cap INF, all six -- wild pays any pip incl {C}); colour_c -> T (cap strict demand:
+// cost.white.. + colorless); colour_c -> GEN (cap INF; any colour pays a generic pip); GEN -> T
+// (cap cost.generic). Feasible iff maxflow == cost.ManaValue().
+static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool for_creature,
+                              const ManaPool& floating, const std::vector<Color>* rp_colors,
+                              std::uint64_t reserved_mask,
+                              const std::vector<std::pair<int, const CardDefinition*>>& cands,
+                              bool* out_bailed = nullptr)
+{
+    if (out_bailed) { *out_bailed = false; }
+    // {X} and hybrid pips are outside this model (X is chosen elsewhere; hybrids need per-assignment
+    // expansion) -> bail rather than risk an under-credit. cost.has_x with x_pips==0 is inert, but a
+    // set has_x flag still signals an unresolved-X context, so stay conservative.
+    if (cost.hybrid_count > 0 || cost.has_x) { if (out_bailed) { *out_bailed = true; } return false; }
+
+    const int active = state.active_player_index;
+
+    // Node layout: 0=S, 1=T, 2=GEN, 3=WILD, 4..9 = colour nodes (W,U,B,R,G,C = Color enum order),
+    // 10.. = one per eligible untapped source. Colour node for Color c = 4 + int(c).
+    constexpr int S = 0, T = 1, GEN = 2, WILD = 3, COL0 = 4, FIRST_SRC = 10;
+    constexpr int INF = 1 << 20;
+
+    struct FEdge { int to, cap, rev; };
+    static thread_local std::vector<FEdge> g_edges;
+    static thread_local std::vector<std::vector<int>> g_adj;
+    g_edges.clear();
+    // adjacency: reuse the outer vectors but clear each row we touch. Size to the max node count.
+    auto ensure_nodes = [&](int n)
+    {
+        if (static_cast<int>(g_adj.size()) < n) { g_adj.resize(n); }
+        for (int i = 0; i < n; ++i) { g_adj[i].clear(); }
+    };
+    auto add_edge = [&](int u, int v, int cap)
+    {
+        g_adj[u].push_back(static_cast<int>(g_edges.size())); g_edges.push_back({ v, cap, 0 });
+        g_adj[v].push_back(static_cast<int>(g_edges.size())); g_edges.push_back({ u, 0, 0 });
+    };
+
+    // First pass: validate every eligible source fits the 1-tap->1-mana model and collect colour
+    // sets. `rp_ready` mirrors the worker's lazy Reflecting-Pool union (computed once, aliased).
+    struct SrcColset { std::uint8_t bits; int amt; };   // bit c => may make colour c; amt = mana/tap
+    static thread_local std::vector<SrcColset> srcs;
+    srcs.clear();
+    bool rp_ready = (rp_colors != nullptr);
+    for (const std::pair<int, const CardDefinition*>& cand : cands)
+    {
+        const int i = cand.first;
+        if (state.battlefield[i].tapped) { continue; }
+        if (reserved_mask & (1ull << i)) { continue; }
+        const CardDefinition* def = cand.second;
+        const bool is_src = (def->tmpl == CardTemplate::BasicLand)
+                         || (def->tmpl == CardTemplate::ManaDork && CanTapNow(state.battlefield[i], state.battlefield))
+                         || def->params.mana_rock;
+        if (!is_src) { continue; }
+        if (def->params.creature_mana_only && !for_creature) { continue; }
+        if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }
+        if (!GraveyardFuelLive(state, active, *def)) { continue; }
+        // Unmodellable source types -> the whole oracle bails (it would MIS-credit their yield): a
+        // filter/ramp consumes+converts floating; domain makes one of EACH colour (not a choice);
+        // storage bursts a variable amount; scaled pays a feeder for N-of-one. Every other source --
+        // including a bounce/Karoo land (produces_amount>=2) -- is uniformly "one tap -> `amt` mana of
+        // ONE chosen colour among `produces`" (the worker's loop below), so `amt` is its flow capacity.
+        if (def->params.is_filter || def->params.ramp_filter || def->params.domain_mana
+            || def->params.storage_land || IsScaledManaLand(*def))
+        { if (out_bailed) { *out_bailed = true; } return false; }
+        const int amt = ManaProducedPerTap(*def);   // 1 for a normal land/dork/rock; 2 for a Karoo
+
+        // Colour set (SUPERSET, over-credit safe) -- mirror the worker's produces/reflecting/cco
+        // handling. A drip land additionally offers a {C} mode, so add Colorless there.
+        if (def->params.reflecting && !rp_ready)
+        { rp_colors = &ReflectedColors(state, active, /*in_hand=*/false); rp_ready = true; }
+        const std::vector<Color>& produces = def->params.reflecting ? *rp_colors : def->params.produces;
+        std::uint8_t bits = 0;
+        if (def->params.colored_creature_only && !for_creature)
+        {
+            bits |= (1u << static_cast<int>(Color::Colorless));   // only its {C} survives
+        }
+        else
+        {
+            for (Color c : produces) { bits |= (1u << static_cast<int>(c)); }
+            if (bits == 0 && !def->params.reflecting)
+            { bits |= (1u << static_cast<int>(Color::Colorless)); }   // {C}-only source (empty produces)
+            if (def->params.tap_opponent_lifegain > 0)
+            { bits |= (1u << static_cast<int>(Color::Colorless)); }   // drip land's {C} mode
+        }
+        if (bits == 0) { continue; }   // solo Reflecting Pool etc.: makes nothing usable -> no supply
+        srcs.push_back({ bits, amt });
+    }
+
+    const int m = static_cast<int>(srcs.size());
+    const int demand = cost.ManaValue();
+    if (demand == 0) { if (out_bailed) { *out_bailed = true; } return false; }   // nothing to pay (unreachable)
+
+    ensure_nodes(FIRST_SRC + m);
+
+    // Strict colour demand (colours that must be paid by their own colour, or by wild).
+    const int strict[6] = { cost.white, cost.blue, cost.black, cost.red, cost.green, cost.colorless };
+    const int fl[6] = { floating.white, floating.blue, floating.black, floating.red, floating.green,
+                        floating.colorless };
+    for (int c = 0; c < 6; ++c)
+    {
+        if (strict[c] > 0)  { add_edge(COL0 + c, T, strict[c]); }   // colour_c pays its own strict demand
+        add_edge(COL0 + c, GEN, INF);                               // excess colour pays generic
+        if (fl[c] > 0)      { add_edge(S, COL0 + c, fl[c]); }       // floating of colour c
+        add_edge(WILD, COL0 + c, INF);                              // wild pays any colour
+    }
+    if (cost.generic > 0) { add_edge(GEN, T, cost.generic); }
+    if (floating.wild > 0) { add_edge(S, WILD, floating.wild); }
+    for (int s = 0; s < m; ++s)
+    {
+        add_edge(S, FIRST_SRC + s, srcs[s].amt);   // one tap yields `amt` mana (1, or 2 for a Karoo)
+        for (int c = 0; c < 6; ++c)
+        { if (srcs[s].bits & (1u << c)) { add_edge(FIRST_SRC + s, COL0 + c, srcs[s].amt); } }
+    }
+
+    // Edmonds-Karp: BFS augmenting paths until saturated or no path. demand is small (<= ~15).
+    const int N = FIRST_SRC + m;
+    static thread_local std::vector<int> prev_edge, bfsq;
+    int flow = 0;
+    while (flow < demand)
+    {
+        prev_edge.assign(N, -1);
+        bfsq.clear();
+        bfsq.push_back(S);
+        prev_edge[S] = -2;   // visited marker for the source
+        for (std::size_t qi = 0; qi < bfsq.size() && prev_edge[T] == -1; ++qi)
+        {
+            const int u = bfsq[qi];
+            for (int eid : g_adj[u])
+            {
+                const FEdge& e = g_edges[eid];
+                if (e.cap > 0 && prev_edge[e.to] == -1)
+                { prev_edge[e.to] = eid; bfsq.push_back(e.to); }
+            }
+        }
+        if (prev_edge[T] == -1) { break; }   // no augmenting path
+        // Bottleneck along the path.
+        int bott = INF;
+        for (int v = T; v != S; )
+        { const FEdge& e = g_edges[prev_edge[v]]; bott = std::min(bott, e.cap); v = g_edges[prev_edge[v] ^ 1].to; }
+        for (int v = T; v != S; )
+        { g_edges[prev_edge[v]].cap -= bott; g_edges[prev_edge[v] ^ 1].cap += bott; v = g_edges[prev_edge[v] ^ 1].to; }
+        flow += bott;
+    }
+    return flow < demand;   // could not saturate the full cost -> DEFINITELY infeasible
+}
+
+// Recursive worker. The public TapForCostBacktrack (below) is a thin wrapper so it can record the
+// payable/unpayable OUTCOME split under MTG_TAP_STATS; the recursion calls the WORKER directly, so a
+// wrapper call is always one top-level entry. Behaviour is identical to calling the worker directly.
+static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
                                 const std::vector<Color>* rp_colors,
                                 TapBacktrackMemo* fail_memo,
@@ -705,7 +896,8 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                 std::uint64_t tapped_mask,
                                 int untapped_max,
                                 std::uint64_t reserved_mask,
-                                ManaPool* out_full_pool)
+                                ManaPool* out_full_pool,
+                                const std::vector<std::pair<int, const CardDefinition*>>* src_cands)
 {
     TapSpeculationScope _spec;   // suppress phantom drip-land life events from speculative taps
     if (floating.CanPay(cost))
@@ -753,9 +945,55 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // stored as the full pair (not a lossy hash) so a hash collision can never cause a false prune.
     // Set up once at the top-level call and threaded down; disabled when n>64 (bitmask won't fit).
     const bool top_level = (fail_memo == nullptr);
-    if (top_level && tapstats::Enabled()) { tapstats::g_backtrack_entries.fetch_add(1, std::memory_order_relaxed); }
-    TapBacktrackMemo memo_local;
-    if (top_level && n <= 64) { fail_memo = &memo_local; }
+    if (tapstats::Enabled())
+    {
+        tapstats::g_nodes.fetch_add(1, std::memory_order_relaxed);   // every recursion node
+        if (top_level)
+        {
+            tapstats::g_backtrack_entries.fetch_add(1, std::memory_order_relaxed);
+            if (n > 64) { tapstats::g_top_memo_off.fetch_add(1, std::memory_order_relaxed); }
+            std::uint64_t prev = tapstats::g_max_n.load(std::memory_order_relaxed);
+            while (static_cast<std::uint64_t>(n) > prev &&
+                   !tapstats::g_max_n.compare_exchange_weak(prev, static_cast<std::uint64_t>(n),
+                                                            std::memory_order_relaxed)) {}
+        }
+    }
+    // Reuse the failure-memo's bucket allocation across the (hundreds of thousands of) top-level calls
+    // instead of constructing/destructing a fresh unordered_set each time. clear() retains the bucket
+    // array (libstdc++), so after warm-up there is no per-call bucket alloc/free and no rehash growth --
+    // which the profile showed as a real slice (operator new/delete + _M_rehash) on a token-heavy deck
+    // where the greedy strands ~400k times per rollout. Byte-identical: each top-level call sees an
+    // empty memo and inserts exactly the same proven-failure keys, so every prune is unchanged. Safe as
+    // thread_local (each gen worker has its own) because no nested top-level backtrack runs in a subtree.
+    static thread_local TapBacktrackMemo s_memo_tl;
+    if (top_level && n <= 64) { s_memo_tl.clear(); fail_memo = &s_memo_tl; }
+
+    // Structural mana-source list (the controller's BasicLand / ManaDork / mana_rock permanents +
+    // their cached def), enumerated ONCE at the top-level call and threaded to every node. The
+    // recursion then iterates ~sources instead of the whole battlefield and never re-runs the
+    // LookupCached hash: a token-flooded OPPONENT board (Forbidden Orchard / Hunted Phantasm /
+    // Varchild's) is skipped entirely instead of rescanned at each of the millions of nodes. This is
+    // a SUPERSET of the per-node `is_src` structural test (ManaDork's CanTapNow check stays per-node),
+    // and the battlefield is invariant during a payment, so it is byte-identical. thread_local buffer:
+    // rebuilt at each top-level call, reused via the threaded pointer by that call's subtree (no nested
+    // top-level backtrack exists within a subtree, so the buffer is never clobbered mid-iteration).
+    static thread_local std::vector<std::pair<int, const CardDefinition*>> s_src_cands_buf;
+    if (top_level)
+    {
+        s_src_cands_buf.clear();
+        for (int i = 0; i < n; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != active) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d) { continue; }
+            if (d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
+                || d->params.mana_rock)
+            { s_src_cands_buf.push_back({ i, d }); }
+        }
+        src_cands = &s_src_cands_buf;
+    }
+    const std::vector<std::pair<int, const CardDefinition*>>& cands = *src_cands;
 
     std::pair<std::uint64_t, std::uint64_t> key{0, 0};
     if (fail_memo)
@@ -834,14 +1072,30 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // (the stl_vector alloc churn in the combo-turn callgrind).
     bool rp_ready = (rp_colors != nullptr);
 
-    for (int i = 0; i < n; ++i)
+    // Flow-prune oracle: prove this cost contention-infeasible up front so we return the same false
+    // without walking the exponential tree to prove it (byte-identical -- see TapFlowInfeasible). Run
+    // ONLY at the top level (it examines all untapped sources fresh) and only when the fail-memo is
+    // active (n<=64); a deep node's partial-tap state is already handled by the memo + B&B gate.
+    if (top_level && fail_memo && FlowPruneEnabled())
     {
-        if (state.battlefield[i].controller_index != active || state.battlefield[i].tapped)
-        { continue; }
+        bool bailed = false;
+        const bool infeasible = TapFlowInfeasible(state, cost, for_creature, floating, rp_colors,
+                                                  reserved_mask, cands, tapstats::Enabled() ? &bailed : nullptr);
+        if (infeasible)
+        {
+            if (tapstats::Enabled()) { tapstats::g_flow_prune.fetch_add(1, std::memory_order_relaxed); }
+            fail_memo->insert(key);   // consistency with the B&B gate's prune (harmless at top level)
+            return false;
+        }
+        if (tapstats::Enabled() && bailed) { tapstats::g_flow_bail.fetch_add(1, std::memory_order_relaxed); }
+    }
+
+    for (const std::pair<int, const CardDefinition*>& cand : cands)
+    {
+        const int i = cand.first;
+        if (state.battlefield[i].tapped) { continue; }
         if (reserved_mask & (1ull << i)) { continue; }   // reservation audit: this source is held (not tappable)
-        const CardDefinition* def =
-            CardDatabase::Instance().LookupCached(state.battlefield[i].card);
-        if (!def) { continue; }
+        const CardDefinition* def = cand.second;   // hoisted: controller==active filter + LookupCached done once
         const bool is_src = (def->tmpl == CardTemplate::BasicLand)
                          || (def->tmpl == CardTemplate::ManaDork && CanTapNow(state.battlefield[i], state.battlefield))
                          || def->params.mana_rock;
@@ -931,10 +1185,10 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             // below on failure alongside the active player's life.
             if (drip_ok && def->params.tap_opponent_lifegain > 0)
             { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
-            if (TapForCostBacktrack(state, cost, for_creature, next, rp_colors, fail_memo, out_leftover,
+            if (TapForCostBacktrackWorker(state, cost, for_creature, next, rp_colors, fail_memo, out_leftover,
                                     tapped_mask | (1ull << i),
                                     untapped_max < 0 ? -1 : untapped_max - src_max_net,
-                                    reserved_mask, out_full_pool)) { return true; }
+                                    reserved_mask, out_full_pool, src_cands)) { return true; }
             state.battlefield[i].tapped = tapped_snap;   // only this source was touched at this level
             if (has_counters) { state.battlefield[i].counters = counters_snap; }
             state.battlefield[i].storage_counters = storage_snap;
@@ -1053,4 +1307,104 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // re-exploring. State is unchanged here (the invariant), so this is byte-identical.
     if (fail_memo) { fail_memo->insert(key); }
     return false;
+}
+
+// Public entry: thin wrapper over the worker. Identical behaviour; under MTG_TAP_STATS it records the
+// payable/unpayable OUTCOME of each top-level call and the nodes it consumed (the recursion calls the
+// worker directly, so every call here is exactly one top-level entry). Diagnostic only -- when the flag
+// is off it is a straight forward, so zero cost.
+bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
+                         bool for_creature, ManaPool floating,
+                         const std::vector<Color>* rp_colors,
+                         TapBacktrackMemo* fail_memo,
+                         ManaPool* out_leftover,
+                         std::uint64_t tapped_mask,
+                         int untapped_max,
+                         std::uint64_t reserved_mask,
+                         ManaPool* out_full_pool,
+                         const std::vector<std::pair<int, const CardDefinition*>>* src_cands)
+{
+    if (!tapstats::Enabled())
+    {
+        return TapForCostBacktrackWorker(state, cost, for_creature, floating, rp_colors, fail_memo,
+                                         out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                         out_full_pool, src_cands);
+    }
+    const std::uint64_t nodes0 = tapstats::g_nodes.load(std::memory_order_relaxed);
+    const bool ok = TapForCostBacktrackWorker(state, cost, for_creature, floating, rp_colors, fail_memo,
+                                              out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                              out_full_pool, src_cands);
+    const std::uint64_t dn = tapstats::g_nodes.load(std::memory_order_relaxed) - nodes0;
+    if (ok) { tapstats::g_entries_ok.fetch_add(1, std::memory_order_relaxed);
+              tapstats::g_nodes_ok.fetch_add(dn, std::memory_order_relaxed); }
+    else    { tapstats::g_entries_fail.fetch_add(1, std::memory_order_relaxed);
+              tapstats::g_nodes_fail.fetch_add(dn, std::memory_order_relaxed); }
+    return ok;
+}
+
+// Format the one aggregated life-watcher event for the play viewer (viewer issue #11). See the
+// declaration in SpellEffects.h for why this is out-of-line: it runs only on a real human-play
+// resolution (the event sink is nulled in every search/rollout), so it is cold by construction.
+//
+// `subject_index >= 0` names the creature that ENTERED (the enter-watcher case); -1 means the
+// subject is a creature that DIED (the Massacre Wurm case -- the dead card has already left the
+// battlefield, so there is no index left to name it by). Both read the same way in the history:
+// what happened, which watchers saw it (with multiplicity), and the resulting life swing.
+//
+//   "<drop> 1/1 Spirit Token entered under the opponent -- Suture Priest x2: opponent -2 (12->10)"
+//   "<drop> Birds of Paradise entered -- Essence Warden: you +1 (20->21)"
+std::string DescribeLifeWatchers(const GameState& state, int subject_controller, int subject_index,
+                                 const std::vector<std::pair<std::string, int>>& on_subject,
+                                 const std::vector<std::pair<std::string, int>>& on_other,
+                                 int life_before_subject, int life_before_other)
+{
+    auto who = [&](int idx) { return idx == state.active_player_index ? "you" : "opponent"; };
+    auto list = [](const std::vector<std::pair<std::string, int>>& v)
+    {
+        std::string s;
+        for (const auto& e : v)
+        {
+            if (!s.empty()) { s += ", "; }
+            s += e.first;
+            if (e.second > 1) { s += " \xC3\x97" + std::to_string(e.second); }   // " x2"
+        }
+        return s;
+    };
+    auto swing = [&](int idx, int before)
+    {
+        const int now = state.players[idx].life, d = now - before;
+        return std::string(who(idx)) + " " + (d >= 0 ? "+" : "\xE2\x88\x92")   // U+2212 MINUS SIGN
+             + std::to_string(std::abs(d)) + " (" + std::to_string(before)
+             + "\xE2\x86\x92" + std::to_string(now) + ")";                     // U+2192 arrow
+    };
+
+    std::string head;
+    if (subject_index >= 0 && subject_index < static_cast<int>(state.battlefield.size()))
+    {
+        head = state.battlefield[subject_index].card.m_name.str() + " entered";
+        if (subject_controller != state.active_player_index) { head += " under the opponent"; }
+    }
+    else
+    {
+        head = std::string("a creature the ") + who(subject_controller) + " controlled died";
+    }
+
+    // One clause per side whose life actually moved, subject side first (that is the side the
+    // event is ABOUT). A side with no watcher contributes nothing rather than a "+0".
+    std::string body;
+    if (!on_subject.empty())
+    { body += list(on_subject) + ": " + swing(subject_controller, life_before_subject); }
+    if (!on_other.empty())
+    {
+        if (!body.empty()) { body += "; "; }
+        body += list(on_other) + ": " + swing(1 - subject_controller, life_before_other);
+    }
+    // Icon by what actually happened to the OPPONENT: a drain reads as blood, a pure lifegain
+    // (Essence Warden / Suture Priest clause 1 off our own creature) reads as a heart -- matching
+    // the lifegain/lifeloss split the ApplyOpponentLifegain event already uses.
+    const int opp = 1 - state.active_player_index;
+    const int opp_before = (opp == subject_controller) ? life_before_subject : life_before_other;
+    const bool drained = state.players[opp].life < opp_before;
+    return (drained ? "\xF0\x9F\xA9\xB8 " : "\xF0\x9F\x92\x9A ")   // U+1FA78 blood / U+1F49A heart
+         + head + " \xE2\x80\x94 " + body;                          // em dash
 }

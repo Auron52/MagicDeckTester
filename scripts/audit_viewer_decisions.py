@@ -330,7 +330,7 @@ MAINPHASE_PARAMS = {
     "suspend_time_counters": "Lotus Bloom suspend = a {0} main_phase action; when-to-suspend is a plan variant",
     "is_aura":             "Aura enchant-target = a main_phase plan variant (one per legal creature, offered unpruned; SummarizePlan labels it, main.cpp emits enchant_target)",
     # --- Goblins: activated abilities the search enumerates as top-level plan actions ---------
-    "sac_creature_outlet": "sac-a-Goblin outlet activation (Skirk {R}/Siege-Gang {1}{R}/Pashalik {3}{R}) = a main_phase plan action (SacForMana / SacCreatureOutlet / Channel actions); which victim is a heuristic sub-choice (disclosed 6a)",
+    "sac_creature_outlet": "sac-a-Goblin outlet activation (Skirk {R}/Siege-Gang {1}{R}/Pashalik {3}{R}): the ACTIVATION rides main_phase via the sacout= line verb (LineSpec::sac_outlets), and WHICH victim dies is the `sacrifice` board decision at resolution (ChooseSacOutletVictimIndex) -- no longer a disclosed heuristic gap (2026-08-08)",
     "channel_cost":        "Twinshot Sniper Channel = a from-HAND {1}{R}-discard activation = a main_phase plan action (Channel action)",
     "tap_creates_tokens_per_controlled_subtype": "Krenko {T}: make X Goblins = a main_phase tap activation (TapForTokens action)",
     # --- FiveColour: activations / choices the search enumerates as main_phase plan variants ---

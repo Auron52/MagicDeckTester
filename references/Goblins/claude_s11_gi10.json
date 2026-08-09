@@ -1,0 +1,145 @@
+{
+  "seed": 11, "game_index": 10, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 24, "name": "Mountain" }, { "num": 25, "name": "Mountain" }, { "num": 21, "name": "Lightning Bolt" }, { "num": 22, "name": "Lightning Bolt" }, { "num": 59, "name": "Three Tree City" }, { "num": 49, "name": "Rundvelt Hordemaster" }, { "num": 5, "name": "Goblin Chieftain" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 5, "name": "Goblin Chieftain", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 22, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 24, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Rundvelt Hordemaster", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Lightning Bolt", "land": "Mountain", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 1, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Three Tree City; cast: (nothing)", "land": "Three Tree City", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "target",
+  "source": "Lightning Bolt",
+  "turn": 1,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 0, "num": 24, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Goblin Chieftain", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Rundvelt Hordemaster", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Goblin King" }],
+  "events": [{ "turn": 1, "kind": "damage", "text": "🔥 Lightning Bolt: 3 to opponent (20→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 0, "num": 24, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Goblin Chieftain", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 7, "name": "Goblin King", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Rundvelt Hordemaster", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 59, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Lightning Bolt"], "library_size": 51 },
+  "opponent": { "life": 17, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Rundvelt Hordemaster", "land": "Mountain", "casts": ["Rundvelt Hordemaster"], "actions": [{ "card": "Rundvelt Hordemaster" }] },
+    { "index": 1, "summary": "land=Three Tree City; cast: Rundvelt Hordemaster", "land": "Three Tree City", "casts": ["Rundvelt Hordemaster"], "actions": [{ "card": "Rundvelt Hordemaster" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Lightning Bolt", "land": "Mountain", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 3, "summary": "land=Three Tree City; cast: Lightning Bolt", "land": "Three Tree City", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 4, "summary": "land=none; cast: Lightning Bolt", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 5, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Three Tree City; cast: (nothing)", "land": "Three Tree City", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Goblin Warchief" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 0, "num": 24, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 25, "is_land": true }, { "name": "Rundvelt Hordemaster", "idx": 2, "num": 49, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Goblin Chieftain", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 7, "name": "Goblin King", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Goblin Warchief", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Lightning Bolt"], "library_size": 50 },
+  "opponent": { "life": 17, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Three Tree City; cast: Goblin Chieftain", "land": "Three Tree City", "casts": ["Goblin Chieftain"], "actions": [{ "card": "Goblin Chieftain" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Goblin Chieftain", "land": "Mountain", "casts": ["Goblin Chieftain"], "actions": [{ "card": "Goblin Chieftain" }] },
+    { "index": 2, "summary": "land=Three Tree City; cast: Goblin King", "land": "Three Tree City", "casts": ["Goblin King"], "actions": [{ "card": "Goblin King" }] },
+    { "index": 3, "summary": "land=Three Tree City; cast: Goblin Warchief", "land": "Three Tree City", "casts": ["Goblin Warchief"], "actions": [{ "card": "Goblin Warchief" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Goblin King", "land": "Mountain", "casts": ["Goblin King"], "actions": [{ "card": "Goblin King" }] },
+    { "index": 5, "summary": "land=Mountain; cast: Goblin Warchief", "land": "Mountain", "casts": ["Goblin Warchief"], "actions": [{ "card": "Goblin Warchief" }] },
+    { "index": 6, "summary": "land=Three Tree City; cast: Lightning Bolt", "land": "Three Tree City", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 7, "summary": "land=Mountain; cast: Lightning Bolt", "land": "Mountain", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 8, "summary": "land=none; cast: Lightning Bolt", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 9, "summary": "land=Three Tree City; cast: (nothing)", "land": "Three Tree City", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Mountain" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Rundvelt Hordemaster (1), Goblin Warchief (3) — 4 to opponent (17→13)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Goblin Warchief", "idx": 4, "num": 19, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 24, "is_land": true }, { "name": "Mountain", "idx": 1, "num": 25, "is_land": true }, { "name": "Mountain", "idx": 3, "num": 26, "is_land": true }, { "name": "Rundvelt Hordemaster", "idx": 2, "num": 49, "is_land": false }], "vial_counters": [], "hand": [{ "num": 5, "name": "Goblin Chieftain", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 7, "name": "Goblin King", "cost": "{1}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 27, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Lightning Bolt"], "library_size": 49 },
+  "opponent": { "life": 13, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Goblin Chieftain, Goblin King", "land": "Mountain", "casts": ["Goblin Chieftain", "Goblin King"], "cast_order_canonical": ["Goblin Chieftain", "Goblin King"], "actions": [{ "card": "Goblin Chieftain" }, { "card": "Goblin King" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Goblin King, Goblin Chieftain", "land": "Mountain", "casts": ["Goblin King", "Goblin Chieftain"], "cast_order_canonical": ["Goblin King", "Goblin Chieftain"], "actions": [{ "card": "Goblin King" }, { "card": "Goblin Chieftain" }] },
+    { "index": 2, "summary": "land=Three Tree City; cast: Goblin Chieftain, Lightning Bolt", "land": "Three Tree City", "casts": ["Goblin Chieftain", "Lightning Bolt"], "cast_order_canonical": ["Goblin Chieftain", "Lightning Bolt"], "actions": [{ "card": "Goblin Chieftain" }, { "card": "Lightning Bolt" }] },
+    { "index": 3, "summary": "land=Three Tree City; cast: Goblin King, Lightning Bolt", "land": "Three Tree City", "casts": ["Goblin King", "Lightning Bolt"], "cast_order_canonical": ["Goblin King", "Lightning Bolt"], "actions": [{ "card": "Goblin King" }, { "card": "Lightning Bolt" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Goblin Chieftain, Lightning Bolt", "land": "Mountain", "casts": ["Goblin Chieftain", "Lightning Bolt"], "cast_order_canonical": ["Goblin Chieftain", "Lightning Bolt"], "actions": [{ "card": "Goblin Chieftain" }, { "card": "Lightning Bolt" }] },
+    { "index": 5, "summary": "land=Mountain; cast: Goblin King, Lightning Bolt", "land": "Mountain", "casts": ["Goblin King", "Lightning Bolt"], "cast_order_canonical": ["Goblin King", "Lightning Bolt"], "actions": [{ "card": "Goblin King" }, { "card": "Lightning Bolt" }] },
+    { "index": 6, "summary": "land=none; cast: Goblin Chieftain, Lightning Bolt", "land": null, "casts": ["Goblin Chieftain", "Lightning Bolt"], "cast_order_canonical": ["Goblin Chieftain", "Lightning Bolt"], "actions": [{ "card": "Goblin Chieftain" }, { "card": "Lightning Bolt" }] },
+    { "index": 7, "summary": "land=none; cast: Goblin King, Lightning Bolt", "land": null, "casts": ["Goblin King", "Lightning Bolt"], "cast_order_canonical": ["Goblin King", "Lightning Bolt"], "actions": [{ "card": "Goblin King" }, { "card": "Lightning Bolt" }] },
+    { "index": 8, "summary": "land=Three Tree City; cast: Goblin Chieftain", "land": "Three Tree City", "casts": ["Goblin Chieftain"], "actions": [{ "card": "Goblin Chieftain" }] },
+    { "index": 9, "summary": "land=Three Tree City; cast: Goblin King", "land": "Three Tree City", "casts": ["Goblin King"], "actions": [{ "card": "Goblin King" }] },
+    { "index": 10, "summary": "land=Mountain; cast: Goblin Chieftain", "land": "Mountain", "casts": ["Goblin Chieftain"], "actions": [{ "card": "Goblin Chieftain" }] },
+    { "index": 11, "summary": "land=Mountain; cast: Goblin King", "land": "Mountain", "casts": ["Goblin King"], "actions": [{ "card": "Goblin King" }] },
+    { "index": 12, "summary": "land=none; cast: Goblin Chieftain", "land": null, "casts": ["Goblin Chieftain"], "actions": [{ "card": "Goblin Chieftain" }] },
+    { "index": 13, "summary": "land=none; cast: Goblin King", "land": null, "casts": ["Goblin King"], "actions": [{ "card": "Goblin King" }] },
+    { "index": 14, "summary": "land=Three Tree City; cast: Lightning Bolt", "land": "Three Tree City", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 15, "summary": "land=Mountain; cast: Lightning Bolt", "land": "Mountain", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 16, "summary": "land=none; cast: Lightning Bolt", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 17, "summary": "land=Three Tree City; cast: (nothing)", "land": "Three Tree City", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}

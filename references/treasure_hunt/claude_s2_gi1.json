@@ -147,8 +147,8 @@
   "mdfc_backs": ["Boulderloft Pathway"],
   "me": { "life": 20, "battlefield": [{ "name": "Saprazzan Skerry", "idx": 0, "num": 40, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Saprazzan Skerry", "idx": 1, "num": 41, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 2, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 3, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 5, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Forgotten Cave", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Frostboil Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Lonely Sandbar", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Steam Vents", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Temple of Epiphany", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Thundering Falls", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Treasure Hunt", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 59, "name": "Treasure Hunt", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Treasure Hunt"], "library_size": 44 },
   "opponent": { "life": 20, "battlefield": [] },
-  "ai_set": [0, 1, 2, 4, 5, 6],
-  "heuristic_default": 0,
+  "ai_set": [7, 8, 9, 10, 6, 11],
+  "heuristic_default": 7,
   "options": [{ "index": 0, "name": "Thundering Falls" }, { "index": 1, "name": "Steam Vents" }, { "index": 2, "name": "Cascade Bluffs" }, { "index": 3, "name": "Treasure Hunt" }, { "index": 4, "name": "Forgotten Cave" }, { "index": 5, "name": "Lonely Sandbar" }, { "index": 6, "name": "Ferrous Lake" }, { "index": 7, "name": "Cascade Bluffs" }, { "index": 8, "name": "Cascade Bluffs" }, { "index": 9, "name": "Frostboil Snarl" }, { "index": 10, "name": "Island" }, { "index": 11, "name": "Temple of Epiphany" }, { "index": 12, "name": "Treasure Hunt" }],
   "note": "reply a hand index -- the card to discard. Default = the AI's pick."
 }
@@ -161,8 +161,8 @@
   "mdfc_backs": ["Boulderloft Pathway"],
   "me": { "life": 20, "battlefield": [{ "name": "Saprazzan Skerry", "idx": 0, "num": 40, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Saprazzan Skerry", "idx": 1, "num": 41, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 2, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 3, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Forgotten Cave", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Frostboil Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Lonely Sandbar", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Steam Vents", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Temple of Epiphany", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Thundering Falls", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Treasure Hunt", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 59, "name": "Treasure Hunt", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Ferrous Lake", "Treasure Hunt"], "library_size": 44 },
   "opponent": { "life": 20, "battlefield": [] },
-  "ai_set": [0, 1, 2, 4, 5],
-  "heuristic_default": 0,
+  "ai_set": [6, 7, 8, 9, 10],
+  "heuristic_default": 6,
   "options": [{ "index": 0, "name": "Thundering Falls" }, { "index": 1, "name": "Steam Vents" }, { "index": 2, "name": "Cascade Bluffs" }, { "index": 3, "name": "Treasure Hunt" }, { "index": 4, "name": "Forgotten Cave" }, { "index": 5, "name": "Lonely Sandbar" }, { "index": 6, "name": "Cascade Bluffs" }, { "index": 7, "name": "Cascade Bluffs" }, { "index": 8, "name": "Frostboil Snarl" }, { "index": 9, "name": "Island" }, { "index": 10, "name": "Temple of Epiphany" }, { "index": 11, "name": "Treasure Hunt" }],
   "note": "reply a hand index -- the card to discard. Default = the AI's pick."
 }
@@ -175,8 +175,8 @@
   "mdfc_backs": ["Boulderloft Pathway"],
   "me": { "life": 20, "battlefield": [{ "name": "Saprazzan Skerry", "idx": 0, "num": 40, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Saprazzan Skerry", "idx": 1, "num": 41, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 2, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 3, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Forgotten Cave", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Frostboil Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Steam Vents", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Temple of Epiphany", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Thundering Falls", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Treasure Hunt", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 59, "name": "Treasure Hunt", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Ferrous Lake", "Lonely Sandbar", "Treasure Hunt"], "library_size": 44 },
   "opponent": { "life": 20, "battlefield": [] },
-  "ai_set": [0, 1, 2, 4],
-  "heuristic_default": 0,
+  "ai_set": [5, 6, 7, 8],
+  "heuristic_default": 5,
   "options": [{ "index": 0, "name": "Thundering Falls" }, { "index": 1, "name": "Steam Vents" }, { "index": 2, "name": "Cascade Bluffs" }, { "index": 3, "name": "Treasure Hunt" }, { "index": 4, "name": "Forgotten Cave" }, { "index": 5, "name": "Cascade Bluffs" }, { "index": 6, "name": "Cascade Bluffs" }, { "index": 7, "name": "Frostboil Snarl" }, { "index": 8, "name": "Island" }, { "index": 9, "name": "Temple of Epiphany" }, { "index": 10, "name": "Treasure Hunt" }],
   "note": "reply a hand index -- the card to discard. Default = the AI's pick."
 }
@@ -189,8 +189,8 @@
   "mdfc_backs": ["Boulderloft Pathway"],
   "me": { "life": 20, "battlefield": [{ "name": "Saprazzan Skerry", "idx": 0, "num": 40, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Saprazzan Skerry", "idx": 1, "num": 41, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 1, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 2, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 3, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Frostboil Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Steam Vents", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Temple of Epiphany", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Thundering Falls", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Treasure Hunt", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 59, "name": "Treasure Hunt", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Ferrous Lake", "Forgotten Cave", "Lonely Sandbar", "Treasure Hunt"], "library_size": 44 },
   "opponent": { "life": 20, "battlefield": [] },
-  "ai_set": [0, 1, 2],
-  "heuristic_default": 0,
+  "ai_set": [4, 5, 6],
+  "heuristic_default": 4,
   "options": [{ "index": 0, "name": "Thundering Falls" }, { "index": 1, "name": "Steam Vents" }, { "index": 2, "name": "Cascade Bluffs" }, { "index": 3, "name": "Treasure Hunt" }, { "index": 4, "name": "Cascade Bluffs" }, { "index": 5, "name": "Cascade Bluffs" }, { "index": 6, "name": "Frostboil Snarl" }, { "index": 7, "name": "Island" }, { "index": 8, "name": "Temple of Epiphany" }, { "index": 9, "name": "Treasure Hunt" }],
   "note": "reply a hand index -- the card to discard. Default = the AI's pick."
 }
@@ -203,8 +203,8 @@
   "mdfc_backs": ["Boulderloft Pathway"],
   "me": { "life": 20, "battlefield": [{ "name": "Saprazzan Skerry", "idx": 0, "num": 40, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Saprazzan Skerry", "idx": 1, "num": 41, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 2, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 3, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Frostboil Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Steam Vents", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Temple of Epiphany", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Thundering Falls", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Treasure Hunt", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 59, "name": "Treasure Hunt", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Cascade Bluffs", "Ferrous Lake", "Forgotten Cave", "Lonely Sandbar", "Treasure Hunt"], "library_size": 44 },
   "opponent": { "life": 20, "battlefield": [] },
-  "ai_set": [0, 1],
-  "heuristic_default": 0,
+  "ai_set": [4, 5],
+  "heuristic_default": 4,
   "options": [{ "index": 0, "name": "Thundering Falls" }, { "index": 1, "name": "Steam Vents" }, { "index": 2, "name": "Treasure Hunt" }, { "index": 3, "name": "Cascade Bluffs" }, { "index": 4, "name": "Cascade Bluffs" }, { "index": 5, "name": "Frostboil Snarl" }, { "index": 6, "name": "Island" }, { "index": 7, "name": "Temple of Epiphany" }, { "index": 8, "name": "Treasure Hunt" }],
   "note": "reply a hand index -- the card to discard. Default = the AI's pick."
 }
@@ -217,8 +217,8 @@
   "mdfc_backs": ["Boulderloft Pathway"],
   "me": { "life": 20, "battlefield": [{ "name": "Saprazzan Skerry", "idx": 0, "num": 40, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Saprazzan Skerry", "idx": 1, "num": 41, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 2, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 3, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Frostboil Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Temple of Epiphany", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Thundering Falls", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Treasure Hunt", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }, { "num": 59, "name": "Treasure Hunt", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Cascade Bluffs", "Ferrous Lake", "Forgotten Cave", "Lonely Sandbar", "Steam Vents", "Treasure Hunt"], "library_size": 44 },
   "opponent": { "life": 20, "battlefield": [] },
-  "ai_set": [0],
-  "heuristic_default": 0,
+  "ai_set": [3],
+  "heuristic_default": 3,
   "options": [{ "index": 0, "name": "Thundering Falls" }, { "index": 1, "name": "Treasure Hunt" }, { "index": 2, "name": "Cascade Bluffs" }, { "index": 3, "name": "Cascade Bluffs" }, { "index": 4, "name": "Frostboil Snarl" }, { "index": 5, "name": "Island" }, { "index": 6, "name": "Temple of Epiphany" }, { "index": 7, "name": "Treasure Hunt" }],
   "note": "reply a hand index -- the card to discard. Default = the AI's pick."
 }
@@ -485,9 +485,58 @@
   "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
 },
-    { "chosen": 10, "decision": {
+    { "chosen": -1, "decision": {
   "decision_index": 13,
   "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Cascade Bluffs", "idx": 1, "num": 2, "tapped": true, "is_land": true }, { "name": "Land's Edge", "idx": 2, "num": 25, "is_land": false, "is_le": true }, { "name": "Reliquary Tower", "idx": 0, "num": 31, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 4, "name": "Cascade Bluffs", "cost": "", "mv": 0, "kind": "land" }, { "num": 7, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 6, "name": "Ferrous Lake", "cost": "", "mv": 0, "kind": "land" }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Forgotten Cave", "cost": "", "mv": 0, "kind": "land" }, { "num": 15, "name": "Forgotten Cave", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Frostboil Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Frostboil Snarl", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 22, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Lonely Sandbar", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Lonely Sandbar", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Lonely Sandbar", "cost": "", "mv": 0, "kind": "land" }, { "num": 32, "name": "Reliquary Tower", "cost": "", "mv": 0, "kind": "land" }, { "num": 35, "name": "Remote Isle", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Sandstone Needle", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Steam Vents", "cost": "", "mv": 0, "kind": "land" }, { "num": 46, "name": "Steam Vents", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Temple of Epiphany", "cost": "", "mv": 0, "kind": "land" }, { "num": 48, "name": "Temple of Epiphany", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Thundering Falls", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Thundering Falls", "cost": "", "mv": 0, "kind": "land" }, { "num": 60, "name": "Treasure Hunt", "cost": "{1}{U}", "mv": 2, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Cascade Bluffs", "Ferrous Lake", "Forgotten Cave", "Lonely Sandbar", "Saprazzan Skerry", "Saprazzan Skerry", "Steam Vents", "Thundering Falls", "Treasure Hunt", "Treasure Hunt", "Treasure Hunt"], "library_size": 19 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "lands_edge": { "rate": 2, "lands_in_hand": 26 },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Land's Edge (other) +discard1", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Land's Edge (other) +discard2", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 2 }] },
+    { "index": 3, "summary": "land=none; cast: Land's Edge (other) +discard3", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 3 }] },
+    { "index": 4, "summary": "land=none; cast: Land's Edge (other) +discard4", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 4 }] },
+    { "index": 5, "summary": "land=none; cast: Land's Edge (other) +discard5", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 5 }] },
+    { "index": 6, "summary": "land=none; cast: Land's Edge (other) +discard6", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 6 }] },
+    { "index": 7, "summary": "land=none; cast: Land's Edge (other) +discard7", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 7 }] },
+    { "index": 8, "summary": "land=none; cast: Land's Edge (other) +discard8", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 8 }] },
+    { "index": 9, "summary": "land=none; cast: Land's Edge (other) +discard9", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 9 }] },
+    { "index": 10, "summary": "land=none; cast: Land's Edge (other) +discard10", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 10 }] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=none; cast: Land's Edge (other) +discard1", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 1 }] },
+    { "index": 14, "summary": "land=none; cast: Land's Edge (other) +discard1", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 1 }] },
+    { "index": 15, "summary": "land=none; cast: Land's Edge (other) +discard2", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 2 }] },
+    { "index": 16, "summary": "land=none; cast: Land's Edge (other) +discard2", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 2 }] },
+    { "index": 17, "summary": "land=none; cast: Land's Edge (other) +discard3", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 3 }] },
+    { "index": 18, "summary": "land=none; cast: Land's Edge (other) +discard3", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 3 }] },
+    { "index": 19, "summary": "land=none; cast: Land's Edge (other) +discard4", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 4 }] },
+    { "index": 20, "summary": "land=none; cast: Land's Edge (other) +discard4", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 4 }] },
+    { "index": 21, "summary": "land=none; cast: Land's Edge (other) +discard5", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 5 }] },
+    { "index": 22, "summary": "land=none; cast: Land's Edge (other) +discard5", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 5 }] },
+    { "index": 23, "summary": "land=none; cast: Land's Edge (other) +discard6", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 6 }] },
+    { "index": 24, "summary": "land=none; cast: Land's Edge (other) +discard6", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 6 }] },
+    { "index": 25, "summary": "land=none; cast: Land's Edge (other) +discard7", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 7 }] },
+    { "index": 26, "summary": "land=none; cast: Land's Edge (other) +discard7", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 7 }] },
+    { "index": 27, "summary": "land=none; cast: Land's Edge (other) +discard8", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 8 }] },
+    { "index": 28, "summary": "land=none; cast: Land's Edge (other) +discard8", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 8 }] },
+    { "index": 29, "summary": "land=none; cast: Land's Edge (other) +discard9", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 9 }] },
+    { "index": 30, "summary": "land=none; cast: Land's Edge (other) +discard9", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 9 }] },
+    { "index": 31, "summary": "land=none; cast: Land's Edge (other) +discard10", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 10 }] },
+    { "index": 32, "summary": "land=none; cast: Land's Edge (other) +discard10", "land": null, "casts": [], "actions": [{ "card": "Land's Edge", "landsedge": 10 }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 10, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 8,
   "type": "main_phase",
   "turn": 4,
   "phase": "post_main",

@@ -127,6 +127,15 @@ public:
     bool CastEnablerFirst(const GameState&, const std::string&) const override;
     bool ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const override;
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    // Tainted Remedy and Plague Drone are the SAME role (opponent lifegain -> loss) and you only
+    // need one at a time, so holding one makes the other a redundant required piece rather than a
+    // protected "last copy" (user 2026-08-07).
+    const std::vector<std::string>* InterchangeableRequiredGroup(const std::string&) const override;
+    // Cleanup discard: USER-AUTHORED bucket policy (2026-08-07) -- keep 1 enabler + enough mana,
+    // maximize payoffs. State-dependent (board mana, enabler status, opponent creatures), so it
+    // lives here rather than in a profile discard_order. MTG_AL_BUCKET_DISCARD=0 -> generic base.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
     // Seeking the Grove drip is useful exactly when a lifegain->loss enabler (Tainted Remedy / Plague
     // Drone) is active -- it reverses the opponent's "gain 1" into 1 damage. Drives the two drip rules
     // (colours-not-{C}, and the end-of-main sweep); default false in the base provider.
@@ -222,6 +231,19 @@ class HinataProvider : public GenericProvider
 {
 public:
     bool OpponentPlaysLands() const override { return true; }
+    // Cleanup discard: the deck's USER-AUTHORED KEEP PRIORITY (2026-08-07), assigned as ranks
+    // and shed in reverse. Keep hardest -> shed first: Hinata #1, Reality Spasm #1, Crackle #1,
+    // Sol Ring (never shed), Spasm #2 or Irencrag, mana up to 5 with colours (2U/1R/1W,
+    // counting the board), Soulfire with Hinata, cantrips while pieces are missing (2 without
+    // Hinata, 1 otherwise), Soulfire without Hinata, Magma Opus, extra mana or cantrips, extra
+    // Crackle, anything else, inert spells (Distorting Wake / Icy Blast / Memory Lapse /
+    // Remand -- always shed if available). Cantrip and Soulfire ranks move with the board, so
+    // this is a rank assignment, not a static order. Derived from searched trial tables via the
+    // discard-analysis stage; the priority list itself is the user's.
+    // MTG_HINATA_DISCARD_ORDER=0 -> generic base (A/B hatch);
+    // MTG_HINATA_CANTRIP_FIRST=1 -> the 1-mana-cantrip-above-mana arm (keeps a 2-source floor).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
     // Gamble (and any unrestricted tutor) is narrowed combo-aware: while no Hinata is in play
     // or hand, fetch Hinata (a no-Hinata hand is a dead hand); once she is online, let the
     // search pick among the missing payoffs/rituals (the generic full set). Honours MTG_UNPRUNED.
@@ -321,14 +343,12 @@ public:
     // CastCheapestFirstWithinTier: NOT overridden -- cheapest-first among same-tier accelerants is now
     // the ROOT default (DecisionProvider::CastCheapestFirstWithinTier), shared with every ritual deck.
 
-    // Spare-copy discard band: OFF. The band's premise -- a name with 2+ hand copies has a spare --
-    // fails for a storm deck: the go-off consumes ritual copies CUMULATIVELY (storm count + float),
-    // so a "spare" Rite of Flame is next turn's mana and storm. Card-level exclusion via
-    // IsManaRitual is NOT usable instead: Reality Spasm classifies as a ritual, and shedding a
-    // spare Spasm is exactly the band's biggest measured win (hinata gi21 loss->T8). Adoption gate
-    // 2026-08-06: band-on measured dragonstorm worse in 11/12 overnight cells (+0.063 net, 0
-    // better); off is byte-identical to pre-band. See docs/design/searched-discard-as-search-node.md.
-    bool SpareCopyDiscardBand(const GameState&) const override { return false; }
+    // Cleanup discard: NO spare-copy rule for this deck, ever. Recorded because it was MEASURED,
+    // not assumed: the 2026-08-06 adoption gate ran dragonstorm with a shed-duplicates-first band
+    // and got 11/12 overnight cells worse (+0.063 net, 0 better) -- a storm deck consumes ritual
+    // copies CUMULATIVELY (storm count + float), so a "spare" Rite of Flame is next turn's mana
+    // and storm. The discard-analysis labels agree (band 85.8% optimal vs the base MV rule's 99%
+    // over 401 decisions). See docs/design/per-deck-discard-analysis-phase.md.
 
     // Float-colour collapse (Hook: ImpulseFloatColorRedOnly / RestrictSacColorsToHasteAndRed). Apex of
     // Power floats RED only; Lotus Bloom floats RED unless a HASTE Dragon (Karrthus {4}{B}{R}{G} /

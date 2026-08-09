@@ -193,10 +193,25 @@ inline bool CleanupDiscardProtected(const GameState& state, const Card& c,
     const Player& ap = state.players[state.active_player_index];
     const DiscardProtectScope scope = EffectiveDiscardProtectScope(state);
     if (scope == DiscardProtectScope::All) { return true; }
+    // Redundancy is counted over the piece's INTERCHANGEABLE GROUP, not just its own name. Some
+    // required pieces are different cards filling ONE role -- Anti-Lifegain's Tainted Remedy and
+    // Plague Drone are both "opponent lifegain becomes loss", and you only need one at a time
+    // (USER 2026-08-07). Counting by name alone protected BOTH as "last copy", which vetoed the
+    // provider's own bucket decision to shed the redundant enabler and made it pitch a payoff
+    // instead (antilife s3003 gi226: shed Skyshroud Cutter = 5, shedding the spare enabler or a
+    // lesser payoff = 4). Groups are deck knowledge, so the archetype provider supplies them;
+    // the default is empty, i.e. name-only counting exactly as before.
+    const std::vector<std::string>* group = ResolveProvider(state).InterchangeableRequiredGroup(c.m_name);
+    auto same_role = [&](const std::string& other)
+    {
+        if (other == c.m_name) { return true; }
+        if (group == nullptr)  { return false; }
+        return std::find(group->begin(), group->end(), other) != group->end();
+    };
     int copies = 0;
-    for (const Card& h : ap.hand) { if (h.m_name == c.m_name) { ++copies; } }
+    for (const Card& h : ap.hand) { if (same_role(h.m_name.str())) { ++copies; } }
     if (scope == DiscardProtectScope::LastInDeck)
-    { for (const Card& l : ap.library) { if (l.m_name == c.m_name) { ++copies; } } }
+    { for (const Card& l : ap.library) { if (same_role(l.m_name.str())) { ++copies; } } }
     return copies <= 1;
 }
 
@@ -210,6 +225,31 @@ inline bool CleanupDiscardIsLand(const Card& c)
 {
     const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
     return def != nullptr ? def->card.IsLand() : c.IsLand();
+}
+
+// MTG_DISCARD_ORDER (value-carrying, parsed once): the discard-analysis stage's TESTING-ONLY
+// shed-order lever -- "Name;Name;..." trialled as a tier-A order per A/B arm without code.
+// nullptr when unset/empty (the shipped path). Shipped orders are provider overrides.
+inline const std::vector<std::string>* DiscardOrderTestLever()
+{
+    static const std::vector<std::string> s_order = []
+    {
+        std::vector<std::string> out;
+        const char* e = std::getenv("MTG_DISCARD_ORDER");
+        if (e == nullptr || *e == '\0') { return out; }
+        std::string cur;
+        for (const char* p = e;; ++p)
+        {
+            if (*p == ';' || *p == '\0')
+            {
+                if (!cur.empty()) { out.push_back(cur); cur.clear(); }
+                if (*p == '\0') { break; }
+            }
+            else { cur += *p; }
+        }
+        return out;
+    }();
+    return s_order.empty() ? nullptr : &s_order;
 }
 
 // The base ranking. `preferred`, when non-empty, is the provider's OWN order for the cards it has an
@@ -244,53 +284,38 @@ inline std::vector<int> CleanupDiscardRankingWithOrder(
             push(i);
         }
     }
+    else if (const std::vector<std::string>* test_order = DiscardOrderTestLever())
+    {
+        // MTG_DISCARD_ORDER="Name;Name;..." -- TESTING-ONLY lever for the analyzer's
+        // discard-analysis stage to trial a candidate shed order WITHOUT code (per-arm env in
+        // its outcome A/B). Shipped rules are always PROVIDER-owned (user ruling 2026-08-07):
+        // an adopted order becomes a provider CleanupDiscardCandidates override deferring to
+        // this ranking via `preferred` (see HinataProvider). Never set outside the stage.
+        // Semantics match a provider order: named cards shed first, in order (all hand copies,
+        // hand order); omission = keep; staged and protected entries dropped.
+        for (const std::string& name : *test_order)
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                if (ap.hand[i].m_name != name || ap.hand[i].m_is_staged) { continue; }
+                if (CleanupDiscardProtected(state, ap.hand[i], required_pieces)) { continue; }
+                push(i);
+            }
+        }
+    }
     else if (ResolveProvider(state).DiscardLandsFirst(state))
     {
         for (int i = 0; i < n; ++i)
         { if (!ap.hand[i].m_is_staged && CleanupDiscardIsLand(ap.hand[i])) { push(i); } }
     }
 
-    // Tier A2 -- SPARE COPIES first (MTG_SPARE_COPY_BAND=0 restores the pre-band ranking).
-    // A name with two-plus non-staged copies in hand sheds a copy before any unique card:
-    // across the probe-retirement classification (2026-08-06, 16 surviving games,
-    // docs/design/searched-discard-as-search-node.md) the clairvoyant probe's win-optimal shed
-    // was a duplicate in game after game (Reality Spasm x4, Crackle x3, Plague Drone x3,
-    // Preordain/Wake/Invigorate/Idyllic x2) while the MV rule pitched a unique engine card --
-    // hinata gi21 shed its SINGLETON Hinata into a loss holding four Spasms. Visible
-    // information only: hand copy counts, no library order. Exclusions, each load-bearing:
-    //   * lands -- shedding mana measured catastrophic on the mana-hungry decks (antilife
-    //     fetch sheds rolled out 9 = unwon);
-    //   * required pieces -- their redundant-copy semantics are DiscardProtectScope's,
-    //     measured per-deck (protecting every Dragonstorm copy once turned three wins unwon;
-    //     see the scope comment above). A required-name dup stays a tier-B decision.
-    // MV descending within the band (a dup'd dork ranks behind a dup'd spell -- antilife gi188:
-    // the Ignoble Hierarch pair rolled out 9, the Skyshroud Cutter pair 8).
-    // Provider opt-out (SpareCopyDiscardBand): the premise fails deck-wide where duplicates are
-    // cumulative fuel -- the adoption gate measured dragonstorm worse in 11/12 overnight cells
-    // (+0.063 net, 0 better) with the band on, byte-identical to pre-band with it off.
-    static const bool s_spare_copy_band = EnvOn("MTG_SPARE_COPY_BAND", true);
-    if (s_spare_copy_band && ResolveProvider(state).SpareCopyDiscardBand(state))
-    {
-        std::vector<int> dup_band;
-        for (int i = 0; i < n; ++i)
-        {
-            const Card& c = ap.hand[i];
-            if (c.m_is_staged || CleanupDiscardIsLand(c)) { continue; }
-            // Protection is the ONLY required-piece filter: under the deck's DiscardProtectScope a
-            // redundant required copy is discardable (antilife sheds its spare Tainted Remedy /
-            // Plague Drone / Idyllic Tutor -- measured optimal in 3 of its 6 classified games),
-            // and the scope re-engages at the last copy. Dragonstorm's history (protect-every-copy
-            // regressed) is a SCOPE lesson, already honored here by deferring to it.
-            if (CleanupDiscardProtected(state, c, required_pieces)) { continue; }
-            int copies = 0;
-            for (int j = 0; j < n; ++j)
-            { if (!ap.hand[j].m_is_staged && ap.hand[j].m_name == c.m_name) { ++copies; } }
-            if (copies >= 2) { dup_band.push_back(i); }
-        }
-        std::stable_sort(dup_band.begin(), dup_band.end(), [&](int a, int b)
-        { return CleanupDiscardManaValue(ap.hand[a]) > CleanupDiscardManaValue(ap.hand[b]); });
-        for (int i : dup_band) { push(i); }
-    }
+    // (A "spare-copy band" tier lived here 2026-08-06/07 -- shed any name with 2+ hand copies
+    // before unique cards. REMOVED as an engine rule: the discard-analysis stage scores it as a
+    // label-only hypothesis, and it lost to authored per-deck rules on every deck where dups
+    // mattered (hinata/antilife orders beat it head-to-head; dragonstorm it actively hurt,
+    // +0.063 overnight -- ritual copies are cumulative fuel). If a future deck's labels ever
+    // demand it, implement it in THAT deck's provider. See
+    // docs/design/per-deck-discard-analysis-phase.md.)
 
     // Tier B -- eligible cards, descending mana value, ties keeping the earlier card.
     std::vector<int> tier_b;
@@ -1779,8 +1804,45 @@ inline int CountAttackTriggerLifeLoss(
 // The "you may" on Suture Priest's triggers is always taken (strictly beneficial). Multiple
 // watchers stack (each is its own trigger). The entered permanent itself is excluded ("another");
 // a watcher entering alongside others still sees THEIR enters (each enter fires separately).
+// DescribeLifeWatchers -- body in SpellEffects.cpp (see the header note above). Formats the one
+// aggregated enter/death life-watcher event. COLD by construction: it runs only when a human-play
+// event sink is attached, never in a rollout, so keeping it out of this 15-TU header costs nothing.
+//
+// The watcher lists are keyed by WHICH PLAYER'S LIFE MOVED, not by who controls the watcher -- the
+// two differ (Essence Warden's "whenever ANOTHER creature enters" gains for ITS controller no matter
+// whose creature entered, while Suture Priest's drain hits the entering creature's controller). So
+// `on_subject` = watchers that changed subject_controller's life, `on_other` = the other player's.
+// subject_index >= 0 names the creature that ENTERED; -1 = the subject creature DIED.
+std::string DescribeLifeWatchers(const GameState& state, int subject_controller, int subject_index,
+                                 const std::vector<std::pair<std::string, int>>& on_subject,
+                                 const std::vector<std::pair<std::string, int>>& on_other,
+                                 int life_before_subject, int life_before_other);
+
 inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, int entered_index)
 {
+    // Play-viewer history (viewer issue #11): this is the DRAIN ENGINE, and it used to move life
+    // totals silently -- so a Creature Giving game read as if the engine were inventing damage
+    // (issue #10: Suture Priest x2 x (Orchard Spirits + Varchild's Survivors) is exactly the 12->6
+    // and 1->-7 that looked invented). Log ONE aggregated event per enter rather than one per
+    // watcher, so a two-Priest board reads "Suture Priest x2: opponent -2" instead of two lines.
+    // Nothing is collected unless a real human-play sink is attached: g_play_event_sink is nulled
+    // by RevealLogPause for every search/rollout/enumeration scope, and this is a per-enter HOT
+    // path -- so autonomous play does one predictable null check and is byte-identical.
+    // !g_tap_speculating mirrors the lifegain site: never log a phantom that gets backtracked.
+    const bool log = (g_play_event_sink != nullptr) && !g_tap_speculating;
+    const int life_before_entered = state.players[entered_controller].life;
+    const int life_before_other   = state.players[1 - entered_controller].life;
+    // Keyed by WHOSE LIFE MOVED, not by who controls the watcher -- Essence Warden gains for ITS
+    // controller whichever side the creature entered on, while Suture Priest's drain always hits
+    // the entering creature's controller. See DescribeLifeWatchers.
+    std::vector<std::pair<std::string, int>> on_entered, on_other;   // watcher name -> trigger count
+    auto note = [&](int affected, const std::string& nm)
+    {
+        auto& v = (affected == entered_controller) ? on_entered : on_other;
+        for (auto& e : v) { if (e.first == nm) { ++e.second; return; } }
+        v.emplace_back(nm, 1);
+    };
+
     const int n = static_cast<int>(state.battlefield.size());
     for (int i = 0; i < n; ++i)
     {
@@ -1791,10 +1853,16 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         const CardParams& wp = wd->params;
         // "Whenever another creature enters, you gain N" (Soul Warden / Essence Warden: ANY side).
         if (wp.any_creature_enters_lifegain > 0)
-        { state.players[w.controller_index].life += wp.any_creature_enters_lifegain; }
+        {
+            state.players[w.controller_index].life += wp.any_creature_enters_lifegain;
+            if (log) { note(w.controller_index, w.card.m_name.str()); }
+        }
         // "Whenever another creature you control enters, you [may] gain N" (Suture Priest cl. 1).
         if (wp.own_creature_enters_lifegain > 0 && w.controller_index == entered_controller)
-        { state.players[w.controller_index].life += wp.own_creature_enters_lifegain; }
+        {
+            state.players[w.controller_index].life += wp.own_creature_enters_lifegain;
+            if (log) { note(w.controller_index, w.card.m_name.str()); }
+        }
         // "Whenever a creature an opponent controls enters, that player loses N" (Suture Priest
         // clause 2 -- the drain engine; life LOSS, not damage).
         if (wp.opp_creature_enters_life_loss > 0 && w.controller_index != entered_controller)
@@ -1802,7 +1870,16 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             state.players[entered_controller].life -= wp.opp_creature_enters_life_loss;
             if (entered_controller != state.active_player_index)
             { state.opponent_lost_life_this_turn = true; }
+            if (log) { note(entered_controller, w.card.m_name.str()); }
         }
+    }
+
+    if (log && (!on_entered.empty() || !on_other.empty()))
+    {
+        EmitPlayEvent(state.turn_number, "drain",
+                      DescribeLifeWatchers(state, entered_controller, entered_index,
+                                           on_entered, on_other,
+                                           life_before_entered, life_before_other));
     }
 }
 
@@ -1812,6 +1889,12 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
 // etb_damage_each_opponent ping prune). Gated on the param -> byte-identical elsewhere.
 inline void FireOppCreatureDies(GameState& state, int dead_controller)
 {
+    // Same silent-life-change class as FireCreatureEnterWatchers above (viewer issue #11): log ONE
+    // aggregated event, only when a human-play sink is attached (nulled by RevealLogPause in every
+    // search/rollout scope -> autonomous play byte-identical).
+    const bool log = (g_play_event_sink != nullptr) && !g_tap_speculating;
+    const int life_before = state.players[dead_controller].life;
+    std::vector<std::pair<std::string, int>> on_dead;   // watcher name -> trigger count
     for (const Permanent& w : state.battlefield)
     {
         if (w.controller_index == dead_controller) { continue; }
@@ -1820,6 +1903,20 @@ inline void FireOppCreatureDies(GameState& state, int dead_controller)
         state.players[dead_controller].life -= wd->params.opp_dies_life_loss;
         if (dead_controller != state.active_player_index)
         { state.opponent_lost_life_this_turn = true; }
+        if (log)
+        {
+            const std::string nm = w.card.m_name.str();
+            bool seen = false;
+            for (auto& e : on_dead) { if (e.first == nm) { ++e.second; seen = true; break; } }
+            if (!seen) { on_dead.emplace_back(nm, 1); }
+        }
+    }
+    if (log && !on_dead.empty())
+    {
+        // subject_index = -1: the subject already left the battlefield, so it has no index to name.
+        EmitPlayEvent(state.turn_number, "drain",
+                      DescribeLifeWatchers(state, dead_controller, -1, on_dead, {},
+                                           life_before, state.players[1 - dead_controller].life));
     }
 }
 
@@ -2610,6 +2707,54 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
     return victim_id;
 }
 
+// Sacrifice the permanent at battlefield index `idx`: to the graveyard, off the battlefield, then
+// its death-watchers (Pashalik ping / Rundvelt impulse / Mogg death token). Factored out because
+// the sac-outlet paths below each open-coded it, and the human-victim override needs to sacrifice
+// by INDEX rather than by card number (see ChooseSacOutletVictimIndex).
+inline void SacrificePermanentAt(GameState& state, int controller, int idx)
+{
+    if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return; }
+    const Card dead = state.battlefield[idx].card;
+    state.players[controller].graveyard.push_back(dead);
+    state.battlefield.erase(state.battlefield.begin() + idx);
+    OnCreatureDies(state, controller, dead);
+}
+
+// HUMAN-PLAY victim override for a creature-sac outlet (viewer issue #4). Autonomously the victim is
+// CanonicalSacVictim's expendability pick and the human never saw it -- but "which Goblin dies" is a
+// real decision (feeding a lord to Skirk de-buffs the whole board; feeding Mogg War Marshal is nearly
+// free; feeding Rundvelt Hordemaster is how you buy its impulse dig). Reuses the existing `sacrifice`
+// board-click decision (g_play_sacrifice_chooser), so no new decision type is introduced.
+//
+// Returns a BATTLEFIELD INDEX, or -1 when there is no chooser (autonomous / search / rollout -- the
+// pointer is nulled by RevealLogPause) so the caller keeps its byte-identical heuristic path. Indices
+// rather than card numbers deliberately: TOKENS all carry m_number 0, so the card-number lookup the
+// heuristic path uses cannot distinguish two different tokens -- fine when they are fungible, not
+// fine when a human is pointing at one.
+inline int ChooseSacOutletVictimIndex(GameState& state, int controller, int source_id,
+                                      const std::string& need_sub, int heuristic_vid,
+                                      const std::string& source_name)
+{
+    if (!g_play_sacrifice_chooser) { return -1; }
+    std::vector<int> cands;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& v = state.battlefield[i];
+        if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
+        if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
+        cands.push_back(i);
+    }
+    if (cands.empty())     { return -1; }
+    if (cands.size() == 1) { return cands[0]; }   // forced -- do not prompt for a non-choice
+    int def_opt = 0;
+    for (int k = 0; k < static_cast<int>(cands.size()); ++k)
+    { if (state.battlefield[cands[k]].card.m_number == heuristic_vid) { def_opt = k; break; } }
+    const int chosen = (*g_play_sacrifice_chooser)(state, controller, source_name, cands, def_opt);
+    if (chosen >= 0 && chosen < static_cast<int>(cands.size())) { return cands[chosen]; }
+    return cands[def_opt];
+    (void)source_id;
+}
+
 inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_id, int victim_id)
 {
     const CardParams* op = nullptr;
@@ -2623,9 +2768,23 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         }
     }
     if (!op) { return; }
+    // Human play re-asks WHICH creature dies against the real resolution board (viewer issue #4);
+    // with no chooser this is -1 and the card-number search below runs byte-identically.
+    std::string src_name;
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == controller && p.card.m_number == source_id)
+      { src_name = p.card.m_name.str(); break; } }
+    const int hidx = ChooseSacOutletVictimIndex(state, controller, source_id,
+                                                op->sac_creature_requires_subtype, victim_id, src_name);
     // Find + remove the chosen victim (a controlled creature of the required subtype; self-inclusive).
     Card victim; bool found = false;
-    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    if (hidx >= 0)
+    {
+        victim = state.battlefield[hidx].card; found = true;
+        state.players[controller].graveyard.push_back(victim);
+        state.battlefield.erase(state.battlefield.begin() + hidx);
+    }
+    for (int i = 0; !found && i < static_cast<int>(state.battlefield.size()); ++i)
     {
         Permanent& q = state.battlefield[i];
         if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
@@ -3291,6 +3450,9 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         // each (Pashalik ping / Rundvelt impulse / Mogg death token per Goblin). count==1 falls through
         // to the single-sac path below (BYTE-IDENTICAL). Shared by executor + rollout (every caller passes
         // a.ritual_float), so lockstep is automatic.
+        // Captured BEFORE any sacrifice below: erasing from the battlefield invalidates `p`.
+        const std::string src_name = p.card.m_name.str();
+        const std::string need_sub = d->params.sac_creature_requires_subtype;
         if (skirk)
         {
             const int per = std::max(1, d->params.sac_outlet_add_mana_amount);
@@ -3299,18 +3461,19 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
             {
                 for (int n = 0; n < count; ++n)
                 {
-                    const int vid = CanonicalSacVictim(state, controller, sac_source_id,
-                                                       d->params.sac_creature_requires_subtype);
+                    const int vid = CanonicalSacVictim(state, controller, sac_source_id, need_sub);
                     if (vid < 0) { break; }   // ran out of Goblins to sacrifice
+                    // Human play picks each victim in turn (one prompt per sac in the burst); with no
+                    // chooser this is -1 and the card-number path below runs byte-identically.
+                    const int bidx = ChooseSacOutletVictimIndex(state, controller, sac_source_id,
+                                                                need_sub, vid, src_name);
                     AddChosenColorFloat(state, color, per);
+                    if (bidx >= 0) { SacrificePermanentAt(state, controller, bidx); continue; }
                     for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
                     {
                         Permanent& q = state.battlefield[j];
                         if (q.controller_index != controller || q.card.m_number != vid) { continue; }
-                        const Card dead = q.card;
-                        state.players[controller].graveyard.push_back(dead);
-                        state.battlefield.erase(state.battlefield.begin() + j);
-                        OnCreatureDies(state, controller, dead);   // per-sac death triggers (lockstep)
+                        SacrificePermanentAt(state, controller, j);   // per-sac death triggers (lockstep)
                         break;
                     }
                 }
@@ -3326,15 +3489,18 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         }
         if (victim_id != 0 && skirk)
         {
-            // Skirk: the source stays; sacrifice the chosen victim Goblin.
+            // Skirk: the source stays; sacrifice the chosen victim Goblin. The victim was picked at
+            // ENUMERATION time (CanonicalSacVictim, baked into Action::sac_victim_id), so human play
+            // re-asks here against the real resolution board -- otherwise the human's only say in a
+            // single-sac activation would be that they made it at all.
+            const int bidx = ChooseSacOutletVictimIndex(state, controller, sac_source_id,
+                                                        need_sub, victim_id, src_name);
+            if (bidx >= 0) { SacrificePermanentAt(state, controller, bidx); return; }
             for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
             {
                 Permanent& q = state.battlefield[j];
                 if (q.controller_index != controller || q.card.m_number != victim_id) { continue; }
-                const Card dead = q.card;
-                state.players[controller].graveyard.push_back(dead);
-                state.battlefield.erase(state.battlefield.begin() + j);
-                OnCreatureDies(state, controller, dead);   // fires Pashalik ping / death token etc.
+                SacrificePermanentAt(state, controller, j);   // Pashalik ping / death token etc.
                 return;
             }
             return;
@@ -6011,12 +6177,49 @@ namespace tapstats
 {
     inline bool Enabled() { static const bool v = EnvOn("MTG_TAP_STATS"); return v; }
     inline std::atomic<std::uint64_t> g_backtrack_entries{0};
+    inline std::atomic<std::uint64_t> g_nodes{0};          // ALL recursion nodes (top-level + deep)
+    inline std::atomic<std::uint64_t> g_top_memo_off{0};   // top-level calls with n>64 (fail-memo disabled)
+    inline std::atomic<std::uint64_t> g_max_n{0};          // max battlefield size seen at a top-level call
+    // Outcome split of the top-level entries (payable vs unpayable) + the nodes each outcome consumed.
+    // Answers: is the backtracker mostly PROVING FAILURE (a byte-identical exact-frontier prune would
+    // remove those nodes) or mostly SEARCHING FOR A PAYMENT it does find (only pay-from-frontier or a
+    // better greedy would help)? Recorded by the public TapForCostBacktrack wrapper (the recursion calls
+    // the worker directly, so every wrapper call is one top-level entry).
+    inline std::atomic<std::uint64_t> g_entries_ok{0};
+    inline std::atomic<std::uint64_t> g_entries_fail{0};
+    inline std::atomic<std::uint64_t> g_nodes_ok{0};
+    inline std::atomic<std::uint64_t> g_nodes_fail{0};
+    // Flow-prune oracle accounting: entries it proved infeasible up front (pruned, saving their whole
+    // subtree) vs entries where it bailed (a source/cost it can't model exactly -> fell through to the
+    // backtracker). High bail% on a deck means the exact model needs extending (e.g. bounce lands).
+    inline std::atomic<std::uint64_t> g_flow_prune{0};
+    inline std::atomic<std::uint64_t> g_flow_bail{0};
     struct Dumper {
         ~Dumper()
         {
             if (!Enabled()) { return; }
-            std::fprintf(stderr, "\n=== TAP STATS: TapForCostBacktrack top-level entries = %llu ===\n",
-                         (unsigned long long)g_backtrack_entries.load());
+            const unsigned long long top = g_backtrack_entries.load();
+            const unsigned long long nodes = g_nodes.load();
+            const unsigned long long eok = g_entries_ok.load(), efail = g_entries_fail.load();
+            const unsigned long long nok = g_nodes_ok.load(), nfail = g_nodes_fail.load();
+            std::fprintf(stderr,
+                "\n=== TAP STATS: top-level entries=%llu  total nodes=%llu  nodes/entry=%.1f"
+                "  memo-off(n>64) top-level=%llu  max board n=%llu ===\n",
+                top, nodes, top ? (double)nodes / (double)top : 0.0,
+                (unsigned long long)g_top_memo_off.load(), (unsigned long long)g_max_n.load());
+            std::fprintf(stderr,
+                "=== TAP OUTCOME: payable entries=%llu (%.1f%%, %llu nodes, %.1f/entry)  "
+                "UNpayable entries=%llu (%.1f%%, %llu nodes = %.1f%% of nodes, %.1f/entry) ===\n",
+                eok,   (eok + efail) ? 100.0 * (double)eok / (double)(eok + efail) : 0.0,
+                nok,   eok ? (double)nok / (double)eok : 0.0,
+                efail, (eok + efail) ? 100.0 * (double)efail / (double)(eok + efail) : 0.0,
+                nfail, (nok + nfail) ? 100.0 * (double)nfail / (double)(nok + nfail) : 0.0,
+                efail ? (double)nfail / (double)efail : 0.0);
+            const unsigned long long fp = g_flow_prune.load(), fb = g_flow_bail.load();
+            std::fprintf(stderr,
+                "=== FLOW PRUNE: pruned=%llu (%.1f%% of top-level entries)  bailed=%llu (%.1f%%) ===\n",
+                fp, top ? 100.0 * (double)fp / (double)top : 0.0,
+                fb, top ? 100.0 * (double)fb / (double)top : 0.0);
         }
     };
     inline Dumper g_dumper;
@@ -6026,6 +6229,12 @@ namespace tapstats
 // Default ON: it is LOSSLESS (an upper bound only ever short-circuits provably-unpayable costs).
 inline bool MaxManaGateEnabled()
 { static const bool v = !EnvOn("MTG_NO_MAXMANA_GATE"); return v; }
+
+// Flow-prune oracle (byte-identical contention-aware infeasibility test at the top-level tap
+// backtracker entry; see TapFlowInfeasible in SpellEffects.cpp). ON by default; MTG_NO_FLOW_PRUNE=1
+// disables it (A/B off-switch -- output must be byte-identical either way).
+inline bool FlowPruneEnabled()
+{ static const bool v = !EnvOn("MTG_NO_FLOW_PRUNE"); return v; }
 
 // UPPER bound on the net mana one tap of `def` can add to the floating pool -- used to bound the
 // total mana still extractable from a set of untapped sources. Deliberately over- (never under-)
@@ -6109,6 +6318,13 @@ inline std::uint64_t ReservableSpecialMask(const GameState& state)
 }
 
 // TapForCostBacktrack -- body in SpellEffects.cpp (see the header note above).
+// `src_cands` (threaded, nullptr at the top-level call) is the controller's structural mana sources
+// {battlefield index, cached def}, enumerated ONCE at the top-level call and reused by every recursion
+// node -- so a token-flooded OPPONENT board (Forbidden Orchard Spirits / Hunted Phantasm / Varchild's
+// Survivors) is skipped instead of rescanned (with a fresh LookupCached hash lookup) at every one of the
+// millions of backtrack nodes. Invariant during a payment (no permanent enters/leaves), so this is a
+// pure byte-identical speedup: every per-node liveness check (tapped / CanTapNow / storage / graveyard
+// fuel / reservation) still runs, only the O(battlefield) filter + LookupCached are hoisted.
 bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
                                 const std::vector<Color>* rp_colors = nullptr,
@@ -6117,7 +6333,8 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                 std::uint64_t tapped_mask = 0,
                                 int untapped_max = -1,
                                 std::uint64_t reserved_mask = 0,
-                                ManaPool* out_full_pool = nullptr);
+                                ManaPool* out_full_pool = nullptr,
+                                const std::vector<std::pair<int, const CardDefinition*>>* src_cands = nullptr);
 
 // Sacrifices any land whose depletion counters have run out (count 0): the depletion
 // lands' "If there are no depletion counters on it, sacrifice it." Safe to call after

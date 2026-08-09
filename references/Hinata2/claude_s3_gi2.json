@@ -46,6 +46,7 @@
   "phase": "pre_main",
   "on_the_play": false,
   "drew": [{ "turn": 1, "card": "Izzet Boilerworks" }, { "turn": 2, "card": "Mountain" }],
+  "reveals": [{ "turn": 1, "source": "Ponder (shuffle)", "cards": [{ "name": "Magma Opus", "disposition": "to the bottom" }, { "name": "Reality Spasm", "disposition": "to the bottom" }, { "name": "Remand", "disposition": "to the bottom" }] }],
   "mdfc_backs": ["Boulderloft Pathway"],
   "me": { "life": 20, "battlefield": [{ "name": "Forbidden Orchard", "idx": 5, "num": 10, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Crackle with Power", "cost": "{X}{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 4, "name": "Crackle with Power", "cost": "{X}{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 5, "name": "Crackle with Power", "cost": "{X}{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 25, "name": "Izzet Boilerworks", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Reality Spasm", "cost": "{X}{U}{U}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Soulfire Eruption", "cost": "{6}{R}{R}{R}", "mv": 9, "kind": "nonpermanent" }], "graveyard": ["Ponder"], "library_size": 50 },
   "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 6, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 9, "num": 0, "is_land": false }, { "name": "Opponent Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Land", "idx": 2, "num": 0, "is_land": true }] },
@@ -173,12 +174,12 @@
   "note": "reply an option index. Each chosen target takes 5 damage (up to 1 target(s)). Default = the AI's pick (face)."
 }
 },
-    { "chosen": 0, "decision": {
+    { "chosen": -1, "decision": {
   "decision_index": 9,
   "main_ordinal": 6,
   "type": "main_phase",
   "turn": 6,
-  "phase": "post_main",
+  "phase": "pre_main",
   "on_the_play": false,
   "events": [{ "turn": 6, "kind": "damage", "text": "🔥 Crackle with Power: 5 to opponent (15→10)" }],
   "mdfc_backs": ["Boulderloft Pathway"],
@@ -193,6 +194,23 @@
 },
     { "chosen": 0, "decision": {
   "decision_index": 10,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forbidden Orchard", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 29, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 16, "num": 30, "tapped": true, "is_land": true }, { "name": "Mystic Monastery", "idx": 14, "num": 32, "tapped": true, "is_land": true }, { "name": "Reflecting Pool", "idx": 18, "num": 52, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Crackle with Power", "cost": "{X}{R}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 20, "name": "Irencrag Feat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 25, "name": "Izzet Boilerworks", "cost": "", "mv": 0, "kind": "land" }, { "num": 47, "name": "Reality Spasm", "cost": "{X}{U}{U}", "mv": 2, "kind": "nonpermanent" }, { "num": 48, "name": "Reality Spasm", "cost": "{X}{U}{U}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Soulfire Eruption", "cost": "{6}{R}{R}{R}", "mv": 9, "kind": "nonpermanent" }], "graveyard": ["Crackle with Power", "Crackle with Power", "Ponder"], "library_size": 46 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 7, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 8, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 11, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 12, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 6, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 9, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 13, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 15, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 17, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 19, "num": 0, "is_land": false }, { "name": "Opponent Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Izzet Boilerworks; cast: (nothing)", "land": "Izzet Boilerworks", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 11,
   "type": "bounce",
   "source": "Izzet Boilerworks",
   "turn": 6,
@@ -205,8 +223,8 @@
 }
 },
     { "chosen": 1, "decision": {
-  "decision_index": 11,
-  "main_ordinal": 7,
+  "decision_index": 12,
+  "main_ordinal": 8,
   "type": "main_phase",
   "turn": 7,
   "phase": "pre_main",
@@ -239,7 +257,7 @@
 }
 },
     { "chosen": 0, "decision": {
-  "decision_index": 12,
+  "decision_index": 13,
   "type": "target",
   "source": "Crackle with Power",
   "turn": 7,

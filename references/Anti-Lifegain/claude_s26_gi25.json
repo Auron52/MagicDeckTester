@@ -134,6 +134,22 @@
   "main_ordinal": 3,
   "type": "main_phase",
   "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 16, "battlefield": [{ "name": "Birds of Paradise", "idx": 3, "num": 5, "tapped": true, "is_land": false }, { "name": "Blood Crypt", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Plague Drone", "idx": 5, "num": 33, "is_land": false }, { "name": "Stomping Ground", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Temple Garden", "idx": 2, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 26, "name": "Invigorate", "cost": "{2}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 49, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Invigorate", "land": null, "casts": ["Invigorate"], "actions": [{ "card": "Invigorate" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
   "phase": "post_main",
   "on_the_play": true,
   "mdfc_backs": ["Boulderloft Pathway"],
@@ -146,8 +162,8 @@
 }
 },
     { "chosen": 1, "decision": {
-  "decision_index": 7,
-  "main_ordinal": 4,
+  "decision_index": 8,
+  "main_ordinal": 5,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
@@ -176,7 +192,7 @@
 }
 },
     { "chosen": [5, 0, 0, 0], "decision": {
-  "decision_index": 8,
+  "decision_index": 9,
   "type": "divide",
   "source": "Fiery Justice",
   "turn": 4,
@@ -189,7 +205,7 @@
 }
 },
     { "chosen": 1, "decision": {
-  "decision_index": 12,
+  "decision_index": 13,
   "type": "target",
   "source": "Invigorate",
   "turn": 4,
@@ -202,6 +218,24 @@
   "heuristic_default": 1,
   "options": [{ "index": 0, "label": "Birds of Paradise (yours)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 1, "label": "Plague Drone (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }],
   "note": "reply an option index. The chosen creature gets +4/+4. Default = the AI's pick (best attacker)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "damage", "text": "🔥 Fiery Justice: 5 to opponent (20→15)" }, { "turn": 4, "kind": "lifeloss", "text": "🩸 opponent −5 life (via Tainted Remedy)" }, { "turn": 4, "kind": "lifeloss", "text": "🩸 opponent −3 life (via Tainted Remedy)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 16, "battlefield": [{ "name": "Birds of Paradise", "idx": 3, "num": 5, "is_land": false }, { "name": "Blood Crypt", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Plague Drone", "idx": 5, "num": 33, "is_land": false }, { "name": "Stomping Ground", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Temple Garden", "idx": 2, "num": 53, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 6, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Fiery Justice", "cost": "{W}{R}{G}", "mv": 3, "kind": "nonpermanent" }, { "num": 49, "name": "Tainted Remedy", "cost": "{2}{B}", "mv": 3, "kind": "permanent" }], "graveyard": ["Fiery Justice", "Invigorate"], "library_size": 50 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Birds of Paradise", "land": null, "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
 }
 }
   ]

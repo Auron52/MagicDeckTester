@@ -137,6 +137,11 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         if (p.charge_counters)  { cs.push_back({ "charge",    "charge",    p.charge_counters }); }
         if (p.verse_counters)   { cs.push_back({ "verse",     "verse",     p.verse_counters }); }
         if (p.storage_counters) { cs.push_back({ "storage",   "storage",   p.storage_counters }); }
+        // Cumulative upkeep AGE counters (Varchild's War-Riders): the cost SCALES with this count
+        // (one opponent Survivor token per age counter, every upkeep), so it is the single number
+        // that explains why the drain accelerates -- it belongs on the board like every other
+        // counter kind (viewer issue #12). Additive display field; absent when zero.
+        if (p.age_counters)     { cs.push_back({ "age",       "age",       p.age_counters }); }
         // num = stable per-copy id; is_aura + attached_to let the viewer draw an Aura overlapping the
         // creature (m_number) it enchants (0 = unattached / not an Aura). Additive display fields.
         bool is_aura = d && d->params.is_aura;
@@ -256,6 +261,21 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 tag = a.card_name + (a.gy_exile_mode == 1 ? ": exile instant/sorcery (drain 2)"
                                                           : ": exile creature (gain 2)");
                 break;
+            // Sac outlets (Skirk Prospector "Sacrifice a Goblin: Add {R}", Siege-Gang, Pashalik):
+            // a battlefield ACTIVATION, and the sac COUNT is the whole difference between two
+            // otherwise identical menu entries -- a 1-sac and a 3-sac Skirk read the same without
+            // it, which is how the human ended up unable to tell them apart (viewer issue #4).
+            case Action::Kind::SacForMana:
+            case Action::Kind::SacCreatureOutlet:
+            {
+                const int k = std::max(1, a.sac_count);
+                tag = a.card_name + ": sac " + std::to_string(k)
+                    + (k == 1 ? " creature" : " creatures");
+                if (a.kind == Action::Kind::SacForMana && !a.chosen_float_color.empty())
+                { tag += " for {" + a.chosen_float_color + "}\xC3\x97" + std::to_string(std::max(1, a.ritual_float)); }
+                else if (a.direct_damage > 0) { tag += " \xE2\x86\x92 " + std::to_string(a.direct_damage) + " damage"; }
+                break;
+            }
             default:                              tag = a.card_name + " (other)"; break;
         }
         if (a.sacrifice_land) { tag += " +sac-land"; }
@@ -733,8 +753,20 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // this flag there was no way to express one and the ability was simply unusable by a human.
             // The flag says "this name is a board activation, not a hand cast", which is what the viewer
             // needs to make the permanent clickable. Emitted only in the human-play decision JSON.
+            // SacForMana joins these: Skirk Prospector's "Sacrifice a Goblin: Add {R}" used to be an
+            // IMPLICIT mana source the enumerator slipped in when a cast needed it, so it carried no
+            // flag and the viewer had no way to render or queue it (viewer issue #4). It is an
+            // activation of a permanent already in play, exactly like Krenko's tap.
             if (ac.kind == Action::Kind::TapForTokens
-             || ac.kind == Action::Kind::SacCreatureOutlet) { os << ", \"activate\": true"; }
+             || ac.kind == Action::Kind::SacForMana
+             || ac.kind == Action::Kind::SacCreatureOutlet)
+            {
+                os << ", \"activate\": true";
+                // `sacout` tells the GUI to encode this as the sacout= line verb rather than cast=,
+                // and sac_count is how many creatures ONE activation eats (the burst).
+                if (ac.kind != Action::Kind::TapForTokens)
+                { os << ", \"sacout\": true, \"sac_count\": " << std::max(1, ac.sac_count); }
+            }
             if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }
@@ -1485,8 +1517,9 @@ static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, con
 
 
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
-// "land=<name>", "cast=<name>", or the bare word "pass". Card names may contain spaces
-// and commas (no MTG name contains ';' or '='), so they pass through verbatim.
+// "land=<name>", "cast=<name>", "vial=<name>", "retrace=<name>", "landsedge=<n>",
+// "sacout=<outlet name>" (repeat for repeat activations), or the bare word "pass". Card names may
+// contain spaces and commas (no MTG name contains ';' or '='), so they pass through verbatim.
 static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
 {
     TurnSolver::LineSpec ls;
@@ -1509,6 +1542,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "landsedge") { ls.lands_edge = std::atoi(val.c_str()); }
         else if (key == "vial")      { ls.vial_deploys.push_back(val); }
         else if (key == "retrace")   { ls.retrace_casts.push_back(val); }
+        else if (key == "sacout")    { ls.sac_outlets.push_back(val); }   // one token per activation
     }
     return ls;
 }

@@ -34,7 +34,7 @@
   "main_ordinal": 1,
   "type": "main_phase",
   "turn": 1,
-  "phase": "post_main",
+  "phase": "pre_main",
   "on_the_play": false,
   "mdfc_backs": ["Boulderloft Pathway"],
   "me": { "life": 20, "battlefield": [{ "name": "Unclaimed Territory", "idx": 0, "num": 58, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Apex of Power", "cost": "{7}{R}{R}{R}", "mv": 10, "kind": "nonpermanent" }, { "num": 6, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 7, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 11, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 10, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 15, "name": "Irencrag Feat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53 },
@@ -56,6 +56,30 @@
     { "chosen": -1, "decision": {
   "decision_index": 2,
   "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Unclaimed Territory", "idx": 0, "num": 58, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Apex of Power", "cost": "{7}{R}{R}{R}", "mv": 10, "kind": "nonpermanent" }, { "num": 6, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 7, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 11, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 10, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 15, "name": "Irencrag Feat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Desperate Ritual, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Desperate Ritual", "Desperate Ritual", "Irencrag Feat"], "cast_order_canonical": ["Desperate Ritual", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Desperate Ritual" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 1, "summary": "land=none; cast: Desperate Ritual, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Desperate Ritual", "Desperate Ritual", "Irencrag Feat"], "cast_order_canonical": ["Desperate Ritual", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Desperate Ritual", "splice_count": 1 }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 2, "summary": "land=none; cast: Desperate Ritual, Desperate Ritual", "land": null, "casts": ["Desperate Ritual", "Desperate Ritual"], "cast_order_canonical": ["Desperate Ritual", "Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 3, "summary": "land=none; cast: Desperate Ritual, Desperate Ritual", "land": null, "casts": ["Desperate Ritual", "Desperate Ritual"], "cast_order_canonical": ["Desperate Ritual", "Desperate Ritual"], "actions": [{ "card": "Desperate Ritual", "splice_count": 1 }, { "card": "Desperate Ritual" }] },
+    { "index": 4, "summary": "land=none; cast: Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Desperate Ritual", "Irencrag Feat"], "cast_order_canonical": ["Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 5, "summary": "land=none; cast: Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Desperate Ritual", "Irencrag Feat"], "cast_order_canonical": ["Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Desperate Ritual", "splice_count": 1 }, { "card": "Irencrag Feat" }] },
+    { "index": 6, "summary": "land=none; cast: Desperate Ritual", "land": null, "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 7, "summary": "land=none; cast: Desperate Ritual", "land": null, "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual", "splice_count": 1 }] },
+    { "index": 8, "summary": "land=none; cast: Irencrag Feat", "land": null, "casts": ["Irencrag Feat"], "actions": [{ "card": "Irencrag Feat" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 3,
   "type": "main_phase",
   "turn": 2,
   "phase": "pre_main",
@@ -90,8 +114,8 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 3,
-  "main_ordinal": 3,
+  "decision_index": 4,
+  "main_ordinal": 4,
   "type": "main_phase",
   "turn": 2,
   "phase": "post_main",
@@ -125,8 +149,8 @@
 }
 },
     { "chosen": 39, "decision": {
-  "decision_index": 4,
-  "main_ordinal": 4,
+  "decision_index": 5,
+  "main_ordinal": 5,
   "type": "main_phase",
   "turn": 3,
   "phase": "pre_main",
@@ -182,8 +206,43 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 5,
-  "main_ordinal": 5,
+  "decision_index": 6,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Unclaimed Territory", "idx": 0, "num": 58, "is_land": true }, { "name": "Unclaimed Territory", "idx": 3, "num": 57, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Apex of Power", "cost": "{7}{R}{R}{R}", "mv": 10, "kind": "nonpermanent" }, { "num": 6, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 7, "name": "Desperate Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 11, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 10, "name": "Dragonstorm", "cost": "{8}{R}", "mv": 9, "kind": "nonpermanent" }, { "num": 15, "name": "Irencrag Feat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "nonpermanent" }, { "num": 38, "name": "Pyretic Ritual", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 2, "num": 0, "is_land": false }, { "name": "6/6 Creature", "idx": 1, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual, Desperate Ritual, Irencrag Feat, Dragonstorm", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual", "Desperate Ritual", "Irencrag Feat", "Dragonstorm"], "cast_order_canonical": ["Pyretic Ritual", "Desperate Ritual", "Desperate Ritual", "Irencrag Feat", "Dragonstorm"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual", "splice_count": 1 }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }, { "card": "Dragonstorm" }] },
+    { "index": 1, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual", "Desperate Ritual", "Irencrag Feat"], "cast_order_canonical": ["Pyretic Ritual", "Desperate Ritual", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 2, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual", "Desperate Ritual", "Irencrag Feat"], "cast_order_canonical": ["Pyretic Ritual", "Desperate Ritual", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual", "splice_count": 1 }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 3, "summary": "land=none; cast: Desperate Ritual, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Desperate Ritual", "Desperate Ritual", "Irencrag Feat"], "cast_order_canonical": ["Desperate Ritual", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Desperate Ritual" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 4, "summary": "land=none; cast: Desperate Ritual, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Desperate Ritual", "Desperate Ritual", "Irencrag Feat"], "cast_order_canonical": ["Desperate Ritual", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Desperate Ritual", "splice_count": 1 }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 5, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual", "Desperate Ritual"], "cast_order_canonical": ["Pyretic Ritual", "Desperate Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 6, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual", "Desperate Ritual"], "cast_order_canonical": ["Pyretic Ritual", "Desperate Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual", "splice_count": 1 }, { "card": "Desperate Ritual" }] },
+    { "index": 7, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual", "Irencrag Feat"], "cast_order_canonical": ["Pyretic Ritual", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 8, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual", "Irencrag Feat"], "cast_order_canonical": ["Pyretic Ritual", "Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual", "splice_count": 1 }, { "card": "Irencrag Feat" }] },
+    { "index": 9, "summary": "land=none; cast: Desperate Ritual, Desperate Ritual", "land": null, "casts": ["Desperate Ritual", "Desperate Ritual"], "cast_order_canonical": ["Desperate Ritual", "Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 10, "summary": "land=none; cast: Desperate Ritual, Desperate Ritual", "land": null, "casts": ["Desperate Ritual", "Desperate Ritual"], "cast_order_canonical": ["Desperate Ritual", "Desperate Ritual"], "actions": [{ "card": "Desperate Ritual", "splice_count": 1 }, { "card": "Desperate Ritual" }] },
+    { "index": 11, "summary": "land=none; cast: Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Desperate Ritual", "Irencrag Feat"], "cast_order_canonical": ["Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Desperate Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 12, "summary": "land=none; cast: Desperate Ritual, Irencrag Feat", "land": null, "casts": ["Desperate Ritual", "Irencrag Feat"], "cast_order_canonical": ["Desperate Ritual", "Irencrag Feat"], "actions": [{ "card": "Desperate Ritual", "splice_count": 1 }, { "card": "Irencrag Feat" }] },
+    { "index": 13, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual"], "cast_order_canonical": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual" }] },
+    { "index": 14, "summary": "land=none; cast: Pyretic Ritual, Desperate Ritual", "land": null, "casts": ["Pyretic Ritual", "Desperate Ritual"], "cast_order_canonical": ["Pyretic Ritual", "Desperate Ritual"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Desperate Ritual", "splice_count": 1 }] },
+    { "index": 15, "summary": "land=none; cast: Pyretic Ritual, Irencrag Feat", "land": null, "casts": ["Pyretic Ritual", "Irencrag Feat"], "cast_order_canonical": ["Pyretic Ritual", "Irencrag Feat"], "actions": [{ "card": "Pyretic Ritual" }, { "card": "Irencrag Feat" }] },
+    { "index": 16, "summary": "land=none; cast: Desperate Ritual", "land": null, "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual" }] },
+    { "index": 17, "summary": "land=none; cast: Desperate Ritual", "land": null, "casts": ["Desperate Ritual"], "actions": [{ "card": "Desperate Ritual", "splice_count": 1 }] },
+    { "index": 18, "summary": "land=none; cast: Irencrag Feat", "land": null, "casts": ["Irencrag Feat"], "actions": [{ "card": "Irencrag Feat" }] },
+    { "index": 19, "summary": "land=none; cast: Pyretic Ritual", "land": null, "casts": ["Pyretic Ritual"], "actions": [{ "card": "Pyretic Ritual" }] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 7,
   "type": "main_phase",
   "turn": 3,
   "phase": "post_main",
@@ -217,8 +276,8 @@
 }
 },
     { "chosen": 65, "decision": {
-  "decision_index": 6,
-  "main_ordinal": 6,
+  "decision_index": 8,
+  "main_ordinal": 8,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
@@ -332,8 +391,8 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 7,
-  "main_ordinal": 7,
+  "decision_index": 9,
+  "main_ordinal": 9,
   "type": "main_phase",
   "turn": 5,
   "phase": "pre_main",
@@ -510,8 +569,8 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 8,
-  "main_ordinal": 8,
+  "decision_index": 10,
+  "main_ordinal": 10,
   "type": "main_phase",
   "turn": 5,
   "phase": "post_main",
@@ -687,7 +746,7 @@
 }
 },
     { "chosen": 5, "decision": {
-  "decision_index": 9,
+  "decision_index": 11,
   "type": "discard",
   "turn": 5,
   "over_by": 1,
@@ -701,8 +760,8 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 10,
-  "main_ordinal": 9,
+  "decision_index": 12,
+  "main_ordinal": 11,
   "type": "main_phase",
   "turn": 6,
   "phase": "pre_main",
@@ -802,8 +861,8 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 11,
-  "main_ordinal": 10,
+  "decision_index": 13,
+  "main_ordinal": 12,
   "type": "main_phase",
   "turn": 6,
   "phase": "post_main",
@@ -902,7 +961,7 @@
 }
 },
     { "chosen": 2, "decision": {
-  "decision_index": 12,
+  "decision_index": 14,
   "type": "discard",
   "turn": 6,
   "over_by": 1,
@@ -916,8 +975,8 @@
 }
 },
     { "chosen": 9, "decision": {
-  "decision_index": 13,
-  "main_ordinal": 11,
+  "decision_index": 15,
+  "main_ordinal": 13,
   "type": "main_phase",
   "turn": 7,
   "phase": "pre_main",
@@ -1212,7 +1271,7 @@
 }
 },
     { "chosen": [1, 1, 1, 1, 0, 1, 0], "decision": {
-  "decision_index": 14,
+  "decision_index": 16,
   "type": "dragon",
   "source": "Dragonstorm",
   "turn": 7,
@@ -1226,8 +1285,8 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 21,
-  "main_ordinal": 12,
+  "decision_index": 23,
+  "main_ordinal": 14,
   "type": "main_phase",
   "turn": 7,
   "phase": "pre_main",

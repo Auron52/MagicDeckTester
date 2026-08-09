@@ -54,7 +54,7 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `target` | `g_play_target_chooser` (`TargetChooser`) | `EffectHandler` damage/removal | `WriteTargetDecisionJson` | `promptPanelHtml` | board |
 | `divide` | (target/divide path) | `EffectHandler` divided damage | `WriteDivideDecisionJson` | `promptPanelHtml` | board |
 | `bounce` | `g_play_bounce_chooser` (`BounceChooser`) | `SpellEffects.h` ETB bounce | `WriteBounceDecisionJson` | `promptPanelHtml` | board |
-| `sacrifice` | `g_play_sacrifice_chooser` (`BounceChooser`) | sac-land cost | `WriteBounceDecisionJson` | `promptPanelHtml` | board |
+| `sacrifice` | `g_play_sacrifice_chooser` (`BounceChooser`) | sac-land cost **+ creature-sac outlets** (`ChooseSacOutletVictimIndex`, SpellEffects.h) | `WriteBounceDecisionJson` | `promptPanelHtml` | board |
 | `dig` | `g_play_dig_chooser` (`DigChooser`) | `SpellEffects.h` ETB dig | `WriteDigDecisionJson` | `digPanelHtml` | modal |
 | `discard` | `g_play_discard_chooser` (`DiscardChooser`) | cleanup discard | `WriteDiscardDecisionJson` | `discardPanelHtml` | modal |
 | `expressive_iteration` | `g_play_ei_chooser` (`EIChooser`) | Expressive Iteration resolution | `WriteEIDecisionJson` | `eiPanelHtml` | modal |
@@ -107,6 +107,29 @@ pool index, or `-1` to decline; `heuristic_default` = the engine's highest-stati
 Each Aura you cast in a turn triggers its own fetch → its own decision. Autonomously byte-identical (the
 chooser is nulled in every search/rollout by `RevealLogPause`; `aura_cast_tutor_attach` maps to
 `lightpaws` in the auditor manifest, was a heuristic-picked known gap while the fetch was engine-only).
+
+**Creature-sac outlets (Skirk Prospector / Siege-Gang / Pashalik) — the ACTIVATION is a line verb,
+the VICTIM reuses `sacrifice`.** Two halves, deliberately split (2026-08-08, viewer issues #1/#2/#4/#8):
+
+- *How many activations* rides the line as the repeatable **`sacout=<outlet name>`** verb
+  (`LineSpec::sac_outlets`, `ParseLineSpec`, matched in `CheckLine`), one token per creature
+  sacrificed. It needs its own verb because these are neither hand casts nor a pass — Skirk's
+  "Sacrifice a Goblin: Add {R}" used to be an *implicit* mana source the enumerator added only when
+  a cast needed it (`planSacs`), so a human could not ask for one, and a sac-only line read as
+  "cast nothing" at `CheckLine` stage 0. **An empty `sac_outlets` keeps legacy matching**
+  (`SacForMana` implicit, `SacCreatureOutlet` via `cast=<name>`), which is what keeps saved
+  references validating unchanged. In the GUI a sac outlet is a board click like Krenko's tap; the
+  queued entry is `{kind:'activate', sacout:true}` so every existing planbar/badge renderer works,
+  and only `encodeLine` branches.
+- *Which creature dies* is answered at RESOLUTION by the existing **`sacrifice`** board decision, so
+  the human picks against the real board (a burst of k prompts k times, as each sac resolves).
+  `ChooseSacOutletVictimIndex` addresses victims by BATTLEFIELD INDEX, not card number — tokens all
+  carry `m_number == 0`, so the card-number path the heuristic uses cannot distinguish two tokens.
+  Returns -1 with no chooser installed → the autonomous `CanonicalSacVictim` path is byte-identical.
+
+Also: `DeferSacOutletPreCombat` (a measured-neutral *perf* prune that hides the value outlets from
+the pre-combat main) is skipped under `HumanPlayActive()` — to a human the outlet just vanished from
+main 1 and reappeared in main 2.
 
 **Soulfire Eruption / Crackle with Power full-board targeting** does NOT use a distinct type:
 the `g_play_soulfire_chooser` (`SoulfireTargetChooser`) lambda in `main.cpp` **reuses the generic

@@ -1,0 +1,173 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 7, "name": "City of Brass" }, { "num": 43, "name": "Suture Priest" }, { "num": 24, "name": "Forbidden Orchard" }, { "num": 38, "name": "Reflecting Pool" }, { "num": 25, "name": "Forbidden Orchard" }, { "num": 13, "name": "Defense of the Heart" }, { "num": 14, "name": "Defense of the Heart" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 7, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Defense of the Heart", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 14, "name": "Defense of the Heart", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 24, "name": "Forbidden Orchard", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Forbidden Orchard", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Suture Priest", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=City of Brass; cast: (nothing)", "land": "City of Brass", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Forbidden Orchard; cast: (nothing)", "land": "Forbidden Orchard", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Reflecting Pool; cast: (nothing)", "land": "Reflecting Pool", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 2,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Windswept Heath" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forbidden Orchard", "idx": 1, "num": 24, "is_land": true }], "vial_counters": [], "hand": [{ "num": 7, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Defense of the Heart", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 14, "name": "Defense of the Heart", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 25, "name": "Forbidden Orchard", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Suture Priest", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Windswept Heath", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 2, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 4, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=City of Brass; cast: Suture Priest", "land": "City of Brass", "casts": ["Suture Priest"], "actions": [{ "card": "Suture Priest" }] },
+    { "index": 1, "summary": "land=Reflecting Pool; cast: Suture Priest", "land": "Reflecting Pool", "casts": ["Suture Priest"], "actions": [{ "card": "Suture Priest" }] },
+    { "index": 2, "summary": "land=Forbidden Orchard; cast: Suture Priest", "land": "Forbidden Orchard", "casts": ["Suture Priest"], "actions": [{ "card": "Suture Priest" }] },
+    { "index": 3, "summary": "land=Windswept Heath; cast: Suture Priest", "land": "Windswept Heath", "casts": ["Suture Priest"], "actions": [{ "card": "Suture Priest" }] },
+    { "index": 4, "summary": "land=Windswept Heath; cast: Suture Priest", "land": "Windswept Heath", "casts": ["Suture Priest"], "actions": [{ "card": "Suture Priest" }] },
+    { "index": 5, "summary": "land=Windswept Heath; cast: Suture Priest", "land": "Windswept Heath", "casts": ["Suture Priest"], "actions": [{ "card": "Suture Priest" }] },
+    { "index": 6, "summary": "land=Windswept Heath; cast: Suture Priest", "land": "Windswept Heath", "casts": ["Suture Priest"], "actions": [{ "card": "Suture Priest" }] },
+    { "index": 7, "summary": "land=Windswept Heath; cast: Suture Priest", "land": "Windswept Heath", "casts": ["Suture Priest"], "actions": [{ "card": "Suture Priest" }] },
+    { "index": 8, "summary": "land=City of Brass; cast: (nothing)", "land": "City of Brass", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Reflecting Pool; cast: (nothing)", "land": "Reflecting Pool", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Forbidden Orchard; cast: (nothing)", "land": "Forbidden Orchard", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Varchild's War-Riders" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forbidden Orchard", "idx": 1, "num": 24, "is_land": true }, { "name": "Forbidden Orchard", "idx": 5, "num": 25, "is_land": true }, { "name": "Suture Priest", "idx": 7, "num": 43, "is_land": false }], "vial_counters": [], "hand": [{ "num": 7, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Defense of the Heart", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 14, "name": "Defense of the Heart", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 38, "name": "Reflecting Pool", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Varchild's War-Riders", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Windswept Heath", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 2, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 6, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 9, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 10, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 8, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=City of Brass; cast: Varchild's War-Riders", "land": "City of Brass", "casts": ["Varchild's War-Riders"], "actions": [{ "card": "Varchild's War-Riders" }] },
+    { "index": 1, "summary": "land=Reflecting Pool; cast: Varchild's War-Riders", "land": "Reflecting Pool", "casts": ["Varchild's War-Riders"], "actions": [{ "card": "Varchild's War-Riders" }] },
+    { "index": 2, "summary": "land=Windswept Heath; cast: Varchild's War-Riders", "land": "Windswept Heath", "casts": ["Varchild's War-Riders"], "actions": [{ "card": "Varchild's War-Riders" }] },
+    { "index": 3, "summary": "land=Windswept Heath; cast: Varchild's War-Riders", "land": "Windswept Heath", "casts": ["Varchild's War-Riders"], "actions": [{ "card": "Varchild's War-Riders" }] },
+    { "index": 4, "summary": "land=Windswept Heath; cast: Varchild's War-Riders", "land": "Windswept Heath", "casts": ["Varchild's War-Riders"], "actions": [{ "card": "Varchild's War-Riders" }] },
+    { "index": 5, "summary": "land=Windswept Heath; cast: Varchild's War-Riders", "land": "Windswept Heath", "casts": ["Varchild's War-Riders"], "actions": [{ "card": "Varchild's War-Riders" }] },
+    { "index": 6, "summary": "land=Windswept Heath; cast: Varchild's War-Riders", "land": "Windswept Heath", "casts": ["Varchild's War-Riders"], "actions": [{ "card": "Varchild's War-Riders" }] },
+    { "index": 7, "summary": "land=none; cast: Varchild's War-Riders", "land": null, "casts": ["Varchild's War-Riders"], "actions": [{ "card": "Varchild's War-Riders" }] },
+    { "index": 8, "summary": "land=City of Brass; cast: (nothing)", "land": "City of Brass", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Reflecting Pool; cast: (nothing)", "land": "Reflecting Pool", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Azorius Chancery" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Suture Priest (1) — 1 to opponent (17→16)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 21, "battlefield": [{ "name": "Forbidden Orchard", "idx": 1, "num": 24, "is_land": true }, { "name": "Forbidden Orchard", "idx": 5, "num": 25, "is_land": true }, { "name": "Reflecting Pool", "idx": 11, "num": 38, "is_land": true }, { "name": "Suture Priest", "idx": 7, "num": 43, "is_land": false }, { "name": "Varchild's War-Riders", "idx": 12, "num": 53, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Azorius Chancery", "cost": "", "mv": 0, "kind": "land" }, { "num": 7, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Defense of the Heart", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 14, "name": "Defense of the Heart", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 57, "name": "Windswept Heath", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50 },
+  "opponent": { "life": 13, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 2, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 6, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 9, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 10, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 13, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 14, "num": 0, "is_land": false }, { "name": "1/1 Survivor Token", "idx": 15, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 8, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=City of Brass; cast: Defense of the Heart", "land": "City of Brass", "casts": ["Defense of the Heart"], "actions": [{ "card": "Defense of the Heart" }] },
+    { "index": 1, "summary": "land=Windswept Heath; cast: Defense of the Heart", "land": "Windswept Heath", "casts": ["Defense of the Heart"], "actions": [{ "card": "Defense of the Heart" }] },
+    { "index": 2, "summary": "land=Windswept Heath; cast: Defense of the Heart", "land": "Windswept Heath", "casts": ["Defense of the Heart"], "actions": [{ "card": "Defense of the Heart" }] },
+    { "index": 3, "summary": "land=Windswept Heath; cast: Defense of the Heart", "land": "Windswept Heath", "casts": ["Defense of the Heart"], "actions": [{ "card": "Defense of the Heart" }] },
+    { "index": 4, "summary": "land=Windswept Heath; cast: Defense of the Heart", "land": "Windswept Heath", "casts": ["Defense of the Heart"], "actions": [{ "card": "Defense of the Heart" }] },
+    { "index": 5, "summary": "land=Windswept Heath; cast: Defense of the Heart", "land": "Windswept Heath", "casts": ["Defense of the Heart"], "actions": [{ "card": "Defense of the Heart" }] },
+    { "index": 6, "summary": "land=Azorius Chancery; cast: (nothing)", "land": "Azorius Chancery", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=City of Brass; cast: (nothing)", "land": "City of Brass", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=Windswept Heath; cast: (nothing)", "land": "Windswept Heath", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0], "decision": {
+  "decision_index": 5,
+  "type": "sac_tutor",
+  "source": "Defense of the Heart",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Forbidden Orchard", "idx": 1, "num": 24, "is_land": true }, { "name": "Forbidden Orchard", "idx": 5, "num": 25, "is_land": true }, { "name": "Reflecting Pool", "idx": 11, "num": 38, "is_land": true }, { "name": "Suture Priest", "idx": 7, "num": 43, "is_land": false }, { "name": "Temple Garden", "idx": 16, "num": 51, "is_land": true }, { "name": "Varchild's War-Riders", "idx": 12, "num": 53, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Azorius Chancery", "cost": "", "mv": 0, "kind": "land" }, { "num": 7, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Defense of the Heart", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }], "graveyard": ["Defense of the Heart", "Windswept Heath"], "library_size": 49 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 2, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 4, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 6, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 9, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 10, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 13, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 14, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 17, "num": 0, "is_land": false }, { "name": "1/1 Spirit Token", "idx": 18, "num": 0, "is_land": false }, { "name": "1/1 Survivor Token", "idx": 15, "num": 0, "is_land": false }, { "name": "1/1 Survivor Token", "idx": 19, "num": 0, "is_land": false }, { "name": "1/1 Survivor Token", "idx": 20, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 8, "num": 0, "is_land": false }] },
+  "max_puts": 2,
+  "ai_set": [8, 15],
+  "candidates": [{ "index": 0, "def": false, "name": "Soul Warden" }, { "index": 1, "def": false, "name": "Varchild's War-Riders" }, { "index": 2, "def": false, "name": "Birds of Paradise" }, { "index": 3, "def": false, "name": "Soul Warden" }, { "index": 4, "def": false, "name": "Hunted Phantasm" }, { "index": 5, "def": false, "name": "Soul Warden" }, { "index": 6, "def": false, "name": "Hunted Phantasm" }, { "index": 7, "def": false, "name": "Hunted Phantasm" }, { "index": 8, "def": true, "name": "Massacre Wurm" }, { "index": 9, "def": false, "name": "Birds of Paradise" }, { "index": 10, "def": false, "name": "Suture Priest" }, { "index": 11, "def": false, "name": "Hunted Phantasm" }, { "index": 12, "def": false, "name": "Suture Priest" }, { "index": 13, "def": false, "name": "Suture Priest" }, { "index": 14, "def": false, "name": "Essence Warden" }, { "index": 15, "def": true, "name": "Massacre Wurm" }, { "index": 16, "def": false, "name": "Massacre Wurm" }, { "index": 17, "def": false, "name": "Essence Warden" }, { "index": 18, "def": false, "name": "Essence Warden" }, { "index": 19, "def": false, "name": "Essence Warden" }, { "index": 20, "def": false, "name": "Varchild's War-Riders" }, { "index": 21, "def": false, "name": "Birds of Paradise" }, { "index": 22, "def": false, "name": "Birds of Paradise" }, { "index": 23, "def": false, "name": "Varchild's War-Riders" }],
+  "note": "reply one int per candidate (1 = put this creature onto the battlefield), up to max_puts total. They enter in ascending candidate order. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 29,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Tree of Tales" }],
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Suture Priest (1), Varchild's War-Riders (3) — 4 to opponent (13→9)" }, { "turn": 5, "kind": "tutor", "text": "💚 Defense of the Heart: 2 creature(s) onto the battlefield" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forbidden Orchard", "idx": 0, "num": 24, "is_land": true }, { "name": "Forbidden Orchard", "idx": 1, "num": 25, "is_land": true }, { "name": "Massacre Wurm", "idx": 6, "num": 33, "is_land": false }, { "name": "Massacre Wurm", "idx": 7, "num": 34, "is_land": false }, { "name": "Reflecting Pool", "idx": 3, "num": 38, "is_land": true }, { "name": "Suture Priest", "idx": 2, "num": 43, "is_land": false }, { "name": "Temple Garden", "idx": 5, "num": 51, "is_land": true }, { "name": "Varchild's War-Riders", "idx": 4, "num": 53, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Azorius Chancery", "cost": "", "mv": 0, "kind": "land" }, { "num": 7, "name": "City of Brass", "cost": "", "mv": 0, "kind": "land" }, { "num": 14, "name": "Defense of the Heart", "cost": "{3}{G}", "mv": 4, "kind": "permanent" }, { "num": 52, "name": "Tree of Tales", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Defense of the Heart", "Windswept Heath"], "library_size": 46 },
+  "opponent": { "life": -55, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=City of Brass; cast: Defense of the Heart", "land": "City of Brass", "casts": ["Defense of the Heart"], "actions": [{ "card": "Defense of the Heart" }] },
+    { "index": 1, "summary": "land=Tree of Tales; cast: Defense of the Heart", "land": "Tree of Tales", "casts": ["Defense of the Heart"], "actions": [{ "card": "Defense of the Heart" }] },
+    { "index": 2, "summary": "land=none; cast: Defense of the Heart", "land": null, "casts": ["Defense of the Heart"], "actions": [{ "card": "Defense of the Heart" }] },
+    { "index": 3, "summary": "land=Azorius Chancery; cast: (nothing)", "land": "Azorius Chancery", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=City of Brass; cast: (nothing)", "land": "City of Brass", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Tree of Tales; cast: (nothing)", "land": "Tree of Tales", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
