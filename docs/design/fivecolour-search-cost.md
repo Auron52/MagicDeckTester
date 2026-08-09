@@ -1109,3 +1109,37 @@ the plans it removes were never payable and were never rolled out.
 
 So: implement it (sound, general, and the deck's precondition is verified), expect low single digits,
 and keep the rollout count as the number to attack for anything larger.
+
+### The correct predicate is NET mana, and the user's four cases map onto the engine's two guards
+
+User's refinement: a mana source or reducer can only enable an otherwise-uncastable spell if it adds
+**more than it costs**. Their exhaustive list of what actually reduces a turn's total cost:
+
+1. **Skirk Prospector with goblin fodder** — repeatable, no tap, sacrifices bodies already on board
+2. **Sol Ring** — `{1}` for `{C}{C}`, net +1 the turn it lands
+3. **Rituals** — Dark Ritual and friends
+4. **Aether Vial + cost-reducing creatures** — cheats the reducer in without paying for it
+
+Checked against the code, and the mapping is exact — the engine already models all four with two terms:
+
+| case | engine term | verified |
+|---|---|---|
+| Skirk Prospector | `ritual_float` (`TurnSolver.cpp:3597`, "credited by Solve") | `IsManaSideAction` = `ritual_float > 0 \|\| rock_mana.Total() > 0` |
+| Sol Ring | `rock_mana` (`produces_amount: 2`, cost `{1}` → net +1) | same |
+| rituals | `ritual_float` | same |
+| Vial + reducers | `block` (per-subset discount disables the gate) | `payable()` returns true when `block > 0` |
+
+So the prune needs **no new machinery** and no new escape hatch: the guards it must respect already
+exist and already cover every case on the list. Worth noting Skirk is neither a rock nor a ritual —
+it is `sac_creature_outlet` — so a guard keyed on "is it a ritual or a mana rock" would have missed it.
+The net-mana framing catches it; the parameter-name framing does not.
+
+**The refinement the code does NOT yet exploit.** `IsManaSideAction` tests `gain > 0`, not
+`gain > cost`. Ancient Cornucopia is `{2}{G}` and taps for **one** mana of any colour — **net −2** on
+the turn it lands, so it can never fund anything that turn — yet it is classified mana-side and gets a
+mana-side group. Classify by net instead and **FiveColour has zero budget-raising actions**, so the
+strongest form of the prune applies unconditionally to this deck.
+
+(The *bound* is already net-correct: `best_head = max over lines of gain + Tri(gy) - cost`. Only the
+*classification* is gross rather than net. Reclassifying moves a card between stages and so changes
+enumeration order — verify byte-identity on per-game win turns, do not assume it.)
