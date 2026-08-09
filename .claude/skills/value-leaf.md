@@ -42,23 +42,32 @@ model *is* the staged artifact, and the A/B's "live" arm is the deck with **no s
 which is the correct baseline, since presence alone activates the hybrid. You do not pass a flag for
 this and there is no separate path to remember.
 
-## Play mismatch: the unit of consistency is the SEED
+## Play mismatch: the unit of consistency is the CHUNK
 
 Generation is frozen to one commit because the artifacts are engine-state fingerprints. When that
 freeze is broken anyway -- a merge lands, an optimization ships mid-run -- the run does not have to be
-thrown away. The rule (user, 2026-08-09):
+thrown away, and **this is handled by the tool, not by hand**. The rule (user, 2026-08-09):
 
-> Continue under the mismatch, but **regenerate any seed that is not completely done**, at every level
-> that had completed for it previously.
+> Continue under the mismatch, but regenerate **the specific game chunks that were not completed**,
+> across all entries of the table that have generated them already (so some cells will not need to).
 
-The seed is the unit because the table averages over seeds: a seed measured entirely on one engine is
-internally consistent, and mixing engines *between* seeds only widens the spread. Mixing them *within*
-a seed corrupts the H-vs-V comparison the crossover is derived from, because the two arms would
-describe different engines at the same depth.
+The chunk is the unit because a chunk *is* a fixed set of games: `[off,off+n)` always runs
+`--seed (seed+off) --game-index off`, so game 380 is the same game in every cell, at every depth, on
+both arms. The table is then read down a column (does depth d+1 beat depth d?) and across arms (V vs
+H at the same depth) -- both per-game comparisons averaged over the seed. What has to hold is that a
+given game was measured on ONE engine everywhere it appears, not that a whole seed was. Splitting at
+an offset delivers exactly that: `[0,B)` is engine A in every cell, `[B,target)` is engine B in every
+cell, and every column and arm-difference is computed from games that agree.
 
-So on a mismatch: keep every 100%-complete seed, and re-run every cell of every incomplete seed --
-not just the cells that were short. Size it before committing: on FiveColour, 3 short cells were 75
-games, but the two seeds owning them are 26 cells and ~10,400 games.
+`valueleaf_depth_matrix.py --incremental` does this automatically on resume. Cell state is a list of
+chunks stamped with `git rev-parse HEAD:src`; on a src change it picks `B` = the lowest offset any
+cell of that seed still owes, drops old-engine chunks at or above `B`, keeps new-engine ones, and
+re-queues the gaps. A fully-complete seed is untouched whatever its engine, and a condemned cell
+capped at 50 has nothing at or above `B` so it is neither redone nor extended.
+
+**Do not re-run whole cells for this.** An earlier draft of this section made the seed the unit; on
+FiveColour that was 26 cells / ~10,400 games where the chunk rule is 24 chunks / 587 -- 18x more work
+for no extra consistency.
 
 ## Progress and restarts
 

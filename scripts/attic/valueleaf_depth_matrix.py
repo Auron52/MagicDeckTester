@@ -142,6 +142,140 @@ def run_batch(deck_file, mt, depth, seed, offset, batch, value_on, value_min_dep
 def _cell_key(c): return "%s|%s|%d|%d" % (c["deck"], c["arm"], c["depth"], c["seed"])
 
 
+# ==================== CHUNK-LEVEL STATE (the unit of consistency) ====================
+# A cell's results are stored as the LIST OF CHUNKS that produced them, not as a running total:
+#
+#     {"off": 375, "n": 25, "lp": 5.31, "ms": 9508.2, "src": "<tree hash of src/>"}
+#
+# Games are addressed by OFFSET, and the offset is what fixes identity: chunk [off,off+n) always runs
+# `--seed (seed+off) --game-index off`, so game 380 of a cell is the SAME GAME in every run, at every
+# depth, on both arms. That is what makes a chunk replaceable -- and replaceable at chunk granularity
+# is the whole point, because it is what lets a play change be absorbed by re-running the affected
+# GAMES rather than the affected CELLS (26 cells / 10,400 games vs 24 chunks / ~590).
+#
+# The flat fields (games/lp_sum/batches/ms) are DERIVED and kept in sync for other readers
+# (scripts/valueleaf.sh status, emit_table). chunks[] is the source of truth.
+#
+# It also fixes a bias the adaptive chunk size introduced: the table averaged BATCH MEANS, which is
+# only correct while every batch is the same size. A 3-game chunk counted as much as a 25-game one.
+# cell_mean() weights by games.
+def _refresh(c):
+    ch = c["chunks"]
+    c["games"]   = sum(x["n"] for x in ch)
+    c["batches"] = len(ch)
+    c["ms"]      = sum(x["ms"] for x in ch)
+    c["lp_mean"] = (sum(x["lp"] * x["n"] for x in ch) / c["games"]) if c["games"] else float("nan")
+    # Compat shim: readers that predate chunks compute lp_sum/batches to get the mean.
+    c["lp_sum"]  = c["lp_mean"] * c["batches"] if c["games"] else 0.0
+    return c
+
+
+def cell_mean(c): return c["lp_mean"]
+
+
+def _covered(c):
+    """Sorted [off,end) intervals this cell holds results for."""
+    return sorted(((x["off"], x["off"] + x["n"]) for x in c["chunks"]))
+
+
+def _missing(c, target):
+    """The offsets below `target` with no result -- a list of [lo,hi). Normally one range at the end,
+    but a resync can leave a hole in the middle, so this is computed generally rather than assumed."""
+    out, pos = [], 0
+    for lo, hi in _covered(c):
+        if lo > pos: out.append((pos, min(lo, target)))
+        pos = max(pos, hi)
+        if pos >= target: break
+    if pos < target: out.append((pos, target))
+    return [(a, b) for a, b in out if b > a]
+
+
+def _split_chunk(x, at):
+    """Keep only [off,at) of chunk x. lp (a mean) carries over unchanged; ms is apportioned by count.
+
+    Exact for a whole-chunk drop. For a legacy chunk -- one synthetic record standing in for a run
+    that predates this schema -- the split is structurally exact (the old batches were uniform and
+    offset-aligned) but the kept prefix inherits the WHOLE cell's mean instead of the surviving
+    batches' mean. On a 400-game cell losing its last 25 that is an error of about
+    |batch_mean - cell_mean| / 15 ~ 0.01 turns. Recorded here rather than hidden: every chunk written
+    from now on is individually addressable, so it cannot recur."""
+    n = at - x["off"]
+    if n <= 0: return None
+    x = dict(x); x["ms"] = x["ms"] * n / x["n"]; x["n"] = n
+    return x
+
+
+def _src_fingerprint():
+    """Engine identity = the tree hash of src/. Same value => same play, which is the property the
+    freeze exists to protect. `git rev-parse HEAD:src` is what scripts/valueleaf.sh records too."""
+    try:
+        r = subprocess.run(["git", "rev-parse", "HEAD:src"], capture_output=True, text=True)
+        return r.stdout.strip() or None
+    except Exception:
+        return None
+
+
+def resync_engine_change(cells, target, src_now, log=print):
+    """Absorb a play change WITHOUT throwing the run away: re-run the affected GAMES everywhere they
+    were already generated, and keep everything below them.
+
+    The rule (user, 2026-08-09): generation may continue under a play mismatch, but any game chunk
+    that is not completely done must be regenerated -- "across all entries of the table that have
+    generated them already, so some cells will not need to generate them".
+
+    Why the chunk and not the seed. The table is read two ways: down a column (does depth d+1 beat
+    depth d?) and across arms (V vs H at the same depth). Both are PER-GAME comparisons averaged over
+    the seed. So what has to hold is that game 380 was measured on ONE engine at every depth and in
+    both arms -- not that the whole seed was. Splitting at an offset gives exactly that: offsets
+    [0,B) are engine A everywhere, [B,target) are engine B everywhere, and every column and every
+    arm-difference is computed from games that agree. Re-running whole cells buys nothing extra and
+    cost 140x more here (26 cells / 10,400 games against 24 chunks / ~590).
+
+    B is per (deck, seed), and is the lowest offset any cell still owes:
+      * a seed whose cells are ALL at target is already consistent -- untouched, whatever its engine.
+      * cells that never reached B keep everything (a condemned cell capped at 50 has nothing at or
+        above B=375, so it is not touched and not extended).
+      * a cell that has results at or above B from the OLD engine drops exactly those and re-runs
+        them; results at or above B already produced by the CURRENT engine are kept.
+    """
+    if not src_now: log("resync: no src fingerprint (not a git tree?) -- skipping"); return []
+    groups = {}
+    for c in cells: groups.setdefault((c["deck"], c["seed"]), []).append(c)
+
+    def foreign_end(c):
+        """End of the contiguous prefix produced by an engine OTHER than the current one."""
+        pos = 0
+        for x in sorted(c["chunks"], key=lambda x: x["off"]):
+            if x["off"] > pos: break                 # hole: prefix stops here
+            if x.get("src") == src_now: break        # current engine: prefix stops here
+            pos = max(pos, x["off"] + x["n"])
+        return pos
+
+    plan = []
+    for (deck, seed), cs in sorted(groups.items()):
+        incomplete = [c for c in cs if c["games"] < target(c)]
+        if not incomplete: continue                  # seed complete => internally consistent
+        B = min(foreign_end(c) for c in incomplete)
+        for c in cs:
+            keep, dropped = [], 0
+            for x in sorted(c["chunks"], key=lambda x: x["off"]):
+                if x.get("src") == src_now or x["off"] + x["n"] <= B:
+                    keep.append(x); continue
+                head = _split_chunk(x, B)            # None unless the chunk straddles B
+                if head: keep.append(head)
+                dropped += x["n"] - (head["n"] if head else 0)
+            if dropped:
+                c["chunks"] = keep; _refresh(c)
+                plan.append((deck, seed, "%s%d" % (c["arm"], c["depth"]), B, dropped))
+    if plan:
+        tot = sum(p[4] for p in plan)
+        log("resync: src changed since these results were written -- %d cells, %d games to redo"
+            % (len(plan), tot))
+        for deck, seed, cell, B, n in plan:
+            log("  s%-6d %-4s drop [%d,+%d)" % (seed, cell, B, n))
+    return plan
+
+
 def emit_table(cells, args):
     """Parser-compatible legacy table (mean over seeds) + per-cell game counts, rewritten each batch."""
     L=["",
@@ -157,7 +291,7 @@ def emit_table(cells, args):
             for d in depths:
                 cs=[c for c in dc if c["arm"]==arm and c["depth"]==d and c["batches"]>0]
                 if not cs: continue
-                lp=sum(c["lp_sum"]/c["batches"] for c in cs)/len(cs)
+                lp=sum(cell_mean(c) for c in cs)/len(cs)
                 ms=sum(c["ms"]/max(c["games"],1)*1000 for c in cs)/len(cs)
                 g=min(c["games"] for c in cs)
                 tag="*" if any(c["intractable"] for c in cs) else ""
@@ -177,84 +311,138 @@ def run_incremental(args):
             for d in args.hdepths: cells.append(dict(deck=dname,arm="H",depth=d,seed=seed))
             for d in args.vdepths: cells.append(dict(deck=dname,arm="V",depth=d,seed=seed))
     for c in cells:
-        c.update(games=0, lp_sum=0.0, batches=0, ms=0.0, intractable=False, running=False, first_wall=None)
+        c.update(chunks=[], intractable=False, running=False, first_wall=None); _refresh(c)
     state_path=args.out+".cells.json"
-    if os.path.exists(state_path):                       # resume: skip already-committed batches
+    src_now=_src_fingerprint()
+    if os.path.exists(state_path):                       # resume: skip already-committed chunks
         try:
             saved={_cell_key(x):x for x in json.load(open(state_path))}
+            # A state file written before chunks[] existed carries only totals, so its games can only
+            # be attributed to ONE engine -- the src the run was started under, recorded by
+            # scripts/valueleaf.sh next to the state. That is right for every cell that was not
+            # resumed across a src change; where it is wrong it is wrong CONSERVATIVELY (games the
+            # new engine already produced get re-run, which costs time and cannot corrupt anything).
+            legacy_src=None
+            fs=os.path.join(os.path.dirname(os.path.abspath(state_path)),"freeze.src")
+            if os.path.exists(fs): legacy_src=open(fs).read().strip() or None
             for c in cells:
                 s=saved.get(_cell_key(c))
-                if s: c.update(games=s["games"],lp_sum=s["lp_sum"],batches=s["batches"],ms=s["ms"],
-                               intractable=s["intractable"],first_wall=s.get("first_wall"))
+                if not s: continue
+                c["intractable"]=s["intractable"]; c["first_wall"]=s.get("first_wall")
+                if s.get("chunks"):
+                    c["chunks"]=s["chunks"]
+                elif s.get("games"):
+                    c["chunks"]=[{"off":0,"n":s["games"],
+                                  "lp":s["lp_sum"]/max(s["batches"],1),"ms":s["ms"],
+                                  "src":legacy_src,"legacy":s["batches"]}]
+                _refresh(c)
         except Exception: pass
         print("resumed %d cells from %s" % (sum(1 for c in cells if c["batches"]), state_path))
 
     lock=threading.Lock()
-    for c in cells: c["inflight"]=0; c["inflight_games"]=0; c["next_off"]=c["games"]   # resume cursor: where the completed games end (sizes now vary)
+    for c in cells: c["inflight_games"]=0
     def target(c): return min(args.reference_target,args.target) if c["intractable"] else args.target
-    def wanted(c): return c["games"] + c["inflight_games"] < target(c)
 
-    # ADAPTIVE BATCH SIZE. A batch runs its games SERIALLY inside one subprocess, so the batch size is
-    # the granularity of the tail: with 25-game batches and three cells left, the machine ran 3 of 24
-    # cores for FIFTEEN HOURS while each process ground through its 25 games one at a time. Shrink the
-    # batch as the work runs out so there are always at least `workers` pieces to hand out. No knob --
-    # a knob is how it was wrong in the first place.
+    # A play change since these results were written is absorbed here, at chunk granularity.
+    resync_engine_change(cells, target, src_now)
+
+    # ---------------------------------------------------------------- PROPER BATCHING: one work QUEUE
+    # ONE queue of fixed-size chunks, handed to `workers` threads that are kept full until the queue
+    # drains. Not one chunk per cell, not a chunk size that shrinks: a QUEUE.
     #
-    # This is a MITIGATION, not the design. The right shape is CLAUDE.md's: one `mtg --batch` manifest
-    # per arm, every game of every cell in ONE process pooling across threads, so the phase pays ONE
-    # tail instead of one per subprocess. That needs a `game_index` field the batch manifest does not
-    # have yet (BatchRunner.cpp takes name/deck/profile/games/seed/depth/budget_ms/weight/max_turns/
-    # ignore_play_profile), so it is a src change and is queued behind the value-leaf freeze.
-    def batch_size():
-        rem=sum(max(0,target(c)-c["games"]-c["inflight_games"]) for c in cells)
-        if rem<=0: return args.batch
-        return max(1,min(args.batch,rem//max(1,args.workers)))
-    def cell_cap():
-        # How many batches of ONE cell may be in flight. Batches are DISJOINT game ranges (offset =
-        # submitted*batch), so concurrency within a cell is safe -- and the old one-batch-per-cell
-        # rule starved the pool the moment the matrix narrowed to a few expensive cells: measured 3
-        # of 24 cores busy with 10 cells left, because max parallelism WAS the cell count. Spread the
-        # workers over whatever still needs games.
-        n=sum(1 for c in cells if wanted(c))
-        if n<=0: return 1
-        return max(1, -(-args.workers // n))   # ceil(workers/n)
-    def needs(c):  return wanted(c) and c["inflight"] < cell_cap()
+    # What this replaces and why. The old scheduler picked the cell with the FEWEST games (breadth
+    # first) and allowed ceil(workers/open cells) chunks of it in flight. Two failures follow from
+    # that, and both were measured on this deck:
+    #   * breadth-first is exactly backwards. It starts the CHEAP work first, so the expensive cells
+    #     are the ones still running when everything else has drained -- 3 of 24 cores for fifteen
+    #     hours, with two H5 chunks at 54,004s elapsed.
+    #   * parallelism was capped by the number of OPEN CELLS, so it collapsed as the run finished.
+    #
+    # LONGEST-PROCESSING-TIME FIRST fixes the first: start the slowest chunks at the beginning, when
+    # there is still cheap work to fill the other cores, and they finish alongside it instead of
+    # after it. A single queue fixes the second -- a free worker takes the next chunk from anywhere.
+    # The residual tail is then one chunk, which is the honest floor for subprocess-level batching
+    # (game-level pooling inside ONE `mtg --batch` needs a manifest game_index field: src, next).
+    def est_spg(c):
+        # Measured rate when we have one (a resume has 49 of 52), else a depth model: the H arm grows
+        # about 4x per level (measured 0.5 / 5.9 / 36 / 161 / 325 s at H1..H5) and the V arm about 3x
+        # from a far lower base (0.009 .. 9.4 s at V1..V8). Only the ORDER matters to LPT, so a rough
+        # model is fine -- and it is only ever used for a cell with no games yet.
+        if c["games"]: return c["ms"]/c["games"]
+        return (4.0**c["depth"]) if c["arm"]=="H" else (3.0**c["depth"])*0.02
+
+    def build_queue():
+        # Chunk size is about the QUEUE having at least one piece per worker, not about shrinking as
+        # the run drains. A full run (20,800 games) gets 832 chunks of 25 and never notices; a targeted
+        # fill of 75 games would get THREE chunks of 25 -- three busy cores out of twenty -- so the
+        # size drops to keep every worker fed. Computed once, up front, from the total outstanding.
+        # The work is the set of MISSING OFFSETS, not "target minus a count". After a resync those are
+        # not always a suffix -- a cell can be left with a hole in the middle -- so the gaps are
+        # computed from the chunks the cell actually holds.
+        gaps={id(c):_missing(c,target(c)) for c in cells}
+        total=sum(hi-lo for g in gaps.values() for lo,hi in g)
+        chunk=max(1,min(args.batch, total//max(1,args.workers))) if total else args.batch
+        q=[]
+        for c in cells:
+            for lo,hi in gaps[id(c)]:
+                off=lo
+                while off<hi:
+                    n=min(chunk,hi-off)
+                    q.append({"c":c,"off":off,"n":n})
+                    off+=n
+        q.sort(key=lambda ch: est_spg(ch["c"])*ch["n"], reverse=True)
+        return q
+
+    queue=build_queue()
+    print("queue: %d chunks of <=%d games, longest-first (slowest cell first: %s)"
+          % (len(queue), args.batch,
+             ("%s%d s%s" % (queue[0]["c"]["arm"],queue[0]["c"]["depth"],queue[0]["c"]["seed"])) if queue else "-"),
+          flush=True)
+
+    def drop_condemned(c):
+        # A condemned cell keeps only what it needs to reach reference_target; the rest leaves the
+        # queue immediately so no worker ever picks it up.
+        lim=target(c)
+        queue[:] = [ch for ch in queue if not (ch["c"] is c and ch["off"] >= lim)]
 
     def write_state():
         tmp=state_path+".tmp"
-        json.dump([{k:c[k] for k in ("deck","arm","depth","seed","games","lp_sum","batches","ms",
-                                     "intractable","first_wall")} for c in cells], open(tmp,"w"))
+        json.dump([{k:c[k] for k in ("deck","arm","depth","seed","games","lp_sum","lp_mean","batches",
+                                     "ms","intractable","first_wall","chunks")} for c in cells], open(tmp,"w"))
         os.replace(tmp,state_path)
         emit_table(cells,args)
 
     ex=ThreadPoolExecutor(max_workers=args.workers)
     futs={}
     def submit_next():
-        cand=[c for c in cells if needs(c)]
-        if not cand: return False
-        c=min(cand,key=lambda x:(x["games"]+x["inflight_games"],x["depth"]))  # breadth-first
-        n=min(batch_size(), max(1, target(c)-c["games"]-c["inflight_games"]))
-        c["inflight"]+=1; c["inflight_games"]+=n
-        off=c["next_off"]                  # per-cell cursor: batches are DISJOINT game ranges even
-        c["next_off"]+=n                   # when their sizes differ, so concurrency stays safe
-        deck_file,prof,mt=DECKS[c["deck"]]
-        futs[ex.submit(run_batch,deck_file,mt,c["depth"],c["seed"],off,n,
-                       c["arm"]=="V",args.value_min_depth,prof,
-                       PROFILES.get(c["deck"]))]=(c,n)
-        return True
+        while queue:
+            ch=queue.pop(0)
+            c=ch["c"]
+            if ch["off"]>=target(c): continue      # condemned after this chunk was queued
+            c["inflight_games"]+=ch["n"]
+            deck_file,prof,mt=DECKS[c["deck"]]
+            futs[ex.submit(run_batch,deck_file,mt,c["depth"],c["seed"],ch["off"],ch["n"],
+                           c["arm"]=="V",args.value_min_depth,prof,
+                           PROFILES.get(c["deck"]))]=(c,ch)
+            return True
+        return False
 
     while len(futs)<args.workers and submit_next(): pass
     done_batches=0
     while futs:
         done,_=wait(list(futs),return_when=FIRST_COMPLETED)
         for fut in done:
-            c,nsub=futs.pop(fut)
+            c,ch=futs.pop(fut)
             try: lp,wall,p=fut.result()
             except Exception: lp,wall,p=float("nan"),0.0,0
             with lock:
-                c["inflight"]-=1; c["inflight_games"]-=nsub
+                c["inflight_games"]-=ch["n"]
                 if p>0 and lp==lp:
-                    c["games"]+=p; c["lp_sum"]+=lp; c["batches"]+=1; c["ms"]+=wall
+                    # Recorded as a CHUNK, addressed by offset and stamped with the engine that
+                    # produced it -- so this exact span of games can be replaced later without
+                    # touching the rest of the cell.
+                    c["chunks"].append({"off":ch["off"],"n":p,"lp":lp,"ms":wall,"src":src_now})
+                    _refresh(c)
                     if c["first_wall"] is None: c["first_wall"]=wall
                     # Tractability keys on the cell's CUMULATIVE rate, not this batch's. Per-batch was
                     # wrong twice over: (1) a single unlucky 25-game batch holding one pathological
@@ -284,8 +472,10 @@ def run_incremental(args):
                     # not turn a 2.5 s batch into a 5 h one. The cause is the tail, not the load.)
                     #
                     # So: never condemn at or below this depth; let deep cells absorb the trimming.
+                    was=c["intractable"]
                     c["intractable"] = (c["depth"] > args.never_condemn_at_or_below
                                         and (c["ms"] / max(c["games"],1)) > args.intractable_sec_per_game)
+                    if c["intractable"] and not was: drop_condemned(c)
                 done_batches+=1
                 write_state()
                 if done_batches % 10 == 0:
