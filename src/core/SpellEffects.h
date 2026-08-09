@@ -6142,17 +6142,46 @@ namespace tapstats
     inline std::atomic<std::uint64_t> g_nodes{0};          // ALL recursion nodes (top-level + deep)
     inline std::atomic<std::uint64_t> g_top_memo_off{0};   // top-level calls with n>64 (fail-memo disabled)
     inline std::atomic<std::uint64_t> g_max_n{0};          // max battlefield size seen at a top-level call
+    // Outcome split of the top-level entries (payable vs unpayable) + the nodes each outcome consumed.
+    // Answers: is the backtracker mostly PROVING FAILURE (a byte-identical exact-frontier prune would
+    // remove those nodes) or mostly SEARCHING FOR A PAYMENT it does find (only pay-from-frontier or a
+    // better greedy would help)? Recorded by the public TapForCostBacktrack wrapper (the recursion calls
+    // the worker directly, so every wrapper call is one top-level entry).
+    inline std::atomic<std::uint64_t> g_entries_ok{0};
+    inline std::atomic<std::uint64_t> g_entries_fail{0};
+    inline std::atomic<std::uint64_t> g_nodes_ok{0};
+    inline std::atomic<std::uint64_t> g_nodes_fail{0};
+    // Flow-prune oracle accounting: entries it proved infeasible up front (pruned, saving their whole
+    // subtree) vs entries where it bailed (a source/cost it can't model exactly -> fell through to the
+    // backtracker). High bail% on a deck means the exact model needs extending (e.g. bounce lands).
+    inline std::atomic<std::uint64_t> g_flow_prune{0};
+    inline std::atomic<std::uint64_t> g_flow_bail{0};
     struct Dumper {
         ~Dumper()
         {
             if (!Enabled()) { return; }
             const unsigned long long top = g_backtrack_entries.load();
             const unsigned long long nodes = g_nodes.load();
+            const unsigned long long eok = g_entries_ok.load(), efail = g_entries_fail.load();
+            const unsigned long long nok = g_nodes_ok.load(), nfail = g_nodes_fail.load();
             std::fprintf(stderr,
                 "\n=== TAP STATS: top-level entries=%llu  total nodes=%llu  nodes/entry=%.1f"
                 "  memo-off(n>64) top-level=%llu  max board n=%llu ===\n",
                 top, nodes, top ? (double)nodes / (double)top : 0.0,
                 (unsigned long long)g_top_memo_off.load(), (unsigned long long)g_max_n.load());
+            std::fprintf(stderr,
+                "=== TAP OUTCOME: payable entries=%llu (%.1f%%, %llu nodes, %.1f/entry)  "
+                "UNpayable entries=%llu (%.1f%%, %llu nodes = %.1f%% of nodes, %.1f/entry) ===\n",
+                eok,   (eok + efail) ? 100.0 * (double)eok / (double)(eok + efail) : 0.0,
+                nok,   eok ? (double)nok / (double)eok : 0.0,
+                efail, (eok + efail) ? 100.0 * (double)efail / (double)(eok + efail) : 0.0,
+                nfail, (nok + nfail) ? 100.0 * (double)nfail / (double)(nok + nfail) : 0.0,
+                efail ? (double)nfail / (double)efail : 0.0);
+            const unsigned long long fp = g_flow_prune.load(), fb = g_flow_bail.load();
+            std::fprintf(stderr,
+                "=== FLOW PRUNE: pruned=%llu (%.1f%% of top-level entries)  bailed=%llu (%.1f%%) ===\n",
+                fp, top ? 100.0 * (double)fp / (double)top : 0.0,
+                fb, top ? 100.0 * (double)fb / (double)top : 0.0);
         }
     };
     inline Dumper g_dumper;
@@ -6162,6 +6191,12 @@ namespace tapstats
 // Default ON: it is LOSSLESS (an upper bound only ever short-circuits provably-unpayable costs).
 inline bool MaxManaGateEnabled()
 { static const bool v = !EnvOn("MTG_NO_MAXMANA_GATE"); return v; }
+
+// Flow-prune oracle (byte-identical contention-aware infeasibility test at the top-level tap
+// backtracker entry; see TapFlowInfeasible in SpellEffects.cpp). ON by default; MTG_NO_FLOW_PRUNE=1
+// disables it (A/B off-switch -- output must be byte-identical either way).
+inline bool FlowPruneEnabled()
+{ static const bool v = !EnvOn("MTG_NO_FLOW_PRUNE"); return v; }
 
 // UPPER bound on the net mana one tap of `def` can add to the floating pool -- used to bound the
 // total mana still extractable from a set of untapped sources. Deliberately over- (never under-)
