@@ -6278,11 +6278,41 @@ void FiveColourProvider::ModalSplitCandidates(const GameState& s, const CardDefi
 
     // Board damage we could add on top, counting creatures that can attack this turn or next --
     // summoning sickness wears off, so a creature that entered this turn still counts for "next".
+    // HONEST LETHAL REACH -- what this turn's ATTACK can actually deal, not what the board prints.
+    // Same lesson as GoblinsProvider::TutorCandidates' honest-power read, which exists because a
+    // printed-power scan halved a lord-heavy board and its this-turn-lethal test never fired. Here
+    // the gap was bigger still: on s6006 gi209 the real turn-4 swing was 11 and this read said 4,
+    // so the all-in was declined on a turn it was exactly lethal (11 + 10 vs 20 life). Everything
+    // missing lived in the PLAN rather than on the battlefield:
+    //   Kavu 3/3 -> 8/8   (Jared's -3, +1/+1 counters equal to each target's colour count)
+    //   Deathrite -> 3    (+2/+2 from the same -3, and attacking at all only because Lightning
+    //                      Greaves was cast that same turn and granted haste)
+    // So the three terms below are: honest current power, the pump a planeswalker can activate
+    // this turn, and the bodies haste lets us deploy and swing with.
     int board_power = 0;
+    std::vector<int> colors_desc;      // colour counts of my creatures -- the counter-pump magnitude
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me || !p.card.IsCreature()) { continue; }
-        board_power += std::max(0, p.EffectivePower());
+        const int lp = ComputeLordBonus(p.card, s.battlefield, me, p.is_animated, &p).first;
+        board_power += std::max(0, p.EffectivePower() + lp);
+        colors_desc.push_back(p.card.ColorCount());
+    }
+    // Planeswalker counter-pump available THIS turn (loyalty abilities have no summoning sickness).
+    // "+1/+1 counters equal to the number of colours it is, on up to N creatures" -> take the N
+    // most colourful bodies we control. Jared's -3 on a 5-colour Kavu is +5 by itself.
+    std::sort(colors_desc.begin(), colors_desc.end(), std::greater<int>());
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || !p.card.HasType(CardType::Planeswalker)) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (!pd) { continue; }
+        for (const auto& la : pd->params.loyalty_abilities)
+        {
+            if (la.effect != "counters_up_to_two" || p.loyalty + la.delta < 0) { continue; }
+            for (int k = 0; k < la.amount && k < static_cast<int>(colors_desc.size()); ++k)
+            { board_power += colors_desc[k]; }
+        }
     }
 
     // Other castable creature threats in hand: a body we could actually deploy, not just hold.
