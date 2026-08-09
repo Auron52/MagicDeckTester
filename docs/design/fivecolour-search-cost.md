@@ -1324,3 +1324,28 @@ only land-ETB forms (`etb_pay_life_to_untap` on the shocklands, `etb_untap_revea
 Snarl), which govern whether a land ENTERS untapped — none of them re-taps a mana source mid-turn. It
 belongs in the predicate anyway, because the first Elves or Defenders deck will bring both halves at
 once: two-plus scaling sources AND cheap creatures that increment the count.
+
+### Two counterexamples that fix the wording — the rule is `n > c`, not "needs 2 dorks"
+
+User supplied both, and each breaks the "two scaling sources" shorthand in a different way.
+
+**1. Wirewood Lodge (the untap case).** `{T}, {G}: Untap target Elf.` With Priest of Titania, Wirewood
+Lodge and other Elves out, playing a 1-drop Elf goes: tap Priest for `N` → play the Elf, count becomes
+`N+1` → Lodge + `{G}` untaps Priest → tap again for `N+1`. Extra mana `N+1` against extra cost 2 (the
+Elf plus the `{G}`), so net `N-1` — **positive from `N >= 2` with a SINGLE scaling dork**. This is the
+untap clause doing exactly the work it was put there for.
+
+**2. Shield Sphere (the zero-cost case).** A `{0}` artifact creature with defender. With an untapped,
+non-sick Overgrown Battlement out, playing it costs nothing and raises the defender count by one, so
+the Battlement taps for `+1`. **Net positive with one scaling dork and no untap.**
+
+Shield Sphere is why the predicate must stay the inequality. `n > c` with `c = 0` gives `1 > 0` — true,
+caution required. "Needs two scaling dorks" is only a *corollary*, and it holds solely when the
+cheapest incrementing play costs at least 1. Write the inequality; do not write the shorthand.
+
+**Current exposure, checked.** None of Wirewood Lodge, Shield Sphere, Overgrown Battlement or Priest of
+Titania is in `cards.json` — Elves and Defenders are unimplemented, as the user said. And the pool
+holds exactly **one** zero-cost card: **Black Lotus**, which clause 1 already catches on its own terms
+(`gain = 3 > cost = 0`) and which is a colorless artifact, so it cannot widen a colour-scaling source
+either. The zero-cost hazard is therefore real but currently empty; it becomes live the moment a
+Defenders deck lands, and the inequality is already the right shape for it.
