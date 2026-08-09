@@ -17,6 +17,11 @@ struct BatchJobResult
     std::vector<int>      win_turns;   // per-game; <=0 = no win within max_turns
     std::vector<uint64_t> digests;     // per-game play digest (GameLogger::Digest), 0 if unavailable
     uint64_t              case_digest = 0;  // fold of per-game digests in game order (a case fingerprint)
+    // SUM of this job's per-game wall times, in ms -- core-milliseconds, not elapsed span. Games of
+    // one job interleave with other jobs across the pool, so an elapsed first-to-last span would
+    // measure the pool, not the job. The sum is the same quantity a serial per-chunk subprocess used
+    // to report as its wall clock, which is what a cost/tractability model consumes.
+    long long             elapsed_ms  = 0;
 };
 
 // Runs a whole manifest of goldfish jobs (different decks / seeds / depths /
@@ -32,6 +37,20 @@ struct BatchJobResult
 // every per-job input passed by value into the worker, there is no shared mutable
 // state on the hot path, so no locking is needed and each job's output matches its
 // standalone run exactly.
+//
+// Per-job manifest fields: name, deck, profile, games, seed, game_index, depth,
+// budget_ms, max_turns, weight, ignore_play_profile.
+//
+// `game_index` makes a job a CHUNK of a longer run -- games [game_index,
+// game_index+games) -- rather than a whole one. That is what lets a chunked
+// generator pool every chunk of every cell into ONE process: without it, a chunk
+// had to be its own `mtg` invocation, and the batch size then WAS the tail
+// granularity (measured 2026-08-08: two 25-game chunks still running at 54,004 s
+// after everything else had drained, three of twenty-four cores busy for fifteen
+// hours). With it the whole run has ONE tail, of one game. Game i of a chunk is
+// globally game (game_index + i) for the spawn schedule and the log, while its
+// shuffle seed stays `seed + i` -- so a chunk reproduces the single-run
+// `--seed (base+off) --game-index off` form exactly. Default 0 = a whole run.
 class BatchRunner
 {
 public:

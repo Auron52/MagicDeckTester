@@ -39,6 +39,15 @@ struct Job
     int             vial_target_mv      = 0;     // pulled off the profile at parse (cheap scalar)
     int             games               = 0;
     uint64_t        seed                = 0;
+    // GLOBAL index of this job's first game. A job is normally a whole run (base 0), but it can also
+    // be a CHUNK of one -- games [game_index, game_index+games) of a longer sequence -- which is what
+    // lets a chunked generator (the value-leaf depth matrix) pool every chunk of every cell into ONE
+    // process instead of one subprocess per chunk. Game i of the job is then globally game
+    // (game_index + i): that index drives the opponent spawn schedule and the logged game number,
+    // while the shuffle seed stays `seed + i` (so a chunk sets "seed" to base_seed + game_index,
+    // exactly as the single-run `--seed (base+off) --game-index off` form does). Default 0 keeps
+    // every existing manifest byte-identical.
+    int             game_index          = 0;
     int             depth               = 0;
     int             budget_ms           = 0;
     int             max_turns           = 8;   // goldfish horizon (see main.cpp); per-job overridable
@@ -133,6 +142,18 @@ struct WorkItem
     int game;
 };
 
+// Report any game at or over this many ms (see the SLOW-GAME emission in the worker). A MILLISECOND
+// value, not a boolean, so it is getenv+parse rather than EnvOn -- same convention and same variable
+// as GoldFishRunner's. 0 / unset / unparseable => off.
+static long long SlowGameMs()
+{
+    const char* e = std::getenv("MTG_SLOW_GAME_MS");
+    if (!e || !*e) { return 0; }
+    char* end = nullptr;
+    const long long v = std::strtoll(e, &end, 10);
+    return (end && *end == '\0' && v > 0) ? v : 0;
+}
+
 Job ParseJob(const json& jspec, ProfileCache& cache)
 {
     Job j;
@@ -147,6 +168,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
 
     j.games               = jspec["games"].get<int>();
     j.seed                = jspec["seed"].get<uint64_t>();
+    j.game_index          = jspec.value("game_index", 0);   // chunk offset; see Job::game_index
     j.depth               = jspec.value("depth", 0);
     j.budget_ms           = jspec.value("budget_ms", 0);
     j.sched_weight        = jspec.value("weight", 0);      // LPT priority override (see Job::sched_weight)
@@ -221,6 +243,11 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     // no synchronisation. games[j][gi] = win turn (<=0 means no win).
     std::vector<std::vector<int>> win_turns(jobs.size());
     std::vector<std::vector<uint64_t>> digests(jobs.size());
+    // Per-job core-milliseconds (see BatchJobResult::elapsed_ms). Relaxed adds: the value is read
+    // only after the job's last game lands, and that read is already ordered by the acq_rel
+    // remaining-counter decrement below.
+    std::vector<std::atomic<long long>> job_ms(jobs.size());
+    for (std::atomic<long long>& a : job_ms) { a.store(0, std::memory_order_relaxed); }
     for (std::size_t j = 0; j < jobs.size(); ++j)
     {
         win_turns[j].assign(jobs[j].games, -1);
@@ -263,6 +290,8 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             return a.job < b.job;
         });
 
+    const long long s_slow_game_ms = SlowGameMs();
+
     int requested = num_threads;
     num_threads = concurrency_util::ResolveWorkerThreads(num_threads);
     num_threads = std::min<int>(num_threads, std::max<std::size_t>(1, items.size()));
@@ -291,6 +320,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             for (int b = 0; b < 8; ++b) { cd ^= static_cast<uint8_t>((d >> (b * 8)) & 0xff); cd *= 1099511628211ULL; }
         }
         r.case_digest = cd;
+        r.elapsed_ms  = job_ms[j].load(std::memory_order_relaxed);
         return r;
     };
 
@@ -342,10 +372,16 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     cached_job = wi.job;
                 }
 
+                // Global game number = the job's chunk offset + the local index. The shuffle seed
+                // stays seed+local (a chunk's "seed" already carries the offset), but the spawn
+                // schedule and the logged index are GLOBAL, so a chunk reproduces the corresponding
+                // `--seed (base+off) --game-index off` single run exactly. game_index is 0 for a
+                // whole-run job, which is every pre-existing manifest.
+                const int global_gi = job.game_index + wi.game;
                 GameState state = GoldFishRunner::SetupGame(
                     job.deck, job.seed + static_cast<uint64_t>(wi.game));
                 state.vial_target_mv = job.vial_target_mv;
-                GoldFishRunner::PopulateOpponentSpawns(state, wi.game);
+                GoldFishRunner::PopulateOpponentSpawns(state, global_gi);
 
                 // Attach a logger for the play fingerprint. Default: DIGEST-ONLY (no structure
                 // built, no disk -- cheap). With trace_dir set: a FULL logger that also builds
@@ -358,15 +394,39 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // search rollouts), so it does not perturb play.
                 const bool trace = !trace_dir.empty();
                 GameLogger dlog(/*digest_only=*/!trace);
-                dlog.StartGame(std::string(), wi.game, job.name, job.seed + wi.game, {});
+                dlog.StartGame(std::string(), global_gi, job.name, job.seed + wi.game, {});
                 engine->SetLogger(&dlog);
+                const auto g_t0 = std::chrono::steady_clock::now();
                 win_turns[wi.job][wi.game] = engine->RunGame(state, job.max_turns);
+                const long long g_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - g_t0).count();
+                job_ms[wi.job].fetch_add(g_ms, std::memory_order_relaxed);
+
+                // SLOW-GAME capture. GoldFishRunner emits this from its own game loop, which the
+                // batch path does not use -- so before this, `--batch` reported no slow games at
+                // all, however pathological the deck. That matters because an expensive deck's cost
+                // is concentrated in a handful of games and the repro list is the whole input to an
+                // optimization pass; a chunked generator moving onto `--batch` would have lost it
+                // silently. Carries job= (the chunk) so a line is attributable to a matrix cell,
+                // which the bare GoldFishRunner form is not once many cells share a process.
+                // The replay seed is base_seed + LOCAL index (that is what SetupGame shuffled on)
+                // while --game-index is the GLOBAL one (what the spawn schedule used).
+                if (s_slow_game_ms > 0 && g_ms >= s_slow_game_ms)
+                {
+                    std::fprintf(stderr,
+                        "[goldfish] SLOW-GAME %lldms  job=%s gi=%d wt=%d  repro: --seed %llu "
+                        "--game-index %d --games 1\n",
+                        g_ms, job.name.c_str(), global_gi, win_turns[wi.job][wi.game],
+                        static_cast<unsigned long long>(job.seed + static_cast<uint64_t>(wi.game)),
+                        global_gi);
+                    std::fflush(stderr);
+                }
                 engine->SetLogger(nullptr);
                 digests[wi.job][wi.game] = dlog.Digest();
                 if (trace)
                 {
                     dlog.EndGame(win_turns[wi.job][wi.game]);
-                    dlog.WriteToFile(trace_dir / (job.name + "_gi" + std::to_string(wi.game) + ".json"));
+                    dlog.WriteToFile(trace_dir / (job.name + "_gi" + std::to_string(global_gi) + ".json"));
                 }
 
                 // Stream this job the instant its last game lands.

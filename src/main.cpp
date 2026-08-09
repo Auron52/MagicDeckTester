@@ -3475,7 +3475,8 @@ int main(int argc, char* argv[])
                 std::snprintf(avgbuf, sizeof(avgbuf), "%.4f", r.avg_turns);
                 std::cout << r.name << ": played=" << r.games_played
                           << " avg=" << avgbuf
-                          << " digest=" << dbuf << "\n" << std::flush;
+                          << " digest=" << dbuf
+                          << " ms=" << r.elapsed_ms << "\n" << std::flush;
                 if (!game_log_dir.empty())
                 {
                     WriteGameLog(game_log_dir, r.name, r.win_turns, r.digests);

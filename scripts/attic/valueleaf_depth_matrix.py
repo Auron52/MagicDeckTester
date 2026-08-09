@@ -371,15 +371,16 @@ def run_incremental(args):
         if c["games"]: return c["ms"]/c["games"]
         return (4.0**c["depth"]) if c["arm"]=="H" else (3.0**c["depth"])*0.02
 
-    def build_queue():
-        # Chunk size is about the QUEUE having at least one piece per worker, not about shrinking as
-        # the run drains. A full run (20,800 games) gets 832 chunks of 25 and never notices; a targeted
-        # fill of 75 games would get THREE chunks of 25 -- three busy cores out of twenty -- so the
-        # size drops to keep every worker fed. Computed once, up front, from the total outstanding.
+    def build_queue(cap):
+        # Chunks for this wave: every missing offset below min(the cell's target, the wave's cap).
+        # Chunk size still matters even though the pool no longer runs one process per chunk -- it is
+        # the unit of DURABILITY (a chunk's result is written the moment it lands) and of resume, so
+        # a wave with few games uses smaller chunks rather than leaving most of them un-committed
+        # until the end.
         # The work is the set of MISSING OFFSETS, not "target minus a count". After a resync those are
         # not always a suffix -- a cell can be left with a hole in the middle -- so the gaps are
         # computed from the chunks the cell actually holds.
-        gaps={id(c):_missing(c,target(c)) for c in cells}
+        gaps={id(c):_missing(c,min(target(c),cap)) for c in cells}
         total=sum(hi-lo for g in gaps.values() for lo,hi in g)
         chunk=max(1,min(args.batch, total//max(1,args.workers))) if total else args.batch
         q=[]
@@ -393,18 +394,6 @@ def run_incremental(args):
         q.sort(key=lambda ch: est_spg(ch["c"])*ch["n"], reverse=True)
         return q
 
-    queue=build_queue()
-    print("queue: %d chunks of <=%d games, longest-first (slowest cell first: %s)"
-          % (len(queue), args.batch,
-             ("%s%d s%s" % (queue[0]["c"]["arm"],queue[0]["c"]["depth"],queue[0]["c"]["seed"])) if queue else "-"),
-          flush=True)
-
-    def drop_condemned(c):
-        # A condemned cell keeps only what it needs to reach reference_target; the rest leaves the
-        # queue immediately so no worker ever picks it up.
-        lim=target(c)
-        queue[:] = [ch for ch in queue if not (ch["c"] is c and ch["off"] >= lim)]
-
     def write_state():
         tmp=state_path+".tmp"
         json.dump([{k:c[k] for k in ("deck","arm","depth","seed","games","lp_sum","lp_mean","batches",
@@ -412,77 +401,135 @@ def run_incremental(args):
         os.replace(tmp,state_path)
         emit_table(cells,args)
 
-    ex=ThreadPoolExecutor(max_workers=args.workers)
-    futs={}
-    def submit_next():
-        while queue:
-            ch=queue.pop(0)
-            c=ch["c"]
-            if ch["off"]>=target(c): continue      # condemned after this chunk was queued
-            c["inflight_games"]+=ch["n"]
-            deck_file,prof,mt=DECKS[c["deck"]]
-            futs[ex.submit(run_batch,deck_file,mt,c["depth"],c["seed"],ch["off"],ch["n"],
-                           c["arm"]=="V",args.value_min_depth,prof,
-                           PROFILES.get(c["deck"]))]=(c,ch)
-            return True
-        return False
-
-    while len(futs)<args.workers and submit_next(): pass
-    done_batches=0
-    while futs:
-        done,_=wait(list(futs),return_when=FIRST_COMPLETED)
-        for fut in done:
-            c,ch=futs.pop(fut)
-            try: lp,wall,p=fut.result()
-            except Exception: lp,wall,p=float("nan"),0.0,0
-            with lock:
-                c["inflight_games"]-=ch["n"]
-                if p>0 and lp==lp:
-                    # Recorded as a CHUNK, addressed by offset and stamped with the engine that
-                    # produced it -- so this exact span of games can be replaced later without
-                    # touching the rest of the cell.
-                    c["chunks"].append({"off":ch["off"],"n":p,"lp":lp,"ms":wall,"src":src_now})
-                    _refresh(c)
-                    if c["first_wall"] is None: c["first_wall"]=wall
-                    # Tractability keys on the cell's CUMULATIVE rate, not this batch's. Per-batch was
-                    # wrong twice over: (1) a single unlucky 25-game batch holding one pathological
-                    # game condemned the whole cell -- measured 2026-08-04, dragonstorm H5 seed 11011
-                    # was flagged while averaging 5.5 s/game against a 60 s/game threshold, 11x under;
-                    # and (2) the flag was STICKY, never re-examined as the average recovered, so one
-                    # bad sample truncated the cell for the rest of the run. Cumulative is robust to a
-                    # single bad game and self-corrects, while still capping a cell that is genuinely
-                    # too slow to be production-usable at this depth.
-                    # DEPTH FLOOR (--never-condemn-at-or-below). Shallow cells are the ones the trust-depth
-                    # decision is derived from, so condemning one is not a saved cost -- it is a hole in
-                    # the answer.
-                    #
-                    # And the cumulative average, which was itself the fix for a STICKY per-batch flag
-                    # (see below), still cannot survive a heavy tail. Measured 2026-08-05, TH H5:
-                    #   seed 8008   400g   14.8 s/game   first batch     4.4 s
-                    #   seed 9009    50g  358.2 s/game   first batch 17875   s  (4.96 HOURS, 25 games)
-                    #   seed 10010  400g   15.3 s/game   first batch     1.9 s
-                    #   seed 11011   50g  213.4 s/game   first batch 10668   s  (2.96 hours)
-                    # ONE pathological game made its batch cost five hours; 17912/50 = 358 > 60 and the
-                    # cell was condemned. Every OTHER game in those cells runs at ~0.1 s/game -- the fill
-                    # run took them 50 -> 325 in minutes. So condemning threw away ~350 cheap games to
-                    # avoid re-running one expensive game that had ALREADY BEEN PAID FOR.
-                    #
-                    # (An earlier draft of this comment blamed oversubscription -- 20 single-threaded
-                    # workers on a 12-core box. That is real but nowhere near sufficient: contention does
-                    # not turn a 2.5 s batch into a 5 h one. The cause is the tail, not the load.)
-                    #
-                    # So: never condemn at or below this depth; let deep cells absorb the trimming.
-                    was=c["intractable"]
-                    c["intractable"] = (c["depth"] > args.never_condemn_at_or_below
-                                        and (c["ms"] / max(c["games"],1)) > args.intractable_sec_per_game)
-                    if c["intractable"] and not was: drop_condemned(c)
-                done_batches+=1
+    # ---------------------------------------------------------------- ONE PROCESS, ONE POOL
+    # Each WAVE hands every outstanding chunk to a single `mtg --batch`, which flattens every game
+    # of every job into one work queue behind one atomic cursor. That is the real fix for the tail:
+    # a chunk used to be its own subprocess, so the chunk size WAS the tail granularity and the box
+    # drained to whatever chunks happened to be slowest (measured 2026-08-08: two 25-game H5 chunks
+    # still running at 54,004 s with 3 of 24 cores busy, for fifteen hours). Pooled, the whole wave
+    # has ONE tail, and it is one GAME long.
+    #
+    # One pool per (deck, arm), because the value-model settings reach the engine as environment
+    # variables and are therefore process-global: the H arm runs MTG_VALUE_MODEL=0 with the ladder
+    # on the cheap leaf, the V arm runs the model itself. Two pools per wave for a single-deck run.
+    #
+    # TWO WAVES, because condemnation needs a barrier. The pool owns its queue once it starts, so a
+    # cell cannot be pulled out mid-run the way the old scheduler pulled it from a Python queue.
+    # Wave 1 takes every cell to reference_target, tractability is judged on those rates, and wave 2
+    # fills only what survived. Same semantics as the old per-batch re-evaluation, one barrier
+    # instead of a per-chunk one -- the floor/refine shape the keep-model generator already uses.
+    def run_pool(chunks, wave):
+        by_name={}
+        groups={}
+        for ch in chunks:
+            groups.setdefault((ch["c"]["deck"], ch["c"]["arm"]), []).append(ch)
+        for (dname, arm), gchunks in sorted(groups.items()):
+            deck_file, prof, mt = DECKS[dname]
+            jobs=[]
+            for ch in gchunks:
+                c=ch["c"]
+                nm="%s%d_s%d_off%d" % (c["arm"], c["depth"], c["seed"], ch["off"])
+                by_name[nm]=ch
+                jobs.append({"name":nm, "deck":deck_file, "profile":PROFILES.get(dname),
+                             "games":ch["n"],
+                             # The chunk's shuffle seeds are base+off .. base+off+n, and its GLOBAL
+                             # game numbers are off .. off+n -- exactly the single-run
+                             # `--seed (base+off) --game-index off` form this used to spawn.
+                             "seed":c["seed"]+ch["off"], "game_index":ch["off"],
+                             "depth":c["depth"], "budget_ms":0,   # 0 = unbounded (the H arm's point)
+                             "max_turns":mt, "ignore_play_profile":True,
+                             # LPT priority for the pool's own sort: slowest cell first.
+                             "weight":int(est_spg(c)*1000)})
+            man=args.out+".manifest.%s.%s.w%d.json" % (dname, arm, wave)
+            json.dump({"jobs":jobs}, open(man,"w"))
+            env=dict(os.environ)
+            for k in ("MTG_EVAL_MODEL","MTG_EVAL_PROFILE","MTG_VALUE_MODEL","MTG_VALUE_PROFILE",
+                      "MTG_NC_SEARCH","MTG_VALUE_MIN_DEPTH","MTG_VALUE_REDO_MODE",
+                      "MTG_VALUE_STARTGATE_ALPHA","MTG_LADDER_VALUE_LEAF"):
+                env.pop(k, None)
+            if arm=="V":
+                env["MTG_VALUE_MODEL"]="1"; env["MTG_VALUE_PROFILE"]=prof
+                env["MTG_VALUE_MIN_DEPTH"]=str(args.value_min_depth)
+                env["MTG_VALUE_STARTGATE_ALPHA"]="8"
+            else:
+                env["MTG_VALUE_MODEL"]="0"
+                # The H-cell ladder runs its warm-up passes on the cheap leaf and only the committed
+                # pass on the heuristic. Guarded on the sidecar EXISTING, so a missing model does not
+                # error -- every H cell just silently takes the slow path (1.35x-84.8x more work).
+                if prof and os.path.exists(prof):
+                    env["MTG_VALUE_PROFILE"]=prof; env["MTG_LADDER_VALUE_LEAF"]="1"
+            games=sum(j["games"] for j in jobs)
+            print("wave %d pool %s/%s: %d chunks, %d games, %d threads"
+                  % (wave, dname, arm, len(jobs), games, args.workers), flush=True)
+            cmd=[MTG,"--batch",man,"--threads",str(args.workers)]
+            # stderr carries the engine's SLOW-GAME lines (each a self-contained repro, tagged
+            # job=<cell>_off<offset>). Drained on its own thread so a full pipe can never block the
+            # pool, and appended as it arrives rather than collected at exit -- on this deck a single
+            # chunk ran for hours, and a report you only get afterwards is not a report.
+            pr=subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, env=env)
+            slow_path=os.environ.get("MTG_SLOW_GAME_LOG","logs/eval/slow_games.log")
+            def drain_slow(stream, tag):
+                try:
+                    for l in stream:
+                        if "SLOW-GAME" not in l: continue
+                        with _slow_lock:
+                            with open(slow_path,"a") as fh: fh.write("%s %s\n" % (tag, l.strip()))
+                except Exception: pass
+            st=threading.Thread(target=drain_slow, args=(pr.stderr, "%s/%s" % (dname, arm)), daemon=True)
+            st.start()
+            done=0
+            # Commit each chunk THE INSTANT its line arrives. The pool streams a job's result as
+            # soon as that job's last game lands, so durability is per chunk exactly as before --
+            # killing the run mid-wave loses only the chunks still in flight.
+            for line in pr.stdout:
+                m=re.match(r"(\S+): played=(\d+) avg=([\d.]+) digest=(\w+) ms=(\d+)", line.strip())
+                if not m: continue
+                nm,p,lp,_dg,ms = m.group(1), int(m.group(2)), float(m.group(3)), m.group(4), int(m.group(5))
+                ch=by_name.get(nm)
+                if ch is None or p<=0: continue
+                c=ch["c"]; wall=ms/1000.0
+                c["chunks"].append({"off":ch["off"],"n":p,"lp":lp,"ms":wall,"src":src_now})
+                _refresh(c)
+                if c["first_wall"] is None: c["first_wall"]=wall
+                done+=1
                 write_state()
-                if done_batches % 10 == 0:
-                    tot=sum(c["games"] for c in cells); ic=sum(1 for c in cells if c["intractable"])
-                    print("... %d batches, %d games total, %d cells intractable" % (done_batches,tot,ic),flush=True)
-        while len(futs)<args.workers and submit_next(): pass
-    ex.shutdown(); write_state()
+                if done % 10 == 0:
+                    tot=sum(x["games"] for x in cells)
+                    print("... %d chunks, %d games total" % (done, tot), flush=True)
+            pr.wait()
+            st.join(timeout=5)
+
+    # WAVE 1 -- every cell to the reference floor, so tractability is judged on real rates.
+    # WAVE 2 -- the rest, for the cells that survived.
+    total_chunks=0
+    for wave, cap in ((1, args.reference_target), (2, args.target)):
+        q=build_queue(cap)
+        if not q:
+            continue
+        print("wave %d: %d chunks of <=%d games (cap %d), slowest first: %s"
+              % (wave, len(q), args.batch, cap,
+                 "%s%d s%s" % (q[0]["c"]["arm"], q[0]["c"]["depth"], q[0]["c"]["seed"])), flush=True)
+        total_chunks+=len(q)
+        run_pool(q, wave)
+        if wave==1:
+            # Tractability on the cell's CUMULATIVE rate, never a single chunk's. Per-chunk was wrong
+            # twice over: one unlucky 25-game chunk holding a pathological game condemned a cell
+            # averaging 5.5 s/game against a 60 s/game threshold (dragonstorm H5 s11011, 2026-08-04),
+            # and the flag was STICKY, never re-examined as the average recovered.
+            #
+            # DEPTH FLOOR (--never-condemn-at-or-below): the shallow cells ARE the trust-depth answer,
+            # so condemning one is a hole in the table, not a saving. Measured 2026-08-05 on TH H5,
+            # one pathological game cost its chunk five hours, 17912/50 = 358 > 60 condemned the cell,
+            # and ~350 CHEAP games were thrown away to avoid re-running a game already paid for.
+            for c in cells:
+                c["intractable"] = (c["depth"] > args.never_condemn_at_or_below
+                                    and (c["ms"] / max(c["games"],1)) > args.intractable_sec_per_game)
+            ic=sum(1 for c in cells if c["intractable"])
+            if ic: print("condemned %d cell(s) after the floor wave" % ic, flush=True)
+            write_state()
+
+    done_batches=total_chunks
     print("=== incremental generation complete: %d batches, %d cells (%d intractable) ===" % (
         done_batches, len(cells), sum(1 for c in cells if c["intractable"])))
 
