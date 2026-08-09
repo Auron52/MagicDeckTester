@@ -828,3 +828,45 @@ and a different quantity, with a measured 90.7% fire rate rather than a hypothes
 
 Gate it the usual way (`MTG_PAYOFF_BB`, `EnvOn(..., true)` once measured) and verify byte-identity on
 per-game win turns with `MTG_DUMP_WINS`, not on aggregate averages.
+
+### "Enumerate the mana combinations up front" — already designed, and already measured HERE
+
+That idea is `docs/design/exact-mana-enumeration.md` (deferred 2026-07-29): precompute the Pareto
+frontier of achievable `ManaPool` vectors once per decision, then answer each plan's affordability by
+lookup. It is **not implemented**, and it was deferred *because it measured as not a performance
+lever* — 0.44-1.36% of runtime in the per-plan affordability lookup, with the conclusion "no richer
+precomputation can beat 0.5%".
+
+**But that measurement never included FiveColour** (treasure_hunt d3, Hinata2 d5, Dragonstorm d5), and
+FiveColour is the only deck here that enters the mana odometer at all. So the ceiling it established
+was measured on decks where the thing being optimised does not happen.
+
+The good news is we do not have to re-litigate it: `MTG_ENUM_STATS` already simulates the up-front
+design on this deck, and it scores the idea's two halves separately.
+
+**The COLLAPSE half is refuted for FiveColour.** Deduplicating the up-front mana lines by what they
+hand the payoff side:
+
+| signature | distinct | collapse |
+|---|---|---|
+| raw combos | 12,998 | — |
+| after existing symmetry prunes | 12,998 | **1.00x (they remove nothing here)** |
+| exact (mana+storm+cards+colour) | 12,740 | 1.02x |
+| + colours capped at demand | 12,740 | 1.02x |
+| cards-spent identity dropped | 12,576 | 1.03x |
+| storm dropped too | 12,500 | 1.04x |
+
+Even the loosest signature collapses 1.04x. FiveColour's mana lines are genuinely distinct — different
+cards spent, different colours produced — not duplicates waiting to be merged. Building a frontier to
+deduplicate them buys at most 4%. (Same shape as the `MTG_SPARE_COPY_BAND` result: 2.08x on the deck
+it was built for, 0.2% here.)
+
+**The GATING half is the whole prize, and it does not need the enumeration.** The 90.7% row-skip needs
+exactly one number — `max_avail`, an upper bound on the total mana any line can produce. An
+*over*-estimate is sound (it only prunes fewer lines, never more), so it can be computed by maximising
+each term independently instead of enumerating the lines and taking the max. You get the ~7x without
+building the frontier at all.
+
+So: right neighbourhood, and the instrument has already told us which half pays. Worth keeping the
+frontier on the deferred list for the correctness reasons its own doc gives (it deletes `SubsetPayable`
+and `SubsetPayableWithFilters`, net-negative LOC) — just not as the speed fix.
