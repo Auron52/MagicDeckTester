@@ -1,7 +1,9 @@
 # Scaling mana sources: a same-turn permanent widens them, and the search cannot see it
 
-**Status:** diagnosed and reproduced; fix specified below, stage 1 landed DEFAULT OFF
-(`MTG_DOMAIN_WIDEN_GATE`, byte-identical). Fixture: `test/scenarios/fivecolour_domain_widen.json`.
+**Status: FIXED 2026-08-10, DEFAULT ON** (`MTG_DOMAIN_WIDEN=0` restores the gap). Fixture
+`test/scenarios/fivecolour_domain_widen.json` now asserts `validate_line` **accept** and fails with
+the flag off. See "Resolution" at the bottom for the implementation, the measurement, and the one
+thing the spec below did not predict.
 
 **The user's question (2026-08-08):** *"the dorks on the field (Bloom Tender, Faeburrow Elder) can add
 more mana based on what we play … sometimes the play is to play a rainbow permanent and then cast
@@ -116,6 +118,77 @@ subsets the gate currently rejects. It is not to be conflated with the emission-
 `fivecolour-search-cost.md`, which is the opposite trade (drop never-payable lines, byte-identical).
 The two interact: `BudgetCanGrow` must treat a live scaling source with `n > c` as a way the budget
 can grow, or the prune would re-introduce this same bug from the other direction.
+
+## Resolution (2026-08-10) — the credit, and the hybrid pip that blocked it
+
+Implemented as specified: `ScalingWidenScan` computes the state-only half once per enumeration
+(`domain_mask`, plus `live` = untapped scaling sources that can tap now and whose mana the pool
+already holds), and per subset `SubsetWidensDomainBy` unions the colours the selection's PERMANENT
+casts add. When the wideners are payable from the **un-widened** pool, `eff`/`eff_nc` gain `live`
+mana of each newly-added colour. `live == 0` skips the per-subset path entirely, so every deck
+without a scaling source is byte-identical — confirmed: smoke 30/30 and regression 50/50 with
+**0 play-changed**.
+
+The two halves ship under ONE flag. `MTG_DOMAIN_WIDEN_GATE` is gone: a gate-only flag could never be
+turned on to any effect (this file's own §"why" explains that the flat pool rejects the subset first),
+so it was a switch with no reachable ON state. `MTG_DOMAIN_WIDEN` now controls the colour gate and
+the pool credit together.
+
+### The part the spec missed: a hybrid pip bakes into its FIRST colour
+
+The credit fired and changed nothing, because step 2 — "require the wideners to be payable from the
+un-widened pool" — was summing their costs field by field. A hybrid pip is stored baked into its
+first colour (`Card.h`), and the metadata that lets `ManaPool::CanPay` try the OTHER colour lives
+outside those flat ints. So the sum of Deathrite Shaman's `{B/G}` demanded **black** — the very
+colour the un-widened board cannot make, which is the whole point of the reproducer — and
+`pool.CanPay(widener_costs)` was false for the one subset the fix exists to rescue.
+
+`AddCostCarryingHybrids` carries the pairs while the fixed 4-entry array has room and leaves the
+surplus baked, which only ever demands a specific colour: conservative, never permissive. Note the
+sibling accumulations (`rock_costs`, `enable_costs`) still sum flat; that is safe in the same
+direction (they can only under-credit) but it means a hybrid-costed rock or equip piece would
+silently miss its credit too.
+
+This is the third time in this area that a hybrid pip's first-colour baking has produced a
+"the code is right but the line is never offered" bug — `SubsetPayable` and `CheckLine`'s colour gate
+were the first two (`92c7ce0`). **Any new flat read of a `ManaCost`'s colour ints is suspect by
+default.**
+
+### Measured
+
+Play, 3 x 500 games at d3/b10, both arms on ONE binary (seeds 4200000 / 90001 / 555000-held-out):
+
+| arm | 4200000 | 90001 | 555000 | sum | cost |
+|---|---|---|---|---|---|
+| widening OFF | 5.0780 | 5.0400 | 5.0720 | 15.1900 | 3,405.9 core-s |
+| **widening ON (adopted)** | 5.0800 | 5.0420 | 5.0720 | 15.1940 | 3,432.7 core-s (**+0.8%**) |
+
+**Per-game, the reach is 6 games in 1,500** (`--game-log-dir`, unwon scored as `max_turns + 1`):
+2 faster, 4 slower, 1,494 unchanged. The +0.004 IS those six games — at n=6 the direction carries no
+information, so the honest reading is *no measurable quality effect either way*, at +0.8% cost.
+
+**Adopted as a correctness fix, not as a quality win.** The engine was failing to enumerate a legal,
+strictly better line; the fixture goes `illegal` -> `accept`, and with `max_turns` raised to 9 the
+executor plays it for real — Cosmic Spider-Man lands on T6 instead of T7, which is what lets
+Progenitus follow on T7 (opponent to -15 instead of -1). That the effect is rare in goldfish games is
+a statement about how often this board shape comes up, not about whether the line exists.
+
+### The executor ordering question is answered
+
+The spec flagged it as unverified: *"the executor must cast the widener before tapping the dork"*.
+It does, with no new machinery — the cast order is ascending cost, which puts a 1-mana widener ahead
+of the payoff it unlocks. Verified end to end on the fixture at `max_turns: 9` (the T6 line is
+`cast Deathrite Shaman {B/G}` then `cast Cosmic Spider-Man {W}{U}{B}{R}{G}`), not merely by
+`validate_line`. The credit is still `EnumeratePlans`-only per the Medallion precedent; `Solve`'s d0
+greedy is untouched.
+
+### Known optimism, deliberate
+
+The credit gives `live` mana of each new colour even when one of those sources is itself tapped to
+PAY for the widener (in the fixture Bloom Tender pays for Deathrite, so the true gain is one black,
+not two). That is the specified behaviour and it is sound in the same way the rock and haste-dork
+credits are: an optimistic affordability HINT that the rollout validates, offered only where a
+rollout exists to validate it.
 
 ---
 

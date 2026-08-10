@@ -37,6 +37,8 @@
   "library_size": 30,
   "depth": 3,
   "budget_ms": 0,
+  "validate_line": "cast=Deathrite Shaman;cast=Cosmic Spider-Man",
+  "expect_verdict": "accept",
   "log_out": "logs/play/fivecolour_domain_widen.json",
-  "_comment": "KNOWN GAP (2026-08-09), not yet a passing fixture. Two scaling dorks (domain {G,W}) + Breeding Pool + Jetmir's Garden = 6 mana but NO black. Cosmic Spider-Man {W}{U}{B}{R}{G} is payable only via the widening: tap Bloom Tender for {G}, cast Deathrite Shaman {B/G}, the domain gains BLACK, and Faeburrow Elder then taps {W}{B}{G} which with the two lands is exactly WUBRG. The engine casts NOTHING. See docs/design/scaling-source-widening.md."
+  "_comment": "Scaling-source widening -- FIXED 2026-08-10 (MTG_DOMAIN_WIDEN=0 restores the gap, and the verdict then reads 'illegal: no untapped source produces black mana'). Two scaling dorks (domain {G,W}) + Breeding Pool + Jetmir's Garden = 6 mana but NO black. Cosmic Spider-Man {W}{U}{B}{R}{G} is payable only via the widening: tap Bloom Tender for {G}, cast Deathrite Shaman {B/G}, the domain gains BLACK, and Faeburrow Elder then taps {W}{B}{G} which with the two lands is exactly WUBRG. ASSERTED VIA validate_line, NOT a win turn: turn == max_turns here, so a creature cast on the final turn is worth nothing against a passive goldfish and the search rightly just attacks -- no win-turn assertion can see this at all. Two things had to change: the per-subset widening credit in EnumeratePlans (the flat pool is state-only, so it killed the subset before the colour gate was ever consulted) and hybrid-carrying cost accumulation (Deathrite's {B/G} bakes into BLACK, so a flat sum of the widener's own cost demanded a colour the un-widened board cannot make). Raise max_turns to 9 and the executor plays it for real: Spider-Man lands on T6 instead of T7, which is what lets Progenitus follow on T7. See docs/design/scaling-source-widening.md."
 }
