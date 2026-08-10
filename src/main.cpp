@@ -3620,6 +3620,16 @@ int main(int argc, char* argv[])
             std::cerr << "Error: " << e.what() << "\n";
             return 1;
         }
+        // Counters, same as the single-run path below. WITHOUT this an instrumented (-DMTG_PROFILE=ON)
+        // batch run emits NO counters and still exits 0 -- a harness parsing them gets a clean, EMPTY
+        // cost table, which reads exactly like "the two arms cost the same". That is the conclusion
+        // such a measurement is usually run to test, and it cost a full cycle of the Goblins
+        // value-leaf cost A/B before the empty table was traced to the mode rather than the build.
+        // The trap was sharp because this repo MANDATES pooling long runs into ONE --batch, so the
+        // sanctioned instrument was missing from exactly the mode required for the runs big enough to
+        // need it -- pushing perf claims back onto wall clock, which is documented to lie here.
+        // No-op (expands to nothing) unless MTG_PROFILE is defined, so Release codegen is unchanged.
+        PROF_REPORT(std::cerr);
         return 0;
     }
 
