@@ -309,14 +309,20 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                 // the FiveColour Stage-4 atom presented as "the analyzer is hung" for 3.4 h because
                 // nothing in a Release build reports per-game time (the PROF_RECORD_GAME below is
                 // #ifdef MTG_PROFILE, i.e. a separate instrumented build). 30 s is far above any healthy
-                // goldfish game, so a quiet stream means no degenerate games. MTG_SLOW_GAME_MS=0
-                // disables; any explicit value overrides. One steady_clock read per game is the only
-                // overhead, and nothing here feeds a decision -> byte-identical.
+                // goldfish game, so a quiet stream means no degenerate games. MTG_SLOW_GAME_MS is a
+                // LOWER-ONLY override, clamped into [1, 30000]: 0 and out-of-range values leave the baked
+                // default rather than disabling the detector. A silent run that turns out to have been
+                // crawling teaches nothing, which is the whole reason this exists -- so there is no off
+                // switch (same rule as the keep generator's, docs/design/keepgen-no-off-switches.md).
+                // One steady_clock read per game is the only overhead, and nothing here feeds a decision
+                // -> byte-identical.
                 static const long long s_slow_game_ms = []{
+                    constexpr long long kDefault = 30000LL;
                     const char* s = std::getenv("MTG_SLOW_GAME_MS");
-                    return (s && *s) ? std::atoll(s) : 30000LL; }();
-                std::chrono::steady_clock::time_point game_t0;
-                if (s_slow_game_ms > 0) { game_t0 = std::chrono::steady_clock::now(); }
+                    if (!s || !*s) { return kDefault; }
+                    const long long raw = std::atoll(s);
+                    return (raw <= 0) ? kDefault : std::min(raw, kDefault); }();
+                std::chrono::steady_clock::time_point game_t0 = std::chrono::steady_clock::now();
 #ifdef MTG_PROFILE
                 std::chrono::steady_clock::time_point prof_t0 = std::chrono::steady_clock::now();
 #endif
@@ -326,7 +332,6 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                     std::chrono::steady_clock::now() - prof_t0).count();
                 PROF_RECORD_GAME(gi, game_ms);
 #endif
-                if (s_slow_game_ms > 0)
                 {
                     const long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now() - game_t0).count();

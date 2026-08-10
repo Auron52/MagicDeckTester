@@ -25,14 +25,18 @@ struct ExhaustiveKeepConfig
     double   threshold = 0.01;  // equivalence single-linkage merge distance
     int      depth     = 5;     // rollout search depth (match keep-model labels)
     int      budget_ms = 20;
-    int      rollouts  = 100;   // R_max: the per-cell rollout CAP (label precision ceiling)
-    // Adaptive (confidence-driven) sampling. When r_floor < rollouts the generator samples every cell
+    int      rollouts  = 100;   // R_max: the per-cell rollout CAP (label precision ceiling). Must be >= 2:
+                                // a cap of 1 leaves no room for a floor below it, and the generator has
+                                // only the adaptive/continuous path (a cap of 1 is rejected, not downgraded).
+    // Adaptive (confidence-driven) sampling -- the ONLY execution path. The generator samples every cell
     // at r_floor first, then adds rollouts ONLY to cells whose argmin value could still flip a keep
     // decision (flip-prob > flip_eps against the provisional threshold), up to `rollouts`. Lossless by
-    // construction (a cell stops only once its decision can't flip); r_floor==rollouts => uniform R =
-    // byte-identical to the pre-adaptive path (the free unpruned A/B). Per-cell actual counts are
-    // stored in the raw sidecar, so pooling (which reads counts per-entry) is unaffected.
-    int      r_floor   = 0;     // R_0: initial rollouts for every cell (0 => = rollouts, i.e. uniform)
+    // construction (a cell stops only once its decision can't flip). Per-cell actual counts are stored in
+    // the raw sidecar, so pooling (which reads counts per-entry) is unaffected.
+    // r_floor is DERIVED, not configured: RunExhaustiveKeep clamps it into [1, rollouts-1] (0 => 2). The
+    // old "r_floor >= rollouts => uniform R" escape is deleted -- it took the continuous pool, the journal
+    // and the slow/projection reports with it (docs/design/keepgen-no-off-switches.md).
+    int      r_floor   = 0;     // R_0: initial rollouts for every cell (0 => the default floor of 2)
     int      r_batch   = 16;    // rollouts added per refine wave to a still-ambiguous cell
     double   flip_eps  = 0.02;  // stop refining a cell once P(decision flips vs threshold) < this
     double   se_prior  = 8.0;   // pseudo-count for shrinking a cell's sample variance toward the global
@@ -66,18 +70,22 @@ struct ExhaustiveKeepConfig
                                      // waves, no profile written. A cost-scouting probe, ~1/(cap/floor) the
                                      // price of a full gen, so the user can pick fast/complete/another machine.
                                      // ALSO writes its R=1 floor pass to <out_raw>.probe (a poolable "probe
-                                     // chunk") so a later real gen can reuse it (see use_probe_carry).
-    bool     use_probe_carry = false; // reuse a COMPLETE recommend-probe chunk (<out_raw>.probe) as the r=0
-                                     // slice of THIS gen. The probe sampled every cell once at the SAME
-                                     // seed/depth/budget/bucketing, so (rollout seed is a pure fn of
-                                     // (seed_base,r,w,pd)) its r=0 IS byte-identically this gen's r=0 -> load
-                                     // it and roll only r>=1, skipping one rollout/cell. BYTE-IDENTICAL to a
-                                     // from-scratch run (not a lossy pool). Gated on matching play_digest
-                                     // (only reuse if play is unchanged) + fingerprints + floor_complete; a
-                                     // mismatch is silently ignored (fresh run). main.cpp sets this for the
-                                     // --gen-mulligan complete/fast recipes; MTG_KEEP_NO_PROBE_CARRY opts out.
+                                     // chunk") that a later real gen reuses automatically (see the probe-carry note below).
+    // (Probe carry -- reusing a COMPLETE recommend-probe chunk `<out_raw>.probe` as this gen's r=0 slice --
+    // is UNCONDITIONAL and has no flag. The probe sampled every cell once at the same seed/depth/budget/
+    // bucketing, so (the rollout seed being a pure fn of (seed_base,r,w,pd)) its r=0 IS byte-identically
+    // this gen's r=0: load it and roll only r>=1, skipping one rollout per cell. It is BYTE-IDENTICAL to a
+    // from-scratch run, not a lossy pool, and it is gated on matching play_digest + fingerprints +
+    // floor_complete, so a mismatch is silently ignored rather than misapplied. There is nothing to opt
+    // into or out of -- the old MTG_KEEP_PROBE_CARRY / MTG_KEEP_NO_PROBE_CARRY pair only let a resumed or
+    // scouted run repay work it had already banked.)
     std::string out_profile;    // if set, write the serialized keep policy (base profile + table) here
     std::string out_raw;        // if set, write the poolable raw sum+count sidecar (for cross-machine merge)
+    std::string gen_cache;      // fingerprint-gated cache of the EQUIVALENCE CLASSES (the minutes-long
+                                // bucketing head). Defaulted to <deck-stem>.keepmodel.gencache.json by the
+                                // CLI so a resume never re-derives buckets; MTG_EQUIV_CACHE overrides the
+                                // path. Keyed on deck/params/equiv_seed AND the play digest, so a changed
+                                // engine, card or value sidecar can never produce a stale hit.
     std::string commit;         // play-logic identity stamped into the raw sidecar (from MTG_COMMIT)
     std::string force_merge;    // MANUAL bucket override (MTG_EQUIV_FORCE_MERGE): ";"-separated groups,
                                 // each a ","-separated list of card names, unioned into ONE bucket AFTER

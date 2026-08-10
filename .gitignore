@@ -94,6 +94,12 @@ __pycache__/
 # "keepmodel.exhaustive" infix so analyzer profiles stay tracked.
 # decks/**/ reaches into per-deck folders (decks/<name>/<name>.keepmodel.exhaustive.*.json).
 decks/**/*.keepmodel.exhaustive*.json
+# Per-run generator scratch that now lands next to the deck by default (no flag): the fingerprint-gated
+# bucket cache, the crash-recovery journal, and the slow-rollout evidence log. All are derived and
+# re-created on demand -- the journal is deleted by a run that finishes.
+decks/**/*.keepmodel.gencache.json
+decks/**/*.journal
+decks/**/*.slow.log
 scripts/*.so
 
 # Parsed-sidecar binary cache (derived; rebuilt from the .gz on demand)

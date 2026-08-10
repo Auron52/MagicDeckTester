@@ -10,6 +10,7 @@ Follows `.claude/skills/mulligan-profile.md`.
   Rancor/Audacity merge, scaling auras stay distinct). **367,321 distinct hands** (size7=252k). R=1 mm6
   full pass ≈ 24 min — keep-rollouts run at d5/b20 with the value leaf attached (`AttachValueSidecar`),
   so the value leaf *accelerates* the gen.
+- **Build driver (historical):** the `test/exhaustive_chunked_gen.sh` round driver cited below was **deleted 2026-08-10** (`docs/design/keepgen-no-off-switches.md`) -- its rounds ran the uniform, barriered, non-journalled path. The record is kept as-is; a rebuild today is `--gen-mulligan complete`, re-run to resume.
 - **Build:** `test/exhaustive_chunked_gen.sh` (`KM_TARGET_R=40 KM_ROUND_R=5`, mm6), 8 adaptive rounds
   (frozen `a6b4160`, seeds 30001000–30001007) → effective **R=40** on the live frontier. Adaptive
   freezing shrank each round (round 1 7231s → round 8 3100s); 388k of 504k size-7 cell-sides confident
