@@ -10845,12 +10845,34 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         double odo = 1.0;
         for (const std::vector<int>& gp : groups) { odo *= (1.0 + static_cast<double>(gp.size())); }
         odo *= static_cast<double>(1u << std::min(num_ind, 24));
-        int max_opts = 0; std::string driver = "(casts<=1)";
+        // WHICH card is the driver. A group of size 1 is a plain optional cast: it contributes a x2
+        // factor because it can be taken or not, which every candidate does -- it is NOT a property
+        // of that card. Attributing to it produced a published table where Mana Cannons (a {2}{R}
+        // enchantment with no modal split, no X and no targets -- group size ALWAYS 1) appeared to
+        // drive 15% of the odometer, purely because it is cheap, castable early, and therefore often
+        // FIRST in `groups`. The giveaway was avg_odo ~= 2^5, i.e. the combinatorics of "five
+        // castable things", not anything the card does.
+        //
+        // So only a group that actually multiplies -- size >= 2 -- can name a driver, and ties are
+        // recorded as ambiguous rather than silently going to whichever enumerated first. Calls whose
+        // groups are all size 1 are bucketed as "(flat: N optional casts)", which is the honest
+        // description: their branching is 2^n in the number of simultaneously castable options and
+        // belongs to no single card.
+        int max_opts = 0, n_at_max = 0; std::string driver;
         for (const std::vector<int>& gp : groups)
         {
-            if (static_cast<int>(gp.size()) > max_opts)
-            { max_opts = static_cast<int>(gp.size()); driver = cands[gp[0]].card_name; }
+            const int sz = static_cast<int>(gp.size());
+            if (sz < 2) { continue; }                       // optional-cast x2, not a card's doing
+            if (sz > max_opts) { max_opts = sz; n_at_max = 1; driver = cands[gp[0]].card_name; }
+            else if (sz == max_opts) { ++n_at_max; }
         }
+        if (max_opts < 2)
+        {
+            char flat[48];
+            std::snprintf(flat, sizeof flat, "(flat: %d optional casts)", num_groups + num_ind);
+            driver = flat;
+        }
+        else if (n_at_max > 1) { driver += "  [+" + std::to_string(n_at_max - 1) + " tied]"; }
         const int bf = static_cast<int>(state.battlefield.size());
         char situ[96];
         std::snprintf(situ, sizeof situ, "groups=%s board=%s hinata=%d",

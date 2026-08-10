@@ -1132,7 +1132,15 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
         int hand_size = static_cast<int>(ap.hand.size());
         std::vector<char> allowed(hand_size, 1);
 
-        if (LookaheadBottoming() && !m_forced_mull_active)
+        // SIZING PROBE (MTG_BOTTOM_ROLLOUTS=0), default ON => byte-identical. Bottoming is 90.4% of
+        // FiveColour's runtime at shipped play (callgrind, 2026-08-10) because this block runs a FULL
+        // game rollout per candidate per bottom step and the deck has no exhaustive bottom table to
+        // short-circuit it. Turning the rollouts off leaves `allowed` all-ones, so HeuristicBottomPick
+        // below decides alone -- which is the K=0 end of the "pre-filter candidates before rolling
+        // out" lever, and therefore an upper bound on what that lever can save and on what it costs
+        // in play quality. A probe, not a proposal: measure both arms before designing anything.
+        static const bool s_bottom_rollouts = EnvOn("MTG_BOTTOM_ROLLOUTS", true);
+        if (LookaheadBottoming() && !m_forced_mull_active && s_bottom_rollouts)
         {
             // Clairvoyant greedy: roll out a full game for removing each candidate
             // card (it goes to the bottom of the library, so the draws the rollout
