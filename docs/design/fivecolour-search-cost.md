@@ -1349,3 +1349,52 @@ holds exactly **one** zero-cost card: **Black Lotus**, which clause 1 already ca
 (`gain = 3 > cost = 0`) and which is a colorless artifact, so it cannot widen a colour-scaling source
 either. The zero-cost hazard is therefore real but currently empty; it becomes live the moment a
 Defenders deck lands, and the inequality is already the right shape for it.
+
+## RETRACTION (2026-08-10) — there was no post-merge search-cost regression
+
+A claim carried into this work — that the merge of `92c7ce0` (the 9 FiveColour fixes, incl. the
+hasted-dork mana unlock) made the engine 1.6–3.8x slower per game — is **false**. Two measurement
+faults produced it, and both are the kind that reads as a result rather than as an error.
+
+**Method.** Three binaries built from `f713a0d` (pre-merge), `92c7ce0` (the suspect), and HEAD, run
+over the SAME manifest (H2 + H3, seeds 8008/9009/10010/11011, 25 games each = 200 games), sequentially
+on an otherwise idle box, against the same data files. Neither engine commit touches `cards.json` or
+`decks/`, so the deck data is identical by construction.
+
+| | pre `f713a0d` | mid `92c7ce0` | HEAD | HEAD / pre |
+|---|---|---|---|---|
+| H2, 100 games | 565.2 | 426.7 | 426.2 core-s | **0.75x** |
+| H3, 100 games | 2824.8 | 3085.2 | 3036.1 core-s | **1.07x** |
+| total | 3390.0 | 3511.9 | 3462.3 core-s | **1.02x** |
+
+**Fault 1 — thread-wall timings compared across machine load.** `BatchJobResult::elapsed_ms` is
+accumulated per game from a worker thread's own `steady_clock`, so it is wall time and inflates under
+oversubscription. The "regressed" figures came from a matrix run that was stalled at ~5 of 20 threads;
+the same cells measured clean here are **1.34–1.46x cheaper** than that run recorded. Any cross-run
+cost comparison has to come from a contention-free run or from deterministic counters — the rule this
+file already states twice, applied to the wrong data.
+
+**Fault 2 — a slow-game log that a tooling bug had misdirected.** The headline "3 slow games in
+20,800, worst 3.4 min" was read off `logs/vlq_fivecolour.pre-merge-fc95780/slow_games.log`. That file
+holds 3 lines because `SLOW_GAME_LOG` was being derived before single-deck mode reassigned `VLQ` (the
+bug fixed in `6a60e42`, and already written up at the end of the work-list section above) — the run's
+real record is `logs/vlq/slow_games.log`: **1,100 slow games, 213 core-hours**, i.e. a heavier tail
+than the post-merge run's 248 / 78 core-h. The pre-merge engine was never the clean one.
+
+Two things fall out of the same probe, for free: HEAD's play digest matches `92c7ce0` on all 8 cells,
+which independently confirms that `394dce1`'s default-off second-main gate and the `ValueArm` batch
+refactor are byte-identical as claimed.
+
+### What the probe does say: the tail is 75% of the cost, and it is not new
+
+| engine | slow games (>=30 s) of 200 | tail core-s | share of arm |
+|---|---|---|---|
+| pre `f713a0d` | 27 | 2,337.8 | 69% |
+| mid `92c7ce0` | 28 | 2,619.7 | 75% |
+| HEAD | 28 | 2,586.5 | 75% |
+
+The same four games top the list on every engine (`--seed 11024 --game-index 13` at depth 3 is
+377 s on HEAD, 383 s on `92c7ce0`, 148 s on `f713a0d`). So the unbounded-search tail this file has
+been tracking since §4 is a structural property of the deck at fixed depth, unchanged by the merge —
+which is what the ANSWERED section above already established from the other direction (every one of
+these games is under 5 s at the budgeted configuration the deck actually ships at).

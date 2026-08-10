@@ -2,6 +2,7 @@
 #include "GoldFishRunner.h"
 #include "../core/GameEngine.h"
 #include "../core/GameLogger.h"
+#include "../core/EnvFlags.h"
 #include "../core/HardwareConcurrency.h"
 #include "../ai/AIEngine.h"
 #include "../ai/MulliganProfile.h"
@@ -668,6 +669,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     }
 
     const long long s_slow_game_ms = SlowGameMs();
+    const bool      s_dump_wins    = EnvOn("MTG_DUMP_WINS");   // see the emission in the worker
 
     int requested = num_threads;
     num_threads = concurrency_util::ResolveWorkerThreads(num_threads);
@@ -916,6 +918,17 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                         static_cast<unsigned long long>(job.seed + static_cast<uint64_t>(wi.game)),
                         global_gi);
                     std::fflush(stderr);
+                }
+                // MTG_DUMP_WINS, for the same reason and with the same defect: it lives in
+                // GoldFishRunner's game loop, which `--batch` does not use, so the per-game A/B diff
+                // its own comment advertises produced NOTHING under the batch path -- an empty diff
+                // reads as "no game changed". Same class as the MTG_PROFILE gap (4eb2f04). Carries
+                // job= because many chunks share one process, and the repro seed is the LOCAL one
+                // (what SetupGame shuffled on), matching the SLOW-GAME line above.
+                if (s_dump_wins)
+                {
+                    std::fprintf(stderr, "[win] job=%s gi=%d wt=%d\n",
+                                 job.name.c_str(), global_gi, win_turns[wi.job][wi.game]);
                 }
                 engine->SetLogger(nullptr);
                 digests[wi.job][wi.game] = dlog.Digest();
