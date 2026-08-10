@@ -32,6 +32,13 @@ Every other `MTG_KEEP_*` / `MTG_EQUIV_*` knob and the uniform/round/wave code pa
 > see `docs/design/continuous-only-keepgen.md`, which is the authoritative status + plan. The historical
 > sections below (with their `MTG_KEEP_CONTINUOUS=1` gating and temporary A/B knobs) are the SHIPPED-2026-07-24
 > record; the flags they cite as "temporary A/B knob" are the ones now retired.
+>
+> **2026-08-10 — the UNIFORM path is gone too, and Pass A no longer joins**
+> (`docs/design/keepgen-no-off-switches.md`): `MTG_KEEP_R_FLOOR` is deleted (the floor is derived and a cap
+> R < 2 is rejected), the sub-table floor/cap is fed into the pool as kind-1 tasks for **every** recipe (so
+> `fast`/`recommend`/change-detect no longer barrier before the size-7 floor), discovery is re-grained to
+> per-(probe,candidate) items, the 64-game play-digest battery is parallelised, and slow-rollout reporting
+> plus journalling can no longer be switched off.
 
 **Persistence = per-cell incremental journal, NOT periodic full-snapshot checkpoints — SHIPPED 2026-07-24.**
 Because a cell completes atomically (floor reached, or terminal freeze/cap), durability is a per-cell append

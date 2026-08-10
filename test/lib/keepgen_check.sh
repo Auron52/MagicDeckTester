@@ -23,6 +23,14 @@
 #      inherit an earlier one's cells (and the first run of a fresh invocation sees no file at all,
 #      while the second invocation does -- which made this harness nondeterministic until it was
 #      caught by running it twice against one build).
+#   5. MTG_KEEP_REFS_OFFSET=0 is PINNED. At the shipped default (2) the freeze shrink target `vg` is
+#      re-derived on a TIMING-triggered schedule (when the producer observes the completed level
+#      advance), so a cell sitting on the freeze threshold can stop at R=7 in one run and R=10 in the
+#      next -- at a fixed seed, on one binary. That is accepted in production (rolling vg makes freeze
+#      decisions more accurate; docs/design/continuous-only-keepgen.md) but it is fatal to a BYTE-EXACT
+#      diff: measured on burn R=10, one size-7 cell flips ~1 run in 3, which reads as a code regression.
+#      offset=0 pins vg at the floor, which is deterministic by construction, so a DIFFERS here means a
+#      real behaviour change. (Everything else about the run is unchanged by the pin.)
 #
 # Deck folder: runs against a COPY under $SCRATCH, because the keep-model path writes its output next
 # to the deck. Never point this at decks/ directly.
@@ -59,9 +67,13 @@ open(sys.argv[2],"w").write(re.sub(r"\"engine_fp\":\"[0-9a-f]*\"","\"engine_fp\"
 # gen <name> <R> <seed> [extra env...] -- one generation run; keeps the raw (and profile, if written).
 # R is the only size knob: max_mull is FIXED at 6 in the analyzer CLI (there is no MTG_KEEP_MAX_MULL --
 # setting one only earns a "not a flag this binary reads" warning), so every run covers sizes 7..1.
+# Every run is ADAPTIVE/continuous -- that is the generator's only execution path (the uniform path was
+# deleted: docs/design/keepgen-no-off-switches.md), so a uniform invocation here would test a shape the
+# binary can no longer produce. R>=2 is a hard requirement for the same reason.
 gen() {
     local name=$1 R=$2 seed=$3; shift 3
     env "$@" MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_ROLLOUTS="$R" MTG_EQUIV_PROBES=4 \
+        MTG_KEEP_REFS_OFFSET=0 \
         MTG_KEEP_OUT_RAW="$D/$name.raw" MTG_KEEP_OUT_PROFILE="$D/$name.profile" \
         "$BIN" "$DECK" --seed "$seed" >"$D/$name.report" 2>"$D/$name.err" \
         || { echo "FAILED: $name"; tail -5 "$D/$name.err"; exit 1; }
@@ -69,9 +81,10 @@ gen() {
 }
 
 # --- 1-3. plain generation, and two disjoint-seed chunks -------------------------------------------
-# R=1 is below the profile floor (kMinProfileR), so it exercises the REFUSAL branch; R=10 clears it
-# and so exercises BuildPolicyFromTables and the profile write.
-gen gen  1 4242
+# R=3 is below the profile floor (kMinProfileR), so it exercises the REFUSAL branch; R=10 clears it
+# and so exercises BuildPolicyFromTables and the profile write. (R=1 used to serve the refusal case,
+# but a cap below 2 cannot be adaptive and is now rejected outright.)
+gen gen  3 4242
 gen p1  10 4242
 gen p2  10 9001
 
@@ -93,12 +106,11 @@ merge sim   MTG_KEEP_SIM_ADAPTIVE_BOTTOM=1 MTG_KEEP_SIM_TRIALS=32
 gen traced 4 4242 MTG_KEEP_TRACE=1
 
 # --- 8. change-detection carry: re-run against a PRIOR pool ----------------------------------------
-# Needs an ADAPTIVE run (0 < R_FLOOR < R), else the prior is ignored -- which would make this path
-# silently test nothing, so the report is checked for the "change-detection ON" line below.
-gen carry 4 4242 MTG_KEEP_R_FLOOR=2 MTG_KEEP_PRIOR_RAW="$D/p1.raw"
+# The report is checked for the "change-detection ON" line below, so a silently-skipped carry fails.
+gen carry 4 4242 MTG_KEEP_PRIOR_RAW="$D/p1.raw"
 
 # --- 9. carry + execution-trace reuse (a traced prior plus a declared changed-card set) ------------
-gen carry_traced 4 4242 MTG_KEEP_R_FLOOR=2 MTG_KEEP_PRIOR_RAW="$D/traced.raw" \
+gen carry_traced 4 4242 MTG_KEEP_PRIOR_RAW="$D/traced.raw" \
                         MTG_KEEP_CHANGED_CARDS="Lightning Bolt,Goblin Guide"
 
 # --- 10. cross-run prune set: emit one from the merge, then consume it -----------------------------
@@ -116,13 +128,13 @@ fi
 # nothing to do with the carry. Do not "simplify" it away: the play_digest gate does NOT catch the
 # mismatch (measured -- docs/design/rollout-config-digest-depth-blindness.md), which is exactly why
 # this check pins the depth by hand instead of trusting the gate.
-env MTG_EQUIV_PROBES=4 MTG_KEEP_OUT_RAW="$D/probe.raw" "$BIN" "$DECK" --seed 4242 \
+env MTG_EQUIV_PROBES=4 MTG_KEEP_REFS_OFFSET=0 MTG_KEEP_OUT_RAW="$D/probe.raw" "$BIN" "$DECK" --seed 4242 \
     --gen-mulligan recommend >"$D/probe.report" 2>"$D/probe.err" \
     || { echo "FAILED: probe"; tail -5 "$D/probe.err"; exit 1; }
 norm "$D/probe.raw.probe" "$D/probe.probe.n"
 gen d6plain 4 4242 MTG_EQUIV_DEPTH=6
 cp "$D/probe.raw.probe" "$D/d6carry.raw.probe"
-gen d6carry 4 4242 MTG_EQUIV_DEPTH=6 MTG_KEEP_PROBE_CARRY=1
+gen d6carry 4 4242 MTG_EQUIV_DEPTH=6   # probe carry is unconditional -- no flag to enable
 
 # --- 14-15. JOURNAL + byte-identical RESUME -------------------------------------------------------
 # The generator's crash-safety claim: an interrupted run, restarted with the same command, resumes
@@ -135,7 +147,7 @@ gen d6carry 4 4242 MTG_EQUIV_DEPTH=6 MTG_KEEP_PROBE_CARRY=1
 # The interruption POINT is wall-clock dependent, so resume.err/.report are excluded from the
 # cross-tag diff below (NOCMP). The asserted artifact is not: whatever the resumed run inherits, its
 # final raw must equal the uninterrupted one's.
-cont() { env MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_ROLLOUTS=4 MTG_KEEP_R_FLOOR=2 MTG_KEEP_CONTINUOUS=1 \
+cont() { env MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_ROLLOUTS=4 MTG_KEEP_REFS_OFFSET=0 \
     MTG_EQUIV_PROBES=4 MTG_KEEP_OUT_RAW="$D/$1.raw" MTG_KEEP_OUT_PROFILE="$D/$1.profile" \
     "$BIN" "$DECK" --seed 4242 >"$D/$1.report" 2>>"$D/$1.err"; }
 : >"$D/cont.err";   cont cont   || { echo "FAILED: cont"; exit 1; }
@@ -160,13 +172,15 @@ sed -i "s#$D#<D>#g; s#$SCRATCH#<S>#g" "$D"/*.report "$D"/*.err 2>/dev/null
 # SAME binary (proven by running this twice against one build). Drop it before comparing; every semantic
 # line (a PRIOR-RAW refusal, a PRUNE-SET carry count, a fingerprint mismatch, the adaptive wave summary)
 # is left intact, so a real change still shows.
-#   * stderr progress lines -- the PERCENTAGE is time-sampled, so the "(N/M tasks, R rollouts)" counts at
-#     that instant move even when the run is byte-identical. Match on the shape, not the phase name: the
-#     phases are floor-pass / refine-wave-<n> / full-pass and a new one must not silently escape this.
-#   * the report's gen-time projection and slowest-rollout table -- pure ms measurements and their
+#   * stderr progress lines -- the PERCENTAGE is time-sampled, so the "(N/M tasks|rollouts)" counts at
+#     that instant move even when the run is byte-identical. Match on the shape, not the phase name, so a
+#     new phase cannot silently escape this. Covers discovery, the continuous "rollouts fed" heartbeat and
+#     the top-N slow dumps that now ride along with it.
+#   * the report's gen-time projection and slowest-rollout tables -- pure ms measurements and their
 #     derived hour estimates, whose ORDER also changes when two cells time within noise of each other.
-sed -i -E '/[0-9]+% +\([0-9]+\/[0-9]+ tasks/d' "$D"/*.err 2>/dev/null
-sed -i -E '/^  floor pass: [0-9]+s @ /d; /^  projected (COMPLETE|FAST)/d; /^  overnight target:/d; /^ +[0-9]+ms  size[0-9]+ (play|draw)/d' "$D"/*.report 2>/dev/null
+#     (The tables print at several points now, so the ms-line pattern is matched anywhere.)
+sed -i -E '/[0-9]+% +\([0-9]+\/[0-9]+ (tasks|rollouts)/d; /continuous: [0-9]+ rollouts fed/d; /^ +slowest rollouts /d; /^ +[0-9]+ms  /d' "$D"/*.err 2>/dev/null
+sed -i -E '/^  floor pass: [0-9]+s @ /d; /^  projected (COMPLETE|FAST)/d; /^  overnight target:/d; /^ +slowest rollouts /d; /^ +[0-9]+ms  /d' "$D"/*.report 2>/dev/null
 sed -i -E 's#[0-9]+/s#<rate>/s#g; s#\b[0-9]+s\b#<t>s#g' "$D"/*.err "$D"/*.report 2>/dev/null
 
 # Guard against a path that silently does nothing: assert the opt-in ones actually engaged.

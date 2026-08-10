@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "EquivalenceDiscovery.h"
+#include "SlowRollouts.h"
 #include "../ai/AIEngine.h"
 #include "../ai/MulliganProfileIO.h"
 #include "../cards/CardDatabase.h"
@@ -56,6 +57,13 @@ constexpr int HAND = 7;
 // profile: the worst it can do is emit a chunk. Real recipes (fast R=30, complete R=40) clear it by a
 // wide margin, so this changes no happy path.
 constexpr int kMinProfileR = 10;
+
+// Minimum cap R the generator will run at. The generator has exactly ONE execution path -- the
+// continuous adaptive pool -- and "adaptive" needs a floor strictly below the cap, so a cap of 1
+// cannot be run at all. Rejecting it is deliberate: the alternative (fall back to a uniform pass)
+// IS the uniform path this design deleted, and it silently took the journal, the floor projection
+// and the slow-cell report with it. See docs/design/keepgen-no-off-switches.md.
+constexpr int kMinCapR = 2;
 
 // C(n,k) as an exact long long (n<=60, k<=7 here -> well within range).
 long long Comb(int n, int k)
@@ -356,21 +364,48 @@ static std::string RolloutConfigDigest(const Decklist& deck, const MulliganProfi
 {
     constexpr int      kGames    = 64;                    // coverage vs cost (negligible beside R rollouts)
     constexpr uint64_t kSeedBase = 0x9E3779B97F4A7C15ULL; // FIXED -> the battery is machine-independent
-    AIEngine   ai(profile, depth, budget_ms);
-    ai.SetSearchPostCombat(GoldFishRunner::DeckUsesSecondMain(deck));
-    GameEngine engine(ai);
-    uint64_t   fold = 1469598103934665603ULL;             // FNV-1a over per-game digests, in game order
+    const bool second_main = GoldFishRunner::DeckUsesSecondMain(deck);
+    // PARALLEL over games, FOLDED in game order. Each game is a pure function of its own seed, so
+    // running them concurrently cannot change any per-game digest; only the fold order matters for the
+    // result, and that is fixed below. This used to be 64 games on ONE core while the other N-1 idled --
+    // a silent single-threaded head paid on every invocation INCLUDING every resume (minutes on a heavy
+    // deck). Timed + streamed like every other rollout phase, so a degenerate game here is visible too.
+    std::vector<uint64_t> digests(kGames, 0);
+    std::atomic<int>      next_game{ 0 };
+    const int nthreads = std::max(1, std::min(concurrency_util::AffinityCpuCount(), kGames));
+    std::vector<std::thread> pool;
+    for (int t = 0; t < nthreads; ++t)
+    {
+        pool.emplace_back([&]{
+            AIEngine   ai(profile, depth, budget_ms);
+            ai.SetSearchPostCombat(second_main);
+            GameEngine engine(ai);
+            for (;;)
+            {
+                const int gi = next_game.fetch_add(1);
+                if (gi >= kGames) { break; }
+                const uint64_t seed = kSeedBase + static_cast<uint64_t>(gi);
+                digests[gi] = TimedRollout("play-digest",
+                    [&]{ return "game gi=" + std::to_string(gi) + " seed=" + std::to_string(seed); },
+                    [&]() -> uint64_t {
+                        GameState state = GoldFishRunner::SetupGame(deck, seed);
+                        state.vial_target_mv = profile.vial_target_mv;
+                        GoldFishRunner::PopulateOpponentSpawns(state, gi);
+                        GameLogger dlog(/*digest_only=*/true);
+                        dlog.StartGame(std::string(), gi, "d", seed, {});
+                        engine.SetLogger(&dlog);
+                        engine.RunGame(state, max_turns);
+                        engine.SetLogger(nullptr);
+                        return dlog.Digest();
+                    });
+            }
+        });
+    }
+    for (std::thread& th : pool) { th.join(); }
+    uint64_t fold = 1469598103934665603ULL;               // FNV-1a over per-game digests, in game order
     for (int gi = 0; gi < kGames; ++gi)
     {
-        GameState state = GoldFishRunner::SetupGame(deck, kSeedBase + static_cast<uint64_t>(gi));
-        state.vial_target_mv = profile.vial_target_mv;
-        GoldFishRunner::PopulateOpponentSpawns(state, gi);
-        GameLogger dlog(/*digest_only=*/true);
-        dlog.StartGame(std::string(), gi, "d", kSeedBase + static_cast<uint64_t>(gi), {});
-        engine.SetLogger(&dlog);
-        engine.RunGame(state, max_turns);
-        engine.SetLogger(nullptr);
-        uint64_t d = dlog.Digest();
+        const uint64_t d = digests[gi];
         for (int b = 0; b < 8; ++b)
         { fold ^= static_cast<uint8_t>((d >> (b * 8)) & 0xff); fold *= 1099511628211ULL; }
     }
@@ -389,19 +424,28 @@ static std::string RolloutConfigDigest(const Decklist& deck, const MulliganProfi
 // Every other local here (the fingerprints, the cache path, the merge scratch) dies with it, so
 // the seam is airtight and the move is mechanical.
 static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganProfile& profile,
-                                           const ExhaustiveKeepConfig& cfg)
+                                           const ExhaustiveKeepConfig& cfg,
+                                           const std::string& play_digest)
 {
     const auto t_bucket = std::chrono::steady_clock::now();
-    // Discovery CACHE (MTG_EQUIV_CACHE=<path>): the equivalence classes are a deterministic function of
-    // (deck cards, probes, depth, budget_ms, threshold, equiv_seed, max_turns, play commit), yet the
-    // chunked gen re-invokes the analyzer once PER ROUND with identical params -- so every round otherwise
-    // re-derives the same (minutes-long) bucketing. Fingerprint-gate a JSON cache: a hit skips discovery;
-    // any spec/commit change re-discovers and overwrites. Absent -> unchanged (always discovers).
+    // Discovery CACHE -- ALWAYS ON (path: cfg.gen_cache, defaulted next to the deck by the CLI;
+    // MTG_EQUIV_CACHE overrides it). The equivalence classes are a deterministic function of (deck cards,
+    // probes, depth, budget_ms, threshold, equiv_seed, max_turns, play behaviour), so re-deriving them is
+    // pure repeated work -- and this is the minutes-long serial-ish head every RESUME used to repay. It is
+    // fingerprint-gated: a hit skips discovery, any spec change re-discovers and overwrites.
+    //
+    // The key includes the rollout-config PLAY DIGEST, not just the commit string. The commit alone was
+    // insufficient: discovery rolls games through `profile`, so a changed value sidecar or card data (same
+    // HEAD, clean tree) would have produced a stale hit. The digest moves whenever this deck's play at
+    // this config moves, which is exactly the condition under which buckets may move.
     EquivReport eq;
     const uint64_t eq_deck_fp = DeckFp(deck);
     const std::string eq_commit = []{ const char* s = std::getenv("MTG_COMMIT"); return s ? std::string(s) : std::string(); }();
     const long long   eq_thr_x1e6 = static_cast<long long>(std::llround(cfg.threshold * 1e6));
-    const char*       eq_cache    = std::getenv("MTG_EQUIV_CACHE");
+    const std::string eq_cache_s  = []{ const char* s = std::getenv("MTG_EQUIV_CACHE");
+                                        return (s && *s) ? std::string(s) : std::string(); }();
+    const std::string eq_cache_path = !eq_cache_s.empty() ? eq_cache_s : cfg.gen_cache;
+    const char*       eq_cache      = eq_cache_path.empty() ? nullptr : eq_cache_path.c_str();
     bool eq_loaded = false;
     if (eq_cache && *eq_cache && std::filesystem::exists(eq_cache))
     {
@@ -418,7 +462,10 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
                             && m.value("threshold_x1e6", ~0LL) == eq_thr_x1e6
                             && m.value("equiv_seed", ~0ULL) == cfg.equiv_seed
                             && m.value("max_turns", -1) == cfg.max_turns
-                            && m.value("commit", std::string("\x01")) == eq_commit;
+                            && m.value("commit", std::string("\x01")) == eq_commit
+                            // Play-behaviour identity: a cache written under different play (engine, card
+                            // data, value sidecar) must MISS even when every param above matches.
+                            && m.value("play_digest", std::string("\x01")) == play_digest;
             if (match)
             {
                 eq.probes         = m.value("probes", 0);
@@ -454,7 +501,8 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
             cj["meta"] = { {"deck_fp", eq_deck_fp}, {"probes", cfg.probes}, {"depth", cfg.depth},
                            {"budget_ms", cfg.budget_ms}, {"threshold_x1e6", eq_thr_x1e6},
                            {"equiv_seed", cfg.equiv_seed}, {"max_turns", cfg.max_turns},
-                           {"commit", eq_commit}, {"distinct_cards", eq.distinct_cards} };
+                           {"commit", eq_commit}, {"play_digest", play_digest},
+                           {"distinct_cards", eq.distinct_cards} };
             nlohmann::json jclasses = nlohmann::json::array();
             for (const EquivClass& ec : eq.classes)
             { jclasses.push_back({ {"members", ec.members}, {"signature", ec.signature} }); }
@@ -940,9 +988,8 @@ static PriorCarry LoadPriorCarry(const Decklist& deck, const ExhaustiveKeepConfi
                 // prior rolled at another depth would be adopted wholesale and invisibly.
                 else if (!RolloutCfgAllows(RolloutCfgOf(cfg), RolloutCfgFromMeta(mm), "PRIOR-RAW", pr))
                 { /* refused above, with the reason */ }
-                else if (!(cfg.r_floor > 0 && cfg.r_floor < cfg.rollouts))
-                { std::cerr << "[keepgen] PRIOR-RAW: change-detection needs an ADAPTIVE run "
-                               "(0 < MTG_KEEP_R_FLOOR < MTG_KEEP_ROLLOUTS) -- ignoring prior\n" << std::flush; }
+                // (The old "change-detection needs an ADAPTIVE run" gate is gone: every run is adaptive now,
+                // so the condition can no longer be false.)
                 else
                 {
                     prior_traced = mm.value("traced", false);
@@ -1305,12 +1352,52 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::cerr << "[keepgen] ERROR: max_mull=" << cfg.max_mull << " < 1 -- aborting (need >=1)\n" << std::flush;
         return;
     }
+    // Cap R must leave room for a floor below it. The generator has ONE execution path (the continuous
+    // adaptive pool), so a cap of 1 is not runnable -- and the old fallback for it (a uniform pass) is
+    // exactly the path this design deleted, because it silently ran with no journal, no floor projection
+    // and no slow-cell report. Fail loudly instead of quietly generating a worse-instrumented run.
+    if (cfg.rollouts < kMinCapR)
+    {
+        os << "ERROR: cap R=" << cfg.rollouts << " is below the minimum of " << kMinCapR
+           << ". The generator is always adaptive/continuous, which needs a floor below the cap.\n"
+              "Use a real recipe (--gen-mulligan fast|complete) or a cap R>=" << kMinCapR
+           << "; pool low-R chunks with MTG_KEEP_MERGE instead of generating them.\n";
+        std::cerr << "[keepgen] ERROR: cap R=" << cfg.rollouts << " < " << kMinCapR
+                  << " -- aborting (no uniform path exists)\n" << std::flush;
+        return;
+    }
+
+    // Slow-rollout evidence goes to a sidecar next to the raw as well as to stderr, so an INTERRUPTED
+    // run still leaves the degenerate-cell list behind (a killed run prints no end-of-run table, and
+    // stderr is routinely a log nobody kept). Set before the first rollout of any phase.
+    if (!cfg.out_raw.empty()) { Slow().SetLog(cfg.out_raw + ".slow.log"); }
+
+    // ---- 0. Rollout-config PLAY DIGEST ----------------------------------------------------------
+    // The pooling identity: a fixed 64-game battery at the gen's depth/budget, stamped into both the
+    // runtime policy and the raw sidecar. Computed FIRST (before bucketing) because the equivalence
+    // cache keys on it -- a changed engine/card/value-sidecar must invalidate cached buckets, and the
+    // digest is precisely "this deck's play at this config". Also needed early by the change-detection
+    // carry: a prior whose play_digest matches this run's is byte-identical play, so its ENTIRE table is
+    // reusable with zero fresh rollouts.
+    std::string play_digest;
+    if (!cfg.out_profile.empty() || !cfg.out_raw.empty())
+    {
+        const auto t_dig = std::chrono::steady_clock::now();
+        play_digest = RolloutConfigDigest(deck, profile, cfg.depth, cfg.budget_ms, cfg.max_turns);
+        os << "rollout-config play digest (d" << cfg.depth << "/b" << cfg.budget_ms
+           << ", 64-game battery): " << play_digest << "\n";
+        std::cerr << "[keepgen] play digest: " << play_digest << " ("
+                  << static_cast<long long>(std::chrono::duration<double>(
+                         std::chrono::steady_clock::now() - t_dig).count()) << "s)\n" << std::flush;
+        Slow().Dump(std::cerr, "after the play-digest battery");
+    }
 
     // ---- 1. Buckets (objective-relative equivalence) --------------------------------------------
     // Bucketing uses the FIXED equiv_seed (not the rollout seed) so the clustering is byte-identical
     // across machines -- a precondition for pooling their raw tables.
-    EquivReport eq = BuildEquivalenceClasses(deck, profile, cfg);
+    EquivReport eq = BuildEquivalenceClasses(deck, profile, cfg, play_digest);
     const int K = static_cast<int>(eq.classes.size());
+    Slow().Dump(std::cerr, "after equivalence discovery");
 
     std::map<std::string, int> bucket_of;             // card name -> bucket index
     std::vector<int>  count(K, 0);                    // deck copies in each bucket
@@ -1394,17 +1481,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // ---- Cross-run PRUNE-SET carry (MTG_KEEP_PRUNE_SET): see LoadPruneCarry above ----------------
     PruneCarry prune = LoadPruneCarry(deck, cfg, eq, tables, K);
 
-    // Rollout-config play digest -- the pooling identity stamped into both the runtime policy and the
-    // raw sidecar below. Computed ONCE here (a fixed 64-game d5/b20 battery) rather than just before the
-    // writes, because the change-detection carry (below) needs it now: a prior whose play_digest matches
-    // this run's is byte-identical play, so its ENTIRE table is reusable with zero fresh rollouts.
-    std::string play_digest;
-    if (!cfg.out_profile.empty() || !cfg.out_raw.empty())
-    {
-        play_digest = RolloutConfigDigest(deck, profile, cfg.depth, cfg.budget_ms, cfg.max_turns);
-        os << "rollout-config play digest (d" << cfg.depth << "/b" << cfg.budget_ms
-           << ", 64-game battery): " << play_digest << "\n";
-    }
+    // (The rollout-config play digest -- the pooling identity stamped into both the runtime policy and
+    // the raw sidecar below -- is computed at the TOP of this function: the equivalence cache keys on it.)
 
     // ---- Change-detection carry (MTG_KEEP_PRIOR_RAW): see LoadPriorCarry above ------------------
     PriorCarry pc = LoadPriorCarry(deck, cfg, eq, tables, K, min_size, play_digest);
@@ -1412,57 +1490,30 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // Append rollouts [r0,r1) to cell `w`, mode `pd`, folding into its sum/sumsq/cnt accumulators.
     // Each (w,pd) is scheduled at most once per wave, so the direct writes are race-free. The seed is a
     // pure function of (seed_base, r, w, pd) -- extending r for a later batch never reuses a draw.
-    // Slow-rollout capture (diagnostic, ON by default at 30 s): time each rollout; if it exceeds
-    // MTG_KEEP_SLOW_MS, log the exact degenerate game -- hand (bucket composition), side, rollout index
-    // and the seed that fully reproduces it -- so the pathological combo game can be replayed/profiled
-    // LIVE rather than discovered in the end-of-run top-12 hours later (user-directed default,
-    // 2026-08-07). 30 s is far above any healthy rollout (~0.3-2 s even on heavy decks) so a quiet
-    // stream means no degenerate cells. MTG_KEEP_SLOW_MS=0 disables; any explicit value overrides.
-    // A single steady_clock read per rollout is the only overhead. Logged to stderr.
-    const long long slow_ms = []{ const char* s = std::getenv("MTG_KEEP_SLOW_MS");
-        return (s && *s) ? std::atoll(s) : 30000LL; }();
-    std::mutex slow_mtx;
+    // Slow-rollout capture is ALWAYS ON and shared with every other phase (SlowRollouts.h): time each
+    // rollout; anything over the baked 30 s threshold streams the exact degenerate game -- hand (bucket
+    // composition), side, rollout index and the seed that fully reproduces it -- to stderr AND to
+    // <out_raw>.slow.log, so it can be replayed/profiled LIVE and survives a kill. The N slowest are kept
+    // continuously and dumped at every heartbeat, at floor-complete and at end-of-run. There is no
+    // disable: MTG_KEEP_SLOW_MS may only LOWER the stream threshold.
     // Guards the accumulator COMMIT in run_batch (t.sum/sumsq/cnt) so a mid-flight checkpoint can read a
     // consistent snapshot WHILE workers keep running -- this is what lets the floor pass be one continuous
     // process_tasks call (cores full to the end) instead of 32 barriered groups. Held only for the cheap
     // 3-field commit (the multi-second rollout is outside it), so contention is negligible.
     std::mutex acc_mtx;
 
-    // Always-on rollout diagnostics: keep the N SLOWEST rollouts seen (a degenerate-cell detector -- e.g. a
-    // Lotus-Bloom + rituals enumeration blowup). Near-zero cost: capture_slow is now called for EVERY
-    // rollout, but a worker only builds the hand string / takes slow_mtx when its rollout beats the current
-    // N-th-slowest cutoff (slow_gate, an atomic read + compare) -- rare after warm-up -- so there is no
-    // per-rollout lock. MTG_KEEP_SLOW_MS additionally STREAMS any rollout over that threshold (unchanged).
-    struct SlowRec { double ms; int H; int pd; long long r; std::string hand; };
-    std::vector<SlowRec> slow_top;                    // the N slowest so far, guarded by slow_mtx
-    std::atomic<double>  slow_gate{0.0};              // = N-th-slowest ms once full; lock only if ms > this
-    const std::size_t    SLOW_N = 12;
-    auto capture_slow = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs, double ms)
+    // Per-rollout hand description, built ONLY when a rollout is actually slow (the tracker calls this
+    // lambda on the slow path only), so the common case costs one clock read and an atomic compare.
+    auto describe_cell = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs)
     {
-        const bool topn_cand = ms > slow_gate.load(std::memory_order_relaxed);   // warm-up: gate 0 => all in
-        const bool stream    = slow_ms > 0 && ms >= static_cast<double>(slow_ms);
-        if (!topn_cand && !stream) { return; }        // fast path: the vast majority of rollouts
         std::string hand;
         for (int b = 0; b < K; ++b)
         { if (comp[b] > 0) { hand += label[b] + " x" + std::to_string(comp[b]) + "; "; } }
-        std::lock_guard<std::mutex> lk(slow_mtx);
-        if (topn_cand)
-        {
-            slow_top.push_back({ms, H, pd, r, hand});
-            std::sort(slow_top.begin(), slow_top.end(),
-                      [](const SlowRec& a, const SlowRec& b) { return a.ms > b.ms; });
-            if (slow_top.size() > SLOW_N) { slow_top.resize(SLOW_N); }
-            slow_gate.store(slow_top.size() >= SLOW_N ? slow_top.back().ms : 0.0,
-                            std::memory_order_relaxed);
-        }
-        if (stream)
-        {
-            const std::string line = "[keepgen] SLOW-ROLLOUT " + std::to_string(static_cast<long long>(ms))
-                + "ms  size" + std::to_string(H) + " " + (pd ? "play" : "draw") + " r=" + std::to_string(r)
-                + " seed=" + std::to_string(rs) + "  hand: " + hand;
-            std::cerr << line << "\n" << std::flush;
-        }
+        return "size" + std::to_string(H) + " " + (pd ? "play" : "draw") + " r=" + std::to_string(r)
+             + " seed=" + std::to_string(rs) + "  hand: " + hand;
     };
+    auto capture_slow = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs, double ms)
+    { Slow().Observe(ms, "keep-rollout", [&]{ return describe_cell(H, comp, pd, r, rs); }); };
 
     // ---- Per-cell JOURNAL (crash-recovery for the continuous pool) --------------------------------
     // Instead of periodically snapshotting the whole raw (a fold-blocking multi-MB write every sweep --
@@ -1792,9 +1843,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         return std::sqrt(vs / c);
     };
 
-    // Adaptive schedule (influence-driven). Sample EVERY cell to the floor r0, then in waves add
-    // rollouts only to cells that could still change a keep decision or bias the threshold, until none
-    // qualify or all hit the cap. r_floor<=0 or >=rollouts => uniform R (byte-identical to the old path).
+    // Adaptive schedule (influence-driven) -- the ONLY schedule. Sample EVERY cell to the floor r0, then
+    // add rollouts only to cells that could still change a keep decision or bias the threshold, until
+    // none qualify or all hit the cap.
     //
     // Two cell roles:
     //  * size-7 cell (mull-0): KeepVal(h,0)=V[7][h], a plain mean. Refine while the mull-0 flip prob vs
@@ -1808,24 +1859,23 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     //    downward, so an under-sampled cell reads LOWER -> looks MORE keepable -> gets classified needed
     //    and refined; it can never make a keep/near hand masquerade as a confident mulligan.
     const long long r_max = cfg.rollouts;
-    const long long r0    = (cfg.r_floor > 0 && cfg.r_floor < cfg.rollouts) ? cfg.r_floor : r_max;
-    const bool adaptive   = r0 < r_max;
+    // The floor is DERIVED, never configured. Clamped into [1, r_max-1] (0 => the default 2), so
+    // r0 < r_max ALWAYS holds: there is no configuration of this generator that is not adaptive, and
+    // therefore none that is not continuous and journal-persisted. The old escape (r_floor unset or
+    // >= rollouts => uniform R) took the pool, the journal, the gen-time projection and the slow-cell
+    // report with it, and was the DEFAULT for the MTG_KEEP_EXHAUSTIVE route -- see
+    // docs/design/keepgen-no-off-switches.md. Cap R < 2 was rejected above.
+    const long long r0 = std::max<long long>(
+        1, std::min<long long>(cfg.r_floor > 0 ? cfg.r_floor : 2, r_max - 1));
 
-    // ---- Periodic CHECKPOINT of the raw sidecar ------------------------------------------------
-    // A long adaptive run (antilife floor pass alone is hours) writes its raw sidecar every
-    // MTG_KEEP_CHECKPOINT_SEC (default 1800s; 0 disables) DURING the refine loop, so a crash/stop
-    // after the floor pass loses only minutes. Each checkpoint is a COMPLETE-floor state (all cells
-    // sampled >= r0) -> recover a profile from it with the merge path (MTG_KEEP_MERGE on this one
-    // file). Written atomically (tmp + rename) so a crash mid-write can't corrupt the sidecar. This
-    // is the same content as the final 6b write (below) minus the play_digest, which recovery on one
-    // machine does not need. sumsq is included for a future resume-continuation path.
-    // CONTINUOUS is now the ONLY adaptive execution path (docs/design/continuous-only-keepgen.md): one
-    // persistent pool over per-rollout tasks for the size-7 keep decision, freeze evaluated inline on
-    // fixed floor-derived refs -> cores stay full to the last live cell, and the per-cell journal (below)
-    // persists every completed cell incrementally so a crash loses seconds, not a wave. The old wave path
-    // and its knobs (MTG_KEEP_CONTINUOUS / _CHECKPOINT_SEC / _FLOOR_GROUPS / _JOURNAL / _SWEEP_SEC /
-    // _CONTINUOUS_LOOKAHEAD) are retired: an adaptive run is unconditionally continuous, journal-persisted.
-    const bool continuous = adaptive;
+    // ---- The single execution path -------------------------------------------------------------
+    // CONTINUOUS is the ONLY execution path (docs/design/continuous-only-keepgen.md +
+    // keepgen-no-off-switches.md): one persistent pool over per-rollout tasks for the size-7 keep
+    // decision, freeze evaluated inline on fixed floor-derived refs -> cores stay full to the last live
+    // cell, and the per-cell journal (below) persists every completed cell incrementally so a crash
+    // loses seconds, not a wave. The wave/uniform paths and their knobs (MTG_KEEP_CONTINUOUS /
+    // _CHECKPOINT_SEC / _FLOOR_GROUPS / _JOURNAL / _SWEEP_SEC / _CONTINUOUS_LOOKAHEAD / _R_FLOOR) are
+    // retired; nothing selects a schedule any more.
     // Refine speculation bound past a cell's committed prefix (kept as an internal constant, not a knob).
     const long long cont_lookahead = 4LL;
     // ROLLING vg refs. The size-7 freeze shrink target vg is otherwise pinned at the noisy r0 floor for the
@@ -1837,10 +1887,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // old single-fix behavior, kept as the A/B arm). MTG_KEEP_REFS_OFFSET overrides the default (2).
     const long long refs_offset = []{ const char* s = std::getenv("MTG_KEEP_REFS_OFFSET");
         return (s && *s) ? std::max<long long>(0, std::strtoll(s, nullptr, 10)) : 2LL; }();
-    // Per-cell journal is continuous's persistence: append-per-cell on freeze/floor + a REFS record, so a
-    // crash resumes from the log (no periodic full-raw snapshot). Always on for a raw-writing adaptive run.
+    // Per-cell journal is the generator's persistence: append-per-cell on freeze/floor + a REFS record,
+    // so a crash resumes from the log (no periodic full-raw snapshot). ALWAYS on -- the CLI guarantees a
+    // non-empty out_raw for every rollout gen (MTG_KEEP_NO_WRITE may suppress only the profile), so there
+    // is no configuration that runs rollouts without persisting them.
     // journal_on is captured by reference in run_batch/journal_append (defined earlier).
-    journal_on = continuous && !cfg.out_raw.empty();
+    journal_on = !cfg.out_raw.empty();
     if (journal_on) { journal_path = cfg.out_raw + ".journal"; }
     auto write_raw_atomic = [&](const std::string& path, bool as_probe = false) -> bool
     {
@@ -2030,10 +2082,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     }
 
     // ---- Probe carry (<out_raw>.probe): see LoadProbeCarry above --------------------------------
-    // Skipped when a journal/out_raw resume already loaded state (the same run continuing), and
-    // opt-out-able via MTG_KEEP_NO_PROBE_CARRY for an A/B.
-    if (cfg.use_probe_carry && !cfg.recommend_only && resume_loaded == 0 && !cfg.out_raw.empty()
-        && !EnvOn("MTG_KEEP_NO_PROBE_CARRY"))
+    // Skipped only when a journal/out_raw resume already loaded state (the same run continuing).
+    // Unconditional: a matching probe chunk is byte-identically this gen's r=0 slice, so reusing it is
+    // never a trade-off -- the only alternative is re-rolling work already banked. Every mismatch case
+    // (different play_digest / fingerprints / an incomplete floor) is rejected inside LoadProbeCarry.
+    if (!cfg.recommend_only && resume_loaded == 0 && !cfg.out_raw.empty())
     {
         const long long carried = LoadProbeCarry(deck, cfg, eq, tables, K, min_size, play_digest);
         if (carried > 0)
@@ -2062,9 +2115,17 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             if (!keep)
             {
                 const PoolFp jfp = ComputePoolFp(deck, eq, K);
+                nlohmann::json jbuckets = nlohmann::json::array();
+                for (int b = 0; b < K; ++b) { jbuckets.push_back(eq.classes[b].members); }
                 nlohmann::json meta = { { "commit", cfg.commit }, { "bucket_fp", jfp.bucket }, { "deck_fp", jfp.deck },
                     { "seed_base", cfg.seed }, { "R", static_cast<long long>(cfg.rollouts) },
-                    { "max_mull", cfg.max_mull }, { "K", K }, { "equiv_seed", cfg.equiv_seed } };
+                    { "max_mull", cfg.max_mull }, { "K", K }, { "equiv_seed", cfg.equiv_seed },
+                    // The pooling identity, so a journal merged as a partial chunk is checked exactly
+                    // like a finished raw rather than being waved through as "config not recorded".
+                    { "play_digest", play_digest },
+                    // Buckets travel with the journal so an INTERRUPTED run is poolable: the merge can
+                    // rebuild the comp ordering the cell indices refer to without the final raw.
+                    { "buckets", jbuckets } };
                 StampRolloutCfg(meta, RolloutCfgOf(cfg));   // a restart at another depth must not resume this
                 journal_f << nlohmann::json({ { "meta", meta } }).dump() << "\n";
                 journal_f.flush();
@@ -2079,37 +2140,26 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // floor-R cells from the bottoming argmin (so curse-noise can't pick one). Size-7 always starts at floor.
     // change-detection also needs every sub-table sampled at the floor first (as the detection batch),
     // even with bottoming on -- moved sub-cells are then refined to the cap, unmoved reuse the prior.
-    const bool sub_floor = (adaptive && (!cfg.bottoming_enabled || cfg.adaptive_bottom)) || pc.change_detect;
-    // Sub-table FUSION: when the continuous pool caps the sub-tables (not floors them), run that capping
-    // INSIDE the single size-7 pool instead of a separate Pass-A join -> the size-7 floor overlaps the
-    // sub-cap tail (no Pass-A -> size-7 barrier). Only the sub_floor=false case (bottoming-on, no
-    // adaptive_bottom, no change-detect); those still Pass-A-floor the sub-tables then refine-wave them.
-    // Always fuses when applicable (the separate-Pass-A opt-out MTG_KEEP_NO_SUB_FUSE is retired).
-    // run_batch's whole-batch one-thread accumulation is scheduling-independent, so fusing is byte-identical.
-    const bool fuse_sub = continuous && !sub_floor;
-    // Sub_floor FUSION: the ADAPTIVE sub-refine (fast/keep-only/change-detect) also runs INSIDE the
-    // continuous size-7 pool -- producer-driven waves fed as kind-2 tasks, concurrent with the size-7
-    // floor -- so no barrier strands cores before the floor. Byte-identical to the old run_refine_waves
-    // barrier: the sub_only wave marking reads only sub-table V/cnt + Dopt[1..M] + sub vg[m>=1], all
-    // size-7-independent, and run_batch is deterministic on (seed,r,w,pd) (validated byte-identical +
-    // resume-correct on Slivers). Unconditional now (the run_refine_waves barrier is deleted).
-    const bool fuse_subfloor = continuous && sub_floor && !cfg.recommend_only;
-    std::vector<Task> fused_sub_tasks;                 // sub-cap tasks handed to the continuous pool
+    const bool sub_floor = (!cfg.bottoming_enabled || cfg.adaptive_bottom) || pc.change_detect;
+    // The ADAPTIVE sub-refine (fast / keep-only / change-detect) runs INSIDE the continuous size-7 pool --
+    // producer-driven waves fed as kind-2 tasks, concurrent with the size-7 floor -- so no barrier strands
+    // cores. Byte-identical to the old run_refine_waves barrier: the sub_only wave marking reads only
+    // sub-table V/cnt + Dopt[1..M] + sub vg[m>=1], all size-7-independent, and run_batch is deterministic
+    // on (seed,r,w,pd) (validated byte-identical + resume-correct on Slivers). `recommend` is a floor-only
+    // scout, so it has no refine waves (its sub-floor is still fused, below).
+    const bool sub_refine_on = sub_floor && !cfg.recommend_only;
+    std::vector<Task> fused_sub_tasks;                 // sub-table floor/cap tasks handed to the pool
     {   // Pass A: size-7 to the floor; sub-tables to the floor (keep-only) or straight to the cap.
         std::vector<Task> tasks;
         tasks.reserve(work.size() * 2);
         for (int w = 0; w < static_cast<int>(work.size()); ++w)
         {
-            // Continuous mode owns the size-7 floor+refine (its own pool below); Pass A does sub-tables
-            // only, so the sub-table V it produces is ready for the continuous sweep's Dopt.
-            if (continuous && work[w].H == HAND) { continue; }
-            const long long init = (work[w].H == HAND || sub_floor) ? r0 : r_max;
+            // The pool owns the size-7 floor+refine; this pass enumerates sub-tables only.
+            if (work[w].H == HAND) { continue; }
+            const long long init = sub_floor ? r0 : r_max;
             const int Hw = work[w].H, iw = work[w].idx;
             for (int pd = 0; pd < 2; ++pd)
             {
-                // skip mode: a carried (frozen) size-7 cell gets 0 rollouts -- V preloaded, no samples.
-                // Live/other cells keep their w, so seeds are unperturbed.
-                if (Hw == HAND && prune.frozen7[iw][pd]) { continue; }
                 if (Hw >= 1 && Hw < HAND && prune.frozen_sub[Hw][iw][pd]) { continue; }   // Phase 2 sub-table skip
                 // Whole-pool reuse (EXTEND-DEPTH / identical play_digest): a cell taken verbatim from the
                 // prior needs NO fresh floor sample -- change-detection marks it `resolved` and
@@ -2117,12 +2167,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // the floor pass ONLY on cells the prior lacks (the new deeper sizes), turning a full
                 // re-sample of every reused cell (~94% of the work on a depth extend) into ~zero.
                 if (pc.reuse_all_cells && pc.has_prior[HAND - Hw][iw][pd]) { continue; }
-                long long cell_init = init;
-                // verify mode: a carried confident-mull cell starts at a REDUCED floor so the run skips
-                // most of its floor cost; the adaptive refiner still tops it up if it flipped to keepable
-                // on the new deck/commit. Adaptive only -- a uniform run has no refiner, so sample in full.
-                if (Hw == HAND && prune.carry_lowfloor7[iw][pd] && adaptive)
-                { cell_init = std::min(cell_init, prune.carry_floor); }
+                const long long cell_init = init;
+                // (The size-7 "verify mode" reduced floor -- prune.carry_lowfloor7 -- is applied by the pool,
+                // which owns size-7; this pass never sees a size-7 cell.)
                 // RESUME / PROBE-CARRY: a cell may already carry rollouts from a reloaded checkpoint or probe
                 // chunk. If it is already at/above its floor, skip it (its accumulators are correct; += would
                 // double-count). Otherwise START at the loaded count so we roll only the DEFICIT r>=have --
@@ -2135,25 +2182,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 tasks.push_back({ w, pd, have, cell_init });
             }
         }
-        // ONE barrier-free pass over the whole floor: workers stay saturated to the very end (cores idle
-        // only on the final slow-cell tail), instead of the old 32 barriered groups that stranded ~21
-        // cores at EVERY group's slow-cell tail. Crash-safety comes from MID-FLIGHT checkpointing (the
-        // ckpt_cb snapshots the accumulators under acc_mtx and writes the raw WHILE workers run -- no
-        // join). Result-invariant: each task is independent, seeds are per-(w,pd,r); the final raw is
-        // identical to the grouped path. Inert (plain single pass) unless a raw path + checkpointing set.
-        const char* lbl = adaptive ? "floor-pass" : "full-pass";
-        // FUSION: hand the sub-cap tasks to the continuous pool instead of running (and joining on) them
-        // here. Defer the recompute too -- the sub-table V is computed inside compute_refs once the pool
-        // has driven them to the cap. (In fuse_sub, `tasks` holds only sub-cells: size-7 is skipped above.)
-        if (fuse_sub) { fused_sub_tasks = std::move(tasks); }
-        else
-        {
-            // Pass A here handles sub-tables only (size-7 is owned by the continuous pool). Its cells are
-            // persisted per-commit via run_batch's journal_append, so there is no full-raw snapshot
-            // checkpoint -- the journal is the sole persistence.
-            process_tasks(tasks, lbl);
-            recompute();
-        }
+        // ALWAYS FUSED -- this pass enqueues, it never joins. The sub-table tasks are handed to the same
+        // continuous pool that fills the size-7 floor, so the two overlap and no core waits on a barrier.
+        // Previously only the bottoming-full case (`fuse_sub`) fused: `fast`, `recommend` and change-detect
+        // runs called process_tasks(...) here and JOINED before a single size-7 rollout started -- a
+        // whole-phase barrier plus its own slow-cell tail, in the two recipes every deck runs first.
+        // The recompute is deferred with it: sub-table V is computed inside compute_refs once the pool has
+        // driven the sub-tables to their target. Fusing is byte-identical because run_batch accumulates a
+        // whole batch on one thread and its values are a pure function of (seed_base, r, w, pd).
+        fused_sub_tasks = std::move(tasks);
     }
 
     // ---- change-detection: classify moved vs unmoved from the floor batch, then reuse the prior -----
@@ -2176,7 +2213,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     if (pc.resolved[HAND - H][i][pd]) { t.V[i][pd] = pc.pri_V[HAND - H][i][pd]; }
         }
     };
-    if (pc.change_detect)
+    // Runs ONCE, from the pool's producer, the moment the fused sub-table floor has fully committed
+    // (sub_remaining==0) -- it reads the fresh floor estimates, so it cannot run before them. It used to
+    // sit here, immediately after Pass A's join; with the sub-floor fused into the pool there is no join
+    // left to sit behind, and running it here would test cells that have zero samples (silently resolving
+    // nothing and turning the whole carry feature into a no-op).
+    // Size-7 cells are never classified on this path (the pool owns them and they have no samples yet),
+    // exactly as before -- only sub-cells carry.
+    auto classify_change_detect = [&]()
     {
         // Effective delta = DISTANCE TO THRESHOLD, not a flat tolerance. We don't care whether a cell
         // moved; only whether it moved enough to flip its DECISION. A size-7 cell's m=0 keep decision
@@ -2228,13 +2272,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
            << "sub delta=" << pc.detect_delta << ", z=" << pc.detect_z << "]\n";
         std::cerr << "[keepgen] change-detection: " << n_unmoved << " unmoved / " << n_moved
                   << " moved (of " << n_tested << " prior cell-sides)\n" << std::flush;
-    }
+    };
 
-    // Refine waves, shared by the continuous size-7 pool (sub_only=true, run FIRST to fix Dopt) and the
-    // non-continuous full path (sub_only=false). sub_only skips the m=0 size-7 gate so only sub-cells are
-    // refined. Dopt is one-directional off the sub-tables (compute_Dopt never reads size-7 V), so
-    // converging the sub-tables in isolation yields the SAME Dopt the full wave path converges to -> the
-    // continuous size-7 freeze can then gate against an exact, fixed threshold.
+    // Sub-table refine bookkeeping (the producer-driven waves inside the pool). Dopt is one-directional
+    // off the sub-tables (ComputeDopt never reads size-7 V), so converging them in isolation yields the
+    // SAME Dopt a whole-table refine would -> the size-7 freeze gates against an exact, fixed threshold.
     int refine_waves = 0;
     long long refined_rollouts = 0;
 
@@ -2362,22 +2404,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             os.unsetf(std::ios::floatfield);
             os << "=============================================\n" << std::flush;
         }
-        {
-            std::lock_guard<std::mutex> lk(slow_mtx);
-            if (!slow_top.empty())
-            {
-                os << "  slowest rollouts so far (top " << slow_top.size() << "; watch for degenerate cells):\n";
-                os << std::fixed << std::setprecision(0);
-                for (const SlowRec& s : slow_top)
-                    os << "    " << s.ms << "ms  size" << s.H << " " << (s.pd ? "play" : "draw")
-                       << "  " << s.hand << "\n";
-                os.unsetf(std::ios::floatfield);
-                os << std::flush;
-            }
-        }
+        Slow().Dump(os, "through the floor pass");
         if (!cfg.recommend_only) { return false; }
         // Persist the COMPLETE R=1 floor pass as a poolable probe chunk (byte-identical r=0 slice a later
-        // complete/fast reuses via use_probe_carry). Reached only after the whole floor -> every cell has
+        // complete/fast run reuses automatically). Reached only after the whole floor -> every cell has
         // its one rollout. recommend disables floor speculation so this is exactly r0, every cell.
         if (!cfg.out_raw.empty())
         {
@@ -2401,11 +2431,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // its own confidence crosses (flip<=flip_eps / low-prob), evaluated inside the fold on the fixed
     // refs. A cell's freeze level is a pure function of its own rollouts + the fixed refs, so two runs are
     // byte-identical regardless of scheduling timing, and no cell waits on any other -> cores stay full
-    // to the last live cell. Sub-tables reach their final values before Dopt is fixed: capped by Pass A
-    // (bottoming-on / fuse_sub) or, for the sub_floor cases, converged by the producer-driven fused
-    // sub-refine below (fuse_subfloor), which runs concurrent with the size-7 floor -- so the floor gate
-    // (sub_converged) holds Dopt back until they are final. recommend is a floor-only scout (no sub-refine).
-    if (continuous)
+    // to the last live cell. Sub-tables reach their final values before Dopt is fixed: their floor/cap
+    // batches are fed into THIS pool (kind 1) and, where the recipe refines them, converged by the
+    // producer-driven sub-refine (kind 2) -- both concurrent with the size-7 floor, so the floor gate
+    // (sub_remaining/sub_converged) holds Dopt back until they are final without stranding a core.
+    // recommend is a floor-only scout (no sub-refine). This block is unconditional: it is the only path.
     {
         const double SQRT2 = 1.4142135623730951;
         SizeTable& S7 = tables[0];
@@ -2451,8 +2481,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
         std::mutex fold_mtx;                         // guards the fold (sum/sumsq/cnt + slot/have + frozen7)
         std::mutex qmtx; std::condition_variable q_ne, q_nf;
-        // Task = {kind, x, pd, a, b}: kind 0 size-7 rollout {i, pd, r, 0}; kind 1 fuse_sub sub-cap batch
-        // {w, pd, 0, r1}; kind 2 fuse_subfloor adaptive sub-wave batch {w, pd, have, target}. kinds 1/2
+        // Task = {kind, x, pd, a, b}: kind 0 size-7 rollout {i, pd, r, 0}; kind 1 sub-table floor/cap batch
+        // {w, pd, have, target}; kind 2 adaptive sub-wave batch {w, pd, have, target}. kinds 1/2
         // run run_batch(w,pd,a,b) (a whole batch on one thread, self-committing), scheduling-independent.
         std::deque<std::array<long long, 5>> q;
         const std::size_t QCAP = static_cast<std::size_t>(8 * nthreads);
@@ -2575,11 +2605,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         auto compute_refs = [&]()
         {
             std::lock_guard<std::mutex> fk(fold_mtx);
-            // FUSION: the sub-tables were capped by this pool (not Pass A), so recompute their V now, before
-            // compute_Dopt reads them. Sub-cells are final here (gate waits sub_remaining==0). Under acc_mtx
-            // (run_batch's commit lock); lock order fold_mtx->acc_mtx is unique to compute_refs -> no cycle.
-            // Values are byte-identical to Pass A's recompute (same whole-batch run_batch accumulation).
-            if (fuse_sub)
+            // The sub-tables are sampled by THIS pool (Pass A no longer joins or recomputes), so recompute
+            // their V now, before ComputeDopt reads them. Sub-cells are final here (the gate waits on
+            // sub_remaining==0 and sub_converged). Under acc_mtx (run_batch's commit lock); the lock order
+            // fold_mtx->acc_mtx is unique to compute_refs -> no cycle. Values are byte-identical to the old
+            // Pass-A recompute (same whole-batch run_batch accumulation).
             {
                 std::lock_guard<std::mutex> ak(acc_mtx);
                 for (int H = HAND - 1; H >= min_size; --H)
@@ -2595,6 +2625,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         }
                 }
             }
+            // ...and re-assert the change-detection carry on top of it: the recompute above derives V from
+            // the fresh (thin) samples, which would otherwise clobber the prior's high-R value on resolved
+            // cells and silently un-do the carry for the Dopt the whole refine gates against. Inert unless
+            // change_detect.
+            apply_prior_override_sub();
             std::array<double, 2> vg{ 0.0, 0.0 }; std::array<long long, 2> ng{ 0, 0 };
             for (int i = 0; i < NC; ++i) for (int pd = 0; pd < 2; ++pd)
             { const std::size_t k = static_cast<std::size_t>(i) * 2 + pd; const long long c = floor_cnt[k];
@@ -2673,9 +2708,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         for (int t = 0; t < nw; ++t) { pool.emplace_back(worker); }
         std::cerr << "[keepgen] continuous size-7: " << NC << " cells, floor R=" << r0 << " cap R=" << r_max
                   << ", lookahead=" << cont_lookahead << " on " << nw
-                  << " threads" << (fuse_sub ? (" (+ " + std::to_string(fused_sub_tasks.size())
-                                              + " fused sub-cap batches)") : std::string())
-                  << "\n" << std::flush;
+                  << " threads (+ " << fused_sub_tasks.size() << " fused sub-table batches"
+                  << (sub_refine_on ? " + adaptive sub-refine" : "") << ")\n" << std::flush;
 
         // Resumed mid-refine: the journal carried the fixed refs -> restore them and skip the floor phase
         // (the floored/terminal cells were reloaded; the producer continues refining live cells).
@@ -2690,10 +2724,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
         long long fed_total = 0, last_report = 0;
         bool any_fed = false;
-        // fuse_subfloor: the producer-driven adaptive sub-refine converges when compute_sub_wave_tasks
-        // yields no more marks. Non-fused runs start converged -- their sub-tables are already final
-        // (fuse_sub caps them via the kind-1 filler; recommend is floor-only and skips the sub-refine).
-        bool sub_converged = !fuse_subfloor;
+        // The producer-driven adaptive sub-refine converges when compute_sub_wave_tasks yields no more
+        // marks. Runs without one start converged -- bottoming-full drives its sub-tables straight to the
+        // cap via the kind-1 filler, and `recommend` is a floor-only scout.
+        bool sub_converged = !sub_refine_on;
+        // Change-detection classification is a one-shot that must observe the COMPLETE fused sub-floor.
+        bool cd_classified = !pc.change_detect;
         auto feed_upto = [&](int i, int pd, long long limit)   // enqueue size-7 rollouts [fed, limit)
         {
             long long& f = fed[static_cast<std::size_t>(i) * 2 + pd];
@@ -2706,8 +2742,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 ++f; in_flight.fetch_add(1); ++fed_total; any_fed = true;
             }
         };
-        // FUSION: drain the sub-cap batch tasks into the same queue (kind 1). Filler that overlaps the
-        // size-7 floor with sub-table capping -> no Pass-A -> size-7 barrier. Empty unless fuse_sub.
+        // FUSION: drain the sub-table batch tasks into the same queue (kind 1). This is what removes the
+        // Pass-A -> size-7 barrier: the sub-tables are sampled by the SAME pool that is filling the size-7
+        // floor, so no core waits on a join.
+        // NOTE st.r0, not 0. A carried cell (probe carry, or a partially-sampled resume) starts at its
+        // already-banked count and must roll only the DEFICIT [r0, r1). Hard-coding 0 here re-rolled r=0 on
+        // top of the carried r=0 -- double-counting one sample into every sub-cell's sum and leaving count
+        // one high. It was invisible because the generator check only exercised the (now deleted) uniform
+        // path, where these tasks never went through the pool.
         std::size_t sub_cursor = 0;
         auto feed_sub = [&]()
         {
@@ -2716,7 +2758,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 const Task& st = fused_sub_tasks[sub_cursor];
                 { std::unique_lock<std::mutex> lk(qmtx);
                   q_nf.wait(lk, [&]{ return q.size() < QCAP; });
-                  q.push_back({ 1, static_cast<long long>(st.w), static_cast<long long>(st.pd), 0, st.r1 }); }
+                  q.push_back({ 1, static_cast<long long>(st.w), static_cast<long long>(st.pd),
+                                st.r0, st.r1 }); }
                 q_ne.notify_one();
                 ++sub_cursor; in_flight.fetch_add(1); ++fed_total; any_fed = true;
             }
@@ -2729,7 +2772,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // sub-tables it reads. No-op unless fuse_subfloor.
         auto sub_refine_step = [&]()
         {
-            if (sub_converged || sub_wave_pending.load() != 0) { return; }
+            // sub_remaining==0 additionally required: the sub-table FLOOR is now fused into this same pool,
+            // so the first wave must not be computed off half-sampled sub-cells (Pass A's join used to
+            // guarantee that). Both counters at zero == "every sub-cell committed its current target".
+            if (sub_converged || sub_wave_pending.load() != 0 || sub_remaining.load() != 0) { return; }
             recompute_sub();               // fold the just-finished wave's sub-cell samples into V/se
             apply_prior_override_sub();     // change-detection: restore prior V on resolved sub-cells
             std::vector<Task> wave;
@@ -2762,11 +2808,20 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     any_live = true;
                     if (c < r0) { any_below_floor = true; feed_upto(i, pd, r0); }
                 }
-                // FUSION filler: drain sub-cap batch tasks into the pool (overlaps the size-7 floor with
-                // the sub-table capping the old Pass A did before the pool). No-op unless fuse_sub.
+                // FUSION filler: drain the sub-table floor/cap batches into the pool, overlapping them with
+                // the size-7 floor (this is the work Pass A used to run behind a join).
                 feed_sub();
-                // fuse_subfloor: advance the adaptive sub-refine one wave when its prior wave has committed.
-                sub_refine_step();
+                // Change-detection classifies off the COMPLETE fused sub-floor, once, before the first
+                // refine wave can mark anything (a resolved cell must not be re-marked).
+                if (!cd_classified && sub_remaining.load() == 0)
+                {
+                    recompute_sub();
+                    classify_change_detect();
+                    apply_prior_override_sub();
+                    cd_classified = true;
+                }
+                // Advance the adaptive sub-refine one wave when its prior wave has committed.
+                if (cd_classified) { sub_refine_step(); }
                 // Floor pass 2 (speculation filler): while the floor phase is INCOMPLETE for ANY reason
                 // (a size-7 cell still finishing r0, sub-tables still capping, or the fused sub-refine not
                 // yet converged) -> feed already-floored size-7 cells up to r0+spec_budget so idle cores
@@ -2809,7 +2864,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             // final). -> fix refs + reconcile floor-tail speculation + publish refs_ready (inside
             // compute_refs, under fold_mtx). NO size-7 in_flight wait: speculation still in flight is
             // harmless (reconcile handles it).
-            if (!refine && !any_below_floor && sub_remaining.load() == 0 && sub_converged)
+            if (!refine && !any_below_floor && sub_remaining.load() == 0 && sub_converged && cd_classified)
             {
                 compute_refs();     // fixes Dopt/vg, reconciles speculation, sets refs_ready
                 journal_refs();     // persist the fixed refs (byte-identical resume marker)
@@ -2839,7 +2894,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             { last_report = fed_total;
               std::cerr << "[keepgen]   continuous: " << fed_total << " rollouts fed, in_flight="
                         << in_flight.load() << (refine ? " (refine)" : " (floor)") << " ("
-                        << static_cast<long long>(gen_elapsed()) << "s)\n" << std::flush; }
+                        << static_cast<long long>(gen_elapsed()) << "s)\n" << std::flush;
+              // The slowest cells travel WITH the heartbeat: a long refine phase used to print them exactly
+              // once (at floor-complete) and never again, so a degenerate cell that only shows up during
+              // refine -- or a run the operator kills before it ends -- reported nothing at all.
+              Slow().Dump(std::cerr, "so far", 3); }
             if (refine && !any_live && in_flight.load() == 0) { break; }
             if (!any_fed)
             { std::unique_lock<std::mutex> pk(prod_mtx);
@@ -2848,6 +2907,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         producing.store(false); q_ne.notify_all();
         for (std::thread& th : pool) { th.join(); }
         recompute();
+        // recompute() derives V from the fresh accumulators, so it clobbers the change-detection carry on
+        // resolved cells -- re-assert it before the raw/profile/report are written off these tables.
+        apply_prior_override();
         if (!cfg.out_raw.empty()) { write_raw_atomic(cfg.out_raw); }
         // The final raw is now the authoritative, complete state -> the journal is superseded. Close and
         // remove it so a later invocation doesn't resume from a stale journal for an already-finished run.
@@ -2865,11 +2927,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // (The post-floor GEN-TIME PROJECTION + degenerate-cell diagnostic + --gen-mulligan recommend
     // early-stop now fire inside the continuous pool at floor-complete, via floor_report_maybe_stop.)
 
-    // (The wave whole-table/sub-table refine (run_refine_waves) is retired entirely: adaptive is
-    // unconditionally continuous, which owns the size-7 floor+refine AND -- via the producer-driven
-    // fuse_subfloor sub-refine -- the sub-table convergence, all in one pool, persisted via the journal.)
+    // (The wave whole-table/sub-table refine (run_refine_waves) is retired entirely: the pool owns the
+    // size-7 floor+refine AND -- via the producer-driven kind-1/kind-2 sub-table tasks -- the sub-table
+    // convergence, all in one queue, persisted via the journal.)
 
-    if (adaptive)
+    // END-OF-RUN slow-cell report. Unconditional, and to the REPORT (not just stderr): the floor-complete
+    // dump only covers the floor phase, so without this a cell that turned degenerate during refine never
+    // appeared anywhere the operator reads.
+    Slow().Dump(os, "over the whole run");
+
     {
         os << "adaptive sampling: floor R=" << r0 << " cap R=" << r_max << " (flip_eps=" << cfg.flip_eps
            << ", se_prior=" << cfg.se_prior << ", batch=" << cfg.r_batch << ") -> " << refine_waves
@@ -3287,14 +3353,94 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     bool first = true;
     long long files_ok = 0;
 
+    // A `.journal` input is folded into the same raw shape before pooling. Without this, an INTERRUPTED
+    // run was resumable but not poolable/shippable: the authoritative raw is only written at the end, so
+    // a killed chunk's hours of rollouts could not be merged or turned into a profile until someone ran
+    // it to completion. The journal already holds exactly the per-cell (sum, sumsq, count) records the
+    // raw carries -- highest-count record per (H, cell, pd) wins, matching the resume loader -- so this
+    // is a format adaptation, not a new source of truth.
+    auto journal_to_raw = [&](const std::string& path) -> json
+    {
+        std::ifstream jf(path);
+        json out;
+        std::string line;
+        if (!std::getline(jf, line)) { return out; }
+        json hdr;
+        try { hdr = json::parse(line); } catch (...) { return out; }
+        out["meta"] = hdr.contains("meta") ? hdr["meta"] : hdr;
+        // H -> comp-index -> pd -> (s,q,n). The journal keys by cell INDEX, and comp order is a pure
+        // function of the fingerprint the header carries, so indices are meaningful only against a
+        // matching deck/bucketing -- the same condition the merge already enforces below.
+        std::map<int, std::map<int, std::array<std::array<double, 3>, 2>>> cells;
+        while (std::getline(jf, line))
+        {
+            if (line.empty()) { continue; }
+            json e;
+            try { e = json::parse(line); } catch (...) { continue; }
+            if (e.contains("refs")) { continue; }
+            const int H = e.value("H", 0), i = e.value("i", -1), p = e.value("p", -1);
+            if (i < 0 || p < 0 || p > 1) { continue; }
+            const double n = static_cast<double>(e.value("n", 0LL));
+            auto& slot = cells[H][i][p];
+            if (n <= slot[2]) { continue; }                  // keep the highest-count record
+            slot = { e.value("s", 0.0), e.value("q", 0.0), n };
+        }
+        // The journal keys cells by INDEX; a raw sidecar keys them by COMPOSITION. Re-derive the comp
+        // ordering exactly as the generator does -- same buckets (carried in the journal header), same
+        // per-bucket deck counts, same EnumComps walk -- so index i means the identical hand it meant
+        // during the run. A header without buckets (a journal from an older binary) cannot be resolved
+        // and is skipped rather than guessed at.
+        if (!out["meta"].contains("buckets")) { return json(); }
+        const auto bk = out["meta"]["buckets"].get<std::vector<std::vector<std::string>>>();
+        const int  Kb = static_cast<int>(bk.size());
+        std::map<std::string, int> bof;
+        for (int b = 0; b < Kb; ++b) { for (const std::string& nm : bk[b]) { bof[nm] = b; } }
+        std::vector<int> cnt(Kb, 0);
+        for (const Card& c : deck.mainboard)
+        { auto it = bof.find(c.m_name.str()); if (it != bof.end()) { cnt[it->second]++; } }
+        json sizes = json::array();
+        for (const auto& [H, by_idx] : cells)
+        {
+            std::vector<std::vector<int>> comps;
+            { std::vector<int> cap(Kb), cur(Kb, 0);
+              for (int b = 0; b < Kb; ++b) { cap[b] = std::min(cnt[b], H); }
+              EnumComps(0, H, cur, cap, comps); }
+            json entries = json::array();
+            for (const auto& [idx, pdv] : by_idx)
+            {
+                if (idx >= static_cast<int>(comps.size())) { continue; }   // stale/foreign index
+                json je;
+                je["comp"]  = comps[idx];
+                je["sum"]   = { pdv[0][0], pdv[1][0] };
+                je["sumsq"] = { pdv[0][1], pdv[1][1] };
+                je["count"] = { static_cast<long long>(pdv[0][2]), static_cast<long long>(pdv[1][2]) };
+                entries.push_back(je);
+            }
+            sizes.push_back({ { "H", H }, { "entries", entries } });
+        }
+        out["sizes"]   = sizes;
+        out["buckets"] = out["meta"]["buckets"];
+        return out;
+    };
+
     os << "=== KEEP MERGE (" << raw_paths.size() << " sidecar(s)) ===\n";
     for (const std::string& path : raw_paths)
     {
+        const bool is_journal = path.size() > 8 && path.compare(path.size() - 8, 8, ".journal") == 0;
         std::ifstream f(path);
         if (!f) { os << "  SKIP (cannot open): " << path << "\n"; continue; }
         json root;
+        if (is_journal)
+        {
+            root = journal_to_raw(path);
+            if (root.contains("sizes"))
+            { os << "  (journal input folded to raw: " << path << ")\n"; }
+        }
+        else
+        {
         try { f >> root; }
         catch (const std::exception& e) { os << "  SKIP (bad json: " << e.what() << "): " << path << "\n"; continue; }
+        }
         if (!root.contains("meta") || !root.contains("sizes")) { os << "  SKIP (not a raw sidecar): " << path << "\n"; continue; }
         const json& m = root["meta"];
         const std::string c   = m.value("commit", std::string());

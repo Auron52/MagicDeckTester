@@ -1,5 +1,13 @@
 # Continuous-only keep-gen — delete the wave/uniform paths and their knobs
 
+> **FOLLOW-ON (2026-08-10): [keepgen-no-off-switches.md](keepgen-no-off-switches.md).** This doc removed
+> the *wave* path but left the **uniform** one reachable — and as the `MTG_KEEP_EXHAUSTIVE` route's
+> DEFAULT, because `MTG_KEEP_R_FLOOR` defaulted to 0 (`r_floor >= rollouts => uniform`, ExhaustiveKeep.cpp
+> old line 1863). See the "KEEP" table below, which listed `MTG_KEEP_R_FLOOR` as a precision knob: it was
+> not: it *selected an execution path*, taking the pool, the journal, the gen-time projection and the
+> slow-cell report with it. The follow-on derives the floor, rejects a cap R below 2, fuses the remaining
+> Pass-A barrier for every recipe, and makes slow reporting and journalling un-disableable.
+
 **Status:** **COMPLETE 2026-08-09** on branch `phase-1-2-deck-analyzer`. The 2026-08-08 work landed the
 footgun removal + `recommend` port + wave-path delete + auto-commit-stamp + rolling-vg; the final piece —
 the `sub_floor` sub-table fusion (**delete `run_refine_waves`**) — landed 2026-08-09 as the producer-driven

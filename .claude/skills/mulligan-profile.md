@@ -92,25 +92,48 @@ takes **no parameters but the recipe**, pulls the rollout depth/budget from the 
 - **Depth/budget** come from `value_play` (`target_depth`/`budget_ms`); set the optional
   `value_play.mull_gen_depth` / `mull_gen_budget_ms` in `<deck>.value.json` when mulligan gen should run at
   a **cheaper depth than shipped play** for cost (0/unset → inherit the play depth → built-in default).
-- **Every run reports its settings and its slowest cells** — always on, ~free (one clock read + an atomic
-  compare per rollout). `MTG_KEEP_SLOW_MS=<ms>` additionally *streams* live over-threshold rollouts.
 
-### Manual / advanced path (pin every param — for chunking & pooling)
+### Three properties every run has, that nothing can switch off
 
-When you need the individual knobs — chunked / multi-machine runs, a specific R, a custom bucketing —
-drive the gen directly. **Pin every discovery parameter**: the buckets (and thus the poolable
-`bucket_fp`) depend on all of them, so they must match across any machines you intend to pool.
+`docs/design/keepgen-no-off-switches.md`. There is **one execution path** and it is always:
+
+- **Continuous / batched.** A single pooled queue covers discovery, the play-digest battery, the
+  sub-tables and the size-7 floor+refine. No phase joins before another starts, so cores go idle only on
+  the final live cell. There is no schedule to select (the old `MTG_KEEP_R_FLOOR` didn't tune the
+  schedule, it *selected* a uniform one — and was the env route's **default**). The floor is derived;
+  **a cap R below 2 is rejected**, not silently downgraded.
+- **Slow-game reporting.** Every rollout in every phase is timed. Anything ≥ 30 s streams live to stderr
+  *and* to `<raw>.slow.log` with the seed that reproduces it; the top-12 print at each heartbeat, at
+  floor-complete and at end-of-run. `MTG_KEEP_SLOW_MS` may only **lower** the stream threshold — `=0` no
+  longer disables it (that is how the Creature Giving scout ended up with no slow list at all).
+- **Incremental.** Every completed cell is journalled as it commits, so **re-running the identical
+  command resumes** — there is no resume flag and no driver script. Buckets are cached next to the deck
+  (`<stem>.keepmodel.gencache.json`), a `recommend` probe is reused as the real gen's r=0 slice
+  automatically, and an interrupted run's `.journal` can be pooled directly (below), so nothing is repaid
+  and nothing is stranded.
+
+### Manual / advanced path (pin every param — for multi-machine pooling)
+
+Same engine, same single path — this route exists only to pin the *bucketing* and the seed across
+machines. **Pin every discovery parameter**: the buckets (and thus the poolable `bucket_fp`) depend on
+all of them, so they must match across any machines you intend to pool. There is no floor/schedule knob;
+`MTG_KEEP_ROLLOUTS` is the cap R and must be ≥ 2.
 
 ```bash
-HASH=$(git rev-parse --short HEAD)          # play-logic identity, stamped into the sidecar
 MTG_KEEP_EXHAUSTIVE=1 \
   MTG_EQUIV_PROBES=400 MTG_EQUIV_THRESHOLD=0.01 MTG_EQUIV_DEPTH=5 \  # bucketing (pinned)
   MTG_EQUIV_SEED=20260701 \                                          # FIXED bucket seed (all machines)
-  MTG_KEEP_ROLLOUTS=<R> \                                            # R = label precision (per-cell rollouts)
-  MTG_COMMIT="$HASH" \              # (bottoming always on; max_mull fixed at 6 = down to keep-1 -- no knob)
+  MTG_KEEP_ROLLOUTS=<R> \                                            # cap R (>=2); floor is derived
   ./build/Release/mtg-analyze decks/<name>/<name>.txt --cards-json src/cards/data/cards.json \
     --max-turns 8 --seed <SEED_BASE>                                 # SEED_BASE = the rollout run id
 ```
+
+(`MTG_COMMIT` is optional: the recipe path auto-stamps the sidecar from `git rev-parse --short HEAD`,
+`+dirty` on an unclean tree. Bottoming is always on; `max_mull` is fixed at 6 — no knobs.)
+
+**Prefer the recipe even here.** For a second machine, the modern form of "chunking" is simply: same
+commit, same recipe, **a different `--seed`**, then pool with `MTG_KEEP_MERGE`. Low-R uniform chunks are
+no longer generatable.
 
 The report prints per-size hand counts, the optimal-vs-static policy gap, the disagreement
 decomposition, the label-noise diagnostic, and a **projected-regret-vs-R curve** (extrapolated) — read
@@ -203,36 +226,36 @@ MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS=<full-bottom.raw.json> \
 Validated to ±0.0001t on slivers (+0.0058 sim vs +0.0057 in-game). Full recipe + rationale:
 [docs/design/mulligan-reconstruct-lower-r.md](../../docs/design/mulligan-reconstruct-lower-r.md).
 
-## Resuming an interrupted run & chunking (the "it didn't finish" path)
+## Resuming an interrupted run (the "it didn't finish" path)
 
-The one-flag `--gen-mulligan` run is **single-shot** — great for the normal case, but it does not
-auto-resume. When a run is long enough that an interruption is likely (power failure, machine restart,
-manual shutdown) or must be **split across machines**, drive it through the resumable/poolable chunk
-driver instead. This is the separate path the simple flag deliberately leaves alone.
-
-**Resumable single-machine run (stop and restart at will).** `test/exhaustive_chunked_gen.sh` journals
-per-cell and continues from where it stopped — re-run the **identical** command to resume (it skips
-already-completed cells). Nothing is lost but the few in-flight cells.
+**Run the identical command again. That is the whole procedure.** There is no resume flag, no driver
+script and nothing to remember: the recipe pins the seed, every completed cell is journalled to
+`<raw>.journal` as it commits, and startup replays it and skips those cells. A crash/reboot/Ctrl-C loses
+only the handful of in-flight cells. Bucketing is not re-derived either (it is cached next to the deck).
 
 ```bash
-# CONTINUOUS pool: one adaptive floor->cap queue; stop (Ctrl-C / power loss / reboot) and RE-RUN to resume.
-KM_CONTINUOUS=1 KM_DECK=decks/<name>/<name>.cod KM_TARGET_R=40 KM_FLOOR_R=2 \
-  bash test/exhaustive_chunked_gen.sh
-#   <-- interrupted? run the EXACT same line again; the <deck>.keepmodel.exhaustive.raw.json.journal
-#       carries the completed cells. Cores stay full to the last live cell (no per-chunk barrier).
+# start ... and resume: the SAME line, whatever happened in between.
+./build/Release/mtg-analyze decks/<name>/<name>.cod --cards-json src/cards/data/cards.json \
+    --gen-mulligan complete
 ```
 
-Round mode (`KM_TARGET_R`/`KM_ROUND_R`, prune-set carry) is the alternative: each round adds `KM_ROUND_R`
-to the still-live frontier and freezes confident cells, so each round is cheaper and independently
-resumable/poolable. Use it when you want explicit stop points at intermediate R.
+(There used to be a `test/exhaustive_chunked_gen.sh` driver for this. It is **deleted**: its round mode
+ran the uniform, non-journalled, barriered path — strictly worse than re-running the recipe.)
 
-**Manual carry (advanced).** A finished raw at a lower R (including a completed `--gen-mulligan recommend`
-R=1 probe) can seed a higher-R run via `MTG_KEEP_PRIOR_RAW=<that.raw.json>` on an **adaptive**
-(`0 < R_FLOOR < ROLLOUTS`) run — but it is **fingerprint-gated**: the carry is refused unless
+**Pooling an interrupted run.** A killed run's journal is itself a valid merge input, so its rollouts are
+never stranded — you can ship or pool them without finishing the run:
+
+```bash
+MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS="decks/<n>/<n>.keepmodel.exhaustive.raw.json.journal" \
+  ./build/Release/mtg-analyze decks/<n>/<n>.txt --cards-json src/cards/data/cards.json
+```
+
+**Manual carry (advanced).** A finished raw at a lower R can seed a higher-R run via
+`MTG_KEEP_PRIOR_RAW=<that.raw.json>` — **fingerprint-gated**: the carry is refused unless
 `bucket_fp`/`deck_fp`/`equiv_seed`/`K` match, and it re-rolls any cells a changed `play_digest` touched.
 That gate is the "don't assume it's safe" guard — a play-logic change since the prior invalidates it and
-the affected cells are recomputed. (Getting the seed/accumulate semantics right is exactly why chunk
-accumulation lives in the driver script, not the one-shot flag.)
+the affected cells are recomputed. (A `recommend` probe needs no flag at all: it is picked up
+automatically as the next gen's r=0 slice.)
 
 ## Multi-machine handoff (pooling with the secondary machine)
 
@@ -253,6 +276,12 @@ config (same `--seed`, e.g. `MTG_KEEP_ROLLOUTS=2`) and you confirm the raw sidec
 have **identical `bucket_fp` and `deck_fp`** and **byte-identical V** on that shared seed. Only if they
 match is cross-machine rollout determinism holding (the shuffle is portable across Linux/Windows, but
 verify per pair). Then discard those and run **distinct-seed** production runs.
+
+> **Pin `MTG_KEEP_REFS_OFFSET=0` for the handshake.** At the shipped default (2) the freeze shrink
+> target is re-derived on a *timing-triggered* schedule, so a cell sitting on the freeze threshold can
+> stop at a different R between two runs of **the same binary and seed** (measured on burn R=10: one
+> size-7 cell in 330, ~1 run in 3). That is accepted in production but would make the handshake fail for
+> a reason that has nothing to do with cross-machine parity. offset=0 is deterministic by construction.
 
 **Seed allocation:** give each machine a distinct seed prefix (e.g. primary `1xxxxxxx`, secondary
 `2xxxxxxx`) and keep a per-deck ledger of used `seed_base`s; the merge's overlap-guard is the backstop,

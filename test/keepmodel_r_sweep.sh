@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Reusable EMPIRICAL R-sweep for the exhaustive KEEP policy via chunked generation + cumulative merge.
-# Generates N independent uniform-R rollout chunks (distinct seed_base), then for each target chunk-count
+# Generates N independent rollout chunks (distinct seed_base), then for each target chunk-count
 # k pools chunks 1..k into a policy at effective R = k*CHUNK_R and A/Bs the exhaustive KEEP against static
 # (keep isolation: bottoming OFF both sides) so the win-turn delta is purely the keep decision's quality
 # at that R. Chunks are cheap for small-K decks (e.g. test_deck/burn, K=9). Re-runnable: existing chunks
@@ -14,8 +14,13 @@ DECK=${KM_DECK:?set KM_DECK=decks/<name>.txt}
 STEM=$(basename "$DECK" | sed -E 's/\.(txt|cod)$//')
 STATIC=decks/$STEM.profile.json
 [ -f "$STATIC" ] || { echo "missing static profile: $STATIC"; exit 1; }
+[ "${KM_CHUNK_R:-10}" -ge 2 ] || { echo "KM_CHUNK_R must be >= 2 (the generator rejects a cap below 2)"; exit 1; }
 
-CHUNK_R=${KM_CHUNK_R:-10}                 # uniform rollouts per chunk (floor=0 => uniform = R)
+# Rollouts per chunk (the cap R each chunk generates at). Chunks are ADAPTIVE -- the generator has no
+# uniform mode any more (docs/design/keepgen-no-off-switches.md), so per-cell R varies and the pooled R is
+# NOMINAL (k*CHUNK_R) rather than exact. That is the same regime a real expensive gen runs in, so the sweep
+# still answers "how much R does this deck's keep decision need". Must be >= 2; a cap of 1 is rejected.
+CHUNK_R=${KM_CHUNK_R:-10}
 NUM_CHUNKS=${KM_NUM_CHUNKS:-6}
 SEED_BASE=${KM_SEED_BASE:-20260801}       # chunk i uses seed_base SEED_BASE+i (disjoint => poolable)
 TARGETS=${KM_TARGETS:-"3 4 5 6"}          # chunk-counts to pool -> R = k*CHUNK_R
@@ -24,10 +29,6 @@ TARGETS=${KM_TARGETS:-"3 4 5 6"}          # chunk-counts to pool -> R = k*CHUNK_
 # machines you intend to pool (part of the bucket_fp / play_digest identity).
 GEN_DEPTH=${KM_GEN_DEPTH:-3}
 GEN_BUDGET=${KM_GEN_BUDGET:-10}
-# Chunk floor: == CHUNK_R => UNIFORM (every cell exactly CHUNK_R => exact R=k*CHUNK_R pooling; clean for an
-# R-sweep). Set KM_CHUNK_FLOOR < CHUNK_R for ADAPTIVE chunks (cheaper, per-cell R varies => nominal pooled
-# R; what an expensive real run like Hinata uses). NOTE: MTG_KEEP_R_FLOOR has env-min 1, so 0 != uniform.
-CHUNK_FLOOR=${KM_CHUNK_FLOOR:-$CHUNK_R}
 AB_SEEDS=${KM_AB_SEEDS:-"4004 5005 6006 7007 8008 9009 10010 11011 12012 13013 14014 15015 16016 17017 18018 19019"}
 AB_DEPTH=${KM_AB_DEPTH:-3}
 AB_GAMES=${KM_AB_GAMES:-1000}
@@ -45,9 +46,9 @@ for i in $(seq 1 "$NUM_CHUNKS"); do
   craw=$CH/chunk_${i}.raw.json
   if [ -f "$craw" ]; then log "chunk $i: exists ($craw)"; continue; fi
   s=$((SEED_BASE + i))
-  log "chunk $i: generating uniform R=$CHUNK_R seed_base=$s $(stamp)"
+  log "chunk $i: generating cap R=$CHUNK_R seed_base=$s $(stamp)"
   # Direct-write the chunk raw; skip the (unneeded) per-chunk profile via empty MTG_KEEP_OUT_PROFILE.
-  MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_ROLLOUTS=$CHUNK_R MTG_KEEP_R_FLOOR=$CHUNK_FLOOR \
+  MTG_KEEP_EXHAUSTIVE=1 MTG_KEEP_ROLLOUTS=$CHUNK_R \
     MTG_EQUIV_DEPTH=$GEN_DEPTH MTG_EQUIV_BUDGET=$GEN_BUDGET \
     MTG_KEEP_OUT_RAW="$craw" MTG_KEEP_OUT_PROFILE= \
     "$ANALYZE" "$DECK" --seed "$s" >"$OUT/gen_${i}.log" 2>&1

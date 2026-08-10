@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# ARCHIVED (2026-08-10) -- DOES NOT RUN on the current binary. It generates R=1 uniform chunks, and the
+# generator now rejects a cap R below 2: there is no uniform path left, only the adaptive/continuous pool
+# (docs/design/keepgen-no-off-switches.md). The multi-machine idea it implements is still right, but the
+# modern form is "each machine runs the SAME recipe with its own --seed, then MTG_KEEP_MERGE pools them" --
+# see .claude/skills/mulligan-profile.md. Kept only as a record of the Hinata2 weekend campaign.
+#
 # Weekend Hinata mulligan-profile chunk generator. Runs N chunks SEQUENTIALLY (each --threads 0 = full cores,
 # so no oversubscription), on the FROZEN commit hinata-gen-7f3aaa8. Each chunk is an independent disjoint
 # rollout stream (distinct --seed) for cross-machine pooling; commit 7f3aaa8 checkpoints/resumes so a killed

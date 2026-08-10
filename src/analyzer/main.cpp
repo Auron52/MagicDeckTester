@@ -10,6 +10,7 @@
 #include "../core/FlagRegistry.h"
 #include "EquivalenceDiscovery.h"
 #include "ExhaustiveKeep.h"
+#include "SlowRollouts.h"
 #include "../ai/AIEngine.h"
 #include "../core/GameEngine.h"
 #include "../runner/GoldFishRunner.h"
@@ -154,10 +155,12 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
     cfg.depth     = env_int("MTG_EQUIV_DEPTH", 5, 0);
     cfg.budget_ms = env_int("MTG_EQUIV_BUDGET", 20, 0);  // per-decision rollout search budget (ms);
                                                          // feeds discovery, rollouts AND play digest
-    cfg.rollouts  = env_int("MTG_KEEP_ROLLOUTS", 100, 1);
-    // Adaptive sampling: R_FLOOR<ROLLOUTS engages confidence-driven refinement (default off =>
-    // uniform R => byte-identical). FLIP_EPS is the stop threshold; R_BATCH the per-wave add.
-    cfg.r_floor   = env_int("MTG_KEEP_R_FLOOR", 0, 1);   // 0 => uniform (= rollouts)
+    cfg.rollouts  = env_int("MTG_KEEP_ROLLOUTS", 100, 1);   // cap R; <2 is rejected by the generator
+    // The adaptive FLOOR is derived by the generator (clamped into [1, cap-1]) -- there is no knob. The
+    // old MTG_KEEP_R_FLOOR did not tune the schedule, it SELECTED one: unset (the default!) or >= cap meant
+    // "uniform", which silently ran with no continuous pool, no journal, no gen-time projection and no
+    // slow-cell report. See docs/design/keepgen-no-off-switches.md. FLIP_EPS is the stop threshold;
+    // R_BATCH the per-wave add -- those tune the schedule without being able to switch it off.
     cfg.r_batch   = env_int("MTG_KEEP_R_BATCH", 16, 1);
     cfg.flip_eps  = []{ const char* s = std::getenv("MTG_KEEP_FLIP_EPS");
                         return (s && *s) ? std::max(0.0, std::atof(s)) : 0.02; }();
@@ -184,19 +187,25 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
     // argmin to refined cells (recovers keep-only savings for bottoming-on). Off => full-R sub-tables.
     cfg.adaptive_bottom = []{ const char* s = std::getenv("MTG_KEEP_ADAPTIVE_BOTTOM");
                               return s && *s && std::string(s) != "0"; }();
-    // Reuse a prior recommend-probe chunk (<out_raw>.probe) as this gen's r=0 slice. Auto-on for the
-    // --gen-mulligan complete/fast recipes (set below); MTG_KEEP_PROBE_CARRY=1 also enables it on this
-    // advanced env path.
-    cfg.use_probe_carry = []{ const char* s = std::getenv("MTG_KEEP_PROBE_CARRY");
-                              return s && *s && std::string(s) != "0"; }();
+    // (Reuse of a prior recommend-probe chunk as this gen's r=0 slice is unconditional and has no flag --
+    // it is byte-identical to rolling r=0 fresh, and fingerprint-gated, so there was never a reason to
+    // turn it off. MTG_KEEP_PROBE_CARRY / MTG_KEEP_NO_PROBE_CARRY are gone.)
     if (const char* c = std::getenv("MTG_COMMIT")) { cfg.commit = c; }
     if (const char* fm = std::getenv("MTG_EQUIV_FORCE_MERGE")) { cfg.force_merge = fm; }
-    // Write the serialized keep policy + poolable raw sidecar next to the deck unless suppressed.
-    if (!EnvOn("MTG_KEEP_NO_WRITE"))
+    // Write the serialized keep policy + poolable raw sidecar next to the deck.
     {
         const std::string stem = (a.deck_path.parent_path() / a.deck_path.stem().string()).string();
         cfg.out_profile = stem + ".keepmodel.exhaustive.profile.json";
+        // The RAW is not optional. It is the run's journal anchor (<out_raw>.journal), its slow-rollout
+        // log (<out_raw>.slow.log) and its probe chunk (<out_raw>.probe) -- i.e. everything that makes a
+        // gen resumable and diagnosable. MTG_KEEP_NO_WRITE used to clear it too, which produced the one
+        // configuration that could run rollouts for hours and persist NOTHING; it now suppresses only the
+        // profile (its actual purpose: don't ship a policy from a scratch/diagnostic run).
         cfg.out_raw     = stem + ".keepmodel.exhaustive.raw.json";
+        // Fingerprint-gated cache of the equivalence classes, so a resume (or a recommend -> complete
+        // hand-off) never re-derives the minutes-long bucketing. MTG_EQUIV_CACHE overrides the path.
+        cfg.gen_cache   = stem + ".keepmodel.gencache.json";
+        if (EnvOn("MTG_KEEP_NO_WRITE")) { cfg.out_profile.clear(); }
         // Override output paths (mirrors the merge path's MTG_MERGE_OUT_*): lets chunked R-sweep
         // generation write each chunk's raw straight to its own path, skipping the (unneeded)
         // per-chunk profile via MTG_KEEP_OUT_PROFILE=/dev/null-style empty.
@@ -258,12 +267,10 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
         if (a.gen_recipe == "complete")
         {
             cfg.rollouts = 40; cfg.r_floor = 2; cfg.adaptive_bottom = false;  // full bottoming, native-R
-            cfg.use_probe_carry = true;   // reuse a prior 'recommend' probe chunk if one matches
         }
         else if (a.gen_recipe == "fast")
         {
             cfg.rollouts = 30; cfg.r_floor = 2; cfg.adaptive_bottom = true;   // adaptive bottoming, R30
-            cfg.use_probe_carry = true;   // reuse a prior 'recommend' probe chunk if one matches
         }
         else if (a.gen_recipe == "recommend")
         {
@@ -292,9 +299,8 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
         std::cout << "  bottoming       : " << (cfg.adaptive_bottom ? "ADAPTIVE" : "FULL")
                   << "  (baked ON at runtime)\n";
         std::cout << "  cap R (rollouts): " << cfg.rollouts << "\n";
-        std::cout << "  floor R         : " << cfg.r_floor
-                  << (cfg.r_floor > 0 && cfg.r_floor < cfg.rollouts ? "  (adaptive keep)" : "  (uniform)")
-                  << "\n";
+        std::cout << "  floor R         : " << (cfg.r_floor > 0 ? cfg.r_floor : 2)
+                  << "  (adaptive keep -- the only schedule; clamped below the cap)\n";
         std::cout << "  rollout depth   : " << cfg.depth     << "  (source: " << depth_src  << ")\n";
         std::cout << "  rollout budget  : " << cfg.budget_ms << " ms  (source: " << budget_src << ")\n";
         std::cout << "  flip_eps        : " << cfg.flip_eps << "   se_prior: " << cfg.se_prior
@@ -304,10 +310,13 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
         std::cout << "  seed            : " << cfg.seed << "\n";
         std::cout << "  out profile     : " << (cfg.out_profile.empty() ? "(none)" : cfg.out_profile) << "\n";
         std::cout << "  out raw         : " << (cfg.out_raw.empty() ? "(none)" : cfg.out_raw) << "\n";
+        std::cout << "  gen cache       : " << (cfg.gen_cache.empty() ? "(none)" : cfg.gen_cache) << "\n";
+        std::cout << "  slow-rollout log: " << (cfg.out_raw.empty() ? "(none)" : cfg.out_raw + ".slow.log")
+                  << "  (stream >= " << SlowTracker::StreamMs() << "ms; cannot be disabled)\n";
         if (cfg.recommend_only)
         { std::cout << "  probe chunk out : " << (cfg.out_raw.empty() ? "(none)" : cfg.out_raw + ".probe")
                     << "\n"; }
-        else if (cfg.use_probe_carry)
+        else
         { std::cout << "  probe carry     : ON (reuse " << (cfg.out_raw.empty() ? "<out_raw>" : cfg.out_raw)
                     << ".probe if it matches)\n"; }
         std::cout << "=====================================\n" << std::flush;

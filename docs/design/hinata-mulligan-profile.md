@@ -9,6 +9,7 @@ frozen commit `7f3aaa8` and validated by the in-game A/B before adoption. Follow
 - **Feasibility:** K=**20** buckets (60-card deck → 20 equivalence classes; the 7 lands stay distinct
   by role, cantrips/dig stay distinct). **604,702 distinct hands** (size7 = 431,144). At d3/b10 with
   the value leaf attached, one R=1 mm6 full pass ≈ 21 h — the reason this was a multi-week grind.
+- **Build driver (historical):** the `test/exhaustive_chunked_gen.sh` round driver cited below was **deleted 2026-08-10** (`docs/design/keepgen-no-off-switches.md`) -- its rounds ran the uniform, barriered, non-journalled path. The record is kept as-is; a rebuild today is `--gen-mulligan complete`, re-run to resume.
 - **Build:** `test/exhaustive_chunked_gen.sh` (`KM_TARGET_R`, `KM_ROUND_R=1`, mm6), frozen `7f3aaa8`,
   d3/b10, `MTG_EQUIV_SEED=20260701`. Pooled **R=22** on the live frontier from **22 disjoint sidecars**:
   12 adaptive rounds (this box, seeds 30001000–30001011) + 9 budget-10 chunks (second box, seeds

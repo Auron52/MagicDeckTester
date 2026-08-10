@@ -2,11 +2,14 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <functional>
+#include <iostream>
 #include <map>
 #include <ostream>
 #include <thread>
 
+#include "SlowRollouts.h"
 #include "../ai/AIEngine.h"
 #include "../cards/CardDatabase.h"
 #include "../core/HardwareConcurrency.h"
@@ -64,30 +67,54 @@ EquivReport DiscoverEquivalence(const Decklist& deck, const MulliganProfile& pro
         tpl[i] = std::move(s);
     }
 
-    // sig[k][i] = clairvoyant win-turn with candidate k in probe i's test slot. Parallelised over
-    // probes; one AIEngine per worker (AIEngine is not shared-thread-safe).
+    // sig[k][i] = clairvoyant win-turn with candidate k in probe i's test slot.
+    //
+    // The work item is ONE (probe, candidate) ROLLOUT, not a whole probe. Claiming a probe meant a
+    // worker owned N serial rollouts, so the run's tail was a full probe (~N rollouts on one core while
+    // every other core idled) -- a real tail before the pool, on a phase that is otherwise pure
+    // fan-out. Per-rollout claiming makes the tail one rollout. Each sig[k][i] is written by exactly
+    // one worker and no rollout reads another's result, so the values are unchanged by the re-graining.
     std::vector<std::vector<int>> sig(N, std::vector<int>(probes, 0));
-    std::atomic<int> next_probe{0};
+    const long long total = static_cast<long long>(probes) * static_cast<long long>(N);
+    std::atomic<long long> next_item{ 0 };
+    std::atomic<long long> done_items{ 0 };
+    const auto t_start = std::chrono::steady_clock::now();
+    std::atomic<long long> next_report{ 30 };          // stderr heartbeat, every 30s
     auto worker = [&]()
     {
         AIEngine ai(rollout_profile, depth, budget_ms);
         ai.SetSearchPostCombat(second_main);
         for (;;)
         {
-            int i = next_probe.fetch_add(1);
-            if (i >= probes) { break; }
-            for (int k = 0; k < N; ++k)
+            const long long item = next_item.fetch_add(1);
+            if (item >= total) { break; }
+            const int i = static_cast<int>(item / N);   // probe
+            const int k = static_cast<int>(item % N);   // candidate
+            // Timed + streamed like every other rollout phase: a card that is degenerate to play used
+            // to make discovery silently crawl, with no output at all until it finished.
+            sig[k][i] = TimedRollout("discovery",
+                [&]{ return "probe=" + std::to_string(i) + " candidate=" + names[k]; },
+                [&]() -> int {
+                    GameState s = tpl[i];               // fixed library + fixed base6 (CRN)
+                    Player& ap = s.ActivePlayer();
+                    ap.hand = base6[i];
+                    ap.hand.push_back(reps[k]);         // hand = base6 + candidate (7 cards)
+                    return ai.RolloutKeepWinTurn(s, 0, max_turns);
+                });
+            const long long d  = done_items.fetch_add(1) + 1;
+            const double    el = std::chrono::duration<double>(
+                                     std::chrono::steady_clock::now() - t_start).count();
+            long long nr = next_report.load(std::memory_order_relaxed);
+            if (static_cast<long long>(el) >= nr && next_report.compare_exchange_strong(nr, nr + 30))
             {
-                GameState s = tpl[i];               // fixed library + fixed base6 (CRN)
-                Player& ap = s.ActivePlayer();
-                ap.hand = base6[i];
-                ap.hand.push_back(reps[k]);         // hand = base6 + candidate (7 cards)
-                sig[k][i] = ai.RolloutKeepWinTurn(s, 0, max_turns);
+                std::cerr << "[keepgen]   discovery " << (100 * d / total) << "%  (" << d << "/" << total
+                          << " rollouts, " << static_cast<long long>(el > 0 ? d / el : 0) << "/s, "
+                          << static_cast<long long>(el) << "s)\n" << std::flush;
             }
         }
     };
     int nthreads = std::max(1, concurrency_util::AffinityCpuCount());
-    nthreads = std::min(nthreads, std::max(1, probes));
+    nthreads = static_cast<int>(std::min<long long>(nthreads, std::max<long long>(1, total)));
     std::vector<std::thread> pool;
     for (int t = 0; t < nthreads; ++t) { pool.emplace_back(worker); }
     for (std::thread& th : pool) { th.join(); }
