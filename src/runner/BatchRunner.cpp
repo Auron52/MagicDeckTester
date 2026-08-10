@@ -15,6 +15,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <list>
 #include <memory>
@@ -84,10 +85,17 @@ struct Job
 struct CondemnRule
 {
     bool   enabled             = false;
-    double sec_per_game        = 0.0;   // condemn a cell whose mean cost exceeds this
+    double sec_per_game        = 0.0;   // condemn a cell whose MEAN cost exceeds this
     int    reference_games     = 0;     // ...but only after it has this many games (the sample)
     int    never_condemn_depth = 0;     // ...and never at or below this depth (the d<=5 ladder IS
                                         //    the crossover; condemning there leaves a HOLE, not a saving)
+    // SEPARATE limit for a SINGLE game, applied to games still running (see the in-flight hook).
+    // Deliberately not sec_per_game: these measure different things, and sharing the number would
+    // condemn a cell with a 5 s/game mean because one game took 61 s. The mean rule asks "is filling
+    // this cell affordable?"; this one asks "is this individual game pathological?" -- which the mean
+    // cannot answer at all until the game finishes, and a 21.4-hour game answers far too late.
+    // 0 / absent => the in-flight rule is off.
+    double max_game_sec        = 0.0;
 };
 
 // Bounded LRU cache of loaded (+sidecar-attached) mulligan profiles, keyed by profile path.
@@ -207,13 +215,17 @@ public:
 
     bool on() const { return !path_.empty(); }
 
-    void SetRunning(std::size_t slot, const std::string& job, int gi)
+    // Called every period with each in-flight game's (cell_id, elapsed ms). Lets the owner apply the
+    // tractability rule to games that have not FINISHED -- see the on_inflight_ note below.
+    void SetInFlightHook(std::function<void(int, long long)> f) { on_inflight_ = std::move(f); }
+
+    void SetRunning(std::size_t slot, const std::string& job, int gi, int cell_id)
     {
         if (path_.empty() || slot >= running_.size()) { return; }
         Slot& s = running_[slot];
         {
             std::lock_guard<std::mutex> lk(s.mtx);
-            s.job = job; s.gi = gi;
+            s.job = job; s.gi = gi; s.cell_id = cell_id;
         }
         s.start_ms.store(NowMs(), std::memory_order_relaxed);
         s.active.store(1, std::memory_order_release);
@@ -281,6 +293,7 @@ private:
         std::mutex             mtx;
         std::string            job;
         int                    gi = 0;
+        int                    cell_id = 0;
     };
 
     static long long NowMs()
@@ -304,8 +317,14 @@ private:
             if (s.active.load(std::memory_order_acquire) == 0) { continue; }
             const long long st = s.start_ms.load(std::memory_order_relaxed);
             std::lock_guard<std::mutex> lk(s.mtx);
-            rows.push_back({now - st, s.job + "  [RUNNING]", s.gi});
+            const long long elapsed = now - st;
+            rows.push_back({elapsed, s.job + "  [RUNNING]", s.gi});
             ++n_running;
+            // A cell's cost only counts FINISHED games, so a cell whose reference sample contains
+            // one catastrophic game looks free while the pool keeps dispatching more of it (a run
+            // measured 2026-08-10 had a single game at 21.4 h). This is the only thread that sees
+            // in-flight elapsed time, so it is where that gap closes.
+            if (on_inflight_) { on_inflight_(s.cell_id, elapsed); }
         }
         std::sort(rows.begin(), rows.end(),
                   [](const Entry& a, const Entry& b) { return a.ms > b.ms; });
@@ -337,6 +356,7 @@ private:
     std::size_t              keep_;
     std::mutex               fin_mtx_;
     std::vector<Entry>       finished_;
+    std::function<void(int, long long)> on_inflight_;
     std::mutex               wake_mtx_;
     std::condition_variable  wake_cv_;
     bool                     stop_ = false;
@@ -473,20 +493,29 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         condemn.sec_per_game        = c.value("sec_per_game", 0.0);
         condemn.reference_games     = c.value("reference_games", 0);
         condemn.never_condemn_depth = c.value("never_condemn_depth", 0);
-        condemn.enabled             = (condemn.sec_per_game > 0.0 && condemn.reference_games > 0);
+        condemn.max_game_sec        = c.value("max_game_sec", 0.0);
+        condemn.enabled             = (condemn.sec_per_game > 0.0 && condemn.reference_games > 0)
+                                   || condemn.max_game_sec > 0.0;
     }
 
     // Dense cell indices, so the per-game hot path indexes a vector instead of hashing a string.
     // A job with no "cell" is its own cell -- cross-job condemnation then cannot trigger for it,
     // which is the right default for every manifest that is not a matrix.
     int n_cells = 0;
+    std::vector<std::string> cell_name;
+    std::vector<int>         cell_depth;   // for the never-condemn floor, off the first job of the cell
     {
         std::unordered_map<std::string, int> cell_ix;
         for (Job& j : jobs)
         {
             const std::string key = j.cell.empty() ? ("\x1f" + j.name) : j.cell;
             auto it = cell_ix.find(key);
-            if (it == cell_ix.end()) { it = cell_ix.emplace(key, n_cells++).first; }
+            if (it == cell_ix.end())
+            {
+                it = cell_ix.emplace(key, n_cells++).first;
+                cell_name.push_back(j.cell.empty() ? j.name : j.cell);
+                cell_depth.push_back(j.depth);
+            }
             j.cell_id = it->second;
         }
     }
@@ -611,6 +640,27 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     // Slowest-game heartbeat (see Heartbeat). One running-slot per worker; inert unless
     // MTG_BATCH_HEARTBEAT names a file.
     Heartbeat hb(static_cast<std::size_t>(num_threads), 100);
+    // IN-FLIGHT condemnation. A cell's mean cost only sees FINISHED games, so a cell whose sample
+    // contains one catastrophic game reads as free and the pool keeps feeding it. A single game
+    // already over the per-game limit is proof enough on its own: condemn the cell so its remaining
+    // games are skipped. The game in flight still runs to completion (there is no safe way to abort
+    // a search mid-node) -- this stops the OTHER nineteen from being dispatched behind it.
+    if (condemn.max_game_sec > 0.0)
+    {
+        hb.SetInFlightHook([&](int cell_id, long long elapsed_ms) {
+            if (cell_id < 0 || cell_id >= n_cells) { return; }
+            if (static_cast<double>(elapsed_ms) <= condemn.max_game_sec * 1000.0) { return; }
+            if (cell_depth[cell_id] <= condemn.never_condemn_depth) { return; }
+            if (cell_condemned[cell_id].exchange(1, std::memory_order_relaxed) == 0)
+            {
+                std::fprintf(stderr,
+                    "[goldfish] CONDEMNED cell=%s on an IN-FLIGHT game at %.1f s (limit %.1f); "
+                    "remaining games of this cell are skipped\n",
+                    cell_name[cell_id].c_str(), static_cast<double>(elapsed_ms) / 1000.0,
+                    condemn.max_game_sec);
+            }
+        });
+    }
     hb.Start();
 
     std::atomic<std::size_t> cursor{0};
@@ -691,7 +741,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // digests are byte-identical whether or not tracing is on. Reset per game via
                 // StartGame. Records only the real game's decisions (m_logger is nulled in the
                 // search rollouts), so it does not perturb play.
-                hb.SetRunning(slot, job.name, global_gi);
+                hb.SetRunning(slot, job.name, global_gi, job.cell_id);
                 const bool trace = !trace_dir.empty();
                 GameLogger dlog(/*digest_only=*/!trace);
                 dlog.StartGame(std::string(), global_gi, job.name, job.seed + wi.game, {});
@@ -707,7 +757,8 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // Continuous tractability guard. Evaluated after every game rather than at a wave
                 // barrier: the point of the pool is that no cell ever waits on another, and a
                 // barrier reintroduces exactly the synchronisation the pool exists to remove.
-                if (condemn.enabled && job.depth > condemn.never_condemn_depth)
+                if (condemn.sec_per_game > 0.0 && condemn.reference_games > 0
+                    && job.depth > condemn.never_condemn_depth)
                 {
                     const int cid = job.cell_id;
                     const int   n  = cell_games[cid].fetch_add(1, std::memory_order_relaxed) + 1;
