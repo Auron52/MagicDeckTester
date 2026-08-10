@@ -180,3 +180,40 @@ change needing its own measurement, so they are recorded rather than quietly swi
 5. **Rejection + resume paths:** `MTG_KEEP_ROLLOUTS=1` aborts with the "no uniform path exists" error;
    a re-run hits the bucket cache and resumes from the prior raw/journal; a killed run's `.journal`
    merges as a poolable chunk (and correctly refuses to emit a profile below `kMinProfileR`).
+
+## Follow-up (review pass, 2026-08-10, same day)
+
+An independent re-review of the commit found two defects; both are fixed in the follow-up commit.
+
+1. **`MTG_KEEP_OUT_RAW=""` was a residual incrementality off-switch.** The override read accepted an
+   empty value, and an empty `out_raw` silently takes the journal, the slow-rollout log and the probe
+   chunk with it (every downstream site treats empty as "don't"). The read now ignores an empty value:
+   the RAW override redirects, it never clears. (`MTG_KEEP_OUT_PROFILE=` empty stays allowed — profile
+   suppression is `MTG_KEEP_NO_WRITE`'s legitimate purpose.)
+
+2. **The change-detect classification raced the pool on size-7 (and its comment claimed otherwise).**
+   Moving classification into the producer (correct for sub-cells: it fires at `sub_remaining==0`,
+   when the sub floor is complete and quiescent) left the loop's `H == HAND` iterations reading size-7
+   `cnt/sum/sumsq/V` **without `fold_mtx` while workers fold size-7** — the count it observes is
+   timing-dependent in `[r0, r0+lookahead]`, so the resolved set (and, via the final
+   `apply_prior_override`, the shipped profile) depended on thread scheduling on any *real*
+   change-detect re-gen (prior from an older commit, `play_digest` differs). The internal full
+   `apply_prior_override()` also wrote size-7 `V` mid-pool. Now: the statistical test is **sub-only**;
+   size-7 keeps the (deterministic, accumulator-free) trace-reuse branch; the lambda applies no
+   overrides itself (caller does sub, the final post-pool apply does size-7).
+
+   Why nothing caught it: `keepgen_check.sh`'s carry case feeds a **same-binary prior**, so
+   `play_digest` matches and AUTO-ATTRIB whole-pool trace reuse resolves every cell *before* the
+   statistical branch — the racy path never runs in the harness (same lesson as the uniform-shape
+   guard: check which configuration a check actually exercises). Measured directly (doctored prior
+   digest, burn, seed 4242, 4 runs): verdicts happened to be stable on that workload — tiny-R `se`
+   classifies nearly everything "moved" — but the reads are UB and the production R=40 near-margin
+   case is exactly where the verdict flips.
+
+   **Deferred (a real design, not a hotfix):** size-7 statistical carry only ever worked on the
+   deleted uniform path, and even the racy half-version saved nothing (a "resolved" size-7 cell was
+   still refined to `flip_eps`, then its refined V discarded for the prior's). Reviving it means:
+   classify size-7 at the **floor-complete event** off the **r0-prefix sample slots** (deterministic
+   regardless of speculation, like the freeze reconcile), and **freeze resolved cells** so the reuse
+   skips their refinement. That same freeze is what would put `pc.reuse_all_cells` (identical-digest
+   re-gen ~free) and `prune.carry_lowfloor7` back to work for size-7 — all three are one design.

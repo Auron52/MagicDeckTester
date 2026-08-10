@@ -210,7 +210,11 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
         // generation write each chunk's raw straight to its own path, skipping the (unneeded)
         // per-chunk profile via MTG_KEEP_OUT_PROFILE=/dev/null-style empty.
         if (const char* p = std::getenv("MTG_KEEP_OUT_PROFILE")) { cfg.out_profile = p; }
-        if (const char* r = std::getenv("MTG_KEEP_OUT_RAW"))     { cfg.out_raw     = r; }
+        // The RAW override REDIRECTS, never clears: an empty MTG_KEEP_OUT_RAW is ignored, because an
+        // empty out_raw would silently take the journal, the slow-rollout log and the probe chunk with
+        // it -- exactly the incrementality off-switch this route no longer has. Only the PROFILE may be
+        // suppressed (above), matching MTG_KEEP_NO_WRITE.
+        if (const char* r = std::getenv("MTG_KEEP_OUT_RAW"); r && *r) { cfg.out_raw = r; }
     }
 
     // --gen-mulligan <recipe>: one-flag mulligan-profile generation. A recipe is a fixed preset over

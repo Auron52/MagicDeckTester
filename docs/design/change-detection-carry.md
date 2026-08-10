@@ -4,6 +4,15 @@
 the savings are more concentrated (and the value is more about SAFETY) than the original pitch.**
 Motivated by "never re-run Hinata for a week again" — and, per the user, useful for *small deck changes* too.
 
+**2026-08-10 update (continuous-only generator): the size-7 *statistical* classification described below
+is RETIRED for now** — it only ever ran on the uniform path (deleted by
+`keepgen-no-off-switches.md`), and on the continuous path classification fires while the pool is still
+folding size-7, so a statistical read there is racy/timing-dependent. Today size-7 carries via the
+**execution-trace branch only** (including AUTO-ATTRIB whole-pool reuse on an identical `play_digest`);
+sub-cells keep the full statistical test. The deterministic revival (classify size-7 at floor-complete
+off the r0-prefix sample slots + freeze resolved cells) is sketched in
+`keepgen-no-off-switches.md` → "Follow-up".
+
 ## Phase 1 finding (measured — read this first)
 
 Built: `MTG_KEEP_PRIOR_RAW=<pool>` loads a prior pool; the floor pass doubles as the detection batch; each

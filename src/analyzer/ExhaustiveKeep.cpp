@@ -2168,8 +2168,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // re-sample of every reused cell (~94% of the work on a depth extend) into ~zero.
                 if (pc.reuse_all_cells && pc.has_prior[HAND - Hw][iw][pd]) { continue; }
                 const long long cell_init = init;
-                // (The size-7 "verify mode" reduced floor -- prune.carry_lowfloor7 -- is applied by the pool,
-                // which owns size-7; this pass never sees a size-7 cell.)
+                // (The size-7 "verify mode" reduced floor -- prune.carry_lowfloor7 -- is currently INERT:
+                // this pass never sees a size-7 cell, and the pool, which owns size-7, does not read it --
+                // marked cells just sample at the normal floor (correct, merely unoptimized). It was live
+                // only on the deleted uniform path; docs/design/keepgen-no-off-switches.md records reviving
+                // it (with the size-7 reuse skip) as deferred work.)
                 // RESUME / PROBE-CARRY: a cell may already carry rollouts from a reloaded checkpoint or probe
                 // chunk. If it is already at/above its floor, skip it (its accumulators are correct; += would
                 // double-count). Otherwise START at the loaded count so we roll only the DEFICIT r>=have --
@@ -2218,22 +2221,27 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // sit here, immediately after Pass A's join; with the sub-floor fused into the pool there is no join
     // left to sit behind, and running it here would test cells that have zero samples (silently resolving
     // nothing and turning the whole carry feature into a no-op).
-    // Size-7 cells are never classified on this path (the pool owns them and they have no samples yet),
-    // exactly as before -- only sub-cells carry.
+    // SIZE-7 IS TRACE-REUSED ONLY. When this fires the pool is still actively folding size-7 (the floor
+    // feed plus speculation runs concurrently with the sub-floor), so a statistical read of the size-7
+    // accumulators would race the fold (they are written under fold_mtx, which this does not hold) and
+    // observe a timing-dependent count in [r0, r0+lookahead] -- making the resolved set, and with it the
+    // final profile, depend on thread scheduling. The statistical test is therefore restricted to
+    // sub-cells (whose floor is provably complete and quiescent here). That matches the old CONTINUOUS
+    // path exactly; the old UNIFORM path's size-7 statistical carry (classify off a complete, joined
+    // floor) retired with it -- reviving it needs a deterministic classify at the size-7 floor-complete
+    // event off the r0-prefix sample slots (like the freeze reconcile), plus a freeze of resolved cells
+    // so the reuse actually saves their refinement: docs/design/keepgen-no-off-switches.md, deferred.
     auto classify_change_detect = [&]()
     {
-        // Effective delta = DISTANCE TO THRESHOLD, not a flat tolerance. We don't care whether a cell
-        // moved; only whether it moved enough to flip its DECISION. A size-7 cell's m=0 keep decision
-        // flips only if its value crosses Dopt[1], so a move smaller than |V - Dopt[1]| is
-        // decision-irrelevant -- deep cells (huge margin) clear trivially from the thin floor batch,
-        // near-threshold cells (tiny margin) can't clear and are refined (correctly). Certify unmoved iff
-        // even the CI upper bound on the shift stays inside the margin: shift + z*se < margin. A deep
-        // cell that moved ACROSS the threshold has shift > margin -> flagged moved -> refined (caught).
-        // Sub-cells feed Dopt[1..M] thresholds AND the bottoming argmin, so a clean per-cell margin is
-        // not well-defined -- they use the flat MTG_KEEP_DETECT_DELTA (conservative -> refine more; the
-        // R-hungry bottoming carry is future work). Dopt from the fresh floor batch (its noise is small
-        // -- an average over cells -- and deep-cell margins dwarf it).
-        const std::array<std::vector<double>, 2> Dopt_det = { ComputeDopt(tables, K, P, cfg.max_mull, 0), ComputeDopt(tables, K, P, cfg.max_mull, 1) };
+        if (!pc.change_detect) { return; }   // no prior -> nothing to classify (and no noise line)
+        // Certify a sub-cell unmoved iff even the CI upper bound on the shift stays inside the margin:
+        // shift + z*se < margin -- a cell that truly moved has shift > margin -> flagged moved -> refined
+        // fresh (the test is biased toward MOVED, so misses are rare). Sub-cells feed Dopt[1..M]
+        // thresholds AND the bottoming argmin, so a clean per-cell margin is not well-defined -- they use
+        // the flat MTG_KEEP_DETECT_DELTA (conservative -> refine more; the R-hungry bottoming carry is
+        // future work). Size-7 takes only the trace branch here -- its accumulators are mid-fold (see the
+        // header comment above); the old dist-to-threshold margin logic lives in the git history for the
+        // deferred deterministic revival.
         long long n_unmoved = 0, n_moved = 0, n_tested = 0;
         for (int H = HAND; H >= min_size; --H)
         {
@@ -2245,9 +2253,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     // Execution-trace: prior touched-set disjoint from the changed cards => this cell's
                     // rollouts are byte-identical on the new commit => reuse the prior EXACTLY (no
                     // statistical test, covers near-threshold + bottoming cells). Composes with the
-                    // statistical detection below for cells that DID touch a changed card.
+                    // statistical detection below for cells that DID touch a changed card. Reads no
+                    // accumulators, so it is safe -- and deterministic -- for size-7 too.
                     if (!pc.trace_reuse[HAND - H].empty() && pc.trace_reuse[HAND - H][i])
                     { pc.resolved[HAND - H][i][pd] = true; continue; }
+                    if (H == HAND) { continue; }   // statistical test is SUB-ONLY (racy for size-7; header)
                     const long long nf = t.cnt[i][pd];
                     if (nf < 1) { continue; }
                     ++n_tested;
@@ -2258,20 +2268,19 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     const double np   = static_cast<double>(pc.pri_n[HAND - H][i][pd]);
                     const double se   = std::sqrt(varf / nf + pc.pri_var[HAND - H][i][pd] / np);
                     const double shift = std::abs(Vf - Vp);
-                    // margin: size-7 -> distance from the prior value to the m=0 threshold; sub-cells ->
-                    // flat delta.
-                    const double margin = (H == HAND) ? std::abs(Vp - Dopt_det[pd][1]) : pc.detect_delta;
-                    if (shift + pc.detect_z * se < margin)
+                    if (shift + pc.detect_z * se < pc.detect_delta)
                     { pc.resolved[HAND - H][i][pd] = true; ++n_unmoved; }
                     else { ++n_moved; }
                 }
         }
-        apply_prior_override();
-        os << "change-detection: " << n_tested << " prior cell-sides tested -> " << n_unmoved
-           << " unmoved (reuse prior), " << n_moved << " moved (refine fresh)  [size-7 margin=dist-to-thr, "
-           << "sub delta=" << pc.detect_delta << ", z=" << pc.detect_z << "]\n";
+        // NO apply here: the caller runs apply_prior_override_sub() immediately after. Size-7 V must not
+        // be written from the producer while the pool folds size-7 (the old full apply did exactly that);
+        // size-7 trace-resolved overrides land in the final post-pool apply_prior_override().
+        os << "change-detection: " << n_tested << " prior sub-cell-sides tested -> " << n_unmoved
+           << " unmoved (reuse prior), " << n_moved << " moved (refine fresh)  [sub delta="
+           << pc.detect_delta << ", z=" << pc.detect_z << "; size-7 = trace-reuse only]\n";
         std::cerr << "[keepgen] change-detection: " << n_unmoved << " unmoved / " << n_moved
-                  << " moved (of " << n_tested << " prior cell-sides)\n" << std::flush;
+                  << " moved (of " << n_tested << " prior sub-cell-sides)\n" << std::flush;
     };
 
     // Sub-table refine bookkeeping (the producer-driven waves inside the pool). Dopt is one-directional

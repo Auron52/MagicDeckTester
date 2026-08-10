@@ -214,7 +214,12 @@ fi
 
 # resume.* records how far the interrupted attempt got before the kill -- wall-clock dependent by
 # construction, so it is asserted by the invariant above and NOT byte-compared across tags.
-NOCMP=" resume.err resume.report "
+# probe.raw.journal appends per-cell records in COMPLETION order (thread timing), so its bytes differ
+# between two runs of the SAME binary even though the record SET is identical -- byte-comparing it
+# across tags is a coin-flip false positive (it passed once by luck). Its semantics are covered by the
+# invariants: d6carry proves the probe chunk it anchors carries byte-identically, and resume proves the
+# journal-fold itself is order-independent.
+NOCMP=" resume.err resume.report probe.raw.journal "
 ok=$((ENG != 0 || INV != 0)); n=0
 for f in $(cd "$ROOT/base" && ls); do
     case "$f" in *.raw | *.raw.probe) continue ;; esac   # the normalized .raw.n / .probe.n is what we compare
