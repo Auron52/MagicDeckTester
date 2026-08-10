@@ -73,10 +73,18 @@ ROWDIR=$VLQ/rows          # queue-owned: logs/eval collides case-insensitively o
                           # (Auras_value.rows resolves to the pre-merge auras_value.rows)
 mkdir -p "$DONE" "$ROWDIR" logs/eval
 
-# Workers for the ONE pooled batch. Derived from the box, not chosen: leave a couple of cores for
-# the OS and keep ~1 GB/worker headroom. Hand-picking this is how a 24-core box ran 20 workers and
-# nobody noticed the pool was only filling 3 of them.
-WORKERS=$(( $(nproc 2>/dev/null || echo 8) - 4 )); [ "$WORKERS" -lt 1 ] && WORKERS=1
+# NO worker count is passed. The engine resolves it to AffinityCpuCount() -- every core the process
+# is actually allowed to use -- which beats any number chosen here: it is affinity-aware (nproc and
+# os.cpu_count() both over-report inside a cgroup with a restricted cpuset), and it cannot drift out
+# of date with the box.
+#
+# The old value was 20 with the note "~1 GB/process on a 47 GB box". That reasoning expired when the
+# matrix stopped spawning one PROCESS per cell: it is now ONE process whose workers SHARE each
+# mulligan profile through a shared_ptr, and measured peak RSS at 24 threads on the heaviest keep
+# model in the repo (Goblins) is 1,481 MB -- 3% of the box. There was never a reason to leave four
+# cores idle on a run whose entire failure mode is idle cores. (User, 2026-08-10: "Why do we want
+# less than the maximum workers? This makes no sense to me." It did not.)
+WORKERS=auto
 MATRIX_TARGET=400
 MATRIX_REF=50                     # games cap for cells ruled intractable
 # Protect the d<=5 ladder from the tractability guard. The H cells ARE the crossover: they decide
@@ -309,11 +317,11 @@ phase_matrix() {
     done_p C_matrix && return 0
     local keys; keys=$(staged_keys)
     [ -n "$keys" ] || { log "PHASE C ABORT: no staged models"; return 1; }
-    log "PHASE C: matrix over$keys -- ONE pool, $WORKERS workers, target $MATRIX_TARGET/cell, H=[$HDEPTHS], V=[$VDEPTHS], cutoff ${INTRACTABLE_SPG}s/game, never-condemn<=$NEVER_CONDEMN"
+    log "PHASE C: matrix over$keys -- ONE pool, all available cores, target $MATRIX_TARGET/cell, H=[$HDEPTHS], V=[$VDEPTHS], cutoff ${INTRACTABLE_SPG}s/game, never-condemn<=$NEVER_CONDEMN"
     MTG_SLOW_GAME_LOG="$SLOW_GAME_LOG" \
     python3 scripts/attic/valueleaf_depth_matrix.py --incremental --decks $keys \
         --hdepths $HDEPTHS --vdepths $VDEPTHS --seeds 8008 9009 10010 11011 \
-        --target "$MATRIX_TARGET" --reference-target "$MATRIX_REF" --batch 25 --workers "$WORKERS" \
+        --target "$MATRIX_TARGET" --reference-target "$MATRIX_REF" --batch 25 \
         --value-min-depth 0 --intractable-sec-per-game "$INTRACTABLE_SPG" \
         --never-condemn-at-or-below "$NEVER_CONDEMN" \
         --out "$MATRIX_TXT" >> "$VLQ/matrix.log" 2>&1
@@ -480,7 +488,7 @@ status)
     # live state the scheduler itself reads.
     if [ -s "$MATRIX_TXT.cells.json" ]; then
         python3 - "$MATRIX_TXT.cells.json" "$MATRIX_TARGET" <<'PY'
-import json, sys, collections
+import json, os, sys, collections
 cells = json.load(open(sys.argv[1])); target = int(sys.argv[2])
 done = sum(1 for c in cells if (c.get("games") or 0) >= target)
 cond = sum(1 for c in cells if c.get("intractable"))
@@ -508,8 +516,14 @@ for k, v in short.items():
     print("             %-3s short on %d seed(s): %s   ~%.1f core-h left"
           % (k, len(v), " ".join("%s:%dg" % (s, g) for s, g, _ in v), left))
 if total:
-    print("             ~%.0f core-h remaining -> ~%.1f h wall at %d workers"
-          % (total / 3600.0, total / 3600.0 / 20, 20))
+    # Cores the process may actually use, matching the engine's AffinityCpuCount() -- not a hardcoded
+    # 20, which is what made a 275-core-hour job look like it might fit an evening. This ETA is the
+    # multiplication that was skipped before the 2026-08-10 run: sizing the job first would have shown
+    # a ~14 h floor and made 23 h at 5% complete obviously a scheduling failure, not an engine one.
+    cores = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 8)
+    print("             ~%.0f core-h remaining -> ~%.1f h wall at %d cores (FULL packing; if the"
+          " heartbeat shows fewer busy, that is the problem)"
+          % (total / 3600.0, total / 3600.0 / cores, cores))
 PY
     fi
     [ -s "$MATRIX_TXT" ] && echo "             table -> $MATRIX_TXT"

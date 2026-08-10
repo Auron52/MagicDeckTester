@@ -471,7 +471,10 @@ def run_incremental(args):
               % (len(jobs), nH, len(jobs)-nH, games, args.workers, condemn), flush=True)
         print("  heartbeat -> %s (slowest 100 games, running ones included)"
               % env["MTG_BATCH_HEARTBEAT"], flush=True)
-        cmd=[MTG,"--batch",man,"--threads",str(args.workers)]
+        # --threads only when explicitly asked for; otherwise let the engine resolve to every
+        # available core (see --workers). Passing a number always would re-introduce the very
+        # hand-picked cap this run exists to avoid.
+        cmd=[MTG,"--batch",man]+(["--threads",str(args.workers)] if args.workers>0 else [])
         # stderr carries the engine's SLOW-GAME and CONDEMNED lines (each SLOW-GAME a
         # self-contained repro, tagged job=<cell>_off<offset>). Drained on its own thread so a full
         # pipe can never block the pool, and handled as it arrives rather than collected at exit --
@@ -606,10 +609,12 @@ def main():
                          "the one most likely to be discarded. The pool admits this many and refills on each "
                          "uncondemned completion, while the protected (d<=never-condemn) cells, which must run in "
                          "full regardless, keep the rest of the box busy. Default 1.")
-    ap.add_argument("--workers",type=int,default=(os.cpu_count() or 8),
-                    help="threads for the ONE pooled batch. Was once a count of concurrent single-threaded "
-                         "processes; the whole matrix is now a single `mtg --batch`, so this is that process's "
-                         "--threads. Default = CPU count.")
+    ap.add_argument("--workers",type=int,default=0,
+                    help="threads for the ONE pooled batch. DEFAULT 0 = let the engine resolve it, which "
+                         "means AffinityCpuCount() -- every core the process is actually allowed to use. "
+                         "That is strictly better than a number chosen here: os.cpu_count() over-reports "
+                         "inside a cgroup with a restricted cpuset, and any hand-picked value is one more "
+                         "way to under-fill the box. Pass a number only to deliberately run small.")
     args=ap.parse_args()
     if not args.incremental:
         sys.exit("the monolithic path is REMOVED -- incremental batching is the only route "
