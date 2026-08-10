@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <climits>
 #include <condition_variable>
+#include <deque>
 #include <iomanip>
 #include <atomic>
 #include <cstdlib>
@@ -96,6 +97,11 @@ struct CondemnRule
     // cannot answer at all until the game finishes, and a 21.4-hour game answers far too late.
     // 0 / absent => the in-flight rule is off.
     double max_game_sec        = 0.0;
+    // How many games of a single NOT-YET-JUDGED condemnable cell may be in flight at once. This is
+    // what stops LPT from putting the whole box on work that is about to be thrown away: the cell is
+    // metered in at this rate and refilled on each uncondemned completion, while protected cells use
+    // the remaining threads. 1 is deliberate -- a cell needs only a trickle to reach its verdict.
+    int    drip                = 1;
 };
 
 // Bounded LRU cache of loaded (+sidecar-attached) mulligan profiles, keyed by profile path.
@@ -215,9 +221,10 @@ public:
 
     bool on() const { return !path_.empty(); }
 
-    // Called every period with each in-flight game's (cell_id, elapsed ms). Lets the owner apply the
-    // tractability rule to games that have not FINISHED -- see the on_inflight_ note below.
-    void SetInFlightHook(std::function<void(int, long long)> f) { on_inflight_ = std::move(f); }
+    // Called once per period with EVERY in-flight game as (cell_id, elapsed ms). One call with the
+    // whole set, not one per game, because the mean rule needs to aggregate per cell before judging.
+    using InFlight = std::vector<std::pair<int, long long>>;
+    void SetInFlightHook(std::function<void(const InFlight&)> f) { on_inflight_ = std::move(f); }
 
     void SetRunning(std::size_t slot, const std::string& job, int gi, int cell_id)
     {
@@ -312,6 +319,7 @@ private:
         const std::size_t n_done = rows.size();
         const long long now = NowMs();
         std::size_t n_running = 0;
+        InFlight live;
         for (Slot& s : running_)
         {
             if (s.active.load(std::memory_order_acquire) == 0) { continue; }
@@ -324,8 +332,9 @@ private:
             // one catastrophic game looks free while the pool keeps dispatching more of it (a run
             // measured 2026-08-10 had a single game at 21.4 h). This is the only thread that sees
             // in-flight elapsed time, so it is where that gap closes.
-            if (on_inflight_) { on_inflight_(s.cell_id, elapsed); }
+            if (on_inflight_) { live.emplace_back(s.cell_id, elapsed); }
         }
+        if (on_inflight_ && !live.empty()) { on_inflight_(live); }
         std::sort(rows.begin(), rows.end(),
                   [](const Entry& a, const Entry& b) { return a.ms > b.ms; });
         if (rows.size() > keep_) { rows.resize(keep_); }
@@ -356,7 +365,7 @@ private:
     std::size_t              keep_;
     std::mutex               fin_mtx_;
     std::vector<Entry>       finished_;
-    std::function<void(int, long long)> on_inflight_;
+    std::function<void(const InFlight&)> on_inflight_;
     std::mutex               wake_mtx_;
     std::condition_variable  wake_cv_;
     bool                     stop_ = false;
@@ -494,6 +503,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         condemn.reference_games     = c.value("reference_games", 0);
         condemn.never_condemn_depth = c.value("never_condemn_depth", 0);
         condemn.max_game_sec        = c.value("max_game_sec", 0.0);
+        condemn.drip                = std::max(1, c.value("drip", 1));
         condemn.enabled             = (condemn.sec_per_game > 0.0 && condemn.reference_games > 0)
                                    || condemn.max_game_sec > 0.0;
     }
@@ -577,6 +587,85 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             return a.job < b.job;
         });
 
+    // WORK POOL. Non-condemnable games sit in the static LPT-sorted `items` and are taken in order.
+    // Games of CONDEMNABLE cells are NOT in that list: they are METERED IN through `front`, a
+    // high-priority deque holding at most `drip` games per unjudged cell, refilled one game at a
+    // time as each of that cell's games finishes UNCONDEMNED.
+    //
+    // Why not just sort them: a condemnable cell's whole point is that most of its work will be
+    // thrown away, so dispatching it by cost (LPT puts it first -- it is the most expensive thing in
+    // the queue) puts every thread on work that is about to be discarded, and the verdict cannot
+    // arrive until those games finish. Metering caps how much of the box a not-yet-judged cell can
+    // occupy, while the protected cells (H5 and friends, which must run in full regardless) keep the
+    // rest of the threads busy. A condemned cell's pending games are flushed to `front` and drained
+    // as skips, which costs nothing and reuses the same dequeue-time skip path.
+    struct Pool
+    {
+        std::mutex                        mtx;
+        std::condition_variable           cv;
+        std::deque<WorkItem>              front;      // metered condemnable work, taken FIRST
+        const std::vector<WorkItem>*      items = nullptr;
+        std::size_t                       cursor = 0;
+        std::vector<std::deque<WorkItem>> pending;    // per-cell condemnable games not yet released
+        long long                         outstanding = 0;   // condemnable games not yet finalised
+
+        bool Take(WorkItem& out)
+        {
+            std::unique_lock<std::mutex> lk(mtx);
+            for (;;)
+            {
+                if (!front.empty()) { out = front.front(); front.pop_front(); return true; }
+                if (cursor < items->size()) { out = (*items)[cursor++]; return true; }
+                if (outstanding <= 0) { return false; }
+                // Static work is exhausted but a surviving cell is still dripping: wait for its next
+                // release rather than exiting, or the run would end with games unplayed.
+                cv.wait(lk);
+            }
+        }
+
+        // One condemnable game finalised (played or skipped). Releases that cell's next game, or --
+        // if the cell has been condemned -- flushes ALL of its pending games so they drain as skips.
+        void OnFinished(int cell_id, bool cell_condemned)
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            --outstanding;
+            std::deque<WorkItem>& q = pending[static_cast<std::size_t>(cell_id)];
+            if (cell_condemned) { while (!q.empty()) { front.push_back(q.front()); q.pop_front(); } }
+            else if (!q.empty()) { front.push_back(q.front()); q.pop_front(); }
+            cv.notify_all();
+        }
+    };
+    Pool pool;
+    pool.items = &items;
+    pool.pending.resize(static_cast<std::size_t>(std::max(1, n_cells)));
+    {
+        // Partition: pull condemnable cells' games OUT of the static list into per-cell queues, then
+        // seed `front` with `drip` of each. Order within a cell is preserved (its games run in gi
+        // order), and cells enter `front` in the static list's LPT order.
+        std::vector<WorkItem> keep;
+        keep.reserve(items.size());
+        for (const WorkItem& wi : items)
+        {
+            const Job& j = jobs[wi.job];
+            const bool condemnable = condemn.enabled && j.depth > condemn.never_condemn_depth;
+            if (condemnable) { pool.pending[static_cast<std::size_t>(j.cell_id)].push_back(wi); }
+            else             { keep.push_back(wi); }
+        }
+        for (std::deque<WorkItem>& q : pool.pending) { pool.outstanding += static_cast<long long>(q.size()); }
+        for (std::deque<WorkItem>& q : pool.pending)
+        {
+            for (int d = 0; d < condemn.drip && !q.empty(); ++d)
+            { pool.front.push_back(q.front()); q.pop_front(); }
+        }
+        items.swap(keep);
+        if (pool.outstanding > 0)
+        {
+            std::cerr << "[batch] metering " << pool.outstanding << " games of condemnable cells at "
+                      << condemn.drip << " in flight per cell; " << items.size()
+                      << " protected games run alongside\n";
+        }
+    }
+
     const long long s_slow_game_ms = SlowGameMs();
 
     int requested = num_threads;
@@ -645,19 +734,50 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     // already over the per-game limit is proof enough on its own: condemn the cell so its remaining
     // games are skipped. The game in flight still runs to completion (there is no safe way to abort
     // a search mid-node) -- this stops the OTHER nineteen from being dispatched behind it.
-    if (condemn.max_game_sec > 0.0)
+    if (condemn.enabled)
     {
-        hb.SetInFlightHook([&](int cell_id, long long elapsed_ms) {
-            if (cell_id < 0 || cell_id >= n_cells) { return; }
-            if (static_cast<double>(elapsed_ms) <= condemn.max_game_sec * 1000.0) { return; }
-            if (cell_depth[cell_id] <= condemn.never_condemn_depth) { return; }
-            if (cell_condemned[cell_id].exchange(1, std::memory_order_relaxed) == 0)
-            {
+        hb.SetInFlightHook([&](const Heartbeat::InFlight& live) {
+            auto condemn_cell = [&](int cid, const char* why, double v, double limit) {
+                if (cid < 0 || cid >= n_cells) { return; }
+                if (cell_depth[cid] <= condemn.never_condemn_depth) { return; }
+                if (cell_condemned[cid].exchange(1, std::memory_order_relaxed) != 0) { return; }
                 std::fprintf(stderr,
-                    "[goldfish] CONDEMNED cell=%s on an IN-FLIGHT game at %.1f s (limit %.1f); "
-                    "remaining games of this cell are skipped\n",
-                    cell_name[cell_id].c_str(), static_cast<double>(elapsed_ms) / 1000.0,
-                    condemn.max_game_sec);
+                    "[goldfish] CONDEMNED cell=%s %s %.1f s (limit %.1f); remaining games of this "
+                    "cell are skipped\n", cell_name[cid].c_str(), why, v, limit);
+            };
+
+            // (1) Single pathological game, judged while it runs.
+            if (condemn.max_game_sec > 0.0)
+            {
+                for (const auto& [cid, ms] : live)
+                {
+                    if (static_cast<double>(ms) > condemn.max_game_sec * 1000.0)
+                    { condemn_cell(cid, "on an IN-FLIGHT game at", static_cast<double>(ms) / 1000.0,
+                                   condemn.max_game_sec); }
+                }
+            }
+
+            // (2) The MEAN rule, with in-flight games folded in. A running game's elapsed time is a
+            // LOWER BOUND on its final cost, so this mean can only UNDERSTATE the cell -- if it
+            // already exceeds the limit, the finished-only mean must exceed it too. That makes
+            // condemning here sound (no false positive is possible from the partial term) while
+            // catching the case the finished-only rule is blind to: a cell whose expensive games are
+            // all still running reads as free until the first one lands, which on this deck is hours.
+            if (condemn.sec_per_game > 0.0 && condemn.reference_games > 0)
+            {
+                std::unordered_map<int, std::pair<int, long long>> agg;   // cell -> (games, ms)
+                for (const auto& [cid, ms] : live)
+                { auto& a = agg[cid]; ++a.first; a.second += ms; }
+                for (const auto& [cid, a] : agg)
+                {
+                    if (cid < 0 || cid >= n_cells) { continue; }
+                    const int       n   = cell_games[cid].load(std::memory_order_relaxed) + a.first;
+                    const long long tot = cell_ms[cid].load(std::memory_order_relaxed) + a.second;
+                    if (n >= condemn.reference_games
+                        && static_cast<double>(tot) / n > condemn.sec_per_game * 1000.0)
+                    { condemn_cell(cid, "at a running mean (in-flight included) of",
+                                   static_cast<double>(tot) / n / 1000.0, condemn.sec_per_game); }
+                }
             }
         });
     }
@@ -681,11 +801,10 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
 
             for (;;)
             {
-                std::size_t k = cursor.fetch_add(1, std::memory_order_relaxed);
-                if (k >= items.size()) { break; }
-
-                const WorkItem& wi = items[k];
-                const Job&      job = jobs[wi.job];
+                WorkItem wi;
+                if (!pool.Take(wi)) { break; }
+                const Job& job = jobs[wi.job];
+                const bool condemnable = condemn.enabled && job.depth > condemn.never_condemn_depth;
 
                 // CONDEMNED cell: drop this game rather than run it. Checked as the item comes off
                 // the queue (not at a barrier), so a cell stops consuming cores the moment it is
@@ -694,6 +813,9 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     && cell_condemned[jobs[wi.job].cell_id].load(std::memory_order_relaxed) != 0)
                 {
                     win_turns[wi.job][wi.game] = kSkipped;
+                    // Finalise in the pool as well: a skipped game is still a condemnable game
+                    // accounted for, and if `outstanding` never drains the workers wait forever.
+                    if (condemnable) { pool.OnFinished(job.cell_id, true); }
                     if (on_job_done && remaining[wi.job].fetch_sub(1, std::memory_order_acq_rel) == 1)
                     {
                         BatchJobResult r = reduce_job(wi.job);
@@ -800,6 +922,15 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 {
                     dlog.EndGame(win_turns[wi.job][wi.game]);
                     dlog.WriteToFile(trace_dir / (job.name + "_gi" + std::to_string(global_gi) + ".json"));
+                }
+
+                // Refill the drip: this cell may send in its next game now that one has completed
+                // uncondemned. If it WAS condemned (by this very game, or by the heartbeat while it
+                // ran), OnFinished flushes the rest of the cell to be drained as skips instead.
+                if (condemnable)
+                {
+                    pool.OnFinished(job.cell_id,
+                                    cell_condemned[job.cell_id].load(std::memory_order_relaxed) != 0);
                 }
 
                 // Stream this job the instant its last game lands.
