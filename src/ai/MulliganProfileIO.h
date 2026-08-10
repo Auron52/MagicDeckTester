@@ -1,4 +1,5 @@
 #pragma once
+#include "ValueArm.h"
 #include "MulliganProfile.h"
 #include <nlohmann/json.hpp>
 #include <cstdint>
@@ -1081,9 +1082,15 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
                       profile.value_fallback_max_depth = 0; profile.value_play = ValuePlay{}; }
     };
 
-    if (const char* ov = std::getenv("MTG_VALUE_PROFILE"))
+    // Per-job override first (see ValueArm.h), then the env. Empty override = unset; a SET override
+    // of "none"/"off"/"0" explicitly means NO sidecar, which is how an H-arm job gets the pure
+    // heuristic leaf on a deck that ships a model -- sidecar PRESENCE is what activates the hybrid,
+    // so leaving the model attached and only turning MTG_VALUE_MODEL off is not the same thing.
+    const char* env_ov = std::getenv("MTG_VALUE_PROFILE");
+    const bool  arm_ov = !valuearm::t_arm.value_profile.empty();
+    if (arm_ov || env_ov)
     {
-        const std::string v = ov;
+        const std::string v = arm_ov ? valuearm::t_arm.value_profile : std::string(env_ov);
         if (v.empty() || v == "none" || v == "off" || v == "0") { return; }
         load_from(v);
         return;

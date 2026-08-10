@@ -1,3 +1,4 @@
+#include "ValueArm.h"
 #include "../core/EnvFlags.h"
 #include "TurnSolver.h"
 #include "ManaPayment.h"
@@ -13518,8 +13519,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // See learned-d0-policy.md.
     const bool vl_active = (UseValueModel() && !g_force_heuristic_leaf
                             && state.m_value_model && !state.m_value_model->empty());
-    static const double s_vl_alpha_mult = []{ const char* e = std::getenv("MTG_VALUE_STARTGATE_ALPHA");
-                                              return (e && *e) ? std::atof(e) : 8.0; }();
+    static const double s_vl_alpha_env = []{ const char* e = std::getenv("MTG_VALUE_STARTGATE_ALPHA");
+                                             return (e && *e) ? std::atof(e) : 8.0; }();
+    // Per-job override (see ValueArm.h); <=0 = unset => the env static (byte-identical off-batch).
+    const double s_vl_alpha_mult = (valuearm::t_arm.startgate_alpha > 0.0)
+                                 ? valuearm::t_arm.startgate_alpha : s_vl_alpha_env;
     const double gate_alpha = (vl_active && s_vl_alpha_mult > 1.0)
                             ? kStartGateAlpha * s_vl_alpha_mult : kStartGateAlpha;
 
@@ -13550,7 +13554,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     //     cell (unbounded, so each config reaches its nominal depth).
     // Under a bounded budget it is a real (and favourable) change, not a free one: that arm needs its
     // own A/B, exactly like MTG_FS_NOWIN_CACHE on the play path.
-    static const bool s_ladder_value_leaf = EnvOn("MTG_LADDER_VALUE_LEAF");
+    static const bool s_ladder_env = EnvOn("MTG_LADDER_VALUE_LEAF");
+    // Per-job override (see ValueArm.h); -1 = unset => the env static (byte-identical off-batch).
+    const bool s_ladder_value_leaf = (valuearm::t_arm.ladder_value_leaf >= 0)
+                                   ? (valuearm::t_arm.ladder_value_leaf != 0) : s_ladder_env;
 
     for (int pass_depth = (depth >= 1 ? 1 : depth); pass_depth <= depth; ++pass_depth)
     {
