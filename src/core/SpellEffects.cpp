@@ -1090,6 +1090,52 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         if (tapstats::Enabled() && bailed) { tapstats::g_flow_bail.fetch_add(1, std::memory_order_relaxed); }
     }
 
+    // Colour-branch collapse. A multi-colour source (Birds of Paradise: W/U/B/R/G) spawns one recursion
+    // per producible colour. But the `cost` is INVARIANT for the whole backtrack, so a produced colour
+    // the cost never demands as a coloured pip can only ever be spent as GENERIC -- and one generic
+    // mana is interchangeable with any other for every downstream CanPay of this fixed cost. Tapping
+    // Birds for W vs U vs B vs R therefore explores identical subtrees (same success/failure at every
+    // node, same set of sources left tapped -- colour choice is not stored on the permanent, and the
+    // drip/self-damage side effects are colour-independent); only the floating pool's colour
+    // composition differs -- and the first solution found is unchanged (the representative is the FIRST
+    // generic-only colour in produces order, and an interchangeable colour's subtree is isomorphic:
+    // identical success/failure at every node and the same set of sources left tapped, so the total
+    // mana produced is identical, only recoloured). We fold all generic-only colours of each source
+    // into a single representative branch and skip the rest -- cutting the branching factor on
+    // Birds+flexible-land boards (the gen hotspot: 5^k tap orderings collapse toward the colours the
+    // cost actually needs). `special_mask` marks the colours the cost DOES demand (a mono pip, a {C}
+    // pip, or either half of a hybrid pip); those keep their own branch. Colorless is always special (a
+    // {C}-only source produces a single colour anyway, so nothing to collapse -- and it keeps {C}-pip
+    // payment exact).
+    //
+    // GUARD (out_leftover == nullptr). The recoloured pool is observable only through the surfaced-pool
+    // outputs, so collapse is byte-identical exactly when no caller inspects a produced colour:
+    //   * out_leftover (ManaPayment): the over-produced remainder is FLOATED and later drained
+    //     colour-sensitively (a subsequent cast's coloured pip), so a recolour could diverge -- UNSAFE.
+    //     (This path also gets ~0 benefit: its per-cast costs rarely leave Birds' colours generic-only.)
+    //   * out_full_pool (TurnSolver batch prepay): the caller reads ONLY produced.wild (== 0 check;
+    //     collapse never adds wild) and produced.Total() (unchanged by recolour) -- it rebuilds the
+    //     floating pool from `combined`'s pinned pips + wild=Total-pinned and DISCARDS produced's
+    //     colours entirely (TurnSolver.cpp ~6221-6232). SAFE, and this path is the whole win.
+    // So collapse is enabled whenever out_leftover is null (covers both-null and full-pool-only); any
+    // future out_full_pool caller that reads a per-colour count must keep this contract.
+    const bool collapse_colors = (out_leftover == nullptr);
+    unsigned special_mask = 0;
+    if (collapse_colors)
+    {
+        if (cost.white > 0) { special_mask |= 1u << static_cast<int>(Color::White); }
+        if (cost.blue  > 0) { special_mask |= 1u << static_cast<int>(Color::Blue); }
+        if (cost.black > 0) { special_mask |= 1u << static_cast<int>(Color::Black); }
+        if (cost.red   > 0) { special_mask |= 1u << static_cast<int>(Color::Red); }
+        if (cost.green > 0) { special_mask |= 1u << static_cast<int>(Color::Green); }
+        special_mask |= 1u << static_cast<int>(Color::Colorless);   // {C} pips need colourless mana
+        for (int h = 0; h < cost.hybrid_count; ++h)
+        {
+            special_mask |= 1u << (cost.hybrid_pair[h] >> 4);
+            special_mask |= 1u << (cost.hybrid_pair[h] & 0xF);
+        }
+    }
+
     for (const std::pair<int, const CardDefinition*>& cand : cands)
     {
         const int i = cand.first;
@@ -1159,7 +1205,12 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             { state.players[active].life -= def->params.tap_self_damage; }
             // Deathrite Shaman: the tap exiles a graveyard land (eligibility guaranteed one).
             // Remember which slot so a failed branch re-inserts it exactly (byte-identical undo).
-            int gy_exiled_at = -1; Card gy_exiled_card;
+            // gy_exiled_card is lazy (std::optional): a plain `Card` here default-constructs an
+            // InternedName on EVERY activate() -- calling InternedName::EmptyStr() 39.8M x in a
+            // token-heavy rollout (~1.9% self-cost in callgrind) -- even though it is only ever used
+            // on the Deathrite (gy_land_exile_mana) path below. optional constructs no Card until the
+            // exile actually happens, so the common path pays nothing. Byte-identical.
+            int gy_exiled_at = -1; std::optional<Card> gy_exiled_card;
             if (def->params.gy_land_exile_mana)
             {
                 std::vector<Card>& gy = state.players[active].graveyard;
@@ -1195,7 +1246,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             if (gy_exiled_at >= 0)
             {
                 std::vector<Card>& gy = state.players[active].graveyard;
-                gy.insert(gy.begin() + static_cast<std::ptrdiff_t>(gy_exiled_at), gy_exiled_card);
+                gy.insert(gy.begin() + static_cast<std::ptrdiff_t>(gy_exiled_at), *gy_exiled_card);
             }
             state.players[active].life = life_snap;
             state.players[1 - active].life      = opp_life_snap;
@@ -1273,9 +1324,17 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 // the coloured branches (matches the TapDripLandsIfUseful sweep). Inert for non-drip lands.
                 if (def->params.tap_opponent_lifegain > 0 && !ResolveProvider(state).OpponentLifegainUseful(state, active))
                 { ManaPool f = floating; f.Add(Color::Colorless, amt); if (activate(f, /*drip_ok=*/false, storage_burn)) { return true; } }
+                bool generic_rep_done = false;   // collapse: explore one generic-only colour, skip the rest
                 for (Color c : produces)
-                { CcoAuditTap(*def, c, for_creature);   // audit: `produces` is cco-stripped above
-                  ManaPool f = floating; f.Add(c, amt); if (activate(f, /*drip_ok=*/true, storage_burn)) { return true; } }
+                {
+                    if (collapse_colors && !(special_mask & (1u << static_cast<int>(c))))
+                    {
+                        if (generic_rep_done) { continue; }   // interchangeable generic mana already tried
+                        generic_rep_done = true;
+                    }
+                    CcoAuditTap(*def, c, for_creature);   // audit: `produces` is cco-stripped above
+                    ManaPool f = floating; f.Add(c, amt); if (activate(f, /*drip_ok=*/true, storage_burn)) { return true; }
+                }
             }
             // Three Tree City scaled mode: "{feeder},{T}: add N of a chosen colour" (N = creatures you
             // control). Offered IN ADDITION to the basic {C} tap above -- reached only if the basic tap

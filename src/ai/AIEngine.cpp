@@ -1,3 +1,4 @@
+#include "ValueArm.h"
 #include "../core/EnvFlags.h"
 #include "AIEngine.h"
 #include "ManaPayment.h"
@@ -1862,8 +1863,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // is weak everywhere below convergence, so default to fixing it whenever affordable).
                     // Inert unless a value model is attached (UseValueModel + <deck>.value.json).
                     // See TurnSolver / learned-d0-policy.md.
-                    static const int s_vmd_override = []{ const char* e = std::getenv("MTG_VALUE_MIN_DEPTH");
-                                                          return (e && *e) ? std::atoi(e) : -1; }();
+                    static const int s_vmd_env = []{ const char* e = std::getenv("MTG_VALUE_MIN_DEPTH");
+                                                     return (e && *e) ? std::atoi(e) : -1; }();
+                    // Per-job override (see ValueArm.h) so a pooled batch can carry both arms; -2 =
+                    // unset => the env static, i.e. byte-identical off the batch path.
+                    const int s_vmd_override = (valuearm::t_arm.value_min_depth >= -1)
+                                             ? valuearm::t_arm.value_min_depth : s_vmd_env;
                     const int escalate_below =
                         (s_vmd_override >= 0)             ? s_vmd_override
                       : (m_profile.value_trust_depth > 0) ? m_profile.value_trust_depth

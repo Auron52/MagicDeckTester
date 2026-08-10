@@ -1,5 +1,6 @@
 #include <array>
 #include <map>
+#include "ValueArm.h"
 #include "../core/EnvFlags.h"
 #include <cstdlib>
 #include <cctype>
@@ -147,6 +148,10 @@ bool UseValueModel()
     // learned-d0-policy.md). It only engages when a deck ships <deck>.value.json (else m_value_model is
     // empty -> plain search), so decks without a sidecar (e.g. Hinata) are unaffected. Override OFF with
     // MTG_VALUE_MODEL=0/off/no/none/false for A/B against the pure heuristic leaf.
+    // Per-job override first (see ValueArm.h): a pooled batch carries H and V jobs in ONE process,
+    // so the arm cannot come from a process-wide static. Unset (-1) => the env default below, which
+    // keeps every non-batch path byte-identical.
+    if (valuearm::t_arm.value_model >= 0) { return valuearm::t_arm.value_model != 0; }
     static const bool v = []{
         const char* e = std::getenv("MTG_VALUE_MODEL");
         if (e && *e)

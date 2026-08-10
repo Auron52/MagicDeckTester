@@ -1,3 +1,4 @@
+#include "ValueArm.h"
 #include "../core/EnvFlags.h"
 #include "TurnSolver.h"
 #include "ManaPayment.h"
@@ -380,15 +381,19 @@ static int CountLands(const GameState& state)
 // Colors at least one untapped source can produce (W,U,B,R,G). State-only -- it does not depend
 // on which subset is being tested -- so callers compute it ONCE before the subset-enumeration
 // loop and pass the result to SubsetPayable, instead of re-scanning the battlefield per subset.
-// Repairs the state-only assumption below for a `domain_mana` scaling source -- STAGE 1 of the fix,
-// and DEFAULT OFF, so the tree is byte-identical until the rest of it lands. On its own it changes
-// nothing on the measured reproducer: the flat-pool `mana_ok` test rejects the subset before this
-// gate is ever consulted, and that pool is state-only for the same reason (see
-// docs/design/scaling-source-widening.md). Turning it on alone is therefore not a fix, only a
-// loosened gate -- which is exactly why it does not ship on.
+// Repairs the state-only assumption below for a `domain_mana` scaling source (Faeburrow Elder /
+// Bloom Tender): a coloured permanent cast EARLIER IN THE SAME PLAN widens what the source taps for,
+// so its output is a function of the SUBSET, not of the board.
+//
+// ONE flag for the whole fix, because its two halves are inert apart and only work together:
+//   * the COLOUR gate here (ComputeAvailableColors -> SubsetPayable), and
+//   * the POOL credit in EnumeratePlans (see ScalingWidenScan), which is what actually rescues the
+//     subset -- the flat-pool `mana_ok` test rejects it before the colour gate is ever consulted.
+// This was `MTG_DOMAIN_WIDEN_GATE` while only the first half existed; a gate-only flag could never
+// be turned on to any effect. See docs/design/scaling-source-widening.md.
 // Namespace scope: read once per enumeration, not per node.
-static const bool g_domain_widen_gate = EnvOn("MTG_DOMAIN_WIDEN_GATE");
-static bool DomainWidenGateEnabled() { return g_domain_widen_gate; }
+static const bool g_domain_widen = EnvOn("MTG_DOMAIN_WIDEN", true);
+static bool DomainWidenEnabled() { return g_domain_widen; }
 
 // Same-turn HASTED mana dork credit (EnumeratePlans) + the execution hoist that realises it.
 // Default ON; MTG_NO_HASTE_DORK_CREDIT=1 restores the un-credited, trailing-equip behaviour for the
@@ -506,7 +511,7 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
     //
     // Hand cards are NAME-ONLY placeholders with empty masks, so the colours must be read from the
     // definition, never from the Card itself (a raw hand HasColor() is always false).
-    if (scaling_source && DomainWidenGateEnabled())
+    if (scaling_source && DomainWidenEnabled())
     {
         for (const Card& hc : state.players[active].hand)
         {
@@ -1265,6 +1270,76 @@ static void HasteUnlockedManaOf(const GameState& state, int host_id, ManaPool& o
     if (add.Total() <= 0) { return; }
     out.AddPool(add);
     if (!d->params.creature_mana_only) { out_nc.AddPool(add); }
+}
+
+// ---- SCALING mana source widening (domain_mana: Faeburrow Elder / Bloom Tender) ----------------
+// A scaling source taps for "one mana of each color among permanents you control", so a coloured
+// PERMANENT cast earlier in the same plan adds a colour to every one of them. The pool the
+// enumerator tests against is built once from the board (`AvailableManaPool`), which credits each
+// source with its CURRENT domain -- so the subset {widener, payoff} is rejected for needing a colour
+// nothing produces, and the line is never offered (test/scenarios/fivecolour_domain_widen.json).
+//
+// This is the state-only half, computed ONCE per enumeration: the colours already present, and how
+// many live scaling sources would gain from a new one. `live` counts only sources whose mana the
+// pool ALREADY holds (untapped, tappable now, fuel live) -- the credit is the DELTA they gain, not
+// their whole output, so a source the pool never counted must not be counted here either.
+// live == 0 -> the per-subset path never runs -> every deck without one is byte-identical.
+static void ScalingWidenScan(const GameState& state, int& out_domain_mask, int& out_live)
+{
+    out_domain_mask = 0;
+    out_live        = 0;
+    const int active = state.active_player_index;
+    for (Color c : DomainColors(state, active)) { out_domain_mask |= (1 << static_cast<int>(c)); }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.domain_mana) { continue; }
+        if (!CanTapNow(p, state.battlefield)) { continue; }
+        if (!GraveyardFuelLive(state, active, *d)) { continue; }
+        ++out_live;
+    }
+}
+
+// Sum one cost into another, CARRYING hybrid pips. A hybrid pip is baked into its first colour
+// (Card.h), and the flat ints are what a plain field-by-field sum copies -- so summing {B/G} that
+// way demands BLACK, and `CanPay` (which expands assignments) never gets the chance to pay it green.
+// That is precisely the widener case: Deathrite Shaman off a green-only board. Pairs are carried
+// while the fixed metadata array has room; past it the pip stays baked, which only ever DEMANDS a
+// specific colour -- conservative, never permissive.
+static void AddCostCarryingHybrids(ManaCost& dst, const ManaCost& src)
+{
+    dst.white += src.white; dst.blue      += src.blue;  dst.black   += src.black;
+    dst.red   += src.red;   dst.green     += src.green; dst.generic += src.generic;
+    dst.colorless += src.colorless;
+    for (int i = 0; i < src.hybrid_count && dst.hybrid_count < 4; ++i)
+    { dst.hybrid_pair[dst.hybrid_count++] = src.hybrid_pair[i]; }
+}
+
+// The colours THIS subset adds to the domain, and the cost of the casts that add them. Only a
+// permanent counts (an instant/sorcery never enters play), and only a colour the domain is missing.
+// Hand cards are name-only placeholders with empty masks, so colours are read from the DEFINITION --
+// a raw hand `HasColor()` is always false (see zone-card-placeholder-masks).
+static int SubsetWidensDomainBy(const std::vector<Action>& cands, const std::vector<int>& sel,
+                                int domain_mask, ManaCost& out_widener_costs)
+{
+    int add_mask = 0;
+    for (int j : sel)
+    {
+        const Action& c = cands[j];
+        if (c.kind != Action::Kind::CastFromHand || !c.def) { continue; }
+        if (c.def->card.IsInstant() || c.def->card.IsSorcery()) { continue; }
+        int mine = 0;
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            if (c.def->card.HasColor(static_cast<Color>(ci)) && !(domain_mask & (1 << ci)))
+            { mine |= (1 << ci); }
+        }
+        if (!mine) { continue; }
+        add_mask |= mine;
+        AddCostCarryingHybrids(out_widener_costs, c.cost);
+    }
+    return add_mask;
 }
 
 // Fire every planned Equip that UNLOCKS MANA -- a haste-granting Equipment onto a mana dork that
@@ -9713,6 +9788,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             any_haste_dork     = true;
         }
     }
+    // Same-turn SCALING SOURCE widening scan (EnumeratePlans ONLY -- see the credit below).
+    // State-only, so it is built ONCE here; the per-subset path is an int test plus a walk of the
+    // selection. Zero live scaling sources -> every other deck/state is byte-identical.
+    int domain_mask = 0, live_scaling = 0;
+    if (DomainWidenEnabled()) { ScalingWidenScan(state, domain_mask, live_scaling); }
     // Same-turn affinity scan (mirrors Solve). Inert without an affinity card (Thrumming Hivepool).
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
@@ -10054,6 +10134,43 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
             if (sel_dork && pool.CanPay(enable_costs))
             { eff.AddPool(dork_prod); eff_nc.AddPool(dork_prod_nc); credited = true; }
+        }
+        // Same-turn SCALING SOURCE widening credit. A coloured permanent cast by THIS subset adds its
+        // colours to "each color among permanents you control", so every live scaling source taps for
+        // one MORE mana of each newly-added colour. Conservative in exactly the way the rock rule is
+        // ("a rock never funds its own cost"): the WIDENERS must be payable from the un-widened pool,
+        // so the mana the widening unlocks can never pay for the widening. Their own costs are
+        // already in `combined`, so the credit stays net.
+        //
+        // EnumeratePlans only, never Solve: an optimistic affordability hint is sound only where a
+        // rollout validates the line, and Solve's d0 greedy has none (the Medallion precedent).
+        // The executor realises it by casting in ascending-cost order, which puts a cheap widener
+        // before the payoff it unlocks (verified on the fixture).
+        if (live_scaling > 0)
+        {
+            ManaCost widener_costs;
+            const int add_mask = SubsetWidensDomainBy(cands, sel, domain_mask, widener_costs);
+            if (add_mask != 0 && pool.CanPay(widener_costs))
+            {
+                ManaPool widen;
+                for (int ci = 0; ci < 5; ++ci)
+                {
+                    if (!(add_mask & (1 << ci))) { continue; }
+                    switch (static_cast<Color>(ci))
+                    {
+                        case Color::White: widen.white += live_scaling; break;
+                        case Color::Blue:  widen.blue  += live_scaling; break;
+                        case Color::Black: widen.black += live_scaling; break;
+                        case Color::Red:   widen.red   += live_scaling; break;
+                        case Color::Green: widen.green += live_scaling; break;
+                        default: break;
+                    }
+                }
+                // A scaling source is a creature, but its mana is unrestricted (`creature_mana_only`
+                // is the Unclaimed Territory restriction, which no domain_mana card carries), so the
+                // credit belongs to BOTH pools -- same split HasteUnlockedManaOf makes.
+                eff.AddPool(widen); eff_nc.AddPool(widen); credited = true;
+            }
         }
         // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
         if (any_affinity)
@@ -13518,8 +13635,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // See learned-d0-policy.md.
     const bool vl_active = (UseValueModel() && !g_force_heuristic_leaf
                             && state.m_value_model && !state.m_value_model->empty());
-    static const double s_vl_alpha_mult = []{ const char* e = std::getenv("MTG_VALUE_STARTGATE_ALPHA");
-                                              return (e && *e) ? std::atof(e) : 8.0; }();
+    static const double s_vl_alpha_env = []{ const char* e = std::getenv("MTG_VALUE_STARTGATE_ALPHA");
+                                             return (e && *e) ? std::atof(e) : 8.0; }();
+    // Per-job override (see ValueArm.h); <=0 = unset => the env static (byte-identical off-batch).
+    const double s_vl_alpha_mult = (valuearm::t_arm.startgate_alpha > 0.0)
+                                 ? valuearm::t_arm.startgate_alpha : s_vl_alpha_env;
     const double gate_alpha = (vl_active && s_vl_alpha_mult > 1.0)
                             ? kStartGateAlpha * s_vl_alpha_mult : kStartGateAlpha;
 
@@ -13550,7 +13670,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     //     cell (unbounded, so each config reaches its nominal depth).
     // Under a bounded budget it is a real (and favourable) change, not a free one: that arm needs its
     // own A/B, exactly like MTG_FS_NOWIN_CACHE on the play path.
-    static const bool s_ladder_value_leaf = EnvOn("MTG_LADDER_VALUE_LEAF");
+    static const bool s_ladder_env = EnvOn("MTG_LADDER_VALUE_LEAF");
+    // Per-job override (see ValueArm.h); -1 = unset => the env static (byte-identical off-batch).
+    const bool s_ladder_value_leaf = (valuearm::t_arm.ladder_value_leaf >= 0)
+                                   ? (valuearm::t_arm.ladder_value_leaf != 0) : s_ladder_env;
 
     for (int pass_depth = (depth >= 1 ? 1 : depth); pass_depth <= depth; ++pass_depth)
     {

@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -6191,7 +6192,13 @@ using TapBacktrackMemo =
 // single-threaded and compare. Prints one line at exit.
 namespace tapstats
 {
-    inline bool Enabled() { static const bool v = EnvOn("MTG_TAP_STATS"); return v; }
+    // Namespace-scope (not function-local): a function-local `static const bool` forces a
+    // thread-safe init-guard check on EVERY call, which the callgrind of a token-heavy rollout
+    // showed as ~0.9% self-cost (called once per backtracker node, 39.8M x). An inline variable
+    // is initialized once at static-init and read with no guard -- byte-identical value, zero
+    // per-node overhead. Read only at runtime during payments, so no static-init-order hazard.
+    inline const bool g_enabled = EnvOn("MTG_TAP_STATS");
+    inline bool Enabled() { return g_enabled; }
     inline std::atomic<std::uint64_t> g_backtrack_entries{0};
     inline std::atomic<std::uint64_t> g_nodes{0};          // ALL recursion nodes (top-level + deep)
     inline std::atomic<std::uint64_t> g_top_memo_off{0};   // top-level calls with n>64 (fail-memo disabled)

@@ -11,21 +11,34 @@ bash scripts/valueleaf.sh run    decks/<Deck>     # build (start / resume)
 bash scripts/valueleaf.sh status decks/<Deck>     # progress, touches nothing
 ```
 
-That is the entire interface, and there are no other knobs you need. **Do not hand-roll the phases
-and do not add settings** — if something the pipeline needs is missing, fix the pipeline, not your
-invocation.
+**The deck is the only input.** There are no other knobs, and this is now ENFORCED rather than
+advised: the 16 environment settings that used to exist (`HDEPTHS`, `MATRIX_TARGET`, `WORKERS`,
+`SLOW_GAME_MS`, `VLQ`, `AB_GAMES`, …) are retired, and the script **exits 2** naming any of them that
+is set. A retired knob is refused rather than ignored on purpose — silently dropping `HDEPTHS=1 2 3`
+would hand back a table that looks complete and measures something else.
+
+`NEVER_CONDEMN` is the ONE surviving setting (user, 2026-08-10): default 5 — never condemn at or
+below the shipped play depth — raisable when a deeper ladder is being measured, and clamped so it
+can never go below 5.
+
+**Do not hand-roll the phases and do not re-add settings** — if something the pipeline needs is
+missing, fix the pipeline, not your invocation.
 
 The settings that matter are FIXED inside the script, because each has already gone wrong once:
 
 | fixed setting | why it is not a knob |
 |---|---|
-| pooled batching, always | a per-item loop pays a load-imbalance tail PER ITEM; one-batch-per-cell scheduling starved a live run to 3 of 24 cores for fifteen hours. Phase C now hands every chunk to ONE `mtg --batch` per (deck, arm), in two waves (floor, then refine, so condemnation still has its barrier), so the whole wave has one tail and it is one GAME long |
+| pooled batching, always | a per-item loop pays a load-imbalance tail PER ITEM, and every barrier between items idles the box. Two designs have already failed here: a per-cell loop (3 of 24 cores for fifteen hours) and then one batch per (deck, arm) in two waves (**3 of 20 cores for 23 hours**, 2026-08-10 — the waves were the barrier and the arms never shared threads). Phase C is now the WHOLE matrix -- every chunk of every cell of both arms -- in ONE `mtg --batch`, expensive cells first, condemnable cells metered in rather than sorted to the front. No waves, no per-arm split, one tail for the entire matrix |
+| the H ladder is 1-6, V is 1-8 | the crossover CLAMPS to the deepest measured hdepth, so a truncated ladder yields `6->5 7->5 8->5` entries that are the clamp, NOT a measurement, and cannot justify d6 play. H stops at 6 because H7 is impractical -- and on FiveColour H6 came in ~11x CHEAPER than H5, a non-monotonic ladder that is worth measuring rather than guessing |
 | no condemnation at d<=5 | the H cells ARE the crossover; condemning one leaves a HOLE in the answer rather than saving cost, and the guard is wall-clock based so which cells it hits is partly luck |
 | profile always attached | measuring profile-less describes a deck we do not ship — it invalidated every table in this repo once |
 | staged model before the matrix | the H-cell ladder is guarded on the sidecar EXISTING; missing it does not error, it silently runs every H cell on the slow path |
-| slow games recorded | an expensive deck's cost is concentrated in a few pathological games; the repro list is the input to any optimization pass |
+| slow games + heartbeat, on by DEFAULT | an expensive deck's cost is concentrated in a few pathological games (75% of a FiveColour arm sits in 14% of its games), and the repro list is the input to any optimization pass. Both instruments now default ON in `mtg --batch` itself, so they cannot be forgotten by a caller: a `[batch] heartbeat` line every 10 min leads with **workers busy**, and any game over 30 s prints a one-line repro. Utilisation-first is deliberate -- the 23-hour run above was misdiagnosed twice (as an engine regression, then as condemnation) when the actual fact was 3 of 20 cores, which this line states outright |
 
-The monolithic matrix path is removed and `--never-condemn-at-or-below < 5` is refused outright.
+The monolithic matrix path is DELETED (not merely disabled), `--no-incremental` exits with an error,
+and `--never-condemn-at-or-below < 5` is refused outright. The per-(seed,depth) driver that shared the
+same single-invocation helper (`valueleaf_incremental.py`) is deleted too — dead code that still reads
+as a working alternative is how a superseded design gets re-adopted.
 
 The run must sit on ONE commit, because these artifacts are engine-state fingerprints: a play change
 midway produces a table whose rows disagree with each other. The driver records `HEAD:src` at start
@@ -96,13 +109,14 @@ run's rows, table or markers.
 | A rows | dump labelled positions at SHIPPED play (K=3 searched labels) | yes — one pooled batch |
 | A split | bucket by seed, dedupe on `(seed, turn)`, sort | no |
 | B train | GBDT → `logs/eval/<stem>.value.STAGED.json` | no |
-| C matrix | H×V depth matrix, pooled `--batch` per arm | yes — one pool per arm per wave |
+| C matrix | H×V depth matrix, the whole thing in ONE pool | yes — one pooled batch, one tail |
 | D metadata | derive crossover + `value_trust_depth` into the staged sidecar | no |
 | E measure | staged-vs-live A/B + play sweep | yes — one pooled batch |
 
 Every batch is a barrier that returns only when its slowest game finishes, so what matters is **how
-many times you pay that tail**, not how big each batch is. Three is the floor — the phase boundaries
-are real dependencies (the matrix measures the model; the A/B measures the table).
+many times you pay that tail**, not how big each batch is. Three is the floor and phase C now sits at
+it — the phase boundaries are real dependencies (the matrix measures the model; the A/B measures the
+table), and nothing inside a phase is allowed to add a barrier of its own.
 
 **Nothing is adopted.** Every artifact lands in `logs/eval/<stem>.value.STAGED.json`; live sidecars
 are never written. Phase E produces the numbers an adoption decision needs — you make the call.

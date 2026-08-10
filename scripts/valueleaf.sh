@@ -5,8 +5,9 @@
 #   bash scripts/valueleaf.sh status decks/<Deck>     # progress, touches nothing
 #   bash scripts/valueleaf.sh run                     # the whole fleet
 #
-# There are no other knobs you need. The settings that matter are FIXED here rather than left to a
-# caller to remember, because every one of them has already gone wrong once:
+# THE INTERFACE IS THE DECK. There are no knobs -- every setting that matters is FIXED here rather
+# than left to a caller to remember, and a retired one is REJECTED rather than ignored. Each has
+# already gone wrong once:
 #
 #   * INCREMENTAL BATCHING, ALWAYS. Every phase is one pooled queue, resumable, with concurrent
 #     batches per cell. The monolithic path is removed. A per-item loop pays a load-imbalance tail
@@ -19,8 +20,11 @@
 #     invalidated every value-leaf table in this repo once already.
 #   * THE STAGED MODEL EXISTS BEFORE THE MATRIX. The H-cell ladder is guarded on the sidecar
 #     existing, so a missing one does not error -- it silently runs every H cell on the slow path.
-#   * SLOW GAMES ARE RECORDED. Anything over SLOW_GAME_MS lands in <queue>/slow_games.log with a
-#     self-contained repro, tagged by cell.
+#   * SLOW GAMES AND UTILISATION ARE REPORTED, by the engine itself. `mtg --batch` defaults both ON:
+#     any game over 30 s prints a self-contained repro (tagged by cell, mirrored to
+#     <queue>/slow_games.log) and a `[batch] heartbeat` line every 10 min leads with workers busy.
+#     They are not passed from here any more -- doing so is how they came to be OFF for every other
+#     caller, which is why a 23-hour run at 3 of 20 cores produced no signal.
 #
 # NOTHING IS ADOPTED: artifacts land in logs/eval/<stem>.value.STAGED.json. Phase E produces the
 # numbers an adoption decision needs; the decision is yours.
@@ -34,22 +38,64 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 . test/lib/harness.sh
 
-VLQ_EXPLICIT=${VLQ:+1}    # remember whether the caller chose one, so single-deck mode can scope it
-VLQ=${VLQ:-logs/vlq}
+# ---------------------------------------------------------------- THE INTERFACE IS THE DECK ONLY
+#
+# `bash scripts/valueleaf.sh run decks/<Deck>` and nothing else. Every value below is FIXED, not a
+# default, because each knob that existed here was a way to get a wrong answer that still looked
+# like an answer: HDEPTHS silently truncated the ladder the crossover clamps to, MATRIX_TARGET
+# resized the measurement, SLOW_GAME_MS could switch off the only instrument that names a
+# pathological game, VLQ could point a single-deck run at the shared fleet directory (which is
+# exactly how one run's slow games ended up in another's log).
+#
+# The ONE setting is NEVER_CONDEMN, kept deliberately (user, 2026-08-10): the d<=5 floor is the
+# default we want, and raising it is a legitimate choice when a deeper ladder is being measured.
+#
+# A retired knob is REJECTED, not ignored -- silently dropping `HDEPTHS=1 2 3` would hand back a
+# table that looks complete and is not. See RETIRED_KNOBS below.
+RETIRED_KNOBS="VLQ WORKERS MATRIX_TARGET MATRIX_REF SLOW_GAME_MS SLOW_GAME_LOG VDEPTHS HDEPTHS
+               INTRACTABLE_SPG AB_GAMES AB_SEEDS PLAY_GAMES PLAY_SEEDS ROW_K ROW_GAMES DECK_DIR"
+_set_knobs=""
+for _k in $RETIRED_KNOBS; do
+    if [ -n "${!_k+x}" ]; then _set_knobs="$_set_knobs $_k"; fi
+done
+if [ -n "$_set_knobs" ]; then
+    echo "REFUSING TO RUN: these settings were retired and are no longer honoured:$_set_knobs" >&2
+    echo "  The interface is the deck: $0 run decks/<Deck>" >&2
+    echo "  Every phase setting is fixed in the script on purpose -- a knob here produces a table" >&2
+    echo "  that looks complete but measures something else. NEVER_CONDEMN (floor 5) is the one" >&2
+    echo "  setting that remains. See .claude/skills/value-leaf.md." >&2
+    exit 2
+fi
+
+VLQ=logs/vlq              # fleet default; single-deck mode scopes this to logs/vlq_<key> below
 DONE=$VLQ/done
 ROWDIR=$VLQ/rows          # queue-owned: logs/eval collides case-insensitively on this filesystem
                           # (Auras_value.rows resolves to the pre-merge auras_value.rows)
 mkdir -p "$DONE" "$ROWDIR" logs/eval
 
-WORKERS=${WORKERS:-20}            # matrix: ~1 GB/process on a 47 GB box
-MATRIX_TARGET=${MATRIX_TARGET:-400}
-MATRIX_REF=${MATRIX_REF:-50}      # games cap for cells ruled intractable
+# NO worker count is passed. The engine resolves it to AffinityCpuCount() -- every core the process
+# is actually allowed to use -- which beats any number chosen here: it is affinity-aware (nproc and
+# os.cpu_count() both over-report inside a cgroup with a restricted cpuset), and it cannot drift out
+# of date with the box.
+#
+# The old value was 20 with the note "~1 GB/process on a 47 GB box". That reasoning expired when the
+# matrix stopped spawning one PROCESS per cell: it is now ONE process whose workers SHARE each
+# mulligan profile through a shared_ptr, and measured peak RSS at 24 threads on the heaviest keep
+# model in the repo (Goblins) is 1,481 MB -- 3% of the box. There was never a reason to leave four
+# cores idle on a run whose entire failure mode is idle cores. (User, 2026-08-10: "Why do we want
+# less than the maximum workers? This makes no sense to me." It did not.)
+WORKERS=auto
+MATRIX_TARGET=400
+MATRIX_REF=50                     # games cap for cells ruled intractable
 # Protect the d<=5 ladder from the tractability guard. The H cells ARE the crossover: they decide
 # which evaluator escalation uses at each rung it climbs to, so condemning one leaves a HOLE in the
 # answer rather than saving cost. FiveColour 2026-08-08 is the worked example -- 8 capped cells, all
 # of them H (H4 on every seed, H5 on three, one with zero games), while all 20 V cells finished at
 # 400. That makes crossover entries for c=4..8 unfounded for a deck that ships at d5. The guard is
 # also wall-clock based, so it can fire purely because the box was busy.
+# THE ONE SETTING (user, 2026-08-10). Default 5 -- never condemn at or below the shipped play
+# depth -- and raisable when a deeper ladder is being measured. It cannot go BELOW 5 (clamped
+# just below), because that is the case that silently holes the answer rather than saving cost.
 NEVER_CONDEMN=${NEVER_CONDEMN:-5}
 # Clamped, not merely defaulted. The d<=5 H cells ARE the crossover -- they decide which evaluator
 # escalation uses at each rung it climbs to -- so condemning one leaves a HOLE in the answer rather
@@ -59,21 +105,30 @@ if [ "$NEVER_CONDEMN" -lt 5 ] 2>/dev/null; then
     echo "NEVER_CONDEMN=$NEVER_CONDEMN is below the floor; forcing 5 (see docs/design/value-leaf-regeneration-queue.md)"
     NEVER_CONDEMN=5
 fi
-# Report any game slower than this (ms) with a self-contained repro, tagged by cell. Off-by-default
-# in the engine; here it is ON, because an expensive deck's cost is concentrated in a few
-# pathological games and knowing WHICH ones is the whole input to an optimization pass. 0 disables.
-SLOW_GAME_MS=${SLOW_GAME_MS:-30000}
-VDEPTHS=${VDEPTHS:-"1 2 3 4 5 6 7 8"}
+# Slow-game reporting is no longer set here: `mtg --batch` defaults it ON at 30 s and also prints a
+# 10-minute `[batch] heartbeat` line leading with worker utilisation. Passing it from this script was
+# how it came to be OFF for every caller that was not this script.
+VDEPTHS="1 2 3 4 5 6 7 8"
+# The HEURISTIC ladder, 1-6. The shipped play depth is 5 and d6 is the next escalation target worth
+# ranking, so the ladder has to reach it: the crossover CLAMPS to the deepest measured hdepth, so
+# `6->5 7->5 8->5` in a derived table is the clamp, NOT a measurement, and cannot justify d6 play.
+# It stops at 6 because H7 is impractical (H cells cost ~2.2x per rung: FiveColour measured 0.54s,
+# 5.9s, 36s, 160s, 348s per game at H1..H5) -- while H6 came in ~11x CHEAPER than H5 there, which is
+# a non-monotonic ladder worth knowing about and not worth guessing at.
+# Note H_maxturns == V_maxturns is the SAME cell: at depth >= max_turns the horizon covers the whole
+# game, so every leaf is terminal and the learned evaluator is never consulted. FiveColour has
+# max_turns=8, so H8 == V8 -- never pay ~68 core-hours to re-measure a cell the V arm already has.
+HDEPTHS="1 2 3 4 5 6"
 # Tractability guard, seconds/game. This is a SAFETY VALVE against a genuinely exploding cell, not a
 # budget: at 3.0 it condemned cells running at 4.33 s/game whose full fill cost 4 CORE-HOURS in total
 # -- 0.3% of the run that skipped them -- and left H1-5 unmeasured on two decks, which is what the
 # table is derived from. Set it high enough that only a real explosion trips it.
-INTRACTABLE_SPG=${INTRACTABLE_SPG:-60}
-AB_GAMES=${AB_GAMES:-1000}
-AB_SEEDS=${AB_SEEDS:-"600000 601000 602000 603000 604000 605000 606000 607000"}
-PLAY_GAMES=${PLAY_GAMES:-500}
-PLAY_SEEDS=${PLAY_SEEDS:-"610000 611000 612000 613000"}
-ROW_K=${ROW_K:-3}
+INTRACTABLE_SPG=60
+AB_GAMES=1000
+AB_SEEDS="600000 601000 602000 603000 604000 605000 606000 607000"
+PLAY_GAMES=500
+PLAY_SEEDS="610000 611000 612000 613000"
+ROW_K=3
 
 # key | deck-dir | stem | matrix-key | row-seed-base | row-games -- GENERATED, never edited.
 #
@@ -86,19 +141,20 @@ ROW_K=${ROW_K:-3}
 # Games OVERSHOOT the ~11k-row knee (~5-6 rows/game measured on hinata and auras) because overshoot
 # inside one pooled batch is free -- it adds no tail -- whereas undershooting needs a second batch and
 # therefore a second tail.
-mapfile -t DECK_TABLE < <(python3 scripts/deck_registry.py --shell "${ROW_GAMES:-2500}")
+ROW_GAMES=2500
+mapfile -t DECK_TABLE < <(python3 scripts/deck_registry.py --shell "$ROW_GAMES")
 [ ${#DECK_TABLE[@]} -gt 0 ] || { echo "no decks discovered under decks/ -- each needs <stem>.cod|.txt AND <stem>.profile.json"; exit 2; }
 # SINGLE-DECK MODE. `run <deck-dir>` replaces the table above with one row derived from the folder,
 # so a NEW deck goes through exactly this pipeline instead of a hand-rolled one. Nothing else differs:
 # same phases, same staging, same freeze rule. Its own VLQ dir keeps it from colliding with a fleet run.
-DECK_DIR=${DECK_DIR:-${2:-}}
+DECK_DIR=${2:-}
 if [ -n "$DECK_DIR" ]; then
     _stem=$(basename "$DECK_DIR")
     _key=$(echo "$_stem" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '_')
     [ -d "$DECK_DIR" ] || { echo "no such deck dir: $DECK_DIR"; exit 2; }
     [ -e "$DECK_DIR/$_stem.profile.json" ] || { echo "no profile at $DECK_DIR/$_stem.profile.json -- run analyze_deck.py first"; exit 2; }
-    DECK_TABLE=("$_key|$DECK_DIR|$_stem|$_key|900000|${ROW_GAMES:-2500}")
-    [ -n "${VLQ_EXPLICIT:-}" ] || VLQ=logs/vlq_$_key
+    DECK_TABLE=("$_key|$DECK_DIR|$_stem|$_key|900000|$ROW_GAMES")
+    VLQ=logs/vlq_$_key
     DONE=$VLQ/done; ROWDIR=$VLQ/rows
     mkdir -p "$DONE" "$ROWDIR" logs/eval
 fi
@@ -108,7 +164,7 @@ MATRIX_TXT=$VLQ/matrix.txt          # per-run: a single-deck run must not overwr
 # Derived AFTER single-deck mode has finalised VLQ. Set beside SLOW_GAME_MS above, it captured the
 # fleet default (logs/vlq/slow_games.log) and every single-deck run appended to the same shared file
 # -- the FiveColour run's 17 slow games landed there while its own queue dir showed none.
-SLOW_GAME_LOG=${SLOW_GAME_LOG:-$VLQ/slow_games.log}
+SLOW_GAME_LOG=$VLQ/slow_games.log
 
 log() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$VLQ/driver.log"; }
 done_p() { [ -e "$DONE/$1" ]; }
@@ -261,11 +317,11 @@ phase_matrix() {
     done_p C_matrix && return 0
     local keys; keys=$(staged_keys)
     [ -n "$keys" ] || { log "PHASE C ABORT: no staged models"; return 1; }
-    log "PHASE C: matrix over$keys -- ONE pool, $WORKERS workers, target $MATRIX_TARGET/cell, V=[$VDEPTHS], cutoff ${INTRACTABLE_SPG}s/game"
-    MTG_SLOW_GAME_MS="$SLOW_GAME_MS" MTG_SLOW_GAME_LOG="$SLOW_GAME_LOG" \
+    log "PHASE C: matrix over$keys -- ONE pool, all available cores, target $MATRIX_TARGET/cell, H=[$HDEPTHS], V=[$VDEPTHS], cutoff ${INTRACTABLE_SPG}s/game, never-condemn<=$NEVER_CONDEMN"
+    MTG_SLOW_GAME_LOG="$SLOW_GAME_LOG" \
     python3 scripts/attic/valueleaf_depth_matrix.py --incremental --decks $keys \
-        --hdepths 1 2 3 4 5 --vdepths $VDEPTHS --seeds 8008 9009 10010 11011 \
-        --target "$MATRIX_TARGET" --reference-target "$MATRIX_REF" --batch 25 --workers "$WORKERS" \
+        --hdepths $HDEPTHS --vdepths $VDEPTHS --seeds 8008 9009 10010 11011 \
+        --target "$MATRIX_TARGET" --reference-target "$MATRIX_REF" --batch 25 \
         --value-min-depth 0 --intractable-sec-per-game "$INTRACTABLE_SPG" \
         --never-condemn-at-or-below "$NEVER_CONDEMN" \
         --out "$MATRIX_TXT" >> "$VLQ/matrix.log" 2>&1
@@ -432,7 +488,7 @@ status)
     # live state the scheduler itself reads.
     if [ -s "$MATRIX_TXT.cells.json" ]; then
         python3 - "$MATRIX_TXT.cells.json" "$MATRIX_TARGET" <<'PY'
-import json, sys, collections
+import json, os, sys, collections
 cells = json.load(open(sys.argv[1])); target = int(sys.argv[2])
 done = sum(1 for c in cells if (c.get("games") or 0) >= target)
 cond = sum(1 for c in cells if c.get("intractable"))
@@ -460,8 +516,14 @@ for k, v in short.items():
     print("             %-3s short on %d seed(s): %s   ~%.1f core-h left"
           % (k, len(v), " ".join("%s:%dg" % (s, g) for s, g, _ in v), left))
 if total:
-    print("             ~%.0f core-h remaining -> ~%.1f h wall at %d workers"
-          % (total / 3600.0, total / 3600.0 / 20, 20))
+    # Cores the process may actually use, matching the engine's AffinityCpuCount() -- not a hardcoded
+    # 20, which is what made a 275-core-hour job look like it might fit an evening. This ETA is the
+    # multiplication that was skipped before the 2026-08-10 run: sizing the job first would have shown
+    # a ~14 h floor and made 23 h at 5% complete obviously a scheduling failure, not an engine one.
+    cores = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 8)
+    print("             ~%.0f core-h remaining -> ~%.1f h wall at %d cores (FULL packing; if the"
+          " heartbeat shows fewer busy, that is the problem)"
+          % (total / 3600.0, total / 3600.0 / cores, cores))
 PY
     fi
     [ -s "$MATRIX_TXT" ] && echo "             table -> $MATRIX_TXT"
@@ -478,5 +540,5 @@ PY
     tail -5 "$VLQ/driver.log" 2>/dev/null
     exit 0
     ;;
-*) echo "usage: $0 {run|status} [deck-dir]"; echo "  $0 run                    # regenerate the 8-deck fleet"; echo "  $0 run decks/FiveColour   # one deck, new or existing"; exit 2 ;;
+*) echo "usage: $0 {run|status} [deck-dir]"; echo "  $0 run                    # regenerate the whole fleet"; echo "  $0 run decks/FiveColour   # one deck, new or existing"; echo "  the deck is the ONLY input; NEVER_CONDEMN (floor 5) is the one setting"; exit 2 ;;
 esac

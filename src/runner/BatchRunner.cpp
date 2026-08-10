@@ -2,16 +2,23 @@
 #include "GoldFishRunner.h"
 #include "../core/GameEngine.h"
 #include "../core/GameLogger.h"
+#include "../core/EnvFlags.h"
 #include "../core/HardwareConcurrency.h"
 #include "../ai/AIEngine.h"
 #include "../ai/MulliganProfile.h"
 #include "../ai/Profiler.h"
 #include "../ai/MulliganProfileIO.h"
 #include "../deck/DeckLoader.h"
+#include "../ai/ValueArm.h"
 #include <algorithm>
+#include <climits>
+#include <condition_variable>
+#include <deque>
+#include <iomanip>
 #include <atomic>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <list>
 #include <memory>
@@ -56,6 +63,47 @@ struct Job
     int             sched_weight        = 0;   // optional LPT scheduling priority (higher = run first);
                                                // overrides the depth/budget cost proxy for known-slow
                                                // jobs (e.g. Hinata's combo search). 0 => use the proxy.
+    // Per-job VALUE-LEAF ARM (see ai/ValueArm.h). These used to be process environment, which is why
+    // the depth matrix had to spawn one `mtg --batch` per arm; as job fields, H and V cells share ONE
+    // pooled queue and one tail. Sentinels mean "unset" => the env default => byte-identical for every
+    // manifest that omits them.
+    valuearm::Arm   arm;
+    // CONDEMNATION grouping key: every job of the same matrix cell (deck+arm+depth+seed) shares one.
+    // Empty in the manifest => the job's own name, i.e. each job is its own cell and cross-chunk
+    // condemnation is inert. Resolved to a dense index at parse (cell_id) so the hot path touches a
+    // vector, not a map.
+    std::string     cell;
+    int             cell_id             = 0;
+};
+
+// Tractability guard, evaluated INSIDE the pooled queue rather than between waves.
+//
+// The old driver could only condemn at a barrier: it ran every cell to a reference sample, stopped
+// the world, decided, then ran the survivors. That barrier is why a long run synchronises on its
+// single slowest game. Here the rule is applied continuously -- a worker checks it after each game,
+// and once a cell is condemned the remaining items of that cell are skipped as they come off the
+// queue -- so no cell ever waits for another and there is exactly one tail for the whole matrix.
+//
+// Absent from the manifest => disabled => byte-identical (nothing is ever skipped).
+struct CondemnRule
+{
+    bool   enabled             = false;
+    double sec_per_game        = 0.0;   // condemn a cell whose MEAN cost exceeds this
+    int    reference_games     = 0;     // ...but only after it has this many games (the sample)
+    int    never_condemn_depth = 0;     // ...and never at or below this depth (the d<=5 ladder IS
+                                        //    the crossover; condemning there leaves a HOLE, not a saving)
+    // SEPARATE limit for a SINGLE game, applied to games still running (see the in-flight hook).
+    // Deliberately not sec_per_game: these measure different things, and sharing the number would
+    // condemn a cell with a 5 s/game mean because one game took 61 s. The mean rule asks "is filling
+    // this cell affordable?"; this one asks "is this individual game pathological?" -- which the mean
+    // cannot answer at all until the game finishes, and a 21.4-hour game answers far too late.
+    // 0 / absent => the in-flight rule is off.
+    double max_game_sec        = 0.0;
+    // How many games of a single NOT-YET-JUDGED condemnable cell may be in flight at once. This is
+    // what stops LPT from putting the whole box on work that is about to be thrown away: the cell is
+    // metered in at this rate and refilled on each uncondemned completion, while protected cells use
+    // the remaining threads. 1 is deliberate -- a cell needs only a trickle to reach its verdict.
+    int    drip                = 1;
 };
 
 // Bounded LRU cache of loaded (+sidecar-attached) mulligan profiles, keyed by profile path.
@@ -77,10 +125,16 @@ class ProfileCache
 public:
     explicit ProfileCache(std::size_t cap) : cap_(std::max<std::size_t>(1, cap)) {}
 
-    std::shared_ptr<const MulliganProfile> get(const std::string& path)
+    // Keyed on (profile path, value-sidecar override) because the override CHANGES the loaded object:
+    // an H job asks for "none" (no sidecar) and a V job for a model path, off the same deck profile.
+    // Keying on the path alone would hand the first arm's profile to the other -- silently measuring
+    // one arm twice, which is exactly the class of bug this whole change exists to remove.
+    std::shared_ptr<const MulliganProfile> get(const std::string& path,
+                                               const std::string& value_profile = std::string())
     {
+        const std::string key = value_profile.empty() ? path : (path + '\x1f' + value_profile);
         std::lock_guard<std::mutex> lk(mtx_);
-        auto it = map_.find(path);
+        auto it = map_.find(key);
         if (it != map_.end())
         {
             lru_.splice(lru_.begin(), lru_, it->second.pos);   // mark most-recently-used
@@ -93,9 +147,9 @@ public:
         // brief stall per boundary (a load is ~1 s; steady-state play does no loads at all, and the second
         // worker to want a profile now gets the cache hit instead of re-parsing) and bounds resident memory
         // to ~cap profiles + the one in-flight load.
-        std::shared_ptr<const MulliganProfile> loaded = load(path);
-        lru_.push_front(path);
-        map_[path] = Entry{loaded, lru_.begin()};
+        std::shared_ptr<const MulliganProfile> loaded = load(path, value_profile);
+        lru_.push_front(key);
+        map_[key] = Entry{loaded, lru_.begin()};
         while (map_.size() > cap_)
         {
             map_.erase(lru_.back());   // evict LRU (its profile survives while any worker holds a handle)
@@ -105,8 +159,17 @@ public:
     }
 
 private:
-    static std::shared_ptr<const MulliganProfile> load(const std::string& path)
+    static std::shared_ptr<const MulliganProfile> load(const std::string& path,
+                                                       const std::string& value_profile)
     {
+        // AttachValueSidecar reads the override off the thread's arm (see ai/ValueArm.h). Set it for
+        // the duration of THIS load only: the loading thread is a worker that will go on to run other
+        // jobs, and the arm it runs under is set separately per job.
+        const std::string saved = valuearm::t_arm.value_profile;
+        valuearm::t_arm.value_profile = value_profile;
+        struct Restore {
+            const std::string& s; ~Restore() { valuearm::t_arm.value_profile = s; }
+        } restore{saved};
         // Mirror ParseJob's original load exactly: base profile (or the built-in default when the file is
         // absent -- the auto-detect case), then attach the exhaustive keep/bottom, eval, and value sidecars
         // (each a no-op when its sidecar file is missing).
@@ -136,6 +199,229 @@ std::size_t ProfileCacheCap()
     return 3;   // small: a big profile is ~167 MB, and the sort keeps the resident set ~1-2 anyway
 }
 
+// HEARTBEAT: periodically write the slowest games to disk, RUNNING ones included.
+//
+// SLOW-GAME lines only appear when a game FINISHES, so the pathological games -- the ones that
+// actually matter -- are invisible for exactly as long as they are a problem. A run measured
+// 2026-08-10 had a single game at 21.4 hours and nothing on disk said so until it ended. This writes
+// a ranked snapshot every MTG_BATCH_HEARTBEAT_MS (default 60s) to MTG_BATCH_HEARTBEAT, merging games
+// still in flight (elapsed so far) with the slowest completed ones, so a run can be diagnosed while
+// it is running instead of afterwards.
+//
+// DEFAULT ON. It was opt-in (unset path => no thread), which meant a bare `mtg --batch` had no
+// heartbeat, no slow-game lines AND no in-flight condemnation -- all three mid-run protections are
+// gated on this object being alive. `MTG_BATCH_HEARTBEAT=0` (or `off`/`none`) disables; a path
+// overrides where the ranked file goes.
+//
+// Every beat also prints ONE line to stderr, and that line leads with worker UTILISATION, because
+// that is the number the whole 2026-08-10 saga turned on: the run was diagnosed as an engine
+// regression, then as condemnation, when it was 3 of 20 cores busy the entire time. A run cannot
+// hide that from a 10-minute heartbeat.
+class Heartbeat
+{
+public:
+    Heartbeat(std::size_t slots, std::size_t keep)
+        : running_(slots), keep_(keep)
+    {
+        const char* p = std::getenv("MTG_BATCH_HEARTBEAT");
+        const std::string want = p ? std::string(p) : std::string();
+        if (p && (want == "0" || want == "off" || want == "none")) { enabled_ = false; }
+        else if (p && !want.empty()) { path_ = want; }
+        else
+        {
+            // Default file, under logs/ per the repo convention. If the directory cannot be made
+            // (read-only cwd, sandbox), keep the stderr line and simply skip the file -- the
+            // instrument must never be the reason a run fails to start.
+            std::error_code ec;
+            std::filesystem::create_directories("logs/batch", ec);
+            if (!ec) { path_ = "logs/batch/heartbeat.txt"; }
+        }
+        if (const char* m = std::getenv("MTG_BATCH_HEARTBEAT_MS"))
+        { const long v = std::atol(m); if (v > 0) { period_ms_ = v; } }
+        if (const char* f = std::getenv("MTG_BATCH_HEARTBEAT_MIN_MS"))
+        { const long v = std::atol(f); if (v >= 0) { min_ms_ = v; } }
+        for (Slot& s : running_) { s.active.store(0); s.start_ms.store(0); }
+    }
+
+    bool on() const { return enabled_; }
+
+    // Called once per period with EVERY in-flight game as (cell_id, elapsed ms). One call with the
+    // whole set, not one per game, because the mean rule needs to aggregate per cell before judging.
+    using InFlight = std::vector<std::pair<int, long long>>;
+    void SetInFlightHook(std::function<void(const InFlight&)> f) { on_inflight_ = std::move(f); }
+
+    void SetRunning(std::size_t slot, const std::string& job, int gi, int cell_id)
+    {
+        if (!enabled_ || slot >= running_.size()) { return; }
+        Slot& s = running_[slot];
+        {
+            std::lock_guard<std::mutex> lk(s.mtx);
+            s.job = job; s.gi = gi; s.cell_id = cell_id;
+        }
+        s.start_ms.store(NowMs(), std::memory_order_relaxed);
+        s.active.store(1, std::memory_order_release);
+    }
+
+    void ClearRunning(std::size_t slot)
+    {
+        if (!enabled_ || slot >= running_.size()) { return; }
+        running_[slot].active.store(0, std::memory_order_release);
+    }
+
+    // Keep only the slowest `keep_` finished games: a full matrix is >100k games and we want a
+    // ranked tail, not a log of everything.
+    void Finished(const std::string& job, int gi, long long ms)
+    {
+        // Floor-checked BEFORE the lock. The interesting games are hours long, so recording every
+        // finished game would take a mutex on the hot path (20 workers x ~9 ms V-cell games) to
+        // retain rows that could never make the top 100 anyway. Below the floor: two loads, no lock.
+        if (!enabled_ || ms < min_ms_) { return; }
+        std::lock_guard<std::mutex> lk(fin_mtx_);
+        if (finished_.size() < keep_) { finished_.push_back({ms, job, gi}); }
+        else
+        {
+            auto worst = std::min_element(finished_.begin(), finished_.end(),
+                [](const Entry& a, const Entry& b) { return a.ms < b.ms; });
+            if (worst != finished_.end() && worst->ms < ms) { *worst = Entry{ms, job, gi}; }
+        }
+    }
+
+    void Start()
+    {
+        if (!enabled_) { return; }
+        stop_ = false;
+        thread_ = std::thread([this] {
+            // A condition_variable, not a poll loop: the thread sleeps for the WHOLE period and is
+            // woken only by Stop(). Zero wakeups in between, so it takes nothing from the workers --
+            // which matters because it exists to watch a run that is already starved for cores.
+            for (;;)
+            {
+                std::unique_lock<std::mutex> lk(wake_mtx_);
+                if (wake_cv_.wait_for(lk, std::chrono::milliseconds(period_ms_),
+                                      [this] { return stop_; }))
+                { break; }               // Stop() woke us
+                lk.unlock();
+                Write();
+            }
+            Write();   // final snapshot, so the file reflects the end state
+        });
+    }
+
+    void Stop()
+    {
+        if (!enabled_) { return; }
+        { std::lock_guard<std::mutex> lk(wake_mtx_); stop_ = true; }
+        wake_cv_.notify_all();
+        if (thread_.joinable()) { thread_.join(); }
+    }
+
+private:
+    struct Entry { long long ms; std::string job; int gi; };
+    struct Slot
+    {
+        std::atomic<int>       active{0};
+        std::atomic<long long> start_ms{0};
+        std::mutex             mtx;
+        std::string            job;
+        int                    gi = 0;
+        int                    cell_id = 0;
+    };
+
+    static long long NowMs()
+    {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+
+    void Write()
+    {
+        std::vector<Entry> rows;
+        {
+            std::lock_guard<std::mutex> lk(fin_mtx_);
+            rows = finished_;
+        }
+        const std::size_t n_done = rows.size();
+        const long long now = NowMs();
+        std::size_t n_running = 0;
+        InFlight live;
+        for (Slot& s : running_)
+        {
+            if (s.active.load(std::memory_order_acquire) == 0) { continue; }
+            const long long st = s.start_ms.load(std::memory_order_relaxed);
+            std::lock_guard<std::mutex> lk(s.mtx);
+            const long long elapsed = now - st;
+            rows.push_back({elapsed, s.job + "  [RUNNING]", s.gi});
+            ++n_running;
+            // A cell's cost only counts FINISHED games, so a cell whose reference sample contains
+            // one catastrophic game looks free while the pool keeps dispatching more of it (a run
+            // measured 2026-08-10 had a single game at 21.4 h). This is the only thread that sees
+            // in-flight elapsed time, so it is where that gap closes.
+            if (on_inflight_) { live.emplace_back(s.cell_id, elapsed); }
+        }
+        if (on_inflight_ && !live.empty()) { on_inflight_(live); }
+        std::sort(rows.begin(), rows.end(),
+                  [](const Entry& a, const Entry& b) { return a.ms > b.ms; });
+        if (rows.size() > keep_) { rows.resize(keep_); }
+
+        // ONE stderr line per beat, utilisation FIRST. A ranked file nobody thought to open is not
+        // observability: this is the line that makes "23 hours at 3 of 20 cores" impossible to miss,
+        // and it costs one write every 10 minutes.
+        {
+            const double busy = running_.empty() ? 0.0
+                              : 100.0 * static_cast<double>(n_running) / static_cast<double>(running_.size());
+            std::fprintf(stderr, "[batch] heartbeat: %zu/%zu workers busy (%.0f%%)",
+                         n_running, running_.size(), busy);
+            if (!rows.empty() && rows.front().ms >= min_ms_)
+            {
+                std::fprintf(stderr, "  slowest %.2fh %s gi=%d",
+                             static_cast<double>(rows.front().ms) / 3600000.0,
+                             rows.front().job.c_str(), rows.front().gi);
+            }
+            if (!path_.empty()) { std::fprintf(stderr, "  -> %s", path_.c_str()); }
+            std::fprintf(stderr, "\n");
+            std::fflush(stderr);
+        }
+        if (path_.empty()) { return; }
+
+        // Write-then-rename so a reader never sees a half-written file.
+        const std::string tmp = path_ + ".tmp";
+        std::ofstream out(tmp, std::ios::trunc);
+        if (!out) { return; }
+        out << "# batch heartbeat -- slowest games (running games included, marked [RUNNING])\n"
+            << "# " << n_running << " in flight, " << n_done << " finished games retained (top "
+            << keep_ << " by duration)\n";
+        for (const Entry& e : rows)
+        {
+            out << std::fixed << std::setprecision(2) << (static_cast<double>(e.ms) / 3600000.0)
+                << " h  gi=" << e.gi << "  " << e.job << "\n";
+        }
+        out.close();
+        std::error_code ec;
+        std::filesystem::rename(tmp, path_, ec);
+    }
+
+    bool                     enabled_ = true;   // MTG_BATCH_HEARTBEAT=0/off/none turns it off
+    std::string              path_;             // may be empty (unwritable cwd) -- stderr line still runs
+    // 10 minutes. The games this exists to surface run for HOURS, so a coarse snapshot loses
+    // nothing, and a rare wake is the point: never compete with the workers it is watching.
+    long                     period_ms_ = 600000;
+    long long                min_ms_    = 60000;   // ignore anything under a minute (see Finished)
+    std::vector<Slot>        running_;
+    std::size_t              keep_;
+    std::mutex               fin_mtx_;
+    std::vector<Entry>       finished_;
+    std::function<void(const InFlight&)> on_inflight_;
+    std::mutex               wake_mtx_;
+    std::condition_variable  wake_cv_;
+    bool                     stop_ = false;
+    std::thread              thread_;
+};
+
+// Sentinel written into a job's win-turn slot for a game the pool SKIPPED because its cell was
+// condemned mid-run. Distinct from -1 ("played, did not win"): a skipped game must be dropped from
+// the aggregate, not scored as a loss.
+constexpr int kSkipped = INT_MIN;
+
 // A single unit of pooled work: game `game` of job `job`.
 struct WorkItem
 {
@@ -145,11 +431,16 @@ struct WorkItem
 
 // Report any game at or over this many ms (see the SLOW-GAME emission in the worker). A MILLISECOND
 // value, not a boolean, so it is getenv+parse rather than EnvOn -- same convention and same variable
-// as GoldFishRunner's. 0 / unset / unparseable => off.
+// as GoldFishRunner's, INCLUDING its default: ON at 30 s, `=0` disables.
+//
+// It used to default OFF here while GoldFishRunner defaulted ON, which is exactly backwards: the
+// single-game path defaults to reporting on runs that are short and watched, and `--batch` -- the
+// route every long pooled run is REQUIRED to take -- defaulted to silence. That inversion is why a
+// 23-hour matrix run at 3 of 20 cores, containing one 21.4-hour game, produced no signal at all.
 static long long SlowGameMs()
 {
     const char* e = std::getenv("MTG_SLOW_GAME_MS");
-    if (!e || !*e) { return 0; }
+    if (!e || !*e) { return 30000LL; }
     char* end = nullptr;
     const long long v = std::strtoll(e, &end, 10);
     return (end && *end == '\0' && v > 0) ? v : 0;
@@ -174,6 +465,19 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     j.budget_ms           = jspec.value("budget_ms", 0);
     j.sched_weight        = jspec.value("weight", 0);      // LPT priority override (see Job::sched_weight)
     j.max_turns           = jspec.value("max_turns", 8);   // global goldfish horizon; per-job override
+
+    // Per-job VALUE-LEAF ARM (see ai/ValueArm.h). Every key is optional and every default is the
+    // "unset" sentinel, so a manifest that omits them all runs exactly as before.
+    if (jspec.contains("value_model"))
+    { j.arm.value_model = jspec["value_model"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("value_min_depth"))
+    { j.arm.value_min_depth = jspec["value_min_depth"].get<int>(); }
+    if (jspec.contains("ladder_value_leaf"))
+    { j.arm.ladder_value_leaf = jspec["ladder_value_leaf"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("value_startgate_alpha"))
+    { j.arm.startgate_alpha = jspec["value_startgate_alpha"].get<double>(); }
+    j.arm.value_profile   = jspec.value("value_profile", std::string());
+    j.cell                = jspec.value("cell", std::string());
     // Note: lookahead bottoming is no longer a manifest field -- the engine derives it
     // from depth (on iff depth>0). A stale "lookahead_bottoming" key is simply ignored.
 
@@ -193,7 +497,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
                      / (deck_path.stem().string() + ".profile.json");
     }
     j.profile_path = profile_path.string();
-    std::shared_ptr<const MulliganProfile> prof = cache.get(j.profile_path);
+    std::shared_ptr<const MulliganProfile> prof = cache.get(j.profile_path, j.arm.value_profile);
     j.vial_target_mv = prof->vial_target_mv;
 
     // Resolve the effective play settings from the manifest's explicit depth/budget + the deck's value_play.
@@ -239,6 +543,48 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     std::vector<Job> jobs;
     jobs.reserve(manifest["jobs"].size());
     for (const json& jspec : manifest["jobs"]) { jobs.push_back(ParseJob(jspec, profile_cache)); }
+
+    // Manifest-level tractability guard (see CondemnRule). Absent => disabled => nothing is skipped.
+    CondemnRule condemn;
+    if (manifest.contains("condemn") && manifest["condemn"].is_object())
+    {
+        const json& c = manifest["condemn"];
+        condemn.sec_per_game        = c.value("sec_per_game", 0.0);
+        condemn.reference_games     = c.value("reference_games", 0);
+        condemn.never_condemn_depth = c.value("never_condemn_depth", 0);
+        condemn.max_game_sec        = c.value("max_game_sec", 0.0);
+        condemn.drip                = std::max(1, c.value("drip", 1));
+        condemn.enabled             = (condemn.sec_per_game > 0.0 && condemn.reference_games > 0)
+                                   || condemn.max_game_sec > 0.0;
+    }
+
+    // Dense cell indices, so the per-game hot path indexes a vector instead of hashing a string.
+    // A job with no "cell" is its own cell -- cross-job condemnation then cannot trigger for it,
+    // which is the right default for every manifest that is not a matrix.
+    int n_cells = 0;
+    std::vector<std::string> cell_name;
+    std::vector<int>         cell_depth;   // for the never-condemn floor, off the first job of the cell
+    {
+        std::unordered_map<std::string, int> cell_ix;
+        for (Job& j : jobs)
+        {
+            const std::string key = j.cell.empty() ? ("\x1f" + j.name) : j.cell;
+            auto it = cell_ix.find(key);
+            if (it == cell_ix.end())
+            {
+                it = cell_ix.emplace(key, n_cells++).first;
+                cell_name.push_back(j.cell.empty() ? j.name : j.cell);
+                cell_depth.push_back(j.depth);
+            }
+            j.cell_id = it->second;
+        }
+    }
+    // games/ms accumulate as the pool runs; `condemned` latches once and is only ever set true.
+    std::vector<std::atomic<int>>       cell_games(static_cast<std::size_t>(n_cells));
+    std::vector<std::atomic<long long>> cell_ms(static_cast<std::size_t>(n_cells));
+    std::vector<std::atomic<int>>       cell_condemned(static_cast<std::size_t>(n_cells));
+    for (int i = 0; i < n_cells; ++i)
+    { cell_games[i].store(0); cell_ms[i].store(0); cell_condemned[i].store(0); }
 
     // Per-job, per-game results. Pre-sized so workers write to disjoint slots with
     // no synchronisation. games[j][gi] = win turn (<=0 means no win).
@@ -291,7 +637,87 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             return a.job < b.job;
         });
 
+    // WORK POOL. Non-condemnable games sit in the static LPT-sorted `items` and are taken in order.
+    // Games of CONDEMNABLE cells are NOT in that list: they are METERED IN through `front`, a
+    // high-priority deque holding at most `drip` games per unjudged cell, refilled one game at a
+    // time as each of that cell's games finishes UNCONDEMNED.
+    //
+    // Why not just sort them: a condemnable cell's whole point is that most of its work will be
+    // thrown away, so dispatching it by cost (LPT puts it first -- it is the most expensive thing in
+    // the queue) puts every thread on work that is about to be discarded, and the verdict cannot
+    // arrive until those games finish. Metering caps how much of the box a not-yet-judged cell can
+    // occupy, while the protected cells (H5 and friends, which must run in full regardless) keep the
+    // rest of the threads busy. A condemned cell's pending games are flushed to `front` and drained
+    // as skips, which costs nothing and reuses the same dequeue-time skip path.
+    struct Pool
+    {
+        std::mutex                        mtx;
+        std::condition_variable           cv;
+        std::deque<WorkItem>              front;      // metered condemnable work, taken FIRST
+        const std::vector<WorkItem>*      items = nullptr;
+        std::size_t                       cursor = 0;
+        std::vector<std::deque<WorkItem>> pending;    // per-cell condemnable games not yet released
+        long long                         outstanding = 0;   // condemnable games not yet finalised
+
+        bool Take(WorkItem& out)
+        {
+            std::unique_lock<std::mutex> lk(mtx);
+            for (;;)
+            {
+                if (!front.empty()) { out = front.front(); front.pop_front(); return true; }
+                if (cursor < items->size()) { out = (*items)[cursor++]; return true; }
+                if (outstanding <= 0) { return false; }
+                // Static work is exhausted but a surviving cell is still dripping: wait for its next
+                // release rather than exiting, or the run would end with games unplayed.
+                cv.wait(lk);
+            }
+        }
+
+        // One condemnable game finalised (played or skipped). Releases that cell's next game, or --
+        // if the cell has been condemned -- flushes ALL of its pending games so they drain as skips.
+        void OnFinished(int cell_id, bool cell_condemned)
+        {
+            std::lock_guard<std::mutex> lk(mtx);
+            --outstanding;
+            std::deque<WorkItem>& q = pending[static_cast<std::size_t>(cell_id)];
+            if (cell_condemned) { while (!q.empty()) { front.push_back(q.front()); q.pop_front(); } }
+            else if (!q.empty()) { front.push_back(q.front()); q.pop_front(); }
+            cv.notify_all();
+        }
+    };
+    Pool pool;
+    pool.items = &items;
+    pool.pending.resize(static_cast<std::size_t>(std::max(1, n_cells)));
+    {
+        // Partition: pull condemnable cells' games OUT of the static list into per-cell queues, then
+        // seed `front` with `drip` of each. Order within a cell is preserved (its games run in gi
+        // order), and cells enter `front` in the static list's LPT order.
+        std::vector<WorkItem> keep;
+        keep.reserve(items.size());
+        for (const WorkItem& wi : items)
+        {
+            const Job& j = jobs[wi.job];
+            const bool condemnable = condemn.enabled && j.depth > condemn.never_condemn_depth;
+            if (condemnable) { pool.pending[static_cast<std::size_t>(j.cell_id)].push_back(wi); }
+            else             { keep.push_back(wi); }
+        }
+        for (std::deque<WorkItem>& q : pool.pending) { pool.outstanding += static_cast<long long>(q.size()); }
+        for (std::deque<WorkItem>& q : pool.pending)
+        {
+            for (int d = 0; d < condemn.drip && !q.empty(); ++d)
+            { pool.front.push_back(q.front()); q.pop_front(); }
+        }
+        items.swap(keep);
+        if (pool.outstanding > 0)
+        {
+            std::cerr << "[batch] metering " << pool.outstanding << " games of condemnable cells at "
+                      << condemn.drip << " in flight per cell; " << items.size()
+                      << " protected games run alongside\n";
+        }
+    }
+
     const long long s_slow_game_ms = SlowGameMs();
+    const bool      s_dump_wins    = EnvOn("MTG_DUMP_WINS");   // see the emission in the worker
 
     int requested = num_threads;
     num_threads = concurrency_util::ResolveWorkerThreads(num_threads);
@@ -305,18 +731,32 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     {
         BatchJobResult r;
         r.name         = jobs[j].name;
-        r.games_played = jobs[j].games;
-        r.win_turns    = win_turns[j];
-        r.digests      = digests[j];
+        // A CONDEMNED cell's remaining games are skipped, so a job can finish short. Skipped slots
+        // carry kSkipped and are dropped here rather than folded in: ComputeAvgTurns scores anything
+        // <=0 as a LOSS, so leaving them in would report a condemned cell as a pile of losses --
+        // a silently wrong number, which is worse than a short one.
+        std::vector<int>      wt_played;
+        std::vector<uint64_t> dg_played;
+        wt_played.reserve(win_turns[j].size());
+        dg_played.reserve(digests[j].size());
+        for (std::size_t i = 0; i < win_turns[j].size(); ++i)
+        {
+            if (win_turns[j][i] == kSkipped) { continue; }
+            wt_played.push_back(win_turns[j][i]);
+            dg_played.push_back(digests[j][i]);
+        }
+        r.games_played = static_cast<int>(wt_played.size());
+        r.win_turns    = wt_played;
+        r.digests      = dg_played;
         long long sum = 0;
-        for (int wt : win_turns[j]) { if (wt > 0) { ++r.games_won; sum += wt; } }
+        for (int wt : wt_played) { if (wt > 0) { ++r.games_won; sum += wt; } }
         if (r.games_won > 0) { r.average_win_turn = static_cast<double>(sum) / r.games_won; }
-        r.avg_turns = ComputeAvgTurns(win_turns[j], jobs[j].max_turns);
+        r.avg_turns = wt_played.empty() ? 0.0 : ComputeAvgTurns(wt_played, jobs[j].max_turns);
         // Case digest: FNV-1a fold of the per-game digests in game (gi) order -- a single
         // fingerprint of the whole case's play. Games in gi order (the vector index), so it is
         // deterministic and order-stable regardless of the pool's execution interleave.
         uint64_t cd = 1469598103934665603ULL;
-        for (uint64_t d : digests[j])
+        for (uint64_t d : dg_played)
         {
             for (int b = 0; b < 8; ++b) { cd ^= static_cast<uint8_t>((d >> (b * 8)) & 0xff); cd *= 1099511628211ULL; }
         }
@@ -337,13 +777,70 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     }
     std::mutex cb_mtx;
 
+    // Slowest-game heartbeat (see Heartbeat). One running-slot per worker; inert unless
+    // MTG_BATCH_HEARTBEAT names a file.
+    Heartbeat hb(static_cast<std::size_t>(num_threads), 100);
+    // IN-FLIGHT condemnation. A cell's mean cost only sees FINISHED games, so a cell whose sample
+    // contains one catastrophic game reads as free and the pool keeps feeding it. A single game
+    // already over the per-game limit is proof enough on its own: condemn the cell so its remaining
+    // games are skipped. The game in flight still runs to completion (there is no safe way to abort
+    // a search mid-node) -- this stops the OTHER nineteen from being dispatched behind it.
+    if (condemn.enabled)
+    {
+        hb.SetInFlightHook([&](const Heartbeat::InFlight& live) {
+            auto condemn_cell = [&](int cid, const char* why, double v, double limit) {
+                if (cid < 0 || cid >= n_cells) { return; }
+                if (cell_depth[cid] <= condemn.never_condemn_depth) { return; }
+                if (cell_condemned[cid].exchange(1, std::memory_order_relaxed) != 0) { return; }
+                std::fprintf(stderr,
+                    "[goldfish] CONDEMNED cell=%s %s %.1f s (limit %.1f); remaining games of this "
+                    "cell are skipped\n", cell_name[cid].c_str(), why, v, limit);
+            };
+
+            // (1) Single pathological game, judged while it runs.
+            if (condemn.max_game_sec > 0.0)
+            {
+                for (const auto& [cid, ms] : live)
+                {
+                    if (static_cast<double>(ms) > condemn.max_game_sec * 1000.0)
+                    { condemn_cell(cid, "on an IN-FLIGHT game at", static_cast<double>(ms) / 1000.0,
+                                   condemn.max_game_sec); }
+                }
+            }
+
+            // (2) The MEAN rule, with in-flight games folded in. A running game's elapsed time is a
+            // LOWER BOUND on its final cost, so this mean can only UNDERSTATE the cell -- if it
+            // already exceeds the limit, the finished-only mean must exceed it too. That makes
+            // condemning here sound (no false positive is possible from the partial term) while
+            // catching the case the finished-only rule is blind to: a cell whose expensive games are
+            // all still running reads as free until the first one lands, which on this deck is hours.
+            if (condemn.sec_per_game > 0.0 && condemn.reference_games > 0)
+            {
+                std::unordered_map<int, std::pair<int, long long>> agg;   // cell -> (games, ms)
+                for (const auto& [cid, ms] : live)
+                { auto& a = agg[cid]; ++a.first; a.second += ms; }
+                for (const auto& [cid, a] : agg)
+                {
+                    if (cid < 0 || cid >= n_cells) { continue; }
+                    const int       n   = cell_games[cid].load(std::memory_order_relaxed) + a.first;
+                    const long long tot = cell_ms[cid].load(std::memory_order_relaxed) + a.second;
+                    if (n >= condemn.reference_games
+                        && static_cast<double>(tot) / n > condemn.sec_per_game * 1000.0)
+                    { condemn_cell(cid, "at a running mean (in-flight included) of",
+                                   static_cast<double>(tot) / n / 1000.0, condemn.sec_per_game); }
+                }
+            }
+        });
+    }
+    hb.Start();
+
     std::atomic<std::size_t> cursor{0};
     std::vector<std::thread> threads;
     threads.reserve(num_threads);
 
     for (int t = 0; t < num_threads; ++t)
     {
-        threads.emplace_back([&]()
+        threads.emplace_back([&, slot = static_cast<std::size_t>(t)]()
         {
             // Reuse one engine across consecutive games of the same job (the common
             // case after the stable sort). Rebuild only on a job change. This is the
@@ -355,18 +852,42 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
 
             for (;;)
             {
-                std::size_t k = cursor.fetch_add(1, std::memory_order_relaxed);
-                if (k >= items.size()) { break; }
+                WorkItem wi;
+                if (!pool.Take(wi)) { break; }
+                const Job& job = jobs[wi.job];
+                const bool condemnable = condemn.enabled && job.depth > condemn.never_condemn_depth;
 
-                const WorkItem& wi = items[k];
-                const Job&      job = jobs[wi.job];
+                // CONDEMNED cell: drop this game rather than run it. Checked as the item comes off
+                // the queue (not at a barrier), so a cell stops consuming cores the moment it is
+                // ruled intractable and every other cell keeps running undisturbed.
+                if (condemn.enabled
+                    && cell_condemned[jobs[wi.job].cell_id].load(std::memory_order_relaxed) != 0)
+                {
+                    win_turns[wi.job][wi.game] = kSkipped;
+                    // Finalise in the pool as well: a skipped game is still a condemnable game
+                    // accounted for, and if `outstanding` never drains the workers wait forever.
+                    if (condemnable) { pool.OnFinished(job.cell_id, true); }
+                    if (on_job_done && remaining[wi.job].fetch_sub(1, std::memory_order_acq_rel) == 1)
+                    {
+                        BatchJobResult r = reduce_job(wi.job);
+                        std::lock_guard<std::mutex> lk(cb_mtx);
+                        on_job_done(r);
+                    }
+                    continue;
+                }
 
                 if (wi.job != cached_job)
                 {
+                    // The job's VALUE-LEAF ARM must be installed BEFORE the engine is built: the
+                    // profile load resolves the sidecar off it, and the search reads it per node.
+                    // Set unconditionally (an omitted block resets to "use env"), so a previous
+                    // job's arm can never leak into this one through the reused worker thread.
+                    valuearm::t_arm = jobs[wi.job].arm;
                     // Load (or hit) the job's profile through the shared cache and hand a copy to the
                     // AIEngine (which owns its own copy). The shared handle is released at the end of this
                     // block; only the AIEngine's copy persists across the job's games.
-                    std::shared_ptr<const MulliganProfile> prof = profile_cache.get(job.profile_path);
+                    std::shared_ptr<const MulliganProfile> prof =
+                        profile_cache.get(job.profile_path, job.arm.value_profile);
                     ai.emplace(*prof, job.depth, job.budget_ms);
                     ai->SetSearchPostCombat(job.second_main);
                     engine.emplace(*ai);
@@ -393,6 +914,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // digests are byte-identical whether or not tracing is on. Reset per game via
                 // StartGame. Records only the real game's decisions (m_logger is nulled in the
                 // search rollouts), so it does not perturb play.
+                hb.SetRunning(slot, job.name, global_gi, job.cell_id);
                 const bool trace = !trace_dir.empty();
                 GameLogger dlog(/*digest_only=*/!trace);
                 dlog.StartGame(std::string(), global_gi, job.name, job.seed + wi.game, {});
@@ -402,6 +924,29 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 const long long g_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - g_t0).count();
                 job_ms[wi.job].fetch_add(g_ms, std::memory_order_relaxed);
+                hb.Finished(job.name, global_gi, g_ms);
+                hb.ClearRunning(slot);
+
+                // Continuous tractability guard. Evaluated after every game rather than at a wave
+                // barrier: the point of the pool is that no cell ever waits on another, and a
+                // barrier reintroduces exactly the synchronisation the pool exists to remove.
+                if (condemn.sec_per_game > 0.0 && condemn.reference_games > 0
+                    && job.depth > condemn.never_condemn_depth)
+                {
+                    const int cid = job.cell_id;
+                    const int   n  = cell_games[cid].fetch_add(1, std::memory_order_relaxed) + 1;
+                    const long long tot = cell_ms[cid].fetch_add(g_ms, std::memory_order_relaxed) + g_ms;
+                    if (n >= condemn.reference_games
+                        && static_cast<double>(tot) / n > condemn.sec_per_game * 1000.0
+                        && cell_condemned[cid].exchange(1, std::memory_order_relaxed) == 0)
+                    {
+                        std::fprintf(stderr,
+                            "[goldfish] CONDEMNED cell=%s after %d games at %.1f s/game "
+                            "(limit %.1f); remaining games of this cell are skipped\n",
+                            job.cell.empty() ? job.name.c_str() : job.cell.c_str(),
+                            n, static_cast<double>(tot) / n / 1000.0, condemn.sec_per_game);
+                    }
+                }
 
                 // SLOW-GAME capture. GoldFishRunner emits this from its own game loop, which the
                 // batch path does not use -- so before this, `--batch` reported no slow games at
@@ -422,12 +967,32 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                         global_gi);
                     std::fflush(stderr);
                 }
+                // MTG_DUMP_WINS, for the same reason and with the same defect: it lives in
+                // GoldFishRunner's game loop, which `--batch` does not use, so the per-game A/B diff
+                // its own comment advertises produced NOTHING under the batch path -- an empty diff
+                // reads as "no game changed". Same class as the MTG_PROFILE gap (4eb2f04). Carries
+                // job= because many chunks share one process, and the repro seed is the LOCAL one
+                // (what SetupGame shuffled on), matching the SLOW-GAME line above.
+                if (s_dump_wins)
+                {
+                    std::fprintf(stderr, "[win] job=%s gi=%d wt=%d\n",
+                                 job.name.c_str(), global_gi, win_turns[wi.job][wi.game]);
+                }
                 engine->SetLogger(nullptr);
                 digests[wi.job][wi.game] = dlog.Digest();
                 if (trace)
                 {
                     dlog.EndGame(win_turns[wi.job][wi.game]);
                     dlog.WriteToFile(trace_dir / (job.name + "_gi" + std::to_string(global_gi) + ".json"));
+                }
+
+                // Refill the drip: this cell may send in its next game now that one has completed
+                // uncondemned. If it WAS condemned (by this very game, or by the heartbeat while it
+                // ran), OnFinished flushes the rest of the cell to be drained as skips instead.
+                if (condemnable)
+                {
+                    pool.OnFinished(job.cell_id,
+                                    cell_condemned[job.cell_id].load(std::memory_order_relaxed) != 0);
                 }
 
                 // Stream this job the instant its last game lands.
@@ -448,6 +1013,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         });
     }
     for (std::thread& th : threads) { th.join(); }
+    hb.Stop();
 
     // Final per-job aggregate, in manifest order (regardless of streaming).
     std::vector<BatchJobResult> results(jobs.size());

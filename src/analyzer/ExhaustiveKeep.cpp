@@ -1504,6 +1504,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
     // Per-rollout hand description, built ONLY when a rollout is actually slow (the tracker calls this
     // lambda on the slow path only), so the common case costs one clock read and an atomic compare.
+    // (MERGE NOTE b9d8d08: the remote's slow_top/slow_ver capture_slow -- an always-on top-N with a
+    // heartbeat re-dump -- targeted the pre-a1dce19 architecture. SlowRollouts.h subsumes it: the shared
+    // tracker keeps the top-N across ALL rollout phases and Slow().Dump fires at every heartbeat, at
+    // floor-complete and at end-of-run, with the stream also persisted to <out_raw>.slow.log.)
     auto describe_cell = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs)
     {
         std::string hand;
@@ -1774,6 +1778,10 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                               << static_cast<long long>(el > 0 ? rd / el : 0) << "/s, "
                               << static_cast<long long>(el) << "s phase / " << static_cast<long long>(gen_elapsed())
                               << "s total)\n" << std::flush;
+                    // Always-on slowest-rollout dump at this runner's heartbeat too (merge of b9d8d08,
+                    // re-expressed on the shared tracker): an interrupted / weekend run surfaces its slow
+                    // games continuously instead of only at floor-complete / end-of-run.
+                    Slow().Dump(std::cerr, "so far", 3);
                 }
             }
         };
