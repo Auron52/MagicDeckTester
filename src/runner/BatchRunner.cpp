@@ -5,6 +5,7 @@
 #include "../core/HardwareConcurrency.h"
 #include "../ai/AIEngine.h"
 #include "../ai/MulliganProfile.h"
+#include "../ai/Profiler.h"
 #include "../ai/MulliganProfileIO.h"
 #include "../deck/DeckLoader.h"
 #include "../ai/ValueArm.h"
@@ -942,6 +943,12 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     on_job_done(r);
                 }
             }
+            // Fold this worker's thread_local counters into the global aggregate, exactly as the
+            // single-run path does (GoldFishRunner.cpp). The hot path is deliberately lock-free
+            // thread_local storage, so a worker that never flushes contributes NOTHING -- and since
+            // every game runs on a worker, an unflushed batch reports all-zero counters rather than
+            // no counters, which looks like a measured result. No-op unless MTG_PROFILE is defined.
+            PROF_FLUSH_THREAD();
         });
     }
     for (std::thread& th : threads) { th.join(); }
