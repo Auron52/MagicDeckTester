@@ -70,6 +70,23 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   manifest's `profile` field rather than re-launching per variant). This is the same
   lesson as the regression harness's per-mode pooling — one tail, not one-per-item.
 
+  **WAVES ARE A LOOP.** Splitting a pooled run into phases/waves, or into one batch per
+  arm/deck/variant, re-introduces exactly the defect the rule forbids: every wave is a
+  barrier that idles the box until its slowest game lands, and separate pools never share
+  threads. This has now failed twice (a per-cell loop: 3 of 24 cores for 15 h; then a
+  two-wave per-arm split: **3 of 20 cores for 23 h**, delivering 5% of the job). A barrier
+  is only allowed where a genuine data dependency requires it.
+
+  **CHECK UTILISATION IN THE FIRST TEN MINUTES.** `mtg --batch` prints a
+  `[batch] heartbeat: N/M workers busy` line every 10 minutes (and a `SLOW-GAME` repro for
+  any game over 30 s) — both ON BY DEFAULT, `MTG_BATCH_HEARTBEAT=0` / `MTG_SLOW_GAME_MS=0`
+  to silence. If that line is not near M/M, stop and fix the scheduling before letting the
+  run continue; do not reach for an engine explanation first. Both times the box was
+  starved, the cause was diagnosed as something else (an engine regression, a tractability
+  guard) while the heartbeat number said plainly what it was. Anything that runs work
+  without going through `--batch` therefore has NO utilisation reporting — which is one
+  more reason the pooled queue is the only route.
+
 - **Log/output directories go under `logs/` (or `test/logs/`), never the repo root.**
   Any script or command that writes game logs, batch output, or A/B scratch must
   target a subdirectory of `logs/` (e.g. `logs/fd_quick`), not a root-level

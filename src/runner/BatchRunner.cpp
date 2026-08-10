@@ -206,14 +206,36 @@ std::size_t ProfileCacheCap()
 // 2026-08-10 had a single game at 21.4 hours and nothing on disk said so until it ended. This writes
 // a ranked snapshot every MTG_BATCH_HEARTBEAT_MS (default 60s) to MTG_BATCH_HEARTBEAT, merging games
 // still in flight (elapsed so far) with the slowest completed ones, so a run can be diagnosed while
-// it is running instead of afterwards. Unset path => no thread, no file, zero overhead.
+// it is running instead of afterwards.
+//
+// DEFAULT ON. It was opt-in (unset path => no thread), which meant a bare `mtg --batch` had no
+// heartbeat, no slow-game lines AND no in-flight condemnation -- all three mid-run protections are
+// gated on this object being alive. `MTG_BATCH_HEARTBEAT=0` (or `off`/`none`) disables; a path
+// overrides where the ranked file goes.
+//
+// Every beat also prints ONE line to stderr, and that line leads with worker UTILISATION, because
+// that is the number the whole 2026-08-10 saga turned on: the run was diagnosed as an engine
+// regression, then as condemnation, when it was 3 of 20 cores busy the entire time. A run cannot
+// hide that from a 10-minute heartbeat.
 class Heartbeat
 {
 public:
     Heartbeat(std::size_t slots, std::size_t keep)
         : running_(slots), keep_(keep)
     {
-        if (const char* p = std::getenv("MTG_BATCH_HEARTBEAT")) { path_ = p; }
+        const char* p = std::getenv("MTG_BATCH_HEARTBEAT");
+        const std::string want = p ? std::string(p) : std::string();
+        if (p && (want == "0" || want == "off" || want == "none")) { enabled_ = false; }
+        else if (p && !want.empty()) { path_ = want; }
+        else
+        {
+            // Default file, under logs/ per the repo convention. If the directory cannot be made
+            // (read-only cwd, sandbox), keep the stderr line and simply skip the file -- the
+            // instrument must never be the reason a run fails to start.
+            std::error_code ec;
+            std::filesystem::create_directories("logs/batch", ec);
+            if (!ec) { path_ = "logs/batch/heartbeat.txt"; }
+        }
         if (const char* m = std::getenv("MTG_BATCH_HEARTBEAT_MS"))
         { const long v = std::atol(m); if (v > 0) { period_ms_ = v; } }
         if (const char* f = std::getenv("MTG_BATCH_HEARTBEAT_MIN_MS"))
@@ -221,7 +243,7 @@ public:
         for (Slot& s : running_) { s.active.store(0); s.start_ms.store(0); }
     }
 
-    bool on() const { return !path_.empty(); }
+    bool on() const { return enabled_; }
 
     // Called once per period with EVERY in-flight game as (cell_id, elapsed ms). One call with the
     // whole set, not one per game, because the mean rule needs to aggregate per cell before judging.
@@ -230,7 +252,7 @@ public:
 
     void SetRunning(std::size_t slot, const std::string& job, int gi, int cell_id)
     {
-        if (path_.empty() || slot >= running_.size()) { return; }
+        if (!enabled_ || slot >= running_.size()) { return; }
         Slot& s = running_[slot];
         {
             std::lock_guard<std::mutex> lk(s.mtx);
@@ -242,7 +264,7 @@ public:
 
     void ClearRunning(std::size_t slot)
     {
-        if (path_.empty() || slot >= running_.size()) { return; }
+        if (!enabled_ || slot >= running_.size()) { return; }
         running_[slot].active.store(0, std::memory_order_release);
     }
 
@@ -253,7 +275,7 @@ public:
         // Floor-checked BEFORE the lock. The interesting games are hours long, so recording every
         // finished game would take a mutex on the hot path (20 workers x ~9 ms V-cell games) to
         // retain rows that could never make the top 100 anyway. Below the floor: two loads, no lock.
-        if (path_.empty() || ms < min_ms_) { return; }
+        if (!enabled_ || ms < min_ms_) { return; }
         std::lock_guard<std::mutex> lk(fin_mtx_);
         if (finished_.size() < keep_) { finished_.push_back({ms, job, gi}); }
         else
@@ -266,7 +288,7 @@ public:
 
     void Start()
     {
-        if (path_.empty()) { return; }
+        if (!enabled_) { return; }
         stop_ = false;
         thread_ = std::thread([this] {
             // A condition_variable, not a poll loop: the thread sleeps for the WHOLE period and is
@@ -287,7 +309,7 @@ public:
 
     void Stop()
     {
-        if (path_.empty()) { return; }
+        if (!enabled_) { return; }
         { std::lock_guard<std::mutex> lk(wake_mtx_); stop_ = true; }
         wake_cv_.notify_all();
         if (thread_.joinable()) { thread_.join(); }
@@ -341,6 +363,26 @@ private:
                   [](const Entry& a, const Entry& b) { return a.ms > b.ms; });
         if (rows.size() > keep_) { rows.resize(keep_); }
 
+        // ONE stderr line per beat, utilisation FIRST. A ranked file nobody thought to open is not
+        // observability: this is the line that makes "23 hours at 3 of 20 cores" impossible to miss,
+        // and it costs one write every 10 minutes.
+        {
+            const double busy = running_.empty() ? 0.0
+                              : 100.0 * static_cast<double>(n_running) / static_cast<double>(running_.size());
+            std::fprintf(stderr, "[batch] heartbeat: %zu/%zu workers busy (%.0f%%)",
+                         n_running, running_.size(), busy);
+            if (!rows.empty() && rows.front().ms >= min_ms_)
+            {
+                std::fprintf(stderr, "  slowest %.2fh %s gi=%d",
+                             static_cast<double>(rows.front().ms) / 3600000.0,
+                             rows.front().job.c_str(), rows.front().gi);
+            }
+            if (!path_.empty()) { std::fprintf(stderr, "  -> %s", path_.c_str()); }
+            std::fprintf(stderr, "\n");
+            std::fflush(stderr);
+        }
+        if (path_.empty()) { return; }
+
         // Write-then-rename so a reader never sees a half-written file.
         const std::string tmp = path_ + ".tmp";
         std::ofstream out(tmp, std::ios::trunc);
@@ -358,7 +400,8 @@ private:
         std::filesystem::rename(tmp, path_, ec);
     }
 
-    std::string              path_;
+    bool                     enabled_ = true;   // MTG_BATCH_HEARTBEAT=0/off/none turns it off
+    std::string              path_;             // may be empty (unwritable cwd) -- stderr line still runs
     // 10 minutes. The games this exists to surface run for HOURS, so a coarse snapshot loses
     // nothing, and a rare wake is the point: never compete with the workers it is watching.
     long                     period_ms_ = 600000;
@@ -388,11 +431,16 @@ struct WorkItem
 
 // Report any game at or over this many ms (see the SLOW-GAME emission in the worker). A MILLISECOND
 // value, not a boolean, so it is getenv+parse rather than EnvOn -- same convention and same variable
-// as GoldFishRunner's. 0 / unset / unparseable => off.
+// as GoldFishRunner's, INCLUDING its default: ON at 30 s, `=0` disables.
+//
+// It used to default OFF here while GoldFishRunner defaulted ON, which is exactly backwards: the
+// single-game path defaults to reporting on runs that are short and watched, and `--batch` -- the
+// route every long pooled run is REQUIRED to take -- defaulted to silence. That inversion is why a
+// 23-hour matrix run at 3 of 20 cores, containing one 21.4-hour game, produced no signal at all.
 static long long SlowGameMs()
 {
     const char* e = std::getenv("MTG_SLOW_GAME_MS");
-    if (!e || !*e) { return 0; }
+    if (!e || !*e) { return 30000LL; }
     char* end = nullptr;
     const long long v = std::strtoll(e, &end, 10);
     return (end && *end == '\0' && v > 0) ? v : 0;

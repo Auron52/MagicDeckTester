@@ -49,32 +49,10 @@ for _k, _d in _REG.items():
     PROFILES[_k + deck_registry.STAGED_SUFFIX] = _d.profile
 
 
-def run(deck, depth, games, seed, mt, threads, profile, value_on, value_min_depth,
-        deck_profile=None):
-    env = dict(os.environ)
-    for k in ("MTG_EVAL_MODEL","MTG_EVAL_PROFILE","MTG_VALUE_MODEL","MTG_VALUE_PROFILE",
-              "MTG_NC_SEARCH","MTG_VALUE_MIN_DEPTH","MTG_VALUE_REDO_MODE","MTG_VALUE_STARTGATE_ALPHA"):
-        env.pop(k, None)
-    if value_on:
-        env["MTG_VALUE_MODEL"]="1"; env["MTG_VALUE_PROFILE"]=profile
-        # MIN_DEPTH=0 => PURE value-leaf (no heuristic redo); the whole point of this matrix.
-        env["MTG_VALUE_MIN_DEPTH"]=str(value_min_depth); env["MTG_VALUE_STARTGATE_ALPHA"]="8"
-    else:
-        env["MTG_VALUE_MODEL"]="0"
-    # --ignore-play-profile: a deck with an ENABLED value_play block (antilife/hinata since the beam
-    # adoption) locks play depth and REJECTS an explicit --depth; this bypasses that so the matrix can
-    # sweep depths. Harmless for decks without an enabled block (CLI depth just wins). REQUIRED now.
-    cmd=[MTG,deck,"--games",str(games),"--seed",str(seed),"--depth",str(depth),
-         "--max-turns",str(mt),"--threads",str(threads),"--ignore-play-profile"]
-    if deck_profile: cmd += ["--profile", deck_profile]
-    t0=time.time(); out=subprocess.run(cmd,capture_output=True,text=True,env=env).stdout; dt=time.time()-t0
-    p=int(re.search(r"Games played\s*:\s*(\d+)",out).group(1))
-    # Merged metric (a4f2be7): "avg (turns)" IS the loss-penalised avg win turn (unwon = max_turns+1)
-    # printed directly -- identical to the old (w*a+(p-w)*(mt+1))/p, so numbers stay comparable to the
-    # existing tables. (Was: parse "Games won" + "Avg win turn" and recompute; both lines are now gone.)
-    m=re.search(r"avg \(turns\)\s*:\s*([\d.]+)",out); lp=float(m.group(1)) if m else float("nan")
-    return lp, 1000.0*dt/p
-
+# NOTE: the single-invocation helper `run()` that used to live here is DELETED. It ran ONE `mtg` per
+# (deck, depth, seed) and was the shared engine of two loop-shaped drivers -- the monolithic branch of
+# this file and scripts/attic/valueleaf_incremental.py -- both of which are now gone. Anything that
+# needs the matrix goes through run_incremental() -> run_pool(): one manifest, one queue, one tail.
 
 # ==================== INCREMENTAL / TRACTABILITY-AWARE MODE (--incremental) ====================
 # The way to build a depth table on decks with a heavy search tail (antilife unbounded deep search has games
@@ -644,47 +622,13 @@ def main():
         os.makedirs(os.path.dirname(args.out),exist_ok=True)
         run_incremental(args)
         return
-    hgames = args.hgames if args.hgames is not None else args.games
-    vgames = args.vgames if args.vgames is not None else args.games
-    hgd = {}
-    for spec in args.hgames_depth:
-        k, v = spec.split(":"); hgd[int(k)] = int(v)
-    os.makedirs(os.path.dirname(args.out),exist_ok=True)
-    of=open(args.out,"a")
-    run_lines=[]   # THIS run's blocks only (for --write-profile; the --out file is append-history)
-    def emit(s): print(s,flush=True); of.write(s+"\n"); of.flush(); run_lines.append(s)
-    # Header's `games=` carries VGAMES (the full value arm -> the writer's provenance); heuristic games trail it.
-    hnote = ("hgames=%d" % hgames) + ("" if not hgd else " hgames_depth=" + ",".join("%d:%d" % (d, hgd[d]) for d in sorted(hgd)))
-    emit("\n===== DEPTH MATRIX (UNBOUNDED)  games=%d seeds=%s value_min_depth=%d%s  %s =====" % (
-        vgames, args.seeds, args.value_min_depth,
-        "  [PURE value-leaf, no redo]" if args.value_min_depth == 0 else "  [HYBRID redo below this]", hnote))
-    for dname in args.decks:
-        deck,prof,mt=DECKS[dname]
-        # accumulate mean LP + ms per config over seeds
-        H={d:[0.0,0.0] for d in args.hdepths}; V={d:[0.0,0.0] for d in args.vdepths}; n=0
-        for seed in args.seeds:
-            try:
-                for d in args.hdepths:
-                    g = hgd.get(d, hgames)   # per-depth games: cut only the slow heuristic cells
-                    lp,ms=run(deck,d,g,seed,mt,args.threads,None,False,args.value_min_depth); H[d][0]+=lp; H[d][1]+=ms
-                for d in args.vdepths:
-                    lp,ms=run(deck,d,vgames,seed,mt,args.threads,prof,True,args.value_min_depth); V[d][0]+=lp; V[d][1]+=ms
-                n+=1
-            except Exception as e:
-                emit("  %s s%d ERROR %s" % (dname,seed,e))
-        if not n: continue
-        emit("---- %s (mean over %d seeds) ----" % (dname,n))
-        emit("  heuristic:  " + "   ".join("H%d=%.4f[%.1fms]"%(d,H[d][0]/n,H[d][1]/n) for d in args.hdepths))
-        emit("  value-leaf: " + "   ".join("V%d=%.4f[%.1fms]"%(d,V[d][0]/n,V[d][1]/n) for d in args.vdepths))
-        emit("  Vi-Hj matrix (neg = value-leaf better):")
-        emit("        " + "  ".join("H%d    "%d for d in args.hdepths))
-        for vi in args.vdepths:
-            row="   V%d  " % vi
-            for hj in args.hdepths:
-                row += "%+.4f " % (V[vi][0]/n - H[hj][0]/n)
-            emit(row)
-    of.close()
-
+    # NOTE: the monolithic per-cell path that used to live here is DELETED, not disabled. It called
+    # run() once per (deck, depth, seed) -- a loop of ~50 separate `mtg` invocations, each with its own
+    # load-imbalance tail and a serial gap between them. That is the shape CLAUDE.md forbids, and it is
+    # what the 2026-08-10 post-mortem traced 23 hours at 3-of-20 cores back to. The guard above rejects
+    # --no-incremental, but dead code that still reads as a working alternative is how a superseded
+    # baseline gets re-adopted (see fivecolour-search-cost.md, where exactly that produced a retracted
+    # 7x claim). run_incremental() -> run_pool() is the ONLY route: ONE manifest, ONE queue, ONE tail.
     if args.write_profile:
         # Fold THIS run's table straight into the play profile(s) -- one atomic command, no hand-stitched log.
         # Write this run's blocks to a fresh run-scoped log (NOT the appended --out) so the writer sees only
