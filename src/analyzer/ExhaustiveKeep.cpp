@@ -1436,6 +1436,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     struct SlowRec { double ms; int H; int pd; long long r; std::string hand; };
     std::vector<SlowRec> slow_top;                    // the N slowest so far, guarded by slow_mtx
     std::atomic<double>  slow_gate{0.0};              // = N-th-slowest ms once full; lock only if ms > this
+    std::atomic<unsigned long long> slow_ver{0};      // bumped whenever slow_top changes -> heartbeat re-dumps
     const std::size_t    SLOW_N = 12;
     auto capture_slow = [&](int H, const std::vector<int>& comp, int pd, long long r, uint64_t rs, double ms)
     {
@@ -1454,6 +1455,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             if (slow_top.size() > SLOW_N) { slow_top.resize(SLOW_N); }
             slow_gate.store(slow_top.size() >= SLOW_N ? slow_top.back().ms : 0.0,
                             std::memory_order_relaxed);
+            slow_ver.fetch_add(1, std::memory_order_relaxed);   // signal the heartbeat to re-dump
         }
         if (stream)
         {
@@ -1694,6 +1696,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::atomic<std::size_t> next_report{ step };
         std::atomic<long long>   next_time{ 30 };      // ...OR every 30s, whichever comes first
         std::atomic<long long>   roll_done{ 0 };       // rollouts completed this phase (for a live rate)
+        std::atomic<unsigned long long> printed_slow_ver{ 0 };   // last slow_top version dumped by a heartbeat
         const auto t_batch = std::chrono::steady_clock::now();
         auto th_worker = [&]()
         {
@@ -1723,6 +1726,21 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                               << static_cast<long long>(el > 0 ? rd / el : 0) << "/s, "
                               << static_cast<long long>(el) << "s phase / " << static_cast<long long>(gen_elapsed())
                               << "s total)\n" << std::flush;
+                    // Always-on slowest-rollout dump (no flag, no completion gate): whenever the top-N set
+                    // has changed since the last heartbeat, re-print it here so an interrupted / weekend run
+                    // still surfaces its slow games instead of hiding them until floor_report_maybe_stop.
+                    const unsigned long long sv = slow_ver.load(std::memory_order_relaxed);
+                    if (sv != printed_slow_ver.exchange(sv, std::memory_order_relaxed))
+                    {
+                        std::lock_guard<std::mutex> lk(slow_mtx);
+                        std::cerr << "[keepgen]   slowest rollouts so far (top " << slow_top.size()
+                                  << "):\n" << std::fixed << std::setprecision(0);
+                        for (const SlowRec& s : slow_top)
+                            std::cerr << "[keepgen]     " << s.ms << "ms  size" << s.H << " "
+                                      << (s.pd ? "play" : "draw") << "  " << s.hand << "\n";
+                        std::cerr.unsetf(std::ios::floatfield);
+                        std::cerr << std::flush;
+                    }
                 }
             }
         };

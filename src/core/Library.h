@@ -179,22 +179,41 @@ public:
     // live card, so the key is a total order (tie-break on m_number for hash collisions).
     void ShuffleByKey(uint64_t seed)
     {
-        if (size() < 2) { return; }
-        auto key = [seed](const Card& c) -> std::uint64_t
+        const std::size_t n = size();
+        if (n < 2) { return; }
+        auto key = [seed](std::int32_t number) -> std::uint64_t
         {
             std::uint64_t x = seed * 0x9E3779B97F4A7C15ull
-                            + (static_cast<std::uint64_t>(c.m_number) + 1) * 0xD1B54A32D192ED03ull;
+                            + (static_cast<std::uint64_t>(number) + 1) * 0xD1B54A32D192ED03ull;
             x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ull;
             x ^= x >> 27; x *= 0x94D049BB133111EBull;
             x ^= x >> 31;
             return x;
         };
-        std::stable_sort(m_cards.begin() + static_cast<std::ptrdiff_t>(m_top), m_cards.end(),
-            [&key](const Card& a, const Card& b)
-            {
-                std::uint64_t ka = key(a), kb = key(b);
-                return ka != kb ? ka < kb : a.m_number < b.m_number;
-            });
+        // Decorate-sort-undecorate. The sort key is a PURE function of (seed, m_number), so it was
+        // wastefully recomputed inside every comparison -- O(n log n) splitmix64 evaluations -- while
+        // stable_sort also shuffled heavy Card objects through its merge buffer. Instead compute each
+        // key ONCE (O(n)), sort lightweight (key, number, offset) records, then permute the cards a
+        // single time. The comparator is (key asc, m_number asc); m_number is unique per live card, so
+        // the order is a strict TOTAL order and the resulting permutation is uniquely determined --
+        // BYTE-IDENTICAL to the old whole-Card stable_sort. stable_sort is retained on the records (they
+        // are built in live-window order) so even a hypothetical key+m_number collision preserves the
+        // exact original relative order. thread_local scratch avoids a per-call heap alloc (ShuffleByKey
+        // is hot in rollouts); no nested ShuffleByKey exists, so the buffers are never clobbered mid-use.
+        struct Deco { std::uint64_t key; std::int32_t number; std::uint32_t off; };
+        static thread_local std::vector<Deco> deco;
+        static thread_local std::vector<Card> tmp;
+        deco.clear(); deco.reserve(n);
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            const Card& c = m_cards[m_top + i];
+            deco.push_back(Deco{ key(c.m_number), c.m_number, static_cast<std::uint32_t>(i) });
+        }
+        std::stable_sort(deco.begin(), deco.end(), [](const Deco& a, const Deco& b)
+        { return a.key != b.key ? a.key < b.key : a.number < b.number; });
+        tmp.clear(); tmp.reserve(n);
+        for (const Deco& d : deco) { tmp.push_back(std::move(m_cards[m_top + d.off])); }
+        std::move(tmp.begin(), tmp.end(), m_cards.begin() + static_cast<std::ptrdiff_t>(m_top));
     }
 
 private:
