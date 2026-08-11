@@ -3560,11 +3560,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 { mana_ceiling += std::max(1, d->params.produces_amount); }
             }
             // Strive variants only make sense for a target already on the battlefield.
+            // DOMINANCE FOLD (measured, MTG_BRANCH_STATS 2026-08-11): Twinflame's target x
+            // strive-count product was 94% of this deck's total odometer (single groups up to 768
+            // options). With a MAGNET on the battlefield every K>0 variant is goldfish-dominated:
+            // the solo-target fan-out copies EVERY other creature for the base cost, while strive
+            // K delivers K+1 chosen creatures for base + K x strive -- strictly fewer tokens for
+            // strictly more mana (hedging value vs interaction does not exist vs the passive
+            // opponent). So K>0 is enumerated only on magnetless boards. Opened by
+            // MTG_UNPRUNED/tricktarget alongside the sibling target prune (standing A/B).
+            bool magnet_on_bf = false;
+            if (def.params.strive_cost.has_value()
+                && !DecisionUnpruned(UnprunedGate::TrickTarget))
+            {
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index) { continue; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                    if (d && d->params.copies_solo_targeted_spells) { magnet_on_bf = true; break; }
+                }
+            }
             auto emit_with_strive = [&](int tgt_num, bool on_battlefield,
                                         const std::string& hand_name = std::string())
             {
                 emit(tgt_num, 0, hand_name);
                 if (!on_battlefield || !def.params.strive_cost.has_value()) { return; }
+                if (magnet_on_bf) { return; }   // fan-out dominates every strive count (above)
                 for (int k = 1; k < others; ++k)
                 {
                     const int mv = base_cost.ManaValue()

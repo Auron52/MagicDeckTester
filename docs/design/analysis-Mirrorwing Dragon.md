@@ -286,6 +286,39 @@ All checks PASS except one:
      Prospector model). All other decks byte-identical. Viewer protocol 184 refs clean.
      GT digests for the 5 goblins configs need an accept (score-neutral rebaseline).
 
+## Stage 6 round 2 (2026-08-11): branching enumeration + cap question + magnet preference
+
+- **Magnet preference (user)**: kept-magnet choice in the discard rule is now
+  earliest-cast-turn based (board sources + hand mana, one drop/turn, red pips checked):
+  Mirrorwing when castable the SAME turn as Zada, Zada when strictly earlier or Mirrorwing
+  uncoverable; tie -> bigger body. Commit f9c679c, smoke 30/30 byte-identical.
+- **Branching enumerated (MTG_BRANCH_STATS, heavy game 5041/gi36)**: Twinflame drives ~94%
+  of total odometer (345k of ~368k; single option-groups up to 768 wide) -- the width is the
+  target x strive-count product INSIDE one group, i.e. mostly NOT the group-count axis the
+  EnumGroupCap bounds. Ancestral Anger a distant second (21k).
+- **Strive dominance fold (new, lossless)**: with a magnet on the battlefield every strive
+  K>0 variant is goldfish-dominated by the solo-target fan-out (all creatures copied for
+  base cost vs K+1 chosen for base + K x strive). K>0 now enumerates only on magnetless
+  boards; opened by MTG_UNPRUNED/tricktarget (viewer unaffected -- human play is unpruned).
+  300g d3: avg 5.2433 IDENTICAL to pre-fold, same 5 unwon games; smoke 30/30. A 1-game
+  4->5 flip at b200 was classified budget churn (recovers at 4x; unpruned control is WORSE
+  at b200: 6.0 -- dilution).
+- **Cap-8 vs cap-12 A/B (user question "is lowering the cap the right lever?")**: cap-12
+  (MTG_SOLVE_GROUP_CAP=12) re-inflates the tail at suite budgets -- same-game gi88 154s
+  (cap 8) vs 253s (cap 12), gi60 <30s vs 119s, plus a still-longer tail game; the earlier
+  NO-cap arm had a 1139s game and was killed after 7 CPU-h. Both wider arms confirm the
+  cap's feasibility role. Result-quality comparison recorded when the arm lands.
+- **Escalation question (user)**: verified in code -- there is NO capped-then-expand
+  breadth escalation; the cap is static per provider, MTG_UNPRUNED/MTG_SOLVE_GROUP_CAP are
+  manual levers, and the existing escalation ladder (value-leaf hybrid) escalates
+  depth/budget only. The board-lethal short-circuit protects attack-only wins from the cap,
+  but a CAST-dependent this-turn lethal needing a dropped group is unprotected (the win is
+  found a turn later instead). The cap-site comment overclaims ("never drops a win").
+  PROPOSAL (user to approve): expand-on-no-win rung -- when the capped enumeration finds no
+  winning plan AND groups were dropped AND a cast-dependent lethal is plausible, re-enumerate
+  once with the cap lifted. Bounded (fires only on no-win nodes) but exactly those nodes are
+  the expensive ones -- needs a plausibility gate + measurement before adoption.
+
 ## Open items / next steps
 
 - Mulligan profile generation: DEFERRED (user kicks off; policy 2026-07-17).
@@ -293,3 +326,6 @@ All checks PASS except one:
 - card_costs gate line: re-run when Scryfall rate limit clears (see above).
 - Goblins value sidecar predates the corrected sac model (engine-state fingerprint policy):
   regeneration is cheap (~3 min) if pooling/regen ever needs it.
+- Expand-on-no-win breadth escalation: proposed above, awaiting user decision.
+- Deck-aware SituationalCardRank for Mirrorwing (which groups the cap drops): the "fill in
+  later" seam -- currently inherits the generic ranking.
