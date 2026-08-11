@@ -6554,11 +6554,34 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         if (d && d->card.IsCreature()) { bodies.push_back(i); }
         if (c.m_name == "Gold Rush") { gold_rush_held = true; }
     }
-    // The kept enabler: none needed with a magnet already on board; else the CHEAPEST hand magnet
-    // (Zada {3}{R} before Mirrorwing {3}{R}{R} -- castable a turn sooner; the pair is one role,
-    // see InterchangeableRequiredGroup).
+    // The kept enabler: none needed with a magnet already on board. Among hand magnets the pick
+    // is NOT a fixed cheapest-first (user, Stage-6 round 2): estimate each magnet's EARLIEST CAST
+    // TURN from board sources + the hand's mana (one land drop per turn), and keep Mirrorwing
+    // when it is castable the SAME turn as Zada (more power, better Twinflame interactions) --
+    // Zada only when it is castable strictly earlier or Mirrorwing's cost (incl. the RR pips) is
+    // not coverable at all. The kill usually comes the turn AFTER the enabler lands, so
+    // equal-turn castability is the decision point.
+    int hand_mana_n = 0, hand_red = 0;
+    for (int i : mana)
+    {
+        ++hand_mana_n;
+        if (produces(ap.hand[i], Color::Red)) { ++hand_red; }
+    }
+    auto cast_turns = [&](const Card& c) -> int
+    {
+        const int mv      = c.m_mana_cost.ManaValue();
+        const int red_req = c.m_mana_cost.red;
+        const int deficit = std::max(0, mv - board_sources);
+        if (deficit > hand_mana_n)              { return 1000; }   // mana not coverable
+        if (board_red + hand_red < red_req)     { return 1000; }   // red pips not coverable
+        return deficit;
+    };
     std::stable_sort(magnets.begin(), magnets.end(), [&](int a, int b)
-    { return ap.hand[a].m_mana_cost.ManaValue() < ap.hand[b].m_mana_cost.ManaValue(); });
+    {
+        const int ta = cast_turns(ap.hand[a]), tb = cast_turns(ap.hand[b]);
+        if (ta != tb) { return ta < tb; }                                   // castable sooner wins
+        return ap.hand[a].m_mana_cost.ManaValue() > ap.hand[b].m_mana_cost.ManaValue();   // tie: bigger body
+    });
     const int kept_magnet = (!magnet_board && !magnets.empty()) ? magnets.front() : -1;
     const int enabler_mv  = kept_magnet >= 0
         ? ap.hand[kept_magnet].m_mana_cost.ManaValue()
