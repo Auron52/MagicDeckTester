@@ -6390,7 +6390,7 @@ void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDef
                                                    // identical Mirrorwing is the same choice
     for (const Permanent& p : s.battlefield)
     {
-        if (p.controller_index != me || !p.card.IsCreature() || p.card.m_number == 0) { continue; }
+        if (p.controller_index != me || !p.card.IsCreature()) { continue; }   // tokens included
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && d->params.copies_solo_targeted_spells)
         {
@@ -6432,6 +6432,196 @@ void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDef
     // there are no legal targets and the caller's loops emit nothing anyway -- but out.empty()
     // must not silently mean "all", so mark narrowing active with a 0 (skipped by the caller).
     if (out.empty()) { out.push_back(0); }
+}
+
+// ---- MirrorwingProvider::LegendKeepIndex ------------------------------------
+//
+// User directive (Stage 6 review, analysis-Mirrorwing Dragon.md): the base keep-the-oldest rule is
+// wrong in exactly one corner -- Zada is summoning-sick, Twinflame makes a hasty token copy of it,
+// and attacking WITH the token wins this turn. The token exiles at end of turn either way, so
+// giving up the original only pays when it converts THIS turn into the win; in every other state
+// keep-the-oldest is strictly better (the original stays, the token was temporary).
+//
+// Decided by SIMULATING combat on scratch copies (both arms), not by the pending-damage
+// projection: the projection can over-count vs the simulated combat (commit-the-line note in
+// TurnSolver.cpp), and an over-count here would discard the original for a phantom lethal. The
+// same simulation runs in both worlds (executor's EnforceLegendRule and the rollout's resolve the
+// same provider), so the choice is lockstep by construction. Phase gate: only while combat is
+// still ahead (GameState::phase, maintained by the executor's MainPhase and the rollout's
+// SimulateCombat/turn-boundary writes) -- a post-combat keep-the-copy is a pure loss (the token
+// exiles before it can ever attack). Later plan casts (a pump after the trick) are not seen; the
+// projection is a same-instant lower bound, so the miss direction is the safe one (keep original).
+int MirrorwingProvider::LegendKeepIndex(const GameState& s, int controller,
+                                        const std::vector<int>& duplicates) const
+{
+    const int oldest = duplicates.empty() ? -1 : duplicates.front();
+    if (duplicates.size() != 2) { return oldest; }   // the Twinflame pattern is exactly one pair
+    if (s.phase != Phase::PreCombatMain && s.phase != Phase::Combat) { return oldest; }
+    const int newest = duplicates.back();
+    const Permanent& po = s.battlefield[oldest];
+    const Permanent& pn = s.battlefield[newest];
+    if (!pn.exile_at_end)                              { return oldest; }  // not the temp-copy pattern
+    if (CanAttackFull(po, s.battlefield, controller))  { return oldest; }  // original attacks fine
+    if (!CanAttackFull(pn, s.battlefield, controller)) { return oldest; }  // copy cannot attack either
+    const int opp = 1 - controller;
+
+    auto lethal_keeping = [&](int keep_idx) {
+        GameState arm = s;
+        // Apply this arm's legend-rule outcome exactly as EnforceLegendRule will (loser to the
+        // graveyard), then simulate the attack. No duplicates remain, so no recursion back here.
+        const int lose_idx = (keep_idx == oldest) ? newest : oldest;
+        arm.players[arm.battlefield[lose_idx].owner_index].graveyard.push_back(
+            arm.battlefield[lose_idx].card);
+        arm.battlefield.erase(arm.battlefield.begin() + lose_idx);
+        RolloutSimulateCombat(arm);
+        return arm.players[opp].life <= 0;
+    };
+    if (!lethal_keeping(newest)) { return oldest; }   // not lethal even with the copy
+    if (lethal_keeping(oldest))  { return oldest; }   // lethal anyway -> keep the original
+    return newest;
+}
+
+// ---- MirrorwingProvider cleanup discard -------------------------------------
+//
+// USER-AUTHORED keep policy (Stage 6 review, 2026-08-11, analysis-Mirrorwing Dragon.md): "You want
+// 1 enabler in Mirrorwing/Zada, at least 3-4 creatures total (counting the goblin as 2),
+// sufficient mana to play your enabler (preferably with at least 2 red) and a few spells,
+// preferring the ones that win outright like Gold Rush and Fists of Flame, but ones that draw can
+// also do the trick." Same shape as the antilife bucket rule: name what to SHED (in order),
+// omission = keep, and the shared ranking keeps required-piece protection as the safety net.
+// The deck rarely discards (0.13 mean label regret in the discard-analysis stage), so this rule is
+// mostly about the post-Fists mass-draw turns where the hand blows past seven.
+
+const std::vector<std::string>*
+MirrorwingProvider::InterchangeableRequiredGroup(const std::string& name) const
+{
+    static const std::vector<std::string> kMagnets = { "Zada, Hedron Grinder", "Mirrorwing Dragon" };
+    if (name == "Zada, Hedron Grinder" || name == "Mirrorwing Dragon") { return &kMagnets; }
+    return nullptr;
+}
+
+std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    static const bool s_bucket = EnvOn("MTG_MW_BUCKET_DISCARD", true);
+    if (!s_bucket) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    const Player& ap = s.players[s.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto is_magnet = [&](const Card& c)
+    { const CardDefinition* d = def_of(c); return d && d->params.copies_solo_targeted_spells; };
+    auto is_dork = [&](const Card& c)
+    { const CardDefinition* d = def_of(c); return d && d->tmpl == CardTemplate::ManaDork; };
+    auto is_land = [&](const Card& c)
+    { const CardDefinition* d = def_of(c); return d ? d->card.IsLand() : c.IsLand(); };
+    auto produces = [&](const Card& c, Color col)
+    {
+        const CardDefinition* d = def_of(c);
+        if (!d) { return false; }
+        for (Color p : d->params.produces) { if (p == col) { return true; } }
+        return false;
+    };
+
+    // Board census the buckets key on.
+    bool magnet_board = false, board_green = false;
+    int  board_sources = 0, board_red = 0, board_bodies = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        const bool creature = d ? d->card.IsCreature() : p.card.IsCreature();
+        if (creature) { ++board_bodies; }
+        if (d && d->params.copies_solo_targeted_spells) { magnet_board = true; }
+        if ((d && d->card.IsLand()) || is_dork(p.card))
+        {
+            ++board_sources;
+            if (produces(p.card, Color::Red))   { ++board_red; }
+            if (produces(p.card, Color::Green)) { board_green = true; }
+        }
+    }
+
+    // Hand census.
+    std::vector<int> magnets, mana, bodies;
+    bool gold_rush_held = false;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[i];
+        if (c.m_is_staged) { continue; }
+        if (is_magnet(c)) { magnets.push_back(i); continue; }
+        if (is_land(c) || is_dork(c)) { mana.push_back(i); }
+        const CardDefinition* d = def_of(c);
+        if (d && d->card.IsCreature()) { bodies.push_back(i); }
+        if (c.m_name == "Gold Rush") { gold_rush_held = true; }
+    }
+    // The kept enabler: none needed with a magnet already on board; else the CHEAPEST hand magnet
+    // (Zada {3}{R} before Mirrorwing {3}{R}{R} -- castable a turn sooner; the pair is one role,
+    // see InterchangeableRequiredGroup).
+    std::stable_sort(magnets.begin(), magnets.end(), [&](int a, int b)
+    { return ap.hand[a].m_mana_cost.ManaValue() < ap.hand[b].m_mana_cost.ManaValue(); });
+    const int kept_magnet = (!magnet_board && !magnets.empty()) ? magnets.front() : -1;
+    const int enabler_mv  = kept_magnet >= 0
+        ? ap.hand[kept_magnet].m_mana_cost.ManaValue()
+        : (magnet_board ? 2 : 4);   // magnet down -> trick mana; none anywhere -> assume Zada
+
+    std::vector<int> shed;
+    // S1 -- excess mana beyond the kept enabler's cost. Shed rank (sooner first): green-only
+    // lands, then red lands, then dorks (dorks are BODIES for the fan-out too). Two guards on the
+    // user's colour preferences: hold red sources back until two red are secured (board + kept),
+    // and hold one green source if a Gold Rush is held with no green on board ({1}{G}).
+    const int need = std::max(0, enabler_mv - board_sources);
+    int red_deficit = std::max(0, 2 - board_red);
+    bool green_guard_used = board_green || !gold_rush_held;
+    auto mana_shed_rank = [&](int i)   // lower = shed sooner
+    {
+        const Card& c = ap.hand[i];
+        if (is_dork(c)) { return 3; }
+        if (produces(c, Color::Red) && red_deficit > 0) { --red_deficit; return 2; }
+        if (produces(c, Color::Green) && !green_guard_used) { green_guard_used = true; return 1; }
+        return 0;
+    };
+    std::vector<std::pair<int, int>> ranked_mana;   // (rank, hand index)
+    for (int i : mana) { ranked_mana.push_back({ mana_shed_rank(i), i }); }
+    std::stable_sort(ranked_mana.begin(), ranked_mana.end(),
+                     [](const std::pair<int, int>& a, const std::pair<int, int>& b)
+                     { return a.first < b.first; });
+    const int excess = static_cast<int>(ranked_mana.size()) - need;
+    for (int k = 0; k < excess; ++k) { shed.push_back(ranked_mana[static_cast<std::size_t>(k)].second); }
+
+    // S2 -- redundant magnets beyond the kept one (all of them once a magnet is on board; the
+    // interchangeable-group protection still guards the truly last enabler anywhere in hand).
+    for (int i : magnets) { if (i != kept_magnet) { shed.push_back(i); } }
+
+    // S3 -- spells, least wanted first. USER keep priority: Gold Rush / Fists of Flame (win
+    // outright; never named here -> kept by omission) > draw tricks. Among the rest: Scale the
+    // Heights is the clunkiest (3 MV, one counter), Expedite is a bare cantrip, Twinflame doubles
+    // a wide board, Ancestral Anger is the cheapest mass-draw under a magnet.
+    static const char* const kSpellShedOrder[] = {
+        "Scale the Heights", "Expedite", "Twinflame", "Ancestral Anger" };
+    for (const char* name : kSpellShedOrder)
+    {
+        for (int i = 0; i < n; ++i)
+        { if (!ap.hand[i].m_is_staged && ap.hand[i].m_name == name) { shed.push_back(i); } }
+    }
+
+    // S4 -- excess creatures beyond the >=4 weighted bodies (Goblin Instigator brings its token,
+    // so it weighs 2). Board bodies count; dorks first among the shed (their mana role is already
+    // covered by S1's kept sources).
+    auto body_weight = [&](const Card& c) { return c.m_name == "Goblin Instigator" ? 2 : 1; };
+    int secured = board_bodies + (kept_magnet >= 0 ? 1 : 0);
+    std::vector<int> spare_bodies;
+    for (int i : bodies)
+    {
+        if (secured < 4) { secured += body_weight(ap.hand[i]); continue; }   // kept
+        spare_bodies.push_back(i);
+    }
+    std::stable_sort(spare_bodies.begin(), spare_bodies.end(), [&](int a, int b)
+    { return is_dork(ap.hand[a]) > is_dork(ap.hand[b]); });
+    for (int i : spare_bodies) { shed.push_back(i); }
+
+    // Omitted (kept): the kept magnet, the needed mana, every Gold Rush / Fists of Flame, and the
+    // bodies inside the 4-weight target.
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
 // ---- FiveColourProvider::ModalSplitCandidates -------------------------------

@@ -136,6 +136,11 @@ def cast_availability_advisory(dec):
     notes = []
     for p in dec.get("plans", []):
         for c in p.get("casts", []):
+            # Sac-outlet activations ride the casts list (references match on that multiset) and
+            # name a battlefield PERMANENT; a token source ("Treasure Token") is never hand-castable
+            # by definition, so it is noise for this advisory, not a hand-desync signal.
+            if c.endswith(" Token"):
+                continue
             if c not in hand and c not in yard:
                 notes.append(f"turn {dec.get('turn')} plan {p.get('index')}: casts '{c}' "
                              f"not in hand/retrace_gy (cascade/vial/staged? -> verify)")

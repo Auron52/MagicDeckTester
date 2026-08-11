@@ -777,3 +777,11 @@ public:
 // unification. Not part of the solver's interface: src/ code outside TurnSolver.cpp must keep
 // paying costs through AIEngine::TapForCost (executor) or plan application (rollout).
 bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
+
+// The rollout's combat simulation (defined in TurnSolver.cpp; the same shared combat core the
+// executor mirrors). External linkage exists ONLY for MirrorwingProvider::LegendKeepIndex, which
+// decides a legend-rule keep by simulating the attack on scratch copies of the state -- the
+// pending-damage projection can over-count vs the simulated combat (commit-the-line note), and
+// over-counting there would discard the original Zada for a phantom lethal. Mutates `state`
+// (damage, taps, pumps): call on a throwaway copy only.
+void RolloutSimulateCombat(GameState& state);

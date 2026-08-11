@@ -3491,10 +3491,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // one CastFromHand variant per legal target (sharing hand_index -> mutually exclusive),
         // reusing enchant_target to carry the chosen creature's card.m_number (aura precedent).
         // Targets offered:
-        //   - every own NONTOKEN battlefield creature (tokens are unnumbered so they cannot ride
-        //     the m_number axis; in this deck a token is a vanilla 1/1 always weakly dominated by
-        //     an equal-or-better numbered target, so the narrowing is inert -- disclosed 6a; the
-        //     copy FAN-OUT still includes tokens, only the explicit target choice excludes them);
+        //   - every own battlefield creature INCLUDING tokens (tokens carry unique ids from
+        //     GameState::next_token_number, so they ride the m_number axis; the equivalence fold
+        //     below keeps a swarm of identical tokens to one representative);
         //   - every creature card IN HAND (deduped by name): the same-plan line "cast Zada, then
         //     the trick at it" -- legal only in subsets that also cast that creature, enforced by
         //     the SubsetHasMissingTrickTarget filter (SubsetHasIllegalSplice's shape), and ordered
@@ -3603,8 +3602,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             std::unordered_set<std::string> seen_equiv;
             for (const Permanent& p : state.battlefield)
             {
-                if (p.controller_index != state.active_player_index || !p.card.IsCreature()
-                    || p.card.m_number == 0) { continue; }
+                if (p.controller_index != state.active_player_index || !p.card.IsCreature())
+                { continue; }   // tokens carry unique ids now, so they ride the target axis too
                 std::string eq = p.card.m_name.str();
                 eq += CanAttackFull(p, state.battlefield, state.active_player_index) ? "/A" : "/s";
                 eq += "/" + std::to_string(p.temp_power_bonus) + ","
@@ -9243,7 +9242,21 @@ static void SimulateCombat(GameState& state)
     // Damage, attack triggers, Utvara tokens and the Goblin Lackey cheat are shared with the
     // executor (ResolveCombatDamage, Combat.cpp). The rollout wants no play-viewer descriptions.
     ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/false);
+
+    // Combat is over for this simulated turn: everything until SimulateEndAndStartNextTurn is the
+    // post-combat main. The rollout historically never maintained GameState::phase (the executor
+    // sets it in GameEngine; no shared-resolution code read it), which left rollout states stuck on
+    // the phase inherited from the top-level solve. MirrorwingProvider::LegendKeepIndex now reads
+    // it (keep-the-copy is only sane while combat is still ahead), so keep it faithful here and at
+    // the turn boundary. Write-only for every other deck -> byte-identical.
+    state.phase = Phase::PostCombatMain;
 }
+
+// Provider-visible combat simulation (MirrorwingProvider::LegendKeepIndex): decide a legend-rule
+// keep by SIMULATING the attack both ways instead of trusting the pending-damage projection --
+// the projection can over-count vs ApplyPlanDirect+SimulateCombat (see the commit-the-line note),
+// and over-counting here would throw away the original Zada for a phantom lethal.
+void RolloutSimulateCombat(GameState& state) { SimulateCombat(state); }
 
 
 // End-of-turn cleanup + start of next turn (untap, draw).
@@ -9549,6 +9562,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     if (ap.library.empty()) { return false; }
     ap.hand.push_back(ap.library.DrawTop());
     ap.cards_drawn_this_turn += 1;   // the draw step is a real CR-121 draw (lockstep w/ DrawStep)
+    // Next simulated turn opens on its pre-combat main (partner of the PostCombatMain write at the
+    // end of SimulateCombat; see the note there). Write-only for every other deck.
+    state.phase = Phase::PreCombatMain;
     return true;
 }
 

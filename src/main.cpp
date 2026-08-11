@@ -697,6 +697,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // are NOT casts -- they are surfaced via the action's "landsedge" count below and the
         // top-level "lands_edge" object, so the GUI's cast match doesn't treat them as spells.
         os << ", \"casts\": [";
+        // NOTE: SacForMana / SacCreatureOutlet stay INSIDE this list -- saved references match
+        // recorded lines against the casts multiset with sacs included (moving them to
+        // "activations" broke 14 goblins refs with enum-gap, 2026-08-11). play_invariants
+        // instead skips token-named entries in its casts-must-be-in-hand advisory.
         auto is_activation = [](Action::Kind k)
         {
             return k == Action::Kind::GarthActivate || k == Action::Kind::ActivateLoyalty

@@ -1946,6 +1946,7 @@ inline void CreateToken(
     token.card.m_subtypes  = subtypes;
     token.card.m_power     = power;
     token.card.m_toughness = toughness;
+    token.card.m_number    = state.next_token_number++;   // unique per-copy id (GameState.h note)
     token.controller_index = controller_index;
     token.owner_index      = controller_index;
     token.entered_this_turn = true;
@@ -2332,9 +2333,10 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
     {
         // Permanent copies enter the battlefield (Lotus's sac-for-mana and Shivan's
         // firebreathing are param-driven from their cards.json entries; the token-copy is a new
-        // object with a fresh id 0 -- ids only matter for targeting/equip, neither applies).
+        // object with a fresh token id -- see GameState::next_token_number).
         Permanent perm;
         perm.card              = cd->card;
+        perm.card.m_number     = state.next_token_number++;
         perm.controller_index  = controller;
         perm.owner_index       = controller;
         perm.entered_this_turn = true;
@@ -2448,6 +2450,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
             token.card.AddColor(Color::Green);
         }
         if (green_only) { token.card.AddColor(Color::Green); }
+        token.card.m_number     = state.next_token_number++;   // unique per-copy id (GameState.h note)
         token.controller_index  = controller;
         token.owner_index       = controller;
         token.entered_this_turn = true;
@@ -2807,17 +2810,30 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         state.players[controller].graveyard.push_back(victim);
         state.battlefield.erase(state.battlefield.begin() + hidx);
     }
-    for (int i = 0; !found && i < static_cast<int>(state.battlefield.size()); ++i)
+    // The baked victim id may be STALE: two outlets (or two activations) enumerated against the
+    // same board bake the same canonical victim, and the first apply consumes it -- with tokens
+    // now uniquely numbered the second activation's id scan then misses (under shared id 0 it
+    // silently aliased onto the next token, which is why this never surfaced before numbering).
+    // Victims are fungible, so on a miss RE-PICK canonically against the live board; only a board
+    // with no legal victim at all no-ops. Shared by executor + rollout -> lockstep.
+    for (int attempt = 0; !found && attempt < 2; ++attempt)
     {
-        Permanent& q = state.battlefield[i];
-        if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
-        if (q.card.m_number != victim_id) { continue; }
-        if (!op->sac_creature_requires_subtype.empty()
-            && !CardHasSubtype(q.card, op->sac_creature_requires_subtype)) { continue; }
-        victim = q.card; found = true;
-        state.players[controller].graveyard.push_back(q.card);
-        state.battlefield.erase(state.battlefield.begin() + i);
-        break;
+        for (int i = 0; !found && i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            Permanent& q = state.battlefield[i];
+            if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
+            if (q.card.m_number != victim_id) { continue; }
+            if (!op->sac_creature_requires_subtype.empty()
+                && !CardHasSubtype(q.card, op->sac_creature_requires_subtype)) { continue; }
+            victim = q.card; found = true;
+            state.players[controller].graveyard.push_back(q.card);
+            state.battlefield.erase(state.battlefield.begin() + i);
+            break;
+        }
+        if (found || attempt > 0) { break; }
+        victim_id = CanonicalSacVictim(state, controller, source_id,
+                                       op->sac_creature_requires_subtype);
+        if (victim_id < 0) { break; }
     }
     if (!found) { return; }
     // Payload (copy the scalars before CreateToken invalidates `op` via battlefield realloc).
@@ -3530,12 +3546,21 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
             const int bidx = ChooseSacOutletVictimIndex(state, controller, sac_source_id,
                                                         need_sub, victim_id, src_name);
             if (bidx >= 0) { SacrificePermanentAt(state, controller, bidx); return; }
-            for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+            // Stale-victim fallback (see ApplySacCreatureOutlet): an earlier action may have
+            // consumed the baked victim; victims are fungible, so re-pick against the live board
+            // rather than ghosting the float. Lockstep (shared helper, both worlds).
+            for (int attempt = 0; attempt < 2; ++attempt)
             {
-                Permanent& q = state.battlefield[j];
-                if (q.controller_index != controller || q.card.m_number != victim_id) { continue; }
-                SacrificePermanentAt(state, controller, j);   // Pashalik ping / death token etc.
-                return;
+                for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+                {
+                    Permanent& q = state.battlefield[j];
+                    if (q.controller_index != controller || q.card.m_number != victim_id) { continue; }
+                    SacrificePermanentAt(state, controller, j);   // Pashalik ping / death token etc.
+                    return;
+                }
+                if (attempt > 0) { break; }
+                victim_id = CanonicalSacVictim(state, controller, sac_source_id, need_sub);
+                if (victim_id < 0) { break; }
             }
             return;
         }
@@ -3943,6 +3968,7 @@ inline void CreateTreasureTokens(GameState& state, int controller, int n)
         token.card.RehashName();
         token.card.AddType(CardType::Artifact);
         token.card.m_subtypes = std::vector<std::string>{ "Treasure" };
+        token.card.m_number     = state.next_token_number++;   // distinct sac source per Treasure
         token.controller_index  = controller;
         token.owner_index       = controller;
         token.entered_this_turn = true;   // artifacts have no summoning sickness; sac works now
@@ -3955,16 +3981,17 @@ inline void CreateTreasureTokens(GameState& state, int controller, int n)
 // it is exiled at the beginning of the next end step (Permanent::exile_at_end, swept at both
 // end-of-turn sites). Copies copy PRINTED characteristics (CR 707.2): the source's base card --
 // not its counters, damage, or until-EOT effects -- which is exactly Permanent::card. m_number is
-// zeroed (tokens are unnumbered; two live permanents must not share a per-copy id). The token
-// enters through the universal enter cascade (OnDragonEnters top fires the creature-enter
-// watchers; OnGoblinEnters fires a copied Goblin Instigator's own ETB token -- faithful, CR 707.4:
-// the copy has the ETB trigger). A LEGENDARY copy (Zada) legend-rules immediately after; the
-// engine keeps the earlier (original) copy (EnforceLegendRule keep-oldest; disclosed 6a).
+// reassigned from the token counter (two live permanents must not share a per-copy id; see
+// GameState::next_token_number). The token enters through the universal enter cascade
+// (OnDragonEnters top fires the creature-enter watchers; OnGoblinEnters fires a copied Goblin
+// Instigator's own ETB token -- faithful, CR 707.4: the copy has the ETB trigger). A LEGENDARY
+// copy (Zada) legend-rules immediately after; MirrorwingProvider::LegendKeepIndex keeps the
+// original unless the hasty copy converts this turn into the win (user rule; disclosed 6a).
 inline void CreateTrickCopyToken(GameState& state, int controller, int src_i)
 {
     Permanent token;
     token.card          = state.battlefield[src_i].card;
-    token.card.m_number = 0;
+    token.card.m_number = state.next_token_number++;
     token.card.AddKeyword(Keyword::Haste);
     token.controller_index  = controller;
     token.owner_index       = controller;
@@ -4051,8 +4078,8 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
 inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardDefinition& def,
                                    int target_number, int strive_extras)
 {
-    // Resolve the declared target (by stable per-copy id; enumeration only offers numbered
-    // creatures -- see CollectActions' trick branch for the token-target disclosure).
+    // Resolve the declared target (by stable per-copy id; deck cards AND tokens are numbered --
+    // see GameState::next_token_number).
     int ti = -1;
     if (target_number != 0)
     {

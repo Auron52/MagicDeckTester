@@ -255,8 +255,41 @@ All checks PASS except one:
   Verdict: network transient; re-run `python3 scripts/audit_card_costs.py` once the
   rate limit clears if a green line in the gate log is wanted.
 
+## Stage 6 follow-ups — implemented (2026-08-11, on top of 17c29a3)
+
+1. **Legend-rule keep-copy corner (user directive)**: `MirrorwingProvider::LegendKeepIndex`
+   keeps the hasty exile-at-end Twinflame copy over a summoning-sick original iff simulating
+   the attack WITH the copy is lethal and WITHOUT it is not (RolloutSimulateCombat on scratch
+   copies -- the pending-damage projection over-counts, commit-the-line lesson). Phase-gated to
+   PreCombatMain/Combat; the rollout now maintains GameState::phase at its combat/turn-boundary
+   sites (write-only for every other deck). Smoke 30/30 byte-identical.
+2. **Cleanup-discard rule (user spec)**: MirrorwingProvider bucket policy -- keep 1 magnet
+   (cheapest; Zada+Mirrorwing are one InterchangeableRequiredGroup role), >=4 weighted bodies
+   (Instigator=2), mana to cast the kept enabler preferring 2 red + a green for a held Gold
+   Rush, keep Gold Rush/Fists by omission, shed order Scale->Expedite->Twinflame->Anger.
+   MTG_MW_BUCKET_DISCARD=0 reverts to the generic ranking (A/B lever). Smoke 30/30
+   byte-identical.
+3. **Token numbering (user: "fix for sure")**: `GameState::next_token_number` (base 1000);
+   all five shared token-creation helpers assign unique per-copy ids; trick-target enumeration
+   and the provider prune now include tokens (equivalence fold keeps width); multiple Treasures
+   are distinct sac sources (the one-crack-per-plan collapse is gone). Sim keys don't fold
+   m_number -> TT dedup unaffected.
+   - **Pre-existing defect EXPOSED and fixed**: two sac-outlet activations enumerated against
+     the same board bake the SAME canonical victim; under shared id 0 the second silently
+     aliased onto the next token, and (worse) ApplySacForMana's `victim_id != 0` guard sent a
+     token victim down the "sacrifice the SOURCE" path -- Skirk Prospector killed itself
+     whenever its chosen victim was a token. Fixed with a canonical stale-victim RE-PICK at
+     both applies (fungible victims; shared helpers, lockstep).
+   - Suite impact: goblins-only, score-neutral after the re-pick fix (final full regression:
+     searched slower=0 faster=0 play-changed=27; d0 slower=0 **faster=2** play-changed=8 --
+     net POSITIVE; the play changes are which-token-dies identity churn + the corrected
+     Prospector model). All other decks byte-identical. Viewer protocol 184 refs clean.
+     GT digests for the 5 goblins configs need an accept (score-neutral rebaseline).
+
 ## Open items / next steps
 
 - Mulligan profile generation: DEFERRED (user kicks off; policy 2026-07-17).
 - Value-leaf: not generated (user decides post-freeze).
 - card_costs gate line: re-run when Scryfall rate limit clears (see above).
+- Goblins value sidecar predates the corrected sac model (engine-state fingerprint policy):
+  regeneration is cheap (~3 min) if pooling/regen ever needs it.

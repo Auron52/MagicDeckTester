@@ -518,6 +518,20 @@ public:
     // cap of 12 groups never binds there; 8 keeps the worst node ~=400k positions. Same gated
     // breadth-policy shape as the base hook (MTG_UNPRUNED / MTG_NO_GROUP_CAP opens it).
     int EnumGroupCap() const override { return 8; }
+    // Legend-rule keep with the user's Twinflame exception (Stage 6 directive, analysis ledger):
+    // keep the hasty exile-at-end COPY over a summoning-sick original iff attacking with the copy
+    // wins THIS turn and attacking without it does not. Decided by simulating combat both ways.
+    int LegendKeepIndex(const GameState&, int,
+                        const std::vector<int>&) const override;
+    // Cleanup discard: the USER-AUTHORED keep policy (Stage 6 review, analysis ledger) -- one
+    // magnet enabler, >=4 weighted bodies (Instigator counts 2), mana for the kept enabler
+    // preferring 2 red, then spells with the outright winners (Gold Rush / Fists of Flame) kept
+    // over the draw tricks. MTG_MW_BUCKET_DISCARD=0 -> generic base ranking (A/B lever).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
+    // Zada and Mirrorwing fill ONE role (the copy magnet): redundancy is counted across the pair
+    // so the last-copy veto cannot protect both (the antilife enabler-group lesson).
+    const std::vector<std::string>* InterchangeableRequiredGroup(const std::string&) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the
