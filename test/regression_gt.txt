@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 0733416  date 2026-08-11
+# Regression ground truth -- commit f3f993a  date 2026-08-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -192,18 +192,18 @@ auras_overnight_d5_s4004=4.1140/d9324ccfce78c11a
 auras_overnight_d5_s5005=4.1460/9424cf33b61fa6db
 auras_overnight_d5_s6006=4.1150/726e66c3748fa121
 auras_overnight_d5_s7007=4.1520/f7a8a209c1db565a
-goblins_overnight_d0_s4004=4.1760/4b2b680c58514c81
-goblins_overnight_d0_s6006=4.1490/618ffecfe9c505f9
-goblins_overnight_d0_s8008=4.1425/eefbc96a2b5c0e41
-goblins_overnight_d0_s10010=4.1555/c454da77104af16e
-goblins_overnight_d3_s4004=3.8420/40e3c4bd01e2175e
-goblins_overnight_d3_s5005=3.8020/2d71e49b6c2ad198
-goblins_overnight_d3_s6006=3.8180/71d829f961c12ca9
-goblins_overnight_d3_s7007=3.8170/6ebfe0c011e565fa
-goblins_overnight_d5_s4004=3.8420/72fb8d9d53a9cb8c
-goblins_overnight_d5_s5005=3.8030/c6288f9c2b069fcd
-goblins_overnight_d5_s6006=3.8180/24a3ec186311ea5d
-goblins_overnight_d5_s7007=3.8200/7b417e6b598e6435
+goblins_overnight_d0_s4004=4.1755/c5e53ebd23691bb0
+goblins_overnight_d0_s6006=4.1485/6c2b44d17253df47
+goblins_overnight_d0_s8008=4.1430/42efb5e1a6736c32
+goblins_overnight_d0_s10010=4.1545/8d55f4d73c436327
+goblins_overnight_d3_s4004=3.8410/2d1ee0b28443b873
+goblins_overnight_d3_s5005=3.8020/ebea0cc8bf127d59
+goblins_overnight_d3_s6006=3.8190/0bc0a3466056baf9
+goblins_overnight_d3_s7007=3.8180/02dc95d73ba2d090
+goblins_overnight_d5_s4004=3.8410/6107fc123b33b9f0
+goblins_overnight_d5_s5005=3.8030/2ca210fb7381bcec
+goblins_overnight_d5_s6006=3.8190/b6b732a8eb75794d
+goblins_overnight_d5_s7007=3.8210/5e31773bcf9979ad
 creature_giving_overnight_d0_s4004=5.8890/fcbe9b0d99fd399f
 creature_giving_overnight_d0_s6006=5.8190/ae14e1c108f9e501
 creature_giving_overnight_d0_s8008=5.8475/2df0d089f893f4d6
@@ -216,3 +216,15 @@ creature_giving_overnight_d5_s4004=4.7760/be0816184ad841cd
 creature_giving_overnight_d5_s5005=4.7540/31ed7870233f8298
 creature_giving_overnight_d5_s6006=4.7800/8e7d5ebda9af1000
 creature_giving_overnight_d5_s7007=4.7900/47c21b1aae8b01ed
+mirrorwing_overnight_d0_s4004=6.3655/df37d543372e46fd
+mirrorwing_overnight_d0_s6006=6.3520/d81f9a7a8b87fc59
+mirrorwing_overnight_d0_s8008=6.3825/6826a40733cb71b8
+mirrorwing_overnight_d0_s10010=6.3625/cdb155269bef0165
+mirrorwing_overnight_d3_s4004=5.1625/a4959354f09d0939
+mirrorwing_overnight_d3_s5005=5.2050/c362d6ac5be78c2e
+mirrorwing_overnight_d3_s6006=5.1300/22048a9558780ffd
+mirrorwing_overnight_d3_s7007=5.1850/50d26c077abfabfd
+mirrorwing_overnight_d5_s4004=5.1333/41dbcd03e088e80e
+mirrorwing_overnight_d5_s5005=5.1700/0326e07acc547d8b
+mirrorwing_overnight_d5_s6006=5.1500/09b7c0d5f002025b
+mirrorwing_overnight_d5_s7007=5.1500/8366cea9037fe105
