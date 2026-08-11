@@ -545,8 +545,11 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
 // CastOrderLessAI); executor and rollout now share this definition.
 bool CastOrderLess(const GameState& state, const Action& a, const Action& b)
 {
-    const CardDefinition* da = CardDatabase::Instance().Lookup(a.card_name);
-    const CardDefinition* db = CardDatabase::Instance().Lookup(b.card_name);
+    // Reuse the action's memoized def (back-filled once per node, == Lookup(card_name)) instead of
+    // re-hashing the name string on every comparison -- this comparator runs O(n log n) per sort.
+    // Byte-identical; def==nullptr (an action from a path that didn't back-fill) falls back to Lookup.
+    const CardDefinition* da = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* db = b.def ? b.def : CardDatabase::Instance().Lookup(b.card_name);
     const int ra = da ? ResolveProvider(state).CastOrderRank(state, *da) : 20;
     const int rb = db ? ResolveProvider(state).CastOrderRank(state, *db) : 20;
     if (ra != rb) { return ra < rb; }
