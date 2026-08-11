@@ -2,15 +2,21 @@
 """Compare COMBINATIONS of one fixed card pool -- fast, paired, apparatus-symmetric.
 
     python3 scripts/deck_compare.py <spec.json> [--dry-run]     # the screen
+    python3 scripts/deck_compare.py <spec.json> --preflight     # only the checks that need a human/AI
     python3 scripts/deck_compare.py <spec.json> --floor <tag>   # bracket ONE combination's bias floor
 
-The question this answers: given a base deck and a set of count changes over cards that are ALREADY
-implemented, which combination is faster? Card implementation and heuristic tuning are one-time costs
-per card; this is the per-COMBINATION loop, and it is meant to cost minutes.
+The question this answers: given a base deck and a set of count changes, which combination is faster?
+Card implementation and heuristic tuning are one-time costs per CARD; this is the per-COMBINATION
+loop. Introducing a card the deck has never held is in scope -- the pre-flight (4) routes the
+one-time part to a human or an AI and refuses until it is done.
+
+Per-game cost varies by two orders of magnitude with the deck AND the apparatus (measured at d5 /
+budget 20: slivers 9.8 ms/game with its keep table, 254.8 without it -- and an introduced card always
+drops the table). Read the `ms=` on a 300-game probe before sizing a long run.
 
 Design + all measurements behind it: docs/design/deck-combination-screening.md
 
-Three things it does that a hand-rolled A/B does not:
+Four things it does that a hand-rolled A/B does not:
 
 1. INHERITED NUMBERING. The opening shuffle is a positional Fisher-Yates, so changing a count
    re-permutes the whole game and the two arms share nothing but the seed -- an unpaired measurement
@@ -28,14 +34,32 @@ Three things it does that a hand-rolled A/B does not:
 3. A COVERAGE PRE-FLIGHT. A hand holding a card the shared table never bucketed does not get a biased
    answer, it gets NO answer: the policy falls through to the generic heuristic, silently. So if any
    combination introduces such a card, the table is dropped from EVERY arm -- symmetric and unbiased
-   (measured -0.0003 error on a -0.20 effect) rather than silently lop-sided.
+   (measured -0.0003 error on a -0.20 effect) rather than silently lop-sided. Dropping the TABLE never
+   drops the PLAY PROFILE: the arms keep it and the batch runs MTG_EXHAUSTIVE_PROFILE=none.
+
+4. AN INTRODUCED-CARD PRE-FLIGHT -- the part that needs a human or an AI, so it runs FIRST and
+   REFUSES rather than measuring something else (`--preflight` runs just this). A card the screen has
+   never seen before fails in three places, none of which announces itself:
+     - not in cards.json      -> the engine throws "Unknown card template" inside a pooled batch,
+                                 killing every arm's games with it. Route: .claude/skills/analyze-deck.md.
+     - implemented with GAPS  -> the screen answers about a card the engine plays incompletely; the
+                                 check is analyze_deck.py's own oracle-text scan, imported not copied.
+     - absent from the profile's card_scores -> silent and ASYMMETRIC: ComputeHandScore SKIPS an
+                                 unscored card (AIEngine.cpp), so hands holding it score lower, get
+                                 mulliganed more, and the arm that plays the new card is marked down
+                                 for playing it. The driver derives a POOL PROFILE for that case (one
+                                 analyzer run over the union of every arm's cards, merged into the
+                                 shipped profile) and gives the same one to every arm. Measured small
+                                 and deck-shaped -- +0.0022 on slivers, and exactly 0 on a deck whose
+                                 profile has a keep_model, which owns the keep and never reads
+                                 card_scores. Cheap insurance (~20 s), not a rescue.
 
 Spec format:
 
     {
       "base":          "decks/slivers_vial/slivers_vial.txt",
-      "profile":       "decks/slivers_vial/slivers_vial.profile.json",   # optional
-      "value_profile": "decks/slivers_vial/slivers_vial.value.json",     # optional
+      "profile":       "decks/slivers_vial/slivers_vial.profile.json",   # optional: found beside base
+      "value_profile": "decks/slivers_vial/slivers_vial.value.json",     # optional: found beside base
       "games": 20000, "seed": 910000, "depth": 5, "budget_ms": 20,
       "combinations": {
         "more_leeching": {"Hatchery Sliver": 2, "Leeching Sliver": 4},
@@ -44,7 +68,12 @@ Spec format:
     }
 
 A combination is a map of card -> NEW COUNT (absent = unchanged, 0 = removed). A card not in the base
-deck may be introduced by naming it; it must already exist in cards.json.
+deck may be introduced by naming it, and the pre-flight above says what that costs.
+
+`profile` and `value_profile` default to the deck's siblings and are NOT optional in effect: with no
+profile the engine loads MulliganProfile::DefaultProfile() and every arm plays a deck we do not ship
+(on slivers that zeroes vial_target_mv and inflated a measured effect 2.6x). "allow_no_profile": true
+is the deliberate hatch for a deck that genuinely has none yet.
 
 `--floor <tag>` answers the question the screen cannot: is the measured delta bigger than the bias
 the shared apparatus itself carries? It generates a throwaway low-R keep table for that ONE
@@ -59,21 +88,26 @@ OVERSTATES the floor. That is the right direction for a safety check and the wro
 accuracy claim -- never treat the variant-table arm as "the accurate one".
 """
 import argparse, gzip, json, math, os, re, statistics as st, subprocess, sys
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT  = os.path.join(ROOT, "logs", "deckcmp")
+CARDS_JSON = os.path.join(ROOT, "src", "cards", "data", "cards.json")
+
+# The card checks are analyze_deck.py's, imported rather than re-implemented: a screen must hold a
+# newly introduced card to the SAME standard deck onboarding does, and two copies of an oracle-text
+# scan would drift. analyze_deck.py does nothing at import (its work is behind Main()).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from analyze_deck import LoadDeckCounts, LoadImplementedNames, CheckExistingCoverage  # noqa: E402
 
 
 def read_decklist(path):
-    """-> [(count, name)] in FILE ORDER. File order defines the base numbering, so it is load-bearing."""
-    out = []
-    for line in open(path):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        n, name = line.split(" ", 1)
-        out.append((int(n), name.strip()))
-    return out
+    """-> [(count, name)] in FILE ORDER. File order defines the base numbering, so it is load-bearing.
+
+    Both formats, via analyze_deck's parser: 14 of the 17 decks in `decks/` are Cockatrice `.cod`
+    XML, and a `.cod` fed to a split-on-space text parser does not fail loudly -- it yields nonsense
+    card names. `LoadDeckCounts` returns an insertion-ordered dict, so file order survives."""
+    return [(c, n) for n, c in LoadDeckCounts(Path(path)).items()]
 
 
 def base_numbering(deck):
@@ -110,8 +144,10 @@ def inherit_numbering(base_nums, base_counts, new_counts):
     return {k: v for k, v in out.items() if v}
 
 
-def table_cards(profile_path):
-    """Card names the profile's exhaustive keep table has bucketed, or None if it has no table."""
+def table_buckets(profile_path):
+    """The profile's exhaustive keep table's buckets (list of member-name lists), or None if it has
+    no table. Buckets are the unit of BOTH coverage tests below -- the policy is keyed on bucket
+    composition, not on card names."""
     if not profile_path:
         return None
     for p in (profile_path, profile_path + ".gz",
@@ -126,8 +162,62 @@ def table_cards(profile_path):
             continue
         ek = j.get("exhaustive_keep") or {}
         if ek.get("buckets"):
-            return {n for b in ek["buckets"] for n in b}
+            return ek["buckets"]
     return None
+
+
+def table_cards(profile_path):
+    """Card names the table has bucketed, or None if there is no table."""
+    b = table_buckets(profile_path)
+    return None if b is None else {n for bk in b for n in bk}
+
+
+def comb(n, k):
+    return math.comb(n, k) if 0 <= k <= n else 0
+
+
+def fallback_rate(buckets, base_counts, arm_counts, hand=7):
+    """P(a size-`hand` opening hand resolves to a composition the table never enumerated).
+
+    The SECOND coverage cliff, and the one nothing checked. `EnumComps` (analyzer/ExhaustiveKeep.cpp)
+    caps each bucket at `min(count[b], H)` -- the BASE deck's count. So a combination that RAISES a
+    bucket above its base size makes compositions reachable that were never tabled, and
+    `ExhaustiveKeepPolicy::Decide` answers those with present=false: a silent fall-through to the
+    generic heuristic, on the one arm whose counts changed. Cuts are always safe (they only make
+    compositions unreachable), and a bucket already at >= `hand` copies cannot overflow at all.
+
+    Exact, not sampled: sum the hypergeometric weight of every reachable composition that exceeds a
+    cap. Enumeration is over compositions of 7 across K buckets -- milliseconds at any real K."""
+    n2b = {n: i for i, b in enumerate(buckets) for n in b}
+    K = len(buckets)
+    cnt = lambda counts: [sum(c for n, c in counts.items() if n2b.get(n) == i) for i in range(K)]
+    base, new = cnt(base_counts), cnt(arm_counts)
+    cap = [min(c, hand) for c in base]
+    # A bucket can only overflow if the cap was set by the BASE COUNT rather than by the hand size:
+    # one already holding >= `hand` copies had every composition 0..hand enumerated, so raising it
+    # further changes nothing a 7-card hand can express.
+    over_idx = [i for i in range(K) if min(new[i], hand) > cap[i]]
+    if not over_idx:
+        return 0.0, []
+    total, bad = comb(sum(new), hand), 0
+
+    def rec(i, rem, cur, viol):
+        nonlocal bad
+        if i == K:
+            if rem == 0 and viol:
+                w = 1
+                for b in range(K):
+                    w *= comb(new[b], cur[b])
+                bad += w
+            return
+        for x in range(0, min(new[i], rem) + 1):
+            cur[i] = x
+            rec(i + 1, rem - x, cur, viol or x > cap[i])
+        cur[i] = 0
+
+    rec(0, hand, [0] * K, False)
+    over = [f"[{i}] {', '.join(buckets[i])} {base[i]}->{new[i]}" for i in over_idx]
+    return (bad / total if total else 0.0), over
 
 
 def score(path, arms, max_turns):
@@ -142,7 +232,7 @@ def score(path, arms, max_turns):
     return got
 
 
-def run_batch(jobs, outdir, name, threads):
+def run_batch(jobs, outdir, name, threads, env=None):
     """One pooled `mtg --batch` over every job. -> path of the stderr log the wins were dumped to."""
     man = os.path.join(outdir, f"{name}.manifest.json")
     json.dump({"jobs": jobs}, open(man, "w"), indent=1)
@@ -151,7 +241,7 @@ def run_batch(jobs, outdir, name, threads):
         rc = subprocess.call([os.path.join(ROOT, "build/Release/mtg"), "--batch", man,
                               "--threads", str(threads or os.cpu_count())],
                              stdout=o, stderr=e, cwd=ROOT,
-                             env={**os.environ, "MTG_DUMP_WINS": "1"})
+                             env={**os.environ, "MTG_DUMP_WINS": "1", **(env or {})})
     if rc != 0:
         raise SystemExit(f"batch failed rc={rc}; see {err}")
     return err
@@ -182,13 +272,27 @@ class Spec:
         self.deck  = read_decklist(self.base_path)
         self.counts = {n: c for c, n in self.deck}
         self.nums   = base_numbering(self.deck)
-        self.stem   = os.path.basename(self.base_path)          # e.g. "slivers_vial.txt"
-        self.name   = os.path.splitext(self.stem)[0]            # the sidecar/profile stem
+        # The arm decklists are always written as <name>.txt, whatever the base's format: the engine
+        # reads both, and the STEM is what matters -- mtg-analyze derives the keep table's filename
+        # from the decklist's stem, so an arm named anything else would generate `<other>.keepmodel…`.
+        self.name   = os.path.splitext(os.path.basename(self.base_path))[0]   # profile/sidecar stem
+        self.stem   = self.name + ".txt"
         self.arms = {"base": dict(self.counts)}
         for tag, ov in s["combinations"].items():
             c = dict(self.counts)
             c.update({k: int(v) for k, v in ov.items()})
             self.arms[tag] = {k: v for k, v in c.items() if v > 0}
+        # Cards no arm's base holds -- everything the introduced-card pre-flight is about.
+        self.introduced = sorted({c for a in self.arms.values() for c in a} - set(self.counts))
+        # Resolve the apparatus the way the ENGINE would if it were left to auto-detect: sibling of
+        # the decklist, by stem. Leaving these to the spec made the load-bearing thing optional, and
+        # an omitted `profile` reads exactly like a deliberate one (it is not -- see the header).
+        self.profile       = self.path("profile")       or self.sibling(".profile.json")
+        self.value_profile = self.path("value_profile") or self.sibling(".value.json")
+
+    def sibling(self, ext):
+        p = os.path.join(os.path.dirname(self.base_path), self.name + ext)
+        return p if os.path.exists(p) else None
 
     def path(self, key):
         p = self.raw.get(key)
@@ -213,24 +317,179 @@ class Spec:
              "budget_ms": self.budget, "max_turns": self.maxturn, "ignore_play_profile": True}
         if profile:
             j["profile"] = os.path.relpath(profile, ROOT)
-        if self.raw.get("value_profile"):
+        else:
+            # No `profile` key does NOT mean "no profile": BatchRunner::ParseJob auto-detects
+            # <deck>.profile.json beside the DECK, and the arm decklists live in a scratch directory
+            # that has none -- so the job silently gets DefaultProfile() and plays a deck we do not
+            # ship. Only reachable via "allow_no_profile"; the inert key records that in the manifest,
+            # so a later reader can tell the hatch apart from the bug.
+            j["_no_profile_deliberate"] = True
+        if self.value_profile:
             # Ladder mode: the model makes warm-up passes cheap, the COMMITTED pass stays pure
             # heuristic. Verified byte-identical under a deliberately wrong model at unbounded budget;
             # residual budget coupling at budget>0 measured 0.0008t. That guarantee is what lets one
             # pool model serve every combination without re-validating per combination.
-            j["value_profile"] = self.raw["value_profile"]
+            j["value_profile"] = os.path.relpath(self.value_profile, ROOT)
             j["value_model"] = False
             j["ladder_value_leaf"] = True
         return j
 
 
+def profile_scores(path):
+    """The card names a profile carries a card_scores entry for (empty set if it has none)."""
+    if not path or not os.path.exists(path):
+        return set()
+    return set((json.load(open(path)).get("card_scores") or {}))
+
+
+def preflight(spec):
+    """Everything that must be true before a game is worth running -- and the only part of the loop
+    that can need a human or an AI. It REFUSES: a screen that runs anyway does not fail, it answers a
+    different question, and it answers it with a plausible-looking number.
+
+    -> {"missing", "gaps", "unscored"} for the caller to act on."""
+    if not spec.profile and not spec.raw.get("allow_no_profile"):
+        raise SystemExit(
+            f"no play profile for {spec.raw['base']}\n"
+            f"  looked for: {os.path.join(os.path.dirname(spec.base_path), spec.name + '.profile.json')}\n"
+            "  Without one every arm loads MulliganProfile::DefaultProfile() and plays a deck we do\n"
+            "  not ship (on slivers that zeroes vial_target_mv and inflated a measured effect 2.6x).\n"
+            "  Generate it with scripts/analyze_deck.py, or set \"allow_no_profile\": true if this deck\n"
+            "  genuinely has none yet -- in which case every arm is equally wrong, which is at least\n"
+            "  symmetric.")
+
+    implemented = LoadImplementedNames(Path(CARDS_JSON))
+    missing = sorted({c for a in spec.arms.values() for c in a} - implemented)
+    # Only INTRODUCED cards are gap-scanned. The base deck's cards came through analyze-deck already
+    # and are in every arm, so re-litigating them here would block screens over a decision that was
+    # taken elsewhere; a newly named card has had no such review.
+    gaps = [c for c in CheckExistingCoverage([c for c in spec.introduced if c in implemented],
+                                             Path(CARDS_JSON)) if c.get("status") == "partial"]
+    # With no profile at all there is nothing to be missing FROM: DefaultProfile carries no
+    # card_scores, and AIEngine skips the hand-score gate entirely when the map is empty -- so every
+    # arm is scored the same (badly, but symmetrically) and there is no asymmetry to repair.
+    unscored = [] if not spec.profile else [
+        c for c in spec.introduced if c in implemented and c not in profile_scores(spec.profile)]
+    return {"missing": missing, "gaps": gaps, "unscored": unscored}
+
+
+def refuse_on_cards(pf):
+    """The two pre-flight findings a machine cannot resolve. Both hand off to analyze-deck."""
+    if pf["missing"]:
+        raise SystemExit(
+            "these cards are not implemented: " + ", ".join(pf["missing"]) + "\n\n"
+            "  A screen cannot introduce a card the engine does not know -- CardDatabase throws\n"
+            "  \"Unknown card template\" inside the pooled batch, taking every arm's games with it.\n"
+            "  Implementing one is the AI's job, not this driver's, and it has a route:\n\n"
+            "    1. python3 scripts/analyze_deck.py <base decklist> --coverage-only\n"
+            "    2. read .claude/skills/mtg-rules.md, implement each card into\n"
+            "       src/cards/data/cards.json from its ORACLE TEXT, then review it against the skill\n"
+            "    3. ./build.sh   (a card added to cards.json is data, but the pre-flight reads the\n"
+            "       same file the engine does, so a typo shows up here first)\n"
+            "    4. re-run this screen\n\n"
+            "  Implementation is a one-time cost per CARD; screening is the per-COMBINATION loop.")
+    if pf["gaps"]:
+        lines = [f"    {g['card']}: " + "; ".join(g["gaps"]) for g in pf["gaps"]]
+        raise SystemExit(
+            "introduced cards with implementation gaps:\n" + "\n".join(lines) + "\n\n"
+            "  This is analyze_deck.py's own oracle-text scan (--coverage-only uses it to exit 1).\n"
+            "  Screening a partially-implemented card measures the part that IS implemented and\n"
+            "  reports it as the card. Either finish the implementation, or record the deliberate\n"
+            "  simplification as a [bracket note] in the card's oracle_text -- which is what the\n"
+            "  scan treats as a signed-off deferral rather than a gap.\n"
+            "  \"allow_card_gaps\": true screens anyway, knowing the answer is about a proxy.")
+
+
+def gate(spec):
+    """Pre-flight + the refusals it implies, honouring the spec's hatches. -> the pre-flight report.
+
+    `allow_card_gaps` waives the GAP refusal only. An unimplemented card is not waivable: the batch
+    cannot run at all without it, so there is nothing to trade off."""
+    pf = preflight(spec)
+    refuse_on_cards({**pf, "gaps": []} if spec.raw.get("allow_card_gaps") else pf)
+    return pf
+
+
+def pool_profile(spec, unscored):
+    """Give the introduced cards a card_scores entry, so the screen does not mark an arm down for
+    playing a card the profile has never heard of.
+
+    ComputeHandScore (AIEngine.cpp) SKIPS a name that is not in card_scores, and the keep gate then
+    compares that short sum against hand_score_threshold. So an unscored card is not scored neutrally
+    -- it is scored as if the slot were empty, in the one arm that plays it. Same for the bottoming
+    pick, where CardScore() returns 0.0 and the new card is bottomed first.
+
+    The fix is one analyzer run over the UNION of every arm's cards (the same fixed recipe that
+    produced the shipped scores: default keep, no gate, vial_target_mv from the deck), merged into a
+    COPY of the shipped profile -- adding only the entries it lacks. Merging rather than replacing is
+    what keeps the base arm's play unchanged: the added names cannot appear in a base-arm hand, and
+    the shipped threshold keeps the meaning it was fitted with.
+
+    -> path of the merged profile (in a directory with NO keep sidecar, so nothing auto-attaches)."""
+    d = os.path.join(OUT, "pool")
+    gen = os.path.join(d, "gen")
+    os.makedirs(gen, exist_ok=True)
+    union = {n: max(a.get(n, 0) for a in spec.arms.values())
+             for n in {c for a in spec.arms.values() for c in a}}
+    ordered  = [(union[n], n) for _, n in spec.deck if union.get(n)]
+    ordered += [(union[n], n) for n in sorted(set(union) - set(spec.counts))]
+    out = os.path.join(d, spec.name + ".profile.json")
+    # Reuse is keyed on the union AND on the profile being merged into, not on the file existing:
+    # editing a combination or regenerating the deck's profile must not silently reuse the old merge.
+    fp   = os.path.join(d, ".pool." + spec.name + ".json")   # per-stem: two decks share this dir
+    want = json.dumps({"union": union, "src": open(spec.profile).read()}, sort_keys=True)
+    if os.path.exists(out) and os.path.exists(fp) and open(fp).read() == want:
+        print(f"  reusing pooled card scores: {os.path.relpath(out, ROOT)}")
+        return out
+
+    deck = os.path.join(gen, spec.name + ".txt")
+    open(deck, "w").write("\n".join(f"{c} {n}" for c, n in ordered) + "\n")
+    log = os.path.join(OUT, "poolgen.log")
+    print(f"  deriving card scores for {', '.join(unscored)} over the {sum(union.values())}-card union"
+          f"\n  (one mtg-analyze run, log {os.path.relpath(log, ROOT)})")
+    with open(log, "w") as f:
+        res = subprocess.run([os.path.join(ROOT, "build/Release/mtg-analyze"), deck,
+                              "--cards-json", CARDS_JSON,
+                              "--seed", str(spec.raw.get("pool_seed", 66000001))],
+                             stdout=subprocess.PIPE, stderr=f, text=True, cwd=ROOT)
+    if res.returncode != 0:
+        raise SystemExit(f"mtg-analyze exited {res.returncode}; see {log}")
+    scores = json.loads(res.stdout).get("card_scores") or {}
+    prof = json.load(open(spec.profile))
+    merged = dict(prof.get("card_scores") or {})
+    for n in unscored:
+        if n not in scores:
+            raise SystemExit(f"the analyzer returned no card score for {n} -- refusing to screen it "
+                             "with an implicit 0")
+        merged[n] = scores[n]
+    prof["card_scores"] = merged
+    json.dump(prof, open(out, "w"), indent=1)
+    open(fp, "w").write(want)
+    for n in unscored:
+        print(f"    {n:24s} {[round(x, 4) for x in merged[n]]}")
+    return out
+
+
 def screen(spec, dry_run):
     """Every combination vs base, one shared apparatus, one pooled batch."""
     os.makedirs(OUT, exist_ok=True)
-    tbl = table_cards(spec.path("profile"))
+    pf = gate(spec)
+    bkts = table_buckets(spec.profile)
+    tbl = None if bkts is None else {n for b in bkts for n in b}
     all_cards = {c for a in spec.arms.values() for c in a}
     uncovered = sorted(all_cards - tbl) if tbl is not None else []
-    use_table = tbl is not None and not uncovered
+    # Composition coverage, the second cliff (see fallback_rate). Only meaningful once every card is
+    # bucketed -- an unbucketed card already drops the table below.
+    fb = ({t: fallback_rate(bkts, spec.counts, c) for t, c in spec.arms.items()}
+          if tbl is not None and not uncovered else {})
+    worst = max((r for r, _ in fb.values()), default=0.0)
+    # The threshold is a bias budget, not a taste: a table is worth ~0.063t (measured), so a
+    # one-sided fall-through rate p costs about p*0.063t. At 1% that is 0.0006t -- a tenth of the
+    # measured apparatus floor (0.0068-0.0079). Dropping the table instead is NOT free: it costs
+    # ~0.063t of play quality on BOTH arms and ~22x per-game wall, so trading it away for a 0.008%
+    # fall-through would be absurd. "max_fallback" overrides; 0 forces the old all-or-nothing rule.
+    max_fb = spec.raw.get("max_fallback", 0.01)
+    use_table = tbl is not None and not uncovered and worst <= max_fb
 
     print(f"base: {spec.raw['base']}  ({sum(spec.counts.values())} cards)")
     for tag, counts in spec.arms.items():
@@ -244,25 +503,59 @@ def screen(spec, dry_run):
         # gracefully) but is nearly always a typo in the spec -- say so rather than let it pass.
         warn = "" if tot == b else f"  <-- SIZE {b}->{tot}, intended?"
         print(f"  {tag:22s} {tot:3d} cards  |  " + ", ".join(ch) + warn)
+    print("\napparatus:")
+    print(f"  play profile   {os.path.relpath(spec.profile, ROOT) if spec.profile else 'NONE (deliberate)'}")
+    print(f"  value model    {os.path.relpath(spec.value_profile, ROOT) if spec.value_profile else 'none'}"
+          + ("  (ladder mode: accelerates warm-up passes, never decides)" if spec.value_profile else ""))
     if tbl is None:
-        print("\napparatus: no exhaustive keep table found -> heuristic mulligan on every arm (symmetric)")
+        print("  keep table     none found -> heuristic mulligan on every arm (symmetric)")
     elif uncovered:
-        print(f"\napparatus: table DROPPED from every arm -- not bucketed: {', '.join(uncovered)}")
-        print("           (a hand holding one would silently fall through to the heuristic on SOME arms")
-        print("            only; dropping it everywhere is symmetric and measured unbiased instead)")
+        print(f"  keep table     DROPPED from every arm -- not bucketed: {', '.join(uncovered)}")
+        print("                 (a hand holding one would silently fall through to the heuristic on")
+        print("                  SOME arms only; dropping it everywhere is symmetric and measured")
+        print("                  unbiased instead. The PLAY profile above stays attached.)")
+    elif not use_table:
+        print(f"  keep table     DROPPED from every arm -- {worst*100:.2f}% of hands would resolve to a")
+        print(f"                 composition it never enumerated (limit {max_fb*100:.2f}%), and only on")
+        print("                 the arms that raised a bucket. Overflowing buckets:")
+        for t, (r, over) in sorted(fb.items(), key=lambda kv: -kv[1][0]):
+            if over:
+                print(f"                   {t:20s} {r*100:6.2f}%  " + "; ".join(over))
     else:
-        print("\napparatus: shared exhaustive keep table on every arm (all cards covered)")
+        print("  keep table     shared, on every arm (all cards covered)")
+        if worst > 0:
+            print(f"                 composition fall-through {worst*100:.3f}% worst-arm "
+                  f"(<= {max_fb*100:.2f}% limit, ~{worst*0.063:.5f}t of one-sided bias)")
+
+    # An introduced card the profile cannot score is the one asymmetry left, and it points the wrong
+    # way by construction -- against the arm that plays the new card. Fix it before running, never
+    # after: the screen's number would look perfectly ordinary.
+    profile = spec.profile
+    if pf["unscored"]:
+        if spec.raw.get("pool_profile") is False:
+            print(f"  card scores    MISSING for {', '.join(pf['unscored'])} -- \"pool_profile\": false, so"
+                  " the\n                 screen runs BIASED AGAINST the arms holding them")
+        else:
+            print(f"  card scores    absent for {', '.join(pf['unscored'])} -> pooling")
+            profile = pool_profile(spec, pf["unscored"])
+    elif spec.introduced:
+        print("  card scores    the profile already scores every introduced card")
 
     jobs = []
     for tag in spec.arms:
         dp, np_ = spec.write_arm(tag, os.path.join(OUT, tag))
-        jobs.append(spec.job(tag, dp, np_, spec.path("profile") if use_table else None))
+        jobs.append(spec.job(tag, dp, np_, profile))
     print(f"\n{len(jobs)} arms x {spec.games:,} games -> ONE pooled batch")
     if dry_run:
         json.dump({"jobs": jobs}, open(os.path.join(OUT, "screen.manifest.json"), "w"), indent=1)
         return 0
 
-    got = score(run_batch(jobs, OUT, "screen", spec.threads), list(spec.arms), spec.maxturn)
+    # Drop the TABLE without dropping the PROFILE. Passing profile=None would do both -- the arm
+    # decklists sit in a scratch directory, so BatchRunner's auto-detect finds nothing and falls back
+    # to DefaultProfile() in silence. MTG_EXHAUSTIVE_PROFILE=none suppresses exactly the sidecar
+    # (AttachExhaustiveSidecar), process-globally, which is what "symmetric" means here.
+    env = {} if use_table else {"MTG_EXHAUSTIVE_PROFILE": "none"}
+    got = score(run_batch(jobs, OUT, "screen", spec.threads, env), list(spec.arms), spec.maxturn)
     common = sorted(set.intersection(*[set(v) for v in got.values()]))
     print(f"\n{len(common):,} paired games, d{spec.depth} budget {spec.budget}ms   (negative delta = FASTER)\n")
     print(f"  {'combination':22s} {'avg':>8s} {'delta':>9s} {'se':>8s} {'t':>7s} {'ident':>7s} {'n@3sig/0.03t':>13s}")
@@ -321,8 +614,7 @@ def gen_table(spec, tag, deck_path, R):
                   os.path.join(d, spec.name + ".keepmodel.gencache.json")):
         if os.path.exists(stale):
             os.remove(stale)
-    for key in ("profile", "value_profile"):
-        src = spec.path(key)
+    for src in (spec.profile, spec.value_profile):
         if src and os.path.exists(src):
             subprocess.check_call(["cp", "-f", src, d])
     log = os.path.join(OUT, f"keepgen_{tag}.log")
@@ -341,7 +633,8 @@ def floor(spec, tag, dry_run):
     """2 decks x 2 tables in one pooled batch -> the shared apparatus's actual bias on THIS edit."""
     if tag not in spec.arms or tag == "base":
         raise SystemExit(f"--floor wants one of: {', '.join(t for t in spec.arms if t != 'base')}")
-    shipped = spec.path("profile")
+    gate(spec)
+    shipped = spec.profile
     tbl = table_cards(shipped)
     if tbl is None:
         raise SystemExit("no shared keep table -> the apparatus is deck-INDEPENDENT, so there is no\n"
@@ -358,6 +651,25 @@ def floor(spec, tag, dry_run):
 
     apps = {"ship": apparatus_dir("ship", spec.name, shipped, shipped_table(shipped)),
             "own":  apparatus_dir("own_" + tag, spec.name, shipped, var_table)}
+    # How much of each cell actually GETS a table. The bracket deliberately runs each deck under a
+    # table fit to the other, so the coverage cliff is inside the measurement by design -- but it was
+    # never quantified per cell. An unbucketed card (a bucket the other deck does not have at all)
+    # costs far more than an overflowing one: both land as present=false, silently.
+    print("\n  coverage of each cell (fraction of hands the table will NOT answer):")
+    # Each table's caps come from the counts it was GENERATED for -- the base deck for the shipped
+    # table, the combination for its own. Passing the arm's own counts here would silently report
+    # full coverage for exactly the asymmetry the bracket exists to expose.
+    for a, tp, gen in (("ship", shipped_table(shipped), spec.counts),
+                       ("own", var_table, spec.arms[tag])):
+        bk = table_buckets(tp) or []
+        names = {n for b in bk for n in b}
+        for d in ("base", tag):
+            miss = sorted(set(spec.arms[d]) - names)
+            rate, over = fallback_rate(bk, gen, spec.arms[d]) if bk and not miss else (0.0, [])
+            note = (f"UNBUCKETED {', '.join(miss)} -> every hand holding one" if miss
+                    else (f"{rate*100:.2f}% (composition){'  ' + '; '.join(over) if over else ''}"
+                          if rate else "full"))
+            print(f"    {d + ' on ' + a + ' table':28s} {note}")
     jobs = [spec.job(f"{d}__{a}", decks[d][0], decks[d][1], apps[a])
             for d in ("base", tag) for a in ("ship", "own")]
     print(f"\n4 cells x {spec.games:,} games -> ONE pooled batch")
@@ -411,13 +723,51 @@ def shipped_table(profile_path):
     raise SystemExit(f"no committed keep table beside {profile_path}")
 
 
+def report_preflight(spec):
+    """`--preflight`: just the checks, exit 1 if any needs a human or an AI. Runs no games and reads
+    no binary, so it is the right first call when a spec names a card for the first time."""
+    pf = preflight(spec)
+    print(f"base:       {spec.raw['base']}")
+    print(f"profile:    {os.path.relpath(spec.profile, ROOT) if spec.profile else 'NONE'}")
+    print(f"introduced: {', '.join(spec.introduced) if spec.introduced else '(none -- count changes only)'}")
+    if pf["missing"]:
+        print(f"\nNOT IMPLEMENTED: {', '.join(pf['missing'])}")
+    for g in pf["gaps"]:
+        print(f"\nGAPS in {g['card']}:\n  " + "\n  ".join(g["gaps"]))
+    if pf["unscored"]:
+        print(f"\nNO card_scores ENTRY: {', '.join(pf['unscored'])}"
+              "\n  (the screen pools one automatically; it costs one analyzer run over the union deck)")
+    bkts = table_buckets(spec.profile)
+    if bkts is not None and not (set(spec.introduced) - {n for b in bkts for n in b}):
+        for tag, counts in spec.arms.items():
+            rate, over = fallback_rate(bkts, spec.counts, counts)
+            if over:
+                print(f"\nCOMPOSITION FALL-THROUGH in '{tag}': {rate*100:.2f}% of hands\n  raised past "
+                      "what the table enumerated: " + "; ".join(over) +
+                      "\n  (silent heuristic fallback on this arm only; the screen drops the table from"
+                      "\n   EVERY arm above 1%, which is symmetric but costs ~22x per game)")
+    if not (pf["missing"] or pf["gaps"]):
+        print("\nOK -- nothing here needs a human. Run the screen.")
+        return 0
+    print()
+    try:
+        refuse_on_cards(pf)
+    except SystemExit as e:
+        print(e)
+    return 1
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("spec")
     ap.add_argument("--dry-run", action="store_true", help="build decks + manifest, run nothing")
+    ap.add_argument("--preflight", action="store_true",
+                    help="run only the card/apparatus checks (exit 1 if one needs implementing)")
     ap.add_argument("--floor", metavar="TAG", help="bracket ONE combination's apparatus bias floor")
     args = ap.parse_args()
     spec = Spec(args.spec)
+    if args.preflight:
+        return report_preflight(spec)
     return floor(spec, args.floor, args.dry_run) if args.floor else screen(spec, args.dry_run)
 
 

@@ -457,6 +457,172 @@ needing specific pieces) could be mis-ranked under a weak-but-symmetric policy.
 The pre-flight test is set membership against `ExhaustiveKeepPolicy::name_to_bucket` for every card of
 every combination — free, and it selects the mode rather than merely refusing.
 
+### The SECOND cliff: composition coverage (2026-08-11)
+
+Card membership is not the whole test, and the half that was missing sits on the *mainstream* case —
+a plain count change. `ExhaustiveKeepPolicy::Decide` sets `present=false` in **two** places:
+
+```cpp
+auto it = name_to_bucket.find(n);
+if (it == name_to_bucket.end()) { present = false; return false; }   // (a) unbucketed card
+...
+auto it = keep.find(comp);
+if (it == keep.end())           { present = false; return false; }   // (b) untabled COMPOSITION
+```
+
+Only (a) was checked. (b) exists because the analyzer enumerates compositions bounded by the deck it
+was generated for — `cap[b] = std::min(count[b], H)` in `EnumComps` — so a combination that **raises**
+a bucket above its base size makes hands reachable that were never tabled. They fall silently to the
+generic heuristic, **on the arm that raised it and nowhere else**: the exact lop-sidedness the
+card-level pre-flight exists to prevent.
+
+Cuts are always safe (they only make compositions unreachable), and a bucket already holding ≥ 7
+copies cannot overflow — every composition 0..7 was enumerated. So the exposure is precisely *raising
+a bucket that has fewer than a handful of copies*. Exact hypergeometric rates on slivers:
+
+| combination | overflowing bucket | P(hand falls through) |
+|---|---|---|
+| Thrumming Hivepool 1 → 4 | `[9] Thrumming Hivepool 1->4` | **6.32%** |
+| Ancient Ziggurat 2 → 4 | `[5] Ancient Ziggurat 2->4` | 0.39% |
+| Cloudshredder 3 → 6 | `[6] 3->6` | 0.099% |
+| Hatchery 4 → 8 | `[7] 4->8` | 0.020% |
+| every combination in the worked example above | — | **0.000%** (they only move 14- and 16-card buckets) |
+
+"Try 4 of the card I run 1 of" is an ordinary deckbuilding question, and it costs 6.3% one-sided
+fall-through — at a table worth ~0.063t, roughly **0.004t of bias, the size of the whole apparatus
+floor**.
+
+`deck_compare.py` now computes the rate exactly (hypergeometric over the enumerated compositions,
+milliseconds) and treats it as a **bias budget rather than an all-or-nothing rule**: below
+`max_fallback` (default 1% ≈ 0.0006t, a tenth of the measured floor) it keeps the table and prints
+the rate; above it, the table is dropped from every arm. A binary rule would be wrong in both
+directions here — dropping the table is not free (~0.063t on *both* arms and ~22x per-game wall), so
+trading it away for a 0.008% fall-through is a worse deal than the bias it avoids.
+
+The same check now runs inside `--floor`, where each table is fit to a *different* deck and the
+generating counts are what set the caps. It immediately showed an asymmetry nobody had quantified:
+in the `half_vial` bracket, **the base arm on the variant's own table falls through on 0.39% of
+hands**, because that table capped Aether Vial at 2 while the base deck runs 4.
+
+## The introduced-card route (2026-08-11)
+
+Every measurement above is a **count** change over a fixed pool. Introducing a card the deck has
+never held is the case a user reaches for first — *"what if I ran 4 Lava Spike instead of 4
+Skullcrack?"* — and it was the least-defended path in the driver. It fails in four places; three are
+mechanical and now guarded, the fourth is a reading task that no guard can do.
+
+### 1. Dropping the table dropped the PLAY PROFILE too (bug, fixed)
+
+The table-drop above was implemented as "pass no profile for this job". But `BatchRunner::ParseJob`
+treats an absent `profile` key as *auto-detect* — `<deck>.profile.json` beside the **deck**, and the
+arm decklists are written to a scratch directory under `logs/deckcmp/`. `ProfileCache::load` then
+falls back to `DefaultProfile()` for a path that does not exist, in silence.
+
+So every arm of a screen that introduced a new card ran profile-less: the *third* layer of the
+two-layer bug corrected at the top of this document, and it sat on exactly the route that triggers it
+(an introduced card is never bucketed, so it always drops the table). Dropping the table is now
+`MTG_EXHAUSTIVE_PROFILE=none` on the batch — the documented override in `AttachExhaustiveSidecar`,
+which suppresses the sidecar and nothing else — and the profile stays pinned in every job.
+
+### 2. An unscored card is scored as an EMPTY SLOT, in the one arm that plays it
+
+`ComputeHandScore` (`AIEngine.cpp`) iterates the hand and **skips** any name absent from
+`profile.card_scores`; the keep gate then compares that short sum against `hand_score_threshold`.
+`CardScore()` likewise returns 0.0 for an unknown name, so the bottoming pick discards the new card
+first. A profile's `card_scores` covers the cards of the deck it was analysed from, so **every**
+introduced card lands in this hole.
+
+This is not a symmetric approximation like the dropped table. It is a one-sided penalty on whichever
+arm plays the new card, applied at mulligan time, and invisible in the output.
+
+The fix is one `mtg-analyze` run over the **union** of every arm's cards (the same fixed recipe that
+produced the shipped scores: default keep, no gate, `vial_target_mv` derived from the deck), with
+only the missing entries merged into a copy of the shipped profile. Merging rather than replacing is
+what keeps the base arm identical: an added name cannot appear in a base-arm hand, and the shipped
+threshold keeps the meaning it was fitted with. Measured cost on the 62-card slivers union: **21 s
+wall** on 24 cores.
+
+#### Measured — real, one-sided, and much smaller than the code suggests
+
+Two 4-cell paired runs, each `{base, variant} x {shipped profile, pooled profile}` in one batch off
+the same game indices, no keep table on any arm (which is what an introduced card forces anyway):
+
+| deck | introduced card (its pooled score) | effect under shipped | under pooled | **bias** | variant arm identical |
+|---|---|---|---|---|---|
+| burn, 20,000 paired | Lava Spike (+0.213) | −0.1188 ±0.0036 | −0.1188 ±0.0036 | **−0.0001 ±0.0000** | 100.0% |
+| slivers, 6,000 paired | City of Brass (+0.024) | −0.0028 ±0.0008 | −0.0007 ±0.0013 | **+0.0022 ±0.0010** (t=+2.1) | 99.6% |
+
+**The base arm was byte-identical in both** (0 of 11,967 and 0 of 6,000 games differ) — the merge
+provably touches only hands that can hold the new card, which is what makes it safe to apply to every
+arm rather than only to the arm that needs it.
+
+Burn's zero is not noise, it is structural: `burn.profile.json` carries a **`keep_model`**, and
+`KeepHand` hands the decision to the model at every hand size *above* the size-1 floor, so the
+`card_scores` gate below it is unreachable. The model's features (`ComputeKeepFeatures`) are
+structural — mana demand, castability by MV, key-piece counts by name list — and never read
+`card_scores`. The residual 1-game-in-20,000 is the *bottoming* channel, where `CardScore()` only
+breaks ties among the rollout-optimal removals.
+
+So the channel is live only on a deck with `card_scores`, a real `hand_score_threshold`, and **no**
+keep model. Surveying the 12 committed profiles:
+
+| profile shape | decks | gate |
+|---|---|---|
+| has `keep_model` | burn, Anti-Lifegain, Hinata2 | dead — the model decides |
+| `hand_score_threshold = -1e18` (`NO_GATE`, what the analyzer emits today) | Auras, Creature Giving, Dragonstorm, FiveColour, Goblins | dead — every hand clears it |
+| no `card_scores` at all | treasure_hunt | dead |
+| **live gate** | **slivers_vial, Knights** | **exposed** |
+
+And slivers' +0.0022 is for a *land* scoring +0.024. A card scoring like Lava Spike (+0.21) in an
+exposed deck would move far more hands, so treat the number as a lower bound on a narrow case, not as
+the size of the effect in general. The honest summary: the pool profile is **21 s of insurance
+against a real but small and deck-shape-dependent asymmetry** — worth doing automatically because it
+is cheap and provably inert where it does not apply, not because it rescues a big number.
+
+The derivation is deterministic — fixed `pool_seed` — so the pooled profile is byte-reproducible from
+the spec, and reuse is keyed on the union *plus the source profile's bytes* rather than on the file
+existing (regenerating the deck's profile must not silently reuse the old merge).
+
+### 3. An unimplemented card is a pre-flight, not a runtime error
+
+`CardDatabase::Get` throws `Unknown card template` — inside a pooled batch, i.e. after the manifest is
+built, taking every arm's games with it. `deck_compare.py --preflight` now checks membership in
+`cards.json` before anything runs, and runs `analyze_deck.py`'s own `CheckExistingCoverage` oracle-text
+scan over the introduced cards (imported, not re-implemented — a screen must hold a new card to the
+same standard deck onboarding does). Both refuse, and the refusal prints the analyze-deck route.
+
+Only *introduced* cards are gap-scanned. The base deck's cards came through analyze-deck already and
+are present in every arm, so re-litigating them would block screens over a decision taken elsewhere.
+
+### The price of the dropped table is ~22x PER GAME, and it is all bottoming
+
+Introducing a card always drops the table (it is never bucketed), and the apparatus-selection rule
+above accepts that as a play-quality cost of ~0.063t. It is also a **throughput** cost, which nothing
+had measured. slivers, base arm, 300 games, 8 threads, idle box:
+
+| apparatus | ms/game | avg |
+|---|---|---|
+| shipped table, bottoming on (the normal screen) | **9.8** | 4.1867 |
+| shipped table, `MTG_EXHAUSTIVE_BOTTOM=0` (keep still tabled) | 233.1 | 4.1533 |
+| no table at all (`MTG_EXHAUSTIVE_PROFILE=none`) | **254.8** | 4.1933 |
+
+**The whole 22x is the bottoming path, not the keep path.** Without a bottoming table, `BottomCards`
+falls back to the lookahead: a `RolloutWinTurn` per bottom candidate per bottom step. Turning off
+*only* the table's bottoming already costs 24x, while its keep decisions stay free.
+
+The planning consequence is concrete: a screen that introduces a new card costs ~20x more per game
+than the same screen over count changes, on any deck whose sidecar has `bottoming_enabled: true`
+(slivers does; most ship with it off, and those already pay the rollout price). Size the games
+accordingly — or read the `ms=` on a 300-game probe first.
+
+### 4. What no guard can catch: the engine's model of the card
+
+`Skullcrack`'s `oracle_text` ends `[Life-gain lock and damage-prevention lock not modelled]`. Its
+riders are irrelevant to goldfishing, so nothing is *wrong* — but a Skullcrack → Lava Spike screen is
+comparing a card the engine models fully against a card it models partly, and the number will not say
+so. The bracket notes are where that is recorded; connecting one to the question being asked is a
+reading task, which is why the skill lists it as the AI's job rather than the driver's.
+
 ## Reweight, and the multi-source cell library (user, 2026-08-11)
 
 **The policy separates cleanly into an expensive part and a free part**, and the code already reflects
@@ -544,7 +710,14 @@ position-based implementation can do.
   correctly end to end. Until burn is redone, "floor tracks CRN distance" rests on two profile-less
   points and one corrected one, and should not be used to predict a floor.
 - Whether the corrected floor is *deck*-sized or *edit*-sized — one deck, one edit is not a trend.
-- Larger edits (3+ cards, a genuinely new card), all of whose earlier measurements were profile-less.
+- Larger edits (3+ cards), whose earlier measurements were all profile-less.
+- **A floor for an introduced card.** `--floor` is a table-vs-table bracket, and an introduced card
+  drops the table from both arms — so the one edit kind with the largest apparatus question has no
+  bracket at all. What would substitute is unknown; the pool profile removes the *known* asymmetry,
+  not a measured floor.
+- The pool profile's own accuracy: the new card's marginals come from a union deck (60 + the
+  introduced copies) at `MTG_ANALYZE_SCALE=2`, while the shipped scores may have been generated at
+  scale 1 on the exact 60. Same recipe and same scale of quantity, higher variance; not calibrated.
 - The R=10 same-deck control for the channel-(B) rms-z reading.
 - Deck-size changes (add/remove without a matching replace) under inherited numbering — the route
   supports them by construction, but the alignment cost has not been measured.
@@ -559,6 +732,17 @@ position-based implementation can do.
 - `scripts/deck_compare.py --floor` copies the profile *and* the value sidecar into the arm directory
   before generating, and keys table reuse on the arm's exact card counts (`.counts.json`), so editing
   a combination cannot silently bracket against the previous edit's table.
+- `scripts/deck_compare.py` resolves `profile` / `value_profile` from the deck's **siblings** when the
+  spec omits them, and **refuses** a screen with no profile at all (`"allow_no_profile": true` is the
+  hatch, and it stamps an inert `_no_profile_deliberate` in the manifest so a later reader can tell
+  the hatch from the bug). Making the load-bearing field optional was how the third layer hid.
+- The **table-drop path** keeps the profile: `MTG_EXHAUSTIVE_PROFILE=none` on the batch, never
+  `profile: null`, which BatchRunner reads as *auto-detect* and resolves to nothing.
+- `--preflight` refuses an unimplemented or partially-implemented introduced card, and pools a
+  `card_scores` entry for one the profile has never seen.
+- Both decklist formats go through `analyze_deck.py`'s parser. The driver's own split-on-space text
+  parser silently produced nonsense card names for a Cockatrice `.cod` file — which is **14 of the 17
+  decks in `decks/`**, so the tool effectively only worked on burn, slivers and treasure_hunt.
 - A **payment-capability signature** over mana sources is still worth adding as an assertion: two
   sources that differ in what they can pay for must not merge into one bucket. It would have caught
   the profile-less bucketing without anyone needing to know why it was wrong.

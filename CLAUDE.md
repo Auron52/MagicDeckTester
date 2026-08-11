@@ -257,21 +257,28 @@ H-cell ladder is guarded on the sidecar EXISTING, so a missing model silently co
 When the user asks to **compare deck combinations / ratios / counts**, **try N of card X instead of
 M**, **A/B a card swap within an already-implemented pool**, or **screen deckbuilding changes
 quickly**, read `.claude/skills/deck-screening.md` first. It is the authoritative guide for the
-per-COMBINATION loop (minutes), as distinct from adopting a combination as a deck (hours, via
+per-COMBINATION loop, as distinct from adopting a combination as a deck (hours, via
 `mulligan-profile.md` + `value-leaf.md`).
 
 ```
 Read `.claude/skills/deck-screening.md` and [screen / floor-check / interpret] ...
 ```
 
-**The whole interface is one command** — `python3 scripts/deck_compare.py <spec.json>` (and
-`--floor <tag>` when a result sits near its apparatus bias floor). **Rule 0 it enforces:** do NOT
-regenerate per-deck artifacts per combination — every arm shares ONE apparatus, which is not a cheap
-approximation but the *better* measurement (sharing one keep table halves the se). Its two traps:
-the deck's `profile` must be attached to the measurement **and** to any keep-table generation (a
-profile-less gen silently fits the table to a deck we do not ship — it merged a mana source that
-provably cannot cast the deck's key artifact), and `t` alone settles nothing — an effect must clear
-the measured bias floor.
+**The whole interface is one command** — `python3 scripts/deck_compare.py <spec.json>` (plus
+`--preflight` for the checks that need YOU, and `--floor <tag>` when a result sits near its apparatus
+bias floor). **Rule 0 it enforces:** do NOT regenerate per-deck artifacts per combination — every arm
+shares ONE apparatus, which is not a cheap approximation but the *better* measurement (sharing one
+keep table halves the se). Its traps: the deck's `profile` must be attached to the measurement **and**
+to any keep-table generation **and** on the table-drop path (a profile-less gen silently fits the
+table to a deck we do not ship — it merged a mana source that provably cannot cast the deck's key
+artifact), and `t` alone settles nothing — an effect must clear the measured bias floor.
+
+**Introducing a card the deck has never held is in scope, and it is where the AI's work is.** The
+driver refuses a card that is not in `cards.json` or whose implementation has gaps, and prints the
+`analyze-deck` + `mtg-rules` route; it then pools a `card_scores` entry for the new card
+automatically, because an unscored card is scored as an *empty slot* and that penalty falls only on
+the arm that plays it. What no guard can do is notice that the engine models one side of a comparison
+more completely than the other (a `[bracket note]` in a card's `oracle_text`) — say so in the report.
 
 ## Mulligan Profile Generation Skill
 

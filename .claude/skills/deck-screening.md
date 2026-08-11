@@ -1,18 +1,19 @@
 # Deck-combination screening skill
 
-Comparing **combinations of an already-implemented card pool** — 3 Hatchery vs 4, cut the Vials, swap
-2 Crystalline for 2 Striking. Card implementation, heuristic tuning, the play profile, the mulligan
-table and the value leaf are **one-time costs per pool**; this skill is the *per-combination* loop,
-and it is meant to cost **minutes**, not the hours a per-deck artifact regeneration costs.
+Comparing **combinations of a card pool** — 3 Hatchery vs 4, cut the Vials, swap 2 Crystalline for 2
+Striking, try 4 Lava Spike over the Skullcracks. Card implementation, heuristic tuning, the play
+profile, the mulligan table and the value leaf are **one-time costs per pool**; this skill is the
+*per-combination* loop, and it costs one batch, not the hours a per-deck artifact regeneration costs.
 
-It is NOT the route for: adding a card the engine does not implement (analyze-deck), adopting a
-combination as a deck (mulligan-profile + value-leaf), or tuning a decision heuristic
-(heuristic-optimization).
+It is NOT the route for adopting a combination as a deck (mulligan-profile + value-leaf) or tuning a
+decision heuristic (heuristic-optimization). A card the engine does not implement *is* in scope, but
+only through analyze-deck — see **The new-card route** below.
 
 ## Rule 0 — one command, one apparatus, one pooled batch
 
 ```bash
 python3 scripts/deck_compare.py <spec.json>              # screen every combination vs base
+python3 scripts/deck_compare.py <spec.json> --preflight  # only the checks that need you; runs no games
 python3 scripts/deck_compare.py <spec.json> --floor TAG  # measure ONE combination's bias floor
 ```
 
@@ -30,8 +31,14 @@ python3 scripts/deck_compare.py <spec.json> --floor TAG  # measure ONE combinati
 ```
 
 A combination is `card -> NEW COUNT`. Absent = unchanged, `0` = removed, a card not in the base deck
-is introduced by naming it (it must exist in `cards.json`). Every arm shares one apparatus and every
-game of every arm goes into ONE `mtg --batch`.
+is introduced by naming it. Every arm shares one apparatus and every game of every arm goes into ONE
+`mtg --batch`. `profile` and `value_profile` default to the deck's siblings; the driver **refuses** a
+screen with no play profile (`"allow_no_profile": true` is the hatch — see the trap section).
+
+`base` may be `.txt` **or** Cockatrice `.cod` — 14 of the 17 decks in `decks/` are `.cod`, and the
+driver used to feed those to a split-on-space text parser, which yields nonsense card names rather
+than an error. Both formats now go through `analyze_deck.py`'s parser; arms are always written as
+`<stem>.txt` (the stem is what `mtg-analyze` names a generated keep table after).
 
 **Do not regenerate per-deck artifacts per combination.** Sharing one keep table across arms is not a
 cheap approximation, it is the *better measurement*: two different tables mulligan differently on
@@ -40,7 +47,70 @@ sharing one table **halves the standard error**.
 
 Design and every measurement: `docs/design/deck-combination-screening.md`.
 
-## The three things that make it fast, and why none is optional
+## What needs you, and what does not
+
+The driver measures; it does not judge, and it cannot write a card. Four things are yours:
+
+1. **Proposing the combinations.** A spec is a deckbuilding hypothesis. The tool ranks what you hand
+   it and has no opinion about what is worth trying.
+2. **Implementing a card the engine does not have** — `.claude/skills/analyze-deck.md` +
+   `.claude/skills/mtg-rules.md`, then review it. The pre-flight refuses and prints the route.
+3. **Noticing when the engine's MODEL of a card makes the comparison meaningless.** This is the
+   judgement no measurement can make: `Skullcrack`'s oracle text carries
+   `[Life-gain lock and damage-prevention lock not modelled]`, so screening Skullcrack → Lava Spike
+   compares a fully-modelled card against a partly-modelled one and flatters the newcomer. The
+   bracket notes in `cards.json` are where that is recorded; connecting one to the question being
+   asked is a reading task. Say it in the report — do not let the number stand alone.
+4. **Deciding.** The driver prints an effect, a floor and a verdict; adoption is the user's call, and
+   an adopted combination still owes its own artifacts (bottom of this file).
+
+Everything else — numbering, apparatus selection, pooling, pairing, the floor bracket — is mechanical
+and already in the driver. Do not hand-roll it.
+
+## The new-card route
+
+A card that is not in the base deck at all costs a one-time implementation, then joins the pool.
+Run `--preflight` first: it runs no games, reads no binary, and tells you which of these you are in.
+
+```bash
+python3 scripts/deck_compare.py <spec.json> --preflight
+```
+
+| pre-flight says | what happened | what to do |
+|---|---|---|
+| `NOT IMPLEMENTED: X` | `cards.json` has no `X`; a batch would die on `Unknown card template` | implement it (rules skill), review it, re-run |
+| `GAPS in X` | `analyze_deck.py`'s own oracle-text scan found an unimplemented clause | finish it, or record the deliberate simplification as a `[bracket note]` in `oracle_text` |
+| | *the scan over-reports*: 4 of the 197 cards in `cards.json` are flagged `partial` today (Monastery Swiftspear, Leeching Sliver, Thrumming Hivepool, Ignoble Hierarch) purely for having an un-bracketed `Whenever`, and all four are implemented. **Read the card before believing the flag**; `"allow_card_gaps": true` is the hatch once you have. Only *introduced* cards are scanned, so a base deck's pre-existing flags never block a screen. |
+| `NO card_scores ENTRY: X` | the profile has never seen `X` | nothing — the screen pools one automatically (~20 s) |
+| `OK` | count changes over known cards | run the screen |
+
+**The card_scores case is the one that would have been silent.** `ComputeHandScore` *skips* a name
+that is not in `card_scores` (`AIEngine.cpp`), so a hand holding the new card is scored as if that
+slot were empty, falls below `hand_score_threshold` more often, and gets mulliganed away — in the one
+arm that plays the card. So the driver derives a **pool profile**: one `mtg-analyze` run over the
+union of every arm's cards (~20 s), merged into a copy of the shipped profile, adding only the
+entries it lacks. Merging rather than replacing is what keeps the base arm untouched — measured
+**byte-identical, 0 of 11,967 games** — which is what makes it safe to give to every arm.
+
+**Measured, it is real but small and most decks are structurally immune.** Two 4-cell paired runs:
+
+| deck | introduced card | bias (pooled − shipped) | why |
+|---|---|---|---|
+| burn, 20,000 paired | Lava Spike (+0.213) | **−0.0001 ±0.0000** | `burn.profile.json` has a **`keep_model`**, which owns the keep decision at every hand size — the `card_scores` gate under it is unreachable, and the model's features never read it |
+| slivers, 6,000 paired | City of Brass (+0.024) | **+0.0022 ±0.0010** (t=+2.1) | legacy static path: the gate is live, and 0.4% of games changed |
+
+Of the 12 committed profiles only **slivers_vial and Knights** have a live gate: three carry keep
+models, five have `hand_score_threshold = -1e18` (`NO_GATE`, which is what the analyzer emits today),
+one has no `card_scores`. And slivers' +0.0022 is for a *land*; a Lava Spike-sized score in an
+exposed deck would move more hands. Treat the pooling as **cheap insurance, not a rescue** — and if
+a screen's headline turns on 0.002t, the apparatus floor already says it is unresolved.
+
+**Introducing a card also costs ~22x per game**, because it always drops the keep table. Measured on
+slivers (300 games, idle box): 9.8 ms/game with the table, 254.8 without — and turning off *only* the
+table's bottoming while keeping its keep decisions already costs 233.1, so the whole gap is
+`BottomCards` falling back to a rollout per bottom candidate. Size a new-card screen accordingly.
+
+## The four things that make it fast, and why none is optional
 
 1. **Inherited numbering.** The opening shuffle is a positional Fisher–Yates, so a count edit
    re-permutes the whole game and the arms share nothing but the seed. The driver assigns `m_number`
@@ -53,11 +123,20 @@ Design and every measurement: `docs/design/deck-combination-screening.md`.
    (`value_model: false` + `ladder_value_leaf: true`) so the leaf accelerates warm-up passes and the
    heuristic decides the committed one. Verified byte-identical under a deliberately *wrong* model at
    unbounded budget; the residual budget coupling at `budget_ms: 20` measured 0.0008t.
-3. **A coverage pre-flight.** A hand holding a card the table never bucketed does not get a biased
-   answer, it gets **no** answer — `ExhaustiveKeepPolicy::Keep()` returns `present=false` and the
-   caller falls through to the generic heuristic, silently. So if any combination introduces such a
-   card the driver drops the table from **every** arm: deck-independent, therefore symmetric
-   (measured −0.0003 error on a −0.20 effect), instead of silently lop-sided.
+3. **A coverage pre-flight, on BOTH cliffs.** A hand the table cannot answer does not get a biased
+   answer, it gets **no** answer — `Decide` returns `present=false` and the caller falls through to
+   the generic heuristic, silently. That happens two ways, and until now only the first was checked:
+   - **an unbucketed card** (any introduced card) → the table is dropped from **every** arm:
+     deck-independent, therefore symmetric (measured −0.0003 error on a −0.20 effect);
+   - **an untabled composition** — the analyzer enumerates compositions capped at the *base* deck's
+     bucket counts (`cap[b] = min(count[b], H)`), so **raising** a small bucket makes hands reachable
+     that were never tabled, on that arm alone. Raising a 1-of to a 4-of on slivers = **6.32% of
+     hands**, ≈0.004t of one-sided bias. The driver computes this exactly and drops the table above
+     `max_fallback` (default 1%); below it, it prints the rate and keeps the table, because dropping
+     is not free (~0.063t on *both* arms, and ~22x per game).
+
+   Dropping the table is `MTG_EXHAUSTIVE_PROFILE=none` on the batch, **not** dropping the profile.
+4. **An introduced-card pre-flight** — the part that needs you, above.
 
 ## The trap that has already cost a day: attach the play profile
 
@@ -66,20 +145,24 @@ a deck nobody ships. On slivers that zeroes `vial_target_mv`, and cutting 2 Aeth
 **−0.078t instead of −0.030t — the effect inflated 2.6x**, because a Vial the engine cannot use is
 free to cut.
 
-It bites in **two** places, and the second is easy to miss:
+It bites in **three** places. Each is now guarded, and each guard exists because the failure is silent:
 
-- the measurement (`profile` in the manifest — `deck_compare.py` does this);
+- **the measurement** (`profile` in the manifest). The spec's `profile` used to be optional and now
+  defaults to the deck's sibling; a screen with no profile anywhere **refuses**.
 - **the keep-table generation**, which resolves the profile and value sidecar *directory-relative off
   the decklist*. A gen run from a scratch directory silently fits the table to the same wrong deck.
   It changes the artifact: the play digest moves, and on slivers bucket discovery **merged Ancient
   Ziggurat into the land bucket** (9 buckets instead of 10, ~1.8x fewer cells) because a deck that
   never casts Vial cannot notice that Ziggurat is the one land that cannot pay for it. With the
-  profile present, R=10 discovery reproduces the committed R=60 bucketing exactly.
-
-`mtg-analyze` now **refuses** a keep-gen with no `<stem>.profile.json` beside the decklist
-(`MTG_KEEP_ALLOW_NO_PROFILE=1` is the deliberate hatch), and `--floor` copies the profile and value
-sidecar into the arm directory before generating. Both guards exist because a warning at minute 0 of
-a 90-minute gen is not read.
+  profile present, R=10 discovery reproduces the committed R=60 bucketing exactly. `mtg-analyze` now
+  **refuses** a keep-gen with no `<stem>.profile.json` beside the decklist
+  (`MTG_KEEP_ALLOW_NO_PROFILE=1` is the hatch), and `--floor` copies both sidecars in first.
+- **the table-drop path** — the one that bit the new-card route specifically. Dropping the table used
+  to be implemented as "pass no profile", and `BatchRunner::ParseJob` auto-detects
+  `<deck>.profile.json` *beside the deck*: the arm decklists live in a scratch directory, so every
+  arm silently got `DefaultProfile()`. Introducing a new card is exactly what drops the table, so the
+  route this skill exists to support was profile-less by construction. It is now
+  `MTG_EXHAUSTIVE_PROFILE=none` on the batch, which suppresses the sidecar and nothing else.
 
 A gen that finishes suspiciously fast is a symptom, not a win.
 
@@ -120,9 +203,23 @@ Two things to hold onto when reading it:
 
 | stage | cost | frequency |
 |---|---|---|
-| screen (N combinations x 20k games, pooled) | minutes | per combination set |
+| screen (N arms x 20k games, pooled) | **deck-dependent, see below** | per combination set |
+| pool a `card_scores` entry for an introduced card | ~20 s | once per new card |
 | `--floor` bracket (R=10 table + 4 x 20k games) | tens of minutes | only for a result near its floor |
 | a shippable table / value leaf for an adopted combination | hours | once, at adoption |
+
+**Per-game cost varies by two orders of magnitude, so quote the deck AND the apparatus, never
+"minutes".** Measured at d5 / `budget_ms: 20` / `max_turns: 8`:
+
+| deck | keep table | ms/game | a 4-arm x 20k screen |
+|---|---|---|---|
+| slivers | shared (count changes only) | 9.8 | ~1 min |
+| slivers | dropped (a card was introduced) | 254.8 | ~30 min |
+| burn | dropped | ~1,900 | ~1.8 h |
+
+The `ms=` field on each job's `=== BATCH ===` line is that per-game figure (a *sum of per-game wall
+times*, so it inflates under load — compare runs on a quiet box). **Read it off a 300-game probe
+before committing to a long run.**
 
 Per CLAUDE.md, everything goes through ONE pooled `mtg --batch`; check the
 `[batch] heartbeat: N/M workers busy` line in the first ten minutes of any long run.
