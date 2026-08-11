@@ -2814,8 +2814,16 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     // same board bake the same canonical victim, and the first apply consumes it -- with tokens
     // now uniquely numbered the second activation's id scan then misses (under shared id 0 it
     // silently aliased onto the next token, which is why this never surfaced before numbering).
-    // Victims are fungible, so on a miss RE-PICK canonically against the live board; only a board
-    // with no legal victim at all no-ops. Shared by executor + rollout -> lockstep.
+    // TOKEN victims are fungible, so on a miss RE-PICK canonically against the live board.
+    //
+    // TOKENS ONLY (id >= 1000, or legacy 0). A missing REAL-card victim means the PLAN'S PREMISE
+    // failed -- the search baked a victim its own line imagined into existence (goblins gi123:
+    // the search's combat Lackey-put a STAGED Mogg War Marshal that reality never puts, then
+    // sacked it; re-picking substituted the live Goblin Lackey, converting a harmless stale plan
+    // into the loss of a real attacker and a full turn). Fungibility justifies substitution only
+    // among same-premise token victims; for a real card the sac must NO-OP, exactly as it did
+    // before numbering. Shared by executor + rollout -> lockstep.
+    const bool victim_was_token = (victim_id == 0 || victim_id >= 1000);
     for (int attempt = 0; !found && attempt < 2; ++attempt)
     {
         for (int i = 0; !found && i < static_cast<int>(state.battlefield.size()); ++i)
@@ -2830,7 +2838,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
             state.battlefield.erase(state.battlefield.begin() + i);
             break;
         }
-        if (found || attempt > 0) { break; }
+        if (found || attempt > 0 || !victim_was_token) { break; }
         victim_id = CanonicalSacVictim(state, controller, source_id,
                                        op->sac_creature_requires_subtype);
         if (victim_id < 0) { break; }
@@ -3081,6 +3089,15 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
         std::vector<int> cand_hand;   // hand indices of matching Goblin-permanent cards (chooser pool)
         for (int h = 0; h < static_cast<int>(ap.hand.size()); ++h)
         {
+            // STAGED cards are impulse-EXILED (Rundvelt Hordemaster / Light Up the Stage): the
+            // engine models them as in-hand-with-flag so they stay castable, but in the real game
+            // they sit in EXILE and "put a ... card from your hand" (CR: Lackey names the hand
+            // zone) cannot reach them. The REAL executor already cannot see them here (AIEngine
+            // keeps staged cards outside the hand between main phases), but SIMULATED states carry
+            // them merged -- so without this skip the search imagines a put reality then declines,
+            // and commits follow-up actions against a phantom permanent (goblins gi123: a staged
+            // Mogg War Marshal "put" then sacked -- the plan's victim never existed).
+            if (ap.hand[h].m_is_staged) { continue; }
             const CardDefinition* hd = CardDatabase::Instance().LookupCached(ap.hand[h]);
             const Card& hc = hd ? hd->card : ap.hand[h];
             if (is_match(hc)) { cand_hand.push_back(h); }
@@ -3547,8 +3564,12 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
                                                         need_sub, victim_id, src_name);
             if (bidx >= 0) { SacrificePermanentAt(state, controller, bidx); return; }
             // Stale-victim fallback (see ApplySacCreatureOutlet): an earlier action may have
-            // consumed the baked victim; victims are fungible, so re-pick against the live board
-            // rather than ghosting the float. Lockstep (shared helper, both worlds).
+            // consumed the baked victim; TOKEN victims (id >= 1000, legacy 0) are fungible, so
+            // re-pick against the live board rather than ghosting the float. A missing REAL-card
+            // victim is a failed plan premise (the search imagined the victim into existence --
+            // goblins gi123) and must NO-OP, never substitute a live creature. Lockstep (shared
+            // helper, both worlds).
+            const bool victim_was_token = (victim_id == 0 || victim_id >= 1000);
             for (int attempt = 0; attempt < 2; ++attempt)
             {
                 for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
@@ -3558,7 +3579,7 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
                     SacrificePermanentAt(state, controller, j);   // Pashalik ping / death token etc.
                     return;
                 }
-                if (attempt > 0) { break; }
+                if (attempt > 0 || !victim_was_token) { break; }
                 victim_id = CanonicalSacVictim(state, controller, sac_source_id, need_sub);
                 if (victim_id < 0) { break; }
             }

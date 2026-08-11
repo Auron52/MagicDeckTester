@@ -3864,6 +3864,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             int target_mv = vp.charge_counters;
             for (int i = 0; i < n; ++i)
             {
+                // Staged cards are impulse-EXILED (really in exile, castable-only); Vial puts
+                // "a creature card from your hand" and cannot reach them -- same rules zone as
+                // the Lackey put (see FireCombatDamageCheatIntoPlay). The real executor's hand
+                // never holds them mid-phase; simulated states do, so without this skip the
+                // search Vials a card reality cannot.
+                if (ap.hand[i].m_is_staged) { continue; }
                 const CardDefinition* copt =
                     CardDatabase::Instance().LookupCached(ap.hand[i]);
                 if (!copt || !copt->card.IsCreature()) { continue; }
