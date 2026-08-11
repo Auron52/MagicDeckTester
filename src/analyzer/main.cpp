@@ -137,6 +137,25 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
     { const char* s = std::getenv(k); return (s && *s) ? std::max(lo, std::atoi(s)) : dflt; };
     std::filesystem::path in_path =
         a.deck_path.parent_path() / (a.deck_path.stem().string() + ".profile.json");
+    // A keep table is an artifact of how the deck PLAYS, so generating one without the deck's play
+    // profile silently fits it to a deck we do not ship -- and the failure is invisible in the output.
+    // Measured 2026-08-11: a scratch-directory gen ran with vial_target_mv=0, so the engine never cast
+    // Aether Vial, so bucket discovery MERGED Ancient Ziggurat (the one land that cannot pay for Vial)
+    // into the land bucket -- 9 buckets instead of 10, ~1.8x fewer cells, and a gen that looked cheap
+    // because it was wrong. With the profile present, R=10 discovery reproduces the committed R=60
+    // bucketing exactly. See docs/design/deck-combination-screening.md.
+    // Refuse rather than warn: this route runs for tens of minutes to hours, and a warning scrolled
+    // past at minute 0 is not seen at minute 90. DEFAULT OFF; =1 permits a profile-less gen for a deck
+    // that genuinely has no play profile yet.
+    if (!std::filesystem::exists(in_path) && !EnvOn("MTG_KEEP_ALLOW_NO_PROFILE"))
+    {
+        std::cerr << "keep-gen: no play profile beside the decklist (" << in_path.string() << ").\n"
+                  << "  A table generated without it is fit to a DIFFERENT deck than the one shipped.\n"
+                  << "  Copy the deck's <stem>.profile.json (and its <stem>.value.json, attached just\n"
+                  << "  below) next to this decklist, or set MTG_KEEP_ALLOW_NO_PROFILE=1 if the deck\n"
+                  << "  genuinely has no profile yet.\n";
+        return 1;
+    }
     MulliganProfile profile = std::filesystem::exists(in_path)
                             ? LoadDeckProfile(in_path) : MulliganProfile::DefaultProfile();
     // Attach the deck's learned leaf VALUE sidecar (<deck>.value.json) so the keep/bottom
