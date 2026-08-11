@@ -1398,3 +1398,102 @@ The same four games top the list on every engine (`--seed 11024 --game-index 13`
 been tracking since §4 is a structural property of the deck at fixed depth, unchanged by the merge —
 which is what the ANSWERED section above already established from the other direction (every one of
 these games is under 5 s at the budgeted configuration the deck actually ships at).
+
+## Where the cost is NOW (2026-08-10) — 90% of it is BOTTOMING, and the branching table was mis-read
+
+Everything above predates the Unite the Coalition split (`ca9c50b`), the FiveColourProvider fetch
+policy, the Greaves atom fix, the scaling-source widening fix and the colour-collapse. Re-measured
+from scratch on the current build, at each deck's SHIPPED play config (no forced depth), 200 games,
+seed 2002, one pooled batch on an idle box:
+
+| deck | s/game | x cheapest | play config |
+|---|---|---|---|
+| **fivecolour** | **4.191** | **491x** | d5/b20 (source=default) |
+| creature_giving | 1.199 | 140x | d5/b20 (source=default) |
+| hinata2 | 0.519 | 61x | d5/b20 (value_play) |
+| dragonstorm | 0.131 | 15x | d5/b20 (value_play) |
+| treasure_hunt | 0.079 | 9x | |
+| anti_lifegain | 0.033 | 4x | |
+| slivers_vial / burn / auras / knights | 0.014-0.029 | 2-3x | |
+| goblins | 0.009 | 1x | d6/b40 (value_play) |
+
+### It is bottoming, not play
+
+Callgrind, 2 games at shipped play, contention-free:
+
+```
+45,976,718,991 (99.92%)  GoldFishRunner::Run
+41,604,962,645 (90.42%)  AIEngine::HandleMulligan
+41,604,899,865 (90.42%)  AIEngine::BottomCards      <-- all of it
+```
+
+**`BottomCards` is 90.4% of the run.** The August measurement said 78%; it has grown because PLAY got
+cheaper (Unite, Greaves, fetch policy) while bottoming did not change. Every hotspot the sections
+above chase -- `TapForCostBacktrackWorker` at 11.1% self, `EffectiveProduces` 3.7%, `ComputeLordBonus`
+2.0% -- lives INSIDE this, and the largest of them is a fraction of the remaining 10% of play.
+
+`BottomCards` runs a full `RolloutWinTurn` per candidate card per bottom step (blind-K is off by
+default, so no extra multiplier). FiveColour mulligans 1.46 times per game on average, so that is
+~10 rollouts per game, each costing ~40% of a whole played game.
+
+**Mulligan RATE is not the differentiator** -- burn mulligans MORE (dist 1:38 2:29 3:16 4:15 5:2 over
+100 games, vs FiveColour's 1:65 2:24 3:11). What differs is the cost of one rollout, which is the
+deck's own play cost. Bottoming multiplies whatever a deck already costs by ~10, so it is invisible
+on a cheap deck and dominant on an expensive one.
+
+### The prize, measured (MTG_BOTTOM_ROLLOUTS=0)
+
+Skipping the rollouts entirely -- `allowed` stays all-ones and `HeuristicBottomPick` decides alone --
+is the K=0 end of the "pre-filter candidates before rolling out" lever, i.e. an upper bound on both
+its saving and its quality cost. 11 decks x 3 seeds x 200 games at shipped play:
+
+| deck | rollouts ON | OFF | speedup | quality cost |
+|---|---|---|---|---|
+| **fivecolour** | 3,309.5 core-s | 683.4 | **4.84x** | **+0.1350** |
+| **creature_giving** | 775.0 | 252.8 | **3.07x** | **+0.0733** |
+| every other deck (9) | — | — | 0.91-1.17x | **+0.0000** |
+
+Two things follow, and they point the same way.
+
+**1. The rollouts are LOAD-BEARING.** +0.135 avg turns on FiveColour is a large quality loss in this
+repo's terms -- the whole scaling-source widening fix moved 0.004, and the FiveColourProvider fetch
+policy (a headline adoption) moved 0.22. So this is not dead work to delete; it is buying real play.
+
+**2. The prize is 4.84x on the most expensive deck, and it is collectable WITHOUT the quality loss.**
+`BottomCards` already has an O(1) path -- `m_profile.exhaustive_keep->DecideBottom` -- which
+short-circuits the entire rollout loop. It is gated on `bottoming_enabled`, and **no deck in the repo
+has it set** (checked: every sidecar reports it absent/false, and FiveColour and Creature Giving have
+no mulligan sidecar at all). The two decks paying this bill are exactly the two with no mulligan
+profile.
+
+### Levers, sized
+
+1. **A mulligan profile for FiveColour with `bottoming_enabled`** — replaces ~10 rollouts/game with a
+   table lookup. Worth ~4.8x on the deck, with no quality loss (the table IS the considered answer).
+   Expensive, commit-bound and user-gated per the mulligan skill, which also ships `bottoming_enabled`
+   OFF until a validated high-R run -- so the profile alone does not collect this; the high-R
+   validation is part of the price.
+2. **Top-K heuristic pre-filter on the bottom candidates.** The curve between K=0 (4.84x, +0.135) and
+   K=7 (1x, +0). Needs a ranking function rather than the current single `HeuristicBottomPick`, and it
+   is play-affecting. Cheap to build and the only lever here that needs no generation run.
+3. **Duplicate-candidate collapse** — two copies of a card are the same removal. Sized at 8% on
+   FiveColour (6.47/7 distinct names), so small on the deck that needs it most.
+
+### The branching table above was an artifact, twice over
+
+`MTG_BRANCH_STATS` attributed a call's WHOLE odometer to the first group of maximal size, so with
+every group at size 1 the "driver" was whichever card enumerated first. Fixed: only a group of size
+>= 2 can name a driver, ties are marked `[+N tied]`, and all-size-1 calls bucket as
+`(flat: N optional casts)`. Re-measured, 3 games:
+
+| driver | calls | sum_odo | share | avg_odo |
+|---|---|---|---|---|
+| **(flat: N optional casts)** | 34,128 | **479,268** | **56%** | 2-128 |
+| Unite the Coalition | 4,135 | 263,334 | 31% | 63.7 |
+| Oko, Thief of Crowns | 614 | 64,352 | 8% | 104.8 |
+
+So the honest picture is that **56% of branching belongs to no card at all** -- it is 2^n in the
+number of simultaneously castable options, the irreducible combinatorics of a toolbox deck. Unite is
+still the largest card-specific term at 31% even after `ca9c50b` cut it from six splits to
+`{0,1,2,5}`. Given that all of this sits inside the 10% of runtime that is not bottoming, none of it
+is the lever to pull next.

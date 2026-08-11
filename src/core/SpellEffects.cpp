@@ -1150,7 +1150,11 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     //     colours entirely (TurnSolver.cpp ~6221-6232). SAFE, and this path is the whole win.
     // So collapse is enabled whenever out_leftover is null (covers both-null and full-pool-only); any
     // future out_full_pool caller that reads a per-colour count must keep this contract.
-    const bool collapse_colors = (out_leftover == nullptr);
+    // MTG_NO_COLOR_COLLAPSE=1 makes the collapse inert, for a standing A/B on ONE binary (the repo
+    // rule: never let an A/B straddle a build.sh). Byte-identical either way -- the arms differ in
+    // work done, not in the payment found -- so a digest diff between them is a bug, not a result.
+    static const bool s_no_collapse = EnvOn("MTG_NO_COLOR_COLLAPSE");
+    const bool collapse_colors = (out_leftover == nullptr) && !s_no_collapse;
     unsigned special_mask = 0;
     if (collapse_colors)
     {
