@@ -144,6 +144,15 @@ struct GameState
     std::vector<StackEntry>  stack;
     std::vector<Permanent>   battlefield;
     std::vector<Card>        exile;
+    // Per-copy id for TOKENS (Stage 6 directive, analysis-Mirrorwing Dragon.md): deck cards carry
+    // 1..60 from deck setup; tokens draw unique ids from this counter (base 1000 keeps provenance
+    // obvious) at every shared creation helper. Identity is what lets a token be a trick TARGET
+    // (enchant_target rides m_number), a distinct sac source (multiple Treasures crackable in one
+    // plan -- the old shared id 0 collapsed them to one), and an addressable viewer choice. The
+    // counter lives on the state so search branches fork it: the same line assigns the same ids in
+    // the rollout and the executor (lockstep by construction). Opponent pseudo-spawns stay id 0
+    // (never targeted, never our sac sources).
+    int                      next_token_number     = 1000;
     int                      consecutive_passes           = 0;
     int                      turn_number                  = 0;
     bool                     player_lost_on_draw          = false;

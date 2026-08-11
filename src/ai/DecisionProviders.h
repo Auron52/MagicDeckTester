@@ -60,6 +60,9 @@ enum class UnprunedGate
                   // (DragonstormProvider::UseSpliceCollapse)
     SacLandHold,  // burn's sac-land burn hold disabled: keep the plans that cast Shard Volley before the
                   // winning turn (BurnProvider::HoldsSacLandBurnUntilLethal)
+    TrickTarget,  // Mirrorwing/Zada solo-target trick target set opened to EVERY legal creature
+                  // (battlefield + hand) instead of MirrorwingProvider::TrickTargetCandidates'
+                  // narrowed set (magnets + best attacker + haste/copy extras)
     _Count
 };
 
@@ -499,6 +502,45 @@ public:
     // its tap is worth more than its chip damage -- see the .cpp note. Vigilant sources (Faeburrow
     // Elder) still always attack: attacking never costs them their tap.
     bool ShouldAttackWith(const GameState& s, const Permanent& attacker) const override;
+};
+
+// Mirrorwing/Zada spell-copy swarm: overrides ONLY the trick-target narrowing (a 5f perf prune --
+// the per-target variant group was the measured top branching driver on a swarm board). Every
+// other decision resolves through GenericProvider exactly as before.
+class MirrorwingProvider : public GenericProvider
+{
+public:
+    void TrickTargetCandidates(const GameState&, const CardDefinition&,
+                               std::vector<int>&) const override;
+    // Enumeration breadth: a post-fan-out hand holds 10-12 castable groups x ~5 trick-target
+    // options each -- the full product is computationally infeasible (a single node measured a
+    // 4 GiB digit store / billions of positions; see analysis-mirrorwing-dragon.md). The generic
+    // cap of 12 groups never binds there; 8 keeps the worst node ~=400k positions. Same gated
+    // breadth-policy shape as the base hook (MTG_UNPRUNED / MTG_NO_GROUP_CAP opens it).
+    int EnumGroupCap() const override { return 8; }
+    // Legend-rule keep with the user's Twinflame exception (Stage 6 directive, analysis ledger):
+    // keep the hasty exile-at-end COPY over a summoning-sick original iff attacking with the copy
+    // wins THIS turn and attacking without it does not. Decided by simulating combat both ways.
+    int LegendKeepIndex(const GameState&, int,
+                        const std::vector<int>&) const override;
+    // Cleanup discard: the USER-AUTHORED keep policy (Stage 6 review, analysis ledger) -- one
+    // magnet enabler, >=4 weighted bodies (Instigator counts 2), mana for the kept enabler
+    // preferring 2 red, then spells with the outright winners (Gold Rush / Fists of Flame) kept
+    // over the draw tricks. MTG_MW_BUCKET_DISCARD=0 -> generic base ranking (A/B lever).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
+    // Zada and Mirrorwing fill ONE role (the copy magnet): redundancy is counted across the pair
+    // so the last-copy veto cannot protect both (the antilife enabler-group lesson).
+    const std::vector<std::string>* InterchangeableRequiredGroup(const std::string&) const override;
+    // Twinflame strive counts: only K=0 and the max affordable K (user, Stage-6 round 3: strive
+    // is cast "for lethal on the highest power creature(s)" -- intermediate counts are
+    // mana-coupling corners the lethal line never wants). Gated with the tricktarget family.
+    bool StriveCountMaxOnly(const GameState&, const CardDefinition&) const override;
+    // Go-off order (user round 3): magnets (5) before Twinflame (8) before the pump tricks --
+    // the fan-out target must exist before the token doubler, the doubler before the pumps.
+    // Consumed by the opaque apply path's enabler sort in both worlds.
+    bool CastEnablerFirst(const GameState&, const std::string&) const override;
+    int  CastOrderRank(const GameState&, const CardDefinition&) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

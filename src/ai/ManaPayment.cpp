@@ -576,7 +576,10 @@ bool OrderingOpaque(const std::string& name)
         || d->params.retrace
         || d->params.expressive_iteration
         || d->params.impulse_exile > 0   // Apex of Power: staged exile -> search-owned breakpoint order
-        || d->params.draw > 0;
+        || d->params.draw > 0
+        // Zada/Mirrorwing solo-target trick: every trick in the deck cantrips (cast_draw), and a
+        // magnet fan-out mass-draws mid-turn -- the post-draw re-solve owns the ordering.
+        || d->params.solo_target_trick;
 }
 
 // THE accounting mana pool (C1 unit 4). Depletion lands contribute 2, multi-color lands 1 wild,

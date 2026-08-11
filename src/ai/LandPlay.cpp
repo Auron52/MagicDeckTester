@@ -96,6 +96,12 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
         BounceKarooLand(state, state.active_player_index,
                         static_cast<int>(state.battlefield.size()) - 1);
     }
+    // "When this land enters, you gain N life" (Kazandu Refuge). Plain controller lifegain --
+    // no gain-reversal enabler interaction (OpponentGainsLife is for the OPPONENT's gain).
+    if (def.params.etb_lifegain > 0)
+    {
+        ap.life += def.params.etb_lifegain;
+    }
     // Forbidden Orchard played this turn: it is tapped for mana this turn too, so spawn the
     // opponent's Spirit now (the turn-start spawn only covers copies already in play).
     if (opts.spawn_orchard_spirit && IsForbiddenOrchard(&def)) { SpawnOpponentSpirit(state); }

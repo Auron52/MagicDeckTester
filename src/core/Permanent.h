@@ -74,6 +74,19 @@ struct Permanent
                                            // counter. Only read for a permanent whose card sets a
                                            // cumulative-upkeep param, so it is inert (never inspected)
                                            // for every other deck -> byte-identical.
+    bool      temp_haste           = false; // "gains haste until end of turn" (Expedite, incl. its
+                                            // Zada/Mirrorwing copies). Read by CanAttackFull AND
+                                            // CanTapNow (haste lifts the {T} restriction too, CR
+                                            // 302.6 -- a hasted fresh dork may tap for mana). Reset
+                                            // at BOTH cleanup sites (GameEngine::CleanupStep +
+                                            // TurnSolver::SimulateEndAndStartNextTurn) in lockstep;
+                                            // folded into the sim key. Never set outside the
+                                            // grants_temp_haste payload -> byte-identical elsewhere.
+    bool      exile_at_end         = false; // Twinflame token: "exile those tokens at the beginning
+                                            // of the next end step." Swept (battlefield -> exile) at
+                                            // BOTH end-of-turn sites in lockstep; folded into the
+                                            // sim key. Never set outside token_copy_of_target ->
+                                            // byte-identical elsewhere.
     bool      is_animated          = false; // land animated as a creature (e.g. Mutavault); reset each cleanup
     bool      is_token             = false; // created by a token-making effect (CreateToken). Lathliss's
                                             // "nontoken Dragon" gate reads this so a created 5/5 Dragon

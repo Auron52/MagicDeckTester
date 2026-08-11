@@ -187,6 +187,7 @@ void GameEngine::UntapStep(GameState& state)
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;
     ap.bonus_land_drops_this_turn = 0;
+    ap.cards_drawn_this_turn     = 0;   // Fists of Flame drawn-count resets each turn (lockstep w/ SimulateEndAndStartNextTurn)
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index == state.active_player_index)
@@ -347,6 +348,7 @@ void GameEngine::DrawStep(GameState& state)
         return;
     }
     Card drawn = ap.library.DrawTop();
+    ap.cards_drawn_this_turn += 1;   // the draw step is a real CR-121 draw (Fists of Flame counts it)
     // Human-play (--claude-play) accurate draw reporting: record the per-turn draw so the viewer
     // can show exactly what was drawn this turn (nulled by RevealLogPause during search).
     if (g_play_draw_sink) { g_play_draw_sink->push_back({ state.turn_number, drawn.m_name.str() }); }
@@ -530,6 +532,18 @@ void GameEngine::EndStep(GameState& state)
 {
     state.phase = Phase::Ending;
     state.step  = Step::End;
+    // "Exile those tokens at the beginning of the next end step" (Twinflame token copies,
+    // Permanent::exile_at_end). Swept battlefield -> exile here, BEFORE cleanup (CR 512/514
+    // order). Lockstep with the top of TurnSolver::SimulateEndAndStartNextTurn; no-op for every
+    // deck that never sets the flag.
+    for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+    {
+        if (state.battlefield[i].exile_at_end)
+        {
+            state.exile.push_back(state.battlefield[i].card);
+            state.battlefield.erase(state.battlefield.begin() + i);
+        }
+    }
     // TODO: "end of turn" triggered abilities (Phase 1.2)
     ResolveStack(state);
 }
@@ -592,6 +606,7 @@ void GameEngine::CleanupStep(GameState& state)
         p.pending_death_trigger = 0;   // delayed Searing Blood trigger expires with the damage marks
         p.temp_power_bonus      = 0;
         p.temp_tough_bonus      = 0;
+        p.temp_haste            = false;   // "gains haste until end of turn" (Expedite) expires
         p.is_animated           = false;
     }
 

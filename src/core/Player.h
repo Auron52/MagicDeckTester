@@ -29,6 +29,13 @@ struct Player
     std::vector<Card> graveyard;
     int lands_played_this_turn     = 0;
     int bonus_land_drops_this_turn = 0;  // one-time grants; reset in untap step
+    // Cards DRAWN this turn (CR 121 draws only: the draw step + spell/ability draws -- NOT
+    // reveal-and-put-in-hand (Treasure Hunt), staged/impulse exiles, tutors, or the opening hand).
+    // Read only by Fists of Flame's pump_per_cards_drawn_power payload; incremented at the real
+    // draw sites (GameEngine::DrawStep, the rollout's start-of-turn draw, both worlds' draw-spell /
+    // cast_draw / dig-draw resolvers, the shared trick draw). Reset at BOTH untap sites in
+    // lockstep; folded into the sim key. 0 forever for decks with no drawn-count payload.
+    int cards_drawn_this_turn = 0;
     int poison_counters            = 0;
 
     // Cards exiled by "Light Up the Stage" and similar; playable until their expiry turn.

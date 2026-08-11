@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Mirrorwing Dragon"/>
+        <card number="4" name="Zada, Hedron Grinder"/>
+        <card number="4" name="Goblin Instigator"/>
+        <card number="4" name="Ignoble Hierarch"/>
+        <card number="4" name="Fists of Flame"/>
+        <card number="4" name="Gold Rush"/>
+        <card number="3" name="Sandstone Needle"/>
+        <card number="4" name="Mountain"/>
+        <card number="9" name="Forest"/>
+        <card number="4" name="Ancestral Anger"/>
+        <card number="2" name="Gruul Turf"/>
+        <card number="3" name="Twinflame"/>
+        <card number="4" name="Elvish Mystic"/>
+        <card number="2" name="Expedite"/>
+        <card number="1" name="Kazandu Refuge"/>
+        <card number="2" name="Rootbound Crag"/>
+        <card number="2" name="Scale the Heights"/>
+    </zone>
+</cockatrice_deck>
