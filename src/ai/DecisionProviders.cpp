@@ -637,14 +637,20 @@ std::vector<std::string> DecisionProvider::SacTutorPutList(
         }
     }
 
-    // Distinct library creature names + copy counts.
-    std::vector<const CardDefinition*> names;
-    std::map<std::string, int>         copies;
+    // Distinct library creature names + copy counts. Keyed by the card's canonical
+    // CardDefinition* (LookupCached returns the SAME pointer for every copy of a name), which is
+    // byte-identical to name-keying -- one definition per name -- but skips the per-card std::string
+    // construction (`.str()`) and string hashing that showed up hot on this DotH-heavy deck. The map
+    // is only ever count-queried, never iterated, so the pointer key's arbitrary order is irrelevant;
+    // `names` (a vector) still carries the library first-occurrence order that the enumeration below
+    // depends on.
+    std::vector<const CardDefinition*>            names;
+    std::map<const CardDefinition*, int>          copies;
     for (const Card& lc : ap.library)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
         if (!d || !d->card.IsCreature()) { continue; }
-        if (copies[lc.m_name.str()]++ == 0) { names.push_back(d); }
+        if (copies[d]++ == 0) { names.push_back(d); }
     }
     if (names.empty() || max_puts <= 0) { return {}; }
 
@@ -705,7 +711,7 @@ std::vector<std::string> DecisionProvider::SacTutorPutList(
         for (const CardDefinition* a : names)
         for (const CardDefinition* b : names)
         {
-            if (a == b && copies[a->card.m_name.str()] < 2) { continue; }
+            if (a == b && copies[a] < 2) { continue; }
             std::vector<const CardDefinition*> seq{a, b};
             long long v = seq_value(seq);
             if (v > best_val) { best_val = v; best_seq = seq; }

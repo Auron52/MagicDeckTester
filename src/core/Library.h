@@ -196,10 +196,12 @@ public:
         // key ONCE (O(n)), sort lightweight (key, number, offset) records, then permute the cards a
         // single time. The comparator is (key asc, m_number asc); m_number is unique per live card, so
         // the order is a strict TOTAL order and the resulting permutation is uniquely determined --
-        // BYTE-IDENTICAL to the old whole-Card stable_sort. stable_sort is retained on the records (they
-        // are built in live-window order) so even a hypothetical key+m_number collision preserves the
-        // exact original relative order. thread_local scratch avoids a per-call heap alloc (ShuffleByKey
-        // is hot in rollouts); no nested ShuffleByKey exists, so the buffers are never clobbered mid-use.
+        // BYTE-IDENTICAL to the old whole-Card sort. Because the tie-break m_number is itself UNIQUE,
+        // no two records can compare equal on the full comparator, so std::sort (in-place introsort)
+        // yields the same order as stable_sort would -- and avoids stable_sort's per-call merge-buffer
+        // heap allocation (that temp buffer was the dominant shuffle cost in the rollout profile).
+        // thread_local scratch avoids a per-call heap alloc (ShuffleByKey is hot in rollouts); no nested
+        // ShuffleByKey exists, so the buffers are never clobbered mid-use.
         struct Deco { std::uint64_t key; std::int32_t number; std::uint32_t off; };
         static thread_local std::vector<Deco> deco;
         static thread_local std::vector<Card> tmp;
@@ -209,7 +211,7 @@ public:
             const Card& c = m_cards[m_top + i];
             deco.push_back(Deco{ key(c.m_number), c.m_number, static_cast<std::uint32_t>(i) });
         }
-        std::stable_sort(deco.begin(), deco.end(), [](const Deco& a, const Deco& b)
+        std::sort(deco.begin(), deco.end(), [](const Deco& a, const Deco& b)
         { return a.key != b.key ? a.key < b.key : a.number < b.number; });
         tmp.clear(); tmp.reserve(n);
         for (const Deco& d : deco) { tmp.push_back(std::move(m_cards[m_top + d.off])); }

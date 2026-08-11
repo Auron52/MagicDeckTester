@@ -2893,6 +2893,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     const int mana_ceiling = g_emit_prune ? OptimisticTurnMana(state) : kNoManaCeiling;
 
     std::vector<Action> actions;
+    // Reserve an optimistic upper bound so the push_backs below never re-grow the backing store
+    // mid-build. Action is a heavy struct (carries a card_name string + cost), so each realloc
+    // move-copies every element -- and CollectActions is called on the rollout hot path (millions of
+    // times). A hint only: the contents and order are unchanged, so every game stays byte-identical.
+    actions.reserve(ap.hand.size() + state.battlefield.size());
 
     // --- Hand casts ---
     for (int i = 0; i < n; ++i)

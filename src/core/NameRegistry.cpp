@@ -1,5 +1,6 @@
 #include "NameRegistry.h"
 #include <mutex>
+#include <unordered_map>
 #include <unordered_set>
 
 // The registry: a node-based unordered_set owns the canonical strings. Node-based storage keeps
@@ -24,6 +25,21 @@ const std::string& InternedName::EmptyStr()
 const std::string* InternedName::Intern(const std::string& s)
 {
     if (s.empty()) { return &EmptyStr(); }
-    std::lock_guard<std::mutex> lock(g_mutex);
-    return &*g_names.insert(s).first;
+    // Thread-local memo. Interned strings repeat heavily -- during the parallel search a worker
+    // re-interns the same token name ("P/T subtype Token") across many nodes -- and every call
+    // otherwise takes the global insert mutex. Caching the canonical pointer per thread returns the
+    // SAME process-stable pointer on a repeat (g_names is node-based, so element addresses survive
+    // rehash) with no lock, so this is byte-identical -- pointer identity is preserved -- and only
+    // the first sighting of a name on a given thread pays the lock. The memo holds pointers into
+    // g_names, which outlive every thread, so it is safe to drop at thread exit.
+    static thread_local std::unordered_map<std::string, const std::string*> memo;
+    auto it = memo.find(s);
+    if (it != memo.end()) { return it->second; }
+    const std::string* p;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        p = &*g_names.insert(s).first;
+    }
+    memo.emplace(s, p);
+    return p;
 }
