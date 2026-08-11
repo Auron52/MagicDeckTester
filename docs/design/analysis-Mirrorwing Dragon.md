@@ -254,6 +254,9 @@ All checks PASS except one:
   ("All mana costs match Scryfall", recorded above) and no cost has changed since.
   Verdict: network transient; re-run `python3 scripts/audit_card_costs.py` once the
   rate limit clears if a green line in the gate log is wanted.
+  **RESOLVED 2026-08-11**: standalone re-run (throttle 0.5s) after the limit cleared:
+  "Checked 150 costed cards against Scryfall. All mana costs match Scryfall." — zero
+  429s, zero mismatches (log: logs/cost_audit_retry.log). Gate fully green.
 
 ## Stage 6 follow-ups — implemented (2026-08-11, on top of 17c29a3)
 
@@ -352,7 +355,7 @@ USER play knowledge encoded (rounds 3-4 of the review):
 
 - Mulligan profile generation: DEFERRED (user kicks off; policy 2026-07-17).
 - Value-leaf: not generated (user decides post-freeze).
-- card_costs gate line: re-run when Scryfall rate limit clears (see above).
+- ~~card_costs gate line~~: DONE 2026-08-11 — clean pass, 150/150 match (see above).
 - Goblins value sidecar predates the corrected sac model (engine-state fingerprint policy):
   regeneration is cheap (~3 min) if pooling/regen ever needs it.
 - Expand-on-no-win breadth escalation: proposed above, awaiting user decision.
