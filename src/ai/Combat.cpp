@@ -31,16 +31,31 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     std::vector<const Permanent*> attackers;
     attackers.reserve(atk_idx.size());
     std::vector<int> damaging_idx;   // attackers that dealt >0 damage (Goblin Lackey cheat)
+
+    // Pre-filter the active player's lord permanents ONCE (usually none), so the per-attacker
+    // ComputeLordBonus / HasDoubleStrikeFromLords below iterate that tiny list instead of each
+    // re-scanning the whole battlefield. Byte-identical: same permanents, same per-creature logic.
+    std::vector<int> lord_idx, ds_idx;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index != active) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (!qd) { continue; }
+        if (qd->tmpl == CardTemplate::LordEffect) { lord_idx.push_back(i); }
+        if (qd->params.grants_double_strike)      { ds_idx.push_back(i); }
+    }
+
     for (int idx : atk_idx)
     {
         Permanent& p = state.battlefield[idx];
         const bool animated = p.is_animated;
-        auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state.battlefield, active, animated, &p);
+        auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state.battlefield, active, animated, &p, &lord_idx);
         (void)lord_tb;
         const bool ds = animated
-            ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true)
+            ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true, &ds_idx)
             : (p.card.HasKeyword(Keyword::DoubleStrike)
-               || HasDoubleStrikeFromLords(p.card, state.battlefield, active));
+               || HasDoubleStrikeFromLords(p.card, state.battlefield, active, false, &ds_idx));
         int base_pw = p.EffectivePower() + lord_pb + exalted_bonus;
         const CardDefinition* adef = CardDatabase::Instance().LookupCached(p.card);
         if (adef)

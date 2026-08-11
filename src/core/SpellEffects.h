@@ -1500,12 +1500,21 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 // lord_excludes_self ("Other ... get +1/+1") does not apply to itself. Pass the
 // battlefield permanent at combat/damage time; pass nullptr for hand-card evaluation
 // (the card is not yet a lord on the battlefield, so there is nothing to exclude).
+// controlled_lord_idx (optional): pre-filtered battlefield indices of the controller's LordEffect
+// permanents. When a caller loops over many creatures against an UNCHANGING battlefield (combat,
+// board eval), it can collect this list ONCE instead of having every creature re-scan the whole
+// battlefield for the (usually zero) lords -- the per-creature scan was ~3% of a rollout on a
+// lord-less deck. Byte-identical: the list is exactly the permanents the in-loop filter keeps
+// (controller + LordEffect), and the per-creature logic below (self-exclusion by address, subtype
+// matching, scales_per_matching count) is applied unchanged, so no lord is double-counted and an
+// "other"-lord still skips itself. nullptr => scan the whole battlefield (original behaviour).
 inline std::pair<int,int> ComputeLordBonus(
     const Card&                    creature,
     const std::vector<Permanent>&  battlefield,
     int                            controller_index,
     bool                           all_creature_types = false,
-    const Permanent*               self               = nullptr)
+    const Permanent*               self               = nullptr,
+    const std::vector<int>*        controlled_lord_idx = nullptr)
 {
     int pb = 0, tb = 0;
 
@@ -1532,15 +1541,19 @@ inline std::pair<int,int> ComputeLordBonus(
         }
     }
 
-    for (const Permanent& lord : battlefield)
+    // Body for one candidate lord permanent. Returns early (the old `continue`) when the permanent
+    // is not a matching lord. Iterated either over the whole battlefield or, when the caller
+    // supplied the pre-filtered list, over just the controller's LordEffect permanents -- the checks
+    // below still run, so the two paths are byte-identical.
+    auto process_lord = [&](const Permanent& lord)
     {
-        if (lord.controller_index != controller_index) { continue; }
+        if (lord.controller_index != controller_index) { return; }
         const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
-        if (!ldef || ldef->tmpl != CardTemplate::LordEffect) { continue; }
+        if (!ldef || ldef->tmpl != CardTemplate::LordEffect) { return; }
 
         // "Other ..." lords do not buff themselves (CR layer 7c): skip when the lord IS
         // the creature being evaluated. Identity by address within this same battlefield.
-        if (ldef->params.lord_excludes_self && self != nullptr && &lord == self) { continue; }
+        if (ldef->params.lord_excludes_self && self != nullptr && &lord == self) { return; }
 
         bool matches = false;
         if (ldef->params.affects_all_creatures)
@@ -1562,7 +1575,7 @@ inline std::pair<int,int> ComputeLordBonus(
                 }
             }
         }
-        if (!matches) { continue; }
+        if (!matches) { return; }
 
         if (ldef->params.scales_per_matching)
         {
@@ -1599,22 +1612,33 @@ inline std::pair<int,int> ComputeLordBonus(
             pb += ldef->params.power_bonus;
             tb += ldef->params.tough_bonus;
         }
+    };
+    if (controlled_lord_idx)
+    {
+        for (int li : *controlled_lord_idx) { process_lord(battlefield[li]); }
+    }
+    else
+    {
+        for (const Permanent& lord : battlefield) { process_lord(lord); }
     }
     return {pb, tb};
 }
 
 // Returns true if any lord on the battlefield grants double strike to creature's subtype.
+// ds_lord_idx (optional): pre-filtered indices of the controller's double-strike-granting
+// permanents (see the ComputeLordBonus note); nullptr => scan the whole battlefield. Byte-identical.
 inline bool HasDoubleStrikeFromLords(
     const Card&                    creature,
     const std::vector<Permanent>&  battlefield,
     int                            controller_index,
-    bool                           all_creature_types = false)
+    bool                           all_creature_types = false,
+    const std::vector<int>*        ds_lord_idx        = nullptr)
 {
-    for (const Permanent& lord : battlefield)
+    auto grants = [&](const Permanent& lord) -> bool
     {
-        if (lord.controller_index != controller_index) { continue; }
+        if (lord.controller_index != controller_index) { return false; }
         const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
-        if (!ldef || !ldef->params.grants_double_strike) { continue; }
+        if (!ldef || !ldef->params.grants_double_strike) { return false; }
         if (all_creature_types && !ldef->params.subtypes_affected.empty()) { return true; }
         for (const std::string& sub : ldef->params.subtypes_affected)
         {
@@ -1623,6 +1647,15 @@ inline bool HasDoubleStrikeFromLords(
                 if (cs == sub) { return true; }
             }
         }
+        return false;
+    };
+    if (ds_lord_idx)
+    {
+        for (int li : *ds_lord_idx) { if (grants(battlefield[li])) { return true; } }
+    }
+    else
+    {
+        for (const Permanent& lord : battlefield) { if (grants(lord)) { return true; } }
     }
     return false;
 }
