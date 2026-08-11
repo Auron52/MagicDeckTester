@@ -1,4 +1,4 @@
-# Regression ground truth -- commit f3f993a  date 2026-08-11
+# Regression ground truth -- commit 6a8e8e4  date 2026-08-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -28,8 +28,8 @@ dragonstorm_smoke_d5_s1001=4.4667/8cf792208eab7cc6
 auras_smoke_d0_s1001=4.3760/d0a56ce8cb114f9d
 auras_smoke_d3_s1001=4.1400/de66d9efc3f9e6d7
 auras_smoke_d5_s1001=4.1320/6fac32fc45b724b1
-goblins_smoke_d0_s1001=4.1010/633a7a51a68f0843
-goblins_smoke_d3_s1001=3.6533/277600852100b7e9
+goblins_smoke_d0_s1001=4.1010/da08afbf648524cd
+goblins_smoke_d3_s1001=3.6533/ad176e049733d63f
 goblins_smoke_d5_s1001=3.5867/10a12fab4cce0061
 creature_giving_smoke_d0_s1001=5.7690/84ba9be4148c5a7c
 creature_giving_smoke_d3_s1001=4.8133/ed038c8229520f4d
@@ -79,11 +79,11 @@ auras_regression_d3_s2002=4.1080/17175aeea335db68
 auras_regression_d3_s3003=4.2080/ae97a5df84727fa6
 auras_regression_d5_s2002=4.1020/c6baf8d3edf97c1e
 auras_regression_d5_s3003=4.1960/1d233832be2a2284
-goblins_regression_d0_s2002=4.1360/e4abf28c0c1d6259
-goblins_regression_d3_s2002=3.8167/31836e7b9d87aab0
-goblins_regression_d3_s3003=3.8500/d95bbf19aaa35c45
-goblins_regression_d5_s2002=3.8400/918a22780b585882
-goblins_regression_d5_s3003=3.8320/610db5c114e83a1a
+goblins_regression_d0_s2002=4.1370/0ecd35550ee4f148
+goblins_regression_d3_s2002=3.8167/0a66b79ce85aeeae
+goblins_regression_d3_s3003=3.8433/a1740f5d1f969607
+goblins_regression_d5_s2002=3.8400/ae1878eada075fcc
+goblins_regression_d5_s3003=3.8240/abde495a68770350
 creature_giving_regression_d0_s2002=5.8560/e0b42498388862ce
 creature_giving_regression_d3_s2002=4.8400/18911f9dcf5260a1
 creature_giving_regression_d3_s3003=4.7733/e84bea7174bf8a45
@@ -192,18 +192,18 @@ auras_overnight_d5_s4004=4.1140/d9324ccfce78c11a
 auras_overnight_d5_s5005=4.1460/9424cf33b61fa6db
 auras_overnight_d5_s6006=4.1150/726e66c3748fa121
 auras_overnight_d5_s7007=4.1520/f7a8a209c1db565a
-goblins_overnight_d0_s4004=4.1755/c5e53ebd23691bb0
-goblins_overnight_d0_s6006=4.1485/6c2b44d17253df47
-goblins_overnight_d0_s8008=4.1430/42efb5e1a6736c32
-goblins_overnight_d0_s10010=4.1545/8d55f4d73c436327
-goblins_overnight_d3_s4004=3.8410/2d1ee0b28443b873
-goblins_overnight_d3_s5005=3.8020/ebea0cc8bf127d59
-goblins_overnight_d3_s6006=3.8190/0bc0a3466056baf9
-goblins_overnight_d3_s7007=3.8180/02dc95d73ba2d090
-goblins_overnight_d5_s4004=3.8410/6107fc123b33b9f0
-goblins_overnight_d5_s5005=3.8030/2ca210fb7381bcec
-goblins_overnight_d5_s6006=3.8190/b6b732a8eb75794d
-goblins_overnight_d5_s7007=3.8210/5e31773bcf9979ad
+goblins_overnight_d0_s4004=4.1760/2ebea89658929c17
+goblins_overnight_d0_s6006=4.1490/d7d58294999808b3
+goblins_overnight_d0_s8008=4.1430/d88cb863053a7b26
+goblins_overnight_d0_s10010=4.1550/ab2cee00a7614375
+goblins_overnight_d3_s4004=3.8410/ee70c12ca74d74e9
+goblins_overnight_d3_s5005=3.8020/8a61e673cdfc9fe8
+goblins_overnight_d3_s6006=3.8180/49153a0801c5ae6c
+goblins_overnight_d3_s7007=3.8160/ba118ac3952c57a2
+goblins_overnight_d5_s4004=3.8410/5e76d4adf2ad2506
+goblins_overnight_d5_s5005=3.8040/7a581ab25b783f37
+goblins_overnight_d5_s6006=3.8180/733cfb4369773640
+goblins_overnight_d5_s7007=3.8190/3862f280e3a41503
 creature_giving_overnight_d0_s4004=5.8890/fcbe9b0d99fd399f
 creature_giving_overnight_d0_s6006=5.8190/ae14e1c108f9e501
 creature_giving_overnight_d0_s8008=5.8475/2df0d089f893f4d6
