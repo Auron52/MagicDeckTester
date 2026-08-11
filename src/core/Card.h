@@ -52,7 +52,16 @@ enum class Keyword
     // modelled structurally via CardParams::cumulative_upkeep_opp_token + Permanent::age_counters
     // (always-paid opponent-token gifts), not by this enum. Kept only so the Scryfall keywords field
     // ["Cumulative upkeep"] stays faithful; no engine code reads it.
-    CumulativeUpkeep
+    CumulativeUpkeep,
+    // Strive (Twinflame): an INERT keyword-ability tag -- the "costs {2}{R} more per extra target"
+    // mechanic is modelled structurally via CardParams::strive_cost (searched extra-target-count
+    // plan variants), not by this enum. Kept only so the Scryfall keywords field stays faithful.
+    Strive,
+    // Treasure (Gold Rush): an INERT keyword-ability tag (Scryfall marks Treasure-token makers with
+    // it) -- the mechanic is modelled structurally via CardParams::creates_treasures + the
+    // "Treasure Token" card def's sac-for-mana. Kept only so the Scryfall keywords field stays
+    // faithful; no engine code reads it.
+    Treasure
 };
 enum class Supertype { Legendary, Basic, Snow, World };
 

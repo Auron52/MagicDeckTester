@@ -263,6 +263,17 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 {
                     DestroyAllEnchantments(state);
                 }
+                // Zada/Mirrorwing solo-target trick (Expedite / Fists of Flame / Ancestral Anger /
+                // Gold Rush / Scale the Heights / Twinflame): shared resolver -- copy fan-out,
+                // escalating payloads, strive extras -- in lockstep with the rollout's apply_one.
+                // enchant_target carries the searched creature target (0 = up-to-one, untargeted);
+                // soulfire_own_targets is reused as Twinflame's searched strive-extras count.
+                if (IsSoloTargetTrick(def.params))
+                {
+                    ResolveSoloTargetTrick(state, entry.controller_index, def,
+                                           entry.enchant_target,
+                                           entry.soulfire_own_targets.value_or(0));
+                }
                 // Unite the Coalition (user-approved collapse): the searched split S (on
                 // chosen_x) of the five mode-picks -> S x damage-per-choice to the opponent
                 // face + (N - S) draws. Lockstep with the rollout's apply_one modal branch.
@@ -279,8 +290,10 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                                       * def.params.modal_draw_per_choice;
                     Player& mp = state.players[entry.controller_index];
                     std::size_t before = mp.hand.size();
+                    std::size_t mp_before = mp.hand.size();
                     for (int k = 0; k < draws && !mp.library.empty(); ++k)
                     { mp.library.DrawN(1, mp.hand); }
+                    mp.cards_drawn_this_turn += static_cast<int>(mp.hand.size() - mp_before);
                     if (g_play_draw_sink)
                     {
                         for (std::size_t hi = before; hi < mp.hand.size(); ++hi)
@@ -423,7 +436,7 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
     if (def.params.cast_draw > 0)
     {
         Player& cp = state.players[entry.controller_index];
-        cp.library.DrawN(def.params.cast_draw, cp.hand);
+        cp.cards_drawn_this_turn += cp.library.DrawN(def.params.cast_draw, cp.hand);
     }
 
     MoveToGraveyard(state, entry);
@@ -522,6 +535,7 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
         // draw step uses, so PlayOut ends the game. Reachable on this combo deck once a deep
         // Soulfire/cantrip dig has emptied the library; harmless for decks that never deck out.
         int drew = controller.library.DrawN(n, controller.hand);
+        controller.cards_drawn_this_turn += drew;
         if (drew < n) { state.player_lost_on_draw = true; }
     }
 
@@ -536,7 +550,7 @@ void EffectHandler::ResolveDrawX(GameState& state, const StackEntry& entry,
     int n = entry.chosen_x.value_or(0);
     if (n > 0)
     {
-        controller.library.DrawN(n, controller.hand);
+        controller.cards_drawn_this_turn += controller.library.DrawN(n, controller.hand);
     }
     MoveToGraveyard(state, entry);
 }

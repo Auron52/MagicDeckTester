@@ -187,6 +187,12 @@ struct Action
                                        // depends on it: summoning sickness + Kor's per-aura self-buff).
                                        // Threaded to resolution via apply_one (rollout) and cast_by_name ->
                                        // CastSpellFromHand -> StackEntry (executor). 0 = not an aura.
+    std::string trick_hand_target; // Solo-target trick whose target is a SAME-PLAN HAND creature:
+                                       // that creature's card NAME (enchant_target still carries its
+                                       // m_number). Set at emission so the per-subset legality filter
+                                       // (SubsetHasMissingTrickTarget) is a name compare instead of a
+                                       // zone scan (it profiled at 3.7%). Empty = battlefield target
+                                       // (always legal) or not a trick.
     int         ponder_keep      = -1;
                                        // Ponder-style cast_reorder: the SEARCHED keep-vs-shuffle
                                        // call. CollectActions emits TWO variants (1 = keep top N in

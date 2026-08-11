@@ -269,7 +269,13 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             case Action::Kind::SacCreatureOutlet:
             {
                 const int k = std::max(1, a.sac_count);
-                tag = a.card_name + ": sac " + std::to_string(k)
+                // SacForMana sacrifices the SOURCE ITSELF (a Lotus Bloom / Treasure Token -- an
+                // artifact, not a creature); only SacCreatureOutlet feeds creatures to an outlet.
+                // The shared "creature(s)" suffix mislabeled a Treasure crack as "sac 1 creature"
+                // (three independent 2026-08-11 Mirrorwing sweep agents flagged it). Text-only.
+                tag = (a.kind == Action::Kind::SacForMana)
+                    ? a.card_name + ": sacrifice"
+                    : a.card_name + ": sac " + std::to_string(k)
                     + (k == 1 ? " creature" : " creatures");
                 if (a.kind == Action::Kind::SacForMana && !a.chosen_float_color.empty())
                 { tag += " for {" + a.chosen_float_color + "}\xC3\x97" + std::to_string(std::max(1, a.ritual_float)); }

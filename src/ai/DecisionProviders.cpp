@@ -63,6 +63,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"payoffprune",UnprunedGate::PayoffPrune},
     {"splicecollapse",UnprunedGate::SpliceCollapse},
     {"saclandhold",UnprunedGate::SacLandHold},
+    {"tricktarget",UnprunedGate::TrickTarget},
 };
 
 const char* GateName(UnprunedGate g)
@@ -6236,6 +6237,7 @@ namespace
     const GoblinsProvider        g_goblins;
     const CreatureGivingProvider g_creature_giving;
     const FiveColourProvider     g_fivecolour;
+    const MirrorwingProvider     g_mirrorwing;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -6248,7 +6250,7 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
-    bool goblin = false, gift = false, fivec = false;
+    bool goblin = false, gift = false, fivec = false, mirrorwing = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -6270,6 +6272,14 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
         {
             goblin = true;
         }
+
+        // Mirrorwing/Zada spell-copy swarm: the copy magnet IS the archetype signature (no other
+        // deck carries copies_solo_targeted_spells). Detected BEFORE the goblin check for the same
+        // reason Goblins is detected before anti: this deck's Goblin Instigator carries
+        // etb_self_creates_tokens, which would otherwise set `goblin` and misroute the whole deck
+        // to GoblinsProvider. Routes to GenericProvider (no archetype hooks yet) -- the trick
+        // TARGET is a searched plan variant, not a provider decision, so Generic is exactly right.
+        if (p.copies_solo_targeted_spells) { mirrorwing = true; }
 
         // Dragonstorm (Storm ritual-storm): the tutor-to-battlefield put IS the archetype signature
         // (a {8}{R} that puts a wave of Dragons in). Owns the put-order / selection heuristic.
@@ -6326,6 +6336,9 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
 
     if (dragonstorm) { return g_dragonstorm; }
     if (hinata) { return g_hinata; }
+    // Mirrorwing/Zada swarm: MirrorwingProvider (Generic + the trick-target 5f prune); must WIN
+    // OVER goblin (its Goblin Instigator sets that signature -- see the detection note above).
+    if (mirrorwing) { return g_mirrorwing; }
     // Goblins ride GoblinsProvider. This return WINS OVER anti (Goblin Matron's tutor_to_hand would
     // otherwise set anti and misroute the deck to AntiLifegainProvider) and over th/vial/burn/generic.
     // It sits below dragonstorm/hinata only for tidiness -- a Goblins deck carries none of those
@@ -6346,6 +6359,79 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     if (vial) { return g_vial; }
     if (burn) { return g_burn; }
     return g_generic;
+}
+
+// ---- MirrorwingProvider::TrickTargetCandidates ------------------------------
+//
+// PERFORMANCE prune (5f), grounded in what the payloads can actually do. A solo-target trick's
+// enumerated target group multiplies the plan odometer; measured on seed 45 gi3 (d3, board 7-10)
+// the per-target groups drove sum_odo ~3M/game (Scale the Heights avg 979, max 18000) -- ~13 s a
+// game where the suite budgets ~1. The lines a target choice can distinguish:
+//   * target a COPY MAGNET (Zada / Mirrorwing) -> the whole-board fan-out. Dominates any single
+//     non-magnet target for every symmetric payload (the fan-out delivers that same payload to
+//     the same creature AND every other, for the same mana).
+//   * target the best READY attacker -> the "no magnet / pump the attacker" line.
+//   * haste/copy payloads (Expedite, Twinflame) additionally care about a SICK body (haste it /
+//     copy it into a hasted token) -- keep the best sick creature, and the best HAND creature
+//     (the cast-it-then-trick-it line).
+// Everything else (pumping a lesser dork, hasting an already-ready creature, copying a token) is
+// weakly dominated by one of the kept candidates. MTG_UNPRUNED / MTG_UNPRUNE=tricktarget opens
+// the full set for the definitive with/without A/B (5f).
+void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDefinition& def,
+                                               std::vector<int>& out) const
+{
+    if (DecisionUnpruned(UnprunedGate::TrickTarget)) { return; }   // empty = enumerate all
+    const int me = s.active_player_index;
+    const bool wants_sick = def.params.grants_temp_haste || def.params.token_copy_of_target;
+
+    int best_ready = 0, best_ready_pw = -1;   // best attack-eligible non-magnet (m_number, power)
+    int best_sick  = 0, best_sick_pw  = -1;   // best non-eligible creature
+    std::unordered_set<std::string> seen_magnet;   // (name, eligibility) equivalence -- a 2nd
+                                                   // identical Mirrorwing is the same choice
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || !p.card.IsCreature() || p.card.m_number == 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.copies_solo_targeted_spells)
+        {
+            std::string eq = p.card.m_name.str()
+                           + (CanAttackFull(p, s.battlefield, me) ? "/A" : "/s");
+            if (seen_magnet.insert(eq).second) { out.push_back(p.card.m_number); }
+            continue;
+        }
+        const int pw = p.EffectivePower();
+        if (CanAttackFull(p, s.battlefield, me))
+        { if (pw > best_ready_pw) { best_ready_pw = pw; best_ready = p.card.m_number; } }
+        else
+        { if (pw > best_sick_pw)  { best_sick_pw  = pw; best_sick  = p.card.m_number; } }
+    }
+    if (best_ready != 0)               { out.push_back(best_ready); }
+    if (wants_sick && best_sick != 0)  { out.push_back(best_sick); }
+
+    // Hand candidates (the same-plan "cast it, then point the trick at it" line): every hand
+    // MAGNET (deduped by name), plus -- for haste/copy payloads -- the biggest hand creature.
+    const Player& ap = s.players[me];
+    std::unordered_set<std::string> seen;
+    int best_hand = 0, best_hand_pw = -1;
+    for (const Card& hc : ap.hand)
+    {
+        if (hc.m_number == 0 || hc.m_is_staged) { continue; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (!hd || !hd->card.IsCreature()) { continue; }
+        if (hd->params.copies_solo_targeted_spells)
+        {
+            if (seen.insert(hc.m_name.str()).second) { out.push_back(hc.m_number); }
+            continue;
+        }
+        const int pw = hd->card.m_power.value_or(0);
+        if (wants_sick && pw > best_hand_pw) { best_hand_pw = pw; best_hand = hc.m_number; }
+    }
+    if (best_hand != 0) { out.push_back(best_hand); }
+    // out non-empty => CollectActions emits exactly these; if the board/hand had no candidates at
+    // all (empty out would mean "no narrowing"), push a sentinel-free fallback: with no creatures
+    // there are no legal targets and the caller's loops emit nothing anyway -- but out.empty()
+    // must not silently mean "all", so mark narrowing active with a 0 (skipped by the caller).
+    if (out.empty()) { out.push_back(0); }
 }
 
 // ---- FiveColourProvider::ModalSplitCandidates -------------------------------

@@ -479,6 +479,20 @@ public:
         for (int k = 0; k <= def.params.modal_choose_n; ++k) { out.push_back(k); }
     }
 
+    // TrickTargetCandidates -- narrow a solo-target trick's enumerated creature targets (Zada/
+    // Mirrorwing deck). Fills `out` with candidate card.m_numbers (battlefield creatures and/or
+    // same-plan HAND creatures); leaving it EMPTY means NO narrowing -- CollectActions enumerates
+    // every legal target (the search-primary default, and every deck without an override). A
+    // PERFORMANCE prune (5f): the per-target variant group's size multiplies the plan odometer,
+    // and a swarm board makes it the top branching driver. The narrowing provider must keep every
+    // line that can matter (magnets; the best ready attacker; sick/hand bodies for haste/copy
+    // payloads) and is opened back to ALL targets by MTG_UNPRUNED / MTG_UNPRUNE=tricktarget.
+    virtual void TrickTargetCandidates(const GameState& s, const CardDefinition& def,
+                                       std::vector<int>& out) const
+    {
+        (void)s; (void)def; (void)out;   // default: no narrowing
+    }
+
     // BranchSoulfireOwnTargets -- branch on Soulfire Eruption's OWN-creature target count (0..K)?
     // Own-targeting only pays off with Hinata's per-target discount (which can enable an
     // otherwise-unaffordable cast) plus a deeper dig; without it the K+1 variants are dead weight every

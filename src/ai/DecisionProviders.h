@@ -60,6 +60,9 @@ enum class UnprunedGate
                   // (DragonstormProvider::UseSpliceCollapse)
     SacLandHold,  // burn's sac-land burn hold disabled: keep the plans that cast Shard Volley before the
                   // winning turn (BurnProvider::HoldsSacLandBurnUntilLethal)
+    TrickTarget,  // Mirrorwing/Zada solo-target trick target set opened to EVERY legal creature
+                  // (battlefield + hand) instead of MirrorwingProvider::TrickTargetCandidates'
+                  // narrowed set (magnets + best attacker + haste/copy extras)
     _Count
 };
 
@@ -499,6 +502,22 @@ public:
     // its tap is worth more than its chip damage -- see the .cpp note. Vigilant sources (Faeburrow
     // Elder) still always attack: attacking never costs them their tap.
     bool ShouldAttackWith(const GameState& s, const Permanent& attacker) const override;
+};
+
+// Mirrorwing/Zada spell-copy swarm: overrides ONLY the trick-target narrowing (a 5f perf prune --
+// the per-target variant group was the measured top branching driver on a swarm board). Every
+// other decision resolves through GenericProvider exactly as before.
+class MirrorwingProvider : public GenericProvider
+{
+public:
+    void TrickTargetCandidates(const GameState&, const CardDefinition&,
+                               std::vector<int>&) const override;
+    // Enumeration breadth: a post-fan-out hand holds 10-12 castable groups x ~5 trick-target
+    // options each -- the full product is computationally infeasible (a single node measured a
+    // 4 GiB digit store / billions of positions; see analysis-mirrorwing-dragon.md). The generic
+    // cap of 12 groups never binds there; 8 keeps the worst node ~=400k positions. Same gated
+    // breadth-policy shape as the base hook (MTG_UNPRUNED / MTG_NO_GROUP_CAP opens it).
+    int EnumGroupCap() const override { return 8; }
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

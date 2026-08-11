@@ -276,6 +276,8 @@ static std::string BoardSignature(const GameState& s)
         e += "/ch" + std::to_string(p.charge_counters) + "," + std::to_string(p.storage_counters);
         if (p.age_counters > 0) { e += "/g" + std::to_string(p.age_counters); }   // cumulative upkeep
         e += "/p" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus);
+        if (p.temp_haste)   { e += "/h"; }    // Expedite until-EOT haste
+        if (p.exile_at_end) { e += "/x"; }    // Twinflame token, exiled at end step
         e += "/d" + std::to_string(p.damage);
         e += "/a" + std::to_string(p.aura_attached_to);
         e += "/o" + std::to_string(p.controller_index);
@@ -1054,6 +1056,37 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
         return 3 * DMG;
     }
 
+    // Zada/Mirrorwing solo-target trick: a rough d0 estimate so the greedy leaf policy deploys
+    // tricks sensibly -- the SEARCH (per-target plan variants + rollout combat) owns the real
+    // valuation. Estimate one resolution instance's damage-equivalents, times the copy fan-out
+    // when a magnet is on our battlefield (the strong line). Draw payloads count ~1 DMG per card
+    // (the DrawSpell convention); pump payloads count the power added to one attack.
+    if (def.params.solo_target_trick)
+    {
+        const CardParams& tp = def.params;
+        int per = tp.cast_draw * DMG;                                // draws (DrawSpell convention)
+        int pump = tp.power_bonus
+                 + tp.gy_self_power_bonus                            // >= 1 + copies; estimate low
+                 + tp.pump_per_cards_drawn_power * 2                 // ~2 draws seen by a mid copy
+                 + tp.pump_per_treasure_power * 2;                   // ~2 Treasures mid-stack
+        per += pump * DMG;
+        if (tp.token_copy_of_target) { per += 2 * DMG; }             // a hasted body for a turn
+        if (tp.creates_treasures > 0) { per += tp.creates_treasures * (DMG / 2); }  // ramp
+        int fanout = 1;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || !p.card.IsCreature())
+            { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.copies_solo_targeted_spells)
+            {
+                fanout = std::max(fanout, CreatureCount(state, state.active_player_index));
+                break;
+            }
+        }
+        return per * fanout;
+    }
+
     // Aether Vial and similar: deploys a creature from hand for free each turn once charged.
     // Score as the best matching creature in hand. Lords boost all existing attackers
     // immediately on deployment (continuous effect, not blocked by summoning sickness);
@@ -1657,6 +1690,38 @@ static bool SubsetHasIllegalSplice(const GameState& state,
         {
             if (ks[j] > N - 1 - static_cast<int>(j)) { return true; }
         }
+    }
+    return false;
+}
+
+// Reject a solo-target trick cast whose declared target (enchant_target = a card.m_number) is
+// neither an own battlefield creature nor a creature this same subset casts from hand -- a
+// targeted spell cannot be cast without its target (CR 601.2c). Same shape as
+// SubsetHasStrandedEquip. The hand case matches by NAME (copies are fungible: apply_one casts an
+// arbitrary copy of the name, so the resolved permanent's m_number may differ from the variant's
+// -- ResolveSoloTargetTrick's name fallback mirrors this). Inert without a targeted trick
+// selected -> byte-identical for every other deck.
+static bool SubsetHasMissingTrickTarget(const GameState& state,
+                                        const std::vector<Action>& cands,
+                                        const std::vector<int>& sel)
+{
+    (void)state;
+    // Battlefield-target tricks are always legal (the target exists at this node); only a trick
+    // whose target is a SAME-PLAN HAND creature (trick_hand_target, stamped at emission) needs the
+    // subset to also cast that creature. A pure name compare -- no zone scans (profiled at 3.7%).
+    for (int j : sel)
+    {
+        if (cands[j].trick_hand_target.empty()
+            || cands[j].kind != Action::Kind::CastFromHand) { continue; }
+        bool found = false;
+        for (int k : sel)
+        {
+            if (k == j || cands[k].kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* kd = cands[k].def;
+            if (kd && kd->card.IsCreature() && cands[k].card_name == cands[j].trick_hand_target)
+            { found = true; break; }
+        }
+        if (!found) { return true; }
     }
     return false;
 }
@@ -3419,6 +3484,151 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.enchant_target = tgt_num;
                 actions.push_back(std::move(a));
             }
+            continue;
+        }
+
+        // Zada/Mirrorwing solo-target trick: WHICH creature it targets is a SEARCH decision --
+        // one CastFromHand variant per legal target (sharing hand_index -> mutually exclusive),
+        // reusing enchant_target to carry the chosen creature's card.m_number (aura precedent).
+        // Targets offered:
+        //   - every own NONTOKEN battlefield creature (tokens are unnumbered so they cannot ride
+        //     the m_number axis; in this deck a token is a vanilla 1/1 always weakly dominated by
+        //     an equal-or-better numbered target, so the narrowing is inert -- disclosed 6a; the
+        //     copy FAN-OUT still includes tokens, only the explicit target choice excludes them);
+        //   - every creature card IN HAND (deduped by name): the same-plan line "cast Zada, then
+        //     the trick at it" -- legal only in subsets that also cast that creature, enforced by
+        //     the SubsetHasMissingTrickTarget filter (SubsetHasIllegalSplice's shape), and ordered
+        //     creature-first by the canonical CastOrderRank tiers (10 < 20);
+        //   - the untargeted variant (enchant_target 0) for "up to one target" spells;
+        //   - Twinflame strive: for each BATTLEFIELD target, one extra variant per extra-target
+        //     count K (cost += K x strive_cost), the count on soulfire_own_targets (reused).
+        if (def.params.solo_target_trick)
+        {
+            const ManaCost base_cost = EffectiveCost(def, state);
+            // hand_name: non-empty iff the target is a SAME-PLAN HAND creature (stamped on the
+            // action for the cheap subset legality filter).
+            auto emit = [&](int tgt_num, int strive_k, const std::string& hand_name = std::string())
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = base_cost;
+                if (strive_k > 0 && def.params.strive_cost.has_value())
+                {
+                    const ManaCost& sc = *def.params.strive_cost;
+                    a.cost.generic += strive_k * sc.generic;
+                    a.cost.white   += strive_k * sc.white;
+                    a.cost.blue    += strive_k * sc.blue;
+                    a.cost.black   += strive_k * sc.black;
+                    a.cost.red     += strive_k * sc.red;
+                    a.cost.green   += strive_k * sc.green;
+                    a.soulfire_own_targets = strive_k;   // reused: strive extra-target count
+                }
+                a.eval           = EvalCard(def, state);
+                a.is_noncreature = true;
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.enchant_target = tgt_num;
+                a.trick_hand_target = hand_name;
+                actions.push_back(std::move(a));
+            };
+            // Battlefield targets (+ strive counts for Twinflame), with a LOSSLESS equivalence
+            // fold: two targets whose (name, attack-eligibility, temp bonuses, counters,
+            // temp-haste) match are interchangeable for EVERY trick payload -- the pump/haste/
+            // counter/token-copy outcome is identical whichever copy is picked -- so only one
+            // representative per equivalence class is emitted (the invariant's "fold branches
+            // genuinely identical in outcome"; a swarm of identical 1/1s was the measured #1
+            // branching driver, avg odometer 1200+/call). Copies differing in ANY outcome-
+            // relevant way (a sick vs ready Zada) stay distinct.
+            int others = 0;   // other own battlefield creatures, for the strive K range
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index == state.active_player_index && p.card.IsCreature())
+                { ++others; }
+            }
+            // Strive-K feasibility ceiling (lossless in practice): a variant whose total cost
+            // exceeds every mana this board could conceivably make (own lands + dorks + treasures
+            // + current float + 2 margin) can never be paid this turn -- emitting it only bloats
+            // the option group. The margin absorbs bonus land drops / same-turn rocks.
+            int mana_ceiling = state.floating_mana.Total() + 2;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (!d) { continue; }
+                if (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock
+                    || d->params.sac_for_mana_amount > 0)
+                { mana_ceiling += std::max(1, d->params.produces_amount); }
+            }
+            // Strive variants only make sense for a target already on the battlefield.
+            auto emit_with_strive = [&](int tgt_num, bool on_battlefield,
+                                        const std::string& hand_name = std::string())
+            {
+                emit(tgt_num, 0, hand_name);
+                if (!on_battlefield || !def.params.strive_cost.has_value()) { return; }
+                for (int k = 1; k < others; ++k)
+                {
+                    const int mv = base_cost.ManaValue()
+                                 + k * def.params.strive_cost->ManaValue();
+                    if (mv > mana_ceiling) { break; }
+                    emit(tgt_num, k);
+                }
+            };
+            // Provider narrowing (MirrorwingProvider::TrickTargetCandidates -- the 5f perf prune,
+            // opened by MTG_UNPRUNED/tricktarget). Empty = no narrowing (enumerate all legal).
+            std::vector<int> narrow;
+            ResolveProvider(state).TrickTargetCandidates(state, def, narrow);
+            if (!narrow.empty())
+            {
+                for (int num : narrow)
+                {
+                    if (num == 0) { continue; }   // "narrowing active, no candidates" sentinel
+                    bool on_bf = false;
+                    for (const Permanent& p : state.battlefield)
+                    {
+                        if (p.controller_index == state.active_player_index
+                            && p.card.m_number == num) { on_bf = true; break; }
+                    }
+                    std::string hn;
+                    if (!on_bf)
+                    {
+                        for (const Card& hc : ap.hand)
+                        { if (hc.m_number == num) { hn = hc.m_name.str(); break; } }
+                    }
+                    emit_with_strive(num, on_bf, hn);
+                }
+            }
+            else
+            {
+            std::unordered_set<std::string> seen_equiv;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index || !p.card.IsCreature()
+                    || p.card.m_number == 0) { continue; }
+                std::string eq = p.card.m_name.str();
+                eq += CanAttackFull(p, state.battlefield, state.active_player_index) ? "/A" : "/s";
+                eq += "/" + std::to_string(p.temp_power_bonus) + ","
+                          + std::to_string(p.temp_tough_bonus)
+                          + (p.temp_haste ? "h" : "") + "/c" + std::to_string(p.counters.size());
+                if (!seen_equiv.insert(eq).second) { continue; }
+                emit_with_strive(p.card.m_number, true);
+            }
+            // Same-plan hand-creature targets (deduped by name; the subset filter + creature-
+            // before-trick canonical order make these the "cast it, then point the trick at it"
+            // line).
+            {
+                std::unordered_set<std::string> seen_hand;
+                for (const Card& hc : ap.hand)
+                {
+                    if (hc.m_number == 0 || hc.m_is_staged) { continue; }
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (!hd || !hd->card.IsCreature()) { continue; }
+                    if (!seen_hand.insert(hc.m_name.str()).second) { continue; }
+                    emit(hc.m_number, 0, hc.m_name.str());
+                }
+            }
+            }
+            if (def.params.trick_up_to_one) { emit(0, 0); }
             continue;
         }
 
@@ -5218,6 +5428,81 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     std::uint64_t acc = 1;
     for (int g = 0; g < num_groups; ++g) { stride[g] = acc; acc *= static_cast<std::uint64_t>(groups[g].size()) + 1; }
 
+    // ---- Degenerate-width guard (Mirrorwing swarm, 2026-08-11) --------------------------------
+    // The two-stage split MATERIALIZES each side's lines (mdig/pdig flat digit stores, then the
+    // surviving pair list). On a mass-draw swarm node the payoff side's line count approaches the
+    // full group product -- measured as a single 4 GiB vector<int> (79 cands, 12 groups, wide
+    // per-target trick groups), which 8-24 concurrent workers stack into an OOM. Past a per-side
+    // line bound, fall back to the ORIGINAL FLAT WALK: byte-identical output (the split is a pure
+    // CPU optimization whose final sort restores exact flat order; predicates and the pay gate are
+    // the same tests), O(1) memory, merely slower per position -- and only on nodes the split
+    // would blow up anyway. MTG_ODO_FLAT_FALLBACK tunes the bound (lines; 0 disables the guard).
+    {
+        static const std::uint64_t kLineBound = []{
+            const char* e = std::getenv("MTG_ODO_FLAT_FALLBACK");
+            return e ? std::strtoull(e, nullptr, 10) : 1'000'000ULL;
+        }();
+        auto side_lines = [&](const std::vector<int>& sg, const std::vector<int>& si) -> std::uint64_t
+        {
+            std::uint64_t n = 1;
+            for (int g : sg)
+            {
+                n *= static_cast<std::uint64_t>(groups[g].size()) + 1;
+                if (n > (1ull << 40)) { return n; }   // saturate, avoid overflow
+            }
+            for (std::size_t b = 0; b < si.size() && n <= (1ull << 40); ++b) { n <<= 1; }
+            return n;
+        };
+        if (kLineBound != 0
+            && (side_lines(mg, mi) > kLineBound || side_lines(pg, pi) > kLineBound))
+        {
+            // FLAT walk: mixed-radix over ALL groups (digit 0 fastest -- the same carry order the
+            // split's sort reproduces), independent bits ascending inside each position; the group
+            // predicates read only mana-side digits by construction, so running them on the full
+            // choice vector is the identical test.
+            std::vector<int> choice(num_groups, 0);
+            bool done = false;
+            while (!done)
+            {
+                const bool rejected =
+                       (any_splice && SpliceGroupChoiceRejected(sidx, groups, choice, splice_collapse_on))
+                    || (accel_pred_on && NonPrefixAccelViolated(accel_order, choice));
+                if (!rejected)
+                {
+                    Agg ga;
+                    for (int g = 0; g < num_groups; ++g)
+                    { if (choice[g] > 0) { fold(ga, groups[g][choice[g] - 1]); } }
+                    for (unsigned imask = 0; imask < (1u << num_ind); ++imask)
+                    {
+                        if (has_ind_accel
+                            && IndependentAccelPrefixViolated(cands, independent,
+                                                              static_cast<int>(imask)))
+                        { continue; }
+                        Agg t = ga;
+                        for (int b = 0; b < num_ind; ++b)
+                        { if (imask & (1u << b)) { fold(t, independent[b]); } }
+                        if (!payable(t, Agg{})) { continue; }
+                        sel.clear();
+                        for (int g = 0; g < num_groups; ++g)
+                        { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
+                        for (int b = 0; b < num_ind; ++b)
+                        { if (imask & (1u << b)) { sel.push_back(independent[b]); } }
+                        if (!sel.empty() && extra_ok(sel)) { emit(sel); }
+                    }
+                }
+                int t = 0;
+                for (; t < num_groups; ++t)
+                {
+                    ++choice[t];
+                    if (choice[t] <= static_cast<int>(groups[t].size())) { break; }
+                    choice[t] = 0;
+                }
+                if (t == num_groups) { done = true; }
+            }
+            return;
+        }
+    }
+
     struct Line { Agg agg; std::uint64_t pos = 0; unsigned imask = 0; int digits = 0; };
     std::vector<Line> mlines, plines;
     std::vector<int>  mdig, pdig;      // flat digit storage, |side groups| ints per line
@@ -5832,6 +6117,9 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Reject physically-impossible Desperate Ritual over-splice (a spliced copy must still be in
         // hand). Inert without a splice base selected -> byte-identical.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
+        // Reject a targeted trick whose target is neither on the battlefield nor cast by this
+        // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
+        if (SubsetHasMissingTrickTarget(state, cands, sel)) { return; }
         int mask = 0;
         for (int j : sel) { mask |= (1 << j); }
 
@@ -7329,6 +7617,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // the enumeration cost and the executor's CastSpellFromHand -> lockstep).
         ec.generic = std::max(0, ec.generic
                        - SoulfireOwnTargetDiscount(def, state, state.active_player_index, own_targets));
+    // Twinflame Strive: each searched EXTRA target (own_targets, reused) costs +strive_cost.
+        // Mirrors the enumeration's a.cost surcharge and the executor's CastSpellFromHand -> lockstep. Inert without strive_cost.
+        if (def.params.strive_cost.has_value() && own_targets > 0)
+        {
+            const ManaCost& sc = *def.params.strive_cost;
+            ec.generic += own_targets * sc.generic;
+            ec.white   += own_targets * sc.white;
+            ec.blue    += own_targets * sc.blue;
+            ec.black   += own_targets * sc.black;
+            ec.red     += own_targets * sc.red;
+            ec.green   += own_targets * sc.green;
+        }
+
         // {X} spells: pay the chosen X, once per {X} pip (Crackle {X}{X}{X} -> 3X generic).
         if (def.card.m_mana_cost.has_x && chosen_x > 0)
         {
@@ -7758,6 +8059,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 std::size_t before = ap.hand.size();
                 ap.library.DrawN(def.params.cast_draw, ap.hand);
+                ap.cards_drawn_this_turn += static_cast<int>(ap.hand.size() - before);
                 // Human-play accurate draw reporting (nulled by RevealLogPause during search).
                 if (g_play_draw_sink)
                 {
@@ -7887,6 +8189,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 std::size_t before = ap.hand.size();
                 ap.library.DrawN(n, ap.hand);
+                ap.cards_drawn_this_turn += static_cast<int>(ap.hand.size() - before);
                 // Human-play accurate draw reporting (nulled by RevealLogPause during search).
                 if (g_play_draw_sink)
                 {
@@ -8100,6 +8403,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             std::size_t before = ap.hand.size();
             for (int k = 0; k < draws && !ap.library.empty(); ++k)
             { ap.library.DrawN(1, ap.hand); }
+            ap.cards_drawn_this_turn += static_cast<int>(ap.hand.size() - before);
             if (g_play_draw_sink)
             {
                 for (std::size_t hi = before; hi < ap.hand.size(); ++hi)
@@ -8209,6 +8513,41 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         else if (def.params.destroy_all_enchantments)
         {
             DestroyAllEnchantments(state);
+        }
+        else if (IsSoloTargetTrick(def.params))
+        {
+            // Zada/Mirrorwing solo-target trick (Expedite / Fists / Ancestral Anger / Gold Rush /
+            // Scale the Heights / Twinflame): the SHARED resolver -- copy fan-out, escalating
+            // payloads, strive extras -- in lockstep with EffectHandler's executor branch.
+            // enchant_target = the searched creature target (0 = up-to-one untargeted);
+            // own_targets is reused as Twinflame's searched strive-extras count.
+            ResolveSoloTargetTrick(state, state.active_player_index, def, enchant_target,
+                                   own_targets);
+            // Draw breakpoint (plain-cantrip class): a magnet fan-out mass-draws, so newly revealed
+            // cards must be castable with the mana still available this turn. Same shape as the
+            // plain-cantrip DrawSpell branch: defer at the MAIN-plan level (site 3, resolved after
+            // every main cast -- matching the executor's post-loop replay), re-solve inline when
+            // already inside a re-solve. Human play stops so the chooser re-fires post-draw.
+            if (def.params.cast_draw > 0 && !s_human_play)
+            {
+                if (s_defer_cantrip && sink_stack.empty())
+                {
+                    deferred_cantrip_resolve = true;
+                }
+                else
+                {
+                    if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
+                    TurnSolver::Plan extra;
+                    if (!bp_searched_plan(0, extra))
+                    {
+                        play_breakpoint_land(my_bp_sink);
+                        extra = TurnSolver::Solve(state, is_pre_combat);
+                    }
+                    bp_play_searched_land(extra, my_bp_sink);
+                    apply_plan_actions(extra.actions, extra.searched_order);
+                    if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
+                }
+            }
         }
         else if (def.tmpl == CardTemplate::PumpSpell)
         {
@@ -8551,6 +8890,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!ap.library.empty())
             {
                 Card drawn = ap.library.DrawTop();
+                ap.cards_drawn_this_turn += 1;   // cycle/sac dig = a real draw
                 // Human-play accurate draw reporting (nulled by RevealLogPause during search).
                 if (g_play_draw_sink) { g_play_draw_sink->push_back({ state.turn_number, drawn.m_name.str() }); }
                 ap.hand.push_back(std::move(drawn));
@@ -8756,6 +9096,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // if the library is empty (can't draw from an empty library).
             if (ap.library.empty()) { break; }
             Card drawn = ap.library.DrawTop();
+            ap.cards_drawn_this_turn += 1;   // cycle/sac dig = a real draw
             const CardDefinition* ddef = CardDatabase::Instance().LookupCached(drawn);
             bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
             ap.hand.push_back(std::move(drawn));
@@ -8911,6 +9252,19 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
 {
     Player& ap = state.ActivePlayer();
 
+    // "Exile those tokens at the beginning of the next end step" (Twinflame token copies,
+    // Permanent::exile_at_end): swept FIRST, before the cleanup discard below, mirroring
+    // GameEngine::EndStep (the end step precedes cleanup, CR 512/514). No-op for every deck
+    // that never sets the flag.
+    for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+    {
+        if (state.battlefield[i].exile_at_end)
+        {
+            state.exile.push_back(state.battlefield[i].card);
+            state.battlefield.erase(state.battlefield.begin() + i);
+        }
+    }
+
     // Check for "no maximum hand size" permanent (e.g. Reliquary Tower) — if present,
     // skip the discard-to-7 step so the lookahead correctly models turns after RT is played.
     bool unlimited_hand = false;
@@ -9017,6 +9371,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         p.pending_death_trigger = 0;   // delayed Searing Blood trigger expires with the damage marks
         p.temp_power_bonus      = 0;
         p.temp_tough_bonus      = 0;
+        p.temp_haste            = false;   // Expedite until-EOT haste expires (lockstep w/ CleanupStep)
         p.is_animated           = false;
     }
 
@@ -9039,6 +9394,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_cheat_choice   = -1;            // searched Lackey put is per-turn (lockstep w/ GameEngine::UntapStep)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
+    ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
 
     // Untap and advance Aether Vial counters (upkeep trigger).
     for (Permanent& p : state.battlefield)
@@ -9192,6 +9548,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Draw
     if (ap.library.empty()) { return false; }
     ap.hand.push_back(ap.library.DrawTop());
+    ap.cards_drawn_this_turn += 1;   // the draw step is a real CR-121 draw (lockstep w/ DrawStep)
     return true;
 }
 
@@ -9986,6 +10343,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice. Inert without a splice base.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
+        // Reject a targeted trick whose target is neither on the battlefield nor cast by this
+        // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
+        if (SubsetHasMissingTrickTarget(state, cands, sel)) { return; }
         // Reject a sequenced restricted aura (injected above) with no in-subset enabler on its target.
         // No-op unless AppendSequencedAuraCandidates injected such a candidate (aura decks) -> byte-identical
         // otherwise. Gated by SeqAuraOrderingEnabled() (default on; MTG_LEGACY_NO_SEQ_AURA = viewer-only).
@@ -11090,6 +11450,9 @@ static int PlanOpensBreakpoint(const TurnSolver::Plan& p)
             mask |= (d->params.stages_cards || d->params.expressive_iteration) ? (1 << 0) : (1 << 3);
         }
         if (d->params.impulse_exile > 0) { mask |= 1 << 2; }
+        // Zada/Mirrorwing trick with a draw payload: defers to the plain-cantrip site (3) at the
+        // main level (nested casts re-solve inline at site 0, like a nested cantrip).
+        if (d->params.solo_target_trick && d->params.cast_draw > 0) { mask |= 1 << 3; }
     }
     return mask;
 }
@@ -12461,6 +12824,22 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         Fold(k, static_cast<uint64_t>(p.life));
         Fold(k, static_cast<uint64_t>(p.lands_played_this_turn));
         Fold(k, static_cast<uint64_t>(p.bonus_land_drops_this_turn));
+        // Fists of Flame drawn-count: future-determining for a SAME-TURN cast that reads it (the
+        // counter resets each untap, so only this turn's casts can). Gated on the player's HAND
+        // actually holding a pump_per_cards_drawn_power card AND the count being nonzero -- every
+        // deck without such a card keeps the EXACT prior key (byte-identical), and the fold cost
+        // is one cached-lookup hand scan only for the deck that needs it.
+        if (p.cards_drawn_this_turn > 0)
+        {
+            bool reads_drawn = false;
+            for (const Card& hc : p.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd && hd->params.pump_per_cards_drawn_power > 0) { reads_drawn = true; break; }
+            }
+            if (reads_drawn)
+            { Fold(k, 0xD7A3); Fold(k, static_cast<uint64_t>(p.cards_drawn_this_turn)); }
+        }
         Fold(k, static_cast<uint64_t>(p.library.size()));
         if (!p.library.empty()) { Fold(k, p.library.front().m_name_hash); }
         // Full ordered library when shuffle can reorder it (see above). Skipped when OFF.
@@ -12553,6 +12932,11 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         { Fold(tk, 0xA6E0); Fold(tk, static_cast<uint64_t>(perm.age_counters)); }
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_power_bonus)));
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_tough_bonus)));
+        // Until-EOT haste (Expedite) / exile-at-end (Twinflame token): future-determining (attack
+        // eligibility; the token vanishes at end step). Folded ONLY when set, so every deck that
+        // never sets them keeps the EXACT prior key (byte-identical).
+        if (perm.temp_haste)   { Fold(tk, 0x7A57E); }
+        if (perm.exile_at_end) { Fold(tk, 0xE71E); }
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.damage)));
         for (const Counter& ctr : perm.counters)
         {
@@ -12885,13 +13269,31 @@ inline bool FSNoWinCacheOn()
 // Store a WIN: final and cutoff-independent, so it supersedes any bounded no-win a looser earlier
 // query left behind. With the no-win cache off no such entry can exist, so only the emplace branch
 // is ever reached == the old `lc->emplace(key, line)` exactly.
+// Result-NEUTRAL insert cap for the per-decision line cache (MTG_FSL_CAP, entries; 0/unset =
+// unlimited = byte-identical). Same contract as TranspositionTable's MTG_TT_CAP: the cache is a
+// pure memo (a refused insert just recomputes), but its entries are HEAVY (a full SearchLine of
+// per-phase plans), and a mass-draw deck's single decision was measured at ~28 GB of line cache
+// (Mirrorwing analyzer, 2026-08-11) -- 24 concurrent workers stack such peaks into an OOM.
+// Existing entries still update (win supersede / bound widen), so only NEW inserts stop.
+inline std::size_t FslCap()
+{
+    static const std::size_t cap = []{
+        const char* e = std::getenv("MTG_FSL_CAP");
+        return e ? static_cast<std::size_t>(std::strtoull(e, nullptr, 10)) : std::size_t{0};
+    }();
+    return cap;
+}
+
 inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
                            const TurnSolver::SearchLine& line)
 {
     if (lc == nullptr) { return; }
     FSLineCache::iterator it = lc->find(key);
     if (it == lc->end())
-    { lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max() }); }
+    {
+        if (FslCap() && lc->size() >= FslCap()) { return; }   // memo full: recompute instead
+        lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max() });
+    }
     else if (it->second.nowin_bound != std::numeric_limits<int>::max())
     { it->second = FSLineEntry{ line, std::numeric_limits<int>::max() }; }
 }
@@ -12903,7 +13305,11 @@ inline void FSLineStoreNoWin(FSLineCache* lc, const TranspositionTable::Key& key
 {
     if (lc == nullptr) { return; }
     FSLineCache::iterator it = lc->find(key);
-    if (it == lc->end())                                        { lc->emplace(key, FSLineEntry{ line, bound }); }
+    if (it == lc->end())
+    {
+        if (FslCap() && lc->size() >= FslCap()) { return; }   // memo full: recompute instead
+        lc->emplace(key, FSLineEntry{ line, bound });
+    }
     else if (it->second.nowin_bound != std::numeric_limits<int>::max()
              && it->second.nowin_bound < bound)                 { it->second.nowin_bound = bound; }
 }
@@ -15922,6 +16328,16 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     addSub(a.card_name + " +" + std::to_string(a.soulfire_own_targets) + " own",
                            a.card_name + " own targets", "+" + std::to_string(a.soulfire_own_targets),
                            a.card_name, "soulfire");
+                }
+                // Twinflame STRIVE extra-target COUNT (soulfire_own_targets reused): each extra
+                // costs +strive_cost and copies one more creature. Emit for EVERY count >= 0
+                // (the Soulfire/Crackle/splice precedent: a count-0 variant must still carry a sub
+                // or renderChooseDialog drops to the flat fallback picker).
+                if (adef && adef->params.strive_cost.has_value())
+                {
+                    addSub(a.card_name + " strive+" + std::to_string(a.soulfire_own_targets),
+                           a.card_name + " strive", "+" + std::to_string(a.soulfire_own_targets),
+                           a.card_name, "strive");
                 }
                 // Crackle with Power extra-target COUNT: the declared number of targets BEYOND the
                 // opponent face (each is {1} off via Hinata and takes 5X). Emit for every count >= 0

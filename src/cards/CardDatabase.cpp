@@ -219,6 +219,8 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Umbra armor")   { return Keyword::UmbraArmor; } // inert tag; provably inert vs passive opp
     if (s == "Rampage")       { return Keyword::Rampage; }    // inert tag; provably inert vs passive opp
     if (s == "Cumulative upkeep") { return Keyword::CumulativeUpkeep; } // inert tag; param-modelled
+    if (s == "Strive")        { return Keyword::Strive; }    // inert tag; mechanic is param-modelled
+    if (s == "Treasure")      { return Keyword::Treasure; }  // inert tag; mechanic is param-modelled
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -713,6 +715,26 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.combat_damage_puts_subtype_from_hand.push_back(s);
     p.mana_per_creature_subtype       = params.value("mana_per_creature_subtype", std::string());
     p.mana_per_creature_feeder_generic = params.value("mana_per_creature_feeder_generic", 0);
+
+    // Zada / Mirrorwing spell-copy swarm (see CardDatabase.h block comment).
+    p.copies_solo_targeted_spells = params.value("copies_solo_targeted_spells", false);
+    p.solo_target_trick           = params.value("solo_target_trick", false);
+    p.trick_up_to_one             = params.value("trick_up_to_one", false);
+    p.pump_per_cards_drawn_power  = params.value("pump_per_cards_drawn_power", 0);
+    p.gy_self_power_bonus         = params.value("gy_self_power_bonus", 0);
+    p.pump_per_treasure_power     = params.value("pump_per_treasure_power", 0);
+    p.pump_per_treasure_tough     = params.value("pump_per_treasure_tough", 0);
+    p.creates_treasures           = params.value("creates_treasures", 0);
+    p.grants_temp_haste           = params.value("grants_temp_haste", false);
+    p.counters_on_target          = params.value("counters_on_target", 0);
+    p.cast_lifegain               = params.value("cast_lifegain", 0);
+    p.grants_extra_land_drop      = params.value("grants_extra_land_drop", 0);
+    p.token_copy_of_target        = params.value("token_copy_of_target", false);
+    if (params.contains("strive_cost"))
+        p.strive_cost = ManaCostFromString(params["strive_cost"].get<std::string>());
+    p.etb_lifegain                = params.value("etb_lifegain", 0);
+    for (const std::string& s : params.value("checkland_subtypes", json::array()))
+        p.checkland_subtypes.push_back(s);
 
     return p;
 }
