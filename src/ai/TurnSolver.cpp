@@ -3579,12 +3579,30 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (d && d->params.copies_solo_targeted_spells) { magnet_on_bf = true; break; }
                 }
             }
+            // Strive-count breadth policy (provider-owned; MirrorwingProvider: Twinflame is a
+            // lethal burst, so only K=0 and the max affordable K -- intermediate counts are
+            // mana-coupling corners). Opened with the tricktarget family gate.
+            const bool k_max_only = !DecisionUnpruned(UnprunedGate::TrickTarget)
+                && ResolveProvider(state).StriveCountMaxOnly(state, def);
             auto emit_with_strive = [&](int tgt_num, bool on_battlefield,
                                         const std::string& hand_name = std::string())
             {
                 emit(tgt_num, 0, hand_name);
                 if (!on_battlefield || !def.params.strive_cost.has_value()) { return; }
                 if (magnet_on_bf) { return; }   // fan-out dominates every strive count (above)
+                if (k_max_only)
+                {
+                    int kmax = 0;
+                    for (int k = 1; k < others; ++k)
+                    {
+                        const int mv = base_cost.ManaValue()
+                                     + k * def.params.strive_cost->ManaValue();
+                        if (mv > mana_ceiling) { break; }
+                        kmax = k;
+                    }
+                    if (kmax >= 1) { emit(tgt_num, kmax); }
+                    return;
+                }
                 for (int k = 1; k < others; ++k)
                 {
                     const int mv = base_cost.ManaValue()
@@ -8733,8 +8751,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             };
             if (opaque)
             {
-                for (const Action& a : acts)
-                { if (is_enabler(a)) { prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); fire_unlock(); } }
+                // Enablers apply in CastOrderRank order (stable; equal ranks keep plan order ->
+                // byte-identical for every provider that does not rank its enablers apart).
+                // Mirrorwing needs magnet(5) -> Twinflame(8): the fan-out target must exist
+                // before the token doubler, and the doubler before the pump tricks (user,
+                // Stage-6 round 3: "cast it first so there are more critters").
+                std::vector<int> ena;
+                for (int i = 0; i < static_cast<int>(acts.size()); ++i)
+                { if (is_enabler(acts[i])) { ena.push_back(i); } }
+                std::stable_sort(ena.begin(), ena.end(), [&](int x, int y)
+                {
+                    const CardDefinition* dx = CardDatabase::Instance().Lookup(acts[x].card_name);
+                    const CardDefinition* dy = CardDatabase::Instance().Lookup(acts[y].card_name);
+                    if (!dx || !dy) { return false; }
+                    return ResolveProvider(state).CastOrderRank(state, *dx)
+                         < ResolveProvider(state).CastOrderRank(state, *dy);
+                });
+                for (int i : ena)
+                { const Action& a = acts[i]; prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); fire_unlock(); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a

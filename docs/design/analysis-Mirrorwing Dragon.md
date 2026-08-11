@@ -319,6 +319,35 @@ All checks PASS except one:
   once with the cap lifted. Bounded (fires only on no-win nodes) but exactly those nodes are
   the expensive ones -- needs a plausibility gate + measurement before adoption.
 
+## Stage 6 round 3 (2026-08-11): Twinflame/go-off policy (user-authored) + suite add
+
+USER play knowledge encoded (rounds 3-4 of the review):
+- **Go-off cast order** (the search does not branch orderings; opaque sets applied plan-order
+  before this): enabler ladder magnet(5) -> creatures(10) -> Twinflame(12) -> Gold Rush(15) ->
+  draw tricks(20), via MirrorwingProvider::CastEnablerFirst/CastOrderRank + a stable
+  CastOrderRank sort of the ENABLER loop in BOTH worlds' opaque apply paths (equal ranks keep
+  plan order -> byte-identical for every other provider; smoke 30/30 confirmed). Rationale:
+  bodies before the doubler ("as many creatures as possible... then Gold Rush"), the doubler
+  before the pumps, Gold Rush before the DRAW tricks (its Treasures are spendable at the next
+  draw-breakpoint re-solve -- "essentially a ritual"; its own pump counts its own Treasures).
+- **Twinflame targets**: magnet fan-out UNGATED (draw-breakpoint re-solves own "might draw
+  into lethal" -- no heuristic lethal gate, per user); magnetless boards offer a non-magnet
+  target ONLY in the gap-closing corner (pending attack short of lethal by <= total copyable
+  printed power -- "you would only cast it when you are 1 damage short. Pretty rare"); hand
+  magnets kept (same-plan go-off). User accepts dropping marginal lines (Twinflame on
+  Instigator for two 1/1s) as long as measurement stays clean.
+- **Strive counts**: K in {0, max affordable} (StriveCountMaxOnly; a lethal burst, not a dial).
+- MEASURED: branch stats -- Twinflame fell from #1 driver (6.0M sum_odo at suite budget) to
+  below the top 5 (total odometer ~-30%). d3 300g s5005: 5.1633 vs 5.2433 (-0.08); HELD-OUT
+  fresh seed 9009: 5.0967 vs 5.1867 (-0.09) -- validated, no overfit. Suite shapes now
+  d3 b10 ~0.9 s/game, d5 b20 ~1.8 s/game (hinata-class).
+- **SUITE ADD**: mirrorwing in test/regression_cases.sh (smoke/regression hinata-mirror
+  sizing + overnight rows). Smoke + regression run: ALL PASS, 3+5 NEW keys accepted; all
+  other decks byte-identical. Overnight keys will appear NEW on the next overnight run.
+- OPEN (deferred): same-plan Treasure credit for Gold Rush without a draw breakpoint
+  (SequencedRitualCredit-style; today the ritual role flows only through breakpoint
+  re-solves -- adequate because every chain includes draw tricks, but not exact).
+
 ## Open items / next steps
 
 - Mulligan profile generation: DEFERRED (user kicks off; policy 2026-07-17).

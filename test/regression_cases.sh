@@ -28,6 +28,7 @@ declare -A DECK_FILE=(
   [auras]=decks/Auras/Auras.cod
   [goblins]=decks/Goblins/Goblins.cod
   [creature_giving]="decks/Creature Giving/Creature Giving.cod"
+  [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.cod"
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
@@ -40,6 +41,7 @@ declare -A DECK_PROF=(
   [auras]=decks/Auras/Auras.profile.json
   [goblins]=decks/Goblins/Goblins.profile.json
   [creature_giving]="decks/Creature Giving/Creature Giving.profile.json"
+  [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -101,6 +103,13 @@ SMOKE_CASES=(
   "creature_giving 0 1001 1000 0"
   "creature_giving 3 1001  150 10"
   "creature_giving 5 1001   75 20"
+  # mirrorwing: Zada/Mirrorwing copy-magnet swarm (Tier-3 trick engine; wins ~T5). Hinata-class
+  # cost (measured 2026-08-11 post Twinflame-policy, single-thread: d3 b10 ~0.9 s/game, d5 b20
+  # ~1.8 s/game; no multi-minute tail at suite budgets -- the provider prunes + strive fold are
+  # what keep it tractable, see analysis-Mirrorwing Dragon.md). th/hinata smoke sizing.
+  "mirrorwing 0 1001 1000 0"
+  "mirrorwing 3 1001  150 10"
+  "mirrorwing 5 1001   75 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -166,6 +175,12 @@ REGRESSION_CASES=(
   "creature_giving 3 3003  300 10"
   "creature_giving 5 2002  250 20"
   "creature_giving 5 3003  250 20"
+  # mirrorwing: hinata-mirror sizing (~20 min ST added; see SMOKE block for costs).
+  "mirrorwing 0 2002 1000 0"
+  "mirrorwing 3 2002  200 10"
+  "mirrorwing 3 3003  200 10"
+  "mirrorwing 5 2002  100 20"
+  "mirrorwing 5 3003  100 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -332,4 +347,18 @@ OVERNIGHT_CASES=(
   "creature_giving 5 5005  500 40"
   "creature_giving 5 6006  500 40"
   "creature_giving 5 7007  500 40"
+  # mirrorwing: hinata-mirror overnight sizing (~60 min ST added; heaviest suite deck per game
+  # after slivers -- deeper budgets deliberately NOT raised until a b-sweep motivates them).
+  "mirrorwing 0 4004 2000 0"
+  "mirrorwing 0 6006 2000 0"
+  "mirrorwing 0 8008 2000 0"
+  "mirrorwing 0 10010 2000 0"
+  "mirrorwing 3 4004  400 10"
+  "mirrorwing 3 5005  400 10"
+  "mirrorwing 3 6006  400 10"
+  "mirrorwing 3 7007  400 10"
+  "mirrorwing 5 4004  300 20"
+  "mirrorwing 5 5005  300 20"
+  "mirrorwing 5 6006  300 20"
+  "mirrorwing 5 7007  300 20"
 )

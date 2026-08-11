@@ -6405,6 +6405,50 @@ void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDef
         else
         { if (pw > best_sick_pw)  { best_sick_pw  = pw; best_sick  = p.card.m_number; } }
     }
+    // Twinflame (token_copy_of_target) target policy (user, Stage-6 round 3): the go-off is the
+    // MAGNET fan-out -- ungated (the draw-breakpoint re-solves own "might draw into lethal", so
+    // the search tries it whenever a magnet target exists; no heuristic lethal gate). Without a
+    // magnet anywhere the copies are small, so a non-magnet target is offered ONLY in the rare
+    // gap-closing corner ("you would only cast it when you are 1 damage short"): the pending
+    // attack falls short of lethal by no more than every copyable printed power (optimistic sum
+    // -- the safe direction; the search still decides). Otherwise Twinflame waits in hand.
+    if (def.params.token_copy_of_target)
+    {
+        const bool magnet_bf = !out.empty();   // battlefield magnets pushed above
+        bool magnet_hand = false;
+        for (const Card& hc : s.players[me].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+            if (hd && hd->params.copies_solo_targeted_spells) { magnet_hand = true; break; }
+        }
+        if (!magnet_bf && !magnet_hand)
+        {
+            int pending = 0, copy_sum = 0, best_pw = -1, best_num = 0;
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != me || !p.card.IsCreature()) { continue; }
+                if (CanAttackFull(p, s.battlefield, me)) { pending += p.EffectivePower(); }
+                const int ppw = p.card.m_power.value_or(0);
+                copy_sum += ppw;
+                if (ppw > best_pw && p.card.m_number != 0) { best_pw = ppw; best_num = p.card.m_number; }
+            }
+            const int opp_life = s.players[1 - me].life;
+            if (pending < opp_life && pending + copy_sum >= opp_life && best_num != 0)
+            { out.push_back(best_num); }
+        }
+        // Same-plan hand-magnet targets ("cast Zada, then Twinflame at it" -- the go-off's
+        // other entry point), deduped by name; the generic hand loop below is skipped.
+        std::unordered_set<std::string> seen_hand_magnet;
+        for (const Card& hc : s.players[me].hand)
+        {
+            if (hc.m_number == 0 || hc.m_is_staged) { continue; }
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+            if (!hd || !hd->params.copies_solo_targeted_spells) { continue; }
+            if (seen_hand_magnet.insert(hc.m_name.str()).second) { out.push_back(hc.m_number); }
+        }
+        if (out.empty()) { out.push_back(0); }   // narrowing active, no candidates
+        return;
+    }
     if (best_ready != 0)               { out.push_back(best_ready); }
     if (wants_sick && best_sick != 0)  { out.push_back(best_sick); }
 
@@ -6479,6 +6523,41 @@ int MirrorwingProvider::LegendKeepIndex(const GameState& s, int controller,
     if (!lethal_keeping(newest)) { return oldest; }   // not lethal even with the copy
     if (lethal_keeping(oldest))  { return oldest; }   // lethal anyway -> keep the original
     return newest;
+}
+
+// ---- MirrorwingProvider go-off policy (user, Stage-6 round 3) ---------------
+//
+// "Usually you just use it [Twinflame] to go off by casting it first so there are more critters
+// (order matters a bit here) and then cast all of your other spells to pump for lethal. It's
+// honestly kind of bad without Mirrorwing or Zada on board as all other creatures are small --
+// without them you would only cast it when you are 1 damage short. Pretty rare."
+
+bool MirrorwingProvider::CastEnablerFirst(const GameState&, const std::string& name) const
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    if (!d) { return false; }
+    // ALL creatures precede the doubler (user round 3: "you might cast creatures before
+    // Twinflame to get more [critters]"), the doubler precedes the pump tricks, and Gold Rush
+    // precedes the DRAW tricks (user: "essentially a ritual... sometimes you need to cast it
+    // before other spells to keep the chain going" -- its Treasures are spendable at the next
+    // draw-breakpoint re-solve, so casting it early funds the continuation; its own pump counts
+    // its own Treasures, so early costs nothing).
+    return d->card.IsCreature()                     // bodies first: more copies for the fan-outs
+        || d->params.token_copy_of_target           // Twinflame: double the board before the pumps
+        || d->params.creates_treasures > 0;         // Gold Rush: the ritual funds the chain
+}
+
+int MirrorwingProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (def.params.copies_solo_targeted_spells) { return 5; }    // magnet first of the bodies
+    if (def.params.token_copy_of_target)        { return 12; }   // after every creature (10), before tricks (20)
+    if (def.params.creates_treasures > 0)       { return 15; }   // Gold Rush: after the doubler, before draw tricks
+    return GenericProvider::CastOrderRank(s, def);
+}
+
+bool MirrorwingProvider::StriveCountMaxOnly(const GameState&, const CardDefinition& def) const
+{
+    return def.params.token_copy_of_target;   // Twinflame: K = 0 or max -- a lethal burst, not a dial
 }
 
 // ---- MirrorwingProvider cleanup discard -------------------------------------

@@ -501,6 +501,13 @@ public:
     // = byte-identical (K collapses to 0), HinataProvider returns HinataInPlay(s).
     virtual bool BranchSoulfireOwnTargets(const GameState& s) const { (void)s; return false; }
 
+    // StriveCountMaxOnly -- strive-count BREADTH policy: when true, a strive trick's extra-target
+    // axis enumerates only K=0 and the largest mana-ceiling-affordable K, instead of every count.
+    // Deck judgment (a goldfish strive is a lethal burst: more copies is strictly more damage, so
+    // intermediate counts only exist for mana-coupling with other casts), so provider-owned;
+    // default false = full range (byte-identical). Opened by MTG_UNPRUNED(TrickTarget).
+    virtual bool StriveCountMaxOnly(const GameState&, const CardDefinition&) const { return false; }
+
     // EnumGroupCap -- enumeration BREADTH policy: the max number of card GROUPS the plan enumerator
     // keeps for a turn (groups beyond this, lowest by SituationalCardRank, drop out). A tractability
     // cap -- a deep dig can leave ~20 distinct nonland casts whose powerset dominates the whole

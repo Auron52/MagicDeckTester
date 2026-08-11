@@ -532,6 +532,15 @@ public:
     // Zada and Mirrorwing fill ONE role (the copy magnet): redundancy is counted across the pair
     // so the last-copy veto cannot protect both (the antilife enabler-group lesson).
     const std::vector<std::string>* InterchangeableRequiredGroup(const std::string&) const override;
+    // Twinflame strive counts: only K=0 and the max affordable K (user, Stage-6 round 3: strive
+    // is cast "for lethal on the highest power creature(s)" -- intermediate counts are
+    // mana-coupling corners the lethal line never wants). Gated with the tricktarget family.
+    bool StriveCountMaxOnly(const GameState&, const CardDefinition&) const override;
+    // Go-off order (user round 3): magnets (5) before Twinflame (8) before the pump tricks --
+    // the fan-out target must exist before the token doubler, the doubler before the pumps.
+    // Consumed by the opaque apply path's enabler sort in both worlds.
+    bool CastEnablerFirst(const GameState&, const std::string&) const override;
+    int  CastOrderRank(const GameState&, const CardDefinition&) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

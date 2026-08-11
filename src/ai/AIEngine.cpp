@@ -2703,11 +2703,29 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Enabler-first: cast lifegain_to_loss spells (Tainted Remedy / Plague Drone) before any
     // other hand cast so a same-turn payload fires with the enabler active. Then the rest in
     // plan order, with the draw-engine breakpoint / staging handling.
-    for (const Action& a : plan.actions)
+    // Enablers apply in CastOrderRank order (stable; equal ranks keep plan order -- byte-
+    // identical unless a provider ranks its enablers apart). Mirror of ApplyPlanDirect's
+    // opaque path: Mirrorwing needs magnet(5) -> Twinflame(8) -> pump tricks.
     {
-        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
-            && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
+        std::vector<int> ena;
+        for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
         {
+            const Action& a = plan.actions[i];
+            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
+                && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
+            { ena.push_back(i); }
+        }
+        std::stable_sort(ena.begin(), ena.end(), [&](int x, int y)
+        {
+            const CardDefinition* dx = CardDatabase::Instance().Lookup(plan.actions[x].card_name);
+            const CardDefinition* dy = CardDatabase::Instance().Lookup(plan.actions[y].card_name);
+            if (!dx || !dy) { return false; }
+            return ResolveProvider(state).CastOrderRank(state, *dx)
+                 < ResolveProvider(state).CastOrderRank(state, *dy);
+        });
+        for (int i : ena)
+        {
+            const Action& a = plan.actions[i];
             cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
         }
     }
