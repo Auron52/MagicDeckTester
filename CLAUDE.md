@@ -252,6 +252,27 @@ engine-state fingerprints). Two traps it documents: sidecar PRESENCE activates t
 (`enabled: false` is NOT off — ship a rejected model as `<stem>.value.DISABLED.json`), and the
 H-cell ladder is guarded on the sidecar EXISTING, so a missing model silently costs 1.35–84.8x.
 
+## Deck-Combination Screening Skill
+
+When the user asks to **compare deck combinations / ratios / counts**, **try N of card X instead of
+M**, **A/B a card swap within an already-implemented pool**, or **screen deckbuilding changes
+quickly**, read `.claude/skills/deck-screening.md` first. It is the authoritative guide for the
+per-COMBINATION loop (minutes), as distinct from adopting a combination as a deck (hours, via
+`mulligan-profile.md` + `value-leaf.md`).
+
+```
+Read `.claude/skills/deck-screening.md` and [screen / floor-check / interpret] ...
+```
+
+**The whole interface is one command** — `python3 scripts/deck_compare.py <spec.json>` (and
+`--floor <tag>` when a result sits near its apparatus bias floor). **Rule 0 it enforces:** do NOT
+regenerate per-deck artifacts per combination — every arm shares ONE apparatus, which is not a cheap
+approximation but the *better* measurement (sharing one keep table halves the se). Its two traps:
+the deck's `profile` must be attached to the measurement **and** to any keep-table generation (a
+profile-less gen silently fits the table to a deck we do not ship — it merged a mana source that
+provably cannot cast the deck's key artifact), and `t` alone settles nothing — an effect must clear
+the measured bias floor.
+
 ## Mulligan Profile Generation Skill
 
 When the user asks to **generate / regenerate / pool / A-B / adopt a mulligan (keep or bottom) profile**, or to **hand profile generation to the secondary machine**, read `.claude/skills/mulligan-profile.md` first. It is the authoritative guide for the **exhaustive bucketed mulligan profile** — the separate, expensive, hand-off-able mulligan stage (distinct from `analyze-deck`, which does cards/coverage/play).
