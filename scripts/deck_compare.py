@@ -470,6 +470,102 @@ def pool_profile(spec, unscored):
     return out
 
 
+def union_counts(spec):
+    """The POOL: every card any arm plays, at the highest count any arm plays it.
+
+    This is the deck the shared apparatus should be generated for, and the reason is structural, not
+    a heuristic. Coverage is total BY CONSTRUCTION: every arm's cards are present (so nothing is
+    unbucketed) and every bucket's union count is >= that bucket's count in any arm (so `EnumComps`'
+    cap is never binding for an arm) -- the two ways `Decide` can answer present=false, both closed.
+    No drop, no silent heuristic fallback, and above all no fall-back to lookahead bottoming."""
+    return {n: max(a.get(n, 0) for a in spec.arms.values())
+            for n in {c for a in spec.arms.values() for c in a}}
+
+
+def pool_table(spec, why):
+    """Generate the pool's own exhaustive keep table, once, for the union deck. -> table path.
+
+    A screening apparatus, NOT a shippable one. It is generated at `pool_R` (default 10), and an R=10
+    table is measured to play ~0.032t weaker than a shipped R=60 one -- but SYMMETRICALLY, on every
+    arm, where the own/foreign fit difference among R=10 tables is only 0.004t. Against the
+    alternative it replaces (no table at all) it is better on both axes that matter: ~0.063t weaker
+    play becomes ~0.032t, and ~22x per-game wall becomes ~1x. Adoption still goes through
+    mulligan-profile.md; this never becomes a deck's sidecar."""
+    d = os.path.join(OUT, "pooltable")
+    os.makedirs(d, exist_ok=True)
+    R = int(spec.raw.get("pool_R", 10))
+    counts = union_counts(spec)
+    out = os.path.join(d, spec.name + ".keepmodel.exhaustive.profile.json")
+    fp   = os.path.join(d, ".pooltable." + spec.name + ".json")
+    want = json.dumps({"union": counts, "R": R}, sort_keys=True)
+    if os.path.exists(out) and os.path.exists(fp) and open(fp).read() == want:
+        print(f"  keep table     reusing the pool table: {os.path.relpath(out, ROOT)}")
+        return out
+    for stale in (out, out.replace(".profile.json", ".raw.json"),
+                  os.path.join(d, spec.name + ".keepmodel.gencache.json")):
+        if os.path.exists(stale):
+            os.remove(stale)
+    # The play profile and value sidecar go in FIRST: RunExhaustiveKeepMode resolves both
+    # directory-relative off the decklist and now REFUSES without the profile (85e09b5).
+    for src in (spec.profile, spec.value_profile):
+        if src and os.path.exists(src):
+            subprocess.check_call(["cp", "-f", src, d])
+    ordered  = [(counts[n], n) for _, n in spec.deck if counts.get(n)]
+    ordered += [(counts[n], n) for n in sorted(set(counts) - set(spec.counts))]
+    deck = os.path.join(d, spec.stem)
+    open(deck, "w").write("\n".join(f"{c} {n}" for c, n in ordered) + "\n")
+    log = os.path.join(OUT, "pooltable.log")
+    print(f"  keep table     {why}\n"
+          f"                 generating a POOL table (R={R}) over the {sum(counts.values())}-card union"
+          f" -> {os.path.relpath(out, ROOT)}\n"
+          f"                 (one-time per pool; log {os.path.relpath(log, ROOT)})")
+    with open(log, "w") as f:
+        subprocess.check_call([os.path.join(ROOT, "build/Release/mtg-analyze"), deck,
+                               "--seed", str(spec.raw.get("pool_table_seed", 55000001))],
+                              stdout=f, stderr=subprocess.STDOUT, cwd=ROOT,
+                              env={**os.environ, "MTG_KEEP_EXHAUSTIVE": "1",
+                                   "MTG_KEEP_ROLLOUTS": str(R)})
+    open(fp, "w").write(want)
+    return out
+
+
+def verify_bottoming(table_path, label):
+    """"Never fall back to lookahead bottoming" is a property of the ARTIFACT, so assert it on the
+    artifact. `Decide` covering a hand is not enough: `DecideBottom` independently returns false when
+    the table has no bottoming block, when the flag is off, or when an entry carries no target row --
+    and each of those silently restores the rollout-per-candidate path (~22x, and the clairvoyance-
+    adjacent policy the tables exist to replace)."""
+    op = gzip.open if table_path.endswith(".gz") else open
+    ek = json.load(op(table_path, "rt")).get("exhaustive_keep") or {}
+    K, entries = len(ek.get("buckets") or []), (ek.get("entries") or [])
+    missing = sum(1 for e in entries
+                  if not e.get("bottom_keep") or any(len(r) != K for r in e["bottom_keep"]))
+    if not ek.get("bottoming_enabled") or not entries or missing:
+        raise SystemExit(
+            f"{label} cannot bottom every hand -- refusing.\n"
+            f"  bottoming_enabled={ek.get('bottoming_enabled')}  entries={len(entries)}  "
+            f"without a usable bottom row={missing}\n"
+            "  Those hands would silently use lookahead bottoming instead.")
+
+
+def verify_coverage(buckets, gen_counts, spec, label):
+    """Refuse to run unless EVERY arm is fully answered by the table. The whole point of generating
+    the pool table is that no arm silently degrades, so an unverified claim of coverage would put us
+    back where we started -- this is an assertion, not a report."""
+    names = {n for b in buckets for n in b}
+    for tag, counts in spec.arms.items():
+        miss = sorted(set(counts) - names)
+        rate, over = fallback_rate(buckets, gen_counts, counts)
+        if miss or rate:
+            raise SystemExit(
+                f"{label} does not cover arm '{tag}' -- refusing.\n"
+                + (f"  unbucketed: {', '.join(miss)}\n" if miss else "")
+                + (f"  {rate*100:.2f}% of hands hit an unenumerated composition: {'; '.join(over)}\n"
+                   if rate else "")
+                + "  Every uncovered hand falls silently to the generic heuristic AND to lookahead\n"
+                  "  bottoming, on this arm alone. Report this as a bug in the pool-table route.")
+
+
 def screen(spec, dry_run):
     """Every combination vs base, one shared apparatus, one pooled batch."""
     os.makedirs(OUT, exist_ok=True)
@@ -507,17 +603,32 @@ def screen(spec, dry_run):
     print(f"  play profile   {os.path.relpath(spec.profile, ROOT) if spec.profile else 'NONE (deliberate)'}")
     print(f"  value model    {os.path.relpath(spec.value_profile, ROOT) if spec.value_profile else 'none'}"
           + ("  (ladder mode: accelerates warm-up passes, never decides)" if spec.value_profile else ""))
+    # The apparatus is never silently downgraded. If the shipped table cannot answer every arm, the
+    # pool gets its OWN table over the union deck rather than every arm losing the table -- dropping
+    # it costs ~0.063t of play quality on both arms, ~22x per-game wall, AND regresses bottoming to
+    # the clairvoyance-adjacent lookahead the tables exist to replace (every shipped sidecar has
+    # bottoming_enabled). "pool_table": false restores the old symmetric-drop behaviour.
+    gen_counts, table_src = spec.counts, None
     if tbl is None:
         print("  keep table     none found -> heuristic mulligan on every arm (symmetric)")
+    elif (uncovered or not use_table) and spec.raw.get("pool_table") is not False:
+        why = (f"the shipped table does not bucket {', '.join(uncovered)}" if uncovered else
+               f"{worst*100:.2f}% of hands would hit a composition it never enumerated "
+               f"(limit {max_fb*100:.2f}%)")
+        table_src = pool_table(spec, why)
+        bkts, gen_counts = table_buckets(table_src), union_counts(spec)
+        verify_coverage(bkts, gen_counts, spec, "the pool table")
+        verify_bottoming(table_src, "the pool table")
+        print("                 verified: every arm fully covered (no heuristic keep, no lookahead"
+              " bottoming)")
+        use_table = True
     elif uncovered:
         print(f"  keep table     DROPPED from every arm -- not bucketed: {', '.join(uncovered)}")
-        print("                 (a hand holding one would silently fall through to the heuristic on")
-        print("                  SOME arms only; dropping it everywhere is symmetric and measured")
-        print("                  unbiased instead. The PLAY profile above stays attached.)")
+        print("                 (\"pool_table\": false -- symmetric, but both arms lose the table AND")
+        print("                  its bottoming. The PLAY profile above stays attached.)")
     elif not use_table:
-        print(f"  keep table     DROPPED from every arm -- {worst*100:.2f}% of hands would resolve to a")
-        print(f"                 composition it never enumerated (limit {max_fb*100:.2f}%), and only on")
-        print("                 the arms that raised a bucket. Overflowing buckets:")
+        print(f"  keep table     DROPPED from every arm -- {worst*100:.2f}% composition fall-through"
+              f" (limit {max_fb*100:.2f}%), \"pool_table\": false")
         for t, (r, over) in sorted(fb.items(), key=lambda kv: -kv[1][0]):
             if over:
                 print(f"                   {t:20s} {r*100:6.2f}%  " + "; ".join(over))
@@ -540,6 +651,13 @@ def screen(spec, dry_run):
             profile = pool_profile(spec, pf["unscored"])
     elif spec.introduced:
         print("  card scores    the profile already scores every introduced card")
+
+    # Pair whatever profile we ended up with against whatever table we ended up with. Needed whenever
+    # the profile is no longer the deck's own file: the sidecar is presence-gated off the PROFILE's
+    # directory+stem, so a pooled-card_scores profile sitting in a scratch dir would silently take
+    # the table with it -- the same class of loss as the table-drop bug, one level down.
+    if use_table and (table_src or profile is not spec.profile):
+        profile = apparatus_dir("pool", spec.name, profile, table_src or shipped_table(spec.profile))
 
     jobs = []
     for tag in spec.arms:

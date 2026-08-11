@@ -105,10 +105,42 @@ one has no `card_scores`. And slivers' +0.0022 is for a *land*; a Lava Spike-siz
 exposed deck would move more hands. Treat the pooling as **cheap insurance, not a rescue** — and if
 a screen's headline turns on 0.002t, the apparatus floor already says it is unresolved.
 
-**Introducing a card also costs ~22x per game**, because it always drops the keep table. Measured on
-slivers (300 games, idle box): 9.8 ms/game with the table, 254.8 without — and turning off *only* the
-table's bottoming while keeping its keep decisions already costs 233.1, so the whole gap is
-`BottomCards` falling back to a rollout per bottom candidate. Size a new-card screen accordingly.
+## Never run without a table — the pool table
+
+Dropping the table is symmetric, and symmetric is not cheap. It costs **~0.063t of play quality on
+both arms**, **~22x per-game wall** (slivers 9.8 → 254.8 ms/game), and it **regresses bottoming to
+the lookahead** — `bottoming_enabled` is now baked ON at generation with no off switch, so **all 9
+committed sidecars use table bottoming**. The 22x is *entirely* bottoming: with the table's keep
+still live and `MTG_EXHAUSTIVE_BOTTOM=0`, slivers already costs 233.1 ms/game, because `BottomCards`
+falls back to a rollout per candidate.
+
+So when the shipped table cannot answer every arm, the driver generates one for the **pool**:
+
+```
+keep table     the shipped table does not bucket City of Brass
+               generating a POOL table (R=10) over the 65-card union -> logs/deckcmp/pooltable/...
+               verified: every arm fully covered (no heuristic keep, no lookahead bottoming)
+```
+
+- **One-time per pool**, not per combination — the same cost class this skill has always quoted for
+  a mulligan table. Measured: **881 s** on 24 threads for a 65-card slivers union (10,231 size-7
+  cells vs the shipped table's 7,758), after which the screen ran at **21–38 ms/game** instead of
+  254.8. It pays for itself inside one 20k-game screen. Sized by cells: a merged new card is 0.60x
+  the base table, a raised small bucket 1.06x, a new 4-of in its own bucket 1.72x.
+- **Both halves are asserted, not assumed.** `verify_coverage()` checks every arm resolves;
+  `verify_bottoming()` checks the artifact can bottom every hand, because `DecideBottom` fails
+  independently of `Decide` (no bottoming block, flag off, or a missing target row). 0 of 10,231
+  pool entries lacked one.
+- **A screening apparatus, never a sidecar.** `pool_R` defaults to 10, which plays ~0.032t weaker
+  than a shipped R=60 table — but *symmetrically* (own/foreign fit among R=10 tables is 0.004t), and
+  it replaces something strictly worse on both axes. Adoption still goes through
+  `mulligan-profile.md`.
+- `"pool_table": false` restores the old symmetric-drop behaviour if you want the comparison.
+
+**Not yet built:** topping up the base table instead of regenerating the union. The generator already
+has whole-pool warm-start (`MTG_KEEP_PRIOR_RAW`), but it is for the same decklist on a new commit and
+refuses otherwise — *"a changed decklist needs bucket translation, not yet built"*. The cell counts
+say that would pay: a raised bucket needs only ~6% new cells.
 
 ## The four things that make it fast, and why none is optional
 
@@ -123,17 +155,23 @@ table's bottoming while keeping its keep decisions already costs 233.1, so the w
    (`value_model: false` + `ladder_value_leaf: true`) so the leaf accelerates warm-up passes and the
    heuristic decides the committed one. Verified byte-identical under a deliberately *wrong* model at
    unbounded budget; the residual budget coupling at `budget_ms: 20` measured 0.0008t.
-3. **A coverage pre-flight, on BOTH cliffs.** A hand the table cannot answer does not get a biased
-   answer, it gets **no** answer — `Decide` returns `present=false` and the caller falls through to
-   the generic heuristic, silently. That happens two ways, and until now only the first was checked:
-   - **an unbucketed card** (any introduced card) → the table is dropped from **every** arm:
-     deck-independent, therefore symmetric (measured −0.0003 error on a −0.20 effect);
-   - **an untabled composition** — the analyzer enumerates compositions capped at the *base* deck's
-     bucket counts (`cap[b] = min(count[b], H)`), so **raising** a small bucket makes hands reachable
-     that were never tabled, on that arm alone. Raising a 1-of to a 4-of on slivers = **6.32% of
-     hands**, ≈0.004t of one-sided bias. The driver computes this exactly and drops the table above
-     `max_fallback` (default 1%); below it, it prints the rate and keeps the table, because dropping
-     is not free (~0.063t on *both* arms, and ~22x per game).
+3. **A coverage pre-flight on BOTH cliffs, and a POOL TABLE rather than a drop.** A hand the table
+   cannot answer does not get a biased answer, it gets **no** answer — `Decide` returns
+   `present=false` and the caller falls through to the generic heuristic *and* to lookahead
+   bottoming, silently. It happens two ways, and only the first was ever checked:
+   - **an unbucketed card** — any introduced card;
+   - **an untabled composition** — compositions are enumerated capped at the *base* deck's bucket
+     counts (`cap[b] = min(count[b], H)`), so **raising** a small bucket makes hands reachable that
+     were never tabled, on that arm alone. Raising a 1-of to a 4-of on slivers is **6.32% of hands**,
+     ≈0.004t of one-sided bias. Cuts are always safe; a bucket already at ≥7 copies cannot overflow.
+
+   Either way the driver now **generates a table for the POOL** — the union of every arm's cards at
+   the highest count any arm plays them — instead of dropping the table from every arm. Coverage is
+   total by construction (union counts ≥ every arm's, for every card and every bucket), and
+   `verify_coverage()` asserts it before a game runs. See the cost note below for what the drop was
+   costing. Small composition overflows below `max_fallback` (default 1% ≈ 0.0006t, a tenth of the
+   measured floor) just keep the shipped table and print the rate — regenerating for 0.008% would
+   cost far more than the bias it avoids.
 
    Dropping the table is `MTG_EXHAUSTIVE_PROFILE=none` on the batch, **not** dropping the profile.
 4. **An introduced-card pre-flight** — the part that needs you, above.

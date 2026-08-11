@@ -447,12 +447,81 @@ arm and covers the two asymmetrically. Cost: both arms play under a mulligan pol
 than they could. Untested risk: a deck whose value depends heavily on mulligan quality (a combo deck
 needing specific pieces) could be mis-ranked under a weak-but-symmetric policy.
 
-### Apparatus selection rule (measured)
+### Apparatus selection rule — superseded 2026-08-11 by the POOL TABLE
+
+The rule below was the original two-way choice. It is kept because its *measurements* stand, but
+"no table on either arm" is no longer what the driver does — see the pool table immediately after.
 
 | condition | apparatus |
 |---|---|
 | card sets **mutually covered** (count changes only, incl. to zero) | shared table — better play, bias 0.002–0.003, tracks CRN distance |
-| **not** mutually covered (any card the other table never bucketed) | **no table on either arm** — symmetric, unbiased, zero generation cost |
+| **not** mutually covered (any card the other table never bucketed) | ~~no table on either arm~~ — symmetric and unbiased, but see below |
+
+### Generate the table for the POOL, not the base deck (user, 2026-08-11)
+
+Dropping the table is symmetric, and symmetric is not the same as cheap. Three costs, all measured
+here, none of which the original rule priced:
+
+- **~0.063t of play quality on BOTH arms** (the doc's own figure for what a table is worth);
+- **~22x per-game wall** (slivers 9.8 → 254.8 ms/game);
+- **bottoming regresses to the lookahead** — and `cfg.bottoming_enabled = true` is now baked ON at
+  generation with no off switch ("a footgun no agent should be able to reach"), so **all 9 committed
+  sidecars have it enabled**. Dropping the table therefore doesn't restore some neutral default; it
+  takes a facility every shipped deck actually uses.
+
+So the driver now generates the apparatus for the **pool** — the union of every arm's cards at the
+highest count any arm plays them — whenever the shipped table cannot answer every arm. Coverage is
+total **by construction**, closing both of `Decide`'s `present=false` paths at once:
+
+- every arm's cards are in the union → nothing is unbucketed;
+- every bucket's union count ≥ that bucket's count in any arm → `EnumComps`' cap is never binding for
+  an arm, so every reachable composition is enumerated.
+
+`verify_coverage()` asserts exactly that before any game runs and refuses otherwise — an unverified
+coverage claim would put us back where we started. `verify_bottoming()` asserts the other half on the
+artifact itself, because `DecideBottom` fails *independently* of `Decide`: no bottoming block, the
+flag off, or an entry with no target row each silently restores the rollout-per-candidate path. On
+the generated pool table, **0 of 10,231 entries** lack a usable bottoming row (shipped R=60: 0 of
+7,758).
+
+Measured end to end on slivers + {Ziggurat 2→4, Hivepool 1→4}: generation took **881 s** on 24
+threads, and the screen then ran at **21–38 ms/game** against the **254.8 ms/game** the dropped-table
+route costs — the table pays for itself within one 20k-game screen.
+
+The pool table is a **screening apparatus, not a shippable one**: `pool_R` defaults to 10, and an
+R=10 table plays ~0.032t weaker than a shipped R=60 one. That is the right trade because it is
+*symmetric* (own/foreign fit among R=10 tables is only 0.004t) and because the thing it replaces is
+strictly worse on both axes — 0.063t weaker instead of 0.032t, and 22x slower instead of 1x.
+Adoption still goes through `mulligan-profile.md`; a pool table never becomes a deck's sidecar.
+
+Measured on slivers + {Ziggurat 2→4, Hivepool 1→4}: the union is 65 cards and 17,831 cells against
+the base table's 14,117 (**1.26x**), and discovery reproduced the same 10 buckets with the raised
+counts. Cell counts for the other shapes, which is what sets the price:
+
+| pool vs base | K | cells | vs base |
+|---|---|---|---|
+| base slivers | 10 | 14,117 | 1.00x |
+| a new card that MERGES into an existing bucket | 9 | 8,406 | 0.60x |
+| a new 2-of in its own bucket (replacing a 2-of bucket) | 11 | 14,117 | 1.00x |
+| a raised small bucket (Hivepool 1→4) | 10 | 14,975 | 1.06x |
+| a new 4-of in its own bucket | 11 | 24,235 | 1.72x |
+
+### Why regenerate the union instead of topping up the base table
+
+The generator already has whole-pool warm-start (`MTG_KEEP_PRIOR_RAW` + change-detection carry +
+execution-trace reuse + prune-set carry), but it is built for **the same decklist on a new commit**
+and says so at the point of refusal:
+
+```
+[keepgen] PRIOR-RAW: fingerprint mismatch (bucket/deck/equiv_seed/K/max_mull)
+  -- REFUSING (a changed decklist needs bucket translation, not yet built)
+```
+
+**Bucket translation is the missing piece**, and it is worth building: the cell counts above say a
+pool table shares most of its cells with the base one (a raised bucket needs only ~6% new cells; a
+new 4-of bucket ~40%), so a translated warm-start would turn a per-pool full generation into a small
+top-up. Until then the union regeneration is the correct-by-construction route, and it is the same
+one-time-per-pool cost the skill has always quoted for a mulligan table.
 
 The pre-flight test is set membership against `ExhaustiveKeepPolicy::name_to_bucket` for every card of
 every combination — free, and it selects the mode rather than merely refusing.
