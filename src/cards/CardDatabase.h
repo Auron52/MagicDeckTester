@@ -1001,6 +1001,77 @@ struct CardParams
     // "{T}: Add {C}" lives in `produces`. Empty = not a scaled-mana land.
     std::string              mana_per_creature_subtype;
     int                      mana_per_creature_feeder_generic = 0;   // {2}
+
+    // --- Zada / Mirrorwing spell-copy swarm (Mirrorwing Dragon deck) -----------------------------
+    // Copy magnet (Zada, Hedron Grinder / Mirrorwing Dragon): "Whenever you cast an instant or
+    // sorcery spell that targets only [this], copy that spell for each other creature you control
+    // that the spell could target. Each copy targets a different one of those creatures." When a
+    // solo_target_trick's ONLY target is a creature with this flag, ResolveSoloTargetTrick fans the
+    // payload out: one copy per OTHER own creature, the original on the magnet. Copies resolve
+    // BEFORE the original (they go on the stack above it, CR 601.2 order chosen by the controller);
+    // the deterministic order used -- non-attack-eligible creatures first, then eligible, original
+    // (the magnet) last -- is the goldfish-optimal choice for escalating payloads (Fists of Flame's
+    // drawn-count, Gold Rush's treasure count grow with resolution position) and is disclosed in
+    // the deck's Stage-6a report. Mirrorwing's "a player casts" collapses to our own casts (the
+    // passive opponent never casts -- inert, bracket-noted on the entry).
+    bool copies_solo_targeted_spells = false;
+
+    // Solo-target trick (Expedite, Fists of Flame, Ancestral Anger, Gold Rush, Scale the Heights,
+    // Twinflame): an instant/sorcery that targets ONE own creature. WHICH creature is a SEARCH
+    // decision -- CollectActions emits one CastFromHand variant per own creature, carried on the
+    // (widened) Action/StackEntry::enchant_target int (the aura-target precedent), so the search --
+    // never a heuristic -- decides whether to point it at a copy magnet. Resolution runs the
+    // payload params below once per recipient via ResolveSoloTargetTrick (shared executor/rollout).
+    bool solo_target_trick = false;
+    // "up to one target" (Gold Rush, Scale the Heights): also emit a NO-target variant
+    // (enchant_target 0) -- the untargeted payloads (treasure/life/land-drop/draw) still resolve,
+    // and an untargeted cast never triggers a copy magnet ("targets only" requires a target).
+    bool trick_up_to_one = false;
+    // Fists of Flame: "+N/+0 for each card you've drawn this turn", computed AT RESOLUTION per
+    // copy, after that copy's own cast_draw (draw first, then count -- oracle order), off
+    // Player::cards_drawn_this_turn. 0 = no drawn-count pump.
+    int  pump_per_cards_drawn_power = 0;
+    // Ancestral Anger: "+X/+0 where X is 1 plus the number of cards named [this] in your
+    // graveyard" -> power bonus += this * (1 + graveyard copies of the card itself).
+    int  gy_self_power_bonus = 0;
+    // Gold Rush: "+N/+N for each Treasure you control", counted AT RESOLUTION per copy (after that
+    // copy's own creates_treasures), so stacked copies escalate faithfully.
+    int  pump_per_treasure_power = 0;
+    int  pump_per_treasure_tough = 0;
+    // Gold Rush: "Create a Treasure token." -> N "Treasure Token" permanents (existing cards.json
+    // token def; its sac-for-mana machinery prices/spends them).
+    int  creates_treasures = 0;
+    // Expedite: "target creature gains haste until end of turn" -> Permanent::temp_haste (read by
+    // CanAttackFull / CanTapNow -- a hasted fresh dork may tap for mana; reset each cleanup).
+    bool grants_temp_haste = false;
+    // Scale the Heights: "Put a +1/+1 counter on up to one target creature."
+    int  counters_on_target = 0;
+    // Scale the Heights: "You gain 2 life." (per resolved copy -- faithful escalation of life.)
+    int  cast_lifegain = 0;
+    // Scale the Heights: "You may play an additional land this turn." -> +1
+    // Player::bonus_land_drops_this_turn per resolved copy.
+    int  grants_extra_land_drop = 0;
+    // Twinflame: "create a token that's a copy of that creature, except it has haste. Exile those
+    // tokens at the beginning of the next end step." Token = the target's BASE card (copies copy
+    // printed characteristics, CR 707.2 -- not counters/until-EOT effects) + Haste keyword +
+    // Permanent::exile_at_end (swept at both end-step sites). A token copy of a LEGENDARY target
+    // legend-rules immediately; the engine keeps the earlier (original) copy.
+    bool token_copy_of_target = false;
+    // Twinflame "Strive -- this spell costs {2}{R} more for each target beyond the first." Set =>
+    // CollectActions also emits multi-target variants: K extra targets (1..#creatures-1) on the
+    // soulfire_own_targets count field (reused; both are "count of extra own-creature targets"),
+    // cost += K * strive_cost. WHICH extras is resolved deterministically at resolution (highest
+    // printed power first, battlefield order tiebreak) -- a provider-ownable narrowing, disclosed.
+    // A strived (multi-target) cast never triggers a copy magnet ("targets only" fails).
+    std::optional<ManaCost> strive_cost;
+
+    // Kazandu Refuge: "When this land enters, you gain 1 life." (land ETB, controller gains.)
+    int  etb_lifegain = 0;
+    // Check land (Rootbound Crag): "enters tapped UNLESS you control a [subtype] or a [subtype]".
+    // Non-empty => LandWouldEnterTapped returns tapped iff NO controlled land carries any of these
+    // subtypes (the fastland precedent: the shared predicate keeps enumeration pricing and the real
+    // drop in lockstep). enters_tapped stays false on the entry (the static flag would double-tap).
+    std::vector<std::string> checkland_subtypes;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.

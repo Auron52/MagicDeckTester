@@ -669,6 +669,37 @@ void ResolveExpressiveIteration(GameState& state)
 // free land; see Hinata seed 1009 T1).
 void BounceKarooLand(GameState& state, int controller, int self_index)
 {
+    // Depletion-sack timing parity (fd-diverge root cause, Mirrorwing 2026-08-11): the EXECUTOR
+    // sacrifices an emptied depletion land immediately (CheckStateBasedActions after every cast),
+    // but the ROLLOUT's ApplyPlanDirect sweeps only at END of plan -- so a mid-plan karoo bounce
+    // saw a dead-but-still-tapped Sandstone Needle in the rollout (and bounced it, keeping Forest)
+    // while the real game had already sacked it (and bounced the untapped Forest, stranding the
+    // recorded chain's last cast: realized_win = predicted+1). The rules side with the executor
+    // (the "no counters -> sacrifice" state trigger fires at once), so sack HERE, before the
+    // candidate scan, in BOTH worlds: a no-op for the executor (already swept) and for every deck
+    // without depletion lands or without karoos -- byte-identical outside the diverging case.
+    // NB self_index indexes the just-entered karoo (the LAST battlefield slot in every caller);
+    // erasing depleted lands below it would shift it, so re-locate the karoo by its slot surviving
+    // the sweep: depleted lands are strictly earlier entries, so the karoo's index shifts down by
+    // the number erased before it.
+    {
+        const int before = static_cast<int>(state.battlefield.size());
+        int erased_before_self = 0;
+        for (int i = 0; i < before; ++i)
+        {
+            if (i >= self_index) { break; }
+            const Permanent& p = state.battlefield[i];
+            if (!p.card.IsLand()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || d->params.enters_tapped_with_depletion <= 0) { continue; }
+            bool has_counters = false;
+            for (const Counter& c : p.counters)
+            { if (c.type == Counter::Type::Depletion && c.count > 0) { has_counters = true; break; } }
+            if (!has_counters) { ++erased_before_self; }
+        }
+        SacrificeDepletedLands(state);
+        self_index -= erased_before_self;
+    }
     // Choose which of our lands to return to hand. Preference, best first:
     //   (1) NEVER bounce another Karoo bounce land -- replaying it just triggers ANOTHER
     //       ETB bounce (a tempo-negative loop), so avoid it unless it is the only option;

@@ -1,0 +1,369 @@
+# Analysis ledger — Mirrorwing Dragon (decks/Mirrorwing Dragon/)
+
+In-flight state for the analyze-deck workflow (skill: `.claude/skills/analyze-deck.md`).
+Updated continuously; this is the durable memory for resume/handoff.
+
+## Deck (60)
+
+4 Mirrorwing Dragon, 4 Zada Hedron Grinder, 4 Goblin Instigator, 4 Ignoble Hierarch,
+4 Elvish Mystic, 4 Fists of Flame, 4 Gold Rush, 4 Ancestral Anger, 3 Twinflame,
+2 Expedite, 2 Scale the Heights, lands: 9 Forest, 4 Mountain, 3 Sandstone Needle,
+2 Gruul Turf, 2 Rootbound Crag, 1 Kazandu Refuge.
+
+**Archetype**: Zada/Mirrorwing "spell-copy swarm". A single-target instant/sorcery cast
+targeting ONLY Zada (or only Mirrorwing) is copied for each other creature you control;
+copies of cantrip pump spells mass-draw + mass-pump the board. Twinflame targeting only
+Zada duplicates the whole board with hasted tokens for the turn. Goldfish kill = wide
+pumped attack.
+
+## Stage 1 — coverage (2026-08-10) — DONE
+
+13 missing + Ignoble Hierarch partial (exalted bracket note absent; Keyword::Exalted +
+CountExalted already exist in engine — entry fix only).
+
+## Stage 2 — implementation plan (agreed design) — IN PROGRESS
+
+New engine machinery (Tier 3), executor/rollout lockstep via shared SpellEffects helpers:
+
+- **Solo-target trick spells** (`solo_target_trick` param): single-own-creature-target
+  instant/sorcery. Target is a SEARCH decision: CollectActions emits one CastFromHand
+  variant per own creature (reusing the threaded `enchant_target` int = target
+  card.m_number, comment widened; aura precedent). `trick_up_to_one` adds a no-target
+  variant (Gold Rush / Scale the Heights "up to one target").
+- **Copy magnet** (`copies_solo_targeted_spells` on Zada/Mirrorwing): when the trick's
+  only target IS the magnet, resolve one copy per other own creature, then the original
+  on the magnet. Copy resolution order (player-chosen per CR; deterministic here):
+  non-attack-eligible creatures first, then eligible, original last — optimal for
+  goldfish since escalating payloads (Fists draw count, Gold Rush treasures) grow with
+  resolution position. To disclose in 6a.
+- **Payload params** (recomputed per copy — escalation is faithful):
+  `cast_draw` (existing), `power_bonus`/`tough_bonus` (existing),
+  `pump_per_cards_drawn_power` (Fists: after its own draw),
+  `gy_self_power_bonus` (Ancestral Anger), `pump_per_treasure_power/_tough` +
+  `creates_treasures` (Gold Rush), `grants_temp_haste` (Expedite),
+  `counters_on_target` / `cast_lifegain` / `grants_extra_land_drop` (Scale the Heights),
+  `token_copy_of_target` (Twinflame: haste token copy, exiled at beginning of end step),
+  `strive_cost` (Twinflame; K-extra-target variants reuse `soulfire_own_targets` count,
+  extras picked at resolution by printed-power rank — provider-ownable, to disclose).
+- **New state**: `Permanent::temp_haste` (Expedite; read in CanAttackFull/CanTapNow,
+  reset both cleanups), `Permanent::exile_at_end` (Twinflame tokens; swept at both
+  end-step sites), `Player::cards_drawn_this_turn` (Fists; incremented at real draw
+  sites, reset at both untap sites, folded into sim keys — fingerprint rule: ADD a
+  field, never change the hash).
+- **Treasures**: reuse existing "Treasure Token" cards.json def + sac_for_mana
+  machinery (Jared precedent); shared CreateTreasureTokens helper.
+- **Lands**: Gruul Turf = existing karoo params. Kazandu Refuge = enters_tapped +
+  new `etb_lifegain`. Rootbound Crag = new `checkland_subtypes` branch in
+  LandWouldEnterTapped (fastland precedent — pricing + play share the predicate).
+- **Ignoble Hierarch**: mana_dork produces [B,R,G] + Exalted keyword (engine wired).
+- **Second main**: none of these create combat resources — first-main only.
+
+## Stage 2 progress
+
+- [x] Scryfall data fetched for all 14 cards (2026-08-10, this session)
+- [x] Engine machinery (params, state, helpers, both worlds) — built clean; regression
+      SMOKE suite fully green afterwards (40/40 byte-identical) so existing decks are
+      untouched. Keyword enum gained inert Strive/Treasure tags (Suspend precedent).
+- [x] cards.json entries (13 new + Ignoble bracket-note fix; Gold Rush keywords
+      emptied to match the Scryfall snapshot printing)
+- [x] Viewer wiring (2c-ter): trick target rides the existing enchant_target sub-choice
+      (battlefield + hand names resolve in CheckLine); strive count added as a "strive"
+      SubChoice (emitted for K=0 too, renderChooseDialog precedent); human-play plan
+      signature already splits both axes (enchant_target / soulfire_own_targets reuse).
+      audit_viewer_decisions.py: MANIFEST rows (solo_target_trick / strive_cost /
+      copies_solo_targeted_spells -> main_phase) + INERT_PARAMS rows for the payload
+      params.
+- [x] 2d review vs oracle text (during entry writing; deferrals below)
+- [x] 2d-bis: audit_card_costs.py PASS ("All mana costs match Scryfall").
+      audit_card_fields.py: all HARD fields match; snapshot refresh keeps 429-ing on
+      ~50 cards (rate-limit transients, per the skill not failures) — re-verify later.
+- [x] Build clean.
+
+## Perf work (2026-08-11) — the trick-variant enumeration blowup
+
+Symptom: 10-100x slow games (13.6 s/game d3 b200; the first Stage-4 analyzer run was
+OOM-killed at "card scores 1000g d5"). MTG_BRANCH_STATS: per-target trick variant
+groups were the top branching driver (Scale the Heights avg odo 1201, max 18000,
+sum_odo ~3.6M/game). Three fixes, in order:
+
+1. LOSSLESS target equivalence fold (CollectActions): two battlefield targets with
+   identical (name, attack-eligibility, temp bonuses, counters, temp-haste) are
+   interchangeable for every payload — one representative emitted. Invariant-clean
+   (folds only outcome-identical branches).
+2. Strive-K feasibility ceiling: don't emit strive variants whose ManaValue exceeds
+   the board's conceivable mana (+2 margin).
+3. MirrorwingProvider::TrickTargetCandidates — the 5f PERF PRUNE (provider-owned,
+   MTG_UNPRUNED / MTG_UNPRUNE=tricktarget opens it): candidates = all magnets
+   (battlefield + hand), best ready non-magnet attacker, plus (haste/copy payloads
+   only) best sick creature and biggest hand creature. New UnprunedGate::TrickTarget.
+   NEEDS the 5f pruned-vs-unpruned per-game A/B before adoption is final.
+   Also: SelectDecisionProvider gained the mirrorwing signature (BEFORE goblin —
+   Goblin Instigator's etb_self_creates_tokens would otherwise misroute the deck to
+   GoblinsProvider).
+4. SubsetHasMissingTrickTarget rewritten from per-subset zone scans (profiled 3.7%)
+   to a name compare via Action::trick_hand_target stamped at emission.
+
+After: ~10.7 s/game d3 b200 single-thread, d5 b400 ~7.8 s/game; sum_odo ~1M/game and
+the probe game IMPROVED T5->T4 (budget dilution relief). Solve-in-rollout (the mass-
+draw re-solve chains) remains the dominant cost — inherent to the archetype (TH-flood
+class); revisit only if suite budgets demand it.
+
+## Memory investigation (2026-08-11) — analyzer OOM/SEGV chain
+
+Three analyzer runs died (-9 OOM at 33-44 GB; one -11). Root-caused:
+
+- The footprint is NOT a leak: single games are ~10 MB RSS flat; per-DECISION live
+  memory spikes (gdb at 19-27 GB: threads 10-14 frames deep in
+  FSLineWin/FSLineTail -> SimulateToEnd -> SolveWithLookahead chains, each level
+  holding its EnumeratePlansWithLand plan vector + rollout GameState copies). Wide
+  plans x deep recursion x 24 workers stacks past RAM on this deck's flooded
+  mass-draw nodes. MALLOC_ARENA_MAX=2 did not help (live data, not arena retention).
+- The -11 (SEGV) is attributed to a stack-extension page fault under the extreme
+  memory/swap pressure of the co-resident 33 GB run: a 144-game d5 seed sweep + a
+  ~4 CPU-hour direct analyzer run on a quiet machine reproduced NO crash.
+- Mitigations (all result-neutral):
+  * MTG_TT_CAP (existing) — per-table SimulateToEnd memo cap.
+  * MTG_FSL_CAP (NEW, this session; FSLineStoreWin/NoWin) — same contract for the
+    full-depth line cache, whose entries are heavy (whole SearchLines). Default
+    0 = unlimited = byte-identical.
+  * Run the analyzer under `taskset -c 0-7` (8 workers): AffinityCpuCount honors the
+    mask, and peak memory scales with worker count.
+  Working analyzer recipe: MTG_TT_CAP=1000000 MTG_FSL_CAP=5000 taskset -c 0-7.
+- OPEN (flag to user): if this deck joins the regression suite, its cases may need
+  the same caps/affinity in the harness env, or a per-deck peak-memory guard; suite
+  smoke/regression currently run other decks fine but have no memory margin
+  discipline for a deck with this footprint.
+
+## Approved deferrals (user sign-off 2026-08-11, Stage 6 review)
+
+All judged goldfish-inert; none silently dropped:
+
+- Fists of Flame / Ancestral Anger "gains trample": no blockers vs passive opponent —
+  inert. Bracket-noted in entries. **APPROVED** ("okay for goldfish").
+- Mirrorwing "a player casts" (opponent side): opponent never casts — inert collapse to
+  our own casts. Zada "you cast" is exact. **APPROVED.**
+- Mirrorwing/Zada "that the spell could target": no protection/shroud/hexproof effects
+  in this deck's goldfish — all other own creatures always eligible. **APPROVED.**
+- Copy fan-out order (sick → eligible → magnet last): **APPROVED** — user notes the
+  magnet-last part "is not even a choice" (the original spell resolves after the copies
+  per CR 601.2/608 — correct) and the recipient order matches real play. Optional idea
+  (user, unprioritized): a viewer order-choice dialog, off by default.
+- Strive extras ranked by PRINTED power: **CONFIRMED CORRECT** by user — a Twinflame
+  token copies only printed (copiable) values, so current/buffed power would be a
+  misleading rank. Code verified: `ResolveSoloTargetTrick` ranks by `p.card.m_power`
+  (printed), not the permanent's effective power. User also notes strive is near-dead
+  in practice here (a 2-target Twinflame is no longer copied by Zada/Mirrorwing —
+  modeled correctly: `IsSoloTargetTrick` requires the magnet be the ONLY target).
+- Mulligan generation deferred to user kickoff: **APPROVED** ("as intended").
+
+## Stage 6 user review — directives (2026-08-11)
+
+- **Trick-target rule blessed**: "If a magnet is present you always cast on it
+  search-wise. That's a good rule." Nontoken-only enumeration OK for search but must
+  NOT restrict the viewer. Status: the provider prune already does not restrict the
+  viewer (human play sets MTG_UNPRUNED — main.cpp play path — which opens
+  UnprunedGate::TrickTarget); the nontoken restriction DOES bind the viewer (tokens
+  are unnumbered) and is resolved by the token-numbering directive below.
+- **Token numbering — FIX FOR SURE** (lifts one-Treasure-per-plan + lets viewer/search
+  target tokens). Follow-up change on top of the analysis commit, own verification.
+- **Legend-rule corner — keep the COPY when it wins**: user identified the rare case
+  where the deterministic keep-original rule is wrong: Zada summoning-sick, Twinflame
+  makes a hasty Zada token, and attacking with the token is LETHAL this turn — then
+  keep the token (losing Zada at end of turn doesn't matter; the game is over).
+  Follow-up: narrow deterministic rule "on legend collision original-vs-own-temp-token,
+  keep the token iff the original cannot attack this turn AND projected attack with
+  the token is lethal"; both worlds identically.
+- **Discard rule spec (user-supplied)** for the NO_RULE_CONSIDER_SEARCH verdict — keep
+  priorities when discarding: 1 magnet enabler (Mirrorwing/Zada); ≥3-4 creatures total
+  counting Goblin Instigator as 2; enough mana to cast the kept enabler, preferably
+  with ≥2 red; then a few tricks preferring outright-win spells (Gold Rush, Fists of
+  Flame), draw tricks also acceptable. Structure like antilife/hinata provider rules.
+  Follow-up: implement in MirrorwingProvider, A/B vs searched discard per the
+  discard-rule process (adopt only if >= searched).
+
+## Stage 4 — profile
+
+Generated 2026-08-11 (analyzer seed 777, MTG_TT_CAP=1000000 MTG_FSL_CAP=5000; card
+scores 1000g d5 + discard analysis). Written to decks/Mirrorwing Dragon/
+Mirrorwing Dragon.profile.json — card-scores-only baseline, defaults keep,
+NO_GATE threshold, bottoming off. Discard verdict: NO_RULE_CONSIDER_SEARCH (0.13
+mean label regret; no visible-info rule captured it — report-only, searched-width
+escalation is the candidate follow-up). NOTE: profile min_playable = 0 (the skill's
+notes say verify >= 1 for multicolour decks) — flagged to the user, not hand-edited.
+
+## Stage 5 — verification log (2026-08-11)
+
+- 5a nonconv (d3 b200, seeds 2002/3003/4004 x 100g): CLEAN — 0 flags.
+- 5a fd-diverge (MTG_FD_ORACLE d5 b400, same seeds): first pass flagged 4/300 (each
+  realized = predicted+1). ROOT-CAUSED via bp-pay/bounce instrumentation (game 4034
+  gi30): depletion-sack TIMING divergence — the executor sacrifices an emptied
+  Sandstone Needle immediately (SBA after every cast) while the rollout swept only at
+  END of ApplyPlanDirect, so a mid-plan Gruul Turf bounce saw different candidates
+  (rollout: dead-tapped Needle -> bounced it, kept Forest; executor: Needle already
+  gone -> bounced the untapped Forest) and the recorded chain's last cast (Fists)
+  became unpayable (AFFORD_AUDIT: colour-short). Pre-existing divergence — exposed
+  because no other deck combines karoos + depletion lands. FIX: BounceKarooLand now
+  runs SacrificeDepletedLands before its candidate scan (both worlds; no-op for the
+  executor and for every deck without depletion+karoo). Full re-sweep: 0/300 CLEAN,
+  and the four flagged games now REALIZE their predicted wins (4034: T5->T4).
+  Smoke re-run after the fix: 40/40 byte-identical (fix inert elsewhere).
+- 5b multi-depth (300g seed 5005): d0 6.6200, d3 5.2533, d5 5.2467. Monotone;
+  plausible T5 swarm clock; search saturates ~d3 (the Goblins pattern); big d0 gap =
+  greedy can't see magnet fan-out lines (expected; 5i candidate if d0 ever matters).
+- 5c budget: d5 b400 vs b1600, 100 games — ZERO per-game win-turn diffs. No
+  starvation at suite-class budgets.
+- 5h viewer audit: PASS. Expected types {bounce} surfaced; trick targets surface as
+  main_phase plan-variant choose subs (enchant-kind + new "strive" sub); oracle-text
+  advisories are the five tricks' target phrases — all modeled+searched (triaged OK).
+- 5f A/B (pruned vs MTG_UNPRUNE="tricktarget groupcap", d3 b200, seed 5005, 100
+  paired games): DECISIVE for the prune — per-game diff 50 better / 46 equal /
+  0 worse (common-game means 5.1458 vs 5.8438, delta −0.6979), AND 3 unpruned games
+  (gi 18/60/88) did not complete after >3 h CPU (the enumeration is computationally
+  INFEASIBLE unpruned — one completed unpruned game logged SLOW-GAME 814 s). At equal
+  budget the unpruned width pure-DILUTES the search. The prune is therefore both a
+  feasibility requirement and quality-positive; MTG_UNPRUNED keeps the standing A/B.
+
+## Claude-play sweep
+- commit: `<uncommitted tree, 2026-08-11 — the analyze branch state this ledger describes>`
+- seeds: 8200 games: 12  (gi 0-6,8,9,11,12,14; gi 7,10,13,15-17 lost to a session cap
+  mid-fan-out — the skill's known risk; 12-game sample kept, signal already clean)
+- flags: 0 unresolved
+  - Cosmetic (4 agents independently): SacForMana plan-summary said "sac 1 creature"
+    for a Treasure crack (artifact). FIXED in main.cpp SummarizePlan (text-only;
+    smoke re-verified byte-identical after).
+  - Quality note (gi5): human-plan payment tapped a dork/depletion counter where a
+    free source sufficed — mana allocation is a USER-SANCTIONED greedy area
+    ("no greedy steps except attack decisions + mana allocation"); dismissed.
+  - Quality note (gi6, uncertain): all-attack instead of lone-attacker Exalted
+    stacking — attack decisions are the other sanctioned greedy area; dismissed
+    (worth revisiting only if an Exalted-centric deck arrives).
+- Win turns: 9 exact ties with the AI benchmark (T4-T6), 3 Claude-slower (+1 each),
+  0 Claude-faster. Agents verified fan-out math exactly (gi0: 32 dmg = base 5 +
+  escalating drawn-counts 2..7; gi4 Twinflame legend rule; gi12 exact-lethal 11).
+
+## Final verify_deck gate (2026-08-11, logs/mirrorwing_verify2.log)
+
+All checks PASS except one:
+- coverage / card_fields / viewer / viewer_wiring / mismatch (0 nonconv+fd across
+  seeds 7001-7002 x 60g) / play_invariants (8 games, 96 decisions, determinism+
+  integrity+progress hold) / claude_sweep (recorded, 0 unresolved): **PASS**.
+- card_costs: FAIL with "(PENDING) cost audit non-zero (rc=124)" — the audit
+  SUBPROCESS timed out; NOT a mismatch. A standalone re-run got blanket HTTP 429s
+  on every card (Scryfall rate-limiting this IP after the session's snapshot
+  refresh). The audit DID pass cleanly in Stage 2 on this same cards.json
+  ("All mana costs match Scryfall", recorded above) and no cost has changed since.
+  Verdict: network transient; re-run `python3 scripts/audit_card_costs.py` once the
+  rate limit clears if a green line in the gate log is wanted.
+  **RESOLVED 2026-08-11**: standalone re-run (throttle 0.5s) after the limit cleared:
+  "Checked 150 costed cards against Scryfall. All mana costs match Scryfall." — zero
+  429s, zero mismatches (log: logs/cost_audit_retry.log). Gate fully green.
+
+## Stage 6 follow-ups — implemented (2026-08-11, on top of 17c29a3)
+
+1. **Legend-rule keep-copy corner (user directive)**: `MirrorwingProvider::LegendKeepIndex`
+   keeps the hasty exile-at-end Twinflame copy over a summoning-sick original iff simulating
+   the attack WITH the copy is lethal and WITHOUT it is not (RolloutSimulateCombat on scratch
+   copies -- the pending-damage projection over-counts, commit-the-line lesson). Phase-gated to
+   PreCombatMain/Combat; the rollout now maintains GameState::phase at its combat/turn-boundary
+   sites (write-only for every other deck). Smoke 30/30 byte-identical.
+2. **Cleanup-discard rule (user spec)**: MirrorwingProvider bucket policy -- keep 1 magnet
+   (cheapest; Zada+Mirrorwing are one InterchangeableRequiredGroup role), >=4 weighted bodies
+   (Instigator=2), mana to cast the kept enabler preferring 2 red + a green for a held Gold
+   Rush, keep Gold Rush/Fists by omission, shed order Scale->Expedite->Twinflame->Anger.
+   MTG_MW_BUCKET_DISCARD=0 reverts to the generic ranking (A/B lever). Smoke 30/30
+   byte-identical.
+3. **Token numbering (user: "fix for sure")**: `GameState::next_token_number` (base 1000);
+   all five shared token-creation helpers assign unique per-copy ids; trick-target enumeration
+   and the provider prune now include tokens (equivalence fold keeps width); multiple Treasures
+   are distinct sac sources (the one-crack-per-plan collapse is gone). Sim keys don't fold
+   m_number -> TT dedup unaffected.
+   - **Pre-existing defect EXPOSED and fixed**: two sac-outlet activations enumerated against
+     the same board bake the SAME canonical victim; under shared id 0 the second silently
+     aliased onto the next token, and (worse) ApplySacForMana's `victim_id != 0` guard sent a
+     token victim down the "sacrifice the SOURCE" path -- Skirk Prospector killed itself
+     whenever its chosen victim was a token. Fixed with a canonical stale-victim RE-PICK at
+     both applies (fungible victims; shared helpers, lockstep).
+   - Suite impact: goblins-only, score-neutral after the re-pick fix (final full regression:
+     searched slower=0 faster=0 play-changed=27; d0 slower=0 **faster=2** play-changed=8 --
+     net POSITIVE; the play changes are which-token-dies identity churn + the corrected
+     Prospector model). All other decks byte-identical. Viewer protocol 184 refs clean.
+     GT digests for the 5 goblins configs need an accept (score-neutral rebaseline).
+
+## Stage 6 round 2 (2026-08-11): branching enumeration + cap question + magnet preference
+
+- **Magnet preference (user)**: kept-magnet choice in the discard rule is now
+  earliest-cast-turn based (board sources + hand mana, one drop/turn, red pips checked):
+  Mirrorwing when castable the SAME turn as Zada, Zada when strictly earlier or Mirrorwing
+  uncoverable; tie -> bigger body. Commit f9c679c, smoke 30/30 byte-identical.
+- **Branching enumerated (MTG_BRANCH_STATS, heavy game 5041/gi36)**: Twinflame drives ~94%
+  of total odometer (345k of ~368k; single option-groups up to 768 wide) -- the width is the
+  target x strive-count product INSIDE one group, i.e. mostly NOT the group-count axis the
+  EnumGroupCap bounds. Ancestral Anger a distant second (21k).
+- **Strive dominance fold (new, lossless)**: with a magnet on the battlefield every strive
+  K>0 variant is goldfish-dominated by the solo-target fan-out (all creatures copied for
+  base cost vs K+1 chosen for base + K x strive). K>0 now enumerates only on magnetless
+  boards; opened by MTG_UNPRUNED/tricktarget (viewer unaffected -- human play is unpruned).
+  300g d3: avg 5.2433 IDENTICAL to pre-fold, same 5 unwon games; smoke 30/30. A 1-game
+  4->5 flip at b200 was classified budget churn (recovers at 4x; unpruned control is WORSE
+  at b200: 6.0 -- dilution).
+- **Cap-8 vs cap-12 A/B (user question "is lowering the cap the right lever?")**: cap-12
+  (MTG_SOLVE_GROUP_CAP=12) re-inflates the tail at suite budgets -- same-game gi88 154s
+  (cap 8) vs 253s (cap 12), gi60 <30s vs 119s, plus a still-longer tail game; the earlier
+  NO-cap arm had a 1139s game and was killed after 7 CPU-h. Both wider arms confirm the
+  cap's feasibility role. Result-quality comparison recorded when the arm lands.
+- **Escalation question (user)**: verified in code -- there is NO capped-then-expand
+  breadth escalation; the cap is static per provider, MTG_UNPRUNED/MTG_SOLVE_GROUP_CAP are
+  manual levers, and the existing escalation ladder (value-leaf hybrid) escalates
+  depth/budget only. The board-lethal short-circuit protects attack-only wins from the cap,
+  but a CAST-dependent this-turn lethal needing a dropped group is unprotected (the win is
+  found a turn later instead). The cap-site comment overclaims ("never drops a win").
+  PROPOSAL (user to approve): expand-on-no-win rung -- when the capped enumeration finds no
+  winning plan AND groups were dropped AND a cast-dependent lethal is plausible, re-enumerate
+  once with the cap lifted. Bounded (fires only on no-win nodes) but exactly those nodes are
+  the expensive ones -- needs a plausibility gate + measurement before adoption.
+
+## Stage 6 round 3 (2026-08-11): Twinflame/go-off policy (user-authored) + suite add
+
+USER play knowledge encoded (rounds 3-4 of the review):
+- **Go-off cast order** (the search does not branch orderings; opaque sets applied plan-order
+  before this): enabler ladder magnet(5) -> creatures(10) -> Twinflame(12) -> Gold Rush(15) ->
+  draw tricks(20), via MirrorwingProvider::CastEnablerFirst/CastOrderRank + a stable
+  CastOrderRank sort of the ENABLER loop in BOTH worlds' opaque apply paths (equal ranks keep
+  plan order -> byte-identical for every other provider; smoke 30/30 confirmed). Rationale:
+  bodies before the doubler ("as many creatures as possible... then Gold Rush"), the doubler
+  before the pumps, Gold Rush before the DRAW tricks (its Treasures are spendable at the next
+  draw-breakpoint re-solve -- "essentially a ritual"; its own pump counts its own Treasures).
+- **Twinflame targets**: magnet fan-out UNGATED (draw-breakpoint re-solves own "might draw
+  into lethal" -- no heuristic lethal gate, per user); magnetless boards offer a non-magnet
+  target ONLY in the gap-closing corner (pending attack short of lethal by <= total copyable
+  printed power -- "you would only cast it when you are 1 damage short. Pretty rare"); hand
+  magnets kept (same-plan go-off). User accepts dropping marginal lines (Twinflame on
+  Instigator for two 1/1s) as long as measurement stays clean.
+- **Strive counts**: K in {0, max affordable} (StriveCountMaxOnly; a lethal burst, not a dial).
+- MEASURED: branch stats -- Twinflame fell from #1 driver (6.0M sum_odo at suite budget) to
+  below the top 5 (total odometer ~-30%). d3 300g s5005: 5.1633 vs 5.2433 (-0.08); HELD-OUT
+  fresh seed 9009: 5.0967 vs 5.1867 (-0.09) -- validated, no overfit. Suite shapes now
+  d3 b10 ~0.9 s/game, d5 b20 ~1.8 s/game (hinata-class).
+- **SUITE ADD**: mirrorwing in test/regression_cases.sh (smoke/regression hinata-mirror
+  sizing + overnight rows). Smoke + regression run: ALL PASS, 3+5 NEW keys accepted; all
+  other decks byte-identical. Overnight keys will appear NEW on the next overnight run.
+- OPEN (deferred): same-plan Treasure credit for Gold Rush without a draw breakpoint
+  (SequencedRitualCredit-style; today the ritual role flows only through breakpoint
+  re-solves -- adequate because every chain includes draw tricks, but not exact).
+
+## Open items / next steps
+
+- Mulligan profile generation: DEFERRED (user kicks off; policy 2026-07-17).
+- Value-leaf: not generated (user decides post-freeze).
+- ~~card_costs gate line~~: DONE 2026-08-11 — clean pass, 150/150 match (see above).
+- Goblins value sidecar predates the corrected sac model (engine-state fingerprint policy):
+  regeneration is cheap (~3 min) if pooling/regen ever needs it.
+- ~~Expand-on-no-win breadth escalation~~: SUPERSEDED and DONE 2026-08-11 by **group waves**
+  (defer-don't-cap deferred tranches for EnumGroupCap-dropped groups; user-approved in
+  principle, then measured and adopted default-ON). Design + measurements:
+  `docs/design/group-waves.md`. Headline: smoke game 137 (seed 1138) was UNWON under the cap
+  and wins at T8 with waves — the exact "cast-dependent lethal in a dropped group" hazard the
+  escalation question uncovered; every other deck byte-identical, wall cost free (16s vs 17s on
+  the heaviest case), `MTG_GROUP_WAVES=0` restores the old engine byte-identically.
+- Deck-aware SituationalCardRank for Mirrorwing (which groups the cap drops): the "fill in
+  later" seam -- currently inherits the generic ranking.

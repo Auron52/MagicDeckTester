@@ -91,6 +91,16 @@ MANIFEST = {
     # listed here so the self-guard treats them as MAPPED (not unknown choice params).
     "tutor_to_hand":         ("main_phase",           truthy),
     "tutor_to_top":          ("main_phase",           truthy),
+    # Zada/Mirrorwing solo-target trick: WHICH creature the trick targets is a plan-variant
+    # sub-decision (an `enchant`-kind choose sub, one main_phase variant per legal target incl.
+    # same-plan hand creatures; Action::enchant_target reused). Twinflame's strive extra-target
+    # COUNT likewise (a `strive` sub on soulfire_own_targets). Not their own decision types.
+    "solo_target_trick":     ("main_phase",           truthy),
+    "strive_cost":           ("main_phase",           truthy),
+    # Copy magnet (Zada / Mirrorwing Dragon): creates no interactive choice of its own -- the copy
+    # fan-out and its resolution order are deterministic engine rules (disclosed 6a); the CHOICE
+    # (whether the trick targets the magnet) lives on the trick's target sub above.
+    "copies_solo_targeted_spells": ("main_phase",     truthy),
     # Dragonstorm: WHICH Dragons to put onto the battlefield -- a real multi-pick decision (the human
     # picks the subset; the engine keeps the rule's play order). Surfaces as its own `dragon` type
     # (WriteDragonDecisionJson / dragonPanelHtml). Was `main_phase` while the selection was search-only.
@@ -317,6 +327,21 @@ INERT_PARAMS = {
     "loyalty_start": "starting loyalty stat, no choice",
     "modal_damage_per_choice": "modal payload detail (rides modal_choose_n)",
     "modal_draw_per_choice": "modal payload detail (rides modal_choose_n)",
+    # Zada/Mirrorwing trick payload details (the CHOICE -- which creature / strive count -- rides
+    # solo_target_trick / strive_cost, both mapped to main_phase plan variants above):
+    "trick_up_to_one": "trick payload detail (adds the untargeted variant; rides solo_target_trick)",
+    "pump_per_cards_drawn_power": "computed pump (rides solo_target_trick)",
+    "gy_self_power_bonus": "computed pump (rides solo_target_trick)",
+    "pump_per_treasure_power": "computed pump (rides solo_target_trick)",
+    "pump_per_treasure_tough": "computed pump (rides solo_target_trick)",
+    "creates_treasures": "automatic token creation (Treasure; sac-for-mana is a searched plan action)",
+    "grants_temp_haste": "automatic until-EOT grant to the chosen target (rides solo_target_trick)",
+    "counters_on_target": "automatic counter on the chosen target (rides solo_target_trick)",
+    "cast_lifegain": "automatic lifegain",
+    "grants_extra_land_drop": "automatic bonus land drop (the drop itself is the normal land choice)",
+    "token_copy_of_target": "automatic token copy of the chosen target (rides solo_target_trick)",
+    "etb_lifegain": "automatic land ETB lifegain (Kazandu Refuge)",
+    "checkland_subtypes": "static land entry condition (Rootbound Crag), no choice",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click

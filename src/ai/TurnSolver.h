@@ -187,6 +187,12 @@ struct Action
                                        // depends on it: summoning sickness + Kor's per-aura self-buff).
                                        // Threaded to resolution via apply_one (rollout) and cast_by_name ->
                                        // CastSpellFromHand -> StackEntry (executor). 0 = not an aura.
+    std::string trick_hand_target; // Solo-target trick whose target is a SAME-PLAN HAND creature:
+                                       // that creature's card NAME (enchant_target still carries its
+                                       // m_number). Set at emission so the per-subset legality filter
+                                       // (SubsetHasMissingTrickTarget) is a name compare instead of a
+                                       // zone scan (it profiled at 3.7%). Empty = battlefield target
+                                       // (always legal) or not a trick.
     int         ponder_keep      = -1;
                                        // Ponder-style cast_reorder: the SEARCHED keep-vs-shuffle
                                        // call. CollectActions emits TWO variants (1 = keep top N in
@@ -771,3 +777,11 @@ public:
 // unification. Not part of the solver's interface: src/ code outside TurnSolver.cpp must keep
 // paying costs through AIEngine::TapForCost (executor) or plan application (rollout).
 bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
+
+// The rollout's combat simulation (defined in TurnSolver.cpp; the same shared combat core the
+// executor mirrors). External linkage exists ONLY for MirrorwingProvider::LegendKeepIndex, which
+// decides a legend-rule keep by simulating the attack on scratch copies of the state -- the
+// pending-damage projection can over-count vs the simulated combat (commit-the-line note), and
+// over-counting there would discard the original Zada for a phantom lethal. Mutates `state`
+// (damage, taps, pumps): call on a throwaway copy only.
+void RolloutSimulateCombat(GameState& state);

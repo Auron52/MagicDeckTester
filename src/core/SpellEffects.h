@@ -1473,6 +1473,7 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
             {
                 std::size_t before = kp.hand.size();
                 kp.library.DrawN(1, kp.hand);
+                kp.cards_drawn_this_turn += static_cast<int>(kp.hand.size() - before);
                 if (g_play_draw_sink)
                 {
                     for (std::size_t hi = before; hi < kp.hand.size(); ++hi)
@@ -1720,6 +1721,9 @@ namespace HasteTapStats
 inline bool CanTapNow(const Permanent& p, const std::vector<Permanent>& battlefield)
 {
     if (p.CanTap()) { return true; }
+    // "Gains haste until end of turn" (Expedite): haste lifts the summoning-sick {T} restriction
+    // too (CR 302.6), so a hasted fresh mana dork may tap for mana the turn it arrives.
+    if (p.temp_haste) { return true; }
     if (HasHasteFromLords(p.card, battlefield, p.controller_index, p.is_animated))
     {
         // MTG_HASTE_TAP_STATS: how often a summoning-sick permanent is rescued by each haste
@@ -1751,6 +1755,7 @@ inline bool CanAttackFull(
     // which hastes the animated land as it is every creature type) grants it.
     if (!p.entered_this_turn)                   { return true; }
     if (p.card.HasKeyword(Keyword::Haste))      { return true; }
+    if (p.temp_haste)                           { return true; }   // Expedite until-EOT haste
     if (HasHasteFromLords(p.card, battlefield, controller_index, p.is_animated)) { return true; }
     return HasHasteFromEquip(p, battlefield, controller_index);
 }
@@ -1941,6 +1946,7 @@ inline void CreateToken(
     token.card.m_subtypes  = subtypes;
     token.card.m_power     = power;
     token.card.m_toughness = toughness;
+    token.card.m_number    = state.next_token_number++;   // unique per-copy id (GameState.h note)
     token.controller_index = controller_index;
     token.owner_index      = controller_index;
     token.entered_this_turn = true;
@@ -2327,9 +2333,10 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
     {
         // Permanent copies enter the battlefield (Lotus's sac-for-mana and Shivan's
         // firebreathing are param-driven from their cards.json entries; the token-copy is a new
-        // object with a fresh id 0 -- ids only matter for targeting/equip, neither applies).
+        // object with a fresh token id -- see GameState::next_token_number).
         Permanent perm;
         perm.card              = cd->card;
+        perm.card.m_number     = state.next_token_number++;
         perm.controller_index  = controller;
         perm.owner_index       = controller;
         perm.entered_this_turn = true;
@@ -2343,6 +2350,7 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
         std::size_t before = pl.hand.size();
         for (int k = 0; k < braingeyser_x && !pl.library.empty(); ++k)
         { pl.library.DrawN(1, pl.hand); }
+        pl.cards_drawn_this_turn += static_cast<int>(pl.hand.size() - before);
         if (g_play_draw_sink)
         {
             for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
@@ -2442,6 +2450,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
             token.card.AddColor(Color::Green);
         }
         if (green_only) { token.card.AddColor(Color::Green); }
+        token.card.m_number     = state.next_token_number++;   // unique per-copy id (GameState.h note)
         token.controller_index  = controller;
         token.owner_index       = controller;
         token.entered_this_turn = true;
@@ -2505,6 +2514,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
                 {
                     std::size_t before = pl.hand.size();
                     pl.library.DrawN(1, pl.hand);
+                    pl.cards_drawn_this_turn += static_cast<int>(pl.hand.size() - before);
                     if (g_play_draw_sink)
                     {
                         for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
@@ -2800,17 +2810,30 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         state.players[controller].graveyard.push_back(victim);
         state.battlefield.erase(state.battlefield.begin() + hidx);
     }
-    for (int i = 0; !found && i < static_cast<int>(state.battlefield.size()); ++i)
+    // The baked victim id may be STALE: two outlets (or two activations) enumerated against the
+    // same board bake the same canonical victim, and the first apply consumes it -- with tokens
+    // now uniquely numbered the second activation's id scan then misses (under shared id 0 it
+    // silently aliased onto the next token, which is why this never surfaced before numbering).
+    // Victims are fungible, so on a miss RE-PICK canonically against the live board; only a board
+    // with no legal victim at all no-ops. Shared by executor + rollout -> lockstep.
+    for (int attempt = 0; !found && attempt < 2; ++attempt)
     {
-        Permanent& q = state.battlefield[i];
-        if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
-        if (q.card.m_number != victim_id) { continue; }
-        if (!op->sac_creature_requires_subtype.empty()
-            && !CardHasSubtype(q.card, op->sac_creature_requires_subtype)) { continue; }
-        victim = q.card; found = true;
-        state.players[controller].graveyard.push_back(q.card);
-        state.battlefield.erase(state.battlefield.begin() + i);
-        break;
+        for (int i = 0; !found && i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            Permanent& q = state.battlefield[i];
+            if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
+            if (q.card.m_number != victim_id) { continue; }
+            if (!op->sac_creature_requires_subtype.empty()
+                && !CardHasSubtype(q.card, op->sac_creature_requires_subtype)) { continue; }
+            victim = q.card; found = true;
+            state.players[controller].graveyard.push_back(q.card);
+            state.battlefield.erase(state.battlefield.begin() + i);
+            break;
+        }
+        if (found || attempt > 0) { break; }
+        victim_id = CanonicalSacVictim(state, controller, source_id,
+                                       op->sac_creature_requires_subtype);
+        if (victim_id < 0) { break; }
     }
     if (!found) { return; }
     // Payload (copy the scalars before CreateToken invalidates `op` via battlefield realloc).
@@ -3005,6 +3028,7 @@ inline void ApplyAttackDrawTriggers(GameState& state, int controller,
             if (pl.library.empty()) { state.player_lost_on_draw = true; return; }
             std::size_t before = pl.hand.size();
             pl.library.DrawN(1, pl.hand);
+            pl.cards_drawn_this_turn += static_cast<int>(pl.hand.size() - before);
             if (g_play_draw_sink)
             {
                 for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
@@ -3454,12 +3478,21 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         Permanent& p = state.battlefield[i];
         if (p.controller_index != controller) { continue; }
         if (p.card.m_number != sac_source_id) { continue; }
+        // TOKENS are unnumbered (m_number 0), so with sac_source_id == 0 this scan can land on the
+        // WRONG token first (a 1/1 Goblin ahead of the Treasure in battlefield order). The old
+        // `return`s below then silently NO-OPED the whole sacrifice -- state unchanged, the plan
+        // re-offered, and the play-viewer segment loop span forever (Mirrorwing play_invariants
+        // runaway, 2026-08-11; latent for any deck mixing creature tokens with Treasures). Same-id
+        // copies of a sac source are fungible, so on a mismatch KEEP SCANNING (continue) for an
+        // id-matching permanent that IS a valid, untapped source; only a full-scan miss no-ops.
+        // Byte-identical whenever the first id-match was already the valid source (every numbered
+        // Lotus, and every token board with the source first).
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d) { return; }
+        if (!d) { continue; }
         const bool lotus = d->params.sac_for_mana_amount > 0;
         const bool skirk = d->params.sac_creature_outlet && !d->params.sac_outlet_add_mana_color.empty();
-        if (!lotus && !skirk) { return; }
-        if (lotus && p.tapped)  { return; }   // Lotus taps as part of the cost; a tapped one can't
+        if (!lotus && !skirk) { continue; }
+        if (lotus && p.tapped)  { continue; }   // Lotus taps as part of the cost; a tapped one can't
         // Skirk MULTI-SAC BURST: the repeatable "Sacrifice a Goblin: Add {R}" can ramp in one turn.
         // ritual_float carries the TOTAL floated (k * per-sac), so a burst is `amount > per`. Sac k
         // canonical Goblins (token/weakest first, the source LAST -- so a full sac-all sacs Skirk itself
@@ -3513,12 +3546,21 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
             const int bidx = ChooseSacOutletVictimIndex(state, controller, sac_source_id,
                                                         need_sub, victim_id, src_name);
             if (bidx >= 0) { SacrificePermanentAt(state, controller, bidx); return; }
-            for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+            // Stale-victim fallback (see ApplySacCreatureOutlet): an earlier action may have
+            // consumed the baked victim; victims are fungible, so re-pick against the live board
+            // rather than ghosting the float. Lockstep (shared helper, both worlds).
+            for (int attempt = 0; attempt < 2; ++attempt)
             {
-                Permanent& q = state.battlefield[j];
-                if (q.controller_index != controller || q.card.m_number != victim_id) { continue; }
-                SacrificePermanentAt(state, controller, j);   // Pashalik ping / death token etc.
-                return;
+                for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+                {
+                    Permanent& q = state.battlefield[j];
+                    if (q.controller_index != controller || q.card.m_number != victim_id) { continue; }
+                    SacrificePermanentAt(state, controller, j);   // Pashalik ping / death token etc.
+                    return;
+                }
+                if (attempt > 0) { break; }
+                victim_id = CanonicalSacVictim(state, controller, sac_source_id, need_sub);
+                if (victim_id < 0) { break; }
             }
             return;
         }
@@ -3875,6 +3917,266 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     { state.players[state.battlefield[idx].owner_index].graveyard.push_back(state.battlefield[idx].card); }
     for (auto it = doomed.rbegin(); it != doomed.rend(); ++it)   // descending -> indices stay valid
     { state.battlefield.erase(state.battlefield.begin() + *it); }
+}
+
+// ============================================================================
+// Zada / Mirrorwing solo-target trick spells (Mirrorwing Dragon deck)
+// ============================================================================
+// One shared resolver, called IDENTICALLY by the executor (EffectHandler custom non-permanent
+// branch) and the rollout (TurnSolver::apply_one) so the copy fan-out, escalating payloads and
+// token creation stay in lockstep by construction. See CardDatabase.h "Zada / Mirrorwing" block.
+
+inline bool IsSoloTargetTrick(const CardParams& p) { return p.solo_target_trick; }
+
+// A real CR-121 DRAW of n cards for `controller`: counts Player::cards_drawn_this_turn (the Fists
+// of Flame pump reads it), feeds the viewer draw sink, and flags deck-out (CR 104.3c) exactly as
+// ResolveDrawSpell does.
+inline void TrickDraw(GameState& state, int controller, int n)
+{
+    if (n <= 0) { return; }
+    Player& pl = state.players[controller];
+    std::size_t before = pl.hand.size();
+    int drew = pl.library.DrawN(n, pl.hand);
+    pl.cards_drawn_this_turn += drew;
+    if (drew < n) { state.player_lost_on_draw = true; }
+    if (g_play_draw_sink)
+    {
+        for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
+        { g_play_draw_sink->push_back({ state.turn_number, pl.hand[hi].m_name.str() }); }
+    }
+}
+
+// Treasures `controller` controls (subtype "Treasure" -- only ever the "Treasure Token" def).
+inline int CountTreasuresControlled(const GameState& state, int controller)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && CardHasSubtype(p.card, "Treasure")) { ++n; }
+    }
+    return n;
+}
+
+// Create n "Treasure Token" artifact permanents (the existing cards.json token def -- its
+// sac_for_mana_amount:1 makes each a live, searched SacForMana source; the Jared precedent).
+inline void CreateTreasureTokens(GameState& state, int controller, int n)
+{
+    for (int k = 0; k < n; ++k)
+    {
+        Permanent token;
+        token.card.m_name = "Treasure Token";
+        token.card.RehashName();
+        token.card.AddType(CardType::Artifact);
+        token.card.m_subtypes = std::vector<std::string>{ "Treasure" };
+        token.card.m_number     = state.next_token_number++;   // distinct sac source per Treasure
+        token.controller_index  = controller;
+        token.owner_index       = controller;
+        token.entered_this_turn = true;   // artifacts have no summoning sickness; sac works now
+        token.is_token          = true;
+        state.battlefield.push_back(token);
+    }
+}
+
+// Twinflame token: a copy of the creature at battlefield index `src_i`, except it has haste, and
+// it is exiled at the beginning of the next end step (Permanent::exile_at_end, swept at both
+// end-of-turn sites). Copies copy PRINTED characteristics (CR 707.2): the source's base card --
+// not its counters, damage, or until-EOT effects -- which is exactly Permanent::card. m_number is
+// reassigned from the token counter (two live permanents must not share a per-copy id; see
+// GameState::next_token_number). The token enters through the universal enter cascade
+// (OnDragonEnters top fires the creature-enter watchers; OnGoblinEnters fires a copied Goblin
+// Instigator's own ETB token -- faithful, CR 707.4: the copy has the ETB trigger). A LEGENDARY
+// copy (Zada) legend-rules immediately after; MirrorwingProvider::LegendKeepIndex keeps the
+// original unless the hasty copy converts this turn into the win (user rule; disclosed 6a).
+inline void CreateTrickCopyToken(GameState& state, int controller, int src_i)
+{
+    Permanent token;
+    token.card          = state.battlefield[src_i].card;
+    token.card.m_number = state.next_token_number++;
+    token.card.AddKeyword(Keyword::Haste);
+    token.controller_index  = controller;
+    token.owner_index       = controller;
+    token.entered_this_turn = true;
+    token.is_token          = true;
+    token.exile_at_end      = true;
+    state.battlefield.push_back(token);
+    const int idx = static_cast<int>(state.battlefield.size()) - 1;
+    OnDragonEnters(state, controller, idx);
+    OnGoblinEnters(state, controller, idx);
+    if (state.battlefield[idx].card.HasSupertype(Supertype::Legendary))
+    {
+        EnforceLegendRule(state, controller);
+    }
+}
+
+// Apply ONE resolution instance of a trick's payload to the creature at battlefield index `ti`
+// (-1 = the untargeted "up to one target, chose none" instance: only the untargeted payloads
+// resolve). Every dynamic count (cards drawn this turn, Treasures, graveyard copies) is
+// recomputed HERE, per instance, so stacked copies escalate faithfully (draw first, THEN count --
+// oracle order for Fists; create the Treasure, THEN count -- oracle order for Gold Rush).
+inline void ApplyTrickPayload(GameState& state, int controller, const CardDefinition& def, int ti)
+{
+    const CardParams& pp = def.params;
+    Player& pl = state.players[controller];
+
+    // Untargeted riders (resolve for every instance, targeted or not).
+    TrickDraw(state, controller, pp.cast_draw);
+    if (pp.creates_treasures > 0) { CreateTreasureTokens(state, controller, pp.creates_treasures); }
+    if (pp.cast_lifegain > 0)     { pl.life += pp.cast_lifegain; }
+    if (pp.grants_extra_land_drop > 0) { pl.bonus_land_drops_this_turn += pp.grants_extra_land_drop; }
+
+    if (ti < 0 || ti >= static_cast<int>(state.battlefield.size())) { return; }
+    Permanent& tgt = state.battlefield[ti];
+
+    if (pp.counters_on_target > 0)
+    { tgt.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, pp.counters_on_target}); }
+    if (pp.grants_temp_haste) { tgt.temp_haste = true; }
+
+    // P/T pump: flat + graveyard-scaled (Ancestral Anger) + drawn-count (Fists of Flame, AFTER
+    // its own draw above) + Treasure-count (Gold Rush, AFTER its own Treasure above).
+    int pw = pp.power_bonus;
+    int tf = pp.tough_bonus;
+    if (pp.gy_self_power_bonus > 0)
+    {
+        int copies = 0;
+        for (const Card& g : pl.graveyard) { if (g.m_name == def.card.m_name) { ++copies; } }
+        pw += pp.gy_self_power_bonus * (1 + copies);
+    }
+    if (pp.pump_per_cards_drawn_power > 0)
+    { pw += pp.pump_per_cards_drawn_power * pl.cards_drawn_this_turn; }
+    if (pp.pump_per_treasure_power > 0 || pp.pump_per_treasure_tough > 0)
+    {
+        const int tr = CountTreasuresControlled(state, controller);
+        pw += pp.pump_per_treasure_power * tr;
+        tf += pp.pump_per_treasure_tough * tr;
+    }
+    if (pw != 0) { tgt.temp_power_bonus += pw; }
+    if (tf != 0) { tgt.temp_tough_bonus += tf; }
+
+    // Twinflame: a hasted token copy of the recipient, exiled at the beginning of the end step.
+    if (pp.token_copy_of_target) { CreateTrickCopyToken(state, controller, ti); }
+}
+
+// Resolve a solo-target trick cast by `controller`. `target_number` = the chosen creature's
+// card.m_number (0 = the up-to-one untargeted cast); `strive_extras` = Twinflame's searched count
+// of EXTRA targets beyond the first (>0 suppresses the copy magnet -- a strived spell does not
+// "target only" one creature).
+//
+// Copy magnet (Zada / Mirrorwing): when the single target IS a magnet, resolve one copy per OTHER
+// own creature, then the original on the magnet. Copies resolve before the original (CR: they go
+// on the stack above it) and their order is the controller's choice; the deterministic order used
+// -- non-attack-eligible recipients first (ascending battlefield order), then eligible, magnet
+// last -- is goldfish-optimal for escalating payloads (later instances see more draws/Treasures,
+// so the biggest bonuses land on creatures that can actually attack). Disclosed in Stage 6a.
+//
+// Strive (Twinflame, strive_extras > 0): recipients = the target + the strive_extras highest
+// printed-power OTHER own creatures (ties by battlefield order) -- WHICH extras is this
+// deterministic resolution-time rule (disclosed), the COUNT is the searched decision.
+//
+// Returns false when the cast declared a target that is no longer on the battlefield (the spell
+// fizzles, CR 608.2b: no payloads, straight to the graveyard). The enumeration's same-plan subset
+// filter makes this unreachable in normal play; the guard keeps a stale plan safe.
+inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardDefinition& def,
+                                   int target_number, int strive_extras)
+{
+    // Resolve the declared target (by stable per-copy id; deck cards AND tokens are numbered --
+    // see GameState::next_token_number).
+    int ti = -1;
+    if (target_number != 0)
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index == controller && p.card.m_number == target_number
+                && (p.card.IsCreature() || p.is_animated))
+            { ti = i; break; }
+        }
+        // NAME fallback for the same-plan hand-creature target: the variant carried the number of
+        // a specific HAND copy, but apply_one/cast_by_name casts an arbitrary copy of that name --
+        // so match by name. Locate the referenced copy in the caster's zones (it exists somewhere)
+        // to learn the name, then pick the own battlefield creature of that name, preferring an
+        // attack-eligible copy (ties by battlefield order). Deterministic and shared -> lockstep.
+        if (ti < 0)
+        {
+            const Player& pl = state.players[controller];
+            std::string tgt_name;
+            auto scan = [&](const std::vector<Card>& zone)
+            {
+                if (!tgt_name.empty()) { return; }
+                for (const Card& c : zone)
+                { if (c.m_number == target_number) { tgt_name = c.m_name.str(); return; } }
+            };
+            scan(pl.hand); scan(pl.graveyard);
+            if (tgt_name.empty())
+            {
+                for (const Card& c : pl.library)
+                { if (c.m_number == target_number) { tgt_name = c.m_name.str(); break; } }
+            }
+            if (!tgt_name.empty())
+            {
+                int fallback = -1;
+                for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+                {
+                    const Permanent& p = state.battlefield[i];
+                    if (p.controller_index != controller || !p.card.IsCreature()
+                        || p.card.m_name.str() != tgt_name) { continue; }
+                    if (CanAttackFull(p, state.battlefield, controller)) { ti = i; break; }
+                    if (fallback < 0) { fallback = i; }
+                }
+                if (ti < 0) { ti = fallback; }
+            }
+        }
+        if (ti < 0) { return false; }   // declared target gone -> fizzle
+    }
+
+    // Recipient list, in resolution order (see the header comment). Indices stay valid across the
+    // payload applications: token/Treasure creation only push_backs (append), nothing erases
+    // mid-resolution (the legend rule inside CreateTrickCopyToken erases only the just-made
+    // duplicate... which sits BEHIND every recipient index -- it erases the HIGHER index of the
+    // pair only when the token is not kept; when the provider keeps the token instead, recipient
+    // indices after the original could shift, so KeepOldest is relied on and asserted by review).
+    std::vector<int> order;
+    const bool magnet = ti >= 0 && strive_extras <= 0
+        && CardDatabase::Instance().LookupCached(state.battlefield[ti].card)
+        && CardDatabase::Instance().LookupCached(state.battlefield[ti].card)
+               ->params.copies_solo_targeted_spells;
+    if (magnet)
+    {
+        std::vector<int> sick, ready;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (i == ti) { continue; }
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != controller || (!p.card.IsCreature() && !p.is_animated))
+            { continue; }
+            (CanAttackFull(p, state.battlefield, controller) ? ready : sick).push_back(i);
+        }
+        order = std::move(sick);
+        order.insert(order.end(), ready.begin(), ready.end());
+        order.push_back(ti);   // the original resolves last (biggest escalating payload)
+    }
+    else if (ti >= 0 && strive_extras > 0)
+    {
+        // Strive: target + the strive_extras biggest OTHER creatures by printed power.
+        std::vector<std::pair<int, int>> ranked;   // (printed power, index)
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (i == ti) { continue; }
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
+            ranked.push_back({ p.card.m_power.value_or(0), i });
+        }
+        std::stable_sort(ranked.begin(), ranked.end(),
+                         [](const std::pair<int, int>& x, const std::pair<int, int>& y)
+                         { return x.first > y.first; });
+        order.push_back(ti);
+        for (int k = 0; k < strive_extras && k < static_cast<int>(ranked.size()); ++k)
+        { order.push_back(ranked[k].second); }
+    }
+    else if (ti >= 0) { order.push_back(ti); }
+    else              { order.push_back(-1); }   // up-to-one, no target: one untargeted instance
+
+    for (int i : order) { ApplyTrickPayload(state, controller, def, i); }
+    return true;
 }
 
 // PerformEtbDig -- body in SpellEffects.cpp (see the header note above).
@@ -5034,14 +5336,25 @@ inline void BpTraceCast(const char* side, const GameState& state, const std::str
         if (!untapped.empty()) { untapped += ","; }
         untapped += p.card.m_name.str();
     }
+    std::string dorks;   // untapped, TAP-ELIGIBLE mana dorks (sickness/haste-aware)
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->tmpl != CardTemplate::ManaDork) { continue; }
+        if (!CanTapNow(p, state.battlefield)) { continue; }
+        if (!dorks.empty()) { dorks += ","; }
+        dorks += p.card.m_name.str();
+        dorks += "#" + std::to_string(p.card.m_number);
+    }
     std::fprintf(stderr,
                  "[bp-pay] %-5s T%-2d cast=%-24s cost=%d/W%d U%d B%d R%d G%d C%d creature=%d"
-                 " float=W%d U%d B%d R%d G%d C%d wild%d untapped=[%s]\n",
+                 " float=W%d U%d B%d R%d G%d C%d wild%d untapped=[%s] dorks=[%s]\n",
                  side, state.turn_number, name.c_str(),
                  cost.generic, cost.white, cost.blue, cost.black, cost.red,
                  cost.green, cost.colorless, for_creature ? 1 : 0,
                  f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild,
-                 untapped.c_str());
+                 untapped.c_str(), dorks.c_str());
 }
 
 // Hand-context variant for mulligan / bottoming evaluation, where the relevant "other lands" are
@@ -5390,6 +5703,23 @@ inline bool LandWouldEnterTapped(const GameState& state, const CardDefinition& d
         for (const Permanent& p : state.battlefield)
             if (p.controller_index == state.active_player_index && p.card.IsLand()) { ++other_lands; }
         return other_lands > pp.fastland_max_other_lands;
+    }
+    if (!pp.checkland_subtypes.empty())
+    {
+        // Check land (Rootbound Crag): "enters tapped unless you control a Mountain or a Forest" --
+        // untapped iff a controlled LAND carries any of the listed land subtypes. Same shared-
+        // predicate contract as the fastland branch: enumeration pricing and the real drop agree.
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || !p.card.IsLand()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            const SubtypeSet& subs = d ? d->card.m_subtypes : p.card.m_subtypes;
+            for (const std::string& want : pp.checkland_subtypes)
+            {
+                for (const std::string& s : subs) { if (s == want) { return false; } }
+            }
+        }
+        return true;
     }
     return pp.enters_tapped;
 }

@@ -276,6 +276,8 @@ static std::string BoardSignature(const GameState& s)
         e += "/ch" + std::to_string(p.charge_counters) + "," + std::to_string(p.storage_counters);
         if (p.age_counters > 0) { e += "/g" + std::to_string(p.age_counters); }   // cumulative upkeep
         e += "/p" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus);
+        if (p.temp_haste)   { e += "/h"; }    // Expedite until-EOT haste
+        if (p.exile_at_end) { e += "/x"; }    // Twinflame token, exiled at end step
         e += "/d" + std::to_string(p.damage);
         e += "/a" + std::to_string(p.aura_attached_to);
         e += "/o" + std::to_string(p.controller_index);
@@ -1054,6 +1056,37 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
         return 3 * DMG;
     }
 
+    // Zada/Mirrorwing solo-target trick: a rough d0 estimate so the greedy leaf policy deploys
+    // tricks sensibly -- the SEARCH (per-target plan variants + rollout combat) owns the real
+    // valuation. Estimate one resolution instance's damage-equivalents, times the copy fan-out
+    // when a magnet is on our battlefield (the strong line). Draw payloads count ~1 DMG per card
+    // (the DrawSpell convention); pump payloads count the power added to one attack.
+    if (def.params.solo_target_trick)
+    {
+        const CardParams& tp = def.params;
+        int per = tp.cast_draw * DMG;                                // draws (DrawSpell convention)
+        int pump = tp.power_bonus
+                 + tp.gy_self_power_bonus                            // >= 1 + copies; estimate low
+                 + tp.pump_per_cards_drawn_power * 2                 // ~2 draws seen by a mid copy
+                 + tp.pump_per_treasure_power * 2;                   // ~2 Treasures mid-stack
+        per += pump * DMG;
+        if (tp.token_copy_of_target) { per += 2 * DMG; }             // a hasted body for a turn
+        if (tp.creates_treasures > 0) { per += tp.creates_treasures * (DMG / 2); }  // ramp
+        int fanout = 1;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || !p.card.IsCreature())
+            { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.copies_solo_targeted_spells)
+            {
+                fanout = std::max(fanout, CreatureCount(state, state.active_player_index));
+                break;
+            }
+        }
+        return per * fanout;
+    }
+
     // Aether Vial and similar: deploys a creature from hand for free each turn once charged.
     // Score as the best matching creature in hand. Lords boost all existing attackers
     // immediately on deployment (continuous effect, not blocked by summoning sickness);
@@ -1657,6 +1690,38 @@ static bool SubsetHasIllegalSplice(const GameState& state,
         {
             if (ks[j] > N - 1 - static_cast<int>(j)) { return true; }
         }
+    }
+    return false;
+}
+
+// Reject a solo-target trick cast whose declared target (enchant_target = a card.m_number) is
+// neither an own battlefield creature nor a creature this same subset casts from hand -- a
+// targeted spell cannot be cast without its target (CR 601.2c). Same shape as
+// SubsetHasStrandedEquip. The hand case matches by NAME (copies are fungible: apply_one casts an
+// arbitrary copy of the name, so the resolved permanent's m_number may differ from the variant's
+// -- ResolveSoloTargetTrick's name fallback mirrors this). Inert without a targeted trick
+// selected -> byte-identical for every other deck.
+static bool SubsetHasMissingTrickTarget(const GameState& state,
+                                        const std::vector<Action>& cands,
+                                        const std::vector<int>& sel)
+{
+    (void)state;
+    // Battlefield-target tricks are always legal (the target exists at this node); only a trick
+    // whose target is a SAME-PLAN HAND creature (trick_hand_target, stamped at emission) needs the
+    // subset to also cast that creature. A pure name compare -- no zone scans (profiled at 3.7%).
+    for (int j : sel)
+    {
+        if (cands[j].trick_hand_target.empty()
+            || cands[j].kind != Action::Kind::CastFromHand) { continue; }
+        bool found = false;
+        for (int k : sel)
+        {
+            if (k == j || cands[k].kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* kd = cands[k].def;
+            if (kd && kd->card.IsCreature() && cands[k].card_name == cands[j].trick_hand_target)
+            { found = true; break; }
+        }
+        if (!found) { return true; }
     }
     return false;
 }
@@ -3422,6 +3487,188 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             continue;
         }
 
+        // Zada/Mirrorwing solo-target trick: WHICH creature it targets is a SEARCH decision --
+        // one CastFromHand variant per legal target (sharing hand_index -> mutually exclusive),
+        // reusing enchant_target to carry the chosen creature's card.m_number (aura precedent).
+        // Targets offered:
+        //   - every own battlefield creature INCLUDING tokens (tokens carry unique ids from
+        //     GameState::next_token_number, so they ride the m_number axis; the equivalence fold
+        //     below keeps a swarm of identical tokens to one representative);
+        //   - every creature card IN HAND (deduped by name): the same-plan line "cast Zada, then
+        //     the trick at it" -- legal only in subsets that also cast that creature, enforced by
+        //     the SubsetHasMissingTrickTarget filter (SubsetHasIllegalSplice's shape), and ordered
+        //     creature-first by the canonical CastOrderRank tiers (10 < 20);
+        //   - the untargeted variant (enchant_target 0) for "up to one target" spells;
+        //   - Twinflame strive: for each BATTLEFIELD target, one extra variant per extra-target
+        //     count K (cost += K x strive_cost), the count on soulfire_own_targets (reused).
+        if (def.params.solo_target_trick)
+        {
+            const ManaCost base_cost = EffectiveCost(def, state);
+            // hand_name: non-empty iff the target is a SAME-PLAN HAND creature (stamped on the
+            // action for the cheap subset legality filter).
+            auto emit = [&](int tgt_num, int strive_k, const std::string& hand_name = std::string())
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = base_cost;
+                if (strive_k > 0 && def.params.strive_cost.has_value())
+                {
+                    const ManaCost& sc = *def.params.strive_cost;
+                    a.cost.generic += strive_k * sc.generic;
+                    a.cost.white   += strive_k * sc.white;
+                    a.cost.blue    += strive_k * sc.blue;
+                    a.cost.black   += strive_k * sc.black;
+                    a.cost.red     += strive_k * sc.red;
+                    a.cost.green   += strive_k * sc.green;
+                    a.soulfire_own_targets = strive_k;   // reused: strive extra-target count
+                }
+                a.eval           = EvalCard(def, state);
+                a.is_noncreature = true;
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.enchant_target = tgt_num;
+                a.trick_hand_target = hand_name;
+                actions.push_back(std::move(a));
+            };
+            // Battlefield targets (+ strive counts for Twinflame), with a LOSSLESS equivalence
+            // fold: two targets whose (name, attack-eligibility, temp bonuses, counters,
+            // temp-haste) match are interchangeable for EVERY trick payload -- the pump/haste/
+            // counter/token-copy outcome is identical whichever copy is picked -- so only one
+            // representative per equivalence class is emitted (the invariant's "fold branches
+            // genuinely identical in outcome"; a swarm of identical 1/1s was the measured #1
+            // branching driver, avg odometer 1200+/call). Copies differing in ANY outcome-
+            // relevant way (a sick vs ready Zada) stay distinct.
+            int others = 0;   // other own battlefield creatures, for the strive K range
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index == state.active_player_index && p.card.IsCreature())
+                { ++others; }
+            }
+            // Strive-K feasibility ceiling (lossless in practice): a variant whose total cost
+            // exceeds every mana this board could conceivably make (own lands + dorks + treasures
+            // + current float + 2 margin) can never be paid this turn -- emitting it only bloats
+            // the option group. The margin absorbs bonus land drops / same-turn rocks.
+            int mana_ceiling = state.floating_mana.Total() + 2;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (!d) { continue; }
+                if (d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock
+                    || d->params.sac_for_mana_amount > 0)
+                { mana_ceiling += std::max(1, d->params.produces_amount); }
+            }
+            // Strive variants only make sense for a target already on the battlefield.
+            // DOMINANCE FOLD (measured, MTG_BRANCH_STATS 2026-08-11): Twinflame's target x
+            // strive-count product was 94% of this deck's total odometer (single groups up to 768
+            // options). With a MAGNET on the battlefield every K>0 variant is goldfish-dominated:
+            // the solo-target fan-out copies EVERY other creature for the base cost, while strive
+            // K delivers K+1 chosen creatures for base + K x strive -- strictly fewer tokens for
+            // strictly more mana (hedging value vs interaction does not exist vs the passive
+            // opponent). So K>0 is enumerated only on magnetless boards. Opened by
+            // MTG_UNPRUNED/tricktarget alongside the sibling target prune (standing A/B).
+            bool magnet_on_bf = false;
+            if (def.params.strive_cost.has_value()
+                && !DecisionUnpruned(UnprunedGate::TrickTarget))
+            {
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index) { continue; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                    if (d && d->params.copies_solo_targeted_spells) { magnet_on_bf = true; break; }
+                }
+            }
+            // Strive-count breadth policy (provider-owned; MirrorwingProvider: Twinflame is a
+            // lethal burst, so only K=0 and the max affordable K -- intermediate counts are
+            // mana-coupling corners). Opened with the tricktarget family gate.
+            const bool k_max_only = !DecisionUnpruned(UnprunedGate::TrickTarget)
+                && ResolveProvider(state).StriveCountMaxOnly(state, def);
+            auto emit_with_strive = [&](int tgt_num, bool on_battlefield,
+                                        const std::string& hand_name = std::string())
+            {
+                emit(tgt_num, 0, hand_name);
+                if (!on_battlefield || !def.params.strive_cost.has_value()) { return; }
+                if (magnet_on_bf) { return; }   // fan-out dominates every strive count (above)
+                if (k_max_only)
+                {
+                    int kmax = 0;
+                    for (int k = 1; k < others; ++k)
+                    {
+                        const int mv = base_cost.ManaValue()
+                                     + k * def.params.strive_cost->ManaValue();
+                        if (mv > mana_ceiling) { break; }
+                        kmax = k;
+                    }
+                    if (kmax >= 1) { emit(tgt_num, kmax); }
+                    return;
+                }
+                for (int k = 1; k < others; ++k)
+                {
+                    const int mv = base_cost.ManaValue()
+                                 + k * def.params.strive_cost->ManaValue();
+                    if (mv > mana_ceiling) { break; }
+                    emit(tgt_num, k);
+                }
+            };
+            // Provider narrowing (MirrorwingProvider::TrickTargetCandidates -- the 5f perf prune,
+            // opened by MTG_UNPRUNED/tricktarget). Empty = no narrowing (enumerate all legal).
+            std::vector<int> narrow;
+            ResolveProvider(state).TrickTargetCandidates(state, def, narrow);
+            if (!narrow.empty())
+            {
+                for (int num : narrow)
+                {
+                    if (num == 0) { continue; }   // "narrowing active, no candidates" sentinel
+                    bool on_bf = false;
+                    for (const Permanent& p : state.battlefield)
+                    {
+                        if (p.controller_index == state.active_player_index
+                            && p.card.m_number == num) { on_bf = true; break; }
+                    }
+                    std::string hn;
+                    if (!on_bf)
+                    {
+                        for (const Card& hc : ap.hand)
+                        { if (hc.m_number == num) { hn = hc.m_name.str(); break; } }
+                    }
+                    emit_with_strive(num, on_bf, hn);
+                }
+            }
+            else
+            {
+            std::unordered_set<std::string> seen_equiv;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index || !p.card.IsCreature())
+                { continue; }   // tokens carry unique ids now, so they ride the target axis too
+                std::string eq = p.card.m_name.str();
+                eq += CanAttackFull(p, state.battlefield, state.active_player_index) ? "/A" : "/s";
+                eq += "/" + std::to_string(p.temp_power_bonus) + ","
+                          + std::to_string(p.temp_tough_bonus)
+                          + (p.temp_haste ? "h" : "") + "/c" + std::to_string(p.counters.size());
+                if (!seen_equiv.insert(eq).second) { continue; }
+                emit_with_strive(p.card.m_number, true);
+            }
+            // Same-plan hand-creature targets (deduped by name; the subset filter + creature-
+            // before-trick canonical order make these the "cast it, then point the trick at it"
+            // line).
+            {
+                std::unordered_set<std::string> seen_hand;
+                for (const Card& hc : ap.hand)
+                {
+                    if (hc.m_number == 0 || hc.m_is_staged) { continue; }
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (!hd || !hd->card.IsCreature()) { continue; }
+                    if (!seen_hand.insert(hc.m_name.str()).second) { continue; }
+                    emit(hc.m_number, 0, hc.m_name.str());
+                }
+            }
+            }
+            if (def.params.trick_up_to_one) { emit(0, 0); }
+            continue;
+        }
+
         // Count damage that actually reaches the opponent's life total. A player/multi-target burn
         // deals its face damage directly (Searing Blaze: 1, or landfall 3). A creature-only burn
         // deals damage to a permanent -- EXCEPT Searing Blood, whose "when that creature dies" rider
@@ -4457,19 +4704,110 @@ static void CollectMultiVariantSacSources(const std::vector<Action>& cands, std:
     std::sort(out.begin(), out.end());
 }
 
+// ---- Deferred GROUP WAVES (defer-don't-cap for the breadth cap above) --------------------------
+// The cap discards the lowest-ranked groups from THIS enumeration with no record, so a plan needing
+// a dropped group was unreachable AT ANY BUDGET -- a quality prune by the deferred-wave doctrine
+// (BpWaveWalker: "no rank is unreachable at an unbounded budget"). Group waves close that: after a
+// node's candidate loop (and its bp wave phase), while budget remains, the host re-enumerates one
+// TRANCHE at a time. Tranche R (R = cap, cap+1, ...) keeps the groups ranked [0..R] and REQUIRES
+// the rank-R group in every emitted plan: a plan's highest-ranked-used group assigns it to exactly
+// one tranche, so wave 0 + the tranches partition the UNCAPPED plan space exactly -- no dedup, no
+// double-scoring. The rank order is deterministic (same state -> same cands -> same stable_sort),
+// so the partition is stable across the re-enumerations.
+//   MTG_GROUP_WAVES=0 -- off, byte-identical to the capped-only engine (the A/B hatch).
+//   MTG_GROUP_WAVES=1 -- DEFAULT: tranches run while the node's budget allows; unlimited => the
+//                        node's answer equals the uncapped enumeration's (exhaustive).
+// The state below is thread_local plumbing between a HOST phase and the EnumeratePlans calls it
+// makes: the host scopes tranche_rank strictly around its own enumeration call, so every nested
+// enumeration during SCORING (rollouts, FSLineTail recursion) runs in normal mode.
+namespace groupwave
+{
+    struct State
+    {
+        int    tranche_rank   = -1;     // >= 0: tranche mode, require the group ranked HERE
+        double bound_limit    = 0.0;    // tranche mode: max plan-space bound (<= 0 = unlimited)
+        bool   bound_exceeded = false;  // OUT: a tranche was skipped for its enumeration bound
+        bool   call_active    = false;  // OUT (per EnumeratePlans call): rank-R group exists here
+        int    max_dropped    = 0;      // OUT (normal mode): max groups dropped by the cap since
+                                        // the host reset it (max over the per-land inner calls)
+    };
+    inline thread_local State g_state;
+    inline thread_local std::vector<char> g_required;   // cand-index flags of the rank-R group
+
+    inline bool Enabled()
+    {
+        static const bool v = EnvOn("MTG_GROUP_WAVES", true);
+        return v;
+    }
+    // Does a plan selection touch the tranche's required group? (eval_and_push filter)
+    inline bool SelTouchesRequired(const std::vector<int>& sel)
+    {
+        for (int j : sel)
+        {
+            if (j >= 0 && j < static_cast<int>(g_required.size()) && g_required[j]) { return true; }
+        }
+        return false;
+    }
+
+    // MTG_GROUP_WAVE_PROBE=1: did group waves run, how many tranches/plans, did one ever WIN?
+    struct Probe
+    {
+        std::atomic<uint64_t> nodes{0};        // nodes that ran a group-wave phase
+        std::atomic<uint64_t> tranches{0};     // tranche enumerations performed
+        std::atomic<uint64_t> enumerated{0};   // plans those enumerations produced
+        std::atomic<uint64_t> scored{0};       // tranche plans actually scored
+        std::atomic<uint64_t> improved{0};     // ... that beat the node's incumbent
+        std::atomic<uint64_t> stopped{0};      // phases cut short by the budget
+        std::atomic<uint64_t> bound_skips{0};  // tranches skipped for their enumeration bound
+        ~Probe()
+        {
+            if (!EnvOn("MTG_GROUP_WAVE_PROBE")) { return; }
+            std::fprintf(stderr,
+                         "[group-waves] nodes=%llu tranches=%llu enumerated=%llu scored=%llu"
+                         " improved=%llu budget-stopped=%llu bound-skips=%llu\n",
+                         static_cast<unsigned long long>(nodes.load()),
+                         static_cast<unsigned long long>(tranches.load()),
+                         static_cast<unsigned long long>(enumerated.load()),
+                         static_cast<unsigned long long>(scored.load()),
+                         static_cast<unsigned long long>(improved.load()),
+                         static_cast<unsigned long long>(stopped.load()),
+                         static_cast<unsigned long long>(bound_skips.load()));
+        }
+    };
+    inline Probe g_probe;
+    inline bool ProbeOn()
+    {
+        static const bool on = EnvOn("MTG_GROUP_WAVE_PROBE");
+        return on;
+    }
+}
+
+// The engine-side cap override, shared by the cap itself and the wave hosts (which need the
+// effective BASE cap to know where tranches start). Cached: this runs per enumeration -- an
+// uncached getenv here was ~1.2% of rollout time / 212M calls in a Hinata gen profile. -1 = unset.
+static int GroupCapOverride()
+{
+    static const int s = []{ const char* e = std::getenv("MTG_SOLVE_GROUP_CAP");
+        if (!e) { return -1; } int x = std::atoi(e); return x < 1 ? 1 : x; }();
+    return s;
+}
+static int EffectiveGroupCap(const GameState& state)
+{
+    const int o = GroupCapOverride();
+    return o >= 0 ? o : ResolveProvider(state).EnumGroupCap();
+}
+
 static void CapGroupsBySituationalRank(const GameState& state, const std::vector<Action>& cands,
                                        std::vector<std::vector<int>>& groups,
-                                       std::vector<int>& group_hand_index)
+                                       std::vector<int>& group_hand_index,
+                                       int num_independent)
 {
+    groupwave::g_state.call_active = false;   // set true below iff this call has a rank-R group
     if (GroupCapDisabled() || DecisionUnpruned(UnprunedGate::GroupCap)) { return; }
-    // The provider supplies the breadth policy; the env knob is an engine-side A/B override.
-    // Cache the env read once (this runs per enumeration -- an uncached getenv here was ~1.2% of
-    // rollout time / 212M calls in a Hinata gen profile). -1 = unset. Byte-identical to the read.
-    static const int s_group_cap_override = []{ const char* e = std::getenv("MTG_SOLVE_GROUP_CAP");
-        if (!e) { return -1; } int x = std::atoi(e); return x < 1 ? 1 : x; }();
-    int cap = ResolveProvider(state).EnumGroupCap();
-    if (s_group_cap_override >= 0) { cap = s_group_cap_override; }
-    if (static_cast<int>(groups.size()) <= cap)    { return; }
+    const int cap = EffectiveGroupCap(state);
+    const int R   = groupwave::g_state.tranche_rank;   // -1 = normal (capped) mode
+    if (R < 0 && static_cast<int>(groups.size()) <= cap) { return; }
+    if (R >= 0 && static_cast<int>(groups.size()) <= R)  { return; }   // tranche absent here -> emit nothing
 
     const DecisionProvider& prov = ResolveProvider(state);
     std::vector<std::pair<int, int>> ranked;   // (situational rank, original group index)
@@ -4488,8 +4826,42 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
     }
     std::stable_sort(ranked.begin(), ranked.end(),
         [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first > b.first; });
+
+    // How many ranked groups this call keeps: the cap (normal) or the tranche's R+1.
+    const int keep_n = (R < 0) ? cap : (R + 1);
+    if (R >= 0)
+    {
+        // Enumeration-bound gate for a BUDGETED wave host: the tranche's odometer walk is paid
+        // BEFORE any per-plan budget check can fire, so a tranche whose plan-space bound already
+        // exceeds what the remaining budget could even score is skipped outright (the host counts
+        // a truncation). Unlimited hosts pass bound_limit <= 0 and always proceed.
+        if (groupwave::g_state.bound_limit > 0.0)
+        {
+            double bound = std::ldexp(1.0, std::min(num_independent, 60));
+            for (int i = 0; i < keep_n; ++i)
+            { bound *= 1.0 + static_cast<double>(groups[ranked[i].second].size()); }
+            if (bound > groupwave::g_state.bound_limit)
+            {
+                groupwave::g_state.bound_exceeded = true;
+                return;   // call_active stays false -> the enumeration emits nothing
+            }
+        }
+        // Flag the required (rank-R) group's candidate indices for the eval_and_push filter.
+        groupwave::g_required.assign(cands.size(), 0);
+        for (int idx : groups[ranked[R].second]) { groupwave::g_required[idx] = 1; }
+        groupwave::g_state.call_active = true;
+    }
+    else if (groupwave::Enabled())
+    {
+        // Record the drop so a wave host knows tranches exist for this node. Max over the
+        // enumeration's inner (per-land) calls; the host resets before enumerating and captures
+        // immediately after, so nested scoring-time enumerations never leak into the capture.
+        const int dropped = static_cast<int>(groups.size()) - cap;
+        if (dropped > groupwave::g_state.max_dropped) { groupwave::g_state.max_dropped = dropped; }
+    }
+
     std::vector<char> keep(groups.size(), 0);
-    for (int i = 0; i < cap; ++i) { keep[ranked[i].second] = 1; }
+    for (int i = 0; i < keep_n; ++i) { keep[ranked[i].second] = 1; }
     std::vector<std::vector<int>> kept_groups;
     std::vector<int>              kept_hand_index;
     for (int g = 0; g < static_cast<int>(groups.size()); ++g)
@@ -5218,6 +5590,81 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     std::uint64_t acc = 1;
     for (int g = 0; g < num_groups; ++g) { stride[g] = acc; acc *= static_cast<std::uint64_t>(groups[g].size()) + 1; }
 
+    // ---- Degenerate-width guard (Mirrorwing swarm, 2026-08-11) --------------------------------
+    // The two-stage split MATERIALIZES each side's lines (mdig/pdig flat digit stores, then the
+    // surviving pair list). On a mass-draw swarm node the payoff side's line count approaches the
+    // full group product -- measured as a single 4 GiB vector<int> (79 cands, 12 groups, wide
+    // per-target trick groups), which 8-24 concurrent workers stack into an OOM. Past a per-side
+    // line bound, fall back to the ORIGINAL FLAT WALK: byte-identical output (the split is a pure
+    // CPU optimization whose final sort restores exact flat order; predicates and the pay gate are
+    // the same tests), O(1) memory, merely slower per position -- and only on nodes the split
+    // would blow up anyway. MTG_ODO_FLAT_FALLBACK tunes the bound (lines; 0 disables the guard).
+    {
+        static const std::uint64_t kLineBound = []{
+            const char* e = std::getenv("MTG_ODO_FLAT_FALLBACK");
+            return e ? std::strtoull(e, nullptr, 10) : 1'000'000ULL;
+        }();
+        auto side_lines = [&](const std::vector<int>& sg, const std::vector<int>& si) -> std::uint64_t
+        {
+            std::uint64_t n = 1;
+            for (int g : sg)
+            {
+                n *= static_cast<std::uint64_t>(groups[g].size()) + 1;
+                if (n > (1ull << 40)) { return n; }   // saturate, avoid overflow
+            }
+            for (std::size_t b = 0; b < si.size() && n <= (1ull << 40); ++b) { n <<= 1; }
+            return n;
+        };
+        if (kLineBound != 0
+            && (side_lines(mg, mi) > kLineBound || side_lines(pg, pi) > kLineBound))
+        {
+            // FLAT walk: mixed-radix over ALL groups (digit 0 fastest -- the same carry order the
+            // split's sort reproduces), independent bits ascending inside each position; the group
+            // predicates read only mana-side digits by construction, so running them on the full
+            // choice vector is the identical test.
+            std::vector<int> choice(num_groups, 0);
+            bool done = false;
+            while (!done)
+            {
+                const bool rejected =
+                       (any_splice && SpliceGroupChoiceRejected(sidx, groups, choice, splice_collapse_on))
+                    || (accel_pred_on && NonPrefixAccelViolated(accel_order, choice));
+                if (!rejected)
+                {
+                    Agg ga;
+                    for (int g = 0; g < num_groups; ++g)
+                    { if (choice[g] > 0) { fold(ga, groups[g][choice[g] - 1]); } }
+                    for (unsigned imask = 0; imask < (1u << num_ind); ++imask)
+                    {
+                        if (has_ind_accel
+                            && IndependentAccelPrefixViolated(cands, independent,
+                                                              static_cast<int>(imask)))
+                        { continue; }
+                        Agg t = ga;
+                        for (int b = 0; b < num_ind; ++b)
+                        { if (imask & (1u << b)) { fold(t, independent[b]); } }
+                        if (!payable(t, Agg{})) { continue; }
+                        sel.clear();
+                        for (int g = 0; g < num_groups; ++g)
+                        { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
+                        for (int b = 0; b < num_ind; ++b)
+                        { if (imask & (1u << b)) { sel.push_back(independent[b]); } }
+                        if (!sel.empty() && extra_ok(sel)) { emit(sel); }
+                    }
+                }
+                int t = 0;
+                for (; t < num_groups; ++t)
+                {
+                    ++choice[t];
+                    if (choice[t] <= static_cast<int>(groups[t].size())) { break; }
+                    choice[t] = 0;
+                }
+                if (t == num_groups) { done = true; }
+            }
+            return;
+        }
+    }
+
     struct Line { Agg agg; std::uint64_t pos = 0; unsigned imask = 0; int digits = 0; };
     std::vector<Line> mlines, plines;
     std::vector<int>  mdig, pdig;      // flat digit storage, |side groups| ints per line
@@ -5832,6 +6279,9 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Reject physically-impossible Desperate Ritual over-splice (a spliced copy must still be in
         // hand). Inert without a splice base selected -> byte-identical.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
+        // Reject a targeted trick whose target is neither on the battlefield nor cast by this
+        // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
+        if (SubsetHasMissingTrickTarget(state, cands, sel)) { return; }
         int mask = 0;
         for (int j : sel) { mask |= (1 << j); }
 
@@ -6392,8 +6842,11 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 
     // Breadth cap on a bloated combo-dig hand (the lethal combo line is already returned by the
     // short-circuit above, so a non-lethal turn -- the only kind that reaches here -- never drops a
-    // win). Shared with EnumeratePlans; see CapGroupsBySituationalRank.
-    CapGroupsBySituationalRank(state, cands, groups, group_hand_index);
+    // win). Shared with EnumeratePlans; see CapGroupsBySituationalRank. Solve is the greedy
+    // rollout leaf -- it has no budgeted candidate loop, so no group-wave phase runs here (the
+    // deferred tranches belong to the SEARCH hosts; see groupwave above).
+    CapGroupsBySituationalRank(state, cands, groups, group_hand_index,
+                               static_cast<int>(independent.size()));
 
     // Feasible-aware early ritual-drop: when no payoff is reachable this turn, remove the ritual groups
     // before the odometer enumerates their powerset (byte-identical; see DropRitualGroupsIfNoPayoff).
@@ -7329,6 +7782,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // the enumeration cost and the executor's CastSpellFromHand -> lockstep).
         ec.generic = std::max(0, ec.generic
                        - SoulfireOwnTargetDiscount(def, state, state.active_player_index, own_targets));
+    // Twinflame Strive: each searched EXTRA target (own_targets, reused) costs +strive_cost.
+        // Mirrors the enumeration's a.cost surcharge and the executor's CastSpellFromHand -> lockstep. Inert without strive_cost.
+        if (def.params.strive_cost.has_value() && own_targets > 0)
+        {
+            const ManaCost& sc = *def.params.strive_cost;
+            ec.generic += own_targets * sc.generic;
+            ec.white   += own_targets * sc.white;
+            ec.blue    += own_targets * sc.blue;
+            ec.black   += own_targets * sc.black;
+            ec.red     += own_targets * sc.red;
+            ec.green   += own_targets * sc.green;
+        }
+
         // {X} spells: pay the chosen X, once per {X} pip (Crackle {X}{X}{X} -> 3X generic).
         if (def.card.m_mana_cost.has_x && chosen_x > 0)
         {
@@ -7758,6 +8224,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 std::size_t before = ap.hand.size();
                 ap.library.DrawN(def.params.cast_draw, ap.hand);
+                ap.cards_drawn_this_turn += static_cast<int>(ap.hand.size() - before);
                 // Human-play accurate draw reporting (nulled by RevealLogPause during search).
                 if (g_play_draw_sink)
                 {
@@ -7887,6 +8354,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 std::size_t before = ap.hand.size();
                 ap.library.DrawN(n, ap.hand);
+                ap.cards_drawn_this_turn += static_cast<int>(ap.hand.size() - before);
                 // Human-play accurate draw reporting (nulled by RevealLogPause during search).
                 if (g_play_draw_sink)
                 {
@@ -8100,6 +8568,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             std::size_t before = ap.hand.size();
             for (int k = 0; k < draws && !ap.library.empty(); ++k)
             { ap.library.DrawN(1, ap.hand); }
+            ap.cards_drawn_this_turn += static_cast<int>(ap.hand.size() - before);
             if (g_play_draw_sink)
             {
                 for (std::size_t hi = before; hi < ap.hand.size(); ++hi)
@@ -8209,6 +8678,41 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         else if (def.params.destroy_all_enchantments)
         {
             DestroyAllEnchantments(state);
+        }
+        else if (IsSoloTargetTrick(def.params))
+        {
+            // Zada/Mirrorwing solo-target trick (Expedite / Fists / Ancestral Anger / Gold Rush /
+            // Scale the Heights / Twinflame): the SHARED resolver -- copy fan-out, escalating
+            // payloads, strive extras -- in lockstep with EffectHandler's executor branch.
+            // enchant_target = the searched creature target (0 = up-to-one untargeted);
+            // own_targets is reused as Twinflame's searched strive-extras count.
+            ResolveSoloTargetTrick(state, state.active_player_index, def, enchant_target,
+                                   own_targets);
+            // Draw breakpoint (plain-cantrip class): a magnet fan-out mass-draws, so newly revealed
+            // cards must be castable with the mana still available this turn. Same shape as the
+            // plain-cantrip DrawSpell branch: defer at the MAIN-plan level (site 3, resolved after
+            // every main cast -- matching the executor's post-loop replay), re-solve inline when
+            // already inside a re-solve. Human play stops so the chooser re-fires post-draw.
+            if (def.params.cast_draw > 0 && !s_human_play)
+            {
+                if (s_defer_cantrip && sink_stack.empty())
+                {
+                    deferred_cantrip_resolve = true;
+                }
+                else
+                {
+                    if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
+                    TurnSolver::Plan extra;
+                    if (!bp_searched_plan(0, extra))
+                    {
+                        play_breakpoint_land(my_bp_sink);
+                        extra = TurnSolver::Solve(state, is_pre_combat);
+                    }
+                    bp_play_searched_land(extra, my_bp_sink);
+                    apply_plan_actions(extra.actions, extra.searched_order);
+                    if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
+                }
+            }
         }
         else if (def.tmpl == CardTemplate::PumpSpell)
         {
@@ -8375,8 +8879,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             };
             if (opaque)
             {
-                for (const Action& a : acts)
-                { if (is_enabler(a)) { prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); fire_unlock(); } }
+                // Enablers apply in CastOrderRank order (stable; equal ranks keep plan order ->
+                // byte-identical for every provider that does not rank its enablers apart).
+                // Mirrorwing needs magnet(5) -> Twinflame(8): the fan-out target must exist
+                // before the token doubler, and the doubler before the pump tricks (user,
+                // Stage-6 round 3: "cast it first so there are more critters").
+                std::vector<int> ena;
+                for (int i = 0; i < static_cast<int>(acts.size()); ++i)
+                { if (is_enabler(acts[i])) { ena.push_back(i); } }
+                std::stable_sort(ena.begin(), ena.end(), [&](int x, int y)
+                {
+                    const CardDefinition* dx = CardDatabase::Instance().Lookup(acts[x].card_name);
+                    const CardDefinition* dy = CardDatabase::Instance().Lookup(acts[y].card_name);
+                    if (!dx || !dy) { return false; }
+                    return ResolveProvider(state).CastOrderRank(state, *dx)
+                         < ResolveProvider(state).CastOrderRank(state, *dy);
+                });
+                for (int i : ena)
+                { const Action& a = acts[i]; prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); fire_unlock(); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -8551,6 +9071,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!ap.library.empty())
             {
                 Card drawn = ap.library.DrawTop();
+                ap.cards_drawn_this_turn += 1;   // cycle/sac dig = a real draw
                 // Human-play accurate draw reporting (nulled by RevealLogPause during search).
                 if (g_play_draw_sink) { g_play_draw_sink->push_back({ state.turn_number, drawn.m_name.str() }); }
                 ap.hand.push_back(std::move(drawn));
@@ -8756,6 +9277,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // if the library is empty (can't draw from an empty library).
             if (ap.library.empty()) { break; }
             Card drawn = ap.library.DrawTop();
+            ap.cards_drawn_this_turn += 1;   // cycle/sac dig = a real draw
             const CardDefinition* ddef = CardDatabase::Instance().LookupCached(drawn);
             bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
             ap.hand.push_back(std::move(drawn));
@@ -8902,7 +9424,21 @@ static void SimulateCombat(GameState& state)
     // Damage, attack triggers, Utvara tokens and the Goblin Lackey cheat are shared with the
     // executor (ResolveCombatDamage, Combat.cpp). The rollout wants no play-viewer descriptions.
     ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/false);
+
+    // Combat is over for this simulated turn: everything until SimulateEndAndStartNextTurn is the
+    // post-combat main. The rollout historically never maintained GameState::phase (the executor
+    // sets it in GameEngine; no shared-resolution code read it), which left rollout states stuck on
+    // the phase inherited from the top-level solve. MirrorwingProvider::LegendKeepIndex now reads
+    // it (keep-the-copy is only sane while combat is still ahead), so keep it faithful here and at
+    // the turn boundary. Write-only for every other deck -> byte-identical.
+    state.phase = Phase::PostCombatMain;
 }
+
+// Provider-visible combat simulation (MirrorwingProvider::LegendKeepIndex): decide a legend-rule
+// keep by SIMULATING the attack both ways instead of trusting the pending-damage projection --
+// the projection can over-count vs ApplyPlanDirect+SimulateCombat (see the commit-the-line note),
+// and over-counting here would throw away the original Zada for a phantom lethal.
+void RolloutSimulateCombat(GameState& state) { SimulateCombat(state); }
 
 
 // End-of-turn cleanup + start of next turn (untap, draw).
@@ -8910,6 +9446,19 @@ static void SimulateCombat(GameState& state)
 static bool SimulateEndAndStartNextTurn(GameState& state)
 {
     Player& ap = state.ActivePlayer();
+
+    // "Exile those tokens at the beginning of the next end step" (Twinflame token copies,
+    // Permanent::exile_at_end): swept FIRST, before the cleanup discard below, mirroring
+    // GameEngine::EndStep (the end step precedes cleanup, CR 512/514). No-op for every deck
+    // that never sets the flag.
+    for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+    {
+        if (state.battlefield[i].exile_at_end)
+        {
+            state.exile.push_back(state.battlefield[i].card);
+            state.battlefield.erase(state.battlefield.begin() + i);
+        }
+    }
 
     // Check for "no maximum hand size" permanent (e.g. Reliquary Tower) — if present,
     // skip the discard-to-7 step so the lookahead correctly models turns after RT is played.
@@ -9017,6 +9566,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         p.pending_death_trigger = 0;   // delayed Searing Blood trigger expires with the damage marks
         p.temp_power_bonus      = 0;
         p.temp_tough_bonus      = 0;
+        p.temp_haste            = false;   // Expedite until-EOT haste expires (lockstep w/ CleanupStep)
         p.is_animated           = false;
     }
 
@@ -9039,6 +9589,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_cheat_choice   = -1;            // searched Lackey put is per-turn (lockstep w/ GameEngine::UntapStep)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
+    ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
 
     // Untap and advance Aether Vial counters (upkeep trigger).
     for (Permanent& p : state.battlefield)
@@ -9192,6 +9743,10 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Draw
     if (ap.library.empty()) { return false; }
     ap.hand.push_back(ap.library.DrawTop());
+    ap.cards_drawn_this_turn += 1;   // the draw step is a real CR-121 draw (lockstep w/ DrawStep)
+    // Next simulated turn opens on its pre-combat main (partner of the PostCombatMain write at the
+    // end of SimulateCombat; see the note there). Write-only for every other deck.
+    state.phase = Phase::PreCombatMain;
     return true;
 }
 
@@ -9942,8 +10497,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
     // Breadth cap on a bloated combo-dig hand (shared with Solve). This enumerator feeds both the
     // multi-turn search and the per-turn leaf rollout (SolveWithLookahead), so capping it is what
-    // attacks the rollout-bound no-win games. See CapGroupsBySituationalRank.
-    CapGroupsBySituationalRank(state, cands, groups, group_hand_index);
+    // attacks the rollout-bound no-win games. See CapGroupsBySituationalRank. In tranche mode
+    // (a group-wave host re-enumerating; groupwave::g_state.tranche_rank >= 0) the cap instead
+    // keeps ranks [0..R] and flags the rank-R group as REQUIRED; a call with no rank-R group
+    // contributes nothing (its plan space was fully covered by wave 0 / earlier tranches).
+    CapGroupsBySituationalRank(state, cands, groups, group_hand_index,
+                               static_cast<int>(independent.size()));
+    if (groupwave::g_state.tranche_rank >= 0 && !groupwave::g_state.call_active)
+    { return {}; }   // no plans exist yet -- the odometer + Plan-B below are the only producers
 
     // Feasible-aware early ritual-drop: when no payoff is reachable this turn, remove the ritual groups
     // before the odometer enumerates their powerset (byte-identical; see DropRitualGroupsIfNoPayoff).
@@ -9961,6 +10522,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // feasible, append the resulting plan. Mirrors the former per-mask body.
     auto eval_and_push = [&](const std::vector<int>& sel)
     {
+        // Group-wave tranche filter FIRST (cheapest reject): a selection not touching the
+        // tranche's required (rank-R) group was already emitted by wave 0 or an earlier tranche
+        // -- the highest-ranked-used group assigns every plan to exactly one tranche, which is
+        // what makes the partition exact (no dedup needed). Inert in normal mode.
+        if (groupwave::g_state.tranche_rank >= 0 && !groupwave::SelTouchesRequired(sel)) { return; }
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
@@ -9986,6 +10552,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice. Inert without a splice base.
         if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
+        // Reject a targeted trick whose target is neither on the battlefield nor cast by this
+        // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
+        if (SubsetHasMissingTrickTarget(state, cands, sel)) { return; }
         // Reject a sequenced restricted aura (injected above) with no in-subset enabler on its target.
         // No-op unless AppendSequencedAuraCandidates injected such a candidate (aura decks) -> byte-identical
         // otherwise. Gated by SeqAuraOrderingEnabled() (default on; MTG_LEGACY_NO_SEQ_AURA = viewer-only).
@@ -10598,7 +11167,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
     struct TriggerCand { int idx; ManaCost cost; int damage; int eval; };
     std::vector<TriggerCand> triggers;
-    for (int i = 0; i < m; ++i)
+    // Group-wave tranche mode: skip Plan B entirely. It builds plans straight from `cands`
+    // without consulting `groups`, so the cap never dropped any of its plans -- wave 0 emitted
+    // them all, and re-emitting here would double-score them.
+    const bool s_groupwave_tranche = (groupwave::g_state.tranche_rank >= 0);
+    for (int i = 0; !s_groupwave_tranche && i < m; ++i)
     {
         const Action& c = cands[i];
         // A spectacle-enabling trigger is any burn that reaches the opponent's face this turn --
@@ -10617,7 +11190,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             return a.cost.ManaValue() < b.cost.ManaValue();
         });
 
-    for (int i = 0; i < m; ++i)
+    for (int i = 0; !s_groupwave_tranche && i < m; ++i)
     {
         const Action& draw = cands[i];
         if (!draw.is_draw || !draw.has_spectacle) { continue; }
@@ -11112,6 +11685,9 @@ static int PlanOpensBreakpoint(const TurnSolver::Plan& p)
             mask |= (d->params.stages_cards || d->params.expressive_iteration) ? (1 << 0) : (1 << 3);
         }
         if (d->params.impulse_exile > 0) { mask |= 1 << 2; }
+        // Zada/Mirrorwing trick with a draw payload: defers to the plain-cantrip site (3) at the
+        // main level (nested casts re-solve inline at site 0, like a nested cantrip).
+        if (d->params.solo_target_trick && d->params.cast_draw > 0) { mask |= 1 << 3; }
     }
     return mask;
 }
@@ -11271,6 +11847,19 @@ static bool BpWavesHere(const SearchBudget* budget)
     if (budget == nullptr || budget->Unlimited()) { return true; }
     // Skipping the phase for lack of budget leaves ranks unexplored -- a truncation, so any
     // enclosing no-win stops being a refutation (see g_fs_trunc_events).
+    if (budget->Exhausted()) { ++g_fs_trunc_events; return false; }
+    return true;
+}
+
+// May this node run a GROUP-WAVE phase (deferred tranches for EnumGroupCap-dropped groups; see
+// groupwave above)? Same budget contract as BpWavesHere. Callers only ask when the node's own
+// enumeration actually dropped groups, so an exhausted-budget skip here IS a truncation.
+static bool GroupWavesHere(const SearchBudget* budget)
+{
+    if (!groupwave::Enabled()) { return false; }
+    // Cap open (env or unpruned audit) => nothing was dropped in the first place.
+    if (GroupCapDisabled() || DecisionUnpruned(UnprunedGate::GroupCap)) { return false; }
+    if (budget == nullptr || budget->Unlimited()) { return true; }
     if (budget->Exhausted()) { ++g_fs_trunc_events; return false; }
     return true;
 }
@@ -11778,14 +12367,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         GameState copy = state;
         if (!land_name.empty() && !PlayLandByName(copy, land_name, fetch_target, true, land_face)) { return; }
 
-        // "Play this land, cast nothing" baseline (neutral value 0).
-        TurnSolver::Plan idle;
-        idle.value        = 0;
-        idle.land_decided = true;
-        idle.land_to_play = land_name;
-        idle.fetch_target = fetch_target;
-        idle.land_face    = land_face;
-        all.push_back(std::move(idle));
+        // "Play this land, cast nothing" baseline (neutral value 0). Skipped in a group-wave
+        // TRANCHE re-enumeration: the idle plan touches no group, so wave 0 already emitted it.
+        if (groupwave::g_state.tranche_rank < 0)
+        {
+            TurnSolver::Plan idle;
+            idle.value        = 0;
+            idle.land_decided = true;
+            idle.land_to_play = land_name;
+            idle.fetch_target = fetch_target;
+            idle.land_face    = land_face;
+            all.push_back(std::move(idle));
+        }
 
         std::vector<TurnSolver::Plan> plans = EnumeratePlans(copy, is_pre_combat);
         for (TurnSolver::Plan& p : plans)
@@ -12483,6 +13076,22 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         Fold(k, static_cast<uint64_t>(p.life));
         Fold(k, static_cast<uint64_t>(p.lands_played_this_turn));
         Fold(k, static_cast<uint64_t>(p.bonus_land_drops_this_turn));
+        // Fists of Flame drawn-count: future-determining for a SAME-TURN cast that reads it (the
+        // counter resets each untap, so only this turn's casts can). Gated on the player's HAND
+        // actually holding a pump_per_cards_drawn_power card AND the count being nonzero -- every
+        // deck without such a card keeps the EXACT prior key (byte-identical), and the fold cost
+        // is one cached-lookup hand scan only for the deck that needs it.
+        if (p.cards_drawn_this_turn > 0)
+        {
+            bool reads_drawn = false;
+            for (const Card& hc : p.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd && hd->params.pump_per_cards_drawn_power > 0) { reads_drawn = true; break; }
+            }
+            if (reads_drawn)
+            { Fold(k, 0xD7A3); Fold(k, static_cast<uint64_t>(p.cards_drawn_this_turn)); }
+        }
         Fold(k, static_cast<uint64_t>(p.library.size()));
         if (!p.library.empty()) { Fold(k, p.library.front().m_name_hash); }
         // Full ordered library when shuffle can reorder it (see above). Skipped when OFF.
@@ -12575,6 +13184,11 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         { Fold(tk, 0xA6E0); Fold(tk, static_cast<uint64_t>(perm.age_counters)); }
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_power_bonus)));
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_tough_bonus)));
+        // Until-EOT haste (Expedite) / exile-at-end (Twinflame token): future-determining (attack
+        // eligibility; the token vanishes at end step). Folded ONLY when set, so every deck that
+        // never sets them keeps the EXACT prior key (byte-identical).
+        if (perm.temp_haste)   { Fold(tk, 0x7A57E); }
+        if (perm.exile_at_end) { Fold(tk, 0xE71E); }
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.damage)));
         for (const Counter& ctr : perm.counters)
         {
@@ -12907,13 +13521,31 @@ inline bool FSNoWinCacheOn()
 // Store a WIN: final and cutoff-independent, so it supersedes any bounded no-win a looser earlier
 // query left behind. With the no-win cache off no such entry can exist, so only the emplace branch
 // is ever reached == the old `lc->emplace(key, line)` exactly.
+// Result-NEUTRAL insert cap for the per-decision line cache (MTG_FSL_CAP, entries; 0/unset =
+// unlimited = byte-identical). Same contract as TranspositionTable's MTG_TT_CAP: the cache is a
+// pure memo (a refused insert just recomputes), but its entries are HEAVY (a full SearchLine of
+// per-phase plans), and a mass-draw deck's single decision was measured at ~28 GB of line cache
+// (Mirrorwing analyzer, 2026-08-11) -- 24 concurrent workers stack such peaks into an OOM.
+// Existing entries still update (win supersede / bound widen), so only NEW inserts stop.
+inline std::size_t FslCap()
+{
+    static const std::size_t cap = []{
+        const char* e = std::getenv("MTG_FSL_CAP");
+        return e ? static_cast<std::size_t>(std::strtoull(e, nullptr, 10)) : std::size_t{0};
+    }();
+    return cap;
+}
+
 inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
                            const TurnSolver::SearchLine& line)
 {
     if (lc == nullptr) { return; }
     FSLineCache::iterator it = lc->find(key);
     if (it == lc->end())
-    { lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max() }); }
+    {
+        if (FslCap() && lc->size() >= FslCap()) { return; }   // memo full: recompute instead
+        lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max() });
+    }
     else if (it->second.nowin_bound != std::numeric_limits<int>::max())
     { it->second = FSLineEntry{ line, std::numeric_limits<int>::max() }; }
 }
@@ -12925,7 +13557,11 @@ inline void FSLineStoreNoWin(FSLineCache* lc, const TranspositionTable::Key& key
 {
     if (lc == nullptr) { return; }
     FSLineCache::iterator it = lc->find(key);
-    if (it == lc->end())                                        { lc->emplace(key, FSLineEntry{ line, bound }); }
+    if (it == lc->end())
+    {
+        if (FslCap() && lc->size() >= FslCap()) { return; }   // memo full: recompute instead
+        lc->emplace(key, FSLineEntry{ line, bound });
+    }
     else if (it->second.nowin_bound != std::numeric_limits<int>::max()
              && it->second.nowin_bound < bound)                 { it->second.nowin_bound = bound; }
 }
@@ -13215,8 +13851,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     const bool bp_root = (g_fsline_nest == 0);
     FsLineNestGuard _fs_nest;
     g_bp_root_enum = bp_root;
+    groupwave::g_state.max_dropped = 0;   // reset; capture right after (nested scoring-time
+                                          // enumerations would otherwise leak into it)
     std::vector<TurnSolver::Plan> pre = EnumeratePlansWithLand(state, true);
     g_bp_root_enum = false;
+    // Groups the breadth cap dropped from THIS node's enumeration (max over the per-land inner
+    // calls) -- the group-wave phase below walks one tranche per dropped group.
+    const int gw_dropped = groupwave::g_state.max_dropped;
     MoveOrderPlans(pre);   // lethal-looking / higher-value plans first -> earlier B&B cutoff
 
     // VALUE-RANKED BEAM: reorder `pre` by the PROBE's recorded value-win-turns for this node, so the beam-cap
@@ -13452,6 +14093,143 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         return best;
                     }
                 }
+            }
+        }
+    }
+
+    // ---- DEFERRED GROUP WAVES (see groupwave / CapGroupsBySituationalRank) -----------------------
+    // Wave 0's enumeration kept only the top-`cap` groups by situational rank; each tranche below
+    // re-enumerates with one more ranked group admitted AND REQUIRED, so the tranches exactly cover
+    // the plans the cap dropped (no overlap with wave 0 or each other). After the bp wave phase so
+    // an already-consumed budget stops us first; node_vals was stored above and is never extended
+    // (the probe's position-keyed ranks keep mapping to the same plans). Skipped at beam-cut nodes:
+    // the escalation beam declined breadth at this node on purpose, and it never applies at the
+    // root, so the committed play is not affected by the skip.
+    if (gw_dropped > 0 && !beam_here && GroupWavesHere(budget))
+    {
+        if (groupwave::ProbeOn()) { groupwave::g_probe.nodes.fetch_add(1); }
+        const int cap_base = EffectiveGroupCap(state);
+        bool gw_stop = false;
+        for (int R = cap_base; !gw_stop && R < cap_base + gw_dropped; ++R)
+        {
+            if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+            { ++g_fs_trunc_events;
+              if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); } break; }
+            // Enumerate tranche R. bound_limit: a budgeted node cannot even SCORE more plans than
+            // its remaining budget, so a tranche whose enumeration bound exceeds it is skipped
+            // before the odometer pays for it (counted as a truncation).
+            groupwave::g_state.tranche_rank   = R;
+            groupwave::g_state.bound_limit    = (budget != nullptr && !budget->Unlimited())
+                                              ? static_cast<double>(budget->Remaining()) : 0.0;
+            groupwave::g_state.bound_exceeded = false;
+            g_bp_root_enum = bp_root;
+            std::vector<TurnSolver::Plan> tp = EnumeratePlansWithLand(state, true);
+            g_bp_root_enum = false;
+            groupwave::g_state.tranche_rank = -1;
+            if (groupwave::g_state.bound_exceeded)
+            { ++g_fs_trunc_events;
+              if (groupwave::ProbeOn()) { groupwave::g_probe.bound_skips.fetch_add(1); } break; }
+            if (groupwave::ProbeOn())
+            {
+                groupwave::g_probe.tranches.fetch_add(1);
+                groupwave::g_probe.enumerated.fetch_add(tp.size());
+            }
+            if (tp.empty()) { continue; }
+            MoveOrderPlans(tp);   // same static order as wave 0's plans
+
+            // Score one tranche plan/variant: the bp wave body's contract (strictly-better only;
+            // this-turn win returns immediately). Returns false when the budget stopped the phase.
+            auto score_tranche_plan = [&](const TurnSolver::Plan& v, std::vector<Action>& bp_out,
+                                          bool& won_now) -> bool
+            {
+                won_now = false;
+                if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                { ++g_fs_trunc_events;
+                  if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); }
+                  return false; }
+                if (budget) { budget->Consume(1); }   // one interior node (plan applied)
+                if (s_rollout_stats)
+                {
+                    g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
+                    if (g_force_heuristic_leaf) { g_interior_nodes_esc.fetch_add(1, std::memory_order_relaxed); }
+                }
+                if (groupwave::ProbeOn()) { groupwave::g_probe.scored.fetch_add(1); }
+                GameState s = state;
+                bp_out.clear();
+                g_bp_cands_last = 0;
+                g_bp_seen_last  = 0;
+                ApplyPlanDirect(s, v, true, &bp_out);
+                // Post-apply state dedup against everything scored at this node: a tranche plan
+                // whose extra cast strands (a silent no-op) collapses onto an already-scored state
+                // and cannot improve on it. Insert-always is safe -- tranche plans are disjoint
+                // from wave 0 BY PLAN, so a hit is a genuine same-state collapse, not a re-visit.
+                if (!bp_seen_states.insert(BuildSimKey(s, 0, 0, false)).second) { return true; }
+                if (s.ActivePlayer().life <= 0) { return true; }   // self-kill guard, as above
+                AnimateLandsShared(s, nullptr);
+                ActivateTapTokensShared(s, nullptr);
+                SimulateCombat(s);
+                if (s.Opponent().life <= 0)       // wins THIS turn -> the earliest possible from here
+                {
+                    if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }
+                    won_now = true;
+                    return true;
+                }
+                TurnSolver::SearchLine tail =
+                    FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main,
+                               tt, lc, budget);
+                if (tail.win_turn < best.win_turn)
+                {
+                    if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }
+                    best.win_turn = tail.win_turn;
+                    best.phases.clear();
+                    TurnSolver::Plan p_rec = v;
+                    p_rec.breakpoint_actions = bp_out;
+                    best.phases.push_back({ true, std::move(p_rec) });
+                    best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());
+                }
+                return true;
+            };
+
+            std::vector<Action> gw_bp;
+            bool                gw_won = false;
+            for (const TurnSolver::Plan& v : tp)
+            {
+                if (!score_tranche_plan(v, gw_bp, gw_won)) { gw_stop = true; break; }
+                if (gw_won)
+                {
+                    TurnSolver::Plan p_rec = v;
+                    p_rec.breakpoint_actions = std::move(gw_bp);
+                    TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
+                    FSLineStoreWin(lc, key, win);
+                    return win;
+                }
+            }
+            if (gw_stop) { break; }
+
+            // Deferred bp ranks OF THE TRANCHE PLANS: wave 0's rank ceiling applies to these new
+            // base plans too, so walk their ranks >= W exactly as the bp wave phase above did for
+            // `pre` -- otherwise a tranche plan's deep continuation stays unreachable at an
+            // unlimited budget, re-breaking the wave doctrine for the plans this phase adds.
+            if (BpWavesHere(budget))
+            {
+                BpWaveWalker gw_walker(state, tp, tp.size());
+                TurnSolver::Plan v;
+                while (gw_walker.Next(tp, v))
+                {
+                    if (!score_tranche_plan(v, gw_bp, gw_won)) { gw_stop = true; break; }
+                    // Report AFTER the apply inside score_tranche_plan set g_bp_cands_last /
+                    // g_bp_seen_last (a dedup/self-kill early-out leaves them from this apply).
+                    gw_walker.Report(tp, g_bp_cands_last, g_bp_seen_last);
+                    if (gw_won)
+                    {
+                        TurnSolver::Plan p_rec = v;
+                        p_rec.breakpoint_actions = std::move(gw_bp);
+                        TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
+                        FSLineStoreWin(lc, key, win);
+                        return win;
+                    }
+                }
+                if (gw_stop) { break; }
             }
         }
     }
@@ -15260,8 +16038,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // see g_bp_root_enum. The rollouts below re-enter this function with the flag clear, so their
     // leaf evaluation keeps the cheap greedy continuation.
     g_bp_root_enum = enforce_budget;
+    groupwave::g_state.max_dropped = 0;   // reset; capture right after (see the FSLineWin twin)
     std::vector<Plan> candidates = EnumeratePlansWithLand(state, is_pre_combat);
     g_bp_root_enum = false;
+    const int gw_dropped = groupwave::g_state.max_dropped;
 
     // Candidates are sorted highest-value first, so the first winning plan
     // (if any) is also the highest-value winning plan.
@@ -15309,6 +16089,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     //      AND still expensive to finish. Roll-back is free: each candidate runs on
     //      a GameState copy, so a pass only touches pass-local state.
     Plan best_plan = candidates.front();
+
+    // Group-wave tranche plan lists, built lazily by the first pass that runs the phase and
+    // rescored by every later pass at ITS sub_depth -- exactly as `candidates` is rescored.
+    // The enumeration is deterministic per node, so building once is byte-identical to
+    // re-enumerating per pass and skips the repeated odometer walks.
+    std::vector<std::vector<Plan>> gw_tranches;
+    bool gw_built = false, gw_build_truncated = false;
 
     const bool   gate         = enforce_budget && budget != nullptr;
     long long    c_prev       = 0;       // cost of pass k-1 (work units)
@@ -15548,6 +16335,121 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     pass_best_win = win_turn;
                     pass_best     = v;
                     pass_has_best = true;
+                }
+            }
+        }
+
+        // ---- DEFERRED GROUP WAVES (see groupwave / the FSLineWin twin phase) ---------------------
+        // The breadth cap dropped groups from this node's enumeration; walk one tranche per dropped
+        // group (tranche R admits AND requires the group ranked R, so the tranches exactly cover the
+        // dropped plan space). Same contract as the bp wave phase above: strictly-better win turn
+        // only, budget-checked per plan, and an aborted pass skips the phase wholesale.
+        if (!pass_aborted && gw_dropped > 0 && GroupWavesHere(budget))
+        {
+            if (!gw_built)
+            {
+                gw_built = true;
+                if (groupwave::ProbeOn()) { groupwave::g_probe.nodes.fetch_add(1); }
+                const int cap_base = EffectiveGroupCap(state);
+                for (int R = cap_base; R < cap_base + gw_dropped; ++R)
+                {
+                    groupwave::g_state.tranche_rank   = R;
+                    groupwave::g_state.bound_limit    = (budget != nullptr && !budget->Unlimited())
+                                                      ? static_cast<double>(budget->Remaining()) : 0.0;
+                    groupwave::g_state.bound_exceeded = false;
+                    g_bp_root_enum = enforce_budget;
+                    std::vector<Plan> tp = EnumeratePlansWithLand(state, is_pre_combat);
+                    g_bp_root_enum = false;
+                    groupwave::g_state.tranche_rank = -1;
+                    if (groupwave::g_state.bound_exceeded)
+                    {
+                        gw_build_truncated = true;
+                        if (groupwave::ProbeOn()) { groupwave::g_probe.bound_skips.fetch_add(1); }
+                        break;
+                    }
+                    if (groupwave::ProbeOn())
+                    {
+                        groupwave::g_probe.tranches.fetch_add(1);
+                        groupwave::g_probe.enumerated.fetch_add(tp.size());
+                    }
+                    if (!tp.empty()) { gw_tranches.push_back(std::move(tp)); }
+                }
+            }
+            if (gw_build_truncated) { ++g_fs_trunc_events; }
+
+            // Score one tranche plan/variant at this pass's sub_depth (the bp wave body's contract).
+            // Returns false when the budget stopped the phase; won_out set => caller returns v.
+            bool gw_stop = false;
+            auto score_gw = [&](const Plan& v, bool& won_out) -> bool
+            {
+                won_out = false;
+                if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                { ++g_fs_trunc_events;
+                  if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); }
+                  return false; }
+                if (budget) { budget->Consume(1); }
+                if (groupwave::ProbeOn()) { groupwave::g_probe.scored.fetch_add(1); }
+                PROF_INC(gamestate_copies);
+                GameState copy = state;
+                g_bp_cands_last = 0;
+                g_bp_seen_last  = 0;
+                if (is_pre_combat)
+                {
+                    ApplyPlanDirect(copy, v, true);
+                    // Post-apply dedup vs everything scored this pass (tranche plans are disjoint
+                    // from wave 0 BY PLAN, so a hit is a genuine same-state collapse).
+                    if (!bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second) { return true; }
+                    AnimateLandsShared(copy, nullptr);
+                    ActivateTapTokensShared(copy, nullptr);
+                    SimulateCombat(copy);
+                    if (copy.Opponent().life <= 0) { won_out = true; return true; }
+                    if (second_main)
+                    {
+                        Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
+                                                            second_main, tt);
+                        ApplyPlanDirect(copy, post, false);
+                        if (copy.Opponent().life <= 0) { won_out = true; return true; }
+                    }
+                }
+                else
+                {
+                    ApplyPlanDirect(copy, v, false);
+                    if (copy.Opponent().life <= 0) { won_out = true; return true; }
+                    if (!bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second) { return true; }
+                }
+                if (!SimulateEndAndStartNextTurn(copy)) { return true; }
+                const int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
+                                                   pass_best_win, second_main, tt);
+                // STRICTLY better only -- same reasoning as the bp wave phase above.
+                if (pass_has_best && win_turn >= pass_best_win) { return true; }
+                if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }
+                pass_best_win = win_turn;
+                pass_best     = v;
+                pass_has_best = true;
+                return true;
+            };
+
+            for (const std::vector<Plan>& tp : gw_tranches)
+            {
+                bool won = false;
+                for (const Plan& v : tp)
+                {
+                    if (!score_gw(v, won)) { gw_stop = true; break; }
+                    if (won) { report(state.turn_number, depth - 1); return v; }
+                }
+                if (gw_stop) { break; }
+                // Deferred bp ranks OF the tranche plans (see the FSLineWin twin's reasoning).
+                if (BpWavesHere(budget))
+                {
+                    BpWaveWalker gw_walker(state, tp, tp.size());
+                    Plan v;
+                    while (gw_walker.Next(tp, v))
+                    {
+                        if (!score_gw(v, won)) { gw_stop = true; break; }
+                        gw_walker.Report(tp, g_bp_cands_last, g_bp_seen_last);
+                        if (won) { report(state.turn_number, depth - 1); return v; }
+                    }
+                    if (gw_stop) { break; }
                 }
             }
         }
@@ -15944,6 +16846,16 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     addSub(a.card_name + " +" + std::to_string(a.soulfire_own_targets) + " own",
                            a.card_name + " own targets", "+" + std::to_string(a.soulfire_own_targets),
                            a.card_name, "soulfire");
+                }
+                // Twinflame STRIVE extra-target COUNT (soulfire_own_targets reused): each extra
+                // costs +strive_cost and copies one more creature. Emit for EVERY count >= 0
+                // (the Soulfire/Crackle/splice precedent: a count-0 variant must still carry a sub
+                // or renderChooseDialog drops to the flat fallback picker).
+                if (adef && adef->params.strive_cost.has_value())
+                {
+                    addSub(a.card_name + " strive+" + std::to_string(a.soulfire_own_targets),
+                           a.card_name + " strive", "+" + std::to_string(a.soulfire_own_targets),
+                           a.card_name, "strive");
                 }
                 // Crackle with Power extra-target COUNT: the declared number of targets BEYOND the
                 // opponent face (each is {1} off via Hinata and takes 5X). Emit for every count >= 0

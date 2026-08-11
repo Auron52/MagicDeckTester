@@ -63,6 +63,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"payoffprune",UnprunedGate::PayoffPrune},
     {"splicecollapse",UnprunedGate::SpliceCollapse},
     {"saclandhold",UnprunedGate::SacLandHold},
+    {"tricktarget",UnprunedGate::TrickTarget},
 };
 
 const char* GateName(UnprunedGate g)
@@ -6236,6 +6237,7 @@ namespace
     const GoblinsProvider        g_goblins;
     const CreatureGivingProvider g_creature_giving;
     const FiveColourProvider     g_fivecolour;
+    const MirrorwingProvider     g_mirrorwing;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -6248,7 +6250,7 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
-    bool goblin = false, gift = false, fivec = false;
+    bool goblin = false, gift = false, fivec = false, mirrorwing = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -6270,6 +6272,14 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
         {
             goblin = true;
         }
+
+        // Mirrorwing/Zada spell-copy swarm: the copy magnet IS the archetype signature (no other
+        // deck carries copies_solo_targeted_spells). Detected BEFORE the goblin check for the same
+        // reason Goblins is detected before anti: this deck's Goblin Instigator carries
+        // etb_self_creates_tokens, which would otherwise set `goblin` and misroute the whole deck
+        // to GoblinsProvider. Routes to GenericProvider (no archetype hooks yet) -- the trick
+        // TARGET is a searched plan variant, not a provider decision, so Generic is exactly right.
+        if (p.copies_solo_targeted_spells) { mirrorwing = true; }
 
         // Dragonstorm (Storm ritual-storm): the tutor-to-battlefield put IS the archetype signature
         // (a {8}{R} that puts a wave of Dragons in). Owns the put-order / selection heuristic.
@@ -6326,6 +6336,9 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
 
     if (dragonstorm) { return g_dragonstorm; }
     if (hinata) { return g_hinata; }
+    // Mirrorwing/Zada swarm: MirrorwingProvider (Generic + the trick-target 5f prune); must WIN
+    // OVER goblin (its Goblin Instigator sets that signature -- see the detection note above).
+    if (mirrorwing) { return g_mirrorwing; }
     // Goblins ride GoblinsProvider. This return WINS OVER anti (Goblin Matron's tutor_to_hand would
     // otherwise set anti and misroute the deck to AntiLifegainProvider) and over th/vial/burn/generic.
     // It sits below dragonstorm/hinata only for tidiness -- a Goblins deck carries none of those
@@ -6346,6 +6359,371 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     if (vial) { return g_vial; }
     if (burn) { return g_burn; }
     return g_generic;
+}
+
+// ---- MirrorwingProvider::TrickTargetCandidates ------------------------------
+//
+// PERFORMANCE prune (5f), grounded in what the payloads can actually do. A solo-target trick's
+// enumerated target group multiplies the plan odometer; measured on seed 45 gi3 (d3, board 7-10)
+// the per-target groups drove sum_odo ~3M/game (Scale the Heights avg 979, max 18000) -- ~13 s a
+// game where the suite budgets ~1. The lines a target choice can distinguish:
+//   * target a COPY MAGNET (Zada / Mirrorwing) -> the whole-board fan-out. Dominates any single
+//     non-magnet target for every symmetric payload (the fan-out delivers that same payload to
+//     the same creature AND every other, for the same mana).
+//   * target the best READY attacker -> the "no magnet / pump the attacker" line.
+//   * haste/copy payloads (Expedite, Twinflame) additionally care about a SICK body (haste it /
+//     copy it into a hasted token) -- keep the best sick creature, and the best HAND creature
+//     (the cast-it-then-trick-it line).
+// Everything else (pumping a lesser dork, hasting an already-ready creature, copying a token) is
+// weakly dominated by one of the kept candidates. MTG_UNPRUNED / MTG_UNPRUNE=tricktarget opens
+// the full set for the definitive with/without A/B (5f).
+void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDefinition& def,
+                                               std::vector<int>& out) const
+{
+    if (DecisionUnpruned(UnprunedGate::TrickTarget)) { return; }   // empty = enumerate all
+    const int me = s.active_player_index;
+    const bool wants_sick = def.params.grants_temp_haste || def.params.token_copy_of_target;
+
+    int best_ready = 0, best_ready_pw = -1;   // best attack-eligible non-magnet (m_number, power)
+    int best_sick  = 0, best_sick_pw  = -1;   // best non-eligible creature
+    std::unordered_set<std::string> seen_magnet;   // (name, eligibility) equivalence -- a 2nd
+                                                   // identical Mirrorwing is the same choice
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || !p.card.IsCreature()) { continue; }   // tokens included
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.copies_solo_targeted_spells)
+        {
+            std::string eq = p.card.m_name.str()
+                           + (CanAttackFull(p, s.battlefield, me) ? "/A" : "/s");
+            if (seen_magnet.insert(eq).second) { out.push_back(p.card.m_number); }
+            continue;
+        }
+        const int pw = p.EffectivePower();
+        if (CanAttackFull(p, s.battlefield, me))
+        { if (pw > best_ready_pw) { best_ready_pw = pw; best_ready = p.card.m_number; } }
+        else
+        { if (pw > best_sick_pw)  { best_sick_pw  = pw; best_sick  = p.card.m_number; } }
+    }
+    // Twinflame (token_copy_of_target) target policy (user, Stage-6 round 3): the go-off is the
+    // MAGNET fan-out -- ungated (the draw-breakpoint re-solves own "might draw into lethal", so
+    // the search tries it whenever a magnet target exists; no heuristic lethal gate). Without a
+    // magnet anywhere the copies are small, so a non-magnet target is offered ONLY in the rare
+    // gap-closing corner ("you would only cast it when you are 1 damage short"): the pending
+    // attack falls short of lethal by no more than every copyable printed power (optimistic sum
+    // -- the safe direction; the search still decides). Otherwise Twinflame waits in hand.
+    if (def.params.token_copy_of_target)
+    {
+        const bool magnet_bf = !out.empty();   // battlefield magnets pushed above
+        bool magnet_hand = false;
+        for (const Card& hc : s.players[me].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+            if (hd && hd->params.copies_solo_targeted_spells) { magnet_hand = true; break; }
+        }
+        if (!magnet_bf && !magnet_hand)
+        {
+            int pending = 0, copy_sum = 0, best_pw = -1, best_num = 0;
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != me || !p.card.IsCreature()) { continue; }
+                if (CanAttackFull(p, s.battlefield, me)) { pending += p.EffectivePower(); }
+                const int ppw = p.card.m_power.value_or(0);
+                copy_sum += ppw;
+                if (ppw > best_pw && p.card.m_number != 0) { best_pw = ppw; best_num = p.card.m_number; }
+            }
+            const int opp_life = s.players[1 - me].life;
+            if (pending < opp_life && pending + copy_sum >= opp_life && best_num != 0)
+            { out.push_back(best_num); }
+        }
+        // Same-plan hand-magnet targets ("cast Zada, then Twinflame at it" -- the go-off's
+        // other entry point), deduped by name; the generic hand loop below is skipped.
+        std::unordered_set<std::string> seen_hand_magnet;
+        for (const Card& hc : s.players[me].hand)
+        {
+            if (hc.m_number == 0 || hc.m_is_staged) { continue; }
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+            if (!hd || !hd->params.copies_solo_targeted_spells) { continue; }
+            if (seen_hand_magnet.insert(hc.m_name.str()).second) { out.push_back(hc.m_number); }
+        }
+        if (out.empty()) { out.push_back(0); }   // narrowing active, no candidates
+        return;
+    }
+    if (best_ready != 0)               { out.push_back(best_ready); }
+    if (wants_sick && best_sick != 0)  { out.push_back(best_sick); }
+
+    // Hand candidates (the same-plan "cast it, then point the trick at it" line): every hand
+    // MAGNET (deduped by name), plus -- for haste/copy payloads -- the biggest hand creature.
+    const Player& ap = s.players[me];
+    std::unordered_set<std::string> seen;
+    int best_hand = 0, best_hand_pw = -1;
+    for (const Card& hc : ap.hand)
+    {
+        if (hc.m_number == 0 || hc.m_is_staged) { continue; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (!hd || !hd->card.IsCreature()) { continue; }
+        if (hd->params.copies_solo_targeted_spells)
+        {
+            if (seen.insert(hc.m_name.str()).second) { out.push_back(hc.m_number); }
+            continue;
+        }
+        const int pw = hd->card.m_power.value_or(0);
+        if (wants_sick && pw > best_hand_pw) { best_hand_pw = pw; best_hand = hc.m_number; }
+    }
+    if (best_hand != 0) { out.push_back(best_hand); }
+    // out non-empty => CollectActions emits exactly these; if the board/hand had no candidates at
+    // all (empty out would mean "no narrowing"), push a sentinel-free fallback: with no creatures
+    // there are no legal targets and the caller's loops emit nothing anyway -- but out.empty()
+    // must not silently mean "all", so mark narrowing active with a 0 (skipped by the caller).
+    if (out.empty()) { out.push_back(0); }
+}
+
+// ---- MirrorwingProvider::LegendKeepIndex ------------------------------------
+//
+// User directive (Stage 6 review, analysis-Mirrorwing Dragon.md): the base keep-the-oldest rule is
+// wrong in exactly one corner -- Zada is summoning-sick, Twinflame makes a hasty token copy of it,
+// and attacking WITH the token wins this turn. The token exiles at end of turn either way, so
+// giving up the original only pays when it converts THIS turn into the win; in every other state
+// keep-the-oldest is strictly better (the original stays, the token was temporary).
+//
+// Decided by SIMULATING combat on scratch copies (both arms), not by the pending-damage
+// projection: the projection can over-count vs the simulated combat (commit-the-line note in
+// TurnSolver.cpp), and an over-count here would discard the original for a phantom lethal. The
+// same simulation runs in both worlds (executor's EnforceLegendRule and the rollout's resolve the
+// same provider), so the choice is lockstep by construction. Phase gate: only while combat is
+// still ahead (GameState::phase, maintained by the executor's MainPhase and the rollout's
+// SimulateCombat/turn-boundary writes) -- a post-combat keep-the-copy is a pure loss (the token
+// exiles before it can ever attack). Later plan casts (a pump after the trick) are not seen; the
+// projection is a same-instant lower bound, so the miss direction is the safe one (keep original).
+int MirrorwingProvider::LegendKeepIndex(const GameState& s, int controller,
+                                        const std::vector<int>& duplicates) const
+{
+    const int oldest = duplicates.empty() ? -1 : duplicates.front();
+    if (duplicates.size() != 2) { return oldest; }   // the Twinflame pattern is exactly one pair
+    if (s.phase != Phase::PreCombatMain && s.phase != Phase::Combat) { return oldest; }
+    const int newest = duplicates.back();
+    const Permanent& po = s.battlefield[oldest];
+    const Permanent& pn = s.battlefield[newest];
+    if (!pn.exile_at_end)                              { return oldest; }  // not the temp-copy pattern
+    if (CanAttackFull(po, s.battlefield, controller))  { return oldest; }  // original attacks fine
+    if (!CanAttackFull(pn, s.battlefield, controller)) { return oldest; }  // copy cannot attack either
+    const int opp = 1 - controller;
+
+    auto lethal_keeping = [&](int keep_idx) {
+        GameState arm = s;
+        // Apply this arm's legend-rule outcome exactly as EnforceLegendRule will (loser to the
+        // graveyard), then simulate the attack. No duplicates remain, so no recursion back here.
+        const int lose_idx = (keep_idx == oldest) ? newest : oldest;
+        arm.players[arm.battlefield[lose_idx].owner_index].graveyard.push_back(
+            arm.battlefield[lose_idx].card);
+        arm.battlefield.erase(arm.battlefield.begin() + lose_idx);
+        RolloutSimulateCombat(arm);
+        return arm.players[opp].life <= 0;
+    };
+    if (!lethal_keeping(newest)) { return oldest; }   // not lethal even with the copy
+    if (lethal_keeping(oldest))  { return oldest; }   // lethal anyway -> keep the original
+    return newest;
+}
+
+// ---- MirrorwingProvider go-off policy (user, Stage-6 round 3) ---------------
+//
+// "Usually you just use it [Twinflame] to go off by casting it first so there are more critters
+// (order matters a bit here) and then cast all of your other spells to pump for lethal. It's
+// honestly kind of bad without Mirrorwing or Zada on board as all other creatures are small --
+// without them you would only cast it when you are 1 damage short. Pretty rare."
+
+bool MirrorwingProvider::CastEnablerFirst(const GameState&, const std::string& name) const
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    if (!d) { return false; }
+    // ALL creatures precede the doubler (user round 3: "you might cast creatures before
+    // Twinflame to get more [critters]"), the doubler precedes the pump tricks, and Gold Rush
+    // precedes the DRAW tricks (user: "essentially a ritual... sometimes you need to cast it
+    // before other spells to keep the chain going" -- its Treasures are spendable at the next
+    // draw-breakpoint re-solve, so casting it early funds the continuation; its own pump counts
+    // its own Treasures, so early costs nothing).
+    return d->card.IsCreature()                     // bodies first: more copies for the fan-outs
+        || d->params.token_copy_of_target           // Twinflame: double the board before the pumps
+        || d->params.creates_treasures > 0;         // Gold Rush: the ritual funds the chain
+}
+
+int MirrorwingProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (def.params.copies_solo_targeted_spells) { return 5; }    // magnet first of the bodies
+    if (def.params.token_copy_of_target)        { return 12; }   // after every creature (10), before tricks (20)
+    if (def.params.creates_treasures > 0)       { return 15; }   // Gold Rush: after the doubler, before draw tricks
+    return GenericProvider::CastOrderRank(s, def);
+}
+
+bool MirrorwingProvider::StriveCountMaxOnly(const GameState&, const CardDefinition& def) const
+{
+    return def.params.token_copy_of_target;   // Twinflame: K = 0 or max -- a lethal burst, not a dial
+}
+
+// ---- MirrorwingProvider cleanup discard -------------------------------------
+//
+// USER-AUTHORED keep policy (Stage 6 review, 2026-08-11, analysis-Mirrorwing Dragon.md): "You want
+// 1 enabler in Mirrorwing/Zada, at least 3-4 creatures total (counting the goblin as 2),
+// sufficient mana to play your enabler (preferably with at least 2 red) and a few spells,
+// preferring the ones that win outright like Gold Rush and Fists of Flame, but ones that draw can
+// also do the trick." Same shape as the antilife bucket rule: name what to SHED (in order),
+// omission = keep, and the shared ranking keeps required-piece protection as the safety net.
+// The deck rarely discards (0.13 mean label regret in the discard-analysis stage), so this rule is
+// mostly about the post-Fists mass-draw turns where the hand blows past seven.
+
+const std::vector<std::string>*
+MirrorwingProvider::InterchangeableRequiredGroup(const std::string& name) const
+{
+    static const std::vector<std::string> kMagnets = { "Zada, Hedron Grinder", "Mirrorwing Dragon" };
+    if (name == "Zada, Hedron Grinder" || name == "Mirrorwing Dragon") { return &kMagnets; }
+    return nullptr;
+}
+
+std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    static const bool s_bucket = EnvOn("MTG_MW_BUCKET_DISCARD", true);
+    if (!s_bucket) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    const Player& ap = s.players[s.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto is_magnet = [&](const Card& c)
+    { const CardDefinition* d = def_of(c); return d && d->params.copies_solo_targeted_spells; };
+    auto is_dork = [&](const Card& c)
+    { const CardDefinition* d = def_of(c); return d && d->tmpl == CardTemplate::ManaDork; };
+    auto is_land = [&](const Card& c)
+    { const CardDefinition* d = def_of(c); return d ? d->card.IsLand() : c.IsLand(); };
+    auto produces = [&](const Card& c, Color col)
+    {
+        const CardDefinition* d = def_of(c);
+        if (!d) { return false; }
+        for (Color p : d->params.produces) { if (p == col) { return true; } }
+        return false;
+    };
+
+    // Board census the buckets key on.
+    bool magnet_board = false, board_green = false;
+    int  board_sources = 0, board_red = 0, board_bodies = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        const bool creature = d ? d->card.IsCreature() : p.card.IsCreature();
+        if (creature) { ++board_bodies; }
+        if (d && d->params.copies_solo_targeted_spells) { magnet_board = true; }
+        if ((d && d->card.IsLand()) || is_dork(p.card))
+        {
+            ++board_sources;
+            if (produces(p.card, Color::Red))   { ++board_red; }
+            if (produces(p.card, Color::Green)) { board_green = true; }
+        }
+    }
+
+    // Hand census.
+    std::vector<int> magnets, mana, bodies;
+    bool gold_rush_held = false;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[i];
+        if (c.m_is_staged) { continue; }
+        if (is_magnet(c)) { magnets.push_back(i); continue; }
+        if (is_land(c) || is_dork(c)) { mana.push_back(i); }
+        const CardDefinition* d = def_of(c);
+        if (d && d->card.IsCreature()) { bodies.push_back(i); }
+        if (c.m_name == "Gold Rush") { gold_rush_held = true; }
+    }
+    // The kept enabler: none needed with a magnet already on board. Among hand magnets the pick
+    // is NOT a fixed cheapest-first (user, Stage-6 round 2): estimate each magnet's EARLIEST CAST
+    // TURN from board sources + the hand's mana (one land drop per turn), and keep Mirrorwing
+    // when it is castable the SAME turn as Zada (more power, better Twinflame interactions) --
+    // Zada only when it is castable strictly earlier or Mirrorwing's cost (incl. the RR pips) is
+    // not coverable at all. The kill usually comes the turn AFTER the enabler lands, so
+    // equal-turn castability is the decision point.
+    int hand_mana_n = 0, hand_red = 0;
+    for (int i : mana)
+    {
+        ++hand_mana_n;
+        if (produces(ap.hand[i], Color::Red)) { ++hand_red; }
+    }
+    auto cast_turns = [&](const Card& c) -> int
+    {
+        const int mv      = c.m_mana_cost.ManaValue();
+        const int red_req = c.m_mana_cost.red;
+        const int deficit = std::max(0, mv - board_sources);
+        if (deficit > hand_mana_n)              { return 1000; }   // mana not coverable
+        if (board_red + hand_red < red_req)     { return 1000; }   // red pips not coverable
+        return deficit;
+    };
+    std::stable_sort(magnets.begin(), magnets.end(), [&](int a, int b)
+    {
+        const int ta = cast_turns(ap.hand[a]), tb = cast_turns(ap.hand[b]);
+        if (ta != tb) { return ta < tb; }                                   // castable sooner wins
+        return ap.hand[a].m_mana_cost.ManaValue() > ap.hand[b].m_mana_cost.ManaValue();   // tie: bigger body
+    });
+    const int kept_magnet = (!magnet_board && !magnets.empty()) ? magnets.front() : -1;
+    const int enabler_mv  = kept_magnet >= 0
+        ? ap.hand[kept_magnet].m_mana_cost.ManaValue()
+        : (magnet_board ? 2 : 4);   // magnet down -> trick mana; none anywhere -> assume Zada
+
+    std::vector<int> shed;
+    // S1 -- excess mana beyond the kept enabler's cost. Shed rank (sooner first): green-only
+    // lands, then red lands, then dorks (dorks are BODIES for the fan-out too). Two guards on the
+    // user's colour preferences: hold red sources back until two red are secured (board + kept),
+    // and hold one green source if a Gold Rush is held with no green on board ({1}{G}).
+    const int need = std::max(0, enabler_mv - board_sources);
+    int red_deficit = std::max(0, 2 - board_red);
+    bool green_guard_used = board_green || !gold_rush_held;
+    auto mana_shed_rank = [&](int i)   // lower = shed sooner
+    {
+        const Card& c = ap.hand[i];
+        if (is_dork(c)) { return 3; }
+        if (produces(c, Color::Red) && red_deficit > 0) { --red_deficit; return 2; }
+        if (produces(c, Color::Green) && !green_guard_used) { green_guard_used = true; return 1; }
+        return 0;
+    };
+    std::vector<std::pair<int, int>> ranked_mana;   // (rank, hand index)
+    for (int i : mana) { ranked_mana.push_back({ mana_shed_rank(i), i }); }
+    std::stable_sort(ranked_mana.begin(), ranked_mana.end(),
+                     [](const std::pair<int, int>& a, const std::pair<int, int>& b)
+                     { return a.first < b.first; });
+    const int excess = static_cast<int>(ranked_mana.size()) - need;
+    for (int k = 0; k < excess; ++k) { shed.push_back(ranked_mana[static_cast<std::size_t>(k)].second); }
+
+    // S2 -- redundant magnets beyond the kept one (all of them once a magnet is on board; the
+    // interchangeable-group protection still guards the truly last enabler anywhere in hand).
+    for (int i : magnets) { if (i != kept_magnet) { shed.push_back(i); } }
+
+    // S3 -- spells, least wanted first. USER keep priority: Gold Rush / Fists of Flame (win
+    // outright; never named here -> kept by omission) > draw tricks. Among the rest: Scale the
+    // Heights is the clunkiest (3 MV, one counter), Expedite is a bare cantrip, Twinflame doubles
+    // a wide board, Ancestral Anger is the cheapest mass-draw under a magnet.
+    static const char* const kSpellShedOrder[] = {
+        "Scale the Heights", "Expedite", "Twinflame", "Ancestral Anger" };
+    for (const char* name : kSpellShedOrder)
+    {
+        for (int i = 0; i < n; ++i)
+        { if (!ap.hand[i].m_is_staged && ap.hand[i].m_name == name) { shed.push_back(i); } }
+    }
+
+    // S4 -- excess creatures beyond the >=4 weighted bodies (Goblin Instigator brings its token,
+    // so it weighs 2). Board bodies count; dorks first among the shed (their mana role is already
+    // covered by S1's kept sources).
+    auto body_weight = [&](const Card& c) { return c.m_name == "Goblin Instigator" ? 2 : 1; };
+    int secured = board_bodies + (kept_magnet >= 0 ? 1 : 0);
+    std::vector<int> spare_bodies;
+    for (int i : bodies)
+    {
+        if (secured < 4) { secured += body_weight(ap.hand[i]); continue; }   // kept
+        spare_bodies.push_back(i);
+    }
+    std::stable_sort(spare_bodies.begin(), spare_bodies.end(), [&](int a, int b)
+    { return is_dork(ap.hand[a]) > is_dork(ap.hand[b]); });
+    for (int i : spare_bodies) { shed.push_back(i); }
+
+    // Omitted (kept): the kept magnet, the needed mana, every Gold Rush / Fists of Flame, and the
+    // bodies inside the 4-weight target.
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
 // ---- FiveColourProvider::ModalSplitCandidates -------------------------------

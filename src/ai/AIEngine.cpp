@@ -2369,7 +2369,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         if (d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0
-                  || d->params.stages_cards || d->params.impulse_exile > 0))
+                  || d->params.stages_cards || d->params.impulse_exile > 0
+                  // Zada/Mirrorwing trick with a draw payload: a magnet fan-out mass-draws, so
+                  // the depth-0 executor gets a second pass to cast the freshly drawn cards --
+                  // mirroring the rollout's deferred (site-3) post-cast re-solve. At depth>0 the
+                  // committed line's recorded breakpoint script covers it (TakeTurn returns false
+                  // under full-depth regardless of this flag).
+                  || (d->params.solo_target_trick && d->params.cast_draw > 0)))
         { cast_draw_engine = true; }
     };
 
@@ -2705,11 +2711,29 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Enabler-first: cast lifegain_to_loss spells (Tainted Remedy / Plague Drone) before any
     // other hand cast so a same-turn payload fires with the enabler active. Then the rest in
     // plan order, with the draw-engine breakpoint / staging handling.
-    for (const Action& a : plan.actions)
+    // Enablers apply in CastOrderRank order (stable; equal ranks keep plan order -- byte-
+    // identical unless a provider ranks its enablers apart). Mirror of ApplyPlanDirect's
+    // opaque path: Mirrorwing needs magnet(5) -> Twinflame(8) -> pump tricks.
     {
-        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
-            && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
+        std::vector<int> ena;
+        for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
         {
+            const Action& a = plan.actions[i];
+            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
+                && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
+            { ena.push_back(i); }
+        }
+        std::stable_sort(ena.begin(), ena.end(), [&](int x, int y)
+        {
+            const CardDefinition* dx = CardDatabase::Instance().Lookup(plan.actions[x].card_name);
+            const CardDefinition* dy = CardDatabase::Instance().Lookup(plan.actions[y].card_name);
+            if (!dx || !dy) { return false; }
+            return ResolveProvider(state).CastOrderRank(state, *dx)
+                 < ResolveProvider(state).CastOrderRank(state, *dy);
+        });
+        for (int i : ena)
+        {
+            const Action& a = plan.actions[i];
             cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
         }
     }
@@ -3112,6 +3136,7 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
 
     if (ap.library.empty()) { return false; }
     Card drawn = ap.library.DrawTop();
+    ap.cards_drawn_this_turn += 1;   // a cycle/sac dig is a real draw (Fists of Flame counts it)
     const CardDefinition* ddef = CardDatabase::Instance().LookupCached(drawn);
     bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
     if (m_logger) { m_logger->LogDraw(drawn.m_number, drawn.m_name); }
@@ -3334,6 +3359,18 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // enumeration cost and the rollout's apply_one -> lockstep).
     effective.generic = std::max(0, effective.generic
                           - SoulfireOwnTargetDiscount(*def, state, state.active_player_index, own_targets));
+    // Twinflame Strive: each searched EXTRA target (own_targets, reused) costs +strive_cost.
+    // Mirrors the enumeration's a.cost surcharge and the rollout's apply_one -> lockstep. Inert without strive_cost.
+    if (def->params.strive_cost.has_value() && own_targets > 0)
+    {
+        const ManaCost& sc = *def->params.strive_cost;
+        effective.generic += own_targets * sc.generic;
+        effective.white   += own_targets * sc.white;
+        effective.blue    += own_targets * sc.blue;
+        effective.black   += own_targets * sc.black;
+        effective.red     += own_targets * sc.red;
+        effective.green   += own_targets * sc.green;
+    }
     // {X} is paid as generic mana, once per {X} pip (Crackle {X}{X}{X} -> 3X). Gated on the card
     // actually HAVING {X}: chosen_x is also the searched MODE COUNT for a modal split (Unite the
     // Coalition, modal_choose_n) whose cost is fixed -- charging it as X made the executor's
