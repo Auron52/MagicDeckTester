@@ -4704,19 +4704,110 @@ static void CollectMultiVariantSacSources(const std::vector<Action>& cands, std:
     std::sort(out.begin(), out.end());
 }
 
+// ---- Deferred GROUP WAVES (defer-don't-cap for the breadth cap above) --------------------------
+// The cap discards the lowest-ranked groups from THIS enumeration with no record, so a plan needing
+// a dropped group was unreachable AT ANY BUDGET -- a quality prune by the deferred-wave doctrine
+// (BpWaveWalker: "no rank is unreachable at an unbounded budget"). Group waves close that: after a
+// node's candidate loop (and its bp wave phase), while budget remains, the host re-enumerates one
+// TRANCHE at a time. Tranche R (R = cap, cap+1, ...) keeps the groups ranked [0..R] and REQUIRES
+// the rank-R group in every emitted plan: a plan's highest-ranked-used group assigns it to exactly
+// one tranche, so wave 0 + the tranches partition the UNCAPPED plan space exactly -- no dedup, no
+// double-scoring. The rank order is deterministic (same state -> same cands -> same stable_sort),
+// so the partition is stable across the re-enumerations.
+//   MTG_GROUP_WAVES=0 -- off, byte-identical to the capped-only engine (the A/B hatch).
+//   MTG_GROUP_WAVES=1 -- DEFAULT: tranches run while the node's budget allows; unlimited => the
+//                        node's answer equals the uncapped enumeration's (exhaustive).
+// The state below is thread_local plumbing between a HOST phase and the EnumeratePlans calls it
+// makes: the host scopes tranche_rank strictly around its own enumeration call, so every nested
+// enumeration during SCORING (rollouts, FSLineTail recursion) runs in normal mode.
+namespace groupwave
+{
+    struct State
+    {
+        int    tranche_rank   = -1;     // >= 0: tranche mode, require the group ranked HERE
+        double bound_limit    = 0.0;    // tranche mode: max plan-space bound (<= 0 = unlimited)
+        bool   bound_exceeded = false;  // OUT: a tranche was skipped for its enumeration bound
+        bool   call_active    = false;  // OUT (per EnumeratePlans call): rank-R group exists here
+        int    max_dropped    = 0;      // OUT (normal mode): max groups dropped by the cap since
+                                        // the host reset it (max over the per-land inner calls)
+    };
+    inline thread_local State g_state;
+    inline thread_local std::vector<char> g_required;   // cand-index flags of the rank-R group
+
+    inline bool Enabled()
+    {
+        static const bool v = EnvOn("MTG_GROUP_WAVES", true);
+        return v;
+    }
+    // Does a plan selection touch the tranche's required group? (eval_and_push filter)
+    inline bool SelTouchesRequired(const std::vector<int>& sel)
+    {
+        for (int j : sel)
+        {
+            if (j >= 0 && j < static_cast<int>(g_required.size()) && g_required[j]) { return true; }
+        }
+        return false;
+    }
+
+    // MTG_GROUP_WAVE_PROBE=1: did group waves run, how many tranches/plans, did one ever WIN?
+    struct Probe
+    {
+        std::atomic<uint64_t> nodes{0};        // nodes that ran a group-wave phase
+        std::atomic<uint64_t> tranches{0};     // tranche enumerations performed
+        std::atomic<uint64_t> enumerated{0};   // plans those enumerations produced
+        std::atomic<uint64_t> scored{0};       // tranche plans actually scored
+        std::atomic<uint64_t> improved{0};     // ... that beat the node's incumbent
+        std::atomic<uint64_t> stopped{0};      // phases cut short by the budget
+        std::atomic<uint64_t> bound_skips{0};  // tranches skipped for their enumeration bound
+        ~Probe()
+        {
+            if (!EnvOn("MTG_GROUP_WAVE_PROBE")) { return; }
+            std::fprintf(stderr,
+                         "[group-waves] nodes=%llu tranches=%llu enumerated=%llu scored=%llu"
+                         " improved=%llu budget-stopped=%llu bound-skips=%llu\n",
+                         static_cast<unsigned long long>(nodes.load()),
+                         static_cast<unsigned long long>(tranches.load()),
+                         static_cast<unsigned long long>(enumerated.load()),
+                         static_cast<unsigned long long>(scored.load()),
+                         static_cast<unsigned long long>(improved.load()),
+                         static_cast<unsigned long long>(stopped.load()),
+                         static_cast<unsigned long long>(bound_skips.load()));
+        }
+    };
+    inline Probe g_probe;
+    inline bool ProbeOn()
+    {
+        static const bool on = EnvOn("MTG_GROUP_WAVE_PROBE");
+        return on;
+    }
+}
+
+// The engine-side cap override, shared by the cap itself and the wave hosts (which need the
+// effective BASE cap to know where tranches start). Cached: this runs per enumeration -- an
+// uncached getenv here was ~1.2% of rollout time / 212M calls in a Hinata gen profile. -1 = unset.
+static int GroupCapOverride()
+{
+    static const int s = []{ const char* e = std::getenv("MTG_SOLVE_GROUP_CAP");
+        if (!e) { return -1; } int x = std::atoi(e); return x < 1 ? 1 : x; }();
+    return s;
+}
+static int EffectiveGroupCap(const GameState& state)
+{
+    const int o = GroupCapOverride();
+    return o >= 0 ? o : ResolveProvider(state).EnumGroupCap();
+}
+
 static void CapGroupsBySituationalRank(const GameState& state, const std::vector<Action>& cands,
                                        std::vector<std::vector<int>>& groups,
-                                       std::vector<int>& group_hand_index)
+                                       std::vector<int>& group_hand_index,
+                                       int num_independent)
 {
+    groupwave::g_state.call_active = false;   // set true below iff this call has a rank-R group
     if (GroupCapDisabled() || DecisionUnpruned(UnprunedGate::GroupCap)) { return; }
-    // The provider supplies the breadth policy; the env knob is an engine-side A/B override.
-    // Cache the env read once (this runs per enumeration -- an uncached getenv here was ~1.2% of
-    // rollout time / 212M calls in a Hinata gen profile). -1 = unset. Byte-identical to the read.
-    static const int s_group_cap_override = []{ const char* e = std::getenv("MTG_SOLVE_GROUP_CAP");
-        if (!e) { return -1; } int x = std::atoi(e); return x < 1 ? 1 : x; }();
-    int cap = ResolveProvider(state).EnumGroupCap();
-    if (s_group_cap_override >= 0) { cap = s_group_cap_override; }
-    if (static_cast<int>(groups.size()) <= cap)    { return; }
+    const int cap = EffectiveGroupCap(state);
+    const int R   = groupwave::g_state.tranche_rank;   // -1 = normal (capped) mode
+    if (R < 0 && static_cast<int>(groups.size()) <= cap) { return; }
+    if (R >= 0 && static_cast<int>(groups.size()) <= R)  { return; }   // tranche absent here -> emit nothing
 
     const DecisionProvider& prov = ResolveProvider(state);
     std::vector<std::pair<int, int>> ranked;   // (situational rank, original group index)
@@ -4735,8 +4826,42 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
     }
     std::stable_sort(ranked.begin(), ranked.end(),
         [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first > b.first; });
+
+    // How many ranked groups this call keeps: the cap (normal) or the tranche's R+1.
+    const int keep_n = (R < 0) ? cap : (R + 1);
+    if (R >= 0)
+    {
+        // Enumeration-bound gate for a BUDGETED wave host: the tranche's odometer walk is paid
+        // BEFORE any per-plan budget check can fire, so a tranche whose plan-space bound already
+        // exceeds what the remaining budget could even score is skipped outright (the host counts
+        // a truncation). Unlimited hosts pass bound_limit <= 0 and always proceed.
+        if (groupwave::g_state.bound_limit > 0.0)
+        {
+            double bound = std::ldexp(1.0, std::min(num_independent, 60));
+            for (int i = 0; i < keep_n; ++i)
+            { bound *= 1.0 + static_cast<double>(groups[ranked[i].second].size()); }
+            if (bound > groupwave::g_state.bound_limit)
+            {
+                groupwave::g_state.bound_exceeded = true;
+                return;   // call_active stays false -> the enumeration emits nothing
+            }
+        }
+        // Flag the required (rank-R) group's candidate indices for the eval_and_push filter.
+        groupwave::g_required.assign(cands.size(), 0);
+        for (int idx : groups[ranked[R].second]) { groupwave::g_required[idx] = 1; }
+        groupwave::g_state.call_active = true;
+    }
+    else if (groupwave::Enabled())
+    {
+        // Record the drop so a wave host knows tranches exist for this node. Max over the
+        // enumeration's inner (per-land) calls; the host resets before enumerating and captures
+        // immediately after, so nested scoring-time enumerations never leak into the capture.
+        const int dropped = static_cast<int>(groups.size()) - cap;
+        if (dropped > groupwave::g_state.max_dropped) { groupwave::g_state.max_dropped = dropped; }
+    }
+
     std::vector<char> keep(groups.size(), 0);
-    for (int i = 0; i < cap; ++i) { keep[ranked[i].second] = 1; }
+    for (int i = 0; i < keep_n; ++i) { keep[ranked[i].second] = 1; }
     std::vector<std::vector<int>> kept_groups;
     std::vector<int>              kept_hand_index;
     for (int g = 0; g < static_cast<int>(groups.size()); ++g)
@@ -6717,8 +6842,11 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 
     // Breadth cap on a bloated combo-dig hand (the lethal combo line is already returned by the
     // short-circuit above, so a non-lethal turn -- the only kind that reaches here -- never drops a
-    // win). Shared with EnumeratePlans; see CapGroupsBySituationalRank.
-    CapGroupsBySituationalRank(state, cands, groups, group_hand_index);
+    // win). Shared with EnumeratePlans; see CapGroupsBySituationalRank. Solve is the greedy
+    // rollout leaf -- it has no budgeted candidate loop, so no group-wave phase runs here (the
+    // deferred tranches belong to the SEARCH hosts; see groupwave above).
+    CapGroupsBySituationalRank(state, cands, groups, group_hand_index,
+                               static_cast<int>(independent.size()));
 
     // Feasible-aware early ritual-drop: when no payoff is reachable this turn, remove the ritual groups
     // before the odometer enumerates their powerset (byte-identical; see DropRitualGroupsIfNoPayoff).
@@ -10369,8 +10497,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
     // Breadth cap on a bloated combo-dig hand (shared with Solve). This enumerator feeds both the
     // multi-turn search and the per-turn leaf rollout (SolveWithLookahead), so capping it is what
-    // attacks the rollout-bound no-win games. See CapGroupsBySituationalRank.
-    CapGroupsBySituationalRank(state, cands, groups, group_hand_index);
+    // attacks the rollout-bound no-win games. See CapGroupsBySituationalRank. In tranche mode
+    // (a group-wave host re-enumerating; groupwave::g_state.tranche_rank >= 0) the cap instead
+    // keeps ranks [0..R] and flags the rank-R group as REQUIRED; a call with no rank-R group
+    // contributes nothing (its plan space was fully covered by wave 0 / earlier tranches).
+    CapGroupsBySituationalRank(state, cands, groups, group_hand_index,
+                               static_cast<int>(independent.size()));
+    if (groupwave::g_state.tranche_rank >= 0 && !groupwave::g_state.call_active)
+    { return {}; }   // no plans exist yet -- the odometer + Plan-B below are the only producers
 
     // Feasible-aware early ritual-drop: when no payoff is reachable this turn, remove the ritual groups
     // before the odometer enumerates their powerset (byte-identical; see DropRitualGroupsIfNoPayoff).
@@ -10388,6 +10522,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // feasible, append the resulting plan. Mirrors the former per-mask body.
     auto eval_and_push = [&](const std::vector<int>& sel)
     {
+        // Group-wave tranche filter FIRST (cheapest reject): a selection not touching the
+        // tranche's required (rank-R) group was already emitted by wave 0 or an earlier tranche
+        // -- the highest-ranked-used group assigns every plan to exactly one tranche, which is
+        // what makes the partition exact (no dedup needed). Inert in normal mode.
+        if (groupwave::g_state.tranche_rank >= 0 && !groupwave::SelTouchesRequired(sel)) { return; }
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
@@ -11028,7 +11167,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
     struct TriggerCand { int idx; ManaCost cost; int damage; int eval; };
     std::vector<TriggerCand> triggers;
-    for (int i = 0; i < m; ++i)
+    // Group-wave tranche mode: skip Plan B entirely. It builds plans straight from `cands`
+    // without consulting `groups`, so the cap never dropped any of its plans -- wave 0 emitted
+    // them all, and re-emitting here would double-score them.
+    const bool s_groupwave_tranche = (groupwave::g_state.tranche_rank >= 0);
+    for (int i = 0; !s_groupwave_tranche && i < m; ++i)
     {
         const Action& c = cands[i];
         // A spectacle-enabling trigger is any burn that reaches the opponent's face this turn --
@@ -11047,7 +11190,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             return a.cost.ManaValue() < b.cost.ManaValue();
         });
 
-    for (int i = 0; i < m; ++i)
+    for (int i = 0; !s_groupwave_tranche && i < m; ++i)
     {
         const Action& draw = cands[i];
         if (!draw.is_draw || !draw.has_spectacle) { continue; }
@@ -11708,6 +11851,19 @@ static bool BpWavesHere(const SearchBudget* budget)
     return true;
 }
 
+// May this node run a GROUP-WAVE phase (deferred tranches for EnumGroupCap-dropped groups; see
+// groupwave above)? Same budget contract as BpWavesHere. Callers only ask when the node's own
+// enumeration actually dropped groups, so an exhausted-budget skip here IS a truncation.
+static bool GroupWavesHere(const SearchBudget* budget)
+{
+    if (!groupwave::Enabled()) { return false; }
+    // Cap open (env or unpruned audit) => nothing was dropped in the first place.
+    if (GroupCapDisabled() || DecisionUnpruned(UnprunedGate::GroupCap)) { return false; }
+    if (budget == nullptr || budget->Unlimited()) { return true; }
+    if (budget->Exhausted()) { ++g_fs_trunc_events; return false; }
+    return true;
+}
+
 // COMPLETE NODES (MTG_BP_WAVE_COMPLETE, default ON).
 //
 // `FSLineWin` returns the FIRST in-horizon win it finds, and that shortcut is only sound because
@@ -12211,14 +12367,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         GameState copy = state;
         if (!land_name.empty() && !PlayLandByName(copy, land_name, fetch_target, true, land_face)) { return; }
 
-        // "Play this land, cast nothing" baseline (neutral value 0).
-        TurnSolver::Plan idle;
-        idle.value        = 0;
-        idle.land_decided = true;
-        idle.land_to_play = land_name;
-        idle.fetch_target = fetch_target;
-        idle.land_face    = land_face;
-        all.push_back(std::move(idle));
+        // "Play this land, cast nothing" baseline (neutral value 0). Skipped in a group-wave
+        // TRANCHE re-enumeration: the idle plan touches no group, so wave 0 already emitted it.
+        if (groupwave::g_state.tranche_rank < 0)
+        {
+            TurnSolver::Plan idle;
+            idle.value        = 0;
+            idle.land_decided = true;
+            idle.land_to_play = land_name;
+            idle.fetch_target = fetch_target;
+            idle.land_face    = land_face;
+            all.push_back(std::move(idle));
+        }
 
         std::vector<TurnSolver::Plan> plans = EnumeratePlans(copy, is_pre_combat);
         for (TurnSolver::Plan& p : plans)
@@ -13691,8 +13851,13 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     const bool bp_root = (g_fsline_nest == 0);
     FsLineNestGuard _fs_nest;
     g_bp_root_enum = bp_root;
+    groupwave::g_state.max_dropped = 0;   // reset; capture right after (nested scoring-time
+                                          // enumerations would otherwise leak into it)
     std::vector<TurnSolver::Plan> pre = EnumeratePlansWithLand(state, true);
     g_bp_root_enum = false;
+    // Groups the breadth cap dropped from THIS node's enumeration (max over the per-land inner
+    // calls) -- the group-wave phase below walks one tranche per dropped group.
+    const int gw_dropped = groupwave::g_state.max_dropped;
     MoveOrderPlans(pre);   // lethal-looking / higher-value plans first -> earlier B&B cutoff
 
     // VALUE-RANKED BEAM: reorder `pre` by the PROBE's recorded value-win-turns for this node, so the beam-cap
@@ -13928,6 +14093,143 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         return best;
                     }
                 }
+            }
+        }
+    }
+
+    // ---- DEFERRED GROUP WAVES (see groupwave / CapGroupsBySituationalRank) -----------------------
+    // Wave 0's enumeration kept only the top-`cap` groups by situational rank; each tranche below
+    // re-enumerates with one more ranked group admitted AND REQUIRED, so the tranches exactly cover
+    // the plans the cap dropped (no overlap with wave 0 or each other). After the bp wave phase so
+    // an already-consumed budget stops us first; node_vals was stored above and is never extended
+    // (the probe's position-keyed ranks keep mapping to the same plans). Skipped at beam-cut nodes:
+    // the escalation beam declined breadth at this node on purpose, and it never applies at the
+    // root, so the committed play is not affected by the skip.
+    if (gw_dropped > 0 && !beam_here && GroupWavesHere(budget))
+    {
+        if (groupwave::ProbeOn()) { groupwave::g_probe.nodes.fetch_add(1); }
+        const int cap_base = EffectiveGroupCap(state);
+        bool gw_stop = false;
+        for (int R = cap_base; !gw_stop && R < cap_base + gw_dropped; ++R)
+        {
+            if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+            { ++g_fs_trunc_events;
+              if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); } break; }
+            // Enumerate tranche R. bound_limit: a budgeted node cannot even SCORE more plans than
+            // its remaining budget, so a tranche whose enumeration bound exceeds it is skipped
+            // before the odometer pays for it (counted as a truncation).
+            groupwave::g_state.tranche_rank   = R;
+            groupwave::g_state.bound_limit    = (budget != nullptr && !budget->Unlimited())
+                                              ? static_cast<double>(budget->Remaining()) : 0.0;
+            groupwave::g_state.bound_exceeded = false;
+            g_bp_root_enum = bp_root;
+            std::vector<TurnSolver::Plan> tp = EnumeratePlansWithLand(state, true);
+            g_bp_root_enum = false;
+            groupwave::g_state.tranche_rank = -1;
+            if (groupwave::g_state.bound_exceeded)
+            { ++g_fs_trunc_events;
+              if (groupwave::ProbeOn()) { groupwave::g_probe.bound_skips.fetch_add(1); } break; }
+            if (groupwave::ProbeOn())
+            {
+                groupwave::g_probe.tranches.fetch_add(1);
+                groupwave::g_probe.enumerated.fetch_add(tp.size());
+            }
+            if (tp.empty()) { continue; }
+            MoveOrderPlans(tp);   // same static order as wave 0's plans
+
+            // Score one tranche plan/variant: the bp wave body's contract (strictly-better only;
+            // this-turn win returns immediately). Returns false when the budget stopped the phase.
+            auto score_tranche_plan = [&](const TurnSolver::Plan& v, std::vector<Action>& bp_out,
+                                          bool& won_now) -> bool
+            {
+                won_now = false;
+                if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                { ++g_fs_trunc_events;
+                  if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); }
+                  return false; }
+                if (budget) { budget->Consume(1); }   // one interior node (plan applied)
+                if (s_rollout_stats)
+                {
+                    g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
+                    if (g_force_heuristic_leaf) { g_interior_nodes_esc.fetch_add(1, std::memory_order_relaxed); }
+                }
+                if (groupwave::ProbeOn()) { groupwave::g_probe.scored.fetch_add(1); }
+                GameState s = state;
+                bp_out.clear();
+                g_bp_cands_last = 0;
+                g_bp_seen_last  = 0;
+                ApplyPlanDirect(s, v, true, &bp_out);
+                // Post-apply state dedup against everything scored at this node: a tranche plan
+                // whose extra cast strands (a silent no-op) collapses onto an already-scored state
+                // and cannot improve on it. Insert-always is safe -- tranche plans are disjoint
+                // from wave 0 BY PLAN, so a hit is a genuine same-state collapse, not a re-visit.
+                if (!bp_seen_states.insert(BuildSimKey(s, 0, 0, false)).second) { return true; }
+                if (s.ActivePlayer().life <= 0) { return true; }   // self-kill guard, as above
+                AnimateLandsShared(s, nullptr);
+                ActivateTapTokensShared(s, nullptr);
+                SimulateCombat(s);
+                if (s.Opponent().life <= 0)       // wins THIS turn -> the earliest possible from here
+                {
+                    if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }
+                    won_now = true;
+                    return true;
+                }
+                TurnSolver::SearchLine tail =
+                    FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main,
+                               tt, lc, budget);
+                if (tail.win_turn < best.win_turn)
+                {
+                    if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }
+                    best.win_turn = tail.win_turn;
+                    best.phases.clear();
+                    TurnSolver::Plan p_rec = v;
+                    p_rec.breakpoint_actions = bp_out;
+                    best.phases.push_back({ true, std::move(p_rec) });
+                    best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());
+                }
+                return true;
+            };
+
+            std::vector<Action> gw_bp;
+            bool                gw_won = false;
+            for (const TurnSolver::Plan& v : tp)
+            {
+                if (!score_tranche_plan(v, gw_bp, gw_won)) { gw_stop = true; break; }
+                if (gw_won)
+                {
+                    TurnSolver::Plan p_rec = v;
+                    p_rec.breakpoint_actions = std::move(gw_bp);
+                    TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
+                    FSLineStoreWin(lc, key, win);
+                    return win;
+                }
+            }
+            if (gw_stop) { break; }
+
+            // Deferred bp ranks OF THE TRANCHE PLANS: wave 0's rank ceiling applies to these new
+            // base plans too, so walk their ranks >= W exactly as the bp wave phase above did for
+            // `pre` -- otherwise a tranche plan's deep continuation stays unreachable at an
+            // unlimited budget, re-breaking the wave doctrine for the plans this phase adds.
+            if (BpWavesHere(budget))
+            {
+                BpWaveWalker gw_walker(state, tp, tp.size());
+                TurnSolver::Plan v;
+                while (gw_walker.Next(tp, v))
+                {
+                    if (!score_tranche_plan(v, gw_bp, gw_won)) { gw_stop = true; break; }
+                    // Report AFTER the apply inside score_tranche_plan set g_bp_cands_last /
+                    // g_bp_seen_last (a dedup/self-kill early-out leaves them from this apply).
+                    gw_walker.Report(tp, g_bp_cands_last, g_bp_seen_last);
+                    if (gw_won)
+                    {
+                        TurnSolver::Plan p_rec = v;
+                        p_rec.breakpoint_actions = std::move(gw_bp);
+                        TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
+                        FSLineStoreWin(lc, key, win);
+                        return win;
+                    }
+                }
+                if (gw_stop) { break; }
             }
         }
     }
@@ -15736,8 +16038,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // see g_bp_root_enum. The rollouts below re-enter this function with the flag clear, so their
     // leaf evaluation keeps the cheap greedy continuation.
     g_bp_root_enum = enforce_budget;
+    groupwave::g_state.max_dropped = 0;   // reset; capture right after (see the FSLineWin twin)
     std::vector<Plan> candidates = EnumeratePlansWithLand(state, is_pre_combat);
     g_bp_root_enum = false;
+    const int gw_dropped = groupwave::g_state.max_dropped;
 
     // Candidates are sorted highest-value first, so the first winning plan
     // (if any) is also the highest-value winning plan.
@@ -15785,6 +16089,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     //      AND still expensive to finish. Roll-back is free: each candidate runs on
     //      a GameState copy, so a pass only touches pass-local state.
     Plan best_plan = candidates.front();
+
+    // Group-wave tranche plan lists, built lazily by the first pass that runs the phase and
+    // rescored by every later pass at ITS sub_depth -- exactly as `candidates` is rescored.
+    // The enumeration is deterministic per node, so building once is byte-identical to
+    // re-enumerating per pass and skips the repeated odometer walks.
+    std::vector<std::vector<Plan>> gw_tranches;
+    bool gw_built = false, gw_build_truncated = false;
 
     const bool   gate         = enforce_budget && budget != nullptr;
     long long    c_prev       = 0;       // cost of pass k-1 (work units)
@@ -16024,6 +16335,121 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     pass_best_win = win_turn;
                     pass_best     = v;
                     pass_has_best = true;
+                }
+            }
+        }
+
+        // ---- DEFERRED GROUP WAVES (see groupwave / the FSLineWin twin phase) ---------------------
+        // The breadth cap dropped groups from this node's enumeration; walk one tranche per dropped
+        // group (tranche R admits AND requires the group ranked R, so the tranches exactly cover the
+        // dropped plan space). Same contract as the bp wave phase above: strictly-better win turn
+        // only, budget-checked per plan, and an aborted pass skips the phase wholesale.
+        if (!pass_aborted && gw_dropped > 0 && GroupWavesHere(budget))
+        {
+            if (!gw_built)
+            {
+                gw_built = true;
+                if (groupwave::ProbeOn()) { groupwave::g_probe.nodes.fetch_add(1); }
+                const int cap_base = EffectiveGroupCap(state);
+                for (int R = cap_base; R < cap_base + gw_dropped; ++R)
+                {
+                    groupwave::g_state.tranche_rank   = R;
+                    groupwave::g_state.bound_limit    = (budget != nullptr && !budget->Unlimited())
+                                                      ? static_cast<double>(budget->Remaining()) : 0.0;
+                    groupwave::g_state.bound_exceeded = false;
+                    g_bp_root_enum = enforce_budget;
+                    std::vector<Plan> tp = EnumeratePlansWithLand(state, is_pre_combat);
+                    g_bp_root_enum = false;
+                    groupwave::g_state.tranche_rank = -1;
+                    if (groupwave::g_state.bound_exceeded)
+                    {
+                        gw_build_truncated = true;
+                        if (groupwave::ProbeOn()) { groupwave::g_probe.bound_skips.fetch_add(1); }
+                        break;
+                    }
+                    if (groupwave::ProbeOn())
+                    {
+                        groupwave::g_probe.tranches.fetch_add(1);
+                        groupwave::g_probe.enumerated.fetch_add(tp.size());
+                    }
+                    if (!tp.empty()) { gw_tranches.push_back(std::move(tp)); }
+                }
+            }
+            if (gw_build_truncated) { ++g_fs_trunc_events; }
+
+            // Score one tranche plan/variant at this pass's sub_depth (the bp wave body's contract).
+            // Returns false when the budget stopped the phase; won_out set => caller returns v.
+            bool gw_stop = false;
+            auto score_gw = [&](const Plan& v, bool& won_out) -> bool
+            {
+                won_out = false;
+                if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
+                { ++g_fs_trunc_events;
+                  if (groupwave::ProbeOn()) { groupwave::g_probe.stopped.fetch_add(1); }
+                  return false; }
+                if (budget) { budget->Consume(1); }
+                if (groupwave::ProbeOn()) { groupwave::g_probe.scored.fetch_add(1); }
+                PROF_INC(gamestate_copies);
+                GameState copy = state;
+                g_bp_cands_last = 0;
+                g_bp_seen_last  = 0;
+                if (is_pre_combat)
+                {
+                    ApplyPlanDirect(copy, v, true);
+                    // Post-apply dedup vs everything scored this pass (tranche plans are disjoint
+                    // from wave 0 BY PLAN, so a hit is a genuine same-state collapse).
+                    if (!bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second) { return true; }
+                    AnimateLandsShared(copy, nullptr);
+                    ActivateTapTokensShared(copy, nullptr);
+                    SimulateCombat(copy);
+                    if (copy.Opponent().life <= 0) { won_out = true; return true; }
+                    if (second_main)
+                    {
+                        Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
+                                                            second_main, tt);
+                        ApplyPlanDirect(copy, post, false);
+                        if (copy.Opponent().life <= 0) { won_out = true; return true; }
+                    }
+                }
+                else
+                {
+                    ApplyPlanDirect(copy, v, false);
+                    if (copy.Opponent().life <= 0) { won_out = true; return true; }
+                    if (!bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second) { return true; }
+                }
+                if (!SimulateEndAndStartNextTurn(copy)) { return true; }
+                const int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
+                                                   pass_best_win, second_main, tt);
+                // STRICTLY better only -- same reasoning as the bp wave phase above.
+                if (pass_has_best && win_turn >= pass_best_win) { return true; }
+                if (groupwave::ProbeOn()) { groupwave::g_probe.improved.fetch_add(1); }
+                pass_best_win = win_turn;
+                pass_best     = v;
+                pass_has_best = true;
+                return true;
+            };
+
+            for (const std::vector<Plan>& tp : gw_tranches)
+            {
+                bool won = false;
+                for (const Plan& v : tp)
+                {
+                    if (!score_gw(v, won)) { gw_stop = true; break; }
+                    if (won) { report(state.turn_number, depth - 1); return v; }
+                }
+                if (gw_stop) { break; }
+                // Deferred bp ranks OF the tranche plans (see the FSLineWin twin's reasoning).
+                if (BpWavesHere(budget))
+                {
+                    BpWaveWalker gw_walker(state, tp, tp.size());
+                    Plan v;
+                    while (gw_walker.Next(tp, v))
+                    {
+                        if (!score_gw(v, won)) { gw_stop = true; break; }
+                        gw_walker.Report(tp, g_bp_cands_last, g_bp_seen_last);
+                        if (won) { report(state.turn_number, depth - 1); return v; }
+                    }
+                    if (gw_stop) { break; }
                 }
             }
         }

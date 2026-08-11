@@ -358,6 +358,12 @@ USER play knowledge encoded (rounds 3-4 of the review):
 - ~~card_costs gate line~~: DONE 2026-08-11 — clean pass, 150/150 match (see above).
 - Goblins value sidecar predates the corrected sac model (engine-state fingerprint policy):
   regeneration is cheap (~3 min) if pooling/regen ever needs it.
-- Expand-on-no-win breadth escalation: proposed above, awaiting user decision.
+- ~~Expand-on-no-win breadth escalation~~: SUPERSEDED and DONE 2026-08-11 by **group waves**
+  (defer-don't-cap deferred tranches for EnumGroupCap-dropped groups; user-approved in
+  principle, then measured and adopted default-ON). Design + measurements:
+  `docs/design/group-waves.md`. Headline: smoke game 137 (seed 1138) was UNWON under the cap
+  and wins at T8 with waves — the exact "cast-dependent lethal in a dropped group" hazard the
+  escalation question uncovered; every other deck byte-identical, wall cost free (16s vs 17s on
+  the heaviest case), `MTG_GROUP_WAVES=0` restores the old engine byte-identically.
 - Deck-aware SituationalCardRank for Mirrorwing (which groups the cap drops): the "fill in
   later" seam -- currently inherits the generic ranking.
