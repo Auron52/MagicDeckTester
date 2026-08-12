@@ -382,7 +382,45 @@ def run_batch(jobs, outdir, name, threads, env=None):
         rc = p.wait()
     if rc != 0:
         raise SystemExit(f"batch failed rc={rc}; see {err}")
+    bad = provider_split(err)
+    if bad:
+        raise SystemExit(
+            "arms did not run under the same archetype provider -- REFUSING the comparison.\n  "
+            + "\n  ".join(f"{p_}: {', '.join(sorted(t))}" for p_, t in sorted(bad.items()))
+            + "\n\n  Archetype detection is by card PARAMS (SelectDecisionProvider), so an edit can cross a"
+              "\n  signature and hand one arm another deck's heuristics -- tutor narrowing, dig ranking,"
+              "\n  attack rules. That is not a bias a shared apparatus absorbs; it is two engines.\n"
+              "\n  There is deliberately NO runtime pin. Forcing both arms onto one provider would hide"
+              "\n  the finding, and the finding is the point -- one of two things is true:\n"
+              "\n    the deck is still itself -> make the PROVIDER support both decklists (widen the"
+              "\n      signature, or keep the archetype hook present-but-inert without its card), so both"
+              "\n      arms route to it legitimately. This is the preferred fix.\n"
+              "\n    the edit made it a DIFFERENT deck -> screening is the wrong instrument. Screening"
+              "\n      compares combinations sharing one identity and one apparatus. Analyse it as a NEW"
+              "\n      deck instead (analyze-deck.md, then mulligan-profile.md + value-leaf.md): you still"
+              "\n      get a win-turn diff against the original, it just costs a table from scratch"
+              "\n      rather than a shared one.")
     return err
+
+
+def provider_split(err_path):
+    """-> {provider: {arm, ...}} if the arms disagree, else {}. Read off the batch's own `[play]` line.
+
+    Reported by the engine rather than re-derived here: detection reads card params, and a Python
+    mirror of it would be a second implementation free to drift from the one that decides play."""
+    seen = {}
+    try:
+        for line in open(err_path):
+            if not line.startswith("[play] "):
+                continue
+            parts = line.split()
+            name = parts[1]
+            prov = next((x.split("=", 1)[1] for x in parts if x.startswith("provider=")), None)
+            if prov:
+                seen.setdefault(prov, set()).add(name.split("__")[0])
+    except OSError:
+        return {}
+    return seen if len(seen) > 1 else {}
 
 
 def job_costs(err_path):
@@ -1005,6 +1043,35 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
         print(f"\n  cost is NOT uniform across arms: {hi} is {cost[hi]/cost[lo]:.1f}x {lo} per game"
               f" ({cost[hi]:.0f} vs {cost[lo]:.0f} ms).\n  A screen's wall clock is set by its"
               " priciest arm; ms/game is wall, so it inflates under load.")
+
+    # The apparatus's ROLLOUT half, reported beside the result rather than left to a later audit.
+    # Reweighting bounds the weighting half at ~0.001t; what stayed unbounded is that the shared
+    # table's cell values were fit to the BASE deck's library. Printed as the scatter d* that would be
+    # needed to fake each effect, because that is directly comparable to a measured scatter.
+    raw_p = raw_sidecar(spec.profile)
+    if use_table and raw_p and not raw_profile_mismatch(spec.profile) \
+            and spec.raw.get("misfit_bound", True) and results:
+        try:
+            _, ek_m = table_meta(shipped_table(spec.profile))
+            rows = []
+            for tag, r in results.items():
+                cnt, dsz = __import__("keep_margin").deck_counts(decks[tag][0], ek_m["buckets"])
+                rows.append((tag, r["delta"], misfit_delta_star(raw_p, cnt, dsz, r["delta"])))
+        except Exception as e:                            # never let an audit line kill a measurement
+            print(f"\n  apparatus bound unavailable ({e})")
+            rows = []
+        if rows:
+            print(f"\n  apparatus (rollout half): the cell-value SCATTER that could fake each effect")
+            for tag, d, ds in rows:
+                if ds is None:
+                    print(f"    {tag:20s} delta {d:+.4f}   d* > {MISFIT_GRID[-1]:.2f}t "
+                          f"(off the grid -- misfit cannot reach this effect)")
+                else:
+                    print(f"    {tag:20s} delta {d:+.4f}   d* = {ds:.3f}t")
+            print("    Compare d* against a MEASURED scatter: scripts/keep_delta.py --arm ... "
+                  "(burn's\n    Skullcrack->Bolt measured 0.054t). d* far above it => the effect is"
+                  " not apparatus.\n    Sign is one-way too: misfit falls on the arm alone, so it can"
+                  " only make an edit look SLOWER.")
     # Ranking is what a multi-arm spec is FOR, and every arm was measured against base rather than
     # against each other -- so the interesting comparison (the top two) was the one not printed. The
     # data is already there and paired on the same game indices; only the subtraction was missing.
@@ -1103,6 +1170,34 @@ def raw_sidecar(profile_path):
         if stem and os.path.exists(stem + ext):
             return stem + ext
     return None
+
+
+# Log-spaced so ONE pass over the decision surface yields the whole curve; inverting it by binary
+# search would cost a pass per probe (a minute each on Goblins' 417k cells).
+MISFIT_GRID = tuple(round(0.002 * 1.3 ** i, 6) for i in range(24))
+
+
+def misfit_delta_star(raw_path, counts, deck_size, effect):
+    """The cell-value SCATTER at which the shared table's rollout-half misfit could account for an
+    effect of this size -- i.e. how wrong the apparatus would have to be to have invented the result.
+
+    Reweighting reproduces the table's WEIGHTING half exactly, so what is left unbounded is that its
+    cell values were estimated on the base deck's library. A misfit cell only costs anything if it
+    flips a decision, and the cost of a flip is that decision's distance to its threshold, so the bias
+    is bounded by SUM w*|margin| over decisions within `d` of flipping (scripts/keep_margin.py).
+    Inverting that bound against the measured effect is the form a reader can act on: compare `d*` to
+    a measured scatter (scripts/keep_delta.py; burn's Skullcrack->Bolt came out at 0.054t)."""
+    import keep_margin                                   # deferred: a pass costs ~1s..1min by deck
+    curve = keep_margin.bound_for(raw_path, counts, deck_size, deltas=MISFIT_GRID)
+    prev_d = prev_b = 0.0
+    for d in sorted(curve):
+        b = curve[d]
+        if b >= abs(effect):
+            if b == prev_b:
+                return d
+            return prev_d + (d - prev_d) * (abs(effect) - prev_b) / (b - prev_b)
+        prev_d, prev_b = d, b
+    return None                                          # bound never reaches the effect on this grid
 
 
 def raw_profile_mismatch(profile_path):

@@ -82,6 +82,15 @@ class DecisionProvider
 public:
     virtual ~DecisionProvider() = default;
 
+    // Which archetype provider a deck routed to -- OBSERVABILITY, not a decision input. Archetype
+    // detection is by card params (SelectDecisionProvider), and it has silently MISROUTED decks three
+    // times (Goblins -> AntiLifegain via Goblin Matron's tutor_to_hand; Mirrorwing -> Goblins via
+    // Goblin Instigator's etb_self_creates_tokens; FiveColour -> AntiLifegain via its fetchlands),
+    // each caught only after a deck had been measured under another archetype's heuristics. Nothing
+    // printed which provider was in force, so nothing could have caught them earlier. Pure reporting:
+    // no engine path branches on this.
+    virtual const char* Name() const { return "Generic"; }
+
     // TutorCandidates -- tutor priority: ordered library card-name candidates for a tutor
     // (Idyllic / Enlightened). 1 = decided, >1 = search picks, {} = whiff.
     virtual std::vector<std::string>

@@ -10,6 +10,7 @@
 #include "../ai/MulliganProfileIO.h"
 #include "../deck/DeckLoader.h"
 #include "../ai/ValueArm.h"
+#include "../ai/DecisionProviders.h"   // SelectDecisionProvider + Name(): report which archetype a job runs under
 #include <algorithm>
 #include <climits>
 #include <condition_variable>
@@ -533,7 +534,11 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
         j.depth     = ps.depth;
         j.budget_ms = ps.budget_ms;
         std::cerr << "[play] " << j.name << " depth=" << ps.depth << " budget=" << ps.budget_ms
-                  << "ms source=" << ps.source << "\n";
+                  << "ms source=" << ps.source
+                  // Which archetype's heuristics this job runs under. Detection is by card params, so
+                  // an edited decklist can cross a signature and silently change provider between two
+                  // arms of a comparison -- the one asymmetry a shared apparatus cannot absorb.
+                  << " provider=" << SelectDecisionProvider(j.deck).Name() << "\n";
     }
 
     j.second_main = GoldFishRunner::DeckUsesSecondMain(j.deck);

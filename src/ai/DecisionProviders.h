@@ -93,6 +93,7 @@ const char* GateName(UnprunedGate g);
 class GenericProvider : public DecisionProvider
 {
 public:
+    const char* Name() const override { return "Generic"; }
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
     bool        CanAutoFireAltPayload(const GameState&, int, const CardDefinition&) const override;
@@ -124,6 +125,7 @@ public:
 class AntiLifegainProvider : public GenericProvider
 {
 public:
+    const char* Name() const override { return "AntiLifegain"; }
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
     bool CanAutoFireAltPayload(const GameState&, int, const CardDefinition&) const override;
@@ -166,6 +168,7 @@ public:
 class TreasureHuntProvider : public GenericProvider
 {
 public:
+    const char* Name() const override { return "TreasureHunt"; }
     bool        HasAnyDigSource (const GameState&) const override;
     bool        ShouldConsiderDig(const GameState&) const override;
     std::string SelectDigSource (const GameState&, const ManaPool&, bool&) const override;
@@ -208,6 +211,7 @@ public:
 class VialProvider : public GenericProvider
 {
 public:
+    const char* Name() const override { return "Vial"; }
     bool WantVialCharge(const GameState&, const Permanent&) const override;
 };
 
@@ -219,6 +223,7 @@ public:
 class BurnProvider : public GenericProvider
 {
 public:
+    const char* Name() const override { return "Burn"; }
     bool PreferHoldLandDrop(const GameState&, int) const override;
     // Shard Volley is the deck's only sacrifice-a-land spell, and every land it could sacrifice is a
     // Mountain (no utility land whose loss is free) -- so holding it until it wins the game or unlocks
@@ -233,6 +238,7 @@ public:
 class HinataProvider : public GenericProvider
 {
 public:
+    const char* Name() const override { return "Hinata"; }
     bool OpponentPlaysLands() const override { return true; }
     // Cleanup discard: the deck's USER-AUTHORED KEEP PRIORITY (2026-08-07), assigned as ranks
     // and shed in reverse. Keep hardest -> shed first: Hinata #1, Reality Spasm #1, Crackle #1,
@@ -310,6 +316,7 @@ public:
 class DragonstormProvider : public GenericProvider
 {
 public:
+    const char* Name() const override { return "Dragonstorm"; }
     std::vector<std::string>
     TutorToBattlefieldPutOrder(const GameState&, int, const CardParams&, int) const override;
 
@@ -381,6 +388,7 @@ public:
 class GoblinsProvider : public GenericProvider
 {
 public:
+    const char* Name() const override { return "Goblins"; }
     bool DeferSacOutletPreCombat(const GameState&, const Permanent&, bool) const override;
     // Goblin Matron tutors for "a Goblin card" out of ~16 distinct Goblin names, and unlike every
     // other tutor in the suite its targets are not close substitutes (Muxus and Mogg War Marshal are
@@ -469,6 +477,7 @@ public:
 class CreatureGivingProvider : public GenericProvider
 {
 public:
+    const char* Name() const override { return "CreatureGiving"; }
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
@@ -495,6 +504,7 @@ public:
 class FiveColourProvider : public GenericProvider
 {
 public:
+    const char* Name() const override { return "FiveColour"; }
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
     void ModalSplitCandidates(const GameState&, const CardDefinition&,
                               std::vector<int>&) const override;
@@ -510,6 +520,7 @@ public:
 class MirrorwingProvider : public GenericProvider
 {
 public:
+    const char* Name() const override { return "Mirrorwing"; }
     void TrickTargetCandidates(const GameState&, const CardDefinition&,
                                std::vector<int>&) const override;
     // Enumeration breadth: a post-fan-out hand holds 10-12 castable groups x ~5 trick-target
