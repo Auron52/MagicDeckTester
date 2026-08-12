@@ -1105,6 +1105,32 @@ def raw_sidecar(profile_path):
     return None
 
 
+def raw_profile_mismatch(profile_path):
+    """'' if the deck's committed raw sidecar actually rebuilds its committed keep table, else why not.
+
+    A raw generated at a different max_mull (or missing the hand-size tables the profile's deeper
+    mulligans read) builds a DIFFERENT policy. `scripts/keep_margin.py` carries the same check."""
+    raw_p, tbl_p = raw_sidecar(profile_path), shipped_table(profile_path)
+    if not (raw_p and tbl_p):
+        return ""
+    try:
+        op = gzip.open if raw_p.endswith(".gz") else open
+        raw = json.load(op(raw_p, "rt"))
+        _, ek = table_meta(tbl_p)
+    except Exception as e:                                   # unreadable -> let the caller's own path report
+        return f"unreadable ({e})"
+    pm, rm = ek.get("max_mull"), raw.get("meta", {}).get("max_mull")
+    have = {s["H"] for s in raw.get("sizes", [])}
+    need = {7 - m for m in range(int(pm or 0) + 1)}
+    if rm != pm:
+        return f"max_mull raw={rm} profile={pm}"
+    if need - have:
+        return f"raw lacks hand sizes {sorted(need - have)}"
+    if raw.get("buckets") != ek.get("buckets"):
+        return "bucketing differs"
+    return ""
+
+
 def reweight_ok(spec, tag):
     """Can an existing base-deck table be retargeted to this combination with ZERO rollouts?
 
@@ -1120,6 +1146,14 @@ def reweight_ok(spec, tag):
     bk = table_buckets(spec.profile)
     if not bk:
         return False, "the deck ships no keep table to retarget"
+    # The gate reads the PROFILE's buckets but the reweight rebuilds from the RAW, and nothing
+    # required the two to be the same generation. Anti-Lifegain ships a max_mull=3 raw (sizes 7-4
+    # only) beside a max_mull=6 profile, so a reweight there would quietly hand the arm a shallower
+    # mulligan policy than the base plays -- an asymmetry in the apparatus, which is the one thing
+    # screening may not have.
+    bad = raw_profile_mismatch(spec.profile)
+    if bad:
+        return False, f"its committed raw does not build its committed profile ({bad})"
     rate, over = fallback_rate(bk, spec.counts, spec.arms[tag])
     # Gate on the SAME bias budget the screen uses, not on exactly zero. A raised bucket leaves some
     # hands with no cell to reweight, and those fall through -- but so does the screen's own shared

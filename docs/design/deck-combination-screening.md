@@ -943,9 +943,11 @@ position-based implementation can do.
 
 ## Open / not measured
 
-- **A high-R (R≥40) confirmation arm.** Every floor uses R=10 tables that cost ~0.032t against the
-  shipped one — larger than the effect they bound — so "regenerate to confirm" is still unvalidated as
-  a tier, and the *true* fit bias against a well-fit table is unknown in both size and sign.
+- ~~**A high-R (R≥40) confirmation arm.**~~ **WITHDRAWN and CLOSED a better way (2026-08-12).** The
+  proposal was incoherent on this deck set: six of the nine shipped tables were themselves generated
+  below R=40 (Hinata2 at R=22 over 431k cells), so an R≥40 bracket meant generating a table BETTER than
+  the one we ship, once per arm, per screen. Bounding the rollout half needs no generation at all — see
+  "Bounding the rollout half without generating anything" below.
 - ~~Re-measuring the two burn floors with the profile attached.~~ **DONE, both rows** (see above).
   Both effects survived the correction unchanged (burn carries little of its identity in its
   profile, unlike slivers); both biases came out consistent with zero, so the expected-sign reading
@@ -1273,3 +1275,69 @@ prints as exactly 0.00000 / 100% identical, which is the same cell compared with
 - A **payment-capability signature** over mana sources is still worth adding as an assertion: two
   sources that differ in what they can pay for must not merge into one bucket. It would have caught
   the profile-less bucketing without anyone needing to know why it was wrong.
+
+## Bounding the rollout half without generating anything (2026-08-12)
+
+A table's fit to a deck is (a) the hand weights derived from `count` and (b) the per-cell rollout values.
+Reweighting reproduces (a) exactly at the source's R, for free — but leaves (b) estimated on the base
+deck's library, and that half had never been bounded. Regeneration is the obvious route and is not
+affordable (above). It is also unnecessary.
+
+**The mechanism.** A misfit cell costs nothing unless it changes a DECISION, and the table's two decisions
+are read off the same enumeration (`KeepVal` / `ArgminSub`): keep/mull is a threshold, whose flip costs
+`|KeepVal - Dopt[m+1]|`; bottoming is an argmin, whose flip costs the gap to the runner-up. Both share one
+asymmetry — a decision far from its tipping point needs a large move to flip and won't; one near it flips
+easily and costs almost nothing. So if no cell value moves by more than `d`,
+
+    bias(d)  <=  SUM over decisions with |margin| < d  of  w * |margin|
+
+computed from the committed raw (which stores per-cell `count`/`sum`/`sumsq`), weighted by reach
+probability. `scripts/keep_margin.py`. **Seconds per deck, no play, no rollouts, and the cost does not grow
+with K** — the whole nine-deck set runs in 5 minutes. It rebuilds each shipped policy from its raw first
+and refuses to report unless every keep flag matches; 8 of 9 replicate exactly (Anti-Lifegain is the
+artifact mismatch below).
+
+**The bound is near deck-independent** — at a 0.05t perturbation it is 0.0037–0.0095t across K=10..21 and
+R=22..60. Sensitivity is a property of the mulligan decision structure, not of deck complexity or table
+quality, so `d` calibrated on a cheap deck transfers to an expensive one. Bottoming carries 2–4x more mass
+at risk (46% of Knights' decisions sit within 1 se of flipping, vs 8% for keep/mull) but a comparable
+bound, because its near-ties are cheap.
+
+**The bias also has a known SIGN.** Both arms play under the same table, fit to the base, so the base's
+misfit regret is zero by construction and the whole bias falls on the arm — which can only play worse than
+under its own true-value-optimal policy. Misfit can only make an edit look SLOWER. A screen reporting an
+improvement is therefore conservative; a screen reporting a regression is the one that needs the bound.
+
+**Measuring `d`** needs no table either: it is a per-cell quantity, so a SAMPLE settles its magnitude, and
+`MTG_SCORE_COMPS` scores chosen compositions at chosen R. Cost is `cells x R`, **independent of the grid**
+— the same price on Hinata2's 431k-cell table as on burn's 10.9k one. `scripts/keep_delta.py`. The scorer's
+rollout seed depends only on the rollout index and pd, not the deck, so base and arm run the same seed
+sequence: a paired design for free.
+
+**Measured (burn, Skullcrack 4->0 / Lightning Bolt 4->8, 180 cells x R=400, 288k rollouts, ~30 min):**
+
+| | rms (upper bd) | mean | dispersion |
+|---|---|---|---|
+| size-7 play | 0.0589 | -0.0246 (t=-3.2) | **0.0535** |
+| size-7 draw | 0.0599 | -0.0392 (t=-5.1) | **0.0453** |
+
+The mean shift is real — the arm's library genuinely plays faster — but **a uniform shift flips nothing**,
+because `Dopt` is a weighted average of the same `KeepVal`s and moves with them. The decision-relevant `d`
+is the DISPERSION, not the rms. At d=0.054: **rollout-half bias <= 0.0059t against a measured -0.0314t
+effect, a 5.3x margin**; with the reweight floor (0.0007) the whole apparatus bound is ~0.0066 vs 0.0314.
+Conservative twice over — the dispersion still contains residual sampling noise, and the bound assumes
+every near-threshold decision flips adversarially.
+
+**Two defects found by the replication gate:**
+
+1. **Anti-Lifegain's committed raw does not build its committed profile** — raw `max_mull=3` at commit
+   `9d9f654` holding only sizes 7-4, beside a `max_mull=6` profile at `3276862`. It physically lacks the
+   size-3/2/1 tables the deeper mulligans read. Every raw consumer (reweighting, merging) would silently
+   build a shallower policy for the arm than the base plays — an asymmetric apparatus, the one thing
+   screening may not have. `reweight_ok` now refuses it; the other eight decks are clean. **Open: either
+   regenerate the raw or accept that this deck cannot be screened by reweight.**
+2. **`MTG_SCORE_COMPS` fails silently on every shipped deck** — it builds the sidecar path as
+   `<stem>.keepmodel.exhaustive.profile.json` and does NOT resolve `.gz`, but every deck ships gzipped. It
+   loads an empty profile, leaves K=0, fills no hand, and reports every composition as unwon with se 0.
+   That looks like data. `keep_delta.py` materialises the sidecar plain and refuses an all-se-zero result;
+   the C++ still has the sharp edge. **Open: resolve `.gz` in `RunScoreCompsMode`.**
