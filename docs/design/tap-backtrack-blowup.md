@@ -37,7 +37,19 @@ Suite budgets (b10/b20/b50) have not hit it; 4x/16x classify re-runs and unbound
 - Repro to find first: instrument a step counter (`MTG_TAP_BT_PROBE`) and re-run the command
   above to identify the game index and board shape.
 
+## Second sighting (same day, 2026-08-12)
+
+During the Mirrorwing SituationalCardRank sweep, one variant (Gold-Rush-high group-cap
+ordering, throwaway scaffolding) flipped one game's plan shape and turned it into a
+**286-second game** (`SLOW-GAME` at d5 b20, seed 5060 gi55 — ~100x normal wall). A mid-run
+`gdb` backtrace showed the worker pinned in the same `TapForCostBacktrackWorker` recursion.
+Two independent sightings in one day, both Mirrorwing wide boards, both budget-immune
+(payment solves have no budget check). The deterministic repro died with the deleted
+scaffolding; to re-find one, instrument a step counter (`MTG_TAP_BT_PROBE`) and run
+mirrorwing suite cases at 4x budget.
+
 ## Status
 
 OPEN — recorded on discovery; not scheduled. Cheap mitigation if it bites a run: kill the
-stuck game's process; suite budgets are unaffected so far.
+stuck game's process; suite budgets are unaffected so far (the blow-up needs a plan shape
+the shipped engine currently doesn't choose at suite budgets).

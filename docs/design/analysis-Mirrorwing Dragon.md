@@ -384,5 +384,14 @@ USER play knowledge encoded (rounds 3-4 of the review):
   and wins at T8 with waves — the exact "cast-dependent lethal in a dropped group" hazard the
   escalation question uncovered; every other deck byte-identical, wall cost free (16s vs 17s on
   the heaviest case), `MTG_GROUP_WAVES=0` restores the old engine byte-identically.
-- Deck-aware SituationalCardRank for Mirrorwing (which groups the cap drops): the "fill in
-  later" seam -- currently inherits the generic ranking.
+- ~~Deck-aware SituationalCardRank for Mirrorwing (which groups the cap drops)~~ MEASURED
+  AND REJECTED 2026-08-12 (heuristic-optimization loop, scaffolding deleted): three motivated
+  orderings (V1 chain-fuel-first: Fists > cantrip tricks > Gold Rush > Twinflame > bodies,
+  with magnet-offline on top; V2 bodies-first; V3 Gold-Rush-high) swept vs the generic
+  2-level rank on train seed 5005, d3 300g + d5 150g. V1/V2: **byte-identical win turns on
+  every game at both depths**; V3: identical outcomes but one game 100x slower (it tickled
+  the pre-existing `TapForCostBacktrackWorker` blow-up -- docs/design/tap-backtrack-blowup.md).
+  The ranking path is live (V3 proves it), but the cap's keep-set choice is outcome-inert at
+  suite shapes: the odometer already covers the winning plans within any 8 kept groups, and
+  the group waves recover dropped tranches when budget allows. Baseline wins; complexity not
+  earned. Revisit only if a budget/shape change makes the cap bind harder.
