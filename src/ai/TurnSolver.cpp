@@ -4707,7 +4707,7 @@ static void CollectMultiVariantSacSources(const std::vector<Action>& cands, std:
         if (a.kind != Action::Kind::SacForMana) { continue; }
         const auto it = std::find_if(seen.begin(), seen.end(),
                                      [&](const auto& s) { return s.first == a.sac_source_id; });
-        if (it == seen.end()) { seen.push_back({ a.sac_source_id, &a.chosen_float_color }); continue; }
+        if (it == seen.end()) { seen.push_back({ a.sac_source_id, &a.chosen_float_color.str() }); continue; }
         if (*it->second != a.chosen_float_color
             && std::find(out.begin(), out.end(), a.sac_source_id) == out.end())
         { out.push_back(a.sac_source_id); }
@@ -5405,7 +5405,7 @@ static void MeasureManaSideCollapse(const std::vector<Action>& cands,
                 // Consumed-card identity must be in the signature: two lines with the same mana are NOT
                 // interchangeable if they spent different cards (that changes later turns).
                 consumed += (std::uint64_t)(std::uintptr_t)a.def * 1099511628211ull;
-                if (!a.chosen_float_color.empty()) { colour_choice += (std::uint64_t)a.chosen_float_color[0]; }
+                if (!a.chosen_float_color.empty()) { colour_choice += (std::uint64_t)a.chosen_float_color.str()[0]; }
             };
             for (int t = 0; t < ng; ++t)
             { if (choice[t] > 0) { fold(groups[m_groups[t]][choice[t] - 1]); } }
@@ -11519,7 +11519,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // each distinct multiset ordering once -- identical copies don't multiply).
             std::vector<int> idx(reorder.size());
             for (size_t i = 0; i < idx.size(); ++i) { idx[i] = static_cast<int>(i); }
-            auto by_name = [&](int x, int y) { return reorder[x].card_name < reorder[y].card_name; };
+            // .str(): LEXICOGRAPHIC order (never the interned pointer -- pointer order would vary
+            // run-to-run with allocation order and break determinism).
+            auto by_name = [&](int x, int y) { return reorder[x].card_name.str() < reorder[y].card_name.str(); };
             std::sort(idx.begin(), idx.end(), by_name);
             do { orderings.push_back(idx); } while (std::next_permutation(idx.begin(), idx.end(), by_name));
         }

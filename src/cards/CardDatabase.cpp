@@ -124,6 +124,18 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         }
         m_cards[def.card.m_name] = std::move(def);
     }
+    RebuildInternedIndex();
+}
+
+// See the header: canonical-interned-pointer -> def index over m_cards. Interning here also
+// guarantees every DB name is already in the registry before any worker thread runs, so the
+// hot-path read (InternedName ctor on an existing name / the find below) never inserts.
+void CardDatabase::RebuildInternedIndex()
+{
+    m_by_name_ptr.clear();
+    m_by_name_ptr.reserve(m_cards.size());
+    for (const auto& kv : m_cards)
+    { m_by_name_ptr[InternedName::Intern(kv.first)] = &kv.second; }
 }
 
 std::vector<std::string> CardDatabase::MdfcBackFaceNames() const
@@ -144,6 +156,7 @@ void CardDatabase::Register(const std::string& name, CardFactory factory)
     def.tier = CardTier::Custom;
     def.tmpl = CardTemplate::None;
     m_cards[name] = std::move(def);
+    RebuildInternedIndex();
 }
 
 const CardDefinition* CardDatabase::Lookup(const std::string& name) const

@@ -31,6 +31,11 @@ public:
 
     operator const std::string&() const { return *m_str; }   // implicit: covers every read site
     const std::string& str() const      { return *m_str; }
+    // String-observer delegates so hot structs can swap std::string members for InternedName
+    // without touching read sites (Action::card_name etc.). Same values as the string's own.
+    bool        empty() const { return m_str->empty(); }
+    const char* c_str() const { return m_str->c_str(); }
+    std::size_t size()  const { return m_str->size(); }
 
     // Interned names are canonical, so pointer equality == string equality (used for
     // InternedName-vs-InternedName; string/char* comparisons go via the conversion above).
@@ -59,3 +64,11 @@ inline bool operator!=(const InternedName& a, const char* b)        { return a.s
 inline bool operator!=(const char* a, const InternedName& b)        { return a != b.str(); }
 
 inline std::ostream& operator<<(std::ostream& os, const InternedName& n) { return os << n.str(); }
+
+// Concatenation, delegating to the canonical string (diagnostics / log-string building only --
+// hot paths never concatenate). Same results as the former std::string members.
+inline std::string operator+(const InternedName& a, const std::string& b)  { return a.str() + b; }
+inline std::string operator+(const std::string& a, const InternedName& b)  { return a + b.str(); }
+inline std::string operator+(const InternedName& a, const char* b)         { return a.str() + b; }
+inline std::string operator+(const char* a, const InternedName& b)         { return a + b.str(); }
+inline std::string operator+(const InternedName& a, const InternedName& b) { return a.str() + b.str(); }
