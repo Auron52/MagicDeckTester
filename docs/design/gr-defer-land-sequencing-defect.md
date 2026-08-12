@@ -93,3 +93,13 @@ d5 5.1467 -> 5.0933; 4 searched-slower games all classify `churn` (recover at 4x
 RESOLVED pending GT rebaseline -- fix beats both the broken state and the defer-off hatch on
 the validation list. The overnight accept 73be0a6 stood in the interim (net -0.2125, tail
 bounded ~13 turns/5200 games).
+
+## Post-fix audit note: the one "PERSISTS" held-out game is deep budget churn, not a defect
+
+s6006 gi209 d3 (4 -> 5) survives the classifier's 4x/16x probes but recovers at 64x (b640).
+Traced: the per-candidate miner ranks the T4 line (Mountain + Scale the Heights, whose extra
+land drop funds the T4 go-off) above the committed T5 line in BOTH worlds, and the wave phase
+adopts nothing (MTG_BP_WAVE_PROBE improved=0). The flip is pure budget DILUTION from the
+class's fan-out (any widening does it: waves off + W=16 flips the same game at 1x), landing on
+a game whose T4 verification was marginal at the shipped budget. Classic widening trade; the
+same held-out run has ~100 recoveries against it and every searched key net better.
