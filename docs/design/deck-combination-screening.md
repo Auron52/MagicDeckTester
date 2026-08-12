@@ -1215,6 +1215,35 @@ because "Light Up the Stage" sorts before "Lightning Bolt". A spec can now say i
 - **`<label>.results.json`** carries the deltas, the apparatus and the engine commit, so results
   accumulate instead of scrolling past.
 
+## Every published conclusion, re-measured (2026-08-12)
+
+Both corrections applied at once: the deck's own play settings (`value_play`) instead of a forced
+`d5/b20`, and a reweighted R=60 bracket instead of a generated R=10 one.
+
+| edit | before | after | play |
+|---|---|---|---|
+| burn, Skullcrack→Bolt | −0.0315 ±0.0015, floor 0.0051, **6.14x** | −0.0314 ±0.0015, floor **0.0007**, **42.94x** | d5 → **d6** |
+| burn, Skullcrack→Mountain | +0.0239 ±0.0023, floor 0.0057, **4.22x** | +0.0240 ±0.0023, floor **0.0010**, **23.04x** | d5 → **d6** |
+| slivers, cut_vial | −0.0303 ±0.0014 (60k), floor 0.0068–0.0079, **3.8–4.5x** | −0.0332 ±0.0032 (20k), floor **0.0011**, **28.87x** | d5 (unchanged) |
+
+Three readings:
+
+- **The effect sizes barely moved on burn** (−0.0315 → −0.0314, +0.0239 → +0.0240) despite the play
+  level changing. The forced depth was wrong but *symmetric*, which is what the apparatus argument
+  always claimed; this is the first direct evidence for it.
+- **The floors fell 5–7x, so the margins went from single-digit to 23–43x.** The old margins were
+  never "the effect is 4x the apparatus bias" — they were "the effect is 4x the bracket's own
+  generation noise" (measurement 1 above). Nothing about the effects changed; what changed is that
+  the guard now measures the thing it is named after.
+- **slivers moved more than burn** (−0.0303 at 60k under the old 10-cell design vs −0.0332 at 20k
+  here, ~2se apart). Not reconciled; the honest statement is that slivers' effect is ≈ −0.03 and the
+  two designs differ by about their combined noise.
+
+A structural note on the reweighted bracket: when an edit drops a card, the base deck's "own" table
+IS the shipped one (retargeting the base's counts onto the base's own values is the identity), so the
+driver runs that cell once and the bias reduces to the variant's null alone. The `base` null then
+prints as exactly 0.00000 / 100% identical, which is the same cell compared with itself, not a bug.
+
 ## Guards now in the tree (so the two-layer bug cannot recur)
 
 - `mtg-analyze` **refuses** a keep-gen when `<stem>.profile.json` is not beside the decklist

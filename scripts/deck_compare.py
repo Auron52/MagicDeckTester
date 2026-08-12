@@ -937,16 +937,24 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
     if ftags:
         R = int(spec.raw.get("floor_R", 10))
         print(f"\n  bracketing {', '.join(ftags)} in the same batch:")
-        route, _, own_app, per_arm, base_key = bracket_own_tables(spec, ftags, decks, R, profile,
-                                                                  dry_run)
-        fmeta = (ftags, route, per_arm, base_key, R)
-        seen = set()
+        route, own_tbl_f, own_app, per_arm, base_key = bracket_own_tables(spec, ftags, decks, R,
+                                                                          profile, dry_run)
+        bracket_tbl = {("own_" + k): v for k, v in own_tbl_f.items()}
+        # A bracket cell whose table IS the screen's own table is the screen's ARM -- most often the
+        # base deck's own cell when the edits drop a card and the brackets are reweighted, because
+        # then "the base deck's own table" is the shipped one. Point at the arm instead of running an
+        # identical 20,000-game cell under a second name.
+        screen_tbl = os.path.realpath(table_src or tpath) if use_table and (table_src or tpath) else None
+        cell_name, seen = {}, set()
         for t in ftags:
             for d, key in ((t, "own_" + t), ("base", base_key[t])):
-                if (d, key) not in seen:
+                same = screen_tbl and os.path.realpath(bracket_tbl[key]) == screen_tbl
+                cell_name[(d, key)] = d if same else f"{d}__{key}"
+                if not same and (d, key) not in seen:
                     seen.add((d, key))
                     jobs.append(spec.job(f"{d}__{key}", decks[d][0], decks[d][1], own_app[key],
                                          seed=seed))
+        fmeta = (ftags, route, per_arm, base_key, R, cell_name)
     json.dump({"arms": spec.arms, "games": spec.games, "depth": spec.depth,
                "budget_ms": spec.budget, "max_turns": spec.maxturn, "use_table": use_table,
                "engine_commit": head_commit(),
@@ -1024,13 +1032,14 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
                    st.mean([got["base"][g] for g in common]), "results": results},
               open(os.path.join(spec.out, f"{label}.results.json"), "w"), indent=1)
     if fmeta:
-        ftags, route, per_arm, base_key, R = fmeta
+        ftags, route, per_arm, base_key, R, cell_name = fmeta
         for tag in ftags:
             rw = route[tag] == "reweight"
             own_R = (table_meta(spec.profile)[1] or {}).get("effective_R", "?") if rw else R
             report_bracket(spec, got, tag,
                            {"bs": "base", "vs": tag,
-                            "bo": f"base__{base_key[tag]}", "vo": f"{tag}__own_{tag}"},
+                            "bo": cell_name[("base", base_key[tag])],
+                            "vo": cell_name[(tag, "own_" + tag)]},
                            R, rw, own_R, per_arm[tag], table_src is not None)
     if label == "screen":
         print("\nNOTE: this is a SCREEN. Every arm shares one apparatus, so the measured delta carries an")
@@ -1108,9 +1117,15 @@ def reweight_ok(spec, tag):
     if not bk:
         return False, "the deck ships no keep table to retarget"
     rate, over = fallback_rate(bk, spec.counts, spec.arms[tag])
-    if rate:
+    # Gate on the SAME bias budget the screen uses, not on exactly zero. A raised bucket leaves some
+    # hands with no cell to reweight, and those fall through -- but so does the screen's own shared
+    # table above `max_fallback`, and at 0.0004% (a 4-of raised to a 5-of) that is ~0.0000003t of
+    # one-sided bias. Refusing it forced the alternative: a ~20-minute generated bracket whose floor
+    # is dominated by its own generation noise (~0.0075 measured on burn). That trade is absurd.
+    if rate > spec.raw.get("max_fallback", 0.01):
         return False, f"it raises a bucket past the source grid ({pct(rate)} of hands: {'; '.join(over)})"
-    return True, ""
+    return True, (f"{pct(rate)} of hands have no cell to reweight (under the "
+                  f"{spec.raw.get('max_fallback', 0.01) * 100:.2f}% budget)" if rate else "")
 
 
 def reweight_table(spec, tag, deck_path, src_raw):
@@ -1220,6 +1235,8 @@ def bracket_own_tables(spec, tags, decks, R, play_prof, dry_run):
         ok, why = reweight_ok(spec, t)
         if mode == "reweight" and ok and src_raw:
             route[t] = "reweight"
+            if why:
+                print(f"  {t}: reweighting anyway -- {why}")
             own_tbl[t] = (reweight_table(spec, t, decks[t][0], src_raw) if not dry_run
                           else os.path.join(os.path.dirname(decks[t][0]),
                                             spec.name + ".keepmodel.exhaustive.profile.json"))
@@ -1295,7 +1312,13 @@ def report_bracket(spec, got, tag, cell, R, rw, own_R, per_arm, pool):
           f"\n  the bias above is exactly their difference, null({tag}) - null(base):")
     for lbl, a, b in (("base", cell["bs"], cell["bo"]), (tag, cell["vs"], cell["vo"])):
         c, se_c, _, id_c = paired(got, a, b)
-        print(f"    {lbl:24s} {c:+9.5f} {se_c:8.5f} {id_c:6.1f}%")
+        # A null of exactly 0 / 100% identical is not a suspicious result, it is the same cell twice:
+        # under reweighting the base deck's "own" table IS the shipped one (retargeting the base's
+        # counts onto the base's own values is the identity), so the driver runs it once. The bias
+        # then reduces to the variant's null alone, which is the honest reading.
+        same = a == b
+        print(f"    {lbl:24s} {c:+9.5f} {se_c:8.5f} {id_c:6.1f}%"
+              + ("   <- the same cell: this deck's own table IS the shared one" if same else ""))
     if rw:
         print(f"\n  NOTE this bracket was REWEIGHTED, not generated: the shipped raw's cell values"
               f"\n  retargeted to {tag}'s counts (zero rollouts, R={own_R}). It reproduces the hand"
@@ -1405,14 +1428,25 @@ def floor(spec, tags, dry_run):
     # The CELLS are deduped across tags: `base` under the shared table is one job however many
     # combinations are bracketed.
     apps = {"ship": apparatus_dir(spec.out, "ship", spec.name, play_prof, shared), **own_app}
+    # Two apparatus keys can resolve to the SAME table -- most often when the edits drop a card and
+    # the brackets are reweighted, because then the base deck's "own" table IS the shipped one. Left
+    # alone that runs an identical 20,000-game cell twice under two names. Canonicalise by the table
+    # the key actually points at.
+    tables = {"ship": shared, **{k: own_tbl[k[4:]] for k in own_app}}
+    first, canon = {}, {}
+    for k in ["ship"] + sorted(own_app):
+        canon[k] = first.setdefault(os.path.realpath(tables[k]), k)
+    base_key = {t: canon[base_key[t]] for t in tags}
 
+    # The counts each table was GENERATED for -- what `fallback_rate`'s caps must come from. A base
+    # table (shipped, or the base deck's own) is spec.counts; a variant's own table is that arm's.
+    gen_of = {"ship": shared_gen, "own_base_rw": spec.counts, "own_base_gen": spec.counts}
+    gen_of.update({"own_" + t: spec.arms[t] for t in tags})
     cells = {("base", "ship"): (shared, shared_gen)}
     for t in tags:
         cells[(t, "ship")] = (shared, shared_gen)
-        cells[(t, "own_" + t)] = (own_tbl[t], spec.arms[t])
-        cells[("base", base_key[t])] = (
-            own_tbl[base_key[t][4:]] if per_arm[t] else own_tbl[t],
-            spec.counts if per_arm[t] else spec.arms[t])
+        cells[(t, canon["own_" + t])] = (tables[canon["own_" + t]], gen_of[canon["own_" + t]])
+        cells[("base", base_key[t])] = (tables[base_key[t]], gen_of[base_key[t]])
 
     # How much of each cell actually GETS a table. Where the bracket runs a deck under a table fit to
     # the other, the coverage cliff is inside the measurement by design -- but it was never quantified
@@ -1448,7 +1482,7 @@ def floor(spec, tags, dry_run):
         own_R = (table_meta(spec.profile)[1] or {}).get("effective_R", "?") if rw else R
         report_bracket(spec, got, tag,
                        {"bs": "base__ship", "vs": f"{tag}__ship",
-                        "bo": f"base__{base_key[tag]}", "vo": f"{tag}__own_{tag}"},
+                        "bo": f"base__{base_key[tag]}", "vo": f"{tag}__{canon['own_' + tag]}"},
                        R, rw, own_R, per_arm[tag], shared_gen is not spec.counts)
     return 0
 
