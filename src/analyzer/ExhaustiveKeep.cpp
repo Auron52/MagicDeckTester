@@ -1063,6 +1063,26 @@ static PriorCarry LoadPriorCarry(const Decklist& deck, const ExhaustiveKeepConfi
                     { std::cerr << "[keepgen] CHANGED-CARDS set but prior is NOT traced (no per-cell touched"
                                    " sets) -- falling back to statistical change-detection only\n" << std::flush; }
                     for (int H = HAND; H >= min_size; --H) { pc.trace_reuse[HAND - H].assign(TB(H).comps.size(), 0); }
+                    // A prior that CLAIMS to be traced but carries no non-empty touched set anywhere is
+                    // not evidence of "nothing was touched" -- it is evidence the recording was off (the
+                    // continuous worker went unarmed for exactly this reason). Trusting it is maximally
+                    // unsafe: empty is disjoint from everything, so every cell would be reused and the
+                    // change silently ignored. Demote to statistical detection instead.
+                    if (prior_traced && !pc.reuse_all_cells && !changed_cards.empty())
+                    {
+                        bool any_touch = false;
+                        for (const auto& sz : pj["sizes"])
+                        { for (const auto& e : sz["entries"])
+                          { if (e.contains("touched") && !e["touched"].empty()) { any_touch = true; break; } }
+                          if (any_touch) { break; } }
+                        if (!any_touch)
+                        {
+                            prior_traced = false;
+                            std::cerr << "[keepgen] EXECUTION-TRACE: prior says traced=true but EVERY touched"
+                                         " set is empty -- treating it as untraced (recording was off) and"
+                                         " falling back to statistical change-detection\n" << std::flush;
+                        }
+                    }
                     long long loaded = 0;
                     for (const auto& sz : pj["sizes"])
                     {
@@ -1628,7 +1648,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // result in a per-(cell,r) slot and folds it deterministically). Same seed stream as run_batch
     // (pure function of seed_base,r,w,pd), so a cell's value is byte-identical to the wave path for the
     // same rollout set. Trace is unsupported on this path (a diagnostic; off by default).
-    auto run_one = [&](AIEngine& ai, int w, int pd, long long r) -> double
+    // `hit` (execution-trace): non-null => this rollout records which cards' effects ran. The
+    // continuous path's size-7 rollouts go through HERE, not through run_batch, so omitting it is what
+    // left MTG_KEEP_TRACE recording nothing on the only generation path there is.
+    auto run_one = [&](AIEngine& ai, int w, int pd, long long r,
+                       std::vector<char>* hit = nullptr) -> double
     {
         const int H = work[w].H, idx = work[w].idx;
         const std::vector<int>& comp = tables[HAND - H].comps[idx];
@@ -1654,7 +1678,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
         ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));
         const auto t_roll = std::chrono::steady_clock::now();
-        const double wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns);
+        double wt;
+        if (hit) { std::fill(hit->begin(), hit->end(), 0); wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns, hit); }
+        else     { wt = ai.RolloutKeepWinTurn(s, 0, cfg.max_turns); }
         capture_slow(H, comp, pd, r, rs,   // always-on (cheap-gated); slow_ms only adds streaming
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_roll).count());
         return wt;
@@ -2546,6 +2572,16 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         {
             AIEngine ai(rollout_profile, cfg.depth, cfg.budget_ms);
             ai.SetSearchPostCombat(second_main);
+            // Execution-trace (MTG_KEEP_TRACE): arm THIS worker's engine, as the wave worker does.
+            // Without it the continuous path -- the only generation path since
+            // keepgen-no-off-switches.md -- recorded nothing: every cell's `touched` stayed empty while
+            // the sidecar still stamped meta.traced=true. That is not merely a dead feature. An empty
+            // touched-set is DISJOINT from every changed-card set, so the consume side
+            // (MTG_KEEP_CHANGED_CARDS) marks all cells provably-untouched and reuses the entire prior
+            // -- shipping a stale profile while reporting a successfully scoped re-run.
+            if (trace_on) { ai.SetTouchIndex(&touch_index); }
+            std::vector<char> w_hit;                       // per-rollout scratch, owned by this worker
+            if (trace_on) { w_hit.assign(touch_names.size(), 0); }
             for (;;)
             {
                 std::array<long long, 5> task;
@@ -2567,7 +2603,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 }
                 const int i = static_cast<int>(task[1]), pd = static_cast<int>(task[2]);
                 const long long r = task[3];
-                const double wt = run_one(ai, work_idx[0][i], pd, r);
+                const double wt = run_one(ai, work_idx[0][i], pd, r, trace_on ? &w_hit : nullptr);
+                if (trace_on)   // fold this rollout's cards into the cell's union (same lock as the commit)
+                {
+                    std::lock_guard<std::mutex> tk(acc_mtx);
+                    auto& tset = tables[0].touched[i][pd];
+                    for (std::size_t k = 0; k < w_hit.size(); ++k)
+                    { if (w_hit[k]) { tset.insert(static_cast<int>(k)); } }
+                }
                 // Journal a cell-side EXACTLY when it completes: its floor (c first reaches r0, f=0) or its
                 // terminal freeze/cap (frozen7 flips true, f=1). Both are mutually exclusive per fold (floor
                 // phase never freezes; refine phase is already past r0). Snapshot under fold_mtx, write

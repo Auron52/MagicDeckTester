@@ -4,6 +4,67 @@
 cost — the part statistical change-detection cannot (`docs/design/change-detection-carry.md` finding).**
 Same-list / new-commit only (play-logic changes); small deck changes are a different animal (see end).
 
+## 2026-08-12: the recording was DEAD on the only generation path, and the CELL-UNION saving is ~0
+
+Two findings, one a defect and one a measurement that reframes the whole scheme.
+
+**The defect.** `MTG_KEEP_TRACE=1` recorded nothing at all on the continuous generator — the only
+generation path since `keepgen-no-off-switches.md` deleted the uniform one. A traced burn run produced
+**18,853 entries with zero non-empty touched sets** while still stamping `meta.traced=true`. Two causes,
+both the rewrite leaving the feature behind (the same way it retired the size-7 statistical
+classification): the continuous worker never called `SetTouchIndex`, and its size-7 rollouts go through
+`run_one`, which never passed the hit vector (only `run_batch`, on the superseded wave path, did).
+
+The failure direction is what makes it serious: **an empty touched-set is DISJOINT from every changed-card
+set**, so the consume path would have marked every cell provably-untouched and reused the ENTIRE prior —
+shipping a stale profile while reporting a successfully scoped re-run. Nothing shipped was corrupted (no
+committed raw carries `traced`), so it was latent. Fixed at both sites, plus a consume-side guard: a prior
+claiming `traced=true` with no non-empty touched set anywhere is demoted to untraced rather than trusted.
+Re-validated behaviour-neutral — trace on vs off, same seed, **18,853/18,853 cells identical** on
+`sum`/`sumsq`/`count`.
+
+**The measurement.** With recording restored, per-card touch rates on burn (hand-mass weighted, R=2 traced
+gen so each recorded set is 4 games; `p` inverted off that):
+
+| card | copies | p(one game) | per-GAME carry saves | CELL-UNION carry @R=40 |
+|---|---|---|---|---|
+| Mountain | 24 | 100% | 0% | 0.00% |
+| Goblin Guide / Monastery Swiftspear | 4 | 49.0% | 51% | **0.00%** |
+| Lightning Bolt | 4 | 47.5% | 52% | **0.00%** |
+| Shard Volley | 4 | 42.6% | 57% | **0.00%** |
+| Skullcrack | 4 | 42.0% | 58% | **0.00%** |
+| Eidolon of the Great Revel | 4 | 38.9% | 61% | **0.00%** |
+| Light Up the Stage | 4 | 35.0% | 65% | **0.00%** |
+| Searing Blaze | 4 | 14.8% | 85% | 0.16% |
+| Searing Blood | 4 | 1.2% | **99%** | 62% |
+
+A cell is reusable only if NONE of its R rollouts touched the card, so the union saves `(1-p)^R` while
+per-rollout reuse saves `(1-p)`. At R=22 the union needs `p < 3%` before even half the cells survive.
+**The shipped cell-granularity carry therefore saves 0.00% for eight of ten burn cards** — only Searing
+Blood, near-inert in a goldfish, survives it. This contradicts the "on a singleton combo deck most cells'
+rollouts never involve that piece" claim below: that holds only for cards at single-digit `p`, and the
+draw arithmetic does not put a 1-of there (a 1-of is seen in ~25% of games over a 15-card look).
+
+**So the open lever is PER-GAME masks** (user proposal, 2026-08-12): store the played-card bitfield per
+rollout rather than a union per cell, and reuse individual rollouts. A deck's ~60 distinct cards fit one
+64-bit word, and win turns are small integers, so the marginal storage is ~9 bytes/rollout. Two design
+constraints found while scoping it:
+
+- **"Played" is the right mask for a COMMIT change; "encountered" is required for a DECK change.** A game
+  that drew but never cast the changed card executed none of the changed code (safe to skip), but under a
+  card swap it held a different card and can diverge. The sink records realized plays only, so it is sound
+  for the former and unsound for the latter.
+- **Clairvoyance is what makes the sound version affordable.** The search shares the game's shuffle
+  (`state.shuffle_salt`; `shuffle_salt_search` is only the opt-in decouple instrument), so every branch
+  reads the SAME library order and the union over branches is a *prefix*, not the whole library. A search
+  that re-shuffled per branch would make every game sensitive to every card. Mid-game shuffles (Ponder,
+  fetches) do break the prefix, and an unrestricted tutor's candidate walk reads every library name —
+  though a hard-narrowed candidate list (Hinata's Gamble → {Hinata}) provably cannot pick an excluded card,
+  so only *ranked truncation* (top-`TutorSearchWidth` by `SituationalCardRank`) forces marking.
+- **Verify the skips permanently.** Re-run 1–2% of skipped rollouts and assert identity. In a paired
+  comparison a wrongly-skipped game contributes ZERO difference, so a missed touch channel shrinks every
+  measured effect toward null — the worst possible direction for a screening tool.
+
 ## Phase A — what shipped (2026-07-07)
 
 - **Recording** (`MTG_KEEP_TRACE=1`, off by default → byte-identical): a per-rollout thread-local sink
