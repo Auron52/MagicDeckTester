@@ -499,9 +499,19 @@ def run_incremental(args):
         # quarter, where packing is what protects the makespan: the residual tail is one chunk of the
         # most expensive cell, and that is the honest floor for chunk-level batching.
         #
-        # CONDEMNABLE cells keep plain LPT and stay at the front (user, 2026-08-12). They are capped at
+        # CONDEMNED cells keep plain LPT and stay at the front (user, 2026-08-12). They are capped at
         # the reference target rather than run to 400, their whole purpose is to be judged early so the
         # queue is freed, and level-ordering them would delay that verdict for no banking gain.
+        #
+        # The test is whether a cell IS condemned, never whether its depth makes it condemnABLE. Keying
+        # on depth > never-condemn was wrong twice over: V6/V7/V8 run at ~15-17 s/game, nowhere near the
+        # 60 s/game cutoff, so they are never condemned and are FULL 400-game rows of the table -- yet
+        # the depth test filed them as reference-only and handed 2500 games of them absolute priority.
+        # Observed 2026-08-12: every thread sat on that work while H1-H5 and V1-V5 stayed at zero. Only
+        # 7 of 56 cells are actually condemned here (H6 at every seed, V6/V7/V8 at s8008 alone), which
+        # is the handful this zone is for -- a few of them alongside a whole lot of everything else,
+        # not the pool to themselves. An unjudged cell is level-ordered like any other and simply stops
+        # being queued if the guard later condemns it.
         #
         # Ordering WITHIN a level stays cost-descending: B is gated by the SLOWEST cell's chunk landing,
         # so starting the expensive chunk of each level first minimises time-to-protection. Cheapest-
@@ -511,10 +521,21 @@ def run_incremental(args):
         # is the within-level tiebreak, so H5 is the first chunk of every level and the first chunk of
         # the packed quarter; it is never held back. The single thing that changes versus LPT is the
         # primary key: finish the set, then move on.
-        def condemnable(c): return c["depth"] > args.never_condemn_at_or_below
+        # ONE chunk of a condemned cell at a time, but PRIORITISED (user, 2026-08-12). Note what this
+        # does and does NOT control: OCCUPANCY of the pool by depth>never-condemn cells is the ENGINE's
+        # to decide, not this weight's. BatchRunner pulls every condemnable cell's games OUT of the
+        # static list into per-cell queues and meters them in at `drip` games each (see its WORK POOL
+        # comment), so a manifest weight only chooses the ORDER those cells seed the metered deque.
+        # Keeping one chunk per condemned cell at the head keeps that order sensible -- it does not,
+        # and cannot, stop them taking threads. See docs/design/batch-drip-release.md for the part
+        # that can.
+        first_out = {}
+        for ch in sorted(q, key=lambda ch: ch["off"]):
+            first_out.setdefault(id(ch["c"]), ch["off"])
         def zone(ch):
             c = ch["c"]
-            if condemnable(c):                          return 0  # LPT, up front
+            if c["intractable"] and ch["off"] == first_out[id(c)]:
+                return 0                                          # CONDEMNED, next chunk: up front
             return 1 if ch["off"] < 0.75*target(c) else 2         # level-order, then packed
         q.sort(key=lambda ch: (zone(ch),
                                ch["off"] if zone(ch) == 1 else 0,
@@ -527,7 +548,7 @@ def run_incremental(args):
         #
         # So encode the whole key in the weight. sched_weight is a 32-bit int, so the fields are packed
         # to stay well inside it: zone (0..2) at 1e8, level at 1e4, cost at 1e0.
-        #   zone   : (2-z)*1e8      -- 0 (condemnable) outranks 1 (level-order) outranks 2 (packed)
+        #   zone   : (2-z)*1e8      -- 0 (condemned) outranks 1 (level-order) outranks 2 (packed)
         #   level  : (target-off)*1e4 for the level-order zone only, so a LOWER offset outranks a
         #            higher one; zero elsewhere, which leaves those zones ordered purely by cost (LPT)
         #   cost   : int(s/game*10), capped below 1e4 so it can only ever break ties within a level
