@@ -135,12 +135,22 @@ keep table     the shipped table does not bucket City of Brass
   than a shipped R=60 table — but *symmetrically* (own/foreign fit among R=10 tables is 0.004t), and
   it replaces something strictly worse on both axes. Adoption still goes through
   `mulligan-profile.md`.
-- **Measured: the union deck does not bias the comparison.** slivers `cut_vial`, 6 cells x 20,000
-  paired games, on an edit the shipped table covers fully so all three apparatuses are valid —
-  **union bias −0.0026 ± 0.0033 (t = −0.77)**, R controlled, and the pool table's play level (+0.033)
-  matches the base deck's own R=10 table (+0.031). Caveat: the changed bucket already held ≥7 copies,
-  so the union's grid was *identical* to the base's — a pool table that adds a genuinely new bucket
-  is not covered by this and remains open.
+- **Measured on three cases: the union deck does not bias the comparison.** Each is a
+  difference-of-differences with R controlled, 20,000 paired games, one pooled batch:
+
+  | case | pool grid vs base | union bias | t |
+  |---|---|---|---|
+  | slivers, count change inside a ≥7 bucket | unchanged | −0.0026 ± 0.0033 | −0.77 |
+  | burn, 4 Skullcrack → 4 Lava Spike (card **merges**) | +0.5% | −0.0075 ± 0.0055 | −1.36 |
+  | burn, 2 Mountain → 2 Mutavault (**new bucket**) | +63% (K 10→11) | +0.0010 ± 0.0049 | +0.21 |
+
+  Both signs, a grid that grew 0% / 0.5% / 63%, all consistent with zero (~±0.01 at 2se, R=10 noise).
+- **An introduced card usually MERGES into an existing bucket — do not assume a new one.** Lava Spike
+  landed in *Lightning Bolt's* bucket, growing the grid by 55 cells (one 4-of's cap rising 4→7 at
+  hand size 7); forcing a real new dimension took a colourless land in a mono-red deck. Two
+  consequences: cutting a card **removes** a dimension from that arm's own table (the Lava Spike arm's
+  is K=9/6,120 vs the base's K=10/10,945 — *coarser*), and the pool table, holding every arm's cards,
+  is a **refinement** of them all. That is why it can play an arm better than that arm's own table.
 - `"pool_table": false` restores the old symmetric-drop behaviour if you want the comparison.
 
 **Not yet built:** topping up the base table instead of regenerating the union. The generator already
@@ -236,12 +246,32 @@ bias  = delta(under the combination's own table) − delta(under the shared tabl
 floor = |bias| + 2·se
 ```
 
+When the two arms hold **different cards** (any introduced card, any card cut to 0), each deck is
+bracketed on *its own* table rather than both on the variant's. One table for both is right when only
+counts differ, and wrong here: the variant's table has no bucket for the card the base still plays, so
+that cell would lose the table on **40.0% of hands** for a 4-of swap — ~0.025t of one-sided damage,
+an order of magnitude more than the bias being measured. With per-arm tables no cell falls through,
+and the bias is exactly the difference of two **within-deck** nulls, which the driver prints:
+
+```
+per-arm nulls, own table vs the shared one (positive = the OWN table plays weaker)
+  base        +0.00435    <- bias = null(variant) − null(base)
+  mutavault   +0.00335
+```
+
+**Read the nulls, not just the bias.** A bracket is only worrying when the two nulls *differ*; two
+large equal nulls are a level difference that cancels.
+
 Two things to hold onto when reading it:
 
 - **The bracket OVERSTATES the floor**, because its arm plays a low-R table that is simply weaker
   (measured ~0.032t at R=10) on top of any fit difference. That is the right direction for a safety
   check and the wrong direction for an accuracy claim — never treat the own-table arm as "the
   accurate one".
+- **On the pool route there is no expected sign.** "Each table flatters the deck it was fit to" is a
+  *shipped-table* reading. The union holds every card any arm plays, so the pool table **refines**
+  every arm's partition and can play each arm *better* than that arm's own table (all four burn nulls
+  came out that way). The driver prints no expected sign there — read the nulls.
 - **Do not "regenerate for accuracy" at R=10.** Measured on slivers: an R=10 table plays **0.032t
   worse** than the shipped R=60 one — as large as the whole effect being screened — while the
   own-vs-foreign *fit* difference among R=10 tables is only 0.004t. Regeneration only pays at high R
@@ -254,7 +284,7 @@ Two things to hold onto when reading it:
 |---|---|---|
 | screen (N arms x 20k games, pooled) | **deck-dependent, see below** | per combination set |
 | pool a `card_scores` entry for an introduced card | ~20 s | once per new card |
-| `--floor` bracket (R=10 table + 4 x 20k games) | tens of minutes | only for a result near its floor |
+| `--floor` bracket (1-2 R=10 tables + 4 x 20k games) | tens of minutes | only for a result near its floor |
 | a shippable table / value leaf for an adopted combination | hours | once, at adoption |
 
 **Per-game cost varies by two orders of magnitude, so quote the deck AND the apparatus, never

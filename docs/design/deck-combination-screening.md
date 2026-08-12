@@ -565,7 +565,43 @@ Three limits worth keeping attached to that number:
 - **It is the favourable case by construction.** Because the changed bucket already held ≥ 7 copies,
   the union's composition grid was *identical* to the base's (7,758 cells both), so only the `count`
   vector and the rollout deck differed. A pool table that adds a genuinely NEW bucket — the case the
-  driver actually reaches for — is **not** covered by this measurement and remains open.
+  driver actually reaches for — is **not** covered by this measurement. Closed below.
+
+#### Closed (2026-08-12): a NEW bucket does not bias it either — and three things about bucket shape
+
+Two more cases, on burn, 4 cells x 20,000 paired games each in one pooled batch. The three-apparatus
+design above does not transfer: an introduced card is *unbucketed* by the shipped table, so there is
+no reference apparatus common to both arms. Each arm instead runs under **its own R=10 table** (which
+covers that arm fully) and under the **pool table** — every cell fully answered, no fall-through
+anywhere — and the difference-of-differences decomposes exactly into two WITHIN-deck nulls.
+
+| case | pool K / cells (base = 10 / 10,945) | union bias | t |
+|---|---|---|---|
+| slivers, Vial 4→0 / Muscle 4→8 — grid unchanged | 10 / 7,758 = base | −0.0026 ± 0.0033 | −0.77 |
+| burn, 4 Skullcrack → 4 Lava Spike — card MERGES | 10 / 11,000 (**+0.5%**) | −0.0075 ± 0.0055 | −1.36 |
+| burn, 2 Mountain → 2 Mutavault — **NEW bucket** | 11 / 17,853 (**+63%**) | +0.0010 ± 0.0049 | +0.21 |
+
+Three cases, both signs, a grid that grew 0% / 0.5% / 63% — all consistent with zero. The open item is
+closed: **the pool table is a sound shared apparatus, including when it adds a dimension.** The same
+R-noise caveat applies (each bound is ~±0.01 at 2se), and the effects being screened were −0.1169
+(Lava Spike) and −0.0007 (Mutavault), so the first clears its bias by ~15x and the second is simply a
+wash. Three structural findings came out of it, and two contradict what this doc said before:
+
+1. **An introduced card usually MERGES into an existing bucket — a new bucket is not the default.**
+   Lava Spike ({R} sorcery, 3 to the face) landed in *Lightning Bolt's* bucket in every table that
+   held both, the arm's own and the pool's. The union grid grew by exactly **55 cells**, which is the
+   arithmetic of one 4-of bucket's cap rising 4 → 7 at hand size 7 (45 + 9 + 1), not a new dimension.
+   Forcing a genuinely new bucket took a card unlike anything in the deck — Mutavault, a colourless
+   land in a mono-red deck. "Introduced card" and "new bucket" are different questions.
+2. **A dropped card REMOVES a dimension from that arm's own table.** The Lava Spike arm's own table is
+   K=9 / 6,120 cells against the base's K=10 / 10,945 — strictly *coarser*, because Skullcrack's
+   bucket is gone and the new card merged into Bolt's. An arm's own table is not automatically the
+   better-fitting one, and two arms' own tables are not the same kind of object.
+3. **The pool table REFINES every arm's own partition, so it plays better, not worse.** All four burn
+   nulls came out negative (pool faster): base −0.0018 / −0.0044, variant −0.0092 / −0.0034. The union
+   holds every card any arm plays, so its partition is at least as fine as any arm's — "each table
+   flatters the deck it was fit to" is a **shipped-table** reading and does not carry over. `--floor`
+   no longer prints an expected sign on the pool route; it prints the two nulls instead.
 
 Measured on slivers + {Ziggurat 2→4, Hivepool 1→4}: the union is 65 cards and 17,831 cells against
 the base table's 14,117 (**1.26x**), and discovery reproduced the same 10 buckets with the raised
@@ -590,6 +626,56 @@ Cost is not proportional to cells, though: the base-deck R=10 table (7,758 cells
 while the 65-card union table (10,231 cells) took **14.7 min**. The generator is adaptive, so the
 bill is set by how many cells sit near a keep/mull flip and need refining to the cap, not by the grid
 size. Do not size a gen from the cell count alone.
+
+### The bracket itself had to change for an introduced card (2026-08-12)
+
+`--floor` used to run **both** decks under the *variant's* own table. That is right whenever the arms
+hold the same cards and only counts differ — one table per delta keeps the delta internally
+consistent. It is wrong the moment an edit **drops** a card: the variant's table then has no bucket at
+all for a card the base deck still plays, so the `base__own` cell silently loses the table on every
+hand holding one. For a 4-of swap that is **40.0% of hands** (1 − C(56,7)/C(60,7)), on one arm only,
+each of them falling to the generic heuristic *and* to lookahead bottoming. At ~0.063t for a dropped
+table that is ~0.025t of one-sided damage — an order of magnitude more than the fit bias the bracket
+exists to measure, and not something more games can average away.
+
+So when the arms' card **sets** differ, each deck is now bracketed on its own R=10 table. Two
+properties follow, and the second is what makes it sound rather than merely covered:
+
+- no cell in the bracket has any fall-through (the driver prints per-cell coverage, all `full`);
+- the difference-of-differences decomposes into two **within-deck** nulls,
+  `bias = [var@own − var@shared] − [base@own − base@shared]`, so the level difference between two
+  *distinct* tables cancels instead of leaking into a delta. That is the objection to mixing
+  apparatuses inside one delta, and it is answered by construction rather than by hoping the two
+  tables are equally strong. The driver prints both nulls; a bracket is only worrying when they
+  **differ**, and two large equal nulls are a level difference that cancels.
+
+Validated by rebuilding the Mutavault measurement through `--floor` with every table cached: it
+reproduces the standalone probe to the digit (pool +0.0003 ± 0.0032, own-vs-own −0.0007 ± 0.0048,
+nulls +0.00435 / +0.00335, bias −0.0010 ± 0.0049).
+
+#### The bug that first run caught: a stale sidecar out-ranking the one we linked
+
+The first attempt at that validation disagreed with the probe by 10x, and the cause was neither
+statistics nor the new code. `AttachExhaustiveSidecar` (`src/ai/MulliganProfileIO.h:858`) resolves
+`.keepmodel.exhaustive.profile.json.gz` **first** and only then the plain `.json`. `apparatus_dir()`
+removed just the one name it was about to write, and `app_ship/` is reused by every `--floor` on a
+deck — so a run whose shared apparatus was a **pool table** (plain `.json`) actually ran under the
+**shipped R=60 `.gz`** left behind by an earlier run, and reported that table's numbers under the pool
+table's label. The per-cell coverage print said `full` throughout, because it is computed from the
+table the driver *intended*. The tell was the nulls: +0.0388 / +0.0419, which is exactly burn's known
+R=10-vs-R=60 gap (+0.0495 / +0.0615) rather than a pool-vs-own difference.
+
+Same family as the profile-less bug: a scratch directory silently supplying a *different apparatus*
+than the one named in the output. `apparatus_dir()` now clears **both** resolvable names before
+linking. The `.bincache` beside each is deliberately left — it is keyed by the source's (size, mtime),
+which follows the symlink, so it self-invalidates, and deleting it would charge every run a full
+re-parse (14–68 s on the big sidecars).
+
+Two smaller fixes went with it: `--floor` now uses the same **pooled card_scores profile** the screen
+uses (it did not, so a bracket on an introduced card folded the card_scores asymmetry into what it
+reported as apparatus bias), and `gen_table()`'s reuse fingerprint now includes **R** (it was keyed on
+the arm's counts alone, so changing `floor_R` would silently reuse a table generated at another R —
+worth 0.03–0.06t, the size of a screened effect).
 
 ### Why regenerate the union instead of topping up the base table
 
@@ -865,7 +951,12 @@ position-based implementation can do.
   profile, unlike slivers); both biases came out consistent with zero, so the expected-sign reading
   still rests on slivers alone.
 - Whether the corrected floor is *deck*-sized or *edit*-sized — one deck, one edit is not a trend.
-- Larger edits (3+ cards), whose earlier measurements were all profile-less.
+- ~~A pool table that adds a genuinely NEW bucket.~~ **DONE (2026-08-12), and it does not bias the
+  comparison either** — burn + 2 Mutavault, K 10→11, grid +63%, union bias +0.0010 ± 0.0049. Three
+  cases now (grid +0% / +0.5% / +63%), all consistent with zero. See the section above; it also
+  showed that an introduced card usually *merges* rather than adding a bucket.
+- Larger edits (3+ cards), whose earlier measurements were all profile-less. (The Lava Spike case is a
+  4-of swap, but it is an introduced card measured against the pool table, not a shipped-table floor.)
 - ~~A floor for an introduced card.~~ **Closed by the pool table.** `--floor` used to refuse an
   introduced card ("the screen DROPS the table … nothing to bracket"), which left the edit kind with
   the largest apparatus question un-bracketable. Now that the screen falls back to a pool table
@@ -888,8 +979,15 @@ position-based implementation can do.
   (`MTG_KEEP_ALLOW_NO_PROFILE=1` is the deliberate hatch). It refuses rather than warns because the
   route runs for tens of minutes and a warning at minute 0 is not read at minute 90.
 - `scripts/deck_compare.py --floor` copies the profile *and* the value sidecar into the arm directory
-  before generating, and keys table reuse on the arm's exact card counts (`.counts.json`), so editing
-  a combination cannot silently bracket against the previous edit's table.
+  before generating, and keys table reuse on the arm's exact card counts **and R** (`.counts.json`),
+  so editing a combination — or changing `floor_R` — cannot silently bracket against the previous
+  run's table.
+- `apparatus_dir()` clears **both** sidecar names the engine can resolve (`.json.gz` first, then
+  `.json`) before linking the one it wants. Removing only the name it writes let a `.gz` left in a
+  reused `app_*/` directory out-rank the fresh link, so a run reported one apparatus's numbers under
+  another's label — with the coverage print, computed from the *intended* table, saying `full`.
+- `--floor` runs on the same **pooled card_scores profile** the screen does, so a bracket on an
+  introduced card cannot fold the card_scores asymmetry into what it reports as apparatus bias.
 - `scripts/deck_compare.py` resolves `profile` / `value_profile` from the deck's **siblings** when the
   spec omits them, and **refuses** a screen with no profile at all (`"allow_no_profile": true` is the
   hatch, and it stamps an inert `_no_profile_deliberate` in the manifest so a later reader can tell
