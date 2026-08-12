@@ -136,6 +136,20 @@
    }
   },
   {
+   "name": "Lava Spike",
+   "mana_cost": "{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "keywords": [],
+   "oracle_text": "Lava Spike deals 3 damage to target player or planeswalker.",
+   "template": "direct_damage",
+   "parameters": {
+    "damage": 3,
+    "targeting": "player"
+   }
+  },
+  {
    "name": "Light Up the Stage",
    "mana_cost": "{2}{R}",
    "types": [

@@ -32,6 +32,23 @@ inline double ComputeAvgTurns(const std::vector<int>& win_turns, int max_turns)
     return sum / static_cast<double>(win_turns.size());
 }
 
+// PER-JOB deck numbering, so ONE pooled batch can run every combination of a comparison.
+//
+// The supplied-numbering mode (MTG_DECK_NUMBERING, see GoldFishRunner.cpp) is a process-wide static,
+// which means one process can only ever BE one combination -- and each combination needs a DIFFERENT
+// map. That would force one `mtg --batch` per combination, i.e. exactly the per-item loop CLAUDE.md
+// forbids: every invocation pays its own load-imbalance tail and separate pools never share threads.
+// Same problem, and the same fix, as valuearm::Arm (see ai/ValueArm.h).
+//
+// thread_local because a batch worker owns its thread for a whole job and the search does not spawn
+// threads. nullptr (the default, and what Clear() restores) means "use the env static", so single
+// runs, the regression harness and every pre-existing manifest stay byte-identical.
+namespace decknumbering
+{
+inline thread_local const std::map<std::string, std::vector<int>>* t_map = nullptr;
+inline void Clear() { t_map = nullptr; }
+}
+
 class GoldFishRunner
 {
 public:

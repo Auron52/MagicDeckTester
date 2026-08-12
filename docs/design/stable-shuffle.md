@@ -43,17 +43,24 @@ divergence, not misplays ("neither side misplays, the draws just differ").
 `Library::ShuffleByKey(seed)` (`src/core/Library.h`) orders the live library by a per-copy priority
 `splitmix64(seed, m_number)`:
 
-- `m_number` is a **stable deck-setup ID** (per-copy, assigned at setup; shared cards get the same
-  number across decklists via the union-numbering scheme — see `.claude/skills/mtg-ai.md`), identical
-  across two same-seed games.
+- `m_number` is a **stable deck-setup ID** (per-copy, assigned at setup), identical across two
+  same-seed games *of the same decklist*. It is **not** stable across decklists by default:
+  `GoldFishRunner::BuildCardNumbering` numbers alphabetically within one deck, so any edit that
+  changes which names are present renumbers everything after it. (`.claude/skills/mtg-ai.md` describes
+  a cross-decklist union-numbering scheme; it was never implemented, and measurement rejected it —
+  keying on names aligns identities but not positions. See
+  `docs/design/deck-combination-screening.md`.) To get CRN *across decklists*, supply a numbering
+  explicitly — `MTG_DECK_NUMBERING=<map.json>` / the batch manifest's `deck_numbering` — which also
+  switches the OPENING shuffle to `ShuffleByKey`.
 - A card's rank therefore depends only on its own `m_number` — **not** on the current multiset or the
   `search_count`.
 - Removing a card (a fetch) leaves **every other card's order unchanged**.
 
 So two policies on the same seed draw the **same future modulo the one card each removed**; only genuine
 play differences (a different number of cards drawn/removed) move the realized draws. It remains a real,
-**non-game-start** reshuffle (the opening shuffle is untouched — this is strictly the mid-game
-post-search reshuffle) and **non-clairvoyant** (the search still plans against a decoupled reshuffle via
+**non-game-start** reshuffle (the opening shuffle is untouched by *this* mechanism — it is strictly
+the mid-game post-search reshuffle; only the opt-in `deck_numbering` route above also keys the
+opening shuffle) and **non-clairvoyant** (the search still plans against a decoupled reshuffle via
 `shuffle_salt_search`).
 
 `search_count` is deliberately excluded from the CRN key so every reshuffle in a game yields the same

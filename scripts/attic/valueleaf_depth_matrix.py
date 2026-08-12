@@ -183,6 +183,88 @@ def _split_chunk(x, at):
     return x
 
 
+def _chunk_minus(x, bad):
+    """The sub-chunks of x whose offsets are NOT in `bad`, as a list of maximal runs.
+
+    The general form of _split_chunk (which only keeps a prefix): a cross-cell engine disagreement
+    can land anywhere in a chunk, not just at its tail. lp (a mean) carries to each surviving piece
+    and ms is apportioned by game count -- the same approximation _split_chunk documents."""
+    if not bad: return [x]
+    end, out, run = x["off"] + x["n"], [], None
+    for o in range(x["off"], end + 1):
+        inside = o < end and o not in bad
+        if inside and run is None:
+            run = o
+        elif not inside and run is not None:
+            n = o - run
+            y = dict(x); y["off"] = run; y["n"] = n; y["ms"] = x["ms"] * n / x["n"]
+            out.append(y); run = None
+    return out
+
+
+def _offset_src_conflicts(cells):
+    """(deck,seed) -> the set of game offsets measured on DIFFERENT engines in different cells.
+
+    A cell may legitimately be a MIX of engines (resync_engine_change deliberately keeps the prefix
+    below B on its original engine). What may NOT vary is the engine for a GIVEN GAME across cells,
+    because every way the table is read -- down a column (does depth d+1 beat depth d?) and across
+    arms (V vs H at one depth) -- is a per-game comparison. If game 380 ran on engine A at V8 and on
+    engine B at H5, that single difference is attributed to DEPTH when it is really a code change."""
+    per_seed = {}
+    for c in cells:
+        by_off = per_seed.setdefault((c["deck"], c["seed"]), {})
+        for x in c["chunks"]:
+            for o in range(x["off"], x["off"] + x["n"]):
+                by_off.setdefault(o, set()).add(x.get("src"))
+    return {k: {o for o, s in v.items() if len(s) > 1} for k, v in per_seed.items()}
+
+
+def enforce_offset_src_agreement(cells, log=print):
+    """Drop every game whose engine DISAGREES across the cells of its (deck,seed), so it is re-run
+    once, on one engine, everywhere it is needed.
+
+    This is the invariant resync_engine_change intends but cannot maintain alone. That function picks
+    a single split point B per seed from the state as it stands at ONE resume, and heals everything at
+    or above it. It is correct for the change it sees -- but the src can change AGAIN before the games
+    it just scheduled have all landed, and the second change is never inspected. That is exactly how
+    the pre-merge FiveColour matrix ended up with 63 games (H5 s10010, H4/H5 s11011) on a third engine
+    that no V cell ever ran: those three cells were the slowest, so they were the ones still unfinished
+    when the source moved, and the contamination therefore landed ONLY on the deep heuristic cells it
+    made look good. Checking per OFFSET rather than per prefix is what makes this idempotent: it re-
+    derives the invariant from the state itself, so it holds no matter how many times the src moved."""
+    conflicts = _offset_src_conflicts(cells)
+    groups = {}
+    for c in cells: groups.setdefault((c["deck"], c["seed"]), []).append(c)
+    plan = []
+    for key, bad in sorted(conflicts.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+        if not bad: continue
+        for c in groups[key]:
+            keep, dropped = [], 0
+            for x in sorted(c["chunks"], key=lambda x: x["off"]):
+                pieces = _chunk_minus(x, bad)
+                dropped += x["n"] - sum(p["n"] for p in pieces)
+                keep.extend(pieces)
+            if dropped:
+                c["chunks"] = keep; _refresh(c)
+                plan.append((key[0], key[1], "%s%d" % (c["arm"], c["depth"]), dropped))
+        log("resync: s%d has %d game(s) measured on DIFFERENT engines across cells -- re-running them "
+            "everywhere (offsets %s)" % (key[1], len(bad), _fmt_ranges(sorted(bad))))
+    if plan:
+        for deck, seed, cell, n in plan:
+            log("  s%-6d %-4s drop %d mismatched game(s)" % (seed, cell, n))
+    return plan
+
+
+def _fmt_ranges(offs):
+    """[375,376,...,393] -> '[375,394)' -- compact enough to log every conflicting offset."""
+    out, i = [], 0
+    while i < len(offs):
+        j = i
+        while j + 1 < len(offs) and offs[j + 1] == offs[j] + 1: j += 1
+        out.append("[%d,%d)" % (offs[i], offs[j] + 1)); i = j + 1
+    return " ".join(out)
+
+
 def _src_fingerprint():
     """Engine identity = the tree hash of src/. Same value => same play, which is the property the
     freeze exists to protect. `git rev-parse HEAD:src` is what scripts/valueleaf.sh records too."""
@@ -284,6 +366,18 @@ def emit_table(cells, args):
                 L.append("    # games/cell: %s   (*=intractable=reference-only)"%("  ".join(ann)))
         row("H", args.hdepths, "heuristic: ")
         row("V", args.vdepths, "value-leaf:")
+        # READ-SIDE GUARD. enforce_offset_src_agreement heals this at every resume, so a table
+        # written by a current run cannot carry a conflict -- but an OLD state file can, and the
+        # table outlives the run that made it (the metadata deriver and every later reader consume
+        # this file, not the state). A conflict makes a per-game comparison attribute a code change
+        # to depth, so it is named in the artifact itself rather than left to be rediscovered.
+        conf={k:v for k,v in _offset_src_conflicts(dc).items() if v}
+        if conf:
+            L.append("    !! ENGINE-MIXED: %d game(s) were measured on DIFFERENT engines across cells"
+                     " -- per-game comparisons below are NOT apples-to-apples" %
+                     sum(len(v) for v in conf.values()))
+            for (dk,seed),bad in sorted(conf.items()):
+                L.append("    !!   s%d: %s" % (seed, _fmt_ranges(sorted(bad))))
     open(args.out,"w").write("\n".join(L)+"\n")
 
 
@@ -331,6 +425,13 @@ def run_incremental(args):
     # its original engine. That is what makes landing an optimization mid-table affordable.
     resync_engine_change(cells, target, src_now)
 
+    # ... and the invariant that absorption is FOR is re-derived from the state itself, every resume.
+    # resync_engine_change heals one src change at the split point it can see; this catches a change
+    # that landed while its games were still in flight, which is how three deep-H cells (and no V
+    # cell) ended up carrying 63 games of a third engine. Idempotent and cheap: with no conflict it
+    # walks the offsets once and drops nothing.
+    enforce_offset_src_agreement(cells)
+
     # ---------------------------------------------------------------- PROPER BATCHING: one work QUEUE
     # ONE queue of fixed-size chunks, handed to `workers` threads that are kept full until the queue
     # drains. Not one chunk per cell, not a chunk size that shrinks: a QUEUE.
@@ -375,7 +476,12 @@ def run_incremental(args):
             for lo,hi in gaps[id(c)]:
                 off=lo
                 while off<hi:
-                    n=min(chunk,hi-off)
+                    # GRID-ALIGNED: a chunk never straddles a multiple of args.batch, so the same
+                    # offsets form the same chunk in every cell and a chunk is a comparable unit
+                    # across arms/depths. Without this the boundaries follow each cell's own gap
+                    # start, so a resynced cell chunks [375,394) while its neighbours hold one
+                    # [0,394) -- and a per-chunk engine check has nothing to compare.
+                    n=min(chunk, args.batch-off%args.batch, hi-off)
                     q.append({"c":c,"off":off,"n":n})
                     off+=n
         q.sort(key=lambda ch: est_spg(ch["c"])*ch["n"], reverse=True)

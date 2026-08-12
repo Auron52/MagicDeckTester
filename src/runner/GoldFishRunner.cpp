@@ -6,18 +6,22 @@
 #include "../ai/AIEngine.h"
 #include "../ai/DecisionProviders.h"
 #include "../ai/Profiler.h"
+#include "../deck/DeckLoader.h"
+#include <nlohmann/json.hpp>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <map>
 #include <numeric>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <thread>
 
 // ---- Second-main relevance -------------------------------------------------
@@ -394,6 +398,62 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
     return result;
 }
 
+// ---- CRN across decklists: a supplied, inherited card numbering --------------
+//
+// MTG_DECK_NUMBERING=<numbering.json>  ->  {"Card Name": [n1, n2, ...], ...}
+// Value-carrying, so it keeps the raw getenv+parse form (coding-conventions rule 3).
+// Unset / "0" / empty -> OFF -> every path below is byte-identical.
+//
+// The problem. Comparing two COMBINATIONS of one card pool (4 Bolt/4 Skullcrack vs 5 Bolt/3
+// Skullcrack) is normally an UNPAIRED measurement: the opening shuffle is a positional Fisher-Yates
+// over deck.mainboard, so changing a count re-permutes the whole game and the two arms share nothing
+// but the seed. Measured on burn (5000 games, d5): a naive count edit leaves only 76.2% of games on
+// the same win turn, sd(diff)=0.592 -> ~3,500 games to resolve a 0.03t effect, vs 215 when aligned.
+//
+// The engine deliberately does NOT compute the numbering. Correspondence between two decklists is a
+// property of the EDIT that produced one from the other, which only the caller knows; the rule is
+// "a replacement INHERITS the number of the card it replaced, and nothing is ever renumbered". So
+// the driver derives the map from base+edits and the engine simply applies it, pre-shuffle, and then
+// orders the opening library by those stable identities (Library::ShuffleByKey) rather than by
+// position. Every unchanged card then keeps its sort key -> the two decks share one key order, and
+// the replaced slot swaps identity IN PLACE.
+//
+// Why inheritance and not a name-union (.claude/skills/mtg-ai.md's scheme, never implemented):
+// a union numbers by NAME, so a swap deletes two numbers and inserts two others at their own keyed
+// ranks, shifting everything in between. Measured on slivers: 80.3% of games identical vs 93.3% for
+// in-place. remove+add is NOT the same operation as replace, and must not be "simplified" into it.
+//
+// Requirements on the map: numbers unique within a game (ShuffleByKey's total order is (key,
+// m_number)) and NON-ZERO (0 is the unnumbered sentinel -- all-zero is what once made the batch's
+// reshuffle a silent no-op). Contiguity is NOT required: m_number is never an array index anywhere,
+// only an equality-compared per-copy identity, so holes and out-of-range values are fine.
+//
+// This is a COMPARISON mode, not a default: it moves every opening hand, so it would invalidate all
+// ground truth. Off unless asked for.
+namespace
+{
+const std::map<std::string, std::vector<int>>* DeckNumbering()
+{
+    static const std::map<std::string, std::vector<int>> s_map = []
+    {
+        std::map<std::string, std::vector<int>> m;
+        const char* e = std::getenv("MTG_DECK_NUMBERING");
+        if (e == nullptr || *e == '\0' || std::string(e) == "0") { return m; }
+        // Throws on a bad path/parse -- a mis-specified numbering must fail loudly, never silently
+        // fall back to per-deck numbering (that would read as "comparison mode on" while measuring
+        // unpaired arms, which is exactly the failure this mode exists to remove).
+        std::ifstream f(e);
+        if (!f) { throw std::runtime_error(std::string("MTG_DECK_NUMBERING: cannot open ") + e); }
+        nlohmann::json j; f >> j;
+        for (auto it = j.begin(); it != j.end(); ++it)
+        { m[it.key()] = it.value().get<std::vector<int>>(); }
+        if (m.empty()) { throw std::runtime_error("MTG_DECK_NUMBERING: empty numbering map"); }
+        return m;
+    }();
+    return s_map.empty() ? nullptr : &s_map;
+}
+}   // namespace
+
 GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
 {
     GameState state;
@@ -418,7 +478,37 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     state.shuffle_salt_search  = s_have_salt_search ? s_shuffle_salt_search : s_shuffle_salt;
 
     state.players[0].library.assign(deck.mainboard.begin(), deck.mainboard.end());
-    state.players[0].library.Shuffle(SaltSeed(seed, state.shuffle_salt_opening));
+
+    // Supplied numbering (see DeckNumbering above): apply the caller's map PRE-shuffle, then order
+    // the opening library by those stable identities instead of by position, so two combinations of
+    // one pool draw the same cards except where the edit actually reaches. nullptr (the default) ->
+    // the historical positional shuffle, byte-identical.
+    // Per-job override (decknumbering::t_map) wins; nullptr falls back to the env static, so a
+    // single run and every pre-existing manifest are byte-identical.
+    const std::map<std::string, std::vector<int>>* supplied =
+        decknumbering::t_map ? decknumbering::t_map : DeckNumbering();
+    if (supplied != nullptr)
+    {
+        // Pre-shuffle the library is in decklist order, so AssignCardNumbers' per-name copy counter
+        // hands copy k of a card the map's k-th entry -- independent of where the file lists it.
+        AssignCardNumbers(state, *supplied);
+        for (const Card& c : state.players[0].library)
+        {
+            // m_number 0 == the name is absent from the map, or this deck holds more copies than the
+            // map allots. Either way ShuffleByKey would key every such card identically and clump
+            // them: refuse rather than silently measure a broken shuffle.
+            if (c.m_number == 0)
+            {
+                throw std::runtime_error("MTG_DECK_NUMBERING: no number for '" + c.m_name.str()
+                                         + "' (the map must cover every card, with enough copies)");
+            }
+        }
+        state.players[0].library.ShuffleByKey(SaltSeed(seed, state.shuffle_salt_opening));
+    }
+    else
+    {
+        state.players[0].library.Shuffle(SaltSeed(seed, state.shuffle_salt_opening));
+    }
 
     // Assign stable per-copy card numbers at the single setup choke point, ALWAYS -- so every
     // caller (batch GT / goldfish CLI / analyzer / viewer / references) numbers identically and
@@ -430,8 +520,11 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     // logging path) and independent of the opening Fisher-Yates shuffle, so opening hands are
     // unchanged; only decks that mid-game reshuffle (Hinata Ponder, antilife fetch) move.
     // Escape hatch MTG_LEGACY_UNNUMBERED restores the old number-only-when-logging behavior for A/B.
+    // A SUPPLIED numbering has already been applied (pre-shuffle) and MUST NOT be renumbered here:
+    // per-deck numbering would overwrite the caller's stable identities with deck-local ones and undo
+    // the alignment the ShuffleByKey above just bought.
     static const bool s_legacy_unnumbered = EnvOn("MTG_LEGACY_UNNUMBERED");
-    if (!s_legacy_unnumbered)
+    if (supplied == nullptr && !s_legacy_unnumbered)
     {
         AssignCardNumbers(state, BuildCardNumbering(deck));
     }

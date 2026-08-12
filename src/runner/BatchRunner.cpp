@@ -68,6 +68,10 @@ struct Job
     // pooled queue and one tail. Sentinels mean "unset" => the env default => byte-identical for every
     // manifest that omits them.
     valuearm::Arm   arm;
+    // Per-job deck numbering (see decknumbering in GoldFishRunner.h). Empty => none => the deck's
+    // usual per-deck numbering. Held BY VALUE per job: a comparison's combinations each need their
+    // own map, and a pointer into a shared cache would have to outlive the worker's job.
+    std::map<std::string, std::vector<int>> numbering;
     // CONDEMNATION grouping key: every job of the same matrix cell (deck+arm+depth+seed) shares one.
     // Empty in the manifest => the job's own name, i.e. each job is its own cell and cross-chunk
     // condemnation is inert. Resolved to a dense index at parse (cell_id) so the hot path touches a
@@ -477,6 +481,20 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("value_startgate_alpha"))
     { j.arm.startgate_alpha = jspec["value_startgate_alpha"].get<double>(); }
     j.arm.value_profile   = jspec.value("value_profile", std::string());
+    // "deck_numbering": path to {"Card Name": [n1, n2, ...]}. Throws on a bad path/parse -- a
+    // mis-specified numbering must fail loudly, never silently fall back to per-deck numbering
+    // (that would read as "comparison mode on" while measuring unpaired arms).
+    if (jspec.contains("deck_numbering"))
+    {
+        const std::string np = jspec["deck_numbering"].get<std::string>();
+        std::ifstream nf(np);
+        if (!nf) { throw std::runtime_error("manifest job \"deck_numbering\": cannot open " + np); }
+        nlohmann::json nj; nf >> nj;
+        for (auto it = nj.begin(); it != nj.end(); ++it)
+        { j.numbering[it.key()] = it.value().get<std::vector<int>>(); }
+        if (j.numbering.empty())
+        { throw std::runtime_error("manifest job \"deck_numbering\": empty map in " + np); }
+    }
     j.cell                = jspec.value("cell", std::string());
     // Note: lookahead bottoming is no longer a manifest field -- the engine derives it
     // from depth (on iff depth>0). A stale "lookahead_bottoming" key is simply ignored.
@@ -883,6 +901,10 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     // Set unconditionally (an omitted block resets to "use env"), so a previous
                     // job's arm can never leak into this one through the reused worker thread.
                     valuearm::t_arm = jobs[wi.job].arm;
+                    // Same lifetime rule as the arm: set unconditionally (empty => nullptr => the env
+                    // default) so a previous job's numbering cannot leak through the reused thread.
+                    decknumbering::t_map =
+                        jobs[wi.job].numbering.empty() ? nullptr : &jobs[wi.job].numbering;
                     // Load (or hit) the job's profile through the shared cache and hand a copy to the
                     // AIEngine (which owns its own copy). The shared handle is released at the end of this
                     // block; only the AIEngine's copy persists across the job's games.
