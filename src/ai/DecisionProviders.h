@@ -63,6 +63,10 @@ enum class UnprunedGate
     TrickTarget,  // Mirrorwing/Zada solo-target trick target set opened to EVERY legal creature
                   // (battlefield + hand) instead of MirrorwingProvider::TrickTargetCandidates'
                   // narrowed set (magnets + best attacker + haste/copy extras)
+    TreasureTrickCast, // Gold Rush cast gate disabled: enumerate the magnetless "bank a Treasure
+                  // nothing wants" cast (MirrorwingProvider::TrickCastSensible; USER doctrine
+                  // 2026-08-12 -- magnetless GR is 2 mana for 1 Treasure, a ramp/screw-mitigation
+                  // play toward the magnet, never a this-turn mana play)
     _Count
 };
 
@@ -523,6 +527,13 @@ public:
     const char* Name() const override { return "Mirrorwing"; }
     void TrickTargetCandidates(const GameState&, const CardDefinition&,
                                std::vector<int>&) const override;
+    // Gold Rush cast gate (USER doctrine 2026-08-12): magnetless GR is 2 mana for 1 Treasure --
+    // never a this-turn mana play. Sensible only as (a) magnet fan-out, (b) a pump that could
+    // matter for THIS turn's lethal, (c) ramp / mana-screw mitigation toward mana-constrained
+    // gas in hand ("drop a Zada or Mirrorwing a turn or more earlier", incl. colour-fixing), or
+    // (d) redundancy (>=2 GR in hand + a board: "no point holding back").
+    // MTG_UNPRUNE=treasuretrickcast opens it for audit.
+    bool TrickCastSensible(const GameState&, int, const CardDefinition&) const override;
     // Enumeration breadth: a post-fan-out hand holds 10-12 castable groups x ~5 trick-target
     // options each -- the full product is computationally infeasible (a single node measured a
     // 4 GiB digit store / billions of positions; see analysis-mirrorwing-dragon.md). The generic

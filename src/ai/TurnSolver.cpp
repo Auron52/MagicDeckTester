@@ -2970,6 +2970,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             continue;
         }
 
+        // Treasure-trick cast gate (Gold Rush): a magnetless GR that banks a Treasure nothing
+        // wants is not a line a pilot considers (USER doctrine -- see TrickCastSensible).
+        // Same single choke point as the flood-engine gate above, so search + rollouts + greedy
+        // re-solves inherit it together. Generic providers return true -> byte-identical.
+        if (def.params.solo_target_trick && def.params.creates_treasures > 0
+            && !ResolveProvider(state).TrickCastSensible(state, state.active_player_index, def))
+        {
+            continue;
+        }
+
         // Skip spells that need a creature target when none exists. An own-creature pump
         // (Invigorate) needs one of OUR attackers; other creature-targeting spells need an
         // opponent creature.
@@ -3581,8 +3591,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // opponent). So K>0 is enumerated only on magnetless boards. Opened by
             // MTG_UNPRUNED/tricktarget alongside the sibling target prune (standing A/B).
             bool magnet_on_bf = false;
-            if (def.params.strive_cost.has_value()
-                && !DecisionUnpruned(UnprunedGate::TrickTarget))
+            if (!DecisionUnpruned(UnprunedGate::TrickTarget))
             {
                 for (const Permanent& p : state.battlefield)
                 {
@@ -3677,7 +3686,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
             }
             }
-            if (def.params.trick_up_to_one) { emit(0, 0); }
+            // USER rule (2026-08-12): with a magnet out, the untargeted "bank the Treasure, no
+            // trigger" variant is dominated by targeting the magnet (same mana, strictly more
+            // Treasures + pumps) -- suppressed under the same tricktarget gate (magnet_on_bf is
+            // only ever set when the gate is closed, so MTG_UNPRUNE=tricktarget restores it).
+            if (def.params.trick_up_to_one && !magnet_on_bf) { emit(0, 0); }
             continue;
         }
 
@@ -12004,6 +12017,7 @@ namespace
         g_bp_wave_probe.nested_scored.fetch_add(1, std::memory_order_relaxed);
         BpWaveMax(g_bp_wave_probe.maxat, at);
     }
+
 }
 
 // Hands one node's deferred continuations to its caller, one variant at a time. The caller owns the

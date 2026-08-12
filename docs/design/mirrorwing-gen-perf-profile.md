@@ -41,9 +41,18 @@ Suite-level: neutral (smoke 40s both arms; suite wall is search-dominated there 
 
 ## Deferred levers, ranked (from gdb samples of the real heavy game)
 
-1. **GameState deep copy (~26% of samples; 12.8M copies/batch).** The real fix is apply/undo at
-   the FSLine d1 leaves (the backtracker's pattern) or a pooled/arena Permanent storage. Big,
-   behavioral-risk-free in principle but architecturally invasive; needs its own session.
+> **STALE post-site-5 (2026-08-12).** This ranking predates the trick-class site-5 split
+> (2abb1c7). On the current binary, in-process MTG_WAVE_TIME timers on the gi69 label repro
+> show the label wall is dominated by **deferred-wave ApplyPlanDirect replays (~54% of wall;
+> 63.5M full applies for 6.0M wave slots, 75% deduped post-apply)** — GameState deep copies
+> are now only ~3.5% of the label wall. The top lever today is the prefix-resume cache
+> (capture the GameState at the deferred breakpoint once per base plan, resume per rank),
+> not apply/undo. The ranking below still describes the pre-site-5 shape of the d1 fan-out.
+
+1. **GameState deep copy (~26% of samples pre-site-5; 12.8M copies/batch).** The real fix is
+   apply/undo at the FSLine d1 leaves (the backtracker's pattern) or a pooled/arena Permanent
+   storage. Big, behavioral-risk-free in principle but architecturally invasive; needs its own
+   session. (Post-site-5: demoted — see note above.)
 2. **d1-leaf dominance (90% of nodes).** A d1 node enumerates ~10 plans, deep-copies + applies
    each, and simulates the turn end. Any structural saving here (plan-enumeration memo keyed by
    BuildSimKey, or a slimmer d1-only evaluate path) multiplies across 10M nodes. Behavioral risk:

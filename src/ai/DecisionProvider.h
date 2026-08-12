@@ -260,6 +260,20 @@ public:
     virtual bool ShouldCastDrawEngine(const GameState& s, int controller,
                                       const CardDefinition& def) const = 0;
 
+    // TrickCastSensible -- whether casting this Treasure-making solo-target trick (Gold Rush) is a
+    // line a competent pilot considers on this board. USER doctrine (2026-08-12): magnetless GR is
+    // 2 mana for 1 Treasure -- NEVER a this-turn mana play; it is a ramp / mana-screw-mitigation
+    // play ("essentially a way to drop a Zada or Mirrorwing a turn or more earlier") or a
+    // no-point-holding-back play (redundant copies + a board). A cast with a magnet out, or one
+    // whose pump could matter for this turn's lethal, is always sensible. Asked at the same
+    // enumeration choke point as ShouldCastDrawEngine so the search, rollouts, and greedy
+    // re-solves all inherit the gate (lockstep by construction). This is a game-understanding
+    // filter, not a width cap; MTG_UNPRUNE=treasuretrickcast (UnprunedGate::TreasureTrickCast)
+    // restores the ungated enumeration for audit. Default true -> every deck without a provider
+    // rule is byte-identical.
+    virtual bool TrickCastSensible(const GameState& /*s*/, int /*controller*/,
+                                   const CardDefinition& /*def*/) const { return true; }
+
     // HasExtraLethalModel / ExtraLethalDamage -- deck-specific extra damage toward THIS turn's lethal, BEYOND
     // the generic combat + direct-damage total the engine already sums. This is the Treasure Hunt / Land's
     // Edge model: lands in hand are Land's Edge ammunition, and a clairvoyant Treasure Hunt cast this turn

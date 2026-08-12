@@ -64,6 +64,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"splicecollapse",UnprunedGate::SpliceCollapse},
     {"saclandhold",UnprunedGate::SacLandHold},
     {"tricktarget",UnprunedGate::TrickTarget},
+    {"treasuretrickcast",UnprunedGate::TreasureTrickCast},
 };
 
 const char* GateName(UnprunedGate g)
@@ -6392,11 +6393,13 @@ void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDef
 
     int best_ready = 0, best_ready_pw = -1;   // best attack-eligible non-magnet (m_number, power)
     int best_sick  = 0, best_sick_pw  = -1;   // best non-eligible creature
+    int own_creatures = 0;
     std::unordered_set<std::string> seen_magnet;   // (name, eligibility) equivalence -- a 2nd
                                                    // identical Mirrorwing is the same choice
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me || !p.card.IsCreature()) { continue; }   // tokens included
+        ++own_creatures;
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && d->params.copies_solo_targeted_spells)
         {
@@ -6455,6 +6458,20 @@ void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDef
         if (out.empty()) { out.push_back(0); }   // narrowing active, no candidates
         return;
     }
+    // USER rule (2026-08-12, "We should always do so"): with a magnet on the battlefield, the
+    // fan-out delivers every symmetric payload (pump / haste / draw / Treasure) to the target
+    // AND every other creature for the same mana, so every single-target line is dominated --
+    // enumerate the magnet target(s) ONLY. Lone exception: a mass-draw payload against a nearly
+    // empty library could deck us; keep the best single target as the escape line. (Twinflame
+    // returned above: its copy SET differs by target, so its bf/hand magnets both stay.)
+    if (!out.empty())
+    {
+        const bool deck_risk = def.params.cast_draw > 0
+            && s.players[me].library.size() <= static_cast<std::size_t>(own_creatures + 2);
+        if (deck_risk && best_ready != 0) { out.push_back(best_ready); }
+        return;
+    }
+
     if (best_ready != 0)               { out.push_back(best_ready); }
     if (wants_sick && best_sick != 0)  { out.push_back(best_sick); }
 
@@ -6482,6 +6499,108 @@ void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDef
     // there are no legal targets and the caller's loops emit nothing anyway -- but out.empty()
     // must not silently mean "all", so mark narrowing active with a 0 (skipped by the caller).
     if (out.empty()) { out.push_back(0); }
+}
+
+// ---- MirrorwingProvider::TrickCastSensible ----------------------------------
+// Gold Rush cast gate (USER doctrine, 2026-08-12). Magnetless Gold Rush is {1}{G} in for ONE
+// Treasure out -- a net mana LOSS this turn, so it is never a this-turn mana play. It is real as:
+//   (a) the magnet fan-out (Zada/Mirrorwing out: k copies -> k Treasures + mass pump),
+//   (b) a pump that could push THIS turn's lethal (+2/+2 per Treasure incl. banked ones;
+//       optimistic keep -- the search still decides whether the line actually wins),
+//   (c) ramp / mana-screw mitigation: banking toward mana-constrained gas in hand ("essentially
+//       a way to drop a Zada or Mirrorwing a turn or more earlier", incl. a needed colour no
+//       current source produces), or
+//   (d) redundancy: >=2 copies in hand with a real board -- "no point holding back".
+// Anything else is "cast Gold Rush just to get a treasure", which a pilot does not do -- and
+// which multiplied the searched-breakpoint fan-out for nothing (the 2026-08-12 label-path
+// profile: 63.5M wave candidates, improved=0). Game-understanding filter, not a width cap;
+// MTG_UNPRUNE=treasuretrickcast restores the ungated enumeration.
+bool MirrorwingProvider::TrickCastSensible(const GameState& s, int me,
+                                           const CardDefinition& def) const
+{
+    if (DecisionUnpruned(UnprunedGate::TreasureTrickCast)) { return true; }
+
+    int treasures = 0, atk_power = 0, total_power = 0, pot = 0, creatures_bf = 0;
+    bool have_color[6] = { false, false, false, false, false, false };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.copies_solo_targeted_spells) { return true; }   // (a) magnet out
+        if (p.card.m_name == "Treasure Token") { ++treasures; ++pot; continue; }
+        if (p.card.IsCreature())
+        {
+            ++creatures_bf;
+            total_power += p.EffectivePower();   // ALL bodies: haste/copy tricks unlock them
+            if (d && CanAttackFull(p, s.battlefield, me)) { atk_power += p.EffectivePower(); }
+        }
+        const bool src = (p.card.IsLand() && !p.tapped)
+                      || (d && d->tmpl == CardTemplate::ManaDork && CanTapNow(p, s.battlefield))
+                      || (d && d->params.mana_rock && !p.tapped);
+        if (src && d)
+        {
+            ++pot;
+            for (Color c : EffectiveProduces(s, me, *d)) { have_color[static_cast<int>(c)] = true; }
+        }
+    }
+
+    // One hand scan feeding every clause: gas totals + colour-fix (c), candidate redundancy (d),
+    // and the SAME-TURN combat potential clause (b) must see (Twinflame token-copies the swarm,
+    // Expedite unlocks sick bodies, a held Fists pumps per draw -- all can precede this cast
+    // inside one plan).
+    int gr_in_hand = 0, gas_mv_sum = 0, fists_in_hand = 0;
+    bool copy_trick_in_hand = false, haste_in_hand = false;
+    for (const Card& hc : s.players[me].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd == nullptr || hd->card.IsLand()) { continue; }
+        if (hd->params.token_copy_of_target) { copy_trick_in_hand = true; }
+        if (hd->params.grants_temp_haste) { haste_in_hand = true; }
+        if (hc.m_name == def.card.m_name) { ++gr_in_hand; continue; }   // GR is not its own gas
+        if (hd->params.pump_per_cards_drawn_power > 0) { ++fists_in_hand; }
+        const ManaCost& mc = hd->card.m_mana_cost;
+        // (c) "lacking in mana but have a lot of gas" is a SUM condition (gi145: two 3-MV Fists
+        // vs pot 5 -- no single card is constrained, but the Treasure lets BOTH resolve in one
+        // turn). Accumulate total gas demand; compared against pot after the loop. The
+        // single-big-card ramp case (magnet above the curve) is subsumed by the sum.
+        gas_mv_sum += mc.ManaValue();
+        // Colour-fix corner: affordable on count but a required colour has no producer.
+        if ((mc.white > 0 && !have_color[static_cast<int>(Color::White)])
+            || (mc.blue  > 0 && !have_color[static_cast<int>(Color::Blue)])
+            || (mc.black > 0 && !have_color[static_cast<int>(Color::Black)])
+            || (mc.red   > 0 && !have_color[static_cast<int>(Color::Red)])
+            || (mc.green > 0 && !have_color[static_cast<int>(Color::Green)]))
+        { return true; }
+    }
+
+    // (b) optimistic this-turn lethal. The pre-cast board is NOT the ceiling of "this turn":
+    // gi17 (smoke s1001) cast Twinflame THEN Gold Rush, the Treasure pump finishing the doubled
+    // swarm -- a projection off eligible attackers alone pruned that winning finisher, and no
+    // budget recovers a hard prune. Project the optimistic ceiling from board + hand together;
+    // overshoot only KEEPS a candidate the search then judges on its merits.
+    const int base = (copy_trick_in_hand || haste_in_hand) ? total_power : atk_power;
+    if (base > 0)
+    {
+        const int drawn = s.players[me].cards_drawn_this_turn;
+        int proj = base;
+        if (copy_trick_in_hand) { proj *= 2; }                       // hasty copies of the swarm
+        proj += 2 * (treasures + def.params.creates_treasures);      // Treasure pump on a target
+        if (def.params.pump_per_cards_drawn_power > 0)               // the candidate's own pump
+        { proj += def.params.pump_per_cards_drawn_power * (drawn + def.params.cast_draw + 1); }
+        if (fists_in_hand > 0) { proj += drawn + 2; }                // a held Fists can also fire
+        if (proj >= s.players[1 - me].life) { return true; }
+    }
+    // (A draw-trick HOLD rule lived here 2026-08-12 and was retired the same day by
+    // measurement: zero branching reduction on the label path, and a persistent line-loss
+    // (smoke gi99: the winning line spends Fists as tempo and never deploys the in-hand
+    // Zada -- two lands through T4 meant "everything in place" was never true). USER call:
+    // "if it doesn't reduce branching we can skip it.")
+
+    if (gas_mv_sum > pot) { return true; }   // (c) mana-poor relative to TOTAL gas in hand
+    // (d) redundancy: the candidate itself is in hand, so >=2 means multiple copies held.
+    if (gr_in_hand >= 2 && creatures_bf >= 2) { return true; }
+
+    return false;   // magnetless bank with no use -- not a line
 }
 
 // ---- MirrorwingProvider::LegendKeepIndex ------------------------------------
