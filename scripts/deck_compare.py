@@ -136,20 +136,28 @@ def base_numbering(deck):
     return m
 
 
-def inherit_numbering(base_nums, base_counts, new_counts):
+def inherit_numbering(base_nums, base_counts, new_counts, pairs=None):
     """Unchanged copies keep their numbers; numbers freed by removed copies are INHERITED by added
     copies. Never renumber -- renumbering is the entire bug this exists to avoid.
 
-    Freed numbers are handed out in sorted order. With an explicit edit list ("replace X with Y") the
-    pairing would be exact; from a count diff alone this deterministic rule is the best available, and
-    it still yields in-place replacement whenever the counts balance."""
-    freed, out = [], {}
+    `pairs` is the spec's optional `replace` map for this arm ({removed card: added card}), and it
+    makes the pairing EXACT where it used to be a convention: without it, freed numbers are handed
+    out in sorted order, which is deterministic and fine for one added name but arbitrary as soon as
+    two cards are added at once -- the slots are the same either way, but WHICH new card lands in the
+    departing card's slots is then alphabetical rather than intentional. Anything the map does not
+    cover falls back to the sorted rule."""
+    freed_of, out = {}, {}
     for name, nums in base_nums.items():
         keep = min(new_counts.get(name, 0), base_counts[name])
         out[name] = nums[:keep]
-        freed += nums[keep:]
-    freed.sort()
+        freed_of[name] = list(nums[keep:])
     high = max((max(v) for v in base_nums.values() if v), default=0)
+    for src, dst in (pairs or {}).items():
+        need = new_counts.get(dst, 0) - len(out.get(dst, []))
+        take = freed_of.get(src, [])
+        for _ in range(min(need, len(take))):
+            out.setdefault(dst, []).append(take.pop(0))
+    freed = sorted(n for v in freed_of.values() for n in v)
     for name in sorted(new_counts):
         need = new_counts[name] - len(out.get(name, []))
         for _ in range(need):
@@ -214,20 +222,24 @@ def table_buckets(path):
     return (table_meta(path)[1] or {}).get("buckets")
 
 
-def expected_cells(buckets, counts, hand=7):
-    """How many size-`hand` cells `EnumComps` enumerates for `counts` under `buckets`."""
+def enum_cells(buckets, counts, hand=7):
+    """Every size-`hand` composition `EnumComps` enumerates for `counts` under `buckets`."""
     n2b = {n: i for i, b in enumerate(buckets) for n in b}
     cap = [min(sum(c for n, c in counts.items() if n2b.get(n) == i), hand) for i in range(len(buckets))]
-    memo = {}
+    out, cur = [], [0] * len(cap)
 
     def rec(i, rem):
         if i == len(cap):
-            return 1 if rem == 0 else 0
-        if (i, rem) not in memo:
-            memo[(i, rem)] = sum(rec(i + 1, rem - x) for x in range(0, min(cap[i], rem) + 1))
-        return memo[(i, rem)]
+            if rem == 0:
+                out.append(tuple(cur))
+            return
+        for x in range(0, min(cap[i], rem) + 1):
+            cur[i] = x
+            rec(i + 1, rem - x)
+        cur[i] = 0
 
-    return rec(0, hand)
+    rec(0, hand)
+    return out
 
 
 def verify_table_for_deck(ek, counts, label, path):
@@ -241,15 +253,26 @@ def verify_table_for_deck(ek, counts, label, path):
     `commit` and `effective_R` but not the counts, so the check is structural: the number of size-7
     cells implied by the decklist must equal the number of entries. Verified exact on all 10
     committed tables, K=10..21, 7,758..431,144 entries."""
-    got, want = len(ek.get("entries") or []), expected_cells(ek["buckets"], counts)
-    if got != want:
+    want = enum_cells(ek["buckets"], counts)
+    have = {tuple(e["comp"]) for e in (ek.get("entries") or [])}
+    missing = [c for c in want if c not in have]
+    if missing:
+        ex = "; ".join(" ".join(f"{n}x{v}" for n, v in zip(("+".join(b) for b in ek["buckets"]), c) if v)
+                       for c in missing[:2])
         raise SystemExit(
-            f"{label} was not generated for this decklist -- refusing.\n"
-            f"  {os.path.relpath(path, ROOT)} has {got:,} entries; this decklist implies {want:,}\n"
-            f"  size-7 cells over its {len(ek['buckets'])} buckets.\n"
-            "  Every coverage check here assumes the two match; they do not, so the caps used to test\n"
-            "  composition coverage are the wrong ones. Regenerate the table for the current decklist\n"
-            "  (mulligan-profile.md), or screen the decklist the table was built for.")
+            f"{label} does not answer every hand this decklist can draw -- refusing.\n"
+            f"  {os.path.relpath(path, ROOT)} has {len(have):,} cells; this decklist needs "
+            f"{len(want):,}, of which {len(missing):,} are absent.\n"
+            f"  e.g. {ex}\n"
+            "  Those hands land as present=false: the generic heuristic keep AND lookahead bottoming,\n"
+            "  silently. Regenerate the table for the current decklist (mulligan-profile.md), or\n"
+            "  screen the decklist the table was built for.")
+    # A SUPERSET is fine and is what a reweighted table looks like: it keeps the source deck's grid,
+    # and cells the arm cannot draw get hypergeometric weight 0 (Comb(n,k)=0 for k>n) so they cannot
+    # affect D_opt. Worth saying, because "10,945 entries for a 10,780-cell deck" reads like a bug.
+    if len(have) > len(want):
+        print(f"  ({label}: {len(have):,} cells for a {len(want):,}-cell decklist -- a superset, "
+              "the extra cells carry weight 0)")
 
 
 def table_cards(profile_path):
@@ -362,6 +385,27 @@ def run_batch(jobs, outdir, name, threads, env=None):
     return err
 
 
+def job_costs(err_path):
+    """{job: ms per game} from the batch's own per-job summary. -> {} if it cannot be read.
+
+    Printing this per arm replaces the advice it makes obsolete: the skill used to say "read the ms=
+    on a 300-game probe before sizing a long run", and a 300-game probe is dominated by fixed startup
+    -- the same burn job measured 42.5 and 114 ms/game on two 300-game runs against 59.3 at 20,000.
+    The number that matters is the one THIS run produced, and per ARM, because arms are not equally
+    expensive: slivers' base arm cost 1,632,530 ms against cut_vial's 280,522 for the same 20,000
+    games (5.8x -- Aether Vial's enumeration), so a screen's wall clock is set by its priciest arm."""
+    out = re.sub(r"\.err$", ".out", err_path)
+    costs = {}
+    try:
+        for line in open(out):
+            m = re.match(r"(\S+): played=(\d+) .*ms=(\d+)", line)
+            if m and int(m.group(2)):
+                costs[m.group(1)] = int(m.group(3)) / int(m.group(2))
+    except OSError:
+        pass
+    return costs
+
+
 def paired(got, a, b):
     """(mean delta b-a, se, n, %identical) over the game indices both arms finished."""
     common = sorted(set(got[a]) & set(got[b]))
@@ -376,7 +420,8 @@ class Spec:
 
     def __init__(self, path):
         s = json.load(open(path))
-        self.raw     = s
+        self.raw      = s
+        self.raw_path = os.path.abspath(path)
         self.games   = int(s.get("games", 20000))
         self.seed    = int(s.get("seed", 910000))
         self.depth   = int(s.get("depth", 5))
@@ -406,6 +451,17 @@ class Spec:
             self.arms[tag] = {k: v for k, v in c.items() if v > 0}
         # Cards no arm's base holds -- everything the introduced-card pre-flight is about.
         self.introduced = sorted({c for a in self.arms.values() for c in a} - set(self.counts))
+        # Optional per-arm {removed card: added card}. Only the numbering reads it; it never changes
+        # what a combination IS (that is the counts), only which slots the new copies inherit.
+        self.replace = s.get("replace", {})
+        for tag, m in self.replace.items():
+            if tag not in self.arms:
+                raise SystemExit(f"\"replace\" names an unknown combination: {tag}")
+            for src, dst in m.items():
+                if self.arms[tag].get(src, 0) >= self.counts.get(src, 0):
+                    raise SystemExit(f"\"replace\" {tag}: {src} is not reduced, so it frees nothing")
+                if self.arms[tag].get(dst, 0) <= self.counts.get(dst, 0):
+                    raise SystemExit(f"\"replace\" {tag}: {dst} is not increased, so it needs nothing")
         # Resolve the apparatus the way the ENGINE would if it were left to auto-detect: sibling of
         # the decklist, by stem. Leaving these to the spec made the load-bearing thing optional, and
         # an omitted `profile` reads exactly like a deliberate one (it is not -- see the header).
@@ -429,7 +485,8 @@ class Spec:
         dp = os.path.join(outdir, self.stem)
         open(dp, "w").write("\n".join(f"{c} {n}" for c, n in ordered) + "\n")
         np_ = os.path.join(outdir, "numbering.json")
-        nums = self.nums if tag == "base" else inherit_numbering(self.nums, self.counts, counts)
+        nums = (self.nums if tag == "base" else
+                inherit_numbering(self.nums, self.counts, counts, self.replace.get(tag)))
         json.dump(nums, open(np_, "w"), indent=0)
         return dp, np_
 
@@ -692,7 +749,7 @@ def verify_coverage(buckets, gen_counts, spec, label):
                   "  bottoming, on this arm alone. Report this as a bug in the pool-table route.")
 
 
-def screen(spec, dry_run, only=None, seed=None, label="screen"):
+def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None):
     """Every combination vs base, one shared apparatus, one pooled batch.
 
     `only` restricts which arms RUN without restricting which arms the apparatus is built from: a
@@ -821,12 +878,36 @@ def screen(spec, dry_run, only=None, seed=None, label="screen"):
                         if st_.st_size < 4 << 20 else None}
 
     run_arms = [t for t in spec.arms if only is None or t in only]
-    jobs = []
+    jobs, decks = [], {}
     for tag in run_arms:
         dp, np_ = spec.write_arm(tag, os.path.join(spec.out, tag))
+        decks[tag] = (dp, np_)
         jobs.append(spec.job(tag, dp, np_, profile, seed=seed))
+    # --with-floor: the bracket's SHARED cells are the screen's own arms, so run the bracket's own
+    # cells in the SAME batch instead of re-running base and the variant in a second invocation. That
+    # is not an approximation -- a separate --floor produced per-job digests identical to the screen's
+    # for exactly these cells -- it is the same games, run once.
+    ftags = [t.strip() for t in (with_floor or "").split(",") if t.strip()]
+    bad = [t for t in ftags if t not in run_arms or t == "base"]
+    if bad:
+        raise SystemExit(f"--with-floor wants arms this screen runs: {', '.join(bad)} is not one")
+    fmeta = None
+    if ftags:
+        R = int(spec.raw.get("floor_R", 10))
+        print(f"\n  bracketing {', '.join(ftags)} in the same batch:")
+        route, _, own_app, per_arm, base_key = bracket_own_tables(spec, ftags, decks, R, profile,
+                                                                  dry_run)
+        fmeta = (ftags, route, per_arm, base_key, R)
+        seen = set()
+        for t in ftags:
+            for d, key in ((t, "own_" + t), ("base", base_key[t])):
+                if (d, key) not in seen:
+                    seen.add((d, key))
+                    jobs.append(spec.job(f"{d}__{key}", decks[d][0], decks[d][1], own_app[key],
+                                         seed=seed))
     json.dump({"arms": spec.arms, "games": spec.games, "depth": spec.depth,
                "budget_ms": spec.budget, "max_turns": spec.maxturn, "use_table": use_table,
+               "engine_commit": head_commit(),
                "profile": stamp(profile), "table": stamp(table_src or (tpath if use_table else None)),
                "value_profile": stamp(spec.value_profile),
                "seed": spec.seed if seed is None else seed},
@@ -842,19 +923,34 @@ def screen(spec, dry_run, only=None, seed=None, label="screen"):
     # to DefaultProfile() in silence. MTG_EXHAUSTIVE_PROFILE=none suppresses exactly the sidecar
     # (AttachExhaustiveSidecar), process-globally, which is what "symmetric" means here.
     env = {} if use_table else {"MTG_EXHAUSTIVE_PROFILE": "none"}
-    got = score(run_batch(jobs, spec.out, label, spec.threads, env), run_arms,
+    got = score(run_batch(jobs, spec.out, label, spec.threads, env), [j["name"] for j in jobs],
                 spec.maxturn, expect=spec.games)
     common = sorted(set.intersection(*[set(v) for v in got.values()]))
     print(f"\n{len(common):,} paired games, d{spec.depth} budget {spec.budget}ms   (negative delta = FASTER)\n")
-    print(f"  {'combination':22s} {'avg':>8s} {'delta':>9s} {'se':>8s} {'t':>7s} {'ident':>7s} {'n@3sig/0.03t':>13s}")
-    print(f"  {'base':22s} {st.mean([got['base'][g] for g in common]):8.4f}")
+    cost = {k: v for k, v in job_costs(os.path.join(spec.out, f"{label}.err")).items()
+            if k in run_arms}
+    print(f"  {'combination':22s} {'avg':>8s} {'delta':>9s} {'se':>8s} {'t':>7s} {'ident':>7s} "
+          f"{'n@3sig/0.03t':>13s} {'ms/game':>9s}")
+    print(f"  {'base':22s} {st.mean([got['base'][g] for g in common]):8.4f}"
+          + " " * 49 + f"{cost.get('base', float('nan')):9.1f}")
+    results = {}
     for tag in run_arms:
         if tag == "base":
             continue
         d, se, n, ident = paired(got, "base", tag)
         need = 9 * (se * math.sqrt(n)) ** 2 / 0.03 ** 2
+        results[tag] = {"delta": d, "se": se, "n": n, "identical_pct": ident,
+                        "avg": st.mean([got[tag][g] for g in common]), "ms_per_game": cost.get(tag)}
         print(f"  {tag:22s} {st.mean([got[tag][g] for g in common]):8.4f} {d:+9.4f} {se:8.4f} "
-              f"{d/se if se else float('nan'):+7.2f} {ident:6.1f}% {need:13,.0f}")
+              f"{d/se if se else float('nan'):+7.2f} {ident:6.1f}% {need:13,.0f} "
+              f"{cost.get(tag, float('nan')):9.1f}")
+    # ms/game is a SUM OF PER-GAME WALL TIMES, so it inflates when the box is busy -- including with
+    # this run's own other arms. It is a sizing aid, not a benchmark; say so where it is printed.
+    if cost and max(cost.values()) > 2 * min(cost.values()):
+        hi, lo = max(cost, key=cost.get), min(cost, key=cost.get)
+        print(f"\n  cost is NOT uniform across arms: {hi} is {cost[hi]/cost[lo]:.1f}x {lo} per game"
+              f" ({cost[hi]:.0f} vs {cost[lo]:.0f} ms).\n  A screen's wall clock is set by its"
+              " priciest arm; ms/game is wall, so it inflates under load.")
     # Ranking is what a multi-arm spec is FOR, and every arm was measured against base rather than
     # against each other -- so the interesting comparison (the top two) was the one not printed. The
     # data is already there and paired on the same game indices; only the subtraction was missing.
@@ -877,6 +973,23 @@ def screen(spec, dry_run, only=None, seed=None, label="screen"):
         print(f"  the winner of a {len(others)}-combination screen is selection-biased: confirm it on"
               f" disjoint"
               f" seeds with\n    python3 scripts/deck_compare.py <spec> --confirm {top}")
+    # Results have been stdout-only, so nothing accumulated and nothing could be re-read: the
+    # "numbers do not carry across spec edits" hazard stayed a warning instead of a check. This is the
+    # same object the fingerprint describes, with the measurements attached.
+    json.dump({"spec": os.path.relpath(spec.raw_path, ROOT), "label": label,
+               "engine_commit": head_commit(), "seed": spec.seed if seed is None else seed,
+               "games": spec.games, "n_paired": len(common), "base_avg":
+                   st.mean([got["base"][g] for g in common]), "results": results},
+              open(os.path.join(spec.out, f"{label}.results.json"), "w"), indent=1)
+    if fmeta:
+        ftags, route, per_arm, base_key, R = fmeta
+        for tag in ftags:
+            rw = route[tag] == "reweight"
+            own_R = (table_meta(spec.profile)[1] or {}).get("effective_R", "?") if rw else R
+            report_bracket(spec, got, tag,
+                           {"bs": "base", "vs": tag,
+                            "bo": f"base__{base_key[tag]}", "vo": f"{tag}__own_{tag}"},
+                           R, rw, own_R, per_arm[tag], table_src is not None)
     if label == "screen":
         print("\nNOTE: this is a SCREEN. Every arm shares one apparatus, so the measured delta carries an")
         print("apparatus bias floor. `--floor <tag>` MEASURES that floor for one combination instead of")
@@ -895,6 +1008,10 @@ def apparatus_dir(out, name, stem, profile_src, table_src):
     os.makedirs(d, exist_ok=True)
     prof = os.path.join(d, stem + ".profile.json")
     subprocess.check_call(["cp", "-f", profile_src, prof])
+    # Carry the target's parsed-table cache in with it. The engine keys the cache on the LINK path
+    # (`<sidecar>.bincache`) but fingerprints it by the SOURCE's (size, mtime), which follows the
+    # symlink -- so a cache built beside the real table is valid here, and without this link every
+    # apparatus directory re-parses the sidecar from scratch (14-68 s on the big decks, per run).
     # Clear BOTH names the engine would resolve, not just the one we are about to write.
     # AttachExhaustiveSidecar (MulliganProfileIO.h) tries ".gz" FIRST and falls back to the plain
     # .json, so a directory reused across runs -- app_ship/ is reused by every --floor on a deck --
@@ -909,9 +1026,87 @@ def apparatus_dir(out, name, stem, profile_src, table_src):
         p = os.path.join(d, stem + e)
         if os.path.lexists(p):
             os.remove(p)
+        # Drop a cache LINK we planted for the old target (below) -- left behind, the engine would
+        # find its fingerprint stale and rebuild THROUGH the symlink, overwriting the real table's
+        # cache in decks/ with one for a different table. A real cache file here is left alone.
+        if os.path.islink(p + ".bincache"):
+            os.remove(p + ".bincache")
     ext = ".keepmodel.exhaustive.profile.json" + (".gz" if table_src.endswith(".gz") else "")
-    os.symlink(os.path.abspath(table_src), os.path.join(d, stem + ext))
+    link = os.path.join(d, stem + ext)
+    os.symlink(os.path.abspath(table_src), link)
+    src_cache = os.path.abspath(table_src) + ".bincache"
+    if os.path.exists(src_cache) and not os.path.lexists(link + ".bincache"):
+        os.symlink(src_cache, link + ".bincache")
     return prof
+
+
+def raw_sidecar(profile_path):
+    """The committed RAW sidecar beside a deck's profile, or None. Every deck that ships a keep table
+    ships its raw too (per-deck-folder-layout.md), gzipped."""
+    stem = re.sub(r"\.profile\.json$", "", profile_path or "")
+    for ext in (".keepmodel.exhaustive.raw.json.gz", ".keepmodel.exhaustive.raw.json"):
+        if stem and os.path.exists(stem + ext):
+            return stem + ext
+    return None
+
+
+def reweight_ok(spec, tag):
+    """Can an existing base-deck table be retargeted to this combination with ZERO rollouts?
+
+    Only if every hand the arm can draw is a cell the source table already holds. `BuildPolicyFromTables`
+    takes `count` separately from the rollout values and recomputes `HandWeights` from it, so a
+    different count vector is just a re-weighting -- but a bucket RAISED above its base cap makes
+    compositions reachable that were never enumerated, and those cells do not exist to be reweighted.
+    That is exactly the condition `fallback_rate` already measures, so reuse it rather than re-derive.
+
+    Introduced cards are out: a card the base table never bucketed has no cells at all."""
+    if set(spec.arms[tag]) - set(spec.counts):
+        return False, "it introduces a card the source table never bucketed"
+    bk = table_buckets(spec.profile)
+    if not bk:
+        return False, "the deck ships no keep table to retarget"
+    rate, over = fallback_rate(bk, spec.counts, spec.arms[tag])
+    if rate:
+        return False, f"it raises a bucket past the source grid ({pct(rate)} of hands: {'; '.join(over)})"
+    return True, ""
+
+
+def reweight_table(spec, tag, deck_path, src_raw):
+    """Retarget `src_raw`'s cell values to this arm's counts. No rollouts -- seconds, not minutes.
+
+    This is `MTG_KEEP_MERGE` with ONE input and a different decklist on the command line: the merge
+    pools rollout values from the raw and takes the deck's counts from the argument, which is exactly
+    a reweight. It prints a deck-fingerprint WARNING by design; here the mismatch is the point.
+
+    What it does and does not bracket. The fit of a table to a deck has two parts: the hand weights
+    and D_opt derived from `count` (this reproduces them exactly, at the SOURCE's R -- 60 on the
+    shipped tables, versus 10 for a generated bracket) and the per-cell rollout values, which were
+    estimated on the source deck's library and are NOT re-estimated here. So a reweighted bracket
+    bounds the weighting half at high R and says nothing about the rollout half; a generated bracket
+    bounds both but carries R=10 sampling noise larger than the bias it is measuring. They are
+    complementary, and the cheap one is free."""
+    d = os.path.dirname(deck_path)
+    out = os.path.join(d, spec.name + ".keepmodel.exhaustive.profile.json")
+    log = os.path.join(spec.out, f"reweight_{tag}.log")
+    for src in (spec.profile, spec.value_profile):
+        if src and os.path.exists(src):
+            subprocess.check_call(["cp", "-f", src, d])
+    print(f"  {tag}: reweighting {os.path.relpath(src_raw, ROOT)} onto this arm's counts "
+          f"(zero rollouts; log {os.path.relpath(log, ROOT)})")
+    with open(log, "w") as f:
+        subprocess.check_call([os.path.join(ROOT, "build/Release/mtg-analyze"), deck_path],
+                              stdout=f, stderr=subprocess.STDOUT, cwd=ROOT,
+                              env={**os.environ, "MTG_KEEP_MERGE": "1",
+                                   "MTG_MERGE_INPUTS": os.path.abspath(src_raw),
+                                   "MTG_MERGE_OUT_PROFILE": out,
+                                   "MTG_MERGE_OUT_RAW": out.replace(".profile.json", ".raw.json")})
+    # Stamp the same fingerprint file `gen_table` keys reuse on, with a value it can never match.
+    # Both routes write the SAME path, so without this a later generate would find a reweighted table
+    # sitting under a fingerprint that says "generated at R" and reuse it.
+    open(os.path.join(d, ".counts.json"), "w").write(
+        json.dumps({"counts": spec.arms[tag], "R": f"reweight:{os.path.basename(src_raw)}"},
+                   sort_keys=True))
+    return out
 
 
 def gen_table(spec, tag, deck_path, R, dry=False):
@@ -958,6 +1153,128 @@ def gen_table(spec, tag, deck_path, R, dry=False):
                                    "MTG_KEEP_ROLLOUTS": str(R)})
     open(fp, "w").write(want)
     return out
+
+
+def bracket_own_tables(spec, tags, decks, R, play_prof, dry_run):
+    """The "own table" side of a bracket for each tag. -> (route, own_tbl, per_arm, base_key).
+
+    Split out of `floor()` so the screen can build the SAME brackets and run them in the same
+    batch (`--with-floor`), instead of a second invocation re-running the shared cells."""
+    per_arm = {t: set(spec.arms[t]) != set(spec.counts) for t in tags}
+    if any(per_arm.values()):
+        which = ", ".join(t for t in tags if per_arm[t])
+        print(f"  ({which}: the card sets differ, so each deck is bracketed on ITS OWN R={R}"
+              f" table --\n   one table for both would leave the base deck's dropped card unbucketed)")
+    # REWEIGHT vs GENERATE, per tag. A count-only edit needs no rollouts at all: the shipped raw
+    # already holds a value for every cell the arm can draw, and retargeting it to the arm's counts is
+    # seconds instead of 10-40 minutes AND lands at the shipped R (60) instead of floor_R (10), which
+    # is the noise that makes a generated bracket overstate its floor. What it does not do is
+    # re-estimate the cell values on the arm's library, so it brackets the weighting half only --
+    # `"bracket": "generate"` forces the full, noisy one.
+    mode = spec.raw.get("bracket", "reweight")
+    src_raw = raw_sidecar(spec.profile)
+    route, own_tbl = {}, {}
+    for t in tags:
+        ok, why = reweight_ok(spec, t)
+        if mode == "reweight" and ok and src_raw:
+            route[t] = "reweight"
+            own_tbl[t] = (reweight_table(spec, t, decks[t][0], src_raw) if not dry_run
+                          else os.path.join(os.path.dirname(decks[t][0]),
+                                            spec.name + ".keepmodel.exhaustive.profile.json"))
+        else:
+            route[t] = "generate"
+            if mode == "reweight" and not ok:
+                print(f"  {t}: cannot reweight -- {why}")
+            own_tbl[t] = gen_table(spec, t, decks[t][0], R, dry=dry_run)
+    # The base deck's own table, needed only where the card SETS differ. Under the reweight route it
+    # is the SHIPPED table itself -- retargeting the base's counts onto the base's own values is the
+    # identity -- so that arm costs nothing at all.
+    if any(per_arm[t] and route[t] == "reweight" for t in tags):
+        own_tbl["base_rw"] = shipped_table(spec.profile)
+    if any(per_arm[t] and route[t] == "generate" for t in tags):
+        own_tbl["base_gen"] = gen_table(spec, "base", decks["base"][0], R, dry=dry_run)
+    for t, tp in own_tbl.items():
+        if not dry_run:
+            verify_bottoming(tp, f"the {t} bracket table")
+
+    own_app = {"own_" + t: apparatus_dir(spec.out, "own_" + t, spec.name, play_prof, tp)
+               for t, tp in own_tbl.items()}
+    base_key = {t: (("own_base_rw" if route[t] == "reweight" else "own_base_gen") if per_arm[t]
+                    else "own_" + t) for t in tags}
+    return route, own_tbl, own_app, per_arm, base_key
+
+
+def report_bracket(spec, got, tag, cell, R, rw, own_R, per_arm, pool):
+    """One combination's bracket, computed from cells that have already run.
+
+    Shared by `--floor` and the screen's `--with-floor`. The two differ only in whether the
+    SHARED cells are their own jobs or the screen's own arms, and that is a naming difference:
+    the pooled floor's shared cells reproduced the screen's per-job digests exactly
+    (e41ba09a50c652f4 / 9c708dd6517a9bbc / 655678a650b9ee10 on burn), which is what makes it
+    sound to run them once instead of twice."""
+    e_ship, se_ship, n, id_ship = paired(got, cell["bs"], cell["vs"])
+    e_own,  se_own,  _, id_own  = paired(got, cell["bo"], cell["vo"])
+    # Difference-of-differences over the SAME game indices -- pair it too, or the two deltas'
+    # shared game-to-game variance is counted twice and the bias looks far noisier than it is.
+    common = sorted(set.intersection(*[set(got[c]) for c in cell.values()]))
+    B = [(got[cell["vo"]][g] - got[cell["bo"]][g]) -
+         (got[cell["vs"]][g] - got[cell["bs"]][g]) for g in common]
+    bias, se_b = st.mean(B), st.pstdev(B) / math.sqrt(len(B))
+    fl = abs(bias) + 2 * se_b
+
+    print(f"\n=== {tag} ===   {len(common):,} paired games, d{spec.depth} budget {spec.budget}ms\n")
+    print(f"  {'apparatus':28s} {'delta':>9s} {'se':>8s} {'ident':>7s}")
+    shared_lbl = ("shared (pool R=%d) table" % R if pool
+                  else "shared (shipped) table")
+    print(f"  {shared_lbl:28s} {e_ship:+9.4f} {se_ship:8.4f} {id_ship:6.1f}%")
+    own_lbl = ((f"each arm's own R={own_R}" if per_arm else f"{tag} own R={own_R}")
+               + (" (reweighted)" if rw else " table"))
+    print(f"  {own_lbl:28s} {e_own:+9.4f} {se_own:8.4f} {id_own:6.1f}%")
+    print(f"\n  apparatus bias               {bias:+9.4f} {se_b:8.4f}   "
+          f"(t = {bias/se_b if se_b else float('nan'):+.2f})")
+    if pool:
+        # "Each table flatters the deck it was fit to" is a shipped-table reading, and it does NOT
+        # carry over to the pool route: the union REFINES every arm's partition (it holds every
+        # card any arm plays), so the pool table is finer than any arm's own, not merely foreign
+        # to it. All four nulls measured on burn came out NEGATIVE -- the pool table played each
+        # arm slightly FASTER than its own table. No expected sign here; read the nulls below.
+        print("     (the pool table REFINES every arm's partition, so neither sign is 'expected'"
+              " -- read the per-arm nulls)")
+    else:
+        print(f"     {'(each table flatters the deck it was fit to -- the expected direction)' if bias < 0 else '(the shared table flatters the VARIANT -- unexpected; read the cells before trusting it)'}")
+    print(f"  floor = |bias| + 2se          {fl:9.4f}")
+    print(f"  effect / floor                {abs(e_ship)/fl if fl else float('inf'):9.2f}x")
+    # The two WITHIN-deck nulls the bias is the difference of. Reporting only the variant's (what
+    # this used to do) hides where a bias comes from: a bracket is only worrying when the two
+    # nulls DIFFER, and two large equal nulls are a level difference that cancels. Against a
+    # shipped high-R table expect both POSITIVE and large (an R=<floor_R> table plays ~0.032-0.06t
+    # weaker, deck-dependent) -- which is why the bracket OVERSTATES the floor.
+    print("\n  per-arm nulls, own table vs the shared one (positive = the OWN table plays weaker);"
+          f"\n  the bias above is exactly their difference, null({tag}) - null(base):")
+    for lbl, a, b in (("base", cell["bs"], cell["bo"]), (tag, cell["vs"], cell["vo"])):
+        c, se_c, _, id_c = paired(got, a, b)
+        print(f"    {lbl:24s} {c:+9.5f} {se_c:8.5f} {id_c:6.1f}%")
+    if rw:
+        print(f"\n  NOTE this bracket was REWEIGHTED, not generated: the shipped raw's cell values"
+              f"\n  retargeted to {tag}'s counts (zero rollouts, R={own_R}). It reproduces the hand"
+              f"\n  weights and D_opt a table fit to {tag} would have, at high R -- but the cell"
+              "\n  values were estimated on the BASE deck's library and are not re-estimated, so it"
+              "\n  bounds the WEIGHTING half of the fit only. `\"bracket\": \"generate\"` runs the"
+              f"\n  full one at R={R}, which bounds both halves and carries R={R} noise larger than"
+              "\n  the bias it measures.")
+    if pool:
+        print(f"  NOTE the shared arm is itself an R={R} POOL table here, not the shipped R=60 one,"
+              f" so\n  the usual 'the bracket plays ~0.032t weaker' asymmetry does NOT apply --"
+              f" both arms\n  are low-R, and what is left is the fit difference between union and"
+              " combination.")
+    if fl and abs(e_ship) / fl < 3:
+        print("\n  VERDICT: the effect does NOT clear its floor by 3x. Treat it as UNRESOLVED, not")
+        print("  refuted: either the edit is genuinely small, or the shared apparatus is doing the")
+        print("  work. Only a high-R regeneration settles it -- at low R the table's own regret is")
+        print("  larger than the bias, so re-running this bracket bigger will not help.")
+    else:
+        print("\n  VERDICT: the effect clears its floor by 3x+ -- the shared apparatus is not")
+        print("  producing it. The floor is a screening guard, not a confidence interval.")
 
 
 def floor(spec, tags, dry_run):
@@ -1041,31 +1358,19 @@ def floor(spec, tags, dry_run):
     # fall-through in any cell, and the difference-of-differences decomposes exactly into two
     # WITHIN-deck nulls (bias = [var@own - var@shared] - [base@own - base@shared]) -- so the level
     # difference between two distinct tables cancels rather than leaking into a delta.
-    per_arm = {t: set(spec.arms[t]) != set(spec.counts) for t in tags}
-    if any(per_arm.values()):
-        which = ", ".join(t for t in tags if per_arm[t])
-        print(f"  ({which}: the card sets differ, so each deck is bracketed on ITS OWN R={R} table --"
-              f"\n   one table for both would leave the base deck's dropped card unbucketed)")
-    own_tbl = {t: gen_table(spec, t, decks[t][0], R, dry=dry_run) for t in tags}
-    if any(per_arm.values()):
-        own_tbl["base"] = gen_table(spec, "base", decks["base"][0], R, dry=dry_run)
-    for t, tp in own_tbl.items():
-        if not dry_run:
-            verify_bottoming(tp, f"the {t} bracket table")
-
-    # One apparatus directory per distinct table, and the CELLS are deduped across tags: `base` under
-    # the shared table is one job however many combinations are bracketed.
-    apps = {"ship": apparatus_dir(spec.out, "ship", spec.name, play_prof, shared)}
-    for t, tp in own_tbl.items():
-        apps["own_" + t] = apparatus_dir(spec.out, "own_" + t, spec.name, play_prof, tp)
-    base_key = {t: ("own_base" if per_arm[t] else "own_" + t) for t in tags}
+    route, own_tbl, own_app, per_arm, base_key = bracket_own_tables(spec, tags, decks, R, play_prof,
+                                                                     dry_run)
+    # The CELLS are deduped across tags: `base` under the shared table is one job however many
+    # combinations are bracketed.
+    apps = {"ship": apparatus_dir(spec.out, "ship", spec.name, play_prof, shared), **own_app}
 
     cells = {("base", "ship"): (shared, shared_gen)}
     for t in tags:
         cells[(t, "ship")] = (shared, shared_gen)
         cells[(t, "own_" + t)] = (own_tbl[t], spec.arms[t])
-        cells[("base", base_key[t])] = (own_tbl["base" if per_arm[t] else t],
-                                        spec.counts if per_arm[t] else spec.arms[t])
+        cells[("base", base_key[t])] = (
+            own_tbl[base_key[t][4:]] if per_arm[t] else own_tbl[t],
+            spec.counts if per_arm[t] else spec.arms[t])
 
     # How much of each cell actually GETS a table. Where the bracket runs a deck under a table fit to
     # the other, the coverage cliff is inside the measurement by design -- but it was never quantified
@@ -1097,62 +1402,12 @@ def floor(spec, tags, dry_run):
     got = score(run_batch(jobs, spec.out, "floor", spec.threads), [j["name"] for j in jobs],
                 spec.maxturn, expect=spec.games)
     for tag in tags:
-        cell = {"bs": "base__ship", "vs": f"{tag}__ship",
-                "bo": f"base__{base_key[tag]}", "vo": f"{tag}__own_{tag}"}
-        e_ship, se_ship, n, id_ship = paired(got, cell["bs"], cell["vs"])
-        e_own,  se_own,  _, id_own  = paired(got, cell["bo"], cell["vo"])
-        # Difference-of-differences over the SAME game indices -- pair it too, or the two deltas'
-        # shared game-to-game variance is counted twice and the bias looks far noisier than it is.
-        common = sorted(set.intersection(*[set(got[c]) for c in cell.values()]))
-        B = [(got[cell["vo"]][g] - got[cell["bo"]][g]) -
-             (got[cell["vs"]][g] - got[cell["bs"]][g]) for g in common]
-        bias, se_b = st.mean(B), st.pstdev(B) / math.sqrt(len(B))
-        fl = abs(bias) + 2 * se_b
-
-        print(f"\n=== {tag} ===   {len(common):,} paired games, d{spec.depth} budget {spec.budget}ms\n")
-        print(f"  {'apparatus':28s} {'delta':>9s} {'se':>8s} {'ident':>7s}")
-        shared_lbl = ("shared (pool R=%d) table" % R if shared_gen is not spec.counts
-                      else "shared (shipped) table")
-        print(f"  {shared_lbl:28s} {e_ship:+9.4f} {se_ship:8.4f} {id_ship:6.1f}%")
-        own_lbl = (f"each arm's own R={R} table" if per_arm[tag] else f"{tag} own R={R} table")
-        print(f"  {own_lbl:28s} {e_own:+9.4f} {se_own:8.4f} {id_own:6.1f}%")
-        print(f"\n  apparatus bias               {bias:+9.4f} {se_b:8.4f}   "
-              f"(t = {bias/se_b if se_b else float('nan'):+.2f})")
-        if shared_gen is not spec.counts:
-            # "Each table flatters the deck it was fit to" is a shipped-table reading, and it does NOT
-            # carry over to the pool route: the union REFINES every arm's partition (it holds every
-            # card any arm plays), so the pool table is finer than any arm's own, not merely foreign
-            # to it. All four nulls measured on burn came out NEGATIVE -- the pool table played each
-            # arm slightly FASTER than its own table. No expected sign here; read the nulls below.
-            print("     (the pool table REFINES every arm's partition, so neither sign is 'expected'"
-                  " -- read the per-arm nulls)")
-        else:
-            print(f"     {'(each table flatters the deck it was fit to -- the expected direction)' if bias < 0 else '(the shared table flatters the VARIANT -- unexpected; read the cells before trusting it)'}")
-        print(f"  floor = |bias| + 2se          {fl:9.4f}")
-        print(f"  effect / floor                {abs(e_ship)/fl if fl else float('inf'):9.2f}x")
-        # The two WITHIN-deck nulls the bias is the difference of. Reporting only the variant's (what
-        # this used to do) hides where a bias comes from: a bracket is only worrying when the two
-        # nulls DIFFER, and two large equal nulls are a level difference that cancels. Against a
-        # shipped high-R table expect both POSITIVE and large (an R=<floor_R> table plays ~0.032-0.06t
-        # weaker, deck-dependent) -- which is why the bracket OVERSTATES the floor.
-        print("\n  per-arm nulls, own table vs the shared one (positive = the OWN table plays weaker);"
-              f"\n  the bias above is exactly their difference, null({tag}) - null(base):")
-        for lbl, a, b in (("base", cell["bs"], cell["bo"]), (tag, cell["vs"], cell["vo"])):
-            c, se_c, _, id_c = paired(got, a, b)
-            print(f"    {lbl:24s} {c:+9.5f} {se_c:8.5f} {id_c:6.1f}%")
-        if shared_gen is not spec.counts:
-            print(f"  NOTE the shared arm is itself an R={R} POOL table here, not the shipped R=60 one,"
-                  f" so\n  the usual 'the bracket plays ~0.032t weaker' asymmetry does NOT apply --"
-                  f" both arms\n  are low-R, and what is left is the fit difference between union and"
-                  " combination.")
-        if fl and abs(e_ship) / fl < 3:
-            print("\n  VERDICT: the effect does NOT clear its floor by 3x. Treat it as UNRESOLVED, not")
-            print("  refuted: either the edit is genuinely small, or the shared apparatus is doing the")
-            print("  work. Only a high-R regeneration settles it -- at low R the table's own regret is")
-            print("  larger than the bias, so re-running this bracket bigger will not help.")
-        else:
-            print("\n  VERDICT: the effect clears its floor by 3x+ -- the shared apparatus is not")
-            print("  producing it. The floor is a screening guard, not a confidence interval.")
+        rw = route[tag] == "reweight"
+        own_R = (table_meta(spec.profile)[1] or {}).get("effective_R", "?") if rw else R
+        report_bracket(spec, got, tag,
+                       {"bs": "base__ship", "vs": f"{tag}__ship",
+                        "bo": f"base__{base_key[tag]}", "vo": f"{tag}__own_{tag}"},
+                       R, rw, own_R, per_arm[tag], shared_gen is not spec.counts)
     return 0
 
 
@@ -1349,6 +1604,8 @@ def main():
                     help="run only the card/apparatus checks (exit 1 if one needs implementing)")
     ap.add_argument("--floor", metavar="TAG[,TAG...]",
                     help="bracket combinations' apparatus bias floor (comma-separated = one batch)")
+    ap.add_argument("--with-floor", metavar="TAG[,TAG...]",
+                    help="run the screen AND those combinations' bias brackets in ONE batch")
     ap.add_argument("--confirm", metavar="TAG",
                     help="re-measure ONE combination on held-out seeds (the screen's winner is "
                          "selection-biased)")
@@ -1356,6 +1613,8 @@ def main():
     spec = Spec(args.spec)
     if args.preflight:
         return report_preflight(spec)
+    if args.with_floor and (args.floor or args.confirm):
+        raise SystemExit("--with-floor is part of a screen; do not combine it with --floor/--confirm")
     if args.floor and args.confirm:
         raise SystemExit("--floor and --confirm answer different questions (apparatus bias vs "
                          "selection bias); run them separately")
@@ -1364,7 +1623,7 @@ def main():
             return floor(spec, args.floor, args.dry_run)
         if args.confirm:
             return confirm(spec, args.confirm, args.dry_run)
-        return screen(spec, args.dry_run)
+        return screen(spec, args.dry_run, with_floor=args.with_floor)
 
 
 if __name__ == "__main__":

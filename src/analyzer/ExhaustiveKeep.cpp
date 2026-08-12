@@ -3444,8 +3444,6 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
     for (const std::string& path : raw_paths)
     {
         const bool is_journal = path.size() > 8 && path.compare(path.size() - 8, 8, ".journal") == 0;
-        std::ifstream f(path);
-        if (!f) { os << "  SKIP (cannot open): " << path << "\n"; continue; }
         json root;
         if (is_journal)
         {
@@ -3455,8 +3453,14 @@ void RunKeepMerge(std::ostream& os, const Decklist& deck, const MulliganProfile&
         }
         else
         {
-        try { f >> root; }
-        catch (const std::exception& e) { os << "  SKIP (bad json: " << e.what() << "): " << path << "\n"; continue; }
+            // Read through ReadProfileText, which transparently gunzips a ".gz" path. EVERY raw
+            // sidecar this repo commits is gzipped (docs/design/per-deck-folder-layout.md: commit the
+            // .raw.json.gz, never the uncompressed), so a plain ifstream made the merge unable to read
+            // the only raws that actually exist -- it reported them as "bad json" and pooled nothing.
+            const std::string text = ReadProfileText(std::filesystem::path(path));
+            if (text.empty()) { os << "  SKIP (cannot open / empty): " << path << "\n"; continue; }
+            try { root = json::parse(text); }
+            catch (const std::exception& e) { os << "  SKIP (bad json: " << e.what() << "): " << path << "\n"; continue; }
         }
         if (!root.contains("meta") || !root.contains("sizes")) { os << "  SKIP (not a raw sidecar): " << path << "\n"; continue; }
         const json& m = root["meta"];

@@ -12,13 +12,17 @@ only through analyze-deck — see **The new-card route** below.
 ## Rule 0 — one command, one apparatus, one pooled batch
 
 ```bash
-python3 scripts/deck_compare.py <spec.json>                 # screen every combination vs base
-python3 scripts/deck_compare.py <spec.json> --preflight     # only the checks that need you; no games
-python3 scripts/deck_compare.py <spec.json> --floor A,B     # bias floor for A and B, ONE batch
-python3 scripts/deck_compare.py <spec.json> --confirm TAG   # re-measure the winner on held-out seeds
+python3 scripts/deck_compare.py <spec.json>                    # screen every combination vs base
+python3 scripts/deck_compare.py <spec.json> --preflight        # only the checks that need you; no games
+python3 scripts/deck_compare.py <spec.json> --with-floor A,B   # screen AND bracket A,B in ONE batch
+python3 scripts/deck_compare.py <spec.json> --floor A,B        # the brackets on their own
+python3 scripts/deck_compare.py <spec.json> --confirm TAG      # re-measure the winner on held-out seeds
 ```
 
-Comma-separate `--floor` tags rather than invoking it per tag: the cells overlap (`base` under the
+**Prefer `--with-floor`.** A bracket's shared cells *are* the screen's arms — a separate `--floor`
+re-runs the identical games (verified by digest), so folding them into one batch is free.
+
+Comma-separate the tags rather than invoking it per tag: the cells overlap (`base` under the
 shared apparatus is one job however many combinations you bracket), so T tags cost **2T+2 cells in
 one batch** instead of 4T in T batches — and T separate invocations strand cores on each one's tail,
 which is what CLAUDE.md's pooling rule is about. One run at a time per deck is enforced with a lock:
@@ -39,8 +43,14 @@ reading them.
 ```
 
 A combination is `card -> NEW COUNT`. Absent = unchanged, `0` = removed, a card not in the base deck
-is introduced by naming it. Every arm shares one apparatus and every game of every arm goes into ONE
-`mtg --batch`. `profile` and `value_profile` default to the deck's siblings; the driver **refuses** a
+is introduced by naming it. An optional top-level `"replace": {"<tag>": {"<cut>": "<added>"}}` says
+which new card inherits which departing card's slots. It changes no counts and no estimate — measured
++0.0003 ±0.0038 between two pairings of the same combination — but it changes PRECISION: the
+better-matched pairing measured se ±0.0042 / 75.5% identical against ±0.0046 / 72.9%, i.e. the wrong
+pairing costs ~20% more games. It only matters when two names are added at once; without the map the
+freed numbers go out in sorted-name order, which is deterministic but arbitrary.
+
+Every arm shares one apparatus and every game of every arm goes into ONE `mtg --batch`. `profile` and `value_profile` default to the deck's siblings; the driver **refuses** a
 screen with no play profile (`"allow_no_profile": true` is the hatch — see the trap section).
 
 `base` may be `.txt` **or** Cockatrice `.cod` — 14 of the 17 decks in `decks/` are `.cod`, and the
@@ -251,6 +261,34 @@ The driver fingerprints each run's apparatus (arms, profile content, table, play
 **refuses to compare** two blocks that did not share one — otherwise a spec edited between the runs
 shows up as "shrinkage" and selection bias becomes indistinguishable from an apparatus change.
 
+## The bracket is REWEIGHTED by default, and that is what makes it mean anything
+
+A count-only edit needs **zero rollouts** to bracket. `BuildPolicyFromTables` takes the deck's
+per-bucket `count` separately from the cell values, so retargeting the shipped raw to the arm's counts
+is a re-weighting — **1.5 s instead of ~20 minutes, and at the shipped R (60) instead of R=10.**
+
+That matters far more than the time. Three tables generated for the *same deck* at the *same R=10*,
+differing only in generation seed, report a bracket "floor" of **0.0075 on average (max 0.0091) with
+no fit difference to find** — and two of the three pairs read as significant at |t| ≈ 2. The real
+generated floors on that deck were 0.0051 and 0.0057, i.e. **below the noise**. A generated R=10
+bracket was measuring its own sampling lottery. The reweighted one is deterministic, so it has no
+such lottery:
+
+| bracket | floor | effect/floor | null vs shared | build |
+|---|---|---|---|---|
+| reweighted from R=60 | **0.0010** | 22.95x | −0.0015 / −0.0017 | 1.5 s |
+| generated at R=10 | 0.0057 | 4.22x | +0.0604 / +0.0615 | ~20 min |
+
+**What it bounds.** Fit has two halves: the hand weights and D_opt from `count` (reweighting
+reproduces these exactly, at high R) and the per-cell rollout values (estimated on the source deck's
+library, not re-estimated). So it bounds the weighting half properly and says nothing about the
+rollout half — for which the generated R=10 bracket substitutes noise. Bounding both honestly needs
+R≥40, which is the hours-scale route. `"bracket": "generate"` forces the old behaviour.
+
+**When it is unavailable:** an introduced card, or a bucket raised past the source grid — the cells do
+not exist to reweight. The driver checks that exactly (it is the `fallback_rate` condition) and falls
+back to generating, saying which and why.
+
 ## Reading the output — the floor is the whole judgement
 
 The screen prints, per combination: `delta` (negative = faster), `se`, `t`, `% identical`, and the
@@ -318,6 +356,17 @@ Two things to hold onto when reading it:
 | `--floor A,B` bracket (1 R=10 table per arm + (2T+2) x 20k games, one batch) | tens of minutes, dominated by the table generations | only for results near their floor |
 | `--confirm TAG` on held-out seeds (2 x 20k games, no new table) | one batch | on the winner of a multi-arm screen |
 | a shippable table / value leaf for an adopted combination | hours | once, at adoption |
+
+**Read the ms/game the driver prints per ARM, not a probe.** A 300-game probe is dominated by fixed
+startup: the same burn job measured 42.5 and 114 ms/game on two 300-game runs against **59.3** at
+20,000. And arms are not equally expensive — slivers' base arm cost 1,632,530 ms against `cut_vial`'s
+280,522 for the same 20,000 games (**5.8x**, Aether Vial's enumeration), so a screen's wall clock is
+set by its priciest arm, not the average. The driver prints the per-arm figure and flags a >2x spread.
+
+**Depth is not free and deeper is not slower.** On burn the same edit measured −0.0307 at d3, d5 and
+d7 alike, while costing **148.2 / 49.2 / 17.8 ms per game** — the d5 default is 2.8x the price of d7
+for the same answer (plausibly the value leaf's `trust_depth` ladder). One deck, and a mana-cost swap
+is the edit least likely to need depth; check per deck before trusting either half.
 
 **Per-game cost varies by two orders of magnitude, so quote the deck AND the apparatus, never
 "minutes".** Measured at d5 / `budget_ms: 20` / `max_turns: 8`:

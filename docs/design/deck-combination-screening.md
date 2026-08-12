@@ -1034,6 +1034,138 @@ difference and a bracket only worries when they differ.
 deciding to run nothing, and its stale-table cleanup meant an interrupted dry run left the arm with no
 table at all. It now reports what it would generate.
 
+## The accuracy / performance / reporting levers (2026-08-12, second pass)
+
+Five measurements. The first two together change what a floor bracket *is*.
+
+### 1. The R=10 bracket reports a floor on PURE NOISE that is larger than the fit floors it found
+
+Three keep tables for the **same deck** (burn base) at the **same R=10**, differing only in generation
+seed, then `{base, bolt} x {s1, s2, s3}` in one pooled batch, 20,000 paired games:
+
+| table | delta(bolt − base) | se |
+|---|---|---|
+| s1 | −0.0314 | ±0.0019 |
+| s2 | −0.0316 | ±0.0019 |
+| s3 | −0.0361 | ±0.0019 |
+
+There is no fit difference between these tables to find — they are the same deck. So every bias
+between a pair is noise, and it is exactly the statistic `--floor` calls apparatus bias:
+
+| pair | bias | t | "floor" it would report |
+|---|---|---|---|
+| s1 vs s2 | −0.0002 ± 0.0022 | −0.09 | 0.0045 |
+| s1 vs s3 | −0.0046 ± 0.0022 | **−2.10** | 0.0091 |
+| s2 vs s3 | −0.0044 ± 0.0022 | **−2.05** | 0.0088 |
+
+Mean reported floor on pure noise: **0.0075** (max 0.0091). The *real* brackets measured on this deck
+came in at **0.0051 (bolt)** and **0.0057 (mountain)** — both *below* the noise floor. Two of the
+three null pairs would have read as a significant apparatus bias at |t| ≈ 2.
+
+**So the generated R=10 bracket was not resolving fit at all**, and "effect / floor" at R=10 is
+effect-over-noise. This does not invalidate any *screen* — the shared apparatus is shared — it means
+the bracket's floor was a noise threshold wearing a bias threshold's name. It is also why the doc kept
+saying the bracket "overstates by an unknown amount": the amount is ~0.0075 on this deck.
+
+### 2. A reweighted bracket is free, high-R, deterministic — and 5.7x tighter
+
+`BuildPolicyFromTables(tables, count, …)` takes the deck's per-bucket `count` **separately** from the
+rollout values and recomputes `HandWeights` from it, so retargeting an existing table to a different
+count vector needs **zero rollouts**. That is what `MTG_KEEP_MERGE` already does with one input and a
+different decklist on the command line — its "command-line deck fp != pooled deck_fp" warning is
+precisely this case, made deliberate. Measured on burn / mountain, 20,000 paired games:
+
+| bracket | delta | bias | floor | effect/floor | build cost |
+|---|---|---|---|---|---|
+| shared (shipped R=60) | +0.0239 ±0.0023 | — | — | — | — |
+| own, **reweighted** from R=60 | +0.0237 ±0.0023 | −0.0003 ±0.0004 | **0.0010** | **22.95x** | **1.5 s** |
+| own, generated at R=10 | +0.0250 ±0.0026 | +0.0011 ±0.0023 | 0.0057 | 4.22x | ~20 min |
+
+The nulls say why: the reweighted table plays −0.00145 / −0.00170 against the shipped one (the same
+apparatus, re-weighted) where the generated R=10 table plays **+0.0604 / +0.0615** weaker — the R cost
+that dominates everything else. And a reweight is **deterministic**: same raw, same table, so the
+0.0075 generation-noise floor above simply does not apply to it.
+
+What it does and does not bound. A table's fit to a deck is (a) the hand weights and D_opt derived
+from `count` and (b) the per-cell rollout values. Reweighting reproduces (a) exactly at the source's
+R and leaves (b) estimated on the source deck's library. So it bounds the weighting half at high R;
+the generated bracket bounds both halves but, per measurement 1, buries the answer in its own noise.
+Bounding (b) honestly needs R≥40 — the hours-scale route, still unbuilt.
+
+**Validity is exact, not a judgement call:** a reweight is complete iff every cell the arm can draw
+exists in the source table, which is the condition `fallback_rate` already computes. A raised bucket
+or an introduced card fails it and falls back to generating. This is now the default (`"bracket":
+"generate"` forces the old route).
+
+**A C++ fix was needed first:** the merge read its inputs with a plain `ifstream`, so it could not
+read a single one of the nine committed raw sidecars — all gzipped by the raw-artifact policy. It
+reported them as `SKIP (bad json)` and pooled nothing. It now reads through `ReadProfileText`.
+
+### 3. Search depth: same verdict, and the default depth is the expensive one
+
+Every screen runs d5, and the apparatus-symmetry argument never covered the *search* settings.
+`{base, bolt} x {d3, d5, d7}`, 6,000 games each, same shared apparatus (digests differ per depth, so
+the override reached the engine):
+
+| depth | base avg | bolt avg | delta | t | ms/game |
+|---|---|---|---|---|---|
+| d3 | 4.3287 | 4.2980 | −0.0307 ±0.0028 | −10.95 | 148.2 |
+| d5 | 4.3288 | 4.2982 | −0.0307 ±0.0028 | −10.95 | 49.2 |
+| d7 | 4.3292 | 4.2985 | −0.0307 ±0.0028 | −10.95 | **17.8** |
+
+The verdict is depth-invariant here — but this is a mana-cost swap, the edit *least* likely to need
+depth; a combo or synergy edit is where sensitivity would show, and that is untested. The cost column
+is the surprise: **d7 is 2.8x cheaper per game than the d5 default** (and d3 is 3x more expensive than
+d5). Load cannot explain it — the cheap cells finished while the box was full, which inflates their
+wall figure, so the effect is if anything understated. Plausibly the value leaf's `trust_depth`
+ladder. One deck; worth checking per deck before changing a default.
+
+### 4. Numbering: the pairing costs ~20% of the games, and the sorted rule got lucky
+
+`inherit_numbering` hands freed numbers out in sorted-name order, and the docstring claimed an
+explicit edit list "would be exact" — exact is not the same as better, and nobody had measured it. It
+can only matter when **two** names are added at once. burn, 4 Skullcrack + 4 Searing Blaze → 4
+Lightning Bolt + 4 Light Up the Stage, both arms the SAME combination, differing only in which new
+card inherits which slots, 20,000 paired games:
+
+| pairing | delta(swap − base) | se | identical |
+|---|---|---|---|
+| similar (Skullcrack→Bolt, Blaze→Light Up the Stage) | −0.1746 | **±0.0042** | **75.5%** |
+| crossed (Skullcrack→Light Up the Stage, Blaze→Bolt) | −0.1742 | ±0.0046 | 72.9% |
+
+Against each other: +0.0003 ± 0.0038. **The estimate is unchanged; the precision is not** — the
+crossed pairing needs ~20% more games for the same standard error, and both indicators (se and
+% identical) agree. The sorted-name rule happens to reproduce the *similar* pairing here purely
+because "Light Up the Stage" sorts before "Lightning Bolt". A spec can now say it outright:
+
+```json
+"combinations": {"swap": {"Skullcrack": 0, "Searing Blaze": 0,
+                          "Lightning Bolt": 8, "Light Up the Stage": 8}},
+"replace":      {"swap": {"Skullcrack": "Lightning Bolt",
+                          "Searing Blaze": "Light Up the Stage"}}
+```
+
+### 5. Batching and reporting
+
+- **`--with-floor TAG[,TAG]`** runs a screen and its brackets in ONE batch. The bracket's shared cells
+  *are* the screen's arms — verified, not assumed: a separate `--floor` produced per-job digests
+  identical to the screen's (`e41ba09a50c652f4`, `9c708dd6517a9bbc`, `655678a650b9ee10`). Validated
+  end to end and it reproduces the standalone probe to the digit (bias −0.0003 ±0.0004, floor 0.0010,
+  22.95x).
+- **The parsed-table cache is now shared** into each apparatus directory. The engine keys it on the
+  link path but fingerprints it by the source's (size, mtime), which follows the symlink — so every
+  apparatus directory was re-parsing a sidecar that already had a valid cache beside the real table
+  (14–68 s per run on the big decks). A cache LINK is removed when the sidecar it belongs to is
+  replaced, or the engine would rebuild through the symlink and overwrite the deck's own cache.
+- **Cost is reported per arm, from the run itself.** The old advice ("read the `ms=` on a 300-game
+  probe") is wrong: the same burn job measured 42.5 and 114 ms/game on two 300-game runs against 59.3
+  at 20,000 — fixed startup dominates a small probe. And cost is not uniform across arms: slivers'
+  base arm cost **1,632,530 ms against cut_vial's 280,522** for the same 20,000 games (5.8x, Aether
+  Vial's enumeration), so a screen's wall clock is set by its priciest arm. The driver prints ms/game
+  per arm and says so when they differ by more than 2x.
+- **`<label>.results.json`** carries the deltas, the apparatus and the engine commit, so results
+  accumulate instead of scrolling past.
+
 ## Guards now in the tree (so the two-layer bug cannot recur)
 
 - `mtg-analyze` **refuses** a keep-gen when `<stem>.profile.json` is not beside the decklist

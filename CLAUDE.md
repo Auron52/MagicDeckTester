@@ -265,8 +265,8 @@ Read `.claude/skills/deck-screening.md` and [screen / floor-check / interpret] .
 ```
 
 **The whole interface is one command** — `python3 scripts/deck_compare.py <spec.json>` (plus
-`--preflight` for the checks that need YOU, and `--floor <tag>` when a result sits near its apparatus
-bias floor). **Rule 0 it enforces:** do NOT regenerate per-deck artifacts per combination — every arm
+`--preflight` for the checks that need YOU, `--with-floor <tags>` to bracket the apparatus bias in the
+same batch, and `--confirm <tag>` to re-measure a multi-arm screen's winner on held-out seeds). **Rule 0 it enforces:** do NOT regenerate per-deck artifacts per combination — every arm
 shares ONE apparatus, which is not a cheap approximation but the *better* measurement (sharing one
 keep table halves the se). Its traps: the deck's `profile` must be attached to the measurement **and**
 to any keep-table generation **and** on the table-drop path (a profile-less gen silently fits the
