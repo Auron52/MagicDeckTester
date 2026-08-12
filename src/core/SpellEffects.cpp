@@ -1502,19 +1502,25 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
 //     the other lands) is hashed into the key, so different reachable-colour boards get distinct entries.
 //   * STORE (McReplayable): a MISS's solution is cached only if every source it TAPS can be REPLAYED by
 //     the hit path -- i.e. its tap effect is reproduced when we re-set .tapped. Simple lands/dorks/rocks
-//     qualify; City of Brass qualifies (its tap_self_damage is replayed on the hit). Depletion, storage,
-//     and drip (tap_opponent_lifegain) lands do NOT -- they mutate counters/opponent life the hit path
-//     does not reproduce -- so a solution tapping one is left unstored (recomputed by the real DFS each
-//     time). Negative (unpayable) results are always cacheable (no side effect). A cache MISS always runs
-//     the real DFS, so a non-storable solution is still correct; it just is not memoised.
+//     qualify; City of Brass qualifies (its tap_self_damage is replayed on the hit); a DEPLETION land
+//     (Sandstone Needle) qualifies since 2026-08-12 -- its tap's only side effect is
+//     DecrementDepletionOnTap, which the hit replays exactly (production is counter-independent, and
+//     the decrement is relative, so no counter value needs to enter the key). Storage, drip
+//     (tap_opponent_lifegain) and Deathrite (gy_land_exile_mana) lands do NOT -- storage/drip mutate
+//     counters/opponent life the hit path does not reproduce, and Deathrite's tap EXILES a graveyard
+//     land the hit path cannot replay from a tap-set alone -- so a solution tapping one is left
+//     unstored (recomputed by the real DFS each time). Negative (unpayable) results are always
+//     cacheable (no side effect). A cache MISS always runs the real DFS, so a non-storable solution is
+//     still correct; it just is not memoised.
 namespace {
 inline bool ManaCacheEnabled() { static const bool v = EnvOn("MTG_MANA_CACHE", true); return v; }
 // A tapped source we can REPLAY on a cache hit: set .tapped, plus the side effects we reproduce
-// (currently tap_self_damage -- City of Brass). Depletion/storage/drip mutate counters / opponent life
-// that the hit path does NOT reproduce, so a solution tapping one is not stored.
+// (tap_self_damage -- City of Brass; DecrementDepletionOnTap -- Sandstone Needle). Storage/drip mutate
+// counters / opponent life the hit path does NOT reproduce, and Deathrite's graveyard-land exile is
+// not reproducible from a tap-set, so a solution tapping one of those is not stored.
 inline bool McReplayable(const CardDefinition* d)
-{ return d && d->params.enters_tapped_with_depletion == 0
-           && !d->params.storage_land && d->params.tap_opponent_lifegain == 0; }
+{ return d && !d->params.storage_land && d->params.tap_opponent_lifegain == 0
+           && !d->params.gy_land_exile_mana; }
 // A source whose DFS branching reads board state the key does NOT capture: domain (colours among ALL
 // controlled permanents) and scaled (creature count). Reflecting is NOT here -- its effective colours
 // (a function of the other lands) are hashed into the key below, so it is cacheable.
@@ -1534,6 +1540,8 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
     std::uint64_t h1 = 1469598103934665603ull, h2 = 14695981039346656037ull;
     const int active = state.active_player_index;
     const int n = static_cast<int>(state.battlefield.size());
+    int gy_fuel = -1;       // lazy, hashed once on the first Deathrite-style source
+    int drip_useful = -1;   // lazy, hashed once on the first drip source
     for (int i = 0; i < n; ++i)
     {
         const Permanent& p = state.battlefield[i];
@@ -1547,6 +1555,48 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         mix(h1, static_cast<std::uint64_t>(i));  mix(h2, static_cast<std::uint64_t>(i) * 0x9E3779B97F4A7C15ull);
         mix(h1, di);                             mix(h2, di ^ 0xD1B54A32D192ED03ull);
         mix(h1, p.tapped ? 1ull : 2ull);         mix(h2, p.tapped ? 3ull : 5ull);
+        // Per-source DYNAMIC state the DFS reads that (i, def, tapped) does not capture. Each of
+        // these was a latent stale-hit hole: two boards identical in (i, def, tapped) but differing
+        // in one of the fields below solve DIFFERENTLY, so they must not share a key.
+        if (!p.tapped)
+        {
+            // Dork tap-eligibility (summoning sickness / temp_haste / lord+equip haste): the worker's
+            // is_src gates a ManaDork on CanTapNow, which an Expedite mid-turn or an untap-step
+            // sickness flip changes without touching (def, tapped) -- the Mirrorwing case.
+            if (d->tmpl == CardTemplate::ManaDork)
+            {
+                const bool elig = CanTapNow(p, state.battlefield);
+                mix(h1, elig ? 0xE119'01ull : 0xE119'02ull);
+                mix(h2, elig ? 0xE119'03ull : 0xE119'05ull);
+            }
+            // Storage battery: burst amount = min(counters, shortfall) and StorageSourceLive gates on
+            // counters>0 + the hold flag, so a charged vs uncharged (or held) Bazaar must key apart --
+            // otherwise a stored negative goes stale when the battery charges.
+            if (d->params.storage_land)
+            {
+                mix(h1, 0x570'1ull + static_cast<std::uint64_t>(p.storage_counters) * 2
+                      + (p.storage_hold_this_turn ? 1ull : 0ull));
+                mix(h2, 0x570'2ull ^ (static_cast<std::uint64_t>(p.storage_counters) << 8)
+                      ^ (p.storage_hold_this_turn ? 0x100000ull : 0ull));
+            }
+        }
+        // Deathrite (gy_land_exile_mana): production is gated on GraveyardLandFuel > 0, and each tap
+        // consumes one fuel -- graveyard state the source loop cannot see. Hash the fuel count once.
+        if (d->params.gy_land_exile_mana && gy_fuel < 0)
+        {
+            gy_fuel = GraveyardLandFuel(state, active);
+            mix(h1, 0x6F'F1ull + static_cast<std::uint64_t>(gy_fuel));
+            mix(h2, 0x6F'F2ull ^ (static_cast<std::uint64_t>(gy_fuel) << 16));
+        }
+        // Drip land (Grove of the Burnwillows): the worker's branch ORDER depends on the provider's
+        // OpponentLifegainUseful(state) -- state outside (def, tapped) -- so the found solution (its
+        // colour composition) can differ across boards that otherwise share a key. Hash the bit once.
+        if (d->params.tap_opponent_lifegain > 0 && drip_useful < 0)
+        {
+            drip_useful = ResolveProvider(state).OpponentLifegainUseful(state, active) ? 1 : 0;
+            mix(h1, drip_useful ? 0xD21'B1ull : 0xD21'B2ull);
+            mix(h2, drip_useful ? 0xD21'B3ull : 0xD21'B5ull);
+        }
         // Reflecting source (Reflecting Pool): its produces = union of the controller's OTHER lands'
         // colours (state-dependent). Hash that exact effective colour set so two boards where it can
         // make different colours get different keys -> byte-identical replay.
@@ -1611,6 +1661,12 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 const CardDefinition* td = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
                 if (td && td->params.tap_self_damage > 0)   // City of Brass: replay the tap damage (life 1208-1209)
                 { state.players[state.active_player_index].life -= td->params.tap_self_damage; }
+                // Depletion land (Sandstone Needle): replay the counter decrement the DFS's activate()
+                // performs on the solution path. Relative (decrement whatever the current count is),
+                // so the counter value never needs to be part of the key -- production is
+                // counter-independent and a 0-count no-op replays as a no-op.
+                if (td && td->params.enters_tapped_with_depletion > 0)
+                { DecrementDepletionOnTap(state.battlefield[idx]); }
             }
             *out_full_pool = e.produced;
             return true;
