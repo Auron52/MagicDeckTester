@@ -8704,13 +8704,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // plain-cantrip DrawSpell branch: defer at the MAIN-plan level (site 3, resolved after
             // every main cast -- matching the executor's post-loop replay), re-solve inline when
             // already inside a re-solve. Human play stops so the chooser re-fires post-draw.
-            if (def.params.cast_draw > 0 && !s_human_play)
+            // creates_treasures (Gold Rush) opens the DEFERRED breakpoint ONLY: its Treasures are
+            // same-turn mana (real SacForMana candidates in the re-solve), so the ritual role no
+            // longer requires a draw trick in the plan -- previously a GR-without-draw-payload
+            // plan left its Treasures idle until the next decision. It must NEVER take the inline
+            // path below: a nested greedy re-solve mid-continuation taps attack-ready mana dorks
+            // to develop, stranding a proven this-turn lethal (mirrorwing s3003 gi52 T5->T6), and
+            // -- because the inline path only runs when the continuation is being RECORDED
+            // (sink_stack non-empty) -- it diverges the committed/executed line from the scored
+            // one. A Treasure minted mid-continuation simply waits for the next decision, exactly
+            // as before this feature. (A draw trick keeps the inline path: its DRAWN cards are
+            // unplayable without a re-solve, which is why that trade was accepted for draws.)
+            if ((def.params.cast_draw > 0 || def.params.creates_treasures > 0) && !s_human_play)
             {
                 if (s_defer_cantrip && sink_stack.empty())
                 {
                     deferred_cantrip_resolve = true;
                 }
-                else
+                else if (def.params.cast_draw > 0)
                 {
                     if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
                     TurnSolver::Plan extra;
@@ -11696,9 +11707,11 @@ static int PlanOpensBreakpoint(const TurnSolver::Plan& p)
             mask |= (d->params.stages_cards || d->params.expressive_iteration) ? (1 << 0) : (1 << 3);
         }
         if (d->params.impulse_exile > 0) { mask |= 1 << 2; }
-        // Zada/Mirrorwing trick with a draw payload: defers to the plain-cantrip site (3) at the
+        // Zada/Mirrorwing trick with a draw payload -- or a Treasure payload (Gold Rush), whose
+        // tokens are same-turn mana for the re-solve: defers to the plain-cantrip site (3) at the
         // main level (nested casts re-solve inline at site 0, like a nested cantrip).
-        if (d->params.solo_target_trick && d->params.cast_draw > 0) { mask |= 1 << 3; }
+        if (d->params.solo_target_trick
+            && (d->params.cast_draw > 0 || d->params.creates_treasures > 0)) { mask |= 1 << 3; }
     }
     return mask;
 }

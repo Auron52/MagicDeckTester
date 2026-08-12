@@ -347,9 +347,28 @@ USER play knowledge encoded (rounds 3-4 of the review):
 - **SUITE ADD**: mirrorwing in test/regression_cases.sh (smoke/regression hinata-mirror
   sizing + overnight rows). Smoke + regression run: ALL PASS, 3+5 NEW keys accepted; all
   other decks byte-identical. Overnight keys will appear NEW on the next overnight run.
-- OPEN (deferred): same-plan Treasure credit for Gold Rush without a draw breakpoint
-  (SequencedRitualCredit-style; today the ritual role flows only through breakpoint
-  re-solves -- adequate because every chain includes draw tricks, but not exact).
+- ~~OPEN (deferred): same-plan Treasure credit for Gold Rush without a draw breakpoint~~
+  DONE 2026-08-12, by a DIFFERENT (sounder) mechanism than the sketched planner credit: a
+  `creates_treasures` cast now arms the SAME deferred site-3 post-cast re-solve the draw
+  tricks use (`ApplyPlanDirect` solo-trick branch + `PlanOpensBreakpoint` + the executor's
+  `note_draw_engine` d0 second pass). The re-solve sees the minted Treasures as REAL
+  SacForMana candidates -- no credit arithmetic, no over-projection, executor lockstep via
+  the existing recorded-script replay (fd-diverge 0/300). A planner credit was rejected:
+  order-blind wild credit could fund casts that pay BEFORE Gold Rush (Twinflame at rank 12
+  vs GR 15), and realization would have needed payment-side treasure-cracking.
+  **DEFECT FOUND AND FIXED during measurement** (trace of s3003 gi52, T5 lethal lost): the
+  first cut let a GR cast INSIDE a recorded continuation take the INLINE re-solve path --
+  which (a) only runs when the continuation is being recorded (sink_stack non-empty), so the
+  committed line diverged from the scored one, and (b) greedily tapped attack-ready mana
+  dorks mid-continuation, stranding a proven this-turn lethal (22 -> 14 damage). Fix: GR
+  arms the MAIN-LEVEL deferred re-solve only, never the inline one; a Treasure minted
+  mid-continuation waits for the next decision (as before the feature).
+  MEASURED (vs fd492d5 worktree control): d3 300g s5005 1 faster/2 slower; HELD-OUT s9009
+  5 faster/0 slower; s3003 d3+d5 1 faster/3 slower; net -2 turns over 900 games. The
+  recovered class is real (g70 s9009: bank GR T2 -> Mirrorwing T3 -> T4 win, was T5); the
+  slower class is the same bank-vs-curve judgment landing wrong (gi28) plus near-tie flips
+  in sanctioned-greedy areas (attack-hold, land-pick ties -- gi253 traced). All slower games
+  traced to decisions; none are divergences or wasted resources.
 
 ## Open items / next steps
 
