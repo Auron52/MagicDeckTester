@@ -2389,10 +2389,10 @@ static int BpSearchDepth()
     return d;
 }
 
-// Per-SITE enable mask (MTG_BP_SITES, default all five). Bit i == site i of kBpSiteName:
+// Per-SITE enable mask (MTG_BP_SITES, default all but bit 3). Bit i == site i of kBpSiteName:
 //   0 stages/EI (Light Up the Stage, Expressive Iteration)   1 DrawUntilNonland (Treasure Hunt)
 //   2 impulse_exile (Apex of Power)                          3 plain cantrip (Ponder / Preordain)
-//   4 dig-through-lands (cycle / sacrifice)
+//   4 dig-through-lands (cycle / sacrifice)                  5 trick payload (Gold Rush / Expedite)
 //
 // This mask is the SEARCHABILITY of a class and therefore also its NUMBERING: it decides which
 // breakpoints `bp_at` counts, in the apply (ApplyPlanDirect) and in the executor's replay
@@ -2400,9 +2400,16 @@ static int BpSearchDepth()
 // continuation replays at the wrong breakpoint, so this is deliberately one global value and not
 // something a plan or a wave carries.
 //
-// DEFAULT 0x17 = every class EXCEPT bit 3 (plain cantrip), and that exclusion is an ADMITTED
+// DEFAULT 0x37 = every class EXCEPT bit 3 (plain cantrip), and that exclusion is an ADMITTED
 // QUALITY PRUNE, not a design: it makes Ponder/Preordain continuations unreachable at any budget,
 // which is exactly what the wave mechanism exists to eliminate everywhere else.
+//
+// Site 5 (a solo-target trick with a draw or Treasure payload -- the SAME deferred main-level
+// re-solve shape as site 3) is deliberately a SEPARATE bit so the Zada/Mirrorwing trick class is
+// searchable while the plain-cantrip class stays pruned: chaining the two made the Gold Rush
+// deferred re-solve permanently greedy, which is the root cause of the gr-defer-land-sequencing
+// defect (see docs/design/gr-defer-land-sequencing-defect.md -- the greedy re-solve tapped the
+// would-be attacker for a cantrip cast, and no budget could reach the declining continuation).
 //
 // It stays off because it is MEASURED to cost, on held-out (overnight) seeds, isolated 2026-07-31
 // by running the two axes separately on Hinata:
@@ -2421,8 +2428,8 @@ static int BpSiteMask()
     static const int m = []() -> int
     {
         const char* v = std::getenv("MTG_BP_SITES");
-        if (v == nullptr || *v == '\0') { return 0x17; }
-        return std::atoi(v) & 0x1F;
+        if (v == nullptr || *v == '\0') { return 0x37; }
+        return std::atoi(v) & 0x3F;
     }();
     return m;
 }
@@ -7070,23 +7077,25 @@ static std::string ForcedLandForTurn(int turn)
 // See docs/design/post-breakpoint-search.md.
 namespace
 {
-    const char* const kBpSiteName[5] = {
+    constexpr int kBpSites = 6;
+    const char* const kBpSiteName[kBpSites] = {
         "stages_cards/EI  (Light Up the Stage, Expressive Iteration)",
         "DrawUntilNonland (Treasure Hunt)",
         "impulse_exile    (Apex of Power)",
         "deferred_cantrip (Ponder / Preordain)",
         "dig_through_lands(sac/cycle dig)",
+        "trick_payload    (Gold Rush / Expedite deferred)",
     };
     struct BpProbe
     {
-        std::atomic<uint64_t> hit[5]{};       // all invocations (incl. rollout evaluation)
-        std::atomic<uint64_t> committed[5]{}; // subset on a COMMITTED line -> a real game decision
-        std::atomic<uint64_t> searched[5]{};  // subset resolved by SEARCH (Plan::bp_choice)
-        std::atomic<uint64_t> nested[5]{};    // NESTED (2nd+ breakpoint of an apply) -> still greedy
+        std::atomic<uint64_t> hit[kBpSites]{};       // all invocations (incl. rollout evaluation)
+        std::atomic<uint64_t> committed[kBpSites]{}; // subset on a COMMITTED line -> a real game decision
+        std::atomic<uint64_t> searched[kBpSites]{};  // subset resolved by SEARCH (Plan::bp_choice)
+        std::atomic<uint64_t> nested[kBpSites]{};    // NESTED (2nd+ breakpoint of an apply) -> still greedy
         ~BpProbe()
         {
             if (!EnvOn("MTG_BP_PROBE")) { return; }
-            for (int i = 0; i < 5; ++i)
+            for (int i = 0; i < kBpSites; ++i)
             {
                 const uint64_t n = hit[i].load(std::memory_order_relaxed);
                 const uint64_t c = committed[i].load(std::memory_order_relaxed);
@@ -7139,17 +7148,17 @@ namespace
     }
     struct BpCandsProbe
     {
-        std::atomic<uint64_t> hist[5][kBpCandsBuckets]{};
-        std::atomic<uint64_t> n[5]{};            // searched breakpoints seen
-        std::atomic<uint64_t> total[5]{};        // Σ cands.size()
-        std::atomic<uint64_t> reach[5]{};        // Σ min(cands.size(), W)   -- indexable today
-        std::atomic<uint64_t> unreachable[5]{};  // Σ max(cands.size()-W, 0) -- rank-gated OUT
-        std::atomic<uint64_t> capped[5]{};       // breakpoints with cands.size() > W
-        std::atomic<int>      maxlen[5]{};
+        std::atomic<uint64_t> hist[kBpSites][kBpCandsBuckets]{};
+        std::atomic<uint64_t> n[kBpSites]{};            // searched breakpoints seen
+        std::atomic<uint64_t> total[kBpSites]{};        // Σ cands.size()
+        std::atomic<uint64_t> reach[kBpSites]{};        // Σ min(cands.size(), W)   -- indexable today
+        std::atomic<uint64_t> unreachable[kBpSites]{};  // Σ max(cands.size()-W, 0) -- rank-gated OUT
+        std::atomic<uint64_t> capped[kBpSites]{};       // breakpoints with cands.size() > W
+        std::atomic<int>      maxlen[kBpSites]{};
         ~BpCandsProbe()
         {
             if (!EnvOn("MTG_BP_CANDS_PROBE")) { return; }
-            for (int i = 0; i < 5; ++i)
+            for (int i = 0; i < kBpSites; ++i)
             {
                 const uint64_t cnt = n[i].load(std::memory_order_relaxed);
                 if (cnt == 0) { continue; }
@@ -7417,6 +7426,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // (the old inline behaviour) for the A/B. Inert for decks without plain cantrips.
     static const bool s_defer_cantrip = !EnvOn("MTG_NO_DEFER_CANTRIP");
     bool deferred_cantrip_resolve = false;
+    // Which CLASS armed the deferred re-solve: a solo-target trick with a draw/Treasure payload is
+    // site 5 (searchable by default), a plain cantrip is site 3 (the admitted quality prune). One
+    // deferred breakpoint per apply; if BOTH classes armed it, the trick class owns the numbering
+    // (deterministic, and the searchable class must win or the trick continuation is unreachable
+    // again). No deck currently holds both, but the rule must not be implicit ordering.
+    bool deferred_trick_armed = false;
 
     // Karoo bounce-land play-at-end timing. A Karoo (Izzet Boilerworks: etb_bounce_land,
     // enters tapped) returns one of our lands to hand on ETB. Played land-FIRST it bounces a
@@ -8699,11 +8714,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // own_targets is reused as Twinflame's searched strive-extras count.
             ResolveSoloTargetTrick(state, state.active_player_index, def, enchant_target,
                                    own_targets);
-            // Draw breakpoint (plain-cantrip class): a magnet fan-out mass-draws, so newly revealed
-            // cards must be castable with the mana still available this turn. Same shape as the
-            // plain-cantrip DrawSpell branch: defer at the MAIN-plan level (site 3, resolved after
-            // every main cast -- matching the executor's post-loop replay), re-solve inline when
-            // already inside a re-solve. Human play stops so the chooser re-fires post-draw.
+            // Draw breakpoint (trick class, site 5): a magnet fan-out mass-draws, so newly revealed
+            // cards must be castable with the mana still available this turn. Same SHAPE as the
+            // plain-cantrip DrawSpell branch: defer at the MAIN-plan level (resolved after every
+            // main cast -- matching the executor's post-loop replay), re-solve inline when already
+            // inside a re-solve -- but its OWN site bit, searchable by default (see BpSiteMask).
+            // Human play stops so the chooser re-fires post-draw.
             // creates_treasures (Gold Rush) opens the DEFERRED breakpoint ONLY: its Treasures are
             // same-turn mana (real SacForMana candidates in the re-solve), so the ritual role no
             // longer requires a draw trick in the plan -- previously a GR-without-draw-payload
@@ -8720,6 +8736,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (s_defer_cantrip && sink_stack.empty())
                 {
                     deferred_cantrip_resolve = true;
+                    deferred_trick_armed     = true;   // site 5, not the plain-cantrip site 3
                 }
                 else if (def.params.cast_draw > 0)
                 {
@@ -9231,7 +9248,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         deferred_cantrip_resolve = false;
         if (out_breakpoint) { sink_stack.push_back(out_breakpoint); }
         TurnSolver::Plan extra;
-        if (!bp_searched_plan(3, extra))
+        // Trick-armed (Gold Rush / draw-payload trick) => site 5 (searchable); plain cantrip =>
+        // site 3 (pruned). The trick class owns the breakpoint when both armed -- see the
+        // deferred_trick_armed declaration.
+        if (!bp_searched_plan(deferred_trick_armed ? 5 : 3, extra))
         {
             play_breakpoint_land(out_breakpoint);
             extra = TurnSolver::Solve(state, is_pre_combat);
@@ -11710,10 +11730,16 @@ static int PlanOpensBreakpoint(const TurnSolver::Plan& p)
         }
         if (d->params.impulse_exile > 0) { mask |= 1 << 2; }
         // Zada/Mirrorwing trick with a draw payload -- or a Treasure payload (Gold Rush), whose
-        // tokens are same-turn mana for the re-solve: defers to the plain-cantrip site (3) at the
-        // main level (nested casts re-solve inline at site 0, like a nested cantrip).
+        // tokens are same-turn mana for the re-solve: SAME deferred main-level breakpoint shape as
+        // the plain cantrip, but its OWN site (5), so its searchability is not chained to the
+        // plain-cantrip class (bit 3, an admitted quality prune measured on Hinata). With the
+        // trick class site-masked OFF, the Gold Rush re-solve was PERMANENTLY GREEDY -- no depth
+        // or budget could reach the continuation that declines a cantrip cast and keeps the best
+        // attacker untapped (the gr-defer-land-sequencing defect, mirrorwing gi118: the greedy
+        // re-solve cast Expedite off the attack-ready Hierarch, stranding two turns of chip
+        // damage). Nested casts still re-solve inline at site 0, like a nested cantrip.
         if (d->params.solo_target_trick
-            && (d->params.cast_draw > 0 || d->params.creates_treasures > 0)) { mask |= 1 << 3; }
+            && (d->params.cast_draw > 0 || d->params.creates_treasures > 0)) { mask |= 1 << 5; }
     }
     return mask;
 }
