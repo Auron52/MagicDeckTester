@@ -205,23 +205,39 @@ check_freeze() {
     now=$(src_fingerprint); frozen=$(cat "$VLQ/freeze.src" 2>/dev/null || echo "")
     if [ -z "$frozen" ] || [ "$now" = "$frozen" ]; then return 0; fi
 
-    # src moved -- ask whether PLAY moved before throwing the run away.
+    # src moved. NEITHER outcome throws the run away (user, 2026-08-12) -- the two differ only in how
+    # much is kept:
+    #
+    #   PLAY UNCHANGED -> keep EVERYTHING. The measurements are interchangeable, so the chunks are
+    #     re-stamped to the new src and the matrix driver's resync sees nothing to absorb.
+    #   PLAY CHANGED   -> keep the FULL SETS and drop the rest. Fall through to the driver, whose
+    #     resync_engine_change keeps offsets below B (the completed common prefix -- every cell of the
+    #     seed has them) and re-queues everything above it. That is the chunk rule the skill already
+    #     documents; the blanket stop here was overriding it, which is what made a play change cost the
+    #     whole run instead of one level. Set-completion ordering is what makes B worth keeping.
     play_frozen=$(cat "$VLQ/freeze.play" 2>/dev/null || echo "")
-    if [ -n "$play_frozen" ]; then
-        log "src/ moved ($(echo "$frozen" | cut -c1-12) -> $(echo "$now" | cut -c1-12)); checking whether PLAY moved..."
-        play_now=$(play_fingerprint || echo "")
-        if [ -n "$play_now" ] && [ "$play_now" = "$play_frozen" ]; then
-            log "  PLAY UNCHANGED (smoke digests fold to $(echo "$play_now" | cut -c1-12)) -- continuing and re-stamping the freeze."
-            src_fingerprint > "$VLQ/freeze.src"; git rev-parse --short HEAD > "$VLQ/freeze.commit"
-            return 0
-        fi
-        log "  PLAY CHANGED ($(echo "$play_frozen" | cut -c1-12) -> $(echo "${play_now:-unavailable}" | cut -c1-12)). Measurements after this"
-        log "  would describe a different engine than those before it. Stopping."
-        return 1
+    log "src/ moved ($(echo "$frozen" | cut -c1-12) -> $(echo "$now" | cut -c1-12)); checking whether PLAY moved..."
+    play_now=$(play_fingerprint || echo "")
+    if [ -n "$play_frozen" ] && [ -n "$play_now" ] && [ "$play_now" = "$play_frozen" ]; then
+        log "  PLAY UNCHANGED (smoke digests fold to $(echo "$play_now" | cut -c1-12)) -- keeping every game."
+        # Re-stamp the CHUNKS too, not just the freeze: they were produced by a play-identical engine,
+        # so leaving them on the old src would make the driver's resync drop them for no reason.
+        python3 - "$MATRIX_TXT.cells.json" "$now" <<'PY' 2>/dev/null || true
+import json, sys
+p, new = sys.argv[1], sys.argv[2]
+try:    cells = json.load(open(p))
+except Exception: sys.exit(0)
+for c in cells:
+    for ch in c.get("chunks", []): ch["src"] = new
+json.dump(cells, open(p, "w"))
+PY
+    else
+        log "  PLAY CHANGED ($(echo "${play_frozen:-unstamped}" | cut -c1-12) -> $(echo "${play_now:-unavailable}" | cut -c1-12)) -- keeping"
+        log "  the completed FULL SETS and re-running everything above them (see resync_engine_change)."
     fi
-    log "FREEZE VIOLATION: src/ moved ($frozen -> $now), and this run predates the play fingerprint so"
-    log "  it cannot be checked. Measurements after this would describe a different engine. Stopping."
-    return 1
+    src_fingerprint > "$VLQ/freeze.src"; git rev-parse --short HEAD > "$VLQ/freeze.commit"
+    if [ -n "$play_now" ]; then printf '%s\n' "$play_now" > "$VLQ/freeze.play"; fi
+    return 0
 }
 
 # Scratch deck folder differing from the real one ONLY in its value.json; siblings are symlinked so the
@@ -508,13 +524,9 @@ status)
         # src moved. Whether that MATTERS is a play question, and `run` answers it by re-folding the
         # smoke digests (see check_freeze). status must not run the suite -- it is documented as
         # touching nothing -- so it reports what is pending rather than pre-judging it.
-        if [ -f "$VLQ/freeze.play" ]; then
-        echo "freeze     : src/ moved -- \`run\` will re-check the PLAY digests and continue if they"
-        echo "             are unchanged (stamped $(cut -c1-12 "$VLQ/freeze.play")), else stop."
-        else
-        echo "freeze     : VIOLATED -- src/ moved since this run started, and this run predates the"
-        echo "             play fingerprint so it cannot be checked: restart, do not resume."
-        fi
+        echo "freeze     : src/ moved -- \`run\` re-checks the PLAY digests and CONTINUES either way:"
+        echo "             unchanged (stamped $(cut -c1-12 "$VLQ/freeze.play" 2>/dev/null || echo 'none')) keeps every game;"
+        echo "             changed keeps the completed full sets and re-runs the rest."
     elif [ -n "$frz" ]; then
         echo "freeze     : intact ($(cut -c1-12 "$VLQ/freeze.src"))"
     fi
