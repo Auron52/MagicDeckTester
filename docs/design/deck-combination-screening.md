@@ -1341,3 +1341,24 @@ every near-threshold decision flips adversarially.
    loads an empty profile, leaves K=0, fills no hand, and reports every composition as unwon with se 0.
    That looks like data. `keep_delta.py` materialises the sidecar plain and refuses an all-se-zero result;
    the C++ still has the sharp edge. **Open: resolve `.gz` in `RunScoreCompsMode`.**
+
+## Open after 2026-08-12
+
+- **Provider REUSE when the key pieces survive.** The split refusal is correct but currently blunt:
+  burn's signature is `landfall_damage`, carried only by Searing Blaze, so cutting that ONE card
+  unhomes a deck that is still plainly burn. The preferred fix (user, 2026-08-12) is to make the
+  provider support both decklists — route on the archetype's stable core, or keep the hook
+  present-but-inert without its card — rather than to pin at runtime, which would hide the finding.
+  Deliberately NOT a runtime override: if the edit really did make a different deck, screening is the
+  wrong instrument and it should be analysed as a new deck (the win-turn diff is still available, it
+  just costs a table from scratch).
+- **Diverging-game dump for the viewer** (user request). The driver already knows which game indices
+  diverge — that is where the `ident %` comes from. Dumping those specific games for both arms in a
+  form `tools/play` can open would make a human able to eyeball WHY an edit moved the number, as a
+  guard against a result that is arithmetically fine and nonsense in play.
+- **The scatter `d` is measured for exactly one edit** (burn Skullcrack→Bolt, 0.054t dispersion). It
+  is the input every `d*` is read against, and it does not transfer across edit sizes — see
+  `mirrorwing-trick-suite-screen.md` for a planned 18% edit where it certainly does not.
+- **Anti-Lifegain cannot be screened by reweight**: its committed raw does not build its committed
+  profile (`max_mull=3` vs 6, missing sizes 3/2/1; commits 9d9f654 vs 3276862). `reweight_ok` refuses.
+  Either regenerate the raw or accept the limitation.
