@@ -296,48 +296,54 @@ def resync_engine_change(cells, target, src_now, log=print):
     are regenerated -- in each cell where they exist. Re-running whole cells to remove the mixing
     would cost 10,400 games against 587 for the same per-game agreement across cells.
 
-    B is per (deck, seed), and is the lowest offset any cell still owes:
-      * a seed whose cells are ALL at target is already consistent -- untouched, whatever its engine.
-      * cells that never reached B keep everything (a condemned cell capped at 50 has nothing at or
-        above B=375, so it is not touched and not extended).
-      * a cell that has results at or above B from the OLD engine drops exactly those and re-runs
-        them; results at or above B already produced by the CURRENT engine are kept.
+    KEEP EVERY FULL SET, CONTIGUOUS OR NOT (user, 2026-08-12). What has to hold is per GAME, so the
+    question for offset o is simply: does EVERY cell that still owes work already hold o? If yes, o was
+    measured on the old engine everywhere it appears and no future game can mix it, so it stays --
+    whether or not the offsets below it survived. If no, some cell will run o on the NEW engine, which
+    would make o mixed across cells, so o goes everywhere.
+
+    This used to be a CONTIGUOUS prefix B = min over incomplete cells of the run of offsets from 0,
+    truncated at the first hole. That is sound but needlessly lossy, because cells do not finish in
+    order: chunks within a level land at different times, so a perfectly good full set sitting above an
+    in-flight hole was thrown away with it. With set-completion ordering (build_queue) holes are
+    normal and short-lived, which makes the difference routine rather than exotic.
+
+    Cells at target are excluded from the vote -- they owe nothing, so they cannot re-run anything and
+    cannot mix an offset -- but they are still SUBJECT to the drop, because an offset an incomplete
+    cell will redo must not survive in a complete one either. That also keeps a condemned cell capped
+    at 50 untouched: the incomplete cells all hold offsets 0..50, so nothing of its is dropped.
     """
     if not src_now: log("resync: no src fingerprint (not a git tree?) -- skipping"); return []
     groups = {}
     for c in cells: groups.setdefault((c["deck"], c["seed"]), []).append(c)
 
-    def foreign_end(c):
-        """End of the contiguous prefix produced by an engine OTHER than the current one."""
-        pos = 0
-        for x in sorted(c["chunks"], key=lambda x: x["off"]):
-            if x["off"] > pos: break                 # hole: prefix stops here
-            if x.get("src") == src_now: break        # current engine: prefix stops here
-            pos = max(pos, x["off"] + x["n"])
-        return pos
+    def covered(c):
+        """The offsets this cell holds a result for, by whatever engine."""
+        return {o for x in c["chunks"] for o in range(x["off"], x["off"] + x["n"])}
 
     plan = []
     for (deck, seed), cs in sorted(groups.items()):
         incomplete = [c for c in cs if c["games"] < target(c)]
         if not incomplete: continue                  # seed complete => internally consistent
-        B = min(foreign_end(c) for c in incomplete)
+        keepable = set.intersection(*(covered(c) for c in incomplete))
         for c in cs:
             keep, dropped = [], 0
             for x in sorted(c["chunks"], key=lambda x: x["off"]):
-                if x.get("src") == src_now or x["off"] + x["n"] <= B:
+                if x.get("src") == src_now:          # already the current engine: nothing to absorb
                     keep.append(x); continue
-                head = _split_chunk(x, B)            # None unless the chunk straddles B
-                if head: keep.append(head)
-                dropped += x["n"] - (head["n"] if head else 0)
+                pieces = _chunk_minus(x, {o for o in range(x["off"], x["off"] + x["n"])
+                                          if o not in keepable})
+                dropped += x["n"] - sum(p["n"] for p in pieces)
+                keep.extend(pieces)
             if dropped:
                 c["chunks"] = keep; _refresh(c)
-                plan.append((deck, seed, "%s%d" % (c["arm"], c["depth"]), B, dropped))
+                plan.append((deck, seed, "%s%d" % (c["arm"], c["depth"]), dropped))
     if plan:
-        tot = sum(p[4] for p in plan)
-        log("resync: src changed since these results were written -- %d cells, %d games to redo"
-            % (len(plan), tot))
-        for deck, seed, cell, B, n in plan:
-            log("  s%-6d %-4s drop [%d,+%d)" % (seed, cell, B, n))
+        tot = sum(p[3] for p in plan)
+        log("resync: src changed since these results were written -- %d cells, %d games to redo "
+            "(every offset held by all unfinished cells is kept)" % (len(plan), tot))
+        for deck, seed, cell, n in plan:
+            log("  s%-6d %-4s drop %d game(s) not in a full set" % (seed, cell, n))
     return plan
 
 
