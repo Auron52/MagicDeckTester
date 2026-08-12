@@ -35,7 +35,15 @@ def load_cases(path=CASES):
 
     def amap(name):
         m = re.search(r"declare -A " + name + r"=\((.*?)\)", txt, re.S)
-        return dict(re.findall(r"\[(\w+)\]=(\S+)", m.group(1))) if m else {}
+        if not m:
+            return {}
+        # Values are shell-quoted and may contain SPACES ("decks/Mirrorwing Dragon/..."); a bare
+        # \S+ truncated those at the first space and every mirrorwing explain failed with
+        # "could not run the current binary". Prefer the quoted form; fall back to unquoted.
+        out = dict(re.findall(r'\[(\w+)\]="([^"]+)"', m.group(1)))
+        for k, v in re.findall(r"\[(\w+)\]=([^\s\"]+)", m.group(1)):
+            out.setdefault(k, v)
+        return out
 
     def arr(name):
         m = re.search(name + r"=\((.*?)\n\)", txt, re.S)
