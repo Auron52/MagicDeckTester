@@ -377,7 +377,7 @@ def run_batch(jobs, outdir, name, threads, env=None):
                              env={**os.environ, "MTG_DUMP_WINS": "1", **(env or {})})
         for line in p.stderr:
             e.write(line)
-            if line.startswith("[batch]") or "SLOW-GAME" in line:
+            if line.startswith("[batch]") or line.startswith("[play]") or "SLOW-GAME" in line:
                 print("  | " + line.rstrip(), flush=True)
         rc = p.wait()
     if rc != 0:
@@ -424,8 +424,6 @@ class Spec:
         self.raw_path = os.path.abspath(path)
         self.games   = int(s.get("games", 20000))
         self.seed    = int(s.get("seed", 910000))
-        self.depth   = int(s.get("depth", 5))
-        self.budget  = int(s.get("budget_ms", 20))
         self.maxturn = int(s.get("max_turns", 8))
         self.threads = int(s.get("threads", 0))
         self.base_path = s["base"] if os.path.isabs(s["base"]) else os.path.join(ROOT, s["base"])
@@ -468,6 +466,44 @@ class Spec:
         self.profile       = self.path("profile")       or self.sibling(".profile.json")
         self.value_profile = self.path("value_profile") or self.sibling(".value.json")
 
+        # PLAY SETTINGS COME FROM THE DECK, not from a constant here. Every deck's value model carries
+        # a `value_play` block that IS its adopted, measured policy (burn: d6/b20, escalation_cap 6,
+        # fitted jointly with value_trust_depth 5; Goblins: d6/b40), and several carry a cheaper
+        # `mull_gen_*` pair the deck's owners already accepted for rollout work (Goblins d3/b10).
+        # Two legitimate choices, and they are the deck's own numbers either way:
+        #   "play": "quality"  (default) -- the adopted play policy; the screen then measures the deck
+        #                                   as it is actually played, so its number means something
+        #                                   outside the screen.
+        #   "play": "speed"             -- the mulligan-generation policy: cheaper, and already
+        #                                   sanctioned for this deck rather than invented here.
+        # Pinning `depth`/`budget_ms` in the spec still works but is now an explicit OVERRIDE: the
+        # engine THROWS if a depth is passed while value_play drives, so it needs
+        # `ignore_play_profile`, which is exactly the flag this driver used to set on every job while
+        # forcing d5/b20 -- screening burn one depth below the depth burn ships.
+        self.play_mode = s.get("play", "quality")
+        vp = {}
+        if self.value_profile and os.path.exists(self.value_profile):
+            try:
+                vp = json.load(open(self.value_profile)).get("value_play") or {}
+            except Exception:
+                vp = {}
+        drives = bool(vp.get("enabled")) and int(vp.get("target_depth", 0)) > 0
+        if "depth" in s or "budget_ms" in s:
+            self.depth, self.budget = int(s.get("depth", 5)), int(s.get("budget_ms", 20))
+            self.pin_play, self.play_source = True, "spec (OVERRIDES the deck's policy)"
+        elif self.play_mode == "speed":
+            # Mirrors ValuePlay::MullGenDepth/MullGenBudgetMs: explicit mull_gen_*, else the play
+            # numbers, else the built-in default.
+            self.depth  = int(vp.get("mull_gen_depth") or vp.get("target_depth") or 5)
+            self.budget = int(vp.get("mull_gen_budget_ms") or vp.get("budget_ms") or 20)
+            self.pin_play, self.play_source = True, "value_play.mull_gen (speed)"
+        elif drives:
+            self.depth, self.budget = int(vp["target_depth"]), int(vp.get("budget_ms") or 20)
+            self.pin_play, self.play_source = False, "value_play (the deck's adopted policy)"
+        else:
+            self.depth, self.budget = 5, 20
+            self.pin_play, self.play_source = False, "engine default (this deck has no adopted policy)"
+
     def sibling(self, ext):
         p = os.path.join(os.path.dirname(self.base_path), self.name + ext)
         return p if os.path.exists(p) else None
@@ -492,8 +528,13 @@ class Spec:
 
     def job(self, name, deck, numbering, profile, seed=None):
         j = {"name": name, "deck": deck, "deck_numbering": numbering,
-             "games": self.games, "seed": self.seed if seed is None else seed, "depth": self.depth,
-             "budget_ms": self.budget, "max_turns": self.maxturn, "ignore_play_profile": True}
+             "games": self.games, "seed": self.seed if seed is None else seed,
+             "max_turns": self.maxturn}
+        if self.pin_play:
+            # ResolvePlaySettings THROWS on an explicit depth while value_play drives, so a pinned
+            # depth must say so. Omitting both is what lets the engine resolve the deck's own policy
+            # (it prints `[play] <job> depth=.. budget=..ms source=..` per job either way).
+            j.update({"depth": self.depth, "budget_ms": self.budget, "ignore_play_profile": True})
         if profile:
             j["profile"] = os.path.relpath(profile, ROOT)
         else:
@@ -791,6 +832,7 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
         print(f"  {tag:22s} {tot:3d} cards  |  " + ", ".join(ch) + warn)
     print("\napparatus:")
     print(f"  play profile   {os.path.relpath(spec.profile, ROOT) if spec.profile else 'NONE (deliberate)'}")
+    print(f"  play settings  d{spec.depth} / {spec.budget}ms   <- {spec.play_source}")
     print(f"  value model    {os.path.relpath(spec.value_profile, ROOT) if spec.value_profile else 'none'}"
           + ("  (ladder mode: accelerates warm-up passes, never decides)" if spec.value_profile else ""))
     # The apparatus is never silently downgraded. If the shipped table cannot answer every arm, the

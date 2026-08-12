@@ -1101,7 +1101,56 @@ or an introduced card fails it and falls back to generating. This is now the def
 read a single one of the nine committed raw sidecars — all gzipped by the raw-artifact policy. It
 reported them as `SKIP (bad json)` and pooled nothing. It now reads through `ReadProfileText`.
 
-### 3. Search depth: same verdict, and the default depth is the expensive one
+### 3. Search depth — the sweep was confounded; the fix is to stop overriding the deck (WITHDRAWN)
+
+**The proposal that came out of this measurement ("screen at d7, it is 2.8x cheaper") is withdrawn,
+and the measurement below should not be read as a fact about search depth.**
+
+Every deck's value model carries a `value_play` block that is its *adopted, measured* play policy,
+and those fields are fitted **jointly**: burn is `target_depth 6, budget_ms 20, escalation_cap 6`
+alongside `value_trust_depth 5`; Goblins is `d6/b40`. The sweep moved `depth` alone and left
+`escalation_cap`/`trust_depth` at burn's fitted values — which is exactly the confound burn's own
+`value_play` note records having been caught by once already:
+
+> the previous rationale here is VOID: it was measured at `value_trust_depth=6`, where
+> `escalate_below=6` forced an escalation on every depth-<=5 commit, so the d5 arm was crippled by
+> construction.
+
+An 8x cost swing with *flat* play quality is the signature of escalation machinery switching on and
+off, not of search getting deeper. The numbers (6,000 games/cell, digests differ so the override did
+reach the engine) are kept only because the **verdict** half is still informative:
+
+| depth | base avg | bolt avg | delta | ms/game |
+|---|---|---|---|---|
+| d3 | 4.3287 | 4.2980 | −0.0307 ±0.0028 | 148.2 |
+| d5 | 4.3288 | 4.2982 | −0.0307 ±0.0028 | 49.2 |
+| d7 | 4.3292 | 4.2985 | −0.0307 ±0.0028 | 17.8 |
+
+The screened effect is invariant across a 3x depth range, so it was not an artifact of the depth we
+happened to pick. The cost column is uninterpretable without moving the escalation knobs with it.
+
+**The real defect the sweep exposed: the driver was overriding every deck's adopted policy.**
+`Spec.job` set `"ignore_play_profile": True` on every job — the engine's explicit escape hatch,
+needed because `ResolvePlaySettings` *throws* if a depth is passed while `value_play` drives — and
+forced a hard-coded `d5/b20`. So every burn screen in this document ran the deck one depth *below*
+the depth burn ships, and burn's own note measures d5 as worse than d6 (+0.00059 turns, paired
+t=+6.17, 18/20 seeds, 100k games/arm). Symmetric across arms, so the apparatus conclusions stand; the
+effect sizes were taken at a play level the deck does not use.
+
+The screening depth is now taken from the deck, with the two settings the artifacts actually offer:
+
+| `"play"` | resolves to | example |
+|---|---|---|
+| `"quality"` (default) | `value_play.target_depth` / `budget_ms` — the adopted policy | burn d6/b20, Goblins d6/b40 |
+| `"speed"` | `mull_gen_depth` / `mull_gen_budget_ms`, falling back to the play numbers (mirroring `ValuePlay::MullGenDepth`) | Goblins d3/b10, burn d6/b20 (no `mull_gen_*`) |
+
+Quality is the default because a screen run at the deck's adopted policy measures the deck as it is
+actually played, so the number means something outside the screen. Both are the deck's OWN measured
+numbers rather than a constant invented here. Pinning `depth`/`budget_ms` in a spec still works and
+is now labelled an override; omitting them lets the engine resolve, and it prints
+`[play] <job> depth=.. budget=..ms source=value_play` per job, which the driver tees.
+
+### 3b. The original table, for the record
 
 Every screen runs d5, and the apparatus-symmetry argument never covered the *search* settings.
 `{base, bolt} x {d3, d5, d7}`, 6,000 games each, same shared apparatus (digests differ per depth, so

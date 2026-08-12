@@ -34,7 +34,8 @@ reading them.
   "base":          "decks/slivers_vial/slivers_vial.txt",
   "profile":       "decks/slivers_vial/slivers_vial.profile.json",
   "value_profile": "decks/slivers_vial/slivers_vial.value.json",
-  "games": 20000, "seed": 910000, "depth": 5, "budget_ms": 20,
+  "games": 20000, "seed": 910000,
+  "play": "quality",
   "combinations": {
     "more_leeching": {"Hatchery Sliver": 2, "Leeching Sliver": 4},
     "cut_vial":      {"Aether Vial": 0, "Muscle Sliver": 6}
@@ -363,10 +364,20 @@ startup: the same burn job measured 42.5 and 114 ms/game on two 300-game runs ag
 280,522 for the same 20,000 games (**5.8x**, Aether Vial's enumeration), so a screen's wall clock is
 set by its priciest arm, not the average. The driver prints the per-arm figure and flags a >2x spread.
 
-**Depth is not free and deeper is not slower.** On burn the same edit measured −0.0307 at d3, d5 and
-d7 alike, while costing **148.2 / 49.2 / 17.8 ms per game** — the d5 default is 2.8x the price of d7
-for the same answer (plausibly the value leaf's `trust_depth` ladder). One deck, and a mana-cost swap
-is the edit least likely to need depth; check per deck before trusting either half.
+**Play settings come from the DECK, never from a constant.** Each deck's value model carries a
+`value_play` block that is its adopted, measured policy — burn `d6/b20` (fitted jointly with
+`escalation_cap 6` and `value_trust_depth 5`), Goblins `d6/b40` — and several carry a cheaper
+`mull_gen_*` pair already sanctioned for rollout work. `"play": "quality"` (default) uses the adopted
+policy; `"play": "speed"` uses the mulligan-gen one (Goblins d3/b10). Omit `depth`/`budget_ms` from
+the spec and the engine resolves it, printing `[play] <job> depth=.. budget=..ms source=value_play`
+per job. Pinning them is an override and is labelled as one — the driver used to pin `d5/b20` on
+every job behind `ignore_play_profile`, which screened burn one depth below the depth burn ships.
+
+**Do not sweep depth on its own.** The screened effect is depth-invariant on burn (−0.0307 at d3, d5
+and d7 alike), but the cost swing across those runs (148.2 / 49.2 / 17.8 ms per game) is *not* a fact
+about search: `escalation_cap` and `value_trust_depth` stayed at the deck's fitted values while only
+`depth` moved, which is the confound burn's own `value_play` note records being caught by. Move the
+policy as a unit, or not at all.
 
 **Per-game cost varies by two orders of magnitude, so quote the deck AND the apparatus, never
 "minutes".** Measured at d5 / `budget_ms: 20` / `max_turns: 8`:
