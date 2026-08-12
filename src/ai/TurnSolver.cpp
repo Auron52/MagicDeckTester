@@ -12390,6 +12390,30 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         PROF_INC(gamestate_copies);
         GameState copy = state;
         if (!land_name.empty() && !PlayLandByName(copy, land_name, fetch_target, true, land_face)) { return; }
+        // Karoo (etb_bounce_land) DEFERRAL, mirroring ApplyPlanDirect / the executor: the apply
+        // plays a Karoo AFTER the main casts, so the bounce returns a land that was already
+        // TAPPED for this turn's casts. Folding the Karoo into `copy` up front bounced the land
+        // BEFORE cast enumeration, so every karoo+cast line that spends the bounced land's mana
+        // was unenumerable at ANY budget -- an enumeration/apply mismatch (viewer artifact
+        // s1 T2: "land=Gruul Turf; cast=Goblin Instigator" is executor-legal and was rejected;
+        // the same gap silently shrank every autonomous Karoo turn). Enumerate the casts on the
+        // PRE-Karoo board instead -- exactly the state the apply's deferred order hands them.
+        // The Karoo's own mana never funds this turn (it enters tapped), and it leaves the hand
+        // (committed to the drop) so hand-land accounting (Land's Edge ammo) can't double-count
+        // it. Rides the apply's MTG_NO_KAROO_DEFER hatch: with the hatch set both sides play
+        // land-first again, byte-identically.
+        {
+            static const bool s_karoo_defer_enum = !EnvOn("MTG_NO_KAROO_DEFER");
+            const CardDefinition* fold_ld =
+                land_name.empty() ? nullptr : CardDatabase::Instance().Lookup(land_name);
+            if (s_karoo_defer_enum && fold_ld && fold_ld->params.etb_bounce_land)
+            {
+                copy = state;   // the PlayLandByName above was the legality probe only
+                std::vector<Card>& h = copy.ActivePlayer().hand;
+                for (auto it = h.begin(); it != h.end(); ++it)
+                { if (it->m_name == land_name) { h.erase(it); break; } }
+            }
+        }
 
         // "Play this land, cast nothing" baseline (neutral value 0). Skipped in a group-wave
         // TRANCHE re-enumeration: the idle plan touches no group, so wave 0 already emitted it.

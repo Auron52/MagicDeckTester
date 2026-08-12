@@ -1,4 +1,4 @@
-# Regression ground truth -- commit fd492d5  date 2026-08-12
+# Regression ground truth -- commit 9ec2624  date 2026-08-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -20,8 +20,8 @@ antilife_smoke_d0_s1001=5.5660/85bbc11753f3c9e0
 antilife_smoke_d3_s1001=4.2200/373d694151ddc5d6
 antilife_smoke_d5_s1001=4.1800/5e70f954afe78853
 hinata_smoke_d0_s1001=7.0160/47cc2f0a99c87e49
-hinata_smoke_d3_s1001=5.7467/4b872eff4551e67c
-hinata_smoke_d5_s1001=5.9200/2fc93e3964b909f1
+hinata_smoke_d3_s1001=5.7333/c56d325845249256
+hinata_smoke_d5_s1001=5.8800/7ce0abe8c91d26fb
 dragonstorm_smoke_d0_s1001=5.4300/8b942b0216ec5ee0
 dragonstorm_smoke_d3_s1001=4.5133/f0e29dbe4e7a8b8c
 dragonstorm_smoke_d5_s1001=4.4667/8cf792208eab7cc6
@@ -32,11 +32,11 @@ goblins_smoke_d0_s1001=4.1010/da08afbf648524cd
 goblins_smoke_d3_s1001=3.6533/ad176e049733d63f
 goblins_smoke_d5_s1001=3.5867/10a12fab4cce0061
 creature_giving_smoke_d0_s1001=5.7690/84ba9be4148c5a7c
-creature_giving_smoke_d3_s1001=4.8133/ed038c8229520f4d
-creature_giving_smoke_d5_s1001=4.8400/b6a833ce2761cd95
+creature_giving_smoke_d3_s1001=4.8067/cbb6a847578b1474
+creature_giving_smoke_d5_s1001=4.8133/c5b09a5bfc8974a3
 mirrorwing_smoke_d0_s1001=6.3690/fd2fdde4bf5582ae
-mirrorwing_smoke_d3_s1001=5.2800/38ef08747fdc19ee
-mirrorwing_smoke_d5_s1001=5.1733/44262a6ee105128c
+mirrorwing_smoke_d3_s1001=5.2600/c230c30a6e997056
+mirrorwing_smoke_d5_s1001=5.1467/95cfe6423c6eb730
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/4ec30ea41e344477
@@ -65,10 +65,10 @@ antilife_regression_d3_s3003=4.2567/e69592c3681211f7
 antilife_regression_d5_s2002=4.3120/684facac1b37a71f
 antilife_regression_d5_s3003=4.2280/748ef6342a527bec
 hinata_regression_d0_s2002=7.1060/04ac5048aeedb80d
-hinata_regression_d3_s2002=5.7100/75c1badbe60a2542
-hinata_regression_d3_s3003=5.7450/2444d523b88eb3bb
-hinata_regression_d5_s2002=5.6500/7c7e0e2f5fd0d1a4
-hinata_regression_d5_s3003=5.7500/191e2f050978df2c
+hinata_regression_d3_s2002=5.7050/ee39eff432137134
+hinata_regression_d3_s3003=5.7250/b63cc23b87e6f5ca
+hinata_regression_d5_s2002=5.6500/804f00073c0c715c
+hinata_regression_d5_s3003=5.7200/171c42527939ef4e
 dragonstorm_regression_d0_s2002=5.4650/c537d79d193f1be9
 dragonstorm_regression_d3_s2002=4.3367/42e2b2ffa993a091
 dragonstorm_regression_d3_s3003=4.4767/a58d93efd1c6c4ca
@@ -85,15 +85,15 @@ goblins_regression_d3_s3003=3.8433/a1740f5d1f969607
 goblins_regression_d5_s2002=3.8400/ae1878eada075fcc
 goblins_regression_d5_s3003=3.8240/abde495a68770350
 creature_giving_regression_d0_s2002=5.8560/e0b42498388862ce
-creature_giving_regression_d3_s2002=4.8400/18911f9dcf5260a1
-creature_giving_regression_d3_s3003=4.7733/e84bea7174bf8a45
-creature_giving_regression_d5_s2002=4.7920/746f8ea7d86cd1dd
-creature_giving_regression_d5_s3003=4.7480/97071127578ac97e
+creature_giving_regression_d3_s2002=4.8367/a66c860466245b4f
+creature_giving_regression_d3_s3003=4.7600/d6f2c50f296365a3
+creature_giving_regression_d5_s2002=4.7880/15838f61b1760d9a
+creature_giving_regression_d5_s3003=4.7360/9ab5f873be61901a
 mirrorwing_regression_d0_s2002=6.3670/8f8cf3923df51d2b
-mirrorwing_regression_d3_s2002=5.1250/227458225d59d392
-mirrorwing_regression_d3_s3003=5.0100/f0f66244a4fc4466
-mirrorwing_regression_d5_s2002=5.0500/63be8990944cf0c5
-mirrorwing_regression_d5_s3003=5.0100/79c70d5e27d8f334
+mirrorwing_regression_d3_s2002=5.1300/25fe0090bd74faf1
+mirrorwing_regression_d3_s3003=5.0000/0f9fb8e461fb9dea
+mirrorwing_regression_d5_s2002=5.0500/221f4071da39a698
+mirrorwing_regression_d5_s3003=4.9900/b14380c94b4048be
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/fe364b007bbfaa56

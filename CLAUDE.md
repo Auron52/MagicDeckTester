@@ -28,6 +28,21 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
 
 ## Repository Conventions
 
+- **NEVER create merge commits — REBASE local work onto origin (user directive, 2026-08-12).**
+  The user wants linear history. `git config pull.rebase true` + `rebase.autoStash true` are
+  set in this repo; keep them set on any new clone, and integrate remote work with
+  `git pull --rebase` (or `git fetch` + `git rebase origin/<branch>`), never `git merge`.
+  Never rebase commits that are already pushed — only your local, unpushed commits move.
+  Two repo-specific caveats:
+  * After a rebase that replayed engine changes, REBUILD and re-run the byte-identity check
+    (smoke) before trusting any measurement — same rule as after a merge.
+  * If both sides touched `test/regression_gt.txt`, do not hand-resolve numbers: rebase the
+    code, rebuild, and regenerate/accept GT under the rebased binary (see the
+    gt-rebaseline-rebase lesson — GT is a measurement, not a text file to merge).
+  * Generation freezes (value-leaf / mulligan artifacts) key on the `HEAD:src` TREE hash, so
+    a rebase that lands identical src content keeps a paused run resumable; verify with
+    `git rev-parse HEAD:src` against the queue's `freeze.src` before resuming.
+
 - **NEVER wrap commands in a timeout (no `timeout N`, no Bash `timeout` parameter).**
   A timeout silently truncates a run — a partially-finished regression sweep, batch,
   or build reads as a *result* when it is actually cut off, which corrupts A/B

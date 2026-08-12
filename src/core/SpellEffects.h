@@ -4182,6 +4182,63 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
         if (ti < 0) { return false; }   // declared target gone -> fizzle
     }
 
+    // Human-play board-click target override (viewer feedback 2026-08-12 #2/#3): the searched
+    // variant target (target_number) is only the preselected DEFAULT; the human picks off the
+    // BOARD, exactly like Invigorate's own-pump prompt, and from the full RULES-legal set (every
+    // own creature) -- not the provider's search-pruned candidate set (TrickTargetCandidates),
+    // which is a search-breadth policy and must not bind a human. For a strive cast (Twinflame)
+    // the human picks 1 + strive_extras creatures -- the count the cast already PAID for, so the
+    // floor equals the ceiling (Crackle's "the count is the selection" rule); for trick_up_to_one
+    // (Gold Rush / Scale the Heights) an empty pick keeps the untargeted cast. The chooser is
+    // nulled by RevealLogPause in every search/rollout scope, so the autonomous engine and every
+    // enumeration stay byte-identical.
+    std::vector<int> strive_pick;   // human-chosen strive extras (battlefield indices), else empty
+    if (g_play_target_chooser != nullptr)
+    {
+        std::vector<ChosenTarget> heur;
+        if (ti >= 0) { heur.push_back({ 1, ti, 0 }); }
+        const int extras = (ti >= 0) ? std::max(0, strive_extras) : 0;
+        if (extras > 0)
+        {
+            // Mirror the autonomous pick below: the extras the heuristic would take (by power).
+            std::vector<std::pair<int, int>> ranked;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                if (i == ti) { continue; }
+                const Permanent& p = state.battlefield[i];
+                if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
+                ranked.push_back({ p.card.m_power.value_or(0), i });
+            }
+            std::stable_sort(ranked.begin(), ranked.end(),
+                             [](const std::pair<int, int>& x, const std::pair<int, int>& y)
+                             { return x.first > y.first; });
+            for (int k = 0; k < extras && k < static_cast<int>(ranked.size()); ++k)
+            { heur.push_back({ 1, ranked[k].second, 0 }); }
+        }
+        std::vector<ChosenTarget> picked =
+            (*g_play_target_chooser)(state, def, controller, 1 + extras, 0, heur);
+        std::vector<int> own;
+        for (const ChosenTarget& c : picked)
+        {
+            if (c.kind != 1 || c.index < 0 || c.index >= static_cast<int>(state.battlefield.size()))
+            { continue; }
+            const Permanent& p = state.battlefield[c.index];
+            if (p.controller_index != controller || (!p.card.IsCreature() && !p.is_animated))
+            { continue; }
+            own.push_back(c.index);
+        }
+        if (own.empty())
+        {
+            // Only an up-to-one trick may resolve untargeted; anything else keeps the default.
+            if (def.params.trick_up_to_one) { ti = -1; }
+        }
+        else
+        {
+            ti = own.front();
+            strive_pick.assign(own.begin() + 1, own.end());
+        }
+    }
+
     // Recipient list, in resolution order (see the header comment). Indices stay valid across the
     // payload applications: token/Treasure creation only push_backs (append), nothing erases
     // mid-resolution (the legend rule inside CreateTrickCopyToken erases only the just-made
@@ -4210,21 +4267,29 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
     }
     else if (ti >= 0 && strive_extras > 0)
     {
-        // Strive: target + the strive_extras biggest OTHER creatures by printed power.
-        std::vector<std::pair<int, int>> ranked;   // (printed power, index)
-        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
-        {
-            if (i == ti) { continue; }
-            const Permanent& p = state.battlefield[i];
-            if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
-            ranked.push_back({ p.card.m_power.value_or(0), i });
-        }
-        std::stable_sort(ranked.begin(), ranked.end(),
-                         [](const std::pair<int, int>& x, const std::pair<int, int>& y)
-                         { return x.first > y.first; });
         order.push_back(ti);
-        for (int k = 0; k < strive_extras && k < static_cast<int>(ranked.size()); ++k)
-        { order.push_back(ranked[k].second); }
+        if (!strive_pick.empty())
+        {
+            // Human-chosen strive extras (the board-click override above).
+            for (int i : strive_pick) { order.push_back(i); }
+        }
+        else
+        {
+            // Strive: target + the strive_extras biggest OTHER creatures by printed power.
+            std::vector<std::pair<int, int>> ranked;   // (printed power, index)
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                if (i == ti) { continue; }
+                const Permanent& p = state.battlefield[i];
+                if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
+                ranked.push_back({ p.card.m_power.value_or(0), i });
+            }
+            std::stable_sort(ranked.begin(), ranked.end(),
+                             [](const std::pair<int, int>& x, const std::pair<int, int>& y)
+                             { return x.first > y.first; });
+            for (int k = 0; k < strive_extras && k < static_cast<int>(ranked.size()); ++k)
+            { order.push_back(ranked[k].second); }
+        }
     }
     else if (ti >= 0) { order.push_back(ti); }
     else              { order.push_back(-1); }   // up-to-one, no target: one untargeted instance

@@ -682,8 +682,27 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                << ", \"lands_in_hand\": " << lih << " },\n";
         }
     }
+    // Emit at most the top-ranked slice of the plan list. A Zada/Mirrorwing fan-out segment
+    // enumerated 334,139 plans = a 331 MB decision JSON, which crashed the play server
+    // (spawnSync ENOBUFS at a 32 MB buffer) and would hang any browser rendering it. The
+    // list is display-only: a hand-assembled line is validated ENGINE-side (--validate-line
+    // / CheckLine against the FULL in-engine list), and a plan reply (--choices) indexes the
+    // engine's list, so entries here keep their REAL index and a capped tail costs only
+    // reject-panel suggestions beyond the cap. "plans_total" tells the GUI when truncation
+    // happened.
+    // MTG_PLAY_PLANS_CAP overrides (0 = unlimited): the reference protocol checker
+    // (test/viewer_protocol_check.py) content-matches RECORDED plan indices against this list
+    // -- a recorded pick beyond the cap would look unrepairable and read as play-drift
+    // (FiveColour s8 gi7 records index 304), so the checker runs uncapped.
+    static const size_t kMaxEmittedPlans = []() -> size_t {
+        const char* v = std::getenv("MTG_PLAY_PLANS_CAP");
+        if (v == nullptr || *v == '\0') { return 200; }
+        const long n = std::atol(v);
+        return n <= 0 ? std::numeric_limits<size_t>::max() : static_cast<size_t>(n);
+    }();
+    const size_t n_emit = std::min(plans.size(), kMaxEmittedPlans);
     os << "  \"plans\": [\n";
-    for (size_t i = 0; i < plans.size(); ++i)
+    for (size_t i = 0; i < n_emit; ++i)
     {
         const TurnSolver::Plan& p = plans[i];
         os << "    { \"index\": " << i << ", \"summary\": ";
@@ -790,12 +809,20 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                    << ", \"enchant_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.enchant_target));
             }
             if (!ac.chosen_float_color.empty()) { os << ", \"float_color\": "; JsonStr(os, ac.chosen_float_color); }
+            // Solo-target trick (Zada/Mirrorwing): the target is chosen at RESOLUTION via the
+            // board-click prompt (viewer feedback 2026-08-12 #2), so the GUI must NOT run its
+            // queue-time enchant-variant dialog for these casts (enchantTargetsFor skips them).
+            {
+                const CardDefinition* ad = ac.def ? ac.def : CardDatabase::Instance().Lookup(ac.card_name);
+                if (ad && ad->params.solo_target_trick) { os << ", \"trick\": true"; }
+            }
             os << " }";
         }
         os << "]";
-        os << (i + 1 < plans.size() ? " },\n" : " }\n");
+        os << (i + 1 < n_emit ? " },\n" : " }\n");
     }
     os << "  ],\n";
+    if (plans.size() > n_emit) { os << "  \"plans_total\": " << plans.size() << ",\n"; }
     os << "  \"note\": \"reply with one plan index (0-based), or -1 to pass / cast nothing\"\n";
     os << "}\n";
 }
@@ -1095,10 +1122,19 @@ static std::vector<TargetOption> EnumerateTargetSets(const std::vector<ChosenTar
     // Crackle it is the committed plan's target count (the discount it already paid for) -- picking
     // fewer would under-pay the discount, so those subsets are not offered; picking more only raises
     // the discount (a free over-pay). A plain "up to N targets" burn passes min_targets = 1.
+    // min_targets == 0 (an "up to one target" trick -- Gold Rush / Scale the Heights) additionally
+    // offers the EMPTY set: casting with no target is a real, rules-legal line. Every existing
+    // caller passes min >= 1, so mask still starts at 1 for them -- byte-identical.
     std::vector<TargetOption> opts;
     const int n = static_cast<int>(legal.size());
     const int cap = std::max(1, std::min(max_targets, n));
-    const int lo  = std::max(1, std::min(min_targets, cap));
+    const int lo  = std::max(min_targets <= 0 ? 0 : 1, std::min(min_targets, cap));
+    if (lo == 0)
+    {
+        TargetOption none;
+        none.label = "(no target)";
+        opts.push_back(std::move(none));
+    }
     for (int mask = 1; mask < (1 << n) && opts.size() < 256; ++mask)
     {
         int bits = __builtin_popcount(static_cast<unsigned>(mask));
@@ -2210,6 +2246,12 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // is bounded [min, max]: min = the committed plan's paid discount (heuristic.size()), max =
             // max_targets (= min(X, #legal)). No separate count dialog -- the count IS the selection.
             const bool crackle = IsCrackleCountSpell(def.params);
+            // Zada/Mirrorwing solo-target trick (viewer feedback 2026-08-12 #2/#3): the legal set is
+            // EVERY own creature (the rules-legal board, like Invigorate's own-pump) -- the searched
+            // variant target arrives only as the preselected heuristic default. Strive (Twinflame)
+            // passes max_targets = 1 + paid extras with the floor equal to the ceiling; an up-to-one
+            // trick (Gold Rush / Scale the Heights) allows an EMPTY pick (untargeted cast).
+            const bool trick = def.params.solo_target_trick;
             std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
             if (crackle)
             {
@@ -2220,6 +2262,7 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                     else                             { legal.push_back({ 1, t, 0 });              legal_labels.push_back(s.battlefield[t].card.m_name.str()); }
                 }
             }
+            else if (trick)          { CollectOwnCreatureTargets(s, controller, legal, legal_labels); }
             else if (own_pump)       { CollectOwnCreatureTargets(s, controller, legal, legal_labels); }
             else if (exile_removal)  { CollectOpponentCreatureTargets(s, controller, legal, legal_labels); }
             else if (creature_burn)  { CollectCreatureTargets(s, controller, legal, legal_labels); }
@@ -2269,9 +2312,17 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
 
             // Crackle: floor the count at the committed plan's discount (heuristic.size()); every other
             // burn offers 1..max. max_targets is min(X, #legal) for Crackle, 1 for a single-target burn.
-            const int min_targets = crackle ? std::max(1, static_cast<int>(heuristic.size())) : 1;
+            // Tricks: strive's floor == ceiling == the paid count (heuristic.size() = 1 + extras);
+            // an up-to-one single-target trick floors at ZERO (the untargeted cast is a real option).
+            const int min_targets =
+                  crackle ? std::max(1, static_cast<int>(heuristic.size()))
+                : (trick && def.params.trick_up_to_one && max_targets == 1) ? 0
+                : trick   ? std::min(max_targets, std::max(1, static_cast<int>(heuristic.size())))
+                : 1;
             std::vector<TargetOption> opts = EnumerateTargetSets(legal, legal_labels, max_targets, min_targets);
-            if (opts.empty()) { return heuristic; }
+            // No legal target at all: nothing to ask (min 0 would otherwise offer a lone,
+            // pointless "(no target)" confirm for an empty-board up-to-one trick).
+            if (opts.empty() || legal.empty()) { return heuristic; }
             const int per_target = per_target_damage;   // actual engine damage per target (not recomputed)
             // Default index = the option whose target set matches the heuristic pick.
             auto same = [](const std::vector<ChosenTarget>& a, const std::vector<ChosenTarget>& b) {

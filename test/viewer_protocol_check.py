@@ -63,6 +63,9 @@ DECKS = {
     "Creature_Giving": ("decks/Creature Giving/Creature Giving.cod",
                         "decks/Creature Giving/Creature Giving.profile.json"),
     "FiveColour":    ("decks/FiveColour/FiveColour.cod",       "decks/FiveColour/FiveColour.profile.json"),
+    # Reference dir uses an underscore; the deck folder has a SPACE (same shape as Creature_Giving).
+    "Mirrorwing_Dragon": ("decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+                          "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"),
 }
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", re.S)
@@ -152,7 +155,12 @@ def replay(deck, prof, seed, gi, choices, force=None, extra=None, max_turns=8):
         args += ["--force-mulligan", force]
     if extra:
         args += extra
-    p = subprocess.run(args, capture_output=True, text=True)
+    # Uncapped plan list: recorded references index into the FULL enumerated plan list, and the
+    # stale-index repair content-matches against the emitted "plans" array -- the viewer's display
+    # cap (MTG_PLAY_PLANS_CAP, default 200; ENOBUFS fix) would make any recorded pick beyond the
+    # cap look unrepairable and read as play-drift (FiveColour s8 gi7 records index 304).
+    env = dict(os.environ, MTG_PLAY_PLANS_CAP="0")
+    p = subprocess.run(args, capture_output=True, text=True, env=env)
     return p.returncode, p.stdout + p.stderr
 
 

@@ -523,7 +523,9 @@ function enchantTargetsFor(name) {
   const d = S.decision, out = {};
   if (!d || !Array.isArray(d.plans)) return out;
   d.plans.forEach(pl => (pl.actions||[]).forEach(a => {
-    if (a.card===name && a.enchant_target>0) out[a.enchant_target] = a.enchant_target_name || ('#'+a.enchant_target);
+    // Solo-target tricks (a.trick) choose their target at RESOLUTION via the board-click
+    // prompt — no queue-time enchant dialog for them (viewer feedback 2026-08-12 #2).
+    if (a.card===name && a.enchant_target>0 && !a.trick) out[a.enchant_target] = a.enchant_target_name || ('#'+a.enchant_target);
   }));
   return out;
 }
@@ -1405,9 +1407,12 @@ function handleVerdict(v, line) {
   // matching combined plan the model DOES offer -- e.g. "land=Izzet Boilerworks; cast Crackle, Irencrag
   // Feat" -- instead of rebuilding it. Plans with a valid index are buttons; the "(only pass)" fallback
   // is inert text.
-  const mp=plans.length
+  const mp=(plans.length
     ? plans.map(p=>`<button class="variant vplan" data-plan="${p.index}">${esc(p.summary)}</button>`).join('')
-    : '<div>• (only pass)</div>';
+    : '<div>• (only pass)</div>')
+    // Fan-out nodes enumerate 100k+ plans; the engine emits only the top slice (plans_total
+    // carries the real count). The line-check still validates against the FULL list.
+    +((v.decision&&v.decision.plans_total)?`<div class="hint">showing top ${plans.length} of ${v.decision.plans_total} enumerated plans — hand-built lines are still checked against all of them</div>`:'');
   const ve=$('verdict'); ve.className=cls;
   ve.innerHTML=`<span class="vtag">${tag}</span><h4>${head}</h4>`+
     `<div>${esc(v.reason||'')}${v.failed_action?`<br><span class="hint">at: ${esc(v.failed_action)}</span>`:''}</div>`+
@@ -2055,7 +2060,9 @@ function promptPanelHtml(d, dec){
   // min_targets is the affordability FLOOR (Crackle: the discount the cast already paid for). The
   // count must land in [min,max] — Commit stays disabled until it does (issue 3: you can't confirm a
   // short target set). The opponent's face is a NORMAL target here (issue 5) and is deselectable.
-  const min = Math.max(1, d.min_targets||1);
+  // min 0 = an "up to one target" trick (Gold Rush / Scale the Heights): confirming with NOTHING
+  // selected is legal and submits the untargeted cast.
+  const min = d.min_targets===0 ? 0 : Math.max(1, d.min_targets||1);
   const inRange = n>=min && n<=max;
   const rangeWord = min>=max ? `pick exactly ${max}` : (min<=1 ? `pick up to ${max}` : `pick ${min}–${max}`);
   const needNote = n<min ? ` — need ${min-n} more` : '';
