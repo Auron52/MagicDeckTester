@@ -476,7 +476,15 @@ def check_reference(path, collect=None):
                 resolved.append(-1)
             else:
                 rplans = rd.get("plans") or []
-                recorded = rplans[p] if 0 <= p < len(rplans) else None
+                # Anchor by each stored plan's own "index" FIELD, not array position: the viewer's
+                # display cap (MTG_PLAY_PLANS_CAP) can save a TRUNCATED list while the recorded
+                # pick keeps its REAL engine index (a hand-assembled line validated engine-side can
+                # sit beyond the cap -- Mirrorwing s7_gi6 picks 223 of 412 with 200 saved), and a
+                # repaired reference may carry that one beyond-cap plan appended. Positional lookup
+                # is the fallback for pre-"index"-field references only.
+                recorded = next((pp for pp in rplans if pp.get("index") == p), None)
+                if recorded is None and rplans and "index" not in rplans[0]:
+                    recorded = rplans[p] if 0 <= p < len(rplans) else None
                 if recorded is None:
                     return True, "unresolvable", (
                         f"recorded pick {p} is not a plan in the reference's own list at "

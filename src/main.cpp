@@ -573,7 +573,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                               const std::vector<PlayEvent>& events = {},
                               const std::vector<std::string>& dropped_casts = {},
                               int main_ordinal = -1,
-                              const std::vector<PlayReveal>& reveals = {})
+                              const std::vector<PlayReveal>& reveals = {},
+                              int chosen_index = -1)
 {
     const Player& me  = s.ActivePlayer();
     DecisionJson d(os, decision_index);
@@ -701,8 +702,16 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         return n <= 0 ? std::numeric_limits<size_t>::max() : static_cast<size_t>(n);
     }();
     const size_t n_emit = std::min(plans.size(), kMaxEmittedPlans);
+    // When the caller already KNOWS the resolved choice (the --log-dir trace path), the chosen
+    // plan is emitted even when it sits beyond the display cap: a saved reference must contain
+    // the record of its own pick, or the protocol checker can never content-anchor that pick
+    // again (Mirrorwing s7_gi6 picked a validated hand-assembled line at engine index 223 of
+    // 412 -- the capped save kept 0..199 and the reference read as internally inconsistent).
+    const bool emit_chosen_extra = chosen_index >= 0
+        && static_cast<size_t>(chosen_index) >= n_emit
+        && static_cast<size_t>(chosen_index) < plans.size();
     os << "  \"plans\": [\n";
-    for (size_t i = 0; i < n_emit; ++i)
+    auto emit_plan = [&](size_t i, bool last)
     {
         const TurnSolver::Plan& p = plans[i];
         os << "    { \"index\": " << i << ", \"summary\": ";
@@ -819,8 +828,11 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             os << " }";
         }
         os << "]";
-        os << (i + 1 < n_emit ? " },\n" : " }\n");
-    }
+        os << (last ? " }\n" : " },\n");
+    };
+    for (size_t i = 0; i < n_emit; ++i)
+    { emit_plan(i, !emit_chosen_extra && i + 1 == n_emit); }
+    if (emit_chosen_extra) { emit_plan(static_cast<size_t>(chosen_index), true); }
     os << "  ],\n";
     if (plans.size() > n_emit) { os << "  \"plans_total\": " << plans.size() << ",\n"; }
     os << "  \"note\": \"reply with one plan index (0-based), or -1 to pass / cast nothing\"\n";
@@ -1969,7 +1981,7 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
                         }
                     }
                     ss << ", \"decision\": ";
-                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal, reveal_log);
+                    WriteDecisionJson(ss, s, plans, is_pre, di, reveal_count, draw_log, event_log, dropped_log, this_main_ordinal, reveal_log, chosen);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
