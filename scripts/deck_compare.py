@@ -294,6 +294,13 @@ class Spec:
         # from the decklist's stem, so an arm named anything else would generate `<other>.keepmodel…`.
         self.name   = os.path.splitext(os.path.basename(self.base_path))[0]   # profile/sidecar stem
         self.stem   = self.name + ".txt"
+        # Every scratch path is namespaced by DECK. Keying them on the arm tag alone (logs/deckcmp/
+        # base/) meant two specs over different decks shared `base/`, and `numbering.json` is written
+        # per arm but read by the engine when the JOB runs -- so a second invocation between a floor
+        # bracket's table generation and its batch silently replaced the first run's numbering. It
+        # cost a 20-minute generation, and it only failed LOUDLY because the two decks had disjoint
+        # card names; two specs over the SAME deck would have mis-numbered in silence.
+        self.out = os.path.join(OUT, self.name)
         self.arms = {"base": dict(self.counts)}
         for tag, ov in s["combinations"].items():
             c = dict(self.counts)
@@ -443,7 +450,7 @@ def pool_profile(spec, unscored):
     the shipped threshold keeps the meaning it was fitted with.
 
     -> path of the merged profile (in a directory with NO keep sidecar, so nothing auto-attaches)."""
-    d = os.path.join(OUT, "pool")
+    d = os.path.join(spec.out, "pool")
     gen = os.path.join(d, "gen")
     os.makedirs(gen, exist_ok=True)
     union = {n: max(a.get(n, 0) for a in spec.arms.values())
@@ -461,7 +468,7 @@ def pool_profile(spec, unscored):
 
     deck = os.path.join(gen, spec.name + ".txt")
     open(deck, "w").write("\n".join(f"{c} {n}" for c, n in ordered) + "\n")
-    log = os.path.join(OUT, "poolgen.log")
+    log = os.path.join(spec.out, "poolgen.log")
     print(f"  deriving card scores for {', '.join(unscored)} over the {sum(union.values())}-card union"
           f"\n  (one mtg-analyze run, log {os.path.relpath(log, ROOT)})")
     with open(log, "w") as f:
@@ -508,7 +515,7 @@ def pool_table(spec, why):
     alternative it replaces (no table at all) it is better on both axes that matter: ~0.063t weaker
     play becomes ~0.032t, and ~22x per-game wall becomes ~1x. Adoption still goes through
     mulligan-profile.md; this never becomes a deck's sidecar."""
-    d = os.path.join(OUT, "pooltable")
+    d = os.path.join(spec.out, "pooltable")
     os.makedirs(d, exist_ok=True)
     R = int(spec.raw.get("pool_R", 10))
     counts = union_counts(spec)
@@ -531,7 +538,7 @@ def pool_table(spec, why):
     ordered += [(counts[n], n) for n in sorted(set(counts) - set(spec.counts))]
     deck = os.path.join(d, spec.stem)
     open(deck, "w").write("\n".join(f"{c} {n}" for c, n in ordered) + "\n")
-    log = os.path.join(OUT, "pooltable.log")
+    log = os.path.join(spec.out, "pooltable.log")
     print(f"  keep table     {why}\n"
           f"                 generating a POOL table (R={R}) over the {sum(counts.values())}-card union"
           f" -> {os.path.relpath(out, ROOT)}\n"
@@ -585,7 +592,7 @@ def verify_coverage(buckets, gen_counts, spec, label):
 
 def screen(spec, dry_run):
     """Every combination vs base, one shared apparatus, one pooled batch."""
-    os.makedirs(OUT, exist_ok=True)
+    os.makedirs(spec.out, exist_ok=True)
     pf = gate(spec)
     bkts = table_buckets(spec.profile)
     tbl = None if bkts is None else {n for b in bkts for n in b}
@@ -674,15 +681,15 @@ def screen(spec, dry_run):
     # directory+stem, so a pooled-card_scores profile sitting in a scratch dir would silently take
     # the table with it -- the same class of loss as the table-drop bug, one level down.
     if use_table and (table_src or profile is not spec.profile):
-        profile = apparatus_dir("pool", spec.name, profile, table_src or shipped_table(spec.profile))
+        profile = apparatus_dir(spec.out, "pool", spec.name, profile, table_src or shipped_table(spec.profile))
 
     jobs = []
     for tag in spec.arms:
-        dp, np_ = spec.write_arm(tag, os.path.join(OUT, tag))
+        dp, np_ = spec.write_arm(tag, os.path.join(spec.out, tag))
         jobs.append(spec.job(tag, dp, np_, profile))
     print(f"\n{len(jobs)} arms x {spec.games:,} games -> ONE pooled batch")
     if dry_run:
-        json.dump({"jobs": jobs}, open(os.path.join(OUT, "screen.manifest.json"), "w"), indent=1)
+        json.dump({"jobs": jobs}, open(os.path.join(spec.out, "screen.manifest.json"), "w"), indent=1)
         return 0
 
     # Drop the TABLE without dropping the PROFILE. Passing profile=None would do both -- the arm
@@ -690,7 +697,7 @@ def screen(spec, dry_run):
     # to DefaultProfile() in silence. MTG_EXHAUSTIVE_PROFILE=none suppresses exactly the sidecar
     # (AttachExhaustiveSidecar), process-globally, which is what "symmetric" means here.
     env = {} if use_table else {"MTG_EXHAUSTIVE_PROFILE": "none"}
-    got = score(run_batch(jobs, OUT, "screen", spec.threads, env), list(spec.arms), spec.maxturn)
+    got = score(run_batch(jobs, spec.out, "screen", spec.threads, env), list(spec.arms), spec.maxturn)
     common = sorted(set.intersection(*[set(v) for v in got.values()]))
     print(f"\n{len(common):,} paired games, d{spec.depth} budget {spec.budget}ms   (negative delta = FASTER)\n")
     print(f"  {'combination':22s} {'avg':>8s} {'delta':>9s} {'se':>8s} {'t':>7s} {'ident':>7s} {'n@3sig/0.03t':>13s}")
@@ -708,14 +715,14 @@ def screen(spec, dry_run):
     return 0
 
 
-def apparatus_dir(name, stem, profile_src, table_src):
+def apparatus_dir(out, name, stem, profile_src, table_src):
     """A directory the engine will resolve ONE chosen keep table out of.
 
     The sidecar is presence-gated off the PROFILE path's directory+stem
     (`AttachExhaustiveSidecar`, MulliganProfileIO.h), so pairing an arbitrary table with the deck's
     real play profile is just a directory holding both under the deck's stem. That keeps the play
     profile attached -- which is the whole point: a run without it plays a deck we do not ship."""
-    d = os.path.join(OUT, "app_" + name)
+    d = os.path.join(out, "app_" + name)
     os.makedirs(d, exist_ok=True)
     prof = os.path.join(d, stem + ".profile.json")
     subprocess.check_call(["cp", "-f", profile_src, prof])
@@ -752,7 +759,7 @@ def gen_table(spec, tag, deck_path, R):
     for src in (spec.profile, spec.value_profile):
         if src and os.path.exists(src):
             subprocess.check_call(["cp", "-f", src, d])
-    log = os.path.join(OUT, f"keepgen_{tag}.log")
+    log = os.path.join(spec.out, f"keepgen_{tag}.log")
     print(f"  {tag}: generating R={R} keep table -> {os.path.relpath(out, ROOT)}  (log {os.path.relpath(log, ROOT)})")
     with open(log, "w") as f:
         subprocess.check_call([os.path.join(ROOT, "build/Release/mtg-analyze"), deck_path,
@@ -775,8 +782,8 @@ def floor(spec, tag, dry_run):
         raise SystemExit("no shared keep table -> the apparatus is deck-INDEPENDENT, so there is no\n"
                          "table bias to bracket (measured -0.0003 on a -0.20 effect). Nothing to do.")
 
-    os.makedirs(OUT, exist_ok=True)
-    decks = {t: spec.write_arm(t, os.path.join(OUT, t)) for t in ("base", tag)}
+    os.makedirs(spec.out, exist_ok=True)
+    decks = {t: spec.write_arm(t, os.path.join(spec.out, t)) for t in ("base", tag)}
     R = int(spec.raw.get("floor_R", 10))
 
     # Bracket what the SCREEN actually runs. That used to be "the shipped table, or nothing" -- and
@@ -799,8 +806,8 @@ def floor(spec, tag, dry_run):
         print(f"floor bracket for '{tag}': generating its own R={R} table, then 4 cells in one batch\n")
     var_table = gen_table(spec, tag, decks[tag][0], R)
 
-    apps = {"ship": apparatus_dir("ship", spec.name, shipped, shared),
-            "own":  apparatus_dir("own_" + tag, spec.name, shipped, var_table)}
+    apps = {"ship": apparatus_dir(spec.out, "ship", spec.name, shipped, shared),
+            "own":  apparatus_dir(spec.out, "own_" + tag, spec.name, shipped, var_table)}
     # How much of each cell actually GETS a table. The bracket deliberately runs each deck under a
     # table fit to the other, so the coverage cliff is inside the measurement by design -- but it was
     # never quantified per cell. An unbucketed card (a bucket the other deck does not have at all)
@@ -824,10 +831,10 @@ def floor(spec, tag, dry_run):
             for d in ("base", tag) for a in ("ship", "own")]
     print(f"\n4 cells x {spec.games:,} games -> ONE pooled batch")
     if dry_run:
-        json.dump({"jobs": jobs}, open(os.path.join(OUT, "floor.manifest.json"), "w"), indent=1)
+        json.dump({"jobs": jobs}, open(os.path.join(spec.out, "floor.manifest.json"), "w"), indent=1)
         return 0
 
-    got = score(run_batch(jobs, OUT, "floor", spec.threads), [j["name"] for j in jobs], spec.maxturn)
+    got = score(run_batch(jobs, spec.out, "floor", spec.threads), [j["name"] for j in jobs], spec.maxturn)
     e_ship, se_ship, n, id_ship = paired(got, "base__ship", f"{tag}__ship")
     e_own,  se_own,  _, id_own  = paired(got, "base__own",  f"{tag}__own")
     # Difference-of-differences over the SAME game indices -- pair it too, or the two deltas' shared

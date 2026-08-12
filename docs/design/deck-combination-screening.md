@@ -278,6 +278,46 @@ than the shipped apparatus — the size of the whole effect — so **the bracket
 and can never be read as the accurate arm. A level difference cancels out of the
 difference-of-differences; the interaction does not.
 
+### Burn, re-measured WITH the profile (2026-08-12) — BOTH rows
+
+The doc's top open item was that both burn floors were profile-less. Both re-run through
+`deck_compare.py --floor` (which always attaches the profile), 20,000 paired games, R=10 bracket:
+
+| burn | effect, profile-less | **effect, WITH profile** | bias, profile-less | **bias, WITH profile** | floor | margin |
+|---|---|---|---|---|---|---|
+| 1 Skullcrack → 1 Lightning Bolt | −0.0324 | **−0.0315 ± 0.0015** | +0.00220 ± 0.00129 | **−0.0015 ± 0.0018** (t = −0.87) | 0.0051 | **6.14x** |
+| 1 Skullcrack → 1 Mountain | +0.0248 | **+0.0239 ± 0.0023** | +0.00163 ± 0.00153 | **+0.0011 ± 0.0023** (t = +0.48) | 0.0057 | **4.22x** |
+
+**Burn's effects were NOT distorted by the profile-less bug** — −0.0315 vs −0.0324 and +0.0239 vs
++0.0248, both within noise. That is the opposite of slivers, where profile-less inflated the effect
+**2.6x**, and the reason is deck-specific: `DefaultProfile` zeroes `vial_target_mv`, which is
+deck-*defining* for slivers (the engine stops casting Aether Vial altogether), while burn has no
+equivalent profile-carried lever to lose. The top-of-document correction's "all absolute effect sizes
+are invalidated" is right to be conservative but wrong as a prediction — the damage scales with how
+much of a deck's identity lives in its profile, and for burn it was ~nil.
+
+**On the bias sign, do not over-read this.** Collecting the three correctly-measured brackets:
+
+| bracket | bias | t |
+|---|---|---|
+| slivers, 2 Vial → 2 Muscle | −0.00488 ± 0.00150 | **−3.26** |
+| burn, Skullcrack → Bolt | −0.0015 ± 0.0018 | −0.87 |
+| burn, Skullcrack → Mountain | +0.0011 ± 0.0023 | +0.48 |
+
+Only **slivers** resolves the bias at all. Both burn brackets are consistent with zero, in opposite
+directions. So "each table flatters the deck it was fit to" is established on **one** deck, and what
+burn adds is only an upper bound — its apparatus bias is at most ~0.002–0.005t, sign unresolved.
+
+Also measured: burn's R=10 bracket table plays **+0.0495 ± 0.0041** (bolt) and **+0.0615 ± 0.0042**
+(mountain) weaker than its shipped R=60 one — *larger* than slivers' +0.032t, and consistent across
+the two burn runs. "Regeneration only pays at high R" now holds on a second deck, and the penalty is
+deck-dependent: do not carry slivers' 0.032 around as a constant.
+
+On "floor tracks CRN distance", there are now three correctly-measured points, and they are in the
+conjectured order — burn/bolt (spell→spell, CRN ~0.07) → 0.0051, burn/mountain (spell→land, CRN
+≥0.22) → 0.0057, slivers (CRN 0.32) → 0.0068–0.0079. Three points across two decks, every bracket
+low-R and noise-dominated: suggestive, still not a predictor.
+
 ### The earlier burn numbers (PROFILE-LESS — kept only for shape)
 
 | change | deck | CRN dist | effect | apparatus bias | floor | effect/floor |
@@ -820,9 +860,10 @@ position-based implementation can do.
 - **A high-R (R≥40) confirmation arm.** Every floor uses R=10 tables that cost ~0.032t against the
   shipped one — larger than the effect they bound — so "regenerate to confirm" is still unvalidated as
   a tier, and the *true* fit bias against a well-fit table is unknown in both size and sign.
-- **Re-measuring the two burn floors with the profile attached.** Only the slivers case has been done
-  correctly end to end. Until burn is redone, "floor tracks CRN distance" rests on two profile-less
-  points and one corrected one, and should not be used to predict a floor.
+- ~~Re-measuring the two burn floors with the profile attached.~~ **DONE, both rows** (see above).
+  Both effects survived the correction unchanged (burn carries little of its identity in its
+  profile, unlike slivers); both biases came out consistent with zero, so the expected-sign reading
+  still rests on slivers alone.
 - Whether the corrected floor is *deck*-sized or *edit*-sized — one deck, one edit is not a trend.
 - Larger edits (3+ cards), whose earlier measurements were all profile-less.
 - ~~A floor for an introduced card.~~ **Closed by the pool table.** `--floor` used to refuse an
