@@ -37,6 +37,8 @@ def load_roles():
             roles["magnet"].add(n)
         if p.get("solo_target_trick"):
             roles["trick"].add(n)
+            if p.get("creates_treasures", 0) > 0:
+                roles.setdefault("treasure_trick", set()).add(n)
         if c.get("template") == "mana_dork":
             roles["dork"].add(n)
         if "creature" in t:
@@ -135,6 +137,19 @@ def mine_references(ref_dir, roles):
                     used = any(t in roles["magnet"] for _, t in ct)
                     pats["magnet_target_offered"].note(used, ref, di,
                                                        f"T{turn} chose: {chosen.get('summary')}")
+
+            if not magnet_bf:
+                # Gold-Rush-class = a trick that creates Treasures (role: trick with an
+                # untargeted "bank" variant offered). Was a magnetless cast OFFERED, and did
+                # the teacher take it?
+                gr_plans = [p for p in plans
+                            if any(t for t, _ in plan_trick_targets(p, roles)
+                                   if t in roles.get("treasure_trick", set()))]
+                if gr_plans:
+                    took = any(t in roles.get("treasure_trick", set())
+                               for t, _ in ct)
+                    pats["gr_bank"].note(not took, ref, di,
+                                         f"T{turn} chose: {chosen.get('summary')}")
 
             if turn == 1:
                 dork_plan = any(any(a.get("card") in roles["dork"] for a in p.get("actions", []))

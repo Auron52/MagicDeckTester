@@ -6578,12 +6578,30 @@ bool MirrorwingProvider::TrickCastSensible(const GameState& s, int me,
     // swarm -- a projection off eligible attackers alone pruned that winning finisher, and no
     // budget recovers a hard prune. Project the optimistic ceiling from board + hand together;
     // overshoot only KEEPS a candidate the search then judges on its merits.
-    const int base = (copy_trick_in_hand || haste_in_hand) ? total_power : atk_power;
-    if (base > 0)
+    // Two attack shapes bound the ceiling, and every pump (Treasure / Fists / the candidate's
+    // own payload) lands on whichever shape is taken:
+    //   SWARM -- every eligible body (all bodies when a haste/copy trick in hand frees the sick
+    //   ones), doubled by a held Twinflame's hasty tokens;
+    //   ALONE -- the best single attacker plus the FULL Exalted count (gi87's real win: three
+    //   0/1 Hierarchs turn Mystic's lone swing into 4; projecting only summed printed power
+    //   scored that lethal at 6 of 8 and blocked the winning Gold Rush AT the lethal state).
+    const bool tricks_free_sick = copy_trick_in_hand || haste_in_hand;
+    const bool has_attacker = atk_power > 0 || (tricks_free_sick && total_power > 0)
+                           || (CountExalted(s.battlefield, me) > 0 && creatures_bf > 0);
+    if (has_attacker)
     {
         const int drawn = s.players[me].cards_drawn_this_turn;
-        int proj = base;
-        if (copy_trick_in_hand) { proj *= 2; }                       // hasty copies of the swarm
+        int swarm = tricks_free_sick ? total_power : atk_power;
+        if (copy_trick_in_hand) { swarm *= 2; }                      // hasty copies of the swarm
+        int best_single = 0;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me || !p.card.IsCreature()) { continue; }
+            if (tricks_free_sick || CanAttackFull(p, s.battlefield, me))
+            { best_single = std::max(best_single, p.EffectivePower()); }
+        }
+        const int alone = best_single + CountExalted(s.battlefield, me);
+        int proj = std::max(swarm, alone);
         proj += 2 * (treasures + def.params.creates_treasures);      // Treasure pump on a target
         if (def.params.pump_per_cards_drawn_power > 0)               // the candidate's own pump
         { proj += def.params.pump_per_cards_drawn_power * (drawn + def.params.cast_draw + 1); }
@@ -6599,6 +6617,16 @@ bool MirrorwingProvider::TrickCastSensible(const GameState& s, int me,
     if (gas_mv_sum > pot) { return true; }   // (c) mana-poor relative to TOTAL gas in hand
     // (d) redundancy: the candidate itself is in hand, so >=2 means multiple copies held.
     if (gr_in_hand >= 2 && creatures_bf >= 2) { return true; }
+    // (e) combat-pump chip (gi87: old T6 win -> gated T9). The gi87 denial profile was flooded
+    // endgame states -- pot 8-11, hand gas 1-2, a dork board chipping for 1-3 -- where the
+    // ungated search casts GR as a 2-mana COMBAT TRICK: the Treasure pump lands on the attacker
+    // the same turn (tripling a 1-power chip), and that faster chip is what builds the lethal
+    // window the (b) finisher needs. "Never a this-turn play" is true of the Treasure-as-mana,
+    // FALSE of the pump. A pilot pumps the attack whenever the mana would otherwise idle: an
+    // attack under way, and pot spare beyond the hand's whole gas plus GR itself.
+    if ((atk_power > 0 || (creatures_bf > 0 && CountExalted(s.battlefield, me) > 0))
+        && pot >= gas_mv_sum + 2)
+    { return true; }
 
     return false;   // magnetless bank with no use -- not a line
 }
