@@ -957,7 +957,11 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
         fmeta = (ftags, route, per_arm, base_key, R, cell_name)
     json.dump({"arms": spec.arms, "games": spec.games, "depth": spec.depth,
                "budget_ms": spec.budget, "max_turns": spec.maxturn, "use_table": use_table,
+               # What actually decides play is the BINARY; the commit beside it is
+               # metadata (two commits touching only this driver produce identical games,
+               # and --confirm refused a comparison across exactly that pair).
                "engine_commit": head_commit(),
+               "engine": stamp(os.path.join(ROOT, "build/Release/mtg")),
                "profile": stamp(profile), "table": stamp(table_src or (tpath if use_table else None)),
                "value_profile": stamp(spec.value_profile),
                "seed": spec.seed if seed is None else seed},
@@ -1515,7 +1519,13 @@ def confirm(spec, tag, dry_run):
     fps = [os.path.join(spec.out, f"{k}.fingerprint.json") for k in ("screen", "confirm")]
     if all(os.path.exists(f) for f in fps):
         fa, fb = (json.load(open(f)) for f in fps)
-        diff = sorted(k for k in set(fa) | set(fb) if k != "seed" and fa.get(k) != fb.get(k))
+        # The git commit is METADATA, not the fingerprint: two commits touching only this
+        # driver or the docs produce identical play, and refusing across them makes
+        # --confirm unusable during development (it fired on exactly that). What decides
+        # play is the BINARY, which the fingerprint stamps separately.
+        informational = {"seed", "engine_commit"}
+        diff = sorted(k for k in set(fa) | set(fb)
+                      if k not in informational and fa.get(k) != fb.get(k))
         def show(k):
             if k != "arms":
                 return f"    screen  {fa.get(k)}\n    confirm {fb.get(k)}\n"
