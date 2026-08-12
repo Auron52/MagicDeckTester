@@ -3,7 +3,8 @@
 
     python3 scripts/deck_compare.py <spec.json> [--dry-run]     # the screen
     python3 scripts/deck_compare.py <spec.json> --preflight     # only the checks that need a human/AI
-    python3 scripts/deck_compare.py <spec.json> --floor <tag>   # bracket ONE combination's bias floor
+    python3 scripts/deck_compare.py <spec.json> --floor <tag[,tag]>   # bracket the bias floor
+    python3 scripts/deck_compare.py <spec.json> --confirm <tag>       # re-measure on held-out seeds
 
 The question this answers: given a base deck and a set of count changes, which combination is faster?
 Card implementation and heuristic tuning are one-time costs per CARD; this is the per-COMBINATION
@@ -102,7 +103,7 @@ Note what this does and does not bound: at a low R the own table carries its own
 direction for a safety check and the wrong direction for an accuracy claim -- never treat the
 own-table arm as "the accurate one".
 """
-import argparse, gzip, json, math, os, re, statistics as st, subprocess, sys
+import argparse, gzip, hashlib, json, math, os, re, statistics as st, subprocess, sys
 from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -159,26 +160,96 @@ def inherit_numbering(base_nums, base_counts, new_counts):
     return {k: v for k, v in out.items() if v}
 
 
-def table_buckets(profile_path):
-    """The profile's exhaustive keep table's buckets (list of member-name lists), or None if it has
-    no table. Buckets are the unit of BOTH coverage tests below -- the policy is keyed on bucket
-    composition, not on card names."""
-    if not profile_path:
-        return None
-    for p in (profile_path, profile_path + ".gz",
-              re.sub(r"\.profile\.json$", ".keepmodel.exhaustive.profile.json", profile_path),
-              re.sub(r"\.profile\.json$", ".keepmodel.exhaustive.profile.json.gz", profile_path)):
+def table_candidates(path):
+    """Every file that could supply a keep table for `path`, in the ENGINE's resolution order.
+
+    `.gz` FIRST, because that is what `AttachExhaustiveSidecar` (MulliganProfileIO.h:858) does. This
+    list used to be in the opposite order, so the driver could compute coverage from one file while
+    the games ran on another. `decks/slivers_vial/` holds exactly that pair right now: a gitignored
+    R=1 table sitting beside the committed R=60 `.gz`. Their buckets happen to be identical (so no
+    measurement was affected) but their keep decisions are not -- identical bucketing was luck."""
+    if not path:
+        return []
+    stem = re.sub(r"\.profile\.json$", "", path)
+    return [path, path + ".gz",
+            stem + ".keepmodel.exhaustive.profile.json.gz",
+            stem + ".keepmodel.exhaustive.profile.json"]
+
+
+def table_meta(path):
+    """-> (resolved path, `exhaustive_keep` dict) for `path`, or (None, None) if it has no table.
+
+    Refuses when two candidates exist and disagree about the BUCKETING: that is a silent
+    apparatus swap, and the driver's coverage answer would be about a table the engine will not
+    load."""
+    found = []
+    for p in table_candidates(path):
         if not os.path.exists(p):
             continue
         op = gzip.open if p.endswith(".gz") else open
         try:
-            j = json.load(op(p, "rt"))
+            ek = (json.load(op(p, "rt")).get("exhaustive_keep") or {})
         except Exception:
             continue
-        ek = j.get("exhaustive_keep") or {}
         if ek.get("buckets"):
-            return ek["buckets"]
-    return None
+            found.append((p, ek))
+    if not found:
+        return None, None
+    win, rest = found[0], found[1:]
+    for p, ek in rest:
+        if ek["buckets"] != win[1]["buckets"]:
+            raise SystemExit(
+                f"two keep tables beside {path} disagree about the bucketing -- refusing.\n"
+                f"  the engine would load: {os.path.relpath(win[0], ROOT)} (K={len(win[1]['buckets'])})\n"
+                f"  also present:          {os.path.relpath(p, ROOT)} (K={len(ek['buckets'])})\n"
+                "  Coverage would be computed for one and the games played under the other. Move the\n"
+                "  stale one aside (gitignored keep tables beside a deck have contaminated runs before).")
+    return win
+
+
+def table_buckets(path):
+    """The exhaustive keep table's buckets (list of member-name lists), or None if there is none.
+    Buckets are the unit of BOTH coverage tests below -- the policy is keyed on bucket composition,
+    not on card names."""
+    return (table_meta(path)[1] or {}).get("buckets")
+
+
+def expected_cells(buckets, counts, hand=7):
+    """How many size-`hand` cells `EnumComps` enumerates for `counts` under `buckets`."""
+    n2b = {n: i for i, b in enumerate(buckets) for n in b}
+    cap = [min(sum(c for n, c in counts.items() if n2b.get(n) == i), hand) for i in range(len(buckets))]
+    memo = {}
+
+    def rec(i, rem):
+        if i == len(cap):
+            return 1 if rem == 0 else 0
+        if (i, rem) not in memo:
+            memo[(i, rem)] = sum(rec(i + 1, rem - x) for x in range(0, min(cap[i], rem) + 1))
+        return memo[(i, rem)]
+
+    return rec(0, hand)
+
+
+def verify_table_for_deck(ek, counts, label, path):
+    """The table's ENTRY COUNT is a fingerprint of the decklist it was generated for -- assert it.
+
+    Every coverage answer in this driver rests on an assumption nothing checked: that `counts` are
+    the counts the table was generated for. `fallback_rate` derives its caps from them, so if the
+    decklist has been edited since the table was built, the caps are wrong and the driver reports
+    full coverage for hands that will land as present=false. (The mirror of this mistake -- passing
+    the ARM's counts as the generating counts -- was a real bug in `--floor`.) The sidecar records
+    `commit` and `effective_R` but not the counts, so the check is structural: the number of size-7
+    cells implied by the decklist must equal the number of entries. Verified exact on all 10
+    committed tables, K=10..21, 7,758..431,144 entries."""
+    got, want = len(ek.get("entries") or []), expected_cells(ek["buckets"], counts)
+    if got != want:
+        raise SystemExit(
+            f"{label} was not generated for this decklist -- refusing.\n"
+            f"  {os.path.relpath(path, ROOT)} has {got:,} entries; this decklist implies {want:,}\n"
+            f"  size-7 cells over its {len(ek['buckets'])} buckets.\n"
+            "  Every coverage check here assumes the two match; they do not, so the caps used to test\n"
+            "  composition coverage are the wrong ones. Regenerate the table for the current decklist\n"
+            "  (mulligan-profile.md), or screen the decklist the table was built for.")
 
 
 def table_cards(profile_path):
@@ -242,28 +313,50 @@ def fallback_rate(buckets, base_counts, arm_counts, hand=7):
     return (bad / total if total else 0.0), over
 
 
-def score(path, arms, max_turns):
+def score(path, arms, max_turns, expect=None):
     """Per-arm {game_index: win_turn}. Unwon prints wt=-1 and is scored max_turns+1 -- the repo's
-    primary objective. A regex that only accepts \\d+ silently DROPS those games and biases the mean."""
+    primary objective. A regex that only accepts \\d+ silently DROPS those games and biases the mean.
+
+    `expect` is the per-job game count, and a short job is a REFUSAL. Everything downstream pairs on
+    the intersection of game indices, so a job that died halfway just makes `n` smaller and prints a
+    perfectly ordinary-looking number -- the "a truncated run reads as a result" failure CLAUDE.md
+    exists to prevent. The raw log is left intact for diagnosis."""
     got = {a: {} for a in arms}
     for line in open(path):
         m = re.match(r"\[win\] job=(\S+) gi=(\d+) wt=(-?\d+)", line)
         if m and m.group(1) in got:
             wt = int(m.group(3))
             got[m.group(1)][int(m.group(2))] = max_turns + 1 if wt < 0 else wt
+    short = {a: len(g) for a, g in got.items() if expect is not None and len(g) != expect}
+    if short:
+        raise SystemExit(
+            "the batch did not finish every game -- refusing to report a number.\n"
+            + "".join(f"  {a:24s} {n:,} of {expect:,}\n" for a, n in sorted(short.items()))
+            + f"  The log is intact: {os.path.relpath(path, ROOT)}")
     return got
 
 
 def run_batch(jobs, outdir, name, threads, env=None):
-    """One pooled `mtg --batch` over every job. -> path of the stderr log the wins were dumped to."""
+    """One pooled `mtg --batch` over every job. -> path of the stderr log the wins were dumped to.
+
+    The batch's own progress lines are TEED to stdout instead of being left in the log. `[batch]
+    heartbeat: N/M workers busy` is the first-ten-minutes check CLAUDE.md mandates and `SLOW-GAME` is
+    how a pathological game announces itself -- and both were landing in a file that also carries one
+    `[win]` line per game, so on the last floor run the single heartbeat was line 80,006 of 80,006.
+    A screen can run for hours; it should not be silent for them."""
     man = os.path.join(outdir, f"{name}.manifest.json")
     json.dump({"jobs": jobs}, open(man, "w"), indent=1)
     err = os.path.join(outdir, f"{name}.err")
     with open(err, "w") as e, open(os.path.join(outdir, f"{name}.out"), "w") as o:
-        rc = subprocess.call([os.path.join(ROOT, "build/Release/mtg"), "--batch", man,
+        p = subprocess.Popen([os.path.join(ROOT, "build/Release/mtg"), "--batch", man,
                               "--threads", str(threads or os.cpu_count())],
-                             stdout=o, stderr=e, cwd=ROOT,
+                             stdout=o, stderr=subprocess.PIPE, text=True, cwd=ROOT,
                              env={**os.environ, "MTG_DUMP_WINS": "1", **(env or {})})
+        for line in p.stderr:
+            e.write(line)
+            if line.startswith("[batch]") or "SLOW-GAME" in line:
+                print("  | " + line.rstrip(), flush=True)
+        rc = p.wait()
     if rc != 0:
         raise SystemExit(f"batch failed rc={rc}; see {err}")
     return err
@@ -340,9 +433,9 @@ class Spec:
         json.dump(nums, open(np_, "w"), indent=0)
         return dp, np_
 
-    def job(self, name, deck, numbering, profile):
+    def job(self, name, deck, numbering, profile, seed=None):
         j = {"name": name, "deck": deck, "deck_numbering": numbering,
-             "games": self.games, "seed": self.seed, "depth": self.depth,
+             "games": self.games, "seed": self.seed if seed is None else seed, "depth": self.depth,
              "budget_ms": self.budget, "max_turns": self.maxturn, "ignore_play_profile": True}
         if profile:
             j["profile"] = os.path.relpath(profile, ROOT)
@@ -511,7 +604,7 @@ def union_counts(spec):
             for n in {c for a in spec.arms.values() for c in a}}
 
 
-def pool_table(spec, why):
+def pool_table(spec, why, dry=False):
     """Generate the pool's own exhaustive keep table, once, for the union deck. -> table path.
 
     A screening apparatus, NOT a shippable one. It is generated at `pool_R` (default 10), and an R=10
@@ -529,6 +622,10 @@ def pool_table(spec, why):
     want = json.dumps({"union": counts, "R": R}, sort_keys=True)
     if os.path.exists(out) and os.path.exists(fp) and open(fp).read() == want:
         print(f"  keep table     reusing the pool table: {os.path.relpath(out, ROOT)}")
+        return out
+    if dry:
+        print(f"  keep table     WOULD generate a POOL table (R={R}) over the "
+              f"{sum(counts.values())}-card union -> {os.path.relpath(out, ROOT)}")
         return out
     for stale in (out, out.replace(".profile.json", ".raw.json"),
                   os.path.join(d, spec.name + ".keepmodel.gencache.json")):
@@ -595,11 +692,18 @@ def verify_coverage(buckets, gen_counts, spec, label):
                   "  bottoming, on this arm alone. Report this as a bug in the pool-table route.")
 
 
-def screen(spec, dry_run):
-    """Every combination vs base, one shared apparatus, one pooled batch."""
+def screen(spec, dry_run, only=None, seed=None, label="screen"):
+    """Every combination vs base, one shared apparatus, one pooled batch.
+
+    `only` restricts which arms RUN without restricting which arms the apparatus is built from: a
+    held-out confirmation has to reuse the multi-arm screen's exact apparatus, or a change in the
+    number would conflate selection bias with an apparatus change."""
     os.makedirs(spec.out, exist_ok=True)
     pf = gate(spec)
-    bkts = table_buckets(spec.profile)
+    tpath, ek = table_meta(spec.profile)
+    if ek is not None:
+        verify_table_for_deck(ek, spec.counts, "the shipped keep table", tpath)
+    bkts = None if ek is None else ek["buckets"]
     tbl = None if bkts is None else {n for b in bkts for n in b}
     all_cards = {c for a in spec.arms.values() for c in a}
     uncovered = sorted(all_cards - tbl) if tbl is not None else []
@@ -644,12 +748,26 @@ def screen(spec, dry_run):
         why = (f"the shipped table does not bucket {', '.join(uncovered)}" if uncovered else
                f"{pct(worst)} of hands would hit a composition it never enumerated "
                f"(limit {max_fb*100:.2f}%)")
-        table_src = pool_table(spec, why)
-        bkts, gen_counts = table_buckets(table_src), union_counts(spec)
-        verify_coverage(bkts, gen_counts, spec, "the pool table")
-        verify_bottoming(table_src, "the pool table")
-        print("                 verified: every arm fully covered (no heuristic keep, no lookahead"
-              " bottoming)")
+        table_src = pool_table(spec, why, dry=dry_run)
+        _, pool_ek = table_meta(table_src)
+        gen_counts = union_counts(spec)
+        if pool_ek is not None:
+            bkts = pool_ek["buckets"]
+            verify_coverage(bkts, gen_counts, spec, "the pool table")
+            verify_bottoming(table_src, "the pool table")
+            verify_table_for_deck(pool_ek, gen_counts, "the pool table", table_src)
+            print(f"                 {describe_table(table_src, pool_ek)}")
+            print("                 verified: every arm fully covered (no heuristic keep, no lookahead"
+                  " bottoming)")
+        elif not dry_run:
+            raise SystemExit(f"the pool table was not produced: {table_src}")
+        # The union spans EVERY arm of this spec, so the apparatus is a property of the whole spec
+        # rather than of any one comparison. Worth saying out loud: adding or removing a combination
+        # regenerates it (the fingerprint is the union + R), which silently changes the apparatus the
+        # other arms were measured under -- so numbers do not carry across spec edits.
+        print(f"                 NOTE the union spans all {len(spec.arms)} arms of this spec; adding or"
+              " removing one\n                 rebuilds it, so these numbers do not carry across spec"
+              " edits")
         use_table = True
     elif uncovered:
         print(f"  keep table     DROPPED from every arm -- not bucketed: {', '.join(uncovered)}")
@@ -663,6 +781,7 @@ def screen(spec, dry_run):
                 print(f"                   {t:20s} {pct(r):>9s}  " + "; ".join(over))
     else:
         print("  keep table     shared, on every arm (all cards covered)")
+        print(f"                 {describe_table(tpath, ek)}")
         if worst > 0:
             print(f"                 composition fall-through {pct(worst)} worst-arm "
                   f"(<= {max_fb*100:.2f}% limit, ~{worst*0.063:.5f}t of one-sided bias)")
@@ -688,13 +807,34 @@ def screen(spec, dry_run):
     if use_table and (table_src or profile is not spec.profile):
         profile = apparatus_dir(spec.out, "pool", spec.name, profile, table_src or shipped_table(spec.profile))
 
+    # What the two blocks of a --confirm must agree on. Comparing a screen against a held-out block
+    # is only meaningful if the APPARATUS was identical: same arms (the pool table is built from all
+    # of them), same profile CONTENT, same table bytes, same play settings. Editing the spec between
+    # the two runs would otherwise show up as "shrinkage" -- selection bias and an apparatus change
+    # are indistinguishable in the number, so the driver records enough to tell them apart.
+    def stamp(path):
+        if not path or not os.path.exists(path):
+            return None
+        st_ = os.stat(path)
+        return {"path": os.path.relpath(path, ROOT), "size": st_.st_size,
+                "sha1": hashlib.sha1(open(path, "rb").read()).hexdigest()[:12]
+                        if st_.st_size < 4 << 20 else None}
+
+    run_arms = [t for t in spec.arms if only is None or t in only]
     jobs = []
-    for tag in spec.arms:
+    for tag in run_arms:
         dp, np_ = spec.write_arm(tag, os.path.join(spec.out, tag))
-        jobs.append(spec.job(tag, dp, np_, profile))
-    print(f"\n{len(jobs)} arms x {spec.games:,} games -> ONE pooled batch")
+        jobs.append(spec.job(tag, dp, np_, profile, seed=seed))
+    json.dump({"arms": spec.arms, "games": spec.games, "depth": spec.depth,
+               "budget_ms": spec.budget, "max_turns": spec.maxturn, "use_table": use_table,
+               "profile": stamp(profile), "table": stamp(table_src or (tpath if use_table else None)),
+               "value_profile": stamp(spec.value_profile),
+               "seed": spec.seed if seed is None else seed},
+              open(os.path.join(spec.out, f"{label}.fingerprint.json"), "w"), indent=1)
+    print(f"\n{len(jobs)} arms x {spec.games:,} games -> ONE pooled batch"
+          + (f"   (seed {seed}, held out from the screen's {spec.seed})" if seed is not None else ""))
     if dry_run:
-        json.dump({"jobs": jobs}, open(os.path.join(spec.out, "screen.manifest.json"), "w"), indent=1)
+        json.dump({"jobs": jobs}, open(os.path.join(spec.out, f"{label}.manifest.json"), "w"), indent=1)
         return 0
 
     # Drop the TABLE without dropping the PROFILE. Passing profile=None would do both -- the arm
@@ -702,21 +842,45 @@ def screen(spec, dry_run):
     # to DefaultProfile() in silence. MTG_EXHAUSTIVE_PROFILE=none suppresses exactly the sidecar
     # (AttachExhaustiveSidecar), process-globally, which is what "symmetric" means here.
     env = {} if use_table else {"MTG_EXHAUSTIVE_PROFILE": "none"}
-    got = score(run_batch(jobs, spec.out, "screen", spec.threads, env), list(spec.arms), spec.maxturn)
+    got = score(run_batch(jobs, spec.out, label, spec.threads, env), run_arms,
+                spec.maxturn, expect=spec.games)
     common = sorted(set.intersection(*[set(v) for v in got.values()]))
     print(f"\n{len(common):,} paired games, d{spec.depth} budget {spec.budget}ms   (negative delta = FASTER)\n")
     print(f"  {'combination':22s} {'avg':>8s} {'delta':>9s} {'se':>8s} {'t':>7s} {'ident':>7s} {'n@3sig/0.03t':>13s}")
     print(f"  {'base':22s} {st.mean([got['base'][g] for g in common]):8.4f}")
-    for tag in spec.arms:
+    for tag in run_arms:
         if tag == "base":
             continue
         d, se, n, ident = paired(got, "base", tag)
         need = 9 * (se * math.sqrt(n)) ** 2 / 0.03 ** 2
         print(f"  {tag:22s} {st.mean([got[tag][g] for g in common]):8.4f} {d:+9.4f} {se:8.4f} "
               f"{d/se if se else float('nan'):+7.2f} {ident:6.1f}% {need:13,.0f}")
-    print("\nNOTE: this is a SCREEN. Every arm shares one apparatus, so the measured delta carries an")
-    print("apparatus bias floor. `--floor <tag>` MEASURES that floor for one combination instead of")
-    print("assuming it; do that for any result whose margin over the floor is not several-fold.")
+    # Ranking is what a multi-arm spec is FOR, and every arm was measured against base rather than
+    # against each other -- so the interesting comparison (the top two) was the one not printed. The
+    # data is already there and paired on the same game indices; only the subtraction was missing.
+    others = [t for t in run_arms if t != "base"]
+    if len(others) > 1:
+        rank = sorted(others, key=lambda t: paired(got, "base", t)[0])
+        print(f"\n  ranked, and each pair compared directly (negative = the ROW is faster):\n")
+        print("  " + " " * 22 + "".join(f"{t:>12.12s}" for t in rank))
+        for a in rank:
+            row = "".join(f"{'--':>12s}" if a == b else f"{paired(got, b, a)[0]:+12.4f}" for b in rank)
+            print(f"  {a:22s}{row}")
+        top, second = rank[0], rank[1]
+        d, se, _, _ = paired(got, second, top)
+        print(f"\n  best two: {top} vs {second} = {d:+.4f} +-{se:.4f} "
+              f"(t = {d/se if se else float('nan'):+.2f})")
+        # Selecting the max over N arms on ONE seed block is optimistic even when every individual
+        # delta is honest -- the winner is the arm whose noise pointed the right way. `--confirm`
+        # re-runs it on disjoint seeds, which is the same train/held-out discipline
+        # .claude/skills/heuristic-optimization.md applies to a swept heuristic.
+        print(f"  the winner of a {len(others)}-combination screen is selection-biased: confirm it on"
+              f" disjoint"
+              f" seeds with\n    python3 scripts/deck_compare.py <spec> --confirm {top}")
+    if label == "screen":
+        print("\nNOTE: this is a SCREEN. Every arm shares one apparatus, so the measured delta carries an")
+        print("apparatus bias floor. `--floor <tag>` MEASURES that floor for one combination instead of")
+        print("assuming it; do that for any result whose margin over the floor is not several-fold.")
     return 0
 
 
@@ -750,7 +914,7 @@ def apparatus_dir(out, name, stem, profile_src, table_src):
     return prof
 
 
-def gen_table(spec, tag, deck_path, R):
+def gen_table(spec, tag, deck_path, R, dry=False):
     """Generate a throwaway keep table for one combination, next to its decklist.
 
     The deck's play profile and value sidecar are copied in FIRST, because `RunExhaustiveKeepMode`
@@ -771,6 +935,12 @@ def gen_table(spec, tag, deck_path, R):
     if os.path.exists(out) and os.path.exists(fp) and open(fp).read() == want:
         print(f"  {tag}: reusing {os.path.relpath(out, ROOT)}")
         return out
+    if dry:
+        # --dry-run says "build decks + manifest, run nothing", and generating a keep table is very
+        # much running something (10-40 min). It also DELETES the stale table first, so a dry run that
+        # was interrupted used to leave the arm with no table at all.
+        print(f"  {tag}: WOULD generate an R={R} keep table -> {os.path.relpath(out, ROOT)}")
+        return out
     for stale in (out, out.replace(".profile.json", ".raw.json"),
                   os.path.join(d, spec.name + ".keepmodel.gencache.json")):
         if os.path.exists(stale):
@@ -790,13 +960,26 @@ def gen_table(spec, tag, deck_path, R):
     return out
 
 
-def floor(spec, tag, dry_run):
-    """2 decks x 2 tables in one pooled batch -> the shared apparatus's actual bias on THIS edit."""
-    if tag not in spec.arms or tag == "base":
-        raise SystemExit(f"--floor wants one of: {', '.join(t for t in spec.arms if t != 'base')}")
+def floor(spec, tags, dry_run):
+    """Bracket one or more combinations' apparatus bias -- ALL of them in ONE pooled batch.
+
+    Per tag the bracket is 4 cells (2 decks x 2 tables), but the cells OVERLAP: `base` under the
+    shared apparatus is the same job for every tag, and so is the base deck's own table whenever the
+    edits drop a card. So T combinations cost 2T+2 cells rather than 4T, in one queue rather than T
+    queues -- which is the difference CLAUDE.md's pooling rule is about: T separate invocations strand
+    cores on each one's load-imbalance tail, and the table generations between them are serial."""
+    tags = [t.strip() for t in (tags.split(",") if isinstance(tags, str) else tags) if t.strip()]
+    bad = [t for t in tags if t not in spec.arms or t == "base"]
+    if bad or not tags:
+        raise SystemExit(f"--floor wants one or more of: "
+                         f"{', '.join(t for t in spec.arms if t != 'base')}"
+                         + (f"  (unknown: {', '.join(bad)})" if bad else ""))
     pf = gate(spec)
     shipped = spec.profile
-    bkts = table_buckets(shipped)
+    ship_path, ship_ek = table_meta(shipped)
+    bkts = None if ship_ek is None else ship_ek["buckets"]
+    if bkts is not None:
+        verify_table_for_deck(ship_ek, spec.counts, "the shipped keep table", ship_path)
     if bkts is None:
         raise SystemExit("no shared keep table -> the apparatus is deck-INDEPENDENT, so there is no\n"
                          "table bias to bracket (measured -0.0003 on a -0.20 effect). Nothing to do.")
@@ -811,27 +994,41 @@ def floor(spec, tag, dry_run):
     if pf["unscored"] and spec.raw.get("pool_profile") is not False:
         print(f"  card scores    absent for {', '.join(pf['unscored'])} -> pooling (as the screen does)")
         play_prof = pool_profile(spec, pf["unscored"])
-    decks = {t: spec.write_arm(t, os.path.join(spec.out, t)) for t in ("base", tag)}
+    decks = {t: spec.write_arm(t, os.path.join(spec.out, t)) for t in ["base"] + tags}
     R = int(spec.raw.get("floor_R", 10))
 
-    # Bracket what the SCREEN actually runs. That used to be "the shipped table, or nothing" -- and
-    # the nothing case refused, which left the edit kind with the biggest apparatus question (an
-    # introduced card) with no bracket at all. Since the screen now falls back to a POOL table rather
-    # than to no table, the shared apparatus always exists and is always bracketable.
+    # Bracket what the SCREEN actually runs -- which means the apparatus is chosen from EVERY arm of
+    # the spec, not just the bracketed ones. That used to be "the shipped table, or nothing", and the
+    # nothing case refused, leaving the edit kind with the biggest apparatus question (an introduced
+    # card) with no bracket at all. Since the screen now falls back to a POOL table rather than to no
+    # table, the shared apparatus always exists and is always bracketable.
     tbl = {n for b in bkts for n in b}
     uncovered = sorted({c for a in spec.arms.values() for c in a} - tbl)
     worst = 0.0 if uncovered else max(
         fallback_rate(bkts, spec.counts, c)[0] for c in spec.arms.values())
+    print(f"floor bracket for {', '.join(repr(t) for t in tags)}")
     if uncovered or worst > spec.raw.get("max_fallback", 0.01):
         why = (f"the shipped table does not bucket {', '.join(uncovered)}" if uncovered
                else f"{pct(worst)} composition fall-through")
-        print(f"floor bracket for '{tag}': the screen's apparatus is a POOL table ({why})\n")
-        shared, shared_gen = pool_table(spec, why), union_counts(spec)
-        verify_coverage(table_buckets(shared), shared_gen, spec, "the pool table")
-        verify_bottoming(shared, "the pool table")
+        print(f"  the screen's apparatus is a POOL table ({why})\n")
+        shared, shared_gen = pool_table(spec, why, dry=dry_run), union_counts(spec)
+        if not dry_run:
+            verify_coverage(table_buckets(shared), shared_gen, spec, "the pool table")
+            verify_bottoming(shared, "the pool table")
     else:
         shared, shared_gen = shipped_table(shipped), spec.counts
-        print(f"floor bracket for '{tag}': generating its own R={R} table, then 4 cells in one batch\n")
+        print(f"  shared table   {describe_table(ship_path, ship_ek)}")
+        # A shipped table is an artifact of the commit it was generated on; the bracket tables are
+        # generated NOW. Every other skill in this repo has a Rule 0 about that (artifacts are
+        # engine-state fingerprints), and the bracket is the one place here that MIXES two engine
+        # states inside one difference-of-differences. It is on top of the R difference, not instead
+        # of it, and it is a caveat rather than a defect -- there is no cheaper reference.
+        head = head_commit()
+        if ship_ek.get("commit") and head and not ship_ek["commit"].startswith(head):
+            print(f"                 NOTE this bracket mixes engine states: the shared arm's table was"
+                  f" built at\n                 {ship_ek['commit']}, the bracket's at {head}. Read the"
+                  " nulls with that in mind.")
+
     # Which table each deck's "own" cell runs under. ONE table across both own-cells keeps that delta
     # internally consistent, and it is the right choice whenever the two arms hold the same CARDS --
     # only the counts differ, so the variant's table buckets everything the base plays. It becomes the
@@ -844,21 +1041,32 @@ def floor(spec, tag, dry_run):
     # fall-through in any cell, and the difference-of-differences decomposes exactly into two
     # WITHIN-deck nulls (bias = [var@own - var@shared] - [base@own - base@shared]) -- so the level
     # difference between two distinct tables cancels rather than leaking into a delta.
-    per_arm = set(spec.arms[tag]) != set(spec.counts)
-    if per_arm:
-        print(f"  (the arms' card sets differ, so each deck is bracketed on ITS OWN R={R} table --"
+    per_arm = {t: set(spec.arms[t]) != set(spec.counts) for t in tags}
+    if any(per_arm.values()):
+        which = ", ".join(t for t in tags if per_arm[t])
+        print(f"  ({which}: the card sets differ, so each deck is bracketed on ITS OWN R={R} table --"
               f"\n   one table for both would leave the base deck's dropped card unbucketed)")
-    var_table = gen_table(spec, tag, decks[tag][0], R)
+    own_tbl = {t: gen_table(spec, t, decks[t][0], R, dry=dry_run) for t in tags}
+    if any(per_arm.values()):
+        own_tbl["base"] = gen_table(spec, "base", decks["base"][0], R, dry=dry_run)
+    for t, tp in own_tbl.items():
+        if not dry_run:
+            verify_bottoming(tp, f"the {t} bracket table")
 
-    own_tbl = {tag: var_table,
-               "base": gen_table(spec, "base", decks["base"][0], R) if per_arm else var_table}
-    own_gen = {tag: spec.arms[tag], "base": spec.counts if per_arm else spec.arms[tag]}
-    for d in ("base", tag):
-        verify_bottoming(own_tbl[d], f"the {d} bracket table")
+    # One apparatus directory per distinct table, and the CELLS are deduped across tags: `base` under
+    # the shared table is one job however many combinations are bracketed.
+    apps = {"ship": apparatus_dir(spec.out, "ship", spec.name, play_prof, shared)}
+    for t, tp in own_tbl.items():
+        apps["own_" + t] = apparatus_dir(spec.out, "own_" + t, spec.name, play_prof, tp)
+    base_key = {t: ("own_base" if per_arm[t] else "own_" + t) for t in tags}
 
-    ship_app = apparatus_dir(spec.out, "ship", spec.name, play_prof, shared)
-    own_app = {d: apparatus_dir(spec.out, "own_" + (d if per_arm else tag), spec.name, play_prof,
-                                own_tbl[d]) for d in ("base", tag)}
+    cells = {("base", "ship"): (shared, shared_gen)}
+    for t in tags:
+        cells[(t, "ship")] = (shared, shared_gen)
+        cells[(t, "own_" + t)] = (own_tbl[t], spec.arms[t])
+        cells[("base", base_key[t])] = (own_tbl["base" if per_arm[t] else t],
+                                        spec.counts if per_arm[t] else spec.arms[t])
+
     # How much of each cell actually GETS a table. Where the bracket runs a deck under a table fit to
     # the other, the coverage cliff is inside the measurement by design -- but it was never quantified
     # per cell. An unbucketed card (a bucket the other deck does not have at all) costs far more than
@@ -867,9 +1075,10 @@ def floor(spec, tag, dry_run):
     # Each table's caps come from the counts it was GENERATED for -- the base deck for the shipped
     # table, the combination for its own. Passing the arm's own counts here would silently report
     # full coverage for exactly the asymmetry the bracket exists to expose.
-    cells = ([(d, "ship", shared, shared_gen) for d in ("base", tag)] +
-             [(d, "own", own_tbl[d], own_gen[d]) for d in ("base", tag)])
-    for d, a, tp, gen in cells:
+    for (d, a), (tp, gen) in sorted(cells.items()):
+        if not os.path.exists(tp):
+            print(f"    {d + ' on ' + a:32s} (table not generated yet -- dry run)")
+            continue
         bk = table_buckets(tp) or []
         names = {n for b in bk for n in b}
         miss = sorted(set(spec.arms[d]) - names)
@@ -877,69 +1086,216 @@ def floor(spec, tag, dry_run):
         note = (f"UNBUCKETED {', '.join(miss)} -> every hand holding one" if miss
                 else (f"{pct(rate)} (composition){'  ' + '; '.join(over) if over else ''}"
                       if rate else "full"))
-        print(f"    {d + ' on ' + a + ' table':28s} {note}")
-    jobs = [spec.job(f"{d}__{a}", decks[d][0], decks[d][1],
-                     ship_app if a == "ship" else own_app[d])
-            for d in ("base", tag) for a in ("ship", "own")]
-    print(f"\n4 cells x {spec.games:,} games -> ONE pooled batch")
+        print(f"    {d + ' on ' + a:32s} {note}")
+    jobs = [spec.job(f"{d}__{a}", decks[d][0], decks[d][1], apps[a]) for d, a in sorted(cells)]
+    print(f"\n{len(jobs)} cells x {spec.games:,} games -> ONE pooled batch"
+          + (f"  ({4*len(tags)} before deduplication)" if len(tags) > 1 else ""))
     if dry_run:
         json.dump({"jobs": jobs}, open(os.path.join(spec.out, "floor.manifest.json"), "w"), indent=1)
         return 0
 
-    got = score(run_batch(jobs, spec.out, "floor", spec.threads), [j["name"] for j in jobs], spec.maxturn)
-    e_ship, se_ship, n, id_ship = paired(got, "base__ship", f"{tag}__ship")
-    e_own,  se_own,  _, id_own  = paired(got, "base__own",  f"{tag}__own")
-    # Difference-of-differences over the SAME game indices -- pair it too, or the two deltas' shared
-    # game-to-game variance is counted twice and the bias looks far noisier than it is.
-    common = sorted(set.intersection(*[set(v) for v in got.values()]))
-    B = [(got[f"{tag}__own"][g] - got["base__own"][g]) -
-         (got[f"{tag}__ship"][g] - got["base__ship"][g]) for g in common]
-    bias, se_b = st.mean(B), st.pstdev(B) / math.sqrt(len(B))
-    fl = abs(bias) + 2 * se_b
+    got = score(run_batch(jobs, spec.out, "floor", spec.threads), [j["name"] for j in jobs],
+                spec.maxturn, expect=spec.games)
+    for tag in tags:
+        cell = {"bs": "base__ship", "vs": f"{tag}__ship",
+                "bo": f"base__{base_key[tag]}", "vo": f"{tag}__own_{tag}"}
+        e_ship, se_ship, n, id_ship = paired(got, cell["bs"], cell["vs"])
+        e_own,  se_own,  _, id_own  = paired(got, cell["bo"], cell["vo"])
+        # Difference-of-differences over the SAME game indices -- pair it too, or the two deltas'
+        # shared game-to-game variance is counted twice and the bias looks far noisier than it is.
+        common = sorted(set.intersection(*[set(got[c]) for c in cell.values()]))
+        B = [(got[cell["vo"]][g] - got[cell["bo"]][g]) -
+             (got[cell["vs"]][g] - got[cell["bs"]][g]) for g in common]
+        bias, se_b = st.mean(B), st.pstdev(B) / math.sqrt(len(B))
+        fl = abs(bias) + 2 * se_b
 
-    print(f"\n{len(common):,} paired games, d{spec.depth} budget {spec.budget}ms\n")
-    print(f"  {'apparatus':28s} {'delta':>9s} {'se':>8s} {'ident':>7s}")
-    shared_lbl = ("shared (pool R=%d) table" % R if shared_gen is not spec.counts
-                  else "shared (shipped) table")
-    print(f"  {shared_lbl:28s} {e_ship:+9.4f} {se_ship:8.4f} {id_ship:6.1f}%")
-    own_lbl = (f"each arm's own R={R} table" if per_arm else f"{tag} own R={R} table")
-    print(f"  {own_lbl:28s} {e_own:+9.4f} {se_own:8.4f} {id_own:6.1f}%")
-    print(f"\n  apparatus bias               {bias:+9.4f} {se_b:8.4f}   (t = {bias/se_b if se_b else float('nan'):+.2f})")
-    if shared_gen is not spec.counts:
-        # "Each table flatters the deck it was fit to" is a shipped-table reading, and it does NOT
-        # carry over to the pool route: the union REFINES every arm's partition (it holds every card
-        # any arm plays), so the pool table is finer than any arm's own, not merely foreign to it. All
-        # four nulls measured on burn came out NEGATIVE -- the pool table played each arm slightly
-        # FASTER than that arm's own table. There is no expected sign here; read the nulls below.
-        print("     (the pool table REFINES every arm's partition, so neither sign is 'expected'"
-              " -- read the per-arm nulls)")
-    else:
-        print(f"     {'(each table flatters the deck it was fit to -- the expected direction)' if bias < 0 else '(the shared table flatters the VARIANT -- unexpected; read the cells before trusting it)'}")
-    print(f"  floor = |bias| + 2se          {fl:9.4f}")
-    print(f"  effect / floor                {abs(e_ship)/fl if fl else float('inf'):9.2f}x")
-    # The two WITHIN-deck nulls the bias is the difference of. Reporting only the variant's (what this
-    # used to do) hides where a bias comes from: a bracket is only worrying when the two nulls DIFFER,
-    # and two large equal nulls are a level difference that cancels. Against a shipped high-R table
-    # expect both to be POSITIVE and large (an R=<floor_R> table plays ~0.032-0.06t weaker, deck-
-    # dependent) -- which is why the bracket OVERSTATES the floor and is never "the accurate arm".
-    print("\n  per-arm nulls, own table vs the shared one (positive = the OWN table plays weaker);"
-          "\n  the bias above is exactly their difference, null(%s) - null(base):" % tag)
-    for d in ("base", tag):
-        c, se_c, _, id_c = paired(got, f"{d}__ship", f"{d}__own")
-        print(f"    {d:24s} {c:+9.5f} {se_c:8.5f} {id_c:6.1f}%")
-    if shared_gen is not spec.counts:
-        print(f"  NOTE the shared arm is itself an R={R} POOL table here, not the shipped R=60 one, so"
-              f"\n  the usual 'the bracket plays ~0.032t weaker' asymmetry does NOT apply -- both arms"
-              f"\n  are low-R, and what is left is the fit difference between union and combination.")
-    if fl and abs(e_ship) / fl < 3:
-        print("\n  VERDICT: the effect does NOT clear its floor by 3x. Treat it as UNRESOLVED, not")
-        print("  refuted: either the edit is genuinely small, or the shared apparatus is doing the")
-        print("  work. Only a high-R regeneration settles it -- at low R the table's own regret is")
-        print("  larger than the bias, so re-running this bracket bigger will not help.")
-    else:
-        print("\n  VERDICT: the effect clears its floor by 3x+ -- the shared apparatus is not producing")
-        print("  it. Note the floor is a screening guard, not a confidence interval on the effect.")
+        print(f"\n=== {tag} ===   {len(common):,} paired games, d{spec.depth} budget {spec.budget}ms\n")
+        print(f"  {'apparatus':28s} {'delta':>9s} {'se':>8s} {'ident':>7s}")
+        shared_lbl = ("shared (pool R=%d) table" % R if shared_gen is not spec.counts
+                      else "shared (shipped) table")
+        print(f"  {shared_lbl:28s} {e_ship:+9.4f} {se_ship:8.4f} {id_ship:6.1f}%")
+        own_lbl = (f"each arm's own R={R} table" if per_arm[tag] else f"{tag} own R={R} table")
+        print(f"  {own_lbl:28s} {e_own:+9.4f} {se_own:8.4f} {id_own:6.1f}%")
+        print(f"\n  apparatus bias               {bias:+9.4f} {se_b:8.4f}   "
+              f"(t = {bias/se_b if se_b else float('nan'):+.2f})")
+        if shared_gen is not spec.counts:
+            # "Each table flatters the deck it was fit to" is a shipped-table reading, and it does NOT
+            # carry over to the pool route: the union REFINES every arm's partition (it holds every
+            # card any arm plays), so the pool table is finer than any arm's own, not merely foreign
+            # to it. All four nulls measured on burn came out NEGATIVE -- the pool table played each
+            # arm slightly FASTER than its own table. No expected sign here; read the nulls below.
+            print("     (the pool table REFINES every arm's partition, so neither sign is 'expected'"
+                  " -- read the per-arm nulls)")
+        else:
+            print(f"     {'(each table flatters the deck it was fit to -- the expected direction)' if bias < 0 else '(the shared table flatters the VARIANT -- unexpected; read the cells before trusting it)'}")
+        print(f"  floor = |bias| + 2se          {fl:9.4f}")
+        print(f"  effect / floor                {abs(e_ship)/fl if fl else float('inf'):9.2f}x")
+        # The two WITHIN-deck nulls the bias is the difference of. Reporting only the variant's (what
+        # this used to do) hides where a bias comes from: a bracket is only worrying when the two
+        # nulls DIFFER, and two large equal nulls are a level difference that cancels. Against a
+        # shipped high-R table expect both POSITIVE and large (an R=<floor_R> table plays ~0.032-0.06t
+        # weaker, deck-dependent) -- which is why the bracket OVERSTATES the floor.
+        print("\n  per-arm nulls, own table vs the shared one (positive = the OWN table plays weaker);"
+              f"\n  the bias above is exactly their difference, null({tag}) - null(base):")
+        for lbl, a, b in (("base", cell["bs"], cell["bo"]), (tag, cell["vs"], cell["vo"])):
+            c, se_c, _, id_c = paired(got, a, b)
+            print(f"    {lbl:24s} {c:+9.5f} {se_c:8.5f} {id_c:6.1f}%")
+        if shared_gen is not spec.counts:
+            print(f"  NOTE the shared arm is itself an R={R} POOL table here, not the shipped R=60 one,"
+                  f" so\n  the usual 'the bracket plays ~0.032t weaker' asymmetry does NOT apply --"
+                  f" both arms\n  are low-R, and what is left is the fit difference between union and"
+                  " combination.")
+        if fl and abs(e_ship) / fl < 3:
+            print("\n  VERDICT: the effect does NOT clear its floor by 3x. Treat it as UNRESOLVED, not")
+            print("  refuted: either the edit is genuinely small, or the shared apparatus is doing the")
+            print("  work. Only a high-R regeneration settles it -- at low R the table's own regret is")
+            print("  larger than the bias, so re-running this bracket bigger will not help.")
+        else:
+            print("\n  VERDICT: the effect clears its floor by 3x+ -- the shared apparatus is not")
+            print("  producing it. The floor is a screening guard, not a confidence interval.")
     return 0
+
+
+
+def confirm(spec, tag, dry_run):
+    """Re-measure ONE combination against base on a DISJOINT block of games, same apparatus.
+
+    A screen reports the max of N noisy deltas and calls it the winner, which is optimistic even when
+    every individual estimate is honest -- the arm that wins is partly the arm whose noise pointed the
+    right way, and the more arms the worse it gets. This is the held-out half of the same train/test
+    discipline `.claude/skills/heuristic-optimization.md` applies to a swept heuristic: pick on one
+    seed block, confirm on another, report both.
+
+    The apparatus is deliberately NOT rebuilt for the two arms that run: `only` restricts the jobs
+    while the pool table and pooled card scores still come from every arm of the spec, so the two
+    numbers differ in their GAMES and nothing else. Rebuilding it would make a shrunken effect
+    ambiguous between selection bias and an apparatus change."""
+    if tag not in spec.arms or tag == "base":
+        raise SystemExit(f"--confirm wants one of: {', '.join(t for t in spec.arms if t != 'base')}")
+    seed = int(spec.raw.get("confirm_seed", spec.seed + 500_000))
+    if seed == spec.seed:
+        raise SystemExit("confirm_seed equals the screen's seed -- that is the same games, not a "
+                         "held-out block")
+    print(f"held-out confirmation of '{tag}': same apparatus, seed {seed} instead of {spec.seed}\n")
+    rc = screen(spec, dry_run, only=["base", tag], seed=seed, label="confirm")
+    if dry_run:
+        return rc
+
+    fps = [os.path.join(spec.out, f"{k}.fingerprint.json") for k in ("screen", "confirm")]
+    if all(os.path.exists(f) for f in fps):
+        fa, fb = (json.load(open(f)) for f in fps)
+        diff = sorted(k for k in set(fa) | set(fb) if k != "seed" and fa.get(k) != fb.get(k))
+        def show(k):
+            if k != "arms":
+                return f"    screen  {fa.get(k)}\n    confirm {fb.get(k)}\n"
+            out = ""
+            for t in sorted(set(fa.get(k) or {}) | set(fb.get(k) or {})):
+                ca, cb = (fa.get(k) or {}).get(t, {}), (fb.get(k) or {}).get(t, {})
+                if ca != cb:
+                    out += f"    {t}: " + ", ".join(
+                        f"{n} {ca.get(n, 0)}->{cb.get(n, 0)}" for n in sorted(set(ca) | set(cb))
+                        if ca.get(n, 0) != cb.get(n, 0)) + "\n"
+            return out
+        if diff:
+            raise SystemExit(
+                "the earlier screen did not run under this apparatus -- refusing to compare.\n"
+                + "".join(f"  {k}:\n" + show(k) for k in diff)
+                + "  A held-out block only tests SELECTION bias if everything except the games is\n"
+                  "  held fixed; otherwise a shrunken effect is ambiguous. Re-run the screen.")
+    prev = os.path.join(spec.out, "screen.err")
+    if not os.path.exists(prev):
+        print("\n  (no earlier screen log beside this spec, so there is nothing to compare against --"
+              "\n   this run stands on its own)")
+        return 0
+    a = score(prev, list(spec.arms), spec.maxturn)
+    b = score(os.path.join(spec.out, "confirm.err"), ["base", tag], spec.maxturn)
+    if not (a.get("base") and a.get(tag)):
+        print("\n  (the earlier screen log does not carry this combination -- nothing to compare)")
+        return 0
+    d0, se0, n0, _ = paired(a, "base", tag)
+    d1, se1, n1, _ = paired(b, "base", tag)
+    print(f"\n  {'block':24s} {'games':>8s} {'delta':>9s} {'se':>8s}")
+    print(f"  {'screen (seed %d)' % spec.seed:24s} {n0:8,} {d0:+9.4f} {se0:8.4f}")
+    print(f"  {'held out (seed %d)' % seed:24s} {n1:8,} {d1:+9.4f} {se1:8.4f}")
+    # Independent blocks, so the difference's se is the root of the sum -- these are NOT paired with
+    # each other (different games), which is exactly the point.
+    gap = d1 - d0
+    se_g = math.sqrt(se0 ** 2 + se1 ** 2)
+    print(f"  {'shrinkage':24s} {'':8s} {gap:+9.4f} {se_g:8.4f}  "
+          f"(t = {gap/se_g if se_g else float('nan'):+.2f})")
+    if abs(gap) > 2 * se_g:
+        print("\n  The held-out block does NOT reproduce the screen's effect. Report the held-out"
+              "\n  number, not the screen's -- the screen's is the one that was selected on.")
+    else:
+        print("\n  The held-out block reproduces the screen's effect within noise. Pool them for the"
+              f"\n  point estimate: {(d0*n0 + d1*n1)/(n0+n1):+.4f} over {n0+n1:,} games.")
+    return 0
+
+
+class DeckLock:
+    """Refuse to run two invocations against one deck's scratch directory at the same time.
+
+    Every arm's decklist and its `numbering.json` are rewritten per run and read by the ENGINE when
+    the job runs, minutes to hours later. Two concurrent runs on one deck therefore interleave: the
+    second run's numbering lands under the first run's in-flight jobs. Across two different decks
+    that already cost a 20-minute generation, and it only failed loudly because burn and slivers have
+    disjoint card names -- two specs over the SAME deck mis-number in silence, which is the worst
+    failure this tool can have. Per-deck namespacing fixed the cross-deck case; this fixes the rest.
+
+    A stale lock from a killed run is taken over rather than honoured (the PID check), so a crash
+    never wedges the directory."""
+
+    def __init__(self, out):
+        self.path = os.path.join(out, ".lock")
+
+    def __enter__(self):
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        if os.path.exists(self.path):
+            try:
+                pid = int(open(self.path).read().split()[0])
+                os.kill(pid, 0)
+            except (ValueError, IndexError, ProcessLookupError, PermissionError):
+                pid = None
+            if pid:
+                raise SystemExit(
+                    f"another deck_compare run holds {os.path.relpath(self.path, ROOT)} (pid {pid}).\n"
+                    "  Both would rewrite this deck's arm decklists and numbering.json while the\n"
+                    "  other's jobs are still reading them -- silently mis-numbering one of the runs.\n"
+                    "  Wait for it, or run the other deck.")
+        open(self.path, "w").write(f"{os.getpid()} {' '.join(sys.argv[1:])}\n")
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if int(open(self.path).read().split()[0]) == os.getpid():
+                os.remove(self.path)
+        except Exception:
+            pass
+
+
+def head_commit():
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"],
+                                       cwd=ROOT, text=True).strip()
+    except Exception:
+        return None
+
+
+def describe_table(path, ek):
+    """One line saying which table this is and what engine state it encodes.
+
+    Every sidecar records `commit` and `effective_R` and the driver surfaced neither, so a screen
+    could not tell an R=60 shipped table from an R=1 leftover, nor notice that the apparatus was
+    generated several hundred commits ago. Within one screen that is symmetric and harmless; a
+    `--floor` MIXES a shipped table with one generated at HEAD, and there it is a real confound."""
+    R, c = ek.get("effective_R"), ek.get("commit")
+    head = head_commit()
+    drift = ""
+    if c and head and not (c.startswith(head) or head.startswith(c.split("+")[0])):
+        drift = f" -- engine is now at {head}"
+    return (f"{os.path.relpath(path, ROOT)}\n                 K={len(ek['buckets'])}, "
+            f"{len(ek.get('entries') or []):,} cells, R={R or '?'}, "
+            f"commit={c or 'unrecorded'}{drift}")
 
 
 def shipped_table(profile_path):
@@ -991,12 +1347,24 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="build decks + manifest, run nothing")
     ap.add_argument("--preflight", action="store_true",
                     help="run only the card/apparatus checks (exit 1 if one needs implementing)")
-    ap.add_argument("--floor", metavar="TAG", help="bracket ONE combination's apparatus bias floor")
+    ap.add_argument("--floor", metavar="TAG[,TAG...]",
+                    help="bracket combinations' apparatus bias floor (comma-separated = one batch)")
+    ap.add_argument("--confirm", metavar="TAG",
+                    help="re-measure ONE combination on held-out seeds (the screen's winner is "
+                         "selection-biased)")
     args = ap.parse_args()
     spec = Spec(args.spec)
     if args.preflight:
         return report_preflight(spec)
-    return floor(spec, args.floor, args.dry_run) if args.floor else screen(spec, args.dry_run)
+    if args.floor and args.confirm:
+        raise SystemExit("--floor and --confirm answer different questions (apparatus bias vs "
+                         "selection bias); run them separately")
+    with DeckLock(spec.out):
+        if args.floor:
+            return floor(spec, args.floor, args.dry_run)
+        if args.confirm:
+            return confirm(spec, args.confirm, args.dry_run)
+        return screen(spec, args.dry_run)
 
 
 if __name__ == "__main__":

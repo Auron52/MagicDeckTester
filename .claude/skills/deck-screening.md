@@ -12,10 +12,18 @@ only through analyze-deck — see **The new-card route** below.
 ## Rule 0 — one command, one apparatus, one pooled batch
 
 ```bash
-python3 scripts/deck_compare.py <spec.json>              # screen every combination vs base
-python3 scripts/deck_compare.py <spec.json> --preflight  # only the checks that need you; runs no games
-python3 scripts/deck_compare.py <spec.json> --floor TAG  # measure ONE combination's bias floor
+python3 scripts/deck_compare.py <spec.json>                 # screen every combination vs base
+python3 scripts/deck_compare.py <spec.json> --preflight     # only the checks that need you; no games
+python3 scripts/deck_compare.py <spec.json> --floor A,B     # bias floor for A and B, ONE batch
+python3 scripts/deck_compare.py <spec.json> --confirm TAG   # re-measure the winner on held-out seeds
 ```
+
+Comma-separate `--floor` tags rather than invoking it per tag: the cells overlap (`base` under the
+shared apparatus is one job however many combinations you bracket), so T tags cost **2T+2 cells in
+one batch** instead of 4T in T batches — and T separate invocations strand cores on each one's tail,
+which is what CLAUDE.md's pooling rule is about. One run at a time per deck is enforced with a lock:
+both would rewrite that deck's arm decklists and `numbering.json` while the other's jobs are still
+reading them.
 
 ```json
 {
@@ -220,6 +228,29 @@ It bites in **three** places. Each is now guarded, and each guard exists because
 
 A gen that finishes suspiciously fast is a symptom, not a win.
 
+## The winner of a multi-arm screen is selection-biased — confirm it
+
+A screen reports the **max of N noisy deltas** and calls it the winner. That is optimistic even when
+every individual estimate is honest: the arm that wins is partly the arm whose noise pointed the
+right way, and it gets worse with more arms. The screen prints a direct pairwise comparison of every
+combination (the top two are usually the interesting pair, and that was the one comparison the tool
+never printed) and then names the confirmation command:
+
+```bash
+python3 scripts/deck_compare.py <spec> --confirm <winner>
+```
+
+That re-runs base vs that one combination on a **disjoint block of games** (`confirm_seed`, default
+`seed + 500000`) under the **same apparatus** — the pool table and pooled card scores are still built
+from every arm of the spec, so the two numbers differ in their games and nothing else. It prints both
+blocks and their difference; if the held-out block does not reproduce the screen's effect, report the
+**held-out** number, because the screen's is the one that was selected on. This is the same
+train/held-out discipline `.claude/skills/heuristic-optimization.md` applies to a swept heuristic.
+
+The driver fingerprints each run's apparatus (arms, profile content, table, play settings) and
+**refuses to compare** two blocks that did not share one — otherwise a spec edited between the runs
+shows up as "shrinkage" and selection bias becomes indistinguishable from an apparatus change.
+
 ## Reading the output — the floor is the whole judgement
 
 The screen prints, per combination: `delta` (negative = faster), `se`, `t`, `% identical`, and the
@@ -284,7 +315,8 @@ Two things to hold onto when reading it:
 |---|---|---|
 | screen (N arms x 20k games, pooled) | **deck-dependent, see below** | per combination set |
 | pool a `card_scores` entry for an introduced card | ~20 s | once per new card |
-| `--floor` bracket (1-2 R=10 tables + 4 x 20k games) | tens of minutes | only for a result near its floor |
+| `--floor A,B` bracket (1 R=10 table per arm + (2T+2) x 20k games, one batch) | tens of minutes, dominated by the table generations | only for results near their floor |
+| `--confirm TAG` on held-out seeds (2 x 20k games, no new table) | one batch | on the winner of a multi-arm screen |
 | a shippable table / value leaf for an adopted combination | hours | once, at adoption |
 
 **Per-game cost varies by two orders of magnitude, so quote the deck AND the apparatus, never
@@ -300,8 +332,12 @@ The `ms=` field on each job's `=== BATCH ===` line is that per-game figure (a *s
 times*, so it inflates under load — compare runs on a quiet box). **Read it off a 300-game probe
 before committing to a long run.**
 
-Per CLAUDE.md, everything goes through ONE pooled `mtg --batch`; check the
-`[batch] heartbeat: N/M workers busy` line in the first ten minutes of any long run.
+Per CLAUDE.md, everything goes through ONE pooled `mtg --batch`. The driver **tees** the batch's
+`[batch] heartbeat: N/M workers busy` and `SLOW-GAME` lines to stdout as they arrive, so the
+first-ten-minutes utilisation check needs no second terminal — they used to land in a log that also
+carries one `[win]` line per game (the last floor run's only heartbeat was line 80,006 of 80,006).
+A job that does not finish every game is a **refusal**, not a smaller `n`: a truncated run must not
+read as a result.
 
 ## When a combination graduates
 
@@ -310,10 +346,38 @@ combination is chosen, it earns its own artifacts through the normal routes —
 `.claude/skills/mulligan-profile.md` then `.claude/skills/value-leaf.md` — and its own regression
 ground truth. The screen's number is a *ranking*, not that deck's measured strength.
 
+## Guards that refuse rather than warn
+
+Each of these exists because the failure it catches is *silent* — the run finishes and prints an
+ordinary-looking number. None of them costs a game.
+
+| guard | what it catches |
+|---|---|
+| entry count vs decklist | the shipped table was generated for a **different decklist** — every coverage answer here assumes they match, and `fallback_rate`'s caps come from the decklist. The count of size-7 cells implied by the decklist must equal the table's entries (exact on all 10 committed tables, K=10..21) |
+| two tables beside one deck | a stale sidecar that **out-ranks** the one you meant. The engine resolves `.gz` before `.json`; `decks/slivers_vial/` holds a gitignored R=1 table beside the committed R=60 `.gz` right now (same buckets, different keeps — that was luck) |
+| per-job completion | a batch that did not finish every game. Pairing on the intersection would just shrink `n` |
+| apparatus fingerprint | a `--confirm` whose screen ran under a different apparatus |
+| per-deck lock | two runs rewriting one deck's arm decklists and `numbering.json` while the other's jobs read them |
+
+The apparatus also reports its own provenance now — `K`, cells, `effective_R` and the `commit` the
+table was generated on (burn's is `52d0a58`, several hundred commits back). Within one screen that is
+symmetric and harmless; a `--floor` **mixes** a shipped table with one generated at HEAD, and the
+output says so, because artifacts are engine-state fingerprints (the Rule 0 every other skill here
+enforces).
+
 ## Open
 
 - A high-R (R≥40) confirmation tier is unvalidated: every floor measured so far uses R=10 tables
   whose own noise exceeds the bias they bound.
+- **The pool apparatus is a property of the whole spec.** The union spans every arm, so adding or
+  removing a combination rebuilds the table and silently changes what the other arms were measured
+  under — numbers do not carry across spec edits. The screen says so; nothing enforces it.
+- A screen and a `--floor` still run the shared cells **twice** (identical games, byte for byte). A
+  `--with-floor` mode would put them in one batch; cross-run reuse was rejected as too easy to get
+  silently wrong, and the dominant cost is table generation either way.
+- `n@3sig/0.03t` sizes a run against a 0.03t effect, but decisions are made against the measured
+  floor (~0.005–0.01) — the column can read as "well powered" when it is not for the actual
+  threshold.
 - Reweighting an existing table to a new combination is **zero rollouts** for count-only edits
   (`BuildPolicyFromTables` takes `count` separately from the rollout values, and `Comb(n,k)=0` for
   `k>n` drops unreachable cells automatically). Specified, not built.

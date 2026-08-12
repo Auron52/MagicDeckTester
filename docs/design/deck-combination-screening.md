@@ -973,6 +973,67 @@ position-based implementation can do.
 - The reweight path (zero-rollout retarget of an existing table to a new combination) and the
   multi-source cell library: specified above, not built.
 
+## The reporting / batching / accuracy pass (2026-08-12)
+
+An end-to-end audit of the driver after the bracket rework. Everything here is either a guard that
+refuses a silent failure, a number that was already computed and never printed, or a batch that was
+being split when it did not need to be.
+
+**Accuracy — three assumptions that nothing checked.**
+
+- **The table's entry count is a fingerprint of the decklist it was generated for.** Every coverage
+  answer rests on `spec.counts` being the *generating* counts (`fallback_rate` derives its caps from
+  them), and nothing verified that. The sidecar records `commit`, `effective_R`, `buckets` and
+  `max_mull` but not the counts — so the check is structural: the number of size-7 cells implied by
+  the decklist must equal `len(entries)`. Exact on all 10 committed tables (K=10..21, 7,758..431,144
+  entries), and it fires on a ±1-card edit (10,945 vs 10,990). This is the same mistake as the
+  `--floor` coverage bug one level up: there, the *arm's* counts were passed as the generating counts.
+- **The driver resolved keep tables in the OPPOSITE order to the engine.** `AttachExhaustiveSidecar`
+  tries `.gz` first; `table_buckets()` tried the plain `.json` first. `decks/slivers_vial/` holds
+  exactly that pair today — a gitignored **R=1** table beside the committed **R=60** `.gz`. Their
+  buckets are identical, so no past measurement was affected, but their keep decisions are not:
+  coverage was being computed from one file while the games ran on another. Now engine-order, and two
+  candidates that disagree about the bucketing are a refusal.
+- **A job that did not finish every game just made `n` smaller.** Everything pairs on the
+  intersection of game indices, so a truncated batch printed an ordinary-looking number — the failure
+  CLAUDE.md's no-timeout rule exists to prevent, arriving by another route. Now a refusal, with the
+  log left intact.
+
+**Accuracy — selection bias, which no guard can fix.** A screen reports the max of N deltas and calls
+it the winner; that is optimistic even when every estimate is honest. `--confirm TAG` re-runs base vs
+that combination on a disjoint block of games (`confirm_seed`, default `seed + 500000`) under the
+**same** apparatus — `only` restricts which arms run, not which arms the apparatus is built from,
+because rebuilding it would make a shrunken effect ambiguous between selection bias and an apparatus
+change. Each run stamps a fingerprint (arms, profile content, table, play settings) and the comparison
+refuses across a mismatch. Same train/held-out shape as `heuristic-optimization.md`.
+
+**Batching.** `--floor` took one tag and ran one batch per tag, which is the loop CLAUDE.md forbids —
+T tails, and the table generations between them serial. It now takes a comma-separated list and pools
+every cell into one batch, deduped: `base` under the shared apparatus is one job however many
+combinations are bracketed, and so is the base deck's own table whenever the edits drop a card. T tags
+cost **2T+2 cells rather than 4T**. What is *not* done: a screen and a floor still re-run the shared
+cells (byte-identical games). Reusing the screen's log across invocations was rejected — too easy to
+mix two runs' games silently — but a `--with-floor` mode putting both in one batch would be honest.
+
+**Batching, correctness half.** Two runs on one deck at once interleave: arm decklists and
+`numbering.json` are rewritten per run and read by the engine when the *job* runs, minutes later.
+Per-deck namespacing fixed the cross-deck case; a per-deck lock (PID-checked, so a killed run never
+wedges it) fixes two specs over the same deck, which would have mis-numbered in silence.
+
+**Reporting.** The batch's `[batch] heartbeat` and `SLOW-GAME` lines are teed to stdout as they
+arrive — CLAUDE.md mandates the first-ten-minutes utilisation check, and those lines were landing in
+a log that also carries one `[win]` line per game (the last floor run's only heartbeat was line
+80,006 of 80,006). The apparatus block now prints the table's path, K, cells, `effective_R` and
+`commit`, with a note when the engine has moved on; `--floor` says explicitly that it mixes engine
+states. The screen prints a pairwise matrix of every combination against every other — the top two
+are usually the interesting pair, and it was the one comparison the tool never printed. And `--floor`
+reports both **per-arm nulls** rather than only the variant's, since the bias is exactly their
+difference and a bracket only worries when they differ.
+
+**One more that is not a driver bug:** `--dry-run` used to *generate keep tables* (10–40 min) before
+deciding to run nothing, and its stale-table cleanup meant an interrupted dry run left the arm with no
+table at all. It now reports what it would generate.
+
 ## Guards now in the tree (so the two-layer bug cannot recur)
 
 - `mtg-analyze` **refuses** a keep-gen when `<stem>.profile.json` is not beside the decklist
