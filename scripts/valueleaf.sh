@@ -172,15 +172,56 @@ mark()   { date '+%Y-%m-%dT%H:%M:%S' > "$DONE/$1"; }
 deck_file() { ls "$1/$2".cod "$1/$2".txt 2>/dev/null | head -1; }
 
 src_fingerprint() { git rev-parse HEAD:src 2>/dev/null; }
+
+# PLAY fingerprint: the smoke suite's per-case play digests, folded to one hash.
+#
+# What the freeze is actually protecting is that every cell of the table was measured by the same
+# PLAY. `git rev-parse HEAD:src` is only a proxy for that, and it over-triggers badly: a comment, a
+# docs block under src/, a card-data edit, or an opt-in flag that is byte-identical all move the tree
+# hash and invalidate a table they cannot possibly have affected. That is not hypothetical -- it cost
+# this pipeline a run on 2026-08-12, twice, for changes the suite proved play-neutral (33/33 configs,
+# 0 games changed). If play does not change there is nothing to worry about (user, 2026-08-12).
+#
+# The digests in test/results/smoke.env ARE the repo's play-identity instrument: each is a fold of
+# per-game decision-stream hashes over 33 configs spanning every suite deck at d0/d3/d5, and the
+# regression harness already treats a digest move as a play change even when the average is identical.
+# Folding them gives a single value that is stable across machines and thread counts (every run is
+# deterministic and thread-invariant) and changes iff play changed within that coverage.
+#
+# COVERAGE IS THE LIMIT, and it is a sample, not a proof: a play change confined to a deck or depth
+# the smoke matrix does not exercise would not show up here. So this is only ever used to ACCEPT a
+# src move that the suite says is play-neutral -- never to reject one, and never to skip the src check
+# when the fingerprint is missing. Failing that way round means the worst case is the old behaviour.
+play_fingerprint() {
+    bash test/regression.sh --smoke >/dev/null 2>&1 || true   # digests are recorded even on FAIL
+    [ -f test/results/smoke.env ] || return 1
+    # <key>=<avg>/<digest> -- keep the digest half only, so a pure timing/avg difference cannot move
+    # this and a digest difference always does. Sorted so the fold is order-independent.
+    sed -n 's/.*=\([0-9.]*\)\/\([0-9a-f]*\)$/\2/p' test/results/smoke.env | sort | sha256sum | cut -d' ' -f1
+}
+
 check_freeze() {
-    local now frozen
+    local now frozen play_now play_frozen
     now=$(src_fingerprint); frozen=$(cat "$VLQ/freeze.src" 2>/dev/null || echo "")
-    if [ -n "$frozen" ] && [ "$now" != "$frozen" ]; then
-        log "FREEZE VIOLATION: src/ moved ($frozen -> $now). Measurements after this would describe a"
-        log "  different engine than those before it. Stopping."
+    if [ -z "$frozen" ] || [ "$now" = "$frozen" ]; then return 0; fi
+
+    # src moved -- ask whether PLAY moved before throwing the run away.
+    play_frozen=$(cat "$VLQ/freeze.play" 2>/dev/null || echo "")
+    if [ -n "$play_frozen" ]; then
+        log "src/ moved ($(echo "$frozen" | cut -c1-12) -> $(echo "$now" | cut -c1-12)); checking whether PLAY moved..."
+        play_now=$(play_fingerprint || echo "")
+        if [ -n "$play_now" ] && [ "$play_now" = "$play_frozen" ]; then
+            log "  PLAY UNCHANGED (smoke digests fold to $(echo "$play_now" | cut -c1-12)) -- continuing and re-stamping the freeze."
+            src_fingerprint > "$VLQ/freeze.src"; git rev-parse --short HEAD > "$VLQ/freeze.commit"
+            return 0
+        fi
+        log "  PLAY CHANGED ($(echo "$play_frozen" | cut -c1-12) -> $(echo "${play_now:-unavailable}" | cut -c1-12)). Measurements after this"
+        log "  would describe a different engine than those before it. Stopping."
         return 1
     fi
-    return 0
+    log "FREEZE VIOLATION: src/ moved ($frozen -> $now), and this run predates the play fingerprint so"
+    log "  it cannot be checked. Measurements after this would describe a different engine. Stopping."
+    return 1
 }
 
 # Scratch deck folder differing from the real one ONLY in its value.json; siblings are symlinked so the
@@ -210,6 +251,16 @@ phase_freeze() {
     log "FROZEN at $(cat "$VLQ/freeze.commit")  src-tree $(cut -c1-12 "$VLQ/freeze.src")"
     bash build.sh >> "$VLQ/build.log" 2>&1 || { log "ABORT: build failed, see $VLQ/build.log"; return 1; }
     log "build OK"
+    # Stamp the PLAY fingerprint alongside the src one, so a later src move can be judged on whether
+    # it changed play rather than on whether it touched a file. Recorded AFTER the build so it
+    # describes the binary the run will actually use. Best-effort: without it check_freeze simply
+    # keeps the old src-only behaviour.
+    if pf=$(play_fingerprint); then
+        printf '%s\n' "$pf" > "$VLQ/freeze.play"
+        log "play fingerprint $(echo "$pf" | cut -c1-12) (smoke digests)"
+    else
+        log "WARN: could not record a play fingerprint; a src move will stop the run as before"
+    fi
     mark 00_freeze
 }
 
@@ -454,8 +505,16 @@ status)
     echo "frozen at  : $(cat "$VLQ/freeze.commit" 2>/dev/null || echo '(not started)')"
     now=$(src_fingerprint); frz=$(cat "$VLQ/freeze.src" 2>/dev/null || echo "")
     if [ -n "$frz" ] && [ "$now" != "$frz" ]; then
-        echo "freeze     : VIOLATED -- src/ moved since this run started. Measurements taken before"
-        echo "             and after describe different engines: restart, do not resume."
+        # src moved. Whether that MATTERS is a play question, and `run` answers it by re-folding the
+        # smoke digests (see check_freeze). status must not run the suite -- it is documented as
+        # touching nothing -- so it reports what is pending rather than pre-judging it.
+        if [ -f "$VLQ/freeze.play" ]; then
+        echo "freeze     : src/ moved -- \`run\` will re-check the PLAY digests and continue if they"
+        echo "             are unchanged (stamped $(cut -c1-12 "$VLQ/freeze.play")), else stop."
+        else
+        echo "freeze     : VIOLATED -- src/ moved since this run started, and this run predates the"
+        echo "             play fingerprint so it cannot be checked: restart, do not resume."
+        fi
     elif [ -n "$frz" ]; then
         echo "freeze     : intact ($(cut -c1-12 "$VLQ/freeze.src"))"
     fi
