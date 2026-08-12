@@ -494,6 +494,39 @@ R=10 table plays ~0.032t weaker than a shipped R=60 one. That is the right trade
 strictly worse on both axes — 0.063t weaker instead of 0.032t, and 22x slower instead of 1x.
 Adoption still goes through `mulligan-profile.md`; a pool table never becomes a deck's sidecar.
 
+#### Measured: the union deck does NOT bias the comparison
+
+The symmetry argument above was structural, so it was tested. slivers, `cut_vial` (4 Aether Vial → 4
+extra Muscle Sliver) — an edit the **shipped** table already covers fully, so all three apparatuses
+are valid and the deltas are directly comparable. 2 decks x 3 tables = 6 cells, one pooled batch,
+20,000 paired games:
+
+| apparatus | delta | se | identical |
+|---|---|---|---|
+| shipped R=60 base table | −0.0332 | ±0.0032 | 84.3% |
+| base deck's own R=10 | −0.0328 | ±0.0035 | 83.4% |
+| **POOL R=10 over the 64-card union** | **−0.0353** | ±0.0035 | 83.6% |
+
+| difference-of-differences (paired) | value | t |
+|---|---|---|
+| **union bias** — pool R=10 vs base R=10, *R controlled* | **−0.0026 ± 0.0033** | −0.77 |
+| total vs shipped — pool R=10 vs R=60 | −0.0021 ± 0.0029 | −0.71 |
+| R cost alone — base R=10 vs R=60 | +0.0004 ± 0.0030 | +0.15 |
+
+**No detectable union effect.** And the *level* cost is exactly the known R=10 cost, not more — the
+pool table plays +0.0330/+0.0309 weaker than shipped on the two arms, against the base R=10 table's
++0.0308/+0.0313. Generating over the union costs what generating at R=10 costs, and nothing extra.
+
+Three limits worth keeping attached to that number:
+
+- **One deck, one edit, one R** — not a trend, exactly as with the floor measurements above.
+- At R=10 the table's own sampling noise (~0.01t) is the size of what is being bounded, so this reads
+  "no effect above R=10 noise", not "zero". The 2se bound is roughly ±0.007.
+- **It is the favourable case by construction.** Because the changed bucket already held ≥ 7 copies,
+  the union's composition grid was *identical* to the base's (7,758 cells both), so only the `count`
+  vector and the rollout deck differed. A pool table that adds a genuinely NEW bucket — the case the
+  driver actually reaches for — is **not** covered by this measurement and remains open.
+
 Measured on slivers + {Ziggurat 2→4, Hivepool 1→4}: the union is 65 cards and 17,831 cells against
 the base table's 14,117 (**1.26x**), and discovery reproduced the same 10 buckets with the raised
 counts. Cell counts for the other shapes, which is what sets the price:
@@ -501,10 +534,22 @@ counts. Cell counts for the other shapes, which is what sets the price:
 | pool vs base | K | cells | vs base |
 |---|---|---|---|
 | base slivers | 10 | 14,117 | 1.00x |
+| a count change inside a bucket already ≥ 7 (Vial 4→0, Muscle 4→8) | 10 | 14,117 | **1.00x — the same grid** |
 | a new card that MERGES into an existing bucket | 9 | 8,406 | 0.60x |
 | a new 2-of in its own bucket (replacing a 2-of bucket) | 11 | 14,117 | 1.00x |
 | a raised small bucket (Hivepool 1→4) | 10 | 14,975 | 1.06x |
 | a new 4-of in its own bucket | 11 | 24,235 | 1.72x |
+
+The first row is worth internalising: because `cap[b] = min(count[b], H)`, a bucket already holding ≥ 7
+copies is capped by the *hand size*, so raising it further adds **no cells at all** — the pool table
+has exactly the same composition grid as the base table, and differs only in the `count` vector fed
+to `HandWeights`/`ComputeDopt` and in the deck the rollouts are played on. Cell count is driven by
+small buckets, not by how big the edit looks.
+
+Cost is not proportional to cells, though: the base-deck R=10 table (7,758 cells) took **~28 min**
+while the 65-card union table (10,231 cells) took **14.7 min**. The generator is adaptive, so the
+bill is set by how many cells sit near a keep/mull flip and need refining to the cap, not by the grid
+size. Do not size a gen from the cell count alone.
 
 ### Why regenerate the union instead of topping up the base table
 
@@ -780,10 +825,13 @@ position-based implementation can do.
   points and one corrected one, and should not be used to predict a floor.
 - Whether the corrected floor is *deck*-sized or *edit*-sized — one deck, one edit is not a trend.
 - Larger edits (3+ cards), whose earlier measurements were all profile-less.
-- **A floor for an introduced card.** `--floor` is a table-vs-table bracket, and an introduced card
-  drops the table from both arms — so the one edit kind with the largest apparatus question has no
-  bracket at all. What would substitute is unknown; the pool profile removes the *known* asymmetry,
-  not a measured floor.
+- ~~A floor for an introduced card.~~ **Closed by the pool table.** `--floor` used to refuse an
+  introduced card ("the screen DROPS the table … nothing to bracket"), which left the edit kind with
+  the largest apparatus question un-bracketable. Now that the screen falls back to a pool table
+  rather than to no table, the shared apparatus always exists, so `--floor` brackets *the pool table*
+  against the combination's own — and reports that both arms are then low-R, so the usual "the
+  bracket plays ~0.032t weaker" asymmetry does **not** apply and what remains is the union-vs-
+  combination fit difference.
 - The pool profile's own accuracy: the new card's marginals come from a union deck (60 + the
   introduced copies) at `MTG_ANALYZE_SCALE=2`, while the shipped scores may have been generated at
   scale 1 on the exact 60. Same recipe and same scale of quantity, higher variance; not calibrated.

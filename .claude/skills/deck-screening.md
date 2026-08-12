@@ -135,6 +135,12 @@ keep table     the shipped table does not bucket City of Brass
   than a shipped R=60 table — but *symmetrically* (own/foreign fit among R=10 tables is 0.004t), and
   it replaces something strictly worse on both axes. Adoption still goes through
   `mulligan-profile.md`.
+- **Measured: the union deck does not bias the comparison.** slivers `cut_vial`, 6 cells x 20,000
+  paired games, on an edit the shipped table covers fully so all three apparatuses are valid —
+  **union bias −0.0026 ± 0.0033 (t = −0.77)**, R controlled, and the pool table's play level (+0.033)
+  matches the base deck's own R=10 table (+0.031). Caveat: the changed bucket already held ≥7 copies,
+  so the union's grid was *identical* to the base's — a pool table that adds a genuinely new bucket
+  is not covered by this and remains open.
 - `"pool_table": false` restores the old symmetric-drop behaviour if you want the comparison.
 
 **Not yet built:** topping up the base table instead of regenerating the union. The generator already
@@ -218,7 +224,12 @@ suggested. Expect single-digit margins, and treat anything under 3x as unresolve
 
 `--floor TAG` measures that floor instead of predicting it: it generates a throwaway low-R table for
 that one combination and re-measures the same delta under it, four cells in one pooled batch off the
-same game indices, so the difference-of-differences is fully paired.
+same game indices, so the difference-of-differences is fully paired. It brackets **whatever the
+screen actually runs** — the shipped table when that covers every arm, otherwise the pool table. (It
+used to refuse an introduced card outright, which left the edit kind with the biggest apparatus
+question with no bracket at all.) When the shared arm is itself a pool table, both arms are low-R, so
+the "the bracket plays ~0.032t weaker" asymmetry below does **not** apply and what is left is the
+union-vs-combination fit difference; the output says so.
 
 ```
 bias  = delta(under the combination's own table) − delta(under the shared table)

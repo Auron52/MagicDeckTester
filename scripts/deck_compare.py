@@ -31,11 +31,21 @@ Four things it does that a hand-rolled A/B does not:
    hands unrelated to the edit, which injects divergence into the comparison (measured: sharing
    HALVES the standard error).
 
-3. A COVERAGE PRE-FLIGHT. A hand holding a card the shared table never bucketed does not get a biased
-   answer, it gets NO answer: the policy falls through to the generic heuristic, silently. So if any
-   combination introduces such a card, the table is dropped from EVERY arm -- symmetric and unbiased
-   (measured -0.0003 error on a -0.20 effect) rather than silently lop-sided. Dropping the TABLE never
-   drops the PLAY PROFILE: the arms keep it and the batch runs MTG_EXHAUSTIVE_PROFILE=none.
+3. A COVERAGE PRE-FLIGHT ON BOTH CLIFFS, AND A POOL TABLE RATHER THAN A DROP. A hand the table
+   cannot answer does not get a biased answer, it gets NO answer: `Decide` returns present=false and
+   the caller falls through to the generic heuristic AND to lookahead bottoming, silently. Two ways
+   in, and only the first used to be checked -- an UNBUCKETED CARD (any introduced card), and an
+   UNTABLED COMPOSITION (compositions are enumerated capped at the BASE deck's bucket counts, so
+   RAISING a small bucket makes hands reachable that were never tabled, on that arm alone: 6.32% for
+   a 1-of raised to a 4-of, 0.0004% for a 4-of raised to a 5-of).
+   Either way the driver generates a table for the POOL -- the union of every arm's cards at the
+   highest count any arm plays them -- instead of dropping it. Coverage is then total BY
+   CONSTRUCTION, and verify_coverage() + verify_bottoming() assert it before a game runs. Dropping
+   was never free: ~0.063t of play quality on BOTH arms, ~22x per-game wall, and bottoming regressing
+   to the lookahead (every shipped sidecar has bottoming_enabled). Small overflows below
+   "max_fallback" (1%) just keep the shipped table -- regenerating for 0.0004% costs more than the
+   bias it avoids. Dropping the TABLE would never drop the PLAY PROFILE either: that is
+   MTG_EXHAUSTIVE_PROFILE=none on the batch, not a missing `profile` key.
 
 4. AN INTRODUCED-CARD PRE-FLIGHT -- the part that needs a human or an AI, so it runs FIRST and
    REFUSES rather than measuring something else (`--preflight` runs just this). A card the screen has
@@ -174,6 +184,13 @@ def table_cards(profile_path):
 
 def comb(n, k):
     return math.comb(n, k) if 0 <= k <= n else 0
+
+
+def pct(x):
+    """Fixed 2dp hides exactly the distinction that matters here: raising a 4-of to a 5-of is
+    0.0004% (harmless) and raising a 1-of to a 4-of is 6.32% (not), and both print as "0.00%" or
+    "6.32%" under %.2f -- the first reading as a clean zero next to a warning block."""
+    return f"{x*100:.2f}%" if x >= 0.0001 else f"{x*100:.4f}%"
 
 
 def fallback_rate(buckets, base_counts, arm_counts, hand=7):
@@ -560,7 +577,7 @@ def verify_coverage(buckets, gen_counts, spec, label):
             raise SystemExit(
                 f"{label} does not cover arm '{tag}' -- refusing.\n"
                 + (f"  unbucketed: {', '.join(miss)}\n" if miss else "")
-                + (f"  {rate*100:.2f}% of hands hit an unenumerated composition: {'; '.join(over)}\n"
+                + (f"  {pct(rate)} of hands hit an unenumerated composition: {'; '.join(over)}\n"
                    if rate else "")
                 + "  Every uncovered hand falls silently to the generic heuristic AND to lookahead\n"
                   "  bottoming, on this arm alone. Report this as a bug in the pool-table route.")
@@ -613,7 +630,7 @@ def screen(spec, dry_run):
         print("  keep table     none found -> heuristic mulligan on every arm (symmetric)")
     elif (uncovered or not use_table) and spec.raw.get("pool_table") is not False:
         why = (f"the shipped table does not bucket {', '.join(uncovered)}" if uncovered else
-               f"{worst*100:.2f}% of hands would hit a composition it never enumerated "
+               f"{pct(worst)} of hands would hit a composition it never enumerated "
                f"(limit {max_fb*100:.2f}%)")
         table_src = pool_table(spec, why)
         bkts, gen_counts = table_buckets(table_src), union_counts(spec)
@@ -627,15 +644,15 @@ def screen(spec, dry_run):
         print("                 (\"pool_table\": false -- symmetric, but both arms lose the table AND")
         print("                  its bottoming. The PLAY profile above stays attached.)")
     elif not use_table:
-        print(f"  keep table     DROPPED from every arm -- {worst*100:.2f}% composition fall-through"
+        print(f"  keep table     DROPPED from every arm -- {pct(worst)} composition fall-through"
               f" (limit {max_fb*100:.2f}%), \"pool_table\": false")
         for t, (r, over) in sorted(fb.items(), key=lambda kv: -kv[1][0]):
             if over:
-                print(f"                   {t:20s} {r*100:6.2f}%  " + "; ".join(over))
+                print(f"                   {t:20s} {pct(r):>9s}  " + "; ".join(over))
     else:
         print("  keep table     shared, on every arm (all cards covered)")
         if worst > 0:
-            print(f"                 composition fall-through {worst*100:.3f}% worst-arm "
+            print(f"                 composition fall-through {pct(worst)} worst-arm "
                   f"(<= {max_fb*100:.2f}% limit, ~{worst*0.063:.5f}t of one-sided bias)")
 
     # An introduced card the profile cannot score is the one asymmetry left, and it points the wrong
@@ -753,21 +770,36 @@ def floor(spec, tag, dry_run):
         raise SystemExit(f"--floor wants one of: {', '.join(t for t in spec.arms if t != 'base')}")
     gate(spec)
     shipped = spec.profile
-    tbl = table_cards(shipped)
-    if tbl is None:
+    bkts = table_buckets(shipped)
+    if bkts is None:
         raise SystemExit("no shared keep table -> the apparatus is deck-INDEPENDENT, so there is no\n"
                          "table bias to bracket (measured -0.0003 on a -0.20 effect). Nothing to do.")
-    if sorted({c for a in spec.arms.values() for c in a} - tbl):
-        raise SystemExit("the screen DROPS the table (a card is unbucketed), so both arms already run\n"
-                         "the deck-independent heuristic. Nothing to bracket.")
 
     os.makedirs(OUT, exist_ok=True)
     decks = {t: spec.write_arm(t, os.path.join(OUT, t)) for t in ("base", tag)}
     R = int(spec.raw.get("floor_R", 10))
-    print(f"floor bracket for '{tag}': generating its own R={R} table, then 4 cells in one batch\n")
+
+    # Bracket what the SCREEN actually runs. That used to be "the shipped table, or nothing" -- and
+    # the nothing case refused, which left the edit kind with the biggest apparatus question (an
+    # introduced card) with no bracket at all. Since the screen now falls back to a POOL table rather
+    # than to no table, the shared apparatus always exists and is always bracketable.
+    tbl = {n for b in bkts for n in b}
+    uncovered = sorted({c for a in spec.arms.values() for c in a} - tbl)
+    worst = 0.0 if uncovered else max(
+        fallback_rate(bkts, spec.counts, c)[0] for c in spec.arms.values())
+    if uncovered or worst > spec.raw.get("max_fallback", 0.01):
+        why = (f"the shipped table does not bucket {', '.join(uncovered)}" if uncovered
+               else f"{pct(worst)} composition fall-through")
+        print(f"floor bracket for '{tag}': the screen's apparatus is a POOL table ({why})\n")
+        shared, shared_gen = pool_table(spec, why), union_counts(spec)
+        verify_coverage(table_buckets(shared), shared_gen, spec, "the pool table")
+        verify_bottoming(shared, "the pool table")
+    else:
+        shared, shared_gen = shipped_table(shipped), spec.counts
+        print(f"floor bracket for '{tag}': generating its own R={R} table, then 4 cells in one batch\n")
     var_table = gen_table(spec, tag, decks[tag][0], R)
 
-    apps = {"ship": apparatus_dir("ship", spec.name, shipped, shipped_table(shipped)),
+    apps = {"ship": apparatus_dir("ship", spec.name, shipped, shared),
             "own":  apparatus_dir("own_" + tag, spec.name, shipped, var_table)}
     # How much of each cell actually GETS a table. The bracket deliberately runs each deck under a
     # table fit to the other, so the coverage cliff is inside the measurement by design -- but it was
@@ -777,7 +809,7 @@ def floor(spec, tag, dry_run):
     # Each table's caps come from the counts it was GENERATED for -- the base deck for the shipped
     # table, the combination for its own. Passing the arm's own counts here would silently report
     # full coverage for exactly the asymmetry the bracket exists to expose.
-    for a, tp, gen in (("ship", shipped_table(shipped), spec.counts),
+    for a, tp, gen in (("ship", shared, shared_gen),
                        ("own", var_table, spec.arms[tag])):
         bk = table_buckets(tp) or []
         names = {n for b in bk for n in b}
@@ -785,7 +817,7 @@ def floor(spec, tag, dry_run):
             miss = sorted(set(spec.arms[d]) - names)
             rate, over = fallback_rate(bk, gen, spec.arms[d]) if bk and not miss else (0.0, [])
             note = (f"UNBUCKETED {', '.join(miss)} -> every hand holding one" if miss
-                    else (f"{rate*100:.2f}% (composition){'  ' + '; '.join(over) if over else ''}"
+                    else (f"{pct(rate)} (composition){'  ' + '; '.join(over) if over else ''}"
                           if rate else "full"))
             print(f"    {d + ' on ' + a + ' table':28s} {note}")
     jobs = [spec.job(f"{d}__{a}", decks[d][0], decks[d][1], apps[a])
@@ -808,7 +840,9 @@ def floor(spec, tag, dry_run):
 
     print(f"\n{len(common):,} paired games, d{spec.depth} budget {spec.budget}ms\n")
     print(f"  {'apparatus':28s} {'delta':>9s} {'se':>8s} {'ident':>7s}")
-    print(f"  {'shared (shipped) table':28s} {e_ship:+9.4f} {se_ship:8.4f} {id_ship:6.1f}%")
+    shared_lbl = ("shared (pool R=%d) table" % R if shared_gen is not spec.counts
+                  else "shared (shipped) table")
+    print(f"  {shared_lbl:28s} {e_ship:+9.4f} {se_ship:8.4f} {id_ship:6.1f}%")
     print(f"  {tag+' own R=%d table' % R:28s} {e_own:+9.4f} {se_own:8.4f} {id_own:6.1f}%")
     print(f"\n  apparatus bias               {bias:+9.4f} {se_b:8.4f}   (t = {bias/se_b if se_b else float('nan'):+.2f})")
     print(f"     {'(each table flatters the deck it was fit to -- the expected direction)' if bias < 0 else '(the shared table flatters the VARIANT -- unexpected; read the cells before trusting it)'}")
@@ -819,8 +853,12 @@ def floor(spec, tag, dry_run):
     # size of the whole effect. A level difference cancels out of the difference-of-differences above,
     # but it is why the bracket OVERSTATES the floor and must never be read as "the accurate arm".
     cost, se_c, _, _ = paired(got, f"{tag}__ship", f"{tag}__own")
-    print(f"\n  cost of the R={R} bracket table vs the shipped one: {cost:+.5f} +-{se_c:.5f} "
-          f"(positive = weaker play, expected)")
+    print(f"\n  cost of the R={R} bracket table vs the shared one: {cost:+.5f} +-{se_c:.5f} "
+          f"(positive = weaker play{'' if shared_gen is not spec.counts else ', expected'})")
+    if shared_gen is not spec.counts:
+        print(f"  NOTE the shared arm is itself an R={R} POOL table here, not the shipped R=60 one, so"
+              f"\n  the usual 'the bracket plays ~0.032t weaker' asymmetry does NOT apply -- both arms"
+              f"\n  are low-R, and what is left is the fit difference between union and combination.")
     if fl and abs(e_ship) / fl < 3:
         print("\n  VERDICT: the effect does NOT clear its floor by 3x. Treat it as UNRESOLVED, not")
         print("  refuted: either the edit is genuinely small, or the shared apparatus is doing the")
@@ -860,7 +898,7 @@ def report_preflight(spec):
         for tag, counts in spec.arms.items():
             rate, over = fallback_rate(bkts, spec.counts, counts)
             if over:
-                print(f"\nCOMPOSITION FALL-THROUGH in '{tag}': {rate*100:.2f}% of hands\n  raised past "
+                print(f"\nCOMPOSITION FALL-THROUGH in '{tag}': {pct(rate)} of hands\n  raised past "
                       "what the table enumerated: " + "; ".join(over) +
                       "\n  (silent heuristic fallback on this arm only; the screen drops the table from"
                       "\n   EVERY arm above 1%, which is symmetric but costs ~22x per game)")
