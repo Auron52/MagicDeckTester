@@ -356,18 +356,33 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
 // Uses the deck's committed exhaustive profile for the bucket map. MTG_SCORE_R (default 400).
 static int RunScoreCompsMode(const AnalyzerArgs& a)
 {
+    // Resolve `.gz` FIRST, as AttachExhaustiveSidecar does. Every deck ships this sidecar gzipped, so
+    // the plain-name-only lookup found nothing, left `buckets` empty, and made K=0 -- whereupon the
+    // hand-filling loop below copies zero cards and EVERY composition scores as unwon (max_turns+1)
+    // with se 0. A silent all-unwon result reads as data, not as a failure.
     std::filesystem::path in_path =
         a.deck_path.parent_path() / (a.deck_path.stem().string() + ".keepmodel.exhaustive.profile.json");
+    if (!std::filesystem::exists(in_path) && std::filesystem::exists(in_path.string() + ".gz"))
+    { in_path = in_path.string() + ".gz"; }
     MulliganProfile profile = LoadDeckProfile(in_path);
     static const ExhaustiveKeepPolicy kNoExhaustive;
     const auto& buckets = (profile.exhaustive_keep ? *profile.exhaustive_keep : kNoExhaustive).buckets;
     const int K = static_cast<int>(buckets.size());
+    if (K == 0)
+    { std::cerr << "MTG_SCORE_COMPS: no exhaustive keep sidecar beside " << a.deck_path
+                << " (looked for " << in_path << ") -- refusing to score with an empty bucket map\n";
+      return 1; }
     std::map<std::string,int> bof;
     for (int b = 0; b < K; ++b) { for (const std::string& n : buckets[b]) { bof[n] = b; } }
     const int R = []{ const char* s = std::getenv("MTG_SCORE_R");
                       return (s && *s) ? std::max(1, std::atoi(s)) : 400; }();
     const int depth = []{ const char* s = std::getenv("MTG_EQUIV_DEPTH");
                           return (s && *s) ? std::max(0, std::atoi(s)) : 5; }();
+    // Was hard-coded to 20 (ExhaustiveKeepConfig::budget_ms), which made the scorer unable to answer
+    // "what does a cheaper generation budget do to the cell values it would label?" -- the question
+    // behind budget-vs-R as a generation cost lever. Default is unchanged, so existing runs are
+    // byte-identical.
+    const int budget_ms = EnvInt("MTG_SCORE_BUDGET_MS", 20);
     const char* fp = std::getenv("MTG_SCORE_FILE");
     std::ifstream fin(fp ? fp : "");
     if (!fin) { std::cerr << "MTG_SCORE_FILE not readable\n"; return 1; }
@@ -394,7 +409,7 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
     const std::map<std::string, int>& bofref = bof;   // const ref -> concurrent-safe find()
     auto worker = [&]()
     {
-        AIEngine ai(rp, depth, 20); ai.SetSearchPostCombat(second_main);
+        AIEngine ai(rp, depth, budget_ms); ai.SetSearchPostCombat(second_main);
         for (;;)
         {
             int w = next.fetch_add(1);

@@ -47,6 +47,8 @@ MTG = os.path.join(ROOT, "build/Release/mtg-analyze")   # the comp scorer lives 
 
 def parse_arm(s):
     out = {}
+    if not s.strip():
+        return out
     for part in s.split(","):
         name, _, n = part.rpartition("=")
         out[name.strip()] = int(n)
@@ -119,19 +121,32 @@ def write_arm_deck(deck_dir, arm_counts_by_name, out):
     unwon (max_turns+1) with se 0 instead of failing. Both the base and the arm therefore get a
     scratch directory with the sidecar materialised uncompressed."""
     lst, _, prof = deck_paths(deck_dir)
-    stem = os.path.basename(lst)
+    # Always emit a .txt: the scorer keys the sidecar off the decklist's STEM, which is preserved, and
+    # a .cod's XML is not a line format. Half the deck set (Hinata2, Knights, ...) ships .cod.
+    stem = os.path.basename(lst).rsplit(".", 1)[0] + ".txt"
     os.makedirs(out, exist_ok=True)
     per = {}
     order = []
-    for line in open(lst):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.lower().startswith("sideboard"):
-            break
-        n, name = line.split(" ", 1)
-        per[name.strip()] = int(n)
-        order.append(name.strip())
+    if lst.endswith(".cod"):
+        import xml.etree.ElementTree as ET
+        for zone in ET.parse(lst).getroot().iter("zone"):
+            if (zone.get("name") or "main") != "main":
+                continue
+            for card in zone.iter("card"):
+                nm = card.get("name")
+                if nm not in per:
+                    order.append(nm)
+                per[nm] = per.get(nm, 0) + int(card.get("number", 1))
+    else:
+        for line in open(lst):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.lower().startswith("sideboard"):
+                break
+            n, name = line.split(" ", 1)
+            per[name.strip()] = int(n)
+            order.append(name.strip())
     for name, n in arm_counts_by_name.items():
         if name not in per:
             order.append(name)
@@ -140,15 +155,24 @@ def write_arm_deck(deck_dir, arm_counts_by_name, out):
         for name in order:
             if per.get(name):
                 f.write(f"{per[name]} {name}\n")
-    t = read_json(prof)
-    dst = os.path.join(out, os.path.basename(lst).rsplit(".", 1)[0] + ".keepmodel.exhaustive.profile.json")
-    json.dump(t if "exhaustive_keep" in t else {"exhaustive_keep": t}, open(dst, "w"))
+    # Link the shipped sidecar (and its .bincache) rather than materialising plain JSON. Now that the
+    # scorer resolves `.gz`, this keeps the fast load path: re-parsing Hinata2's 431k-cell table from
+    # expanded JSON costs MINUTES per invocation and dwarfs the rollouts the run is trying to measure.
+    base = os.path.join(out, stem.rsplit(".", 1)[0] + ".keepmodel.exhaustive.profile.json")
+    for suffix in ("", ".bincache"):
+        src, dst = os.path.abspath(prof) + suffix, base + (".gz" if prof.endswith(".gz") else "") + suffix
+        if os.path.lexists(dst):
+            os.unlink(dst)
+        if os.path.exists(src):
+            os.symlink(src, dst)
     return os.path.join(out, stem), per
 
 
-def score(deck_path, cell_file, R, depth, out_path):
+def score(deck_path, cell_file, R, depth, out_path, budget_ms=None):
     env = dict(os.environ, MTG_SCORE_COMPS="1", MTG_SCORE_FILE=cell_file,
                MTG_SCORE_R=str(R), MTG_EQUIV_DEPTH=str(depth))
+    if budget_ms is not None:
+        env["MTG_SCORE_BUDGET_MS"] = str(budget_ms)
     with open(out_path, "w") as f:      # deck path is positional (argv[1]); cards.json resolves off CWD
         subprocess.run([MTG, deck_path], env=env, stdout=f, cwd=ROOT, check=True)
     got = {}
@@ -165,7 +189,14 @@ def score(deck_path, cell_file, R, depth, out_path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("deck")
-    ap.add_argument("--arm", required=True, help='e.g. "Skullcrack=0,Lightning Bolt=8"')
+    ap.add_argument("--arm", default="", help='e.g. "Skullcrack=0,Lightning Bolt=8"')
+    # Same deck, two GENERATION budgets. The keep table's cell values are labels produced by the
+    # rollout search, so a cheaper budget shifts them -- but only the part of the shift that is NOT
+    # common to all cells can flip a keep decision, because Dopt is a weighted average of the same
+    # KeepVals and moves with them. That is why a "notable" quality loss can be nearly free here, and
+    # it is exactly what mean-vs-dispersion separates.
+    ap.add_argument("--budget-ab", default="", metavar="B1,B2",
+                    help="compare the SAME deck at two search budgets instead of two decklists")
     ap.add_argument("--cells", type=int, default=200, help="cells per hand size")
     ap.add_argument("--R", type=int, default=200)
     ap.add_argument("--depth", type=int, default=5)
@@ -182,8 +213,14 @@ def main():
     arm_by_name = parse_arm(a.arm)
     # Both count vectors come from the actual decklists rather than from patching per bucket, so a
     # card that shares a bucket with another cannot be double-counted.
+    budgets = [int(x) for x in a.budget_ab.split(",")] if a.budget_ab else [None, None]
+    if a.budget_ab and a.arm:
+        raise SystemExit("--budget-ab compares one decklist at two budgets; drop --arm")
+    if not (a.budget_ab or a.arm):
+        raise SystemExit("give --arm (two decklists) or --budget-ab (one decklist, two budgets)")
     base_list, _ = write_arm_deck(a.deck, {}, os.path.join(out, "base"))
-    arm_list, arm_per = write_arm_deck(a.deck, arm_by_name, os.path.join(out, "arm"))
+    arm_list = (base_list if a.budget_ab
+                else write_arm_deck(a.deck, arm_by_name, os.path.join(out, "arm"))[0])
     arm_counts, arm_size = deck_counts(arm_list, ek["buckets"])
     if arm_size != deck_size:
         print(f"note: arm mainboard {arm_size} vs base {deck_size} -- deck-size change, weights differ")
@@ -200,11 +237,12 @@ def main():
                 keys.append((H, line))
     total = len(keys)
     print(f"deck {os.path.basename(os.path.abspath(a.deck))}  K={len(ek['buckets'])}  "
-          f"arm={a.arm}\n{total} cells x R={a.R} x 2 decks x 2 pd = "
+          f"{'budgets=' + a.budget_ab if a.budget_ab else 'arm=' + a.arm}"
+          f"\n{total} cells x R={a.R} x 2 arms x 2 pd = "
           f"{total * a.R * 4:,} rollouts (grid-size independent)")
 
-    base_out = score(base_list, cell_file, a.R, a.depth, os.path.join(out, "base.tsv"))
-    arm_out = score(arm_list, cell_file, a.R, a.depth, os.path.join(out, "arm.tsv"))
+    base_out = score(base_list, cell_file, a.R, a.depth, os.path.join(out, "base.tsv"), budgets[0])
+    arm_out = score(arm_list, cell_file, a.R, a.depth, os.path.join(out, "arm.tsv"), budgets[1])
     for lbl, got in (("base", base_out), ("arm", arm_out)):
         if not got:
             raise SystemExit(f"{lbl}: the scorer produced no rows")
