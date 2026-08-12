@@ -88,6 +88,13 @@ Five `ApplyPlanDirect` sites ran the same greedy `TurnSolver::Solve` + `apply_pl
 | 2 | `impulse_exile` | Apex of Power | Dragonstorm |
 | 3 | `deferred_cantrip_resolve` | Ponder / Preordain | Hinata |
 | 4 | dig-through-lands | sac / cycle dig | TH |
+| 5 | trick payload (deferred, same shape as 3) | Gold Rush / Expedite (`solo_target_trick` with `cast_draw`/`creates_treasures`) | Mirrorwing |
+
+Site 5 was split OUT of site 3 (2026-08-12): the trick class shares the deferred main-level
+re-solve SHAPE with plain cantrips but must not share their prune — chaining them made the Gold
+Rush continuation permanently greedy, the root cause of the gr-defer-land-sequencing defect
+(the greedy re-solve tapped the would-be attacker for a cantrip cast; no budget could decline
+it). Default mask is 0x37: everything on except the plain-cantrip class.
 
 `MTG_BP_PROBE=1` counts them, split into `greedy=` vs `searched=`. Per 100 games at d5, against
 the contention-free node telemetry (`MTG_ROLLOUT_STATS=1`), BEFORE the fix (all greedy):

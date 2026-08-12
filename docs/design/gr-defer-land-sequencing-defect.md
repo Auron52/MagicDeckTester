@@ -1,4 +1,9 @@
-# Deferred re-solve strands attackers by casting ahead of the land drop (open defect)
+# Deferred re-solve strands attackers by casting ahead of the land drop (RESOLVED)
+
+> **RESOLVED 2026-08-12 — root cause was narrower than the title: the trick-class deferred
+> continuation was UNSEARCHABLE (site-masked off), so the greedy re-solve's beater-tapping cast
+> could never be declined.** See "Actual root cause" and "Fix" below; the original analysis is
+> kept for the record. The land-first plan shape was in fact always enumerated.
 
 ## Symptom (found 2026-08-12, overnight rebaseline analysis)
 
@@ -35,8 +40,56 @@ Validate: the 8 games in logs/mwprof/persist_list.txt (6 should recover; gi331/g
 different residual -- defer-off does not recover them; classify separately), full suite +
 held-out, then GT rebaseline picks up the recovered turns.
 
+## Actual root cause (traced 2026-08-12, MTG_DUMP_EWINS_TURN=2 + a temp apply trace on gi118)
+
+Both fix directions above rested on a wrong premise. The land-first plan IS enumerated --
+`add_for_land("Forest")` emits `land=Forest, casts=[Gold Rush]`, and `ApplyPlanDirect` plays the
+land before the casts. The EWINS dump shows it present at the T2 root and rolling out to **T6**,
+i.e. MIS-SCORED (its true value, realised under `MTG_NO_DEFER_CANTRIP=1`, is T4). The chain:
+
+1. In that plan's apply, Gold Rush is paid off the two Forests, leaving Hierarch (the would-be
+   attacker) untapped -- so far exactly the old line.
+2. The DEFERRED site-3 re-solve then runs a greedy `TurnSolver::Solve`, which casts Expedite.
+   The only untapped tap-source is the Hierarch (a Treasure pays only via an explicit
+   SacForMana action the greedy plan did not include), so the payment taps the beater. Attack
+   stranded, chip damage lost, rollout scores T6.
+3. The continuation that DECLINES the Expedite cast was unreachable at ANY depth/budget:
+   the trick class (solo_target_trick with cast_draw / creates_treasures) was wired into
+   breakpoint site 3 -- the plain-cantrip site, which `MTG_BP_SITES`' default masked OFF (an
+   admitted quality prune, measured on Hinata's Ponder/Preordain). With the class unsearchable,
+   `bp_searched_plan` never resolved and the wave walker opened no slots: the Gold Rush
+   continuation was PERMANENTLY GREEDY. That -- not missing land-first enumeration -- is why
+   d7 b160 could not recover the line.
+
+So "cast-vs-land order" was a symptom: the defer-shaped plan (GR paid Forest+Hierarch, land in
+the continuation) scored T5 and beat the mis-scored T6 land-first plan.
+
+## Fix (2026-08-12): give the trick class its own searchable site
+
+The trick class moved from site 3 to its OWN site **5**, default ON (`MTG_BP_SITES` default
+0x17 -> 0x37), leaving the plain-cantrip prune (bit 3, the measured Hinata regressor) intact.
+`ApplyPlanDirect` tracks which class armed the deferred re-solve (`deferred_trick_armed`; trick
+class owns the breakpoint if both arm it). The searched-continuation + deferred-wave machinery
+then covers the class: wave 0 fans W variants, the walker reaches every rank on budget.
+
+Validated (d3 b10 single-game, seed base+gi):
+
+| game        | old | broken | fixed |
+|-------------|-----|--------|-------|
+| s4004 gi118 | 4   | 5      | 4     |
+| s4004 gi182 | 4   | 5      | 4     |
+| s4004 gi211 | 6   | 7      | 6     |
+| s4004 gi331 | 4   | 5      | 4  (defer-off did NOT recover this) |
+| s6006 gi123 | 4   | 5      | 5 -> 4 at 4x (budget churn now; was structural) |
+| s6006 gi145 | 5   | 6      | 5     |
+| s6006 gi287 | 4   | 5      | 5 -> 4 at 16x (budget churn now; was structural) |
+| s7007 gi227 | 5   | 6      | 5  (defer-off did NOT recover this) |
+
+Smoke: all non-trick decks byte-identical (Hinata included); mirrorwing d3 5.2600 -> 5.2467,
+d5 5.1467 -> 5.0933; 4 searched-slower games all classify `churn` (recover at 4x/16x).
+
 ## Status
 
-OPEN -- documented at discovery; the overnight accept 73be0a6 stands (net -0.2125; this class
-is a small fixable tail inside a clearly net-positive change). The 13 games' cost is bounded
-(~+13 turns over 5200 overnight games).
+RESOLVED pending GT rebaseline -- fix beats both the broken state and the defer-off hatch on
+the validation list. The overnight accept 73be0a6 stood in the interim (net -0.2125, tail
+bounded ~13 turns/5200 games).
