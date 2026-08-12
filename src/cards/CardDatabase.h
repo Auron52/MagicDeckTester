@@ -1143,9 +1143,23 @@ public:
     {
         if (c.m_def == NotInDb()) { return nullptr; }   // cached miss (token / unknown card)
         if (c.m_def)              { return c.m_def; }   // cached hit
-        const CardDefinition* d = Lookup(c.m_name);
+        const CardDefinition* d = LookupInterned(c.m_name);
         c.m_def = d ? d : NotInDb();
         return d;
+    }
+
+    // By-INTERNED-NAME lookup: hash + compare the InternedName's canonical POINTER instead of the
+    // name string. Byte-identical to Lookup(n.str()) -- m_by_name_ptr indexes exactly m_cards, keyed
+    // by each name's canonical interned address (unique per name, global registry) -- so a miss here
+    // IS "not in the DB". Motivation (gdb sampling, Mirrorwing phase-A heavy game 2026-08-12): the
+    // per-object m_def memo above pays one STRING-map probe per fresh Card object, and a fan-out
+    // apply (Twinflame / Gold Rush copies) creates its tokens anew on EVERY speculative
+    // ApplyPlanDirect (114M applies in a 60-game batch) -- string hash+equals on the CardDefinition
+    // map was ~25% of the heavy game's samples. A pointer probe removes the string work entirely.
+    const CardDefinition* LookupInterned(const InternedName& n) const
+    {
+        auto it = m_by_name_ptr.find(&n.str());
+        return it == m_by_name_ptr.end() ? nullptr : it->second;
     }
 
     bool IsImplemented(const std::string& name) const;
@@ -1177,6 +1191,11 @@ private:
 
     std::unordered_map<std::string, CardDefinition> m_cards;
     std::unordered_map<std::string, uint64_t>       m_def_hash;   // see DefHash()
+    // Canonical-interned-name-pointer -> definition index over m_cards (see LookupInterned).
+    // Rebuilt at the end of every LoadFromJson/Register, so it is complete and IMMUTABLE during
+    // play (values point into m_cards nodes, which never move). Lock-free reads are safe.
+    std::unordered_map<const std::string*, const CardDefinition*> m_by_name_ptr;
+    void RebuildInternedIndex();
 
     static CardDatabase s_instance;   // eager singleton storage (see Instance())
 };

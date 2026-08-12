@@ -72,8 +72,16 @@ struct Action
                              // the shared {T} (the apply is a no-op if the source is already tapped).
     };
 
+    // The three name fields are InternedName, not std::string (2026-08-12): an Action is copied,
+    // moved, sorted and destroyed ~10 per plan x 113M plans in a 60-game Mirrorwing label batch,
+    // and any name over the 15-char SSO limit ("Mirrorwing Dragon", "Goblin Instigator") made
+    // EVERY such copy heap-allocate -- Action/Plan churn was ~1/3 of a heavy phase-A game's gdb
+    // samples. InternedName is one pointer: trivially copyable, no alloc, no dtor work; every
+    // read site sees the same text via the implicit const std::string& conversion (comparisons /
+    // streaming / .empty()/.c_str() covered in NameRegistry.h). Byte-identical: values unchanged,
+    // and no site orders by the POINTER (the one lexicographic sort compares .str()).
     Kind        kind           = Kind::CastFromHand;
-    std::string card_name;             // source card (creature name for ActivateVial)
+    InternedName card_name;            // source card (creature name for ActivateVial)
     int         hand_index     = -1;   // hand index of the source/creature at enumeration time
     ManaCost    cost;                  // effective mana cost (enumeration feasibility only)
     bool        sacrifice_land = false;// additional cost: sacrifice a land (e.g. Shard Volley)
@@ -88,7 +96,7 @@ struct Action
                                        // instead make the opponent gain alt_lifegain life (-> that
                                        // much damage with Tainted Remedy). cost is empty.
     int         alt_lifegain   = 0;    // opponent lifegain paid as the alt cost (see alt_cost)
-    std::string tutor_target;          // CastFromHand of a tutor: the specific library card to
+    InternedName tutor_target;          // CastFromHand of a tutor: the specific library card to
                                        // fetch. When the heuristic is UNSURE, CollectActions emits
                                        // one variant per candidate (same hand_index -> mutually
                                        // exclusive) so the search picks; one variant when it is
@@ -123,7 +131,7 @@ struct Action
                                        // 0 for every non-splice action (all other decks). A per-plan
                                        // legality guard (SubsetHasIllegalSplice) rejects the physically
                                        // impossible over-splice combinations.
-    std::string chosen_float_color;    // The REUSABLE "N mana of one CHOSEN colour" dimension
+    InternedName chosen_float_color;    // The REUSABLE "N mana of one CHOSEN colour" dimension
                                        // (Lotus Bloom's SacForMana; Apex of Power's "add ten of one
                                        // colour" will reuse it). CollectActions emits one plan VARIANT
                                        // per candidate colour ("W"/"U"/"B"/"R"/"G"); the chosen colour

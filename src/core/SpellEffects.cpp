@@ -1026,6 +1026,72 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     }
     const std::vector<std::pair<int, const CardDefinition*>>& cands = *src_cands;
 
+    // Identical-source sibling collapse. On a fanned-out board (a dozen Treasures from copied Gold
+    // Rushes, a dork chain) the failure memo's per-permanent bitmask keys treat every same-named,
+    // same-state source as distinct, so proving one unpayable cost walks C(k,j) masks per tapped
+    // count -- the 14-hour TapForCostBacktrackWorker blow-up (docs/design/tap-backtrack-blowup.md).
+    // But two sources with the same CardDefinition and the same payment-relevant permanent state
+    // (counters, storage battery + hold flag; tap-eligibility folded into the chain below) have
+    // ISOMORPHIC subtrees: tapping either yields states differing only in WHICH index bears the
+    // tapped flag, and nothing in a payment reads that index except the (perf-only) memo mask. So at
+    // any node, once the first such source has been explored and failed, its identical siblings must
+    // fail identically -- skip them. This collapses the reachable tapped-set space from 2^k toward
+    // (count+1) per identical class, byte-identically, by the colour-collapse argument above: only
+    // subtrees isomorphic to PROVEN FAILURES are skipped (and failures restore all state), so the
+    // first payment found -- and the exact sources it leaves tapped -- is unchanged.
+    //
+    // s_dup_of_buf[ci] chains candidate ci to the nearest EARLIER chain-eligible identical candidate
+    // (-1 = none). At a node, a chain member that is currently UNTAPPED was reached by this node's
+    // loop before ci (same order, and failed branches restore state between iterations), passed the
+    // same def-and-sig-determined filters, and so was explored (or itself dup-skipped, which by
+    // induction chains to an explored one) and FAILED -> skip ci. A member currently tapped is on
+    // the DFS path (tapped by an ancestor, not explorable at THIS node) -> walk past it. Chain
+    // eligibility (untapped at entry, unreserved, dork can tap) is computed ONCE here: CanTapNow is
+    // invariant during a payment (haste grants never read `tapped`, no permanent enters or leaves),
+    // and a source tapped at entry stays tapped throughout. MTG_NO_TAP_DUP_COLLAPSE=1 disables it
+    // (standing A/B lever on one binary; output must be byte-identical either way).
+    static thread_local std::vector<int> s_dup_of_buf;
+    if (top_level)
+    {
+        static const bool s_no_dup_collapse = EnvOn("MTG_NO_TAP_DUP_COLLAPSE");
+        const std::size_t nc = cands.size();
+        s_dup_of_buf.assign(nc, -1);
+        if (!s_no_dup_collapse)
+        {
+            auto counters_equal = [](const std::vector<Counter>& a, const std::vector<Counter>& b)
+            {
+                if (a.size() != b.size()) { return false; }
+                for (std::size_t k = 0; k < a.size(); ++k)
+                { if (a[k].type != b[k].type || a[k].count != b[k].count) { return false; } }
+                return true;
+            };
+            auto chain_eligible = [&](const std::pair<int, const CardDefinition*>& c) -> bool
+            {
+                const Permanent& p = state.battlefield[c.first];
+                if (p.tapped) { return false; }                        // tapped at entry: never explorable
+                if (reserved_mask & (1ull << c.first)) { return false; }
+                if (c.second->tmpl == CardTemplate::ManaDork && !CanTapNow(p, state.battlefield))
+                { return false; }
+                return true;
+            };
+            for (std::size_t ci = 1; ci < nc; ++ci)
+            {
+                const Permanent& pa = state.battlefield[cands[ci].first];
+                for (std::size_t cj = ci; cj-- > 0; )
+                {
+                    if (cands[cj].second != cands[ci].second || !chain_eligible(cands[cj]))
+                    { continue; }
+                    const Permanent& pb = state.battlefield[cands[cj].first];
+                    if (pb.storage_counters != pa.storage_counters
+                        || pb.storage_hold_this_turn != pa.storage_hold_this_turn
+                        || !counters_equal(pb.counters, pa.counters)) { continue; }
+                    s_dup_of_buf[ci] = static_cast<int>(cj);
+                    break;
+                }
+            }
+        }
+    }
+
     std::pair<std::uint64_t, std::uint64_t> key{0, 0};
     if (fail_memo)
     {
@@ -1171,8 +1237,9 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         }
     }
 
-    for (const std::pair<int, const CardDefinition*>& cand : cands)
+    for (std::size_t ci = 0; ci < cands.size(); ++ci)
     {
+        const std::pair<int, const CardDefinition*>& cand = cands[ci];
         const int i = cand.first;
         if (state.battlefield[i].tapped) { continue; }
         if (reserved_mask & (1ull << i)) { continue; }   // reservation audit: this source is held (not tappable)
@@ -1184,6 +1251,21 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         if (def->params.creature_mana_only && !for_creature) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }   // uncharged storage: no mana
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land = no mana
+
+        // Identical-sibling collapse (see the s_dup_of_buf block above): an untapped chain member was
+        // explored earlier at this node -- with the exact same def, permanent state and filters -- and
+        // failed, so this candidate's subtree is isomorphic to a proven failure. Skip it. Members
+        // currently tapped are on the DFS path (not explored at THIS node) -> walk past them.
+        {
+            bool dup = false;
+            for (int j = s_dup_of_buf[ci]; j >= 0; j = s_dup_of_buf[j])
+            { if (!state.battlefield[cands[j].first].tapped) { dup = true; break; } }
+            if (dup)
+            {
+                if (tapstats::Enabled()) { tapstats::g_dup_skips.fetch_add(1, std::memory_order_relaxed); }
+                continue;
+            }
+        }
 
         // Reflecting Pool -> the shared, hoisted union (empty = solo RP = no mana); every other
         // source -> its static produces[]. (Inlined EffectiveProduces so the union is reused.)
@@ -1403,6 +1485,149 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     return false;
 }
 
+// ============================ PAYABLE MANA CACHE (MTG_MANA_CACHE) ============================
+// Memoises the out_full_pool batch-prepay solve. Measured: within a rollout the search re-queries the
+// SAME (source-config, cost) ~80% of the time, and each deep solve is 20-40 backtracker nodes -- so
+// caching the first solution and replaying it skips the search on the repeats. The map holds the DFS's
+// determining inputs -> {payable, produced pool, tap-set}; a hit re-taps the stored sources and returns
+// the pool. BYTE-IDENTICAL by construction: the backtracker is a pure deterministic function of the key,
+// so a hit reproduces the same first solution (128-bit key -> false-match prob ~2^-94; validated
+// byte-identical across the full regression suite -- 50/50 digests, 0 play-changed, 184 refs 0 drift --
+// before adoption). Default ON (MTG_MANA_CACHE=0 disables). Correctness gates:
+//   * SHAPE: canonical batch-prepay only -- out_full_pool set, out_leftover/rp_colors null, empty
+//     floating, board <= 64 permanents (tap-set fits a bitmask, matching the fail-memo's own n<=64 cap).
+//   * GLOBAL (McStateDependent): the whole node is skipped when any active mana source has
+//     STATE-DEPENDENT branching the key cannot capture -- domain (colours among ALL permanents) or
+//     scaled (creature count). Reflecting Pool is NOT skipped: its effective colour set (a function of
+//     the other lands) is hashed into the key, so different reachable-colour boards get distinct entries.
+//   * STORE (McReplayable): a MISS's solution is cached only if every source it TAPS can be REPLAYED by
+//     the hit path -- i.e. its tap effect is reproduced when we re-set .tapped. Simple lands/dorks/rocks
+//     qualify; City of Brass qualifies (its tap_self_damage is replayed on the hit); a DEPLETION land
+//     (Sandstone Needle) qualifies since 2026-08-12 -- its tap's only side effect is
+//     DecrementDepletionOnTap, which the hit replays exactly (production is counter-independent, and
+//     the decrement is relative, so no counter value needs to enter the key). Storage, drip
+//     (tap_opponent_lifegain) and Deathrite (gy_land_exile_mana) lands do NOT -- storage/drip mutate
+//     counters/opponent life the hit path does not reproduce, and Deathrite's tap EXILES a graveyard
+//     land the hit path cannot replay from a tap-set alone -- so a solution tapping one is left
+//     unstored (recomputed by the real DFS each time). Negative (unpayable) results are always
+//     cacheable (no side effect). A cache MISS always runs the real DFS, so a non-storable solution is
+//     still correct; it just is not memoised.
+namespace {
+inline bool ManaCacheEnabled() { static const bool v = EnvOn("MTG_MANA_CACHE", true); return v; }
+// A tapped source we can REPLAY on a cache hit: set .tapped, plus the side effects we reproduce
+// (tap_self_damage -- City of Brass; DecrementDepletionOnTap -- Sandstone Needle). Storage/drip mutate
+// counters / opponent life the hit path does NOT reproduce, and Deathrite's graveyard-land exile is
+// not reproducible from a tap-set, so a solution tapping one of those is not stored.
+inline bool McReplayable(const CardDefinition* d)
+{ return d && !d->params.storage_land && d->params.tap_opponent_lifegain == 0
+           && !d->params.gy_land_exile_mana; }
+// A source whose DFS branching reads board state the key does NOT capture: domain (colours among ALL
+// controlled permanents) and scaled (creature count). Reflecting is NOT here -- its effective colours
+// (a function of the other lands) are hashed into the key below, so it is cacheable.
+inline bool McStateDependent(const CardDefinition* d)
+{ return d && (d->params.domain_mana || IsScaledManaLand(*d)); }
+
+struct ManaCacheEntry { std::uint64_t verify; bool payable; ManaPool produced; std::vector<int> taps; };
+inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_cache;
+
+// Scan the active player's mana sources ONCE: build the 128-bit key (k1,k2) AND the global gate.
+// Returns false (caller skips the cache) if a state-dependent source is present.
+inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_creature,
+                         std::uint64_t reserved_mask, int untapped_max,
+                         std::uint64_t& k1, std::uint64_t& k2)
+{
+    auto mix = [](std::uint64_t& h, std::uint64_t v){ h ^= v; h *= 1099511628211ull; h ^= h >> 29; };
+    std::uint64_t h1 = 1469598103934665603ull, h2 = 14695981039346656037ull;
+    const int active = state.active_player_index;
+    const int n = static_cast<int>(state.battlefield.size());
+    int gy_fuel = -1;       // lazy, hashed once on the first Deathrite-style source
+    int drip_useful = -1;   // lazy, hashed once on the first drip source
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
+              || d->params.mana_rock)) { continue; }
+        if (McStateDependent(d)) { return false; }
+        const std::uint64_t di = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(d));
+        mix(h1, static_cast<std::uint64_t>(i));  mix(h2, static_cast<std::uint64_t>(i) * 0x9E3779B97F4A7C15ull);
+        mix(h1, di);                             mix(h2, di ^ 0xD1B54A32D192ED03ull);
+        mix(h1, p.tapped ? 1ull : 2ull);         mix(h2, p.tapped ? 3ull : 5ull);
+        // Per-source DYNAMIC state the DFS reads that (i, def, tapped) does not capture. Each of
+        // these was a latent stale-hit hole: two boards identical in (i, def, tapped) but differing
+        // in one of the fields below solve DIFFERENTLY, so they must not share a key.
+        if (!p.tapped)
+        {
+            // Dork tap-eligibility (summoning sickness / temp_haste / lord+equip haste): the worker's
+            // is_src gates a ManaDork on CanTapNow, which an Expedite mid-turn or an untap-step
+            // sickness flip changes without touching (def, tapped) -- the Mirrorwing case.
+            if (d->tmpl == CardTemplate::ManaDork)
+            {
+                const bool elig = CanTapNow(p, state.battlefield);
+                mix(h1, elig ? 0xE119'01ull : 0xE119'02ull);
+                mix(h2, elig ? 0xE119'03ull : 0xE119'05ull);
+            }
+            // Storage battery: burst amount = min(counters, shortfall) and StorageSourceLive gates on
+            // counters>0 + the hold flag, so a charged vs uncharged (or held) Bazaar must key apart --
+            // otherwise a stored negative goes stale when the battery charges.
+            if (d->params.storage_land)
+            {
+                mix(h1, 0x570'1ull + static_cast<std::uint64_t>(p.storage_counters) * 2
+                      + (p.storage_hold_this_turn ? 1ull : 0ull));
+                mix(h2, 0x570'2ull ^ (static_cast<std::uint64_t>(p.storage_counters) << 8)
+                      ^ (p.storage_hold_this_turn ? 0x100000ull : 0ull));
+            }
+        }
+        // Deathrite (gy_land_exile_mana): production is gated on GraveyardLandFuel > 0, and each tap
+        // consumes one fuel -- graveyard state the source loop cannot see. Hash the fuel count once.
+        if (d->params.gy_land_exile_mana && gy_fuel < 0)
+        {
+            gy_fuel = GraveyardLandFuel(state, active);
+            mix(h1, 0x6F'F1ull + static_cast<std::uint64_t>(gy_fuel));
+            mix(h2, 0x6F'F2ull ^ (static_cast<std::uint64_t>(gy_fuel) << 16));
+        }
+        // Drip land (Grove of the Burnwillows): the worker's branch ORDER depends on the provider's
+        // OpponentLifegainUseful(state) -- state outside (def, tapped) -- so the found solution (its
+        // colour composition) can differ across boards that otherwise share a key. Hash the bit once.
+        if (d->params.tap_opponent_lifegain > 0 && drip_useful < 0)
+        {
+            drip_useful = ResolveProvider(state).OpponentLifegainUseful(state, active) ? 1 : 0;
+            mix(h1, drip_useful ? 0xD21'B1ull : 0xD21'B2ull);
+            mix(h2, drip_useful ? 0xD21'B3ull : 0xD21'B5ull);
+        }
+        // Reflecting source (Reflecting Pool): its produces = union of the controller's OTHER lands'
+        // colours (state-dependent). Hash that exact effective colour set so two boards where it can
+        // make different colours get different keys -> byte-identical replay.
+        if (d->params.reflecting)
+        {
+            const std::vector<Color>& rc = EffectiveProduces(state, active, *d);
+            mix(h1, 0xEFEC71'11ull); mix(h2, 0xEFEC71'22ull);
+            for (Color c : rc)
+            { mix(h1, static_cast<std::uint64_t>(c) + 1);
+              mix(h2, (static_cast<std::uint64_t>(c) + 1) * 0x9E3779B97F4A7C15ull); }
+        }
+    }
+    auto mixcost = [&](std::uint64_t& h){
+        mix(h, static_cast<std::uint64_t>(cost.generic));
+        mix(h, static_cast<std::uint64_t>(cost.white) | (static_cast<std::uint64_t>(cost.blue) << 16)
+             | (static_cast<std::uint64_t>(cost.black) << 32) | (static_cast<std::uint64_t>(cost.red) << 48));
+        mix(h, static_cast<std::uint64_t>(cost.green) | (static_cast<std::uint64_t>(cost.colorless) << 16));
+        mix(h, static_cast<std::uint64_t>(cost.has_x ? 1 : 0) | (static_cast<std::uint64_t>(cost.x_pips) << 8)
+             | (static_cast<std::uint64_t>(cost.hybrid_count) << 16));
+        mix(h, static_cast<std::uint64_t>(cost.hybrid_pair[0]) | (static_cast<std::uint64_t>(cost.hybrid_pair[1]) << 8)
+             | (static_cast<std::uint64_t>(cost.hybrid_pair[2]) << 16) | (static_cast<std::uint64_t>(cost.hybrid_pair[3]) << 24));
+        mix(h, for_creature ? 1ull : 0ull);
+        mix(h, reserved_mask);
+        mix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(untapped_max)));
+    };
+    mixcost(h1); mixcost(h2);
+    k1 = h1; k2 = h2;
+    return true;
+}
+} // namespace
+
 // Public entry: thin wrapper over the worker. Identical behaviour; under MTG_TAP_STATS it records the
 // payable/unpayable OUTCOME of each top-level call and the nodes it consumed (the recursion calls the
 // worker directly, so every call here is exactly one top-level entry). Diagnostic only -- when the flag
@@ -1418,21 +1643,86 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                          ManaPool* out_full_pool,
                          const std::vector<std::pair<int, const CardDefinition*>>* src_cands)
 {
+    // ---- PAYABLE MANA CACHE lookup (canonical batch-prepay shape only; see the block above) ----
+    const bool mc = ManaCacheEnabled() && out_full_pool != nullptr && out_leftover == nullptr
+                    && rp_colors == nullptr && floating.Total() == 0
+                    && state.battlefield.size() <= 64;
+    std::uint64_t mk1 = 0, mk2 = 0, pre_tapped = 0; bool mc_active = false;
+    if (mc && ManaCacheKey(state, cost, for_creature, reserved_mask, untapped_max, mk1, mk2))
+    {
+        auto it = g_mana_cache.find(mk1);
+        if (it != g_mana_cache.end() && it->second.verify == mk2)
+        {
+            const ManaCacheEntry& e = it->second;
+            if (!e.payable) { return false; }
+            for (int idx : e.taps)
+            {
+                state.battlefield[idx].tapped = true;
+                const CardDefinition* td = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
+                if (td && td->params.tap_self_damage > 0)   // City of Brass: replay the tap damage (life 1208-1209)
+                { state.players[state.active_player_index].life -= td->params.tap_self_damage; }
+                // Depletion land (Sandstone Needle): replay the counter decrement the DFS's activate()
+                // performs on the solution path. Relative (decrement whatever the current count is),
+                // so the counter value never needs to be part of the key -- production is
+                // counter-independent and a 0-count no-op replays as a no-op.
+                if (td && td->params.enters_tapped_with_depletion > 0)
+                { DecrementDepletionOnTap(state.battlefield[idx]); }
+            }
+            *out_full_pool = e.produced;
+            return true;
+        }
+        mc_active = true;
+        const int active = state.active_player_index;
+        const int n = static_cast<int>(state.battlefield.size());
+        for (int i = 0; i < n; ++i)
+        { const Permanent& p = state.battlefield[i];
+          if (p.controller_index == active && p.tapped) { pre_tapped |= (1ull << i); } }
+    }
+
+    // ---- Run the real solve (preserving the MTG_TAP_STATS outcome accounting) ----
+    bool ok;
     if (!tapstats::Enabled())
     {
-        return TapForCostBacktrackWorker(state, cost, for_creature, floating, rp_colors, fail_memo,
-                                         out_leftover, tapped_mask, untapped_max, reserved_mask,
-                                         out_full_pool, src_cands);
+        ok = TapForCostBacktrackWorker(state, cost, for_creature, floating, rp_colors, fail_memo,
+                                       out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                       out_full_pool, src_cands);
     }
-    const std::uint64_t nodes0 = tapstats::g_nodes.load(std::memory_order_relaxed);
-    const bool ok = TapForCostBacktrackWorker(state, cost, for_creature, floating, rp_colors, fail_memo,
-                                              out_leftover, tapped_mask, untapped_max, reserved_mask,
-                                              out_full_pool, src_cands);
-    const std::uint64_t dn = tapstats::g_nodes.load(std::memory_order_relaxed) - nodes0;
-    if (ok) { tapstats::g_entries_ok.fetch_add(1, std::memory_order_relaxed);
-              tapstats::g_nodes_ok.fetch_add(dn, std::memory_order_relaxed); }
-    else    { tapstats::g_entries_fail.fetch_add(1, std::memory_order_relaxed);
-              tapstats::g_nodes_fail.fetch_add(dn, std::memory_order_relaxed); }
+    else
+    {
+        const std::uint64_t nodes0 = tapstats::g_nodes.load(std::memory_order_relaxed);
+        ok = TapForCostBacktrackWorker(state, cost, for_creature, floating, rp_colors, fail_memo,
+                                       out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                       out_full_pool, src_cands);
+        const std::uint64_t dn = tapstats::g_nodes.load(std::memory_order_relaxed) - nodes0;
+        if (ok) { tapstats::g_entries_ok.fetch_add(1, std::memory_order_relaxed);
+                  tapstats::g_nodes_ok.fetch_add(dn, std::memory_order_relaxed); }
+        else    { tapstats::g_entries_fail.fetch_add(1, std::memory_order_relaxed);
+                  tapstats::g_nodes_fail.fetch_add(dn, std::memory_order_relaxed); }
+    }
+
+    // ---- Store (STORE gate: negatives always; positives only if every tapped source is simple-tap) ----
+    if (mc_active)
+    {
+        if (g_mana_cache.size() > 500000) { g_mana_cache.clear(); }   // bound cross-rollout growth
+        ManaCacheEntry e; e.verify = mk2; e.payable = ok; bool storable = true;
+        if (ok)
+        {
+            e.produced = *out_full_pool;
+            const int active = state.active_player_index;
+            const int n = static_cast<int>(state.battlefield.size());
+            for (int i = 0; i < n; ++i)
+            {
+                const Permanent& p = state.battlefield[i];
+                if (p.controller_index != active) { continue; }
+                if (p.tapped && !((pre_tapped >> i) & 1))   // newly tapped by this solve
+                {
+                    if (!McReplayable(CardDatabase::Instance().LookupCached(p.card))) { storable = false; break; }
+                    e.taps.push_back(i);
+                }
+            }
+        }
+        if (storable) { g_mana_cache[mk1] = std::move(e); }
+    }
     return ok;
 }
 

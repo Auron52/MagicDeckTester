@@ -643,34 +643,62 @@ struct RevealLogPause
     TutorChooser*       saved_tutorchooser;
     std::vector<PlayReveal>* saved_revealsink;
     bool saved_real;
-    RevealLogPause() : saved(g_reveal_logger), saved_real(g_real_resolution), saved_chooser(g_play_top_chooser),
-                       saved_tchooser(g_play_target_chooser), saved_bchooser(g_play_bounce_chooser),
-                       saved_dchooser(g_play_dig_chooser), saved_dischooser(g_play_discard_chooser),
-                       saved_eichooser(g_play_ei_chooser), saved_rtchooser(g_play_retrace_chooser),
-                       saved_sfchooser(g_play_soulfire_chooser), saved_drawsink(g_play_draw_sink), saved_revealsink(g_play_reveal_sink),
-                       saved_evsink(g_play_event_sink), saved_dropsink(g_play_dropped_cast_sink),
-                       saved_sacchooser(g_play_sacrifice_chooser),
-                       saved_repchooser(g_play_replicate_chooser), saved_lechooser(g_play_land_entry_chooser),
-                       saved_dragchooser(g_play_dragon_chooser), saved_sacttchooser(g_play_sac_tutor_chooser),
-                       saved_lackeychooser(g_play_lackey_chooser),
-                       saved_freecastchooser(g_play_free_cast_chooser),
-                       saved_lpchooser(g_play_lightpaws_chooser),
-                       saved_fbchooser(g_play_firebreathe_chooser),
-                       saved_cochooser(g_play_cast_order_chooser),
-                       saved_shchooser(g_play_storage_hold_chooser),
-                       saved_tutorchooser(g_play_tutor_chooser)
-    { g_real_resolution = false; g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
-      g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
-      g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
-      g_play_draw_sink = nullptr; g_play_reveal_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
-      g_play_sacrifice_chooser = nullptr;
-      g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr;
-      g_play_sac_tutor_chooser = nullptr;
-      g_play_lackey_chooser = nullptr; g_play_free_cast_chooser = nullptr;
-      g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
-      g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr;
-      g_play_tutor_chooser = nullptr; }
-    ~RevealLogPause() { g_real_resolution = saved_real; g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
+    bool noop;   // fast path: nothing installed -> nothing to save/null/restore (see ctor)
+    RevealLogPause()
+    {
+        // NESTED-pause fast path. The overwhelmingly common instance is a pause constructed
+        // INSIDE an outer pause (per-EnumeratePlans / per-plan-scoring, millions per search game)
+        // whose outer already nulled every hook -- or an autonomous batch run where no hook was
+        // ever installed. In both cases every pointer below is already null and g_real_resolution
+        // is false, so the full save+null (ctor) and restore (dtor) are no-ops by inspection.
+        // One pass of null-checks replaces ~52 loads + ~52 stores across ctor+dtor (~5.6% of a
+        // search game's Ir, gdb/callgrind 2026-08-12). Byte-identical: the skipped work writes
+        // back exactly the values already present.
+        noop = !g_real_resolution && g_reveal_logger == nullptr
+            && g_play_top_chooser == nullptr && g_play_target_chooser == nullptr
+            && g_play_bounce_chooser == nullptr && g_play_dig_chooser == nullptr
+            && g_play_discard_chooser == nullptr && g_play_ei_chooser == nullptr
+            && g_play_retrace_chooser == nullptr && g_play_soulfire_chooser == nullptr
+            && g_play_draw_sink == nullptr && g_play_reveal_sink == nullptr
+            && g_play_event_sink == nullptr && g_play_dropped_cast_sink == nullptr
+            && g_play_sacrifice_chooser == nullptr && g_play_replicate_chooser == nullptr
+            && g_play_land_entry_chooser == nullptr && g_play_dragon_chooser == nullptr
+            && g_play_sac_tutor_chooser == nullptr && g_play_lackey_chooser == nullptr
+            && g_play_free_cast_chooser == nullptr && g_play_lightpaws_chooser == nullptr
+            && g_play_firebreathe_chooser == nullptr && g_play_cast_order_chooser == nullptr
+            && g_play_storage_hold_chooser == nullptr && g_play_tutor_chooser == nullptr;
+        if (noop) { return; }
+        saved = g_reveal_logger; saved_real = g_real_resolution; saved_chooser = g_play_top_chooser;
+        saved_tchooser = g_play_target_chooser; saved_bchooser = g_play_bounce_chooser;
+        saved_dchooser = g_play_dig_chooser; saved_dischooser = g_play_discard_chooser;
+        saved_eichooser = g_play_ei_chooser; saved_rtchooser = g_play_retrace_chooser;
+        saved_sfchooser = g_play_soulfire_chooser; saved_drawsink = g_play_draw_sink;
+        saved_revealsink = g_play_reveal_sink;
+        saved_evsink = g_play_event_sink; saved_dropsink = g_play_dropped_cast_sink;
+        saved_sacchooser = g_play_sacrifice_chooser;
+        saved_repchooser = g_play_replicate_chooser; saved_lechooser = g_play_land_entry_chooser;
+        saved_dragchooser = g_play_dragon_chooser; saved_sacttchooser = g_play_sac_tutor_chooser;
+        saved_lackeychooser = g_play_lackey_chooser;
+        saved_freecastchooser = g_play_free_cast_chooser;
+        saved_lpchooser = g_play_lightpaws_chooser;
+        saved_fbchooser = g_play_firebreathe_chooser;
+        saved_cochooser = g_play_cast_order_chooser;
+        saved_shchooser = g_play_storage_hold_chooser;
+        saved_tutorchooser = g_play_tutor_chooser;
+        g_real_resolution = false; g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
+        g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
+        g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
+        g_play_draw_sink = nullptr; g_play_reveal_sink = nullptr; g_play_event_sink = nullptr; g_play_dropped_cast_sink = nullptr;
+        g_play_sacrifice_chooser = nullptr;
+        g_play_replicate_chooser = nullptr; g_play_land_entry_chooser = nullptr; g_play_dragon_chooser = nullptr;
+        g_play_sac_tutor_chooser = nullptr;
+        g_play_lackey_chooser = nullptr; g_play_free_cast_chooser = nullptr;
+        g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
+        g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr;
+        g_play_tutor_chooser = nullptr;
+    }
+    ~RevealLogPause() { if (noop) { return; }
+                        g_real_resolution = saved_real; g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
                         g_play_target_chooser = saved_tchooser; g_play_bounce_chooser = saved_bchooser;
                         g_play_dig_chooser = saved_dchooser; g_play_discard_chooser = saved_dischooser;
                         g_play_ei_chooser = saved_eichooser; g_play_retrace_chooser = saved_rtchooser;

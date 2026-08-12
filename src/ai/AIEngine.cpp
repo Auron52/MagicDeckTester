@@ -2370,12 +2370,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         if (d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0
                   || d->params.stages_cards || d->params.impulse_exile > 0
-                  // Zada/Mirrorwing trick with a draw payload: a magnet fan-out mass-draws, so
-                  // the depth-0 executor gets a second pass to cast the freshly drawn cards --
-                  // mirroring the rollout's deferred (site-3) post-cast re-solve. At depth>0 the
-                  // committed line's recorded breakpoint script covers it (TakeTurn returns false
-                  // under full-depth regardless of this flag).
-                  || (d->params.solo_target_trick && d->params.cast_draw > 0)))
+                  // Zada/Mirrorwing trick with a draw payload -- or a Treasure payload (Gold
+                  // Rush), whose tokens are same-turn mana: a magnet fan-out mass-draws (or
+                  // mass-mints Treasures), so the depth-0 executor gets a second pass to cast the
+                  // freshly drawn/funded cards -- mirroring the rollout's deferred (site-3)
+                  // post-cast re-solve. At depth>0 the committed line's recorded breakpoint
+                  // script covers it (TakeTurn returns false under full-depth regardless of this
+                  // flag).
+                  || (d->params.solo_target_trick
+                      && (d->params.cast_draw > 0 || d->params.creates_treasures > 0))))
         { cast_draw_engine = true; }
     };
 

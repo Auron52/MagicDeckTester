@@ -1500,12 +1500,21 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 // lord_excludes_self ("Other ... get +1/+1") does not apply to itself. Pass the
 // battlefield permanent at combat/damage time; pass nullptr for hand-card evaluation
 // (the card is not yet a lord on the battlefield, so there is nothing to exclude).
+// controlled_lord_idx (optional): pre-filtered battlefield indices of the controller's LordEffect
+// permanents. When a caller loops over many creatures against an UNCHANGING battlefield (combat,
+// board eval), it can collect this list ONCE instead of having every creature re-scan the whole
+// battlefield for the (usually zero) lords -- the per-creature scan was ~3% of a rollout on a
+// lord-less deck. Byte-identical: the list is exactly the permanents the in-loop filter keeps
+// (controller + LordEffect), and the per-creature logic below (self-exclusion by address, subtype
+// matching, scales_per_matching count) is applied unchanged, so no lord is double-counted and an
+// "other"-lord still skips itself. nullptr => scan the whole battlefield (original behaviour).
 inline std::pair<int,int> ComputeLordBonus(
     const Card&                    creature,
     const std::vector<Permanent>&  battlefield,
     int                            controller_index,
     bool                           all_creature_types = false,
-    const Permanent*               self               = nullptr)
+    const Permanent*               self               = nullptr,
+    const std::vector<int>*        controlled_lord_idx = nullptr)
 {
     int pb = 0, tb = 0;
 
@@ -1532,15 +1541,19 @@ inline std::pair<int,int> ComputeLordBonus(
         }
     }
 
-    for (const Permanent& lord : battlefield)
+    // Body for one candidate lord permanent. Returns early (the old `continue`) when the permanent
+    // is not a matching lord. Iterated either over the whole battlefield or, when the caller
+    // supplied the pre-filtered list, over just the controller's LordEffect permanents -- the checks
+    // below still run, so the two paths are byte-identical.
+    auto process_lord = [&](const Permanent& lord)
     {
-        if (lord.controller_index != controller_index) { continue; }
+        if (lord.controller_index != controller_index) { return; }
         const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
-        if (!ldef || ldef->tmpl != CardTemplate::LordEffect) { continue; }
+        if (!ldef || ldef->tmpl != CardTemplate::LordEffect) { return; }
 
         // "Other ..." lords do not buff themselves (CR layer 7c): skip when the lord IS
         // the creature being evaluated. Identity by address within this same battlefield.
-        if (ldef->params.lord_excludes_self && self != nullptr && &lord == self) { continue; }
+        if (ldef->params.lord_excludes_self && self != nullptr && &lord == self) { return; }
 
         bool matches = false;
         if (ldef->params.affects_all_creatures)
@@ -1562,7 +1575,7 @@ inline std::pair<int,int> ComputeLordBonus(
                 }
             }
         }
-        if (!matches) { continue; }
+        if (!matches) { return; }
 
         if (ldef->params.scales_per_matching)
         {
@@ -1599,22 +1612,33 @@ inline std::pair<int,int> ComputeLordBonus(
             pb += ldef->params.power_bonus;
             tb += ldef->params.tough_bonus;
         }
+    };
+    if (controlled_lord_idx)
+    {
+        for (int li : *controlled_lord_idx) { process_lord(battlefield[li]); }
+    }
+    else
+    {
+        for (const Permanent& lord : battlefield) { process_lord(lord); }
     }
     return {pb, tb};
 }
 
 // Returns true if any lord on the battlefield grants double strike to creature's subtype.
+// ds_lord_idx (optional): pre-filtered indices of the controller's double-strike-granting
+// permanents (see the ComputeLordBonus note); nullptr => scan the whole battlefield. Byte-identical.
 inline bool HasDoubleStrikeFromLords(
     const Card&                    creature,
     const std::vector<Permanent>&  battlefield,
     int                            controller_index,
-    bool                           all_creature_types = false)
+    bool                           all_creature_types = false,
+    const std::vector<int>*        ds_lord_idx        = nullptr)
 {
-    for (const Permanent& lord : battlefield)
+    auto grants = [&](const Permanent& lord) -> bool
     {
-        if (lord.controller_index != controller_index) { continue; }
+        if (lord.controller_index != controller_index) { return false; }
         const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
-        if (!ldef || !ldef->params.grants_double_strike) { continue; }
+        if (!ldef || !ldef->params.grants_double_strike) { return false; }
         if (all_creature_types && !ldef->params.subtypes_affected.empty()) { return true; }
         for (const std::string& sub : ldef->params.subtypes_affected)
         {
@@ -1623,6 +1647,15 @@ inline bool HasDoubleStrikeFromLords(
                 if (cs == sub) { return true; }
             }
         }
+        return false;
+    };
+    if (ds_lord_idx)
+    {
+        for (int li : *ds_lord_idx) { if (grants(battlefield[li])) { return true; } }
+    }
+    else
+    {
+        for (const Permanent& lord : battlefield) { if (grants(lord)) { return true; } }
     }
     return false;
 }
@@ -4149,6 +4182,63 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
         if (ti < 0) { return false; }   // declared target gone -> fizzle
     }
 
+    // Human-play board-click target override (viewer feedback 2026-08-12 #2/#3): the searched
+    // variant target (target_number) is only the preselected DEFAULT; the human picks off the
+    // BOARD, exactly like Invigorate's own-pump prompt, and from the full RULES-legal set (every
+    // own creature) -- not the provider's search-pruned candidate set (TrickTargetCandidates),
+    // which is a search-breadth policy and must not bind a human. For a strive cast (Twinflame)
+    // the human picks 1 + strive_extras creatures -- the count the cast already PAID for, so the
+    // floor equals the ceiling (Crackle's "the count is the selection" rule); for trick_up_to_one
+    // (Gold Rush / Scale the Heights) an empty pick keeps the untargeted cast. The chooser is
+    // nulled by RevealLogPause in every search/rollout scope, so the autonomous engine and every
+    // enumeration stay byte-identical.
+    std::vector<int> strive_pick;   // human-chosen strive extras (battlefield indices), else empty
+    if (g_play_target_chooser != nullptr)
+    {
+        std::vector<ChosenTarget> heur;
+        if (ti >= 0) { heur.push_back({ 1, ti, 0 }); }
+        const int extras = (ti >= 0) ? std::max(0, strive_extras) : 0;
+        if (extras > 0)
+        {
+            // Mirror the autonomous pick below: the extras the heuristic would take (by power).
+            std::vector<std::pair<int, int>> ranked;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                if (i == ti) { continue; }
+                const Permanent& p = state.battlefield[i];
+                if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
+                ranked.push_back({ p.card.m_power.value_or(0), i });
+            }
+            std::stable_sort(ranked.begin(), ranked.end(),
+                             [](const std::pair<int, int>& x, const std::pair<int, int>& y)
+                             { return x.first > y.first; });
+            for (int k = 0; k < extras && k < static_cast<int>(ranked.size()); ++k)
+            { heur.push_back({ 1, ranked[k].second, 0 }); }
+        }
+        std::vector<ChosenTarget> picked =
+            (*g_play_target_chooser)(state, def, controller, 1 + extras, 0, heur);
+        std::vector<int> own;
+        for (const ChosenTarget& c : picked)
+        {
+            if (c.kind != 1 || c.index < 0 || c.index >= static_cast<int>(state.battlefield.size()))
+            { continue; }
+            const Permanent& p = state.battlefield[c.index];
+            if (p.controller_index != controller || (!p.card.IsCreature() && !p.is_animated))
+            { continue; }
+            own.push_back(c.index);
+        }
+        if (own.empty())
+        {
+            // Only an up-to-one trick may resolve untargeted; anything else keeps the default.
+            if (def.params.trick_up_to_one) { ti = -1; }
+        }
+        else
+        {
+            ti = own.front();
+            strive_pick.assign(own.begin() + 1, own.end());
+        }
+    }
+
     // Recipient list, in resolution order (see the header comment). Indices stay valid across the
     // payload applications: token/Treasure creation only push_backs (append), nothing erases
     // mid-resolution (the legend rule inside CreateTrickCopyToken erases only the just-made
@@ -4177,21 +4267,29 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
     }
     else if (ti >= 0 && strive_extras > 0)
     {
-        // Strive: target + the strive_extras biggest OTHER creatures by printed power.
-        std::vector<std::pair<int, int>> ranked;   // (printed power, index)
-        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
-        {
-            if (i == ti) { continue; }
-            const Permanent& p = state.battlefield[i];
-            if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
-            ranked.push_back({ p.card.m_power.value_or(0), i });
-        }
-        std::stable_sort(ranked.begin(), ranked.end(),
-                         [](const std::pair<int, int>& x, const std::pair<int, int>& y)
-                         { return x.first > y.first; });
         order.push_back(ti);
-        for (int k = 0; k < strive_extras && k < static_cast<int>(ranked.size()); ++k)
-        { order.push_back(ranked[k].second); }
+        if (!strive_pick.empty())
+        {
+            // Human-chosen strive extras (the board-click override above).
+            for (int i : strive_pick) { order.push_back(i); }
+        }
+        else
+        {
+            // Strive: target + the strive_extras biggest OTHER creatures by printed power.
+            std::vector<std::pair<int, int>> ranked;   // (printed power, index)
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                if (i == ti) { continue; }
+                const Permanent& p = state.battlefield[i];
+                if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
+                ranked.push_back({ p.card.m_power.value_or(0), i });
+            }
+            std::stable_sort(ranked.begin(), ranked.end(),
+                             [](const std::pair<int, int>& x, const std::pair<int, int>& y)
+                             { return x.first > y.first; });
+            for (int k = 0; k < strive_extras && k < static_cast<int>(ranked.size()); ++k)
+            { order.push_back(ranked[k].second); }
+        }
     }
     else if (ti >= 0) { order.push_back(ti); }
     else              { order.push_back(-1); }   // up-to-one, no target: one untargeted instance
@@ -6568,6 +6666,9 @@ namespace tapstats
     // backtracker). High bail% on a deck means the exact model needs extending (e.g. bounce lands).
     inline std::atomic<std::uint64_t> g_flow_prune{0};
     inline std::atomic<std::uint64_t> g_flow_bail{0};
+    // Identical-sibling collapse (s_dup_of_buf in the worker): candidates skipped because an
+    // identical earlier sibling already failed at the same node. Each skip prunes a whole subtree.
+    inline std::atomic<std::uint64_t> g_dup_skips{0};
     struct Dumper {
         ~Dumper()
         {
@@ -6594,6 +6695,10 @@ namespace tapstats
                 "=== FLOW PRUNE: pruned=%llu (%.1f%% of top-level entries)  bailed=%llu (%.1f%%) ===\n",
                 fp, top ? 100.0 * (double)fp / (double)top : 0.0,
                 fb, top ? 100.0 * (double)fb / (double)top : 0.0);
+            std::fprintf(stderr,
+                "=== DUP COLLAPSE: identical-sibling skips=%llu (%.2f per node) ===\n",
+                (unsigned long long)g_dup_skips.load(),
+                nodes ? (double)g_dup_skips.load() / (double)nodes : 0.0);
         }
     };
     inline Dumper g_dumper;

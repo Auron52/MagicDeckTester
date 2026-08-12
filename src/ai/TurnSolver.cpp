@@ -2893,6 +2893,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     const int mana_ceiling = g_emit_prune ? OptimisticTurnMana(state) : kNoManaCeiling;
 
     std::vector<Action> actions;
+    // Reserve an optimistic upper bound so the push_backs below never re-grow the backing store
+    // mid-build. Action is a heavy struct (carries a card_name string + cost), so each realloc
+    // move-copies every element -- and CollectActions is called on the rollout hot path (millions of
+    // times). A hint only: the contents and order are unchanged, so every game stays byte-identical.
+    actions.reserve(ap.hand.size() + state.battlefield.size());
 
     // --- Hand casts ---
     for (int i = 0; i < n; ++i)
@@ -4702,7 +4707,7 @@ static void CollectMultiVariantSacSources(const std::vector<Action>& cands, std:
         if (a.kind != Action::Kind::SacForMana) { continue; }
         const auto it = std::find_if(seen.begin(), seen.end(),
                                      [&](const auto& s) { return s.first == a.sac_source_id; });
-        if (it == seen.end()) { seen.push_back({ a.sac_source_id, &a.chosen_float_color }); continue; }
+        if (it == seen.end()) { seen.push_back({ a.sac_source_id, &a.chosen_float_color.str() }); continue; }
         if (*it->second != a.chosen_float_color
             && std::find(out.begin(), out.end(), a.sac_source_id) == out.end())
         { out.push_back(a.sac_source_id); }
@@ -5400,7 +5405,7 @@ static void MeasureManaSideCollapse(const std::vector<Action>& cands,
                 // Consumed-card identity must be in the signature: two lines with the same mana are NOT
                 // interchangeable if they spent different cards (that changes later turns).
                 consumed += (std::uint64_t)(std::uintptr_t)a.def * 1099511628211ull;
-                if (!a.chosen_float_color.empty()) { colour_choice += (std::uint64_t)a.chosen_float_color[0]; }
+                if (!a.chosen_float_color.empty()) { colour_choice += (std::uint64_t)a.chosen_float_color.str()[0]; }
             };
             for (int t = 0; t < ng; ++t)
             { if (choice[t] > 0) { fold(groups[m_groups[t]][choice[t] - 1]); } }
@@ -8699,13 +8704,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // plain-cantrip DrawSpell branch: defer at the MAIN-plan level (site 3, resolved after
             // every main cast -- matching the executor's post-loop replay), re-solve inline when
             // already inside a re-solve. Human play stops so the chooser re-fires post-draw.
-            if (def.params.cast_draw > 0 && !s_human_play)
+            // creates_treasures (Gold Rush) opens the DEFERRED breakpoint ONLY: its Treasures are
+            // same-turn mana (real SacForMana candidates in the re-solve), so the ritual role no
+            // longer requires a draw trick in the plan -- previously a GR-without-draw-payload
+            // plan left its Treasures idle until the next decision. It must NEVER take the inline
+            // path below: a nested greedy re-solve mid-continuation taps attack-ready mana dorks
+            // to develop, stranding a proven this-turn lethal (mirrorwing s3003 gi52 T5->T6), and
+            // -- because the inline path only runs when the continuation is being RECORDED
+            // (sink_stack non-empty) -- it diverges the committed/executed line from the scored
+            // one. A Treasure minted mid-continuation simply waits for the next decision, exactly
+            // as before this feature. (A draw trick keeps the inline path: its DRAWN cards are
+            // unplayable without a re-solve, which is why that trade was accepted for draws.)
+            if ((def.params.cast_draw > 0 || def.params.creates_treasures > 0) && !s_human_play)
             {
                 if (s_defer_cantrip && sink_stack.empty())
                 {
                     deferred_cantrip_resolve = true;
                 }
-                else
+                else if (def.params.cast_draw > 0)
                 {
                     if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
                     TurnSolver::Plan extra;
@@ -11503,7 +11519,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // each distinct multiset ordering once -- identical copies don't multiply).
             std::vector<int> idx(reorder.size());
             for (size_t i = 0; i < idx.size(); ++i) { idx[i] = static_cast<int>(i); }
-            auto by_name = [&](int x, int y) { return reorder[x].card_name < reorder[y].card_name; };
+            // .str(): LEXICOGRAPHIC order (never the interned pointer -- pointer order would vary
+            // run-to-run with allocation order and break determinism).
+            auto by_name = [&](int x, int y) { return reorder[x].card_name.str() < reorder[y].card_name.str(); };
             std::sort(idx.begin(), idx.end(), by_name);
             do { orderings.push_back(idx); } while (std::next_permutation(idx.begin(), idx.end(), by_name));
         }
@@ -11691,9 +11709,11 @@ static int PlanOpensBreakpoint(const TurnSolver::Plan& p)
             mask |= (d->params.stages_cards || d->params.expressive_iteration) ? (1 << 0) : (1 << 3);
         }
         if (d->params.impulse_exile > 0) { mask |= 1 << 2; }
-        // Zada/Mirrorwing trick with a draw payload: defers to the plain-cantrip site (3) at the
+        // Zada/Mirrorwing trick with a draw payload -- or a Treasure payload (Gold Rush), whose
+        // tokens are same-turn mana for the re-solve: defers to the plain-cantrip site (3) at the
         // main level (nested casts re-solve inline at site 0, like a nested cantrip).
-        if (d->params.solo_target_trick && d->params.cast_draw > 0) { mask |= 1 << 3; }
+        if (d->params.solo_target_trick
+            && (d->params.cast_draw > 0 || d->params.creates_treasures > 0)) { mask |= 1 << 3; }
     }
     return mask;
 }
@@ -12372,6 +12392,30 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         PROF_INC(gamestate_copies);
         GameState copy = state;
         if (!land_name.empty() && !PlayLandByName(copy, land_name, fetch_target, true, land_face)) { return; }
+        // Karoo (etb_bounce_land) DEFERRAL, mirroring ApplyPlanDirect / the executor: the apply
+        // plays a Karoo AFTER the main casts, so the bounce returns a land that was already
+        // TAPPED for this turn's casts. Folding the Karoo into `copy` up front bounced the land
+        // BEFORE cast enumeration, so every karoo+cast line that spends the bounced land's mana
+        // was unenumerable at ANY budget -- an enumeration/apply mismatch (viewer artifact
+        // s1 T2: "land=Gruul Turf; cast=Goblin Instigator" is executor-legal and was rejected;
+        // the same gap silently shrank every autonomous Karoo turn). Enumerate the casts on the
+        // PRE-Karoo board instead -- exactly the state the apply's deferred order hands them.
+        // The Karoo's own mana never funds this turn (it enters tapped), and it leaves the hand
+        // (committed to the drop) so hand-land accounting (Land's Edge ammo) can't double-count
+        // it. Rides the apply's MTG_NO_KAROO_DEFER hatch: with the hatch set both sides play
+        // land-first again, byte-identically.
+        {
+            static const bool s_karoo_defer_enum = !EnvOn("MTG_NO_KAROO_DEFER");
+            const CardDefinition* fold_ld =
+                land_name.empty() ? nullptr : CardDatabase::Instance().Lookup(land_name);
+            if (s_karoo_defer_enum && fold_ld && fold_ld->params.etb_bounce_land)
+            {
+                copy = state;   // the PlayLandByName above was the legality probe only
+                std::vector<Card>& h = copy.ActivePlayer().hand;
+                for (auto it = h.begin(); it != h.end(); ++it)
+                { if (it->m_name == land_name) { h.erase(it); break; } }
+            }
+        }
 
         // "Play this land, cast nothing" baseline (neutral value 0). Skipped in a group-wave
         // TRANCHE re-enumeration: the idle plan touches no group, so wave 0 already emitted it.
