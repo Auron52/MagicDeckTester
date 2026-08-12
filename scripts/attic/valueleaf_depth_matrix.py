@@ -519,6 +519,23 @@ def run_incremental(args):
         q.sort(key=lambda ch: (zone(ch),
                                ch["off"] if zone(ch) == 1 else 0,
                                -est_spg(ch["c"])*ch["n"]))
+        # ...and CARRY that order into the pool, which does its own sort. Every chunk becomes a job in
+        # ONE `mtg --batch`, and BatchRunner re-sorts jobs by the manifest's `weight` DESCENDING (see
+        # BatchRunner.cpp, sched_weight). A plain cost weight therefore reimposed pure LPT and made this
+        # ordering INERT -- observed 2026-08-12: three minutes in, H1-H4 and V1-V5 still had zero games
+        # because the pool was running the costliest chunks first regardless of queue position.
+        #
+        # So encode the whole key in the weight. sched_weight is a 32-bit int, so the fields are packed
+        # to stay well inside it: zone (0..2) at 1e8, level at 1e4, cost at 1e0.
+        #   zone   : (2-z)*1e8      -- 0 (condemnable) outranks 1 (level-order) outranks 2 (packed)
+        #   level  : (target-off)*1e4 for the level-order zone only, so a LOWER offset outranks a
+        #            higher one; zero elsewhere, which leaves those zones ordered purely by cost (LPT)
+        #   cost   : int(s/game*10), capped below 1e4 so it can only ever break ties within a level
+        # Max is ~2.0e8, comfortably inside int32.
+        for ch in q:
+            z = zone(ch); c = ch["c"]
+            lvl = (target(c) - ch["off"])*10_000 if z == 1 else 0
+            ch["w"] = (2-z)*100_000_000 + lvl + min(int(est_spg(c)*10), 9_999)
         return q
 
     def write_state():
@@ -572,8 +589,10 @@ def run_incremental(args):
                      # unlucky 25-game chunk once condemned a cell averaging 5.5 s/game against a
                      # 60 s/game limit -- dragonstorm H5 s11011, 2026-08-04).
                      "cell":"%s_%s%d_s%d" % (dname, c["arm"], c["depth"], c["seed"]),
-                     # LPT priority for the pool's own sort: slowest cell first.
-                     "weight":int(est_spg(c)*1000)}
+                     # Priority for the pool's own sort (BatchRunner sorts by this DESCENDING). Packed
+                     # in build_queue so the queue's order survives into the pool; a bare cost weight
+                     # here silently reimposed LPT and made the set-completion ordering inert.
+                     "weight":ch["w"]}
                 # THE ARM, per job (see ai/ValueArm.h). This is what lets both arms share one queue.
                 if c["arm"]=="V":
                     job.update({"value_model":True, "value_profile":prof,
