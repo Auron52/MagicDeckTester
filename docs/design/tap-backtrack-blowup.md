@@ -48,8 +48,37 @@ Two independent sightings in one day, both Mirrorwing wide boards, both budget-i
 scaffolding; to re-find one, instrument a step counter (`MTG_TAP_BT_PROBE`) and run
 mirrorwing suite cases at 4x budget.
 
+## Fix (2026-08-12): identical-sibling collapse — ADOPTED
+
+Implemented the interchangeability collapse as a **sibling symmetry break inside the
+worker's candidate loop** (`s_dup_of_buf` in `TapForCostBacktrackWorker`,
+SpellEffects.cpp): at the top-level call, each candidate is chained to the nearest earlier
+candidate with the same `CardDefinition` and the same payment-relevant permanent state
+(counters, storage battery + hold flag, unreserved, untapped-at-entry, dork
+tap-eligibility — `CanTapNow` is invariant during a payment, so it is folded into the
+chain once). At any node, if a chain member is currently untapped, it was explored earlier
+at that node and failed, so the candidate's subtree is isomorphic to a proven failure and
+is skipped; members tapped by an ancestor on the DFS path are walked past. This collapses
+the reachable tapped-set space from 2^k toward (count+1) per identical class — the plan
+odometer's activation-family lesson applied to payments — and, unlike the memo, it also
+works on n>64 boards (where the memo is disabled; the b200 repro saw n=84).
+
+**Byte-identical** (only failure-isomorphic subtrees are skipped, so the first payment
+found and the exact sources it leaves tapped are unchanged): verified by a 100-game
+single-threaded on/off diff (`MTG_NO_TAP_DUP_COLLAPSE=1`, identical output) and a full
+smoke suite vs GT (33/33 PASS, digests unchanged, 0 play-changed).
+
+**Measured**: the original 14-hour command (`mirrorwing s5005 d3 b200 x100`) now completes
+in minutes (135,706 whole-subtree skips; worst residual game 123 s, gdb-confirmed to be
+plain wide search at 4x budget, not payment). `MTG_TAP_STATS=1` prints a
+`DUP COLLAPSE: identical-sibling skips=` line; `MTG_NO_TAP_DUP_COLLAPSE=1` is the
+standing same-binary A/B lever (must stay byte-identical — a digest diff is a bug).
+
+Residual: mixed-class boards (many near-identical but not def-identical sources) still
+multiply as (count+1)^classes; no sighting of that being pathological yet. A hard node
+cap + greedy fallback remains the documented next lever if one appears.
+
 ## Status
 
-OPEN — recorded on discovery; not scheduled. Cheap mitigation if it bites a run: kill the
-stuck game's process; suite budgets are unaffected so far (the blow-up needs a plan shape
-the shipped engine currently doesn't choose at suite budgets).
+FIXED (identical copies) — sibling collapse adopted 2026-08-12; see above. The
+node-cap fallback direction stays unimplemented until a residual sighting demands it.

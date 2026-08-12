@@ -1026,6 +1026,72 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     }
     const std::vector<std::pair<int, const CardDefinition*>>& cands = *src_cands;
 
+    // Identical-source sibling collapse. On a fanned-out board (a dozen Treasures from copied Gold
+    // Rushes, a dork chain) the failure memo's per-permanent bitmask keys treat every same-named,
+    // same-state source as distinct, so proving one unpayable cost walks C(k,j) masks per tapped
+    // count -- the 14-hour TapForCostBacktrackWorker blow-up (docs/design/tap-backtrack-blowup.md).
+    // But two sources with the same CardDefinition and the same payment-relevant permanent state
+    // (counters, storage battery + hold flag; tap-eligibility folded into the chain below) have
+    // ISOMORPHIC subtrees: tapping either yields states differing only in WHICH index bears the
+    // tapped flag, and nothing in a payment reads that index except the (perf-only) memo mask. So at
+    // any node, once the first such source has been explored and failed, its identical siblings must
+    // fail identically -- skip them. This collapses the reachable tapped-set space from 2^k toward
+    // (count+1) per identical class, byte-identically, by the colour-collapse argument above: only
+    // subtrees isomorphic to PROVEN FAILURES are skipped (and failures restore all state), so the
+    // first payment found -- and the exact sources it leaves tapped -- is unchanged.
+    //
+    // s_dup_of_buf[ci] chains candidate ci to the nearest EARLIER chain-eligible identical candidate
+    // (-1 = none). At a node, a chain member that is currently UNTAPPED was reached by this node's
+    // loop before ci (same order, and failed branches restore state between iterations), passed the
+    // same def-and-sig-determined filters, and so was explored (or itself dup-skipped, which by
+    // induction chains to an explored one) and FAILED -> skip ci. A member currently tapped is on
+    // the DFS path (tapped by an ancestor, not explorable at THIS node) -> walk past it. Chain
+    // eligibility (untapped at entry, unreserved, dork can tap) is computed ONCE here: CanTapNow is
+    // invariant during a payment (haste grants never read `tapped`, no permanent enters or leaves),
+    // and a source tapped at entry stays tapped throughout. MTG_NO_TAP_DUP_COLLAPSE=1 disables it
+    // (standing A/B lever on one binary; output must be byte-identical either way).
+    static thread_local std::vector<int> s_dup_of_buf;
+    if (top_level)
+    {
+        static const bool s_no_dup_collapse = EnvOn("MTG_NO_TAP_DUP_COLLAPSE");
+        const std::size_t nc = cands.size();
+        s_dup_of_buf.assign(nc, -1);
+        if (!s_no_dup_collapse)
+        {
+            auto counters_equal = [](const std::vector<Counter>& a, const std::vector<Counter>& b)
+            {
+                if (a.size() != b.size()) { return false; }
+                for (std::size_t k = 0; k < a.size(); ++k)
+                { if (a[k].type != b[k].type || a[k].count != b[k].count) { return false; } }
+                return true;
+            };
+            auto chain_eligible = [&](const std::pair<int, const CardDefinition*>& c) -> bool
+            {
+                const Permanent& p = state.battlefield[c.first];
+                if (p.tapped) { return false; }                        // tapped at entry: never explorable
+                if (reserved_mask & (1ull << c.first)) { return false; }
+                if (c.second->tmpl == CardTemplate::ManaDork && !CanTapNow(p, state.battlefield))
+                { return false; }
+                return true;
+            };
+            for (std::size_t ci = 1; ci < nc; ++ci)
+            {
+                const Permanent& pa = state.battlefield[cands[ci].first];
+                for (std::size_t cj = ci; cj-- > 0; )
+                {
+                    if (cands[cj].second != cands[ci].second || !chain_eligible(cands[cj]))
+                    { continue; }
+                    const Permanent& pb = state.battlefield[cands[cj].first];
+                    if (pb.storage_counters != pa.storage_counters
+                        || pb.storage_hold_this_turn != pa.storage_hold_this_turn
+                        || !counters_equal(pb.counters, pa.counters)) { continue; }
+                    s_dup_of_buf[ci] = static_cast<int>(cj);
+                    break;
+                }
+            }
+        }
+    }
+
     std::pair<std::uint64_t, std::uint64_t> key{0, 0};
     if (fail_memo)
     {
@@ -1171,8 +1237,9 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         }
     }
 
-    for (const std::pair<int, const CardDefinition*>& cand : cands)
+    for (std::size_t ci = 0; ci < cands.size(); ++ci)
     {
+        const std::pair<int, const CardDefinition*>& cand = cands[ci];
         const int i = cand.first;
         if (state.battlefield[i].tapped) { continue; }
         if (reserved_mask & (1ull << i)) { continue; }   // reservation audit: this source is held (not tappable)
@@ -1184,6 +1251,21 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         if (def->params.creature_mana_only && !for_creature) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }   // uncharged storage: no mana
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land = no mana
+
+        // Identical-sibling collapse (see the s_dup_of_buf block above): an untapped chain member was
+        // explored earlier at this node -- with the exact same def, permanent state and filters -- and
+        // failed, so this candidate's subtree is isomorphic to a proven failure. Skip it. Members
+        // currently tapped are on the DFS path (not explored at THIS node) -> walk past them.
+        {
+            bool dup = false;
+            for (int j = s_dup_of_buf[ci]; j >= 0; j = s_dup_of_buf[j])
+            { if (!state.battlefield[cands[j].first].tapped) { dup = true; break; } }
+            if (dup)
+            {
+                if (tapstats::Enabled()) { tapstats::g_dup_skips.fetch_add(1, std::memory_order_relaxed); }
+                continue;
+            }
+        }
 
         // Reflecting Pool -> the shared, hoisted union (empty = solo RP = no mana); every other
         // source -> its static produces[]. (Inlined EffectiveProduces so the union is reused.)

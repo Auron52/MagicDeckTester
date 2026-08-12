@@ -6666,6 +6666,9 @@ namespace tapstats
     // backtracker). High bail% on a deck means the exact model needs extending (e.g. bounce lands).
     inline std::atomic<std::uint64_t> g_flow_prune{0};
     inline std::atomic<std::uint64_t> g_flow_bail{0};
+    // Identical-sibling collapse (s_dup_of_buf in the worker): candidates skipped because an
+    // identical earlier sibling already failed at the same node. Each skip prunes a whole subtree.
+    inline std::atomic<std::uint64_t> g_dup_skips{0};
     struct Dumper {
         ~Dumper()
         {
@@ -6692,6 +6695,10 @@ namespace tapstats
                 "=== FLOW PRUNE: pruned=%llu (%.1f%% of top-level entries)  bailed=%llu (%.1f%%) ===\n",
                 fp, top ? 100.0 * (double)fp / (double)top : 0.0,
                 fb, top ? 100.0 * (double)fb / (double)top : 0.0);
+            std::fprintf(stderr,
+                "=== DUP COLLAPSE: identical-sibling skips=%llu (%.2f per node) ===\n",
+                (unsigned long long)g_dup_skips.load(),
+                nodes ? (double)g_dup_skips.load() / (double)nodes : 0.0);
         }
     };
     inline Dumper g_dumper;
