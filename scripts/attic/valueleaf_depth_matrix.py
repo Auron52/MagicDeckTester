@@ -484,29 +484,42 @@ def run_incremental(args):
                     n=min(chunk, args.batch-off%args.batch, hi-off)
                     q.append({"c":c,"off":off,"n":n})
                     off+=n
-        q.sort(key=lambda ch: est_spg(ch["c"])*ch["n"], reverse=True)
-        # PREFIX SEEDING: hoist each cell's FIRST outstanding chunk to the head, keeping LPT order
-        # within the head and within the remainder.
+        # LEVEL-ORDER THE FIRST 3/4, PACK THE LAST (user, 2026-08-12). LPT and the resync's banking
+        # rule pull in opposite directions, and unmediated the banking rule loses: resync_engine_change
+        # keeps only offsets below B = min, over the seed's INCOMPLETE cells, of their contiguous
+        # prefix -- so ONE cell with zero games forces B=0 and an engine change discards the whole
+        # seed. LPT guarantees exactly that state for hours (it runs the costliest chunks first, so the
+        # cheap cells have not started at all): measured 2026-08-11, a run holding 4367 games across
+        # 7.75 h would have banked NONE of them. A Windows Update then killed the next run outright,
+        # which is the same loss arriving by a different route.
         #
-        # LPT and the resync's banking rule pull in opposite directions, and unmediated the banking
-        # rule loses. resync_engine_change keeps only offsets below B = min over the seed's INCOMPLETE
-        # cells of their contiguous prefix -- so a single cell with ZERO games forces B=0 and the
-        # engine change discards the whole seed. LPT guarantees exactly that state for hours: it runs
-        # the costliest chunks first, so the cheap cells (H1-H4, V1-V5 here) have not started at all.
-        # Measured 2026-08-11: a run holding 4367 games across 7.75 h would have banked NONE of them,
-        # because H1 had no chunk and B was therefore 0 for every seed.
+        # So advance every cell together through the first 3/4 of its target -- offset level by offset
+        # level, all cells at level k before level k+1 -- which keeps B climbing with the run and makes
+        # a stop at ANY convenient point cost only the level in flight. Then switch to LPT for the last
+        # quarter, where packing is what protects the makespan: the residual tail is one chunk of the
+        # most expensive cell, and that is the honest floor for chunk-level batching.
         #
-        # One chunk per cell at the head costs ~one chunk-width of makespan (the head is still LPT-
-        # ordered, so the most expensive chunk still starts first) and lifts B off zero for every seed
-        # as soon as it drains. It does not make banking perfect -- B still tracks the SLOWEST cell's
-        # prefix, which is the price of LPT -- but it converts "lose everything" into "lose what is
-        # above the common prefix", which is the difference the measurement above showed.
-        seen, head, rest = set(), [], []
-        for ch in q:
-            k = id(ch["c"])
-            (rest if k in seen else head).append(ch)
-            seen.add(k)
-        return head + rest
+        # CONDEMNABLE cells keep plain LPT and stay at the front (user, 2026-08-12). They are capped at
+        # the reference target rather than run to 400, their whole purpose is to be judged early so the
+        # queue is freed, and level-ordering them would delay that verdict for no banking gain.
+        #
+        # Ordering WITHIN a level stays cost-descending: B is gated by the SLOWEST cell's chunk landing,
+        # so starting the expensive chunk of each level first minimises time-to-protection. Cheapest-
+        # first would bank trivia instantly but push the binding cell later, moving B off zero LATER.
+        # The EXPENSIVE CELL IS NOT SPECIAL-CASED (user, 2026-08-12). H5 leads, exactly as it does under
+        # plain LPT -- it is simply that a SET is completed before the next one starts. Cost-descending
+        # is the within-level tiebreak, so H5 is the first chunk of every level and the first chunk of
+        # the packed quarter; it is never held back. The single thing that changes versus LPT is the
+        # primary key: finish the set, then move on.
+        def condemnable(c): return c["depth"] > args.never_condemn_at_or_below
+        def zone(ch):
+            c = ch["c"]
+            if condemnable(c):                          return 0  # LPT, up front
+            return 1 if ch["off"] < 0.75*target(c) else 2         # level-order, then packed
+        q.sort(key=lambda ch: (zone(ch),
+                               ch["off"] if zone(ch) == 1 else 0,
+                               -est_spg(ch["c"])*ch["n"]))
+        return q
 
     def write_state():
         tmp=state_path+".tmp"
