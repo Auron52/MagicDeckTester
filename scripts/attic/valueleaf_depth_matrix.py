@@ -485,7 +485,28 @@ def run_incremental(args):
                     q.append({"c":c,"off":off,"n":n})
                     off+=n
         q.sort(key=lambda ch: est_spg(ch["c"])*ch["n"], reverse=True)
-        return q
+        # PREFIX SEEDING: hoist each cell's FIRST outstanding chunk to the head, keeping LPT order
+        # within the head and within the remainder.
+        #
+        # LPT and the resync's banking rule pull in opposite directions, and unmediated the banking
+        # rule loses. resync_engine_change keeps only offsets below B = min over the seed's INCOMPLETE
+        # cells of their contiguous prefix -- so a single cell with ZERO games forces B=0 and the
+        # engine change discards the whole seed. LPT guarantees exactly that state for hours: it runs
+        # the costliest chunks first, so the cheap cells (H1-H4, V1-V5 here) have not started at all.
+        # Measured 2026-08-11: a run holding 4367 games across 7.75 h would have banked NONE of them,
+        # because H1 had no chunk and B was therefore 0 for every seed.
+        #
+        # One chunk per cell at the head costs ~one chunk-width of makespan (the head is still LPT-
+        # ordered, so the most expensive chunk still starts first) and lifts B off zero for every seed
+        # as soon as it drains. It does not make banking perfect -- B still tracks the SLOWEST cell's
+        # prefix, which is the price of LPT -- but it converts "lose everything" into "lose what is
+        # above the common prefix", which is the difference the measurement above showed.
+        seen, head, rest = set(), [], []
+        for ch in q:
+            k = id(ch["c"])
+            (rest if k in seen else head).append(ch)
+            seen.add(k)
+        return head + rest
 
     def write_state():
         tmp=state_path+".tmp"
@@ -571,6 +592,19 @@ def run_incremental(args):
             env.pop(k, None)
         env.setdefault("MTG_BATCH_HEARTBEAT", os.path.join(os.path.dirname(args.out) or ".",
                                                            "heartbeat.txt"))
+        # MEMORY BOUND, not a tuning knob. The matrix runs UNBOUNDED search on every worker at once,
+        # and the transposition table is an unbounded memoization of SimulateToEnd -- so the pool's
+        # footprint grows without limit. Measured 2026-08-11 on FiveColour: one `mtg --batch` reached
+        # 43.9 GB RES / 93.3% of a 47 GB box with 0 GB available, i.e. one bad game away from the OOM
+        # killer taking a 13-hour run with it.
+        #
+        # The cap is RESULT-NEUTRAL by construction (see TranspositionTable::Cap): the table is a pure
+        # memoization, so refusing to store past the cap trades recompute for bounded memory and every
+        # decision is unchanged. Early shallow high-reuse leaves are stored first and kept; only the
+        # deep long tail is dropped. An entry is ~64 B (16 B key + 4 B value + node/bucket overhead),
+        # so 8M entries is ~0.5 GB per live table -- roughly 12-24 GB across 24 workers, which leaves
+        # real headroom on this box instead of running to the ceiling.
+        env.setdefault("MTG_TT_CAP", "8000000")
         games=sum(j["games"] for j in jobs)
         nH=sum(1 for j in jobs if not j.get("value_model"))
         print("ONE pool: %d chunks (%d H, %d V), %d games, %d threads; condemn %s"
