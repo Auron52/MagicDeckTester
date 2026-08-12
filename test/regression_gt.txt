@@ -1,4 +1,4 @@
-# Regression ground truth -- commit fb2c9da  date 2026-08-12
+# Regression ground truth -- commit ef38c40  date 2026-08-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -35,8 +35,8 @@ creature_giving_smoke_d0_s1001=5.7690/84ba9be4148c5a7c
 creature_giving_smoke_d3_s1001=4.8067/cbb6a847578b1474
 creature_giving_smoke_d5_s1001=4.8133/c5b09a5bfc8974a3
 mirrorwing_smoke_d0_s1001=6.3690/fd2fdde4bf5582ae
-mirrorwing_smoke_d3_s1001=5.2600/c230c30a6e997056
-mirrorwing_smoke_d5_s1001=5.1467/95cfe6423c6eb730
+mirrorwing_smoke_d3_s1001=5.2467/3865d1238e343ce3
+mirrorwing_smoke_d5_s1001=5.0933/fd8f49e35c8e5ec0
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/4ec30ea41e344477
@@ -90,10 +90,10 @@ creature_giving_regression_d3_s3003=4.7600/d6f2c50f296365a3
 creature_giving_regression_d5_s2002=4.7880/15838f61b1760d9a
 creature_giving_regression_d5_s3003=4.7360/9ab5f873be61901a
 mirrorwing_regression_d0_s2002=6.3670/8f8cf3923df51d2b
-mirrorwing_regression_d3_s2002=5.1300/25fe0090bd74faf1
-mirrorwing_regression_d3_s3003=5.0000/0f9fb8e461fb9dea
-mirrorwing_regression_d5_s2002=5.0500/221f4071da39a698
-mirrorwing_regression_d5_s3003=4.9900/b14380c94b4048be
+mirrorwing_regression_d3_s2002=5.0850/1f0b8bece92200f5
+mirrorwing_regression_d3_s3003=5.0050/963e2405584735a4
+mirrorwing_regression_d5_s2002=5.0100/029b25531f91b30c
+mirrorwing_regression_d5_s3003=4.9700/b170406f34351ca4
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/fe364b007bbfaa56
@@ -220,11 +220,11 @@ mirrorwing_overnight_d0_s4004=6.3650/252a7069a48692e3
 mirrorwing_overnight_d0_s6006=6.3490/7a3c937e1bd3b8d6
 mirrorwing_overnight_d0_s8008=6.3820/b6ed8d16a35ec3a1
 mirrorwing_overnight_d0_s10010=6.3610/11a32d8ddd7e94a0
-mirrorwing_overnight_d3_s4004=5.1600/1e9243443f1e96f7
-mirrorwing_overnight_d3_s5005=5.2050/7195463101c490eb
-mirrorwing_overnight_d3_s6006=5.1100/93abfa35279456e5
-mirrorwing_overnight_d3_s7007=5.1750/b9336d0b75c7492a
-mirrorwing_overnight_d5_s4004=5.1300/eb73df62f7bba310
-mirrorwing_overnight_d5_s5005=5.1633/ab5508af5aee74f1
-mirrorwing_overnight_d5_s6006=5.1400/251130aad20e5938
-mirrorwing_overnight_d5_s7007=5.1300/61dcddd8a3bcc00c
+mirrorwing_overnight_d3_s4004=5.1200/9b5c344a6468c9b4
+mirrorwing_overnight_d3_s5005=5.1650/8b640f8a7e504758
+mirrorwing_overnight_d3_s6006=5.0500/8f19eafda2136da0
+mirrorwing_overnight_d3_s7007=5.1300/5dd469a8ad316655
+mirrorwing_overnight_d5_s4004=5.1200/09dcb753ed056b9b
+mirrorwing_overnight_d5_s5005=5.1300/4152c2c8a514ce65
+mirrorwing_overnight_d5_s6006=5.0733/f41c89395ce2f4b0
+mirrorwing_overnight_d5_s7007=5.1033/f5afd6938d1ca431
