@@ -55,6 +55,10 @@ phase:
 | `src`, play digest UNCHANGED | play-identical: the freeze is re-stamped and the chunks re-labelled. Nothing is discarded, nothing stops |
 | play digest CHANGED | the run CONTINUES and banks every full set — see the next section |
 
+The commit is still worth recording, but as an OPTIMISATION rather than the rule (user, 2026-08-13):
+an unchanged `HEAD:src` means play cannot have changed, so the cheap check short-circuits and the
+digest — which costs a smoke run — is never computed. It is a fast path, not the criterion.
+
 It never stops. An earlier version halted on any `src` movement, which cost a 60–70 core-hour restart
 for a change that provably could not alter a single game.
 
