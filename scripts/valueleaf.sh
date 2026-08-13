@@ -321,16 +321,39 @@ phase_freeze() {
 phase_rows() {
     done_p A_rows && return 0
     local key dir stem mkey base games row b n
+    # GAME-LEVEL RESUME. Rows are durable and dedupe on (seed,turn), but that alone only makes a
+    # re-run CORRECT, not cheap: the manifest used to be rebuilt unconditionally, so an interrupted
+    # phase A re-played every game, banked or not. On a cheap deck that is noise; on Mirrorwing the
+    # 2026-08-13 OOM would have re-paid ~100 core-hours it already held rows for. So: a game that has
+    # produced AT LEAST ONE row is skipped, and only the missing games are queued. The known cost is
+    # a game KILLED MID-PLAY: its already-banked early turns count it as done, so its unwritten
+    # late-turn rows are lost -- a handful of rows against a hundred core-hours; `finish` exists
+    # precisely because fewer rows is acceptable.
+    #
+    # Fidelity: a re-run game must reproduce the original chunk scheme exactly. Chunk b gave its
+    # game k (absolute in [b,b+250)) shuffle seed base+k and global game index k-b, so a missing
+    # range [k, k+n) re-runs as {seed: base+k, game_index: k-b, games: n}, split at chunk
+    # boundaries -- byte-identical to the games the original chunk would have played.
     { for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
-        b=0
-        while [ "$b" -lt "$games" ]; do
-            n=$(( games - b < 250 ? games - b : 250 ))
-            h_job "${key}_rows_$(printf '%05d' "$b")" "$(deck_file "$dir" "$stem")" \
-                  "$dir/$stem.profile.json" "$n" "$(( base + b ))"
-            b=$(( b + 250 ))
+        awk -v base="$base" -v games="$games" '
+            !/^#/ { s = $(NF-1) - base; if (s >= 0 && s < games) seen[s] = 1 }
+            END   { st = -1
+                    for (i = 0; i <= games; i++) {
+                        miss = (i < games && !(i in seen))
+                        if (miss && st < 0) { st = i }
+                        # flush at a run end or a 250-game chunk boundary (gi is chunk-relative)
+                        if (st >= 0 && (!miss || i % 250 == 0) && i > st) {
+                            print st, i - st; st = miss ? i : -1
+                        }
+                    } }' "$( [ -f "$ALL_ROWS" ] && echo "$ALL_ROWS" || echo /dev/null )" \
+        | while read -r st n; do
+            b=$(( st / 250 * 250 ))
+            h_job "${key}_rows_$(printf '%05d' "$b")_$(printf '%03d' "$(( st - b ))")" \
+                  "$(deck_file "$dir" "$stem")" "$dir/$stem.profile.json" \
+                  "$n" "$(( base + st ))" "game_index=$(( st - b ))"
         done
-      done; } | h_manifest "$ALL_ROWS.manifest.json" >/dev/null
+      done; } | h_manifest "$ALL_ROWS.manifest.json" >/dev/null || { log "PHASE A: no games missing -- all rows banked"; mark A_rows; return 0; }
     # Counted from the manifest, not accumulated in the loop: the loop runs inside the pipeline's
     # SUBSHELL, so a variable incremented there is lost and the line logged "0 games".
     log "PHASE A: $(grep -c '"name"' "$ALL_ROWS.manifest.json") jobs across ${#DECK_TABLE[@]} decks in ONE queue (K=$ROW_K searched labels)."
