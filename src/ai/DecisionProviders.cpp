@@ -6833,7 +6833,12 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
     // kept preferentially (they are fan-out bodies too, the next bucket). Greedy keep passes;
     // everything unkept is the shed, deadest first (tapped-entering lands, untapped lands, dorks).
     const int  need          = std::max(0, enabler_mv - board_sources);
-    const bool the_turn_next = need <= 1;   // one more drop and the enabler is castable
+    // "Next turn is the turn" (user): at need <= 1 the enabler lands next turn (need 1: after
+    // the drop; need 0: castable already, next turn is the go-off), so the kept drop must enter
+    // untapped. This hoard is safe ONLY because S5 below names the full hand -- pre-S5, on an
+    // all-keeps hand, it emptied the named list and the MV fallback shed the only magnet
+    // (gi295 s7007: win -> loss, persistent at UNLIMITED budget).
+    const bool the_turn_next = need <= 1;
     auto untapped_land = [&](const Card& c)
     {
         const CardDefinition* d = def_of(c);
@@ -6905,11 +6910,8 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         }
     }
 
-    // S2 -- redundant magnets beyond the kept one (all of them once a magnet is on board; the
-    // interchangeable-group protection still guards the truly last enabler anywhere in hand),
-    // and Twinflame copies beyond the FIRST -- the keep list holds "1 Twinflame" (user
-    // 2026-08-13): one doubles the board, a second is a dead copy of a situational card.
-    for (int i : magnets) { if (i != kept_magnet) { shed.push_back(i); } }
+    // S2 -- Twinflame copies beyond the FIRST: the keep list holds "1 Twinflame" (user
+    // 2026-08-13); one doubles the board, a second is a dead copy of a situational card.
     {
         bool tf_seen = false;
         for (int i = 0; i < n; ++i)
@@ -6918,6 +6920,12 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
             if (tf_seen) { shed.push_back(i); } else { tf_seen = true; }
         }
     }
+    // Spare magnets beyond the kept one (all of them once a magnet is on board; the
+    // interchangeable-group protection still guards the truly last enabler anywhere in hand).
+    // A LATER shed slot for spares (after the tail spells) was measured (gi295 diagnosis) and
+    // was d0-neutral; it only mattered jointly with a green floor of 1, so the "only 1 enabler"
+    // spec position stands.
+    for (int i : magnets) { if (i != kept_magnet) { shed.push_back(i); } }
 
     // S3 -- spells, least wanted first. USER keep priority (2026-08-13): Gold Rush, ONE
     // Twinflame and Fists of Flame (the outright winners -- never named here, kept by omission)
@@ -6964,8 +6972,51 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
     { return is_dork(ap.hand[a]) > is_dork(ap.hand[b]); });
     for (int i : spare_bodies) { shed.push_back(i); }
 
-    // Omitted (kept): the kept magnet, the needed mana + colour-floor sources, every Gold Rush /
-    // Fists of Flame + the first Twinflame, and the bodies inside the 4-weight target.
+    // S5 -- the FULL decision's last-resort tail: name EVERY remaining card, least wanted first,
+    // so the shared ranking's highest-MV fallback (Tier B) never decides anything. "Omission =
+    // keep" only holds while the named list covers the overflow; on an all-keeps hand the MV
+    // fallback shed the deck's only MAGNET (MV 5 tops the hand -- gi295). Order: extra copies of
+    // the top-tier spells (Fists then Gold Rush, high copy tiers first -- the diversity rule),
+    // kept mana (deadest first), kept bodies, then the first copies in reverse keep priority
+    // (Fists, Twinflame, Gold Rush), and the kept magnet ABSOLUTE last.
+    {
+        std::vector<char> named(static_cast<std::size_t>(n), 0);
+        for (int i : shed) { if (i >= 0 && i < n) { named[static_cast<std::size_t>(i)] = 1; } }
+        auto tail_push = [&](int i)
+        { if (!named[static_cast<std::size_t>(i)] && !ap.hand[i].m_is_staged)
+          { named[static_cast<std::size_t>(i)] = 1; shed.push_back(i); } };
+        auto copies_of = [&](const char* name)
+        {
+            std::vector<int> v;
+            for (int i = 0; i < n; ++i)
+            { if (!ap.hand[i].m_is_staged && ap.hand[i].m_name == name) { v.push_back(i); } }
+            return v;
+        };
+        const std::vector<int> fists = copies_of("Fists of Flame");
+        const std::vector<int> grs   = copies_of("Gold Rush");
+        std::size_t top_rounds = std::max(fists.size(), grs.size());
+        for (std::size_t r = top_rounds; r-- > 1; )   // extras only (copy index >= 1)
+        {
+            if (r < fists.size()) { tail_push(fists[r]); }
+            if (r < grs.size())   { tail_push(grs[r]); }
+        }
+        for (int tier = 0; tier <= 2; ++tier)         // kept mana, deadest first
+        {
+            for (std::size_t k = 0; k < mana.size(); ++k)
+            {
+                if (!kept[k]) { continue; }
+                if (mana_shed_tier(ap.hand[static_cast<std::size_t>(mana[k])]) == tier)
+                { tail_push(mana[k]); }
+            }
+        }
+        for (int i : bodies) { tail_push(i); }        // kept bodies (dorks already in mana tiers)
+        if (!fists.empty()) { tail_push(fists[0]); }  // first copies, reverse keep priority
+        for (int i = 0; i < n; ++i)
+        { if (!ap.hand[i].m_is_staged && ap.hand[i].m_name == "Twinflame") { tail_push(i); break; } }
+        if (!grs.empty()) { tail_push(grs[0]); }
+        if (kept_magnet >= 0) { tail_push(kept_magnet); }
+        for (int i : magnets) { tail_push(i); }       // any magnet the group protection released
+    }
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
