@@ -1,0 +1,107 @@
+# Condemn on the ROW average, not one seed's cell (deferred)
+
+User directive, 2026-08-13: *"I don't think we should condemn based on one seed. That's a design flaw.
+... It should be condemned based on the average."*
+
+Deferred only because it is an engine change and a matrix generation was 30% through; see **Gate**.
+
+## What happened
+
+FiveColour's matrix condemned three value-arm cells, all on the same seed:
+
+| cell | games | condemned at | limit |
+|---|---|---|---|
+| V6@8008 | 50 | 60.9 s/game | 60.0 |
+| V7@8008 | 50 | 60.6 s/game | 60.0 |
+| V8@8008 | 50 | 61.7 s/game | 60.0 |
+
+Over the line by 1-3%. The same depths on the other three seeds ran 5.8-16.7 s/game and completed
+all 400 games. One game did it: `gi=17` on seed 8008 took ~0.52 h in each of the three cells and is
+1,908 s of V6@8008's 2,865 s total (67%). Excluding it the cell runs ~19.5 s/game -- a 3x margin
+under the guard.
+
+## The two defects
+
+`BatchRunner.cpp` accumulates against `job.cell_id`, which is `(deck, arm, depth, seed)`:
+
+```cpp
+const int   n  = cell_games[cid].fetch_add(1) + 1;
+const long long tot = cell_ms[cid].fetch_add(g_ms) + g_ms;
+if (n >= condemn.reference_games && double(tot)/n > condemn.sec_per_game*1000.0 && ...)
+```
+
+**1. The unit is the seed.** Tractability is a property of the DEPTH -- whether searching this deck
+that deep is affordable. A single seed is a sample of that property, not the property itself. Judging
+each seed separately means the row's fate is decided four times independently, and any one of them
+going over removes that seed from the row.
+
+**2. The statistic is a raw mean over 50 games.** A mean is not robust, and cost per game in this
+engine is heavy-tailed -- a handful of games carry most of a cell's cost. The `max_game_sec` guard
+already exists to catch a single runaway game; letting one also tip the *mean* guard double-counts
+the same outlier and conflates "one hard hand" with "this depth is unaffordable".
+
+## Why it matters more than the lost games
+
+The table's row mean is an unweighted mean of per-seed means (`valueleaf_depth_matrix.emit_table`):
+
+```python
+lp = sum(cell_mean(c) for c in cs)/len(cs)
+```
+
+so a 50-game cell carries the same 25% as a 400-game cell. On FiveColour:
+
+```
+V8:  8008 = 4.8200 (50g)   9009 = 4.9850   10010 = 5.0225   11011 = 4.9725
+     unweighted row = 4.9500        game-weighted row = 4.9864
+```
+
+**0.036 between those two readings, against the 0.019 H5-vs-V8 gap the run was launched to settle.**
+Seed 8008 scores ~0.17 below the other three, so which seeds a row carries moves that row further
+than the effect under study. Condemnation therefore does not merely thin a row -- it makes rows
+NON-COMPARABLE, because V6-V8 are missing 350 games of a systematically-easy-scoring seed that
+H1-H5 will carry in full. Any cross-arm ordering read off such a table is partly an artifact of which
+cells happened to trip a wall-clock guard.
+
+Neither weighting rescues it. Equal-weight-per-seed is right in principle (the seed is the
+replication unit) but then one seed's estimate rests on 50 games; game-weighting silently
+underweights the hard seed. The only real fix is for every row to carry every seed.
+
+## The change
+
+Accumulate and judge on the ROW, `(deck, arm, depth)`:
+
+- Key the counters on a row id instead of `cell_id` (cells keep their own counters for reporting).
+- Trip when `row_ms / row_games > sec_per_game` with `row_games >= reference_games`.
+- On condemnation, cap EVERY cell of the row at `reference_games`, which is what the driver's
+  `target()` already assumes for an intractable cell.
+
+Effects: V6/V7/V8 read ~23 s/game row-wide and survive. H6 -- genuinely explosive on all four seeds
+(102.6 s/game where it got a mean at all, two seeds tripping `max_game_sec` on a single in-flight
+game over an hour) -- still trips, and trips SOONER, because 50 reference games now accrue across the
+row rather than 50 per seed. The reference cost of judging an explosive row falls ~4x.
+
+Seed balance needs no extra machinery: the pool admits condemnable work at `drip` games per CELL, so
+a row's games arrive roughly evenly across its seeds and the aggregate is not dominated by whichever
+seed the scheduler reached first.
+
+### Also worth fixing at the same site
+
+`max_game_sec` condemns the whole cell from ONE in-flight game (it is what took H6@8008 and H6@9009).
+As a liveness guard it is right to fire -- nothing should wait an hour on one game -- but the response
+should be to abandon THAT GAME, not the cell: same one-observation-kills-a-cell shape as above, one
+level down. Skipping the game keeps the rest of the cell's seeds aligned. Left out of the primary
+change because it alters what a condemned cell's game set means, and wants its own measurement.
+
+## Gate
+
+Engine change, so the standing gate applies -- smoke + regression -- plus a check that a condemned
+row caps every cell at `reference_games` and that `[batch] metering ...` still reports.
+
+It must land BEFORE or AFTER a matrix generation, never during, and for a sharper reason than the
+usual `HEAD:src` fingerprint rule (`.claude/skills/value-leaf.md` Rule 0): condemnation decisions are
+made from WALL-CLOCK s/game, so running the gate on a loaded box would inflate the live run's timings
+and cause the very false condemnations this change removes. The rebuild also cannot replace
+`build/Release/mtg` while that binary is executing.
+
+Related: `docs/design/batch-drip-release.md` (the other deferred change to this same pool), and
+`docs/design/fivecolour-depth-monotonicity.md` (the open V8-vs-H5 question this defect contaminates).
