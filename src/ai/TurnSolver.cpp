@@ -2058,9 +2058,14 @@ static inline bool NonPrefixAccelViolated(const std::vector<int>& accel_order, c
 
 // Forward decl so the storm go-off short-circuit in Solve/EnumeratePlans can VERIFY a projected win by
 // actually simulating the line (ApplyPlanDirect is defined later). Default arg lives here (the earliest
-// declaration) so those callsites can omit out_breakpoint.
+// declaration) so those callsites can omit out_breakpoint. bp_capture/bp_resume are the deferred-
+// breakpoint prefix-resume cache hooks (see BpPrefixSnap at the definition) -- only the wave loops
+// pass them.
+struct BpPrefixSnap;
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
-                            std::vector<Action>* out_breakpoint = nullptr);
+                            std::vector<Action>* out_breakpoint = nullptr,
+                            BpPrefixSnap* bp_capture = nullptr,
+                            const BpPrefixSnap* bp_resume = nullptr);
 
 // Forward decl: ApplyPlanDirect's SEARCHED breakpoint continuation (Plan::bp_choice) picks its
 // candidate from the same land-folded plan set the outer search ranks. Defined later.
@@ -7393,8 +7398,33 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     return true;
 }
 
+// ---- Deferred-breakpoint PREFIX-RESUME cache (see docs/design/mirrorwing-gen-perf-profile.md) --
+//
+// A deferred wave slot's variants differ from their base plan ONLY in (bp_choice, bp_at): for a
+// fixed (base plan, bp_at) every rank replays the identical prefix -- land drop, every main cast,
+// the Karoo deferral -- just to diverge at the deferred re-solve (measured on the gi69 label
+// repro: 63.5M full applies for 6.0M wave slots, ~54% of wall). The cache captures the GameState
+// ONCE per (base, at) at the deferred re-solve, plus the little apply context that must resume
+// with it, and every later rank re-enters ApplyPlanDirect in resume mode: prefix skipped, state
+// seeded from the snapshot, tail (continuation + dig loop + Land's Edge/drip/depletion) unchanged.
+// Deferred site only (site 3/5): a slot whose varied breakpoint fires mid-cast-loop never
+// captures and takes the full apply as before. Byte-identity is the bar: the resumed tail must
+// produce exactly the state a full apply would (validated on wave counters + suite digests).
+// MTG_NO_BP_PREFIX_CACHE=1 restores the uncached walk.
+struct BpPrefixSnap
+{
+    bool valid = false;
+    GameState state;                 // at the deferred re-solve, pre-continuation
+    std::vector<Action> sink;        // *out_breakpoint content at the snapshot
+    int  bp_seen      = 0;           // enabled-class breakpoints the prefix walked past
+    bool trick_armed  = false;       // deferred_trick_armed (site 5 vs 3)
+    bool cascade_free = false;       // one-shot free-cast marker, captured for exactness
+    int  pin_top = -1, pin_etbdig = -1, pin_tutor = -1, pin_reorder = -1;   // scripted-pin state
+};
+
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
-                            std::vector<Action>* out_breakpoint)   // default arg on the forward decl
+                            std::vector<Action>* out_breakpoint,   // default args on the fwd decl
+                            BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume)
 {
     PROF_INC(applyplan_calls);
     Player& ap  = state.ActivePlayer();
@@ -7481,7 +7511,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // SimulateLandPlay fallback, which would play a land the human didn't choose). The autonomous
     // search's post-combat plans carry no land (drop_available is pre-combat-only there), so the
     // block is a no-op for the search -> byte-identical.
-    if (is_pre_combat || s_human_play)
+    // bp_resume: the whole prefix (this land block through the Karoo deferral) is INSIDE the
+    // snapshot's state -- skipped.
+    if (bp_resume == nullptr && (is_pre_combat || s_human_play))
     {
         if (plan.land_decided)
         {
@@ -9167,6 +9199,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // action produces float (a.ritual_float > 0, which SacForMana sets), so the greedy per-cast path --
     // which spends floating first -- realises the combo. Mirrors AIEngine::TakeTurn (lockstep). Both
     // loops are empty for every deck without a Lotus (no SacForMana/Suspend action) -> byte-identical.
+    // bp_resume: the whole main-phase execution below (Lotus float, batch pre-pay, the cast loop,
+    // Krenko taps, sac outlets, the deferred Karoo) already happened inside the snapshot's state;
+    // skip straight to the deferred re-solve and re-arm the context that must resume with it.
+    if (bp_resume != nullptr)
+    {
+        bp_seen                  = bp_resume->bp_seen;
+        deferred_cantrip_resolve = true;                  // captured AT the armed re-solve
+        deferred_trick_armed     = bp_resume->trick_armed;
+        cascade_free             = bp_resume->cascade_free;
+        g_bp_seen_last           = bp_resume->bp_seen;    // as a full apply would have left it
+        g_scripted_top_choice    = bp_resume->pin_top;    // pins as the prefix left them (a
+        g_scripted_etbdig_choice = bp_resume->pin_etbdig; // consumed pin stays consumed; the
+        g_scripted_tutor_choice  = bp_resume->pin_tutor;  // entry guards' dtors still restore
+        g_scripted_reorder_choice= bp_resume->pin_reorder;// the outer values on exit)
+        if (out_breakpoint != nullptr) { *out_breakpoint = bp_resume->sink; }
+    }
+    else
+    {
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::SacForMana)
@@ -9250,6 +9300,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         karoo_deferred = false;
         PlayLandByName(state, karoo_land_name, karoo_fetch);
     }
+    }   // end of the bp_resume prefix skip
 
     // Deferred plain-cantrip re-solve: run ONCE, after every main-plan cast, using only the
     // mana those casts left — the executor's post-loop breakpoint replay does exactly this,
@@ -9258,6 +9309,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // inline, recording into its own nested breakpoint (replayed recursively by the executor).
     if (deferred_cantrip_resolve)
     {
+        // PREFIX-RESUME capture: this apply's varied breakpoint is the deferred one (the running
+        // bp_seen equals plan.bp_at and the class is enabled), so the state RIGHT HERE -- every
+        // main cast applied, Karoo played, pre-continuation -- is the shared prefix of every rank
+        // of this (base, at) slot. Snapshot it once; the wave loop resumes the later ranks from it.
+        if (bp_capture != nullptr && plan.bp_choice >= 0 && bp_seen == plan.bp_at
+            && ((BpSiteMask() >> (deferred_trick_armed ? 5 : 3)) & 1) != 0)
+        {
+            bp_capture->valid        = true;
+            bp_capture->state        = state;
+            bp_capture->sink         = out_breakpoint ? *out_breakpoint : std::vector<Action>{};
+            bp_capture->bp_seen      = bp_seen;
+            bp_capture->trick_armed  = deferred_trick_armed;
+            bp_capture->cascade_free = cascade_free;
+            bp_capture->pin_top      = g_scripted_top_choice;
+            bp_capture->pin_etbdig   = g_scripted_etbdig_choice;
+            bp_capture->pin_tutor    = g_scripted_tutor_choice;
+            bp_capture->pin_reorder  = g_scripted_reorder_choice;
+        }
         deferred_cantrip_resolve = false;
         if (out_breakpoint) { sink_stack.push_back(out_breakpoint); }
         TurnSolver::Plan extra;
@@ -12058,6 +12127,10 @@ public:
     bool Empty() const { return m_slots.empty(); }
     std::size_t SlotCount() const { return m_slots.size(); }
     int LastRank() const { return m_last_k; }
+    // Identity of the slot Next() last handed out, for the prefix-resume cache key: every rank of
+    // one (base plan, bp_at) slot shares its pre-continuation prefix state.
+    std::size_t LastBase() const { return m_slots[m_last].base; }
+    int         LastAt()   const { return m_slots[m_last].at; }
 
     // Fills `out` with the next variant to score. False once every slot is retired.
     bool Next(const std::vector<TurnSolver::Plan>& plans, TurnSolver::Plan& out)
@@ -14120,6 +14193,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 g_bp_wave_probe.slots.fetch_add(walker.SlotCount());
             }
             TurnSolver::Plan v;
+            // Prefix-resume cache: (base plan, bp_at) -> snapshot at the deferred re-solve. The
+            // walker round-robins ranks across slots, so the cache is keyed, not single-entry;
+            // capped so a pathological node cannot hold hundreds of GameState copies.
+            static const bool s_prefix_cache = !EnvOn("MTG_NO_BP_PREFIX_CACHE");
+            std::unordered_map<uint64_t, BpPrefixSnap> prefix_cache;
             while (walker.Next(pre, v))
             {
                 // Anytime: a variant only ever wins on a STRICTLY better win turn, so stopping here
@@ -14135,11 +14213,22 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
                     if (g_force_heuristic_leaf) { g_interior_nodes_esc.fetch_add(1, std::memory_order_relaxed); }
                 }
-                GameState s = state;
+                const uint64_t ck = (static_cast<uint64_t>(walker.LastBase()) << 8)
+                                  | static_cast<uint64_t>(walker.LastAt() & 0xFF);
+                auto hit = s_prefix_cache ? prefix_cache.find(ck) : prefix_cache.end();
+                GameState s = (hit != prefix_cache.end()) ? hit->second.state : state;
                 std::vector<Action> bp;
                 g_bp_cands_last = 0;              // 0 == this apply reached no eligible breakpoint
                 g_bp_seen_last  = 0;              // ... and reached no nested one either
-                ApplyPlanDirect(s, v, true, &bp);
+                if (hit != prefix_cache.end())
+                { ApplyPlanDirect(s, v, true, &bp, nullptr, &hit->second); }
+                else if (s_prefix_cache && prefix_cache.size() < 256)
+                {
+                    BpPrefixSnap snap;
+                    ApplyPlanDirect(s, v, true, &bp, &snap, nullptr);
+                    if (snap.valid) { prefix_cache.emplace(ck, std::move(snap)); }
+                }
+                else { ApplyPlanDirect(s, v, true, &bp); }
                 // Past the end of the list: the continuation fell back to greedy, so this variant is
                 // a copy of its own base plan (already scored) and the slot retires. The apply's
                 // breakpoint COUNT is reported alongside so nested indices open their own slots.
@@ -16372,6 +16461,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     g_bp_wave_probe.slots.fetch_add(walker.SlotCount());
                 }
                 Plan v;
+                // Prefix-resume cache -- same shape as the FSLine wave loop (see BpPrefixSnap).
+                static const bool s_prefix_cache = !EnvOn("MTG_NO_BP_PREFIX_CACHE");
+                std::unordered_map<uint64_t, BpPrefixSnap> prefix_cache;
                 while (walker.Next(candidates, v))
                 {
                     if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
@@ -16382,12 +16474,23 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 
                     if (budget) { budget->Consume(1); }
                     PROF_INC(gamestate_copies);
-                    GameState copy = state;
+                    const uint64_t ck = (static_cast<uint64_t>(walker.LastBase()) << 8)
+                                      | static_cast<uint64_t>(walker.LastAt() & 0xFF);
+                    auto hit = s_prefix_cache ? prefix_cache.find(ck) : prefix_cache.end();
+                    GameState copy = (hit != prefix_cache.end()) ? hit->second.state : state;
                     g_bp_cands_last = 0;
                     g_bp_seen_last  = 0;
                     if (is_pre_combat)
                     {
-                        ApplyPlanDirect(copy, v, true);
+                        if (hit != prefix_cache.end())
+                        { ApplyPlanDirect(copy, v, true, nullptr, nullptr, &hit->second); }
+                        else if (s_prefix_cache && prefix_cache.size() < 256)
+                        {
+                            BpPrefixSnap snap;
+                            ApplyPlanDirect(copy, v, true, nullptr, &snap, nullptr);
+                            if (snap.valid) { prefix_cache.emplace(ck, std::move(snap)); }
+                        }
+                        else { ApplyPlanDirect(copy, v, true); }
                         if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last)) { continue; }
                         if (!bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
