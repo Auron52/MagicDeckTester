@@ -1356,6 +1356,11 @@ static long long LoadProbeCarry(const Decklist& deck, const ExhaustiveKeepConfig
             {
                 const long long c = e["count"][pd].get<long long>();
                 if (c <= 0) { continue; }
+                // Fill ONLY cells a prior resume (journal/raw) left empty. The probe is this gen's r=0
+                // slice; a journal resume carries the cells refined so far (cnt >= floor) but NOT the ones
+                // still sitting at their probe floor, so probe-carry must UNION with -- never clobber --
+                // the resumed state. Same "highest cnt wins" principle the journal reload uses.
+                if (t.cnt[i][pd] != 0) { continue; }
                 t.sum[i][pd]   = e["sum"][pd].get<double>();
                 t.sumsq[i][pd] = e["sumsq"][pd].get<double>();
                 t.cnt[i][pd]   = c;
@@ -1405,6 +1410,50 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // run still leaves the degenerate-cell list behind (a killed run prints no end-of-run table, and
     // stderr is routinely a log nobody kept). Set before the first rollout of any phase.
     if (!cfg.out_raw.empty()) { Slow().SetLog(cfg.out_raw + ".slow.log"); }
+
+    // Always-on liveness monitor -- the READ-OUT side of the slow-rollout instrument. The slow top-N is
+    // collected live and lock-free by every worker (SlowRollouts.h), but it is only PRINTED by
+    // Slow().Dump, which each phase runner calls from its own heartbeat. Those heartbeats sit at the
+    // bottom of a driver loop; the continuous pool's loop body feeds a bounded queue (feed_upto ->
+    // q_nf.wait), so on a large deck the driver parks there for HOURS and the loop bottom -- hence the
+    // dump -- is reached only at floor-complete. Result: on exactly the big, slow gens that need it, the
+    // top-N is collected but never read out. This thread decouples the read-out from any driver loop: it
+    // wakes every 30s and dumps the current top-N + a wall-clock liveness line, so a degenerate cell is
+    // visible within ~30s of appearing, in EVERY phase. Diagnostic only (reads the shared tracker and
+    // stderr; never a decision/seed/accumulator), so results stay byte-identical. No off switch, same
+    // policy as the stream (docs/design/keepgen-no-off-switches.md): a quiet monitor must mean a healthy
+    // gen, not a silenced one.
+    struct SlowMonitor
+    {
+        std::mutex                            mx;
+        std::condition_variable               cv;
+        bool                                  stop = false;
+        std::chrono::steady_clock::time_point t0   = std::chrono::steady_clock::now();
+        std::thread                           th;
+        SlowMonitor()
+        {
+            th = std::thread([this]
+            {
+                std::unique_lock<std::mutex> lk(mx);
+                while (!cv.wait_for(lk, std::chrono::seconds(30), [this] { return stop; }))
+                {
+                    const double el = std::chrono::duration<double>(
+                                          std::chrono::steady_clock::now() - t0).count();
+                    lk.unlock();
+                    std::cerr << "[keepgen]   monitor: " << static_cast<long long>(el)
+                              << "s elapsed (liveness)\n" << std::flush;
+                    Slow().Dump(std::cerr, "so far", 3);
+                    lk.lock();
+                }
+            });
+        }
+        ~SlowMonitor()
+        {
+            { std::lock_guard<std::mutex> lk(mx); stop = true; }
+            cv.notify_all();
+            if (th.joinable()) { th.join(); }
+        }
+    } slow_monitor;
 
     // ---- 0. Rollout-config PLAY DIGEST ----------------------------------------------------------
     // The pooling identity: a fixed 64-game battery at the gen's depth/budget, stamped into both the
@@ -2130,11 +2179,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     }
 
     // ---- Probe carry (<out_raw>.probe): see LoadProbeCarry above --------------------------------
-    // Skipped only when a journal/out_raw resume already loaded state (the same run continuing).
-    // Unconditional: a matching probe chunk is byte-identically this gen's r=0 slice, so reusing it is
-    // never a trade-off -- the only alternative is re-rolling work already banked. Every mismatch case
-    // (different play_digest / fingerprints / an incomplete floor) is rejected inside LoadProbeCarry.
-    if (!cfg.recommend_only && resume_loaded == 0 && !cfg.out_raw.empty())
+    // Runs even AFTER a journal/raw resume: LoadProbeCarry now fills only empty cells (cnt == 0), so it
+    // UNIONS with the resumed state instead of replacing it. This matters because a journal resume of a
+    // gen that used probe-carry loads only the cells refined so far -- the ones still at their probe floor
+    // are absent, and without this they would be re-floored from scratch (measured: ~1.18M cell-sides,
+    // 6-10h wasted on Creature Giving). A matching probe chunk is byte-identically this gen's r=0 slice,
+    // so reusing it is never a trade-off. Every mismatch case (different play_digest / fingerprints / an
+    // incomplete floor) is rejected inside LoadProbeCarry.
+    if (!cfg.recommend_only && !cfg.out_raw.empty())
     {
         const long long carried = LoadProbeCarry(deck, cfg, eq, tables, K, min_size, play_digest);
         if (carried > 0)
