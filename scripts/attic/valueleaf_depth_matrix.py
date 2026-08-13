@@ -168,53 +168,60 @@ def _missing(c, target):
     return [(a, b) for a, b in out if b > a]
 
 
-def _split_chunk(x, at):
-    """Keep only [off,at) of chunk x. lp (a mean) carries over unchanged; ms is apportioned by count.
-
-    Exact for a whole-chunk drop. For a legacy chunk -- one synthetic record standing in for a run
-    that predates this schema -- the split is structurally exact (the old batches were uniform and
-    offset-aligned) but the kept prefix inherits the WHOLE cell's mean instead of the surviving
-    batches' mean. On a 400-game cell losing its last 25 that is an error of about
-    |batch_mean - cell_mean| / 15 ~ 0.01 turns. Recorded here rather than hidden: every chunk written
-    from now on is individually addressable, so it cannot recur."""
-    n = at - x["off"]
-    if n <= 0: return None
-    x = dict(x); x["ms"] = x["ms"] * n / x["n"]; x["n"] = n
-    return x
+def _chunk_offsets(x):
+    return range(x["off"], x["off"] + x["n"])
 
 
-def _chunk_minus(x, bad):
-    """The sub-chunks of x whose offsets are NOT in `bad`, as a list of maximal runs.
+def _chunk_inside(x, allowed):
+    """CHUNK ATOMICITY: a chunk survives only if EVERY offset it covers is allowed.
 
-    The general form of _split_chunk (which only keeps a prefix): a cross-cell engine disagreement
-    can land anywhere in a chunk, not just at its tail. lp (a mean) carries to each surviving piece
-    and ms is apportioned by game count -- the same approximation _split_chunk documents."""
-    if not bad: return [x]
-    end, out, run = x["off"] + x["n"], [], None
-    for o in range(x["off"], end + 1):
-        inside = o < end and o not in bad
-        if inside and run is None:
-            run = o
-        elif not inside and run is not None:
-            n = o - run
-            y = dict(x); y["off"] = run; y["n"] = n; y["ms"] = x["ms"] * n / x["n"]
-            out.append(y); run = None
-    return out
+    A chunk stores a MEAN (`lp`) over its `n` games, never the games themselves, so there is no honest
+    way to keep part of one -- the surviving piece would have to inherit the whole chunk's mean. Two
+    predecessors of this function (_split_chunk, _chunk_minus) did exactly that and documented it as a
+    small approximation, on the reasoning that grid-aligned chunks make a mid-chunk cut unreachable.
+
+    A CONDEMNED CELL BREAKS THAT ALIGNMENT. It stops mid-chunk, leaving a ragged length (FiveColour,
+    2026-08-13: H6 stopped at n=7 on one seed and n=4 on another), and those ragged offsets propagate
+    into the keep set for the entire seed group -- so every 25-game chunk in the group gets cut down
+    to 7 games carrying a 25-game mean. On the live run that was 26 chunks of fabricated `lp`, in the
+    exact quantity the table reports.
+
+    So retention granularity is now the STORAGE granularity: whole chunks, or nothing."""
+    return all(o in allowed for o in _chunk_offsets(x))
 
 
-def _offset_src_conflicts(cells):
+def _reference_only(c):
+    """A CONDEMNED cell is reference-only: capped at `reference_target`, flagged `*` in the table, and
+    never part of a per-game cross-cell comparison.
+
+    It is therefore an OBSERVER of the cross-cell engine invariant, not a participant -- it neither
+    votes on which games survive nor forces a drop on the comparable cells. Letting it participate
+    is how a row that can never be completed came to hold twelve full rows hostage: H6 was condemned
+    by the single-game guard at 7 and 4 games, could never reach its own 50-game target, and so stayed
+    'unfinished' forever, capping its seed's banking at its own 7 offsets."""
+    return bool(c.get("intractable"))
+
+
+def _offset_src_conflicts(cells, comparable_only=False):
     """(deck,seed) -> the set of game offsets measured on DIFFERENT engines in different cells.
 
-    A cell may legitimately be a MIX of engines (resync_engine_change deliberately keeps the prefix
-    below B on its original engine). What may NOT vary is the engine for a GIVEN GAME across cells,
-    because every way the table is read -- down a column (does depth d+1 beat depth d?) and across
-    arms (V vs H at one depth) -- is a per-game comparison. If game 380 ran on engine A at V8 and on
-    engine B at H5, that single difference is attributed to DEPTH when it is really a code change."""
+    A cell may legitimately be a MIX of engines (resync_engine_change deliberately keeps the games
+    below the split on their original engine). What may NOT vary is the engine for a GIVEN GAME across
+    cells, because every way the table is read -- down a column (does depth d+1 beat depth d?) and
+    across arms (V vs H at one depth) -- is a per-game comparison. If game 380 ran on engine A at V8
+    and on engine B at H5, that single difference is attributed to DEPTH when it is really a code
+    change.
+
+    `comparable_only` drops reference-only cells from the vote -- what ENFORCEMENT acts on, since a
+    condemned row cannot be compared per-game anyway. The read-side banner in emit_table deliberately
+    leaves it False: detection stays total even where enforcement is scoped, so mixing inside a
+    reference row is still named in the artifact rather than silently tolerated."""
     per_seed = {}
     for c in cells:
+        if comparable_only and _reference_only(c): continue
         by_off = per_seed.setdefault((c["deck"], c["seed"]), {})
         for x in c["chunks"]:
-            for o in range(x["off"], x["off"] + x["n"]):
+            for o in _chunk_offsets(x):
                 by_off.setdefault(o, set()).add(x.get("src"))
     return {k: {o for o, s in v.items() if len(s) > 1} for k, v in per_seed.items()}
 
@@ -232,7 +239,7 @@ def enforce_offset_src_agreement(cells, log=print):
     when the source moved, and the contamination therefore landed ONLY on the deep heuristic cells it
     made look good. Checking per OFFSET rather than per prefix is what makes this idempotent: it re-
     derives the invariant from the state itself, so it holds no matter how many times the src moved."""
-    conflicts = _offset_src_conflicts(cells)
+    conflicts = _offset_src_conflicts(cells, comparable_only=True)
     groups = {}
     for c in cells: groups.setdefault((c["deck"], c["seed"]), []).append(c)
     plan = []
@@ -241,9 +248,12 @@ def enforce_offset_src_agreement(cells, log=print):
         for c in groups[key]:
             keep, dropped = [], 0
             for x in sorted(c["chunks"], key=lambda x: x["off"]):
-                pieces = _chunk_minus(x, bad)
-                dropped += x["n"] - sum(p["n"] for p in pieces)
-                keep.extend(pieces)
+                # Chunk-atomic (see _chunk_inside): a chunk holding ANY disputed game goes whole.
+                # Widening a drop can never create a conflict -- a conflict needs two cells HOLDING
+                # one offset on different engines -- so this needs no fixpoint, unlike the keep side.
+                if any(o in bad for o in _chunk_offsets(x)):
+                    dropped += x["n"]; continue
+                keep.append(x)
             if dropped:
                 c["chunks"] = keep; _refresh(c)
                 plan.append((key[0], key[1], "%s%d" % (c["arm"], c["depth"]), dropped))
@@ -308,10 +318,15 @@ def resync_engine_change(cells, target, src_now, log=print):
     in-flight hole was thrown away with it. With set-completion ordering (build_queue) holes are
     normal and short-lived, which makes the difference routine rather than exotic.
 
-    Cells at target are excluded from the vote -- they owe nothing, so they cannot re-run anything and
-    cannot mix an offset -- but they are still SUBJECT to the drop, because an offset an incomplete
-    cell will redo must not survive in a complete one either. That also keeps a condemned cell capped
-    at 50 untouched: the incomplete cells all hold offsets 0..50, so nothing of its is dropped.
+    WHO VOTES. A cell at target is excluded -- it owes nothing, so it can neither re-run nor mix an
+    offset -- and so is a REFERENCE-ONLY cell (see _reference_only), which is never compared per-game
+    in the first place. Both remain SUBJECT to the drop, because an offset an unfinished comparable
+    cell will redo must not survive anywhere.
+
+    WHAT SURVIVES IS A WHOLE CHUNK (2026-08-13). The state stores one mean per chunk, not per game, so
+    keeping part of a chunk would mean inventing the surviving piece's score (see _chunk_inside).
+    Retention is chunk-atomic and resolved to a fixpoint, because atomicity and the intersection
+    constrain each other.
     """
     if not src_now: log("resync: no src fingerprint (not a git tree?) -- skipping"); return []
     groups = {}
@@ -323,18 +338,35 @@ def resync_engine_change(cells, target, src_now, log=print):
 
     plan = []
     for (deck, seed), cs in sorted(groups.items()):
-        incomplete = [c for c in cs if c["games"] < target(c)]
+        # Reference-only cells get no vote (see _reference_only) -- they are still SUBJECT to the drop.
+        incomplete = [c for c in cs if c["games"] < target(c) and not _reference_only(c)]
         if not incomplete: continue                  # seed complete => internally consistent
+
+        def survives(c, allowed):
+            """The offsets c would still hold after a drop bounded by `allowed`."""
+            return {o for x in c["chunks"] if x.get("src") == src_now or _chunk_inside(x, allowed)
+                    for o in _chunk_offsets(x)}
+
+        # FIXPOINT. Chunk atomicity and the intersection are mutually dependent: dropping a chunk
+        # because it straddles the boundary shrinks that cell's coverage, which shrinks the
+        # intersection, which can strand a chunk in some OTHER cell. One pass would leave cell A
+        # having dropped offsets cell B still holds -- precisely the cross-cell mixing this exists to
+        # prevent -- so iterate until it stops moving. It terminates because `survives` returns a
+        # subset of `allowed`, making the sequence strictly decreasing.
         keepable = set.intersection(*(covered(c) for c in incomplete))
+        while True:
+            nxt = set.intersection(*(survives(c, keepable) for c in incomplete))
+            if nxt == keepable: break
+            keepable = nxt
+
         for c in cs:
             keep, dropped = [], 0
             for x in sorted(c["chunks"], key=lambda x: x["off"]):
                 if x.get("src") == src_now:          # already the current engine: nothing to absorb
                     keep.append(x); continue
-                pieces = _chunk_minus(x, {o for o in range(x["off"], x["off"] + x["n"])
-                                          if o not in keepable})
-                dropped += x["n"] - sum(p["n"] for p in pieces)
-                keep.extend(pieces)
+                if not _chunk_inside(x, keepable):
+                    dropped += x["n"]; continue
+                keep.append(x)
             if dropped:
                 c["chunks"] = keep; _refresh(c)
                 plan.append((deck, seed, "%s%d" % (c["arm"], c["depth"]), dropped))
