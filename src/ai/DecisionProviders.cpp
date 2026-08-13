@@ -6762,7 +6762,7 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
 
     // Board census the buckets key on. Every bucket nets its board coverage out first (user
     // 2026-08-13: "you don't need to fill up the hand if there is already enough on board").
-    bool magnet_board = false;
+    bool magnet_board = false, board_sick_dork = false;
     int  board_sources = 0, board_red = 0, board_green = 0, board_bodies = 0;
     for (const Permanent& p : s.battlefield)
     {
@@ -6774,6 +6774,7 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         if ((d && d->card.IsLand()) || is_dork(p.card))
         {
             ++board_sources;
+            if (is_dork(p.card) && p.entered_this_turn) { board_sick_dork = true; }
             if (produces(p.card, Color::Red))   { ++board_red; }
             if (produces(p.card, Color::Green)) { ++board_green; }
         }
@@ -6847,6 +6848,7 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
     int red_deficit   = std::max(0, 2 - board_red);
     int green_deficit = std::max(0, 2 - board_green);
     std::vector<char> kept(mana.size(), 0);
+    std::vector<int>  mana_pick_order;   // kept mana, most-important-first (colour closers lead)
     int kept_n = 0;
     // Best unkept source under a preference score; -1 when none qualifies.
     auto pick_best = [&](auto&& qualifies, auto&& score) -> int
@@ -6876,6 +6878,7 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         if (k < 0) { return false; }
         const Card& c = ap.hand[static_cast<std::size_t>(mana[static_cast<std::size_t>(k)])];
         kept[static_cast<std::size_t>(k)] = 1; ++kept_n;
+        mana_pick_order.push_back(mana[static_cast<std::size_t>(k)]);   // most important first
         if (produces(c, Color::Red))   { red_deficit   = std::max(0, red_deficit - 1); }
         if (produces(c, Color::Green)) { green_deficit = std::max(0, green_deficit - 1); }
         return true;
@@ -6883,6 +6886,22 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
     while (red_deficit > 0   && keep_one([&](const Card& c) { return produces(c, Color::Red); }))   {}
     while (green_deficit > 0 && keep_one([&](const Card& c) { return produces(c, Color::Green); })) {}
     while (kept_n < need     && keep_one([&](const Card&)   { return true; }))                      {}
+    // Hedge land (user 2026-08-13): "you may keep an extra land even if you have enough mana in
+    // theory, due to summoning sickness or lands that come into play tapped." Theory counts a
+    // kept hand DORK, a tapped-entering kept land, and a summoning-sick board dork as sources,
+    // but each lags a turn in practice -- when the keep leans on any of them, keep one more
+    // LAND (untapped-entering preferred, via keep_one's score).
+    {
+        bool laggy = board_sick_dork;
+        for (std::size_t k = 0; k < mana.size() && !laggy; ++k)
+        {
+            if (!kept[k]) { continue; }
+            const Card& c = ap.hand[static_cast<std::size_t>(mana[k])];
+            if (is_dork(c) || (!untapped_land(c) && !is_dork(c))) { laggy = true; }
+        }
+        if (laggy)
+        { keep_one([&](const Card& c) { return !is_dork(c); }); }
+    }
     // Untapped-drop guard: the colour/count passes may have kept only tapped-entering Karoos;
     // if next turn is the cast turn and no kept LAND enters untapped, keep one that does.
     if (the_turn_next)
@@ -6894,128 +6913,140 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         {
             const int k = pick_best([&](const Card& c) { return untapped_land(c); },
                                     [&](const Card& c) { return produces(c, Color::Red) ? 1 : 0; });
-            if (k >= 0) { kept[static_cast<std::size_t>(k)] = 1; ++kept_n; }
+            if (k >= 0)
+            {
+                kept[static_cast<std::size_t>(k)] = 1; ++kept_n;
+                mana_pick_order.push_back(mana[static_cast<std::size_t>(k)]);
+            }
         }
     }
-    // The unkept mana is the shed: tapped-entering lands first, then untapped lands, then dorks.
+    // ---- The ORDERED shed list: the user's full doctrine (2026-08-13), least wanted first. ----
+    // "Duplicate enablers, unnecessary creatures or unnecessary lands should be cut first. Then,
+    // if needed you can cut spells down to 2. In the worst case where you need everything, you
+    // could go down to 1 enabler 2 pump 2 creatures and 2 land" (a kept dork counts as BOTH mana
+    // and creature "to make this fit"), "if there is extra space, we generally want more variety
+    // of spells", and Gold Rush outranks any other pump with ALL its copies ("it gives mana and
+    // pumps a lot. It's very difficult to lose when you get an enabler on board with 2 Gold
+    // Rush"). The list names EVERY card (the gi295 lesson: an under-covering list hands the
+    // decision to the shared ranking's highest-MV fallback, which sheds the magnet), so the
+    // shared ranking only ever contributes the required-piece protection net.
     auto mana_shed_tier = [&](const Card& c)
     { return is_dork(c) ? 2 : (untapped_land(c) ? 1 : 0); };
-    for (int tier = 0; tier <= 2; ++tier)
     {
-        for (std::size_t k = 0; k < mana.size(); ++k)
-        {
-            if (kept[k]) { continue; }
-            if (mana_shed_tier(ap.hand[static_cast<std::size_t>(mana[k])]) == tier)
-            { shed.push_back(mana[k]); }
-        }
-    }
+        std::vector<char> listed(static_cast<std::size_t>(n), 0);
+        auto put = [&](int i)
+        { if (i >= 0 && i < n && !listed[static_cast<std::size_t>(i)]
+              && !ap.hand[i].m_is_staged) { listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i); } };
 
-    // S2 -- Twinflame copies beyond the FIRST: the keep list holds "1 Twinflame" (user
-    // 2026-08-13); one doubles the board, a second is a dead copy of a situational card.
-    {
-        bool tf_seen = false;
-        for (int i = 0; i < n; ++i)
+        // 1. Dead cards: magnets beyond the kept one, Twinflame copies beyond the first.
+        for (int i : magnets) { if (i != kept_magnet) { put(i); } }
         {
-            if (ap.hand[i].m_is_staged || ap.hand[i].m_name != "Twinflame") { continue; }
-            if (tf_seen) { shed.push_back(i); } else { tf_seen = true; }
-        }
-    }
-    // Spare magnets beyond the kept one (all of them once a magnet is on board; the
-    // interchangeable-group protection still guards the truly last enabler anywhere in hand).
-    // A LATER shed slot for spares (after the tail spells) was measured (gi295 diagnosis) and
-    // was d0-neutral; it only mattered jointly with a green floor of 1, so the "only 1 enabler"
-    // spec position stands.
-    for (int i : magnets) { if (i != kept_magnet) { shed.push_back(i); } }
-
-    // S3 -- spells, least wanted first. USER keep priority (2026-08-13): Gold Rush, ONE
-    // Twinflame and Fists of Flame (the outright winners -- never named here, kept by omission)
-    // > Ancestral Anger > Expedite > Scale the Heights. With spare hand space prefer DIFFERENT
-    // pump spells over copies: the tail keeps FIRST copies of each name before SECOND copies
-    // (round-robin), so the shed walks copy tiers from the back -- 2nd Scale, 2nd Expedite,
-    // 2nd Anger, then 1st Scale, 1st Expedite, 1st Anger.
-    {
-        static const char* const kTailKeepOrder[] = {
-            "Ancestral Anger", "Expedite", "Scale the Heights" };
-        std::vector<int> copies[3];
-        for (int i = 0; i < n; ++i)
-        {
-            if (ap.hand[i].m_is_staged) { continue; }
-            for (int k = 0; k < 3; ++k)
-            { if (ap.hand[i].m_name == kTailKeepOrder[k]) { copies[k].push_back(i); } }
-        }
-        std::size_t rounds = 0;
-        for (int k = 0; k < 3; ++k) { rounds = std::max(rounds, copies[k].size()); }
-        for (std::size_t r = rounds; r-- > 0; )
-        {
-            for (int k = 2; k >= 0; --k)   // within a round: Scale before Expedite before Anger
-            { if (r < copies[k].size()) { shed.push_back(copies[k][r]); } }
-        }
-    }
-
-    // S4 -- excess creatures beyond the >=4 weighted bodies (Goblin Instigator brings its token,
-    // so it weighs 2). Board bodies count. A dork S1 KEPT does double duty (mana AND body, user
-    // 2026-08-13): it counts toward the 4 and is never a spare here -- without that carve-out this
-    // pass re-listed a kept mana dork as a spare body and shed it out from under the mana bucket.
-    std::vector<char> s1_kept(static_cast<std::size_t>(n), 0);
-    for (std::size_t k = 0; k < mana.size(); ++k)
-    { if (kept[k]) { s1_kept[static_cast<std::size_t>(mana[k])] = 1; } }
-    auto body_weight = [&](const Card& c) { return c.m_name == "Goblin Instigator" ? 2 : 1; };
-    int secured = board_bodies + (kept_magnet >= 0 ? 1 : 0);
-    std::vector<int> spare_bodies;
-    for (int i : bodies)
-    {
-        if (s1_kept[static_cast<std::size_t>(i)]) { secured += body_weight(ap.hand[i]); continue; }
-        if (secured < 4) { secured += body_weight(ap.hand[i]); continue; }   // kept
-        spare_bodies.push_back(i);
-    }
-    std::stable_sort(spare_bodies.begin(), spare_bodies.end(), [&](int a, int b)
-    { return is_dork(ap.hand[a]) > is_dork(ap.hand[b]); });
-    for (int i : spare_bodies) { shed.push_back(i); }
-
-    // S5 -- the FULL decision's last-resort tail: name EVERY remaining card, least wanted first,
-    // so the shared ranking's highest-MV fallback (Tier B) never decides anything. "Omission =
-    // keep" only holds while the named list covers the overflow; on an all-keeps hand the MV
-    // fallback shed the deck's only MAGNET (MV 5 tops the hand -- gi295). Order: extra copies of
-    // the top-tier spells (Fists then Gold Rush, high copy tiers first -- the diversity rule),
-    // kept mana (deadest first), kept bodies, then the first copies in reverse keep priority
-    // (Fists, Twinflame, Gold Rush), and the kept magnet ABSOLUTE last.
-    {
-        std::vector<char> named(static_cast<std::size_t>(n), 0);
-        for (int i : shed) { if (i >= 0 && i < n) { named[static_cast<std::size_t>(i)] = 1; } }
-        auto tail_push = [&](int i)
-        { if (!named[static_cast<std::size_t>(i)] && !ap.hand[i].m_is_staged)
-          { named[static_cast<std::size_t>(i)] = 1; shed.push_back(i); } };
-        auto copies_of = [&](const char* name)
-        {
-            std::vector<int> v;
+            bool tf_seen = false;
             for (int i = 0; i < n; ++i)
-            { if (!ap.hand[i].m_is_staged && ap.hand[i].m_name == name) { v.push_back(i); } }
-            return v;
-        };
-        const std::vector<int> fists = copies_of("Fists of Flame");
-        const std::vector<int> grs   = copies_of("Gold Rush");
-        std::size_t top_rounds = std::max(fists.size(), grs.size());
-        for (std::size_t r = top_rounds; r-- > 1; )   // extras only (copy index >= 1)
-        {
-            if (r < fists.size()) { tail_push(fists[r]); }
-            if (r < grs.size())   { tail_push(grs[r]); }
+            {
+                if (ap.hand[i].m_is_staged || ap.hand[i].m_name != "Twinflame") { continue; }
+                if (tf_seen) { put(i); } else { tf_seen = true; }
+            }
         }
-        for (int tier = 0; tier <= 2; ++tier)         // kept mana, deadest first
+
+        // 2. Unnecessary lands/dorks -- mana beyond the desired keep (need + colour floor +
+        //    untapped drop), deadest first: tapped-entering lands, untapped lands, dorks.
+        for (int tier = 0; tier <= 2; ++tier)
         {
             for (std::size_t k = 0; k < mana.size(); ++k)
             {
-                if (!kept[k]) { continue; }
-                if (mana_shed_tier(ap.hand[static_cast<std::size_t>(mana[k])]) == tier)
-                { tail_push(mana[k]); }
+                if (kept[k]) { continue; }
+                if (mana_shed_tier(ap.hand[static_cast<std::size_t>(mana[k])]) == tier) { put(mana[k]); }
             }
         }
-        for (int i : bodies) { tail_push(i); }        // kept bodies (dorks already in mana tiers)
-        if (!fists.empty()) { tail_push(fists[0]); }  // first copies, reverse keep priority
-        for (int i = 0; i < n; ++i)
-        { if (!ap.hand[i].m_is_staged && ap.hand[i].m_name == "Twinflame") { tail_push(i); break; } }
-        if (!grs.empty()) { tail_push(grs[0]); }
-        if (kept_magnet >= 0) { tail_push(kept_magnet); }
-        for (int i : magnets) { tail_push(i); }       // any magnet the group protection released
+
+        // 3. Unnecessary creatures -- beyond the 4-weighted-bodies target (Instigator weighs 2;
+        //    board bodies count; a mana-kept dork counts toward the 4 and is never a spare).
+        std::vector<char> s1_kept(static_cast<std::size_t>(n), 0);
+        for (std::size_t k = 0; k < mana.size(); ++k)
+        { if (kept[k]) { s1_kept[static_cast<std::size_t>(mana[k])] = 1; } }
+        auto body_weight = [&](const Card& c) { return c.m_name == "Goblin Instigator" ? 2 : 1; };
+        int secured = board_bodies + (kept_magnet >= 0 ? 1 : 0);
+        std::vector<int> kept_bodies, spare_bodies;
+        for (int i : bodies)
+        {
+            if (s1_kept[static_cast<std::size_t>(i)])
+            { secured += body_weight(ap.hand[i]); kept_bodies.push_back(i); continue; }
+            if (secured < 4)
+            { secured += body_weight(ap.hand[i]); kept_bodies.push_back(i); continue; }
+            spare_bodies.push_back(i);
+        }
+        std::stable_sort(spare_bodies.begin(), spare_bodies.end(), [&](int a, int b)
+        { return is_dork(ap.hand[a]) > is_dork(ap.hand[b]); });
+        for (int i : spare_bodies) { put(i); }
+
+        // 4. Spells down to the 2-pump floor, worst first. Keep priority (best-first): every
+        //    Gold Rush, the Twinflame, Fists' first copy, then VARIETY across the tail -- first
+        //    copies of Anger > Expedite > Scale before second copies of anything but GR.
+        std::vector<int> pumps;   // best-first
+        {
+            auto copies_of = [&](const char* name)
+            {
+                std::vector<int> v;
+                for (int i = 0; i < n; ++i)
+                { if (!ap.hand[i].m_is_staged && ap.hand[i].m_name == name) { v.push_back(i); } }
+                return v;
+            };
+            const std::vector<int> grs   = copies_of("Gold Rush");
+            const std::vector<int> tfs   = copies_of("Twinflame");
+            const std::vector<int> fists = copies_of("Fists of Flame");
+            const std::vector<int> anger = copies_of("Ancestral Anger");
+            const std::vector<int> exped = copies_of("Expedite");
+            const std::vector<int> scale = copies_of("Scale the Heights");
+            for (int i : grs) { pumps.push_back(i); }
+            if (!tfs.empty())   { pumps.push_back(tfs[0]); }      // extras are dead (step 1)
+            if (!fists.empty()) { pumps.push_back(fists[0]); }
+            if (!anger.empty()) { pumps.push_back(anger[0]); }
+            if (!exped.empty()) { pumps.push_back(exped[0]); }
+            if (!scale.empty()) { pumps.push_back(scale[0]); }
+            std::size_t rounds = std::max({ fists.size(), anger.size(), exped.size(), scale.size() });
+            for (std::size_t r = 1; r < rounds; ++r)
+            {
+                if (r < fists.size()) { pumps.push_back(fists[r]); }
+                if (r < anger.size()) { pumps.push_back(anger[r]); }
+                if (r < exped.size()) { pumps.push_back(exped[r]); }
+                if (r < scale.size()) { pumps.push_back(scale[r]); }
+            }
+        }
+        for (std::size_t k = pumps.size(); k-- > 2; ) { put(pumps[k]); }
+
+        // 5. Worst case ("you need everything"): trim the kept mana LANDS down to the floor
+        //    (least important first -- reverse of the keep passes' pick order; dorks are
+        //    creatures here) and the kept bodies down to 2. The floors trade (user 2026-08-13):
+        //    with a kept dork the mana slot floors at 2 lands (dork = mana AND creature);
+        //    dork-less it "may keep 3 land in the mana spot", with an Instigator preferred on
+        //    the creature side ("a goblin... would give you 3 creatures" -- it weighs 2, plus
+        //    the enabler).
+        {
+            std::vector<int> kept_lands;
+            bool kept_dork = false;
+            for (int i : mana_pick_order)
+            {
+                if (is_dork(ap.hand[i])) { kept_dork = true; }
+                else                     { kept_lands.push_back(i); }
+            }
+            const std::size_t land_floor = kept_dork ? 2 : 3;
+            for (std::size_t k = kept_lands.size(); k-- > land_floor; ) { put(kept_lands[k]); }
+            auto keep_rank = [&](const Card& c)   // higher = kept longer
+            { return is_dork(c) ? 2 : (c.m_name == "Goblin Instigator" ? 1 : 0); };
+            std::vector<int> kb = kept_bodies;    // keep-priority order, so the tail sheds first
+            std::stable_sort(kb.begin(), kb.end(), [&](int a, int b)
+            { return keep_rank(ap.hand[a]) > keep_rank(ap.hand[b]); });
+            for (std::size_t k = kb.size(); k-- > 2; ) { put(kb[k]); }
+        }
+
+        // 6. The floor itself, least precious first, magnet ABSOLUTE last. Everything still
+        //    unlisted (the 1/2/2/2 keep) is named so the list always covers the whole hand.
+        for (int i : bodies)          { put(i); }
+        for (std::size_t k = mana.size(); k-- > 0; ) { put(mana[k]); }
+        for (std::size_t k = pumps.size(); k-- > 0; ) { put(pumps[k]); }
+        if (kept_magnet >= 0) { put(kept_magnet); }
+        for (int i : magnets) { put(i); }   // any magnet the group protection released
     }
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }

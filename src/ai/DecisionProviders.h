@@ -548,7 +548,8 @@ public:
     // Cleanup discard: the USER-AUTHORED keep policy (Stage 6 review, refined 2026-08-13) -- one
     // magnet enabler, >=4 weighted bodies (Instigator counts 2), mana for the kept enabler with a
     // >=2 red + >=2 green floor (untapped drop when next turn is the cast turn), then spells:
-    // Gold Rush / ONE Twinflame / Fists kept, Anger > Expedite > Scale, different pumps over
+    // Gold Rush (EVERY copy -- GR outranks any other pump) / ONE Twinflame / Fists kept,
+    // Anger > Expedite > Scale, different pumps over
     // copies. Board coverage nets each bucket. The FULL decision, heuristic, never searched.
     // MTG_MW_BUCKET_DISCARD=0 -> generic base ranking (A/B lever).
     std::vector<int> CleanupDiscardCandidates(
