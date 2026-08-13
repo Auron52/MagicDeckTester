@@ -298,8 +298,12 @@ phase_rows() {
     # SUBSHELL, so a variable incremented there is lost and the line logged "0 games".
     log "PHASE A: $(grep -c '"name"' "$ALL_ROWS.manifest.json") jobs across ${#DECK_TABLE[@]} decks in ONE queue (K=$ROW_K searched labels)."
     log "  One tail, at the very end. Hinata dominates; the other decks fill cores behind its slow games."
+    # --threads 0 = let the engine resolve to every logical CPU it is actually allowed to use
+    # (affinity-aware), exactly as phases C and E already do. The old literal 24 was the DEV box's
+    # core count baked in as a number -- on a 32-thread machine it silently left a quarter of the
+    # box idle through the most expensive phase.
     MTG_DUMP_VALUE_ROWS="$ALL_ROWS" MTG_EVAL_ROWS_K="$ROW_K" MTG_EVAL_ROWS_ROLLOUT=0 \
-        ./build/Release/mtg --batch "$ALL_ROWS.manifest.json" --threads 24 \
+        ./build/Release/mtg --batch "$ALL_ROWS.manifest.json" --threads 0 \
         > "$VLQ/rows.batch.log" 2>&1
     log "PHASE A done: $(grep -vc '^#' "$ALL_ROWS" 2>/dev/null || echo 0) rows total"
     mark A_rows
