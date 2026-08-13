@@ -141,6 +141,26 @@ HDEPTHS="1 2 3 4 5"
 # -- 0.3% of the run that skipped them -- and left H1-5 unmeasured on two decks, which is what the
 # table is derived from. Set it high enough that only a real explosion trips it.
 INTRACTABLE_SPG=60
+# MEMORY BOUNDS, derived from the box -- generous, but never OOM (user, 2026-08-13). Both caches are
+# RESULT-NEUTRAL memos (a refused insert just recomputes; play is byte-identical -- see
+# TranspositionTable::Cap and FslCap in TurnSolver.cpp), so capping them costs only tail-game
+# wall-clock, never a row or a decision. They MUST be capped here because the label path runs
+# UNBOUNDED search on every worker at once and its two caches are otherwise unlimited:
+#   * MTG_TT_CAP  -- transposition table, ~64 B/entry, grows for the whole game.
+#   * MTG_FSL_CAP -- per-decision line cache, HEAVY entries (a full SearchLine of per-phase plans);
+#     ONE Mirrorwing mass-draw decision was measured at ~28 GB uncapped (2026-08-11), and phase A
+#     with both caches unlimited on 32 workers OOM'd a 23 GB box 3.2 h in (2026-08-13).
+# Sizing: budget = MemTotal minus 5 GB (system + engine baseline), split per worker; TT takes 1/3 at
+# 64 B/entry, the line cache 2/3 at an assumed ~8 KB/entry (deliberately pessimistic -- the caches
+# only lose recompute when the guess is off, the box only OOMs when it is optimistic). On a
+# 47 GB / 24-worker box this lands near the matrix driver's long-standing MTG_TT_CAP=8000000.
+# Exported for every phase; the matrix driver's env.setdefault yields to these.
+_mem_mb=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo)
+_nw=$(nproc)
+_budget_mb=$(( _mem_mb - 5120 )); [ "$_budget_mb" -lt 2048 ] && _budget_mb=2048
+_pw_kb=$(( _budget_mb * 1024 / _nw ))
+export MTG_TT_CAP=$((  _pw_kb * 1024 / 3 / 64   ))
+export MTG_FSL_CAP=$(( _pw_kb * 2 / 3 / 8      ))
 AB_GAMES=1000
 AB_SEEDS="600000 601000 602000 603000 604000 605000 606000 607000"
 PLAY_GAMES=500
