@@ -51,8 +51,18 @@ HDR = re.compile(r"games=(\d+)\s+seeds=\[([^\]]+)\]\s+value_min_depth=(\d+)")
 HGAMES = re.compile(r"hgames=(\d+)")
 HGAMES_DEPTH = re.compile(r"hgames_depth=([\d:,]+)")
 DECK = re.compile(r"^----\s+(\S+)\s+\(mean over (\d+) seeds\)")
-HROW = re.compile(r"H(\d+)=(-?[\d.]+)\[")
-VROW = re.compile(r"V(\d+)=(-?[\d.]+)\[")
+# The trailing `*` is emit_table's REFERENCE-ONLY marker (`*=intractable=reference-only`): at least one
+# seed-cell of that depth was condemned, so the row is a partial sample, not a measurement. It used to be
+# invisible here -- the old pattern stopped at `[` and the marker sits after `]` -- so a condemned row was
+# parsed as an ordinary ladder entry. On FiveColour that flipped the derived runtime rule for committed
+# depths 6-8 from "never fall back" to "fall back at H6", on the strength of an H6 mean taken from 4 games
+# on one seed and 7 on another. The `]` and the marker are optional so pre-marker logs still parse.
+HROW = re.compile(r"H(\d+)=(-?[\d.]+)\[[^\]]*\]?(\*?)")
+VROW = re.compile(r"V(\d+)=(-?[\d.]+)\[[^\]]*\]?(\*?)")
+# The per-deck `# games/cell:` line emit_table already writes, e.g. `H1:300g  H5:325g  H6:4g`. These are
+# the REAL per-depth counts (the min over seeds), which is what training_adequacy needs: the `hgames=`
+# header field carries args.target, so it declares 400 games for a cell that has 4.
+GAMES_CELL = re.compile(r"\b([HV])(\d+):(\d+)g")
 
 
 def parse_log(path, average=False):
@@ -95,7 +105,7 @@ def parse_log(path, average=False):
             cur = blocks.get(name)
             if cur is None:
                 cur = {"deck": name, "H": {}, "V": {}, "hg_cell": {}, "vg_cell": {},
-                       "meta": dict(meta), "seeds": meta["seeds"],
+                       "meta": dict(meta), "seeds": meta["seeds"], "ref_only": set(),
                        "_Hsum": {}, "_Hcnt": {}, "_Vsum": {}, "_Vcnt": {}, "_seedset": set()}
                 blocks[name] = cur
             cur["_seedset"].update(meta["seeds"])
@@ -105,8 +115,10 @@ def parse_log(path, average=False):
         if cur is None:
             continue
         if "heuristic:" in line:
-            for d, lp in HROW.findall(line):
+            for d, lp, ref in HROW.findall(line):
                 dd = int(d)
+                if ref:                                       # reference-only: the row does not exist here
+                    cur["ref_only"].add(("H", dd)); continue
                 if average:
                     cur["_Hsum"][dd] = cur["_Hsum"].get(dd, 0.0) + float(lp); cur["_Hcnt"][dd] = cur["_Hcnt"].get(dd, 0) + 1
                     cur["H"][dd] = cur["_Hsum"][dd] / cur["_Hcnt"][dd]
@@ -114,18 +126,31 @@ def parse_log(path, average=False):
                     cur["H"][dd] = float(lp)
                 cur["hg_cell"][dd] = cur["_hgd"].get(dd, cur["_hgdef"])   # games this H cell was measured at
         elif "value-leaf:" in line:
-            for d, lp in VROW.findall(line):
+            for d, lp, ref in VROW.findall(line):
                 dd = int(d)
+                if ref:
+                    cur["ref_only"].add(("V", dd)); continue
                 if average:
                     cur["_Vsum"][dd] = cur["_Vsum"].get(dd, 0.0) + float(lp); cur["_Vcnt"][dd] = cur["_Vcnt"].get(dd, 0) + 1
                     cur["V"][dd] = cur["_Vsum"][dd] / cur["_Vcnt"][dd]
                 else:
                     cur["V"][dd] = float(lp)
                 cur["vg_cell"][dd] = cur["_vg"]
+        elif "# games/cell:" in line:
+            # Real per-depth counts, overwriting the header's declared target. Emitted per arm, per deck,
+            # immediately after that arm's row, so the arm letter disambiguates.
+            for arm, d, g in GAMES_CELL.findall(line):
+                (cur["hg_cell"] if arm == "H" else cur["vg_cell"])[int(d)] = int(g)
     # With averaging, the merged block's seed provenance is the UNION of all per-seed emits seen.
     if average:
         for cur in blocks.values():
             cur["seeds"] = sorted(cur["_seedset"]); cur["meta"] = dict(cur["meta"], seeds=cur["seeds"])
+    # Never drop a row silently: an excluded depth SHORTENS the ladder, and the ladder's top is what the
+    # crossover's "never fall back" sentinel (max(hd)+1) is measured against.
+    for cur in blocks.values():
+        if cur["ref_only"]:
+            sys.stderr.write("NOTE %s: reference-only rows excluded from the ladder -- %s\n"
+                             % (cur["deck"], " ".join("%s%d" % r for r in sorted(cur["ref_only"]))))
     return blocks
 
 
