@@ -56,14 +56,31 @@ Suite-level: neutral (smoke 40s both arms; suite wall is search-dominated there 
 > real cost is (a) the CONTINUATION re-solve + apply per rank — genuinely different work per
 > rank, not redundancy — and (b) the FSLineTail rollouts of the ~26% of walks that survive
 > post-apply dedup. The remaining honest levers for label-path cost, in order of leverage:
-> 1. **Wave policy for the LABEL path** (USER decision, not an engine default): the deferred
->    wave contributed improved=0 on gi69's entire label pass (53M walks, 14M tails). If a
->    broader sample confirms ~0, generating labels with the deferred wave off recovers nearly
->    the whole 88x while play keeps full reachability. Measure first: improved counts across
->    a full label seed set.
+> 1. ~~Wave policy for the LABEL path~~ REJECTED by user (2026-08-13): "not an honest lever" —
+>    an empirical improved=0 is not a structural guarantee across decks/scale. Only provable
+>    folds qualify. (And see the update below: the improved=0 itself was partly a bug.)
 > 2. Pre-apply equivalence prediction for the 75% post-apply-dedup class (hard in general;
 >    provable subsets — identical targets — are already folded at enumeration).
 > 3. Tail-rollout cost (FSLine no-win memo already absorbs 69% of revisits).
+>
+> **UPDATE 2026-08-13 (2) — the duplicate class was a DEFECT, not a fold opportunity.**
+> A temp classification probe (MTG_BP_DUP_PROBE, stripped after diagnosis) split gi69's 53M
+> scored wave walks: 14.0M fresh / 15.3M dup-vs-main / 13.6M dup-intra-slot / 9.4M dup-cross.
+> The dominant intra class (10.75M of 13.6M) was "one extra cast, same post-state", and the
+> extra cast was overwhelmingly **SacForMana(Treasure Token)**. Root cause: `apply_plan_actions`
+> handles only vial/hand/sac-land/graveyard casts; site 2 (staging) grew a SacForMana/Suspend
+> pre-loop for the staged Dragonstorm rituals, but the deferred trick site 5 (and sites 0/1/4)
+> shipped without it — **the Gold Rush Treasures the site-5 deferral exists to spend never
+> actually cracked in the rollout** (the executor's live fallback `resolve_draw_breakpoint`
+> does crack: a rollout/executor divergence). Every crack-carrying continuation rank silently
+> collapsed onto its crack-less sibling. Fixed with one shared `apply_continuation_precasts`
+> loop at all six continuation sites (recorded into the sink; `replay_recorded` already applies
+> SacForMana, so committed lines stay lockstep). gi17 after the fix: intra diff-casts
+> 29,806→1,752, fresh walks 18.8K→33.0K (treasure-funded lines are now real reachability), and
+> wave `improved` 1→5 — the gi69 improved=0 that motivated the rejected wave-off lever was
+> partly this bug. Remaining duplicate classes are honest post-apply convergence (crack colour
+> variants; unaffordable-cast greedy fallback) and stay with the dedup set. Label-path cost
+> must be RE-MEASURED on the fixed binary (more fresh states ⇒ more tails, but real ones).
 
 1. **GameState deep copy (~26% of samples pre-site-5; 12.8M copies/batch).** The real fix is
    apply/undo at the FSLine d1 leaves (the backtracker's pattern) or a pooled/arena Permanent

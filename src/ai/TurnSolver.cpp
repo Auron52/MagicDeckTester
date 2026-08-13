@@ -7772,6 +7772,35 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             sink->push_back(la);
         }
     };
+    // Apply (and RECORD) a continuation's SacForMana / Suspend actions BEFORE its casts, exactly as
+    // the top-level ApplyPlanDirect / TakeTurn pre-pass does. apply_plan_actions handles only
+    // vial/hand/sac-land/graveyard casts, so without this pre-loop a continuation's Treasure crack /
+    // Lotus sac is silently DROPPED -- the plan scores as if the mana existed while the state never
+    // pays or sacs. Site 2 (staging) grew this loop for the staged Dragonstorm rituals (2026-07);
+    // the deferred trick class (site 5) shipped WITHOUT it, so the Gold Rush Treasures the deferral
+    // exists to spend never actually cracked: every crack-carrying continuation collapsed onto its
+    // crack-less sibling (the gi69 duplicate probe's dominant intra-slot class, 2026-08-13), and
+    // the executor's LIVE fallback (resolve_draw_breakpoint) does crack -- a rollout/executor
+    // divergence. One shared loop for every continuation site; recording into the current sink
+    // keeps the committed-line replay (AIEngine::replay_recorded, which already applies SacForMana)
+    // in lockstep. Empty for every plan without a SacForMana/Suspend action.
+    auto apply_continuation_precasts = [&](const TurnSolver::Plan& sp)
+    {
+        for (const Action& a : sp.actions)
+        {
+            if (a.kind == Action::Kind::SacForMana)
+            {
+                ApplySacForMana(state, state.active_player_index, a.sac_source_id,
+                                a.chosen_float_color, a.ritual_float, a.sac_victim_id);
+                if (out_breakpoint && !sink_stack.empty()) { sink_stack.back()->push_back(a); }
+            }
+            else if (a.kind == Action::Kind::Suspend)
+            {
+                ApplySuspend(state, state.active_player_index, a.card_name);
+                if (out_breakpoint && !sink_stack.empty()) { sink_stack.back()->push_back(a); }
+            }
+        }
+    };
 
 
     // One-shot flag: when set, the NEXT apply_one cast skips its mana cost (a free
@@ -8461,6 +8490,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     extra = TurnSolver::Solve(state, is_pre_combat);
                 }
                 bp_play_searched_land(extra, my_bp_sink);
+                apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
                 if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
             }
@@ -8498,6 +8528,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     extra = TurnSolver::Solve(state, is_pre_combat);
                 }
                 bp_play_searched_land(extra, my_bp_sink);
+                apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
                 if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
             }
@@ -8722,26 +8753,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     extra = TurnSolver::Solve(state, is_pre_combat);
                 }
                 bp_play_searched_land(extra, my_bp_sink);
-                // Lotus Bloom: apply (and RECORD) any SacForMana / Suspend the re-solve chose BEFORE the
-                // casts, exactly as the top-level ApplyPlanDirect / TakeTurn pre-pass does. apply_plan_actions
-                // handles only vial/hand/sac-land/graveyard casts, so a mid-turn Lotus sac would otherwise be
-                // dropped -- the staged Dragonstorm/rituals then can't pay the floated mana (the executor's
-                // breakpoint replay had the same gap). Recording into the current sink keeps the committed-line
-                // replay (AIEngine::replay_recorded) in lockstep. Empty for every plan without a SacForMana.
-                for (const Action& a : extra.actions)
-                {
-                    if (a.kind == Action::Kind::SacForMana)
-                    {
-                        ApplySacForMana(state, state.active_player_index, a.sac_source_id,
-                                        a.chosen_float_color, a.ritual_float, a.sac_victim_id);
-                        if (out_breakpoint && !sink_stack.empty()) { sink_stack.back()->push_back(a); }
-                    }
-                    else if (a.kind == Action::Kind::Suspend)
-                    {
-                        ApplySuspend(state, state.active_player_index, a.card_name);
-                        if (out_breakpoint && !sink_stack.empty()) { sink_stack.back()->push_back(a); }
-                    }
-                }
+                // Lotus Bloom: the staged Dragonstorm/rituals grew this pre-pass first (the
+                // executor's breakpoint replay had the same gap) -- now the shared loop.
+                apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
                 if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
             }
@@ -8793,6 +8807,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         extra = TurnSolver::Solve(state, is_pre_combat);
                     }
                     bp_play_searched_land(extra, my_bp_sink);
+                    apply_continuation_precasts(extra);
                     apply_plan_actions(extra.actions, extra.searched_order);
                     if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
                 }
@@ -9339,6 +9354,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             extra = TurnSolver::Solve(state, is_pre_combat);
         }
         bp_play_searched_land(extra, out_breakpoint);
+        // The deferred trick class (site 5) is the site this pre-loop was MISSING from: the Gold
+        // Rush Treasures the deferral banks are exactly the SacForMana candidates the continuation
+        // enumerates, and dropping the crack made every crack-carrying rank a no-op duplicate of
+        // its crack-less sibling (gi69 probe, 2026-08-13).
+        apply_continuation_precasts(extra);
         apply_plan_actions(extra.actions, extra.searched_order);
         if (out_breakpoint) { sink_stack.pop_back(); }
     }
@@ -9427,6 +9447,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 TurnSolver::Plan extra;
                 if (!bp_searched_plan(4, extra)) { extra = TurnSolver::Solve(state, is_pre_combat); }
                 bp_play_searched_land(extra, my_bp_sink);
+                apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
                 if (out_breakpoint) { sink_stack.pop_back(); }
                 break;
@@ -12073,6 +12094,7 @@ namespace
         static const bool on = EnvOn("MTG_BP_WAVE_PROBE");
         return on;
     }
+
     inline void BpWaveMax(std::atomic<int>& m, int k)
     {
         int prev = m.load(std::memory_order_relaxed);
@@ -14106,7 +14128,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // already-scored state is redundant -- skip its rollout. Ordinary plans only RECORD.
         if (bp_variants_here)
         {
-            const bool fresh = bp_seen_states.insert(BuildSimKey(s, 0, 0, false)).second;
+            const TranspositionTable::Key mk = BuildSimKey(s, 0, 0, false);
+            const bool fresh = bp_seen_states.insert(mk).second;
             if (!fresh && p.bp_choice >= 0)
             { if (rec_vals) { node_vals.push_back(max_turns + 1); } continue; }
         }
@@ -14235,7 +14258,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 if (walker.Report(pre, g_bp_cands_last, g_bp_seen_last)) { continue; }
                 // Same post-apply state as an already-scored candidate -- the loop's own dedup set,
                 // so a wave candidate is also checked against every wave-0 one.
-                if (!bp_seen_states.insert(BuildSimKey(s, 0, 0, false)).second) { continue; }
+                {
+                    const TranspositionTable::Key wk = BuildSimKey(s, 0, 0, false);
+                    if (!bp_seen_states.insert(wk).second) { continue; }
+                }
                 if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
                 if (s.ActivePlayer().life <= 0) { continue; }   // self-kill guard, as above
                 AnimateLandsShared(s, nullptr);
