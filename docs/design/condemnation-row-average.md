@@ -5,6 +5,12 @@ User directive, 2026-08-13: *"I don't think we should condemn based on one seed.
 
 Deferred only because it is an engine change and a matrix generation was 30% through; see **Gate**.
 
+**Partly mitigated already, driver-side.** A condemned cell no longer votes on what a play change
+banks, and retention is chunk-atomic (`valueleaf_depth_matrix.py`, 2026-08-13). That stops a
+condemned row from holding its seed hostage and stops ragged condemned chunks from fabricating `lp`
+in every other cell of the group. It does NOT stop the false condemnation itself -- the row still
+loses 350 of its 400 games -- which is what the change below is for.
+
 ## What happened
 
 FiveColour's matrix condemned three value-arm cells, all on the same seed:
