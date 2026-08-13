@@ -643,11 +643,16 @@ def run_incremental(args):
                      "seed":c["seed"]+ch["off"], "game_index":ch["off"],
                      "depth":c["depth"], "budget_ms":0,   # 0 = unbounded (the H arm's point)
                      "max_turns":mt, "ignore_play_profile":True,
-                     # Every chunk of a cell shares one `cell`, which is what condemnation groups on:
-                     # the guard judges the CELL's cumulative rate, never one chunk's (a single
-                     # unlucky 25-game chunk once condemned a cell averaging 5.5 s/game against a
-                     # 60 s/game limit -- dragonstorm H5 s11011, 2026-08-04).
+                     # Every chunk of a cell shares one `cell` (max_game_sec's unit and the skip
+                     # unit), and every cell of a (deck,arm,depth) shares one `row` -- the MEAN
+                     # rule's judgment unit. The mean judges the ROW's cumulative rate, never one
+                     # chunk's (a single unlucky 25-game chunk once condemned a cell averaging
+                     # 5.5 s/game against a 60 s/game limit -- dragonstorm H5 s11011, 2026-08-04)
+                     # and never one SEED's (one 32-minute game condemned V6/V7/V8 on seed 8008
+                     # alone, 1-3% over the limit, while the other three seeds ran 4-10x under it
+                     # -- docs/design/condemnation-row-average.md).
                      "cell":"%s_%s%d_s%d" % (dname, c["arm"], c["depth"], c["seed"]),
+                     "row":"%s_%s%d" % (dname, c["arm"], c["depth"]),
                      # Priority for the pool's own sort (BatchRunner sorts by this DESCENDING). Packed
                      # in build_queue so the queue's order survives into the pool; a bare cost weight
                      # here silently reimposed LPT and made the set-completion ordering inert.
@@ -719,8 +724,17 @@ def run_incremental(args):
                     # CONDEMNED comes back on the same stream. Mirror it into the cell state so the
                     # table, the resume logic and the pool agree on what was actually judged --
                     # otherwise a resumed run would keep re-queueing a cell the pool has given up on.
+                    # Two shapes: the MEAN rule condemns `row=<deck>_<arm><depth>` (every seed's cell
+                    # of it goes reference-only), max_game_sec condemns `cell=<...>_s<seed>` (that
+                    # one cell). Matching either keeps this compatible with an engine from before
+                    # the row rule, whose mean verdicts arrived as cell= lines.
                     if "CONDEMNED" in l:
                         print(l.rstrip(), flush=True)
+                        m=re.search(r"row=(\S+)", l)
+                        if m:
+                            for c in cells:
+                                if "%s_%s%d" % (c["deck"],c["arm"],c["depth"]) == m.group(1):
+                                    c["intractable"]=True
                         m=re.search(r"cell=(\S+)", l)
                         if m:
                             for c in cells:

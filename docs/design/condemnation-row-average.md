@@ -1,9 +1,24 @@
-# Condemn on the ROW average, not one seed's cell (deferred)
+# Condemn on the ROW average, not one seed's cell (SHIPPED 2026-08-13)
 
 User directive, 2026-08-13: *"I don't think we should condemn based on one seed. That's a design flaw.
 ... It should be condemned based on the average."*
 
-Deferred only because it is an engine change and a matrix generation was 30% through; see **Gate**.
+**SHIPPED 2026-08-13 (engine + driver), between matrix generations as the Gate requires.** The
+manifest job gained a `row` key (`<deck>_<arm><depth>` -- the cell minus its seed); the MEAN rule
+accumulates and judges on it, in both the finished-game rule and the heartbeat's in-flight fold.
+`max_game_sec` stays per-cell on purpose (one game is one observation; widening its blast radius to
+the row would remove four seeds on it instead of one -- see "Also worth fixing", still open). A
+manifest with no `row` judges per cell exactly as before, reported with the old `cell=` wording, so
+every non-matrix manifest is byte-identical. The driver stamps `row` on every chunk and mirrors
+`CONDEMNED row=` lines into every cell of the row (still matching `cell=` for max_game_sec verdicts).
+Verified: synthetic three-scenario check (row survives / row trips row-wide with both seeds' cells
+capped at the reference sample / no-row legacy fallback) plus smoke 33/33 byte-identical.
+Shipped together with the drip-as-cap release (`batch-drip-release.md`), which the row rule
+composes with: a row is judged tractable after `reference_games` ROW-WIDE, so release from
+metering comes ~4x sooner.
+
+It was deferred only because it is an engine change and a matrix generation was 30% through; the
+history and analysis below are kept as written.
 
 **Partly mitigated already, driver-side.** A condemned cell no longer votes on what a play change
 banks, and retention is chunk-atomic (`valueleaf_depth_matrix.py`, 2026-08-13). That stops a

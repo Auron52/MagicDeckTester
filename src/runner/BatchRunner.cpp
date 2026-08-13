@@ -79,6 +79,17 @@ struct Job
     // vector, not a map.
     std::string     cell;
     int             cell_id             = 0;
+    // CONDEMNATION judgment key: every cell of the same matrix ROW (deck+arm+depth, i.e. the cell
+    // minus its seed) shares one. Tractability is a property of the DEPTH, and a single seed is only
+    // a sample of it: judging each seed's cell separately let one 32-minute game condemn V6/V7/V8 on
+    // seed 8008 alone while the other three seeds ran 4-10x under the limit and filled -- which makes
+    // rows NON-COMPARABLE, since which seeds a row carries moves its mean further than the effects
+    // under study (docs/design/condemnation-row-average.md). The MEAN rule therefore accumulates and
+    // judges here; max_game_sec stays per-cell (one pathological game should not take 4 seeds' cells
+    // with it). Empty in the manifest => the job's cell key, i.e. per-cell judgment exactly as before
+    // -- every existing manifest is byte-identical.
+    std::string     row;
+    int             row_id              = 0;
 };
 
 // Tractability guard, evaluated INSIDE the pooled queue rather than between waves.
@@ -497,6 +508,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
         { throw std::runtime_error("manifest job \"deck_numbering\": empty map in " + np); }
     }
     j.cell                = jspec.value("cell", std::string());
+    j.row                 = jspec.value("row", std::string());   // mean-rule judgment key; see Job::row
     // Note: lookahead bottoming is no longer a manifest field -- the engine derives it
     // from depth (on iff depth>0). A stale "lookahead_bottoming" key is simply ignored.
 
@@ -595,8 +607,19 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     int n_cells = 0;
     std::vector<std::string> cell_name;
     std::vector<int>         cell_depth;   // for the never-condemn floor, off the first job of the cell
+    // ROW indices for the mean rule (see Job::row). A job with no "row" judges on its cell key, so a
+    // manifest that never says "row" behaves exactly as before -- per-cell judgment, or per-job when
+    // it says neither.
+    int n_rows = 0;
+    std::vector<std::string> row_name;
+    std::vector<int>         row_depth;    // never-condemn floor for the row rule; min over its jobs,
+                                           // so a mixed-depth row is protected by its shallowest member
+    std::vector<char>        row_is_cell;  // fallback row (no "row" in the manifest): report it with
+                                           // the old cell= wording so pre-row log parsers still match
+    std::vector<int>         cell_row;     // cell_id -> row_id, for the in-flight hook's aggregation
     {
         std::unordered_map<std::string, int> cell_ix;
+        std::unordered_map<std::string, int> row_ix;
         for (Job& j : jobs)
         {
             const std::string key = j.cell.empty() ? ("\x1f" + j.name) : j.cell;
@@ -606,16 +629,36 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 it = cell_ix.emplace(key, n_cells++).first;
                 cell_name.push_back(j.cell.empty() ? j.name : j.cell);
                 cell_depth.push_back(j.depth);
+                cell_row.push_back(-1);   // filled below, once the job's row is resolved
             }
             j.cell_id = it->second;
+
+            const std::string rkey = j.row.empty() ? key : j.row;
+            auto rt = row_ix.find(rkey);
+            if (rt == row_ix.end())
+            {
+                rt = row_ix.emplace(rkey, n_rows++).first;
+                row_name.push_back(j.row.empty() ? cell_name[static_cast<std::size_t>(j.cell_id)]
+                                                 : j.row);
+                row_depth.push_back(j.depth);
+                row_is_cell.push_back(j.row.empty() ? 1 : 0);
+            }
+            j.row_id = rt->second;
+            row_depth[static_cast<std::size_t>(j.row_id)] =
+                std::min(row_depth[static_cast<std::size_t>(j.row_id)], j.depth);
+            cell_row[static_cast<std::size_t>(j.cell_id)] = j.row_id;
         }
     }
-    // games/ms accumulate as the pool runs; `condemned` latches once and is only ever set true.
-    std::vector<std::atomic<int>>       cell_games(static_cast<std::size_t>(n_cells));
-    std::vector<std::atomic<long long>> cell_ms(static_cast<std::size_t>(n_cells));
+    // games/ms accumulate as the pool runs, keyed on the ROW (the mean rule's judgment unit);
+    // `condemned` latches once and is only ever set true. Cells keep their own latch because
+    // max_game_sec still condemns per cell, and a skip must honour either verdict.
+    std::vector<std::atomic<int>>       row_games(static_cast<std::size_t>(n_rows));
+    std::vector<std::atomic<long long>> row_ms(static_cast<std::size_t>(n_rows));
+    std::vector<std::atomic<int>>       row_condemned(static_cast<std::size_t>(n_rows));
     std::vector<std::atomic<int>>       cell_condemned(static_cast<std::size_t>(n_cells));
-    for (int i = 0; i < n_cells; ++i)
-    { cell_games[i].store(0); cell_ms[i].store(0); cell_condemned[i].store(0); }
+    for (int i = 0; i < n_rows; ++i)
+    { row_games[i].store(0); row_ms[i].store(0); row_condemned[i].store(0); }
+    for (int i = 0; i < n_cells; ++i) { cell_condemned[i].store(0); }
 
     // Per-job, per-game results. Pre-sized so workers write to disjoint slots with
     // no synchronisation. games[j][gi] = win turn (<=0 means no win).
@@ -668,84 +711,143 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             return a.job < b.job;
         });
 
-    // WORK POOL. Non-condemnable games sit in the static LPT-sorted `items` and are taken in order.
-    // Games of CONDEMNABLE cells are NOT in that list: they are METERED IN through `front`, a
-    // high-priority deque holding at most `drip` games per unjudged cell, refilled one game at a
-    // time as each of that cell's games finishes UNCONDEMNED.
+    // WORK POOL. Every game -- protected and condemnable alike -- sits in the ONE static list in
+    // weight order, and the drip is an in-flight CAP enforced at Take, not a separate queue
+    // (docs/design/batch-drip-release.md). An item whose NOT-YET-JUDGED condemnable cell already has
+    // `drip` games running is PARKED and retried when one of that cell's games lands; an item whose
+    // cell has been judged -- condemned (drains as a cheap skip) or proven tractable (its row reached
+    // `reference_games` uncondemned) -- is simply taken in its static-order turn.
     //
-    // Why not just sort them: a condemnable cell's whole point is that most of its work will be
+    // Why the cap and not a sort: a condemnable cell's whole point is that most of its work may be
     // thrown away, so dispatching it by cost (LPT puts it first -- it is the most expensive thing in
     // the queue) puts every thread on work that is about to be discarded, and the verdict cannot
     // arrive until those games finish. Metering caps how much of the box a not-yet-judged cell can
     // occupy, while the protected cells (H5 and friends, which must run in full regardless) keep the
-    // rest of the threads busy. A condemned cell's pending games are flushed to `front` and drained
-    // as skips, which costs nothing and reuses the same dequeue-time skip path.
+    // rest of the threads busy.
+    //
+    // Why not the old front/pending split (a high-priority deque fed `drip` games per cell): two
+    // measured defects. Metering NEVER ENDED -- a cell judged tractable stayed metered for its whole
+    // 400-game target, and because `front` outranked ALL static work, 16 proven-tractable V6-V8
+    // cells held 16 of 24 threads ahead of the protected d<=5 ladder the trust decision actually
+    // reads (FiveColour, 2026-08-12). And a run whose static work finished first ended with
+    // `threads - cells*drip` workers idle. Under the cap both disappear: a judged cell simply stops
+    // being skipped, in the weight order the manifest already carries, and nothing is held back at
+    // the end.
     struct Pool
     {
         std::mutex                        mtx;
         std::condition_variable           cv;
-        std::deque<WorkItem>              front;      // metered condemnable work, taken FIRST
         const std::vector<WorkItem>*      items = nullptr;
         std::size_t                       cursor = 0;
-        std::vector<std::deque<WorkItem>> pending;    // per-cell condemnable games not yet released
-        long long                         outstanding = 0;   // condemnable games not yet finalised
+        // Deferred condemnable work, keyed by ORIGINAL list index so it re-enters in static (weight)
+        // order. Every deferred item was popped from an index below `cursor`, so draining `ready`
+        // before `items[cursor]` preserves the global order exactly. A std::map (ordered, begin() =
+        // lowest index) is plenty: it only ever holds capped cells' games, and pool operations run
+        // once per multi-second game.
+        std::map<std::size_t, WorkItem>                          ready;
+        std::vector<std::deque<std::pair<std::size_t, WorkItem>>> parked;   // per cell, with index
+        std::vector<int>                  inflight;           // condemnable games running, per cell
+        long long                         outstanding = 0;    // condemnable games not yet finalised
+        int                               drip = 1;
+        // Verdict for a condemnable item, evaluated under the pool lock at Take time (it reads the
+        // judgment atomics, which move under the workers and the heartbeat).
+        enum class Verdict { kProtected, kCondemnable, kCapped };
+        std::function<Verdict(const WorkItem&)> classify;
 
         bool Take(WorkItem& out)
         {
             std::unique_lock<std::mutex> lk(mtx);
             for (;;)
             {
-                if (!front.empty()) { out = front.front(); front.pop_front(); return true; }
-                if (cursor < items->size()) { out = (*items)[cursor++]; return true; }
+                while (!ready.empty() || cursor < items->size())
+                {
+                    const bool  from_ready = !ready.empty();
+                    std::size_t idx;
+                    WorkItem    wi;
+                    if (from_ready) { idx = ready.begin()->first; wi = ready.begin()->second; }
+                    else            { idx = cursor;               wi = (*items)[cursor]; }
+                    const Verdict v = classify(wi);
+                    if (from_ready) { ready.erase(ready.begin()); } else { ++cursor; }
+                    if (v == Verdict::kCapped)
+                    {
+                        parked[cell_of(wi)].push_back({idx, wi});
+                        continue;
+                    }
+                    if (v == Verdict::kCondemnable) { ++inflight[cell_of(wi)]; }
+                    out = wi;
+                    return true;
+                }
                 if (outstanding <= 0) { return false; }
-                // Static work is exhausted but a surviving cell is still dripping: wait for its next
-                // release rather than exiting, or the run would end with games unplayed.
+                // Everything left is parked behind a drip cap: wait for one of those cells' games
+                // to land rather than exiting, or the run would end with games unplayed. Liveness
+                // holds because a cell only ever parks work while it has >= 1 game in flight, and
+                // that game's OnFinished promotes the parked items.
                 cv.wait(lk);
             }
         }
 
-        // One condemnable game finalised (played or skipped). Releases that cell's next game, or --
-        // if the cell has been condemned -- flushes ALL of its pending games so they drain as skips.
-        void OnFinished(int cell_id, bool cell_condemned)
+        // One condemnable game finalised (played or skipped). Frees the cell's in-flight slot and
+        // promotes its parked items for re-evaluation -- they may now be under the cap, their row
+        // may have crossed reference_games (released for good), or a condemnation may have landed
+        // (they drain as skips). Promotion is wholesale rather than one-at-a-time: Take re-parks
+        // whatever is still capped, and the churn is bounded by the cell's own game count, once per
+        // finished game -- microseconds against multi-second games.
+        void OnFinished(int cell_id)
         {
             std::lock_guard<std::mutex> lk(mtx);
             --outstanding;
-            std::deque<WorkItem>& q = pending[static_cast<std::size_t>(cell_id)];
-            if (cell_condemned) { while (!q.empty()) { front.push_back(q.front()); q.pop_front(); } }
-            else if (!q.empty()) { front.push_back(q.front()); q.pop_front(); }
+            --inflight[static_cast<std::size_t>(cell_id)];
+            auto& q = parked[static_cast<std::size_t>(cell_id)];
+            while (!q.empty()) { ready.emplace(q.front().first, q.front().second); q.pop_front(); }
             cv.notify_all();
         }
+
+        std::function<int(const WorkItem&)> cell_of;   // bound below, once jobs is in scope
     };
     Pool pool;
     pool.items = &items;
-    pool.pending.resize(static_cast<std::size_t>(std::max(1, n_cells)));
+    pool.drip  = condemn.drip;
+    pool.parked.resize(static_cast<std::size_t>(std::max(1, n_cells)));
+    pool.inflight.assign(static_cast<std::size_t>(std::max(1, n_cells)), 0);
     {
-        // Partition: pull condemnable cells' games OUT of the static list into per-cell queues, then
-        // seed `front` with `drip` of each. Order within a cell is preserved (its games run in gi
-        // order), and cells enter `front` in the static list's LPT order.
-        std::vector<WorkItem> keep;
-        keep.reserve(items.size());
+        long long n_condemnable = 0;
         for (const WorkItem& wi : items)
         {
             const Job& j = jobs[wi.job];
-            const bool condemnable = condemn.enabled && j.depth > condemn.never_condemn_depth;
-            if (condemnable) { pool.pending[static_cast<std::size_t>(j.cell_id)].push_back(wi); }
-            else             { keep.push_back(wi); }
+            if (condemn.enabled && j.depth > condemn.never_condemn_depth) { ++n_condemnable; }
         }
-        for (std::deque<WorkItem>& q : pool.pending) { pool.outstanding += static_cast<long long>(q.size()); }
-        for (std::deque<WorkItem>& q : pool.pending)
-        {
-            for (int d = 0; d < condemn.drip && !q.empty(); ++d)
-            { pool.front.push_back(q.front()); q.pop_front(); }
-        }
-        items.swap(keep);
+        pool.outstanding = n_condemnable;
         if (pool.outstanding > 0)
         {
             std::cerr << "[batch] metering " << pool.outstanding << " games of condemnable cells at "
-                      << condemn.drip << " in flight per cell; " << items.size()
+                      << condemn.drip << " in flight per cell until judged; "
+                      << (items.size() - static_cast<std::size_t>(n_condemnable))
                       << " protected games run alongside\n";
         }
     }
+    // The mean rule is active iff both its parameters are set; without it a cell is never "proven
+    // tractable" (row_games does not accrue), so metering persists for the whole run -- exactly the
+    // old drip-forever semantics, which is right when only max_game_sec is guarding.
+    const bool mean_rule_on = condemn.sec_per_game > 0.0 && condemn.reference_games > 0;
+    pool.classify = [&](const WorkItem& wi) -> Pool::Verdict
+    {
+        const Job& j = jobs[wi.job];
+        if (!condemn.enabled || j.depth <= condemn.never_condemn_depth)
+        { return Pool::Verdict::kProtected; }
+        // Condemned (row by the mean rule, cell by max_game_sec): take it -- it drains as a skip.
+        if (row_condemned[j.row_id].load(std::memory_order_relaxed) != 0
+            || cell_condemned[j.cell_id].load(std::memory_order_relaxed) != 0)
+        { return Pool::Verdict::kCondemnable; }
+        // Judged tractable: the row reached its reference sample uncondemned. Released from
+        // metering -- from here it runs in plain static order.
+        if (mean_rule_on
+            && row_games[j.row_id].load(std::memory_order_relaxed) >= condemn.reference_games)
+        { return Pool::Verdict::kCondemnable; }
+        // Unjudged: metered at `drip` in flight per cell.
+        return pool.inflight[static_cast<std::size_t>(j.cell_id)] < pool.drip
+             ? Pool::Verdict::kCondemnable : Pool::Verdict::kCapped;
+    };
+    pool.cell_of = [&](const WorkItem& wi) { return jobs[wi.job].cell_id; };
 
     const long long s_slow_game_ms = SlowGameMs();
     const bool      s_dump_wins    = EnvOn("MTG_DUMP_WINS");   // see the emission in the worker
@@ -827,8 +929,22 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     "[goldfish] CONDEMNED cell=%s %s %.1f s (limit %.1f); remaining games of this "
                     "cell are skipped\n", cell_name[cid].c_str(), why, v, limit);
             };
+            auto condemn_row = [&](int rid, const char* why, double v, double limit) {
+                if (rid < 0 || rid >= n_rows) { return; }
+                if (row_depth[static_cast<std::size_t>(rid)] <= condemn.never_condemn_depth) { return; }
+                if (row_condemned[rid].exchange(1, std::memory_order_relaxed) != 0) { return; }
+                const bool fb = row_is_cell[static_cast<std::size_t>(rid)] != 0;
+                std::fprintf(stderr,
+                    "[goldfish] CONDEMNED %s=%s %s %.1f s/game (limit %.1f); remaining games of "
+                    "%s are skipped\n", fb ? "cell" : "row",
+                    row_name[static_cast<std::size_t>(rid)].c_str(), why, v, limit,
+                    fb ? "this cell" : "every cell of this row");
+            };
 
-            // (1) Single pathological game, judged while it runs.
+            // (1) Single pathological game, judged while it runs. Deliberately still per CELL: one
+            // game is one observation, and widening its blast radius to the row would remove four
+            // seeds on it instead of one (the abandon-the-game rework is deferred separately --
+            // docs/design/condemnation-row-average.md, "Also worth fixing").
             if (condemn.max_game_sec > 0.0)
             {
                 for (const auto& [cid, ms] : live)
@@ -839,26 +955,31 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 }
             }
 
-            // (2) The MEAN rule, with in-flight games folded in. A running game's elapsed time is a
-            // LOWER BOUND on its final cost, so this mean can only UNDERSTATE the cell -- if it
-            // already exceeds the limit, the finished-only mean must exceed it too. That makes
-            // condemning here sound (no false positive is possible from the partial term) while
-            // catching the case the finished-only rule is blind to: a cell whose expensive games are
-            // all still running reads as free until the first one lands, which on this deck is hours.
+            // (2) The MEAN rule, with in-flight games folded in -- aggregated on the ROW, same unit
+            // as the finished-game rule. A running game's elapsed time is a LOWER BOUND on its final
+            // cost, so this mean can only UNDERSTATE the row -- if it already exceeds the limit, the
+            // finished-only mean must exceed it too. That makes condemning here sound (no false
+            // positive is possible from the partial term) while catching the case the finished-only
+            // rule is blind to: a row whose expensive games are all still running reads as free
+            // until the first one lands, which on an explosive deck is hours.
             if (condemn.sec_per_game > 0.0 && condemn.reference_games > 0)
             {
-                std::unordered_map<int, std::pair<int, long long>> agg;   // cell -> (games, ms)
+                std::unordered_map<int, std::pair<int, long long>> agg;   // row -> (games, ms)
                 for (const auto& [cid, ms] : live)
-                { auto& a = agg[cid]; ++a.first; a.second += ms; }
-                for (const auto& [cid, a] : agg)
                 {
                     if (cid < 0 || cid >= n_cells) { continue; }
-                    const int       n   = cell_games[cid].load(std::memory_order_relaxed) + a.first;
-                    const long long tot = cell_ms[cid].load(std::memory_order_relaxed) + a.second;
+                    auto& a = agg[cell_row[static_cast<std::size_t>(cid)]];
+                    ++a.first; a.second += ms;
+                }
+                for (const auto& [rid, a] : agg)
+                {
+                    if (rid < 0 || rid >= n_rows) { continue; }
+                    const int       n   = row_games[rid].load(std::memory_order_relaxed) + a.first;
+                    const long long tot = row_ms[rid].load(std::memory_order_relaxed) + a.second;
                     if (n >= condemn.reference_games
                         && static_cast<double>(tot) / n > condemn.sec_per_game * 1000.0)
-                    { condemn_cell(cid, "at a running mean (in-flight included) of",
-                                   static_cast<double>(tot) / n / 1000.0, condemn.sec_per_game); }
+                    { condemn_row(rid, "at a running mean (in-flight included) of",
+                                  static_cast<double>(tot) / n / 1000.0, condemn.sec_per_game); }
                 }
             }
         });
@@ -888,16 +1009,21 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 const Job& job = jobs[wi.job];
                 const bool condemnable = condemn.enabled && job.depth > condemn.never_condemn_depth;
 
-                // CONDEMNED cell: drop this game rather than run it. Checked as the item comes off
-                // the queue (not at a barrier), so a cell stops consuming cores the moment it is
-                // ruled intractable and every other cell keeps running undisturbed.
-                if (condemn.enabled
-                    && cell_condemned[jobs[wi.job].cell_id].load(std::memory_order_relaxed) != 0)
+                // CONDEMNED row or cell: drop this game rather than run it. Checked as the item
+                // comes off the queue (not at a barrier), so a cell stops consuming cores the moment
+                // it is ruled intractable and every other cell keeps running undisturbed. Either
+                // verdict skips: the mean rule condemns the ROW, max_game_sec condemns the CELL.
+                // `condemnable` (job.depth above the floor) gates the skip so a protected d<=5 job
+                // can never be skipped through a shared row/cell key -- the floor is structural, not
+                // just a property of who sets the latch.
+                if (condemn.enabled && condemnable
+                    && (row_condemned[jobs[wi.job].row_id].load(std::memory_order_relaxed) != 0
+                        || cell_condemned[jobs[wi.job].cell_id].load(std::memory_order_relaxed) != 0))
                 {
                     win_turns[wi.job][wi.game] = kSkipped;
                     // Finalise in the pool as well: a skipped game is still a condemnable game
                     // accounted for, and if `outstanding` never drains the workers wait forever.
-                    if (condemnable) { pool.OnFinished(job.cell_id, true); }
+                    pool.OnFinished(job.cell_id);
                     if (on_job_done && remaining[wi.job].fetch_sub(1, std::memory_order_acq_rel) == 1)
                     {
                         BatchJobResult r = reduce_job(wi.job);
@@ -965,21 +1091,30 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // Continuous tractability guard. Evaluated after every game rather than at a wave
                 // barrier: the point of the pool is that no cell ever waits on another, and a
                 // barrier reintroduces exactly the synchronisation the pool exists to remove.
+                //
+                // The MEAN accumulates and judges on the ROW (deck+arm+depth), not the cell:
+                // tractability is a property of the depth, and judging each seed's cell separately
+                // let one outlier game remove a single seed from a row, making rows non-comparable
+                // (docs/design/condemnation-row-average.md). With no "row" in the manifest the row
+                // IS the cell and this is the old per-cell rule verbatim.
                 if (condemn.sec_per_game > 0.0 && condemn.reference_games > 0
                     && job.depth > condemn.never_condemn_depth)
                 {
-                    const int cid = job.cell_id;
-                    const int   n  = cell_games[cid].fetch_add(1, std::memory_order_relaxed) + 1;
-                    const long long tot = cell_ms[cid].fetch_add(g_ms, std::memory_order_relaxed) + g_ms;
+                    const int rid = job.row_id;
+                    const int   n  = row_games[rid].fetch_add(1, std::memory_order_relaxed) + 1;
+                    const long long tot = row_ms[rid].fetch_add(g_ms, std::memory_order_relaxed) + g_ms;
                     if (n >= condemn.reference_games
                         && static_cast<double>(tot) / n > condemn.sec_per_game * 1000.0
-                        && cell_condemned[cid].exchange(1, std::memory_order_relaxed) == 0)
+                        && row_condemned[rid].exchange(1, std::memory_order_relaxed) == 0)
                     {
+                        const bool fb = row_is_cell[static_cast<std::size_t>(rid)] != 0;
                         std::fprintf(stderr,
-                            "[goldfish] CONDEMNED cell=%s after %d games at %.1f s/game "
-                            "(limit %.1f); remaining games of this cell are skipped\n",
-                            job.cell.empty() ? job.name.c_str() : job.cell.c_str(),
-                            n, static_cast<double>(tot) / n / 1000.0, condemn.sec_per_game);
+                            "[goldfish] CONDEMNED %s=%s after %d games at %.1f s/game "
+                            "(limit %.1f); remaining games of %s are skipped\n",
+                            fb ? "cell" : "row",
+                            row_name[static_cast<std::size_t>(rid)].c_str(),
+                            n, static_cast<double>(tot) / n / 1000.0, condemn.sec_per_game,
+                            fb ? "this cell" : "every cell of this row");
                     }
                 }
 
@@ -1021,14 +1156,12 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     dlog.WriteToFile(trace_dir / (job.name + "_gi" + std::to_string(global_gi) + ".json"));
                 }
 
-                // Refill the drip: this cell may send in its next game now that one has completed
-                // uncondemned. If it WAS condemned (by this very game, or by the heartbeat while it
-                // ran), OnFinished flushes the rest of the cell to be drained as skips instead.
-                if (condemnable)
-                {
-                    pool.OnFinished(job.cell_id,
-                                    cell_condemned[job.cell_id].load(std::memory_order_relaxed) != 0);
-                }
+                // Finalise in the pool: frees this cell's in-flight slot and promotes its parked
+                // games, which Take re-classifies -- released outright if the row has now been
+                // judged (tractable or condemned), metered back in otherwise. Sibling cells of a
+                // condemned row drain the same way as their own in-flight games land and their
+                // parked work re-enters as cheap dequeue-time skips.
+                if (condemnable) { pool.OnFinished(job.cell_id); }
 
                 // Stream this job the instant its last game lands.
                 if (on_job_done

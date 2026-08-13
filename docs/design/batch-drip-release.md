@@ -1,9 +1,19 @@
-# `--batch` drip: release a condemnable cell once it has been JUDGED (deferred)
+# `--batch` drip: release a condemnable cell once it has been JUDGED (SHIPPED 2026-08-13)
 
 Not a problem for FiveColour, whose static tail (H5) outlasts all metered work — but worth having
 logic for (user, 2026-08-12).
 
-## What the pool does today
+**SHIPPED 2026-08-13, in the alternative shape this doc argues for.** The front/pending split is
+gone: every game sits in the ONE static list in weight order, and the drip is an in-flight CAP
+enforced at `Take` — an item whose not-yet-judged cell is at the cap is parked and retried when one
+of that cell's games lands; a judged cell (condemned, or its ROW past `reference_games` uncondemned
+— the row rule from `condemnation-row-average.md` shipped with this) simply stops being skipped, in
+the ordering the manifest already carries. Both defects verified gone in a synthetic check (a
+surviving row runs to completion with full drainage — no end-of-run hold-back; a condemned row stops
+at its reference sample) and the suite is byte-identical (smoke 33/33; condemnation-free manifests
+never enter the metering path at all). The section below is kept as the design rationale.
+
+## What the pool did before this shipped
 
 `BatchRunner::RunManifest` partitions work in two:
 
