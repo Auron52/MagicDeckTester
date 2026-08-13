@@ -545,10 +545,12 @@ public:
     // wins THIS turn and attacking without it does not. Decided by simulating combat both ways.
     int LegendKeepIndex(const GameState&, int,
                         const std::vector<int>&) const override;
-    // Cleanup discard: the USER-AUTHORED keep policy (Stage 6 review, analysis ledger) -- one
-    // magnet enabler, >=4 weighted bodies (Instigator counts 2), mana for the kept enabler
-    // preferring 2 red, then spells with the outright winners (Gold Rush / Fists of Flame) kept
-    // over the draw tricks. MTG_MW_BUCKET_DISCARD=0 -> generic base ranking (A/B lever).
+    // Cleanup discard: the USER-AUTHORED keep policy (Stage 6 review, refined 2026-08-13) -- one
+    // magnet enabler, >=4 weighted bodies (Instigator counts 2), mana for the kept enabler with a
+    // >=2 red + >=2 green floor (untapped drop when next turn is the cast turn), then spells:
+    // Gold Rush / ONE Twinflame / Fists kept, Anger > Expedite > Scale, different pumps over
+    // copies. Board coverage nets each bucket. The FULL decision, heuristic, never searched.
+    // MTG_MW_BUCKET_DISCARD=0 -> generic base ranking (A/B lever).
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
     // Zada and Mirrorwing fill ONE role (the copy magnet): redundancy is counted across the pair

@@ -6715,14 +6715,19 @@ bool MirrorwingProvider::StriveCountMaxOnly(const GameState&, const CardDefiniti
 
 // ---- MirrorwingProvider cleanup discard -------------------------------------
 //
-// USER-AUTHORED keep policy (Stage 6 review, 2026-08-11, analysis-Mirrorwing Dragon.md): "You want
-// 1 enabler in Mirrorwing/Zada, at least 3-4 creatures total (counting the goblin as 2),
-// sufficient mana to play your enabler (preferably with at least 2 red) and a few spells,
-// preferring the ones that win outright like Gold Rush and Fists of Flame, but ones that draw can
-// also do the trick." Same shape as the antilife bucket rule: name what to SHED (in order),
-// omission = keep, and the shared ranking keeps required-piece protection as the safety net.
-// The deck rarely discards (0.13 mean label regret in the discard-analysis stage), so this rule is
-// mostly about the post-Fists mass-draw turns where the hand blows past seven.
+// USER-AUTHORED keep policy (Stage 6 review 2026-08-11, refined 2026-08-13): bucket the hand
+// into Enabler (only 1 -- none with a magnet on board), Other Creatures (enough for 4 weighted
+// bodies counting the board; Instigator weighs 2; dorks count here AND as mana), Mana (enough
+// to cast the kept enabler with at least 2 red and 2 green across board + hand; when next turn
+// is the cast turn the kept drop must enter untapped), and Pump/Draw spells (keep priority:
+// Gold Rush, ONE Twinflame and Fists of Flame, then Ancestral Anger > Expedite > Scale the
+// Heights, preferring DIFFERENT pump spells over copies with spare space). Every bucket nets
+// its board coverage first ("you don't need to fill up the hand if there is already enough on
+// board"). This is the FULL decision -- no search: the rule names the shed order, omission =
+// keep, the shared ranking keeps required-piece protection as the safety net, and both the
+// rollout cleanup and the executor consume rank 0 (width stays 1, no discard search node).
+// The deck rarely discards (0.13 mean label regret in the discard-analysis stage), so this rule
+// is mostly about the post-Fists mass-draw turns where the hand blows past seven.
 
 const std::vector<std::string>*
 MirrorwingProvider::InterchangeableRequiredGroup(const std::string& name) const
@@ -6755,9 +6760,10 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         return false;
     };
 
-    // Board census the buckets key on.
-    bool magnet_board = false, board_green = false;
-    int  board_sources = 0, board_red = 0, board_bodies = 0;
+    // Board census the buckets key on. Every bucket nets its board coverage out first (user
+    // 2026-08-13: "you don't need to fill up the hand if there is already enough on board").
+    bool magnet_board = false;
+    int  board_sources = 0, board_red = 0, board_green = 0, board_bodies = 0;
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != s.active_player_index) { continue; }
@@ -6769,13 +6775,12 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         {
             ++board_sources;
             if (produces(p.card, Color::Red))   { ++board_red; }
-            if (produces(p.card, Color::Green)) { board_green = true; }
+            if (produces(p.card, Color::Green)) { ++board_green; }
         }
     }
 
     // Hand census.
     std::vector<int> magnets, mana, bodies;
-    bool gold_rush_held = false;
     for (int i = 0; i < n; ++i)
     {
         const Card& c = ap.hand[i];
@@ -6784,7 +6789,6 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         if (is_land(c) || is_dork(c)) { mana.push_back(i); }
         const CardDefinition* d = def_of(c);
         if (d && d->card.IsCreature()) { bodies.push_back(i); }
-        if (c.m_name == "Gold Rush") { gold_rush_held = true; }
     }
     // The kept enabler: none needed with a magnet already on board. Among hand magnets the pick
     // is NOT a fixed cheapest-first (user, Stage-6 round 2): estimate each magnet's EARLIEST CAST
@@ -6820,53 +6824,139 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         : (magnet_board ? 2 : 4);   // magnet down -> trick mana; none anywhere -> assume Zada
 
     std::vector<int> shed;
-    // S1 -- excess mana beyond the kept enabler's cost. Shed rank (sooner first): green-only
-    // lands, then red lands, then dorks (dorks are BODIES for the fan-out too). Two guards on the
-    // user's colour preferences: hold red sources back until two red are secured (board + kept),
-    // and hold one green source if a Gold Rush is held with no green on board ({1}{G}).
-    const int need = std::max(0, enabler_mv - board_sources);
-    int red_deficit = std::max(0, 2 - board_red);
-    bool green_guard_used = board_green || !gold_rush_held;
-    auto mana_shed_rank = [&](int i)   // lower = shed sooner
+    // S1 -- excess mana beyond what the kept enabler needs (user 2026-08-13). The KEPT sources
+    // must (a) cover the enabler's remaining MV against board sources, (b) close the colour
+    // floor -- at least TWO red and TWO green across board + kept hand (both magnets are {..}{R}
+    // and the tricks are red; Gold Rush / Scale the Heights carry the green pips), and (c) when
+    // the enabler is castable NEXT turn (one more drop), that drop must be a land that ENTERS
+    // UNTAPPED -- a Karoo dropped on the go-off turn contributes nothing that turn. Dorks are
+    // kept preferentially (they are fan-out bodies too, the next bucket). Greedy keep passes;
+    // everything unkept is the shed, deadest first (tapped-entering lands, untapped lands, dorks).
+    const int  need          = std::max(0, enabler_mv - board_sources);
+    const bool the_turn_next = need <= 1;   // one more drop and the enabler is castable
+    auto untapped_land = [&](const Card& c)
     {
-        const Card& c = ap.hand[i];
-        if (is_dork(c)) { return 3; }
-        if (produces(c, Color::Red) && red_deficit > 0) { --red_deficit; return 2; }
-        if (produces(c, Color::Green) && !green_guard_used) { green_guard_used = true; return 1; }
-        return 0;
+        const CardDefinition* d = def_of(c);
+        return d && d->card.IsLand() && !d->params.enters_tapped;
     };
-    std::vector<std::pair<int, int>> ranked_mana;   // (rank, hand index)
-    for (int i : mana) { ranked_mana.push_back({ mana_shed_rank(i), i }); }
-    std::stable_sort(ranked_mana.begin(), ranked_mana.end(),
-                     [](const std::pair<int, int>& a, const std::pair<int, int>& b)
-                     { return a.first < b.first; });
-    const int excess = static_cast<int>(ranked_mana.size()) - need;
-    for (int k = 0; k < excess; ++k) { shed.push_back(ranked_mana[static_cast<std::size_t>(k)].second); }
+    int red_deficit   = std::max(0, 2 - board_red);
+    int green_deficit = std::max(0, 2 - board_green);
+    std::vector<char> kept(mana.size(), 0);
+    int kept_n = 0;
+    // Best unkept source under a preference score; -1 when none qualifies.
+    auto pick_best = [&](auto&& qualifies, auto&& score) -> int
+    {
+        int best = -1, best_score = -1;
+        for (std::size_t k = 0; k < mana.size(); ++k)
+        {
+            if (kept[k]) { continue; }
+            const Card& c = ap.hand[static_cast<std::size_t>(mana[k])];
+            if (!qualifies(c)) { continue; }
+            const int sc = score(c);
+            if (sc > best_score) { best_score = sc; best = static_cast<int>(k); }
+        }
+        return best;
+    };
+    auto keep_one = [&](auto&& qualifies) -> bool
+    {
+        const int k = pick_best(qualifies, [&](const Card& c)
+        {
+            int sc = 0;                                       // prefer: dual coverage, dork,
+            if (produces(c, Color::Red) && red_deficit > 0)     { sc += 2; }   // untapped drop
+            if (produces(c, Color::Green) && green_deficit > 0) { sc += 2; }
+            if (is_dork(c))                        { sc += 1; }
+            if (the_turn_next && untapped_land(c)) { sc += 1; }
+            return sc;
+        });
+        if (k < 0) { return false; }
+        const Card& c = ap.hand[static_cast<std::size_t>(mana[static_cast<std::size_t>(k)])];
+        kept[static_cast<std::size_t>(k)] = 1; ++kept_n;
+        if (produces(c, Color::Red))   { red_deficit   = std::max(0, red_deficit - 1); }
+        if (produces(c, Color::Green)) { green_deficit = std::max(0, green_deficit - 1); }
+        return true;
+    };
+    while (red_deficit > 0   && keep_one([&](const Card& c) { return produces(c, Color::Red); }))   {}
+    while (green_deficit > 0 && keep_one([&](const Card& c) { return produces(c, Color::Green); })) {}
+    while (kept_n < need     && keep_one([&](const Card&)   { return true; }))                      {}
+    // Untapped-drop guard: the colour/count passes may have kept only tapped-entering Karoos;
+    // if next turn is the cast turn and no kept LAND enters untapped, keep one that does.
+    if (the_turn_next)
+    {
+        bool have_untapped = false;
+        for (std::size_t k = 0; k < mana.size(); ++k)
+        { if (kept[k] && untapped_land(ap.hand[static_cast<std::size_t>(mana[k])])) { have_untapped = true; break; } }
+        if (!have_untapped)
+        {
+            const int k = pick_best([&](const Card& c) { return untapped_land(c); },
+                                    [&](const Card& c) { return produces(c, Color::Red) ? 1 : 0; });
+            if (k >= 0) { kept[static_cast<std::size_t>(k)] = 1; ++kept_n; }
+        }
+    }
+    // The unkept mana is the shed: tapped-entering lands first, then untapped lands, then dorks.
+    auto mana_shed_tier = [&](const Card& c)
+    { return is_dork(c) ? 2 : (untapped_land(c) ? 1 : 0); };
+    for (int tier = 0; tier <= 2; ++tier)
+    {
+        for (std::size_t k = 0; k < mana.size(); ++k)
+        {
+            if (kept[k]) { continue; }
+            if (mana_shed_tier(ap.hand[static_cast<std::size_t>(mana[k])]) == tier)
+            { shed.push_back(mana[k]); }
+        }
+    }
 
     // S2 -- redundant magnets beyond the kept one (all of them once a magnet is on board; the
-    // interchangeable-group protection still guards the truly last enabler anywhere in hand).
+    // interchangeable-group protection still guards the truly last enabler anywhere in hand),
+    // and Twinflame copies beyond the FIRST -- the keep list holds "1 Twinflame" (user
+    // 2026-08-13): one doubles the board, a second is a dead copy of a situational card.
     for (int i : magnets) { if (i != kept_magnet) { shed.push_back(i); } }
-
-    // S3 -- spells, least wanted first. USER keep priority: Gold Rush / Fists of Flame (win
-    // outright; never named here -> kept by omission) > draw tricks. Among the rest: Scale the
-    // Heights is the clunkiest (3 MV, one counter), Expedite is a bare cantrip, Twinflame doubles
-    // a wide board, Ancestral Anger is the cheapest mass-draw under a magnet.
-    static const char* const kSpellShedOrder[] = {
-        "Scale the Heights", "Expedite", "Twinflame", "Ancestral Anger" };
-    for (const char* name : kSpellShedOrder)
     {
+        bool tf_seen = false;
         for (int i = 0; i < n; ++i)
-        { if (!ap.hand[i].m_is_staged && ap.hand[i].m_name == name) { shed.push_back(i); } }
+        {
+            if (ap.hand[i].m_is_staged || ap.hand[i].m_name != "Twinflame") { continue; }
+            if (tf_seen) { shed.push_back(i); } else { tf_seen = true; }
+        }
+    }
+
+    // S3 -- spells, least wanted first. USER keep priority (2026-08-13): Gold Rush, ONE
+    // Twinflame and Fists of Flame (the outright winners -- never named here, kept by omission)
+    // > Ancestral Anger > Expedite > Scale the Heights. With spare hand space prefer DIFFERENT
+    // pump spells over copies: the tail keeps FIRST copies of each name before SECOND copies
+    // (round-robin), so the shed walks copy tiers from the back -- 2nd Scale, 2nd Expedite,
+    // 2nd Anger, then 1st Scale, 1st Expedite, 1st Anger.
+    {
+        static const char* const kTailKeepOrder[] = {
+            "Ancestral Anger", "Expedite", "Scale the Heights" };
+        std::vector<int> copies[3];
+        for (int i = 0; i < n; ++i)
+        {
+            if (ap.hand[i].m_is_staged) { continue; }
+            for (int k = 0; k < 3; ++k)
+            { if (ap.hand[i].m_name == kTailKeepOrder[k]) { copies[k].push_back(i); } }
+        }
+        std::size_t rounds = 0;
+        for (int k = 0; k < 3; ++k) { rounds = std::max(rounds, copies[k].size()); }
+        for (std::size_t r = rounds; r-- > 0; )
+        {
+            for (int k = 2; k >= 0; --k)   // within a round: Scale before Expedite before Anger
+            { if (r < copies[k].size()) { shed.push_back(copies[k][r]); } }
+        }
     }
 
     // S4 -- excess creatures beyond the >=4 weighted bodies (Goblin Instigator brings its token,
-    // so it weighs 2). Board bodies count; dorks first among the shed (their mana role is already
-    // covered by S1's kept sources).
+    // so it weighs 2). Board bodies count. A dork S1 KEPT does double duty (mana AND body, user
+    // 2026-08-13): it counts toward the 4 and is never a spare here -- without that carve-out this
+    // pass re-listed a kept mana dork as a spare body and shed it out from under the mana bucket.
+    std::vector<char> s1_kept(static_cast<std::size_t>(n), 0);
+    for (std::size_t k = 0; k < mana.size(); ++k)
+    { if (kept[k]) { s1_kept[static_cast<std::size_t>(mana[k])] = 1; } }
     auto body_weight = [&](const Card& c) { return c.m_name == "Goblin Instigator" ? 2 : 1; };
     int secured = board_bodies + (kept_magnet >= 0 ? 1 : 0);
     std::vector<int> spare_bodies;
     for (int i : bodies)
     {
+        if (s1_kept[static_cast<std::size_t>(i)]) { secured += body_weight(ap.hand[i]); continue; }
         if (secured < 4) { secured += body_weight(ap.hand[i]); continue; }   // kept
         spare_bodies.push_back(i);
     }
@@ -6874,8 +6964,8 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
     { return is_dork(ap.hand[a]) > is_dork(ap.hand[b]); });
     for (int i : spare_bodies) { shed.push_back(i); }
 
-    // Omitted (kept): the kept magnet, the needed mana, every Gold Rush / Fists of Flame, and the
-    // bodies inside the 4-weight target.
+    // Omitted (kept): the kept magnet, the needed mana + colour-floor sources, every Gold Rush /
+    // Fists of Flame + the first Twinflame, and the bodies inside the 4-weight target.
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
