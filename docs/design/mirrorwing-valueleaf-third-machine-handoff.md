@@ -62,6 +62,28 @@ Measurement traps (hard-won on the dev box; re-verify per machine): callgrind DI
 label-config games (do not use it here); `perf record` broken under WSL2; walls need `taskset`
 pinning; counters/digests are the contention-immune currency.
 
+## If the numbers say INFEASIBLE
+
+Infeasible is a routing decision, not a dead end. The remaining honest levers (ranked, detail
+in `mirrorwing-gen-perf-profile.md`) would land on the DEV box first, producing a NEW frozen
+commit before any regen starts (any src change moves the `HEAD:src` freeze key):
+
+1. **Equivalence collapses at continuation enumeration** (designed, not built): fold symmetric
+   target/strive variants before the wave walks them — the provable-fold family (sibling
+   tap-backtrack collapse precedent). Note the duplicate-probe verdict: remaining dup classes
+   are crack-colour convergence + unaffordable-cast fallback; only provable subsets qualify.
+   The label-wave-off lever is REJECTED (user, 2026-08-13) — do not re-raise it.
+2. **Tail-rollout cost**: post-crack-fix, `rolled` rose 14M→24M on gi69 (ex-duplicate walks now
+   take full FSLineTail rollouts) — the dominant label-wall slice. FSLine no-win memo already
+   absorbs 69% of revisits.
+3. **GameState deep-copy / apply-undo rework**: big engine-wide item, but only ~3.5% of the
+   label wall post-site-5 — a play/suite lever more than a regen rescue.
+4. Micro: CleanupDiscardRanking rank-cache per hand multiset (~6% Ir, runs per shed on rollout
+   hands >7); incremental BuildSimKey (~8% Ir).
+
+So the report to the user should frame the choice as: run as-is (N days) / land lever(s) 1–2
+and re-freeze / defer the regen.
+
 ## Step 2 — if the user says go
 
 ```
