@@ -48,6 +48,22 @@ Suite-level: neutral (smoke 40s both arms; suite wall is search-dominated there 
 > are now only ~3.5% of the label wall. The top lever today is the prefix-resume cache
 > (capture the GameState at the deferred breakpoint once per base plan, resume per rank),
 > not apply/undo. The ranking below still describes the pre-site-5 shape of the d1 fan-out.
+>
+> **UPDATE 2026-08-13 — prefix-resume cache BUILT (61a08ca) and it settles the attribution.**
+> Byte-identical, default-on, but only ~4% of the gi69 label wall (1342→1290s pinned-idle):
+> the redundant prefix apply is ~1-2µs of each ~14µs wave walk (this deck's base plans are
+> 1-3 actions), so "63.5M full applies" was the right count but the wrong villain. The walk's
+> real cost is (a) the CONTINUATION re-solve + apply per rank — genuinely different work per
+> rank, not redundancy — and (b) the FSLineTail rollouts of the ~26% of walks that survive
+> post-apply dedup. The remaining honest levers for label-path cost, in order of leverage:
+> 1. **Wave policy for the LABEL path** (USER decision, not an engine default): the deferred
+>    wave contributed improved=0 on gi69's entire label pass (53M walks, 14M tails). If a
+>    broader sample confirms ~0, generating labels with the deferred wave off recovers nearly
+>    the whole 88x while play keeps full reachability. Measure first: improved counts across
+>    a full label seed set.
+> 2. Pre-apply equivalence prediction for the 75% post-apply-dedup class (hard in general;
+>    provable subsets — identical targets — are already folded at enumeration).
+> 3. Tail-rollout cost (FSLine no-win memo already absorbs 69% of revisits).
 
 1. **GameState deep copy (~26% of samples pre-site-5; 12.8M copies/batch).** The real fix is
    apply/undo at the FSLine d1 leaves (the backtracker's pattern) or a pooled/arena Permanent
