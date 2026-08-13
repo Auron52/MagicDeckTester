@@ -4,7 +4,7 @@ The value leaf is a learned O(1) evaluator that replaces the search's horizon ro
 the whole process for **building one for a deck** — new deck or regeneration — and deciding whether
 to ship it.
 
-## Rule 0 — one command, one frozen commit
+## Rule 0 — one command, one consistent PLAY DIGEST
 
 ```bash
 bash scripts/valueleaf.sh run    decks/<Deck>     # build (start / resume)
@@ -40,10 +40,23 @@ and `--never-condemn-at-or-below < 5` is refused outright. The per-(seed,depth) 
 same single-invocation helper (`valueleaf_incremental.py`) is deleted too — dead code that still reads
 as a working alternative is how a superseded design gets re-adopted.
 
-The run must sit on ONE commit, because these artifacts are engine-state fingerprints: a play change
-midway produces a table whose rows disagree with each other. The driver records `HEAD:src` at start
-and re-checks before every phase, and STOPS rather than mixing. It also refuses to start with
-uncommitted changes under `src/`.
+**The run must be consistent in PLAY, not pinned to a commit (user, 2026-08-13).** These artifacts are
+engine-state fingerprints, so a table whose rows were measured under different play is a table whose
+rows disagree with each other — but a commit hash is only ever a cheap PROXY for that. Plenty of
+commits (a doc, a script, a refactor, a perf change that is byte-identical by design) move `HEAD:src`
+without moving play at all.
+
+So the driver records `HEAD:src` **and the smoke play digest** at start, and re-checks before every
+phase:
+
+| what moved | what happens |
+|---|---|
+| nothing | proceed |
+| `src`, play digest UNCHANGED | play-identical: the freeze is re-stamped and the chunks re-labelled. Nothing is discarded, nothing stops |
+| play digest CHANGED | the run CONTINUES and banks every full set — see the next section |
+
+It never stops. An earlier version halted on any `src` movement, which cost a 60–70 core-hour restart
+for a change that provably could not alter a single game.
 
 **Prerequisite:** the deck needs `decks/<Deck>/<Deck>.profile.json` (run the analyze-deck skill
 first). The driver exits 2 without it rather than measuring a deck we do not ship.
@@ -57,9 +70,8 @@ this and there is no separate path to remember.
 
 ## Play mismatch: the unit of consistency is the CHUNK
 
-Generation is frozen to one commit because the artifacts are engine-state fingerprints. When that
-freeze is broken anyway -- a merge lands, an optimization ships mid-run -- the run does not have to be
-thrown away, and **this is handled by the tool, not by hand**. The rule (user, 2026-08-09):
+When play genuinely does change -- a merge lands, an optimization ships mid-run -- the run does not
+have to be thrown away, and **this is handled by the tool, not by hand**. The rule (user, 2026-08-09):
 
 > Continue under the mismatch, but regenerate **the specific game chunks that were not completed**,
 > across all entries of the table that have generated them already (so some cells will not need to).
@@ -73,10 +85,25 @@ an offset delivers exactly that: `[0,B)` is engine A in every cell, `[B,target)`
 cell, and every column and arm-difference is computed from games that agree.
 
 `valueleaf_depth_matrix.py --incremental` does this automatically on resume. Cell state is a list of
-chunks stamped with `git rev-parse HEAD:src`; on a src change it picks `B` = the lowest offset any
-cell of that seed still owes, drops old-engine chunks at or above `B`, keeps new-engine ones, and
-re-queues the gaps. A fully-complete seed is untouched whatever its engine, and a condemned cell
-capped at 50 has nothing at or above `B` so it is neither redone nor extended.
+chunks stamped with `git rev-parse HEAD:src`, and on a play change it **keeps every FULL SET**: an
+offset survives iff every cell that still owes work already holds it. Contiguous or not — cells do not
+finish in order, and an earlier contiguous-prefix rule threw away perfectly good sets sitting above an
+in-flight hole. Three properties this rests on (2026-08-12/13):
+
+* **Retention is chunk-atomic, resolved to a fixpoint.** A chunk stores one MEAN over its `n` games,
+  never the games, so keeping part of one would have to invent the surviving piece's score. And
+  dropping a straddling chunk shrinks that cell's coverage, which shrinks the intersection, which can
+  strand a chunk in another cell — so a single pass would leave cell A having dropped offsets cell B
+  still holds, which is the very mixing this prevents.
+* **A condemned cell gets no vote.** It is reference-only and capped, so it observes the cross-cell
+  invariant rather than participating in it. Before this, an H6 row condemned at 7 games could never
+  reach its own 50-game target, stayed "unfinished" forever, and capped its entire seed's banking at
+  its own 7 offsets — while its ragged chunk length forced every 25-game chunk in the group to be cut
+  to 7 games carrying a 25-game mean.
+* **A fully-complete seed is untouched** whatever engine it ran on.
+
+Banking is grouped per `(deck, seed)`: seeds are judged independently, so one slow seed cannot cost
+the others their sets.
 
 **Do not re-run whole cells for this.** An earlier draft of this section made the seed the unit; on
 FiveColour that was 26 cells / ~10,400 games where the chunk rule is 24 chunks / 587 -- 18x more work
@@ -84,7 +111,7 @@ for no extra consistency.
 
 ## Progress and restarts
 
-`status` prints the frozen commit and whether the freeze still holds, a per-phase checklist with
+`status` prints the freeze (commit + play digest) and whether it still holds, a per-phase checklist with
 completion times, rows-so-far against target, whether a model is staged, the last held-out RMSE,
 matrix progress, whether games are running, and the exact resume command.
 
@@ -96,8 +123,10 @@ Restarting is the normal case, not an error path:
 - **To redo one phase**, delete its marker and re-run.
 - **If the clock ran out inside phase A**, use `finish` instead of `run`: it accepts the rows on disk
   as final and runs B..E on them. Phase A is all-or-nothing otherwise.
-- **If the freeze was violated** (`src/` moved), restart rather than resume — measurements before and
-  after describe different engines.
+- **If `src/` moved, just resume.** The driver compares the PLAY digest: identical play re-stamps the
+  freeze and keeps everything; a real play change banks every full set and re-queues the rest. Do NOT
+  restart from scratch on a freeze message — that mistake cost 60–70 core-hours once for a change
+  that could not alter a game.
 
 Each run gets its own queue dir (`logs/vlq_<deck>`), so a single-deck run never collides with a fleet
 run's rows, table or markers.
