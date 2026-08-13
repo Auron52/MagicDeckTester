@@ -359,8 +359,14 @@ def score(path, arms, max_turns, expect=None):
     return got
 
 
-def run_batch(jobs, outdir, name, threads, env=None):
+def run_batch(jobs, outdir, name, threads, env=None, pin_deck=None):
     """One pooled `mtg --batch` over every job. -> path of the stderr log the wins were dumped to.
+
+    `pin_deck` (the spec's BASE decklist) sets MTG_PROVIDER_DECK on the whole batch: every arm is a
+    DECLARED modification of that deck, so its provider is the base deck's by construction, never
+    re-detected from an edited list that may have lost or gained a signature card (user directive
+    2026-08-13 -- no room for a silent misroute in the modification context). Detection still runs
+    per job for REPORTING: a `provider_detected=` on the [play] line becomes the crossing NOTE below.
 
     The batch's own progress lines are TEED to stdout instead of being left in the log. `[batch]
     heartbeat: N/M workers busy` is the first-ten-minutes check CLAUDE.md mandates and `SLOW-GAME` is
@@ -370,11 +376,14 @@ def run_batch(jobs, outdir, name, threads, env=None):
     man = os.path.join(outdir, f"{name}.manifest.json")
     json.dump({"jobs": jobs}, open(man, "w"), indent=1)
     err = os.path.join(outdir, f"{name}.err")
+    benv = {**os.environ, "MTG_DUMP_WINS": "1", **(env or {})}
+    if pin_deck:
+        benv["MTG_PROVIDER_DECK"] = os.path.abspath(pin_deck)
     with open(err, "w") as e, open(os.path.join(outdir, f"{name}.out"), "w") as o:
         p = subprocess.Popen([os.path.join(ROOT, "build/Release/mtg"), "--batch", man,
                               "--threads", str(threads or os.cpu_count())],
                              stdout=o, stderr=subprocess.PIPE, text=True, cwd=ROOT,
-                             env={**os.environ, "MTG_DUMP_WINS": "1", **(env or {})})
+                             env=benv)
         for line in p.stderr:
             e.write(line)
             if line.startswith("[batch]") or line.startswith("[play]") or "SLOW-GAME" in line:
@@ -385,21 +394,19 @@ def run_batch(jobs, outdir, name, threads, env=None):
     bad = provider_split(err)
     if bad:
         raise SystemExit(
-            "arms did not run under the same archetype provider -- REFUSING the comparison.\n  "
+            "arms ran under DIFFERENT archetype providers -- REFUSING the comparison.\n  "
             + "\n  ".join(f"{p_}: {', '.join(sorted(t))}" for p_, t in sorted(bad.items()))
-            + "\n\n  Archetype detection is by card PARAMS (SelectDecisionProvider), so an edit can cross a"
-              "\n  signature and hand one arm another deck's heuristics -- tutor narrowing, dig ranking,"
-              "\n  attack rules. That is not a bias a shared apparatus absorbs; it is two engines.\n"
-              "\n  There is deliberately NO runtime pin. Forcing both arms onto one provider would hide"
-              "\n  the finding, and the finding is the point -- one of two things is true:\n"
-              "\n    the deck is still itself -> make the PROVIDER support both decklists (widen the"
-              "\n      signature, or keep the archetype hook present-but-inert without its card), so both"
-              "\n      arms route to it legitimately. This is the preferred fix.\n"
-              "\n    the edit made it a DIFFERENT deck -> screening is the wrong instrument. Screening"
-              "\n      compares combinations sharing one identity and one apparatus. Analyse it as a NEW"
-              "\n      deck instead (analyze-deck.md, then mulligan-profile.md + value-leaf.md): you still"
-              "\n      get a win-turn diff against the original, it just costs a table from scratch"
-              "\n      rather than a shared one.")
+            + "\n\n  Every arm of a spec is a DECLARED modification of the base deck, so every job is pinned"
+              "\n  to the base deck's provider (MTG_PROVIDER_DECK on the batch). A split under that pin"
+              "\n  means the pin did not reach the engine -- a driver/engine BUG, not a property of the"
+              "\n  edit. Nothing above is a number to read.")
+    for arm, (eff, det) in sorted(provider_crossings(err).items()):
+        print(f"  NOTE: '{arm}' crosses the archetype signature -- detection on its edited list says"
+              f" {det};\n        it runs under {eff}, inherited from the base deck (identity is the"
+              f" spec's, by construction).\n        Hooks keyed on a card this edit removed are inert;"
+              f" a card only ANOTHER archetype has\n        heuristics for is played generically."
+              f" If this edit is meant as a NEW deck rather than a\n        modification, screening is"
+              f" the wrong instrument -- analyse it via analyze-deck.md instead.", flush=True)
     return err
 
 
@@ -421,6 +428,25 @@ def provider_split(err_path):
     except OSError:
         return {}
     return seen if len(seen) > 1 else {}
+
+
+def provider_crossings(err_path):
+    """-> {arm: (effective, detected)} for arms whose edited list DETECTS a different provider than
+    the one they ran under (the pin). Read off the engine's own `provider_detected=` report -- the
+    crossing is surfaced, never routed on."""
+    out = {}
+    try:
+        for line in open(err_path):
+            if not line.startswith("[play] ") or " provider_detected=" not in line:
+                continue
+            parts = line.split()
+            arm = parts[1].split("__")[0]
+            eff = next(x.split("=", 1)[1] for x in parts if x.startswith("provider="))
+            det = next(x.split("=", 1)[1] for x in parts if x.startswith("provider_detected="))
+            out[arm] = (eff, det)
+    except OSError:
+        return {}
+    return out
 
 
 def job_costs(err_path):
@@ -658,6 +684,102 @@ def refuse_on_cards(pf):
             "  \"allow_card_gaps\": true screens anyway, knowing the answer is about a proxy.")
 
 
+def edited_cards(spec):
+    """Every card whose count differs from the base in ANY arm -- BOTH sides of every edit."""
+    out = set()
+    for a in spec.arms.values():
+        for n in set(a) | set(spec.counts):
+            if a.get(n, 0) != spec.counts.get(n, 0):
+                out.add(n)
+    return sorted(out)
+
+
+def modeling_notes(cards):
+    """-> {card: [bracket notes]} from oracle_text, for the cards an edit touches.
+
+    A [bracket note] is a signed-off modeling simplification (analyze-deck's convention). Within one
+    deck it is symmetric and harmless; across the two sides of an EDIT it is the asymmetry no guard
+    can absorb -- a screen comparing a fully-modelled card against a partly-modelled one reports a
+    number that will not say so. Surfacing the notes mechanically leaves only the judgement (does
+    the missing rider matter for THIS question?) to the reader, instead of the finding itself."""
+    db = {c.get("name"): c for c in json.load(open(CARDS_JSON))["cards"]}
+    out = {}
+    for n in cards:
+        notes = re.findall(r"\[([^\]]+)\]", (db.get(n) or {}).get("oracle_text") or "")
+        if notes:
+            out[n] = notes
+    return out
+
+
+def lever_refs(spec, cards):
+    """Where existing logic knows an edited card BY NAME. -> {card: [where, ...]}, report-only.
+
+    The quality-gap map for a modification, cheap because it is a scan, not a re-analysis:
+      * the deck's play profile outside card_scores (e.g. required_pieces) -- a lever the play
+        depends on, naming a card an arm may no longer hold;
+      * the provider sources -- an archetype heuristic literally naming the card.
+    A REMOVED card that is named somewhere = that logic goes inert on the arm that cut it (fine,
+    but worth knowing when reading the delta). An INTRODUCED card named NOWHERE = the search plays
+    it, but no archetype heuristic or profile lever knows it exists -- generic handling, which is
+    exactly the provider tweak the modification may be asking for."""
+    hits = {n: [] for n in cards}
+    if spec.profile and os.path.exists(spec.profile):
+        def walk(node, path):
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    if k == "card_scores":       # handled by the pooled-profile route
+                        continue
+                    if k in hits:
+                        hits[k].append(f"profile:{path}{k}")
+                    walk(v, f"{path}{k}.")
+            elif isinstance(node, list):
+                for i, v in enumerate(node):
+                    walk(v, f"{path}{i}.")
+            elif isinstance(node, str) and node in hits:
+                hits[node].append(f"profile:{path[:-1]}")
+        walk(json.load(open(spec.profile)), "")
+    for src in ("src/ai/DecisionProviders.cpp", "src/ai/DecisionProviders.h"):
+        try:
+            for ln, line in enumerate(open(os.path.join(ROOT, src)), 1):
+                for n in cards:
+                    if f'"{n}"' in line:
+                        hits[n].append(f"{src}:{ln}")
+        except OSError:
+            pass
+    return {n: h for n, h in hits.items() if h}
+
+
+def report_gaps(spec):
+    """The modification-analysis report: quality gaps in EXISTING logic for the edited card set.
+    Report-only (nothing here refuses) and incremental (scans, never a re-analysis)."""
+    edited = edited_cards(spec)
+    notes = modeling_notes(edited)
+    if notes:
+        print("\nmodeling notes on edited cards ([bracket note] = signed-off simplification):")
+        for n in sorted(notes):
+            for note in notes[n]:
+                print(f"  {n}: {note}")
+        print("  A note on ONE side of an edit compares a fully-modelled card against a partly-"
+              "\n  modelled one; the delta will not say so. Judge whether the missing rider matters"
+              "\n  for this question.")
+    refs = lever_refs(spec, edited)
+    removed = {n for n in refs if any(a.get(n, 0) < spec.counts.get(n, 0)
+                                      for a in spec.arms.values())}
+    if refs:
+        print("\nexisting logic that names an edited card:")
+        for n in sorted(refs):
+            where = ", ".join(refs[n][:6]) + (" ..." if len(refs[n]) > 6 else "")
+            tag = "goes inert on arms that cut it" if n in removed else "lever sees the raised count"
+            print(f"  {n} ({tag}): {where}")
+    named = set(refs)
+    generic = [n for n in spec.introduced if n not in named]
+    if generic:
+        print("\nintroduced cards NO archetype heuristic or profile lever names: "
+              + ", ".join(generic)
+              + "\n  (the search still plays them; if one underperforms expectation, the provider"
+              "\n   tweak -- not a bigger screen -- is the likely next step)")
+
+
 def gate(spec):
     """Pre-flight + the refusals it implies, honouring the spec's hatches. -> the pre-flight report.
 
@@ -665,6 +787,7 @@ def gate(spec):
     cannot run at all without it, so there is nothing to trade off."""
     pf = preflight(spec)
     refuse_on_cards({**pf, "gaps": []} if spec.raw.get("allow_card_gaps") else pf)
+    report_gaps(spec)
     return pf
 
 
@@ -709,7 +832,13 @@ def pool_profile(spec, unscored):
         res = subprocess.run([os.path.join(ROOT, "build/Release/mtg-analyze"), deck,
                               "--cards-json", CARDS_JSON,
                               "--seed", str(spec.raw.get("pool_seed", 66000001))],
-                             stdout=subprocess.PIPE, stderr=f, text=True, cwd=ROOT)
+                             stdout=subprocess.PIPE, stderr=f, text=True, cwd=ROOT,
+                             # The union deck is still the BASE deck's modification context: pin its
+                             # provider so the derived scores describe play under the deck's own
+                             # heuristics (detection on the union would normally agree -- it holds
+                             # every base card -- but agreement is not a guarantee; the pin is).
+                             env={**os.environ,
+                                  "MTG_PROVIDER_DECK": os.path.abspath(spec.base_path)})
     if res.returncode != 0:
         raise SystemExit(f"mtg-analyze exited {res.returncode}; see {log}")
     scores = json.loads(res.stdout).get("card_scores") or {}
@@ -785,8 +914,13 @@ def pool_table(spec, why, dry=False):
         subprocess.check_call([os.path.join(ROOT, "build/Release/mtg-analyze"), deck,
                                "--seed", str(spec.raw.get("pool_table_seed", 55000001))],
                               stdout=f, stderr=subprocess.STDOUT, cwd=ROOT,
+                              # Gen ROLLOUTS play games too: without the pin a union whose edit
+                              # crossed a signature would fit the table under another archetype's
+                              # heuristics -- the same class of silent apparatus swap as profile-less
+                              # gen, one layer up.
                               env={**os.environ, "MTG_KEEP_EXHAUSTIVE": "1",
-                                   "MTG_KEEP_ROLLOUTS": str(R)})
+                                   "MTG_KEEP_ROLLOUTS": str(R),
+                                   "MTG_PROVIDER_DECK": os.path.abspath(spec.base_path)})
     open(fp, "w").write(want)
     return out
 
@@ -1015,7 +1149,8 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
     # to DefaultProfile() in silence. MTG_EXHAUSTIVE_PROFILE=none suppresses exactly the sidecar
     # (AttachExhaustiveSidecar), process-globally, which is what "symmetric" means here.
     env = {} if use_table else {"MTG_EXHAUSTIVE_PROFILE": "none"}
-    got = score(run_batch(jobs, spec.out, label, spec.threads, env), [j["name"] for j in jobs],
+    got = score(run_batch(jobs, spec.out, label, spec.threads, env, pin_deck=spec.base_path),
+                [j["name"] for j in jobs],
                 spec.maxturn, expect=spec.games)
     common = sorted(set.intersection(*[set(v) for v in got.values()]))
     print(f"\n{len(common):,} paired games, d{spec.depth} budget {spec.budget}ms   (negative delta = FASTER)\n")
@@ -1286,7 +1421,11 @@ def reweight_table(spec, tag, deck_path, src_raw):
     with open(log, "w") as f:
         subprocess.check_call([os.path.join(ROOT, "build/Release/mtg-analyze"), deck_path],
                               stdout=f, stderr=subprocess.STDOUT, cwd=ROOT,
-                              env={**os.environ, "MTG_KEEP_MERGE": "1",
+                              # A reweight plays no games, but the pin keeps every subprocess of a
+                              # spec under one identity -- uniformity is the guarantee here.
+                              env={**os.environ,
+                                   "MTG_PROVIDER_DECK": os.path.abspath(spec.base_path),
+                                   "MTG_KEEP_MERGE": "1",
                                    "MTG_MERGE_INPUTS": os.path.abspath(src_raw),
                                    "MTG_MERGE_OUT_PROFILE": out,
                                    "MTG_MERGE_OUT_RAW": out.replace(".profile.json", ".raw.json")})
@@ -1339,8 +1478,13 @@ def gen_table(spec, tag, deck_path, R, dry=False):
         subprocess.check_call([os.path.join(ROOT, "build/Release/mtg-analyze"), deck_path,
                                "--seed", str(spec.raw.get("floor_seed", 78000001))],
                               stdout=f, stderr=subprocess.STDOUT, cwd=ROOT,
+                              # An arm's OWN bracket table is still generated under the base deck's
+                              # provider: the bracket bounds apparatus FIT, and letting one arm's gen
+                              # run under a different archetype's heuristics would fold a provider
+                              # change into what it reports as apparatus bias.
                               env={**os.environ, "MTG_KEEP_EXHAUSTIVE": "1",
-                                   "MTG_KEEP_ROLLOUTS": str(R)})
+                                   "MTG_KEEP_ROLLOUTS": str(R),
+                                   "MTG_PROVIDER_DECK": os.path.abspath(spec.base_path)})
     open(fp, "w").write(want)
     return out
 
@@ -1608,7 +1752,8 @@ def floor(spec, tags, dry_run):
         json.dump({"jobs": jobs}, open(os.path.join(spec.out, "floor.manifest.json"), "w"), indent=1)
         return 0
 
-    got = score(run_batch(jobs, spec.out, "floor", spec.threads), [j["name"] for j in jobs],
+    got = score(run_batch(jobs, spec.out, "floor", spec.threads, pin_deck=spec.base_path),
+                [j["name"] for j in jobs],
                 spec.maxturn, expect=spec.games)
     for tag in tags:
         rw = route[tag] == "reweight"
@@ -1800,6 +1945,7 @@ def report_preflight(spec):
                       "what the table enumerated: " + "; ".join(over) +
                       "\n  (silent heuristic fallback on this arm only; the screen drops the table from"
                       "\n   EVERY arm above 1%, which is symmetric but costs ~22x per game)")
+    report_gaps(spec)
     if not (pf["missing"] or pf["gaps"]):
         print("\nOK -- nothing here needs a human. Run the screen.")
         return 0

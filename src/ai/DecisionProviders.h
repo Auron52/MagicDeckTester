@@ -572,8 +572,16 @@ public:
 // nullptr fallback so any raw-GameState path stays valid.
 const DecisionProvider& DefaultProvider();
 
-// Pick the provider for a deck by archetype detection. Stage 0: always Generic.
+// Pick the provider for a deck. Honors MTG_PROVIDER_DECK (pin to the provider detected for THAT
+// decklist -- the screening driver's "an arm is a declared modification of the base deck, so its
+// identity is the base's" route); unset, it is DetectDecisionProvider(deck). Every routing site
+// goes through THIS one, so a pin cannot be missed by one path and honored by another.
 const DecisionProvider& SelectDecisionProvider(const Decklist& deck);
+
+// Raw archetype detection by card params, ignoring any pin. For REPORTING only (BatchRunner's
+// [play] line prints detected-vs-pinned so a signature crossing is surfaced, not silently routed
+// around); never use this to attach a provider to a state.
+const DecisionProvider& DetectDecisionProvider(const Decklist& deck);
 
 // Resolve the provider for a state: its attached provider, or the default fallback for
 // any path that built a raw GameState. Cheap (a pointer test on the common path); the

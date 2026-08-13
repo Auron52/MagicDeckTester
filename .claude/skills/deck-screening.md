@@ -78,8 +78,10 @@ The driver measures; it does not judge, and it cannot write a card. Four things 
    judgement no measurement can make: `Skullcrack`'s oracle text carries
    `[Life-gain lock and damage-prevention lock not modelled]`, so screening Skullcrack → Lava Spike
    compares a fully-modelled card against a partly-modelled one and flatters the newcomer. The
-   bracket notes in `cards.json` are where that is recorded; connecting one to the question being
-   asked is a reading task. Say it in the report — do not let the number stand alone.
+   driver now *surfaces* every `[bracket note]` on every card an edit touches (both sides), plus
+   which name-keyed levers (profile fields, provider source) reference an edited card — but
+   connecting a note to the question being asked is still a reading task. Say it in the report — do
+   not let the number stand alone.
 4. **Deciding.** The driver prints an effect, a floor and a verdict; adoption is the user's call, and
    an adopted combination still owes its own artifacts (bottom of this file).
 
@@ -406,6 +408,25 @@ combination is chosen, it earns its own artifacts through the normal routes —
 `.claude/skills/mulligan-profile.md` then `.claude/skills/value-leaf.md` — and its own regression
 ground truth. The screen's number is a *ranking*, not that deck's measured strength.
 
+## The provider is INHERITED, never re-detected (user directive 2026-08-13)
+
+Archetype detection (`SelectDecisionProvider`) is by card params, so an edit can cross a signature —
+cut burn's 4 Searing Blaze (`landfall_damage` is the whole signature) and detection routes that arm
+to `Generic`, handing it a different engine's heuristics. In the screening context that error has
+**no room to exist**: every arm is a *declared* modification of the base deck, so its identity is
+given by the spec, not re-derived from the edited list. The driver sets `MTG_PROVIDER_DECK=<base
+decklist>` on every batch **and** every table/score generation subprocess; the engine honours it at
+the single `SelectDecisionProvider` choke point all callers funnel through, so no path can miss it.
+
+Detection still runs per arm for REPORTING: the batch's `[play]` line prints
+`provider_detected=<X> (pinned via MTG_PROVIDER_DECK)` on a crossing and the driver prints a NOTE.
+Hooks keyed on a card the edit removed are inert (they fire on card params present in play); an
+introduced card only another archetype has heuristics for is played generically — if it
+underperforms expectation, the *provider tweak* is the likely next step, not a bigger screen. A
+modification that is really meant as a NEW deck should be analysed as one (`analyze-deck.md`), where
+detection applies as always. An arms-ran-under-different-providers refusal still exists but can now
+only mean the pin failed to reach the engine — a bug, not a property of the edit.
+
 ## Guards that refuse rather than warn
 
 Each of these exists because the failure it catches is *silent* — the run finishes and prints an
@@ -432,15 +453,16 @@ enforces).
 - **The pool apparatus is a property of the whole spec.** The union spans every arm, so adding or
   removing a combination rebuilds the table and silently changes what the other arms were measured
   under — numbers do not carry across spec edits. The screen says so; nothing enforces it.
-- A screen and a `--floor` still run the shared cells **twice** (identical games, byte for byte). A
-  `--with-floor` mode would put them in one batch; cross-run reuse was rejected as too easy to get
-  silently wrong, and the dominant cost is table generation either way.
+- ~~A screen and a `--floor` run the shared cells twice.~~ **Built**: `--with-floor TAG[,TAG]` runs
+  both in ONE batch (validated — it reproduces the standalone probe to the digit). Cross-run reuse
+  stays rejected as too easy to get silently wrong.
 - `n@3sig/0.03t` sizes a run against a 0.03t effect, but decisions are made against the measured
   floor (~0.005–0.01) — the column can read as "well powered" when it is not for the actual
   threshold.
-- Reweighting an existing table to a new combination is **zero rollouts** for count-only edits
-  (`BuildPolicyFromTables` takes `count` separately from the rollout values, and `Comb(n,k)=0` for
-  `k>n` drops unreachable cells automatically). Specified, not built.
+- ~~Reweighting an existing table is specified, not built.~~ **Built for the BRACKET** (the default
+  `--floor` route: free, deterministic, R=60, 5.7x tighter than a generated R=10 bracket). Still
+  open: using a reweighted table as the *screen's* shared apparatus (today the screen shares the
+  shipped table raw — the base's `count` vector on every arm), and the multi-source cell library.
 - A 2-Headed Giant format axis would need its own table *and* its own value leaf — the leaf's
   transfer argument holds across combinations (generic, non-card-indexed features) but NOT across
   formats, where `OppLife`/`OppCreatures` stop being single-opponent scalars.

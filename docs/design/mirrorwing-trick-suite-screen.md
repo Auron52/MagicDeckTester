@@ -30,12 +30,14 @@ tweaks within the same pool — the user named "Twinflame instead of Luxurious L
    (`mulligan-profile.md`) come first, and the mulligan profile is commit-bound, so it comes last of
    those.
 
-## What is NOT a blocker: the archetype signature survives
+## What is NOT a blocker: provider identity (and since 2026-08-13, never a blocker for ANY edit)
 
-Detection is `p.copies_solo_targeted_spells`, carried by Mirrorwing Dragon and Zada — both stay at 4.
-So both arms route to `MirrorwingProvider` and the driver's provider-split refusal passes. Worth
-stating explicitly because the same check fails on a smaller-looking burn edit: `landfall_damage` IS
-burn's signature, so cutting Searing Blaze drops that arm to `Generic`.
+Detection is `p.copies_solo_targeted_spells`, carried by Mirrorwing Dragon and Zada — both stay at 4,
+so detection on the edited list agrees with the base anyway. Since 2026-08-13 that agreement is
+reported, not load-bearing: every arm of a screen is pinned to the base deck's provider
+(`MTG_PROVIDER_DECK`, inherited identity — see `deck-combination-screening.md`), so even an edit that
+crossed a signature (the burn/Searing Blaze case) screens under the deck's own heuristics, with the
+crossing printed as a NOTE.
 
 ## The decision to make BEFORE generating: build the table over the UNION, not the final list
 

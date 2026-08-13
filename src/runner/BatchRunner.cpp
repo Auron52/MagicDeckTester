@@ -538,7 +538,15 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
                   // Which archetype's heuristics this job runs under. Detection is by card params, so
                   // an edited decklist can cross a signature and silently change provider between two
                   // arms of a comparison -- the one asymmetry a shared apparatus cannot absorb.
-                  << " provider=" << SelectDecisionProvider(j.deck).Name() << "\n";
+                  // Under MTG_PROVIDER_DECK the effective provider is pinned to the base deck's;
+                  // detection still runs on THIS job's list so a crossing is reported, not routed.
+                  << " provider=" << SelectDecisionProvider(j.deck).Name();
+        const DecisionProvider& det = DetectDecisionProvider(j.deck);
+        if (&det != &SelectDecisionProvider(j.deck))
+        {
+            std::cerr << " provider_detected=" << det.Name() << " (pinned via MTG_PROVIDER_DECK)";
+        }
+        std::cerr << "\n";
     }
 
     j.second_main = GoldFishRunner::DeckUsesSecondMain(j.deck);

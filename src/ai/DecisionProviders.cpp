@@ -6252,7 +6252,7 @@ const DecisionProvider& DefaultProvider()
     return g_generic;
 }
 
-const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
+const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
 {
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
@@ -6366,6 +6366,30 @@ const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
     if (vial) { return g_vial; }
     if (burn) { return g_burn; }
     return g_generic;
+}
+
+const DecisionProvider& SelectDecisionProvider(const Decklist& deck)
+{
+    // MTG_PROVIDER_DECK=<decklist path>: pin every game's provider to the one DETECTED for THAT
+    // decklist (value-carrying flag; unset/empty = detect per deck, byte-identical). The screening
+    // driver sets it to the spec's BASE deck: an arm there is a DECLARED modification of that deck,
+    // so its identity is given by the spec, not re-derived from an edited list that may have lost
+    // (or gained) a signature card -- detection by card params has silently misrouted decks three
+    // times, and an edit crossing a signature hands one arm of a comparison another deck's
+    // heuristics (user directive 2026-08-13: in the modification context there must be NO room for
+    // that error). Detection still runs on the edited list for REPORTING (BatchRunner's [play]
+    // line), never for routing. An unreadable pin path throws out of the static initializer --
+    // aborting loudly is the point; a silent fall-back to detection would reintroduce exactly the
+    // error class the pin removes. Hooks keyed on a card the pinned deck's edit removed are inert
+    // (they fire on card params present in play), which is the "present-but-inert without its
+    // card" behaviour the provider-reuse design asked for, obtained structurally.
+    static const DecisionProvider* const pinned = []() -> const DecisionProvider* {
+        const char* p = std::getenv("MTG_PROVIDER_DECK");
+        if (!p || !*p) { return nullptr; }
+        return &DetectDecisionProvider(DeckLoader::LoadFromFile(p));
+    }();
+    if (pinned != nullptr) { return *pinned; }
+    return DetectDecisionProvider(deck);
 }
 
 // ---- MirrorwingProvider::TrickTargetCandidates ------------------------------

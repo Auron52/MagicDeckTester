@@ -1340,18 +1340,57 @@ every near-threshold decision flips adversarially.
    `<stem>.keepmodel.exhaustive.profile.json` and does NOT resolve `.gz`, but every deck ships gzipped. It
    loads an empty profile, leaves K=0, fills no hand, and reports every composition as unwon with se 0.
    That looks like data. `keep_delta.py` materialises the sidecar plain and refuses an all-se-zero result;
-   the C++ still has the sharp edge. **Open: resolve `.gz` in `RunScoreCompsMode`.**
+   ~~the C++ still has the sharp edge.~~ **CLOSED (44d1964): `RunScoreCompsMode` resolves `.gz` first
+   (engine order) and refuses with a message when no sidecar resolves at all.**
+
+## The provider is INHERITED in the modification context (user directive 2026-08-13)
+
+Supersedes the 2026-08-12 "make the provider support both decklists" plan below, with a stronger
+framing from the user: a screen's arm is a **declared modification of an existing deck** — the user
+named the base deck; its identity is *given*, not something to re-derive from an edited list that
+may have lost (or gained) a signature card. So there must be **no room for that error class at
+all**, not a per-provider widening that has to be re-done for every archetype.
+
+Mechanism, engine side: `MTG_PROVIDER_DECK=<decklist path>` pins every game's provider to the one
+*detected for that decklist*. It is honoured inside `SelectDecisionProvider` itself — the single
+choke point every routing site funnels through (batch, single-run, analyzer keep-gen, scenario) —
+so no path can miss the pin. An unreadable path throws out of the static initializer (loud abort;
+a silent fall-back to detection would reintroduce the error class). Detection survives as
+`DetectDecisionProvider`, used for REPORTING only: BatchRunner's `[play]` line adds
+`provider_detected=<X> (pinned via MTG_PROVIDER_DECK)` when the edited list detects differently.
+
+Driver side: the pin is set on **every** subprocess of a spec — both `run_batch` sites and all four
+`mtg-analyze` invocations (pool profile, pool table, bracket gen, reweight). The table gens matter
+as much as the measurement: an arm's own bracket table generated under another archetype's
+heuristics would fold a provider change into what `--floor` reports as apparatus bias — the same
+class of silent apparatus swap as the profile-less gen, one layer up. The old
+arms-ran-under-different-providers refusal is kept but re-worded: under the pin a split can only
+mean the pin failed to reach the engine (a bug), never a property of the edit. A crossing prints a
+NOTE instead: hooks keyed on a removed card are inert ("present-but-inert without its card",
+obtained structurally); an introduced card only another archetype has heuristics for plays
+generically, and *that* is the signal a provider tweak is wanted.
+
+Validated on burn − 4 Searing Blaze (the motivating case): unset, the arms split Burn/Generic;
+pinned, both run Burn, the cut arm reports `provider_detected=Generic`, and the screen runs to a
+number with the NOTE printed. Byte-identity with the flag unset: clean-env smoke, all digests
+unchanged.
+
+Alongside it, the same session added the **modification-analysis report** (`report_gaps`, printed by
+`--preflight` and by every screen/floor): every `[bracket note]` on every card an edit touches (both
+sides — the "engine models one arm more completely" asymmetry is now surfaced mechanically, with
+only the judgement left to the reader), plus which name-keyed levers (profile fields outside
+`card_scores`, provider source literals) reference an edited card — a removed card that is named
+somewhere = logic going inert on that arm; an introduced card named nowhere = generic handling.
+Report-only, scan-based, never a re-analysis: the incremental analysis process for a modification,
+reusing everything the base deck already has.
 
 ## Open after 2026-08-12
 
-- **Provider REUSE when the key pieces survive.** The split refusal is correct but currently blunt:
-  burn's signature is `landfall_damage`, carried only by Searing Blaze, so cutting that ONE card
-  unhomes a deck that is still plainly burn. The preferred fix (user, 2026-08-12) is to make the
-  provider support both decklists — route on the archetype's stable core, or keep the hook
-  present-but-inert without its card — rather than to pin at runtime, which would hide the finding.
-  Deliberately NOT a runtime override: if the edit really did make a different deck, screening is the
-  wrong instrument and it should be analysed as a new deck (the win-turn diff is still available, it
-  just costs a table from scratch).
+- ~~**Provider REUSE when the key pieces survive.**~~ **CLOSED 2026-08-13 — see the section above.**
+  The split refusal was blunt (cutting Searing Blaze unhomed a deck that is still plainly burn);
+  the fix is not per-provider widening but inheritance: in the modification context the identity is
+  the spec's base deck, pinned end to end. If the edit really did make a different deck, screening
+  remains the wrong instrument — analyse it as a new deck, where detection applies as always.
 - **Diverging-game dump for the viewer** (user request). The driver already knows which game indices
   diverge — that is where the `ident %` comes from. Dumping those specific games for both arms in a
   form `tools/play` can open would make a human able to eyeball WHY an edit moved the number, as a
