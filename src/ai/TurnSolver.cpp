@@ -14575,17 +14575,21 @@ namespace
     }
 }
 
-// MTG_CANON_SIMKEY=1 (EXPERIMENT, default OFF = byte-identical): fold the hand and battlefield as
+// MTG_CANON_SIMKEY (ADOPTED default-ON 2026-08-14; =0 disables): fold the hand and battlefield as
 // ORDER-INSENSITIVE multisets instead of ordered sequences. The ordered fold means "play Sandbar
 // T3, Cave T4" and "Cave T3, Sandbar T4" -- the SAME position -- never share a memo entry, so with
 // searched breakpoint continuations (which generate every play order) the FSLineCache/TT DAG
 // degenerates into a tree: distinct-state growth counts SEQUENCES, x12/ply on treasure_hunt
-// (docs/design/th-d5-five-hour-game.md). Canonicalizing collapses permutations. NOT provably
-// byte-identical ON: greedy tie-breaks read vector order, so a memo hit may return a line computed
-// under a permuted internal order -- the A/B (same answers?) is the test this flag exists for.
+// (docs/design/th-d5-five-hour-game.md). Canonicalizing collapses permutations. Adoption evidence
+// (same doc, 2026-08-14): suite net -0.0328 quality, cost 0.91x fleet / ~2.1x on Class B monsters,
+// every slower game classified budget churn, both reference enum-gaps proven benign dedup (zero
+// cast-multisets lost), and the latent storage-counter key hole it exposed is fixed below. Not
+// byte-identical to ordered keys by construction (memo hits return canonically-equivalent lines);
+// GT rebaselined at adoption. Known cost exception: creature_giving pays ~1.10x (big boards, few
+// permutation duplicates) at neutral quality -- revisit as a per-deck opt-out if it ever matters.
 inline bool CanonSimKeyOn()
 {
-    static const bool v = EnvOn("MTG_CANON_SIMKEY");
+    static const bool v = EnvOn("MTG_CANON_SIMKEY", true);
     return v;
 }
 
