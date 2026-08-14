@@ -15160,6 +15160,46 @@ namespace
     // Start gate: begin pass k only if its estimated cost <= alpha * remaining
     // budget; a little over (>1.0) is allowed since the overrun guard backs it up.
     constexpr double kStartGateAlpha = 1.10;
+
+    // ---- PATH-TO-TRUST gate (MTG_ESC_TO_TRUST, default OFF) --------------------------------------
+    // What the ladder is really deciding, when the value leaf drives a deck with a trust depth, is
+    // not "can I afford the next pass" but "can I afford to REACH TRUST" -- because landing on the
+    // trust depth cancels the hybrid's heuristic escalation outright, while stopping one ply short
+    // means paying for that escalation on top of everything already spent.
+    //
+    // The existing lever (MTG_VALUE_STARTGATE_ALPHA, adopted 8.0) has the right idea and the wrong
+    // shape: it multiplies the allowance for EVERY pass by a constant. That is untargeted (a pass to
+    // depth 3 on a trust-6 deck cancels no escalation), unsized (8 is a guess, not a comparison with
+    // what is avoided), and it saturates -- measured on FiveColour, alpha 128 -> 512 buys one point
+    // of escalation rate, because ~40% of its decisions cannot reach trust at any leniency.
+    //
+    // This replaces the guess with the two quantities the ladder already has:
+    //   * the cost of the WHOLE remaining path pass_depth..trust, extrapolated from the ladder's own
+    //     measured growth ratio (not just the next pass -- the ladder must traverse the intermediate
+    //     depths, so affording one of them proves nothing);
+    //   * the escalation it would AVOID, estimated the same way the escalation's own predictor
+    //     estimates itself: R x the probe's leaf count at the last completed depth.
+    // The second is what justifies overshooting the remaining budget at all, and it is why this
+    // needs no external constant: the allowance IS the avoided cost.
+    //
+    // ASYMMETRY (user, 2026-08-14): overshooting and still landing below trust is the punishing
+    // outcome -- budget spent AND the escalation still paid, from a poorer purse. So the leniency is
+    // bounded (kTrustPathSlack) rather than open-ended, and a path that does not fit falls through to
+    // the ordinary gate, which commits where it can and lets the normal escalation run. Escalation
+    // stays the fallback; it is never skipped because trust was unaffordable (user, 2026-08-14).
+    constexpr double kTrustPathSlack = 1.25;
+    // Set by FullSearchLineHybrid around the value probe only (thread_local: one decision, one
+    // thread). 0 => inactive => the gate below is byte-identical to the alpha-only version.
+    thread_local int    g_trust_target = 0;    // the deck's value trust depth
+    thread_local double g_trust_R      = 0.0;  // frozen cost-per-leaf for the avoided-escalation estimate
+    struct TrustPathGuard
+    {
+        int    prev_t;
+        double prev_r;
+        TrustPathGuard(int t, double r) : prev_t(g_trust_target), prev_r(g_trust_R)
+        { g_trust_target = t; g_trust_R = r; }
+        ~TrustPathGuard() { g_trust_target = prev_t; g_trust_R = prev_r; }
+    };
     // Bootstrap growth ratio used for pass 1's estimate, before two completed
     // passes exist to measure a real C_{k-1}/C_{k-2} branching ratio.
     constexpr double kDefaultGrowth = 6.0;
@@ -15282,10 +15322,28 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                             ? static_cast<double>(c_prev) / static_cast<double>(c_prev2)
                             : kDefaultGrowth;
             double estimate = static_cast<double>(c_prev) * ratio;
-            if (estimate > gate_alpha * static_cast<double>(budget->Remaining()))
+            const double remaining = static_cast<double>(budget->Remaining());
+            bool fits = (estimate <= gate_alpha * remaining);
+            // PATH-TO-TRUST override (see kTrustPathSlack). Only when the value leaf is driving, a
+            // trust depth is known, and this pass is still on the way to it: ask whether the WHOLE
+            // path pass_depth..trust fits the remaining budget PLUS the escalation it would cancel.
+            // Never makes the gate stricter -- it can only rescue a pass the alpha test rejected --
+            // so a deck without a trust depth, or a search past it, is untouched.
+            if (!fits && vl_active && g_trust_target >= pass_depth && pass_depth <= depth)
             {
-                break;
+                double path = 0.0, e = estimate;
+                for (int d = pass_depth; d <= g_trust_target; ++d) { path += e; e *= ratio; }
+                // The avoided escalation, estimated as the escalation's own predictor would:
+                // R x the probe's leaf count at the last completed depth. R is the deck's frozen
+                // cost-per-leaf, so this stays a pure function of this decision's structure.
+                const int    lastd   = pass_depth - 1;
+                const double leaves  = (lastd >= 0 && lastd < 16)
+                                     ? static_cast<double>(std::max<long long>(0, g_probe_leaves[lastd]))
+                                     : 0.0;
+                const double avoided = g_trust_R * leaves;
+                if (path <= kTrustPathSlack * (remaining + avoided)) { fits = true; }
             }
+            if (!fits) { break; }
         }
 
         long long used_before = budget ? budget->Used() : 0;
@@ -15727,7 +15785,19 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     ProbeValsGuard _pvg((eff_beam > 0 && !eff_beam_static) ? &beam_vals_map : nullptr);
     if (eff_beam > 0 && !eff_beam_static) { g_probe_val_recording = true; }
     int committed = depth;
-    SearchLine line = FullSearchLine(state, depth, max_turns, second_main, tt, probe_budget, &committed);
+    SearchLine line;
+    // PATH-TO-TRUST: tell the ladder which depth cancels the escalation, and what a heuristic leaf
+    // costs, so its start gate can weigh "reach trust" against "stop short and pay for a redo".
+    // Armed for the PROBE only (the escalation's own ladder must not see it -- its passes cancel
+    // nothing). Default OFF => target 0 => the gate is byte-identical. R mirrors the escalation
+    // predictor's frozen constant so both sides of the comparison use one cost model.
+    static const bool s_esc_to_trust = EnvOn("MTG_ESC_TO_TRUST");
+    const bool trust_push = s_esc_to_trust && value_min_depth > 0 && value_min_depth <= depth;
+    {
+        TrustPathGuard _tpg(trust_push ? value_min_depth : 0,
+                            trust_push ? ((escalation_r > 0.0) ? escalation_r : 120.0) : 0.0);
+        line = FullSearchLine(state, depth, max_turns, second_main, tt, probe_budget, &committed);
+    }
     g_probe_recording = false;
     g_probe_val_recording = false;
 
