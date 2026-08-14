@@ -480,8 +480,13 @@ phase_meta() {
 # Bases are spaced by exactly games-per-job so each arm tiles its seed space once: game identity is
 # base+game_index, so closer spacing makes jobs REPLAY games -- which once turned 1.3 sigma into a fake
 # -14.4 sigma (rule 7). Job names are "<deck>-<arm>_s<seed>" so the single log splits per deck after.
+# Which marker this measurement writes. `run` uses E_measure (the pipeline's phase E, post-matrix).
+# `ab` uses E_ab_nomatrix so a later FULL run still executes phase E properly: the two measure
+# different staged sidecars (ab: the trained model as-is, presence-only hybrid at built-in default
+# play; E: the model with the matrix-derived value_play merged in), so one must not mask the other.
+E_MARK=E_measure
 phase_measure() {
-    done_p E_measure && return 0
+    done_p "$E_MARK" && return 0
     local vroot=$VLQ/variants; rm -rf "$vroot"; mkdir -p "$vroot"
     rm -f "$VLQ/play_baseline"
     local row key dir stem mkey base games staged s d bd drives bl
@@ -559,7 +564,7 @@ PY
         grep -E "^(d[0-9]+|dflt)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_play.log"
         python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_play.log" "$bl" 2>&1 | tee -a "$VLQ/driver.log"
     done
-    mark E_measure
+    mark "$E_MARK"
 }
 
 case "${1:-status}" in
@@ -688,5 +693,24 @@ PY
     tail -5 "$VLQ/driver.log" 2>/dev/null
     exit 0
     ;;
-*) echo "usage: $0 {run|status} [deck-dir]"; echo "  $0 run                    # regenerate the whole fleet"; echo "  $0 run decks/FiveColour   # one deck, new or existing"; echo "  the deck is the ONLY input; NEVER_CONDEMN (floor 5) is the one setting"; exit 2 ;;
+ab)
+    # ADOPTION A/B WITHOUT THE MATRIX. Phase E is matrix-independent in code (nothing in
+    # phase_measure reads the table; a staged model with no value_play block is measured as the
+    # presence-only hybrid at built-in default play -- exactly what shipping it now would mean).
+    # This mode exists for the deck whose keep-table generation NEEDS the leaf as a cost lever
+    # before the matrix is worth running (Mirrorwing, 2026-08-14): settle sidecar adoption first,
+    # generate the keep table under the settled configuration, run the matrix later against final
+    # play. Own marker (E_ab_nomatrix), so a later full `run` still executes its post-matrix E.
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem mkey base games <<< "$row"
+        [ -s "logs/eval/$stem.value.STAGED.json" ] || {
+            echo "no staged model for $key (logs/eval/$stem.value.STAGED.json) -- run phases A..B first"; exit 2; }
+    done
+    E_MARK=E_ab_nomatrix
+    log "=== NO-MATRIX ADOPTION A/B: staged (as-is, presence-only) vs live, + play sweep ==="
+    check_freeze || exit 1
+    phase_freeze && phase_measure || { log "STOPPED in ab"; exit 1; }
+    log "=== AB COMPLETE -- nothing adopted; review the report above ==="
+    ;;
+*) echo "usage: $0 {run|ab|status} [deck-dir]"; echo "  $0 run                    # regenerate the whole fleet"; echo "  $0 run decks/FiveColour   # one deck, new or existing"; echo "  $0 ab  decks/FiveColour   # adoption A/B of the staged model, no matrix needed"; echo "  the deck is the ONLY input; NEVER_CONDEMN (floor 5) is the one setting"; exit 2 ;;
 esac
