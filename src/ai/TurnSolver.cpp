@@ -8792,6 +8792,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 SoulfireResult sr = SoulfireDig(state, state.active_player_index, own_targets, &def, "apply");
                 dmg = sr.face_damage;
                 state.players[state.active_player_index].life -= sr.self_damage;
+                // Soulfire's dig STAGES castable cards into hand, but damage_equals_top_mv never
+                // registered with ANY breakpoint class (not stages_cards, not impulse_exile) --
+                // its continuation was reachable only through the next phase's fresh enumeration,
+                // i.e. the phase boundary a Main2-classified deck no longer has (hinata gi=6: the
+                // T4 kill plays Crackle out of this exile). Arm the deferred acquisition re-solve
+                // (AcqResolveEnabled / MTG_ACQ_RESOLVE, same family as the tutor fetch above).
+                if (AcqResolveEnabled() && !s_human_play && sink_stack.empty())
+                { deferred_cantrip_resolve = true; }
             }
 
             if (t == Targeting::Any || t == Targeting::Player)
@@ -9439,17 +9447,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // falls back to the heuristic's top pick. Identical to the real game (EffectHandler)
             // so the clairvoyant rollout sees the same fetched card.
             PerformTutor(state, state.active_player_index, def.params, tutor_target, def.card.m_name);
-            // Tutor-to-hand re-solve (MTG_TUTOR_RESOLVE -- main-2 parity work, USER 2026-08-14):
-            // the fetched card competes for this turn's remaining mana exactly like a cantrip's
-            // draw, but tutors never armed the deferred re-solve ("a tutor is NOT a breakpoint
-            // site") -- sound only while tutors were cast in MAIN 1, where the post-combat
-            // enumeration picked the fetched card up FOR FREE at the phase boundary. A
-            // Main2-classified deck has no later enumeration this turn (hinata gi=22: Gamble
-            // main-2 fetches Reality Spasm and the Spasm+Crackle kill waits a whole turn). Arm
-            // the same deferred re-solve as a plain cantrip (site 3); executor lockstep comes
-            // via the plan's recorded breakpoint script. DEFAULT OFF until measured.
-            static const bool s_tutor_resolve = EnvOn("MTG_TUTOR_RESOLVE");
-            if (s_tutor_resolve && def.params.tutor_to_hand && !s_human_play
+            // Tutor-to-hand re-solve (AcqResolveEnabled / MTG_ACQ_RESOLVE, EngineFlags.h -- the
+            // mid-phase acquisition family; main-2 parity work, USER 2026-08-14): the fetched
+            // card competes for this turn's remaining mana exactly like a cantrip's draw, but
+            // tutors never armed the deferred re-solve ("a tutor is NOT a breakpoint site") --
+            // sound only while tutors were cast in MAIN 1, where the post-combat enumeration
+            // picked the fetched card up FOR FREE at the phase boundary. A Main2-classified deck
+            // has no later enumeration this turn (hinata gi=22: Gamble main-2 fetches Reality
+            // Spasm and the Spasm+Crackle kill waits a whole turn). Arm the same deferred
+            // re-solve as a plain cantrip; executor lockstep comes via the plan's recorded
+            // breakpoint script. DEFAULT OFF until measured.
+            if (AcqResolveEnabled() && def.params.tutor_to_hand && !s_human_play
                 && sink_stack.empty())
             { deferred_cantrip_resolve = true; }
         }

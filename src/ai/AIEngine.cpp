@@ -2410,7 +2410,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         return d && (d->tmpl == CardTemplate::DrawUntilNonland || d->params.cascade_max_mv > 0
                      || d->params.stages_cards || d->params.expressive_iteration
-                     || d->params.impulse_exile > 0);
+                     || d->params.impulse_exile > 0
+                     // Soulfire's staged exile / tutor fetch (MTG_ACQ_RESOLVE): the rollout arms a
+                     // deferred re-solve after these, so the executor must classify them the same
+                     // way or the committed continuation replays at the wrong breakpoint.
+                     || (AcqResolveEnabled()
+                         && (d->params.damage_equals_top_mv || d->params.tutor_to_hand)));
     };
 
     // SCRIPTED draw breakpoint for COMMIT-THE-LINE replay (MTG_FULL_DEPTH): cast the

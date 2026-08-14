@@ -23,6 +23,21 @@ inline bool Main2DropEnabled()
     return v;
 }
 
+// MTG_ACQ_RESOLVE=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
+// mid-phase ACQUISITION re-solve family. A cast that puts new castable resources in hand mid-plan
+// without drawing -- a tutor-to-hand fetch (Gamble) or a staged exile dig (Soulfire Eruption's
+// damage_equals_top_mv) -- arms the deferred post-cast re-solve exactly like a cantrip draw, so
+// the acquired cards are castable in the SAME phase. Historically neither armed anything, which
+// was sound only while such casts happened in MAIN 1: the post-combat enumeration picked the
+// acquisitions up FOR FREE at the phase boundary. A Main2-classified deck has no later
+// enumeration this turn (hinata gi=22 Gamble, gi=6 Soulfire). Read by the rollout apply
+// (TurnSolver) and the executor's draw-engine classification (AIEngine) -- shared reader.
+inline bool AcqResolveEnabled()
+{
+    static const bool v = EnvOn("MTG_ACQ_RESOLVE");
+    return v;
+}
+
 // MTG_LEGACY_STATIC_TAPPED=1: classify land tapped-ness from the STATIC enters_tapped flag in the
 // land-priority passes, as before the dynamic fix (byte-identical A/B hatch). See
 // AIEngine::TryPlayLand and TurnSolver's greedy_land_name -- the two implement the same passes
