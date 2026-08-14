@@ -234,6 +234,52 @@ assumption, which a Main2-partitioned deck invalidates:
 Sequencing note: these gates interact with the Karoo drop-reservation and the executor
 lockstep (AIEngine fold_land) — implement with the usual per-change digest checks.
 
+## Land-drop TIMING doctrine (USER, 2026-08-14, verbatim)
+
+> "We should generally play lands after we've cast any draw spells we are playing and can
+> afford without the land. That is the timing I would like to encode." / "That way, we get
+> the best choice of lands to play." / "If there are no draw spells in the plan, we play the
+> land before any spells."
+
+Shape: within ANY main phase's plan, a plan containing draw-spell casts affordable WITHOUT
+the land drop sequences [affordable draws] → [land drop, chosen from the post-draw hand] →
+[rest]; a plan with no draw spells keeps land-first (current behaviour). This SUBSUMES the
+Treasure-Hunt-specific defer heuristic (AIEngine::TakeTurn's defer_land) and generalises the
+existing draw-breakpoint land plays (play_breakpoint_land / play_drawn_flood_keep_land).
+It is also an ENUMERATION CUT in the auto-equip-collapse family: for draw-carrying plans the
+pre-enumerated (land × subset) axis collapses to the defer variant — the land choice moves to
+the post-draw re-solve where it is made once, with full information — while no-draw plans
+keep the searched land axis as today. Open switches per the standing bar (unpruned/human
+play keep the full axis); derivation of the deck-level classifier input and this timing rule
+are both deck-agnostic — no per-deck special cases (USER directive).
+
+## Measurement round 3 — parity capabilities built (2026-08-14, all levers default OFF)
+
+Three capabilities landed (each flags-off byte-identical; smoke green): the DERIVED
+no-main-1-effects collapse (`DeckFeedsCombat` → `GameState::deck_feeds_combat`, replacing the
+Hinata special rule byte-identically), the post-combat land drop (`MTG_MAIN2_DROP`), and the
+tutor-to-hand deferred re-solve (`MTG_TUTOR_RESOLVE`). Hinata battery (vs control
+5.78/5.76/5.72 at ship/d3/d5):
+
+| arm | levers | ship | d3 | d5 |
+|-----|--------|------|----|----|
+| total doctrine | classify | +0.26 | +0.35 | +0.31 |
+| + land drop | +MTG_MAIN2_DROP | +0.24 | +0.21 | +0.20 |
+| + tutor re-solve | +MTG_TUTOR_RESOLVE | +0.20 | +0.19 | +0.17 |
+| + searchable site-3 | +MTG_BP_SITES=63 | +0.23 | +0.14 | +0.16 |
+
+Recovered outright: the Gamble-class (gi=22, 99) and the drawn-land-class (gi=10, 17, 21, 32,
+42, 80, 95, 97, 98) games. **Residual (~16 games, e.g. gi=6/71/87): clairvoyant DISPOSITION
+flips** — same casts, different Ponder keep-vs-shuffle / staging-continuation choices, whose
+cascades cost the turn (gi=87: both arms idle T2–T4, but the classified arm's T2 Ponder
+shuffle sends the game unwon where control's hold wins T8). Notably many of these games never
+attack, so main 1 and main 2 are the SAME decision point: the residual is pure APPARATUS gap —
+the main-2 search path (FSLineTail enumeration + greedy site-3 continuations + move ordering)
+evaluates these micro-choices systematically worse than the main-1 path (16–21 games worse vs
+2 better = bias, not churn). Next dissection targets: why the same-state main-2 root reaches a
+different disposition than the main-1 root (budget shape? MoveOrderPlans? bp-variant sets?),
+and the gi=6 staged-exile continuation (greedy site-0/2 re-solve cannot stage-and-Crackle).
+
 ## Measurement plan
 
 Per second-main deck: the standard battery (train seeds, d3+d5, per-game win-turn diff — a
