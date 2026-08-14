@@ -7001,6 +7001,15 @@ namespace tapstats
     // Identical-sibling collapse (s_dup_of_buf in the worker): candidates skipped because an
     // identical earlier sibling already failed at the same node. Each skip prunes a whole subtree.
     inline std::atomic<std::uint64_t> g_dup_skips{0};
+    // PAYABLE MANA CACHE accounting. Added with the scaling-source key fix (2026-08-14): re-enabling
+    // the cache under a domain source bought only ~10% on the degenerate FiveColour rollouts, and the
+    // question that answers "what next" is WHY -- a cache that is never consulted (skip), never hits
+    // (miss), or hits but cannot store its solution (unstorable) each point at a different lever.
+    inline std::atomic<std::uint64_t> g_mc_hit{0};
+    inline std::atomic<std::uint64_t> g_mc_miss{0};
+    inline std::atomic<std::uint64_t> g_mc_skip_shape{0};   // not the canonical batch-prepay shape
+    inline std::atomic<std::uint64_t> g_mc_skip_key{0};     // key builder declined (a legacy bail-out)
+    inline std::atomic<std::uint64_t> g_mc_unstorable{0};   // solved, but a tapped source can't replay
     struct Dumper {
         ~Dumper()
         {
@@ -7031,6 +7040,16 @@ namespace tapstats
                 "=== DUP COLLAPSE: identical-sibling skips=%llu (%.2f per node) ===\n",
                 (unsigned long long)g_dup_skips.load(),
                 nodes ? (double)g_dup_skips.load() / (double)nodes : 0.0);
+            const unsigned long long mh = g_mc_hit.load(), mm = g_mc_miss.load();
+            const unsigned long long ms = g_mc_skip_shape.load(), mk = g_mc_skip_key.load();
+            std::fprintf(stderr,
+                "=== MANA CACHE: hit=%llu (%.1f%% of consulted)  miss=%llu  unstorable=%llu (%.1f%% of "
+                "misses)  skipped: shape=%llu key=%llu (%.1f%% of all calls) ===\n",
+                mh, (mh + mm) ? 100.0 * (double)mh / (double)(mh + mm) : 0.0, mm,
+                (unsigned long long)g_mc_unstorable.load(),
+                mm ? 100.0 * (double)g_mc_unstorable.load() / (double)mm : 0.0,
+                ms, mk,
+                (mh + mm + ms + mk) ? 100.0 * (double)(ms + mk) / (double)(mh + mm + ms + mk) : 0.0);
         }
     };
     inline Dumper g_dumper;

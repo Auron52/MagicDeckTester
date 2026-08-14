@@ -1743,10 +1743,14 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
 // before adoption). Default ON (MTG_MANA_CACHE=0 disables). Correctness gates:
 //   * SHAPE: canonical batch-prepay only -- out_full_pool set, out_leftover/rp_colors null, empty
 //     floating, board <= 64 permanents (tap-set fits a bitmask, matching the fail-memo's own n<=64 cap).
-//   * GLOBAL (McStateDependent): the whole node is skipped when any active mana source has
-//     STATE-DEPENDENT branching the key cannot capture -- domain (colours among ALL permanents) or
-//     scaled (creature count). Reflecting Pool is NOT skipped: its effective colour set (a function of
-//     the other lands) is hashed into the key, so different reachable-colour boards get distinct entries.
+//   * SCALING sources are HASHED, not skipped (2026-08-14). Reflecting Pool always was: its effective
+//     colour set (a function of the other lands) goes into the key, so different reachable-colour
+//     boards get distinct entries. Domain (colours among ALL permanents) and scaled (creature count)
+//     now do the same -- the realised colour SET / creature COUNT is hashed once per key. Both are
+//     invariant across a solve (payment only taps; nothing enters, leaves or changes colour), so the
+//     value read at key-build time is the value every branch reads. Before this they DISABLED the
+//     cache board-wide, which turned the single card that makes payment expensive into the card that
+//     switched the memo off -- see McDomain/McScaled below for the measurement.
 //   * STORE (McReplayable): a MISS's solution is cached only if every source it TAPS can be REPLAYED by
 //     the hit path -- i.e. its tap effect is reproduced when we re-set .tapped. Simple lands/dorks/rocks
 //     qualify; City of Brass qualifies (its tap_self_damage is replayed on the hit); a DEPLETION land
@@ -1768,11 +1772,32 @@ inline bool ManaCacheEnabled() { static const bool v = EnvOn("MTG_MANA_CACHE", t
 inline bool McReplayable(const CardDefinition* d)
 { return d && !d->params.storage_land && d->params.tap_opponent_lifegain == 0
            && !d->params.gy_land_exile_mana; }
-// A source whose DFS branching reads board state the key does NOT capture: domain (colours among ALL
-// controlled permanents) and scaled (creature count). Reflecting is NOT here -- its effective colours
-// (a function of the other lands) are hashed into the key below, so it is cacheable.
-inline bool McStateDependent(const CardDefinition* d)
-{ return d && (d->params.domain_mana || IsScaledManaLand(*d)); }
+// SCALING sources -- domain (Faeburrow Elder / Bloom Tender: one mana of each colour among ALL your
+// permanents) and scaled (Three Tree City: N of one colour, N = creatures you control). Both read
+// board state the per-source key loop below cannot see, because the quantity ranges over permanents
+// that are not mana sources at all (a creature's colour, a creature's existence).
+//
+// This USED to return true from ManaCacheKey -- i.e. one Bloom Tender on the battlefield disabled the
+// payment cache for the WHOLE board, every solve, for the rest of the game. That is backwards: a
+// domain source is precisely the card that makes payment enumeration expensive (its tap yields 2-5
+// mana at once, so it multiplies the orderings the DFS explores), and it was the card that turned the
+// memo off. FiveColour's mulligan scout measured the consequence -- Bloom Tender appeared in 78.3% of
+// the degenerate (>=30 s) rollouts, Faeburrow Elder its top co-occurrence, worst single rollout 31
+// minutes -- and an independent `perf` profile of the depth-matrix tail put mana payment at the top
+// of a flat profile from a completely different measurement path.
+//
+// The fix is the one `reflecting` already uses: don't bail, HASH THE REALISED QUANTITY. Both are
+// invariant across a solve (a payment only TAPS permanents -- nothing enters, leaves or changes
+// colour), so the value read at key-build time is the value every DFS branch will read, and two
+// boards that differ in it get different keys. Everything else these paths touch is already covered:
+// ScaledManaFeederMana reads only mana sources' (index, def, tapped) plus graveyard fuel.
+// DEFAULT ON; MTG_MANA_CACHE_SCALING=0 restores the old bail-out (kept as the A/B arm that measured
+// this, and as the escape hatch if a future scaling source is ever added whose yield is NOT invariant
+// under tapping -- that one would have to bail, or hash whatever it does read).
+inline bool McScalingHashed()
+{ static const bool v = EnvOn("MTG_MANA_CACHE_SCALING", true); return v; }
+inline bool McDomain(const CardDefinition* d)  { return d && d->params.domain_mana; }
+inline bool McScaled(const CardDefinition* d)  { return d && IsScaledManaLand(*d); }
 
 struct ManaCacheEntry { std::uint64_t verify; bool payable; ManaPool produced; std::vector<int> taps; };
 inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_cache;
@@ -1789,6 +1814,8 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
     const int n = static_cast<int>(state.battlefield.size());
     int gy_fuel = -1;       // lazy, hashed once on the first Deathrite-style source
     int drip_useful = -1;   // lazy, hashed once on the first drip source
+    bool domain_done = false;   // lazy, hashed once on the first domain source (Elder / Bloom Tender)
+    bool scaled_done = false;   // lazy, hashed once on the first scaled source (Three Tree City)
     for (int i = 0; i < n; ++i)
     {
         const Permanent& p = state.battlefield[i];
@@ -1797,7 +1824,27 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         if (!d) { continue; }
         if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
               || d->params.mana_rock)) { continue; }
-        if (McStateDependent(d)) { return false; }
+        // Domain source: its yield IS the colour domain -- the set of colours among every permanent
+        // you control, most of which this loop never visits. Hash the realised SET (not a count: two
+        // boards with two colours each pay different pips), once, exactly as `reflecting` does below.
+        if ((McDomain(d) || McScaled(d)) && !McScalingHashed()) { return false; }   // legacy bail-out
+        if (McDomain(d) && !domain_done)
+        {
+            domain_done = true;
+            const std::vector<Color>& dom = DomainColors(state, active);
+            mix(h1, 0xD0'A1'11ull); mix(h2, 0xD0'A1'22ull);
+            for (Color c : dom)
+            { mix(h1, static_cast<std::uint64_t>(c) + 1);
+              mix(h2, (static_cast<std::uint64_t>(c) + 1) * 0xC2B2AE3D27D4EB4Full); }
+        }
+        // Scaled source: N = creatures you control, again mostly permanents this loop skips. The
+        // feeder side (which sources can pay the {2}) is already keyed -- it reads only mana sources.
+        if (McScaled(d) && !scaled_done)
+        {
+            scaled_done = true;
+            const std::uint64_t nc = static_cast<std::uint64_t>(ScaledManaCreatureCount(state));
+            mix(h1, 0x5CA1'ED'01ull + nc); mix(h2, 0x5CA1'ED'02ull ^ (nc << 24));
+        }
         const std::uint64_t di = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(d));
         mix(h1, static_cast<std::uint64_t>(i));  mix(h2, static_cast<std::uint64_t>(i) * 0x9E3779B97F4A7C15ull);
         mix(h1, di);                             mix(h2, di ^ 0xD1B54A32D192ED03ull);
@@ -1895,11 +1942,15 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                     && rp_colors == nullptr && floating.Total() == 0
                     && state.battlefield.size() <= 64;
     std::uint64_t mk1 = 0, mk2 = 0, pre_tapped = 0; bool mc_active = false;
-    if (mc && ManaCacheKey(state, cost, for_creature, reserved_mask, untapped_max, mk1, mk2))
+    const bool mc_keyed = mc && ManaCacheKey(state, cost, for_creature, reserved_mask, untapped_max, mk1, mk2);
+    if (tapstats::Enabled() && !mc_keyed)
+    { (mc ? tapstats::g_mc_skip_key : tapstats::g_mc_skip_shape).fetch_add(1, std::memory_order_relaxed); }
+    if (mc_keyed)
     {
         auto it = g_mana_cache.find(mk1);
         if (it != g_mana_cache.end() && it->second.verify == mk2)
         {
+            if (tapstats::Enabled()) { tapstats::g_mc_hit.fetch_add(1, std::memory_order_relaxed); }
             const ManaCacheEntry& e = it->second;
             if (!e.payable) { return false; }
             for (int idx : e.taps)
@@ -1918,6 +1969,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             *out_full_pool = e.produced;
             return true;
         }
+        if (tapstats::Enabled()) { tapstats::g_mc_miss.fetch_add(1, std::memory_order_relaxed); }
         mc_active = true;
         const int active = state.active_player_index;
         const int n = static_cast<int>(state.battlefield.size());
@@ -1968,6 +2020,8 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 }
             }
         }
+        if (tapstats::Enabled() && !storable)
+        { tapstats::g_mc_unstorable.fetch_add(1, std::memory_order_relaxed); }
         if (storable) { g_mana_cache[mk1] = std::move(e); }
     }
     return ok;
