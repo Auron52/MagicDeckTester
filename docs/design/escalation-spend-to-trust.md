@@ -65,6 +65,50 @@ It also means the current behaviour has a perverse edge: a deck can be made fast
 MORE resource, which is not a property anyone tuning `budget_ms` would expect, and which would read
 as noise to anyone sweeping budgets on wall-clock.
 
+### CONFIRMED on Goblins, 2026-08-14
+
+Goblins is the deck the user had in mind, and it reproduces. 300 games, seed 4004, `MTG_DUMP_UNITS`
+(deterministic -- contention excluded):
+
+```
+budget_ms      units    vs b5    delta     avg turns
+        5    576,783     1.00               3.8900
+       10    547,424     0.95    -5.1%      3.8900
+       15    541,504     0.94    -1.1%      3.8900
+       20    544,822     0.94    +0.6%      3.8900
+       30    583,614     1.01    +7.1%      3.8900
+       40    574,072     1.00    -1.6%      3.8900
+       60    574,072     1.00    +0.0%      3.8900
+       80    598,378     1.04    +4.2%      3.8900
+```
+
+**Three inversions** (5->10, 10->15, 30->40): more budget, strictly less total work. And the avg win
+turn is IDENTICAL at every budget from 5 to 80 while every play digest differs -- the deck plays
+differently and wins on the same turn regardless.
+
+Goblins is also the only trusted deck carrying a NON-DEFAULT budget (40 against everyone else's 20),
+and its adoption note says why: *"ADOPTED: play d6/b40 trust-with-shallow-fallback"*. The 40 is part
+of the TRUST configuration, not a search-depth decision -- i.e. the budget was raised to buy a
+mechanism (reach the leaf, skip escalation) rather than to buy search. That is the workaround this
+proposal would remove: with the reserve spendable on reaching trust directly, a deck should not need
+an inflated `budget_ms` to get there.
+
+Its escalation cap is 6, equal to its trust depth -- the only deck where an escalation can run a
+heuristic pass at the full play depth, which is the most expensive escalation in the fleet and
+explains why avoiding it is worth a budget bump.
+
+Caveats: one seed, 300 games. The inversions are exact (units are deterministic, so a 5% drop is a
+fact rather than an estimate) but SMALL, so this sizes the mechanism as real, not as large. The
+identical avg is not evidence that b40 is unnecessary -- Goblins wins ~turn 3.89 almost regardless,
+making it a poor quality discriminator, and the adopted config came from a 3,000-game 2-seed table.
+Re-deriving the right budget for Goblins is a SEPARATE question from implementing this change.
+
+By contrast the same sweep on FiveColour (trust 6 = target 6) showed NO inversion at budgets
+5/10/20/40/80 -- units rose monotonically 17.9M -> 75.4M. The difference is structural: where trust
+EQUALS target, escaping escalation requires reaching maximum depth, so the transition sits at the far
+end of the range instead of inside it. Goblins escapes via a cap-6 escalation that can itself reach
+depth 6; burn (trust 5 < target 6) is the other deck whose transition should be reachable mid-range.
+
 ## The change
 
 At the escalation decision, before predicting the heuristic depth: estimate the cost of continuing
