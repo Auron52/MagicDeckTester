@@ -132,3 +132,23 @@ first 60% of games. Findings, each measured:
   whole-matrix estimate ~106 core-h as-is, BEFORE the keep table and the mismatch fix, both of
   which attack its dominant terms. H6<H5 in the mean is a 2-game artifact (win verifying at a
   leaf-priced warm-up rung); per-game H6>=H5 everywhere else -- see the mismatch doc for why.
+
+## Mana-payment solver EXONERATED in the Class B monsters (2026-08-14, tap-stats probe)
+
+Stack-sampling the two live seed-603017 monster games (adoption A/B, ~4.5 h each) showed both
+threads permanently inside `TapForCostBacktrackWorker` — raising the question whether the payable-
+mana cache (`MTG_MANA_CACHE`, extended for this deck 2026-08-12) was gate-disabled on explosion
+boards. **It is not.** `MTG_TAP_STATS` on the gi=17 monster repro (seed 8025, unbounded d5):
+
+- `max board n = 18`, `memo-off(n>64) = 0` — no board ever approaches the 64-permanent SHAPE gate
+  (the user's prior: this list cannot reach 64 permanents without lethal — confirmed).
+- 5.33M top-level entries, 14.6M nodes, **2.7 nodes/entry** — every solve is trivial; flow-prune
+  kills 43% of entries up front; unpayable proofs cost 1.0 node each.
+- On an ordinary 30 s Class B game (seed 623262) the cache absorbs 94% of entries (22.5K reach the
+  solver, vs 385K with `MTG_MANA_CACHE=0`).
+
+The payment solver shows in every stack sample by VOLUME, not unit cost: it is the innermost loop
+of the Class B plan-tree exhaustion (993M `ApplyPlanDirect` calls in the gi=17 census). No per-call
+cache fixes a caller making 10^8-10^9 calls. The levers for the monsters remain: the win-break /
+search-play mismatch fix (`mirrorwing-search-play-mismatch.md`), branching-factor reduction, and
+matrix-side degenerate-game avoidance.
