@@ -97,3 +97,38 @@ Suite-level: neutral (smoke 40s both arms; suite wall is search-dominated there 
    LookupCached+ManaValue. Cache the rank per (hand multiset) or hoist MVs before the sort.
 5. The label K=3 cost itself is irreducible per design (independent reshuffled futures are what
    de-clairvoys the label); `MTG_VALUE_LABEL_BNB` + the label ladder are already on.
+
+## The 2026-08-14 degenerate-case investigation (post phase-A, pre-matrix)
+
+Phase A completed on `230765d6` (2,500 games, 12,570 unique rows; ~20 h wall across an OOM split).
+The census (`logs/vlq_mirrorwing_dragon/rows.batch.log`, machine-local): ~45 games >30 min, worst
+finished 6.4 h (900813/gi63); distribution measured as 14 >1h / 17 30-60m / 58 10-30m over the
+first 60% of games. Findings, each measured:
+
+- **The deck's degenerate cost has TWO classes.** Class A: mulligan games with NO exhaustive
+  keep/bottom table (Mirrorwing is the only suite deck without one) pay a full search-driven game
+  rollout per candidate per bottom step -- killing them collapsed gi=14 from 57 s to 130 ms (H5)
+  and 163 s to 94 ms (H6), and the FiveColour precedent in `AIEngine.cpp` records 90.4% of runtime.
+  The fix is the deck's mulligan profile (its own skill), NOT search work. Class B: kept fan-out
+  hands genuinely exhaust the T1 committed pass (gi=17: 99.1% of 140.9M rollout-steps in ONE
+  decision, 1.02M candidates, 50-way branching; >400 s with bottoming off). Class B's root is the
+  search/play mismatch -- see `mirrorwing-search-play-mismatch.md` (fix planned, blocks the matrix
+  by choice).
+- **Cache caps: sized from measurement, and SKEWED.** FSL line-cache entries measured ~600 B (not
+  the 8 KB first guessed -- that guess was the dominant cost of the resumed phase-A tail: 3-5x wall
+  on mid-tier heavies, and the 6.4 h monster re-ran in 1:57 UNLIMITED at only **924 MB peak
+  appetite**). Usage is heavily skewed (typical game ~100 MB, monsters ~900 MB, observed
+  concurrent monsters ~7/32), so a uniform per-worker share strangles exactly the games that
+  matter: the cap should be sized ABOVE the uniform share (~1.5M entries on the 23 GB box), not at
+  it. The 28 GB single-decision analyzer measurement is not representative of these games.
+- **The label budget ceiling binds on monsters**: the 900359 counter run dropped 1 of 5 positions
+  at `MTG_VALUE_LABEL_BUDGET_MS` -- phase A's rows have a small systematic gap at exactly the most
+  degenerate positions (by design; no row rather than a poisoned one).
+- **Unwon games audited, no play bug**: 900248 wins unbounded (budget starvation, priced);
+  900369 is genuinely dead on its true order (`MTG_DUMP_EWINS` earliest=9; the label's 5.7 was
+  reshuffle optimism).
+- **Matrix first-chunk probe** (25 games x 14 cells, seed 8008, `logs/mwprof/matrix_probe.log`):
+  H ladder 0.4/3.3/17.2/56.6/78.9/65.1 s/game (H1..H6), V ladder 0.005..4.8 s/game (V1..V8) --
+  whole-matrix estimate ~106 core-h as-is, BEFORE the keep table and the mismatch fix, both of
+  which attack its dominant terms. H6<H5 in the mean is a 2-game artifact (win verifying at a
+  leaf-priced warm-up rung); per-game H6>=H5 everywhere else -- see the mismatch doc for why.
