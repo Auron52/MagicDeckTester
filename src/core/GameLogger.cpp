@@ -494,6 +494,7 @@ void GameLogger::WriteToFile(const std::filesystem::path& path) const
                 j["cardName"] = p.card_name;
                 j["tapped"]   = p.tapped;
                 j["isLand"]   = p.is_land;
+                if (p.attached_to != 0) { j["attachedTo"] = p.attached_to; }
                 if (!p.counters.empty())
                 {
                     json cs = json::array();

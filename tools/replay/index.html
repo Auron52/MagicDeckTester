@@ -171,9 +171,12 @@ function thumb(x,sm,idb){ const name=cardOf(x); const o = x && typeof x==='objec
   // Deck-card id badge (#4): lets the targets list refer to a specific permanent (#12) instead of a
   // bare name when several share a name. Tokens (card 0) stay nameless/fungible.
   const id = (idb && o && x.card) ? `<span class="idbadge">#${x.card}</span>` : '';
+  // Attachment badge (2026-08-14): an equipped Equipment / attached Aura names its host
+  // ("→ #12") so an equipment deck's board reads correctly instead of free-floating gear.
+  const att = (o && x.attachedTo) ? `<span class="idbadge" title="attached to #${x.attachedTo}">→#${x.attachedTo}</span>` : '';
   return `<span class="thumb ${sm?'sm':''} ${tapped?'tapped':''} card" data-name="${esc(name)}">`+
     `<img loading="lazy" src="${scryImg(name,'small')}" alt="${esc(name)}" onerror="this.style.opacity=.15"/>`+
-    id+counterBadges(x)+
+    id+att+counterBadges(x)+
     `<em>${name}</em></span>`; }
 function thumbs(arr,sm){ if(!arr||!arr.length) return '<span class="hint">—</span>';
   return '<div class="thumbs">'+arr.map(x=>thumb(x,sm)).join('')+'</div>'; }

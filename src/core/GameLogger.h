@@ -73,6 +73,10 @@ public:
         std::string              card_name;
         bool                     tapped   = false;
         bool                     is_land  = false;
+        // Host m_number for an attached Equipment/Aura (0 = unattached) so the viewer can
+        // render attachments (2026-08-14 -- equipment was previously drawn free-floating).
+        // Snapshot-only: not folded into the play digest.
+        int                      attached_to = 0;
         std::vector<CounterInfo> counters;
     };
 

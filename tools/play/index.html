@@ -742,7 +742,7 @@ function enchStack(baseHtml, hostName, auras, planned) {
                    : plannedAuraThumb(it.plan.entry, it.plan.planIdx, it.plan.ord, z, top);
   });
   return `<span class="enchgroup" style="padding-top:${fanH}px">${html}${baseHtml}`+
-    `<span class="enchbadge" style="top:${fanH}px" title="${n} aura${n>1?'s':''} on ${esc(hostName)}">🔗${n}</span></span>`;
+    `<span class="enchbadge" style="top:${fanH}px" title="${n} attachment${n>1?'s':''} on ${esc(hostName)}">🔗${n}</span></span>`;
 }
 // A RESOLVED creature on the battlefield + its (resolved + planned) Auras.
 function enchantedGroup(host, auras, planned) {
@@ -790,7 +790,7 @@ function renderBoard() {
   const plannedAurasByHost = {};
   S.plan.forEach((p,i)=>{ if(p.target && p.kind!=='land' && p.kind!=='le'){ (plannedAurasByHost[p.target]=plannedAurasByHost[p.target]||[]).push({entry:p, planIdx:i, ord:ord[i]}); } });
   const meBf = me.battlefield||[];
-  const boardHostNums = new Set(meBf.filter(x=>!x.is_land && !(x.is_aura&&x.attached_to>0)).map(x=>x.num));
+  const boardHostNums = new Set(meBf.filter(x=>!x.is_land && !((x.is_aura||x.is_equip)&&x.attached_to>0)).map(x=>x.num));
 
   const plannedLands = [], plannedPerms = [], plannedSpells = [], plannedLE = [];
   S.plan.forEach((p,i)=>{
@@ -808,20 +808,21 @@ function renderBoard() {
     plannedPerms.push(plannedThumb(p,i,ord[i])); });
 
   const meLands = meBf.filter(x=>x.is_land).map(bfThumb);
-  // Group attached Auras UNDER their host creature (by m_number). A host with no Aura renders as a plain
+  // Group attached Auras AND attached Equipment UNDER their host creature (by m_number; equipment
+  // added 2026-08-14). A host with no attachment renders as a plain
   // thumb; an Aura whose host isn't found falls back to a standalone thumb so nothing is ever hidden.
   const mePermsRaw = meBf.filter(x=>!x.is_land);
   const aurasByHost = {};
-  mePermsRaw.forEach(p=>{ if(p.is_aura && p.attached_to>0){ (aurasByHost[p.attached_to]=aurasByHost[p.attached_to]||[]).push(p); } });
-  const hostNums = new Set(mePermsRaw.filter(p=>!(p.is_aura && p.attached_to>0)).map(p=>p.num));
+  mePermsRaw.forEach(p=>{ if((p.is_aura||p.is_equip) && p.attached_to>0){ (aurasByHost[p.attached_to]=aurasByHost[p.attached_to]||[]).push(p); } });
+  const hostNums = new Set(mePermsRaw.filter(p=>!((p.is_aura||p.is_equip) && p.attached_to>0)).map(p=>p.num));
   const mePerms = mePermsRaw
-    .filter(p=>!(p.is_aura && p.attached_to>0))
+    .filter(p=>!((p.is_aura||p.is_equip) && p.attached_to>0))
     .map(host=>{
       const at = aurasByHost[host.num]||[], pl = plannedAurasByHost[host.num]||[];
       return (at.length||pl.length) ? enchantedGroup(host, at, pl) : bfThumb(host);
     });
   // Orphan attached auras (host not on my field — shouldn't happen) render standalone.
-  mePermsRaw.forEach(p=>{ if(p.is_aura && p.attached_to>0 && !hostNums.has(p.attached_to)) mePerms.push(bfThumb(p)); });
+  mePermsRaw.forEach(p=>{ if((p.is_aura||p.is_equip) && p.attached_to>0 && !hostNums.has(p.attached_to)) mePerms.push(bfThumb(p)); });
 
   // Result banner FIRST (sticky top) so the outcome is the most prominent thing on the board,
   // not buried below the turn bar / tucked into the History panel on the right.

@@ -2857,6 +2857,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // trailing pass. Pay the mana from the pool left after casts (BuildAvailableMana + TapForCost,
     // the byte-identical mirror of TapForCostDirect), then realise the effect; a stranded outlet is
     // a no-op in both worlds -> lockstep.
+    // Viewer/digest visibility for the equipment-deck ability applies below (2026-08-14):
+    // Equip / Jitte mode / Stoneforge put / Balan attach-all were applied silently -- the game
+    // log showed the equipment appear via CAST_SPELL and damage change, but never WHERE it went
+    // or WHICH ability fired, so the play viewer could not render an equipment deck's turns and
+    // the play digest was blind to equip destinations (two different hosts -> same digest).
+    // Logged via LogAbility (folds into the digest -> a deliberate fingerprint improvement;
+    // digest-moving for decks that equip, flagged for GT rebaseline).
+    auto bf_name = [&](int num) -> std::string {
+        // Own side first (card numbers are unique per deck; the opponent's spawns share
+        // m_number 0), then the opponent's -- a Jitte -1/-1 target is an opponent creature.
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == state.active_player_index
+                && p.card.m_number == num) { return p.card.m_name.str(); }
+        }
+        for (const Permanent& p : state.battlefield)
+        { if (p.card.m_number == num) { return p.card.m_name.str(); } }
+        return "#" + std::to_string(num);
+    };
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)
@@ -2882,18 +2901,37 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // Balan attach-all (executor mirror -- same shared ApplyAttachAllEquipment).
             ManaPool avail = AvailableManaPool(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
-            { ApplyAttachAllEquipment(state, state.active_player_index, a.sac_source_id); }
+            {
+                ApplyAttachAllEquipment(state, state.active_player_index, a.sac_source_id);
+                if (m_logger)
+                { m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id),
+                                       "attach all equipment"); }
+            }
         }
         else if (a.kind == Action::Kind::PutFromHandAbility)
         {
             // Stoneforge put (executor mirror -- same shared ApplyPutFromHand).
             ManaPool avail = AvailableManaPool(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
-            { ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str()); }
+            {
+                ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str());
+                if (m_logger)
+                { m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id),
+                                       "put " + a.card_name.str() + " onto the battlefield"); }
+            }
         }
         else if (a.kind == Action::Kind::JitteModeAbility)
         {
             // Jitte -1/-1 / lifegain (executor mirror -- the cost is the counter).
+            // Log BEFORE apply: a -1/-1 that kills its target removes it from the battlefield,
+            // and the ability string should still name it.
+            if (m_logger)
+            {
+                m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id),
+                                     a.gy_exile_mode == 1
+                                         ? "-1/-1 -> " + bf_name(a.sac_victim_id)
+                                         : "gain 2 life");
+            }
             ApplyJitteMode(state, state.active_player_index, a.sac_source_id,
                            a.gy_exile_mode, a.sac_victim_id);
         }
@@ -2902,14 +2940,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // Lightning Greaves (executor mirror). Skip one the mana-unlock hoist already fired
             // mid-casts -- it is attached to this exact host already, so re-firing would pay the
             // equip cost a second time (mirrors ApplyPlanDirect). Cost recomputed at payment
-            // (metalcraft can flip mid-plan -- see EquipActionCostNow).
+            // (metalcraft can flip mid-plan -- see EquipActionCostNow). A hoisted equip is still
+            // LOGGED here (the hoist runs through the shared TurnSolver helper, which has no
+            // logger) -- the viewer sees it at the action's plan position, same phase.
+            if (m_logger
+                && EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id))
+            { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                   "equip -> " + bf_name(a.sac_victim_id)); }
             ManaPool avail = AvailableManaPool(state);
             if (!EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
                 && TapForCost(state,
                               EquipActionCostNow(state, state.active_player_index,
                                                  a.sac_source_id, a.cost),
                               avail, /*for_creature=*/false))
-            { ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
+            {
+                ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id);
+                if (m_logger)
+                { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                       "equip -> " + bf_name(a.sac_victim_id)); }
+            }
         }
         else if (a.kind == Action::Kind::ActivateLoyalty)
         {

@@ -32,6 +32,8 @@ static void CollectBoardState(const GameState& state,
         snap.card_name = p.card.m_name;
         snap.tapped    = p.tapped;
         snap.is_land   = p.card.IsLand();   // REAL type, so the viewer never name-guesses zones
+        // Attachment (Equipment host / enchanted creature) for viewer rendering.
+        snap.attached_to = (p.equipped_to != 0) ? p.equipped_to : p.aura_attached_to;
 
         // Surface counters as viewer badges (depletion on Saprazzan Skerry, charge on Aether Vial,
         // verse on Aria of Flame, +1/+1, etc.).
