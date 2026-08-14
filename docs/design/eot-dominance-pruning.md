@@ -1,0 +1,88 @@
+# End-of-turn dominance pruning (proposed, measurement staged)
+
+**User proposal (2026-08-14):** drop clearly-dominated states at end-of-turn boundaries inside the
+search recursion. Domination axes: life total, cards in hand, creatures on board. The stronger
+heuristic form — count a creature ON BOARD as superior to the same card IN HAND — is useful but
+"does not fully generalize across decks" (user), so it is a separate, per-deck tier.
+
+## Why now (the measured motivation)
+
+The Class B monster anatomy (gi=17 census, `mirrorwing-gen-perf-profile.md`): a single T1 no-win
+decision = 20,355 tree nodes x 50-way branching = 1.02M candidate lines, each leaf-priced by a
+~138-step rollout = 140.9M steps. The FSLine memo managed 5.8K hits against that — the lines reach
+*distinct* states, so identity-memoization cannot collapse what enumeration created. Most of those
+distinct states differ in ways that are strictly WORSE (same board, fewer cards; same hand, less
+float), i.e. dominated — enumerated, rolled out, and never able to beat the line that dominates
+them. Dominance is the only collapse principle that touches this mass.
+
+## Prior art already in-tree
+
+- `MTG_CANON_SIMKEY` (experiment, default off): memo-key canonicalization — collapses play-order
+  PERMUTATIONS of the *identical* position (the x12/ply sequence explosion,
+  `th-d5-five-hour-game.md`). Dominance is the next rung: collapse *ordered* (strictly-worse)
+  positions, not just equal ones. Canon's caveat applies doubly here: greedy tie-breaks read
+  vector order, so neither is provably byte-identical — both are play-affecting changes that need
+  the full standing gate.
+- Local plan-level dominance folds with the same "never hides a line" argument: sac-for-nothing
+  (TurnSolver ~1593), cheapest-j accelerant subsets (~1979), turn-winning-plan-dominates-powerset
+  (~2550), Twinflame magnet fold (~3590). This proposal is the same idea applied to STATES instead
+  of plans, so it composes with (does not replace) those.
+
+## The sound core (lossless tier)
+
+Two states are comparable ONLY when their futures are identical apart from the compared resources:
+
+- same turn number, same phase boundary (end-of-turn cleanup is the natural hook — "until end of
+  turn" effects have expired there);
+- **same draws consumed** (same library position). Without this the comparison is unsound: an extra
+  draw changes every future.
+
+Then B is dominated by A iff, as multisets/values:
+
+- hand_B SUBSET-OF hand_A;
+- board_B SUBSET-OF board_A, and each matched permanent in A is in at-least-as-good state
+  (untapped >= tapped; counters: depletion charges >=, storage >=, +1/+1 >=; summoning-sick only if
+  B's copy is too);
+- graveyard_B SUBSET-OF graveyard_A when any deck card reads the graveyard (gy_self_power_bonus,
+  retrace, Deathrite fuel) — else graveyards may be ignored;
+- floating_B <= floating_A per colour; life_B <= life_A; storm/turn counters equal.
+
+Under goldfish rules every axis above is monotone (more resources never hurt), so dropping B never
+drops a strictly-earlier win. It is still NOT byte-identical (a dominated line can win tie-breaks
+today), hence: temporary selector flag, A/B on the suite, GT rebaseline if play moves — the
+heuristic-optimization route, not a silent switch.
+
+## The heuristic tier (per-deck, opt-in)
+
+The user's "board creature >= same card in hand" rule collapses far more (deploy-order near-misses
+become comparable) but is deck-dependent: THIS deck sometimes wants instants IN HAND (a Zada turn
+casts from hand; an empty hand is a dead magnet), and a discard/madness deck inverts the axis
+entirely. Ship it, if measured good, in the archetype provider (per-deck), never the root — same
+placement rule as every heuristic-optimization adoption.
+
+## Implementation sketch
+
+A per-decision Pareto archive keyed by (turn, draws-consumed), sitting next to FSLineCache:
+check-and-insert at the NewTurn transition in the FSLineWin recursion. Insert returns
+{dominated -> prune subtree, dominates -> evict archived entries, incomparable -> keep}. Archive
+size is the Pareto-frontier width — bound it (keep newest K per key) so a wide frontier degrades to
+today's behaviour rather than blowing memory. The subset comparisons need the canonical multiset
+form — CANON_SIMKEY's sorted (h1,h2) fold is the right substrate, one more reason to measure it
+first.
+
+## Measurement plan (before any adoption)
+
+1. `MTG_CANON_SIMKEY=1` on the gi=17 monster (zero new code; running 2026-08-14): how much of the
+   1.02M is order-permutation identity, and does the answer change?
+2. Dominance census probe (MTG_BP_DUP_PROBE precedent — temporary, stripped after): at each
+   end-of-turn boundary, bucket sibling states as {identical, dominated, incomparable} under the
+   sound core. This prices the lossless tier before it is built.
+3. If built: A/B win-turn + cost on the regression suite train seeds, validate on held-out, full
+   standing gate (play-affecting). Measure the heuristic tier separately, per deck.
+
+## Sequencing
+
+Independent of the search/play mismatch fix (`mirrorwing-search-play-mismatch.md`) and of the
+keepgen/bottoming work — attacks the same monsters through a third door (state count, vs early
+exit and leaf pricing). Composes with the Expedite / Scale-the-Heights group folds the 2026-08-14
+branch-stats probe surfaced.
