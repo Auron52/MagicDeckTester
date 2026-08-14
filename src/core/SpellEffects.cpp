@@ -2059,6 +2059,10 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                   tapstats::g_nodes_ok.fetch_add(dn, std::memory_order_relaxed); }
         else    { tapstats::g_entries_fail.fetch_add(1, std::memory_order_relaxed);
                   tapstats::g_nodes_fail.fetch_add(dn, std::memory_order_relaxed); }
+        // Same nodes, split by the cache's REACH instead of by outcome: a hit costs no nodes, so
+        // everything here is either a miss (cacheable, not yet memoised) or a shape the cache skips.
+        (mc_active ? tapstats::g_mc_nodes_miss : tapstats::g_mc_nodes_skip)
+            .fetch_add(dn, std::memory_order_relaxed);
     }
 
     // ---- Store (negatives always; a positive records its tap-set + the two order-dependent deltas) --

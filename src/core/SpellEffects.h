@@ -7010,6 +7010,17 @@ namespace tapstats
     inline std::atomic<std::uint64_t> g_mc_skip_shape{0};   // not the canonical batch-prepay shape
     inline std::atomic<std::uint64_t> g_mc_skip_key{0};     // key builder declined (a legacy bail-out)
     inline std::atomic<std::uint64_t> g_mc_unstorable{0};   // solved, but a tapped source can't replay
+    // WHERE THE DFS NODES GO, split by the cache's reach. A hit costs 0 nodes, so every node belongs to
+    // either a MISS (inside the cache's reach, just not memoised yet) or a SKIP (a call shape the cache
+    // does not cover at all). Answers "if the cache handles payment, why is payment still expensive?"
+    //
+    // RUN THESE SINGLE-THREADED (--threads 1). Every per-entry node figure here -- and the pre-existing
+    // g_nodes_ok/g_nodes_fail split above -- is a DELTA on the process-wide g_nodes taken around one
+    // worker call, so under N threads it also counts whatever the other N-1 threads did meanwhile. The
+    // tell is the buckets summing past 100% of `nodes` (measured 122.9% at 12 threads, exactly 100.0%
+    // at 1). Ratios between two buckets survive the inflation roughly; absolute shares do not.
+    inline std::atomic<std::uint64_t> g_mc_nodes_miss{0};
+    inline std::atomic<std::uint64_t> g_mc_nodes_skip{0};
     struct Dumper {
         ~Dumper()
         {
@@ -7050,6 +7061,14 @@ namespace tapstats
                 mm ? 100.0 * (double)g_mc_unstorable.load() / (double)mm : 0.0,
                 ms, mk,
                 (mh + mm + ms + mk) ? 100.0 * (double)(ms + mk) / (double)(mh + mm + ms + mk) : 0.0);
+            const unsigned long long nmiss = g_mc_nodes_miss.load(), nskip = g_mc_nodes_skip.load();
+            std::fprintf(stderr,
+                "=== MANA CACHE NODES: miss=%llu (%.1f%% of nodes, %.1f/entry)  "
+                "skipped-shape=%llu (%.1f%% of nodes, %.1f/entry) ===\n",
+                nmiss, nodes ? 100.0 * (double)nmiss / (double)nodes : 0.0,
+                mm ? (double)nmiss / (double)mm : 0.0,
+                nskip, nodes ? 100.0 * (double)nskip / (double)nodes : 0.0,
+                (ms + mk) ? (double)nskip / (double)(ms + mk) : 0.0);
         }
     };
     inline Dumper g_dumper;
