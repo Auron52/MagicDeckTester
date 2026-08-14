@@ -600,6 +600,31 @@ Perfectly additive decomposition, per-game diffs razor-thin:
   Kemba T3 main-1 → Balan T4 pre-combat → PARK ON KEMBA T4 main-2 → Skyhunter T5 for the
   kill); gi=4 ends parked on Kemba.
 
+**Branching-factor work (2026-08-14, post-doctrine; USER-directed constraints):** the residual
+cost is TREE VOLUME (one heavy game: 17k interior nodes → 291k rollouts → 339k simulated
+turn-steps → 1.7M greedy Solve enumerations, ~90% free-equip powerset walks). USER BAR set
+during this work: **no lossy truncation of the search** — a rollout-candidate beam
+(`MTG_ROLLOUT_BEAM`, 2x for 1 game/100 a turn later) and an EnumGroupCap tightening (cap 6,
+1.35x for a different game) were both REJECTED and the beam DELETED from source; the full
+counterexample + the infinite-budget test now live in
+`.claude/skills/heuristic-optimization.md` Rule 0b — read that before any future speed work
+here. The escalation beam (`value_play.beam_width`) is NOT that: it is budget ordering
+(search the beam to the end, then escalate to the rest) and stays default-on where
+configured. ADOPTED (USER-owned directive — "we can literally only have to choose one creature for
+equipping ... I specifically wanted it to cut down the enumeration space"): the AUTO-EQUIP
+collapse, BOTH scopes — greedy Solve AND the decision-node enumerator (EnumeratePlans; placed
+before CapGroupsBySituationalRank so the wave/tranche machinery never sees the collapsed
+families) — a dominance prune (a {0}-cost equip of an unattached battlefield equipment is
+strictly ≥ skipping; Wargear/Greaves/moves/hand-side/costed all stay enumerated; human play
+and unpruned fully open). Measured per-game LOSSLESS (200 battery games IDENTICAL at d3+d5,
+both scopes), d3 354s→280s / d5 660s→475s for the 100-game battery (~1.3x aggregate, 1.29x
+on the pathological tail), fd 0/50, smoke 33/33 byte-identical (provider-gated). Off-switch
+MTG_NO_AUTO_EQUIP=1. Remaining heuristic road
+(USER direction — "look for heuristics"): (1) second-main dominance (post-combat candidates =
+combat-acquired resources + equip repositioning only), (2) the deferred metalcraft
+enumeration pricing (recovers gi=44 T5 AND improves mana-bound pruning), (3) then value-leaf
+generation once per-game cost is sane.
+
 **Viewer/log visibility fix (same session, digest-moving):** Equip / Jitte mode /
 Stoneforge put / Balan attach-all were applied SILENTLY — no game-log action, no
 attachment info in board snapshots, so the play viewer could not render an equipment

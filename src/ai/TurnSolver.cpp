@@ -7348,6 +7348,69 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     // before the odometer enumerates their powerset (byte-identical; see DropRitualGroupsIfNoPayoff).
     DropRitualGroupsIfNoPayoff(state, pool, cands, groups, group_hand_index, independent);
 
+    // ---- AUTO-EQUIP collapse (greedy Solve ONLY; EquipmentProvider perf, 2026-08-14) ------------
+    // On an equipment board most of the greedy odometer's volume is the powerset of FREE equip
+    // families: KittyEquipment gi=31 d5 made 1.7M greedy enumerations averaging ~104 positions,
+    // ~90% of them take/skip walks over {0}-cost equips the mana bound cannot prune. In a greedy
+    // context a {0}-cost equip of an UNATTACHED battlefield equipment is strictly beneficial (no
+    // mana, taps nothing, every emitted variant has rider_delta > 0), so the greedy takes its BEST
+    // variant (max eval; enumeration order on ties) ALWAYS instead of enumerating the family.
+    // Excluded, because for them take/skip or placement IS a real choice:
+    //   * Grafted Wargear-class (equip_sacrifices_prior_host) -- its equip has a real cost;
+    //   * shroud/haste granters (Lightning Greaves) -- ordering, parking and the shroud dance;
+    //   * ATTACHED equipment -- a MOVE trades away the current host's rider;
+    //   * hand-side equips -- the cast must be co-selected (forcing would strand the pair);
+    //   * costed equips (ManaValue > 0) -- they compete for the pool.
+    // SEARCH decision nodes (EnumeratePlans) are untouched -- the ds-vs-Kemba pair stays searched
+    // where the decision lives; this only stops the rollout leaves re-litigating free equips.
+    // Gated on ConsolidatesEquips (byte-identical for every other deck), skipped under the same
+    // opens as the equip widths (unpruned/all-hosts -- human play sets MTG_UNPRUNED, so the viewer
+    // path is untouched), and skipped alongside the two-stage mana driver (any_ritual/any_rock:
+    // rare early-game nodes; the hot late boards have no rock in hand). MTG_NO_AUTO_EQUIP=1 = off.
+    std::vector<int> auto_sel;   // cand indices force-included in every enumerated subset
+    {
+        static const bool s_no_auto_equip = EnvOn("MTG_NO_AUTO_EQUIP");
+        static const bool s_all_hosts_ae  = EnvOn("MTG_EQUIP_ALL_HOSTS");
+        const bool auto_equip_on = !s_no_auto_equip && !s_all_hosts_ae
+                                && !(any_ritual || any_rock)
+                                && provider.ConsolidatesEquips()
+                                && !DecisionUnpruned(UnprunedGate::EquipHost)
+                                && !HumanPlayActive();
+        if (auto_equip_on)
+        {
+            for (int g = static_cast<int>(groups.size()) - 1; g >= 0; --g)
+            {
+                bool all_free_equips = !groups[g].empty();
+                for (int j : groups[g])
+                {
+                    if (cands[j].kind != Action::Kind::Equip
+                        || cands[j].cost.ManaValue() != 0) { all_free_equips = false; break; }
+                }
+                if (!all_free_equips) { continue; }
+                const int eq_num = cands[groups[g][0]].sac_source_id;
+                const Permanent* eqp = nullptr;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index == state.active_player_index
+                        && p.card.m_number == eq_num) { eqp = &p; break; }
+                }
+                if (!eqp || eqp->equipped_to != 0) { continue; }   // hand-side or a MOVE: keep enumerated
+                const CardDefinition* ed = CardDatabase::Instance().LookupCached(eqp->card);
+                if (!ed || !ed->params.is_equipment
+                    || ed->params.equip_sacrifices_prior_host
+                    || ed->params.equip_grants_shroud
+                    || ed->params.equip_grants_haste) { continue; }
+                int jbest = groups[g][0];
+                for (int j : groups[g]) { if (cands[j].eval > cands[jbest].eval) { jbest = j; } }
+                auto_sel.push_back(jbest);
+                groups.erase(groups.begin() + g);
+                group_hand_index.erase(group_hand_index.begin() + g);
+            }
+            // Candidate order = subset apply order: keep the forced equips in enumeration order.
+            std::sort(auto_sel.begin(), auto_sel.end());
+        }
+    }
+
     if (EnumStatsOn()) { ReportEnumBound(cands, groups, independent); }
 
     int num_groups = static_cast<int>(groups.size());
@@ -7448,6 +7511,12 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
             {
                 int pcost = 0, pgain = 0, pgy = 0, pblock = 0;
                 sel.clear();
+                // Auto-equip collapse: the forced free equips ride EVERY subset (first -- {0}-cost,
+                // so they touch no mana term; Greaves-class equips stay in `groups` and thus later
+                // in sel, preserving shroud-last apply order). An all-zero position that would have
+                // been the skipped empty subset now considers the auto-equips-only plan -- exactly
+                // the "just equip" turn the collapse forces. See the collapse block above.
+                sel.insert(sel.end(), auto_sel.begin(), auto_sel.end());
                 for (int g = 0; g < num_groups; ++g)
                 { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
                 if (gate_on)
@@ -11212,6 +11281,58 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         groups[gi].push_back(j);
     }
 
+    // AUTO-EQUIP collapse, decision-node twin (USER equip doctrine 2026-08-14: "we can literally
+    // only have to choose one creature for equipping ... I specifically wanted it to cut down the
+    // enumeration space"). Same rule + exclusions as Solve's block (see that comment for the full
+    // dominance argument): a {0}-cost equip family of an UNATTACHED battlefield equipment is taken
+    // at its best variant in EVERY plan instead of powersetting take/skip -- Wargear (sacrifices),
+    // shroud/haste granters (Greaves), moves, hand-side pairs and costed equips all stay
+    // enumerated, and human play / unpruned stays fully open. Placed BEFORE
+    // CapGroupsBySituationalRank so the group-wave tranche machinery never sees (and never
+    // re-defers) the collapsed families.
+    std::vector<int> auto_sel;   // cand indices force-included in every enumerated subset
+    {
+        static const bool s_no_auto_equip = EnvOn("MTG_NO_AUTO_EQUIP");
+        static const bool s_all_hosts_ae  = EnvOn("MTG_EQUIP_ALL_HOSTS");
+        const bool auto_equip_on = !s_no_auto_equip && !s_all_hosts_ae
+                                && !(any_ritual || any_rock)
+                                && ResolveProvider(state).ConsolidatesEquips()
+                                && !DecisionUnpruned(UnprunedGate::EquipHost)
+                                && !HumanPlayActive();
+        if (auto_equip_on)
+        {
+            for (int g = static_cast<int>(groups.size()) - 1; g >= 0; --g)
+            {
+                bool all_free_equips = !groups[g].empty();
+                for (int j : groups[g])
+                {
+                    if (cands[j].kind != Action::Kind::Equip
+                        || cands[j].cost.ManaValue() != 0) { all_free_equips = false; break; }
+                }
+                if (!all_free_equips) { continue; }
+                const int eq_num = cands[groups[g][0]].sac_source_id;
+                const Permanent* eqp = nullptr;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index == state.active_player_index
+                        && p.card.m_number == eq_num) { eqp = &p; break; }
+                }
+                if (!eqp || eqp->equipped_to != 0) { continue; }   // hand-side or a MOVE: keep enumerated
+                const CardDefinition* ed = CardDatabase::Instance().LookupCached(eqp->card);
+                if (!ed || !ed->params.is_equipment
+                    || ed->params.equip_sacrifices_prior_host
+                    || ed->params.equip_grants_shroud
+                    || ed->params.equip_grants_haste) { continue; }
+                int jbest = groups[g][0];
+                for (int j : groups[g]) { if (cands[j].eval > cands[jbest].eval) { jbest = j; } }
+                auto_sel.push_back(jbest);
+                groups.erase(groups.begin() + g);
+                group_hand_index.erase(group_hand_index.begin() + g);
+            }
+            std::sort(auto_sel.begin(), auto_sel.end());
+        }
+    }
+
     // Breadth cap on a bloated combo-dig hand (shared with Solve). This enumerator feeds both the
     // multi-turn search and the per-turn leaf rollout (SolveWithLookahead), so capping it is what
     // attacks the rollout-bound no-win games. See CapGroupsBySituationalRank. In tranche mode
@@ -11827,6 +11948,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             {
                 int pcost = 0, pgain = 0, pgy = 0, pblock = 0;
                 sel.clear();
+                // Auto-equip collapse: the forced free equips ride EVERY subset (first -- {0}-cost,
+                // so they touch no mana term; Greaves-class equips stay in `groups` and thus later
+                // in sel, preserving shroud-last apply order). The all-zero position that was the
+                // skipped empty subset now yields the equips-only plan. See the collapse block above.
+                sel.insert(sel.end(), auto_sel.begin(), auto_sel.end());
                 for (int g = 0; g < num_groups; ++g)
                 { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
                 if (gate_on)
