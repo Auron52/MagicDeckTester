@@ -122,6 +122,14 @@ first.
    sound core. This prices the lossless tier before it is built.
 3. If built: A/B win-turn + cost on the regression suite train seeds, validate on held-out, full
    standing gate (play-affecting). Measure the heuristic tier separately, per deck.
+4. **MUST-FIND gate (user, 2026-08-14, from the canon adoption):** dominance is a JUDGMENT prune
+   (its failure mode is a reachable win silently dropped — no per-state validity argument exists,
+   unlike identity collapse), so it additionally passes the unbounded-budget reproduction test:
+   every previously-found win in the gate sweep must be found at `--budget-ms 0` with dominance ON,
+   or the prune is wrong — the only exemption is a win outside the search window from every
+   diverging decision. Prefer the SIBLING-FRONTIER application point first (same decision, same
+   consumed draws — comparability by construction); cross-decision archives only after that form
+   is proven.
 
 ## Sequencing
 
