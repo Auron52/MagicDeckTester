@@ -168,6 +168,44 @@ misses       489,732                    ->  274,665   (-44%)
 backtracker nodes  89.8M                ->  73.1M     (-18.6%)
 ```
 
+### 5a. Deferred: the cache covers ONE of the engine's two payment questions
+
+`MTG_TAP_STATS` now splits the backtracker's nodes by the cache's REACH. A hit costs no nodes, so
+those two buckets are the whole payment cost. FiveColour d3 x14, `--threads 1`:
+
+```
+hit 380,216 (82.0% of consulted)   miss 83,699        skipped-shape 101,214
+nodes:  miss 6,098,803 (45.0%)     skipped 7,443,961 (55.0%)      [sums to 100.0%]
+per entry:   72.9 (miss)      vs        73.5 (skipped)
+```
+
+The cache is not failing at what it covers. It covers one shape:
+
+| question | call site | cached? |
+|---|---|---|
+| "can I afford this whole plan?" (`out_full_pool`) | `TurnSolver.cpp` batch prepay | YES -- 82% hit |
+| "pay this one cost, tell me the leftover" (`out_leftover`, sometimes non-empty floating) | `TapForCostSharedOnce`'s backtracker fallback | **no** |
+
+The uncovered shape is 17.9% of calls but **55% of the nodes**, and is never memoised, so identical
+repeats re-solve every time. Per-entry cost is the same in both (73.5 vs 72.9), so it is not that
+those calls are pathological -- there are just a lot of them.
+
+**Extending it is feasible but small.** Store the leftover pool alongside `produced`, and put the
+floating pool in the key (it is six ints). The prize is bounded: cache-off vs cache-on is 74,691 ->
+71,589 ms while the cache avoids ~2.4x the nodes it spends, so **the whole payment DFS is only ~7% of
+this deck's PLAY runtime** and the extension is worth ~2-4% at best. Worth doing on a quiet day, not
+worth reordering anything for.
+
+**The correction that matters more:** the 22.3% "mana payment" figure in section 3's perf profile came
+from the DEGENERATE rollouts, not from normal play. Payment dominates the TAIL. That is why the tail
+wants the breadth fix (item 1) and not more memoisation -- a memo can only ever attack repeats, and
+what makes those rollouts degenerate is the width of a single solve.
+
+(Instrument trap, now documented at the counters: every per-entry node figure -- including the
+pre-existing payable/unpayable split -- is a delta on a process-wide counter taken around one worker
+call, so under N threads it counts the other N-1 threads' work too. The tell is the buckets summing
+past 100% of `nodes`: 122.9% at 12 threads, exactly 100.0% at 1. Read them single-threaded.)
+
 Byte-identical: identical digests and per-game logs on all three decks that own one of these sources
 (Anti-Lifegain = drip + Tainted Remedy, Dragonstorm = two storage lands, FiveColour = Deathrite), and
 identical to `MTG_MANA_CACHE=0` as well -- three cache configurations, one answer.
