@@ -468,6 +468,31 @@ void EffectHandler::ResolveRemoval(GameState& state, const StackEntry& entry,
             // battlefield vector (appending tokens), which would dangle a held reference.
             TryPumpThenSwordsRedirect(state, entry.controller_index, t.permanent_index, def);
             Permanent& target = state.battlefield[t.permanent_index];
+            // Tuck removal (Unexpectedly Absent): put the target into its owner's library just
+            // beneath the top X cards. A TOKEN (every opponent spawn) ceases to exist instead
+            // (CR 111.7) -- faithful, not a simplification; a real card inserts at min(X, size).
+            // Attachments fall off. No exile/graveyard, no lifegain rider. Mirrors the rollout.
+            if (def.params.tuck_to_library)
+            {
+                const int  dead_num = target.card.m_number;
+                const bool is_tok   = target.is_token;
+                const Card tucked   = target.card;
+                const int  owner    = target.owner_index;
+                state.battlefield.erase(state.battlefield.begin() + t.permanent_index);
+                if (!is_tok)
+                {
+                    Library& lib = state.players[owner].library;
+                    const int x   = std::max(0, entry.chosen_x.value_or(0));
+                    const int pos = std::min<int>(x, static_cast<int>(lib.size()));
+                    lib.insert(lib.begin() + pos, tucked);
+                }
+                for (Permanent& e : state.battlefield)
+                {
+                    if (e.equipped_to      == dead_num) { e.equipped_to = 0; }
+                    if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
+                }
+                continue;
+            }
             // Rider (Swords to Plowshares): the exiled creature's controller gains life equal
             // to its power. Via OpponentGainsLife so a Tainted Remedy turns the opponent's
             // gain into damage equal to the creature's power. Captured before the erase.

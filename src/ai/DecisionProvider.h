@@ -219,6 +219,41 @@ public:
     virtual std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const;
 
+    // AttackDigPutCandidates -- Armored Skyhunter's attack trigger: WHICH of the revealed
+    // Aura/Equipment cards to put onto the battlefield (ranked best-first; empty = decline the
+    // "may"). `examined` is the looked-at top-N in library order; `legal` the indices of
+    // Aura/Equipment cards among them. Base rule (out-of-line, DecisionProviders.cpp): the
+    // largest realized-power put -- equip_power_bonus (auras: aura_power_bonus) descending, ties
+    // to lower index. Provider-owned per the core invariant: the trigger resolves inside combat
+    // where no plan-variant branching exists, so this pick IS the decision (disclosed 6a; the
+    // human chooser overrides it in the viewer).
+    virtual std::vector<int> AttackDigPutCandidates(
+        const GameState& s, int controller,
+        const std::vector<Card>& examined, const std::vector<int>& legal) const;
+
+    // AttackDigAttachHost -- the same trigger's second choice: WHICH controlled creature the put
+    // Equipment attaches to (0 = leave unattached). Base rule (out-of-line): the host whose
+    // realized damage THIS combat rises the most -- delta = (power+bonus)*(ds_after?2:1)
+    // - power*(ds_before?2:1) over the ATTACKING creatures (a non-attacker realizes nothing this
+    // turn), respecting equip_min_power; ds_after counts the incoming equipment (a bare Kor
+    // Duelist flips to double strike). Ties to lower card number.
+    virtual int AttackDigAttachHost(
+        const GameState& s, int controller, const Card& equip_card,
+        const std::vector<int>& attacker_bf_indices) const;
+
+    // JitteSpendCount -- Umezawa's Jitte: how many charge counters to spend on "+2/+2 until end
+    // of turn" for THIS attacker's combat damage. Default -1 = greedy spend-all INCLUDING the
+    // double-strike mid-step earnings (see JitteDamageMath; per-turn damage-optimal). The one
+    // real approximation is never SAVING counters for a future double-strike turn -- an A/B-able
+    // judgment call, human-overridable in the viewer. A non-negative return spends exactly that
+    // many pre-strike. Consulted by the combat core AND both attack projections, so an override
+    // stays lockstep by construction.
+    virtual int JitteSpendCount(const GameState& s, int available_counters) const
+    {
+        (void)s; (void)available_counters;
+        return -1;
+    }
+
     // FirebreatheActivations -- combat pump ("firebreathing"): how many activations to pay for.
     // Returns candidate counts in PREFERENCE order; index 0 is what a non-branching caller takes.
     // A NEGATIVE entry means "as many as the pool affords" -- the greedy maximum -- which is the
@@ -539,6 +574,13 @@ public:
     // value (byte-identical; inert for any hand with <= cap groups). MTG_SOLVE_GROUP_CAP /
     // MTG_NO_GROUP_CAP / MTG_UNPRUNED still override engine-side for A/B.
     virtual int EnumGroupCap() const { return 12; }
+
+    // EquipHostWidth -- haste-equip host enumeration width (how many top-scored fresh/no-haste
+    // hosts get an "equip -> host" action per haste equipment). DEFAULT 1 = the measured
+    // FiveColour trade-off, byte-identical for every existing deck; EquipmentProvider returns 2
+    // (the KittyEquipment gi=39 same-subset-host case). MTG_EQUIP_HOST_WIDTH overrides both, and
+    // MTG_EQUIP_ALL_HOSTS / MTG_UNPRUNED(equiphost) / human play bypass the width entirely.
+    virtual int EquipHostWidth() const { return 1; }
 
     // FetchSearchCap -- fetch BREADTH policy: how many of FetchCandidates' ordered targets the search
     // branches on (the list is best-first; lower ranks are strictly worse colour, a basic ranks

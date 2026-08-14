@@ -61,7 +61,11 @@ enum class Keyword
     // it) -- the mechanic is modelled structurally via CardParams::creates_treasures + the
     // "Treasure Token" card def's sac-for-mana. Kept only so the Scryfall keywords field stays
     // faithful; no engine code reads it.
-    Treasure
+    Treasure,
+    // Metalcraft (Puresteel Paladin): an INERT ability-word tag -- the mechanic is modelled
+    // structurally via CardParams::metalcraft_equip_zero_artifacts (EquipCostGenericNow). Kept
+    // only so the Scryfall keywords field stays faithful; no engine code reads it.
+    Metalcraft
 };
 enum class Supertype { Legendary, Basic, Snow, World };
 

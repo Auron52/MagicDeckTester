@@ -1300,17 +1300,129 @@ inline std::pair<int,int> AuraBonusFor(const Permanent& creature, const GameStat
     return {pw, tb};
 }
 
-// True if `creature` deals combat damage with lifelink -- its own keyword or any attached
-// aura_grants_lifelink Aura you control. Combat sites gain the controller that much life.
+// Equipment analogue of AuraBonusFor: total {power, toughness} granted to `creature` by every
+// attached Equipment (Permanent::equipped_to == its card number, same controller). Kept in
+// lockstep with AuraBonusFor's call sites -- Combat.cpp's real damage, TurnSolver's two attack
+// projections, and the SBA toughness re-check. Equipment stacks (Bonesplitter + Hammer on one
+// host both count), matching CR 613: each grants independently.
+inline std::pair<int,int> EquipBonusFor(const Permanent& creature, const GameState& state)
+{
+    if (!creature.card.IsCreature() && !creature.is_animated) { return {0, 0}; }
+    const int num  = creature.card.m_number;
+    const int ctrl = creature.controller_index;
+    int pw = 0, tb = 0;
+    for (const Permanent& e : state.battlefield)
+    {
+        if (e.equipped_to != num || e.controller_index != ctrl) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.card);
+        if (!d || !d->params.is_equipment) { continue; }
+        pw += d->params.equip_power_bonus;
+        tb += d->params.equip_tough_bonus;
+    }
+    return {pw, tb};
+}
+
+// Number of Equipment attached to creature `creature_num` under `controller`. Kor Duelist's ds
+// gate (>= 1), Balan's (>= double_strike_min_equipment), Kemba's upkeep token count.
+inline int CountEquipmentAttachedTo(const GameState& state, int controller, int creature_num)
+{
+    int n = 0;
+    for (const Permanent& e : state.battlefield)
+    {
+        if (e.equipped_to != creature_num || e.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.card);
+        if (d && d->params.is_equipment) { ++n; }
+    }
+    return n;
+}
+
+// Equipment-conditional double strike (creature-side flags): Kor Duelist ("as long as this
+// creature is equipped") and Balan ("as long as two or more Equipment are attached"). The third
+// ds source beside the own keyword and the lord grant -- OR'd into the same three ds sites
+// (Combat.cpp ResolveCombatDamage; TurnSolver attacking-mana-source scorer + PendingAttackDamage)
+// so executor and rollout agree.
+inline bool HasDoubleStrikeFromEquipment(const Permanent& creature, const GameState& state)
+{
+    const CardDefinition* cd = CardDatabase::Instance().LookupCached(creature.card);
+    if (!cd) { return false; }
+    if (!cd->params.double_strike_while_equipped
+        && cd->params.double_strike_min_equipment <= 0) { return false; }
+    const int n = CountEquipmentAttachedTo(state, creature.controller_index,
+                                           creature.card.m_number);
+    if (cd->params.double_strike_while_equipped && n >= 1) { return true; }
+    return cd->params.double_strike_min_equipment > 0
+        && n >= cd->params.double_strike_min_equipment;
+}
+
+// The battlefield index of a charge-trigger Equipment (Umezawa's Jitte) attached to `attacker`,
+// or -1. Legend rule caps the board at one Jitte, so first match suffices.
+inline int FindAttachedChargeEquip(const GameState& state, const Permanent& attacker)
+{
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& e = state.battlefield[i];
+        if (e.equipped_to != attacker.card.m_number
+            || e.controller_index != attacker.controller_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.card);
+        if (d && d->params.is_equipment && d->params.equip_combat_damage_charges > 0) { return i; }
+    }
+    return -1;
+}
+
+// Umezawa's Jitte combat math, shared by the executor/rollout combat core (which applies the
+// counter mutation) and the two attack projections (which only read the damage) so the three
+// sites cannot diverge. Timing-faithful closed form for the collapsed combat model:
+//   non-DS: one damage event.  spend s0 counters pre-damage -> damage = P + pump*s0; the event
+//           dealing > 0 earns +2 counters (trigger approved-collapsed to "damage to a player").
+//   DS:     two events. Pre-strike spend pumps BOTH halves ("until end of turn"); the first-
+//           strike event earns +2 counters that are mid-step-spendable on the REGULAR half only
+//           (the Kor Duelist / Balan interaction); the regular event earns +2 more.
+// `spend_request`: -1 = greedy spend-all including DS mid-step earnings (the provider default,
+// per-turn damage-optimal); >= 0 = spend exactly that many pre-strike (human choice).
+// Returns {total combat damage, counters remaining on the Jitte}.
+inline std::pair<int,int> JitteDamageMath(int base_pw, bool ds, int counters, int pump,
+                                          int spend_request)
+{
+    if (ds)
+    {
+        const int s0 = (spend_request < 0) ? counters : std::min(spend_request, counters);
+        int c = counters - s0;
+        const int first = base_pw + pump * s0;
+        int total = first;
+        if (first > 0) { c += 2; }
+        const int s1 = (spend_request < 0) ? c : 0;   // mid-step: greedy only
+        c -= s1;
+        const int second = base_pw + pump * s0 + pump * s1;
+        total += second;
+        if (second > 0) { c += 2; }
+        return { total, c };
+    }
+    const int s0 = (spend_request < 0) ? counters : std::min(spend_request, counters);
+    const int dmg = base_pw + pump * s0;
+    int c = counters - s0;
+    if (dmg > 0) { c += 2; }
+    return { dmg, c };
+}
+
+// True if `creature` deals combat damage with lifelink -- its own keyword, any attached
+// aura_grants_lifelink Aura, or any attached equip_grants_lifelink Equipment (Loxodon
+// Warhammer / Shadowspear). Combat sites gain the controller that much life.
 inline bool CreatureHasLifelink(const Permanent& creature, const GameState& state)
 {
     if (creature.card.HasKeyword(Keyword::Lifelink)) { return true; }
     for (const Permanent& a : state.battlefield)
     {
-        if (a.aura_attached_to != creature.card.m_number) { continue; }
         if (a.controller_index != creature.controller_index) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
-        if (d && d->params.is_aura && d->params.aura_grants_lifelink) { return true; }
+        if (a.aura_attached_to == creature.card.m_number)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+            if (d && d->params.is_aura && d->params.aura_grants_lifelink) { return true; }
+        }
+        if (a.equipped_to == creature.card.m_number)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+            if (d && d->params.is_equipment && d->params.equip_grants_lifelink) { return true; }
+        }
     }
     return false;
 }
@@ -1355,6 +1467,37 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
     }
     return best;
 }
+
+// FireAttackDigAttach -- body in SpellEffects.cpp. Armored Skyhunter's attack trigger ("look at
+// the top six... you may put an Aura or Equipment card... onto the battlefield... attach it to a
+// creature you control; rest on the bottom"). Called from GameEngine::CombatPhase AND the
+// rollout's combat in lockstep, after attack triggers/pumps and BEFORE ResolveCombatDamage reads
+// power -- so a put-and-attached Colossus Hammer counts in THIS combat's damage (the deck's core
+// line). The put bypasses the equip cost (attach, not the Equip action) and routes through the
+// shared enter cascade (Puresteel's equipment-ETB draw fires). WHICH card and WHICH host are
+// provider-owned (AttackDigPutCandidates / AttackDigAttachHost, human-overridable via the dig /
+// attach-host choosers). Rest bottomed in examined order (approved deterministic collapse).
+void FireAttackDigAttach(GameState& state, int controller, const std::vector<int>& atk_idx);
+
+// ApplyAttachAllEquipment -- body in SpellEffects.cpp. Balan's "{1}{W}: Attach all Equipment you
+// control to Balan" (cost paid by the caller). Routes every controlled Equipment not already on
+// `balan_id` through the shared ApplyEquip -- Grafted Wargear's re-host sacrifice fires exactly
+// as on a normal Equip, and equip costs are bypassed (attach, not the Equip action).
+void ApplyAttachAllEquipment(GameState& state, int controller, int balan_id);
+
+// ApplyPutFromHand -- body in SpellEffects.cpp. Stoneforge Mystic's "{1}{W}, {T}: put an
+// Equipment card from your hand onto the battlefield" (mana paid by the caller; this taps the
+// source). The named card enters UNATTACHED through the shared enter cascade (Puresteel's draw
+// fires). Returns false (a no-op) when the source is gone/tapped/sick or the card left hand --
+// the stranded-outlet pattern, never a phantom.
+bool ApplyPutFromHand(GameState& state, int controller, int source_id,
+                      const std::string& put_name);
+
+// ApplyJitteMode -- body in SpellEffects.cpp. Umezawa's Jitte's non-combat modes: remove one
+// charge counter from `jitte_id` for mode 1 = target_id gets -1/-1 until end of turn (the death
+// check runs inline against effective toughness, shared by both worlds) or mode 2 = controller
+// gains charge_lifegain. Fizzles without spending the counter if the target left the battlefield.
+void ApplyJitteMode(GameState& state, int controller, int jitte_id, int mode, int target_id);
 
 // PerformLightPawsAttach -- body in SpellEffects.cpp (see the header note above).
 void PerformLightPawsAttach(GameState& state, int controller, int cast_aura_mv,
@@ -2034,6 +2177,42 @@ inline void OnDragonEnters(GameState& state, int controller, int entered_index)
     // exactly like a cast creature. Param-gated scan -> byte-identical for every other deck.
     if (state.battlefield[entered_index].card.IsCreature())
     { FireCreatureEnterWatchers(state, state.battlefield[entered_index].controller_index, entered_index); }
+    // Puresteel Paladin: "Whenever an Equipment you control enters, you may draw a card." Lives
+    // at this universal cascade (NOT the on-cast hook) so it fires for a cast equipment AND one
+    // put onto the battlefield (Stoneforge Mystic's ability, Armored Skyhunter's attack dig) --
+    // CR 603.6a, the ETB-vs-cast checkpoint. "May" always taken: a draw is strictly good in a
+    // goldfish; the empty-library guard skips (disclosed 6a). Each Paladin triggers separately.
+    // Param-gated scan -> byte-identical for every deck without the param.
+    {
+        const Permanent& entered = state.battlefield[entered_index];
+        const CardDefinition* edef = CardDatabase::Instance().LookupCached(entered.card);
+        if (edef && edef->params.is_equipment)
+        {
+            const int ectrl = entered.controller_index;
+            int draws = 0;
+            for (const Permanent& w : state.battlefield)
+            {
+                if (w.controller_index != ectrl) { continue; }
+                const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+                if (wd && wd->params.draw_on_equipment_etb) { ++draws; }
+            }
+            if (draws > 0)
+            {
+                Player& kp = state.players[ectrl];
+                for (int k = 0; k < draws && !kp.library.empty(); ++k)
+                {
+                    std::size_t before = kp.hand.size();
+                    kp.library.DrawN(1, kp.hand);
+                    kp.cards_drawn_this_turn += static_cast<int>(kp.hand.size() - before);
+                    if (g_play_draw_sink)
+                    {
+                        for (std::size_t hi = before; hi < kp.hand.size(); ++hi)
+                        { g_play_draw_sink->push_back({ state.turn_number, kp.hand[hi].m_name.str() }); }
+                    }
+                }
+            }
+        }
+    }
     // Early out for every non-Dragon enter (keeps all other token/creature decks byte-identical).
     if (!CardHasSubtype(state.battlefield[entered_index].card, "Dragon")) { return; }
     const bool entered_is_token = state.battlefield[entered_index].is_token;
@@ -2644,9 +2823,82 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
 // equip ATTACHES, it does not target -- the goldfish has no targeting restrictions anyway). The
 // generic cost is paid by the caller (the trailing outlet apply pass, both worlds); {0} for
 // Greaves. No-op if either permanent is missing (stranded-action safe, lockstep).
+// Metalcraft support (Puresteel Paladin). Artifact count for `controller` -- Equipment ARE
+// artifacts, so this deck's 13 equips + Sol Ring flip the threshold from the third artifact on
+// (the Paladin itself, a creature, does not count).
+inline int CountControlledArtifacts(const GameState& state, int controller)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (p.card.HasType(CardType::Artifact)) { ++n; }
+    }
+    return n;
+}
+
+// The equip cost IN EFFECT right now: {0} while any metalcraft reducer (Puresteel Paladin,
+// metalcraft_equip_zero_artifacts > 0) is on the battlefield with its artifact threshold met,
+// else the printed equip_cost_generic. Called at BOTH enumeration (TurnSolver's Equip candidate
+// block) and every payment site (rollout apply_one, ApplyManaUnlockEquips, the executor) so a
+// mid-plan metalcraft flip -- cast artifact #3, then equip -- stays lockstep. Multiple Paladins
+// are redundant, not cumulative (a static ability either applies or doesn't).
+inline int EquipCostGenericNow(const GameState& state, int controller,
+                               const CardDefinition& equip_def)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->params.metalcraft_equip_zero_artifacts <= 0) { continue; }
+        if (CountControlledArtifacts(state, controller)
+            >= d->params.metalcraft_equip_zero_artifacts) { return 0; }
+    }
+    return equip_def.params.equip_cost_generic;
+}
+
+// The Equip action's cost recomputed AT PAYMENT time. The enumeration bakes EquipCostGenericNow
+// into Action::cost, but metalcraft (Puresteel) can flip between enumeration and apply -- a plan
+// that casts artifact #3 then equips must pay {0}, not the stale baked cost. All three payment
+// sites (rollout apply_one, ApplyManaUnlockEquips, the AIEngine executor) call this so they can
+// never disagree. Falls back to the baked cost if the equipment is not on the battlefield.
+inline ManaCost EquipActionCostNow(const GameState& state, int controller, int equip_id,
+                                   const ManaCost& baked)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != equip_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.is_equipment)
+        {
+            ManaCost c;
+            c.generic = EquipCostGenericNow(state, controller, *d);
+            return c;
+        }
+    }
+    return baked;
+}
+
+// A host's power as the O-Naginata attach gate sees it: base + lords + auras + ALREADY-attached
+// equipment (the incoming equipment is not yet attached, so EquipBonusFor naturally excludes
+// it). Shared by the enumeration filter and ApplyEquip's defense-in-depth check below so the
+// two can never disagree about a legal host.
+inline int EquipGatePowerOf(const Permanent& host, const GameState& state)
+{
+    int pw = host.EffectivePower()
+           + ComputeLordBonus(host.card, state.battlefield, host.controller_index,
+                              host.is_animated, &host).first
+           + AuraBonusFor(host, state).first
+           + EquipBonusFor(host, state).first;
+    return pw;
+}
+
+inline void SacrificePermanentAt(GameState& state, int controller, int idx);  // defined below
+
 inline void ApplyEquip(GameState& state, int controller, int equip_id, int creature_id)
 {
     Permanent* eq = nullptr;
+    const CardDefinition* eqd = nullptr;
     bool host_ok = false;
     for (Permanent& p : state.battlefield)
     {
@@ -2654,12 +2906,53 @@ inline void ApplyEquip(GameState& state, int controller, int equip_id, int creat
         if (p.card.m_number == equip_id)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d && d->params.is_equipment) { eq = &p; }
+            if (d && d->params.is_equipment) { eq = &p; eqd = d; }
         }
         if (p.card.m_number == creature_id && (p.card.IsCreature() || p.is_animated))
         { host_ok = true; }
     }
-    if (eq && host_ok) { eq->equipped_to = creature_id; }
+    if (!eq || !host_ok) { return; }
+    // O-Naginata: "can be attached only to a creature with power 3 or greater" (CR 701.3c: an
+    // illegal target makes the equip a no-op). Defense in depth -- the Equip enumeration already
+    // filters, this keeps a stale/hand-built plan honest.
+    if (eqd->params.equip_min_power > 0)
+    {
+        const Permanent* host = nullptr;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == controller && p.card.m_number == creature_id)
+            { host = &p; break; }
+        }
+        if (!host || EquipGatePowerOf(*host, state) < eqd->params.equip_min_power) { return; }
+    }
+    // Grafted Wargear (per the 2020-11-10 ruling): only a genuine re-host -- moving to a
+    // DIFFERENT creature -- sacrifices the former host; first attach and host-death unattach
+    // resolve as no-ops. Lives here, on the SHARED attach path, so a normal Equip and Balan's
+    // attach-all fire it identically.
+    const int prior = eq->equipped_to;
+    if (eqd->params.equip_sacrifices_prior_host && prior != 0 && prior != creature_id)
+    {
+        int idx = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (state.battlefield[i].controller_index == controller
+                && state.battlefield[i].card.m_number == prior) { idx = i; break; }
+        }
+        if (idx >= 0)
+        {
+            SacrificePermanentAt(state, controller, idx);
+            // The erase shifted/reallocated the battlefield -- re-find the equipment before
+            // writing (and bail if the sacrifice somehow took it out too).
+            eq = nullptr;
+            for (Permanent& p : state.battlefield)
+            {
+                if (p.controller_index == controller && p.card.m_number == equip_id)
+                { eq = &p; break; }
+            }
+            if (!eq) { return; }
+        }
+    }
+    eq->equipped_to = creature_id;
 }
 
 // True when `equip_id` is ALREADY attached to `creature_id`. The Equip enumeration never offers a
@@ -3967,6 +4260,20 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     }
     if (doomed.empty()) { return; }
     std::sort(doomed.begin(), doomed.end());
+    // Attachments fall off a doomed legend (CR 704.5j + 301.5c): zero aura_attached_to /
+    // equipped_to for anything pointing at a doomed permanent, exactly like the combat-death
+    // path. Was missing for equipment -- inert under the default keep-oldest (the doomed copy is
+    // the fresh, never-equipped one) but a provider keeping the newer copy would dangle the
+    // attach (found during the KittyEquipment onboarding; Kemba/Balan x2 make it reachable).
+    for (int idx : doomed)
+    {
+        const int dead_num = state.battlefield[idx].card.m_number;
+        for (Permanent& e : state.battlefield)
+        {
+            if (e.equipped_to     == dead_num) { e.equipped_to = 0; }
+            if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
+        }
+    }
     for (int idx : doomed)   // ascending -> graveyard order matches the old scan
     { state.players[state.battlefield[idx].owner_index].graveyard.push_back(state.battlefield[idx].card); }
     for (auto it = doomed.rbegin(); it != doomed.rend(); ++it)   // descending -> indices stay valid

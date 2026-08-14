@@ -803,15 +803,29 @@ static std::vector<AttackingManaSource> CollectAttackingManaSources(const GameSt
         const bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state.battlefield, active, animated, &p);
         (void)lord_tb;
-        const bool ds = animated
+        const bool ds = (animated
             ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true)
             : (p.card.HasKeyword(Keyword::DoubleStrike)
-               || HasDoubleStrikeFromLords(p.card, state.battlefield, active));
+               || HasDoubleStrikeFromLords(p.card, state.battlefield, active)))
+            || HasDoubleStrikeFromEquipment(p, state);       // Kor Duelist / Balan
         int base_pw = p.EffectivePower() + lord_pb;
         if (animated) { base_pw += def->params.animate_power; }
         base_pw += DynamicBasePower(*def, state, active);
         base_pw += AuraBonusFor(p, state).first;
-        const int power = base_pw * (ds ? 2 : 1);            // mirrors PendingAttackDamage exactly
+        base_pw += EquipBonusFor(p, state).first;            // attached equipment
+        int power = base_pw * (ds ? 2 : 1);                  // mirrors PendingAttackDamage exactly
+        {   // Umezawa's Jitte projection -- same shared closed form as the combat core
+            const int jbf = FindAttachedChargeEquip(state, p);
+            if (jbf >= 0)
+            {
+                const Permanent& je = state.battlefield[jbf];
+                const CardDefinition* jd = CardDatabase::Instance().LookupCached(je.card);
+                power = JitteDamageMath(base_pw, ds, je.charge_counters,
+                                        jd->params.charge_pump_power,
+                                        ResolveProvider(state).JitteSpendCount(
+                                            state, je.charge_counters)).first;
+            }
+        }
 
         const int y = PermanentManaYield(p, *def);
         out.push_back({ power, y >= 0 ? y : ManaProducedPerTap(*def) });
@@ -857,10 +871,11 @@ static int PendingAttackDamage(const GameState& state)
         bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(
             p.card, state.battlefield, active, animated, &p);
-        bool ds = animated
+        bool ds = (animated
             ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true)
             : (p.card.HasKeyword(Keyword::DoubleStrike)
-               || HasDoubleStrikeFromLords(p.card, state.battlefield, active));
+               || HasDoubleStrikeFromLords(p.card, state.battlefield, active)))
+            || HasDoubleStrikeFromEquipment(p, state);           // Kor Duelist / Balan
         int base_pw = p.EffectivePower() + lord_pb;
         const CardDefinition* adef = CardDatabase::Instance().LookupCached(p.card);
         if (adef)
@@ -869,7 +884,20 @@ static int PendingAttackDamage(const GameState& state)
             base_pw += DynamicBasePower(*adef, state, active);   // Adeline: power = creature count
         }
         base_pw += AuraBonusFor(p, state).first;                 // Bogles: attached auras + Kor self-buff
-        dmg += base_pw * (ds ? 2 : 1);
+        base_pw += EquipBonusFor(p, state).first;                // attached equipment
+        {   // Umezawa's Jitte projection -- same shared closed form as the combat core
+            const int jbf = FindAttachedChargeEquip(state, p);
+            if (jbf >= 0)
+            {
+                const Permanent& je = state.battlefield[jbf];
+                const CardDefinition* jd = CardDatabase::Instance().LookupCached(je.card);
+                dmg += JitteDamageMath(base_pw, ds, je.charge_counters,
+                                       jd->params.charge_pump_power,
+                                       ResolveProvider(state).JitteSpendCount(
+                                           state, je.charge_counters)).first;
+            }
+            else { dmg += base_pw * (ds ? 2 : 1); }
+        }
         attackers.push_back(&p);
     }
     dmg += CountAttackTriggerLifeLoss(state.battlefield, active, attackers);
@@ -1418,7 +1446,9 @@ int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action
         ManaPool add, add_nc;
         HasteUnlockedManaOf(state, a.sac_victim_id, add, add_nc);
         if (add.Total() <= 0) { continue; }
-        if (!TapForCostDirect(state, a.cost, /*for_creature=*/false)) { continue; }
+        if (!TapForCostDirect(state,
+                              EquipActionCostNow(state, active, a.sac_source_id, a.cost),
+                              /*for_creature=*/false)) { continue; }
         ApplyEquip(state, active, a.sac_source_id, a.sac_victim_id);
         ++fired;
     }
@@ -3009,9 +3039,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (!alt_burn_live) { continue; }
             }
         }
-        else if ((t == Targeting::Creature || t == Targeting::Multi) && !has_creature_target
+        else if ((t == Targeting::Creature || t == Targeting::Multi
+                  || t == Targeting::NonlandPermanent) && !has_creature_target
                  && !def.params.controller_lifegain_equals_power)
         {
+            // Unexpectedly Absent (nonland-permanent tuck): with no opponent creature the
+            // autonomous cast is skipped (self-tuck lines are user-approved-lean, 2026-08-13),
+            // but a HUMAN may still want the self-target cast -- never narrow the viewer.
+            if (t == Targeting::NonlandPermanent)
+            {
+                if (HumanPlayActive() && def.params.allow_self_target) { /* fall through: emit */ }
+                else { continue; }
+            }
+            else
             // No opponent creature to target. A creature-burn (Searing Blood / Blaze) is normally dead
             // here -- but casting it on our OWN surviving creature triggers prowess and can be lethal.
             // Offer that "prowess line" ONLY when a prowess attacker + a surviving own target exist
@@ -3068,6 +3108,35 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
                 a.ritual_float   = RitualFloatAmount(state, def, x);   // refloat mana, stamped once
                 actions.push_back(std::move(a));
+                continue;
+            }
+            // Tuck removal (Unexpectedly Absent, Removal + {X}): X buries the target deeper --
+            // never better vs the passive opponent, so the provider proposes X=0 (unpruned /
+            // human play opens the full 0..max range as mutually-exclusive variants). Cost =
+            // base + X*pips; the opponent-creature gate above already ran.
+            if (def.tmpl == CardTemplate::Removal && def.params.tuck_to_library)
+            {
+                ManaCost tbase  = EffectiveCost(def, state);
+                ManaPool tpool  = AvailableManaPool(state);
+                int tpips = def.card.m_mana_cost.x_pips; if (tpips < 1) { tpips = 1; }
+                const int tmax = (tpool.Total() - tbase.ManaValue()) / tpips;
+                if (tmax < 0) { continue; }   // cannot pay even the base -> uncastable now
+                for (int x : ResolveProvider(state).XCandidates(state, def, tmax))
+                {
+                    if (x < 0 || x > tmax) { continue; }
+                    Action a;
+                    a.kind           = Action::Kind::CastFromHand;
+                    a.card_name      = ap.hand[i].m_name;
+                    a.hand_index     = i;
+                    ManaCost c = tbase; c.generic += x * tpips;
+                    a.cost           = c;
+                    a.chosen_x       = x;
+                    a.eval           = 1;   // removing a passive spawn: near-zero clock payoff
+                    a.direct_damage  = 0;
+                    a.is_noncreature = !def.card.IsCreature();
+                    a.card_mv        = def.card.m_mana_cost.ManaValue();
+                    actions.push_back(std::move(a));
+                }
                 continue;
             }
             if (def.tmpl != CardTemplate::DirectDamage) { continue; }
@@ -4151,92 +4220,158 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                       d->card.HasKeyword(Keyword::Haste), sc, /*in_hand=*/true });
                 }
             }
+            // Per-host live stats for the RIDER benefit ranking (P/T bonus / lifelink / Jitte
+            // charges / creature-side conditional double strike). Looked up by host id across
+            // battlefield-then-hand; a hand host reads its printed card (it has nothing attached).
+            struct HostStats { int pw = 0; int n_att = 0; bool ds = false; const CardDefinition* def = nullptr; };
+            auto host_stats = [&](int id) -> HostStats {
+                HostStats st;
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index != state.active_player_index
+                        || q.card.m_number != id) { continue; }
+                    st.pw    = EquipGatePowerOf(q, state);
+                    st.n_att = CountEquipmentAttachedTo(state, state.active_player_index, id);
+                    st.ds    = q.card.HasKeyword(Keyword::DoubleStrike)
+                            || HasDoubleStrikeFromEquipment(q, state);
+                    st.def   = CardDatabase::Instance().LookupCached(q.card);
+                    return st;
+                }
+                for (const Card& c : ap.hand)
+                {
+                    if (c.m_number != id) { continue; }
+                    st.def = CardDatabase::Instance().LookupCached(c);
+                    st.pw  = st.def ? st.def->card.m_power.value_or(0) : 0;
+                    st.ds  = c.HasKeyword(Keyword::DoubleStrike);
+                    return st;
+                }
+                return st;
+            };
+            // What attaching `ed` to host `id` is WORTH beyond haste: realized attack-damage
+            // delta (P/T bonus, doubled when the attach flips creature-side double strike --
+            // Kor Duelist / Balan) plus small fixed credits for Kemba's upkeep Cats, Jitte's
+            // charge engine, and lifelink. Returns -1 for an ILLEGAL host (equip_min_power,
+            // O-Naginata -- a legality rule, not a prune); 0 for a genuine no-op pair.
+            auto rider_delta = [&](const CardDefinition* ed2, int id) -> int {
+                const HostStats st = host_stats(id);
+                if (ed2->params.equip_min_power > 0
+                    && st.pw < ed2->params.equip_min_power) { return -1; }
+                bool ds_after = st.ds;
+                if (st.def != nullptr)
+                {
+                    if (st.def->params.double_strike_while_equipped && st.n_att + 1 >= 1)
+                    { ds_after = true; }
+                    if (st.def->params.double_strike_min_equipment > 0
+                        && st.n_att + 1 >= st.def->params.double_strike_min_equipment)
+                    { ds_after = true; }
+                }
+                int delta = (st.pw + ed2->params.equip_power_bonus) * (ds_after ? 2 : 1)
+                          - st.pw * (st.ds ? 2 : 1);
+                if (st.def != nullptr && st.def->params.upkeep_tokens_per_equipment)
+                { delta += 2; }                                        // Kemba: a 2/2 Cat per upkeep
+                if (ed2->params.equip_combat_damage_charges > 0) { delta += 2; }  // Jitte engine
+                if (ed2->params.equip_grants_lifelink)           { delta += 1; }  // life fidelity
+                return delta;
+            };
             for (std::size_t e = 0; e < equips.size(); ++e)
             {
                 const CardDefinition* ed = equips[e].first;
-                // The single heuristic host for THIS equipment: highest score among the hosts the
-                // equip would actually benefit, ties broken by lowest card number for determinism.
-                // Computed per equipment because the already-attached / never-self exclusions below
-                // differ per equipment. -1 when nothing qualifies -> no Equip variant at all.
-                // MTG_EQUIP_HOST_WIDTH: how many of the top-scored benefiting hosts to offer.
-                // 1 (default) = the single heuristic pick; <=0 = every benefiting host. Sweeping
-                // it is how the play/cost trade below was measured -- width 1 reproduces the
-                // single-pick behaviour exactly, since `ranked` then holds only the best host.
-                static const int s_host_width = []{
+                // Heuristic host WIDTH policy. Haste equips (Greaves): the single top-scored
+                // fresh/no-haste host (MTG_EQUIP_HOST_WIDTH, default 1 -- the measured FiveColour
+                // trade-off, byte-identical here). Rider equips (P/T / lifelink / charges): the
+                // top MTG_EQUIP_RIDER_WIDTH hosts by rider_delta (default 3 -- the searched set
+                // for an equipment-centric deck), and a re-host-SACRIFICE equipment (Grafted
+                // Wargear) opens EVERY benefiting host: its static ranking cannot price the loss
+                // of the former host, so the search must weigh it (each (equip,host) pair is a
+                // distinct dedup family). MTG_EQUIP_ALL_HOSTS=1, MTG_UNPRUNED/equiphost, or
+                // human play emit every LEGAL pair -- the viewer must not narrow at all.
+                // Host width is PROVIDER-OWNED (default 1; EquipmentProvider returns 2 -- the
+                // measured KittyEquipment gi=39 case: the T5 kill needs "Greaves -> the Balan
+                // cast this same subset" and a width-1 haste ranking never offers the second
+                // host; 100-game A/B width2 == fully-open, sole diff that game). The env var
+                // stays as an explicit override/A-B lever on top.
+                static const int s_host_width_env = []{
                     const char* s = std::getenv("MTG_EQUIP_HOST_WIDTH");
-                    return (s && *s) ? std::atoi(s) : 1; }();
-                std::vector<std::pair<int, int>> ranked;   // (score, id) of benefiting hosts
+                    return (s && *s) ? std::atoi(s) : -1; }();
+                const int s_host_width = s_host_width_env >= 0
+                    ? s_host_width_env : ResolveProvider(state).EquipHostWidth();
+                static const int s_rider_width = []{
+                    const char* s = std::getenv("MTG_EQUIP_RIDER_WIDTH");
+                    return (s && *s) ? std::atoi(s) : 3; }();
+                static const bool s_all_hosts = EnvOn("MTG_EQUIP_ALL_HOSTS");
+                const bool open_all = s_all_hosts
+                                   || DecisionUnpruned(UnprunedGate::EquipHost)
+                                   || HumanPlayActive();
+                std::vector<std::pair<int, int>> ranked;        // (score, id): haste-benefit hosts
+                std::vector<std::pair<int, int>> ranked_rider;  // (delta, id): rider-benefit hosts
                 for (const Host& h : hosts)
                 {
                     if (attached_to[e] == h.id && h.id != 0) { continue; }
                     if (equips[e].second->m_number == h.id)  { continue; }
-                    if (!(ed->params.equip_grants_haste && h.fresh && !h.haste)) { continue; }
-                    ranked.push_back({ h.score, h.id });
+                    if (ed->params.equip_grants_haste && h.fresh && !h.haste)
+                    { ranked.push_back({ h.score, h.id }); }
+                    const int rd = rider_delta(ed, h.id);
+                    if (rd > 0) { ranked_rider.push_back({ rd, h.id }); }
                 }
-                std::sort(ranked.begin(), ranked.end(),
-                          [](const std::pair<int, int>& a, const std::pair<int, int>& b)
-                          { return a.first != b.first ? a.first > b.first : a.second < b.second; });
+                auto by_score = [](const std::pair<int, int>& a, const std::pair<int, int>& b)
+                                { return a.first != b.first ? a.first > b.first : a.second < b.second; };
+                std::sort(ranked.begin(), ranked.end(), by_score);
+                std::sort(ranked_rider.begin(), ranked_rider.end(), by_score);
                 if (s_host_width > 0 && ranked.size() > static_cast<std::size_t>(s_host_width))
                 { ranked.resize(static_cast<std::size_t>(s_host_width)); }
-                // Diagnostic (MTG_EQUIP_PICK_STATS): which host the ranking chose, and from what
-                // pool. Used to show that a hand fatty the plan cannot cast outranks the dork
-                // actually on the battlefield -- see docs/design/fivecolour-search-cost.md.
+                const bool rider_open = ed->params.equip_sacrifices_prior_host;   // Wargear: search weighs the sac
+                if (!rider_open && s_rider_width > 0
+                    && ranked_rider.size() > static_cast<std::size_t>(s_rider_width))
+                { ranked_rider.resize(static_cast<std::size_t>(s_rider_width)); }
+                // Diagnostic (MTG_EQUIP_PICK_STATS): which host each ranking chose, from what pool.
                 static const bool s_pick_stats = EnvOn("MTG_EQUIP_PICK_STATS");
-                if (s_pick_stats && !ranked.empty())
+                if (s_pick_stats && (!ranked.empty() || !ranked_rider.empty()))
                 {
-                    std::string pool;
-                    for (const Host& h : hosts)
-                    {
-                        if (!(ed->params.equip_grants_haste && h.fresh && !h.haste)) { continue; }
-                        pool += " " + std::to_string(h.id) + "(" + (h.in_hand ? "hand" : "bf")
-                              + ",s=" + std::to_string(h.score) + ")";
-                    }
-                    std::fprintf(stderr, "[equip-pick] %s -> host %d (score %d) | pool:%s\n",
+                    std::fprintf(stderr, "[equip-pick] %s -> haste host %d | rider host %d (delta %d)\n",
                                  equips[e].second->m_name.str().c_str(),
-                                 ranked[0].second, ranked[0].first, pool.c_str());
+                                 ranked.empty() ? 0 : ranked[0].second,
+                                 ranked_rider.empty() ? 0 : ranked_rider[0].second,
+                                 ranked_rider.empty() ? 0 : ranked_rider[0].first);
                 }
                 for (const Host& h : hosts)
                 {
                     if (attached_to[e] == h.id && h.id != 0) { continue; }   // already attached: no-op
                     if (equips[e].second->m_number == h.id)  { continue; }   // never self
-                    // Offer only an equip that actually DOES something. The equipment model has
-                    // exactly ONE modeled effect today -- equip_grants_haste (Lightning Greaves'
-                    // shroud is documented-inert vs the passive opponent, and no equipment carries a
-                    // P/T or other rider) -- so a pair whose host is already able to act, or already
-                    // hasty, is a literal no-op that the rollout scores as a pass.
-                    //
-                    // Emitting them anyway is what made Greaves the deck's worst search atom: every
-                    // controlled creature plus every hand creature became an option in ONE
-                    // mutually-exclusive group, so a wide board multiplied the ENTIRE plan odometer by
-                    // (1 + #hosts). Seed 2044 game 42 hit a 13-option Greaves group -- 2.55e9 odometer
-                    // positions, 84% of them Greaves-driven, 161 s for a single game (see
-                    // docs/design/fivecolour-search-cost.md). The stranded-equip subset guard could not
-                    // help: it rejects a position AFTER the odometer has already produced it.
-                    //
-                    // MAINTENANCE BREADCRUMB: when equipment gains a P/T rider (or any effect beyond
-                    // haste), widen this predicate -- otherwise those equips silently stop being
-                    // offered. MTG_EQUIP_ALL_HOSTS=1 restores the old emit-every-pair behaviour for A/B.
-                    static const bool s_all_hosts = EnvOn("MTG_EQUIP_ALL_HOSTS");
-                    const bool grants_something = ed->params.equip_grants_haste && h.fresh && !h.haste;
-                    if (!grants_something && !s_all_hosts) { continue; }
-                    if (!s_all_hosts)
+                    // LEGALITY first (never bypassed, even open_all): equip_min_power (O-Naginata)
+                    // is a rule, not a prune.
+                    const int rd = rider_delta(ed, h.id);
+                    if (rd < 0) { continue; }
+                    const bool haste_benefit = ed->params.equip_grants_haste && h.fresh && !h.haste;
+                    if (!open_all)
                     {
+                        // Offer only an equip that DOES something, from the width-capped rankings
+                        // (see the width-policy note above; the odometer blowup precedent lives in
+                        // docs/design/fivecolour-search-cost.md).
                         bool kept = false;
                         for (const std::pair<int, int>& r : ranked)
                         { if (r.second == h.id) { kept = true; break; } }
-                        if (!kept) { continue; }   // outside the top-width heuristic pick
+                        if (!kept)
+                        {
+                            for (const std::pair<int, int>& r : ranked_rider)
+                            { if (r.second == h.id) { kept = true; break; } }
+                        }
+                        if (!kept) { continue; }
                     }
                     Action a;
                     a.kind           = Action::Kind::Equip;
                     a.card_name      = equips[e].second->m_name;
                     a.hand_index     = -1;
                     a.cost           = ManaCost{};
-                    a.cost.generic   = ed->params.equip_cost_generic;
+                    // Metalcraft (Puresteel Paladin): the cost IN EFFECT now. Conservative on a
+                    // same-turn flip (a plan casting artifact #3 still sees the printed cost at
+                    // enumeration); the apply sites recompute, so payment is never wrong -- only
+                    // cheaper. Disclosed 6a as a known conservative bound.
+                    a.cost.generic   = EquipCostGenericNow(state, state.active_player_index, *ed);
                     a.sac_source_id  = equips[e].second->m_number;
                     a.sac_victim_id  = h.id;
-                    // Haste onto a fresh creature = enabling a whole attack; anything else is a
-                    // repositioning nicety the search can still take.
-                    a.eval           = (ed->params.equip_grants_haste && h.fresh && !h.haste) ? DMG : 1;
+                    // Haste onto a fresh creature enables a whole attack; a rider attach is worth
+                    // its realized damage delta; anything else is a repositioning nicety.
+                    a.eval           = haste_benefit ? DMG : (rd > 0 ? rd : 1);
                     a.is_noncreature = true;
                     actions.push_back(std::move(a));
                 }
@@ -4426,6 +4561,122 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.is_noncreature = true;
                     actions.push_back(std::move(a));
                 }
+            }
+        }
+
+        // Balan, Wandering Knight: "{1}{W}: Attach all Equipment you control to Balan." One action
+        // per Balan (legend rule keeps it to one); gated on >= 1 controlled Equipment not already
+        // attached to him -- a strict no-op activation is identical-minus-mana, lossless to skip.
+        // No {T}; usable while summoning-sick; instant speed collapsed to the main phase
+        // (approved). The apply routes each equipment through the shared ApplyEquip, so Grafted
+        // Wargear's re-host sacrifice fires and equip costs are bypassed (Balan's whole point
+        // with Colossus Hammer: {1}{W} instead of equip {8}).
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || !pd->params.attach_all_equipment_cost.has_value()) { continue; }
+            bool movable = false;
+            for (const Permanent& e : state.battlefield)
+            {
+                if (e.controller_index != state.active_player_index) { continue; }
+                if (e.equipped_to == p.card.m_number) { continue; }
+                const CardDefinition* edf = CardDatabase::Instance().LookupCached(e.card);
+                if (edf && edf->params.is_equipment) { movable = true; break; }
+            }
+            if (!movable) { continue; }
+            Action a;
+            a.kind           = Action::Kind::AttachAllEquipment;
+            a.card_name      = p.card.m_name;
+            a.hand_index     = -1;
+            a.cost           = *pd->params.attach_all_equipment_cost;
+            a.sac_source_id  = p.card.m_number;
+            a.eval           = DMG;   // mass-attach is a clock play (ds threshold + every bonus)
+            a.is_noncreature = true;
+            actions.push_back(std::move(a));
+        }
+
+        // Stoneforge Mystic ability 2 ("{1}{W}, {T}: put an Equipment card from your hand onto
+        // the battlefield"): one variant per (untapped CanTapNow source, DISTINCT matching hand
+        // card name) -- per the core invariant every distinct put is a real branch, copies are
+        // fungible. Variants of one source are mutually exclusive via sac_source_id (shared {T}).
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || !pd->params.tap_put_from_hand_cost.has_value()) { continue; }
+            if (!CanTapNow(p, state.battlefield)) { continue; }
+            std::unordered_set<std::string> seen_put;
+            for (const Card& c : ap.hand)
+            {
+                if (c.m_is_staged) { continue; }   // impulse-exiled: "from your hand" cannot reach
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+                const Card& hc = hd ? hd->card : c;
+                bool match = false;
+                for (const std::string& t : pd->params.tap_put_from_hand_types)
+                { if (CardMatchesTypeName(hc, t)) { match = true; break; } }
+                if (!match) { continue; }
+                if (!seen_put.insert(c.m_name.str()).second) { continue; }
+                Action a;
+                a.kind           = Action::Kind::PutFromHandAbility;
+                a.card_name      = c.m_name;          // the PUT card; the source rides sac_source_id
+                a.hand_index     = -1;                // resolved by name at apply (hand shifts)
+                a.cost           = *pd->params.tap_put_from_hand_cost;
+                a.sac_source_id  = p.card.m_number;
+                // Worth roughly the mana the put saves (cast cost vs ability cost), floor 1 --
+                // the real value (a free Hammer body on board for the Skyhunter/Balan lines) is
+                // realized by the rollout, not this ordering hint.
+                a.eval           = std::max(1, hc.m_mana_cost.ManaValue()
+                                               - a.cost.ManaValue());
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
+            }
+        }
+
+        // Umezawa's Jitte non-combat modes (user-directed 2026-08-13: implemented, not deferred).
+        // "Remove a charge counter: target creature gets -1/-1 until end of turn" -- one variant
+        // per OPPONENT creature (own-creature targets are strictly bad and pruned; human play
+        // opens them so the viewer never narrows a legal choice) -- and "you gain 2 life". The
+        // +2/+2 combat pump is NOT enumerated here; it is spent inside combat (JitteDamageMath).
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            if (p.charge_counters <= 0) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || !pd->params.is_equipment
+                || pd->params.equip_combat_damage_charges <= 0) { continue; }
+            if (pd->params.charge_minus_power != 0 || pd->params.charge_minus_tough != 0)
+            {
+                const bool open_own = HumanPlayActive();
+                for (const Permanent& t : state.battlefield)
+                {
+                    if (!t.card.IsCreature() && !t.is_animated) { continue; }
+                    if (t.controller_index == state.active_player_index && !open_own) { continue; }
+                    Action a;
+                    a.kind           = Action::Kind::JitteModeAbility;
+                    a.card_name      = p.card.m_name;
+                    a.hand_index     = -1;
+                    a.cost           = ManaCost{};    // the cost is the counter
+                    a.sac_source_id  = p.card.m_number;
+                    a.sac_victim_id  = t.card.m_number;
+                    a.gy_exile_mode  = 1;             // -1/-1 mode
+                    a.eval           = 1;             // spawns never attack/block: near-zero payoff
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
+            if (pd->params.charge_lifegain > 0)
+            {
+                Action a;
+                a.kind           = Action::Kind::JitteModeAbility;
+                a.card_name      = p.card.m_name;
+                a.hand_index     = -1;
+                a.cost           = ManaCost{};
+                a.sac_source_id  = p.card.m_number;
+                a.gy_exile_mode  = 2;                 // gain-2-life mode
+                a.eval           = 1;                 // own life never under pressure here
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
             }
         }
 
@@ -4686,6 +4937,9 @@ static int ActivationFamilyKey(const Action& a)
         case Action::Kind::ActivateLoyalty:
         case Action::Kind::Equip:
         case Action::Kind::GraveyardExileAbility:
+        case Action::Kind::AttachAllEquipment:
+        case Action::Kind::PutFromHandAbility:   // shared {T}: one put per Stoneforge
+        case Action::Kind::JitteModeAbility:     // one counter-spend variant per Jitte per plan
             return (a.sac_source_id >= 0) ? -1000 - a.sac_source_id : 0;
         default:
             return 0;
@@ -8574,6 +8828,56 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
             }
         }
+        else if (def.tmpl == CardTemplate::Removal && def.params.tuck_to_library)
+        {
+            // Unexpectedly Absent (tuck removal). Autonomous target = the LARGEST opponent
+            // creature; the human may retarget onto ANY nonland permanent (incl. their own --
+            // the Stoneforge-reset line -- allow_self_target). Resolution mirrors
+            // EffectHandler::ResolveRemoval's tuck branch: a token ceases (CR 111.7), a real
+            // card inserts at min(chosen_x, library size); attachments fall off; no rider.
+            int ci = -1, best_pw = -1;
+            for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+            {
+                const Permanent& bp = state.battlefield[bi];
+                if (bp.controller_index == state.active_player_index) { continue; }
+                if (bp.card.IsLand()) { continue; }
+                const int pw = bp.EffectivePower();
+                if (pw > best_pw) { best_pw = pw; ci = bi; }
+            }
+            if (g_play_target_chooser)   // real human resolution only (nulled in rollouts)
+            {
+                std::vector<ChosenTarget> heur;
+                if (ci >= 0) { heur.push_back({ 1, ci, 0 }); }
+                std::vector<ChosenTarget> picked =
+                    (*g_play_target_chooser)(state, def, state.active_player_index, 1, 0, heur);
+                if (!picked.empty() && picked[0].kind == 1
+                    && picked[0].index >= 0
+                    && picked[0].index < static_cast<int>(state.battlefield.size())
+                    && !state.battlefield[picked[0].index].card.IsLand())
+                { ci = picked[0].index; }
+            }
+            if (ci >= 0)
+            {
+                const Permanent& tgt = state.battlefield[ci];
+                const int  dead_num  = tgt.card.m_number;
+                const bool is_tok    = tgt.is_token;
+                const Card tucked    = tgt.card;
+                const int  owner     = tgt.owner_index;
+                state.battlefield.erase(state.battlefield.begin() + ci);
+                if (!is_tok)
+                {
+                    Library& lib = state.players[owner].library;
+                    const int x   = std::max(0, chosen_x);
+                    const int pos = std::min<int>(x, static_cast<int>(lib.size()));
+                    lib.insert(lib.begin() + pos, tucked);
+                }
+                for (Permanent& e : state.battlefield)
+                {
+                    if (e.equipped_to      == dead_num) { e.equipped_to = 0; }
+                    if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
+                }
+            }
+        }
         else if (def.tmpl == CardTemplate::Removal)
         {
             // Removal (Swords to Plowshares): exile the opponent's LARGEST creature (max life loss via
@@ -8879,6 +9183,24 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (def.params.etb_opponent_lifegain > 0)
             {
                 OpponentGainsLife(state, state.active_player_index, def.params.etb_opponent_lifegain);
+            }
+            // Universal enter cascade for NONCREATURE permanents too (lockstep with the executor's
+            // EffectHandler::EnterBattlefield, which fires it on EVERY entry). Concretely: a cast
+            // Equipment must fire Puresteel Paladin's draw here, or the rollout's library runs
+            // ahead of the real game -- the seed-300018 fd-diverge (predicted_win=5 realized=6)
+            // was exactly this: the real T5 Greaves cast drew 2 cards (2 Puresteels), while the
+            // projection kept those cards in the library and dug a phantom Colossus Hammer off the
+            // top for +10 attack. No-op unless an enter-watcher/Dragon trigger exists -> every
+            // other deck byte-identical. Uses the saved slot, not back(): a cascade may push
+            // permanents (Lathliss), and the aura block above already relies on back() first.
+            {
+                const int nc_slot = static_cast<int>(state.battlefield.size()) - 1;
+                for (int bi = nc_slot; bi >= 0; --bi)
+                {
+                    if (state.battlefield[bi].card.m_number == cast_number
+                        && state.battlefield[bi].controller_index == state.active_player_index)
+                    { OnDragonEnters(state, state.active_player_index, bi); break; }
+                }
             }
             // Legend rule (CR 704.5j, a state-based action) for a legendary NON-creature permanent
             // too, so this branch matches both the creature branch above and the executor's single
@@ -9284,12 +9606,36 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             { ApplyGraveyardExileAbility(state, state.active_player_index, a.sac_source_id, a.gy_exile_mode); }
         }
+        else if (a.kind == Action::Kind::AttachAllEquipment)
+        {
+            // Balan: pay {1}{W}, then mass-attach through the shared ApplyEquip (Wargear sac
+            // fires; stranded-outlet safe if Balan left the battlefield).
+            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            { ApplyAttachAllEquipment(state, state.active_player_index, a.sac_source_id); }
+        }
+        else if (a.kind == Action::Kind::PutFromHandAbility)
+        {
+            // Stoneforge put: pay {1}{W}, then tap + move the named hand card onto the
+            // battlefield through the shared enter cascade (stranded-outlet safe).
+            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            { ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str()); }
+        }
+        else if (a.kind == Action::Kind::JitteModeAbility)
+        {
+            // Jitte -1/-1 / lifegain: the cost is the counter, spent inside the apply.
+            ApplyJitteMode(state, state.active_player_index, a.sac_source_id,
+                           a.gy_exile_mode, a.sac_victim_id);
+        }
         else if (a.kind == Action::Kind::Equip)
         {
             // Skip one the mana-unlock hoist already fired mid-casts -- it is attached to this exact
-            // host already, so re-firing would pay the equip cost a second time.
+            // host already, so re-firing would pay the equip cost a second time. Cost recomputed at
+            // payment (metalcraft can flip mid-plan -- see EquipActionCostNow).
             if (!EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
-                && TapForCostDirect(state, a.cost, /*for_creature=*/false))
+                && TapForCostDirect(state,
+                                    EquipActionCostNow(state, state.active_player_index,
+                                                       a.sac_source_id, a.cost),
+                                    /*for_creature=*/false))
             { ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
         }
         else if (a.kind == Action::Kind::ActivateLoyalty)
@@ -9566,6 +9912,11 @@ static void SimulateCombat(GameState& state)
         else          { ApplyFirebreathing(state, active, atk_idx, AvailableManaPool(state), fb_k); }
     }
 
+    // Armored Skyhunter attack-trigger dig-and-attach: fired AFTER attack pumps/draws and BEFORE
+    // the damage loop reads power. Mirrors GameEngine::CombatPhase (lockstep); the human choosers
+    // inside are nulled by RevealLogPause, so rollouts always take the provider picks.
+    FireAttackDigAttach(state, active, atk_idx);
+
     // Damage, attack triggers, Utvara tokens and the Goblin Lackey cheat are shared with the
     // executor (ResolveCombatDamage, Combat.cpp). The rollout wants no play-viewer descriptions.
     ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/false);
@@ -9820,13 +10171,24 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (state.battlefield[i].controller_index != state.active_player_index) { continue; }
         const CardDefinition* def =
             CardDatabase::Instance().LookupCached(state.battlefield[i].card);
-        if (!def || def->params.upkeep_creates_tokens <= 0) { continue; }
-        for (int t = 0; t < def->params.upkeep_creates_tokens; ++t)
+        if (!def) { continue; }
+        // Fixed count (Thrumming Hivepool) or one per Equipment attached to THIS permanent
+        // (Kemba, Kha Regent). Snapshot before CreateToken (push_back invalidates references).
+        // Mirrors GameEngine::UpkeepStep (lockstep) -- the search values equip-Kemba lines
+        // because this rollout block realizes the future Cats.
+        int count = def->params.upkeep_creates_tokens;
+        if (def->params.upkeep_tokens_per_equipment)
         {
-            CreateToken(state, state.active_player_index,
-                        def->params.upkeep_token_power,
-                        def->params.upkeep_token_toughness,
-                        def->params.upkeep_token_subtypes);
+            count += CountEquipmentAttachedTo(state, state.battlefield[i].controller_index,
+                                              state.battlefield[i].card.m_number);
+        }
+        if (count <= 0) { continue; }
+        const int tok_p = def->params.upkeep_token_power;
+        const int tok_t = def->params.upkeep_token_toughness;
+        const std::vector<std::string> tok_subs = def->params.upkeep_token_subtypes;
+        for (int t = 0; t < count; ++t)
+        {
+            CreateToken(state, state.active_player_index, tok_p, tok_t, tok_subs);
         }
     }
 
@@ -11493,6 +11855,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 case Action::Kind::GarthActivate:
                     msf.push_back("GARTH#" + std::to_string(act.sac_source_id)
                                   + "#" + act.tutor_target); break;
+                // Balan attach-all: which Balan (legend rule -> effectively one).
+                case Action::Kind::AttachAllEquipment:
+                    msf.push_back("BALAN#" + std::to_string(act.sac_source_id)); break;
+                // Stoneforge put: which source AND which card are distinct decisions
+                // (the enchant_target dedup lesson -- variants differing only in the put card
+                // must not collapse in human play or the search).
+                case Action::Kind::PutFromHandAbility:
+                    msf.push_back("SFPUT#" + std::to_string(act.sac_source_id)
+                                  + "#" + act.card_name); break;
+                // Jitte mode: which Jitte, which mode, which target.
+                case Action::Kind::JitteModeAbility:
+                    msf.push_back("JITTE#" + std::to_string(act.sac_source_id)
+                                  + "m" + std::to_string(act.gy_exile_mode)
+                                  + ">" + std::to_string(act.sac_victim_id)); break;
             }
         }
         std::sort(v.begin(), v.end());
@@ -16899,7 +17275,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // casts) is NOT a pass -- those are real actions committed via their own verbs.
     if (spec.pass || (!spec.has_land && spec.casts.empty() && spec.lands_edge == 0 &&
                       spec.vial_deploys.empty() && spec.retrace_casts.empty() &&
-                      spec.sac_outlets.empty()))
+                      spec.sac_outlets.empty() && spec.attach_all.empty() &&
+                      spec.sf_puts.empty() && spec.jitte_modes.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -16919,6 +17296,17 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // that multiset; if not, legacy matching applies (SacForMana implicit via planSacs,
     // SacCreatureOutlet inside the ordinary `cast=` multiset) so saved references are unaffected.
     const bool sacout_declared = !spec.sac_outlets.empty();
+    // KittyEquipment activations, same declared-vs-legacy split (legacy = the action's card name
+    // matches inside the ordinary cast multiset, like Equip always has).
+    std::vector<std::string> sortedAttachAll = spec.attach_all;
+    std::sort(sortedAttachAll.begin(), sortedAttachAll.end());
+    std::vector<std::string> sortedSfPut = spec.sf_puts;
+    std::sort(sortedSfPut.begin(), sortedSfPut.end());
+    std::vector<int> sortedJitteModes = spec.jitte_modes;
+    std::sort(sortedJitteModes.begin(), sortedJitteModes.end());
+    const bool attachall_declared = !spec.attach_all.empty();
+    const bool sfput_declared     = !spec.sf_puts.empty();
+    const bool jitte_declared     = !spec.jitte_modes.empty();
 
     // --- 1) Does the line match a plan (or several variants) the model would play? ----
     // A "match" is same land + same multiset of cast card names. Several enumerated plans can
@@ -16955,6 +17343,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         //                         prefers the no-sac plan (saving the one-shot source; see the pool sort).
         int planLE = 0, planSacs = 0;
         std::vector<std::string> orderNames, vialNames, retraceNames, sacOutNames;
+        std::vector<std::string> attachAllNames, sfPutNames;
+        std::vector<int> jitteModes;
         for (const Action& a : p.actions)
         {
             if (a.kind == Action::Kind::DiscardToLandsEdge) { planLE += a.discard_lands; continue; }
@@ -16971,6 +17361,14 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                 continue;
             }
             if (a.kind == Action::Kind::SacForMana)         { ++planSacs; continue; }
+            // KittyEquipment activations: matched against their own verbs when declared, else
+            // by card name in the ordinary cast multiset (the legacy Equip behaviour).
+            if (attachall_declared && a.kind == Action::Kind::AttachAllEquipment)
+            { attachAllNames.push_back(a.card_name); continue; }
+            if (sfput_declared && a.kind == Action::Kind::PutFromHandAbility)
+            { sfPutNames.push_back(a.card_name); continue; }
+            if (jitte_declared && a.kind == Action::Kind::JitteModeAbility)
+            { jitteModes.push_back(a.gy_exile_mode); continue; }
             orderNames.push_back(a.card_name);
         }
         if (planLE != spec.lands_edge) { continue; }
@@ -16979,6 +17377,24 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             std::vector<std::string> sortedSacNames = sacOutNames;
             std::sort(sortedSacNames.begin(), sortedSacNames.end());
             if (sortedSacNames != sortedSacOut) { continue; }
+        }
+        if (attachall_declared)
+        {
+            std::vector<std::string> v2 = attachAllNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedAttachAll) { continue; }
+        }
+        if (sfput_declared)
+        {
+            std::vector<std::string> v2 = sfPutNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedSfPut) { continue; }
+        }
+        if (jitte_declared)
+        {
+            std::vector<int> v2 = jitteModes;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedJitteModes) { continue; }
         }
         std::vector<std::string> sortedNames = orderNames;
         std::sort(sortedNames.begin(), sortedNames.end());

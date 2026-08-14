@@ -65,6 +65,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"saclandhold",UnprunedGate::SacLandHold},
     {"tricktarget",UnprunedGate::TrickTarget},
     {"treasuretrickcast",UnprunedGate::TreasureTrickCast},
+    {"equiphost",  UnprunedGate::EquipHost},
 };
 
 const char* GateName(UnprunedGate g)
@@ -474,6 +475,70 @@ std::vector<int> DecisionProvider::EtbDigCandidates(
     const std::vector<int>& legal) const
 {
     return legal;
+}
+
+// Armored Skyhunter attack-dig put pick (see the DecisionProvider.h note). Rank the legal
+// Aura/Equipment cards by the flat power they would grant -- equip_power_bonus for Equipment,
+// aura_power_bonus for an Aura -- descending, ties to lower index (library order). Colossus
+// Hammer (+10) therefore tops any pool it appears in, which is the deck's real line.
+std::vector<int> DecisionProvider::AttackDigPutCandidates(
+    const GameState& /*s*/, int /*controller*/,
+    const std::vector<Card>& examined, const std::vector<int>& legal) const
+{
+    std::vector<int> ranked = legal;
+    auto grant = [&](int i) -> int {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(examined[i]);
+        if (d == nullptr) { return 0; }
+        if (d->params.is_equipment) { return d->params.equip_power_bonus; }
+        if (d->params.is_aura)      { return d->params.aura_power_bonus; }
+        return 0;
+    };
+    std::stable_sort(ranked.begin(), ranked.end(),
+                     [&](int a, int b) { return grant(a) > grant(b); });
+    return ranked;
+}
+
+// Armored Skyhunter attach-host pick (see the DecisionProvider.h note): the ATTACKER whose
+// realized damage this combat rises the most once the equipment lands on it. ds_after counts
+// the incoming equipment (a bare Kor Duelist flips to double strike; Balan may cross his 2-
+// equipment threshold), and equip_min_power (O-Naginata) filters illegal hosts. A non-attacker
+// realizes nothing this combat, so attackers-only is the value-greedy default; the human
+// chooser in the viewer may attach anywhere.
+int DecisionProvider::AttackDigAttachHost(
+    const GameState& s, int /*controller*/, const Card& equip_card,
+    const std::vector<int>& attacker_bf_indices) const
+{
+    const CardDefinition* ed = CardDatabase::Instance().LookupCached(equip_card);
+    if (ed == nullptr || !ed->params.is_equipment) { return 0; }
+    int best_num = 0, best_delta = -1;
+    for (int idx : attacker_bf_indices)
+    {
+        if (idx < 0 || idx >= static_cast<int>(s.battlefield.size())) { continue; }
+        const Permanent& h = s.battlefield[idx];
+        if (!h.card.IsCreature() && !h.is_animated) { continue; }
+        const int pw_now = EquipGatePowerOf(h, s);
+        if (ed->params.equip_min_power > 0 && pw_now < ed->params.equip_min_power) { continue; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h.card);
+        const int  n_now    = CountEquipmentAttachedTo(s, h.controller_index, h.card.m_number);
+        const bool ds_now   = h.card.HasKeyword(Keyword::DoubleStrike)
+                           || HasDoubleStrikeFromEquipment(h, s);
+        bool ds_after = ds_now;
+        if (hd != nullptr)
+        {
+            if (hd->params.double_strike_while_equipped && n_now + 1 >= 1) { ds_after = true; }
+            if (hd->params.double_strike_min_equipment > 0
+                && n_now + 1 >= hd->params.double_strike_min_equipment) { ds_after = true; }
+        }
+        const int delta = (pw_now + ed->params.equip_power_bonus) * (ds_after ? 2 : 1)
+                        - pw_now * (ds_now ? 2 : 1);
+        if (delta > best_delta
+            || (delta == best_delta && best_num != 0 && h.card.m_number < best_num))
+        {
+            best_delta = delta;
+            best_num   = h.card.m_number;
+        }
+    }
+    return best_num;
 }
 
 // ---- Base rules for the remaining ported built-ins -------------------------------------------
@@ -929,14 +994,31 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
     return 20;
 }
 
-std::vector<int> GenericProvider::XCandidates(const GameState&, const CardDefinition&,
+std::vector<int> GenericProvider::XCandidates(const GameState& s, const CardDefinition& def,
                                               int max_affordable) const
 {
+    // Tuck removal (Unexpectedly Absent): the INVERSE of the max-X rule below. X buries the
+    // target deeper in its owner's library -- vs this sim's passive opponent the tucked spawn
+    // never returns regardless (its owner draws nothing), and a self-tuck wants the EARLIEST
+    // redraw -- so a higher X is never better for either use and only wastes mana. X = 0 is
+    // legal ({X}{W}{W} with X=0) and always optimal; unpruned/human play opens the full range.
+    if (def.params.tuck_to_library)
+    {
+        if (DecisionUnpruned(UnprunedGate::XSpell) || HumanPlayActive())
+        {
+            std::vector<int> all;
+            all.reserve(static_cast<std::size_t>(std::max(0, max_affordable)) + 1);
+            for (int x = 0; x <= max_affordable; ++x) { all.push_back(x); }
+            return all;
+        }
+        return { 0 };
+    }
     // See DecisionProvider::XCandidates. In a goldfish, an {X} spell (X burn, X draw, X pump)
     // wants all available mana: a larger X is never worse for closing the game. So the prune
     // proposes the single max-affordable value -- no branching. MTG_UNPRUNED opens the full
     // 1..max range so the unpruned-vs-pruned A/B can confirm the prune leaves nothing behind
     // (e.g. a turn where holding mana for a second spell beats max-X). Empty when X must be 0.
+    (void)s;
     if (max_affordable <= 0) { return {}; }
     if (DecisionUnpruned(UnprunedGate::XSpell))
     {
@@ -6245,6 +6327,7 @@ namespace
     const CreatureGivingProvider g_creature_giving;
     const FiveColourProvider     g_fivecolour;
     const MirrorwingProvider     g_mirrorwing;
+    const EquipmentProvider      g_equipment;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -6257,7 +6340,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
-    bool goblin = false, gift = false, fivec = false, mirrorwing = false;
+    bool goblin = false, gift = false, fivec = false, mirrorwing = false, equipment = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -6308,6 +6391,19 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // below and docs/design/fivecolour-search-cost.md section 6.
         if (p.domain_mana) { fivec = true; }
 
+        // Equipment aggro (KittyEquipment): any equipment-deck gated param marks the deck.
+        // Stoneforge Mystic carries tutor_to_hand, which would otherwise trip the anti-lifegain
+        // signature below and misroute the whole deck to AntiLifegainProvider (the Goblin-Matron
+        // misroute class). Every field here is new + gated (0/false/empty inert), so only a deck
+        // carrying the new equipment params sets this -- all existing decks are byte-identical.
+        if (p.attack_dig_attach_count > 0 || p.equip_combat_damage_charges > 0
+            || p.tap_put_from_hand_cost.has_value() || p.attach_all_equipment_cost.has_value()
+            || p.metalcraft_equip_zero_artifacts || p.draw_on_equipment_etb
+            || p.upkeep_tokens_per_equipment > 0 || p.double_strike_while_equipped)
+        {
+            equipment = true;
+        }
+
         if (p.lifegain_to_loss || p.verse_damage || p.alt_lifegain_cost > 0
             || p.tutor_to_hand || p.tutor_to_top || !p.fetch_land_types.empty())
         {
@@ -6356,6 +6452,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Matron tutor width (12, -0.0620 held-out). It derives from GenericProvider and overrides only
     // those, so every other decision still resolves through exactly the code this deck used before.
     if (goblin) { return g_goblins; }
+    // Equipment aggro; must WIN OVER anti (Stoneforge Mystic's tutor_to_hand sets that signature
+    // on its own -- see the equipment detection note above). No other deck carries the equipment
+    // gated params, so exclusivity is preserved.
+    if (equipment) { return g_equipment; }
     // Creature Giving; must WIN OVER anti (see the gift detection note above).
     if (gift) { return g_creature_giving; }
     // FiveColour; must WIN OVER anti (its fetchlands set that signature on their own -- see the

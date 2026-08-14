@@ -261,6 +261,15 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 tag = a.card_name + (a.gy_exile_mode == 1 ? ": exile instant/sorcery (drain 2)"
                                                           : ": exile creature (gain 2)");
                 break;
+            case Action::Kind::AttachAllEquipment:
+                tag = a.card_name + ": attach all Equipment"; break;
+            case Action::Kind::PutFromHandAbility:
+                tag = "put " + a.card_name + " onto battlefield (Stoneforge)"; break;
+            case Action::Kind::JitteModeAbility:
+                tag = a.card_name + (a.gy_exile_mode == 1
+                        ? ": -1/-1 \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id)
+                        : std::string(": gain 2 life"));
+                break;
             // Sac outlets (Skirk Prospector "Sacrifice a Goblin: Add {R}", Siege-Gang, Pashalik):
             // a battlefield ACTIVATION, and the sac COUNT is the whole difference between two
             // otherwise identical menu entries -- a 1-sac and a 3-sac Skirk read the same without
@@ -1281,7 +1290,20 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
         os << "{ \"index\": " << i << ", \"legal\": " << (is_legal[i] ? "true" : "false")
            << ", \"name\": "; JsonStr(os, examined[i].m_name.str()); os << " }";
     });
-    d.Note("reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick.");
+    // The shared dig chooser serves two destinations: ETB digs put the pick INTO HAND
+    // (Acclaimed Contender), the Skyhunter attack-dig puts it ONTO THE BATTLEFIELD (and the
+    // attach follows as its own attach_host decision). Say the right one -- the 5d sweep
+    // flagged the fixed into-hand wording as contradicting Skyhunter's oracle text.
+    if (source.find("(attack dig)") != std::string::npos)
+    {
+        d.Note("reply an examined index to put that card onto the battlefield (attaching is the "
+               "next decision), or -1 to take nothing. Default = the AI's pick.");
+    }
+    else
+    {
+        d.Note("reply an examined index to put that card into your hand, or -1 to take nothing. "
+               "Default = the AI's pick.");
+    }
 }
 
 // Light-Paws tutor-attach decision (Light-Paws, Emperor's Voice): the player picks WHICH library Aura
@@ -1533,6 +1555,49 @@ static void WriteReplicateDecisionJson(std::ostream& os, const GameState& s, con
            + "); each pays the replicate cost again to make a token copy. Default = replicate the maximum.");
 }
 
+// Attach-host decision (Armored Skyhunter): the attack-dig put an Equipment onto the
+// battlefield; the player picks WHICH controlled creature it attaches to (board-click, like the
+// bounce picker), or -1 to leave it unattached. Rides the positional --choices stream (the
+// trigger fires in chronological decision order).
+static void WriteAttachHostDecisionJson(std::ostream& os, const GameState& s,
+                                        const std::string& source,
+                                        const std::vector<int>& legal, int heuristic_default,
+                                        int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    d.Type("attach_host").Source(source).Turn(s.turn_number)
+     .Board(s).HeuristicDefault(heuristic_default);
+    d.Array("options", legal.size(), [&](std::size_t i)
+    {
+        const Permanent& p = s.battlefield[legal[i]];
+        os << "{ \"index\": " << i << ", \"perm_index\": " << legal[i] << ", \"name\": ";
+        JsonStr(os, p.card.m_name.str());
+        os << ", \"label\": "; JsonStr(os, p.card.m_name.str()); os << " }";
+    });
+    d.Note("reply an option index -- the creature to attach the put Equipment to, or -1 to "
+           "leave it unattached. Default = the AI's pick (best attacker).");
+}
+
+// Jitte counter-spend decision (Umezawa's Jitte): at combat, how many charge counters to spend
+// on +2/+2 for this attacker. Reply = count in [0, max_count]; -1/default = greedy spend-all
+// (incl. double-strike mid-step earnings). Rides the turn-keyed --jitte side-channel, NOT
+// --choices (fires mid-combat; existing references replay byte-identically as greedy).
+static void WriteJitteDecisionJson(std::ostream& os, const GameState& s,
+                                   const std::vector<int>& attacker_indices,
+                                   int max_count, int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    d.Type("jitte").Turn(s.turn_number).Board(s)
+     .Int("max_count", max_count).HeuristicDefault(max_count);
+    d.Array("attackers", attacker_indices.size(), [&](std::size_t j)
+    {
+        const Permanent& p = s.battlefield[attacker_indices[j]];
+        os << "{ \"name\": "; JsonStr(os, p.card.m_name.str()); os << " }";
+    });
+    d.Note("reply how many Jitte charge counters to spend pre-strike on +2/+2 (0..max_count), "
+           "or -1 for the greedy default (spend all, incl. double-strike mid-step earnings).");
+}
+
 // Firebreathe-amount decision (#4): at combat, how many pump ACTIVATIONS to buy with leftover mana
 // (Scourge {R}:+1/+0 self, Lathliss {1}{R}: team +1/+0). Reply = count in [0, max_count]; default =
 // max (the current greedy spend). Rides the turn-keyed --firebreathe side-channel, NOT --choices.
@@ -1630,6 +1695,9 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "vial")      { ls.vial_deploys.push_back(val); }
         else if (key == "retrace")   { ls.retrace_casts.push_back(val); }
         else if (key == "sacout")    { ls.sac_outlets.push_back(val); }   // one token per activation
+        else if (key == "attachall") { ls.attach_all.push_back(val); }    // Balan attach-all
+        else if (key == "sfput")     { ls.sf_puts.push_back(val); }       // Stoneforge put (card name)
+        else if (key == "jittemode") { ls.jitte_modes.push_back(std::atoi(val.c_str())); }
     }
     return ls;
 }
@@ -1742,6 +1810,8 @@ g_play_free_cast_chooser = nullptr;
 g_play_tutor_chooser = nullptr;
 g_play_lightpaws_chooser = nullptr;
 g_play_firebreathe_chooser = nullptr;
+g_play_jitte_chooser = nullptr;
+g_play_attach_host_chooser = nullptr;
 g_play_cast_order_chooser = nullptr;
 g_play_storage_hold_chooser = nullptr;
 g_play_draw_sink = nullptr;
@@ -1896,8 +1966,10 @@ struct ClaudePlayHarness
     std::map<int, int>                      firebreathe_by_turn;
     std::map<int, std::vector<std::string>> cast_order_by_main;
     std::map<std::pair<int, int>, bool>     storage_hold_by_land;
+    std::map<int, int>                      jitte_by_turn;   // Umezawa's Jitte counter-spend
     bool firebreathe_prompt  = false;
     bool storage_hold_prompt = false;
+    bool jitte_prompt        = false;
 
     // ---- the chooser objects themselves; the engine holds their addresses ----
     TopChooser            top_chooser;
@@ -1916,6 +1988,8 @@ struct ClaudePlayHarness
     RetraceDiscardChooser retrace_chooser;
     ReplicateChooser      replicate_chooser;
     FirebreatheChooser    firebreathe_chooser;
+    FirebreatheChooser    jitte_chooser;        // Umezawa's Jitte counter-spend (same shape)
+    BounceChooser         attach_host_chooser;  // Skyhunter attach-host (same shape as bounce)
     CastOrderChooser      cast_order_chooser;
     StorageHoldChooser    storage_hold_chooser;
     LandEntryChooser      land_entry_chooser;
@@ -2861,6 +2935,70 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
         };
     if (firebreathe_prompt || !firebreathe_by_turn.empty()) { g_play_firebreathe_chooser = &firebreathe_chooser; }
 
+    // Umezawa's Jitte counter-spend: same shape and side-channel discipline as firebreathe
+    // (turn-keyed --jitte "turn:count,...", or live prompting via --jitte-prompt). Left null
+    // otherwise -> the combat core's greedy spend-all stands (reference replay / autonomous).
+    jitte_chooser =
+        [this](const GameState& s, int controller, const std::vector<int>& attackers, int max_count) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);   // informational decision_index for the JSON/trace
+            auto it = jitte_by_turn.find(s.turn_number);
+            if (it != jitte_by_turn.end())
+            {
+                int chosen = it->second;
+                if (chosen < 0 || chosen > max_count) { chosen = max_count; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteJitteDecisionJson(ss, s, attackers, max_count, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            if (!jitte_prompt) { return -1; }   // reference replay / autonomous -> greedy default
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteJitteDecisionJson(std::cout, s, attackers, max_count, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    if (jitte_prompt || !jitte_by_turn.empty()) { g_play_jitte_chooser = &jitte_chooser; }
+
+    // Skyhunter attach-host: which controlled creature the attack-dig's put Equipment attaches
+    // to. Rides the positional --choices stream (chronological), exactly like the bounce picker.
+    attach_host_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+            const std::vector<int>& legal, int heuristic_pick) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen != -1 && (chosen < 0 || chosen >= static_cast<int>(legal.size())))
+                { chosen = heuristic_pick; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteAttachHostDecisionJson(ss, s, source, legal, heuristic_pick, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteAttachHostDecisionJson(std::cout, s, source, legal, heuristic_pick, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_attach_host_chooser = &attach_host_chooser;
+
     // #10 Cast-order: the human-pinned execution order of a committed main plan's non-sacrifice hand
     // casts. Rides a MAIN-PHASE-ORDINAL-keyed side-channel (--cast-order "<ord>:A|B|C;<ord>:X|Y"),
     // NOT the positional --choices cursor -- the ordinal is the Nth main-phase decision (0-based),
@@ -3036,7 +3174,9 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          bool firebreathe_prompt = false,
                          const std::string& cast_order_spec = "",
                          const std::string& storage_hold_spec = "",
-                         bool storage_hold_prompt = false)
+                         bool storage_hold_prompt = false,
+                         const std::string& jitte_spec = "",
+                         bool jitte_prompt = false)
 {
     GameState state = GoldFishRunner::SetupGame(deck, seed);
     state.vial_target_mv = profile.vial_target_mv;
@@ -3072,6 +3212,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     h.storage_hold_by_land = ParseStorageHoldSpec(storage_hold_spec);
     h.firebreathe_prompt   = firebreathe_prompt;
     h.storage_hold_prompt  = storage_hold_prompt;
+    h.jitte_by_turn        = ParseFirebreatheSpec(jitte_spec);   // same "turn:count" format
+    h.jitte_prompt         = jitte_prompt;
     h.Install(ai);
 
     GameEngine engine(ai);
@@ -3732,6 +3874,8 @@ int main(int argc, char* argv[])
     std::string choices_str;          // comma-separated plan indices for --claude-play
     std::string firebreathe_str;      // #4: "turn:count,..." firebreathe-amount side-channel (turn-keyed)
     bool firebreathe_prompt = false;  // #4: --firebreathe-prompt -> exit-70 to ask when a turn is unanswered
+    std::string jitte_str;            // Umezawa's Jitte: "turn:count,..." counter-spend side-channel
+    bool jitte_prompt = false;        // --jitte-prompt -> exit-70 to ask when a turn is unanswered
     std::string cast_order_str;       // #10: "<ord>:A|B|C;..." cast-order side-channel (main-ordinal-keyed)
     std::string storage_hold_str;     // #6: "turn:num:val,..." storage tap-vs-charge side-channel
     bool storage_hold_prompt = false; // #6: --storage-hold-prompt -> exit-70 to ask per charged storage land
@@ -3760,6 +3904,8 @@ int main(int argc, char* argv[])
         if (flag == "--ignore-play-profile") { ignore_play_profile = true; continue; }
         if (flag == "--eval-draw")           { eval_on_play = false; continue; }
         if (flag == "--storage-hold-prompt") { storage_hold_prompt = true; continue; }   // #6: value-less; parse regardless of position (the else-if chain below is gated on i+1<argc, so a trailing value-less flag would be dropped)
+        if (flag == "--firebreathe-prompt")  { firebreathe_prompt = true; continue; }    // #4: value-less, same trap as above
+        if (flag == "--jitte-prompt")        { jitte_prompt = true; continue; }          // Jitte spend: value-less, same trap as above
         try
         {
             if (i + 1 < argc)
@@ -3800,12 +3946,11 @@ int main(int argc, char* argv[])
                     // touches the positional --choices stream -> existing references replay unchanged.
                     firebreathe_str = argv[++i];
                 }
-                else if (flag == "--firebreathe-prompt")
+                else if (flag == "--jitte")
                 {
-                    // Live viewer mode: emit the firebreathe decision (exit 70) for any combat turn not
-                    // already answered in --firebreathe. Without this flag an unanswered turn falls back
-                    // to the greedy default (reference replay / autonomous), so the checks never exit-70.
-                    firebreathe_prompt = true;
+                    // Umezawa's Jitte counter-spend side-channel: "turn:count,..." (same format and
+                    // turn-keyed discipline as --firebreathe; references without it replay greedy).
+                    jitte_str = argv[++i];
                 }
                 else if (flag == "--cast-order")
                 {
@@ -4006,7 +4151,8 @@ int main(int argc, char* argv[])
             return RunClaudePlay(deck, profile, seed, base_game_index, max_turns,
                                  lookahead_depth, timeout_ms, choices, reveal_count, log_dir,
                                  validate_line, force_mulligan, firebreathe_str, firebreathe_prompt,
-                                 cast_order_str, storage_hold_str, storage_hold_prompt);
+                                 cast_order_str, storage_hold_str, storage_hold_prompt,
+                                 jitte_str, jitte_prompt);
         }
 
         // Forced-mulligan replay (isolates play from mulligan/bottoming): reconstruct a recorded

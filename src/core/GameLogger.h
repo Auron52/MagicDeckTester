@@ -286,6 +286,15 @@ extern thread_local BounceChooser* g_play_bounce_chooser;
 // graveyard and the viewer says "sacrifice" not "return". Nulled by RevealLogPause for search.
 extern thread_local BounceChooser* g_play_sacrifice_chooser;
 
+// ---- Human-play attach-host chooser (Armored Skyhunter's attack-dig attach) -----------------
+// The Skyhunter attack trigger may put an Equipment onto the battlefield and attach it to a
+// creature you control. WHICH card to put reuses the DIG chooser (examined cards + legal
+// indices, -1 declines); WHICH host it attaches to is this chooser -- same shape as the bounce
+// chooser (legal battlefield indices of candidate hosts + the heuristic's pick; returns the
+// chosen index into the list, or -1 to leave the equipment unattached). Nulled by
+// RevealLogPause for every search/rollout scope, so autonomous play is byte-identical.
+extern thread_local BounceChooser* g_play_attach_host_chooser;
+
 // ---- Human-play ETB-dig chooser (which examined card to put into hand) ------------------
 // An ETB "look at the top N, you may reveal a <type> and put it into your hand" (Acclaimed
 // Contender) digs for a matching card. Autonomously PerformEtbDig takes the FIRST match; under
@@ -376,6 +385,15 @@ extern thread_local ReplicateChooser* g_play_replicate_chooser;
 using FirebreatheChooser = std::function<int(const GameState& state, int controller,
     const std::vector<int>& attacker_indices, int max_activations)>;
 extern thread_local FirebreatheChooser* g_play_firebreathe_chooser;
+
+// ---- Human-play Jitte counter-spend chooser -----------------------------------------------------
+// Umezawa's Jitte: how many charge counters to spend on "+2/+2 until end of turn" for this
+// attacker's combat damage. Same shape as the firebreathe chooser (attacker indices + the greedy
+// max = the counters available); returns the chosen spend, or -1 for the greedy default. Fires at
+// most once per equipped attacker per combat, so like firebreathing it rides a TURN-keyed
+// side-channel, not the positional --choices stream -- existing references replay byte-identically
+// as greedy. Nulled by RevealLogPause so every search/rollout spends greedily.
+extern thread_local FirebreatheChooser* g_play_jitte_chooser;
 
 // ---- Human-play cast-ORDER chooser (#10) -------------------------------------------------------
 // After the human commits a main-phase plan, they may pin the ORDER its non-sacrifice hand casts
@@ -641,6 +659,8 @@ struct RevealLogPause
     CastOrderChooser* saved_cochooser;
     StorageHoldChooser* saved_shchooser;
     TutorChooser*       saved_tutorchooser;
+    BounceChooser*      saved_ahchooser;
+    FirebreatheChooser* saved_jitchooser;
     std::vector<PlayReveal>* saved_revealsink;
     bool saved_real;
     bool noop;   // fast path: nothing installed -> nothing to save/null/restore (see ctor)
@@ -666,7 +686,8 @@ struct RevealLogPause
             && g_play_sac_tutor_chooser == nullptr && g_play_lackey_chooser == nullptr
             && g_play_free_cast_chooser == nullptr && g_play_lightpaws_chooser == nullptr
             && g_play_firebreathe_chooser == nullptr && g_play_cast_order_chooser == nullptr
-            && g_play_storage_hold_chooser == nullptr && g_play_tutor_chooser == nullptr;
+            && g_play_storage_hold_chooser == nullptr && g_play_tutor_chooser == nullptr
+            && g_play_attach_host_chooser == nullptr && g_play_jitte_chooser == nullptr;
         if (noop) { return; }
         saved = g_reveal_logger; saved_real = g_real_resolution; saved_chooser = g_play_top_chooser;
         saved_tchooser = g_play_target_chooser; saved_bchooser = g_play_bounce_chooser;
@@ -685,6 +706,8 @@ struct RevealLogPause
         saved_cochooser = g_play_cast_order_chooser;
         saved_shchooser = g_play_storage_hold_chooser;
         saved_tutorchooser = g_play_tutor_chooser;
+        saved_ahchooser = g_play_attach_host_chooser;
+        saved_jitchooser = g_play_jitte_chooser;
         g_real_resolution = false; g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
         g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
@@ -696,6 +719,7 @@ struct RevealLogPause
         g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
         g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr;
         g_play_tutor_chooser = nullptr;
+        g_play_attach_host_chooser = nullptr; g_play_jitte_chooser = nullptr;
     }
     ~RevealLogPause() { if (noop) { return; }
                         g_real_resolution = saved_real; g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
@@ -714,7 +738,9 @@ struct RevealLogPause
                         g_play_firebreathe_chooser = saved_fbchooser;
                         g_play_cast_order_chooser = saved_cochooser;
                         g_play_storage_hold_chooser = saved_shchooser;
-                        g_play_tutor_chooser = saved_tutorchooser; }
+                        g_play_tutor_chooser = saved_tutorchooser;
+                        g_play_attach_host_chooser = saved_ahchooser;
+                        g_play_jitte_chooser = saved_jitchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };

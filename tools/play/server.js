@@ -119,6 +119,12 @@ function buildArgs(p, logDir, validateLine, exhaustiveKeep) {
     const pairs = Object.keys(p.firebreathe).map(t => `${t}:${p.firebreathe[t]}`);
     if (pairs.length) args.push('--firebreathe', pairs.join(','));
   }
+  // Umezawa's Jitte counter-spend side-channel: same turn-keyed shape as firebreathe.
+  if (p.jitte && typeof p.jitte === 'object') {
+    const jpairs = Object.keys(p.jitte).map(t => `${t}:${p.jitte[t]}`);
+    if (jpairs.length) args.push('--jitte', jpairs.join(','));
+  }
+  args.push('--jitte-prompt');
   args.push('--firebreathe-prompt');
   // #10 cast-order side-channel: p.castOrder is a { mainOrdinal: [name, ...] } map of the human's
   // pinned non-sac hand-cast order for that main-phase decision. Passed as "<ord>:A|B|C;..." (pipe-

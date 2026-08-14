@@ -70,6 +70,29 @@ struct Action
                              // matching graveyard card, then drain 2 (gy_exile_mode 1) or gain 2
                              // (gy_exile_mode 2). Mutually exclusive with the source's mana tap via
                              // the shared {T} (the apply is a no-op if the source is already tapped).
+        AttachAllEquipment,  // Balan, Wandering Knight "{1}{W}: Attach all Equipment you control to
+                             // Balan": pay attach_all_equipment_cost (a.cost), then route EVERY
+                             // controlled Equipment not already on Balan through the shared
+                             // ApplyEquip (so Grafted Wargear's re-host sacrifice fires
+                             // identically to a normal Equip; equip costs are BYPASSED -- this is
+                             // an attach, Colossus Hammer's {8} is irrelevant). sac_source_id =
+                             // Balan's card.m_number. No tap, usable while summoning-sick,
+                             // instant-speed collapsed to the main phase (approved). One per Balan
+                             // per plan; gated on >= 1 equipment not already attached to him.
+        PutFromHandAbility,  // Stoneforge Mystic "{1}{W}, {T}: put an Equipment card from your hand
+                             // onto the battlefield": pay tap_put_from_hand_cost (a.cost) + tap
+                             // the source (sac_source_id, CanTapNow -- summoning-sick gated). The
+                             // named hand card (card_name = the put card, tutor_target unused)
+                             // enters UNATTACHED through the shared enter cascade (Puresteel's
+                             // draw fires). One variant per distinct matching hand card name,
+                             // mutually exclusive per source via sac_source_id.
+        JitteModeAbility,    // Umezawa's Jitte's non-combat modes (user-directed 2026-08-13):
+                             // remove one charge counter from the Jitte (sac_source_id) for
+                             // gy_exile_mode 1 = "target creature gets -1/-1 until end of turn"
+                             // (sac_victim_id = the target creature's card.m_number; kills a
+                             // toughness-1 spawn via the SBA) or mode 2 = "you gain 2 life".
+                             // cost = {0} (the cost is the counter). The +2/+2 pump mode is NOT
+                             // this action -- it is spent inside combat (JitteDamageMath).
     };
 
     // The three name fields are InternedName, not std::string (2026-08-12): an Action is copied,
@@ -532,6 +555,12 @@ public:
         // EMPTY => legacy matching (SacForMana stays implicit, SacCreatureOutlet stays matched via
         // `cast=<name>`), which is what keeps every saved reference validating unchanged.
         std::vector<std::string> sac_outlets;
+        // KittyEquipment battlefield activations (each its own verb so the GUI/line can ask for
+        // them explicitly; EMPTY => a plan containing that kind matches by its card name in the
+        // ordinary cast multiset, the legacy Equip behaviour):
+        std::vector<std::string> attach_all;    // "attachall=<Balan name>": AttachAllEquipment
+        std::vector<std::string> sf_puts;       // "sfput=<equipment name>": PutFromHandAbility
+        std::vector<int>         jitte_modes;   // "jittemode=<1|2>": JitteModeAbility activations
     };
     // One concrete plan variant the human's line matched -- when several enumerated plans
     // share the same land + cast names but differ in a per-spell sub-decision (tutor target,

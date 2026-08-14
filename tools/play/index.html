@@ -465,13 +465,14 @@ const scryImg = (name, ver) => 'https://api.scryfall.com/cards/named?exact='+enc
 // S.plan is the ordered turn plan: [{name, kind}] in the sequence the player queued them.
 // kind: 'land' | 'permanent' | 'spell'(instant/sorcery). At most one land.
 let S = { choices:[], history:[], decision:null, prev:null, over:false, result:null,
-          plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{}, storageHold:{}, castOrder:{} };
+          plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{}, storageHold:{}, castOrder:{}, jitte:{} };
 
 function cfg(extra) {
   return Object.assign({
     deck:$('deck').value, seed:+$('seed').value, gameIndex:Math.max(0,(+$('seed').value||0)-1),
     maxTurns:+$('maxturns').value, depth:0, choices:S.choices,
     firebreathe:S.firebreathe||{},   // #4 turn-keyed side-channel (separate from the positional choices)
+    jitte:S.jitte||{},               // Umezawa's Jitte counter-spend, turn-keyed like firebreathe
     storageHold:S.storageHold||{},   // #6 (turn,land_idx)-keyed tap-vs-charge side-channel
     castOrder:S.castOrder||{},       // #10 main-ordinal-keyed cast-order side-channel
   }, extra || {});
@@ -759,7 +760,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','echo','land_entry','tutor_etb','sac_tutor'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','echo','land_entry','tutor_etb','sac_tutor','attach_host','jitte'];
 function renderBoard() {
   const d = S.decision, board = $('board');
   if (!d) { board.innerHTML = '<div class="hint">Start a new game.</div>'; hideDecPanel(); return; }
@@ -768,7 +769,7 @@ function renderBoard() {
   // clickable) underneath.
   const isMain = !S.over && d.type === 'main_phase';
   const dec = (!S.over && SUBDECISIONS.includes(d.type)) ? d.type : null;
-  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='vial_charge';
+  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='vial_charge' || dec==='attach_host';
   if (boardClick && S._selFor !== d.decision_index) initBoardSel(d);
   if (dec==='divide' && S._divFor !== d.decision_index) initDivAlloc(d);   // board-edit damage allocation
   // At game end, prefer the FINAL board carried on the result (permanents in play after the winning
@@ -1462,7 +1463,7 @@ function initBoardSel(d){
   if (d.type==='target'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||{targets:[]};
     (def.targets||[]).forEach(t=>S.boardSel.add(tgtKey(t)));
-  } else if (d.type==='bounce' || d.type==='sacrifice'){
+  } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
     if (def) S.boardSel.add('m:'+def.perm_index);
   }
@@ -1470,7 +1471,7 @@ function initBoardSel(d){
 }
 function legalTargetKeys(d){
   if (d.type==='target') return new Set((d.legal_targets||[]).map(tgtKey));
-  if (d.type==='bounce' || d.type==='sacrifice') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
+  if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
   return new Set();
 }
 function toggleSel(d, key, max){
@@ -1482,9 +1483,9 @@ function toggleSel(d, key, max){
 // Add highlight classes + click handlers to the real board for an active target/bounce/vial decision.
 function wireDecisionBoard(d, dec){
   const board=$('board');
-  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='soulfire_targets'){
+  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='soulfire_targets' || dec==='attach_host'){
     const legal=legalTargetKeys(d);
-    const max = (dec==='bounce'||dec==='sacrifice')?1:(dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
+    const max = (dec==='bounce'||dec==='sacrifice'||dec==='attach_host')?1:(dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
     board.querySelectorAll('.thumb[data-idx]').forEach(t=>{
       const key='m:'+t.dataset.idx; if (!legal.has(key)) return;
       t.classList.add('selectable'); if (S.boardSel && S.boardSel.has(key)) t.classList.add('selected');
@@ -1564,7 +1565,7 @@ function renderDecisionPanel(d, dec){
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor'
-                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold'
+                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte'
                 || dec==='lackey_put' || dec==='free_cast' || dec==='echo' || dec==='tutor_etb'; // centered card-image modals
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
@@ -1585,6 +1586,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='echo' ? echoPanelHtml(d)
                   : dec==='lightpaws' ? lightPawsPanelHtml(d)
                   : dec==='firebreathe' ? firebreathePanelHtml(d)
+                  : dec==='jitte' ? jittePanelHtml(d)
                   : dec==='storage_hold' ? storageHoldPanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
@@ -2033,6 +2035,15 @@ function promptPanelHtml(d, dec){
       `<div class="pbtns"><span class="pcount">Sacrificing: <b>${opt?esc(opt.name):'(pick a land)'}</b></span>`+
       `<span class="spacer"></span><button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
+  if (dec==='attach_host'){
+    const sel=[...(S.boardSel||[])];
+    const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
+    return `<h3>Attach ${esc(d.source||'the Equipment')} — which creature?</h3>`+
+      `<div class="sub">The attack trigger put this Equipment onto the battlefield; click one of your creatures to attach it to (free — no equip cost), or leave it unattached. The AI's pick (best attacker) is preselected.</div>`+
+      `<div class="pbtns"><span class="pcount">Attaching to: <b>${opt?esc(opt.name):'(pick a creature)'}</b></span>`+
+      `<span class="spacer"></span><button id="decnoattach" class="ghost">Leave unattached</button>`+
+      `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
+  }
   const max=d.max_targets||1, n=(S.boardSel||new Set()).size;
   // Own-creature pump (Invigorate): d.pump carries "+P/+T" -- ask which of YOUR creatures to buff.
   if (d.pump){
@@ -2114,6 +2125,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitReplicate(d, +b.dataset.opt));
   else if (dec==='firebreathe')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFirebreathe(d, +b.dataset.opt));
+  else if (dec==='jitte')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitJitte(d, +b.dataset.opt));
   else if (dec==='storage_hold')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitStorageHold(d, +b.dataset.opt));
   else if (dec==='land_entry')
@@ -2125,7 +2138,12 @@ function wireDecisionPanel(d, dec){
     const ai=panel.querySelector('#bottomai'); if (ai) ai.onclick=()=>followAiBottom(d);
     const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitBottomBatch(d);
   }
-  else { const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitBoardSel(d, dec); }
+  else {
+    const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitBoardSel(d, dec);
+    // attach_host: "Leave unattached" replies -1 (the equipment stays on the battlefield loose).
+    const na=panel.querySelector('#decnoattach');
+    if (na) na.onclick=()=>pushChoice(d, -1, `${d.source}: leave unattached`);
+  }
 }
 function pushChoice(d, oi, lab){ pushChoices(d, [oi], lab); }
 // A decision's answer is one-or-more integers appended atomically; S.steps records how many each
@@ -2271,6 +2289,26 @@ function firebreathePanelHtml(d){
     h+=`<button class="${k===def?'primary':'ghost'}" data-opt="${k}">×${k}${k===def?'  ·  AI':''}</button>`;
   return h+`</div>`;
 }
+// Umezawa's Jitte counter-spend: same modal + turn-keyed side-channel shape as firebreathing.
+function jittePanelHtml(d){
+  const max=d.max_count||0, def=(d.heuristic_default==null?max:d.heuristic_default);
+  const atk=(d.attackers||[]).map(a=>a.name);
+  let h=`<h3>Umezawa's Jitte — spend how many counters?</h3>`;
+  h+=`<div class="sub">Spend charge counters pre-strike on +2/+2 for the equipped attacker. You can spend up to <b>${max}</b>; the AI spends everything (incl. double-strike mid-step earnings). Hold counters to bank them for a bigger turn.</div>`;
+  h+=`<div class="tutgrid">`+atk.map(n=>cardMini(n)).join('')+`</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px;flex-wrap:wrap"><span class="spacer"></span>`;
+  for (let k=0;k<=max;k++)
+    h+=`<button class="${k===def?'primary':'ghost'}" data-opt="${k}">×${k}${k===def?'  ·  AI':''}</button>`;
+  return h+`</div>`;
+}
+function commitJitte(d, k){
+  const t=d.turn, max=d.max_count||0;
+  (S.jitte=S.jitte||{})[t]=k;
+  S.history.push({ turn:t, label:`jitte ×${k}${k<max?` (held ${max-k})`:''}` });
+  S.prev=S.decision;
+  (S.steps=S.steps||[]).push({ n:0, auto:!!(d&&d._autoStep), jt:t });   // consumes NO --choices slot
+  renderHistory(); hideDecPanel(); step();
+}
 // Commit the firebreathe amount: record it in the turn-keyed side-channel and re-step. Unlike the
 // plan/sub-decision commits it appends NO --choices int; instead it pushes a ZERO-int step carrying the
 // turn key (fb) so undo (rollbackStep) can pop it and drop the side-channel entry, keeping the #2
@@ -2360,6 +2398,9 @@ function commitBoardSel(d, dec){
   } else if (dec==='sacrifice'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: sacrifice ${opt?opt.name:'land'}`;
+  } else if (dec==='attach_host'){
+    const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
+    oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: attach to ${opt?opt.name:'creature'}`;
   } else if (dec==='soulfire_targets'){
     const want=sel.map(k=>+k.slice(2)).sort((a,b)=>a-b).join('|');
     const opt=(d.options||[]).find(o=>(o.perm_indices||[]).slice().sort((a,b)=>a-b).join('|')===want);
@@ -2463,6 +2504,7 @@ const AUTO_RESOLVABLE = {
   vial_charge:     'Aether Vial — add a counter',
   firebreathe:     'Firebreathing — how much leftover mana to pump',
   storage_hold:    'Storage lands — hold to charge vs. tap/burst',
+  jitte:           "Umezawa's Jitte — how many charge counters to spend",
 };
 const SURFACE_OFF_BY_DEFAULT = new Set(['land_entry']);
 function surfaceDefault(type){ return !SURFACE_OFF_BY_DEFAULT.has(type); }
@@ -2498,6 +2540,8 @@ function autoResolveDecision(dec){
   // Firebreathe rides the turn-keyed side-channel, not --choices, so it auto-resolves via its own
   // committer (a zero-int step) rather than pushChoice. "Let AI decide" => spend the greedy max.
   if (dec.type==='firebreathe') { dec._autoStep = true; commitFirebreathe(dec, def); return true; }
+  // Jitte rides the turn-keyed side-channel too. "Let AI decide" => greedy spend-all.
+  if (dec.type==='jitte') { dec._autoStep = true; commitJitte(dec, def); return true; }
   // Storage tap-vs-charge rides the (turn,land_idx) side-channel too. "Let AI decide" => the heuristic
   // default (0 = allow the normal tap/burst), committed via its zero-int step.
   if (dec.type==='storage_hold') { dec._autoStep = true; commitStorageHold(dec, def); return true; }
@@ -2641,6 +2685,7 @@ function rollbackStep() {
     // A firebreathe step consumed no --choices int; it recorded a turn-keyed side-channel entry -> drop
     // it so the re-step re-emits the firebreathe decision (rather than replaying the popped amount).
     if (st && st.fb != null && S.firebreathe) { delete S.firebreathe[st.fb]; }
+    if (st && st.jt != null && S.jitte)       { delete S.jitte[st.jt]; }
     // #6: a storage_hold step likewise consumed no --choices int -> drop its (turn,land_idx) side-channel entry.
     if (st && st.sh != null && S.storageHold) { delete S.storageHold[st.sh]; }
     // #10: a main-phase step that PINNED a cast order -> drop its main-ordinal cast-order side-channel entry

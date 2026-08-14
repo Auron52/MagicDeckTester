@@ -98,7 +98,7 @@
     "Instant"
    ],
    "keywords": [],
-   "oracle_text": "Searing Blaze deals 1 damage to target player and 1 damage to target creature that player controls. Landfall \u2014 If a land entered the battlefield under your control this turn, Searing Blaze deals 3 damage to that player and 3 damage to that creature instead.",
+   "oracle_text": "Searing Blaze deals 1 damage to target player and 1 damage to target creature that player controls. Landfall — If a land entered the battlefield under your control this turn, Searing Blaze deals 3 damage to that player and 3 damage to that creature instead.",
    "template": "direct_damage",
    "parameters": {
     "damage": 1,
@@ -147,7 +147,10 @@
    "parameters": {
     "damage": 3,
     "targeting": "player"
-   }
+   },
+   "subtypes": [
+    "Arcane"
+   ]
   },
   {
    "name": "Light Up the Stage",
@@ -952,7 +955,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}: Add {C}.\n{T}: Add {R}, {W}, or {B}. Spend this mana only to cast a Knight or Equipment spell. [Knight/Equipment color restriction inert: the only non-Knight nonland spell in the deck (Aether Vial) costs {1} generic, payable by {C}. Modelled as producing W/R/B; note the engine treats any multi-color source as wild, so it can also pay U/G \u2014 a known dual-land approximation that slightly over-fixes the deck's blue (Haytham/Marshal).]",
+   "oracle_text": "{T}: Add {C}.\n{T}: Add {R}, {W}, or {B}. Spend this mana only to cast a Knight or Equipment spell. [Knight/Equipment color restriction inert: the only non-Knight nonland spell in the deck (Aether Vial) costs {1} generic, payable by {C}. Modelled as producing W/R/B; note the engine treats any multi-color source as wild, so it can also pay U/G — a known dual-land approximation that slightly over-fixes the deck's blue (Haytham/Marshal).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -1519,7 +1522,7 @@
    ],
    "power": 3,
    "toughness": 3,
-   "oracle_text": "Flying\nRot Fly \u2014 If an opponent would gain life, that player loses that much life instead. [Rot Fly modelled as a Tainted Remedy-style replacement (lifegain_to_loss).]",
+   "oracle_text": "Flying\nRot Fly — If an opponent would gain life, that player loses that much life instead. [Rot Fly modelled as a Tainted Remedy-style replacement (lifegain_to_loss).]",
    "template": "vanilla_creature",
    "parameters": {
     "lifegain_to_loss": true
@@ -2158,7 +2161,7 @@
    "keywords": [
     "Suspend"
    ],
-   "oracle_text": "Suspend 3\u2014{0} (Rather than cast this card from your hand, pay {0} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)\n{T}, Sacrifice this artifact: Add three mana of any one color. [Lotus Bloom has NO normal mana cost -- it can ONLY enter via SUSPEND, never be hard-cast. SUSPEND (suspend_time_counters:3): a {0} main-phase action (Action::Kind::Suspend) exiles it from hand with three time counters; a counter is removed at each of your upkeeps and when the last is removed it is CAST off suspend into play (arrive_turn = suspend_turn + 3, i.e. suspend T1 -> arrive T4). The off-suspend cast is routed through the shared CastOffSuspend site (the single home for Dragonstorm's future storm increment, so an off-suspend arrival will count +1 storm); paying {0} to suspend and sacrificing for mana are NOT casts and add no storm. WHEN to suspend is a real SEARCH decision (the multi-turn rollout brings it into play and sees the future mana). SAC-FOR-MANA (sac_for_mana_amount:3): once in play it is a one-shot battlefield ability (Action::Kind::SacForMana) -- tap + SACRIFICE it and float THREE mana of ONE search-chosen color into the turn-scoped reserve (state.floating_mana.<color>), NOT wild (wild could illegally pay a multicolor {B}{R}{G} mix). The chosen color is a plan VARIANT (chosen_float_color): candidate colors = the colors in the deck's spell costs, opened to all five under MTG_UNPRUNED(saccolor); the same reusable colored-float dimension (AddChosenColorFloat) Apex of Power's 'add ten of one color' shares. Modelled lockstep across executor (GameEngine::UpkeepStep arrival + AIEngine::TakeTurn sac) / rollout (SimulateEndAndStartNextTurn arrival + ApplyPlanDirect sac) / planner (credited as ritual_float). 'Any target' collapse: none (it produces mana, no target). VIEWER 5h TODO: suspend timing surfaces as a plan variant (Bucket A); the sac COLOR is a new small chooser (Bucket B) -- recorded, not wired.]",
+   "oracle_text": "Suspend 3—{0} (Rather than cast this card from your hand, pay {0} and exile it with three time counters on it. At the beginning of your upkeep, remove a time counter. When the last is removed, you may cast it without paying its mana cost.)\n{T}, Sacrifice this artifact: Add three mana of any one color. [Lotus Bloom has NO normal mana cost -- it can ONLY enter via SUSPEND, never be hard-cast. SUSPEND (suspend_time_counters:3): a {0} main-phase action (Action::Kind::Suspend) exiles it from hand with three time counters; a counter is removed at each of your upkeeps and when the last is removed it is CAST off suspend into play (arrive_turn = suspend_turn + 3, i.e. suspend T1 -> arrive T4). The off-suspend cast is routed through the shared CastOffSuspend site (the single home for Dragonstorm's future storm increment, so an off-suspend arrival will count +1 storm); paying {0} to suspend and sacrificing for mana are NOT casts and add no storm. WHEN to suspend is a real SEARCH decision (the multi-turn rollout brings it into play and sees the future mana). SAC-FOR-MANA (sac_for_mana_amount:3): once in play it is a one-shot battlefield ability (Action::Kind::SacForMana) -- tap + SACRIFICE it and float THREE mana of ONE search-chosen color into the turn-scoped reserve (state.floating_mana.<color>), NOT wild (wild could illegally pay a multicolor {B}{R}{G} mix). The chosen color is a plan VARIANT (chosen_float_color): candidate colors = the colors in the deck's spell costs, opened to all five under MTG_UNPRUNED(saccolor); the same reusable colored-float dimension (AddChosenColorFloat) Apex of Power's 'add ten of one color' shares. Modelled lockstep across executor (GameEngine::UpkeepStep arrival + AIEngine::TakeTurn sac) / rollout (SimulateEndAndStartNextTurn arrival + ApplyPlanDirect sac) / planner (credited as ritual_float). 'Any target' collapse: none (it produces mana, no target). VIEWER 5h TODO: suspend timing surfaces as a plan variant (Bucket A); the sac COLOR is a new small chooser (Bucket B) -- recorded, not wired.]",
    "template": "custom",
    "parameters": {
     "suspend_time_counters": 3,
@@ -3117,7 +3120,7 @@
    ],
    "power": 2,
    "toughness": 3,
-   "oracle_text": "Reach\nWhen Twinshot Sniper enters, it deals 2 damage to any target.\nChannel \u2014 {1}{R}, Discard Twinshot Sniper: It deals 2 damage to any target. [Reach INERT in goldfishing (no attackers to block). ETB 2 to any target -> face (etb_damage_any 2). Channel from hand: {1}{R}, discard -> 2 damage to any target -> face (channel_cost + channel_damage), a from-hand burn action.]",
+   "oracle_text": "Reach\nWhen Twinshot Sniper enters, it deals 2 damage to any target.\nChannel — {1}{R}, Discard Twinshot Sniper: It deals 2 damage to any target. [Reach INERT in goldfishing (no attackers to block). ETB 2 to any target -> face (etb_damage_any 2). Channel from hand: {1}{R}, discard -> 2 damage to any target -> face (channel_cost + channel_damage), a from-hand burn action.]",
    "template": "vanilla_creature",
    "parameters": {
     "etb_damage_any": 2,
@@ -3378,7 +3381,7 @@
    ],
    "power": 3,
    "toughness": 4,
-   "oracle_text": "Cumulative upkeep\u2014Have an opponent create a 1/1 red Survivor creature token. (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)\nTrample; rampage 1 (Whenever this creature becomes blocked, it gets +1/+1 until end of turn for each creature blocking it beyond the first.) [Cumulative upkeep modelled ALWAYS PAID (cumulative_upkeep_opp_token + Permanent::age_counters): +1 age counter at each of our upkeeps, then the opponent creates age x 1/1 red Survivor through the enter-watcher cascade. Always paying is weakly dominant vs the passive opponent (the gifts only feed our drains / Defense of the Heart and the 3/4 body is kept) -- pay-vs-sacrifice is a disclosed auto-decision, not a surfaced choice. Trample and rampage are inert (the opponent never blocks).]",
+   "oracle_text": "Cumulative upkeep—Have an opponent create a 1/1 red Survivor creature token. (At the beginning of your upkeep, put an age counter on this permanent, then sacrifice it unless you pay its upkeep cost for each age counter on it.)\nTrample; rampage 1 (Whenever this creature becomes blocked, it gets +1/+1 until end of turn for each creature blocking it beyond the first.) [Cumulative upkeep modelled ALWAYS PAID (cumulative_upkeep_opp_token + Permanent::age_counters): +1 age counter at each of our upkeeps, then the opponent creates age x 1/1 red Survivor through the enter-watcher cascade. Always paying is weakly dominant vs the passive opponent (the gifts only feed our drains / Defense of the Heart and the 3/4 body is kept) -- pay-vs-sacrifice is a disclosed auto-decision, not a surfaced choice. Trample and rampage are inert (the opponent never blocks).]",
    "template": "custom",
    "parameters": {
     "cumulative_upkeep_opp_token": true,
@@ -4259,6 +4262,341 @@
      "Mountain",
      "Forest"
     ]
+   }
+  },
+  {
+   "name": "Bonesplitter",
+   "mana_cost": "{1}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature gets +2/+0.\nEquip {1}",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 1,
+    "equip_power_bonus": 2
+   }
+  },
+  {
+   "name": "Colossus Hammer",
+   "mana_cost": "{1}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature gets +10/+10 and loses flying.\nEquip {8} [PARTIAL: 'loses flying' not modeled; approved deferral 2026-08-13 -- nothing blocks in the goldfish (no blocking exists in the engine), so flying-vs-not changes no outcome; same class as the aura evasion-keyword precedent. The +10/+10 is fully modeled (EquipBonusFor at every combat/projection/SBA site); equip {8} drops to {0} under Puresteel metalcraft (EquipCostGenericNow) and is bypassed entirely by Armored Skyhunter's attach and Balan's attach-all.]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 8,
+    "equip_power_bonus": 10,
+    "equip_tough_bonus": 10
+   }
+  },
+  {
+   "name": "Loxodon Warhammer",
+   "mana_cost": "{3}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature gets +3/+0 and has trample and lifelink.\nEquip {3} [Trample approved-deferred 2026-08-13: the engine has no blocking anywhere, so trample can never fire differently than its absence (Armadillo Cloak precedent). Lifelink MODELED (equip_grants_lifelink -> CreatureHasLifelink's equipment scan).]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 3,
+    "equip_power_bonus": 3,
+    "equip_grants_lifelink": true
+   }
+  },
+  {
+   "name": "Shadowspear",
+   "mana_cost": "{1}",
+   "types": [
+    "Artifact"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature gets +1/+1 and has trample and lifelink.\n{1}: Permanents your opponents control lose hexproof and indestructible until end of turn.\nEquip {2} [Trample approved-deferred (no blocking in engine); lifelink MODELED. The {1} strip ability approved-deferred 2026-08-13: opponent spawns never carry hexproof or indestructible, and this deck's removal is exile/tuck (never 'destroy'), so no reachable state changes.]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 2,
+    "equip_power_bonus": 1,
+    "equip_tough_bonus": 1,
+    "equip_grants_lifelink": true
+   }
+  },
+  {
+   "name": "Grafted Wargear",
+   "mana_cost": "{3}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature gets +3/+2.\nWhenever this Equipment becomes unattached from a permanent, sacrifice that permanent.\nEquip {0} ({0}: Attach to target creature you control. Equip only as a sorcery.) [Per the 2020-11-10 WotC ruling the sacrifice only DOES something on a genuine re-host to a different creature (fires in ApplyEquip's shared re-host branch, so Balan's attach-all triggers it identically); host death / Wargear removal resolve as no-ops. Re-host equips open the FULL host set to the search (the static ranking cannot price the sacrificed host).]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 0,
+    "equip_power_bonus": 3,
+    "equip_tough_bonus": 2,
+    "equip_sacrifices_prior_host": true
+   }
+  },
+  {
+   "name": "O-Naginata",
+   "mana_cost": "{1}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "This Equipment can be attached only to a creature with power 3 or greater.\nEquipped creature gets +3/+0 and has trample.\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.) [Attach restriction MODELED (equip_min_power=3, enforced at Equip enumeration AND ApplyEquip; host power counts lords/auras/already-attached equipment). The continuous CR 704.5p re-check is approved-deferred 2026-08-13: its own +3 self-sustains the threshold and nothing in this deck reduces our creatures' power -- revisit if a power-reducer ever joins the shell. Trample approved-deferred (no blocking in engine).]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 2,
+    "equip_power_bonus": 3,
+    "equip_min_power": 3
+   }
+  },
+  {
+   "name": "Umezawa's Jitte",
+   "mana_cost": "{2}",
+   "types": [
+    "Artifact"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Whenever equipped creature deals combat damage, put two charge counters on Umezawa's Jitte.\nRemove a charge counter from Umezawa's Jitte: Choose one —\n• Equipped creature gets +2/+2 until end of turn.\n• Target creature gets -1/-1 until end of turn.\n• You gain 2 life.\nEquip {2} [Counter GAIN fully modeled incl. double-strike two-event timing (first-strike damage earns counters spendable on the regular half -- JitteDamageMath, shared by combat core + both projections). 'Deals combat damage' collapses to 'to a player' (approved: nothing blocks). +2/+2 mode spent in combat (provider JitteSpendCount, default greedy spend-all; --jitte side-channel for the human). -1/-1 and gain-2-life modes IMPLEMENTED as main-phase JitteModeAbility actions (user-directed 2026-08-13). Counters live in Permanent::charge_counters (sim-key-folded).]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 2,
+    "equip_combat_damage_charges": 2,
+    "charge_pump_power": 2,
+    "charge_pump_tough": 2,
+    "charge_minus_power": -1,
+    "charge_minus_tough": -1,
+    "charge_lifegain": 2
+   }
+  },
+  {
+   "name": "Kor Duelist",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Kor",
+    "Soldier"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "As long as this creature is equipped, it has double strike. (It deals both first-strike and regular combat damage.) [Modeled: double_strike_while_equipped -> HasDoubleStrikeFromEquipment at the shared combat + projection ds sites; double strike = power x2 in the collapsed combat model (engine-wide grants_double_strike precedent).]",
+   "template": "custom",
+   "parameters": {
+    "double_strike_while_equipped": true
+   }
+  },
+  {
+   "name": "Puresteel Paladin",
+   "mana_cost": "{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Knight"
+   ],
+   "keywords": [
+    "Metalcraft"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Whenever an Equipment you control enters, you may draw a card.\nMetalcraft — Equipment you control have equip {0} as long as you control three or more artifacts. [Draw trigger fires at the UNIVERSAL enter cascade so a cast AND a put equipment (Stoneforge / Skyhunter attack-dig) both draw; 'may' always taken (strictly good in goldfish, empty-library guard skips -- disclosed 6a). Metalcraft = EquipCostGenericNow, computed at enumeration AND every payment site (executor + rollout lockstep); threshold counts ALL controlled artifacts (equipment + Sol Ring), multiple Paladins redundant. Known conservative bound (disclosed 6a): a plan casting artifact #3 the same turn still sees the printed equip cost at enumeration -- payment recomputes, so it is never overcharged, only under-offered.]",
+   "template": "custom",
+   "parameters": {
+    "draw_on_equipment_etb": true,
+    "metalcraft_equip_zero_artifacts": 3
+   }
+  },
+  {
+   "name": "Balan, Wandering Knight",
+   "mana_cost": "{2}{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Cat",
+    "Knight"
+   ],
+   "keywords": [
+    "First strike"
+   ],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "First strike\nBalan has double strike as long as two or more Equipment are attached to it.\n{1}{W}: Attach all Equipment you control to Balan. [First strike alone approved-inert (nothing blocks); the conditional DOUBLE strike IS modeled (double_strike_min_equipment=2 -> x2 damage at the shared ds sites). Attach-all = Action::Kind::AttachAllEquipment ({1}{W}, no tap, usable summoning-sick; instant speed collapsed to the main phase, approved): routes through the shared ApplyEquip so equip costs are BYPASSED (the Colossus Hammer line) and Grafted Wargear's re-host sacrifice fires. Legend rule engine-enforced (2 copies).]",
+   "template": "custom",
+   "parameters": {
+    "double_strike_min_equipment": 2,
+    "attach_all_equipment_cost": "{1}{W}"
+   }
+  },
+  {
+   "name": "Armored Skyhunter",
+   "mana_cost": "{3}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Cat",
+    "Knight"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Flying\nWhenever this creature attacks, look at the top six cards of your library. You may put an Aura or Equipment card from among them onto the battlefield. If an Equipment is put onto the battlefield this way, you may attach it to a creature you control. Put the rest of those cards on the bottom of your library in a random order. [FireAttackDigAttach: fires at declare-attackers BEFORE damage is read (executor + rollout lockstep), so a put-and-attached Colossus Hammer swings THIS combat; the put bypasses equip cost and routes through the shared enter cascade (Puresteel draws). WHICH card = provider AttackDigPutCandidates (human: the dig chooser; may decline); WHICH host = provider AttackDigAttachHost (human: the attach_host chooser, any controlled creature). Flying approved-inert (nothing blocks). Aura half implemented but structurally dead here (deck has zero Auras -- approved). Multi-copy trigger order = battlefield order + deterministic bottoming (approved conventions, etb_dig precedent).]",
+   "template": "custom",
+   "parameters": {
+    "attack_dig_attach_count": 6
+   }
+  },
+  {
+   "name": "Kemba, Kha Regent",
+   "mana_cost": "{1}{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Cat",
+    "Cleric"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 4,
+   "oracle_text": "At the beginning of your upkeep, create a 2/2 white Cat creature token for each Equipment attached to Kemba. [upkeep_tokens_per_equipment: counts Permanent::equipped_to == Kemba at each of the controller's upkeeps, one 2/2 Cat token each -- lockstep GameEngine::UpkeepStep + rollout, so the search values equip-Kemba lines via the realized future Cats. Token color 'white' approved-unmodeled (CreateToken carries no color; nothing reads it). Legend rule engine-enforced (2 copies; keep-oldest = the equipped, un-sick copy).]",
+   "template": "custom",
+   "parameters": {
+    "upkeep_tokens_per_equipment": true,
+    "upkeep_token_power": 2,
+    "upkeep_token_toughness": 2,
+    "upkeep_token_subtypes": [
+     "Cat"
+    ]
+   }
+  },
+  {
+   "name": "Stoneforge Mystic",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Kor",
+    "Artificer"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, you may search your library for an Equipment card, reveal it, put it into your hand, then shuffle.\n{1}{W}, {T}: You may put an Equipment card from your hand onto the battlefield. [ETB tutor rides tutor_to_hand + tutor_types (Goblin Matron machinery; every distinct library Equipment is a plan-variant target; 'reveal it' approved-unobservable). The activated put = Action::Kind::PutFromHandAbility ({1}{W} + {T}, CanTapNow summoning-sick gate; instant-speed collapse approved): the put card enters UNATTACHED through the shared enter cascade (it dodges only the CAST cost -- equipping is still the Equip action / metalcraft). One plan variant per distinct matching hand card.]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [
+     "Equipment"
+    ],
+    "tutor_shuffle_after": true,
+    "tap_put_from_hand_cost": "{1}{W}",
+    "tap_put_from_hand_types": [
+     "Equipment"
+    ]
+   }
+  },
+  {
+   "name": "Unexpectedly Absent",
+   "mana_cost": "{X}{W}{W}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Put target nonland permanent into its owner's library just beneath the top X cards of that library. [Targeting::NonlandPermanent (approved full scope 2026-08-13). Opponent target: every spawn is a TOKEN, so it ceases on leaving the battlefield (CR 111.7) -- the erase is faithful, X irrelevant there. Own target: a real Library::insert at min(X, size) (the Stoneforge-reset line). Pruned search: X=0 only (higher X provably never better for either use) and opponent-creature targets only (self-tuck approved-lean per user); MTG_UNPRUNED / human play opens the full X range and every nonland permanent incl. own side.]",
+   "template": "removal",
+   "parameters": {
+    "targeting": "nonland_permanent",
+    "tuck_to_library": true,
+    "allow_self_target": true
+   }
+  },
+  {
+   "name": "Boros Garrison",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {R}{W}. [Karoo bounce land (Izzet Boilerworks pattern): enters tapped, 2 mana, ETB returns one of your lands to hand (bounce decision surfaced; prefers a tapped land). Produces credited as wild like every multi-color source (standard Karoo disclosure). KittyEquipment runs no red spells, so the {R} half is unused capacity here -- effectively a tapped-ETB bounce Plains.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "W"
+    ],
+    "produces_amount": 2,
+    "enters_tapped": true,
+    "etb_bounce_land": true
    }
   }
  ]

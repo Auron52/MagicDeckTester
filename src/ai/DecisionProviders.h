@@ -67,6 +67,10 @@ enum class UnprunedGate
                   // nothing wants" cast (MirrorwingProvider::TrickCastSensible; USER doctrine
                   // 2026-08-12 -- magnetless GR is 2 mana for 1 Treasure, a ramp/screw-mitigation
                   // play toward the magnet, never a this-turn mana play)
+    EquipHost,    // Equip host candidate set opened: every legal (equipment, host) pair instead of
+                  // the width-capped benefit ranking (KittyEquipment; also forced by HumanPlayActive
+                  // so the viewer surfaces every legal host -- the pre-existing narrowing gap found
+                  // during that deck's onboarding)
     _Count
 };
 
@@ -566,6 +570,30 @@ public:
     // Consumed by the opaque apply path's enabler sort in both worlds.
     bool CastEnablerFirst(const GameState&, const std::string&) const override;
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+};
+
+// Equipment aggro (KittyEquipment). Detection keys on the equipment-deck gated params
+// (attack_dig_attach_count, equip_combat_damage_charges, tap_put_from_hand_cost, ...) which no
+// other deck carries; it must WIN OVER anti in the routing order because Stoneforge Mystic's
+// tutor_to_hand sets the anti-lifegain signature on its own (the exact Goblin-Matron misroute
+// class -- without this the deck ran under AntiLifegainProvider, whose discard/tutor heuristics
+// hunt lifegain_to_loss enablers this deck does not play).
+class EquipmentProvider : public GenericProvider
+{
+public:
+    const char* Name() const override { return "Equipment"; }
+    // Haste-equip host width 2 (base default 1, the measured FiveColour trade-off): the gi=39
+    // T5 kill needs "equip Greaves -> the Balan cast in this same subset", and the width-1
+    // ranking's top host hides it. 100-game d3 A/B: width2 == MTG_EQUIP_ALL_HOSTS == unpruned
+    // (5.02, sole diff gi=39 T6->T5), zero nonconv. MTG_EQUIP_HOST_WIDTH still overrides.
+    int EquipHostWidth() const override { return 2; }
+    // Board-lethal search short-circuit (the Goblins-proven wide-board cut): when attack-all
+    // damage already kills this turn, skip the cast-subset odometer and just attack. Win-turn-
+    // invariant. This deck's late boards are exactly the pathological shape -- Kemba cats +
+    // creatures + 5-8 equipment whose metalcraft {0} equips the mana bound cannot prune, so a
+    // rollout-leaf Solve walks ~1M subsets and a d5 game hit 40+ min on one seed (300003 gi=2)
+    // once the rollout learned Puresteel draws (enter-cascade fix). Off-switch MTG_NO_LETHAL_CUT.
+    bool UseLethalShortCircuit() const override { return true; }
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

@@ -52,10 +52,11 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         const bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state.battlefield, active, animated, &p, &lord_idx);
         (void)lord_tb;
-        const bool ds = animated
+        const bool ds = (animated
             ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true, &ds_idx)
             : (p.card.HasKeyword(Keyword::DoubleStrike)
-               || HasDoubleStrikeFromLords(p.card, state.battlefield, active, false, &ds_idx));
+               || HasDoubleStrikeFromLords(p.card, state.battlefield, active, false, &ds_idx)))
+            || HasDoubleStrikeFromEquipment(p, state);   // Kor Duelist / Balan (KittyEquipment)
         int base_pw = p.EffectivePower() + lord_pb + exalted_bonus;
         const CardDefinition* adef = CardDatabase::Instance().LookupCached(p.card);
         if (adef)
@@ -64,7 +65,27 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
             base_pw += DynamicBasePower(*adef, state, active);   // Adeline: power = creature count
         }
         base_pw += AuraBonusFor(p, state).first;                 // Bogles: attached auras + Kor self-buff
-        const int power = base_pw * (ds ? 2 : 1);
+        base_pw += EquipBonusFor(p, state).first;                // KittyEquipment: attached equipment
+        // Umezawa's Jitte: spend charge counters on +2/+2 (greedy default / provider / human
+        // side-channel), earn 2 per damage event -- the shared closed form (JitteDamageMath) the
+        // two TurnSolver projections also use, so search and execution stay lockstep.
+        int power = base_pw * (ds ? 2 : 1);
+        const int jitte_bf = FindAttachedChargeEquip(state, p);
+        if (jitte_bf >= 0)
+        {
+            Permanent& je = state.battlefield[jitte_bf];
+            const CardDefinition* jd = CardDatabase::Instance().LookupCached(je.card);
+            int req = ResolveProvider(state).JitteSpendCount(state, je.charge_counters);
+            if (g_play_jitte_chooser)   // nulled by RevealLogPause -> real combat only
+            {
+                int r = (*g_play_jitte_chooser)(state, active, atk_idx, je.charge_counters);
+                if (r >= 0) { req = r; }
+            }
+            const auto [jdmg, jafter] = JitteDamageMath(
+                base_pw, ds, je.charge_counters, jd->params.charge_pump_power, req);
+            power             = jdmg;
+            je.charge_counters = jafter;
+        }
         state.players[opp_idx].life -= power;
         out.total_damage += power;
         if (power > 0)

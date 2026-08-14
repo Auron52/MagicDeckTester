@@ -234,6 +234,9 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Cumulative upkeep") { return Keyword::CumulativeUpkeep; } // inert tag; param-modelled
     if (s == "Strive")        { return Keyword::Strive; }    // inert tag; mechanic is param-modelled
     if (s == "Treasure")      { return Keyword::Treasure; }  // inert tag; mechanic is param-modelled
+    if (s == "Metalcraft")    { return Keyword::Metalcraft; } // inert tag; param-modelled (equip {0})
+    if (s == "First strike")  { return Keyword::FirstStrike; } // Scryfall lowercase variant
+    if (s == "Double strike") { return Keyword::DoubleStrike; }
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -421,6 +424,7 @@ static Targeting TargetingFromString(const std::string& s)
     if (s == "player")   { return Targeting::Player; }
     if (s == "creature") { return Targeting::Creature; }
     if (s == "multi")    { return Targeting::Multi; }
+    if (s == "nonland_permanent") { return Targeting::NonlandPermanent; }
     return Targeting::None;
 }
 
@@ -618,6 +622,37 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.equip_cost_generic        = params.value("equip_cost_generic", 0);
     p.equip_grants_haste        = params.value("equip_grants_haste", false);
     p.equip_grants_shroud       = params.value("equip_grants_shroud", false);
+    p.equip_power_bonus         = params.value("equip_power_bonus", 0);
+    p.equip_tough_bonus         = params.value("equip_tough_bonus", 0);
+    p.equip_grants_lifelink     = params.value("equip_grants_lifelink", false);
+    p.equip_min_power           = params.value("equip_min_power", 0);
+    p.equip_sacrifices_prior_host = params.value("equip_sacrifices_prior_host", false);
+    p.equip_combat_damage_charges = params.value("equip_combat_damage_charges", 0);
+    p.charge_pump_power         = params.value("charge_pump_power", 0);
+    p.charge_pump_tough         = params.value("charge_pump_tough", 0);
+    p.charge_minus_power        = params.value("charge_minus_power", 0);
+    p.charge_minus_tough        = params.value("charge_minus_tough", 0);
+    p.charge_lifegain           = params.value("charge_lifegain", 0);
+    p.double_strike_while_equipped = params.value("double_strike_while_equipped", false);
+    p.double_strike_min_equipment  = params.value("double_strike_min_equipment", 0);
+    if (params.contains("attach_all_equipment_cost"))
+    {
+        p.attach_all_equipment_cost =
+            ManaCostFromString(params["attach_all_equipment_cost"].get<std::string>());
+    }
+    p.draw_on_equipment_etb     = params.value("draw_on_equipment_etb", false);
+    p.metalcraft_equip_zero_artifacts = params.value("metalcraft_equip_zero_artifacts", 0);
+    p.upkeep_tokens_per_equipment = params.value("upkeep_tokens_per_equipment", false);
+    p.attack_dig_attach_count   = params.value("attack_dig_attach_count", 0);
+    if (params.contains("tap_put_from_hand_cost"))
+    {
+        p.tap_put_from_hand_cost =
+            ManaCostFromString(params["tap_put_from_hand_cost"].get<std::string>());
+    }
+    for (const std::string& s : params.value("tap_put_from_hand_types", json::array()))
+        p.tap_put_from_hand_types.push_back(s);
+    p.tuck_to_library           = params.value("tuck_to_library", false);
+    p.allow_self_target         = params.value("allow_self_target", false);
     p.gy_land_exile_mana        = params.value("gy_land_exile_mana", false);
     p.gy_exile_instant_sorcery_drain = params.value("gy_exile_instant_sorcery_drain", 0);
     p.gy_exile_creature_lifegain     = params.value("gy_exile_creature_lifegain", 0);

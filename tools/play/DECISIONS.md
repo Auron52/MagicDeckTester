@@ -68,6 +68,15 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `firebreathe` | `g_play_firebreathe_chooser` (`FirebreatheChooser`) | `AIEngine::Firebreathe` (combat, `GameEngine.cpp:361`) | `WriteFirebreatheDecisionJson` | `firebreathePanelHtml` | modal |
 | `lackey_put` | `g_play_lackey_chooser` (`LackeyChooser`) | `FireCombatDamageCheatIntoPlay` (SpellEffects.h, shared executor+rollout) | `WriteLackeyDecisionJson` | `lackeyPanelHtml` | modal |
 | `free_cast` | `g_play_free_cast_chooser` (`FreeCastChooser`) | `AIEngine` post-combat main, before the plan menu | `WriteFreeCastDecisionJson` | `freeCastPanelHtml` | modal |
+| `attach_host` | `g_play_attach_host_chooser` (`BounceChooser` shape) | `FireAttackDigAttach` (SpellEffects.cpp, shared executor+rollout combat) | `WriteAttachHostDecisionJson` | `promptPanelHtml` (attach_host case) | board |
+| `jitte` | `g_play_jitte_chooser` (`FirebreatheChooser` shape) | `ResolveCombatDamage` (Combat.cpp, shared executor+rollout) | `WriteJitteDecisionJson` | `jittePanelHtml` | modal (turn-keyed `--jitte` side-channel, like `firebreathe`) |
+
+KittyEquipment reuse notes (2026-08-13): the Armored Skyhunter attack-dig's *put* pick reuses the
+`dig` type (`FireAttackDigAttach` → `g_play_dig_chooser`, source = the Skyhunter); only the attach
+host needed the new `attach_host` type above. Unexpectedly Absent's target reuses `target` (the
+tuck branch consults `g_play_target_chooser` with every nonland permanent legal, own side included).
+Balan's attach-all, Stoneforge's put, and the Jitte -1/-1 / lifegain modes are `main_phase` plan
+lines (`attachall=` / `sfput=` / `jittemode=` LineSpec verbs).
 
 **Firebreathe amount (#4) — the first COMBAT-phase decision, and the first on a KEYED SIDE-CHANNEL.**
 At combat, leftover mana is spent greedily on attacker pumps (`ApplyFirebreathing`). The human instead

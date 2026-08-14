@@ -84,6 +84,22 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         //     (free_casts_available) that is only spendable in the post-combat main -- without the
         //     second main the resource silently evaporates each turn.
         if (def->params.combat_damage_free_cast) { return true; }
+
+        //   * ARMORED SKYHUNTER + PURESTEEL PALADIN (attack-dig put + equipment-ETB draw): the
+        //     attack trigger puts an Equipment onto the battlefield DURING combat; with a
+        //     Puresteel-style watcher in the deck that put draws a card mid-combat -- a resource
+        //     generated during combat (2c-bis), spendable only in a post-combat main. Either
+        //     param alone does not need it (the put itself is consumed by this combat's damage;
+        //     the draw needs the combat-time put to fire mid-combat), so require BOTH in the
+        //     deck. Mirrors attack_draw_cards above.
+        if (def->params.attack_dig_attach_count > 0)
+        {
+            for (const Card& c2 : deck.mainboard)
+            {
+                const CardDefinition* d2 = CardDatabase::Instance().LookupCached(c2);
+                if (d2 && d2->params.draw_on_equipment_etb) { return true; }
+            }
+        }
     }
     return false;
 }

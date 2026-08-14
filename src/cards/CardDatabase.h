@@ -20,6 +20,10 @@ enum class Targeting
     Player,   // players/planeswalkers only
     Creature, // creatures only (e.g. Searing Blood)
     Multi,    // one player target AND one creature that player controls (e.g. Searing Blaze)
+    NonlandPermanent, // any nonland permanent (Unexpectedly Absent) -- a one-line !IsLand()
+                      // widening of Creature; opponent side loses nothing (spawns are always
+                      // creatures), and with allow_self_target the controller's own equipment
+                      // becomes a legal (self-tuck) target.
 };
 
 // Parameters extracted from a card's JSON definition, forwarded to the template handler.
@@ -555,6 +559,100 @@ struct CardParams
     int  equip_cost_generic = 0;
     bool equip_grants_haste = false;
     bool equip_grants_shroud = false;
+    // KittyEquipment additions -- the first P/T-rider / keyword-grant / restricted equipment.
+    // equip_power_bonus/equip_tough_bonus mirror aura_power_bonus/aura_tough_bonus and are summed
+    // by EquipBonusFor (SpellEffects.h) at the SAME three attack-power sites as AuraBonusFor
+    // (Combat.cpp ResolveCombatDamage; TurnSolver attacking-mana-source scorer +
+    // PendingAttackDamage) plus the SBA toughness re-check. equip_grants_lifelink is read by
+    // CreatureHasLifelink (equipment scan beside its aura scan). equip_min_power (O-Naginata):
+    // legal-attach gate "power 3 or greater" -- enforced at Equip-candidate enumeration AND in
+    // ApplyEquip's host check (host's effective power counts already-attached equipment, not the
+    // one being placed); the continuous CR 704.5p re-check is deliberately NOT built (approved
+    // deferral: this deck cannot reduce its own creatures' power, and the +3 self-sustains).
+    // equip_sacrifices_prior_host (Grafted Wargear): per the 2020-11-10 ruling the unattach-
+    // sacrifice only DOES something on a genuine re-host to a different creature, so it lives
+    // solely in ApplyEquip's re-host branch (host death / equipment removal resolve as no-ops).
+    int  equip_power_bonus  = 0;
+    int  equip_tough_bonus  = 0;
+    bool equip_grants_lifelink = false;
+    int  equip_min_power    = 0;
+    bool equip_sacrifices_prior_host = false;
+
+    // Umezawa's Jitte: equip_combat_damage_charges counters land on the Jitte each time the
+    // equipped creature deals combat damage (collapsed to "to a player" -- approved: nothing
+    // blocks; the counter GAIN itself is fully modeled, incl. the double-strike two-event
+    // timing). Counters live in Permanent::charge_counters (Aether Vial storage: deep-copied,
+    // sim-key-folded, viewer badge). charge_pump_power/_tough = the "+2/+2 until end of turn"
+    // mode per counter removed, spent in ResolveCombatDamage via the provider's JitteSpendCount
+    // (default greedy spend-all). The -1/-1 and gain-2-life modes are implemented as main-phase
+    // actions (user-directed 2026-08-13): charge_minus_power/_tough on a target creature and
+    // charge_lifegain for the controller, each costing one counter.
+    int  equip_combat_damage_charges = 0;
+    int  charge_pump_power  = 0;
+    int  charge_pump_tough  = 0;
+    int  charge_minus_power = 0;
+    int  charge_minus_tough = 0;
+    int  charge_lifegain    = 0;
+
+    // Kor Duelist: the CREATURE gains double strike while ANY Equipment is attached to it
+    // (checked via HasDoubleStrikeWhileEquipped beside the lord-granted ds sources). Balan:
+    // double strike while >= N Equipment attached (double_strike_min_equipment = 2), plus the
+    // "{1}{W}: Attach all Equipment you control to Balan" activated ability
+    // (attach_all_equipment_cost, a full ManaCost string -- colored; rides Action::cost). The
+    // attach-all routes through ApplyEquip per equipment so Grafted Wargear's re-host sacrifice
+    // fires identically to a normal Equip.
+    bool double_strike_while_equipped = false;
+    int  double_strike_min_equipment  = 0;
+    std::optional<ManaCost> attach_all_equipment_cost;   // nullopt = no such ability
+
+    // Puresteel Paladin. draw_on_equipment_etb: "Whenever an Equipment you control enters, you
+    // may draw a card" -- hooked at the UNIVERSAL enter cascade (OnDragonEnters) so it fires on
+    // cast AND on put-onto-battlefield (Stoneforge / Skyhunter); "may" always taken (draw is
+    // strictly good in goldfish; empty-library guard skips -- disclosed 6a).
+    // metalcraft_equip_zero_artifacts: "Equipment you control have equip {0} as long as you
+    // control three or more artifacts" -- the threshold (3). The dynamic cost is computed by
+    // EquipCostGenericNow at BOTH enumeration and every payment site (executor + rollout), so a
+    // mid-plan metalcraft flip (cast artifact #3, then equip) stays lockstep.
+    bool draw_on_equipment_etb = false;
+    int  metalcraft_equip_zero_artifacts = 0;
+
+    // Kemba, Kha Regent: at the controller's upkeep, create upkeep_token_power/toughness tokens
+    // -- one per Equipment attached to THIS permanent (counted via Permanent::equipped_to).
+    // Rides the existing upkeep_token_* machinery; lockstep GameEngine::UpkeepStep +
+    // TurnSolver::SimulateEndAndStartNextTurn. Token color (white) unmodeled -- approved
+    // (CreateToken carries no color; nothing reads it).
+    bool upkeep_tokens_per_equipment = false;
+
+    // Armored Skyhunter: "Whenever this creature attacks, look at the top six cards of your
+    // library. You may put an Aura or Equipment card from among them onto the battlefield. If an
+    // Equipment is put onto the battlefield this way, you may attach it to a creature you
+    // control. Put the rest ... on the bottom ... in a random order." attack_dig_attach_count =
+    // 6. Fired by FireAttackDigAttach at declare-attackers BEFORE damage is read (lockstep
+    // GameEngine::CombatPhase + TurnSolver rollout combat), so a put-and-attached Colossus
+    // Hammer swings THIS combat. The put bypasses equip cost (attach, not the Equip action) and
+    // routes through the shared equipment-enters path (Puresteel draw fires). Aura half of the
+    // filter implemented but structurally dead here (deck has zero Auras -- approved deferral);
+    // deterministic bottoming + battlefield trigger order (approved conventions).
+    int  attack_dig_attach_count = 0;
+
+    // Stoneforge Mystic ability 2: "{1}{W}, {T}: You may put an Equipment card from your hand
+    // onto the battlefield." tap_put_from_hand_cost is a full ManaCost string (colored -- the
+    // int-generic shortcut deliberately not reused); tap_put_from_hand_types filters the hand
+    // card (type or subtype match). Summoning-sick gate via CanTapNow; the put card enters
+    // UNATTACHED (the put dodges only the CAST cost -- equipping is still the Equip action).
+    std::optional<ManaCost> tap_put_from_hand_cost;      // nullopt = no such ability
+    std::vector<std::string> tap_put_from_hand_types;
+
+    // Unexpectedly Absent (removal-template extensions): tuck_to_library resolves the removal
+    // as "put into its owner's library just beneath the top X cards" -- a real
+    // Library::insert at min(X, size) for OUR OWN permanents; for opponent targets the spawn is
+    // a token (CR 111.7) and simply ceases -- same erase Swords uses, X irrelevant (faithful,
+    // not a simplification). allow_self_target widens candidates to the controller's own
+    // permanents (the Stoneforge-reset line); with targeting "nonland_permanent" own equipment
+    // is legal too. Pruned-path X candidates = {0} (higher X provably never better for either
+    // use); unpruned/human-play exposes the full range (user-approved lean search 2026-08-13).
+    bool tuck_to_library   = false;
+    bool allow_self_target = false;
 
     // Deathrite Shaman ability 1: "{T}: Exile target land card from a graveyard. Add one mana of
     // any color." The {T} mana ability is FUELED by exiling a land card from the controller's OWN

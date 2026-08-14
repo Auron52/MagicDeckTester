@@ -581,6 +581,253 @@ bool PerformEtbDig(GameState& state, int controller_index,
     return took;
 }
 
+// Balan's attach-all (see the SpellEffects.h declaration note). Ids collected FIRST: ApplyEquip
+// can erase (a Wargear re-host sacrifices its former host) and reallocate the battlefield.
+void ApplyAttachAllEquipment(GameState& state, int controller, int balan_id)
+{
+    bool balan_ok = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_number == balan_id
+            && (p.card.IsCreature() || p.is_animated)) { balan_ok = true; break; }
+    }
+    if (!balan_ok) { return; }
+    std::vector<int> to_move;
+    for (const Permanent& e : state.battlefield)
+    {
+        if (e.controller_index != controller || e.equipped_to == balan_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.card);
+        if (d && d->params.is_equipment) { to_move.push_back(e.card.m_number); }
+    }
+    for (int id : to_move) { ApplyEquip(state, controller, id, balan_id); }
+}
+
+// Stoneforge Mystic's tap-put (see the SpellEffects.h declaration note).
+bool ApplyPutFromHand(GameState& state, int controller, int source_id,
+                      const std::string& put_name)
+{
+    Permanent* src = nullptr;
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_number == source_id) { src = &p; break; }
+    }
+    if (src == nullptr || src->tapped || !CanTapNow(*src, state.battlefield)) { return false; }
+    Player& ap = state.players[controller];
+    int hi = -1;
+    for (int h = 0; h < static_cast<int>(ap.hand.size()); ++h)
+    {
+        if (!ap.hand[h].m_is_staged && ap.hand[h].m_name == put_name) { hi = h; break; }
+    }
+    if (hi < 0) { return false; }
+    const std::string src_name = src->card.m_name.str();
+    src->tapped = true;
+    Card raw = ap.hand[hi];
+    ap.hand.erase(ap.hand.begin() + hi);
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(raw);
+    Permanent perm;
+    perm.card              = d ? d->card : raw;
+    perm.card.m_number     = raw.m_number;
+    perm.controller_index  = controller;
+    perm.owner_index       = controller;
+    perm.entered_this_turn = true;
+    state.battlefield.push_back(perm);   // may reallocate -- `src` is dead from here on
+    const int slot = static_cast<int>(state.battlefield.size()) - 1;
+    if (RevealVisible())
+    {
+        EmitReveal(state.turn_number, src_name + " (put)",
+                   { raw.m_number }, { raw.m_name.str() }, { raw.m_number }, {},
+                   /*dispositions*/ { "\xE2\x86\x92 battlefield (from hand)" });
+    }
+    OnDragonEnters(state, controller, slot);   // universal cascade: Puresteel draw fires here
+    OnGoblinEnters(state, controller, slot);
+    if (state.battlefield[slot].card.HasSupertype(Supertype::Legendary))
+    { EnforceLegendRule(state, controller); }
+    return true;
+}
+
+// Umezawa's Jitte non-combat modes (see the SpellEffects.h declaration note).
+void ApplyJitteMode(GameState& state, int controller, int jitte_id, int mode, int target_id)
+{
+    Permanent* je = nullptr;
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_number == jitte_id) { je = &p; break; }
+    }
+    if (je == nullptr || je->charge_counters <= 0) { return; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(je->card);
+    if (d == nullptr) { return; }
+    if (mode == 1)
+    {
+        int ti = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& t = state.battlefield[i];
+            if (t.card.m_number == target_id && (t.card.IsCreature() || t.is_animated))
+            { ti = i; break; }
+        }
+        if (ti < 0) { return; }   // target left -> fizzle, counter kept
+        je->charge_counters -= 1;
+        Permanent& t = state.battlefield[ti];
+        t.temp_power_bonus += d->params.charge_minus_power;   // signed: -1/-1 mode carries -1s
+        t.temp_tough_bonus += d->params.charge_minus_tough;
+        // Inline death check, shared by both worlds (the rollout runs no SBA loop between
+        // main-phase actions): effective toughness + statics <= 0 -> the creature dies. The
+        // realistic target is an opponent SPAWN token (plain P/T, no death triggers, tokens
+        // cease -- CR 111.7); a nontoken card goes to its owner's graveyard.
+        int tough = t.EffectiveToughness()
+                  + ComputeLordBonus(t.card, state.battlefield, t.controller_index,
+                                     t.is_animated, &t).second
+                  + AuraBonusFor(t, state).second
+                  + EquipBonusFor(t, state).second;
+        if (tough <= 0)
+        {
+            const int dead_num = t.card.m_number;
+            const bool is_token = t.is_token;
+            if (!is_token)
+            { state.players[t.owner_index].graveyard.push_back(t.card); }
+            state.battlefield.erase(state.battlefield.begin() + ti);
+            for (Permanent& e : state.battlefield)
+            {
+                if (e.equipped_to      == dead_num) { e.equipped_to = 0; }
+                if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
+            }
+        }
+    }
+    else if (mode == 2)
+    {
+        je->charge_counters -= 1;
+        state.players[controller].life += d->params.charge_lifegain;
+    }
+}
+
+// Armored Skyhunter's attack-trigger dig-and-attach (see the SpellEffects.h declaration note).
+// One trigger per attacking permanent with attack_dig_attach_count, resolved in battlefield
+// order (approved collapse of the controller's trigger-order choice; each dig sees the library
+// as the previous one left it). Snapshots the triggering card numbers first: the puts below
+// push_back onto the battlefield, and stale indices are the classic reallocation bug.
+void FireAttackDigAttach(GameState& state, int controller, const std::vector<int>& atk_idx)
+{
+    if (atk_idx.empty()) { return; }
+    Player& ap = state.players[controller];
+    std::vector<int> trigger_nums;
+    for (int idx : atk_idx)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& p = state.battlefield[idx];
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.attack_dig_attach_count > 0) { trigger_nums.push_back(p.card.m_number); }
+    }
+    for (int tn : trigger_nums)
+    {
+        const CardDefinition* sdef = nullptr;
+        std::string src_name;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == controller && p.card.m_number == tn)
+            { sdef = CardDatabase::Instance().LookupCached(p.card); src_name = p.card.m_name.str(); break; }
+        }
+        if (sdef == nullptr) { continue; }   // source left the battlefield mid-resolution
+        const int look = std::min(sdef->params.attack_dig_attach_count,
+                                  static_cast<int>(ap.library.size()));
+        if (look <= 0) { continue; }
+
+        std::vector<Card> examined;
+        for (int i = 0; i < look; ++i)
+        {
+            examined.push_back(ap.library.front());
+            ap.library.erase(ap.library.begin());
+        }
+        // Legal puts: any Equipment; an Aura only if it has a legal enchant target RIGHT NOW (an
+        // Aura enters attached, CR 303.4f -- no target means it cannot be put at all). The Aura
+        // half is structurally dead in KittyEquipment (zero Auras) but stays faithful.
+        std::vector<int> legal;
+        for (int i = 0; i < static_cast<int>(examined.size()); ++i)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(examined[i]);
+            if (d == nullptr) { continue; }
+            if (d->params.is_equipment) { legal.push_back(i); continue; }
+            if (d->params.is_aura
+                && !LegalEnchantTargets(state, controller, d->params).empty())
+            { legal.push_back(i); }
+        }
+        const std::vector<int> ranked = ResolveProvider(state).AttackDigPutCandidates(
+            state, controller, examined, legal);
+        int take = ranked.empty() ? -1 : ranked.front();
+        // Human play: the put pick rides the existing DIG chooser shape (examined + legal
+        // indices, -1 declines the "may"). Nulled by RevealLogPause during search/rollout.
+        if (!legal.empty() && g_play_dig_chooser)
+        {
+            int picked = (*g_play_dig_chooser)(state, controller, src_name, examined, legal, take);
+            bool ok = (picked == -1);
+            for (int li : legal) { if (li == picked) { ok = true; break; } }
+            take = ok ? picked : take;
+        }
+        if (take >= 0)
+        {
+            Card raw = examined[take];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(raw);
+            Permanent perm;
+            perm.card              = d ? d->card : raw;
+            perm.card.m_number     = raw.m_number;
+            perm.controller_index  = controller;
+            perm.owner_index       = controller;
+            perm.entered_this_turn = true;
+            state.battlefield.push_back(perm);
+            const int slot = static_cast<int>(state.battlefield.size()) - 1;
+            if (RevealVisible())
+            {
+                EmitReveal(state.turn_number, src_name + " (attack dig)",
+                           { raw.m_number }, { raw.m_name.str() }, { raw.m_number }, {},
+                           /*dispositions*/ { "\xE2\x86\x92 battlefield (from library)" });
+            }
+            if (d != nullptr && d->params.is_equipment)
+            {
+                // WHICH creature it attaches to: provider's value-greedy attacker pick (0 =
+                // leave unattached). The human may attach to ANY controlled creature (the
+                // oracle allows non-attackers) or decline, via the attach-host chooser.
+                int host_num = ResolveProvider(state).AttackDigAttachHost(
+                    state, controller, raw, atk_idx);
+                if (g_play_attach_host_chooser)
+                {
+                    std::vector<int> host_idx;
+                    int heur = -1;
+                    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+                    {
+                        const Permanent& h = state.battlefield[i];
+                        if (h.controller_index != controller) { continue; }
+                        if (!h.card.IsCreature() && !h.is_animated) { continue; }
+                        if (d->params.equip_min_power > 0
+                            && EquipGatePowerOf(h, state) < d->params.equip_min_power) { continue; }
+                        host_idx.push_back(i);
+                        if (h.card.m_number == host_num) { heur = static_cast<int>(host_idx.size()) - 1; }
+                    }
+                    int picked = (*g_play_attach_host_chooser)(state, controller,
+                                                               raw.m_name.str(), host_idx, heur);
+                    if (picked == -1) { host_num = 0; }
+                    else if (picked >= 0 && picked < static_cast<int>(host_idx.size()))
+                    { host_num = state.battlefield[host_idx[picked]].card.m_number; }
+                }
+                if (host_num > 0) { ApplyEquip(state, controller, raw.m_number, host_num); }
+            }
+            else if (d != nullptr && d->params.is_aura)
+            {
+                std::vector<int> tg = LegalEnchantTargets(state, controller, d->params);
+                if (!tg.empty()) { state.battlefield[slot].aura_attached_to = tg.front(); }
+            }
+            OnDragonEnters(state, controller, slot);   // universal cascade: Puresteel draw fires here
+            OnGoblinEnters(state, controller, slot);
+            if (state.battlefield[slot].card.HasSupertype(Supertype::Legendary))
+            { EnforceLegendRule(state, controller); }   // a second Shadowspear / Jitte
+        }
+        for (int i = 0; i < static_cast<int>(examined.size()); ++i)
+        {
+            if (i == take) { continue; }
+            ap.library.push_back(std::move(examined[i]));   // rest to the bottom, examined order
+        }
+    }
+}
+
 // Expressive Iteration {U}{R}: "Look at the top three cards of your library. Put one into your hand,
 // put one on the bottom of your library, and exile one. You may play the exiled card this turn."
 // Model: look at the top 3, rank by ScryKeepOnTop (wanted first); the most-wanted goes to HAND

@@ -2877,14 +2877,38 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             { ApplyGraveyardExileAbility(state, state.active_player_index, a.sac_source_id, a.gy_exile_mode); }
         }
+        else if (a.kind == Action::Kind::AttachAllEquipment)
+        {
+            // Balan attach-all (executor mirror -- same shared ApplyAttachAllEquipment).
+            ManaPool avail = AvailableManaPool(state);
+            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            { ApplyAttachAllEquipment(state, state.active_player_index, a.sac_source_id); }
+        }
+        else if (a.kind == Action::Kind::PutFromHandAbility)
+        {
+            // Stoneforge put (executor mirror -- same shared ApplyPutFromHand).
+            ManaPool avail = AvailableManaPool(state);
+            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            { ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str()); }
+        }
+        else if (a.kind == Action::Kind::JitteModeAbility)
+        {
+            // Jitte -1/-1 / lifegain (executor mirror -- the cost is the counter).
+            ApplyJitteMode(state, state.active_player_index, a.sac_source_id,
+                           a.gy_exile_mode, a.sac_victim_id);
+        }
         else if (a.kind == Action::Kind::Equip)
         {
             // Lightning Greaves (executor mirror). Skip one the mana-unlock hoist already fired
             // mid-casts -- it is attached to this exact host already, so re-firing would pay the
-            // equip cost a second time (mirrors ApplyPlanDirect).
+            // equip cost a second time (mirrors ApplyPlanDirect). Cost recomputed at payment
+            // (metalcraft can flip mid-plan -- see EquipActionCostNow).
             ManaPool avail = AvailableManaPool(state);
             if (!EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
-                && TapForCost(state, a.cost, avail, /*for_creature=*/false))
+                && TapForCost(state,
+                              EquipActionCostNow(state, state.active_player_index,
+                                                 a.sac_source_id, a.cost),
+                              avail, /*for_creature=*/false))
             { ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
         }
         else if (a.kind == Action::Kind::ActivateLoyalty)
@@ -3326,6 +3350,29 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                 if (alt_lifegain <= 0) { return; }
                 break;
             }
+            Target t;
+            t.type            = Target::Type::Permanent;
+            t.permanent_index = idx;
+            entry.targets.push_back(t);
+            break;
+        }
+        case Targeting::NonlandPermanent:
+        {
+            // Unexpectedly Absent (tuck removal): autonomous target = the LARGEST opponent
+            // creature (max board removed; opponent never has noncreature permanents in this
+            // sim). No target -> uncastable (the enumeration gate matches; self-tuck lines are
+            // human-play-only, per the user's lean-search direction 2026-08-13). Mirrors the
+            // rollout's Removal tuck branch.
+            int idx = -1, best_pw = -1;
+            for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+            {
+                const Permanent& bp = state.battlefield[bi];
+                if (bp.controller_index == state.active_player_index) { continue; }
+                if (bp.card.IsLand()) { continue; }
+                const int pw = bp.EffectivePower();
+                if (pw > best_pw) { best_pw = pw; idx = bi; }
+            }
+            if (idx < 0) { return; }
             Target t;
             t.type            = Target::Type::Permanent;
             t.permanent_index = idx;

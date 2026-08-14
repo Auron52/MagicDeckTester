@@ -310,13 +310,20 @@ void GameEngine::UpkeepTail(GameState& state)
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != state.active_player_index) { continue; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-        if (!def || def->params.upkeep_creates_tokens <= 0) { continue; }
-        for (int t = 0; t < def->params.upkeep_creates_tokens; ++t)
+        if (!def) { continue; }
+        // Fixed count (Thrumming Hivepool) or one per Equipment attached to THIS permanent
+        // (Kemba, Kha Regent). Snapshot count + owner BEFORE creating: CreateToken push_backs
+        // onto the battlefield, invalidating `p`. Mirrors TurnSolver (lockstep).
+        int count = def->params.upkeep_creates_tokens;
+        if (def->params.upkeep_tokens_per_equipment)
+        { count += CountEquipmentAttachedTo(state, p.controller_index, p.card.m_number); }
+        if (count <= 0) { continue; }
+        const int tok_p = def->params.upkeep_token_power;
+        const int tok_t = def->params.upkeep_token_toughness;
+        const std::vector<std::string> tok_subs = def->params.upkeep_token_subtypes;
+        for (int t = 0; t < count; ++t)
         {
-            CreateToken(state, state.active_player_index,
-                        def->params.upkeep_token_power,
-                        def->params.upkeep_token_toughness,
-                        def->params.upkeep_token_subtypes);
+            CreateToken(state, state.active_player_index, tok_p, tok_t, tok_subs);
         }
     }
 
@@ -487,6 +494,11 @@ void GameEngine::CombatPhase(GameState& state)
                         ? CountExalted(state.battlefield, state.active_player_index) : 0;
 
     const int opp_life_before = opp.life;                  // play-viewer event: "(before->after)"
+
+    // Armored Skyhunter attack-trigger dig-and-attach: fired AFTER attack pumps/draws and BEFORE
+    // the damage loop reads power, so a put-and-attached Colossus Hammer swings this combat.
+    // Mirrors TurnSolver::SimulateCombat (lockstep). Param-gated inert for every other deck.
+    FireAttackDigAttach(state, state.active_player_index, atk_idx);
 
     // Damage, attack triggers, Utvara tokens and the Goblin Lackey cheat are shared with the
     // rollout (ResolveCombatDamage, Combat.cpp) so the two can never disagree on what an attack
@@ -698,6 +710,10 @@ void GameEngine::CheckStateBasedActions(GameState& state)
                     // every ordinary creature (their damage check keeps the raw value).
                     tough += ComputeLordBonus(p.card, state.battlefield,
                                               p.controller_index, p.is_animated, &p).second;
+                    tough += EquipBonusFor(p, state).second;   // Grafted Wargear +3/+2 etc. --
+                                                               // equipment toughness must be seen
+                                                               // here or a Jitte -1/-1'd 0-tough
+                                                               // host dies through its equipment
                     if (tough <= 0) { destroy = true; }
                 }
                 if (p.damage >= tough
