@@ -21,6 +21,21 @@ would hand back a table that looks complete and measures something else.
 below the shipped play depth — raisable when a deeper ladder is being measured, and clamped so it
 can never go below 5.
 
+**Degenerate games can now be ABANDONED rather than waited out (2026-08-14), but the policy is not
+settled — so the mechanism is OFF.** `valueleaf_depth_matrix.py --abandon-units N` sets a per-game
+search-work ceiling: a game past it is voided, excluded from every cell of its `(deck, seed)`, and
+BACKFILLED so the cell still reaches its game count. It is in deterministic work units, not seconds,
+so the same games are dropped on every machine — which is what lets the skip list be shared and the
+run stay reproducible. The table discloses the filter as `~~ FILTERED`, because it changes the
+estimand to "games that complete within the ceiling" and a reader comparing against an unfiltered
+table would otherwise be comparing different populations.
+
+What is NOT decided is the threshold. The useful one is relative to a cell's own median (cells span
+11 ms to 700 s per game), and nothing computes that yet; `MTG_DUMP_UNITS=1` writes a `<job>.units`
+file so the distribution can be measured first. Until a multiplier is chosen and validated, treat
+`--abandon-units` as a calibration lever and do NOT set it on a production run — an absolute ceiling
+picked by eye would silently filter a cheap cell's normal games and an expensive cell's not at all.
+
 **Do not hand-roll the phases and do not re-add settings** — if something the pipeline needs is
 missing, fix the pipeline, not your invocation.
 
@@ -33,6 +48,7 @@ The settings that matter are FIXED inside the script, because each has already g
 | no condemnation at d<=5 | the H cells ARE the crossover; condemning one leaves a HOLE in the answer rather than saving cost, and the guard is wall-clock based so which cells it hits is partly luck |
 | profile always attached | measuring profile-less describes a deck we do not ship — it invalidated every table in this repo once |
 | staged model before the matrix | the H-cell ladder is guarded on the sidecar EXISTING; missing it does not error, it silently runs every H cell on the slow path |
+| per-GAME results, always | a chunk used to store one MEAN over its games, so nothing below a chunk could be dropped: a ragged condemned chunk (n=7) forced whole 25-game chunks out of the keep set across twelve rows, and two earlier attempts to keep part of one FABRICATED the surviving piece's score. Chunks now carry `g` = [(offset, win turn)] read from the `.wins` file, so retention is per game and a skip is a FILTER over data already on disk. It is also what makes a comparison paired by construction -- unequal game sets are how the FiveColour table came to read `V6-H5 = -0.0001` when the matched answer is `+0.0020`, the wrong sign on the comparison the adoption turned on |
 | slow games + heartbeat, on by DEFAULT | an expensive deck's cost is concentrated in a few pathological games (75% of a FiveColour arm sits in 14% of its games), and the repro list is the input to any optimization pass. Both instruments now default ON in `mtg --batch` itself, so they cannot be forgotten by a caller: a `[batch] heartbeat` line every 10 min leads with **workers busy**, and any game over 30 s prints a one-line repro. Utilisation-first is deliberate -- the 23-hour run above was misdiagnosed twice (as an engine regression, then as condemnation) when the actual fact was 3 of 20 cores, which this line states outright |
 
 The monolithic matrix path is DELETED (not merely disabled), `--no-incremental` exits with an error,
