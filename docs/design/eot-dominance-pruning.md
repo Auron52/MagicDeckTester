@@ -68,10 +68,18 @@ casts from hand; an empty hand is a dead magnet); a discard/madness deck inverts
 and **ETB abilities are the sharpest counterexample** (user, 2026-08-14) — a creature whose
 enter-the-battlefield trigger has a payoff condition can be strictly better HELD (cast it when the
 payoff is live: more counters to place, a board to pump, a trigger to double), so board >= hand is
-wrong exactly when the ETB is why the card is in the deck. Framing: these are good ON-BY-DEFAULT
-heuristics, not sound rules — ship the default in the archetype provider with per-deck opt-out
-(or opt-in for the inverted decks), never as root engine truth; the measured A/B decides each
-deck's setting, same placement rule as every heuristic-optimization adoption.
+wrong exactly when the ETB is why the card is in the deck.
+
+Framing (user, 2026-08-14): the rule works for MOST decks most of the time — even ETB-holding
+decks mostly want their permanents played — so it is a very good DEFAULT, and the exceptions are
+per-deck configuration, not engine logic. **The opt-in/out decision belongs to the ANALYSIS stage**
+(analyze-deck, where the profile/archetype provider is built), recorded as a per-deck profile
+flag, correctable later if analysis got it wrong. Examples: treasure_hunt opts OUT of the
+play-a-land dominance (its lands-in-hand are retrace ammo — Flame Jab); "play a land each turn you
+have one" genuinely dominates for nearly every other deck. The analysis stage can auto-suggest the
+setting from the list itself (retrace / discard costs / madness / conditional-ETB payoffs are the
+opt-out signals), with the user confirming. Never root engine truth; measured A/B settles disputed
+cases.
 
 ## Implementation sketch
 
