@@ -15089,7 +15089,90 @@ struct FSLineEntry
     // was searched at the full cutoff) -- the bound is therefore exactly the cutoff it ran under.
     // A WIN carries INT_MAX: valid for every query, i.e. byte-identical to the old behaviour.
     int nowin_bound = std::numeric_limits<int>::max();
+    // Order signature of the state the WIN line was computed under (canon mode only; 0 = unset).
+    // A SearchLine's actions reference cards by HAND INDEX / battlefield position, so a line is
+    // only replayable on a state with the SAME zone ORDER. Ordered keys guaranteed that for free;
+    // the canonical key merges permutations, so a WIN hit must check the order too and fall
+    // through to a fresh search on mismatch (2026-08-14 must-find root cause: canon hits replayed
+    // misindexed plans -- "cast hand[1]" is a different card under a permuted hand). NO-WIN
+    // entries carry no line and stay shareable across every permutation (the perf win survives:
+    // nowins are ~99.99% of monster entries).
+    std::uint64_t order_sig = 0;
 };
+
+// Fold the ACTION-INDEX-relevant zone orders: active player's hand order + battlefield order.
+inline std::uint64_t FsOrderSig(const GameState& state)
+{
+    std::uint64_t h = 1469598103934665603ull;
+    auto mix = [&](std::uint64_t v){ h ^= v; h *= 1099511628211ull; h ^= h >> 29; };
+    const Player& ap = state.players[state.active_player_index];
+    for (const Card& c : ap.hand) { mix(c.m_name_hash); }
+    mix(0xB1F1);
+    for (const Permanent& perm : state.battlefield)
+    { mix(perm.card.m_name_hash); mix(static_cast<std::uint64_t>(perm.card.m_number)); }
+    return h | 1ull;   // never 0 (0 = unset)
+}
+
+// --- MTG_CANON_SHADOW (temporary; MTG_BP_DUP_PROBE precedent) ---------------------------------
+inline bool CanonShadowOn()
+{ static const bool v = EnvOn("MTG_CANON_SHADOW"); return v; }
+// Dump EVERY plausibly-future-determining field, deliberately INCLUDING ones the key does not
+// fold (stack contents, unconditional cards_drawn, per-perm copy ids) -- a mismatch line that
+// appears here but not in BuildSimKey is the hole.
+inline std::string ShadowDumpState(const GameState& state)
+{
+    std::string s;
+    char buf[256];
+    std::snprintf(buf, sizeof buf, "turn=%d ap=%d otp=%d oll=%d vmv=%d storm=%d",
+                  state.turn_number, state.active_player_index, state.on_the_play ? 1 : 0,
+                  state.opponent_lost_life_this_turn ? 1 : 0, state.vial_target_mv,
+                  state.spells_cast_this_turn);
+    s += buf;
+    const ManaPool& fm = state.floating_mana;
+    std::snprintf(buf, sizeof buf, " float=%d/%d/%d/%d/%d/%d/%d",
+                  fm.white, fm.blue, fm.black, fm.red, fm.green, fm.colorless, fm.wild);
+    s += buf;
+    s += " stack=[";
+    for (const auto& so : state.stack) { s += so.source.m_name; s += ","; }
+    s += "]";
+    for (int pi = 0; pi < 2; ++pi)
+    {
+        const Player& p = state.players[pi];
+        std::snprintf(buf, sizeof buf, " P%d{life=%d lands=%d bonus=%d drawn=%d lib=%zu hand=[",
+                      pi, p.life, p.lands_played_this_turn, p.bonus_land_drops_this_turn,
+                      p.cards_drawn_this_turn, p.library.size());
+        s += buf;
+        { std::vector<std::string> hn; for (const Card& c : p.hand) { hn.push_back(c.m_name); }
+          std::sort(hn.begin(), hn.end()); for (const auto& h2 : hn) { s += h2; s += ","; } }
+        s += "] gy=[";
+        { std::vector<std::string> gy; for (const Card& c : p.graveyard) { gy.push_back(c.m_name); }
+          std::sort(gy.begin(), gy.end()); for (const auto& g : gy) { s += g; s += ","; } }
+        s += "]}";
+    }
+    s += " bf=[";
+    std::vector<std::string> bfitems;
+    for (const Permanent& perm : state.battlefield)
+    {
+        std::snprintf(buf, sizeof buf, "{%s#%d c%d t%d e%d a%d ch%d age%d st%d/%d tp%d tt%d h%d x%d dmg%d au%d eq%d ctr:",
+                      perm.card.m_name.c_str(), perm.card.m_number, perm.controller_index,
+                      perm.tapped ? 1 : 0, perm.entered_this_turn ? 1 : 0, perm.is_animated ? 1 : 0,
+                      perm.charge_counters, perm.age_counters, perm.storage_counters,
+                      perm.storage_hold_this_turn ? 1 : 0, perm.temp_power_bonus,
+                      perm.temp_tough_bonus, perm.temp_haste ? 1 : 0, perm.exile_at_end ? 1 : 0,
+                      perm.damage, perm.aura_attached_to, perm.equipped_to);
+        s += buf;
+        for (const Counter& c : perm.counters)
+        { std::snprintf(buf, sizeof buf, "%d=%d,", static_cast<int>(c.type), c.count); s += buf; }
+        s += "}";
+        bfitems.push_back(s.substr(s.rfind('{')));
+        s.erase(s.rfind('{'));
+    }
+    std::sort(bfitems.begin(), bfitems.end());
+    for (const auto& b : bfitems) { s += b; }
+    s += "]";
+    return s;
+}
+inline std::atomic<int>& ShadowHits() { static std::atomic<int> v{ 0 }; return v; }
 // GLOBAL entry pool shared by every live line cache in the process (MTG_FSL_POOL, entries;
 // 0/unset = off = byte-identical). The per-cache cap (MTG_FSL_CAP) bounds ONE decision's cache;
 // this bounds their SUM. Rationale (Mirrorwing, 2026-08-14): line-cache appetite is heavily
@@ -15187,18 +15270,19 @@ inline std::size_t FslCap()
 }
 
 inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
-                           const TurnSolver::SearchLine& line)
+                           const TurnSolver::SearchLine& line, const GameState& state)
 {
     if (lc == nullptr) { return; }
+    const std::uint64_t sig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
     FSLineCache::iterator it = lc->find(key);
     if (it == lc->end())
     {
         if (FslCap() && lc->size() >= FslCap()) { return; }   // memo full: recompute instead
         if (!FslPoolAcquire()) { return; }                    // shared pool drained: recompute
-        lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max() });
+        lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max(), sig });
     }
     else if (it->second.nowin_bound != std::numeric_limits<int>::max())
-    { it->second = FSLineEntry{ line, std::numeric_limits<int>::max() }; }
+    { it->second = FSLineEntry{ line, std::numeric_limits<int>::max(), sig }; }
 }
 
 // Store a NO-WIN proved under `bound`. A later, WIDER refutation of the same node supersedes a
@@ -15484,6 +15568,22 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     if (lc != nullptr)
     {
         key = BuildSimKey(state, depth, max_turns, second_main);
+        // TEMPORARY (MTG_CANON_SHADOW): every probed state records its full dump per key; a second
+        // probe of the SAME key with a DIFFERENT dump is a canonical collision -- print both sides,
+        // the diff names the field BuildSimKey is missing. Strip after the last hole is named.
+        if (CanonShadowOn())
+        {
+            static thread_local std::unordered_map<TranspositionTable::Key, std::string,
+                                                   TranspositionTable::KeyHash> s_shadow;
+            std::string dump = ShadowDumpState(state);
+            auto sit = s_shadow.find(key);
+            if (sit == s_shadow.end()) { s_shadow.emplace(key, std::move(dump)); }
+            else if (sit->second != dump && ShadowHits().fetch_add(1) < 5)
+            {
+                std::fprintf(stderr, "[canon-shadow] COLLISION d=%d\n  A: %s\n  B: %s\n",
+                             depth, sit->second.c_str(), dump.c_str());
+            }
+        }
         FSLineCache::const_iterator it = lc->find(key);
         PROF_INC(fsline_lookups);
         if (it != lc->end())
@@ -15495,7 +15595,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // A win entry carries nowin_bound = INT_MAX and is always reusable. A no-win entry answers
         // only "no win at turn <= nowin_bound", so a query that asks about a LATER turn than the
         // refutation covered must re-search.
-        if (it != lc->end() && cutoff <= it->second.nowin_bound) { return it->second.line; }
+        if (it != lc->end() && cutoff <= it->second.nowin_bound)
+        {
+            // WIN entries (nowin_bound == INT_MAX) carry an index-encoded line: under canon the
+            // key admits permuted states, so replay only when the zone ORDER matches; else fall
+            // through and search fresh (correct, just unmemoized). NO-WIN answers are order-free.
+            if (it->second.nowin_bound != std::numeric_limits<int>::max()
+                || it->second.order_sig == 0
+                || it->second.order_sig == FsOrderSig(state))
+            { return it->second.line; }
+        }
     }
     // Truncation watermark for this node's own exploration (see g_fs_trunc_events).
     const unsigned long long trunc_at_entry = g_fs_trunc_events;
@@ -15628,7 +15737,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
             // A this-turn win is the earliest possible from here, so it is the final
             // optimal line for this node -- cache it (cutoff-independent).
-            FSLineStoreWin(lc, key, win);
+            FSLineStoreWin(lc, key, win, state);
             return win;
         }
 
@@ -15663,7 +15772,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // complete refutation, which a budget-truncated wave phase cannot promise. Break
                 // instead of returning so this node's own deferred ranks get a chance to beat it.
                 if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
-                FSLineStoreWin(lc, key, best);
+                FSLineStoreWin(lc, key, best, state);
                 return best;
             }
         }
@@ -15751,7 +15860,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     TurnSolver::Plan p_rec = v;
                     p_rec.breakpoint_actions = std::move(bp);
                     TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
-                    FSLineStoreWin(lc, key, win);
+                    FSLineStoreWin(lc, key, win, state);
                     return win;
                 }
                 TurnSolver::SearchLine tail =
@@ -15772,7 +15881,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     // on its own when the slots retire or the budget runs out.
                     if (!BpWaveCompleteNodes() && tail.win_turn <= state.turn_number + depth - 1)
                     {
-                        FSLineStoreWin(lc, key, best);
+                        FSLineStoreWin(lc, key, best, state);
                         return best;
                     }
                 }
@@ -15883,7 +15992,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     TurnSolver::Plan p_rec = v;
                     p_rec.breakpoint_actions = std::move(gw_bp);
                     TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
-                    FSLineStoreWin(lc, key, win);
+                    FSLineStoreWin(lc, key, win, state);
                     return win;
                 }
             }
@@ -15908,7 +16017,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         TurnSolver::Plan p_rec = v;
                         p_rec.breakpoint_actions = std::move(gw_bp);
                         TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
-                        FSLineStoreWin(lc, key, win);
+                        FSLineStoreWin(lc, key, win, state);
                         return win;
                     }
                 }
@@ -16021,7 +16130,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
 
     if (best.win_turn <= max_turns)
     {
-        FSLineStoreWin(lc, key, best);
+        FSLineStoreWin(lc, key, best, state);
     }
     else if (lc != nullptr)
     {

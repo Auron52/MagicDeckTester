@@ -240,3 +240,21 @@ key, name the missing field. Candidates not yet folded: stack CONTENTS (size onl
 pending-continuation/breakpoint state, cards_drawn gate breadth. No re-adoption until the full
 must-find set passes; the set itself is now part of the canon gate.
 UPDATE: minimal repro CAPTURED -- logs/mwprof/hole5_gi191_d2_c{0,1}.log: d2 b0 gi191 wins T5 (off) vs T6 (on); first cost divergence at T1 pass=2 (merging active), FD traces included. Next: diff committed lines per turn, instrument the first differing decision.
+
+## 2026-08-14 late: order-signature fix lands; ONE failure remains (gi363)
+
+ROOT CAUSE of the main failure class: not a key hole -- cached WIN lines encode plays by HAND
+INDEX / battlefield position, valid only under the store-time zone order; canon merges permuted
+states, so hits replayed MISINDEXED plans. Fix: FSLineEntry.order_sig (FsOrderSig = active hand
+order + bf name+number), WIN hits fall through to fresh search on mismatch; NOWIN entries stay
+order-free (99.99% of monster memo traffic -- perf preserved). Must-find after fix: antilife 5,
+auras 4, hinata 5, mw191 5, mw223 5, mw267 6 -- ALL PASS; **mw363 still 8 vs old 7 (d3)**.
+
+gi363 residual: at the IDENTICAL T1 root state, unbounded d3, off values win=7 (Forest then
+Needle) vs on win=8 (Needle first) -- a real value divergence, and the FSL-path shadow instrument
+(MTG_CANON_SHADOW, multiset dumps, still in tree -- TEMPORARY) shows ZERO unsound merges on that
+path. Prime suspect: the ENUMERATION-DEDUP call sites (seen_states / bp_seen_states / reframe_seen
+at TurnSolver ~11667/14225/14465/16492) -- they DROP plan variants by canonical key without
+reaching the FSL probe, so the shadow cannot see them. Next: extend the shadow check to those
+sites; trigger pattern = Sandstone Needle (depletion) land-timing orderings. Canon stays
+reverted/blocked until gi363 passes.
