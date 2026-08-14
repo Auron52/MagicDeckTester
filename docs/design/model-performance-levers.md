@@ -69,8 +69,10 @@ decision. Levers:
 
 Already O(1) per candidate; cost is candidate enumeration + featurization. Levers:
 
-1. **Model-guided generation order + early stop** (beam): generate candidates in model-predicted-best-first
-   order and stop once the lead is safe, instead of enumerate-all-then-rank.
+1. **Model-guided generation order + early stop**: generate candidates in model-predicted-best-first
+   order and stop once the lead is safe, instead of enumerate-all-then-rank. (An early stop with a
+   safety condition — NOT a rank cap; see heuristic-optimization.md Rule 0b before narrowing this
+   into any fixed-width "beam".)
 2. **Cheap pre-filter** of strictly-dominated candidates before featurizing.
 3. For the **A/B card-swap screener** use case (validated in `learned-d0-policy.md`): compile / quantize the
    GBDT for the batch path (many variants × many seeds).

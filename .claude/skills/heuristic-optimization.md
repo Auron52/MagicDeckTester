@@ -33,6 +33,37 @@ Two different kinds of change look similar but are handled oppositely:
 > a *state-conditional* rank (flip the drip land earlier when a Remedy makes its drip
 > beneficial). The optimization space includes structure and state, not only list order.
 
+## Rule 0b — NO lossy truncation of the search (USER BAR, 2026-08-14)
+
+**Counterexample — do NOT re-derive this "optimization."** During the KittyEquipment
+branching-factor work an agent coded a rollout-candidate beam (`MTG_ROLLOUT_BEAM=N`: hard-cap
+the plan list at the search's interior rollout nodes to the top N by d0 rank). It measured
+"well" — ~2x wall for one game in 100 finishing a turn later — and the USER rejected it
+outright and had it **deleted from the source**: *"I don't want any beam that completely
+removes branches as it interferes with correctness... We should mainly be looking for
+heuristics instead of this nonsense."* Tightening `EnumGroupCap` purely for speed is the same
+class (a cap-6 test bought 1.35x and silently cost a different game — not adopted). A small
+measured quality loss does not make a truncation acceptable; the measurement is not the
+arbiter for this class of change at all.
+
+**The tell is the infinite-budget test** (same bar as the breakpoint-width waves work:
+"unbounded is THE test"): if a line is *unreachable even at infinite budget*, the change
+REMOVES branches — forbidden. If every line is still reachable given budget, the change only
+*reorders spending* — fine. Acceptable shapes, in order of preference:
+
+1. **Reasoned dominance prunes (doctrine-class)** — a rule with an argument for why the
+   dropped branch cannot be better (e.g. the auto-equip collapse: a {0}-cost equip of an
+   unattached battlefield equipment is strictly ≥ skipping it in a greedy continuation), then
+   measurement to CONFIRM losslessness (per-game win-turn diff, not just the average), an
+   open switch, and user sign-off.
+2. **Coverage-preserving reorderings** — group waves / deferred tranches: the space is still
+   fully enumerated, only the order (and what fits the budget) changes.
+3. **The escalation beam** (`value_play.beam_width`, default-on where configured) is allowed
+   ONLY because it is budget ORDERING, not removal: it searches the beam to full depth first
+   and then **escalates to the rest**; measured quality-IDENTICAL to no-beam at unbounded
+   budget on every deck that carries it (docs/design/post-breakpoint-search.md). A "beam"
+   that never escalates is a cap — the forbidden shape above. Do not confuse the two.
+
 ## Why AI owns this
 
 The alternative to AI optimizing these heuristics is a **human inventing every
@@ -258,3 +289,8 @@ on rather than inventing a fix.
   root `GenericProvider` neutral.
 - **Silent scaffolding** — the `MTG_RANK_VARIANT`-style selector is a throwaway; revert
   it, and commit only the winner in its provider.
+- **Reaching for a width cap / beam when asked to "make it faster"** — the recurring failure
+  mode Rule 0b exists for. Truncating candidate lists is not a heuristic, it is a removal of
+  the search's branches; the user has rejected it every time an agent has proposed it. Speed
+  work goes through dominance prunes, coverage-preserving waves, budget ordering (escalation
+  beam), or the value leaf — never through a rank cutoff.

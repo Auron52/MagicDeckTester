@@ -1,0 +1,100 @@
+# Main-phase classification (MAIN1 / MAIN2 / BOTH)
+
+**Status: USER-designed architecture (2026-08-14), not yet implemented.** Origin: the
+KittyEquipment branching work (`analysis-KittyEquipment.md`) — the residual search cost is
+tree volume, and the USER rejected lossy truncation (see `heuristic-optimization.md` Rule 0b);
+this is the heuristic answer for the two-main share of that volume. The USER named the greedy
+second main's existence as one of the REASONS for this design — killing it is a design goal
+(see the directive below), not an afterthought.
+
+## The rule (USER, verbatim intent)
+
+Classify every spell/ability a deck can cast in a turn as **MAIN1**, **MAIN2**, or **BOTH**,
+by one question:
+
+> Does this spell help me, or potentially help me, deal damage in the attack phase?
+> If it does, you cast it first main. If not, you cast it in the second.
+
+- **MAIN1:** lords, haste creatures, things that grant haste, situations where a creature
+  *can* gain haste, things that pump creatures (including equipment) — anything that adds to
+  or unlocks this turn's attack.
+- **MAIN2 (the default for everything else):** "as a Magic player I play everything that
+  doesn't help [the attack] in the second main — primarily to make the opponent respond to my
+  attack before I do anything else." Worked examples: vigilance-attacking Faeburrow Elder
+  into Unite the Coalition (FiveColour); attack with Hinata, then Crackle targeting her;
+  Light Up the Stage after damage (Burn).
+- **BOTH (narrow exception classes):**
+  * **Draw spells** — can serve either phase; only worth double-listing when the deck has
+    effects that take advantage of main 1 (otherwise MAIN2).
+  * **Rituals** — may need to power a spell in either phase; again only if main-1 effects
+    exist in the deck.
+  * **Floating mana** — you can't fully separate the phases when mana would be lost across
+    them; rare in practice.
+- A deck may still be listed as using only one phase (the existing `DeckUsesSecondMain`
+  gate is unchanged for single-main decks).
+
+## Why this is the right shape
+
+- It **partitions** the candidate space per phase instead of enumerating most cards in both
+  mains: main-1's odometer runs over MAIN1 ∪ BOTH, main-2's over MAIN2 ∪ (BOTH still in
+  hand) ∪ combat-acquired resources ∪ repositioning (e.g. the Greaves→Kemba park). The
+  joint space shrinks multiplicatively without removing any *line* — a non-combat cast
+  moves phases, it doesn't disappear.
+- **Main-2 weak dominance (USER correction 2026-08-14 — NOT mere equivalence):** for a
+  spell that does not feed this turn's attack, casting in main 2 weakly DOMINATES casting
+  in main 1 — never worse, sometimes strictly better — because combat can only ADD options
+  between the mains, never remove them: damage already dealt (spectacle costs — Light Up
+  the Stage), attackers surviving untapped (vigilant Faeburrow Elder attacks AND still taps
+  for Unite the Coalition; tapping it for mana in main 1 would cost the attack), targets in
+  their post-attack state (Crackle wants Hinata to have attacked before it consumes her).
+  The dependence is BIDIRECTIONAL — the cast can affect combat AND combat affects the cast
+  (cost / resources / targets) — and an earlier "outcome-identical" framing that considered
+  only the first direction was wrong. The only places the inequality can flip — a main-1
+  cast indirectly feeding the attack — are exactly the BOTH classes (draws, rituals,
+  floating mana): the exception list IS the boundary of the dominance argument.
+- **Measurement implication:** MAIN2 moves should measure neutral-or-BETTER per game; any
+  per-game regression is a MISCLASSIFICATION signal (a hidden attack-feeding role), not an
+  acceptable trade.
+- It also aligns with correct play for the eventual real-opponent phase (force a response
+  to the attack before committing more).
+
+## Implementation sketch (sites, not yet built)
+
+- **Where:** `CollectActions(state, is_pre_combat)` already carries the phase; filter
+  candidates by classification there. Executor and rollout share it → lockstep by
+  construction. Enforced as a provider-owned policy with an open switch (`MTG_UNPRUNE`
+  gate / human play opens both phases fully — never narrow the viewer).
+- **Classifier:** param-driven base (haste / grants-haste / pump / equipment / lord
+  statics / spectacle / combat-triggered payoffs...), plus the conditional class: a fresh
+  creature is MAIN1 only when haste access exists this turn (granter on board or castable —
+  the "cast Greaves + creature, equip, attack NOW" lines must stay reachable); otherwise
+  creatures default MAIN2. **When in doubt, classify MAIN1** — that reproduces current
+  behavior and is never wrong, only wider; MAIN2-only is the assertive claim.
+- **BOTH handling:** the card appears in both phases' candidate sets; no bookkeeping needed
+  for exclusivity (main-2's Solve sees the post-main-1 state — a card cast in main 1 is no
+  longer in hand).
+- **Mana coupling:** the search already arbitrates reservation structurally — a main-1 plan
+  that strands the main-2 payoff rolls out worse.
+- **KILL THE GREEDY SECOND MAIN (USER directive 2026-08-14 — the point of this design, not a
+  side effect):** "The greedy enumeration is something I want to kill with my new second-main
+  design... I really don't like that we have greedy logic in the search window. I want it all
+  removed." The searched second main (`MTG_SEARCH_SECOND_MAIN`) measured worse at full width
+  only because each phase searched the whole hand twice (budget dilution,
+  `second-main-greedy.md`); classification makes each phase a PARTITION, which is what makes
+  the searched second main affordable. Once classification lands and measures, the greedy
+  second-main path inside the search (`SolveSecondMainInSearch`'s greedy branch and the
+  in-rollout greedy `Solve(state, false)` sites) is to be REMOVED — searched becomes the only
+  path, completing the standing USER BAR "no greedy steps except attack decisions and mana
+  allocation" (2026-08-09). The principle, verbatim: "search should be truly search at every
+  level. Greedy is simply too unreliable to be part of it."
+- **Per-deck payoff:** biggest for decks whose second main carries real decisions over many
+  castables (FiveColour, Hinata, Burn staging, Goblins post-Lackey). KittyEquipment gains
+  modestly (USER assessment: its second main is only the Kemba park + casting cards drawn
+  off a Puresteel/Skyhunter attack) — most of its hand is equipment/pumps = MAIN1 anyway.
+
+## Measurement plan
+
+Per second-main deck: the standard battery (train seeds, d3+d5, per-game win-turn diff — a
+MAIN2 misclassification shows up as a specific game losing a turn, not as an average drift),
+wall-time, fd oracle, full smoke. Adoption per archetype provider on user approval, like
+every prune.
