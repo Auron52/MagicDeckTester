@@ -34,6 +34,15 @@ by one question:
     them; rare in practice.
 - A deck may still be listed as using only one phase (the existing `DeckUsesSecondMain`
   gate is unchanged for single-main decks).
+- **A deck with NO main-1 effects classifies EVERYTHING Main2 — draws included (USER
+  clarification 2026-08-14, verbatim):** "everything in Hinata is second main. The reason is
+  because there is literally no attacking creature beyond Hinata herself and she never gets
+  haste or is pumped. So, by my rule everything should be cast second main including all
+  draw." The BOTH classes exist only to feed a deck's main-1 effects; with none, they
+  collapse to MAIN2 and main 1 is just the land drop + attack. Corollary (USER): "if we are
+  considering main 1 for Hinata, there is a bug" — under a total doctrine, a game that
+  measures worse is an ENGINE defect in the post-combat path, never a reason to soften the
+  classification.
 
 ## Why this is the right shape
 
