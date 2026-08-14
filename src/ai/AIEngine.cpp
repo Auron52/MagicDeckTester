@@ -1747,7 +1747,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         //     uses the 4-pass heuristic plus the Treasure-Hunt defer special-case;
         //   - the second main at any depth: a land may still be playable post-combat
         //     (e.g. one revealed by Light Up the Stage), played greedily as before.
-        const bool fold_land = (m_lookahead_depth > 0 && is_pre_combat_main);
+        // Main2DropEnabled (MTG_MAIN2_DROP, EngineFlags.h): the depth>0 SECOND main is now
+        // searched-land too -- EnumeratePlansWithLand folds the still-open drop post-combat,
+        // so the executor follows the plan's land exactly like the first main (the greedy
+        // suppression note below remains true for the flag-off world it describes).
+        const bool fold_land = (m_lookahead_depth > 0
+                                && (is_pre_combat_main || Main2DropEnabled()));
 
         if (!fold_land)
         {

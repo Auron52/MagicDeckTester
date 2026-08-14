@@ -8208,12 +8208,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // drop), so ApplyPlanDirect must execute the chosen land -- otherwise it AND any cast that needs
     // its mana are silently dropped (the plan is enumerated but never realized). Gated on
     // s_human_play, and post-combat follows ONLY the land_decided branch (never the greedy
-    // SimulateLandPlay fallback, which would play a land the human didn't choose). The autonomous
-    // search's post-combat plans carry no land (drop_available is pre-combat-only there), so the
-    // block is a no-op for the search -> byte-identical.
+    // SimulateLandPlay fallback, which would play a land the human didn't choose). With
+    // Main2DropEnabled (MTG_MAIN2_DROP) the autonomous post-combat plans NOW carry a searched
+    // land too (EnumeratePlansWithLand folds the still-open drop there) and follow the same
+    // land_decided-only rule -- the greedy fallback stays pre-combat-only below, preserving the
+    // gi=141 lockstep lesson. Flag off => post-combat plans carry no land, block no-op, byte-identical.
     // bp_resume: the whole prefix (this land block through the Karoo deferral) is INSIDE the
     // snapshot's state -- skipped.
-    if (bp_resume == nullptr && (is_pre_combat || s_human_play))
+    if (bp_resume == nullptr && (is_pre_combat || s_human_play || Main2DropEnabled()))
     {
         if (plan.land_decided)
         {
@@ -9437,6 +9439,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // falls back to the heuristic's top pick. Identical to the real game (EffectHandler)
             // so the clairvoyant rollout sees the same fetched card.
             PerformTutor(state, state.active_player_index, def.params, tutor_target, def.card.m_name);
+            // Tutor-to-hand re-solve (MTG_TUTOR_RESOLVE -- main-2 parity work, USER 2026-08-14):
+            // the fetched card competes for this turn's remaining mana exactly like a cantrip's
+            // draw, but tutors never armed the deferred re-solve ("a tutor is NOT a breakpoint
+            // site") -- sound only while tutors were cast in MAIN 1, where the post-combat
+            // enumeration picked the fetched card up FOR FREE at the phase boundary. A
+            // Main2-classified deck has no later enumeration this turn (hinata gi=22: Gamble
+            // main-2 fetches Reality Spasm and the Spasm+Crackle kill waits a whole turn). Arm
+            // the same deferred re-solve as a plain cantrip (site 3); executor lockstep comes
+            // via the plan's recorded breakpoint script. DEFAULT OFF until measured.
+            static const bool s_tutor_resolve = EnvOn("MTG_TUTOR_RESOLVE");
+            if (s_tutor_resolve && def.params.tutor_to_hand && !s_human_play
+                && sink_stack.empty())
+            { deferred_cantrip_resolve = true; }
         }
         else if (def.params.tutor_land_to_battlefield)
         {
@@ -13144,10 +13159,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     const Player& ap = state.ActivePlayer();
     // Human play also offers the land drop in the POST-combat main when it is still open: a real
     // game can pass the drop pre-combat, cast a Spectacle dig (Light Up the Stage) post-combat, then
-    // play a land it revealed as the turn's drop. The autonomous search only drops pre-combat (its
-    // second main is cast-only), so this is gated on MTG_HUMAN_PLAY -> byte-identical for the search.
+    // play a land it revealed as the turn's drop. The autonomous search historically only dropped
+    // pre-combat (its second main was cast-only) -- a rules gap (either main phase may take the
+    // drop) that main-phase classification made load-bearing: a Main2-partitioned deck draws into
+    // lands in main 2 and must be able to play them (USER 2026-08-14, hinata gi=99). Main2DropEnabled
+    // (MTG_MAIN2_DROP, EngineFlags.h) opens it for the autonomous engine too; the executor's
+    // fold_land follows the same reader, so search and executor stay lockstep.
     const bool s_human_play_drop = HumanPlayActive();
-    bool drop_available = (is_pre_combat || s_human_play_drop)
+    bool drop_available = (is_pre_combat || Main2DropEnabled() || s_human_play_drop)
                        && ap.lands_played_this_turn < ap.LandDropsAvailable();
 
     if (!drop_available)
@@ -14767,14 +14786,24 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     if (budget && budget->Overrun()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
     if (second_main)
     {
-        std::vector<TurnSolver::Plan> post = EnumeratePlans(state, false);
+        // With the main-2 land drop open (Main2DropEnabled, EngineFlags.h) the second main's
+        // enumeration folds the still-unused drop exactly like the first main's -- this is the
+        // search-side half of the rules fix (the executor's greedy main-2 land play was suppressed
+        // at depth>0 PRECISELY because this path could not model a land, AIEngine::TakeTurn
+        // gi=141 note). Off => the historical cast-only enumeration, byte-identical.
+        std::vector<TurnSolver::Plan> post = Main2DropEnabled()
+            ? EnumeratePlansWithLand(state, false)
+            : EnumeratePlans(state, false);
         // Always allow casting nothing in the second main and just advancing the
         // turn. EnumeratePlans returns an empty vector when no post-combat play is
         // castable (e.g. the pre-combat main tapped out), so without this the loop
         // below would never run and the whole line would be (wrongly) scored as a
         // no-win — making any tap-out play look strictly worse than idling. The
         // baseline rollout always advances past an empty second main; mirror that.
+        // land_decided on the do-nothing plan (an explicit deferred/blank drop) so the
+        // land-execution path never greedy-plays a land the enumeration did not choose.
         post.push_back(TurnSolver::Plan{});
+        post.back().land_decided = Main2DropEnabled();
         MoveOrderPlans(post);   // lethal-looking / higher-value second mains first -> earlier cutoff
         // NOTE: we do NOT shortcut on the projected `wins_this_turn` flag here. That
         // projection (pending_atk + direct_dmg >= opp life) can over-count what the

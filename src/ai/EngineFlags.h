@@ -8,6 +8,21 @@
 #include <cstdlib>
 #include <string>
 
+// MTG_MAIN2_DROP=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted): offer
+// the turn's still-unused land drop in the POST-combat main for the autonomous search/executor,
+// as the rules allow (CR: a land may be played during either of your main phases). Human play has
+// always had this (EnumeratePlansWithLand's s_human_play_drop); the autonomous engine's
+// "second main is cast-only" assumption predates main-phase classification, under which a deck
+// can draw into a land in main 2 and must be able to play it (measured: hinata gi=99). Read by
+// BOTH the search (EnumeratePlansWithLand / FSLineTail / ApplyPlanDirect) and the executor
+// (AIEngine fold_land) -- shared reader per the lockstep rule. On adoption this flips to
+// default-ON with an MTG_NO_MAIN2_DROP hatch + GT rebaseline.
+inline bool Main2DropEnabled()
+{
+    static const bool v = EnvOn("MTG_MAIN2_DROP");
+    return v;
+}
+
 // MTG_LEGACY_STATIC_TAPPED=1: classify land tapped-ness from the STATIC enters_tapped flag in the
 // land-priority passes, as before the dynamic fix (byte-identical A/B hatch). See
 // AIEngine::TryPlayLand and TurnSolver's greedy_land_name -- the two implement the same passes
