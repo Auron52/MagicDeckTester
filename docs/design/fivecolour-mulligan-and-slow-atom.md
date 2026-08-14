@@ -227,6 +227,63 @@ That also revises section 5a's own estimate upward: I sized this at "~2-4% at be
 payment share, and it landed at ~4.1% of total runtime. The estimate was low because the uncovered
 shape turned out to be half the nodes, not a fraction of the remainder.
 
+### 5c. Canonical (type-multiset) keying -- big win, NOT correct yet, default OFF
+
+Where mana actually sits after 5a/5b, `perf` over the live keepgen pool on HEAD (669K samples, 60 s,
+all threads, categorised by subsystem):
+
+```
+SEARCH: solve        26.47%      MANA: payment solve   10.30%
+OTHER (flat tail)    32.59%      MANA: pool/produces    4.61%
+STATE copy/alloc     11.13%      MANA: cost/eligibility 3.49%
+EVAL                 10.70%      ---- ALL MANA         18.40%
+```
+
+The cache key identifies each mana source by **battlefield INDEX**, so two untapped Mountains pose the
+same payment problem under different keys and a wide board re-solves it once per permutation of which
+copy is which. Keying by the sorted MULTISET of source descriptors instead:
+
+```
+hit rate            83.6%      ->  92.7%
+misses              92,888     ->  42,247      (2.20x fewer solves)
+backtracker nodes   6,584,731  ->  1,833,273   (-72.2%)
+nodes per entry     70.9       ->  43.4
+```
+
+The equivalence is not invented: it is the one the DFS's own identical-sibling collapse (`s_dup_of_buf`)
+uses -- same def, chain-eligibility, storage counters/hold, full counters vector. That collapse is also
+what makes realisation cheap: only the lowest-index currently-untapped member of a group is ever
+explorable, so a solution taps a PREFIX of each group, and an entry can store (descriptor, RANK)
+instead of an index.
+
+**Two things went wrong, and the second is unresolved.**
+
+1. *Fixed.* The first sort-free version accumulated `ms2 += dh * C`, and `sum(dh*C) == C*sum(dh)` -- a
+   linear image of `ms1`, so the "128-bit" key was really 64 with a verify that merely re-derived it.
+   It diverged on a 200-game job. `ms2` now sums an AVALANCHED image of `dh`. (XOR is not an option:
+   it cancels on even multiplicity, so `{A,A}` would collide with `{}`.) Dropping the sort also
+   removed a real cost -- the sorted version measured Dragonstorm 2-3% SLOWER, because a sort per call
+   outweighs the solves it saves on a low-redundancy board.
+
+2. *Open.* **The descriptor equivalence is incomplete.** With the hash fixed, a 1,300-game A/B across
+   the three source-awkward decks passes with identical digests AND identical per-game logs -- but the
+   full smoke suite fails **8/36**: slivers d3, th d0, antilife d3, hinata d3/d5, mirrorwing d0/d3/d5.
+   Two move the average (antilife 4.2200 -> 4.2160, mirrorwing d3 5.2400 -> 5.2333), so it is a real
+   play divergence.
+
+   **Minimal repro: `treasure_hunt` d0 seed 1001, 1000 games -> 6 diverge** (games 504, 744, ...), same
+   win turn, different line. Depth 0 means no search at all, so the gap is in the executor's per-cast
+   payment -- the leftover shape.
+
+   The lesson to carry: the sibling collapse only ever prunes subtrees isomorphic to **proven
+   failures**, which is strictly weaker than "either member may be tapped and the game continues
+   identically". Canonicalising needs the stronger property. The missing component is not yet
+   identified -- attachments (equipment/auras on a mana dork) and any per-permanent field a later
+   decision reads are the leading candidates.
+
+Kept as `MTG_MANA_CACHE_CANON=1`, default OFF, because the measurement is the expensive part and it is
+done: whoever closes the equivalence gap gets a 72% cut in payment nodes waiting for them.
+
 **The correction that matters more:** the 22.3% "mana payment" figure in section 3's perf profile came
 from the DEGENERATE rollouts, not from normal play. Payment dominates the TAIL. That is why the tail
 wants the breadth fix (item 1) and not more memoisation -- a memo can only ever attack repeats, and

@@ -1789,8 +1789,9 @@ inline bool ManaCacheEnabled() { static const bool v = EnvOn("MTG_MANA_CACHE", t
 // reads is then resolved against the state the hit is actually landing on.
 struct ManaCacheTap
 {
-    int idx;            // battlefield index of the tapped source
-    int storage_burn;   // counters this tap removed (0 for every non-storage source)
+    std::uint64_t desc;   // canonical mode: the source's descriptor (0 in indexed mode)
+    int idx;              // indexed mode: battlefield index. canonical mode: RANK within the group
+    int storage_burn;     // counters this tap removed (0 for every non-storage source)
 };
 // SCALING sources -- domain (Faeburrow Elder / Bloom Tender: one mana of each colour among ALL your
 // permanents) and scaled (Three Tree City: N of one colour, N = creatures you control). Both read
@@ -1850,6 +1851,59 @@ inline bool McAllSources() { static const bool v = EnvOn("MTG_MANA_CACHE_ALLSRC"
 // per-cast solves keeps payment lazy and in-order -- each subset paid when it is actually due -- and
 // makes the repeats free, which is what was actually expensive.
 inline bool McLeftoverShape() { static const bool v = EnvOn("MTG_MANA_CACHE_LEFTOVER", true); return v; }
+
+// ---- CANONICAL (type-multiset) keying -----------------------------------------------------------
+// The key used to identify each mana source by BATTLEFIELD INDEX, so two untapped Mountains posed the
+// same payment problem under two different keys and a wide board re-solved it once per permutation of
+// which copy was which. Measured on FiveColour d3: keying by type instead lifts the hit rate 83.6% ->
+// 94.0%, i.e. 2.73x fewer solves -- and since the leftover-shape fix, misses are 100% of payment
+// nodes, so that is 2.73x off the payment DFS.
+//
+// The equivalence is NOT invented here: it is exactly the one the DFS's own identical-sibling collapse
+// (s_dup_of_buf) uses -- same def, same chain-eligibility (untapped at entry, unreserved, a dork that
+// can tap), same storage counters/hold, same full counters vector. Reusing it is what makes the
+// realisation sound, because that collapse is also what guarantees the DFS explores a group's members
+// in ASCENDING INDEX order: at any node only the lowest-index currently-untapped member is explorable
+// (an earlier untapped member means ci is skipped; an earlier TAPPED member is on the DFS path and
+// walked past). So any solution taps a PREFIX of each group.
+//
+// Realisation therefore needs no type-to-permanent search: sources are put in a canonical order
+// (descriptor, then index), and the entry stores tap POSITIONS in that order rather than battlefield
+// indices. Two boards sharing a canonical key have identical descriptor multisets, so position p names
+// the same descriptor and the same rank within its group on both -- and rank-within-group ascending is
+// exactly the prefix the DFS would have taken.
+//
+// HARD DEPENDENCY: this is only sound while the sibling collapse is ON. With MTG_NO_TAP_DUP_COLLAPSE=1
+// the DFS may tap a non-prefix member, so canonical keying disables itself with it.
+//
+// *** DEFAULT OFF -- NOT YET CORRECT. The descriptor equivalence is INCOMPLETE. ***
+// The win is real and large (payment nodes 6,584,731 -> 1,833,273, -72.2%; hit rate 83.6% -> 92.7%),
+// and it survives a 1,300-game A/B across the three source-awkward decks (Anti-Lifegain = drip +
+// Tainted Remedy, Dragonstorm = storage, FiveColour = Deathrite) with identical digests AND identical
+// per-game logs. But the full smoke suite fails 8/36: slivers d3, th d0, antilife d3, hinata d3/d5,
+// mirrorwing d0/d3/d5. Two of those move the average (antilife 4.2200 -> 4.2160, mirrorwing d3 5.2400
+// -> 5.2333), so this is a real play divergence, not a digest technicality.
+//
+// MINIMAL REPRO: treasure_hunt d0 seed 1001, 1000 games -> 6 diverge (games 504, 744, ...), same win
+// turn, different line. Depth 0 means no search at all, so the gap is in the executor's per-cast
+// payment, which is the leftover shape (collapse_colors off).
+//
+// What that says: two permanents can pass the sibling collapse's test -- same def, same
+// chain-eligibility, same storage counters/hold, same full counters vector -- and still not be
+// interchangeable for the RESULTING STATE. The collapse only ever prunes subtrees isomorphic to
+// PROVEN FAILURES, which is a weaker claim than "either may be tapped and the game continues
+// identically". Canonicalising needs the stronger property, and the missing component is not yet
+// identified. Candidates not yet ruled out: attachments (equipment/auras on a mana dork), and any
+// per-permanent field a later decision reads that the tap set makes observable.
+//
+// Kept as a lever, not deleted, because the measurement is the expensive part and it is done.
+// MTG_MANA_CACHE_CANON=1 enables it for further diagnosis. See
+// docs/design/fivecolour-mulligan-and-slow-atom.md section 5c.
+inline bool McCanonKey()
+{
+    static const bool v = EnvOn("MTG_MANA_CACHE_CANON") && !EnvOn("MTG_NO_TAP_DUP_COLLAPSE");
+    return v;
+}
 inline bool McSimpleTap(const CardDefinition* d)
 { return d && !d->params.storage_land && d->params.tap_opponent_lifegain == 0
            && !d->params.gy_land_exile_mana; }
@@ -1859,10 +1913,22 @@ inline bool McSimpleTap(const CardDefinition* d)
 inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_creature,
                          std::uint64_t reserved_mask, int untapped_max,
                          bool want_leftover, bool want_full_pool, const ManaPool& floating,
-                         std::uint64_t& k1, std::uint64_t& k2)
+                         std::uint64_t& k1, std::uint64_t& k2,
+                         std::vector<std::uint64_t>* out_desc)
 {
     auto mix = [](std::uint64_t& h, std::uint64_t v){ h ^= v; h *= 1099511628211ull; h ^= h >> 29; };
     std::uint64_t h1 = 1469598103934665603ull, h2 = 14695981039346656037ull;
+    // Canonical mode collects one descriptor per source and hashes the SORTED multiset; indexed mode
+    // hashes the sequence as it stands. `canon` holds (descriptor, index) so the sort is stable on
+    // index -- which is what makes position p mean "rank within its group" and match the DFS's
+    // ascending-index prefix rule.
+    // Canonical mode combines the per-source descriptors COMMUTATIVELY (two independent 64-bit sums),
+    // so the multiset is order-free with no sort -- a sort here cost more than the solves it saved on
+    // low-redundancy boards (Dragonstorm measured 2-3% SLOWER). `out_desc` receives one descriptor per
+    // battlefield slot so the store/hit paths can rank a source within its group by a single scan.
+    const bool canon = (out_desc != nullptr);
+    if (canon) { out_desc->assign(state.battlefield.size(), 0ull); }
+    std::uint64_t ms1 = 0, ms2 = 0;
     const int active = state.active_player_index;
     const int n = static_cast<int>(state.battlefield.size());
     int gy_fuel = -1;       // lazy, hashed once on the first Deathrite-style source
@@ -1899,9 +1965,31 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
             mix(h1, 0x5CA1'ED'01ull + nc); mix(h2, 0x5CA1'ED'02ull ^ (nc << 24));
         }
         const std::uint64_t di = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(d));
-        mix(h1, static_cast<std::uint64_t>(i));  mix(h2, static_cast<std::uint64_t>(i) * 0x9E3779B97F4A7C15ull);
-        mix(h1, di);                             mix(h2, di ^ 0xD1B54A32D192ED03ull);
-        mix(h1, p.tapped ? 1ull : 2ull);         mix(h2, p.tapped ? 3ull : 5ull);
+        // In canonical mode every per-source field below goes into a DESCRIPTOR instead of straight
+        // into the running hash, and the index is deliberately excluded (that is the whole point).
+        // `dh` shadows the h1/h2 writes so the two modes stay one code path.
+        std::uint64_t dh = 1469598103934665603ull;
+        auto smix = [&](std::uint64_t a, std::uint64_t b)
+        { if (canon) { mix(dh, a); } else { mix(h1, a); mix(h2, b); } };
+        if (!canon) { mix(h1, static_cast<std::uint64_t>(i)); mix(h2, static_cast<std::uint64_t>(i) * 0x9E3779B97F4A7C15ull); }
+        smix(di, di ^ 0xD1B54A32D192ED03ull);
+        smix(p.tapped ? 1ull : 2ull, p.tapped ? 3ull : 5ull);
+        // Chain-eligibility and the FULL counters vector -- the remaining two components of the
+        // sibling collapse's equivalence. Counters matter because a tap DECREMENTS a depletion
+        // counter: two Sandstone Needles on different counts are not interchangeable even though
+        // production is counter-independent, and the indexed key never had to say so (same index =>
+        // same permanent). Ineligible sources (tapped/reserved/sick dork) keep their own descriptor;
+        // they are never tapped, so they only ever affect the key, never the tap-set.
+        if (canon)
+        {
+            const bool elig = !p.tapped && !((reserved_mask >> i) & 1ull)
+                           && !(d->tmpl == CardTemplate::ManaDork && !CanTapNow(p, state.battlefield));
+            mix(dh, elig ? 0xE11Cull : 0xE11Dull);
+            mix(dh, static_cast<std::uint64_t>(p.counters.size()));
+            for (const Counter& ctr : p.counters)
+            { mix(dh, static_cast<std::uint64_t>(ctr.type) * 1000003ull + static_cast<std::uint64_t>(ctr.count)); }
+            mix(dh, static_cast<std::uint64_t>(p.storage_counters) * 2 + (p.storage_hold_this_turn ? 1ull : 0ull));
+        }
         // Per-source DYNAMIC state the DFS reads that (i, def, tapped) does not capture. Each of
         // these was a latent stale-hit hole: two boards identical in (i, def, tapped) but differing
         // in one of the fields below solve DIFFERENTLY, so they must not share a key.
@@ -1913,18 +2001,17 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
             if (d->tmpl == CardTemplate::ManaDork)
             {
                 const bool elig = CanTapNow(p, state.battlefield);
-                mix(h1, elig ? 0xE119'01ull : 0xE119'02ull);
-                mix(h2, elig ? 0xE119'03ull : 0xE119'05ull);
+                smix(elig ? 0xE119'01ull : 0xE119'02ull, elig ? 0xE119'03ull : 0xE119'05ull);
             }
             // Storage battery: burst amount = min(counters, shortfall) and StorageSourceLive gates on
             // counters>0 + the hold flag, so a charged vs uncharged (or held) Bazaar must key apart --
             // otherwise a stored negative goes stale when the battery charges.
             if (d->params.storage_land)
             {
-                mix(h1, 0x570'1ull + static_cast<std::uint64_t>(p.storage_counters) * 2
-                      + (p.storage_hold_this_turn ? 1ull : 0ull));
-                mix(h2, 0x570'2ull ^ (static_cast<std::uint64_t>(p.storage_counters) << 8)
-                      ^ (p.storage_hold_this_turn ? 0x100000ull : 0ull));
+                smix(0x570'1ull + static_cast<std::uint64_t>(p.storage_counters) * 2
+                       + (p.storage_hold_this_turn ? 1ull : 0ull),
+                     0x570'2ull ^ (static_cast<std::uint64_t>(p.storage_counters) << 8)
+                       ^ (p.storage_hold_this_turn ? 0x100000ull : 0ull));
             }
         }
         // Deathrite (gy_land_exile_mana): production is gated on GraveyardLandFuel > 0, and each tap
@@ -1950,12 +2037,26 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         if (d->params.reflecting)
         {
             const std::vector<Color>& rc = EffectiveProduces(state, active, *d);
-            mix(h1, 0xEFEC71'11ull); mix(h2, 0xEFEC71'22ull);
+            smix(0xEFEC71'11ull, 0xEFEC71'22ull);
             for (Color c : rc)
-            { mix(h1, static_cast<std::uint64_t>(c) + 1);
-              mix(h2, (static_cast<std::uint64_t>(c) + 1) * 0x9E3779B97F4A7C15ull); }
+            { smix(static_cast<std::uint64_t>(c) + 1,
+                   (static_cast<std::uint64_t>(c) + 1) * 0x9E3779B97F4A7C15ull); }
+        }
+        // Commutative, but the two accumulators must be INDEPENDENT functions of dh. The first cut used
+        // ms2 += dh * C, and sum(dh*C) == C*sum(dh) -- a linear image of ms1, so the "128-bit" key was
+        // really 64 with a verify that re-derived it and could not catch a multiset collision. It
+        // diverged on a 200-game FiveColour job (caught by the per-game log diff, not by the digest of
+        // a smaller run). ms2 now sums an AVALANCHED image of dh, which no longer factors out. XOR is
+        // not an option here: it cancels on even multiplicity, so {A,A} would collide with {}.
+        if (canon)
+        {
+            (*out_desc)[i] = dh;
+            std::uint64_t a = dh;
+            a ^= a >> 33; a *= 0xff51afd7ed558ccdull; a ^= a >> 29; a *= 0xc4ceb9fe1a85ec53ull; a ^= a >> 32;
+            ms1 += dh; ms2 += a;
         }
     }
+    if (canon) { mix(h1, ms1); mix(h2, ms2); }
     auto mixcost = [&](std::uint64_t& h){
         mix(h, static_cast<std::uint64_t>(cost.generic));
         mix(h, static_cast<std::uint64_t>(cost.white) | (static_cast<std::uint64_t>(cost.blue) << 16)
@@ -1989,94 +2090,6 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
 }
 } // namespace
 
-// ---- SHADOW canonical key (MTG_MANA_CACHE_CANON_PROBE) -----------------------------------------
-// Identical to ManaCacheKey except sources are hashed as a SORTED MULTISET of descriptors rather than
-// as an indexed sequence: two untapped Mountains collapse to "Mountain x2" instead of keying apart by
-// battlefield position. reserved_mask cannot be hashed as a mask here (it is index-based), so the
-// reserved bit rides in each source's descriptor. Everything not per-source -- cost, for_creature,
-// untapped_max, output mode, floating, the domain/scaled/fuel/drip globals -- is unchanged.
-//
-// Diagnostic ONLY: it feeds a shadow map that answers "how many solves would a type-canonical key
-// save?" and never influences a payment. Realising such a key for real needs the stored tap-set to
-// name TYPES and pick concrete permanents back at replay time; this measures whether that is worth it.
-namespace {
-inline bool ManaCacheCanonKey(const GameState& state, const ManaCost& cost, bool for_creature,
-                              std::uint64_t reserved_mask, int untapped_max,
-                              bool want_leftover, bool want_full_pool, const ManaPool& floating,
-                              std::uint64_t& k1, std::uint64_t& k2)
-{
-    auto mix = [](std::uint64_t& h, std::uint64_t v){ h ^= v; h *= 1099511628211ull; h ^= h >> 29; };
-    static thread_local std::vector<std::uint64_t> descs;
-    descs.clear();
-    std::uint64_t h1 = 1469598103934665603ull, h2 = 14695981039346656037ull;
-    const int active = state.active_player_index;
-    const int n = static_cast<int>(state.battlefield.size());
-    int gy_fuel = -1, drip_useful = -1;
-    bool domain_done = false, scaled_done = false;
-    for (int i = 0; i < n; ++i)
-    {
-        const Permanent& p = state.battlefield[i];
-        if (p.controller_index != active) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d) { continue; }
-        if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
-              || d->params.mana_rock)) { continue; }
-        if (McDomain(d) && !domain_done)
-        {
-            domain_done = true;
-            for (Color c : DomainColors(state, active)) { mix(h1, (std::uint64_t)c + 1); mix(h2, ((std::uint64_t)c + 1) * 31); }
-        }
-        if (McScaled(d) && !scaled_done)
-        { scaled_done = true; mix(h1, 0x5CA1ull + (std::uint64_t)ScaledManaCreatureCount(state)); }
-        if (d->params.gy_land_exile_mana && gy_fuel < 0)
-        { gy_fuel = GraveyardLandFuel(state, active); mix(h1, 0x6FF1ull + (std::uint64_t)gy_fuel); }
-        if (d->params.tap_opponent_lifegain > 0 && drip_useful < 0)
-        { drip_useful = ResolveProvider(state).OpponentLifegainUseful(state, active) ? 1 : 0;
-          mix(h1, drip_useful ? 0xD21B1ull : 0xD21B2ull); }
-        // Per-source descriptor: everything the indexed key mixes EXCEPT the index itself.
-        std::uint64_t dh = 1469598103934665603ull;
-        mix(dh, (std::uint64_t)reinterpret_cast<std::uintptr_t>(d));
-        mix(dh, p.tapped ? 1ull : 2ull);
-        mix(dh, ((reserved_mask >> i) & 1ull) ? 0xA1ull : 0xA2ull);
-        if (!p.tapped)
-        {
-            if (d->tmpl == CardTemplate::ManaDork)
-            { mix(dh, CanTapNow(p, state.battlefield) ? 0xE11901ull : 0xE11902ull); }
-            if (d->params.storage_land)
-            { mix(dh, 0x5701ull + (std::uint64_t)p.storage_counters * 2 + (p.storage_hold_this_turn ? 1ull : 0ull)); }
-        }
-        if (d->params.reflecting)
-        { for (Color c : EffectiveProduces(state, active, *d)) { mix(dh, (std::uint64_t)c + 7); } }
-        descs.push_back(dh);
-    }
-    std::sort(descs.begin(), descs.end());          // ORDER-FREE: the multiset, not the sequence
-    for (std::uint64_t dh : descs) { mix(h1, dh); mix(h2, dh * 0x9E3779B97F4A7C15ull); }
-    auto mixcost = [&](std::uint64_t& h){
-        mix(h, (std::uint64_t)cost.generic);
-        mix(h, (std::uint64_t)cost.white | ((std::uint64_t)cost.blue << 16)
-             | ((std::uint64_t)cost.black << 32) | ((std::uint64_t)cost.red << 48));
-        mix(h, (std::uint64_t)cost.green | ((std::uint64_t)cost.colorless << 16));
-        mix(h, (std::uint64_t)(cost.has_x ? 1 : 0) | ((std::uint64_t)cost.x_pips << 8)
-             | ((std::uint64_t)cost.hybrid_count << 16));
-        mix(h, (std::uint64_t)cost.hybrid_pair[0] | ((std::uint64_t)cost.hybrid_pair[1] << 8)
-             | ((std::uint64_t)cost.hybrid_pair[2] << 16) | ((std::uint64_t)cost.hybrid_pair[3] << 24));
-        mix(h, for_creature ? 1ull : 0ull);
-        mix(h, (std::uint64_t)(std::int64_t)untapped_max);
-        mix(h, want_leftover ? 0x1EF7ull : 0x1EF8ull);
-        mix(h, want_full_pool ? 0xF0011ull : 0xF0012ull);
-        mix(h, (std::uint64_t)floating.white | ((std::uint64_t)floating.blue << 12)
-             | ((std::uint64_t)floating.black << 24) | ((std::uint64_t)floating.red << 36));
-        mix(h, (std::uint64_t)floating.green | ((std::uint64_t)floating.colorless << 16)
-             | ((std::uint64_t)floating.wild << 32));
-    };
-    mixcost(h1); mixcost(h2);
-    k1 = h1; k2 = h2;
-    return true;
-}
-inline thread_local std::unordered_map<std::uint64_t, std::uint64_t> g_mana_canon_shadow;
-const bool g_canon_probe_on = EnvOn("MTG_MANA_CACHE_CANON_PROBE");
-}  // namespace
-
 // Public entry: thin wrapper over the worker. Identical behaviour; under MTG_TAP_STATS it records the
 // payable/unpayable OUTCOME of each top-level call and the nodes it consumed (the recursion calls the
 // worker directly, so every call here is exactly one top-level entry). Diagnostic only -- when the flag
@@ -2107,24 +2120,14 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // warm-up; only charged batteries are recorded, so it is empty on every deck without one.
     static thread_local std::vector<std::pair<int, int>> mc_storage_pre;   // (index, counters before)
     int mc_opp_life_pre = 0;
+    // Canonical order for this board (empty in indexed mode). Entry taps are POSITIONS in it.
+    static thread_local std::vector<std::uint64_t> mc_desc;
+    const bool mc_canon = McCanonKey();
     const bool mc_keyed = mc && ManaCacheKey(state, cost, for_creature, reserved_mask, untapped_max,
                                              out_leftover != nullptr, out_full_pool != nullptr, floating,
-                                             mk1, mk2);
+                                             mk1, mk2, mc_canon ? &mc_desc : nullptr);
     if (tapstats::Enabled() && !mc_keyed)
     { (mc ? tapstats::g_mc_skip_key : tapstats::g_mc_skip_shape).fetch_add(1, std::memory_order_relaxed); }
-    // Shadow canonical-key probe: mirrors the real cache's lookup/insert exactly, so its hit rate is
-    // what a type-canonical key would have achieved on this run. Never influences a payment.
-    std::uint64_t ck1 = 0, ck2 = 0; bool canon_miss = false;
-    if (g_canon_probe_on && mc_keyed
-        && ManaCacheCanonKey(state, cost, for_creature, reserved_mask, untapped_max,
-                             out_leftover != nullptr, out_full_pool != nullptr, floating, ck1, ck2))
-    {
-        auto cit = g_mana_canon_shadow.find(ck1);
-        if (cit != g_mana_canon_shadow.end() && cit->second == ck2)
-        { tapstats::g_mc_canon_hit.fetch_add(1, std::memory_order_relaxed); }
-        else
-        { tapstats::g_mc_canon_miss.fetch_add(1, std::memory_order_relaxed); canon_miss = true; }
-    }
     if (mc_keyed)
     {
         auto it = g_mana_cache.find(mk1);
@@ -2136,7 +2139,19 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             const int hit_active = state.active_player_index;
             for (const ManaCacheTap& t : e.taps)
             {
-                Permanent& p = state.battlefield[t.idx];
+                // Canonical mode stores (descriptor, RANK); indexed mode stores the index itself. The
+                // key pins the descriptor multiset, so the rank-th member of a descriptor group names
+                // the same source on this board as on the one that filled the entry -- and ascending
+                // rank is exactly the prefix the sibling collapse makes the DFS take.
+                int idx = t.idx;
+                if (mc_canon)
+                {
+                    idx = -1;
+                    for (int q = 0, seen = 0; q < static_cast<int>(mc_desc.size()); ++q)
+                    { if (mc_desc[q] == t.desc && seen++ == t.idx) { idx = q; break; } }
+                    if (idx < 0) { break; }
+                }
+                Permanent& p = state.battlefield[idx];
                 p.tapped = true;
                 const CardDefinition* td = CardDatabase::Instance().LookupCached(p.card);
                 if (!td) { continue; }
@@ -2234,18 +2249,21 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                         for (const std::pair<int, int>& s : mc_storage_pre)
                         { if (s.first == i) { burn = s.second - p.storage_counters; break; } }
                     }
-                    e.taps.push_back({ i, burn });
+                    std::uint64_t desc = 0; int slot = i;
+                    if (mc_canon)
+                    {
+                        desc = (i < static_cast<int>(mc_desc.size())) ? mc_desc[i] : 0ull;
+                        if (desc == 0ull) { storable = false; break; }   // tapped a source the key never saw
+                        slot = 0;                                        // rank within its group, index order
+                        for (int q = 0; q < i; ++q) { if (mc_desc[q] == desc) { ++slot; } }
+                    }
+                    e.taps.push_back({ desc, slot, burn });
                 }
             }
         }
         if (tapstats::Enabled() && !storable)
         { tapstats::g_mc_unstorable.fetch_add(1, std::memory_order_relaxed); }
         if (storable) { g_mana_cache[mk1] = std::move(e); }
-        if (canon_miss)
-        {
-            if (g_mana_canon_shadow.size() > 500000) { g_mana_canon_shadow.clear(); }
-            g_mana_canon_shadow[ck1] = ck2;
-        }
     }
     return ok;
 }
