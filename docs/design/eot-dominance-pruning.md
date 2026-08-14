@@ -32,8 +32,13 @@ them. Dominance is the only collapse principle that touches this mass.
 
 Two states are comparable ONLY when their futures are identical apart from the compared resources:
 
-- same turn number, same phase boundary (end-of-turn cleanup is the natural hook — "until end of
-  turn" effects have expired there);
+- **END OF TURN ONLY — a hard rule, not a preference** (user, 2026-08-14): dominance comparisons
+  happen at the end-of-turn cleanup boundary and nowhere else. Identity keying mid-turn is
+  tolerable because a complete key can account for mid-turn state (floats, until-EOT effects,
+  pending continuations — the 2026-08-14 key-hole audit shows how much there is); dominance
+  CANNOT be soundly judged there, because the monotonicity arguments assume ephemeral state has
+  washed out. The implementation must ENFORCE the boundary (cleanup done, floats empty, until-EOT
+  effects expired, no pending breakpoints), not assume it;
 - **same draws consumed** (same library position). Without this the comparison is unsound: an extra
   draw changes every future.
 
