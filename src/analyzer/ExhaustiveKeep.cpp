@@ -1411,37 +1411,70 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // stderr is routinely a log nobody kept). Set before the first rollout of any phase.
     if (!cfg.out_raw.empty()) { Slow().SetLog(cfg.out_raw + ".slow.log"); }
 
-    // Always-on liveness monitor -- the READ-OUT side of the slow-rollout instrument. The slow top-N is
-    // collected live and lock-free by every worker (SlowRollouts.h), but it is only PRINTED by
-    // Slow().Dump, which each phase runner calls from its own heartbeat. Those heartbeats sit at the
-    // bottom of a driver loop; the continuous pool's loop body feeds a bounded queue (feed_upto ->
-    // q_nf.wait), so on a large deck the driver parks there for HOURS and the loop bottom -- hence the
-    // dump -- is reached only at floor-complete. Result: on exactly the big, slow gens that need it, the
-    // top-N is collected but never read out. This thread decouples the read-out from any driver loop: it
-    // wakes every 30s and dumps the current top-N + a wall-clock liveness line, so a degenerate cell is
-    // visible within ~30s of appearing, in EVERY phase. Diagnostic only (reads the shared tracker and
-    // stderr; never a decision/seed/accumulator), so results stay byte-identical. No off switch, same
-    // policy as the stream (docs/design/keepgen-no-off-switches.md): a quiet monitor must mean a healthy
-    // gen, not a silenced one.
+    // Always-on liveness + PROGRESS monitor. Two read-outs every phase runner needs surfaced -- the slow
+    // top-N (collected lock-free by workers in SlowRollouts.h) and how far along the gen is (rollouts fed,
+    // cells frozen) -- are otherwise emitted only from the phase runners' own heartbeats, which sit at the
+    // BOTTOM of a driver loop. The continuous pool's loop body feeds a bounded queue (feed_upto ->
+    // q_nf.wait), so on a large deck the driver parks there for HOURS: one refine iteration can take most
+    // of a day, and the heartbeat -- slow dump AND the fed/frozen counters alike -- is reached that
+    // rarely. This thread decouples BOTH read-outs from the driver: it wakes on its OWN wall-clock timer
+    // and prints the slow top-N plus a progress line built from counters the WORKER (freeze) and FEED
+    // paths bump continuously (gen_prog), so progress stays visible while the driver is parked. Diagnostic
+    // only (reads shared counters + stderr; never a decision/seed/accumulator) -> results byte-identical.
+    // No off switch (docs/design/keepgen-no-off-switches.md): a quiet monitor must mean a healthy gen.
+    //
+    // Cadence is deliberately coarse (minutes): this is a multi-day read-out, and a rarer wake takes even
+    // less time from the worker cores. The property that matters is that it FIRES on its own timer, always,
+    // regardless of what the driver loop is doing.
+    struct GenProgress
+    {
+        std::atomic<int>       phase{ 0 };   // 0 pre-pool (discovery/digest), 1 floor, 2 refine
+        std::atomic<long long> fed{ 0 };     // size-7 + sub rollouts enqueued so far (feed path)
+        std::atomic<long long> frozen{ 0 };  // size-7 cell-sides settled (freeze path + resume seed)
+        std::atomic<long long> cells{ 0 };   // total size-7 cell-sides (2*NC); 0 until the pool starts
+        std::atomic<long long> cap{ 0 };     // r_max
+    } gen_prog;
+
     struct SlowMonitor
     {
+        GenProgress&                          gp;
         std::mutex                            mx;
         std::condition_variable               cv;
         bool                                  stop = false;
         std::chrono::steady_clock::time_point t0   = std::chrono::steady_clock::now();
         std::thread                           th;
-        SlowMonitor()
+        long long                             period = 300;   // wake cadence, seconds
+        explicit SlowMonitor(GenProgress& p) : gp(p)
         {
+            // Numeric cadence override (default 300s = 5min), same read style as MTG_KEEP_SLOW_MS. Clamped
+            // to >=1s; the monitor cannot be disabled -- a silent run must mean a healthy gen, not a
+            // silenced one. Coarser is fine (this is a multi-day read-out); the point is that it FIRES.
+            if (const char* s = std::getenv("MTG_KEEP_MONITOR_S"))
+            { const long long v = std::atoll(s); if (v > 0) { period = v; } }
             th = std::thread([this]
             {
                 std::unique_lock<std::mutex> lk(mx);
-                while (!cv.wait_for(lk, std::chrono::seconds(30), [this] { return stop; }))
+                long long prev_fed = 0; double prev_el = 0.0;
+                while (!cv.wait_for(lk, std::chrono::seconds(period), [this] { return stop; }))
                 {
                     const double el = std::chrono::duration<double>(
                                           std::chrono::steady_clock::now() - t0).count();
                     lk.unlock();
-                    std::cerr << "[keepgen]   monitor: " << static_cast<long long>(el)
-                              << "s elapsed (liveness)\n" << std::flush;
+                    const int       ph    = gp.phase.load(std::memory_order_relaxed);
+                    const char*     pn    = ph == 2 ? "refine" : ph == 1 ? "floor" : "pre-pool";
+                    const long long fed   = gp.fed.load(std::memory_order_relaxed);
+                    const long long cells = gp.cells.load(std::memory_order_relaxed);
+                    const long long fr    = gp.frozen.load(std::memory_order_relaxed);
+                    const double    dt    = el - prev_el;
+                    const long long rate  = dt > 0.0 ? static_cast<long long>((fed - prev_fed) / dt) : 0;
+                    prev_fed = fed; prev_el = el;
+                    std::cerr << "[keepgen]   monitor: " << static_cast<long long>(el) << "s  phase=" << pn
+                              << "  fed=" << fed << " (" << rate << "/s)"
+                              << "  frozen=" << fr << "/" << cells;
+                    if (cells > 0)
+                    { const long long tenths = 1000 * fr / cells;   // 0..1000
+                      std::cerr << " (" << (tenths / 10) << "." << (tenths % 10) << "%)"; }
+                    std::cerr << "  cap=" << gp.cap.load(std::memory_order_relaxed) << "\n" << std::flush;
                     Slow().Dump(std::cerr, "so far", 3);
                     lk.lock();
                 }
@@ -1453,7 +1486,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             cv.notify_all();
             if (th.joinable()) { th.join(); }
         }
-    } slow_monitor;
+    } slow_monitor(gen_prog);
 
     // ---- 0. Rollout-config PLAY DIGEST ----------------------------------------------------------
     // The pooling identity: a fixed 64-game battery at the gen's depth/budget, stamped into both the
@@ -2579,6 +2612,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         { const std::size_t k = static_cast<std::size_t>(i) * 2 + pd;
           fed[k] = S7.cnt[i][pd];                                    // resume: continue past reloaded cnt
           afroze[k].store(prune.frozen7[i][pd] ? 1 : 0, std::memory_order_relaxed);
+          if (prune.frozen7[i][pd]) { gen_prog.frozen.fetch_add(1, std::memory_order_relaxed); }  // seed resume-frozen
           // Resumed floored/terminal cells already carry cnt>=r0 (no r0-crossing will re-fire). Seed the
           // snapshot with their reloaded accumulators so a vg recompute mirrors the old non-journal reload
           // (mean=sum/cnt); on journal resume refs are restored (not recomputed), so this is unused there.
@@ -2702,7 +2736,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         // Freeze only in the refine phase. During floor speculation (refine==false) the fold
                         // just advances the prefix; reconcile applies the freeze test to [r0,c) once refs fix.
                         if (refine && c >= r0 && freeze_hit(i, pd, c, S7.sum[i][pd], S7.sumsq[i][pd]))
-                        { prune.frozen7[i][pd] = true; afroze[k].store(1, std::memory_order_release); }
+                        { prune.frozen7[i][pd] = true; afroze[k].store(1, std::memory_order_release);
+                          gen_prog.frozen.fetch_add(1, std::memory_order_relaxed); }
                     }
                     if (journal_on)
                     {
@@ -2784,6 +2819,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     {
                         prune.frozen7[i][pd] = true;
                         afroze[k].store(1, std::memory_order_release);
+                        gen_prog.frozen.fetch_add(1, std::memory_order_relaxed);
                         S7.sum[i][pd] = rs; S7.sumsq[i][pd] = rq; S7.cnt[i][pd] = tc;   // truncate
                         if (journal_on) { reconcile_terms.push_back({ i, pd, rs, rq, tc }); }
                         break;
@@ -2791,6 +2827,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 }
             }
             refs_ready.store(true, std::memory_order_release);   // publish AFTER reconcile
+            gen_prog.phase.store(2, std::memory_order_relaxed);   // floor complete -> refine
         };
 
         // Append the one-time REFS record (fixed Dopt/vg) so a resumed run restores the ORIGINAL
@@ -2836,6 +2873,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                   << ", lookahead=" << cont_lookahead << " on " << nw
                   << " threads (+ " << fused_sub_tasks.size() << " fused sub-table batches"
                   << (sub_refine_on ? " + adaptive sub-refine" : "") << ")\n" << std::flush;
+        gen_prog.cap.store(r_max, std::memory_order_relaxed);
+        gen_prog.cells.store(static_cast<long long>(NC) * 2, std::memory_order_relaxed);
+        gen_prog.phase.store(1, std::memory_order_relaxed);   // floor; flips to refine when refs publish
 
         // Resumed mid-refine: the journal carried the fixed refs -> restore them and skip the floor phase
         // (the floored/terminal cells were reloaded; the producer continues refining live cells).
@@ -2844,6 +2884,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             Dopt_ref = loaded_Dopt; vg_ref = loaded_vg;
             vg_roll = loaded_vg; vg_base = r0;   // rolling vg re-derives from the reloaded accumulators below
             refs_ready.store(true, std::memory_order_release);
+            gen_prog.phase.store(2, std::memory_order_relaxed);   // resumed mid-refine
             std::cerr << "[keepgen]   continuous: refs restored from journal -> resuming refine ("
                       << static_cast<long long>(gen_elapsed()) << "s)\n" << std::flush;
         }
@@ -2865,7 +2906,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                   q_nf.wait(lk, [&]{ return q.size() < QCAP; });
                   q.push_back({ 0, static_cast<long long>(i), static_cast<long long>(pd), f, 0 }); }
                 q_ne.notify_one();
-                ++f; in_flight.fetch_add(1); ++fed_total; any_fed = true;
+                ++f; in_flight.fetch_add(1); ++fed_total; any_fed = true; gen_prog.fed.store(fed_total, std::memory_order_relaxed);
             }
         };
         // FUSION: drain the sub-table batch tasks into the same queue (kind 1). This is what removes the
@@ -2887,7 +2928,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                   q.push_back({ 1, static_cast<long long>(st.w), static_cast<long long>(st.pd),
                                 st.r0, st.r1 }); }
                 q_ne.notify_one();
-                ++sub_cursor; in_flight.fetch_add(1); ++fed_total; any_fed = true;
+                ++sub_cursor; in_flight.fetch_add(1); ++fed_total; any_fed = true; gen_prog.fed.store(fed_total, std::memory_order_relaxed);
             }
         };
         // fuse_subfloor: advance the adaptive sub-refine ONE wave at a time, driven from the producer so it
@@ -2914,7 +2955,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                   q_nf.wait(lk, [&]{ return q.size() < QCAP; });
                   q.push_back({ 2, static_cast<long long>(st.w), static_cast<long long>(st.pd), st.r0, st.r1 }); }
                 q_ne.notify_one();
-                in_flight.fetch_add(1); ++fed_total; any_fed = true;
+                in_flight.fetch_add(1); ++fed_total; any_fed = true; gen_prog.fed.store(fed_total, std::memory_order_relaxed);
             }
             ++refine_waves;
         };
