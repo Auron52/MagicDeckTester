@@ -78,8 +78,20 @@ flag, correctable later if analysis got it wrong. Examples: treasure_hunt opts O
 play-a-land dominance (its lands-in-hand are retrace ammo — Flame Jab); "play a land each turn you
 have one" genuinely dominates for nearly every other deck. The analysis stage can auto-suggest the
 setting from the list itself (retrace / discard costs / madness / conditional-ETB payoffs are the
-opt-out signals), with the user confirming. Never root engine truth; measured A/B settles disputed
-cases.
+opt-out signals), with the user confirming. **The flag itself lives in the HEURISTIC (archetype)
+provider** — the analysis stage picks its value, the provider carries it — never root engine truth;
+measured A/B settles disputed cases.
+
+## Instants/sorceries: dominance keeps them in hand (falls out of the sound core)
+
+For a nonpermanent spell the preference INVERTS (user, 2026-08-14): a line that CAST it and
+changed nothing else is dominated by the line that held it — hand-with-spell is a superset, the
+rest equal, so the sound core already prunes it wherever the graveyard axis is ignorable (no
+retrace/gy-payoff). Normally a resolved spell changes something, so this tier only removes WASTED
+casts — fizzled tricks, pumps on nothing, and notably the magnetless Gold-Rush-as-ritual lines from
+the 2026-08-14 branching investigation (cast {1}{G}, crack the Treasure, end with less of
+everything: dominated on every axis by holding). EOT dominance would retire that proposed bespoke
+fold automatically.
 
 ## Implementation sketch
 
