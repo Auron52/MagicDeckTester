@@ -199,3 +199,26 @@ knob.
 - `post-breakpoint-search.md` — the searched continuation whose every-ply fan-out multiplied it.
 - `breakpoint-width-deferred-waves-2026-07-29` — the wave phase (a constant here, kept).
 - `depth-matrix-should-use-batch-pooling.md` — the harness half of the phase-C stall.
+
+## MTG_CANON_SIMKEY adoption evidence (2026-08-14)
+
+The canonical key went through the full verification pass on the Mirrorwing perf push:
+
+- **Exposed a real latent bug first**: dragonstorm regressed under canon because BuildSimKey never
+  folded `storage_counters`/`storage_hold_this_turn` — ordered keys had been keeping the colliding
+  states apart by ACCIDENT of history-order. Fixed (`1593a926`, gated fold, non-storage decks
+  byte-identical); dragonstorm recovered fully (one case byte-identical PASS).
+- **Suite-wide quality (post-fix)**: net loss-penalized delta **-0.0328 over 55 cases** (better);
+  every deck neutral-or-better except two thousandths-scale single-case moves. Mirrorwing paired
+  3000-game A/B: **-0.0087 quality (t=-3.4) at 0.79x cost**; the gi=17 Class B monster: ~2.1x
+  faster, same answer.
+- **Reference-gate items all explained** (bisect method: replay the ref's choice prefix, halt both
+  arms at each decision, diff position/plan lists): both ENUM-GAPs are BENIGN CANONICAL DEDUP —
+  plan count shrinks but the cast-MULTISET sets are equal (dragonstorm T4: 78=78, zero lost;
+  creature_giving T2: 13=13) — the vanished entries are order-permutations whose post-state
+  survives under another ordering. Creature_giving's later "option content" change is a fetch
+  (Windswept Heath) shuffling a differently-ordered line's library — sequence-derived, not a lost
+  option. The Auras play-drift is one recorded game moving T5->T6, priced inside the suite net.
+- **Remaining for the default flip**: the standing adoption gate only — GT rebaseline (digests move
+  by construction) + re-saving the drifted reference via the viewer. Folds into the next joint
+  chain rebaseline. Until then canon rides per-pipeline (Mirrorwing batches).
