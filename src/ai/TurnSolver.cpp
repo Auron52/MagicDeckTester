@@ -15038,8 +15038,48 @@ struct FSLineEntry
     // A WIN carries INT_MAX: valid for every query, i.e. byte-identical to the old behaviour.
     int nowin_bound = std::numeric_limits<int>::max();
 };
-using FSLineCache = std::unordered_map<TranspositionTable::Key, FSLineEntry,
-                                       TranspositionTable::KeyHash>;
+// GLOBAL entry pool shared by every live line cache in the process (MTG_FSL_POOL, entries;
+// 0/unset = off = byte-identical). The per-cache cap (MTG_FSL_CAP) bounds ONE decision's cache;
+// this bounds their SUM. Rationale (Mirrorwing, 2026-08-14): line-cache appetite is heavily
+// skewed -- a typical game peaks ~100 MB, a monster ~900 MB at ~600 B/entry -- so slicing the
+// memory budget uniformly per worker strangles exactly the games that dominate wall-clock (a
+// uniform cap cost the 6.4 h monster 3.3x) while most of the budget sits unused. A shared pool
+// lets the rare monster draw millions of entries while typical workers hold thousands, and the
+// GLOBAL bound holds no matter which workers peak together. A refused insert just recomputes --
+// the same result-neutral contract as MTG_FSL_CAP/MTG_TT_CAP. Accounting: acquire per NEW entry
+// (updates in place are free), release the whole count when the per-decision cache dies. Relaxed
+// atomics: the counter guards memory, not results, and insert rate is far below lookup rate.
+inline std::atomic<long long>& FslPoolUsed()
+{ static std::atomic<long long> v{ 0 }; return v; }
+inline long long FslPool()
+{
+    static const long long v = []{
+        const char* e = std::getenv("MTG_FSL_POOL");
+        return e ? static_cast<long long>(std::strtoll(e, nullptr, 10)) : 0LL; }();
+    return v;
+}
+inline bool FslPoolAcquire()
+{
+    const long long pool = FslPool();
+    if (pool <= 0) { return true; }   // pool off: only the per-cache cap applies
+    if (FslPoolUsed().fetch_add(1, std::memory_order_relaxed) < pool) { return true; }
+    FslPoolUsed().fetch_sub(1, std::memory_order_relaxed);
+    return false;
+}
+struct FSLineCache : std::unordered_map<TranspositionTable::Key, FSLineEntry,
+                                        TranspositionTable::KeyHash>
+{
+    FSLineCache() = default;
+    FSLineCache(const FSLineCache&) = delete;             // a copy's entries were never acquired;
+    FSLineCache& operator=(const FSLineCache&) = delete;  // moves are fine (source empties)
+    FSLineCache(FSLineCache&&) = default;
+    FSLineCache& operator=(FSLineCache&&) = default;
+    ~FSLineCache()
+    {
+        if (FslPool() > 0 && !empty())
+        { FslPoolUsed().fetch_sub(static_cast<long long>(size()), std::memory_order_relaxed); }
+    }
+};
 
 // MTG_FS_NOWIN_CACHE: DEFAULT ON; =0 restores the win-only memo.
 //
@@ -15102,6 +15142,7 @@ inline void FSLineStoreWin(FSLineCache* lc, const TranspositionTable::Key& key,
     if (it == lc->end())
     {
         if (FslCap() && lc->size() >= FslCap()) { return; }   // memo full: recompute instead
+        if (!FslPoolAcquire()) { return; }                    // shared pool drained: recompute
         lc->emplace(key, FSLineEntry{ line, std::numeric_limits<int>::max() });
     }
     else if (it->second.nowin_bound != std::numeric_limits<int>::max())
@@ -15118,6 +15159,7 @@ inline void FSLineStoreNoWin(FSLineCache* lc, const TranspositionTable::Key& key
     if (it == lc->end())
     {
         if (FslCap() && lc->size() >= FslCap()) { return; }   // memo full: recompute instead
+        if (!FslPoolAcquire()) { return; }                    // shared pool drained: recompute
         lc->emplace(key, FSLineEntry{ line, bound });
     }
     else if (it->second.nowin_bound != std::numeric_limits<int>::max()

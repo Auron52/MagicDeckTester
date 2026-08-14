@@ -165,7 +165,14 @@ _nw=$(nproc)
 _budget_mb=$(( _mem_mb - 5120 )); [ "$_budget_mb" -lt 2048 ] && _budget_mb=2048
 _pw_kb=$(( _budget_mb * 1024 / _nw ))
 export MTG_TT_CAP=$((  _pw_kb * 1024 / 3 / 64   ))
-export MTG_FSL_CAP=$(( _pw_kb * 2 / 3          ))
+# The line-cache budget is a SHARED POOL, not a per-worker slice (MTG_FSL_POOL, engine-side global):
+# appetite is heavily skewed (typical game ~100 MB, monster ~900 MB at ~600 B/entry, measured
+# 2026-08-14), so a uniform slice strangled the monsters 3.3x while most of the budget idled. The
+# pool is the whole 2/3 share at the 1 KB planning size; MTG_FSL_CAP stays as a generous PER-DECISION
+# bound (2M entries ~ 1-2 GB) so one pathological decision (the ~28 GB analyzer case) cannot drain
+# the pool for everyone else.
+export MTG_FSL_POOL=$(( _budget_mb * 1024 * 2 / 3 ))
+export MTG_FSL_CAP=2000000
 AB_GAMES=1000
 AB_SEEDS="600000 601000 602000 603000 604000 605000 606000 607000"
 PLAY_GAMES=500
