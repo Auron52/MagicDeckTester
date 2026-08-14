@@ -14582,17 +14582,21 @@ namespace
     }
 }
 
-// MTG_CANON_SIMKEY=1 (EXPERIMENT, default OFF = byte-identical): fold the hand and battlefield as
+// MTG_CANON_SIMKEY (ADOPTED default-ON 2026-08-14; =0 disables): fold the hand and battlefield as
 // ORDER-INSENSITIVE multisets instead of ordered sequences. The ordered fold means "play Sandbar
 // T3, Cave T4" and "Cave T3, Sandbar T4" -- the SAME position -- never share a memo entry, so with
 // searched breakpoint continuations (which generate every play order) the FSLineCache/TT DAG
 // degenerates into a tree: distinct-state growth counts SEQUENCES, x12/ply on treasure_hunt
-// (docs/design/th-d5-five-hour-game.md). Canonicalizing collapses permutations. NOT provably
-// byte-identical ON: greedy tie-breaks read vector order, so a memo hit may return a line computed
-// under a permuted internal order -- the A/B (same answers?) is the test this flag exists for.
+// (docs/design/th-d5-five-hour-game.md). Canonicalizing collapses permutations. The canonical key
+// may share only ORDER-INVARIANT facts: every consumer whose answer encodes indices or depends on
+// rollout tie-breaks is order-exact via FsOrderSig (FSL win lines, bp-enum plans, dedup drops, the
+// SimulateToEnd TT -- see that doc's must-find hunt; the full unbounded-budget must-find set is
+// part of this flag's adoption gate and passes 7/7). Not byte-identical to ordered keys by
+// construction; GT rebaselined at adoption. Known cost exception: creature_giving pays ~1.10x
+// (big boards, few permutation duplicates) at neutral quality -- per-deck opt-out if it matters.
 inline bool CanonSimKeyOn()
 {
-    static const bool v = EnvOn("MTG_CANON_SIMKEY");
+    static const bool v = EnvOn("MTG_CANON_SIMKEY", true);
     return v;
 }
 
@@ -15128,67 +15132,6 @@ struct FSLineEntry
     std::uint64_t order_sig = 0;
 };
 
-// --- MTG_CANON_SHADOW (temporary; MTG_BP_DUP_PROBE precedent) ---------------------------------
-inline bool CanonShadowOn()
-{ static const bool v = EnvOn("MTG_CANON_SHADOW"); return v; }
-// Dump EVERY plausibly-future-determining field, deliberately INCLUDING ones the key does not
-// fold (stack contents, unconditional cards_drawn, per-perm copy ids) -- a mismatch line that
-// appears here but not in BuildSimKey is the hole.
-inline std::string ShadowDumpState(const GameState& state)
-{
-    std::string s;
-    char buf[256];
-    std::snprintf(buf, sizeof buf, "turn=%d ap=%d otp=%d oll=%d vmv=%d storm=%d",
-                  state.turn_number, state.active_player_index, state.on_the_play ? 1 : 0,
-                  state.opponent_lost_life_this_turn ? 1 : 0, state.vial_target_mv,
-                  state.spells_cast_this_turn);
-    s += buf;
-    const ManaPool& fm = state.floating_mana;
-    std::snprintf(buf, sizeof buf, " float=%d/%d/%d/%d/%d/%d/%d",
-                  fm.white, fm.blue, fm.black, fm.red, fm.green, fm.colorless, fm.wild);
-    s += buf;
-    s += " stack=[";
-    for (const auto& so : state.stack) { s += so.source.m_name; s += ","; }
-    s += "]";
-    for (int pi = 0; pi < 2; ++pi)
-    {
-        const Player& p = state.players[pi];
-        std::snprintf(buf, sizeof buf, " P%d{life=%d lands=%d bonus=%d drawn=%d lib=%zu hand=[",
-                      pi, p.life, p.lands_played_this_turn, p.bonus_land_drops_this_turn,
-                      p.cards_drawn_this_turn, p.library.size());
-        s += buf;
-        { std::vector<std::string> hn; for (const Card& c : p.hand) { hn.push_back(c.m_name); }
-          std::sort(hn.begin(), hn.end()); for (const auto& h2 : hn) { s += h2; s += ","; } }
-        s += "] gy=[";
-        { std::vector<std::string> gy; for (const Card& c : p.graveyard) { gy.push_back(c.m_name); }
-          std::sort(gy.begin(), gy.end()); for (const auto& g : gy) { s += g; s += ","; } }
-        s += "]}";
-    }
-    s += " bf=[";
-    std::vector<std::string> bfitems;
-    for (const Permanent& perm : state.battlefield)
-    {
-        std::snprintf(buf, sizeof buf, "{%s#%d c%d t%d e%d a%d ch%d age%d st%d/%d tp%d tt%d h%d x%d dmg%d au%d eq%d ctr:",
-                      perm.card.m_name.c_str(), perm.card.m_number, perm.controller_index,
-                      perm.tapped ? 1 : 0, perm.entered_this_turn ? 1 : 0, perm.is_animated ? 1 : 0,
-                      perm.charge_counters, perm.age_counters, perm.storage_counters,
-                      perm.storage_hold_this_turn ? 1 : 0, perm.temp_power_bonus,
-                      perm.temp_tough_bonus, perm.temp_haste ? 1 : 0, perm.exile_at_end ? 1 : 0,
-                      perm.damage, perm.aura_attached_to, perm.equipped_to);
-        s += buf;
-        for (const Counter& c : perm.counters)
-        { std::snprintf(buf, sizeof buf, "%d=%d,", static_cast<int>(c.type), c.count); s += buf; }
-        s += "}";
-        bfitems.push_back(s.substr(s.rfind('{')));
-        s.erase(s.rfind('{'));
-    }
-    std::sort(bfitems.begin(), bfitems.end());
-    for (const auto& b : bfitems) { s += b; }
-    s += "]";
-    return s;
-}
-inline std::atomic<int>& ShadowHits() { static std::atomic<int> v{ 0 }; return v; }
-
 // See the forward declaration's comment (order-exact key for dedup sites / plan-carrying memos).
 static TranspositionTable::Key BuildDedupKey(const GameState& state)
 {
@@ -15591,22 +15534,6 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     if (lc != nullptr)
     {
         key = BuildSimKey(state, depth, max_turns, second_main);
-        // TEMPORARY (MTG_CANON_SHADOW): every probed state records its full dump per key; a second
-        // probe of the SAME key with a DIFFERENT dump is a canonical collision -- print both sides,
-        // the diff names the field BuildSimKey is missing. Strip after the last hole is named.
-        if (CanonShadowOn())
-        {
-            static thread_local std::unordered_map<TranspositionTable::Key, std::string,
-                                                   TranspositionTable::KeyHash> s_shadow;
-            std::string dump = ShadowDumpState(state);
-            auto sit = s_shadow.find(key);
-            if (sit == s_shadow.end()) { s_shadow.emplace(key, std::move(dump)); }
-            else if (sit->second != dump && ShadowHits().fetch_add(1) < 5)
-            {
-                std::fprintf(stderr, "[canon-shadow] COLLISION d=%d\n  A: %s\n  B: %s\n",
-                             depth, sit->second.c_str(), dump.c_str());
-            }
-        }
         FSLineCache::const_iterator it = lc->find(key);
         PROF_INC(fsline_lookups);
         if (it != lc->end())
