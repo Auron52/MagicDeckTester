@@ -1,4 +1,4 @@
-# Regression ground truth -- commit b579db0  date 2026-08-14
+# Regression ground truth -- commit 0adb32c  date 2026-08-14
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -37,9 +37,9 @@ creature_giving_smoke_d5_s1001=4.8133/c5b09a5bfc8974a3
 mirrorwing_smoke_d0_s1001=6.3480/33017848901e435c
 mirrorwing_smoke_d3_s1001=5.2400/152fd9e45ae38b02
 mirrorwing_smoke_d5_s1001=5.0800/2ef2f3aeeb95868e
-fivecolour_smoke_d0_s1001=6.1860/f9be4e451451ec53
-fivecolour_smoke_d3_s1001=5.1200/e4cfcac979c70cd0
-fivecolour_smoke_d5_s1001=5.2267/c2a632472e5dea0e
+fivecolour_smoke_d0_s1001=6.1850/64c9744dad661002
+fivecolour_smoke_d3_s1001=5.1200/0a432139a2562ada
+fivecolour_smoke_d5_s1001=5.2267/f19dac515eb0dd9e
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/4ec30ea41e344477
@@ -97,11 +97,11 @@ mirrorwing_regression_d3_s2002=5.0700/05fcc40562b5799d
 mirrorwing_regression_d3_s3003=4.9850/7b5830a3a9982475
 mirrorwing_regression_d5_s2002=5.0100/675f2c7d98d9c95d
 mirrorwing_regression_d5_s3003=4.9500/e14cb58dce1dd0c8
-fivecolour_regression_d0_s2002=6.1970/bcc3b9f2d5e5ea98
-fivecolour_regression_d3_s2002=4.9550/b70b3d46ecf945d4
-fivecolour_regression_d3_s3003=5.0800/1d87c718faab1512
-fivecolour_regression_d5_s2002=4.8900/479e98388d76f737
-fivecolour_regression_d5_s3003=5.0400/78b689d48f04ab44
+fivecolour_regression_d0_s2002=6.1950/a4ac6d2f5ca91b5a
+fivecolour_regression_d3_s2002=4.9550/35a8a2f83645dd5d
+fivecolour_regression_d3_s3003=5.0750/c16caa0dae94df68
+fivecolour_regression_d5_s2002=4.8900/722c4cd094ac2d34
+fivecolour_regression_d5_s3003=5.0400/ab7d125f0db4d0e3
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/fe364b007bbfaa56
