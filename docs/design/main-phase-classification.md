@@ -203,6 +203,37 @@ by one question:
   also changes the escalation's planning CHOICES. A deferred-fix comment sits at the function
   head in TurnSolver.cpp.
 
+## Measurement round 2 — TOTAL Hinata doctrine (2026-08-14) and the main-2 parity work list
+
+With the USER's total doctrine encoded (HinataProvider: every cast Main2, draws included):
+**+0.26 (ship) / +0.35 (d3) / +0.31 (d5), ~30 games/config +1 turn, 3 unwon at d3; searched
+second main does not recover it (arm C ≈ B); hinata core-ms drops ~11x** — the main-2 path
+does far less work than main 1 did, i.e. it under-enumerates. Per the USER these are ENGINE
+defects, and the dissections (gi=22, gi=99, plus round 1's gi=6) name them precisely. All
+three capabilities below EXIST for human play and are merely gated off for the autonomous
+search — the legacy "the second main is cast-only / combat creates no new resources"
+assumption, which a Main2-partitioned deck invalidates:
+
+1. **Mid-phase resource acquisition needs an in-phase re-solve in main 2.** A Gamble tutor
+   (gi=22: Gamble→Spasm+Crackle same turn only works with Gamble in main 1), a draw chain,
+   or a staged exile (gi=6 Soulfire) resolved in main 2 is invisible to the
+   already-enumerated plan. Main 1 always got this re-solve FREE at the phase boundary —
+   which is exactly why "a tutor is NOT a breakpoint site" (TurnSolver.cpp ~13694) was sound
+   until now. Parity = extend breakpoint capture/re-solve to the post-combat main
+   (ApplyPlanDirect's `is_pre_combat || s_human_play` gate, ~8204) AND make tutor-to-hand a
+   breakpoint class there.
+2. **The land drop must be offered in the post-combat main** (rules-legal; human play
+   already has it): `drop_available = (is_pre_combat || s_human_play_drop)` at
+   EnumeratePlansWithLand (~13138) plus the land-execution gate in ApplyPlanDirect (~8204).
+   gi=99: a land drawn during main 2 could not be played that turn. Also lets main 1
+   deliberately DEFER the drop past a main-2 draw. `lands_played_this_turn` bookkeeping
+   already prevents double drops.
+3. Gate all of it on the SAME activation as the filter (provider opt-in / lever), so every
+   current autonomous digest is untouched until a deck classifies.
+
+Sequencing note: these gates interact with the Karoo drop-reservation and the executor
+lockstep (AIEngine fold_land) — implement with the usual per-change digest checks.
+
 ## Measurement plan
 
 Per second-main deck: the standard battery (train seeds, d3+d5, per-game win-turn diff — a
