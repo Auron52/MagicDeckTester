@@ -13463,8 +13463,8 @@ static const bool s_legacy_land_sig    = !s_complete_land_sig;
 // Land-priority knobs: shared readers in EngineFlags.h -- greedy_land_name below reimplements
 // TryPlayLand's passes as the search's last-resort tiebreak, and the two must stay in lockstep.
 
-static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
-                                                            bool is_pre_combat)
+static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameState& state,
+                                                                    bool is_pre_combat)
 {
     RevealLogPause _rlp_enum;   // candidate scoring is hypothetical -- see EnumeratePlans
     considerstats::RecordHost(is_pre_combat);
@@ -14393,6 +14393,162 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
           state.turn_number, all.size(), land_names.size(), ap.hand.size());
     PROF_ADD(plans_generated, all.size());
     return all;
+}
+
+// --- Enumeration memo (MTG_ENUM_MEMO, DEFAULT OFF -- measured NEGATIVE, do not adopt) ----------
+//
+// Single-consideration collapse #2 (docs/design/single-consideration.md). With the Solve memo on,
+// the residual duplication leader is the rollout-INTERIOR enumeration: FiveColour d3 gi=0 makes
+// 335k inner EnumeratePlans calls at fs-nest 3 of which 250k (75%) re-enumerate a state some
+// sibling line already enumerated in the same decision. Same collapse as the bp-enum memo
+// (EnumerateBreakpointPlans) -- one function, deterministic in (state, phase, thread-local
+// context) -- generalized to the interior context and epoch-scoped like the Solve memo.
+//
+// RESULT (2026-08-14): identity holds everywhere (verify 0 mismatches, smoke ALL PASS, battery
+// 0 diverged) but it LOSES wall clock at scale -- the d3 probe game's -9% inverts to +14% on the
+// heavy d5 game (hit rate 1% there: 470k BuildBreakpointKey walks for 5k hits, 51 cap clears)
+// and battery wall goes 1:24 -> 2:00 vs the Solve memo alone. Deep-search states are too diverse
+// for a full-key memo whose key walk costs as much as a small enumeration. Kept as a measured
+// negative + reusable verify harness; a revisit must make the KEY incremental, not tune the
+// cache. See the design doc for the full numbers.
+//
+// Soundness rails on top of the Solve memo's (key = BuildBreakpointKey, scope = one decision,
+// search interiors only, human play bypasses):
+//   * NO memo at the committed root (g_bp_root_enum): root-only concerns (tie scan, landfan
+//     trace) live there, and the root is already single-consideration (measured 0 dup).
+//   * NO memo in group-wave TRANCHE mode (tranche_rank >= 0): tranche calls communicate through
+//     groupwave OUT-state (call_active / bound_exceeded) beyond the plan list.
+//   * NO memo under the bp continuation enum (g_bp_enum_depth > 0): EnumerateBreakpointPlans
+//     already caches that context at its own level -- double storage for zero extra hits.
+//   * groupwave max_dropped is an OUT accumulator (max over inner calls, reset+captured by the
+//     FSLineWin / SolveWithLookahead hosts): a miss runs the body against a zeroed accumulator
+//     and stores the call's OWN contribution; hit and miss alike then max-merge it into the
+//     caller's accumulator -- byte-equivalent to the unmemoized max-accumulation.
+// MTG_ENUM_MEMO_VERIFY=1: on every hit recompute uncached and compare plan-by-plan.
+namespace enummemo
+{
+    inline bool Enabled()  { static const bool v = EnvOn("MTG_ENUM_MEMO"); return v; }
+    inline bool VerifyOn() { static const bool v = EnvOn("MTG_ENUM_MEMO_VERIFY"); return v; }
+
+    struct Entry
+    {
+        uint64_t epoch = 0;
+        int      max_dropped = 0;              // the call's own group-cap-drop contribution
+        bool     has_plans = false;            // promotion-on-second-visit: first visit stores a
+                                               // cheap marker only; the plan vector is deep-copied
+                                               // into the cache only for states PROVEN to recur
+                                               // (battery-measured raw hit rate is 24%, so storing
+                                               // on first visit paid 12M vector copies for nothing)
+        std::vector<TurnSolver::Plan> plans;
+    };
+    inline thread_local std::unordered_map<TranspositionTable::Key, Entry,
+                                           TranspositionTable::KeyHash> t_cache;
+    constexpr std::size_t kCap = 8192;         // plan vectors are heavier than single Plans
+
+    inline std::atomic<uint64_t> g_hits{0}, g_misses{0}, g_clears{0};
+    inline std::atomic<uint64_t> g_verified{0}, g_mismatches{0};
+
+    inline bool SamePlans(const std::vector<TurnSolver::Plan>& a,
+                          const std::vector<TurnSolver::Plan>& b)
+    {
+        if (a.size() != b.size()) { return false; }
+        for (std::size_t i = 0; i < a.size(); ++i)
+        {
+            if (!solvememo::SamePlan(a[i], b[i])) { return false; }
+        }
+        return true;
+    }
+
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            std::fprintf(stderr, "[enum-memo] hits=%llu misses=%llu clears=%llu",
+                         (unsigned long long)g_hits.load(), (unsigned long long)g_misses.load(),
+                         (unsigned long long)g_clears.load());
+            if (VerifyOn())
+            {
+                std::fprintf(stderr, " verified=%llu MISMATCHES=%llu",
+                             (unsigned long long)g_verified.load(),
+                             (unsigned long long)g_mismatches.load());
+            }
+            std::fprintf(stderr, "\n");
+        }
+    };
+    inline Dumper g_dumper;
+}
+
+static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
+                                                            bool is_pre_combat)
+{
+    const bool memo_ok = enummemo::Enabled() && !HumanPlayActive()
+                      && !g_bp_root_enum
+                      && g_bp_enum_depth == 0
+                      && groupwave::g_state.tranche_rank < 0
+                      && g_search_candidate_enum
+                      && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
+    if (!memo_ok) { return EnumeratePlansWithLandUncached(state, is_pre_combat); }
+
+    const TranspositionTable::Key k = BuildBreakpointKey(state, is_pre_combat);
+    auto& cache = enummemo::t_cache;
+    auto it = cache.find(k);
+    if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans)
+    {
+        enummemo::g_hits.fetch_add(1, std::memory_order_relaxed);
+        if (enummemo::VerifyOn())
+        {
+            const int saved_md = groupwave::g_state.max_dropped;
+            groupwave::g_state.max_dropped = 0;
+            const std::vector<TurnSolver::Plan> fresh =
+                EnumeratePlansWithLandUncached(state, is_pre_combat);
+            const int fresh_md = groupwave::g_state.max_dropped;
+            groupwave::g_state.max_dropped = saved_md;
+            enummemo::g_verified.fetch_add(1, std::memory_order_relaxed);
+            if (!enummemo::SamePlans(fresh, it->second.plans)
+                || fresh_md != it->second.max_dropped)
+            {
+                const uint64_t n = enummemo::g_mismatches.fetch_add(1, std::memory_order_relaxed);
+                if (n < 5)
+                {
+                    std::fprintf(stderr,
+                                 "[enum-memo] MISMATCH t%d %s: cached %zu plans md=%d vs fresh %zu md=%d\n",
+                                 state.turn_number, is_pre_combat ? "m1" : "m2",
+                                 it->second.plans.size(), it->second.max_dropped,
+                                 fresh.size(), fresh_md);
+                }
+            }
+        }
+        groupwave::g_state.max_dropped =
+            std::max(groupwave::g_state.max_dropped, it->second.max_dropped);
+        return it->second.plans;
+    }
+
+    enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
+    const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
+    const int saved_md = groupwave::g_state.max_dropped;
+    groupwave::g_state.max_dropped = 0;
+    std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLandUncached(state, is_pre_combat);
+    const int own_md = groupwave::g_state.max_dropped;
+    groupwave::g_state.max_dropped = std::max(saved_md, own_md);
+    if (second_visit)
+    {
+        // Second visit this decision: the state provably recurs -- promote to full storage.
+        it->second.has_plans   = true;
+        it->second.max_dropped = own_md;
+        it->second.plans       = plans;
+    }
+    else
+    {
+        // First visit: store only the cheap marker (epoch + key); no plan copy.
+        if (cache.size() >= enummemo::kCap)
+        {
+            cache.clear();
+            enummemo::g_clears.fetch_add(1, std::memory_order_relaxed);
+        }
+        cache[k] = enummemo::Entry{ g_decision_epoch, own_md, false, {} };
+    }
+    return plans;
 }
 
 // ---- Transposition key over the future-determining state ------------------

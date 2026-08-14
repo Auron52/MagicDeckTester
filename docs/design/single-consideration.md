@@ -59,27 +59,57 @@ dependence. The memo (TurnSolver.cpp `namespace solvememo`; `Solve` is now a thi
 * **`MTG_SOLVE_MEMO_VERIFY=1`**: on every hit also recompute uncached and compare field by
   field.
 
-**Validation so far (2026-08-14):** verify mode: 5c gi=0 **796,611 hits / 0 mismatches** (70%
-hit rate), hinata gi=0 90,448 / 0 (82%). Memo on-vs-off: game logs byte-identical (modulo
-runId); 5c wall 7.52 s -> 5.97 s (−21%) on one game. Suite smoke with memo on + full-battery
-identity arms: see the session results below this line as they land.
+**Validation (2026-08-14, all green):** verify mode: 5c gi=0 **796,611 hits / 0 mismatches**
+(70% hit rate), hinata gi=0 90,448 / 0 (82%). Memo on-vs-off: game logs byte-identical (modulo
+runId); 5c wall 7.52 s -> 5.97 s (−21%) on one game. **Suite smoke ALL PASS with the memo
+forced on (36/36 digests identical to GT).** Battery (classify levers, 100 games x 6 jobs):
+**0 diverged games in every job**, pooled wall 1:34 -> 1:24 (−11%), battery-wide hit rate 64%
+(42M hits / 24M misses), RSS +235 MB. Adoption proposal: default-ON + `MTG_NO_SOLVE_MEMO`
+hatch, no GT rebaseline needed — awaiting the user's call.
+
+## Collapse #1 residual (measured with the memo ON)
+
+Hinata is solved: every solve site shows dup = 0 (each distinct state solved exactly once);
+86k -> 23k considerations. 5c: 4.5M -> 1.63M; the residual leader became the rollout-interior
+enumeration (enum.m1.fs3: 335k calls, 250k per-decision dup) — which motivated collapse #2.
+
+## Collapse #2 — enum-side memo (`MTG_ENUM_MEMO`, built 2026-08-14): **REJECTED for adoption**
+
+Same pattern applied to `EnumeratePlansWithLand` interiors (wrapper over
+`EnumeratePlansWithLandUncached`; excludes root / tranche / bp-continuation / human play;
+groupwave `max_dropped` stored as the call's own contribution and max-merged on hit —
+byte-equivalent to the unmemoized accumulation; promotion-on-second-visit so cold states store
+only a marker). **Identity holds everywhere**: verify 0 mismatches (5c 65k + hinata 5k hits),
+smoke ALL PASS with both memos, battery 600 games 0 diverged.
+
+**But it LOSES wall clock at scale, and that is the honest result.** The single probe game
+(5c d3, 1 thread) showed −9% on top of the Solve memo (5.97 -> 5.26 s) — misleading. At
+battery scale the hit rate collapses: 24% raw (M2), 14% with promotion (M3), and on the heavy
+5c **d5** game it is **1%** (5k hits / 470k misses, 51 cap-thrash clears) — the deeper search
+visits too-diverse states, so ~every call pays a full `BuildBreakpointKey` state walk (its cost
+is comparable to a small enumeration) for nothing. Battery wall: M1 (solve memo) 1:24 -> M3
+(both) 2:00; isolated heavy game 19.9 -> 22.7 s (+14%). Why #1 wins where #2 loses: Solve's
+body is heavy relative to the key and its states recur (64% battery-wide hit rate); the
+interior enumerations are often tiny relative to the key and their states don't recur at d5.
+
+The lever stays in-tree DEFAULT OFF as a measured negative (and the verify machinery is
+reusable); do NOT flip it on. If it is ever revisited, the fix must remove the per-call key
+cost (e.g. an incrementally-maintained state hash), not tune the cache.
 
 ## Ranked next collapses (not yet built)
 
-2. **Skip the always-empty m1 harvest on total-Main2 decks** (~37% of hinata's harvest calls).
+3. **Skip the always-empty m1 harvest on total-Main2 decks** (~37% of hinata's harvest calls).
    Exactness condition: with `deck_feeds_combat == false`, no haste access and no scaling
    attacker (the same inputs the classifier reads), every class maps Main2 — but a provider
    `MainPhaseOverride` returning Main1/Both would break a blanket skip, so the skip must be
-   derived per-hand from the real classifier, or simply left to the memo (a hit returns the
-   empty plan without harvesting; covers all but the ~16% distinct states).
-3. **Enum-side memo**: `EnumeratePlans` in rollout interiors (enum.m1.fs3: 335k calls, 75% dup).
-   The bp-enum cache (`EnumerateBreakpointPlans`, same key) is the proven pattern; heavier
-   values (plan vectors), so measure before building.
+   derived per-hand from the real classifier, or simply left to the Solve memo (a hit returns
+   the empty plan without harvesting; covers all but the ~16% distinct states).
 4. **Land-fan sharing**: `EnumeratePlansWithLand` re-enumerates the full spell odometer once per
    land candidate (5c: 78k host calls -> 335k inner enums, ~4.3x). The user's land-after-draws
    TIMING doctrine (recorded in `main-phase-classification.md`, unimplemented) removes part of
    this fan at the root by construction: plans with affordable draws emit ONLY the defer
-   variant, and the land is chosen once, post-draw.
+   variant, and the land is chosen once, post-draw. This is the right route to the enum.m1
+   residual — it deletes the calls instead of caching them.
 
 ## Status
 
