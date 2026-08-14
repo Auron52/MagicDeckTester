@@ -14621,6 +14621,11 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
     // (2026-08-14 must-find audit: canon lost unbounded-findable Mirrorwing wins -- Treasure-float
     // re-solve states merged with their float-less twins). Folded ONLY when non-empty, so every
     // empty-float state keeps the EXACT prior key.
+    // Storm count (spells_cast_this_turn): read by Dragonstorm's resolution, and it can DESYNC from
+    // zone contents mid-turn (a retrace cast returns to the graveyard it left; copies cast no card),
+    // so two identical-zone states can differ in it. User-suspected 2026-08-14; folded when nonzero.
+    if (state.spells_cast_this_turn > 0)
+    { Fold(k, 0x5709A); Fold(k, static_cast<uint64_t>(state.spells_cast_this_turn)); }
     if (state.floating_mana.Total() > 0)
     {
         const ManaPool& fm = state.floating_mana;
