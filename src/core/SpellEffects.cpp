@@ -1823,7 +1823,8 @@ struct ManaCacheEntry
 {
     std::uint64_t             verify;
     bool                      payable;
-    ManaPool                  produced;
+    ManaPool                  produced;    // out_full_pool: the concrete mana the tap set makes
+    ManaPool                  leftover;    // out_leftover: the over-production surfaced for floating
     std::vector<ManaCacheTap> taps;
     int                       drip_life;   // total opponent-life amount the solve's drip taps applied
 };
@@ -1833,6 +1834,22 @@ inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_cac
 // The A/B arm that measured the Deathrite/storage/drip extension, and the hatch if a future source
 // gains a tap effect this replay does not cover.
 inline bool McAllSources() { static const bool v = EnvOn("MTG_MANA_CACHE_ALLSRC", true); return v; }
+
+// DEFAULT ON; MTG_MANA_CACHE_LEFTOVER=0 restricts the cache back to the batch-prepay shape only.
+//
+// The cache used to cover ONE of the engine's two payment questions. TurnSolver's batch prepay ("can
+// I afford this whole plan?", out_full_pool) was cached; TapForCostSharedOnce's per-cast fallback
+// ("pay this one cost, tell me the leftover", out_leftover, sometimes fed by a ritual's floating
+// reserve) was not -- 17.9% of calls but 55% of all payment NODES, re-solved from scratch every time.
+//
+// Covering it is the right shape for a second reason (user, 2026-08-14): the alternative -- widening
+// the batch prepay so it maps the whole turn -- pre-floats all the mana, and pre-floating is actively
+// WRONG for a scaling source. Bloom Tender taps for one mana per colour you control, so tapping it up
+// front banks TODAY's colour count and throws away the extra mana it would have made after the next
+// cast resolves; the same pre-float also spends mana a later phase may want held. Memoising the
+// per-cast solves keeps payment lazy and in-order -- each subset paid when it is actually due -- and
+// makes the repeats free, which is what was actually expensive.
+inline bool McLeftoverShape() { static const bool v = EnvOn("MTG_MANA_CACHE_LEFTOVER", true); return v; }
 inline bool McSimpleTap(const CardDefinition* d)
 { return d && !d->params.storage_land && d->params.tap_opponent_lifegain == 0
            && !d->params.gy_land_exile_mana; }
@@ -1841,6 +1858,7 @@ inline bool McSimpleTap(const CardDefinition* d)
 // Returns false (caller skips the cache) if a state-dependent source is present.
 inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_creature,
                          std::uint64_t reserved_mask, int untapped_max,
+                         bool want_leftover, bool want_full_pool, const ManaPool& floating,
                          std::uint64_t& k1, std::uint64_t& k2)
 {
     auto mix = [](std::uint64_t& h, std::uint64_t v){ h ^= v; h *= 1099511628211ull; h ^= h >> 29; };
@@ -1950,6 +1968,20 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         mix(h, for_creature ? 1ull : 0ull);
         mix(h, reserved_mask);
         mix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(untapped_max)));
+        // OUTPUT MODE is part of the SEARCH, not just of what gets returned: `collapse_colors` is
+        // gated on out_leftover == nullptr, because the leftover pool is floated and later drained
+        // colour-sensitively, so the recolour that mode allows would be observable. The two modes can
+        // therefore find DIFFERENT first solutions for the same board and cost, and must key apart --
+        // sharing one entry between them would hand a collapsed-colour pool to the caller that reads
+        // colours. (want_full_pool rides along: it costs a bit and keeps the modes fully disjoint.)
+        mix(h, want_leftover ? 0x1EF7ull : 0x1EF8ull);
+        mix(h, want_full_pool ? 0xF0011ull : 0xF0012ull);
+        // The INCOMING floating pool (a ritual's reserve on the filter-feed retry). Empty on the batch
+        // path, so every pre-existing entry keys identically.
+        mix(h, static_cast<std::uint64_t>(floating.white) | (static_cast<std::uint64_t>(floating.blue) << 12)
+             | (static_cast<std::uint64_t>(floating.black) << 24) | (static_cast<std::uint64_t>(floating.red) << 36));
+        mix(h, static_cast<std::uint64_t>(floating.green) | (static_cast<std::uint64_t>(floating.colorless) << 16)
+             | (static_cast<std::uint64_t>(floating.wild) << 32));
     };
     mixcost(h1); mixcost(h2);
     k1 = h1; k2 = h2;
@@ -1973,9 +2005,13 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                          const std::vector<std::pair<int, const CardDefinition*>>* src_cands)
 {
     // ---- PAYABLE MANA CACHE lookup (canonical batch-prepay shape only; see the block above) ----
-    const bool mc = ManaCacheEnabled() && out_full_pool != nullptr && out_leftover == nullptr
-                    && rp_colors == nullptr && floating.Total() == 0
-                    && state.battlefield.size() <= 64;
+    // SHAPE: rp_colors must be null (externally-supplied colours are not in the key) and the board must
+    // fit the tap-set bitmask. The output mode and the incoming floating pool are KEYED rather than
+    // excluded (see McLeftoverShape), so both payment questions are cacheable; =0 restores the old
+    // batch-prepay-only reach.
+    const bool mc = ManaCacheEnabled() && rp_colors == nullptr && state.battlefield.size() <= 64
+                    && (McLeftoverShape()
+                        || (out_full_pool != nullptr && out_leftover == nullptr && floating.Total() == 0));
     std::uint64_t mk1 = 0, mk2 = 0, pre_tapped = 0; bool mc_active = false;
     // Pre-solve snapshots, taken on a MISS only, so the store below can recover the two things the
     // final state does not spell out: how many storage counters each tap burned, and how much drip the
@@ -1983,7 +2019,9 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // warm-up; only charged batteries are recorded, so it is empty on every deck without one.
     static thread_local std::vector<std::pair<int, int>> mc_storage_pre;   // (index, counters before)
     int mc_opp_life_pre = 0;
-    const bool mc_keyed = mc && ManaCacheKey(state, cost, for_creature, reserved_mask, untapped_max, mk1, mk2);
+    const bool mc_keyed = mc && ManaCacheKey(state, cost, for_creature, reserved_mask, untapped_max,
+                                             out_leftover != nullptr, out_full_pool != nullptr, floating,
+                                             mk1, mk2);
     if (tapstats::Enabled() && !mc_keyed)
     { (mc ? tapstats::g_mc_skip_key : tapstats::g_mc_skip_shape).fetch_add(1, std::memory_order_relaxed); }
     if (mc_keyed)
@@ -2024,7 +2062,8 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             // through OpponentGainsLife re-reads RemedyActive, so a Tainted Remedy board flips the
             // gain to a loss (and sets opponent_lost_life_this_turn) exactly as the real solve would.
             if (e.drip_life > 0) { OpponentGainsLife(state, hit_active, e.drip_life); }
-            *out_full_pool = e.produced;
+            if (out_full_pool) { *out_full_pool = e.produced; }
+            if (out_leftover)  { *out_leftover  = e.leftover; }
             return true;
         }
         if (tapstats::Enabled()) { tapstats::g_mc_miss.fetch_add(1, std::memory_order_relaxed); }
@@ -2072,7 +2111,8 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         ManaCacheEntry e; e.verify = mk2; e.payable = ok; e.drip_life = 0; bool storable = true;
         if (ok)
         {
-            e.produced = *out_full_pool;
+            if (out_full_pool) { e.produced = *out_full_pool; }
+            if (out_leftover)  { e.leftover = *out_leftover; }
             const int active = state.active_player_index;
             const int n = static_cast<int>(state.battlefield.size());
             // Only drip moves the OPPONENT's life during a payment (tap_self_damage hits the active

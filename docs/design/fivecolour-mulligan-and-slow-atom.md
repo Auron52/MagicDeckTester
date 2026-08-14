@@ -190,11 +190,42 @@ The uncovered shape is 17.9% of calls but **55% of the nodes**, and is never mem
 repeats re-solve every time. Per-entry cost is the same in both (73.5 vs 72.9), so it is not that
 those calls are pathological -- there are just a lot of them.
 
-**Extending it is feasible but small.** Store the leftover pool alongside `produced`, and put the
-floating pool in the key (it is six ints). The prize is bounded: cache-off vs cache-on is 74,691 ->
-71,589 ms while the cache avoids ~2.4x the nodes it spends, so **the whole payment DFS is only ~7% of
-this deck's PLAY runtime** and the extension is worth ~2-4% at best. Worth doing on a quiet day, not
-worth reordering anything for.
+**DONE -- and it was worth more than the estimate.** See section 5b.
+
+### 5b. Both payment questions are cached -- payment nodes HALVED
+
+Why memoise the per-cast solves instead of widening the batch prepay to map the whole turn? Because
+**pre-floating is actively wrong for a scaling source** (user, 2026-08-14). The prepay pre-loads the
+combined cost as floating, which means tapping Bloom Tender UP FRONT -- banking today's colour count
+and throwing away the extra mana it would make after the next cast resolves. The same pre-float also
+spends mana a later phase may want held. Memoising keeps payment lazy and in-order (each subset paid
+when it is due) and makes only the REPEATS free, which is what was actually expensive.
+
+One trap on the way in, and it would have been silent: **`collapse_colors` is gated on
+`out_leftover == nullptr`.** The leftover pool gets floated and later drained colour-sensitively, so
+that mode must not recolour; the batch mode may. The two modes therefore run different searches and
+can find different first solutions for the same board and cost -- sharing one entry between them would
+have handed a collapsed-colour pool to the one caller that reads colours. The output mode is now part
+of the key, so they memoise separately. The incoming floating pool is keyed too (the filter-feed retry
+passes a ritual's reserve); it is empty on the batch path, so every pre-existing entry keys unchanged.
+
+Measured, FiveColour d3 x14, `--threads 1` (`MTG_MANA_CACHE_LEFTOVER=0` vs `=1`):
+
+```
+skipped-shape       101,214 (55.0% of nodes)  ->  0 (0.0%)
+backtracker nodes   13,542,764                ->  6,584,731     (-51.4%)
+top-level entries   184,913                   ->  92,888        (-49.8%)
+hit rate            82.0%                     ->  83.6%
+digest              85007c517c8d89d9          ->  85007c517c8d89d9
+```
+
+Wall, same 60 games at 12 threads: cache OFF 72,546 ms / batch-only 68,753 / both shapes **65,922**.
+So the cache's value roughly DOUBLES (-5.2% -> -9.1% off the no-cache baseline), and the payment DFS
+is cut in half.
+
+That also revises section 5a's own estimate upward: I sized this at "~2-4% at best" from the ~7%
+payment share, and it landed at ~4.1% of total runtime. The estimate was low because the uncovered
+shape turned out to be half the nodes, not a fraction of the remainder.
 
 **The correction that matters more:** the 22.3% "mana payment" figure in section 3's perf profile came
 from the DEGENERATE rollouts, not from normal play. Payment dominates the TAIL. That is why the tail
