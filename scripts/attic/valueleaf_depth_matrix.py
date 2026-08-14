@@ -148,6 +148,64 @@ def _refresh(c):
     return c
 
 
+# ==================== PER-GAME RESULTS (what makes a chunk divisible) ====================
+# A chunk additionally carries `g`: the WIN TURN of each game it covers, in offset order --
+#
+#     {"off": 375, "n": 25, "lp": 5.31, "ms": 9508.2, "src": "<hash>", "g": [5, 6, -1, ...]}
+#
+# read from the `<job>.wins` file `--game-log-dir` writes (`index win_turn digest` per line).
+#
+# This is the ENABLER for everything the chunk mean cannot express, and it is why the mean was
+# a problem rather than a compression:
+#
+#   * A chunk mean cannot be SPLIT. Keeping part of a chunk means the surviving piece inherits the
+#     whole chunk's mean over a different game set -- fabricated data (two predecessors of
+#     _chunk_inside did exactly that). So retention had to be whole-chunk, and one ragged condemned
+#     chunk could force ~37% of blocks to be discarded to drop 2% of games.
+#   * It cannot express a SKIPPED game at all, which is what degenerate-game abandonment needs:
+#     with per-game results a skip is an analysis-time FILTER over data already on disk, not a
+#     re-run and not a retroactive edit.
+#   * Comparisons intersect on GAME SETS rather than counts, so "compare only games both cells
+#     played" stops being a hand computation done outside the driver -- which is where the
+#     FiveColour V6-vs-H5 sign error came from (row means over unequal sets).
+#
+# Cost is ~250 KB for a 22,400-game matrix. `lp` STAYS the engine's own reported average and stays
+# authoritative; `g` is verified against it on arrival (_wins_check) rather than replacing it, so
+# this change is purely additive -- no existing number moves.
+def _mt_of(c):
+    return DECKS[c["deck"]][2]
+
+
+def _lp_value(wt, mt):
+    """One game's loss-penalized score, matching the engine's ComputeAvgTurns EXACTLY
+    (runner/GoldFishRunner.h): a win scores its turn, anything <= 0 scores max_turns + 1.
+    Divergence here would silently shift every filtered mean off the engine's own scale."""
+    return float(wt) if wt > 0 else float(mt + 1)
+
+
+def _chunk_games(x):
+    """[(offset, win_turn)] for a chunk that carries per-game results; None if it predates them."""
+    g = x.get("g")
+    if not g or len(g) != x["n"]: return None
+    return list(zip(_chunk_offsets(x), g))
+
+
+def _read_wins(winsdir, nm, off, n):
+    """Per-game win turns for one chunk, from `<winsdir>/<nm>.wins`.
+
+    The file's first column is the JOB-LOCAL index and SKIPPED games are dropped before it is
+    written, so local+off only equals the global offset when the chunk ran to completion. A short
+    file therefore means the pool skipped games -- which today happens only to a CONDEMNED cell,
+    and a condemned cell is reference-only and never compared per-game. So we return None rather
+    than guess an alignment: no per-game data is strictly better than misaligned per-game data."""
+    try:
+        with open(os.path.join(winsdir, nm + ".wins")) as fh:
+            wt = [int(l.split()[1]) for l in fh if len(l.split()) >= 2]
+    except (OSError, ValueError, IndexError):
+        return None
+    return wt if len(wt) == n else None
+
+
 def cell_mean(c): return c["lp_mean"]
 
 
@@ -186,8 +244,52 @@ def _chunk_inside(x, allowed):
     to 7 games carrying a 25-game mean. On the live run that was 26 chunks of fabricated `lp`, in the
     exact quantity the table reports.
 
-    So retention granularity is now the STORAGE granularity: whole chunks, or nothing."""
+    So retention granularity is now the STORAGE granularity: whole chunks, or nothing.
+
+    A chunk carrying per-game results (`g`) is NOT subject to this -- it can be restricted honestly,
+    see _chunk_restrict. This predicate is the rule for the legacy chunks that only stored a mean."""
     return all(o in allowed for o in _chunk_offsets(x))
+
+
+def _chunk_restrict(x, allowed, mt):
+    """Narrow a chunk to `allowed` offsets. Returns the LIST of surviving chunks (empty if none).
+
+    With per-game results this is exact: recompute the mean over the games that actually remain,
+    on the engine's own scale (_lp_value). Without them the only honest answers are ALL or NOTHING
+    (_chunk_inside), because the surviving piece would otherwise inherit a mean over games it does
+    not contain -- so a legacy chunk still goes whole.
+
+    What this buys: 149 degenerate games spread over ~321 blocks put at least one in ~37% of them,
+    so whole-chunk retention discards a third of the sample to drop 2% of the games -- and the
+    signal lives in 1-4 blocks out of ~50-60, which is the one thing that cannot afford it.
+
+    `ms` is apportioned pro-rata. That is an approximation and deliberately so: the wall time of the
+    dropped games is exactly what we do NOT have per-game, and the field feeds cost reporting, never
+    a result. Whole-chunk retention had the same property (it dropped the time with the games)."""
+    games = _chunk_games(x)
+    if games is None:
+        return [x] if _chunk_inside(x, allowed) else []
+    keep = [(o, w) for o, w in games if o in allowed]
+    if not keep:
+        return []
+    if len(keep) == x["n"]:
+        return [x]
+    # Offsets are contiguous per chunk today; a restriction can only cut a prefix/suffix or punch a
+    # hole. Store the surviving run as a chunk at its own offset -- callers re-derive coverage from
+    # off/n, so a hole must become separate chunks rather than one chunk with gaps.
+    out, run = [], []
+    for o, w in keep:
+        if run and o != run[-1][0] + 1:
+            out.append(run); run = []
+        run.append((o, w))
+    if run: out.append(run)
+    pieces = []
+    for r in out:
+        wts = [w for _, w in r]
+        pieces.append({"off": r[0][0], "n": len(r), "g": wts, "src": x.get("src"),
+                       "lp": sum(_lp_value(w, mt) for w in wts) / len(wts),
+                       "ms": x["ms"] * len(r) / x["n"]})
+    return pieces
 
 
 def _reference_only(c):
@@ -246,13 +348,16 @@ def enforce_offset_src_agreement(cells, log=print):
     for key, bad in sorted(conflicts.items(), key=lambda kv: (kv[0][0], kv[0][1])):
         if not bad: continue
         for c in groups[key]:
-            keep, dropped = [], 0
+            keep, dropped, mt = [], 0, _mt_of(c)
             for x in sorted(c["chunks"], key=lambda x: x["off"]):
-                # Chunk-atomic (see _chunk_inside): a chunk holding ANY disputed game goes whole.
+                # Drop the DISPUTED GAMES. With per-game results that is exactly them; a legacy
+                # mean-only chunk still goes whole (_chunk_restrict picks per chunk).
                 # Widening a drop can never create a conflict -- a conflict needs two cells HOLDING
                 # one offset on different engines -- so this needs no fixpoint, unlike the keep side.
                 if any(o in bad for o in _chunk_offsets(x)):
-                    dropped += x["n"]; continue
+                    surv = _chunk_restrict(x, {o for o in _chunk_offsets(x) if o not in bad}, mt)
+                    dropped += x["n"] - sum(s["n"] for s in surv)
+                    keep.extend(surv); continue
                 keep.append(x)
             if dropped:
                 c["chunks"] = keep; _refresh(c)
@@ -323,10 +428,12 @@ def resync_engine_change(cells, target, src_now, log=print):
     in the first place. Both remain SUBJECT to the drop, because an offset an unfinished comparable
     cell will redo must not survive anywhere.
 
-    WHAT SURVIVES IS A WHOLE CHUNK (2026-08-13). The state stores one mean per chunk, not per game, so
-    keeping part of a chunk would mean inventing the surviving piece's score (see _chunk_inside).
-    Retention is chunk-atomic and resolved to a fixpoint, because atomicity and the intersection
-    constrain each other.
+    WHAT SURVIVES IS A GAME (2026-08-14), where per-game results exist. Retention used to be
+    chunk-atomic because the state stored one mean per chunk, so keeping part of one meant inventing
+    the surviving piece's score (see _chunk_inside) -- which meant a single straddling game cost 25.
+    Chunks carrying `g` are now restricted offset-wise instead (_chunk_restrict); chunks written
+    before that still go whole. The FIXPOINT stays either way: a legacy chunk dropped for straddling
+    the boundary still shrinks its cell's coverage, which can strand a chunk in another cell.
     """
     if not src_now: log("resync: no src fingerprint (not a git tree?) -- skipping"); return []
     groups = {}
@@ -343,9 +450,20 @@ def resync_engine_change(cells, target, src_now, log=print):
         if not incomplete: continue                  # seed complete => internally consistent
 
         def survives(c, allowed):
-            """The offsets c would still hold after a drop bounded by `allowed`."""
-            return {o for x in c["chunks"] if x.get("src") == src_now or _chunk_inside(x, allowed)
-                    for o in _chunk_offsets(x)}
+            """The offsets c would still hold after a drop bounded by `allowed`.
+
+            Per-game chunks survive OFFSET-WISE (a chunk keeps the games inside `allowed` and loses
+            only the rest); a legacy mean-only chunk survives whole or not at all. Mirrors exactly
+            what the drop loop below does, which is what makes the fixpoint honest."""
+            out = set()
+            for x in c["chunks"]:
+                if x.get("src") == src_now:
+                    out.update(_chunk_offsets(x))
+                elif _chunk_games(x) is not None:
+                    out.update(o for o in _chunk_offsets(x) if o in allowed)
+                elif _chunk_inside(x, allowed):
+                    out.update(_chunk_offsets(x))
+            return out
 
         # FIXPOINT. Chunk atomicity and the intersection are mutually dependent: dropping a chunk
         # because it straddles the boundary shrinks that cell's coverage, which shrinks the
@@ -360,13 +478,13 @@ def resync_engine_change(cells, target, src_now, log=print):
             keepable = nxt
 
         for c in cs:
-            keep, dropped = [], 0
+            keep, dropped, mt = [], 0, _mt_of(c)
             for x in sorted(c["chunks"], key=lambda x: x["off"]):
                 if x.get("src") == src_now:          # already the current engine: nothing to absorb
                     keep.append(x); continue
-                if not _chunk_inside(x, keepable):
-                    dropped += x["n"]; continue
-                keep.append(x)
+                surv = _chunk_restrict(x, keepable, mt)
+                dropped += x["n"] - sum(s["n"] for s in surv)
+                keep.extend(surv)
             if dropped:
                 c["chunks"] = keep; _refresh(c)
                 plan.append((deck, seed, "%s%d" % (c["arm"], c["depth"]), dropped))
@@ -710,7 +828,14 @@ def run_incremental(args):
         # --threads only when explicitly asked for; otherwise let the engine resolve to every
         # available core (see --workers). Passing a number always would re-introduce the very
         # hand-picked cap this run exists to avoid.
-        cmd=[MTG,"--batch",man]+(["--threads",str(args.workers)] if args.workers>0 else [])
+        # PER-GAME RESULTS. `--game-log-dir` writes one `<job>.wins` per chunk (`index win_turn
+        # digest`), which is the only channel that reports below the job aggregate -- the streamed
+        # result line carries a single mean. Costs one small file per chunk and nothing at all in
+        # the hot path; the directory is also the durable per-game record (digests included), so a
+        # question the state file cannot answer can still be answered off disk afterwards.
+        winsdir=os.path.join(os.path.dirname(args.out) or ".", "wins")
+        os.makedirs(winsdir, exist_ok=True)
+        cmd=[MTG,"--batch",man,"--game-log-dir",winsdir]+(["--threads",str(args.workers)] if args.workers>0 else [])
         # stderr carries the engine's SLOW-GAME and CONDEMNED lines (each SLOW-GAME a
         # self-contained repro, tagged job=<cell>_off<offset>). Drained on its own thread so a full
         # pipe can never block the pool, and handled as it arrives rather than collected at exit --
@@ -760,7 +885,22 @@ def run_incremental(args):
             ch=by_name.get(nm)
             if ch is None or p<=0: continue
             c=ch["c"]; wall=ms/1000.0
-            c["chunks"].append({"off":ch["off"],"n":p,"lp":lp,"ms":wall,"src":src_now})
+            rec={"off":ch["off"],"n":p,"lp":lp,"ms":wall,"src":src_now}
+            # Attach the per-game win turns, but only after checking they REPRODUCE the engine's own
+            # reported average. `lp` stays authoritative either way; a mismatch means the .wins file
+            # and the result line describe different games (a stale file from a previous run under the
+            # same job name is the realistic way that happens), and silently storing it would poison
+            # every per-game comparison downstream while the table's own numbers still looked right.
+            wt=_read_wins(winsdir, nm, ch["off"], p)
+            if wt is not None:
+                mt=_mt_of(c)
+                got=sum(_lp_value(w, mt) for w in wt)/len(wt)
+                if abs(got-lp) <= 5e-4:
+                    rec["g"]=wt
+                else:
+                    print("  !! per-game mismatch %s: wins=%.4f vs reported=%.4f -- storing mean only"
+                          % (nm, got, lp), flush=True)
+            c["chunks"].append(rec)
             _refresh(c)
             if c["first_wall"] is None: c["first_wall"]=wall
             done+=1
