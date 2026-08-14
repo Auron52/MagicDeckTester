@@ -88,10 +88,15 @@ For a nonpermanent spell the preference INVERTS (user, 2026-08-14): a line that 
 changed nothing else is dominated by the line that held it — hand-with-spell is a superset, the
 rest equal, so the sound core already prunes it wherever the graveyard axis is ignorable (no
 retrace/gy-payoff). Normally a resolved spell changes something, so this tier only removes WASTED
-casts — fizzled tricks, pumps on nothing, and notably the magnetless Gold-Rush-as-ritual lines from
-the 2026-08-14 branching investigation (cast {1}{G}, crack the Treasure, end with less of
-everything: dominated on every axis by holding). EOT dominance would retire that proposed bespoke
-fold automatically.
+casts — fizzled tricks, pumps on nothing, the magnetless Gold-Rush-as-ritual lines from the
+2026-08-14 branching investigation (cast {1}{G}, crack the Treasure, end with less of everything).
+
+**Layering rule (user, 2026-08-14): dominance SUBSUMES the plan-level waste folds correctness-wise
+but does NOT replace them.** A plan-level fold (SubsetWastesAccelerant, sac-for-nothing, the
+existing ritual-waste prunes) removes the line BEFORE it is enumerated/applied/simulated — zero
+budget spent; EOT dominance catches the same line only after paying its whole turn of work. Keep
+every cheap early fold; dominance is the general backstop for the waste no plan-level rule
+anticipated.
 
 ## Implementation sketch
 
