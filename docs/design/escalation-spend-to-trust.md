@@ -1,7 +1,47 @@
 # Escalation: spend the reserve on reaching TRUST, not on a heuristic pass below it
 
-Proposed by the user, 2026-08-14. Not implemented. A budget-ALLOCATION change at one decision point,
-measurable with the existing harness.
+Proposed by the user, 2026-08-14. **ADOPTED the same day (`0d7016c`)** as the path-to-trust start
+gate, `kTrustPathSlack = 2.0`, default ON.
+
+## Outcome, and the way the argument below is WRONG
+
+FiveColour, paired per seed, 500 games/seed:
+
+```
+slack   TRAIN (6 seeds)        HELD-OUT (4 overnight seeds)     work
+ 1.00   -0.0080 (t 4.90)       --                               1.058x
+ 1.25   -0.0107 (t 4.34)       -0.0070 +/- 0.0017 (t 4.04)      1.068x
+ 2.00   -0.0147 (t 4.07)       -0.0150 +/- 0.0013 (t 11.62)     1.220x
+```
+
+2.0 wins on both sets, improves 4/4 held-out seeds, and its held-out estimate matches train almost
+exactly. -0.0150 turns is a LARGER gain than adopting the value leaf itself was (-0.0108).
+
+**But it buys QUALITY, not speed -- the opposite of what everything below predicts.** Cancelling
+escalations does not save work: pushing the ladder to trust costs MORE than the escalation it avoids
+(+22% search units). The escalation-rate drop is real (50.6% -> 43.5%) and was never the payoff. Every
+cost argument in the rest of this document -- the 66x, the "R * leaves term a value ply does not
+have", the budget inversion -- correctly describes why a value ply is cheaper THAN A HEURISTIC PASS AT
+THE SAME DEPTH, and then wrongly concludes the change is cheaper overall. It is not: reaching trust
+means searching DEEPER, and the deeper value search outweighs the saved escalation.
+
+The mechanism is real, the direction of the fix is right, the reason given for it was wrong. Kept in
+full below rather than rewritten, because the error is instructive: a cost argument assembled from
+correct per-comparison facts still needs the end-to-end measurement.
+
+Controls behaved exactly as their escalation rates predict -- burn (3.1%) -0.0003 t=1.00 with 5/6
+digests identical, Goblins (1.5%) 0.0000 with 3/6 identical.
+
+**Goblins b40 -> b20: NOT adopted.** Quality identical (that deck reads 3.7917 at every budget
+tested, so it cannot discriminate), but cost flipped sign between train (0.910x) and held-out
+(1.021x). The only axis that would justify the change disagrees with itself.
+
+**Open:** the slack curve was never shown to turn over. 2.0 is the best value TESTED, not a located
+optimum; 4.0 was never measured, and the trend was still improving.
+
+---
+
+*Original proposal follows, unedited.*
 
 ## The situation
 
