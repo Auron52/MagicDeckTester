@@ -11255,6 +11255,13 @@ DragonstormCastOrderings(const std::vector<Action>& reorder)
 // valid ordering-equivalence key).
 static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns,
                                            bool second_main);
+// ORDER-EXACT variant for enumeration-dedup sites (defined next to FsOrderSig): under
+// MTG_CANON_SIMKEY the plain key means "same multiset", but a dedup DROP requires "identical
+// rollout" -- and rollouts read vector order (greedy tie-breaks, index-encoded actions), so
+// canon-colliding siblings can roll out to different win turns (mirrorwing gi=363: the pruned
+// Forest-first sibling held the turn-7 win). Folding the order signature keeps dedup lossless;
+// with canon OFF this is byte-identical to BuildSimKey(state, 0, 0, false).
+static TranspositionTable::Key BuildDedupKey(const GameState& state);
 
 // Returns candidate plans for the current turn for use by SolveWithLookahead.
 //
@@ -12876,7 +12883,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // Apply this ordering on a copy; dedup by the resulting end-of-phase state.
             GameState copy = state;
             ApplyPlanDirect(copy, cand, is_pre_combat);
-            if (seen_states.insert(BuildSimKey(copy, 0, 0, false)).second)
+            if (seen_states.insert(BuildDedupKey(copy)).second)
             {
                 // Combat is order-independent, so inherit the base plan's combat-based win; a reordering
                 // can only ADD direct damage (e.g. the rebuild), so also mark a win if this ordering
@@ -14589,6 +14596,23 @@ inline bool CanonSimKeyOn()
     return v;
 }
 
+// Fold the ACTION-INDEX-relevant zone orders: active player's hand order + battlefield order.
+// Under canon this signature guards every consumer whose stored answer is NOT order-invariant:
+// index-encoded lines/plans (FSL win entries, the bp-enum memo), enumeration-dedup drops, and
+// rollout VALUES (SimulateToEnd's TT -- greedy rollouts read vector order, so a win turn cached
+// from a permuted sibling can differ; mirrorwing gi=363, leaf-verify cached=8 fresh=7).
+inline std::uint64_t FsOrderSig(const GameState& state)
+{
+    std::uint64_t h = 1469598103934665603ull;
+    auto mix = [&](std::uint64_t v){ h ^= v; h *= 1099511628211ull; h ^= h >> 29; };
+    const Player& ap = state.players[state.active_player_index];
+    for (const Card& c : ap.hand) { mix(c.m_name_hash); }
+    mix(0xB1F1);
+    for (const Permanent& perm : state.battlefield)
+    { mix(perm.card.m_name_hash); mix(static_cast<std::uint64_t>(perm.card.m_number)); }
+    return h | 1ull;   // never 0 (0 = unset)
+}
+
 static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns,
                                            bool second_main)
 {
@@ -14995,6 +15019,10 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     if (tt != nullptr)
     {
         key = BuildSimKey(state, depth, max_turns, second_main);
+        // Rollout win turns are NOT order-invariant (greedy tie-breaks read vector order), so under
+        // canon the multiset key must not share values across permuted states -- leaf-verify caught
+        // cached=8/fresh=7 on mirrorwing gi=363 (a must-find win silently lost). Order-exact key.
+        if (CanonSimKeyOn()) { Fold(key, FsOrderSig(state)); }
         PROF_INC(tt_lookups);
         const int* cached = tt->Lookup(key);
         if (cached != nullptr)
@@ -15100,19 +15128,6 @@ struct FSLineEntry
     std::uint64_t order_sig = 0;
 };
 
-// Fold the ACTION-INDEX-relevant zone orders: active player's hand order + battlefield order.
-inline std::uint64_t FsOrderSig(const GameState& state)
-{
-    std::uint64_t h = 1469598103934665603ull;
-    auto mix = [&](std::uint64_t v){ h ^= v; h *= 1099511628211ull; h ^= h >> 29; };
-    const Player& ap = state.players[state.active_player_index];
-    for (const Card& c : ap.hand) { mix(c.m_name_hash); }
-    mix(0xB1F1);
-    for (const Permanent& perm : state.battlefield)
-    { mix(perm.card.m_name_hash); mix(static_cast<std::uint64_t>(perm.card.m_number)); }
-    return h | 1ull;   // never 0 (0 = unset)
-}
-
 // --- MTG_CANON_SHADOW (temporary; MTG_BP_DUP_PROBE precedent) ---------------------------------
 inline bool CanonShadowOn()
 { static const bool v = EnvOn("MTG_CANON_SHADOW"); return v; }
@@ -15173,6 +15188,14 @@ inline std::string ShadowDumpState(const GameState& state)
     return s;
 }
 inline std::atomic<int>& ShadowHits() { static std::atomic<int> v{ 0 }; return v; }
+
+// See the forward declaration's comment (order-exact key for dedup sites / plan-carrying memos).
+static TranspositionTable::Key BuildDedupKey(const GameState& state)
+{
+    TranspositionTable::Key k = BuildSimKey(state, 0, 0, false);
+    if (CanonSimKeyOn()) { Fold(k, FsOrderSig(state)); }
+    return k;
+}
 // GLOBAL entry pool shared by every live line cache in the process (MTG_FSL_POOL, entries;
 // 0/unset = off = byte-identical). The per-cache cap (MTG_FSL_CAP) bounds ONE decision's cache;
 // this bounds their SUM. Rationale (Mirrorwing, 2026-08-14): line-cache appetite is heavily
@@ -15715,7 +15738,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // already-scored state is redundant -- skip its rollout. Ordinary plans only RECORD.
         if (bp_variants_here)
         {
-            const TranspositionTable::Key mk = BuildSimKey(s, 0, 0, false);
+            const TranspositionTable::Key mk = BuildDedupKey(s);
             const bool fresh = bp_seen_states.insert(mk).second;
             if (!fresh && p.bp_choice >= 0)
             { if (rec_vals) { node_vals.push_back(max_turns + 1); } continue; }
@@ -15846,7 +15869,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // Same post-apply state as an already-scored candidate -- the loop's own dedup set,
                 // so a wave candidate is also checked against every wave-0 one.
                 {
-                    const TranspositionTable::Key wk = BuildSimKey(s, 0, 0, false);
+                    const TranspositionTable::Key wk = BuildDedupKey(s);
                     if (!bp_seen_states.insert(wk).second) { continue; }
                 }
                 if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
@@ -15955,7 +15978,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // whose extra cast strands (a silent no-op) collapses onto an already-scored state
                 // and cannot improve on it. Insert-always is safe -- tranche plans are disjoint
                 // from wave 0 BY PLAN, so a hit is a genuine same-state collapse, not a re-visit.
-                if (!bp_seen_states.insert(BuildSimKey(s, 0, 0, false)).second) { return true; }
+                if (!bp_seen_states.insert(BuildDedupKey(s)).second) { return true; }
                 if (s.ActivePlayer().life <= 0) { return true; }   // self-kill guard, as above
                 AnimateLandsShared(s, nullptr);
                 ActivateTapTokensShared(s, nullptr);
@@ -18091,9 +18114,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 ApplyPlanDirect(copy, plan, true);
                 // Count-bounder: skip this candidate's rollout if its post-apply state was already scored
                 // by an earlier candidate this pass (a dominated/strand-equivalent line). Reframe-only.
-                if (CostReframeEnabled() && !reframe_seen.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
+                if (CostReframeEnabled() && !reframe_seen.insert(BuildDedupKey(copy)).second) { continue; }
                 if (bp_variants_here
-                    && !bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second
+                    && !bp_seen_states.insert(BuildDedupKey(copy)).second
                     && plan.bp_choice >= 0)
                 { ++candidates_done; continue; }
                 AnimateLandsShared(copy, nullptr);
@@ -18124,9 +18147,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return plan; }
                 // Count-bounder (post-combat main): dedup by post-apply state AFTER the win check so a
                 // unique winner is never skipped. Reframe-only. See the pre-combat branch above.
-                if (CostReframeEnabled() && !reframe_seen.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
+                if (CostReframeEnabled() && !reframe_seen.insert(BuildDedupKey(copy)).second) { continue; }
                 if (bp_variants_here
-                    && !bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second
+                    && !bp_seen_states.insert(BuildDedupKey(copy)).second
                     && plan.bp_choice >= 0)
                 { ++candidates_done; continue; }
             }
@@ -18214,7 +18237,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         }
                         else { ApplyPlanDirect(copy, v, true); }
                         if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last)) { continue; }
-                        if (!bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
+                        if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { continue; }
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
                         AnimateLandsShared(copy, nullptr);
                         ActivateTapTokensShared(copy, nullptr);
@@ -18235,7 +18258,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         ApplyPlanDirect(copy, v, false);
                         if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last)) { continue; }
                         if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return v; }
-                        if (!bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second) { continue; }
+                        if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { continue; }
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
                     }
                     if (!SimulateEndAndStartNextTurn(copy)) { continue; }
@@ -18313,7 +18336,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     ApplyPlanDirect(copy, v, true);
                     // Post-apply dedup vs everything scored this pass (tranche plans are disjoint
                     // from wave 0 BY PLAN, so a hit is a genuine same-state collapse).
-                    if (!bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second) { return true; }
+                    if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { return true; }
                     AnimateLandsShared(copy, nullptr);
                     ActivateTapTokensShared(copy, nullptr);
                     SimulateCombat(copy);
@@ -18330,7 +18353,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 {
                     ApplyPlanDirect(copy, v, false);
                     if (copy.Opponent().life <= 0) { won_out = true; return true; }
-                    if (!bp_seen_states.insert(BuildSimKey(copy, 0, 0, false)).second) { return true; }
+                    if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { return true; }
                 }
                 if (!SimulateEndAndStartNextTurn(copy)) { return true; }
                 const int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
@@ -18425,6 +18448,10 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
 static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool is_pre_combat)
 {
     TranspositionTable::Key k = BuildSimKey(state, 0, 0, is_pre_combat);
+    // This memo returns index-encoded Plans (hand indices / battlefield positions), so under
+    // MTG_CANON_SIMKEY a multiset hit could replay plans enumerated under a PERMUTED zone order --
+    // the same misindexed-replay class the FSLineEntry.order_sig guard cures. Order-exact key.
+    if (CanonSimKeyOn()) { Fold(k, FsOrderSig(state)); }
     Fold(k, 0xB9E4);   // section tag: mid-turn scalars
     const ManaPool& f = state.floating_mana;
     Fold(k, static_cast<uint64_t>(f.white));

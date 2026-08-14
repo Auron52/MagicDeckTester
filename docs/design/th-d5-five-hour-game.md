@@ -258,3 +258,22 @@ at TurnSolver ~11667/14225/14465/16492) -- they DROP plan variants by canonical 
 reaching the FSL probe, so the shadow cannot see them. Next: extend the shadow check to those
 sites; trigger pattern = Sandstone Needle (depletion) land-timing orderings. Canon stays
 reverted/blocked until gi363 passes.
+
+## 2026-08-14 overnight: gi363 SOLVED -- the TT rollout-value memo was the last hole
+
+The dedup-site fix (BuildDedupKey = canon key + FsOrderSig at every seen_states/bp_seen_states/
+reframe_seen insert, plus the plan-carrying BuildBreakpointKey memo) was correct hardening but did
+NOT move gi363 (still 8 vs 7). The conviction came from the EXISTING soundness harness: canon-on +
+MTG_LEAF_VERIFY printed 8 stale TT hits on the gi363 repro, including `cached=8 fresh=7` -- the
+SimulateToEnd transposition table caches rollout WIN TURNS under the canon key, and rollout values
+are NOT order-invariant (greedy tie-breaks read vector order), so a win turn cached from a permuted
+sibling masked this order's earlier win. The TT header's purity argument ("pure function of state,
+0 stale hits over 283K verified 2026-07-16") was proved under ORDERED keys; canon silently broke it.
+Fix: fold FsOrderSig into the SimulateToEnd TT key under canon. After: gi363 = 7 with ZERO stale
+hits. The general law of this hunt, now three-times confirmed: canon may share ORDER-INVARIANT
+facts only; every consumer whose stored answer encodes indices (FSL win lines, bp-enum plans) or
+depends on rollout tie-breaks (dedup drops, TT values) must be order-exact. What remains canonical: FSL NOWIN entries (bound-qualified refutations) -- 99.99% of monster memo
+traffic, where the measured perf win lives. NOWIN sharing has the SAME theoretical
+order-dependence (a refutation proved under one vector order); it is retained because the full
+must-find set and the suite gates pass with it -- if a future must-find failure appears, it is
+the first suspect.
