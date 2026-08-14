@@ -109,16 +109,33 @@ fi
 # 10-minute `[batch] heartbeat` line leading with worker utilisation. Passing it from this script was
 # how it came to be OFF for every caller that was not this script.
 VDEPTHS="1 2 3 4 5 6 7 8"
-# The HEURISTIC ladder, 1-6. The shipped play depth is 5 and d6 is the next escalation target worth
-# ranking, so the ladder has to reach it: the crossover CLAMPS to the deepest measured hdepth, so
-# `6->5 7->5 8->5` in a derived table is the clamp, NOT a measurement, and cannot justify d6 play.
-# It stops at 6 because H7 is impractical (H cells cost ~2.2x per rung: FiveColour measured 0.54s,
-# 5.9s, 36s, 160s, 348s per game at H1..H5) -- while H6 came in ~11x CHEAPER than H5 there, which is
-# a non-monotonic ladder worth knowing about and not worth guessing at.
+# The HEURISTIC ladder, 1-5 -- H5 is the ESCALATION CAP, so it is also the deepest rung worth
+# measuring (user, 2026-08-14). Escalation can never exceed H5, so H5 is the strongest fallback the
+# runtime can take, so "trust the leaf" means "the leaf matches H5" and nothing deeper can inform a
+# decision the runtime is incapable of making. The crossover's maxH+1 sentinel then reads as NEVER
+# fall back, which is exactly the wanted behaviour.
+#
+# H6 WAS in this ladder and is removed. It has NEVER been completed on any deck in any run: every H6
+# on disk is a small side-sample (fivecolour 4g, antilife 50g, dragonstorm 100g, all condemned; the
+# 5-deck tables' H6 was merged in from a 150-GAME `d68` pass into tables declaring games=500 --
+# `_antilife_d68_avg.txt` and `_5deck_combined.txt` both carry H6=4.6933, byte-identical). The
+# numbers say the same: H4->H5 across all decks is 0.0000-0.0033 while H5->H6 ranges -0.6048 to
+# +0.1525, i.e. noise. The old rationale here -- "H6 came in ~11x CHEAPER than H5" -- is contradicted
+# by the 2026-08 FiveColour run: H5=822515.7ms vs H6=991283.1ms per game, 1.2x MORE expensive, and
+# that measured only on the 4-50 games that tripped the one-hour guard, so it is a floor. Keeping it
+# cost 47.4 core-h of that run for 111 unusable games, supplied the H6 row that flipped the derived
+# fallback rule from "never" to "fall back at H6", and its ragged condemned chunks (n=4, n=7) held two
+# seeds' banking hostage. See docs/design/depth-matrix-degenerate-games.md.
+#
+# Do NOT cut to H4: the two decks still improving at H3->H4 (dragonstorm +0.1100, hinata +0.0850) are
+# exactly the two whose H5 was never measured -- dragonstorm's was ATTEMPTED AND CONDEMNED. Depth
+# stays useful roughly as far as a deck's games run (antilife wins turn 4.09, dies at H2->H3;
+# fivecolour 4.98, dies at H4->H5; hinata's games run to turn 6.00). H5 is the conservative ceiling.
+#
 # Note H_maxturns == V_maxturns is the SAME cell: at depth >= max_turns the horizon covers the whole
 # game, so every leaf is terminal and the learned evaluator is never consulted. FiveColour has
 # max_turns=8, so H8 == V8 -- never pay ~68 core-hours to re-measure a cell the V arm already has.
-HDEPTHS="1 2 3 4 5 6"
+HDEPTHS="1 2 3 4 5"
 # Tractability guard, seconds/game. This is a SAFETY VALVE against a genuinely exploding cell, not a
 # budget: at 3.0 it condemned cells running at 4.33 s/game whose full fill cost 4 CORE-HOURS in total
 # -- 0.3% of the run that skipped them -- and left H1-5 unmeasured on two decks, which is what the
