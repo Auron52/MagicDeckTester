@@ -103,11 +103,34 @@ identical avg is not evidence that b40 is unnecessary -- Goblins wins ~turn 3.89
 making it a poor quality discriminator, and the adopted config came from a 3,000-game 2-seed table.
 Re-deriving the right budget for Goblins is a SEPARATE question from implementing this change.
 
-By contrast the same sweep on FiveColour (trust 6 = target 6) showed NO inversion at budgets
-5/10/20/40/80 -- units rose monotonically 17.9M -> 75.4M. The difference is structural: where trust
-EQUALS target, escaping escalation requires reaching maximum depth, so the transition sits at the far
-end of the range instead of inside it. Goblins escapes via a cap-6 escalation that can itself reach
-depth 6; burn (trust 5 < target 6) is the other deck whose transition should be reachable mid-range.
+### The budget sweep is a CONFOUNDED instrument (user, 2026-08-14)
+
+The same sweep on FiveColour (trust 6 = target 6) showed no inversion at budgets 5/10/20/40/80 --
+units rose monotonically 17.9M -> 75.4M. **That is an uninformative result, NOT evidence the deck
+would not benefit,** and it must not be read as one.
+
+Raising the budget moves two things in OPPOSITE directions:
+
+1. more budget -> more likely to reach trust -> escalation skipped        -> LESS work
+2. more budget -> the escalation's own affordability walk (`daff` against `esc_budget->Remaining()`)
+   clears at a deeper target, or clears at all where nothing fit before   -> MORE work
+
+Escalation is itself budget-ENABLED. So a monotone curve means effect 2 dominated, which says nothing
+about the size of effect 1. Only where effect 1 happens to win locally -- Goblins -- does a sweep
+reveal anything, and even there it reveals the mechanism's existence rather than its size.
+
+**The correct test is the A/B at FIXED budget**: same budget, spend-to-trust on vs off. A budget
+sweep can neither confirm nor refute this proposal on a deck where escalation is common, and should
+not be used as the adoption evidence.
+
+**FiveColour is therefore a strong candidate, not a weak one.** With trust EQUAL to target it commits
+below trust most of the time, so it escalates far more often than Goblins -- and the prize scales
+with escalation frequency. The earlier reading of its null (that the transition merely sat past the
+end of the range) was one explanation among several; the confound above is the simpler one.
+
+burn (trust 5 < target 6) remains interesting for a different reason: it can be trusted one ply short
+of target, so it is the deck where reaching trust is CHEAPEST, and thus where the branch should fire
+most readily.
 
 ## The change
 
@@ -150,9 +173,16 @@ Standard heuristic-optimization loop (`.claude/skills/heuristic-optimization.md`
 selector, sweep the regression suite's train seeds, validate the winner on overnight (held-out)
 seeds, report, adopt in the profile only on approval.
 
-The decks that can show anything are the ones with a trust depth below their play depth and a real
-escalation rate -- FiveColour first (trust 6, cap 5, and now in all three suite tiers). Report BOTH
-axes, because the change is meant to be quality-neutral-or-better AND cheaper:
+**Do NOT use a budget sweep as the evidence** (see the confound above): escalation is itself
+budget-enabled, so a sweep moves the mechanism and its competitor together. The A/B is at FIXED
+budget, spend-to-trust on vs off.
+
+Rank the decks by how often they escalate, since that is what the prize scales with. All six trusted
+decks are candidates; FiveColour first (trust 6 = target 6, so it commits below trust most of the
+time and escalates most often), then burn (trust 5 < target 6, so reaching trust is cheapest and the
+branch should fire most readily), then Goblins (where the inversion is already visible, and whose
+cap-6 escalation is the fleet's most expensive). Report BOTH axes, because the change is meant to be
+quality-neutral-or-better AND cheaper:
 
 * loss-penalized avg win turn, paired per seed
 * deterministic work (`MTG_DUMP_UNITS`), not wall -- the wall reading that motivated this question was
