@@ -3003,10 +3003,18 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
     {
         case CardTemplate::DirectDamage:
             // Pure damage feeds no attack vs the passive opponent -- and Hinata's payoffs
-            // (Crackle / Soulfire) can DESTROY their own discount targets, so pre-combat is
-            // actively worse there. Pump riders would reclassify (none exist on this template;
-            // guarded anyway).
-            return (p.power_bonus == 0 && p.tough_bonus == 0) ? MP::Main2 : MP::Main1;
+            // (Crackle) can DESTROY their own discount targets, so pre-combat is actively worse
+            // there. Pump riders would reclassify (none exist on this template; guarded anyway).
+            // CARD-FLOW riders are exempt (-> Both): a damage spell that also draws (Magma Opus
+            // cast_draw) or impulse-exiles playable cards (Soulfire Eruption damage_equals_top_mv
+            // reveals + stages the top; stages_cards) can feed the rest of the turn from MAIN 1 --
+            // measured: Main2-ing Soulfire cost hinata +0.15 avg (13-15 games +1 turn, e.g. gi=6:
+            // the T4 win casts Soulfire MAIN1 and plays Crackle+Spasms out of its exile across
+            // both mains; deferred, the deploy no longer fits and the win slips to T5).
+            if (p.power_bonus != 0 || p.tough_bonus != 0) { return MP::Main1; }
+            if (p.draw > 0 || p.cast_draw > 0 || p.stages_cards
+                || p.damage_equals_top_mv) { return MP::Both; }
+            return MP::Main2;
         case CardTemplate::DrawSpell:
         case CardTemplate::DrawX:
         case CardTemplate::DrawUntilNonland:
@@ -15977,6 +15985,20 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                                         int escalation_cap,
                                                         double escalation_r)
 {
+    // KNOWN LEAK, FIX DEFERRED (2026-08-14, needs a scheduled GT rebaseline -- see
+    // docs/design/main-phase-classification.md "pre-existing bug"): this whole function is
+    // planning on state COPIES, but it is called straight from AIEngine::TakeTurn (real-play
+    // context) and its single-pass escalation invokes FSLineWin DIRECTLY (line ~16531) -- the
+    // one planning entry point with NO enclosing RevealLogPause. Consequences: the escalation's
+    // simulated resolutions are logged as REAL events (e.g. 10 phantom turn-1 Ponder reveals in
+    // a --log-dir hinata game), those phantom REVEALs are FOLDED into every play digest
+    // (GameLogger FoldStr("R") -- the current GT is baselined WITH the pollution, which is why
+    // the obvious `RevealLogPause _rlp;` here moves 4 d5 smoke digests at byte-identical
+    // per-game win turns), and under --claude-play the sims consult the human choosers.
+    // The fix is that one line + a GT rebaseline; land it with the viewer HumanPlaySuppress
+    // work. NOTE for that change: g_real_resolution must KEEP the caller's value (real-only
+    // guards exist, e.g. Lackey's s_lackey_pref) -- restore it after the pause, or the
+    // escalation's planning choices move too.
     // --- Escalation budget shaping (all opt-in; ALL unset => byte-identical to the shared-budget hybrid) ---
     // MTG_ESC_SPLIT=c   : CAP the value-leaf probe to c*budget_ms so the probe cannot eat the whole decision
     //                     budget; the remaining (1-c) is RESERVED for the heuristic escalation. No total

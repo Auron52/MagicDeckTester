@@ -131,7 +131,60 @@ by one question:
   never produce an attacker) → Main2; Jared deliberately NOT listed (his −3 is a real pre-combat
   pump). Hinata needs no override — its whole Main2 set is `direct_damage` template.
 - **First probe (5 games/deck, d3):** digests diverge (filter live), win turns identical
-  10/10 (lossless so far), wall −2.1x (FiveColour) / −3.0x (Hinata).
+  10/10 (lossless so far), wall −2.1x (FiveColour) / −3.0x (Hinata) — later shown to be
+  contention-inflated; the full battery's core-ms deltas are far smaller (see below).
+
+## Measurement round 1 (2026-08-14, battery: FiveColour + Hinata2, 100 games/job,
+## CRN seeds 300001+gi, jobs = shipping-config + d3 + d5, arms A control / B classify /
+## C classify+searched-2nd / D searched-2nd only; logs/phase_classify/)
+
+- **Arm D (MTG_SEARCH_SECOND_MAIN=1 alone) is NEUTRAL here**: hinata all 300 games
+  byte-identical to control; 5c one game (ship) +1. The historical "searched measured worse"
+  (antilife+hinata seed 1001) does NOT reproduce on these decks/seeds — relevant to the
+  kill-the-greedy directive; needs the suite-wide re-check on the other second-main decks.
+- **First classify round: hinata +0.15 avg at ALL of ship/d3/d5** (13–15 recurring games +1,
+  gi=87 win-at-8 → unwon; depth-independent = a lost LINE). ROOT-CAUSED via gi=6 log diff:
+  **Soulfire Eruption was Main2'd by the bare DirectDamage rule, but it is an impulse engine**
+  (damage_equals_top_mv reveals + stages the top; the T4 win casts it MAIN1 and plays
+  Crackle+Spasms out of its exile across both mains — deferred, the deploy no longer fits).
+  FIX: DirectDamage with card-flow riders (draw / cast_draw / stages_cards /
+  damage_equals_top_mv) → Both, not Main2 (Magma Opus included). Crackle (pure damage)
+  stays Main2 — the USER's example.
+- **After the fix: hinata +0.00 (ship) / +0.02 (d3) / +0.02 (d5), mixed directions**
+  (gains gi=15,36,38; losses gi=71 all-configs, gi=95, gi=21/46 d3-only).
+- **FiveColour: +0.01 (ship) / +0.04 (d3) / +0.01 (d5), mixed directions** (its per-card
+  doctrine was already correct; no DirectDamage cards, so the Soulfire fix is a no-op here).
+- **Residual failure mode is SECOND-ORDER, not per-card doctrine** — two dissected cases:
+  * 5c d3 gi=10: the SEARCHED post-combat root casts ONE Birds instead of two on T2
+    (control casts both main-1) → T3 is a mana short for Maelstrom Archangel → whole curve
+    slips +1. Persists under arm C, so it is not greedy-vs-searched; the lookahead through
+    classified future turns undervalues the double-ramp plan.
+  * hinata d3 gi=71: same Ponder cast, but the searched keep/shuffle DISPOSITION flips
+    (classify arm shuffles away the Ornithopter the winning line needed) — downstream
+    evaluation through filtered turns re-judged the branch.
+  Diagnosis: rollout/lookahead paths through classified turns under-value deferred casts
+  (main-2 path is not yet at parity with the main-1-tuned machinery). This is the predicted
+  hard part of the design; per its own bar (MAIN2 moves neutral-or-better per game) the
+  filter is NOT adoptable for these decks until the parity work lands.
+- **Perf (battery core-ms, B vs A): 5c d3 −19%, hi d3 −22%, d5 ≈0/−1%, ship ≈0/+9%.**
+  Modest — these two decks' enumeration volume is not where the design's big win lives
+  (that is the equipment/tribal powerset decks); the value-leaf hybrid already absorbs
+  much of the d5/ship cost here.
+- **Bonus pre-existing bug found by the A/B log diff — FIX DEFERRED (needs GT rebaseline)**:
+  `FullSearchLineHybrid` has NO RevealLogPause — its single-pass escalation's FSLineWin calls
+  run planning with the reveal logger/human choosers live. Three consequences: phantom
+  planning reveals in --log-dir games (10 turn-1 Ponder reveals in the hinata gi=6 log);
+  those phantom REVEALs are FOLDED into every play digest (GameLogger `FoldStr("R")`), so the
+  committed GT is baselined WITH the pollution — adding the obvious pause moves 4 d5 smoke
+  digests (goblins/antilife/hinata/th) at byte-identical per-game win turns; and under
+  --claude-play the planning sims CONSULT THE HUMAN CHOOSERS (likely implicated in viewer
+  weirdness on value-leaf decks). The fix is one `RevealLogPause` at the function top **plus
+  a scheduled full GT rebaseline** (smoke/regression/overnight digest-only moves) — land it
+  with the viewer HumanPlaySuppress work. TRAP for that change, measured this session:
+  `g_real_resolution` must KEEP the caller's value (real-only game logic exists despite the
+  flag's diagnostic-only contract — Lackey's `s_lackey_pref`); a blanket pause that clears it
+  also changes the escalation's planning CHOICES. A deferred-fix comment sits at the function
+  head in TurnSolver.cpp.
 
 ## Measurement plan
 
