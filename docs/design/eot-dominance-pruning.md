@@ -53,6 +53,11 @@ Then B is dominated by A iff, as multisets/values:
   all -- an omitted type must fail closed (equality), never be silently ignored;
 - graveyard_B SUBSET-OF graveyard_A when any deck card reads the graveyard (gy_self_power_bonus,
   retrace, Deathrite fuel) — else graveyards may be ignored;
+- **opponent board is a per-deck direction too** (user, 2026-08-14): for nearly every goldfish deck
+  it is inert (equality trivially holds — the opponent never gains permanents), but creature_giving
+  GIVES the opponent creatures as its drain fuel, so there MORE enemy creatures dominates. Any deck
+  that can change the opponent's board needs the axis declared (more-dominates / fewer-dominates /
+  equality), defaulting to equality when undeclared — same fail-closed rule as unknown counters;
 - floating_B <= floating_A per colour; life_B <= life_A; storm/turn counters equal.
 
 Under goldfish rules every axis above is monotone (more resources never hurt), so dropping B never
