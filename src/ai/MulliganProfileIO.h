@@ -1054,7 +1054,13 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
             // informative-only, parsed defensively (null/index-0 -> 0) so a malformed curve can't wipe the model.
             const nlohmann::json& vp = mm.contains("value_play") ? mm["value_play"]
                                      : j.value("value_play", nlohmann::json::object());
-            if (vp.is_object() && vp.contains("target_depth"))
+            // Parse when ANY known key is present, not only target_depth: a presence-only sidecar may
+            // carry JUST the mull_gen_* overrides (play stays default), and gating the whole block on
+            // target_depth silently dropped them -- the Mirrorwing recommend scout ran at the d5/b20
+            // gen default instead of the deck's mull_gen d3/b3. With target_depth absent it parses to
+            // 0, so present()/drives() stay false and play is untouched.
+            if (vp.is_object() && (vp.contains("target_depth") || vp.contains("mull_gen_depth")
+                                   || vp.contains("mull_gen_budget_ms")))
             {
                 profile.value_play.target_depth = vp.value("target_depth", 0);
                 profile.value_play.budget_ms    = vp.value("budget_ms", 0);
