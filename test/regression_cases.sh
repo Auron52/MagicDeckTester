@@ -29,6 +29,7 @@ declare -A DECK_FILE=(
   [goblins]=decks/Goblins/Goblins.cod
   [creature_giving]="decks/Creature Giving/Creature Giving.cod"
   [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.cod"
+  [fivecolour]=decks/FiveColour/FiveColour.cod
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
@@ -42,6 +43,7 @@ declare -A DECK_PROF=(
   [goblins]=decks/Goblins/Goblins.profile.json
   [creature_giving]="decks/Creature Giving/Creature Giving.profile.json"
   [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"
+  [fivecolour]=decks/FiveColour/FiveColour.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -110,6 +112,15 @@ SMOKE_CASES=(
   "mirrorwing 0 1001 1000 0"
   "mirrorwing 3 1001  150 10"
   "mirrorwing 5 1001   75 20"
+  # fivecolour: 5-colour midrange, the ONLY deck whose value_play block asks for depth 6 besides
+  # burn -- so its d5 case (depth key dropped, block owns the depth) is the suite's coverage of the
+  # d6 + escalation_cap 5 path adopted 2026-08-14. Costliest deck per game in the suite, measured
+  # 2026-08-14 single-thread over 2800 games: d0 ~0.03 ms/game, d3 b10 ~1.19 s/game, d5(->d6) b20
+  # ~1.89 s/game -- just above mirrorwing (0.9/1.8), so it takes the same hinata/mirrorwing sizing.
+  # Tail is mild: 2 games of 2800 over 30 s (worst 60.8 s), no multi-minute blowups. ~5 min ST added.
+  "fivecolour 0 1001 1000 0"
+  "fivecolour 3 1001  150 10"
+  "fivecolour 5 1001   75 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -181,6 +192,12 @@ REGRESSION_CASES=(
   "mirrorwing 3 3003  200 10"
   "mirrorwing 5 2002  100 20"
   "mirrorwing 5 3003  100 20"
+  # fivecolour: hinata/mirrorwing-mirror sizing (~14 min ST added; see SMOKE block for costs).
+  "fivecolour 0 2002 1000 0"
+  "fivecolour 3 2002  200 10"
+  "fivecolour 3 3003  200 10"
+  "fivecolour 5 2002  100 20"
+  "fivecolour 5 3003  100 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -361,4 +378,19 @@ OVERNIGHT_CASES=(
   "mirrorwing 5 5005  300 20"
   "mirrorwing 5 6006  300 20"
   "mirrorwing 5 7007  300 20"
+  # fivecolour: hinata/mirrorwing-mirror overnight sizing (~70 min ST added; now the costliest deck
+  # per game in the suite). Budgets deliberately left at the gate values -- the d5 case runs at the
+  # value block's depth 6, so a generous budget here would change the shipped config, not stress it.
+  "fivecolour 0 4004 2000 0"
+  "fivecolour 0 6006 2000 0"
+  "fivecolour 0 8008 2000 0"
+  "fivecolour 0 10010 2000 0"
+  "fivecolour 3 4004  400 10"
+  "fivecolour 3 5005  400 10"
+  "fivecolour 3 6006  400 10"
+  "fivecolour 3 7007  400 10"
+  "fivecolour 5 4004  300 20"
+  "fivecolour 5 5005  300 20"
+  "fivecolour 5 6006  300 20"
+  "fivecolour 5 7007  300 20"
 )
