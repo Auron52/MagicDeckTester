@@ -1,7 +1,25 @@
 # Depth matrix: per-game storage, degenerate-game skipping, and quality-based condemnation
 
 Design agreed with the user 2026-08-13/14, from the FiveColour value-leaf run. Four changes with one
-enabler. Nothing here is implemented yet.
+enabler.
+
+**STATUS 2026-08-14 — 1, 2, 3 and 5 have SHIPPED; 4 partly; 6 is open.**
+
+| piece | state |
+|---|---|
+| 1. per-game storage | SHIPPED (`b579db0`, then pairs). Chunks carry `g` = [(offset, win turn)], read from the `.wins` file; retention is per GAME (`_chunk_restrict`), legacy mean-only chunks stay atomic |
+| 2. skip + backfill | SHIPPED. `<out>.skipped.json` per (deck, seed); `target` grows by its size so cells backfill; `apply_skiplist` excludes the union from every cell; the table discloses it as `~~ FILTERED` |
+| 3. a real abort | SHIPPED. `ai/GameWorkMeter.h` + `GameEngine::kAbandoned` + `abandon_units` per manifest job. Deterministic, in work units, disarmed by default |
+| 4. median condemnation | ROW-WIDE half shipped on the other machine (`230765d`); the MEDIAN statistic is still open |
+| 5. ladder tops at H5 | SHIPPED (`cbb7876`), H6 dropped |
+| 6. quality-based rung condemnation | OPEN — the 0.0075 equivalence threshold is derived below but not implemented |
+
+**What is left before this can drive a real run: the THRESHOLD POLICY.** The ceiling is currently
+supplied by the caller as an absolute unit count; nothing computes "k x this cell's median" yet.
+`MTG_DUMP_UNITS` now writes a `<job>.units` file so the distribution can be MEASURED rather than
+guessed -- a first sample (FiveColour, d3 b10, 25 games) gives median 36,451 units and max 408,902,
+i.e. 11.2x the median at a cheap depth. k, whether the median is per-cell or per-row, and the
+graceful-degradation rate all want that data before being fixed in code.
 
 The motivating run: 22,400 games, 88% complete after 28 hours, then stalled with **6 games running,
 one of them for 26.5 hours**, holding 6 of 24 cores. Those six games could not change any conclusion
@@ -102,23 +120,39 @@ the better question -- budgeted play never searches a degenerate position to com
 unbounded quality was never decision-relevant -- but a reader comparing against an unfiltered table
 would otherwise be comparing different populations. Write the skip list into the table.
 
-## 3. A real ABORT, not a repurposed budget
+## 3. A real ABORT, not a repurposed budget — SHIPPED
 
-There is no cancellation today. `BatchRunner`'s in-flight condemnation only stops FUTURE dispatch; its
-comment ("there is no safe way to abort a search mid-node") is stale, because
+There was no cancellation. `BatchRunner`'s in-flight condemnation only stops FUTURE dispatch; its
+comment ("there is no safe way to abort a search mid-node") was stale, because
 `SearchBudget::SetOverrunLimit`/`Overrun` is exactly a polled bail-out, built for a search whose cost
 explodes past its estimate.
 
 But it is **per-pass**: it makes one search roll back to its last completed pass, after which the game
 continues playing with a cheaper decision. Re-arming it per decision still leaves the GAME unbounded.
-What is needed:
+What was needed, and what shipped:
 
-* a unit counter accumulating across every search in the game,
-* a sentinel return from `RunGame` (e.g. `-2 = ABANDONED`) so `BatchRunner` records SKIPPED rather
-  than a win turn.
+* a unit counter accumulating across every search in the game -- `ai/GameWorkMeter.h`, a thread_local
+  fed from `SearchBudget::Consume`. That is the one place that sees all of a game's work: budgets are
+  per DECISION and a search builds sub-budgets for its probe passes, so no single `SearchBudget` can
+  bound a game. Consuming from one budget per node means each turn-step counts exactly once.
+* a sentinel return from `RunGame` -- `GameEngine::kAbandoned` (-2), mapped to the existing `kSkipped`
+  in `BatchRunner` so `reduce_job` already drops it from the average. Scoring it as a loss would make
+  skipping CHANGE the number being measured, which is the one thing it must not do.
+* `Overrun()` additionally consults the meter, purely so the recursion unwinds promptly. The two
+  signals stay distinct: a pass overrun leaves a playable line and is recorded as such; an
+  abandonment means no result should be reported at all. Overloading one for the other would make
+  them indistinguishable in the very telemetry used to judge tractability.
+* `PlayOutFrom` checks the flag at the turn boundary, so a voided game stops instead of playing on
+  over rolled-back lines -- cheap per turn, unbounded in count, all of it discarded.
 
-Overloading the overrun path would also make a legitimate overrun indistinguishable from an
-intentional void.
+Measured on FiveColour (25 games, d3 b10): ceiling 0 -> 25 played and the baseline digest exactly;
+200k -> 20 played / 5 abandoned; 50k -> 14 / 11; 20k -> 11 / 14. Identical digest and identical
+abandoned SET across three repeat runs (only the stderr ordering varies, which is thread interleave).
+The suite is byte-identical with the meter disarmed: smoke 36/36, regression 60/60, 0 play-changed.
+
+Note the selection effect visible in that table -- the average over survivors moves (4.84 -> 4.64 as
+the ceiling tightens), because expensive games are systematically harder hands. That is the estimand
+change, and it is why the filter has to be disclosed in the artifact rather than applied silently.
 
 ## 4. Condemn on the MEDIAN, row-wide
 

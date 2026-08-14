@@ -184,49 +184,78 @@ def _lp_value(wt, mt):
 
 
 def _chunk_games(x):
-    """[(offset, win_turn)] for a chunk that carries per-game results; None if it predates them."""
+    """[(offset, win_turn)] for a chunk that carries per-game results; None if it predates them.
+
+    Stored as explicit (offset, win_turn) PAIRS rather than a positional list, because a chunk is no
+    longer necessarily contiguous: an ABANDONED game is dropped from the job's output, so a chunk can
+    hold offsets 25,27,29,... The pair form makes that representable instead of silently
+    re-aligning the survivors onto the wrong games."""
     g = x.get("g")
-    if not g or len(g) != x["n"]: return None
-    return list(zip(_chunk_offsets(x), g))
-
-
-def _read_wins(winsdir, nm, off, n):
-    """Per-game win turns for one chunk, from `<winsdir>/<nm>.wins`.
-
-    The file's first column is the JOB-LOCAL index and SKIPPED games are dropped before it is
-    written, so local+off only equals the global offset when the chunk ran to completion. A short
-    file therefore means the pool skipped games -- which today happens only to a CONDEMNED cell,
-    and a condemned cell is reference-only and never compared per-game. So we return None rather
-    than guess an alignment: no per-game data is strictly better than misaligned per-game data."""
+    if not g: return None
     try:
-        with open(os.path.join(winsdir, nm + ".wins")) as fh:
-            wt = [int(l.split()[1]) for l in fh if len(l.split()) >= 2]
-    except (OSError, ValueError, IndexError):
+        return [(int(o), int(w)) for o, w in g]
+    except (TypeError, ValueError):
         return None
-    return wt if len(wt) == n else None
+
+
+def _read_wins(winsdir, nm):
+    """Per-game results for one chunk from `<winsdir>/<nm>.wins`, as [(global_offset, win_turn)].
+
+    Column 0 is the GLOBAL game index (`game_index + position`), which is what makes a SHORT file
+    still usable: skipped and voided games are dropped before the file is written, so a positional
+    read would silently shift every survivor onto its neighbour's identity. Reading the index
+    instead means a chunk that lost games to abandonment reports exactly the games it kept."""
+    try:
+        out = []
+        with open(os.path.join(winsdir, nm + ".wins")) as fh:
+            for line in fh:
+                f = line.split()
+                if len(f) >= 2: out.append((int(f[0]), int(f[1])))
+        return out or None
+    except (OSError, ValueError):
+        return None
 
 
 def cell_mean(c): return c["lp_mean"]
 
 
 def _covered(c):
-    """Sorted [off,end) intervals this cell holds results for."""
-    return sorted(((x["off"], x["off"] + x["n"]) for x in c["chunks"]))
+    """The set of game offsets this cell holds a result for."""
+    return {o for x in c["chunks"] for o in _chunk_offsets(x)}
 
 
-def _missing(c, target):
-    """The offsets below `target` with no result -- a list of [lo,hi). Normally one range at the end,
-    but a resync can leave a hole in the middle, so this is computed generally rather than assumed."""
-    out, pos = [], 0
-    for lo, hi in _covered(c):
-        if lo > pos: out.append((pos, min(lo, target)))
-        pos = max(pos, hi)
-        if pos >= target: break
-    if pos < target: out.append((pos, target))
-    return [(a, b) for a, b in out if b > a]
+def _missing(c, target, skip=()):
+    """The offsets below `target` still to run -- a list of [lo,hi).
+
+    Neither held nor SKIPPED. A skipped offset is one the pool refused to finish (abandoned by the
+    work ceiling, or dropped with a condemned cell); re-queueing it would abandon it again at full
+    cost, so it counts as settled here and the cell's target is extended instead (see `target`).
+
+    Computed from the offsets the cell actually holds rather than from a game count, because after a
+    resync -- or an abandonment -- coverage is not a prefix and the gaps can be anywhere."""
+    have = _covered(c) | set(skip)
+    out, lo = [], None
+    for o in range(target):
+        if o in have:
+            if lo is not None: out.append((lo, o)); lo = None
+        elif lo is None:
+            lo = o
+    if lo is not None: out.append((lo, target))
+    return out
 
 
 def _chunk_offsets(x):
+    """The game offsets this chunk actually holds.
+
+    Derived from the per-game pairs where they exist, because a chunk is only contiguous when every
+    game in its range produced a result -- an abandoned game leaves a hole. Legacy chunks stored
+    only a range, so for them off..off+n IS the coverage."""
+    g = x.get("g")
+    if g:
+        try:
+            return [int(o) for o, _ in g]
+        except (TypeError, ValueError):
+            pass
     return range(x["off"], x["off"] + x["n"])
 
 
@@ -272,24 +301,13 @@ def _chunk_restrict(x, allowed, mt):
     keep = [(o, w) for o, w in games if o in allowed]
     if not keep:
         return []
-    if len(keep) == x["n"]:
+    if len(keep) == len(games):
         return [x]
-    # Offsets are contiguous per chunk today; a restriction can only cut a prefix/suffix or punch a
-    # hole. Store the surviving run as a chunk at its own offset -- callers re-derive coverage from
-    # off/n, so a hole must become separate chunks rather than one chunk with gaps.
-    out, run = [], []
-    for o, w in keep:
-        if run and o != run[-1][0] + 1:
-            out.append(run); run = []
-        run.append((o, w))
-    if run: out.append(run)
-    pieces = []
-    for r in out:
-        wts = [w for _, w in r]
-        pieces.append({"off": r[0][0], "n": len(r), "g": wts, "src": x.get("src"),
-                       "lp": sum(_lp_value(w, mt) for w in wts) / len(wts),
-                       "ms": x["ms"] * len(r) / x["n"]})
-    return pieces
+    # One chunk out, not one per contiguous run: the pair form carries each game's own offset, so a
+    # hole needs no splitting. `off` stays the chunk's first surviving game purely for ordering.
+    return [{"off": keep[0][0], "n": len(keep), "g": [[o, w] for o, w in keep], "src": x.get("src"),
+             "lp": sum(_lp_value(w, mt) for _, w in keep) / len(keep),
+             "ms": x["ms"] * len(keep) / len(games)}]
 
 
 def _reference_only(c):
@@ -497,7 +515,34 @@ def resync_engine_change(cells, target, src_now, log=print):
     return plan
 
 
-def emit_table(cells, args):
+def apply_skiplist(cells, skipped, log=print):
+    """Drop every skipped game from every cell of its (deck, seed), and report what that cost.
+
+    Detection is per-cell -- a game degenerate at H5 may be trivial at V3, so only the cell that hit
+    the ceiling knows. Application has to be GLOBAL, because the table is read as a set of per-game
+    comparisons down a column and across arms: if H5 excludes game 380 and V6 keeps it, the row
+    difference is once again computed over unequal game sets, which is the exact defect per-game
+    storage exists to end. So the union of every cell's abandonments is what every cell excludes.
+
+    With per-game results this is a FILTER over data already on disk -- no re-run, no retroactive
+    edit -- which is why it can be applied at any point without invalidating anything."""
+    if not skipped: return 0
+    total = 0
+    for c in cells:
+        skip = skipped.get((c["deck"], c["seed"]))
+        if not skip: continue
+        mt, keep, dropped = _mt_of(c), [], 0
+        for x in c["chunks"]:
+            surv = _chunk_restrict(x, {o for o in _chunk_offsets(x) if o not in skip}, mt)
+            dropped += x["n"] - sum(s["n"] for s in surv)
+            keep.extend(surv)
+        if dropped:
+            c["chunks"] = keep; _refresh(c); total += dropped
+            log("  skip %s%d s%d: %d game(s) excluded" % (c["arm"], c["depth"], c["seed"], dropped))
+    return total
+
+
+def emit_table(cells, args, skipped=None):
     """Parser-compatible legacy table (mean over seeds) + per-cell game counts, rewritten each batch."""
     L=["",
        "===== DEPTH MATRIX (UNBOUNDED, INCREMENTAL)  games=%d seeds=%s value_min_depth=%d  %s  hgames=%d =====" % (
@@ -534,6 +579,19 @@ def emit_table(cells, args):
                      sum(len(v) for v in conf.values()))
             for (dk,seed),bad in sorted(conf.items()):
                 L.append("    !!   s%d: %s" % (seed, _fmt_ranges(sorted(bad))))
+        # THE ESTIMAND, stated in the artifact. Skipping degenerate games changes the question the
+        # table answers -- "on games that complete within the work ceiling, does the leaf match H5?"
+        # rather than "on all games" -- and a reader comparing this against an unfiltered table would
+        # otherwise be comparing two different populations with nothing to warn them. The skipped
+        # games are BACKFILLED, so the counts above are still the full target; what differs is WHICH
+        # games, and that is exactly what has to be disclosed.
+        sk={k:v for k,v in (skipped or {}).items() if k[0]==dname and v}
+        if sk:
+            L.append("    ~~ FILTERED: %d degenerate game(s) abandoned at the per-game work ceiling"
+                     " and backfilled -- this row measures games that COMPLETE, not all games" %
+                     sum(len(v) for v in sk.values()))
+            for (dk,seed),offs in sorted(sk.items()):
+                L.append("    ~~   s%d: %s" % (seed, _fmt_ranges(sorted(offs))))
     open(args.out,"w").write("\n".join(L)+"\n")
 
 
@@ -574,7 +632,44 @@ def run_incremental(args):
 
     lock=threading.Lock()
     for c in cells: c["inflight_games"]=0
-    def target(c): return min(args.reference_target,args.target) if c["intractable"] else args.target
+
+    # ==================== THE SKIP LIST: (deck, seed) -> offsets that will never complete ==========
+    # A game the pool refused to finish -- ABANDONED by the per-game work ceiling, or skipped because
+    # its cell was condemned. Three things follow, and they are the whole reason the list is shared
+    # per (deck, seed) rather than kept per cell:
+    #
+    #   1. It is never re-queued. It would just abandon again, at full cost, forever.
+    #   2. It does not count toward the target, so the cell BACKFILLS: target grows by the number of
+    #      skipped games and build_queue picks up offsets past the nominal end. That is what keeps
+    #      every cell at the same GAME COUNT despite holding a different game SET.
+    #   3. Every OTHER cell excludes the same offsets. Detection is per-cell (a game degenerate at H5
+    #      may be trivial at V3) but application has to be global, or the comparison across a row is
+    #      once again over unequal game sets -- the exact defect per-game storage exists to end.
+    #
+    # THE ESTIMAND CHANGES, and that must reach the artifact rather than living here. The table then
+    # answers "on games that complete in reasonable time, does the leaf match H5?" instead of "on all
+    # games". That is arguably the better question -- budgeted play never searches a degenerate
+    # position to completion, so its unbounded quality was never decision-relevant -- but a reader
+    # comparing against an unfiltered table would be comparing different populations without knowing.
+    skipped = {}
+    skip_path = args.out + ".skipped.json"
+    # Loaded BEFORE anything reads `target` (resync, build_queue): a skip list that only appeared
+    # later would let the very first resume re-queue every abandoned game, and the run would then
+    # spend its budget re-abandoning the same handful at full cost -- the failure this prevents.
+    try:
+        for _k, _offs in json.load(open(skip_path)).items():
+            _deck, _seed = _k.rsplit("|", 1)
+            skipped[(_deck, int(_seed))] = set(_offs)
+        _n = sum(len(v) for v in skipped.values())
+        if _n: print("resumed skip list: %d game(s) across %d (deck,seed)" % (_n, len(skipped)))
+    except (OSError, ValueError):
+        pass
+
+    def skiplist(c): return skipped.get((c["deck"], c["seed"]), ())
+
+    def target(c):
+        if c["intractable"]: return min(args.reference_target, args.target)
+        return args.target + len(skiplist(c))
 
     # A play change since these results were written is absorbed here, at chunk granularity: the
     # unfinished games are regenerated in each cell where they exist, and the prefix below them keeps
@@ -587,6 +682,11 @@ def run_incremental(args):
     # cell) ended up carrying 63 games of a third engine. Idempotent and cheap: with no conflict it
     # walks the offsets once and drops nothing.
     enforce_offset_src_agreement(cells)
+
+    # A game abandoned in ANY cell is excluded from EVERY cell of its (deck, seed). Re-applied on
+    # every resume rather than only when it grows, because a cell that ran the game before it was
+    # first abandoned elsewhere still holds a result for it.
+    apply_skiplist(cells, skipped)
 
     # ---------------------------------------------------------------- PROPER BATCHING: one work QUEUE
     # ONE queue of fixed-size chunks, handed to `workers` threads that are kept full until the queue
@@ -624,7 +724,7 @@ def run_incremental(args):
         # The work is the set of MISSING OFFSETS, not "target minus a count". After a resync those are
         # not always a suffix -- a cell can be left with a hole in the middle -- so the gaps are
         # computed from the chunks the cell actually holds.
-        gaps={id(c):_missing(c,target(c)) for c in cells}
+        gaps={id(c):_missing(c,target(c),skiplist(c)) for c in cells}
         total=sum(hi-lo for g in gaps.values() for lo,hi in g)
         chunk=max(1,min(args.batch, total//max(1,args.workers))) if total else args.batch
         q=[]
@@ -720,7 +820,11 @@ def run_incremental(args):
         json.dump([{k:c[k] for k in ("deck","arm","depth","seed","games","lp_sum","lp_mean","batches",
                                      "ms","intractable","first_wall","chunks")} for c in cells], open(tmp,"w"))
         os.replace(tmp,state_path)
-        emit_table(cells,args)
+        if skipped:
+            tmp2=skip_path+".tmp"
+            json.dump({"%s|%d" % k: sorted(v) for k, v in skipped.items()}, open(tmp2,"w"))
+            os.replace(tmp2,skip_path)
+        emit_table(cells,args,skipped)
 
     # ------------------------------------------------------- ONE PROCESS, ONE POOL, ONE TAIL
     # The WHOLE matrix -- every cell, both arms, straight to target -- goes into a single
@@ -769,6 +873,8 @@ def run_incremental(args):
                      # and never one SEED's (one 32-minute game condemned V6/V7/V8 on seed 8008
                      # alone, 1-3% over the limit, while the other three seeds ran 4-10x under it
                      # -- docs/design/condemnation-row-average.md).
+                     # Per-game work ceiling (0 = off). Absolute today; see --abandon-units.
+                     "abandon_units":args.abandon_units,
                      "cell":"%s_%s%d_s%d" % (dname, c["arm"], c["depth"], c["seed"]),
                      "row":"%s_%s%d" % (dname, c["arm"], c["depth"]),
                      # Priority for the pool's own sort (BatchRunner sorts by this DESCENDING). Packed
@@ -886,20 +992,31 @@ def run_incremental(args):
             if ch is None or p<=0: continue
             c=ch["c"]; wall=ms/1000.0
             rec={"off":ch["off"],"n":p,"lp":lp,"ms":wall,"src":src_now}
-            # Attach the per-game win turns, but only after checking they REPRODUCE the engine's own
+            # Attach the per-game results, but only after checking they REPRODUCE the engine's own
             # reported average. `lp` stays authoritative either way; a mismatch means the .wins file
             # and the result line describe different games (a stale file from a previous run under the
             # same job name is the realistic way that happens), and silently storing it would poison
             # every per-game comparison downstream while the table's own numbers still looked right.
-            wt=_read_wins(winsdir, nm, ch["off"], p)
-            if wt is not None:
+            wins=_read_wins(winsdir, nm)
+            if wins is not None and len(wins)==p:
                 mt=_mt_of(c)
-                got=sum(_lp_value(w, mt) for w in wt)/len(wt)
+                got=sum(_lp_value(w, mt) for _, w in wins)/len(wins)
                 if abs(got-lp) <= 5e-4:
-                    rec["g"]=wt
+                    rec["g"]=[[o, w] for o, w in wins]
                 else:
                     print("  !! per-game mismatch %s: wins=%.4f vs reported=%.4f -- storing mean only"
                           % (nm, got, lp), flush=True)
+            # A chunk that came back SHORT lost games the pool refused to finish -- abandoned by the
+            # per-game work ceiling, or skipped because the cell was condemned. Those offsets are
+            # recorded so they are neither re-queued (they would abandon again) nor counted toward
+            # the target, and so every OTHER cell can exclude the same games (see the skip list).
+            if p < ch["n"]:
+                ran={o for o, _ in (wins or [])}
+                lost=[o for o in range(ch["off"], ch["off"]+ch["n"]) if o not in ran]
+                if lost and wins is not None:
+                    skipped.setdefault((c["deck"], c["seed"]), set()).update(lost)
+                    print("  chunk %s came back %d/%d: offsets %s did not complete"
+                          % (nm, p, ch["n"], _fmt_ranges(sorted(lost))), flush=True)
             c["chunks"].append(rec)
             _refresh(c)
             if c["first_wall"] is None: c["first_wall"]=wall
@@ -988,6 +1105,16 @@ def main():
                          "one is about a single pathological game, and sharing the number would condemn a cell "
                          "with a 5 s/game mean over one 61 s game. 0 disables. Default 3600 (a run measured "
                          "2026-08-10 had a single game at 21.4 HOURS, invisible until it finished).")
+    ap.add_argument("--abandon-units",type=int,default=0,
+                    help="per-GAME search-work ceiling in units (see ai/GameWorkMeter.h). A game past it is "
+                         "ABANDONED: no result, excluded from every cell of its (deck,seed), and BACKFILLED so "
+                         "the cell still reaches its game count. 0 = off (default), which is byte-identical to "
+                         "the engine without it. Unlike --max-game-sec this is DETERMINISTIC -- work units, not "
+                         "wall clock -- so the same games are dropped on every machine, which is what lets the "
+                         "skip list be shared and the run stay reproducible. ABSOLUTE for now: the threshold "
+                         "that actually wants using is relative to a cell's own median (cells span 11 ms to "
+                         "700 s per game), and MTG_DUMP_UNITS exists to measure that distribution before a "
+                         "multiplier is chosen. Until then this is a calibration lever, not a production knob.")
     ap.add_argument("--drip",type=int,default=1,
                     help="games of a single NOT-YET-JUDGED condemnable cell allowed in flight at once. LPT would "
                          "otherwise put every thread on the most expensive cell in the table -- which is exactly "
