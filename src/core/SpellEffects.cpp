@@ -1765,13 +1765,33 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
 //     still correct; it just is not memoised.
 namespace {
 inline bool ManaCacheEnabled() { static const bool v = EnvOn("MTG_MANA_CACHE", true); return v; }
-// A tapped source we can REPLAY on a cache hit: set .tapped, plus the side effects we reproduce
-// (tap_self_damage -- City of Brass; DecrementDepletionOnTap -- Sandstone Needle). Storage/drip mutate
-// counters / opponent life the hit path does NOT reproduce, and Deathrite's graveyard-land exile is
-// not reproducible from a tap-set, so a solution tapping one of those is not stored.
-inline bool McReplayable(const CardDefinition* d)
-{ return d && !d->params.storage_land && d->params.tap_opponent_lifegain == 0
-           && !d->params.gy_land_exile_mana; }
+// EVERY source is replayable (2026-08-14). The store gate used to reject any solution that tapped a
+// storage, drip or Deathrite source, on the grounds that a tap-set alone cannot reproduce their side
+// effects. That threw away half the work on a deck that plays one: 49.6% of FiveColour's cache misses
+// solved a payment, paid for it, and then could not keep the answer (four Deathrite Shamans).
+//
+// A tap-set alone indeed cannot -- but a tap-set plus the two ORDER-DEPENDENT choices can, and the
+// rest resolve themselves if the replay CALLS THE SAME FUNCTIONS the DFS called instead of storing
+// deltas. The full side-effect surface of the DFS's activate() is: tapped, DecrementDepletionOnTap,
+// storage counter burn, tap_self_damage, graveyard-land exile, opponent drip. Of those:
+//   * storage BURN depends on the floating pool at that point in the tap ORDER -- not derivable, so
+//     it is recorded per tap (as a counter DELTA, which is also how a partial burn stays partial).
+//   * drip depends on which colour branch was taken ({C} mode does not drip) -- recorded as one
+//     aggregate amount, exact because life arithmetic is order-independent and only drip moves the
+//     opponent's life during a payment.
+//   * the graveyard EXILE re-runs ExileGraveyardLandForMana on the hit, which picks the same
+//     first-match the DFS's inline copy would pick ON THIS board. That is the point: the key hashes
+//     the fuel COUNT, not the graveyard's contents, so two boards with the same count share an entry
+//     -- and each replays ITS OWN first land, which is exactly what the DFS would have done to it.
+//   * likewise the drip's SIGN: OpponentGainsLife re-reads RemedyActive, so a Tainted Remedy board
+//     flips the gain to a loss on the hit path without the key ever having to see the enchantment.
+// The rule this rests on: replay by CALLING, not by storing a delta. Anything a replayed function
+// reads is then resolved against the state the hit is actually landing on.
+struct ManaCacheTap
+{
+    int idx;            // battlefield index of the tapped source
+    int storage_burn;   // counters this tap removed (0 for every non-storage source)
+};
 // SCALING sources -- domain (Faeburrow Elder / Bloom Tender: one mana of each colour among ALL your
 // permanents) and scaled (Three Tree City: N of one colour, N = creatures you control). Both read
 // board state the per-source key loop below cannot see, because the quantity ranges over permanents
@@ -1799,8 +1819,23 @@ inline bool McScalingHashed()
 inline bool McDomain(const CardDefinition* d)  { return d && d->params.domain_mana; }
 inline bool McScaled(const CardDefinition* d)  { return d && IsScaledManaLand(*d); }
 
-struct ManaCacheEntry { std::uint64_t verify; bool payable; ManaPool produced; std::vector<int> taps; };
+struct ManaCacheEntry
+{
+    std::uint64_t             verify;
+    bool                      payable;
+    ManaPool                  produced;
+    std::vector<ManaCacheTap> taps;
+    int                       drip_life;   // total opponent-life amount the solve's drip taps applied
+};
 inline thread_local std::unordered_map<std::uint64_t, ManaCacheEntry> g_mana_cache;
+
+// DEFAULT ON; MTG_MANA_CACHE_ALLSRC=0 restores the old McReplayable store gate (simple sources only).
+// The A/B arm that measured the Deathrite/storage/drip extension, and the hatch if a future source
+// gains a tap effect this replay does not cover.
+inline bool McAllSources() { static const bool v = EnvOn("MTG_MANA_CACHE_ALLSRC", true); return v; }
+inline bool McSimpleTap(const CardDefinition* d)
+{ return d && !d->params.storage_land && d->params.tap_opponent_lifegain == 0
+           && !d->params.gy_land_exile_mana; }
 
 // Scan the active player's mana sources ONCE: build the 128-bit key (k1,k2) AND the global gate.
 // Returns false (caller skips the cache) if a state-dependent source is present.
@@ -1942,6 +1977,12 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                     && rp_colors == nullptr && floating.Total() == 0
                     && state.battlefield.size() <= 64;
     std::uint64_t mk1 = 0, mk2 = 0, pre_tapped = 0; bool mc_active = false;
+    // Pre-solve snapshots, taken on a MISS only, so the store below can recover the two things the
+    // final state does not spell out: how many storage counters each tap burned, and how much drip the
+    // solve applied. Both are DELTAS against these. thread_local so a miss allocates nothing after
+    // warm-up; only charged batteries are recorded, so it is empty on every deck without one.
+    static thread_local std::vector<std::pair<int, int>> mc_storage_pre;   // (index, counters before)
+    int mc_opp_life_pre = 0;
     const bool mc_keyed = mc && ManaCacheKey(state, cost, for_creature, reserved_mask, untapped_max, mk1, mk2);
     if (tapstats::Enabled() && !mc_keyed)
     { (mc ? tapstats::g_mc_skip_key : tapstats::g_mc_skip_shape).fetch_add(1, std::memory_order_relaxed); }
@@ -1953,19 +1994,36 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             if (tapstats::Enabled()) { tapstats::g_mc_hit.fetch_add(1, std::memory_order_relaxed); }
             const ManaCacheEntry& e = it->second;
             if (!e.payable) { return false; }
-            for (int idx : e.taps)
+            const int hit_active = state.active_player_index;
+            for (const ManaCacheTap& t : e.taps)
             {
-                state.battlefield[idx].tapped = true;
-                const CardDefinition* td = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
-                if (td && td->params.tap_self_damage > 0)   // City of Brass: replay the tap damage (life 1208-1209)
-                { state.players[state.active_player_index].life -= td->params.tap_self_damage; }
+                Permanent& p = state.battlefield[t.idx];
+                p.tapped = true;
+                const CardDefinition* td = CardDatabase::Instance().LookupCached(p.card);
+                if (!td) { continue; }
+                if (td->params.tap_self_damage > 0)   // City of Brass: replay the tap damage (life 1208-1209)
+                { state.players[hit_active].life -= td->params.tap_self_damage; }
                 // Depletion land (Sandstone Needle): replay the counter decrement the DFS's activate()
                 // performs on the solution path. Relative (decrement whatever the current count is),
                 // so the counter value never needs to be part of the key -- production is
                 // counter-independent and a 0-count no-op replays as a no-op.
-                if (td && td->params.enters_tapped_with_depletion > 0)
-                { DecrementDepletionOnTap(state.battlefield[idx]); }
+                if (td->params.enters_tapped_with_depletion > 0) { DecrementDepletionOnTap(p); }
+                // Storage battery: the DFS burns only the PARTIAL shortfall, so the remainder persists.
+                // Replayed as the recorded DELTA (not "set to X"), which keeps that partiality exact on
+                // a board whose counter total differs -- and the key hashes the count, so it cannot.
+                if (td->params.storage_land && t.storage_burn > 0) { p.storage_counters -= t.storage_burn; }
+                // Deathrite Shaman: re-run the SHARED first-match exile rather than replaying a stored
+                // index. The key hashes the graveyard-land COUNT, not its contents, so this board may
+                // hold different lands than the one that filled the entry -- and running the picker is
+                // precisely what the DFS would have done here. (Lockstep note: activate() keeps its own
+                // inline copy of this scan because it also needs the slot for its undo; the two use the
+                // same ZoneCard(...).IsLand() first-match predicate and must stay that way.)
+                if (td->params.gy_land_exile_mana) { ExileGraveyardLandForMana(state, hit_active); }
             }
+            // Drip (Grove of the Burnwillows): one aggregate call -- order-independent, and going
+            // through OpponentGainsLife re-reads RemedyActive, so a Tainted Remedy board flips the
+            // gain to a loss (and sets opponent_lost_life_this_turn) exactly as the real solve would.
+            if (e.drip_life > 0) { OpponentGainsLife(state, hit_active, e.drip_life); }
             *out_full_pool = e.produced;
             return true;
         }
@@ -1973,9 +2031,13 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         mc_active = true;
         const int active = state.active_player_index;
         const int n = static_cast<int>(state.battlefield.size());
+        mc_storage_pre.clear();
+        mc_opp_life_pre = state.players[1 - active].life;
         for (int i = 0; i < n; ++i)
         { const Permanent& p = state.battlefield[i];
-          if (p.controller_index == active && p.tapped) { pre_tapped |= (1ull << i); } }
+          if (p.controller_index != active) { continue; }
+          if (p.tapped) { pre_tapped |= (1ull << i); }
+          if (p.storage_counters > 0) { mc_storage_pre.push_back({ i, p.storage_counters }); } }
     }
 
     // ---- Run the real solve (preserving the MTG_TAP_STATS outcome accounting) ----
@@ -1999,24 +2061,35 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                   tapstats::g_nodes_fail.fetch_add(dn, std::memory_order_relaxed); }
     }
 
-    // ---- Store (STORE gate: negatives always; positives only if every tapped source is simple-tap) ----
+    // ---- Store (negatives always; a positive records its tap-set + the two order-dependent deltas) --
     if (mc_active)
     {
         if (g_mana_cache.size() > 500000) { g_mana_cache.clear(); }   // bound cross-rollout growth
-        ManaCacheEntry e; e.verify = mk2; e.payable = ok; bool storable = true;
+        ManaCacheEntry e; e.verify = mk2; e.payable = ok; e.drip_life = 0; bool storable = true;
         if (ok)
         {
             e.produced = *out_full_pool;
             const int active = state.active_player_index;
             const int n = static_cast<int>(state.battlefield.size());
+            // Only drip moves the OPPONENT's life during a payment (tap_self_damage hits the active
+            // player), so the magnitude of that one diff is the total drip the solve applied -- and
+            // magnitude is all the replay needs, since OpponentGainsLife re-derives the sign.
+            e.drip_life = std::abs(state.players[1 - active].life - mc_opp_life_pre);
             for (int i = 0; i < n; ++i)
             {
                 const Permanent& p = state.battlefield[i];
                 if (p.controller_index != active) { continue; }
                 if (p.tapped && !((pre_tapped >> i) & 1))   // newly tapped by this solve
                 {
-                    if (!McReplayable(CardDatabase::Instance().LookupCached(p.card))) { storable = false; break; }
-                    e.taps.push_back(i);
+                    const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                    if (!McAllSources() && !McSimpleTap(pd)) { storable = false; break; }
+                    int burn = 0;
+                    if (pd && pd->params.storage_land)
+                    {
+                        for (const std::pair<int, int>& s : mc_storage_pre)
+                        { if (s.first == i) { burn = s.second - p.storage_counters; break; } }
+                    }
+                    e.taps.push_back({ i, burn });
                 }
             }
         }

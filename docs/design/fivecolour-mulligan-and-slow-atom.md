@@ -137,11 +137,47 @@ rollout does not become tractable at -10%. Two reasons the tail resists it, both
    enormous solves (494 nodes per unpayable entry, 67-71% of all nodes spent PROVING FAILURE), which
    is DFS breadth -- a fold keyed on the realised COLOUR SET rather than the source permutation is
    the shape of that fix (the sibling tap-backtrack collapse is the precedent).
-2. **Half of all misses cannot be stored** (49.6% unstorable) -- a solved payment whose tap-set
-   includes a source the hit path cannot replay. On this deck that is Deathrite Shaman (4 copies):
-   its tap EXILES a graveyard land, which a tap-set alone cannot reproduce. Every one of those solves
-   is paid for and then thrown away. Storing the exiled card alongside the tap-set would make them
-   replayable; that is a self-contained follow-up.
+2. **Half of all misses could not be stored** (49.6% unstorable) -- a solved payment whose tap-set
+   includes a source the hit path could not replay. On this deck that is Deathrite Shaman (4 copies):
+   its tap EXILES a graveyard land. Every one of those solves was paid for and thrown away.
+   **Now fixed -- see section 5.**
+
+## 5. Every source is replayable (the store gate is gone)
+
+The store gate rejected any solution tapping a storage, drip or Deathrite source. A tap-set alone
+genuinely cannot reproduce those, but a tap-set plus the two ORDER-DEPENDENT choices can, provided the
+replay **calls the same functions the DFS called instead of storing deltas**:
+
+| effect | how the hit path reproduces it |
+|---|---|
+| storage counter burn | recorded per tap as a DELTA (depends on the floating pool at that point in the tap order -- not derivable) |
+| drip lifegain | one aggregate amount (life arithmetic is order-independent; only drip moves opponent life during a payment) |
+| drip SIGN | `OpponentGainsLife` re-reads `RemedyActive` -- a Tainted Remedy board flips gain to loss without the key ever seeing the enchantment |
+| graveyard exile | re-runs `ExileGraveyardLandForMana` -- the key hashes the fuel COUNT, not the contents, so each board exiles ITS OWN first land, which is what the DFS would have done to it |
+
+That last row is the whole idea: replaying by CALLING means anything the replayed function reads is
+resolved against the board the hit is actually landing on, so entries stay shareable across boards the
+key deliberately does not distinguish.
+
+Measured on FiveColour d3 x60 (`MTG_MANA_CACHE_ALLSRC=0` vs `=1`):
+
+```
+unstorable   275,823 (56.3% of misses)  ->  0
+hit rate     71.3%                      ->  83.9%
+misses       489,732                    ->  274,665   (-44%)
+backtracker nodes  89.8M                ->  73.1M     (-18.6%)
+```
+
+Byte-identical: identical digests and per-game logs on all three decks that own one of these sources
+(Anti-Lifegain = drip + Tainted Remedy, Dragonstorm = two storage lands, FiveColour = Deathrite), and
+identical to `MTG_MANA_CACHE=0` as well -- three cache configurations, one answer.
+
+**Wall time barely moves, and the calibration says why.** Same 60 games: cache OFF 74,691 ms, legacy
+gate 73,659 ms, all sources 71,589 ms. **The entire payment cache is worth ~4% of this deck's play
+time**, so -18.6% of backtracker nodes is -18.6% of a small slice. What the extension really did is
+roughly TRIPLE the cache's value (1.4% -> 4.2% off the no-cache baseline). Worth keeping -- it is
+byte-identical, never slower, and removes a carve-out -- but it is not a tractability lever, and the
+degenerate tail still needs the breadth fix in item 1.
 
 (The capture said 156 s and the isolated replay takes 55 s: keepgen's per-rollout timing is WALL under
 23-way load, not CPU. The ranking is sound; the absolute numbers are inflated.)
