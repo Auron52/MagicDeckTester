@@ -3520,7 +3520,8 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
 // is optional to every reader (regression.sh awk on $1/$2, audit read_wins on $1/$2).
 static void WriteGameLog(const std::filesystem::path& dir, const std::string& name,
                          const std::vector<int>& win_turns,
-                         const std::vector<uint64_t>& digests)
+                         const std::vector<uint64_t>& digests,
+                         const std::vector<int>& game_indices = {})
 {
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
@@ -3528,7 +3529,12 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
     char buf[17];
     for (int gi = 0; gi < static_cast<int>(win_turns.size()); ++gi)
     {
-        out << gi << ' ' << win_turns[gi];
+        // The GLOBAL game index when the caller supplied one, else the position. They differ only
+        // for a job that is a CHUNK of a longer run or that finished short (skipped/voided games are
+        // dropped), so every existing caller writes exactly the same bytes as before -- the
+        // regression suite's jobs are whole runs at game_index 0 with nothing skipped.
+        out << (gi < static_cast<int>(game_indices.size()) ? game_indices[gi] : gi)
+            << ' ' << win_turns[gi];
         if (gi < static_cast<int>(digests.size()))
         {
             std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(digests[gi]));
@@ -3822,7 +3828,20 @@ int main(int argc, char* argv[])
                           << " ms=" << r.elapsed_ms << "\n" << std::flush;
                 if (!game_log_dir.empty())
                 {
-                    WriteGameLog(game_log_dir, r.name, r.win_turns, r.digests);
+                    WriteGameLog(game_log_dir, r.name, r.win_turns, r.digests, r.game_indices);
+                    // Per-game search work, under MTG_DUMP_UNITS. A SEPARATE file on purpose: the
+                    // .wins format is consumed by the regression suite's committed ground truth, so
+                    // adding a column there would churn every gt_log for a diagnostic.
+                    if (!r.units.empty())
+                    {
+                        std::ofstream uo(game_log_dir / (r.name + ".units"));
+                        for (std::size_t i = 0; i < r.units.size(); ++i)
+                        {
+                            uo << (i < r.game_indices.size() ? r.game_indices[i]
+                                                             : static_cast<int>(i))
+                               << ' ' << r.units[i] << '\n';
+                        }
+                    }
                 }
             };
             std::vector<BatchJobResult> results =

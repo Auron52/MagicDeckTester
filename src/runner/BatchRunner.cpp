@@ -1,6 +1,7 @@
 #include "BatchRunner.h"
 #include "GoldFishRunner.h"
 #include "../core/GameEngine.h"
+#include "../ai/GameWorkMeter.h"
 #include "../core/GameLogger.h"
 #include "../core/EnvFlags.h"
 #include "../core/HardwareConcurrency.h"
@@ -59,6 +60,14 @@ struct Job
     int             game_index          = 0;
     int             depth               = 0;
     int             budget_ms           = 0;
+    // Per-GAME work ceiling in search units (see ai/GameWorkMeter.h). 0 = disarmed = byte-identical
+    // to a manifest that omits it. A game that hits it is VOIDED -- recorded kSkipped, dropped from
+    // the job's average, and reported on stderr so the caller can build a skip list. The ceiling is
+    // supplied by the caller rather than derived here on purpose: the useful threshold is relative
+    // to the cell's own median cost (cells span 11 ms to 700 s per game), and only the driver that
+    // owns the whole matrix can compute that. The engine's job is to enforce an absolute number
+    // deterministically.
+    long long       abandon_units       = 0;
     int             max_turns           = 8;   // goldfish horizon (see main.cpp); per-job overridable
     bool            second_main         = false;  // precomputed DeckUsesSecondMain
     int             sched_weight        = 0;   // optional LPT scheduling priority (higher = run first);
@@ -481,6 +490,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     j.budget_ms           = jspec.value("budget_ms", 0);
     j.sched_weight        = jspec.value("weight", 0);      // LPT priority override (see Job::sched_weight)
     j.max_turns           = jspec.value("max_turns", 8);   // global goldfish horizon; per-job override
+    j.abandon_units       = jspec.value("abandon_units", 0LL);   // per-game ceiling; see Job::abandon_units
 
     // Per-job VALUE-LEAF ARM (see ai/ValueArm.h). Every key is optional and every default is the
     // "unset" sentinel, so a manifest that omits them all runs exactly as before.
@@ -664,6 +674,10 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     // no synchronisation. games[j][gi] = win turn (<=0 means no win).
     std::vector<std::vector<int>> win_turns(jobs.size());
     std::vector<std::vector<uint64_t>> digests(jobs.size());
+    // Per-game search work, for calibrating the per-game ceiling. Off by default: it is a diagnostic,
+    // and pre-sizing a third per-game vector for every batch that will never read it is pure waste.
+    static const bool s_dump_units = EnvOn("MTG_DUMP_UNITS");
+    std::vector<std::vector<long long>> units(s_dump_units ? jobs.size() : 0);
     // Per-job core-milliseconds (see BatchJobResult::elapsed_ms). Relaxed adds: the value is read
     // only after the job's last game lands, and that read is already ordered by the acq_rel
     // remaining-counter decrement below.
@@ -673,6 +687,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     {
         win_turns[j].assign(jobs[j].games, -1);
         digests[j].assign(jobs[j].games, 0);
+        if (s_dump_units) { units[j].assign(jobs[j].games, 0); }
     }
 
     // Flatten every game of every job into one work list.
@@ -870,17 +885,22 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         // a silently wrong number, which is worse than a short one.
         std::vector<int>      wt_played;
         std::vector<uint64_t> dg_played;
+        std::vector<int>      gi_played;
         wt_played.reserve(win_turns[j].size());
         dg_played.reserve(digests[j].size());
+        gi_played.reserve(win_turns[j].size());
         for (std::size_t i = 0; i < win_turns[j].size(); ++i)
         {
             if (win_turns[j][i] == kSkipped) { continue; }
             wt_played.push_back(win_turns[j][i]);
             dg_played.push_back(digests[j][i]);
+            gi_played.push_back(jobs[j].game_index + static_cast<int>(i));
+            if (s_dump_units) { r.units.push_back(units[j][i]); }
         }
         r.games_played = static_cast<int>(wt_played.size());
         r.win_turns    = wt_played;
         r.digests      = dg_played;
+        r.game_indices = gi_played;
         long long sum = 0;
         for (int wt : wt_played) { if (wt > 0) { ++r.games_won; sum += wt; } }
         if (r.games_won > 0) { r.average_win_turn = static_cast<double>(sum) / r.games_won; }
@@ -1081,7 +1101,34 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 dlog.StartGame(std::string(), global_gi, job.name, job.seed + wi.game, {});
                 engine->SetLogger(&dlog);
                 const auto g_t0 = std::chrono::steady_clock::now();
-                win_turns[wi.job][wi.game] = engine->RunGame(state, job.max_turns);
+                // Arm the per-game work ceiling (see ai/GameWorkMeter.h). Paired with End() below so
+                // a pooled worker thread can never carry one game's meter into the next; Begin also
+                // resets, so the pairing is belt-and-braces rather than load-bearing.
+                gamework::Begin(job.abandon_units);
+                int wt = engine->RunGame(state, job.max_turns);
+                const long long g_units = gamework::Used();
+                gamework::End();
+                if (wt == GameEngine::kAbandoned)
+                {
+                    // VOID, not a loss. kSkipped is dropped by reduce_job, so an abandoned game does
+                    // not drag the cell's average toward max_turns+1 -- which is the whole point:
+                    // scoring it as a loss would make skipping CHANGE the number we are measuring.
+                    wt = kSkipped;
+                    // The caller needs to know WHICH game, in the same self-contained form as
+                    // SLOW-GAME, because the skip list is per (deck, seed, offset) and is what every
+                    // other cell filters on. Units, not ms: the decision was deterministic and the
+                    // reader must be able to reproduce it.
+                    std::fprintf(stderr,
+                                 "[goldfish] ABANDONED job=%s gi=%d units=%lld limit=%lld  repro: "
+                                 "--seed %llu --game-index %d --games 1\n",
+                                 job.name.c_str(), global_gi, g_units, job.abandon_units,
+                                 static_cast<unsigned long long>(job.seed
+                                                                 + static_cast<uint64_t>(wi.game)),
+                                 global_gi);
+                    std::fflush(stderr);
+                }
+                win_turns[wi.job][wi.game] = wt;
+                if (s_dump_units) { units[wi.job][wi.game] = g_units; }
                 const long long g_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - g_t0).count();
                 job_ms[wi.job].fetch_add(g_ms, std::memory_order_relaxed);

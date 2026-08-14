@@ -9,8 +9,15 @@ class GameEngine
 public:
     explicit GameEngine(AIEngine& ai);
 
+    // A game the per-game work meter VOIDED (see ai/GameWorkMeter.h). Distinct from -1, which is a
+    // real result meaning "no win within max_turns": an abandoned game has NO result and must be
+    // excluded from every average rather than folded in as a loss. Callers that never arm the meter
+    // can never see it.
+    static constexpr int kAbandoned = -2;
+
     // Returns the turn number the active player won;
-    // -1 if max turns exceeded or player lost on draw.
+    // -1 if max turns exceeded or player lost on draw;
+    // kAbandoned if the per-game work ceiling was hit (only possible when armed).
     int RunGame(GameState& state, int max_turns = 20);
 
     // Plays turns from the current state to a win or max_turns WITHOUT running a

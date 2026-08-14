@@ -16,6 +16,19 @@ struct BatchJobResult
     double avg_turns        = 0.0;   // THE goldfish metric: mean turn-to-win, unwon = max_turns+1
     std::vector<int>      win_turns;   // per-game; <=0 = no win within max_turns
     std::vector<uint64_t> digests;     // per-game play digest (GameLogger::Digest), 0 if unavailable
+    // GLOBAL game index of each entry above, i.e. game_index + its position in the job. Parallel to
+    // win_turns, and NOT simply 0..n-1: a job can finish short (a condemned cell's games are skipped
+    // at dequeue, an abandoned game is voided), and those entries are dropped, so position in the
+    // vector stops matching game identity. Carrying the index makes a short result still alignable
+    // -- which is what lets a per-game consumer tell "game 380 was voided" from "the file is stale".
+    std::vector<int>      game_indices;
+    // Per-game SEARCH WORK in units (ai/GameWorkMeter.h), parallel to win_turns. Populated only
+    // under MTG_DUMP_UNITS, because it exists to CALIBRATE the per-game ceiling: the useful
+    // threshold is relative to a cell's own typical cost (cells span 11 ms to 700 s per game), so
+    // the distribution has to be measurable before a multiplier can be chosen. Units rather than
+    // milliseconds for the same reason the ceiling is in units -- a wall-clock calibration would
+    // pick a different threshold on every machine and under every load.
+    std::vector<long long> units;
     uint64_t              case_digest = 0;  // fold of per-game digests in game order (a case fingerprint)
     // SUM of this job's per-game wall times, in ms -- core-milliseconds, not elapsed span. Games of
     // one job interleave with other jobs across the pool, so an elapsed first-to-last span would

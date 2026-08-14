@@ -3,6 +3,7 @@
 #include "SpellEffects.h"
 #include "../ai/AIEngine.h"
 #include "../ai/Combat.h"
+#include "../ai/GameWorkMeter.h"
 #include "../cards/CardDatabase.h"
 #include <algorithm>
 #include <iostream>   // MTG_FB_TRACE diagnostic
@@ -96,6 +97,9 @@ int GameEngine::RunGame(GameState& state, int max_turns)
     }
 
     int win_turn = PlayOut(state, max_turns);
+    // A voided game has no result to report or to learn from, so OnGameEnd is skipped too -- it
+    // drives the fidelity oracle, which would otherwise be taught from a truncated game.
+    if (gamework::Abandoned()) { return kAbandoned; }
     m_ai.OnGameEnd(state, win_turn);
     return win_turn;
 }
@@ -118,6 +122,11 @@ int GameEngine::PlayOutFrom(GameState& state, int max_turns, ResumeAt from)
     while (state.turn_number < max_turns)
     {
         if (state.player_lost_on_draw) { return -1; }
+        // Stop playing a game that has already been voided. The search bails out of its recursion as
+        // soon as the meter trips (SearchBudget::Overrun), but the game itself would otherwise keep
+        // running turns on rolled-back lines -- cheap per turn, yet unbounded in count, and every one
+        // of them is work spent on a result that will be discarded.
+        if (gamework::Abandoned()) { return GameEngine::kAbandoned; }
         RunTurn(state);
         // Check opponent loss first: if we dealt lethal and also triggered ourselves to
         // death in the same turn, the win still counts.

@@ -1,5 +1,6 @@
 #pragma once
 #include <climits>
+#include "GameWorkMeter.h"
 
 // Deterministic replacement for the wall-clock search deadline.
 //
@@ -40,7 +41,12 @@ public:
     }
 
     bool      Unlimited() const { return m_limit <= 0; }
-    void      Consume(long long n = 1) { m_used += n; }
+    // Every unit also folds into the per-GAME meter. This is the one place that sees all of a
+    // game's search work: budgets are per DECISION (a game has many, and a search builds sub-budgets
+    // for its probe passes), so no single SearchBudget can bound a game. Counting here counts each
+    // simulated turn-step exactly once regardless of how many budget objects wrap it, because the
+    // recursion consumes from ONE budget per node. See ai/GameWorkMeter.h.
+    void      Consume(long long n = 1) { m_used += n; gamework::Add(n); }
     long long Used() const { return m_used; }
     long long Limit() const { return m_limit; }
 
@@ -56,7 +62,15 @@ public:
     // unlimited budgets are byte-identical to before). Normal passes finish far under any
     // sane ceiling, so the guard never fires for them (parity preserved).
     void SetOverrunLimit(long long abs_units) { m_overrun_limit = abs_units; }
-    bool Overrun() const { return m_overrun_limit > 0 && m_used >= m_overrun_limit; }
+    // Also true once the per-GAME meter has been spent, so the recursion unwinds promptly instead of
+    // finishing a search whose result is about to be discarded. This is only the UNWIND: the game is
+    // marked void by the meter's own flag (gamework::Abandoned), which RunGame reads. The two are
+    // deliberately not the same signal -- a pass overrun leaves a playable line and is recorded as
+    // such, an abandonment means no result should be reported at all.
+    bool Overrun() const
+    {
+        return (m_overrun_limit > 0 && m_used >= m_overrun_limit) || gamework::Abandoned();
+    }
 
     // Units left before exhaustion, clamped to >= 0 (LLONG_MAX if unlimited).
     // Clamping keeps the start-gate / overrun arithmetic well-behaved once the
