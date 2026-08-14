@@ -14615,6 +14615,21 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
     Fold(k, state.opponent_lost_life_this_turn ? 1u : 0u);
     Fold(k, static_cast<uint64_t>(state.vial_target_mv));
     Fold(k, static_cast<uint64_t>(state.stack.size()));
+    // Floating mana: future-determining (a mid-turn re-solve state with {R}{R} floated solves
+    // differently from the same board without it). Latent hole under ordered keys (mid-turn float
+    // states usually differed in zone order-history too); a REQUIRED field for the canonical key
+    // (2026-08-14 must-find audit: canon lost unbounded-findable Mirrorwing wins -- Treasure-float
+    // re-solve states merged with their float-less twins). Folded ONLY when non-empty, so every
+    // empty-float state keeps the EXACT prior key.
+    if (state.floating_mana.Total() > 0)
+    {
+        const ManaPool& fm = state.floating_mana;
+        Fold(k, 0xF10A7);
+        Fold(k, (static_cast<uint64_t>(fm.white) << 48) ^ (static_cast<uint64_t>(fm.blue) << 40)
+              ^ (static_cast<uint64_t>(fm.black) << 32) ^ (static_cast<uint64_t>(fm.red) << 24)
+              ^ (static_cast<uint64_t>(fm.green) << 16) ^ (static_cast<uint64_t>(fm.colorless) << 8)
+              ^  static_cast<uint64_t>(fm.wild));
+    }
 
     // With search-shuffle ON the library order is NO LONGER a deterministic function of
     // its size (a fetch/tutor reshuffles it), so the cheap (size + front) library digest
@@ -14724,6 +14739,17 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
 
     Fold(k, 0xB1F1); // section tag: battlefield (ordered; multiset when canon)
     Fold(k, static_cast<uint64_t>(state.battlefield.size()));
+    // Attachment wiring (aura_attached_to / equipped_to): future-determining CROSS-permanent state
+    // (which creature carries the Aura decides combat and hexproof/lifelink lines). A latent hole
+    // under ordered keys and a REQUIRED canonical field (2026-08-14 must-find audit: canon lost
+    // unbounded-findable Auras/Anti-Lifegain wins -- differently-wired boards merged). On a board
+    // with ANY attachment, every permanent folds its stable copy id (card.m_number) plus its
+    // outgoing links, so the wiring graph is exact; attachment-free boards keep the EXACT prior key.
+    bool bf_has_attachment = false;
+    for (const Permanent& perm : state.battlefield)
+    {
+        if (perm.aura_attached_to != 0 || perm.equipped_to != 0) { bf_has_attachment = true; break; }
+    }
     for (const Permanent& perm : state.battlefield)
     {
         TranspositionTable::Key ck;             // canon: per-perm sub-key, folded sorted below
@@ -14752,6 +14778,14 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             Fold(tk, 0x570A6E);
             Fold(tk, static_cast<uint64_t>(perm.storage_counters));
             Fold(tk, perm.storage_hold_this_turn ? 1u : 0u);
+        }
+        // Attachment wiring (see the board scan above): stable ids + links, only on wired boards.
+        if (bf_has_attachment)
+        {
+            Fold(tk, 0xA77A);
+            Fold(tk, static_cast<uint64_t>(perm.card.m_number));
+            Fold(tk, static_cast<uint64_t>(perm.aura_attached_to));
+            Fold(tk, static_cast<uint64_t>(perm.equipped_to));
         }
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_power_bonus)));
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_tough_bonus)));
