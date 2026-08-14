@@ -17,7 +17,9 @@ import re
 import sys
 from collections import defaultdict
 
-LINE = re.compile(r"([A-Za-z0-9]+)_s(\d+): played=(\d+) avg=([\d.]+) digest=(\w+)(?: ms=(\d+))?")
+# Job names may carry a deck prefix ("mirrorwing_dragon-live_s601000") or not ("live_s601000");
+# the arm is whatever sits between the optional "<deck>-" prefix and the "_s<seed>" suffix.
+LINE = re.compile(r"(?:[\w]+-)?(\w+?)_s(\d+): played=(\d+) avg=([\d.]+) digest=(\w+)(?: ms=(\d+))?")
 
 
 def main(path, baseline=None):
