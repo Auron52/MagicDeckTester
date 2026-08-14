@@ -239,3 +239,4 @@ with MTG_FD_TRACE, diff the first divergent rollout, extract the two states shar
 key, name the missing field. Candidates not yet folded: stack CONTENTS (size only today),
 pending-continuation/breakpoint state, cards_drawn gate breadth. No re-adoption until the full
 must-find set passes; the set itself is now part of the canon gate.
+UPDATE: minimal repro CAPTURED -- logs/mwprof/hole5_gi191_d2_c{0,1}.log: d2 b0 gi191 wins T5 (off) vs T6 (on); first cost divergence at T1 pass=2 (merging active), FD traces included. Next: diff committed lines per turn, instrument the first differing decision.
