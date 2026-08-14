@@ -94,4 +94,7 @@ public:
     // Such decks enable AIEngine::SetSearchPostCombat; everything else skips the
     // second main. Shared so the runner and analyzer enable it identically.
     static bool DeckUsesSecondMain(const Decklist& deck);
+    // Deck-level input to the main-phase classifier: any attack-feeding card in the deck?
+    // Stamped onto GameState::deck_feeds_combat by SetupGame (see the .cpp note).
+    static bool DeckFeedsCombat(const Decklist& deck);
 };

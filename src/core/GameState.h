@@ -216,6 +216,12 @@ struct GameState
     // PATTERNS table in GoldFishRunner (PopulateOpponentSpawns). nullptr -> no spawns.
     const std::vector<OpponentSpawn>* opponent_spawns = nullptr;
     int                      vial_target_mv        = 0;   // most common creature MV in the deck; Aether Vial stops here
+    // Deck-level input to the main-phase classifier (GoldFishRunner::DeckFeedsCombat, stamped by
+    // SetupGame): does ANY card in the deck feed the attack when cast pre-combat? False collapses
+    // the classifier's BOTH classes and Main1-by-doubt default to Main2 (USER rule: a deck with no
+    // main-1 effects casts EVERYTHING second main, draws included). Default TRUE = the wide/safe
+    // reading for any state not built through SetupGame.
+    bool                     deck_feeds_combat     = true;
 
     // SEARCHED Goblin Lackey put (Plan::lackey_choice): an index into the provider's ranked
     // CombatCheatCandidates list, or -1 for the provider's top pick. Unlike the scry/ETB-dig pins

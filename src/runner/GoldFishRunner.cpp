@@ -104,6 +104,36 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
     return false;
 }
 
+// Does ANY card in the deck feed the ATTACK when cast pre-combat? The deck-level input to the
+// main-phase classifier (docs/design/main-phase-classification.md): the BOTH classes
+// (draws/rituals) and the Main1-by-doubt default only exist to feed a deck's main-1 effects --
+// USER rule 2026-08-14: with none, they collapse to Main2 ("everything in Hinata is second main
+// ... including all draw"), DERIVED here rather than special-cased per deck (USER: "I would
+// rather not have to specify a special rule for decks like Hinata"). Signals are the same ones
+// the per-card classifier treats as attack-feeding; deliberately WIDE (a false positive only
+// keeps casts pre-combat = current behaviour). Doubt-class customs do NOT count as signals --
+// else an unmodelled Gamble would flip the whole deck back to has-main-1.
+bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
+{
+    for (const Card& c : deck.mainboard)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        if (!def) { continue; }
+        if (def->tmpl == CardTemplate::Haste || def->tmpl == CardTemplate::PumpSpell
+            || def->tmpl == CardTemplate::LordEffect)                        { return true; }
+        if (def->card.HasKeyword(Keyword::Haste))                            { return true; }
+        const CardParams& p = def->params;
+        if (p.grants_haste || p.grants_temp_haste || p.equip_grants_haste
+            || p.grants_double_strike)                                       { return true; }
+        if (p.is_equipment)                                                  { return true; }
+        if (p.team_pump_cost.has_value() || p.firebreathing_cost.has_value()){ return true; }
+        if (p.power_bonus > 0 || p.tough_bonus > 0)                          { return true; }
+        if (p.scales_per_matching || p.affects_all_creatures
+            || p.domain_self_pump || p.power_equals_creature_count)          { return true; }
+    }
+    return false;
+}
+
 // ---- Card numbering --------------------------------------------------------
 
 // Assigns stable integer IDs to each card copy in the deck.
@@ -492,6 +522,7 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     state.shuffle_salt         = s_shuffle_salt;
     state.shuffle_salt_opening = s_shuffle_salt_opening;
     state.shuffle_salt_search  = s_have_salt_search ? s_shuffle_salt_search : s_shuffle_salt;
+    state.deck_feeds_combat    = DeckFeedsCombat(deck);   // main-phase classifier's deck-level input
 
     state.players[0].library.assign(deck.mainboard.begin(), deck.mainboard.end());
 

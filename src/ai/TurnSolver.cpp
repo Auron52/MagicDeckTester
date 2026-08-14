@@ -3013,14 +3013,21 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
             // both mains; deferred, the deploy no longer fits and the win slips to T5).
             if (p.power_bonus != 0 || p.tough_bonus != 0) { return MP::Main1; }
             if (p.draw > 0 || p.cast_draw > 0 || p.stages_cards
-                || p.damage_equals_top_mv) { return MP::Both; }
+                || p.damage_equals_top_mv)
+            {
+                // Card-flow rider: BOTH -- but only when the deck HAS main-1 effects to dig
+                // into (state.deck_feeds_combat); otherwise the flow cannot feed an attack and
+                // the USER's rule collapses it to Main2 (derived, not per-deck special-cased).
+                return state.deck_feeds_combat ? MP::Both : MP::Main2;
+            }
             return MP::Main2;
         case CardTemplate::DrawSpell:
         case CardTemplate::DrawX:
         case CardTemplate::DrawUntilNonland:
             // Draws can dig INTO a Main1 card -- the BOTH exception class (the boundary of the
-            // dominance argument). Offered in both phases.
-            return MP::Both;
+            // dominance argument)... when the deck has main-1 effects to find. With none
+            // (deck_feeds_combat false) the USER's rule makes draws Main2 like everything else.
+            return state.deck_feeds_combat ? MP::Both : MP::Main2;
         case CardTemplate::VanillaCreature:
         case CardTemplate::ManaDork:
         {
@@ -3035,7 +3042,12 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
             return haste ? MP::Main1 : MP::Main2;
         }
         default:
-            return MP::Main1;   // when in doubt, keep pre-combat (wider, never wrong)
+            // When in doubt, keep pre-combat (wider, never wrong) -- EXCEPT in a deck with no
+            // main-1 effects at all: there the doubt has nothing to protect (no modelled way
+            // for any cast to feed the attack), and the USER's rule sends everything second
+            // main. Doubt-class customs deliberately do NOT count toward DeckFeedsCombat, so
+            // this cannot flip itself.
+            return state.deck_feeds_combat ? MP::Main1 : MP::Main2;
     }
 }
 

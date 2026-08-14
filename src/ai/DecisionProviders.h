@@ -315,17 +315,14 @@ public:
     // Main-phase doctrine (USER, 2026-08-14, verbatim): "everything in Hinata is second main.
     // The reason is because there is literally no attacking creature beyond Hinata herself and
     // she never gets haste or is pumped. So, by my rule everything should be cast second main
-    // including all draw." The BOTH classes (draws/rituals/float) only exist where a deck has
-    // main-1 effects to feed -- this deck has NONE, so the override is TOTAL: every hand cast
-    // is Main2 (main 1 = land drop + attack declaration only). Consequence, also per the USER:
-    // "if we are considering main 1 for Hinata, there is a bug" -- a measured game that loses a
-    // turn under this doctrine is an ENGINE defect in the post-combat path (first known one:
-    // Soulfire Eruption's mid-phase staged exile is only visible to a FRESH enumeration, which
-    // a main-1 cast got for free at the phase boundary -- the main-2 re-solve must match it).
-    // Inert until ClassifiesMainPhases()/MTG_PHASE_CLASSIFY activates the filter.
-    std::optional<MainPhase> MainPhaseOverride(const GameState&,
-                                               const CardDefinition&) const override
-    { return MainPhase::Main2; }
+    // including all draw." NOT special-cased here (USER: "I would rather not have to specify a
+    // special rule for decks like Hinata"): the collapse is DERIVED --
+    // GoldFishRunner::DeckFeedsCombat finds no attack-feeding card in this deck, and with
+    // GameState::deck_feeds_combat false the base classifier sends draws, card-flow riders and
+    // every doubt-class custom to Main2 by itself (verified digest-identical to the explicit
+    // total override it replaced). Corollary, also per the USER: "if we are considering main 1
+    // for Hinata, there is a bug" -- a game measuring worse under the filter is an ENGINE
+    // defect in the post-combat path (see main-phase-classification.md round 2).
     // TutorSearchWidth: deliberately NOT overridden -- this deck keeps the base 6. Worth recording
     // because the train seeds said otherwise and the holdout overruled them. Gamble is unrestricted
     // ("search your library for a card") but TutorCandidates above already narrows it hard (Hinata
