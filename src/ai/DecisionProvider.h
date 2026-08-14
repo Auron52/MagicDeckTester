@@ -63,6 +63,7 @@
 #include "../core/ManaPool.h"
 #include "../cards/CardDatabase.h"
 #include "KeepModel.h"   // KeepGuard (Undecided / ForceKeep / ForceMulligan) for the keep-floor hook
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -593,6 +594,38 @@ public:
     // EquipmentProvider returns true. Opened by MTG_EQUIP_ALL_HOSTS / MTG_UNPRUNE=equiphost /
     // human play like every other equip-width policy.
     virtual bool ConsolidatesEquips() const { return false; }
+
+    // --- Main-phase classification (USER design 2026-08-14, docs/design/main-phase-classification.md) ---
+    // Classify a hand cast by ONE question: does it help (or potentially help) this turn's ATTACK?
+    //   Main1 -- yes: lords, haste creatures/granters, pumps incl. equipment. Kept pre-combat.
+    //   Main2 -- no: face damage, spectacle staging, sick vanilla bodies. Enumerated ONLY in the
+    //            post-combat main, where it weakly DOMINATES the pre-combat cast: combat can only
+    //            ADD options between the mains (spectacle turned on, surviving vigilant attackers'
+    //            mana, post-attack targets), never remove them.
+    //   Both  -- the boundary of that dominance argument (draws/rituals/floating mana can feed a
+    //            Main1 cast): offered in BOTH phases.
+    // The post-combat enumeration is NEVER filtered, so a Main2 class moves a line to the phase
+    // where it is >= as good -- it cannot delete one. When in doubt classify Main1: that is
+    // current behaviour, only wider; Main2 is the assertive claim, and a per-game win-turn
+    // regression under the filter is a MISCLASSIFICATION signal, not an acceptable trade.
+
+    enum class MainPhase { Main1, Main2, Both };
+
+    // ClassifiesMainPhases -- opt IN to the pre-combat Main2 filter (TurnSolver::CollectActions).
+    // ONLY valid for a deck that actually plays a second main (GoldFishRunner::DeckUsesSecondMain):
+    // there every dropped cast reappears post-combat; on a single-main deck the filter would simply
+    // LOSE the cast. Default false = byte-identical everywhere. MTG_PHASE_CLASSIFY forces it on for
+    // A/B measurement (same second-main caveat); MTG_NO_PHASE_CLASSIFY kills it; human play and
+    // MTG_UNPRUNE=mainphase keep the full pre-combat set.
+    virtual bool ClassifiesMainPhases() const { return false; }
+
+    // MainPhaseOverride -- per-card doctrine consulted BEFORE the engine's template rules (deck
+    // knowledge lives in the provider, like the discard doctrines). nullopt = defer to the base
+    // template classifier (DirectDamage/spectacle -> Main2, Draw* -> Both, sick Vanilla/ManaDork
+    // with no haste access -> Main2, everything else incl. Tier-3 `None` -> Main1-by-doubt).
+    virtual std::optional<MainPhase> MainPhaseOverride(const GameState& s,
+                                                       const CardDefinition& def) const
+    { (void)s; (void)def; return std::nullopt; }
 
     // FetchSearchCap -- fetch BREADTH policy: how many of FetchCandidates' ordered targets the search
     // branches on (the list is best-first; lower ranks are strictly worse colour, a basic ranks

@@ -68,6 +68,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"equiphost",  UnprunedGate::EquipHost},
     {"jittemode",  UnprunedGate::JitteMode},
     {"uacast",     UnprunedGate::UACast},
+    {"mainphase",  UnprunedGate::MainPhase},
 };
 
 const char* GateName(UnprunedGate g)
@@ -6208,6 +6209,24 @@ bool FiveColourProvider::ShouldAttackWith(const GameState& s, const Permanent& p
         if (mc.has_x || with.CanPay(mc)) { return false; }   // the mana has somewhere to go -> hold
     }
     return true;   // nothing castable at all -> the tap buys nothing, take the chip damage
+}
+
+// Main-phase doctrine (see the .h note). Param-keyed where a param exists (robust to reprints),
+// name-keyed for the two walkers -- Jared is deliberately NOT listed (his -3 is a real pre-combat
+// pump, so the base Main1-by-doubt is the correct class for him).
+std::optional<DecisionProvider::MainPhase>
+FiveColourProvider::MainPhaseOverride(const GameState& s, const CardDefinition& def) const
+{
+    (void)s;
+    const CardParams& p = def.params;
+    // Unite the Coalition: S x (2 face damage) + (N-S) x draw -- no split feeds the attack, and
+    // combat first means a vigilant Faeburrow's mana is still available to pay for it.
+    if (p.modal_choose_n > 0 && p.modal_damage_per_choice > 0) { return MainPhase::Main2; }
+    // Mana Cannons: on-cast face damage, fires identically from either main.
+    if (p.multicolor_cast_damage_per_color)                    { return MainPhase::Main2; }
+    if (def.card.m_name == "Nicol Bolas, Planeswalker")        { return MainPhase::Main2; }
+    if (def.card.m_name == "Oko, Thief of Crowns")             { return MainPhase::Main2; }
+    return std::nullopt;
 }
 
 std::vector<std::string>

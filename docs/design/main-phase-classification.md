@@ -1,6 +1,8 @@
 # Main-phase classification (MAIN1 / MAIN2 / BOTH)
 
-**Status: USER-designed architecture (2026-08-14), not yet implemented.** Origin: the
+**Status: USER-designed architecture (2026-08-14); ENGINE MACHINERY BUILT (same day, see
+"Implementation (as built)" below), measurement in flight, NOT yet adopted — every gate
+default-off, suite byte-identical (smoke 36/36 post-build).** Origin: the
 KittyEquipment branching work (`analysis-KittyEquipment.md`) — the residual search cost is
 tree volume, and the USER rejected lossy truncation (see `heuristic-optimization.md` Rule 0b);
 this is the heuristic answer for the two-main share of that volume. The USER named the greedy
@@ -91,6 +93,45 @@ by one question:
   castables (FiveColour, Hinata, Burn staging, Goblins post-Lackey). KittyEquipment gains
   modestly (USER assessment: its second main is only the Kemba park + casting cards drawn
   off a Puresteel/Skyhunter attack) — most of its hand is equipment/pumps = MAIN1 anyway.
+
+## Implementation (as built, 2026-08-14)
+
+- **Filter site:** ONE pass at the tail of `TurnSolver::CollectActions` (after the def-resolution
+  loop), pre-combat only: Main2-classified `CastFromHand` actions are erased (`remove_if`, order
+  of survivors preserved for the odometer). The post-combat pass is NEVER filtered, so a Main2
+  class moves a line, it cannot delete one. Both enumerators (Solve + EnumeratePlans), the
+  full-search second main (`FSLineTail`'s `EnumeratePlans(state, false)`), and the executor all
+  share this funnel — lockstep by construction. Generalises the Goblins
+  `DeferSacOutletPreCombat` precedent from sac outlets to the whole cast enumeration.
+- **Gates:** provider opt-in `DecisionProvider::ClassifiesMainPhases()` (default false =
+  byte-identical everywhere; ONLY valid on a `DeckUsesSecondMain` deck — a single-main deck
+  would LOSE the cast, not defer it) or the `MTG_PHASE_CLASSIFY=1` A/B lever (same second-main
+  caveat — never set it on a suite-wide run, single-main decks would be corrupted).
+  `MTG_NO_PHASE_CLASSIFY=1` kills; `MTG_UNPRUNE=mainphase` (UnprunedGate::MainPhase) and human
+  play keep the full pre-combat set (the viewer is never narrowed).
+- **Base template rules** (engine-side, `ClassifyMainPhase` in TurnSolver.cpp) — Main2 is
+  asserted only where the engine can SEE the cast cannot feed the attack:
+  * `spectacle_cost` present → Main2 (Light Up the Stage — the USER's named example).
+  * `DirectDamage` template with no pump rider → Main2 (and Hinata's Crackle/Soulfire are
+    actively anti-Main1: they can destroy their own discount targets).
+  * `DrawSpell`/`DrawX`/`DrawUntilNonland` → Both (can dig into a Main1 card — the boundary
+    class; kept in both phases).
+  * `VanillaCreature`/`ManaDork` (statics-free by definition) → Main2 iff summoning-sick with
+    NO route to haste (own keyword, on-board haste lord via `HasHasteFromLords`, on-board
+    `equip_grants_haste` equipment, or a `grants_haste`/`equip_grants_haste`/`grants_temp_haste`
+    card in hand — affordability-blind on purpose: over-detecting only keeps a cast pre-combat)
+    AND no board-scaling attacker (`domain_self_pump` — a new-colour permanent pumps a live
+    Faeburrow Elder; `domain_mana` — mana coupling; `power_equals_creature_count`;
+    `scales_per_matching`). Guard is presence-only — conservative by design.
+  * Everything else (Tier-3 `None`, pumps, lords, removal, planeswalkers) → Main1-by-doubt.
+- **Per-card doctrine:** `DecisionProvider::MainPhaseOverride(state, def)` consulted before the
+  base rules (deck knowledge lives in the provider, like the discard doctrines).
+  `FiveColourProvider` ships the first one: Unite the Coalition (param-keyed: damage modal) and
+  Mana Cannons (cast-trigger damage) → Main2; Nicol Bolas + Oko (name-keyed; a cast-turn Oko can
+  never produce an attacker) → Main2; Jared deliberately NOT listed (his −3 is a real pre-combat
+  pump). Hinata needs no override — its whole Main2 set is `direct_damage` template.
+- **First probe (5 games/deck, d3):** digests diverge (filter live), win turns identical
+  10/10 (lossless so far), wall −2.1x (FiveColour) / −3.0x (Hinata).
 
 ## Measurement plan
 

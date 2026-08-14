@@ -2897,6 +2897,140 @@ static void ApplyCantripFirstOrder(std::vector<Action>& acts)
 // MTG_NO_GOBLIN_SAC_2ND); the guard in the sac-outlet loop below calls it. GenericProvider returns
 // false, so every non-Goblins deck enumerates sac outlets pre-combat byte-identically.
 
+// ---- Main-phase classification (USER design 2026-08-14) ------------------
+//
+// docs/design/main-phase-classification.md. One question per hand cast: does it help (or
+// potentially help) this turn's ATTACK? If not, it is enumerated ONLY in the post-combat main
+// (Main2), where it weakly DOMINATES the pre-combat cast -- combat can only ADD options between
+// the mains (spectacle turned on, surviving vigilant attackers' mana, post-attack targets), never
+// remove them. The post-combat pass (is_pre_combat == false) is NEVER filtered, so a Main2 class
+// moves a line, it cannot delete one -- which is also why the filter is only valid on a deck that
+// actually PLAYS a second main (GoldFishRunner::DeckUsesSecondMain; see ClassifiesMainPhases).
+// This generalises DeferSacOutletPreCombat above from sac outlets to the whole cast enumeration:
+// partitioning the two mains is what shrinks the joint plan space multiplicatively, and it is
+// what makes the SEARCHED second main affordable (the greedy one is slated for removal -- the
+// USER's stated goal for this design, not a side effect).
+//
+// When in doubt the base rules classify Main1 (current behaviour, only wider): Tier-3 `None`
+// templates, pumps, lords, removal, planeswalkers all stay pre-combat unless a provider's
+// per-card doctrine (MainPhaseOverride) says otherwise. Main2 is the assertive claim, made only
+// where the engine can SEE the card cannot feed the attack: pure damage templates, spectacle
+// staging, and summoning-sick vanilla/dork bodies with no route to haste and no board-scaling
+// attacker to pump by entering.
+
+// Any route to haste for a fresh creature THIS turn. Deliberately affordability- and
+// subtype-BLIND: over-detecting haste access only keeps creatures pre-combat (never drops), so
+// a granter we could not actually pay for costs width, not correctness.
+//   - battlefield: a grants_haste lord (any subtype -- the per-card lord match is done exactly by
+//     the caller via HasHasteFromLords; this blanket check covers casting a creature the lord
+//     matches only after another cast), or an equip_grants_haste Equipment (Greaves can be
+//     re-pointed at the fresh body -- equip {0}), or
+//   - hand: a castable grants_haste / equip_grants_haste / grants_temp_haste card (the
+//     "cast Greaves + creature, equip, attack NOW" line must stay reachable).
+static bool HasteAccessThisTurn(const GameState& state)
+{
+    const int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.grants_haste) { return true; }
+        if (d->params.is_equipment && d->params.equip_grants_haste) { return true; }
+    }
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        if (d->params.grants_haste || d->params.equip_grants_haste
+            || d->params.grants_temp_haste) { return true; }
+    }
+    return false;
+}
+
+// A battlefield attacker whose POWER scales with what else you cast makes every permanent cast
+// pre-combat a potential pump: Faeburrow Elder (domain_self_pump -- any new-colour permanent),
+// Adeline (power_equals_creature_count -- any creature), Predatory Sliver (scales_per_matching --
+// any matching body), and domain_mana (a live Elder/Bloom Tender taps for MORE colours after a
+// new-colour cast -- mana coupling, the USER's floating-mana/BOTH boundary class). Conservative:
+// presence alone fires the guard (no can-attack / colour-delta analysis) -- over-firing keeps
+// casts pre-combat, never drops one.
+static bool BoardHasScalingAttacker(const GameState& state)
+{
+    const int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.domain_self_pump || d->params.domain_mana
+            || d->params.power_equals_creature_count
+            || d->params.scales_per_matching) { return true; }
+    }
+    return false;
+}
+
+// The filter's activation gate. Provider opt-in (only meaningful for second-main decks) or the
+// MTG_PHASE_CLASSIFY A/B lever; MTG_NO_PHASE_CLASSIFY kills; human play and
+// MTG_UNPRUNE=mainphase keep the full pre-combat set (the viewer is never narrowed).
+static bool MainPhaseFilterActive(const GameState& state)
+{
+    static const bool s_kill  = EnvOn("MTG_NO_PHASE_CLASSIFY");  // DEFAULT unset; =1 kills the filter
+    static const bool s_force = EnvOn("MTG_PHASE_CLASSIFY");     // A/B lever (second-main decks ONLY)
+    if (s_kill || HumanPlayActive()) { return false; }
+    if (!s_force && !ResolveProvider(state).ClassifiesMainPhases()) { return false; }
+    return !DecisionUnpruned(UnprunedGate::MainPhase);
+}
+
+// Base template rules; the provider's per-card doctrine (MainPhaseOverride) wins where set.
+// Everything that is not a hand cast (equips, Vial puts, digs, loyalty, channels, retrace) is
+// untouched -- Main1 here just means "keep in the pre-combat enumeration".
+static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
+                                                     const DecisionProvider& prov,
+                                                     const Action& a,
+                                                     bool hand_haste_access,
+                                                     bool scaling_attacker)
+{
+    using MP = DecisionProvider::MainPhase;
+    if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { return MP::Main1; }
+    const CardDefinition& def = *a.def;
+    if (auto o = prov.MainPhaseOverride(state, def)) { return *o; }
+    const CardParams& p = def.params;
+    // Spectacle: the alternate cost turns ON during combat (Light Up the Stage -- the USER's
+    // named example), so post-combat is cheaper-or-equal and never worse.
+    if (p.spectacle_cost.has_value()) { return MP::Main2; }
+    switch (def.tmpl)
+    {
+        case CardTemplate::DirectDamage:
+            // Pure damage feeds no attack vs the passive opponent -- and Hinata's payoffs
+            // (Crackle / Soulfire) can DESTROY their own discount targets, so pre-combat is
+            // actively worse there. Pump riders would reclassify (none exist on this template;
+            // guarded anyway).
+            return (p.power_bonus == 0 && p.tough_bonus == 0) ? MP::Main2 : MP::Main1;
+        case CardTemplate::DrawSpell:
+        case CardTemplate::DrawX:
+        case CardTemplate::DrawUntilNonland:
+            // Draws can dig INTO a Main1 card -- the BOTH exception class (the boundary of the
+            // dominance argument). Offered in both phases.
+            return MP::Both;
+        case CardTemplate::VanillaCreature:
+        case CardTemplate::ManaDork:
+        {
+            // These templates carry no lord/anthem statics BY DEFINITION, so a fresh
+            // (summoning-sick) body affects this turn's combat only if it can attack NOW --
+            // or if entering pumps a board-scaling attacker / expands domain mana.
+            if (scaling_attacker) { return MP::Main1; }
+            const bool haste = def.card.HasKeyword(Keyword::Haste)
+                            || HasHasteFromLords(def.card, state.battlefield,
+                                                 state.active_player_index)
+                            || hand_haste_access;
+            return haste ? MP::Main1 : MP::Main2;
+        }
+        default:
+            return MP::Main1;   // when in doubt, keep pre-combat (wider, never wrong)
+    }
+}
+
 // An OPTIMISTIC ceiling on the mana this turn could ever produce. Used only to drop hand casts that
 // no line could pay for (see the emission prune below), so every term here is deliberately GENEROUS:
 // over-estimating costs a prune we could have made, while under-estimating would drop a legal play.
@@ -5095,6 +5229,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         a.def = (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
                     ? CardDatabase::Instance().LookupCached(ap.hand[a.hand_index])
                     : CardDatabase::Instance().Lookup(a.card_name);
+    }
+
+    // Main-phase classification filter (USER design 2026-08-14; helpers above CollectActions).
+    // Drop Main2-classified hand casts from the PRE-combat enumeration only -- the post-combat
+    // pass re-offers them where they are weakly dominant. remove_if preserves the kept actions'
+    // relative order, so group/odometer construction downstream is unchanged for survivors.
+    if (is_pre_combat && !actions.empty() && MainPhaseFilterActive(state))
+    {
+        const DecisionProvider& prov = ResolveProvider(state);
+        const bool haste_access     = HasteAccessThisTurn(state);
+        const bool scaling_attacker = BoardHasScalingAttacker(state);
+        actions.erase(std::remove_if(actions.begin(), actions.end(),
+            [&](const Action& a)
+            {
+                return ClassifyMainPhase(state, prov, a, haste_access, scaling_attacker)
+                       == DecisionProvider::MainPhase::Main2;
+            }), actions.end());
     }
 
     return actions;

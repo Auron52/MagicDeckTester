@@ -76,6 +76,10 @@ enum class UnprunedGate
                   // the modes are pruned by default; human play always keeps them)
     UACast,       // Unexpectedly Absent hand-cast re-enumerated in autonomous search (USER doctrine
                   // 2026-08-14: "just not cast for now" -- pruned by default; human play keeps it)
+    MainPhase,    // main-phase classification filter disabled: enumerate every cast in the
+                  // pre-combat main instead of deferring Main2-classified casts to the post-combat
+                  // main (USER design 2026-08-14, docs/design/main-phase-classification.md;
+                  // human play always keeps the full pre-combat set)
     _Count
 };
 
@@ -525,6 +529,15 @@ public:
     // its tap is worth more than its chip damage -- see the .cpp note. Vigilant sources (Faeburrow
     // Elder) still always attack: attacking never costs them their tap.
     bool ShouldAttackWith(const GameState& s, const Permanent& attacker) const override;
+    // Main-phase doctrine (USER design 2026-08-14): the Tier-3 customs the base template rules
+    // keep pre-combat by doubt but that provably cannot feed this turn's attack -- Unite the
+    // Coalition (the USER's named example: vigilant Faeburrow attacks, THEN Unite spends its
+    // mana), Nicol Bolas (face-damage walker; loyalty is a separate un-filtered action and fires
+    // once per turn from either main), Mana Cannons (cast-trigger damage, timing-neutral), Oko
+    // (a cast-turn Oko can never produce an attacker: +2 makes a sick-irrelevant Food, +1 needs
+    // a Food that does not exist yet). NOT active until ClassifiesMainPhases()/MTG_PHASE_CLASSIFY.
+    std::optional<MainPhase> MainPhaseOverride(const GameState& s,
+                                               const CardDefinition& def) const override;
 };
 
 // Mirrorwing/Zada spell-copy swarm: overrides ONLY the trick-target narrowing (a 5f perf prune --
