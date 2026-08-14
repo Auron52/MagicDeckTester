@@ -452,10 +452,24 @@ static bool GreedySecondMainEnabled() { return !g_search_second_main; }
 // byte-identical. The shared SearchBudget is threaded through, so this spends from the same
 // per-decision allowance rather than running unbounded -- it buys second-main fidelity by making
 // the rest of the pass shallower, which is exactly the trade the A/B has to judge.
+// MTG_CONSIDER_STATS context tags (diagnosis only -- see namespace considerstats below the
+// groupwave block). Declared here because the two functions that bump them are defined early.
+static thread_local int g_cs_m2solve_nest = 0;   // inside SolveSecondMainInSearch (either path)
+static thread_local int g_cs_solver_nest  = 0;   // inside any SolveWithLookahead frame
+
+// Decision epoch: bumped at each committed-decision driver entry (SolveWithLookahead
+// enforce_budget, FSLineWin nest 0, FullSearchLineHybrid). Scopes the per-decision caches --
+// the greedy-Solve memo (namespace solvememo) treats an entry from an older epoch as absent,
+// which restores exactly the TranspositionTable's per-decision-scope soundness argument (the
+// library digest's size=>content assumption only holds within one decision). Also read by the
+// MTG_CONSIDER_STATS diagnostics to scope duplicate counting the same way.
+static thread_local uint64_t g_decision_epoch = 0;
+
 static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int depth, int max_turns,
                                                 SearchBudget* budget, bool second_main,
                                                 TranspositionTable* tt)
 {
+    struct M2Guard { M2Guard() { ++g_cs_m2solve_nest; } ~M2Guard() { --g_cs_m2solve_nest; } } _m2g;
     if (depth <= 0 || GreedySecondMainEnabled()) { return TurnSolver::Solve(state, false); }
     return TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/false, depth, max_turns, budget,
                                           /*enforce_budget=*/false, second_main, tt);
@@ -5446,6 +5460,116 @@ namespace groupwave
     }
 }
 
+// --- Consideration diagnostics (MTG_CONSIDER_STATS, off by default = zero cost) ---------------
+// The single-consideration map (USER 2026-08-14: "figure out where we are considering spells
+// multiple times"): attributes every CollectActions harvest to its CALL-SITE CONTEXT, built from
+// the thread_local markers that already exist for other purposes -- root-enum flag, FSLine nest,
+// second-main-in-search nest, breakpoint-continuation depth, group-wave tranche mode -- plus a
+// SolveWithLookahead nest counter. Per context it counts calls, total Actions emitted, and
+// per-card emission counts, then dumps ranked tables at exit. The same hand card appearing under
+// many contexts (or with a huge count in one) IS the duplication being mapped. Run single game,
+// --threads 1, for clean numbers.
+static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, int max_turns,
+                                           bool second_main);   // fwd (defined much later)
+
+namespace considerstats
+{
+    inline bool Enabled() { static const bool v = EnvOn("MTG_CONSIDER_STATS"); return v; }
+
+    inline std::string SiteLabel(const char* caller, bool is_pre_combat)
+    {
+        std::string s = caller;
+        s += is_pre_combat ? ".m1" : ".m2";
+        // live = an executor-level call (no solver/FSLine frame on this thread's stack)
+        if (g_cs_solver_nest == 0 && g_fsline_nest == 0) { s += ".live"; }
+        if (g_bp_root_enum)                              { s += ".root"; }
+        if (g_fsline_nest > 0) { s += ".fs" + std::to_string(g_fsline_nest); }
+        if (g_cs_m2solve_nest > 0)                       { s += ".m2solve"; }
+        if (g_bp_enum_depth > 0)                         { s += ".bpcont"; }
+        if (groupwave::g_state.tranche_rank >= 0)        { s += ".tranche"; }
+        return s;
+    }
+
+    struct Bucket
+    {
+        uint64_t calls = 0, actions = 0;
+        std::map<std::string, uint64_t> by_card;
+        // Distinct harvest STATES (BuildSimKey as a pure state signature): calls - states.size()
+        // = harvests that re-considered a state some earlier harvest at this site already
+        // considered -- the directly-memoizable duplication.
+        std::map<std::pair<uint64_t, uint64_t>, uint64_t> states;
+    };
+    inline std::mutex                    g_mtx;
+    inline std::map<std::string, Bucket> g_sites;
+
+    // One record per CollectActions harvest (Solve's greedy consider or EnumeratePlans).
+    inline void Record(const char* caller, bool is_pre_combat, const std::vector<Action>& cands,
+                       const GameState& state)
+    {
+        if (!Enabled()) { return; }
+        const std::string label = SiteLabel(caller, is_pre_combat);
+        TranspositionTable::Key k = BuildSimKey(state, 0, 0, false);
+        k.h1 ^= g_decision_epoch * 0x9E3779B97F4A7C15ULL;   // scope duplicates to one decision
+        std::lock_guard<std::mutex> lk(g_mtx);
+        Bucket& b = g_sites[label];
+        ++b.calls;
+        b.actions += cands.size();
+        ++b.states[{k.h1, k.h2}];
+        for (const Action& a : cands) { ++b.by_card[a.card_name.str()]; }
+    }
+    // Host-call counter (EnumeratePlansWithLand): calls only, so the enum/withland ratio exposes
+    // the per-land inner fan-out.
+    inline void RecordHost(bool is_pre_combat)
+    {
+        if (!Enabled()) { return; }
+        const std::string label = SiteLabel("withland", is_pre_combat);
+        std::lock_guard<std::mutex> lk(g_mtx);
+        ++g_sites[label].calls;
+    }
+
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            std::vector<std::pair<std::string, Bucket>> v(g_sites.begin(), g_sites.end());
+            std::sort(v.begin(), v.end(),
+                      [](auto& a, auto& b) { return a.second.actions > b.second.actions; });
+            uint64_t tot_calls = 0, tot_actions = 0;
+            for (auto& p : v) { tot_calls += p.second.calls; tot_actions += p.second.actions; }
+            std::fprintf(stderr, "\n=== CONSIDER STATS: %llu harvests, %llu action considerations ===\n",
+                         (unsigned long long)tot_calls, (unsigned long long)tot_actions);
+            std::fprintf(stderr, "%-44s %12s %14s %8s %12s %10s\n",
+                         "site", "calls", "actions", "avg", "distinct_st", "dup_calls");
+            for (auto& p : v)
+            {
+                const Bucket& b = p.second;
+                const uint64_t distinct = b.states.size();
+                std::fprintf(stderr, "%-44s %12llu %14llu %8.1f %12llu %10llu\n", p.first.c_str(),
+                             (unsigned long long)b.calls, (unsigned long long)b.actions,
+                             b.calls ? (double)b.actions / b.calls : 0.0,
+                             (unsigned long long)distinct,
+                             (unsigned long long)(b.calls - distinct));
+            }
+            std::fprintf(stderr, "\n--- per-card considerations by site (top 12 each) ---\n");
+            for (auto& p : v)
+            {
+                if (p.second.by_card.empty()) { continue; }
+                std::vector<std::pair<std::string, uint64_t>> c(p.second.by_card.begin(),
+                                                                p.second.by_card.end());
+                std::sort(c.begin(), c.end(), [](auto& a, auto& b) { return a.second > b.second; });
+                std::fprintf(stderr, "%s:\n", p.first.c_str());
+                for (size_t i = 0; i < c.size() && i < 12; ++i)
+                {
+                    std::fprintf(stderr, "    %-38s %12llu\n", c[i].first.c_str(),
+                                 (unsigned long long)c[i].second);
+                }
+            }
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 // The engine-side cap override, shared by the cap itself and the wave hosts (which need the
 // effective BASE cap to know where tranches start). Cached: this runs per enumeration -- an
 // uncached getenv here was ~1.2% of rollout time / 212M calls in a Hinata gen profile. -1 = unset.
@@ -6771,7 +6895,136 @@ static bool HoldSacLandBurn(const GameState& state, const std::vector<Action>& c
 
 // ---- TurnSolver::Solve ---------------------------------------------------
 
+// Mid-turn-exact state key, defined with the breakpoint-enum memo far below. Reused verbatim by
+// the greedy-Solve memo: its history (a first attempt keyed on BuildSimKey alone silently changed
+// Hinata's play -- floating ritual mana and the storm count are mid-turn state) is exactly the
+// trap a Solve memo faces, and one shared key means one place to keep exact.
+static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool is_pre_combat);
+
+// --- Greedy-Solve memo (MTG_SOLVE_MEMO, DEFAULT OFF until the identity A/B is accepted) --------
+//
+// Single-consideration collapse #1 (USER 2026-08-14: "figure out where we are considering spells
+// multiple times and ... consider them only once"). MTG_CONSIDER_STATS measured that the greedy
+// Solve inside search interiors -- above all SolveSecondMainInSearch's leaf path, the post-combat
+// main of every rollout ply -- re-harvests and re-solves a state some sibling line already solved
+// IN THE SAME DECISION for 80-86% of its calls (FiveColour d3 gi=0: 708k calls on 143k distinct
+// per-decision states; Hinata2 collapsed: 42k on 6k). Solve is a pure function of (state, phase)
+// -- no draws, no budget, no cutoff dependence -- so those repeats are memoizable the same way
+// SimulateToEnd already is.
+//
+// Soundness rails (each one load-bearing):
+//   * KEY: BuildBreakpointKey, not BuildSimKey -- mid-turn floating mana / storm count / casts-
+//     remaining are exactly what distinguish two post-combat states (see that key's comment).
+//   * SCOPE: entries are valid for ONE decision (g_decision_epoch) -- the key's library digest
+//     (size + front card) only implies content within a single decision, the TranspositionTable's
+//     own scoping argument.
+//   * SEARCH INTERIORS ONLY: live executor calls (no solver/FSLine frame) bypass the memo, so
+//     real-play decisions never read a cached plan and the d0 ship configuration is untouched.
+//   * HUMAN PLAY bypasses (chooser interaction must stay live).
+// MTG_SOLVE_MEMO_VERIFY=1: on every hit ALSO recompute uncached and compare the plans field by
+// field; mismatches are counted and the first few printed -- the honest test that the key is
+// complete before any adoption A/B.
+namespace solvememo
+{
+    inline bool Enabled()  { static const bool v = EnvOn("MTG_SOLVE_MEMO"); return v; }
+    inline bool VerifyOn() { static const bool v = EnvOn("MTG_SOLVE_MEMO_VERIFY"); return v; }
+
+    struct Entry { uint64_t epoch = 0; TurnSolver::Plan plan; };
+    // thread_local: the batch runner plays games concurrently; capped so one long decision
+    // cannot grow it without bound (wholesale clear, same policy as the bp-enum memo).
+    inline thread_local std::unordered_map<TranspositionTable::Key, Entry,
+                                           TranspositionTable::KeyHash> t_cache;
+    constexpr std::size_t kCap = 16384;
+
+    inline std::atomic<uint64_t> g_hits{0}, g_misses{0}, g_clears{0};
+    inline std::atomic<uint64_t> g_verified{0}, g_mismatches{0};
+
+    inline bool SamePlan(const TurnSolver::Plan& a, const TurnSolver::Plan& b)
+    {
+        if (a.value != b.value || a.wins_this_turn != b.wins_this_turn
+            || a.searched_order != b.searched_order || a.land_decided != b.land_decided
+            || a.land_to_play != b.land_to_play || a.fetch_target != b.fetch_target
+            || a.land_face != b.land_face || a.actions.size() != b.actions.size())
+        { return false; }
+        for (std::size_t i = 0; i < a.actions.size(); ++i)
+        {
+            const Action& x = a.actions[i];
+            const Action& y = b.actions[i];
+            if (x.kind != y.kind || !(x.card_name == y.card_name) || x.hand_index != y.hand_index
+                || x.chosen_x != y.chosen_x || x.splice_count != y.splice_count
+                || !(x.tutor_target == y.tutor_target) || x.sacrifice_land != y.sacrifice_land
+                || x.discard_lands != y.discard_lands)
+            { return false; }
+        }
+        return true;
+    }
+
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            std::fprintf(stderr, "[solve-memo] hits=%llu misses=%llu clears=%llu",
+                         (unsigned long long)g_hits.load(), (unsigned long long)g_misses.load(),
+                         (unsigned long long)g_clears.load());
+            if (VerifyOn())
+            {
+                std::fprintf(stderr, " verified=%llu MISMATCHES=%llu",
+                             (unsigned long long)g_verified.load(),
+                             (unsigned long long)g_mismatches.load());
+            }
+            std::fprintf(stderr, "\n");
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
+{
+    // Memo only inside a search decision (a driver frame is on the stack): the decision epoch is
+    // fresh there, and the live executor path stays untouched by construction.
+    const bool memo_ok = solvememo::Enabled() && !HumanPlayActive()
+                      && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
+    if (!memo_ok) { return SolveUncached(state, is_pre_combat); }
+
+    const TranspositionTable::Key k = BuildBreakpointKey(state, is_pre_combat);
+    auto& cache = solvememo::t_cache;
+    auto it = cache.find(k);
+    if (it != cache.end() && it->second.epoch == g_decision_epoch)
+    {
+        solvememo::g_hits.fetch_add(1, std::memory_order_relaxed);
+        if (solvememo::VerifyOn())
+        {
+            const TurnSolver::Plan fresh = SolveUncached(state, is_pre_combat);
+            solvememo::g_verified.fetch_add(1, std::memory_order_relaxed);
+            if (!solvememo::SamePlan(fresh, it->second.plan))
+            {
+                const uint64_t n = solvememo::g_mismatches.fetch_add(1, std::memory_order_relaxed);
+                if (n < 5)
+                {
+                    std::fprintf(stderr,
+                                 "[solve-memo] MISMATCH t%d %s: cached %zu acts v=%d vs fresh %zu acts v=%d\n",
+                                 state.turn_number, is_pre_combat ? "m1" : "m2",
+                                 it->second.plan.actions.size(), it->second.plan.value,
+                                 fresh.actions.size(), fresh.value);
+                }
+            }
+        }
+        return it->second.plan;
+    }
+
+    solvememo::g_misses.fetch_add(1, std::memory_order_relaxed);
+    TurnSolver::Plan p = SolveUncached(state, is_pre_combat);
+    if (cache.size() >= solvememo::kCap)
+    {
+        cache.clear();
+        solvememo::g_clears.fetch_add(1, std::memory_order_relaxed);
+    }
+    cache[k] = solvememo::Entry{ g_decision_epoch, p };
+    return p;
+}
+
+TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_combat)
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     const Player& ap = state.ActivePlayer();
@@ -6791,6 +7044,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     g_search_candidate_enum = false;
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
     g_search_candidate_enum = saved_sce;
+    considerstats::Record("solve", is_pre_combat, cands, state);
     int n = static_cast<int>(ap.hand.size());
 
     // Hinata combo: does any candidate float ritual mana (Reality Spasm / Irencrag)? Each Action's
@@ -11321,6 +11575,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Shared enumeration of all action sources (hand casts + Vial + retrace; LE in a
     // later phase). The subset machinery below reads the per-Action valuation scalars.
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
+    considerstats::Record("enum", is_pre_combat, cands, state);
     // Human-play only: inject sequenced restricted-aura candidates (e.g. Daybreak Coronet on a creature
     // that an Ethereal Armor cast this same turn will enable) so the viewer can play within-turn-dependent
     // aura lines. No-op in the autonomous search (HumanPlayActive() false) -> byte-identical.
@@ -13212,6 +13467,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                                                             bool is_pre_combat)
 {
     RevealLogPause _rlp_enum;   // candidate scoring is hypothetical -- see EnumeratePlans
+    considerstats::RecordHost(is_pre_combat);
     const Player& ap = state.ActivePlayer();
     // Human play also offers the land drop in the POST-combat main when it is still open: a real
     // game can pass the drop pre-combat, cast a Spectacle dig (Light Up the Stage) post-combat, then
@@ -15005,6 +15261,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // of this comment claimed deeper nodes keep the greedy continuation; that mis-aimed the whole
     // 2026-08-06 depth-curve investigation (th-d5-five-hour-game.md).
     const bool bp_root = (g_fsline_nest == 0);
+    if (bp_root) { ++g_decision_epoch; }
     FsLineNestGuard _fs_nest;
     g_bp_root_enum = bp_root;
     groupwave::g_state.max_dropped = 0;   // reset; capture right after (nested scoring-time
@@ -16108,6 +16365,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     //                     the single pass's overrun-abort then acts as the crossover-skip (an unaffordable
     //                     escalation is dropped, keeping the value-leaf line, instead of committing a partial).
     // See docs/design/escalation-and-rollout-cost.md + hinata-escalation-budget-restore memory.
+    ++g_decision_epoch;   // committed-decision driver (scopes per-decision caches)
     static const double s_esc_split   = []{ const char* e = std::getenv("MTG_ESC_SPLIT");
                                             return (e && *e) ? std::atof(e) : -1.0; }();
     SearchBudget  probe_cap_budget;
@@ -17291,6 +17549,15 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         if (out_committed_win)       { *out_committed_win = win; }
         if (out_committed_sub_depth) { *out_committed_sub_depth = sub_depth; }
     };
+
+    // MTG_CONSIDER_STATS site tagging: everything under this frame is solver-interior, so a
+    // CollectActions harvest without any frame on the stack is an executor-level ("live") call.
+    struct SolverNestGuard
+    {
+        SolverNestGuard()  { ++g_cs_solver_nest; }
+        ~SolverNestGuard() { --g_cs_solver_nest; }
+    } _cs_nest;
+    if (enforce_budget) { ++g_decision_epoch; }
 
     if (depth <= 0)
     {

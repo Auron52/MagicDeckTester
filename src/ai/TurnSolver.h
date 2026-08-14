@@ -447,6 +447,10 @@ public:
     // Uses a static evaluation function (no lookahead).
     static Plan Solve(const GameState& state, bool is_pre_combat);
 
+    // The uncached greedy solve. Solve() is a thin wrapper that (under MTG_SOLVE_MEMO, search
+    // interiors only) memoizes this per decision -- see namespace solvememo in TurnSolver.cpp.
+    static Plan SolveUncached(const GameState& state, bool is_pre_combat);
+
     // Enable per-pass per-candidate trace output for top-level T1 decisions.
     static void SetTraceSolve(bool enable);
     static bool GetTraceSolve();
