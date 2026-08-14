@@ -448,8 +448,8 @@ phase_measure() {
             h_job "$key-staged_s$s" "$(deck_file "$vroot/$key/staged" "$stem")" "$vroot/$key/staged/$stem.profile.json" "$AB_GAMES" "$s"
         done
         # play-profile sweep: target_depth around the shipped one, on the REGENERATED model.
-        # escalation_cap tracks target_depth because every deck ships them equal (measured: the cap
-        # never binds), so moving depth alone would silently change what the cap does.
+        # escalation_cap tracks target_depth, CLAMPED to the measured ladder (see the heredoc below);
+        # moving depth alone would otherwise silently change what the cap does.
         read -r bd drives <<< "$(python3 -c "
 import json; vp = json.load(open('$staged')).get('value_play') or {}
 print(vp.get('target_depth') or 5, 1 if (vp.get('target_depth') and vp.get('enabled')) else 0)")"
@@ -477,7 +477,15 @@ import json, sys
 # budget_ms comes along because an enabled block OWNS the budget too: omit it and it resolves to 0,
 # confounding the depth comparison with a resource change. 20 = BuiltinDefaultPlay().budget_ms.
 v = json.load(open(sys.argv[1])); vp = v.setdefault("value_play", {})
-vp["target_depth"] = int(sys.argv[3]); vp["escalation_cap"] = int(sys.argv[3])
+d = int(sys.argv[3])
+vp["target_depth"] = d
+# escalation_cap CLAMPED to the deepest MEASURED heuristic depth, matching what the deriver ships
+# (user, 2026-08-14). Arming escalation past the ladder spends budget reaching a depth the crossover
+# can never take (it clamps hcommitted to the measured [min,max]), so a sweep arm that did it would
+# not be measuring a config we would adopt. Clamping is also safe by construction: the ladder top is
+# >= the built-in play depth, so the cap is never LOWER than the d5 baseline it is compared against.
+hd = ((v.get("value_leaf_table") or {}).get("hdepths")) or [d]
+vp["escalation_cap"] = min(d, max(hd))
 vp["enabled"] = True
 vp["budget_ms"] = vp.get("budget_ms") or 20
 json.dump(v, open(sys.argv[2], "w"), indent=1)

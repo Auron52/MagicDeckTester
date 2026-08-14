@@ -389,7 +389,15 @@ def write_deck(block, tol, offset, margin, dry, scalar_cap=None, set_esc_cap=Tru
     if set_esc_cap:
         vp = nd.get("value_play")
         if isinstance(vp, dict) and vp.get("target_depth"):
-            vp["escalation_cap"] = int(vp["target_depth"])
+            # CLAMP to the deepest MEASURED heuristic depth (user, 2026-08-14). The cap tracks
+            # target_depth, but arming escalation PAST the ladder buys nothing the crossover can
+            # reward: it clamps hcommitted to the measured [min,max], so a deeper pass is either taken
+            # at the clamped depth or not at all -- while still spending budget getting there, which
+            # is not byte-neutral inside a bounded search. With the H ladder now topping at H5 (H6
+            # dropped: never completed on any deck, see docs/design/depth-matrix-degenerate-games.md)
+            # a target_depth of 6 would otherwise arm escalation to a depth we have no measurement for.
+            # Binds only where the ladder is SHORTER than the play depth: burn/knights are unchanged.
+            vp["escalation_cap"] = min(int(vp["target_depth"]), max(hd))
 
     td = "UNSET" if trust_depth is None else str(trust_depth)
     ov_note = "" if not manual else "  [manual: %s]" % ",".join(
