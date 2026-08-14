@@ -7021,6 +7021,12 @@ namespace tapstats
     // at 1). Ratios between two buckets survive the inflation roughly; absolute shares do not.
     inline std::atomic<std::uint64_t> g_mc_nodes_miss{0};
     inline std::atomic<std::uint64_t> g_mc_nodes_skip{0};
+    // SHADOW probe (MTG_MANA_CACHE_CANON_PROBE): what the hit rate WOULD be if the key identified
+    // sources by TYPE MULTISET instead of by battlefield INDEX. Two untapped Mountains pose the same
+    // payment problem, but today they key apart -- so a board with duplicate lands re-solves the same
+    // question once per permutation of which copy is which. Measures the ceiling before building it.
+    inline std::atomic<std::uint64_t> g_mc_canon_hit{0};
+    inline std::atomic<std::uint64_t> g_mc_canon_miss{0};
     struct Dumper {
         ~Dumper()
         {
@@ -7069,6 +7075,16 @@ namespace tapstats
                 mm ? (double)nmiss / (double)mm : 0.0,
                 nskip, nodes ? 100.0 * (double)nskip / (double)nodes : 0.0,
                 (ms + mk) ? (double)nskip / (double)(ms + mk) : 0.0);
+            const unsigned long long ch = g_mc_canon_hit.load(), cm = g_mc_canon_miss.load();
+            if (ch + cm)
+            {
+                std::fprintf(stderr,
+                    "=== MANA CACHE CANON (shadow): hit=%llu (%.1f%% of consulted)  miss=%llu  "
+                    "vs indexed %.1f%%  -> misses %llu -> %llu (%.2fx fewer solves) ===\n",
+                    ch, 100.0 * (double)ch / (double)(ch + cm), cm,
+                    (mh + mm) ? 100.0 * (double)mh / (double)(mh + mm) : 0.0,
+                    mm, cm, cm ? (double)mm / (double)cm : 0.0);
+            }
         }
     };
     inline Dumper g_dumper;

@@ -1989,6 +1989,94 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
 }
 } // namespace
 
+// ---- SHADOW canonical key (MTG_MANA_CACHE_CANON_PROBE) -----------------------------------------
+// Identical to ManaCacheKey except sources are hashed as a SORTED MULTISET of descriptors rather than
+// as an indexed sequence: two untapped Mountains collapse to "Mountain x2" instead of keying apart by
+// battlefield position. reserved_mask cannot be hashed as a mask here (it is index-based), so the
+// reserved bit rides in each source's descriptor. Everything not per-source -- cost, for_creature,
+// untapped_max, output mode, floating, the domain/scaled/fuel/drip globals -- is unchanged.
+//
+// Diagnostic ONLY: it feeds a shadow map that answers "how many solves would a type-canonical key
+// save?" and never influences a payment. Realising such a key for real needs the stored tap-set to
+// name TYPES and pick concrete permanents back at replay time; this measures whether that is worth it.
+namespace {
+inline bool ManaCacheCanonKey(const GameState& state, const ManaCost& cost, bool for_creature,
+                              std::uint64_t reserved_mask, int untapped_max,
+                              bool want_leftover, bool want_full_pool, const ManaPool& floating,
+                              std::uint64_t& k1, std::uint64_t& k2)
+{
+    auto mix = [](std::uint64_t& h, std::uint64_t v){ h ^= v; h *= 1099511628211ull; h ^= h >> 29; };
+    static thread_local std::vector<std::uint64_t> descs;
+    descs.clear();
+    std::uint64_t h1 = 1469598103934665603ull, h2 = 14695981039346656037ull;
+    const int active = state.active_player_index;
+    const int n = static_cast<int>(state.battlefield.size());
+    int gy_fuel = -1, drip_useful = -1;
+    bool domain_done = false, scaled_done = false;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
+              || d->params.mana_rock)) { continue; }
+        if (McDomain(d) && !domain_done)
+        {
+            domain_done = true;
+            for (Color c : DomainColors(state, active)) { mix(h1, (std::uint64_t)c + 1); mix(h2, ((std::uint64_t)c + 1) * 31); }
+        }
+        if (McScaled(d) && !scaled_done)
+        { scaled_done = true; mix(h1, 0x5CA1ull + (std::uint64_t)ScaledManaCreatureCount(state)); }
+        if (d->params.gy_land_exile_mana && gy_fuel < 0)
+        { gy_fuel = GraveyardLandFuel(state, active); mix(h1, 0x6FF1ull + (std::uint64_t)gy_fuel); }
+        if (d->params.tap_opponent_lifegain > 0 && drip_useful < 0)
+        { drip_useful = ResolveProvider(state).OpponentLifegainUseful(state, active) ? 1 : 0;
+          mix(h1, drip_useful ? 0xD21B1ull : 0xD21B2ull); }
+        // Per-source descriptor: everything the indexed key mixes EXCEPT the index itself.
+        std::uint64_t dh = 1469598103934665603ull;
+        mix(dh, (std::uint64_t)reinterpret_cast<std::uintptr_t>(d));
+        mix(dh, p.tapped ? 1ull : 2ull);
+        mix(dh, ((reserved_mask >> i) & 1ull) ? 0xA1ull : 0xA2ull);
+        if (!p.tapped)
+        {
+            if (d->tmpl == CardTemplate::ManaDork)
+            { mix(dh, CanTapNow(p, state.battlefield) ? 0xE11901ull : 0xE11902ull); }
+            if (d->params.storage_land)
+            { mix(dh, 0x5701ull + (std::uint64_t)p.storage_counters * 2 + (p.storage_hold_this_turn ? 1ull : 0ull)); }
+        }
+        if (d->params.reflecting)
+        { for (Color c : EffectiveProduces(state, active, *d)) { mix(dh, (std::uint64_t)c + 7); } }
+        descs.push_back(dh);
+    }
+    std::sort(descs.begin(), descs.end());          // ORDER-FREE: the multiset, not the sequence
+    for (std::uint64_t dh : descs) { mix(h1, dh); mix(h2, dh * 0x9E3779B97F4A7C15ull); }
+    auto mixcost = [&](std::uint64_t& h){
+        mix(h, (std::uint64_t)cost.generic);
+        mix(h, (std::uint64_t)cost.white | ((std::uint64_t)cost.blue << 16)
+             | ((std::uint64_t)cost.black << 32) | ((std::uint64_t)cost.red << 48));
+        mix(h, (std::uint64_t)cost.green | ((std::uint64_t)cost.colorless << 16));
+        mix(h, (std::uint64_t)(cost.has_x ? 1 : 0) | ((std::uint64_t)cost.x_pips << 8)
+             | ((std::uint64_t)cost.hybrid_count << 16));
+        mix(h, (std::uint64_t)cost.hybrid_pair[0] | ((std::uint64_t)cost.hybrid_pair[1] << 8)
+             | ((std::uint64_t)cost.hybrid_pair[2] << 16) | ((std::uint64_t)cost.hybrid_pair[3] << 24));
+        mix(h, for_creature ? 1ull : 0ull);
+        mix(h, (std::uint64_t)(std::int64_t)untapped_max);
+        mix(h, want_leftover ? 0x1EF7ull : 0x1EF8ull);
+        mix(h, want_full_pool ? 0xF0011ull : 0xF0012ull);
+        mix(h, (std::uint64_t)floating.white | ((std::uint64_t)floating.blue << 12)
+             | ((std::uint64_t)floating.black << 24) | ((std::uint64_t)floating.red << 36));
+        mix(h, (std::uint64_t)floating.green | ((std::uint64_t)floating.colorless << 16)
+             | ((std::uint64_t)floating.wild << 32));
+    };
+    mixcost(h1); mixcost(h2);
+    k1 = h1; k2 = h2;
+    return true;
+}
+inline thread_local std::unordered_map<std::uint64_t, std::uint64_t> g_mana_canon_shadow;
+const bool g_canon_probe_on = EnvOn("MTG_MANA_CACHE_CANON_PROBE");
+}  // namespace
+
 // Public entry: thin wrapper over the worker. Identical behaviour; under MTG_TAP_STATS it records the
 // payable/unpayable OUTCOME of each top-level call and the nodes it consumed (the recursion calls the
 // worker directly, so every call here is exactly one top-level entry). Diagnostic only -- when the flag
@@ -2024,6 +2112,19 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                              mk1, mk2);
     if (tapstats::Enabled() && !mc_keyed)
     { (mc ? tapstats::g_mc_skip_key : tapstats::g_mc_skip_shape).fetch_add(1, std::memory_order_relaxed); }
+    // Shadow canonical-key probe: mirrors the real cache's lookup/insert exactly, so its hit rate is
+    // what a type-canonical key would have achieved on this run. Never influences a payment.
+    std::uint64_t ck1 = 0, ck2 = 0; bool canon_miss = false;
+    if (g_canon_probe_on && mc_keyed
+        && ManaCacheCanonKey(state, cost, for_creature, reserved_mask, untapped_max,
+                             out_leftover != nullptr, out_full_pool != nullptr, floating, ck1, ck2))
+    {
+        auto cit = g_mana_canon_shadow.find(ck1);
+        if (cit != g_mana_canon_shadow.end() && cit->second == ck2)
+        { tapstats::g_mc_canon_hit.fetch_add(1, std::memory_order_relaxed); }
+        else
+        { tapstats::g_mc_canon_miss.fetch_add(1, std::memory_order_relaxed); canon_miss = true; }
+    }
     if (mc_keyed)
     {
         auto it = g_mana_cache.find(mk1);
@@ -2140,6 +2241,11 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         if (tapstats::Enabled() && !storable)
         { tapstats::g_mc_unstorable.fetch_add(1, std::memory_order_relaxed); }
         if (storable) { g_mana_cache[mk1] = std::move(e); }
+        if (canon_miss)
+        {
+            if (g_mana_canon_shadow.size() > 500000) { g_mana_canon_shadow.clear(); }
+            g_mana_canon_shadow[ck1] = ck2;
+        }
     }
     return ok;
 }
