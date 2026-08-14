@@ -222,3 +222,20 @@ The canonical key went through the full verification pass on the Mirrorwing perf
 - **Remaining for the default flip**: the standing adoption gate only — GT rebaseline (digests move
   by construction) + re-saving the drifted reference via the viewer. Folds into the next joint
   chain rebaseline. Until then canon rides per-pipeline (Mirrorwing batches).
+
+## Canon must-find hunt — state at 2026-08-14 end of session
+
+REVERTED/BLOCKED (user invariant: unbounded budget must reproduce every old win; 6 games failed).
+Three key holes fixed so far (`1593a926` storage, `433cda94` floating mana + attachment wiring —
+the latter cured the Auras failure; float measurably improved ordered-mode mirrorwing too).
+STILL FAILING under canon-on b0: antilife s6006 gi306 (5->6), mirrorwing gi191/223/267/363 (+1).
+
+LOCALIZED REPRO (traced hunt, logs/mwprof/hunt_gi191_{on,off}.log): the first 35 search entries
+match; the arms then split INSIDE a pre-game bottoming trial — same trial, same state, OFF commits
+`T1 pass=2 done win=5`, ON commits `win=6`. A DEPTH-2 estimate divergence at unlimited budget =
+the collision sits in the LEAF-ROLLOUT memo path (SimulateToEnd / leaf TT hit poisoned by a
+canonical merge), not deep recursion. Next session: re-run that T1 trial search at d2 both modes
+with MTG_FD_TRACE, diff the first divergent rollout, extract the two states sharing a canonical
+key, name the missing field. Candidates not yet folded: stack CONTENTS (size only today),
+pending-continuation/breakpoint state, cards_drawn gate breadth. No re-adoption until the full
+must-find set passes; the set itself is now part of the canon gate.
