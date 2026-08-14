@@ -1404,6 +1404,31 @@ inline std::pair<int,int> JitteDamageMath(int base_pw, bool ds, int counters, in
     return { dmg, c };
 }
 
+// True if `creature` has shroud -- today only from an attached equip_grants_shroud Equipment
+// (Lightning Greaves); no card in the pool has the printed keyword. Shroud means "can't be the
+// target of spells or abilities" (CR 702.18b), and EQUIP TARGETS (CR 702.6b) -- so a shrouded
+// creature is not a legal equip host, Jitte -1/-1 target, or removal target. Balan's attach-all
+// and Skyhunter's attach-dig do NOT target and are unaffected (user-confirmed 2026-08-14).
+// Returns the m_number of the shroud-granting equipment via `src_out` when non-null (0 = none)
+// so the equip enumerator can offer the move-the-Greaves-off dance.
+inline bool CreatureHasShroud(const Permanent& creature, const GameState& state,
+                              int* src_out = nullptr)
+{
+    if (src_out) { *src_out = 0; }
+    for (const Permanent& a : state.battlefield)
+    {
+        if (a.controller_index != creature.controller_index) { continue; }
+        if (a.equipped_to != creature.card.m_number) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (d && d->params.is_equipment && d->params.equip_grants_shroud)
+        {
+            if (src_out) { *src_out = a.card.m_number; }
+            return true;
+        }
+    }
+    return false;
+}
+
 // True if `creature` deals combat damage with lifelink -- its own keyword, any attached
 // aura_grants_lifelink Aura, or any attached equip_grants_lifelink Equipment (Loxodon
 // Warhammer / Shadowspear). Combat sites gain the controller that much life.

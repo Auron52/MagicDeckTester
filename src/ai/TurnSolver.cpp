@@ -166,6 +166,14 @@ static thread_local bool g_search_candidate_enum = true;
 // out for the with/without A/B. Cheap: one O(n log n) sort per interior node.
 static const bool s_move_order = !EnvOn("MTG_NO_MOVE_ORDER");
 
+// Shroud rules fix (user doctrine 2026-08-14): equip / Jitte -1/-1 / removal targeting respects
+// equip_grants_shroud (CR 702.18b; equip targets, CR 702.6b). MTG_LEGACY_SHROUD=1 restores the
+// old unenforced behavior for the rules-fix A/B. Read once; consulted by the equip enumeration,
+// SubsetHasShroudBlockedEquip, the Jitte mode target loop, and the UA retarget validation --
+// all in this file (the executor applies enumerated plans and never re-targets, so there is no
+// second reader).
+static const bool s_legacy_shroud = EnvOn("MTG_LEGACY_SHROUD");
+
 static void MoveOrderPlans(std::vector<TurnSolver::Plan>& plans)
 {
     if (!s_move_order || plans.size() < 2) { return; }
@@ -1275,6 +1283,50 @@ static bool SubsetHasStrandedEquip(const GameState& state,
         const Action& c = cands[idx];
         if (c.kind != Action::Kind::Equip) { continue; }
         if (!live(c.sac_source_id) || !live(c.sac_victim_id)) { return true; }
+    }
+    return false;
+}
+
+// RULES twin of the equip enumeration's shroud check (user doctrine 2026-08-14): equipping onto a
+// host that currently carries a shroud-granting equipment (Lightning Greaves) is only legal when
+// the plan ALSO moves that equipment off the host first -- shroud blocks the equip TARGET
+// (CR 702.18b / 702.6b). The enumerator still emits the blocked pair (the "Greaves dance" makes it
+// achievable), so this guard rejects any subset that takes the equip WITHOUT co-selecting a move
+// of the shroud source to some other host. Set-level achievability: move Greaves first, then
+// equip -- a legal sequential order always exists for a surviving subset. Applied in BOTH subset
+// walkers (Solve::consider + EnumeratePlans::eval_and_push), like SubsetHasStrandedEquip. No
+// shrouded host -> byte-identical for every deck; MTG_LEGACY_SHROUD=1 disables.
+static bool SubsetHasShroudBlockedEquip(const GameState& state,
+                                        const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    if (s_legacy_shroud) { return false; }
+    const int active = state.active_player_index;
+    auto shroud_src_of = [&](int host_num) -> int {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == active && p.card.m_number == host_num)
+            {
+                int src = 0;
+                CreatureHasShroud(p, state, &src);
+                return src;
+            }
+        }
+        return 0;   // in hand (cast this turn): enters without shroud attached
+    };
+    for (int idx : sel)
+    {
+        const Action& c = cands[idx];
+        if (c.kind != Action::Kind::Equip) { continue; }
+        const int src = shroud_src_of(c.sac_victim_id);
+        if (src == 0 || src == c.sac_source_id) { continue; }   // unshrouded, or moving the source itself
+        bool moved_off = false;
+        for (int jdx : sel)
+        {
+            const Action& d = cands[jdx];
+            if (d.kind == Action::Kind::Equip && d.sac_source_id == src
+                && d.sac_victim_id != c.sac_victim_id) { moved_off = true; break; }
+        }
+        if (!moved_off) { return true; }
     }
     return false;
 }
@@ -3116,6 +3168,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // base + X*pips; the opponent-creature gate above already ran.
             if (def.tmpl == CardTemplate::Removal && def.params.tuck_to_library)
             {
+                // USER doctrine 2026-08-14 ("Unexpectedly Absent we can just not cast for now"):
+                // the autonomous search never casts the tuck removal -- removing a passive spawn
+                // has near-zero clock value and the cast only burns mana. Human play keeps the
+                // cast (the rollout resolution branch below stays live for replay);
+                // MTG_UNPRUNE=uacast is the standing A/B lever.
+                if (!HumanPlayActive() && !DecisionUnpruned(UnprunedGate::UACast)) { continue; }
                 ManaCost tbase  = EffectiveCost(def, state);
                 ManaPool tpool  = AvailableManaPool(state);
                 int tpips = def.card.m_mana_cost.x_pips; if (tpips < 1) { tpips = 1; }
@@ -4220,6 +4278,26 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                       d->card.HasKeyword(Keyword::Haste), sc, /*in_hand=*/true });
                 }
             }
+            // Shroud fix, directive 4d (user doctrine 2026-08-14): shroud-granting equipment
+            // (Lightning Greaves) enumerates LAST. Subset apply order == candidate order, so a
+            // plan that stacks several equips onto one host attaches every other equipment
+            // BEFORE the shroud arrives -- the internal linearization is itself rules-legal.
+            // Stable two-pass partition keeps the original order within each class.
+            if (!s_legacy_shroud && equips.size() > 1)
+            {
+                std::vector<std::pair<const CardDefinition*, const Card*>> eq2;
+                std::vector<int> at2;
+                eq2.reserve(equips.size()); at2.reserve(attached_to.size());
+                for (int pass = 0; pass < 2; ++pass)
+                {
+                    for (std::size_t i = 0; i < equips.size(); ++i)
+                    {
+                        if ((equips[i].first->params.equip_grants_shroud ? 1 : 0) != pass) { continue; }
+                        eq2.push_back(equips[i]); at2.push_back(attached_to[i]);
+                    }
+                }
+                equips.swap(eq2); attached_to.swap(at2);
+            }
             // Per-host live stats for the RIDER benefit ranking (P/T bonus / lifelink / Jitte
             // charges / creature-side conditional double strike). Looked up by host id across
             // battlefield-then-hand; a hand host reads its printed card (it has nothing attached).
@@ -4273,6 +4351,39 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (ed2->params.equip_grants_lifelink)           { delta += 1; }  // life fidelity
                 return delta;
             };
+            // USER equip-consolidation doctrine (2026-08-14, provider-owned -- see
+            // DecisionProvider::ConsolidatesEquips for the full policy). Precompute the two
+            // special hosts the policy names:
+            //   kemba_id      -- the per-equipment-upkeep-token host (Kemba): the searched
+            //                    alternative to the ds host, and Greaves' end-of-turn park
+            //                    ("literally a free 2/2 next turn", and the Cat then unblocks
+            //                    Greaves moves off Kemba).
+            //   stoneforge_id -- a summoning-sick, untapped tap-put source with an Equipment in
+            //                    hand: hasting it unlocks the put THIS turn (doctrine 4b).
+            const bool s_consolidate = ResolveProvider(state).ConsolidatesEquips();
+            int kemba_id = 0, stoneforge_id = 0;
+            if (s_consolidate)
+            {
+                for (const Host& h : hosts)
+                {
+                    const HostStats st = host_stats(h.id);
+                    if (st.def && st.def->params.upkeep_tokens_per_equipment)
+                    { kemba_id = h.id; break; }
+                }
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                    if (!d || !d->params.tap_put_from_hand_cost.has_value()) { continue; }
+                    if (CanTapNow(p, state.battlefield)) { continue; }   // already live: no enable needed
+                    for (const Card& c : ap.hand)
+                    {
+                        const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+                        if (hd && hd->params.is_equipment) { stoneforge_id = p.card.m_number; break; }
+                    }
+                    if (stoneforge_id != 0) { break; }
+                }
+            }
             for (std::size_t e = 0; e < equips.size(); ++e)
             {
                 const CardDefinition* ed = equips[e].first;
@@ -4313,6 +4424,21 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     const int rd = rider_delta(ed, h.id);
                     if (rd > 0) { ranked_rider.push_back({ rd, h.id }); }
                 }
+                // A currently-ATTACHED shroud-granting equipment (Greaves on a host) always offers
+                // its best ALTERNATIVE host as a move: that single candidate is what makes the
+                // shroud dance (move Greaves off, then equip the freed host) reachable, and it is
+                // the parking move the doctrine wants late-turn. {0} equip cost -> no width risk.
+                int unpark_id = 0;
+                if (!s_legacy_shroud && ed->params.equip_grants_shroud && attached_to[e] != 0)
+                {
+                    int best_sc = -1;
+                    for (const Host& h : hosts)
+                    {
+                        if (h.id == attached_to[e] || h.id == equips[e].second->m_number) { continue; }
+                        if (rider_delta(ed, h.id) < 0) { continue; }
+                        if (h.score > best_sc) { best_sc = h.score; unpark_id = h.id; }
+                    }
+                }
                 auto by_score = [](const std::pair<int, int>& a, const std::pair<int, int>& b)
                                 { return a.first != b.first ? a.first > b.first : a.second < b.second; };
                 std::sort(ranked.begin(), ranked.end(), by_score);
@@ -4323,6 +4449,41 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (!rider_open && s_rider_width > 0
                     && ranked_rider.size() > static_cast<std::size_t>(s_rider_width))
                 { ranked_rider.resize(static_cast<std::size_t>(s_rider_width)); }
+                // USER consolidation doctrine (2026-08-14, ConsolidatesEquips): the rider set
+                // collapses to the searched pair {top ds-potential host, Kemba} (single best host
+                // when neither exists), and it REPLACES Wargear's all-hosts opening. Moves of an
+                // attached equipment obey the doctrine's rule: never off a ds host, and only to a
+                // ds-potential host or Kemba (Wargear: ds only -- its equip sacrifices the prior
+                // host, so the "free" Kemba re-equip is not free). MTG_UNPRUNE=equiphost /
+                // MTG_EQUIP_ALL_HOSTS / human play restore the open set for the standing A/B.
+                if (s_consolidate && !open_all && !ed->params.equip_grants_haste)
+                {
+                    auto ds_potential = [&](int id) {
+                        const HostStats st = host_stats(id);
+                        return st.ds
+                            || (st.def && (st.def->params.double_strike_while_equipped
+                                           || st.def->params.double_strike_min_equipment > 0));
+                    };
+                    const bool moving = attached_to[e] != 0;
+                    std::vector<std::pair<int, int>> keep;
+                    // Never move an equipment OFF a double-striking host.
+                    if (!(moving && host_stats(attached_to[e]).ds))
+                    {
+                        for (const std::pair<int, int>& r : ranked_rider)          // top ds-potential
+                        { if (ds_potential(r.second)) { keep.push_back(r); break; } }
+                        if (kemba_id != 0
+                            && !(moving && ed->params.equip_sacrifices_prior_host))
+                        {
+                            for (const std::pair<int, int>& r : ranked_rider)      // the pair partner
+                            { if (r.second == kemba_id) { keep.push_back(r); break; } }
+                        }
+                        // No ds/Kemba host at all: a FRESH equip still lands on the single best
+                        // host; a MOVE to an ordinary host is never offered.
+                        if (keep.empty() && !moving && !ranked_rider.empty())
+                        { keep.push_back(ranked_rider[0]); }
+                    }
+                    ranked_rider.swap(keep);
+                }
                 // Diagnostic (MTG_EQUIP_PICK_STATS): which host each ranking chose, from what pool.
                 static const bool s_pick_stats = EnvOn("MTG_EQUIP_PICK_STATS");
                 if (s_pick_stats && (!ranked.empty() || !ranked_rider.empty()))
@@ -4341,13 +4502,44 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // is a rule, not a prune.
                     const int rd = rider_delta(ed, h.id);
                     if (rd < 0) { continue; }
+                    // LEGALITY too (rules fix 2026-08-14): shroud blocks the equip TARGET
+                    // (CR 702.18b / 702.6b). A battlefield host shrouded by ANOTHER equipment
+                    // stays offerable -- the plan can move the Greaves off first, and
+                    // SubsetHasShroudBlockedEquip enforces that co-selection -- but with no
+                    // other creature to receive the Greaves the dance is impossible and the
+                    // pair is dead (the user's exactly-one-creature case).
+                    if (!s_legacy_shroud)
+                    {
+                        int ssrc = 0;
+                        for (const Permanent& q : state.battlefield)
+                        {
+                            if (q.controller_index == state.active_player_index
+                                && q.card.m_number == h.id)
+                            { CreatureHasShroud(q, state, &ssrc); break; }
+                        }
+                        if (ssrc != 0 && ssrc != equips[e].second->m_number)
+                        {
+                            bool other = false;
+                            for (const Host& o : hosts)
+                            { if (o.id != h.id && o.id != ssrc) { other = true; break; } }
+                            if (!other) { continue; }
+                        }
+                    }
                     const bool haste_benefit = ed->params.equip_grants_haste && h.fresh && !h.haste;
                     if (!open_all)
                     {
                         // Offer only an equip that DOES something, from the width-capped rankings
                         // (see the width-policy note above; the odometer blowup precedent lives in
-                        // docs/design/fivecolour-search-cost.md).
-                        bool kept = false;
+                        // docs/design/fivecolour-search-cost.md). The shroud-dance unpark move is
+                        // always kept (see unpark_id above); under consolidation a haste equip
+                        // (Greaves) additionally always offers the Kemba park (doctrine 4e:
+                        // "always be equipped to Kemba by end of turn if possible") and the
+                        // Stoneforge tap-put enable (doctrine 4b).
+                        bool kept = (unpark_id != 0 && h.id == unpark_id);
+                        if (s_consolidate && ed->params.equip_grants_haste
+                            && ((kemba_id != 0 && h.id == kemba_id)
+                                || (stoneforge_id != 0 && h.id == stoneforge_id)))
+                        { kept = true; }
                         for (const std::pair<int, int>& r : ranked)
                         { if (r.second == h.id) { kept = true; break; } }
                         if (!kept)
@@ -4638,8 +4830,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // per OPPONENT creature (own-creature targets are strictly bad and pruned; human play
         // opens them so the viewer never narrows a legal choice) -- and "you gain 2 life". The
         // +2/+2 combat pump is NOT enumerated here; it is spent inside combat (JitteDamageMath).
+        // USER doctrine 2026-08-14 ("the heuristic for Jitte can just always use it for +2/+2 in
+        // search. There is no reason to use any other mode in goldfishing"): the non-combat modes
+        // are PRUNED from autonomous search entirely -- combat's greedy +2/+2 spend is the only
+        // Jitte outlet. Human play keeps both modes (never narrow the viewer);
+        // MTG_UNPRUNE=jittemode is the standing pruned-vs-unpruned A/B lever.
+        const bool jitte_modes_open = HumanPlayActive()
+                                   || DecisionUnpruned(UnprunedGate::JitteMode);
         for (const Permanent& p : state.battlefield)
         {
+            if (!jitte_modes_open) { break; }
             if (p.controller_index != state.active_player_index) { continue; }
             if (p.charge_counters <= 0) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
@@ -4652,6 +4852,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 {
                     if (!t.card.IsCreature() && !t.is_animated) { continue; }
                     if (t.controller_index == state.active_player_index && !open_own) { continue; }
+                    // RULES (shroud fix 2026-08-14): the -1/-1 mode TARGETS -- a shrouded
+                    // creature (own Greaves carrier, reachable only via open_own) is illegal.
+                    if (!s_legacy_shroud && CreatureHasShroud(t, state)) { continue; }
                     Action a;
                     a.kind           = Action::Kind::JitteModeAbility;
                     a.card_name      = p.card.m_name;
@@ -6561,6 +6764,9 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with the twin below.
         if (SubsetHasStrandedEquip(state, cands, sel)) { return; }
+        // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,
+        // CR 702.18b; shroud fix 2026-08-14). Lockstep twin in eval_and_push.
+        if (SubsetHasShroudBlockedEquip(state, cands, sel)) { return; }
         // Reject a creature sac-for-mana whose float nothing spends (see the helper). Solve's
         // rituals-for-payoff guard already covers this on the credited/pool path; this also catches
         // the filter fallback, and keeps the rule identical on both sides. Inert without a creature
@@ -8853,7 +9059,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (!picked.empty() && picked[0].kind == 1
                     && picked[0].index >= 0
                     && picked[0].index < static_cast<int>(state.battlefield.size())
-                    && !state.battlefield[picked[0].index].card.IsLand())
+                    && !state.battlefield[picked[0].index].card.IsLand()
+                    // RULES (shroud fix 2026-08-14): a shrouded permanent (own Greaves
+                    // carrier) is not a legal retarget -- fall back to the heuristic pick.
+                    && (s_legacy_shroud
+                        || !CreatureHasShroud(state.battlefield[picked[0].index], state)))
                 { ci = picked[0].index; }
             }
             if (ci >= 0)
@@ -11052,6 +11262,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with Solve's twin.
         if (SubsetHasStrandedEquip(state, cands, sel)) { return; }
+        // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,
+        // CR 702.18b; shroud fix 2026-08-14). Lockstep twin in Solve::consider.
+        if (SubsetHasShroudBlockedEquip(state, cands, sel)) { return; }
         // Reject a creature sac-for-mana whose float nothing spends -- the dominated branch this
         // enumeration otherwise hands the search (Goblins gi44). Unlike the rituals-for-payoff guard
         // above, declining an in-play outlet keeps BOTH the outlet and the body, so there is no

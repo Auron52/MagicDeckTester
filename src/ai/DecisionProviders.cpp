@@ -66,6 +66,8 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"tricktarget",UnprunedGate::TrickTarget},
     {"treasuretrickcast",UnprunedGate::TreasureTrickCast},
     {"equiphost",  UnprunedGate::EquipHost},
+    {"jittemode",  UnprunedGate::JitteMode},
+    {"uacast",     UnprunedGate::UACast},
 };
 
 const char* GateName(UnprunedGate g)

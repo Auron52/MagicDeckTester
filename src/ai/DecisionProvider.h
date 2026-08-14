@@ -582,6 +582,18 @@ public:
     // MTG_EQUIP_ALL_HOSTS / MTG_UNPRUNED(equiphost) / human play bypass the width entirely.
     virtual int EquipHostWidth() const { return 1; }
 
+    // ConsolidatesEquips -- USER equip-consolidation doctrine (2026-08-14): stack extra power on
+    // ONE creature. Rider-equip candidates collapse to the top double-strike-potential host plus
+    // Kemba (both offered -- ds-vs-Kemba is a SEARCHED decision, per the user: ds usually finishes
+    // faster but Kemba can win slow games / low-power equipment); with neither, the single best
+    // rider host. Moving an ATTACHED equipment is only offered from a non-ds host to a
+    // ds-potential host or Kemba (Grafted Wargear: ds only -- its "free" equip sacrifices the
+    // prior host). Haste equips (Greaves) are exempt from the move rule and always offer the
+    // Kemba park + the Stoneforge tap-put enable. Default false = byte-identical everywhere;
+    // EquipmentProvider returns true. Opened by MTG_EQUIP_ALL_HOSTS / MTG_UNPRUNE=equiphost /
+    // human play like every other equip-width policy.
+    virtual bool ConsolidatesEquips() const { return false; }
+
     // FetchSearchCap -- fetch BREADTH policy: how many of FetchCandidates' ordered targets the search
     // branches on (the list is best-first; lower ranks are strictly worse colour, a basic ranks
     // last). Provider-OWNED (audit A2) instead of a hardcoded solver constant. Default 2 = the prior

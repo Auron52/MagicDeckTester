@@ -475,8 +475,12 @@ profile — separate skills, on request (generate LATE, post-commit-freeze per t
 ## USER HEURISTIC DOCTRINE (2026-08-14, post-push directives) — IN FLIGHT
 
 User-directed equip/Jitte/UA doctrine to encode as provider prunes + one RULES fix.
-Verbatim intent, then the implementation plan. STATUS AT CHECKPOINT: design done, sites
-identified, NOTHING IMPLEMENTED YET.
+Verbatim intent, then the implementation plan. STATUS 2026-08-14: IMPLEMENTED (all sites
+below coded, builds clean); measurement battery in flight — see "Doctrine measurement"
+at the end of this section. Residual known gap: the autonomous solo-target-trick target
+pickers (Mirrorwing) and pump-target heuristics do not consult CreatureHasShroud — inert
+today (no deck co-occurs Greaves with own-creature-targeting spells; the human-facing
+target collectors DO filter), but if such a deck arrives those sites need the same check.
 
 **Directives (user):**
 1. Jitte: search should ALWAYS use +2/+2 (combat greedy spend — already the default);
@@ -485,17 +489,33 @@ identified, NOTHING IMPLEMENTED YET.
 3. Equip consolidation: stack extra power on ONE creature, preferring creatures with or
    that GAIN double strike (Kor Duelist while equipped, Balan at 2+). Re-equips (moving an
    attached equipment) only from a non-double-strike host to a double-strike(-potential)
-   host. Grafted Wargear: never move it except to a ds creature for lethal ("I don't think
-   it's worth it otherwise, though we can test this"). Lifelink/trample exceptions don't
-   matter in goldfish. Exception: Kemba vs double-striker stays a SEARCHED decision (or a
-   kills-this-turn heuristic) — enumerate both candidates.
+   host **or to Kemba** (amendment 2026-08-14: "a re-equip to Kemba from a
+   non-doublestriker is also reasonable, particularly if it is free. Essentially, Kemba
+   and the Doublestrikers have higher than normal equip value"). Grafted Wargear: never
+   move it except to a ds creature for lethal ("I don't think it's worth it otherwise,
+   though we can test this"). Lifelink/trample exceptions don't matter in goldfish.
+   Exception: Kemba vs double-striker stays a SEARCHED decision (or a kills-this-turn
+   heuristic) — enumerate both candidates. Amendment (2026-08-14): "Most likely on the
+   whole the doublestrikers outrank Kemba because they finish the game so quickly, but
+   Kemba is still higher value than other creatures in the list for equipping and in slow
+   games may beat doublestrike, especially when the equipment doesn't add much power." →
+   ds-vs-Kemba stays searched (never a fixed rank); Kemba ranks above all other non-ds
+   creatures when no ds-potential host exists.
 4. Lightning Greaves: (a) may need to MOVE to unshroud a host so another equipment can be
    equipped (SHROUD MUST BLOCK targeted equip — currently NOT enforced, see rules fix);
    matters mostly at exactly ONE creature (with more you park Greaves elsewhere);
    (b) use to enable Stoneforge Mystic's tap-put by granting haste (CanTapNow ALREADY
    handles equip-granted haste — no engine change needed); (c) otherwise haste the largest
    (ds-weighted) summoning-sick creature; (d) Greaves goes LAST after all other equipment
-   lands on the host (because its shroud blocks later equips).
+   lands on the host (because its shroud blocks later equips); (e) amendment 2026-08-14:
+   "Lightning greaves should always be equipped to Kemba by end of turn if possible" —
+   the parking spot is Kemba (user: "that is literally a free 2/2 next turn", and "the
+   2/2 cat becomes a target for the greaves so you can equip other things to Kemba next
+   turn" — the park is self-unblocking; equip {0} so moving it off and back is free).
+   Encoded as an always-offered Greaves→Kemba candidate
+   (any main; end-of-turn parking realizes in the second main) — the search confirms it;
+   if measurement shows the search declining the park, escalate to a forced default and
+   report.
 5. User confirmed: Balan's attach-all and Skyhunter's attach-dig do NOT target → shroud
    does not block them. Regular equip DOES target → blocked.
 
@@ -533,9 +553,12 @@ identified, NOTHING IMPLEMENTED YET.
     or double_strike_min_equipment reachable) + Kemba (upkeep_tokens_per_equipment) when
     present (searched pair, directive 3); no ds-potential host → top rider_delta host.
     MOVES (attached_to != 0) only when current host NOT ds-now AND destination is
-    ds-potential — applies to Wargear too (replaces its rider_open=all-hosts under the
-    consolidated policy; rider_open stays under open_all). Haste-granting equips (Greaves)
-    EXEMPT from the moves-only-to-ds rule (shroud-dance/parking).
+    ds-potential OR Kemba (high-equip-value set, amendment 2026-08-14) — applies to
+    Wargear too for ds destinations (replaces its rider_open=all-hosts under the
+    consolidated policy; rider_open stays under open_all); Wargear→Kemba stays excluded
+    (its "free" equip sacrifices the prior host — user's stricter never-move rule stands,
+    testable via the open arm). Haste-granting equips (Greaves) EXEMPT from the
+    moves-only-to-high-value rule (shroud-dance/parking).
   * Greaves haste ranking under consolidation: score boost for (i) a summoning-sick
     untapped Stoneforge with a matching Equipment in hand (enables the tap-put — directive
     4b), (ii) ds-weighted largest sick creature (pw doubled if ds-potential). Width stays 2.
@@ -546,6 +569,47 @@ identified, NOTHING IMPLEMENTED YET.
   (FiveColour shroud watch). Report per-game regressions with explanations; adoption =
   user call if anything moves outside the doctrine's predictions.
 
+**Doctrine measurement (2026-08-14, seed 300001, 100 games/depth, logs/kitty_doctrine/):**
+| arm | d3 avg (wall) | d5 avg (wall) |
+|---|---|---|
+| OLD engine (pre-doctrine, stage-5 batchA5) | 5.02 (68 min) | 5.01 (82 min) |
+| A = doctrine (rules fix + prunes) | 5.03 (5.5 min) | 5.03 (11 min) |
+| B = MTG_UNPRUNE=equiphost,jittemode,uacast (rules fix on) | 5.03 (107 min) | 5.02 (151 min) |
+| C = doctrine + MTG_LEGACY_SHROUD=1 (rules fix off) | 5.02 (5.2 min) | 5.02 (9.8 min) |
+
+Perfectly additive decomposition, per-game diffs razor-thin:
+- **Shroud rules fix: exactly ONE game** (gi=44, T5→T6 at both depths). The old T5 win was
+  ILLEGAL — Greaves went to Puresteel Paladin on T2 and both Bonesplitters equipped onto the
+  shrouded Paladin on T3. Legal play holds Greaves unequipped on T2 (one creature — the
+  dance is impossible, the user's exactly-one-creature case) and equips everything T3,
+  Greaves last. The legal T5 (equip all three on T2 pre-combat, swing hasted for 6) is
+  blocked only by the KNOWN metalcraft enumeration conservatism (Paladin in hand at
+  enumeration → Bonesplitter equips price at printed {1} → subset dies on mana): that
+  already-deferred improvement now has a concrete +1-turn cost attached.
+- **Doctrine narrowing: ZERO games at d3; ONE game at d5** (gi=5, T5→T6): a T1 tie-churn
+  (cast-vs-hold Shadowspear) around sequencing Shadowspear after Puresteel for the
+  equipment-ETB draw — holding is not pruned, so this is rollout value shift, not a
+  doctrine-rule misplay. The user's Wargear/Kemba restrictions cost NOTHING measurable
+  (open arm B == doctrine arm A at d3; d5 delta is the sequencing game above).
+- **Wall time: ~12x faster at d3, ~7.4x at d5**; worst d5 game now 40 s (was 17–21 min —
+  the old gi=32 pathological tail is gone; it is still pathological in the OPEN arm, which
+  proves the doctrine prunes are what tames it).
+- fd-diverge: **0** over 50 full-depth d5 games (same single unwon game 25 as stage 5).
+- d0: avg identical 5.58; digest changed (prunes legitimately narrow the greedy path).
+- Doctrine behavior verified in game logs: gi=29 shuttles Greaves (haste Duelist T2 →
+  Kemba T3 main-1 → Balan T4 pre-combat → PARK ON KEMBA T4 main-2 → Skyhunter T5 for the
+  kill); gi=4 ends parked on Kemba.
+
+**Viewer/log visibility fix (same session, digest-moving):** Equip / Jitte mode /
+Stoneforge put / Balan attach-all were applied SILENTLY — no game-log action, no
+attachment info in board snapshots, so the play viewer could not render an equipment
+deck's turns at all (equipment floated free) and the play digest was blind to equip
+destinations. Now: LogAbility entries for all four (folds into the digest — deliberate
+fingerprint improvement; digest-moving for any deck that equips → FiveColour GT),
+`attachedTo` in PermSnapshot/game JSON + `is_equip`+`attached_to` in the decision-JSON
+battlefield, and both viewers (tools/play, tools/replay) group attached equipment under
+its host like auras.
+
 ## Stage 6a — heuristics & assumptions disclosure
 
 Per the search-primary core bar: the search decides; these are the PRUNES/defaults that
@@ -554,8 +618,11 @@ narrow its candidate set (each with its open switch), plus modeling assumptions.
 **Search-narrowing heuristics (provider-owned, EquipmentProvider):**
 | Heuristic | Narrowing | Open switch |
 |---|---|---|
-| Equip haste-host width | top **2** fresh/no-haste hosts per haste equipment (base default 1; measured equal to fully-open on 100 games) | MTG_EQUIP_HOST_WIDTH / MTG_EQUIP_ALL_HOSTS / MTG_UNPRUNE=equiphost / human play |
-| Equip rider width | top **3** hosts by P/T-lifelink-charge delta per equipment; Grafted Wargear opens ALL benefiting hosts (search must weigh the re-host sacrifice) | MTG_EQUIP_RIDER_WIDTH / same opens as above |
+| Equip haste-host width | top **2** fresh/no-haste hosts per haste equipment (base default 1; measured equal to fully-open on 100 games); under consolidation Greaves ALSO always offers the Kemba park + Stoneforge tap-put enable + (when attached) its best alternative host (the shroud-dance unpark) | MTG_EQUIP_HOST_WIDTH / MTG_EQUIP_ALL_HOSTS / MTG_UNPRUNE=equiphost / human play |
+| Equip consolidation (USER doctrine 2026-08-14) | rider candidates collapse to the searched pair {top ds-potential host, Kemba} (single best host when neither exists); MOVES of an attached equipment only from a non-ds host to ds-potential or Kemba (Wargear: ds only); REPLACES Wargear's all-hosts opening; Greaves exempt from the move rule | MTG_UNPRUNE=equiphost / MTG_EQUIP_ALL_HOSTS / human play |
+| Jitte non-combat modes (USER doctrine 2026-08-14) | -1/-1 and gain-2 mode enumeration pruned entirely from autonomous search (combat greedy +2/+2 spend is the only outlet) | MTG_UNPRUNE=jittemode / human play |
+| Unexpectedly Absent cast (USER doctrine 2026-08-14) | hand-cast enumeration pruned entirely from autonomous search | MTG_UNPRUNE=uacast / human play |
+| Equip rider width | top **3** hosts by P/T-lifelink-charge delta per equipment; Grafted Wargear opens ALL benefiting hosts (search must weigh the re-host sacrifice) — superseded by consolidation for this provider | MTG_EQUIP_RIDER_WIDTH / same opens as above |
 | Board-lethal short-circuit | when attack-all already kills this turn, skip the cast-subset odometer (win-turn-invariant; 99/99 A/B identical) | MTG_NO_LETHAL_CUT=1 |
 | Skyhunter dig put | provider ranks examined cards by granted power, puts top | human play: full `dig` chooser (any legal card or decline) |
 | Skyhunter attach host | delta-greedy over ATTACKERS (ds-aware, min-power filtered) | human play: `attach_host` chooser over ALL creatures, or decline |
@@ -577,3 +644,11 @@ narrow its candidate set (each with its open switch), plus modeling assumptions.
 - Kemba token color/type, Stoneforge reveal, instant-speed collapses, Skyhunter trigger
   order + random bottoming, O-Naginata SBA skip, dead-Aura path: per approved conventions.
 - Opponent 4/4 spawns exist as removal targets only (standard goldfish apparatus).
+- Shroud (RULES FIX 2026-08-14, not a heuristic): equip_grants_shroud now blocks the
+  controller's own TARGETED attach/targeting — equip hosts (CR 702.6b), Jitte -1/-1
+  targets, removal retargets, and the human-facing own-creature target lists. Balan
+  attach-all / Skyhunter attach-dig do not target (user-confirmed) and stay legal.
+  A shrouded host stays enumerable only alongside the Greaves-off move
+  (SubsetHasShroudBlockedEquip, both subset walkers); shroud-granting equipment
+  enumerates LAST so multi-equip plans linearize legally (doctrine 4d). Enforced even
+  under open_all/human play. Off-hatch MTG_LEGACY_SHROUD=1.

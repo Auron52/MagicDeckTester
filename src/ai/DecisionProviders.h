@@ -71,6 +71,11 @@ enum class UnprunedGate
                   // the width-capped benefit ranking (KittyEquipment; also forced by HumanPlayActive
                   // so the viewer surfaces every legal host -- the pre-existing narrowing gap found
                   // during that deck's onboarding)
+    JitteMode,    // Umezawa's Jitte non-combat modes (-1/-1 / gain 2) re-enumerated in autonomous
+                  // search (USER doctrine 2026-08-14: "always use it for +2/+2 in goldfishing" --
+                  // the modes are pruned by default; human play always keeps them)
+    UACast,       // Unexpectedly Absent hand-cast re-enumerated in autonomous search (USER doctrine
+                  // 2026-08-14: "just not cast for now" -- pruned by default; human play keeps it)
     _Count
 };
 
@@ -587,6 +592,9 @@ public:
     // ranking's top host hides it. 100-game d3 A/B: width2 == MTG_EQUIP_ALL_HOSTS == unpruned
     // (5.02, sole diff gi=39 T6->T5), zero nonconv. MTG_EQUIP_HOST_WIDTH still overrides.
     int EquipHostWidth() const override { return 2; }
+    // USER equip-consolidation doctrine (2026-08-14) -- see the base hook's comment for the full
+    // policy (single consolidation host; ds-vs-Kemba searched; move rule; Greaves exemptions).
+    bool ConsolidatesEquips() const override { return true; }
     // Board-lethal search short-circuit (the Goblins-proven wide-board cut): when attack-all
     // damage already kills this turn, skip the cast-subset odometer and just attack. Win-turn-
     // invariant. This deck's late boards are exactly the pathological shape -- Kemba cats +

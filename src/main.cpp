@@ -105,7 +105,7 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
     // (e.g. a depletion land that also caught a +1/+1), hence a vector.
     struct Cnt { const char* kind; const char* label; int count; };
     struct Row { std::string name; bool is_land; bool is_le; std::vector<Cnt> counters; int idx; bool tapped;
-                 int num; bool is_aura; int attached_to; };
+                 int num; bool is_aura; bool is_equip; int attached_to; };
     std::vector<Row> rows;
     for (int pi = 0; pi < static_cast<int>(s.battlefield.size()); ++pi)
     {
@@ -142,11 +142,15 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // that explains why the drain accelerates -- it belongs on the board like every other
         // counter kind (viewer issue #12). Additive display field; absent when zero.
         if (p.age_counters)     { cs.push_back({ "age",       "age",       p.age_counters }); }
-        // num = stable per-copy id; is_aura + attached_to let the viewer draw an Aura overlapping the
-        // creature (m_number) it enchants (0 = unattached / not an Aura). Additive display fields.
-        bool is_aura = d && d->params.is_aura;
+        // num = stable per-copy id; is_aura/is_equip + attached_to let the viewer draw an Aura or
+        // an attached Equipment overlapping the creature (m_number) it enchants/equips
+        // (0 = unattached). Additive display fields (equipment added 2026-08-14 -- attached
+        // equipment previously rendered free-floating).
+        bool is_aura  = d && d->params.is_aura;
+        bool is_equip = d && d->params.is_equipment;
+        const int att = p.aura_attached_to > 0 ? p.aura_attached_to : p.equipped_to;
         rows.push_back({ p.card.m_name, p.card.IsLand(), is_le, std::move(cs), pi, p.tapped,
-                         p.card.m_number, is_aura, p.aura_attached_to });
+                         p.card.m_number, is_aura, is_equip, att });
     }
     std::sort(rows.begin(), rows.end(),
               [](const Row& a, const Row& b){ return a.name < b.name; });
@@ -158,7 +162,8 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         os << ", \"idx\": " << rows[i].idx;
         os << ", \"num\": " << rows[i].num;
         if (rows[i].tapped) { os << ", \"tapped\": true"; }
-        if (rows[i].is_aura) { os << ", \"is_aura\": true"; }
+        if (rows[i].is_aura)  { os << ", \"is_aura\": true"; }
+        if (rows[i].is_equip) { os << ", \"is_equip\": true"; }
         if (rows[i].attached_to > 0) { os << ", \"attached_to\": " << rows[i].attached_to; }
         os << ", \"is_land\": " << (rows[i].is_land ? "true" : "false");
         if (rows[i].is_le) { os << ", \"is_le\": true"; }
@@ -1082,12 +1087,17 @@ static void CollectDamageTargets(const GameState& s, int controller, bool player
 static void CollectOwnCreatureTargets(const GameState& s, int controller,
                                       std::vector<ChosenTarget>& out, std::vector<std::string>& labels)
 {
+    // Shroud (CR 702.18b, rules fix 2026-08-14): a creature shrouded by its own equipment
+    // (Lightning Greaves) can't be the target of its controller's spells either -- legality,
+    // not narrowing, so it is filtered from the human-facing target list too.
+    static const bool legacy_shroud = EnvOn("MTG_LEGACY_SHROUD");
     for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
     {
         const Permanent& p = s.battlefield[i];
         if (p.controller_index != controller) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d || !d->card.IsCreature()) { continue; }
+        if (!legacy_shroud && CreatureHasShroud(p, s)) { continue; }
         out.push_back({ 1, i });
         labels.push_back(p.card.m_name.str() + " (yours)");
     }
@@ -1122,11 +1132,15 @@ static void CollectOpponentCreatureTargets(const GameState& s, int controller,
 static void CollectCreatureTargets(const GameState& s, int controller,
                                    std::vector<ChosenTarget>& out, std::vector<std::string>& labels)
 {
+    // Same shroud legality filter as CollectOwnCreatureTargets (only own creatures can be
+    // shrouded -- Greaves is ours; the passive opponent has no equipment).
+    static const bool legacy_shroud = EnvOn("MTG_LEGACY_SHROUD");
     for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
     {
         const Permanent& p = s.battlefield[i];
         if (!p.card.IsCreature()) { continue; }
         const bool mine = (p.controller_index == controller);
+        if (mine && !legacy_shroud && CreatureHasShroud(p, s)) { continue; }
         out.push_back({ 1, i });
         labels.push_back(p.card.m_name.str() + " (" + std::to_string(p.EffectivePower()) + "/"
                          + std::to_string(p.EffectiveToughness()) + (mine ? ", yours)" : ")"));

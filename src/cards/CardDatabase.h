@@ -553,8 +553,11 @@ struct CardParams
     // abilities) -- CR 302.6 lifts one restriction covering both, so both consult the same three
     // haste sources (own keyword / lord / equipment). The former attack-only LIMITATION is FIXED;
     // a Greaves'd fresh mana dork taps this turn, and a Greaves'd fresh Deathrite may use its
-    // graveyard-exile modes. equip_grants_shroud is documented-inert (the passive opponent never
-    // targets us).
+    // graveyard-exile modes. equip_grants_shroud is ENFORCED against OUR OWN targeting (the
+    // passive opponent never targets us, but shroud also blocks the controller -- CR 702.18b):
+    // CreatureHasShroud (SpellEffects.h) gates equip hosts (equip targets, CR 702.6b), Jitte
+    // -1/-1 targets, and removal retargets; Balan attach-all / Skyhunter attach-dig do not
+    // target and stay legal. MTG_LEGACY_SHROUD=1 restores the old unenforced behavior.
     bool is_equipment       = false;
     int  equip_cost_generic = 0;
     bool equip_grants_haste = false;
