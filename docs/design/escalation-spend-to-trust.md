@@ -132,6 +132,63 @@ burn (trust 5 < target 6) remains interesting for a different reason: it can be 
 of target, so it is the deck where reaching trust is CHEAPEST, and thus where the branch should fire
 most readily.
 
+## It already exists, as a BLUNT instrument -- and that is what to fix
+
+`TurnSolver.cpp:15222`, the value-leaf start-gate relaxation, states this proposal's own rationale:
+
+> *"when the CHEAP value-leaf is driving this search (free leaves), a pass whose estimate slightly
+> overshoots the budget is still worth FINISHING within this search -- **reaching the value-leaf trust
+> depth here avoids the hybrid's separate (expensive) heuristic redo**."*
+
+`MTG_VALUE_STARTGATE_ALPHA`, ADOPTED, default **8.0**: multiply the start gate's allowance by 8
+whenever the value leaf is active, so a nearly-affordable pass may start and run over budget under the
+overrun guard.
+
+So the IDEA is validated and shipped. What is wrong with it is the shape (user, 2026-08-14): it dates
+from before escalation was worked out -- before the crossover table, the per-deck `escalation_cap`,
+and the predicted-affordable single pass -- so it GUESSES a uniform 8x overshoot where the quantity is
+now computable. Specifically it is:
+
+* **untargeted** -- it relaxes EVERY pass, not the one that would land on the trust depth. A pass to
+  depth 3 on a trust-6 deck gets the same 8x, and reaching 3 cancels no escalation at all.
+* **unsized** -- 8 is a constant, not a comparison. The right allowance is the cost of the escalation
+  it avoids (`probe_cost[d] + R * probe_leaves[d]` at the depth the escalation would pick), which the
+  predictor already computes for the escalation's own affordability walk.
+* **blind to whether it succeeded** -- overshooting and STILL landing below trust is pure loss: the
+  budget is spent and the heuristic escalation runs anyway, now poorer.
+
+The evidence that it under-reaches: **FiveColour escalates on 46.9% of decisions WITH alpha 8**
+(583 of 1,243; measured 2026-08-14, `MTG_HYBRID_STATS`, 120 games seed 4004), and 100% of those
+escalations fail to reach the user depth (`redo_short == redos`). Every other trusted deck sits at
+1.5-3.1% (burn 4/131, slivers 10/424, Knights 7/426, Goblins 3/195), which is why the prize is
+concentrated almost entirely in one deck -- and why the Goblins inversion was only 1-5%.
+
+### Sizing the prize: the blunt lever SATURATES
+
+Sweeping the existing knob on FiveColour (200 games, seed 4004, `MTG_HYBRID_STATS`) says how much
+room a targeted version could possibly recover:
+
+```
+alpha    decisions   escalations   rate     avg turns
+    1         2484          1541   62.0%      5.0150
+    8 (adopted) 1941         983   50.6%      5.0300
+   32         1735           775   44.7%      5.0200
+  128         1649           688   41.7%      5.0200
+  512         1621           660   40.7%      5.0200
+```
+
+It works in the intended direction -- escalations fall monotonically as the gate relaxes -- **but it
+saturates**: 128 -> 512 is a 4x increase in leniency for one percentage point. Roughly **40% of this
+deck's decisions escalate no matter how lenient the gate is**, because for those, reaching trust is
+not marginally unaffordable but genuinely unaffordable.
+
+So the targeted version's ceiling is the gap between today's 50.6% and the ~40.7% floor: about a
+fifth of current escalations. Worth having; not transformative. Anyone picking this up should size
+their expectations accordingly rather than from the 46.9% headline.
+
+(The avg-turns column carries NO signal at 200 games on one seed -- 5.0150 / 5.0300 / 5.0200 x3,
+non-monotonic. It is recorded only so nobody re-derives it expecting one.)
+
 ## The change
 
 At the escalation decision, before predicting the heuristic depth: estimate the cost of continuing
@@ -166,6 +223,43 @@ see it.
 
 **Only where trust is reachable.** If `value_trust_depth > target_depth` the deepening can never
 land, and the branch must not fire. On a deck whose trust depth is UNSET the question does not arise.
+
+## Two principles this has to respect (user, 2026-08-14)
+
+**1. Leniency is a BET, and the loss is asymmetric.** Finishing the pass that reaches trust cancels
+the escalation outright; failing to finish spends the budget AND still pays for the escalation, now
+from a poorer purse. "Failing to finish after you thought you could is quite punishing." So some
+overshoot beyond the escalation's own budget is justified -- but sized by the payoff and the
+confidence in the estimate, not applied uniformly. A flat multiplier is lenient everywhere,
+including where there is nothing to win (relaxing a pass to depth 3 on a trust-6 deck cancels no
+escalation at all).
+
+**2. This is NOT an outside setting.** How to spend a decision's budget is internal logic. The engine
+already holds every input -- `probe_cost[]`, `probe_leaves[]`, the frozen `R`, and the depth the
+escalation would otherwise pick -- so the shipped behaviour should be COMPUTED, not configured.
+`MTG_VALUE_STARTGATE_ALPHA` carrying an ADOPTED default of 8.0 is a tuning constant that escaped into
+the interface; it should survive only as a research override, the way the other env levers here do.
+
+## The direction this points: BUDGET-first, depth as a ceiling
+
+Longer term (user, 2026-08-14), the right contract may not be depth-led at all: pass something like
+**`d8 b20`** -- a depth CEILING and a budget -- and let the engine work out how best to spend the
+budget to get the best result it can. Depth is a means; the budget is the actual resource.
+
+Several current awkwardnesses look like symptoms of having it the other way round:
+
+* `value_play` LOCKS the depth to `target_depth`, so the search cannot trade depth for anything else.
+* FiveColour's trust depth EQUALS its target depth, which makes "reach trust" and "reach maximum
+  depth" the same event -- an artifact of depth being pinned, not a property of the deck.
+* Goblins carries `budget_ms` 40 against everyone else's 20 to buy a MECHANISM (reach the leaf, skip
+  escalation) rather than to buy search -- a budget standing in for logic the engine should own.
+* `target_depth`, `escalation_cap`, `value_trust_depth` and the crossover table all encode pieces of
+  one decision -- how deep is it worth going, and with which leaf -- as four separate configured
+  numbers that must be kept mutually consistent by hand.
+
+Under a budget-first contract most of those collapse into one internal question, which is the same
+question this document is about, asked once rather than at each stage. Not proposed for now; recorded
+so the narrow change is built in a shape that does not block it.
 
 ## How to measure it
 
