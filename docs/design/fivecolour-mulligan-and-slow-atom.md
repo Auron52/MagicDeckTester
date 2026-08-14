@@ -2,6 +2,13 @@
 
 2026-08-14. Two findings from the R=1 `--gen-mulligan recommend` scout, plus one general rule.
 
+**Status 2026-08-14 (later the same day): both findings are now CODE.** The fetchland rule is a
+by-construction merge in `DiscoverEquivalence` (K=31 -> 27 on this deck, size-7 5,655,953 ->
+1,977,898 -- the predicted 2.86x, measured); the atom's first lever is a mana-cache fix (section 4).
+The scout itself was stopped at 7h31m/25.2% at the user's request -- R=1 was never going to ship a
+profile, and the slow games were the deliverable. Its 253 reproducers are preserved in
+`test/slow_repro/` (the gen's own `.slow.log` is gitignored scratch).
+
 ## 1. ALWAYS merge fetchlands (user rule, 2026-08-14)
 
 Equivalence discovery at the documented threshold (`MTG_EQUIV_THRESHOLD=0.01`) merged **nothing** on
@@ -77,8 +84,67 @@ Faeburrow Elder / Chromatic Lantern-style effects, and the cost is combinatorial
 micro-optimisation touches. A fold or memo keyed on the *realised colour set* rather than the source
 permutation is the shape of the fix -- the sibling tap-backtrack collapse is the precedent.
 
-Reproducers: every slow line in `logs/fc_mull/recommend.log` carries its seed and exact hand, and the
-run also writes `<raw>.slow.log`.
+Reproducers: `test/slow_repro/fivecolour_keepgen_slow.txt` (all 253, with the pinned bucketing and a
+`MTG_KEEP_REPLAY` recipe -- each one replays as a single timed rollout, straight under `perf`).
+
+## 4. First lever: a domain source was TURNING THE MANA CACHE OFF
+
+The payable-mana cache (`MTG_MANA_CACHE`, default on) memoises the batch-prepay solve. Its key is
+built by scanning the active player's mana sources -- and it **bailed on the whole board** if any of
+them had state-dependent branching:
+
+```cpp
+if (McStateDependent(d)) { return false; }   // domain_mana || IsScaledManaLand
+```
+
+So one Bloom Tender on the battlefield disabled the payment memo for every solve for the rest of the
+game. That is exactly backwards. A domain source is the card that makes payment enumeration expensive
+-- its tap yields 2-5 mana at once, multiplying the orderings the DFS explores -- and it was the card
+that switched off the memo meant to absorb that.
+
+The fix is the one `reflecting` already used: don't bail, **hash the realised quantity**. Both scaling
+kinds are invariant across a solve (payment only TAPS -- nothing enters, leaves or changes colour), so
+the value read at key-build time is the value every branch reads: hash the domain COLOUR SET, hash the
+scaled CREATURE COUNT, and two boards that differ in either get different keys. Everything else those
+paths read (`ScaledManaFeederMana`) is already keyed.
+
+Measured, `MTG_MANA_CACHE_SCALING=0` vs `=1`, FiveColour:
+
+| | legacy (bail) | hashed | |
+|---|---|---|---|
+| d5 x75 + d3 x150, digests | `ab95fa49…` / `9d09ffbd…` | **identical** | byte-identical, per-game logs too |
+| d3 x150 | 228,595 ms | 204,331 ms | -10.6% |
+| d5 x75 | 108,672 ms | 106,333 ms | -2.2% |
+| one degenerate rollout (156 s capture) | 55,557 ms | 50,063 ms | -9.9%, same `win_turn=9` |
+
+`MTG_TAP_STATS` now reports the cache's own accounting (hit / miss / unstorable / skipped), added
+with this fix because "-10%" does not say WHY. One rollout, both arms:
+
+```
+legacy   hit=122,011 (66.4% of consulted)  miss=61,823   skipped: shape=227,220 key=282,238
+hashed   hit=335,105 (71.9% of consulted)  miss=130,967  skipped: shape=227,220 key=0
+         nodes 68.8M -> 53.5M (-22%)   top-level entries 571k -> 358k (-37%)   wall -32%
+```
+
+The bail was refusing **282,238 lookups in a single rollout -- 60.6% of every call that had the right
+shape** -- and they hit at 71.9% once consulted. So the mechanism works exactly as intended.
+
+**Honest reading: real, free, and NOT the whole atom.** It is worth having unconditionally (-32% on a
+healthy rollout, byte-identical, no cost), but the degenerate tail only moved -9.9%, and a 31-minute
+rollout does not become tractable at -10%. Two reasons the tail resists it, both now measured:
+
+1. The cache skips REPEAT solves; it does not narrow ONE solve. The tail is a small number of
+   enormous solves (494 nodes per unpayable entry, 67-71% of all nodes spent PROVING FAILURE), which
+   is DFS breadth -- a fold keyed on the realised COLOUR SET rather than the source permutation is
+   the shape of that fix (the sibling tap-backtrack collapse is the precedent).
+2. **Half of all misses cannot be stored** (49.6% unstorable) -- a solved payment whose tap-set
+   includes a source the hit path cannot replay. On this deck that is Deathrite Shaman (4 copies):
+   its tap EXILES a graveyard land, which a tap-set alone cannot reproduce. Every one of those solves
+   is paid for and then thrown away. Storing the exiled card alongside the tap-set would make them
+   replayable; that is a self-contained follow-up.
+
+(The capture said 156 s and the isolated replay takes 55 s: keepgen's per-rollout timing is WALL under
+23-way load, not CPU. The ranking is sound; the absolute numbers are inflated.)
 
 Related: `depth-matrix-degenerate-games.md` (the perf profile and the per-game abort),
 `.claude/skills/mulligan-profile.md` (feasibility guide), `mana-source-reservation.md`.

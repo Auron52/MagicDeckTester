@@ -62,13 +62,19 @@ MTG_EQUIV_DISCOVER=1 MTG_EQUIV_PROBES=400 MTG_EQUIV_THRESHOLD=0.01 \
   ./build/Release/mtg-analyze decks/<name>/<name>.txt --cards-json src/cards/data/cards.json --max-turns 8
 ```
 
-**ALWAYS MERGE FETCHLANDS, as a class, regardless of what the threshold says** (user, 2026-08-14).
-On FiveColour the documented `0.01` threshold merged NOTHING (K=31, every card its own dimension)
-because the five fetchlands measure 0.0125–0.035 apart — just above it. Merging that one cycle is
-worth **2.86x** (5,655,953 size-7 hands → 1,977,898). Leaving a known equivalence to a distance
-threshold makes a 2.9x cost difference a deck-by-deck coin flip. Do NOT extend this to duals: theirs
-are ~5x further (0.07+) and that is real signal on any deck whose mana creatures scale with colours.
-See `docs/design/fivecolour-mulligan-and-slow-atom.md`.
+**Fetchlands ALWAYS merge, as a class, regardless of what the threshold says** (user, 2026-08-14).
+This is now BY CONSTRUCTION in `DiscoverEquivalence` — no flag, nothing to remember — alongside the
+goldfish-inert merge. It exists because on FiveColour the documented `0.01` threshold merged NOTHING
+(K=31, every card its own dimension): the five fetchlands measure 0.0125–0.035 apart, just above it.
+Merging that one cycle is worth **2.86x** (5,655,953 size-7 hands → 1,977,898, measured). Leaving a
+known equivalence to a distance threshold makes a 2.9x cost difference a deck-by-deck coin flip. The
+rule stops at fetchlands: duals measure ~5x further (0.07+) and that is real signal on any deck whose
+mana creatures scale with colours. See `docs/design/fivecolour-mulligan-and-slow-atom.md`.
+
+**A discovery cache from before a discovery change is stale.** The cache's fingerprint covers
+discovery's INPUTS; `kDiscoveryVersion` (in `ExhaustiveKeep.cpp`) covers what discovery DOES with
+them. Bump it whenever the clustering can move for unchanged inputs, or every deck with an existing
+cache silently keeps its old buckets.
 
 Then `hands ≈ C(K+6,7)`, and runtime ≈ `hands × 2(pd) × R / (~110 rollouts/s/core × cores)`. Rough
 guide: K=10 → 7.8k hands (Slivers), K=15 → 114k, K=24 → ~1M, K=60 (all 1-ofs) → infeasible. If K is

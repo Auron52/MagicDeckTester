@@ -1,0 +1,339 @@
+=== MULLIGAN PROFILE GEN SETTINGS ===
+  recipe          : recommend
+  bottoming       : ADAPTIVE  (baked ON at runtime)
+  cap R (rollouts): 40
+  floor R         : 1  (adaptive keep -- the only schedule; clamped below the cap)
+  rollout depth   : 3  (source: value_play.mull_gen_depth)
+  rollout budget  : 3 ms  (source: value_play.mull_gen_budget_ms)
+  flip_eps        : 0.02   se_prior: 8   r_batch: 16
+  max_mull        : 6   max_turns: 8
+  bucket probes   : 400   threshold: 0.01
+  seed            : 1000000
+  out profile     : decks/FiveColour/FiveColour.keepmodel.exhaustive.profile.json
+  out raw         : decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json
+  gen cache       : decks/FiveColour/FiveColour.keepmodel.gencache.json
+  slow-rollout log: decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json.slow.log  (stream >= 30000ms; cannot be disabled)
+  probe chunk out : decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json.probe
+=====================================
+rollout-config play digest (d3/b3, 64-game battery): 5e49b86c98c8cbb0
+[keepgen] play digest: 5e49b86c98c8cbb0 (3s)
+  slowest rollouts after the play-digest battery (top 12; watch for degenerate cells):
+    3441ms  play-digest  game gi=13 seed=11400714819323198498
+    2950ms  play-digest  game gi=11 seed=11400714819323198496
+    1960ms  play-digest  game gi=41 seed=11400714819323198526
+    1815ms  play-digest  game gi=51 seed=11400714819323198536
+    1785ms  play-digest  game gi=30 seed=11400714819323198515
+    1664ms  play-digest  game gi=7 seed=11400714819323198492
+    1449ms  play-digest  game gi=38 seed=11400714819323198523
+    1260ms  play-digest  game gi=39 seed=11400714819323198524
+    1235ms  play-digest  game gi=3 seed=11400714819323198488
+    1168ms  play-digest  game gi=55 seed=11400714819323198540
+    1118ms  play-digest  game gi=40 seed=11400714819323198525
+    1116ms  play-digest  game gi=20 seed=11400714819323198505
+[keepgen] equivalence discovery: 400 probes, depth 3 ...
+[keepgen]   discovery 30%  (3841/12400 rollouts, 127/s, 30s)
+[keepgen]   discovery 58%  (7264/12400 rollouts, 121/s, 60s)
+[keepgen]   discovery 89%  (11094/12400 rollouts, 122/s, 90s)
+[keepgen] equivalence discovery done: 31 raw buckets (106s)
+[keepgen] equivalence cache WROTE decks/FiveColour/FiveColour.keepmodel.gencache.json
+  slowest rollouts after equivalence discovery (top 12; watch for degenerate cells):
+    21640ms  discovery  probe=194 candidate=Jared Carthalion
+    18738ms  discovery  probe=194 candidate=Oko, Thief of Crowns
+    17553ms  discovery  probe=194 candidate=Nicol Bolas, Planeswalker
+    16821ms  discovery  probe=160 candidate=Garth One-Eye
+    15709ms  discovery  probe=194 candidate=Lightning Greaves
+    14988ms  discovery  probe=194 candidate=Bloom Tender
+    13359ms  discovery  probe=194 candidate=Ancient Cornucopia
+    12187ms  discovery  probe=194 candidate=Maelstrom Archangel
+    8730ms  discovery  probe=352 candidate=Misty Rainforest
+    8521ms  discovery  probe=352 candidate=Wooded Foothills
+    8504ms  discovery  probe=373 candidate=Verdant Catacombs
+    8300ms  discovery  probe=373 candidate=Windswept Heath
+=== EXHAUSTIVE KEEP (deck=60 cards, 31 buckets) ===
+  [0] Mana Cannons x3
+  [1] Zagoth Triome x1
+  [2] Wooded Foothills x4
+  [3] Windswept Heath x2
+  [4] Verdant Catacombs x2
+  [5] Unite the Coalition x2
+  [6] Two-Headed Hellkite x3
+  [7] Stomping Ground x1
+  [8] Steam Vents x1
+  [9] Scalding Tarn x3
+  [10] Progenitus x1
+  [11] Overgrown Tomb x1
+  [12] Oko, Thief of Crowns x1
+  [13] Nicol Bolas, Planeswalker x2
+  [14] Mountain x1
+  [15] Misty Rainforest x2
+  [16] Ancient Cornucopia x1
+  [17] Maelstrom Archangel x4
+  [18] Lightning Greaves x1
+  [19] Jetmir's Garden x1
+  [20] Jared Carthalion x2
+  [21] Island x1
+  [22] Godless Shrine x1
+  [23] Garth One-Eye x1
+  [24] Faeburrow Elder x4
+  [25] Deathrite Shaman x4
+  [26] Cosmic Spider-Man x2
+  [27] Breeding Pool x1
+  [28] Bloom Tender x2
+  [29] Blood Crypt x1
+  [30] Birds of Paradise x4
+distinct hands: size7=5655953 size6=1262279 size5=242101 size4=38790 size3=4983 size2=481 size1=31  (total 7204618)
+rollouts/hand R=40, depth=3, horizon=8
+[keepgen] continuous size-7: 5655953 cells, floor R=1 cap R=40, lookahead=4 on 24 threads (+ 3097330 fused sub-table batches)
+[keepgen] SLOW-ROLLOUT 30204ms  keep-rollout  size7 draw r=0 seed=11400714823553211109  hand: Jared Carthalion x2; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 39676ms  keep-rollout  size7 play r=0 seed=11400714824183213000  hand: Jared Carthalion x2; Island x1; Garth One-Eye x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 36324ms  keep-rollout  size7 draw r=0 seed=11400714827458222824  hand: Lightning Greaves x1; Faeburrow Elder x1; Deathrite Shaman x1; Cosmic Spider-Man x2; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 104596ms  keep-rollout  size7 draw r=0 seed=11400714827043221579  hand: Jetmir's Garden x1; Jared Carthalion x2; Garth One-Eye x1; Faeburrow Elder x3; 
+[keepgen] SLOW-ROLLOUT 44655ms  keep-rollout  size7 draw r=0 seed=11400714829090227720  hand: Lightning Greaves x1; Jared Carthalion x1; Faeburrow Elder x3; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 34091ms  keep-rollout  size7 play r=0 seed=11400714829231228144  hand: Lightning Greaves x1; Jared Carthalion x1; Garth One-Eye x1; Faeburrow Elder x2; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 36622ms  keep-rollout  size7 play r=0 seed=11400714829859230028  hand: Lightning Greaves x1; Jared Carthalion x2; Faeburrow Elder x1; Cosmic Spider-Man x2; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 255070ms  keep-rollout  size7 play r=0 seed=11400714827801223854  hand: Lightning Greaves x1; Garth One-Eye x1; Faeburrow Elder x1; Deathrite Shaman x2; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 97826ms  keep-rollout  size7 draw r=0 seed=11400714830097230741  hand: Lightning Greaves x1; Jared Carthalion x2; Island x1; Deathrite Shaman x1; Breeding Pool x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 34382ms  keep-rollout  size7 play r=0 seed=11400714833088239715  hand: Maelstrom Archangel x1; Island x1; Godless Shrine x1; Bloom Tender x2; Birds of Paradise x2; 
+[keepgen] SLOW-ROLLOUT 38894ms  keep-rollout  size7 play r=0 seed=11400714833421240714  hand: Maelstrom Archangel x1; Jared Carthalion x1; Faeburrow Elder x1; Cosmic Spider-Man x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 35906ms  keep-rollout  size7 play r=0 seed=11400714833476240879  hand: Maelstrom Archangel x1; Jared Carthalion x1; Faeburrow Elder x2; Bloom Tender x2; Birds of Paradise x1; 
+[keepgen] SLOW-ROLLOUT 42872ms  keep-rollout  size7 play r=0 seed=11400714833666241449  hand: Maelstrom Archangel x1; Jared Carthalion x1; Garth One-Eye x1; Faeburrow Elder x2; Cosmic Spider-Man x2; 
+[keepgen] SLOW-ROLLOUT 71424ms  keep-rollout  size7 play r=0 seed=11400714834490243921  hand: Maelstrom Archangel x1; Jared Carthalion x2; Godless Shrine x1; Garth One-Eye x1; Faeburrow Elder x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 35602ms  keep-rollout  size7 draw r=0 seed=11400714836344249482  hand: Maelstrom Archangel x1; Lightning Greaves x1; Faeburrow Elder x3; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 73770ms  keep-rollout  size7 play r=0 seed=11400714837040251571  hand: Maelstrom Archangel x1; Lightning Greaves x1; Jared Carthalion x1; Cosmic Spider-Man x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 62697ms  keep-rollout  size7 draw r=0 seed=11400714854115302795  hand: Misty Rainforest x1; Deathrite Shaman x3; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 115451ms  keep-rollout  size7 draw r=0 seed=11400714858787316811  hand: Misty Rainforest x1; Lightning Greaves x1; Garth One-Eye x1; Faeburrow Elder x1; Deathrite Shaman x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 36018ms  keep-rollout  size7 draw r=0 seed=11400714878082374696  hand: Mountain x1; Jared Carthalion x1; Garth One-Eye x1; Faeburrow Elder x1; Deathrite Shaman x1; Cosmic Spider-Man x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 41197ms  keep-rollout  size7 draw r=0 seed=11400714882109386777  hand: Mountain x1; Lightning Greaves x1; Jetmir's Garden x1; Deathrite Shaman x2; Bloom Tender x1; Birds of Paradise x1; 
+[keepgen] SLOW-ROLLOUT 30245ms  keep-rollout  size7 draw r=0 seed=11400714882853389009  hand: Mountain x1; Maelstrom Archangel x1; Faeburrow Elder x1; Deathrite Shaman x1; Cosmic Spider-Man x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 32704ms  keep-rollout  size7 play r=0 seed=11400714884857395022  hand: Mountain x1; Maelstrom Archangel x1; Lightning Greaves x1; Breeding Pool x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 93419ms  keep-rollout  size7 draw r=0 seed=11400714886566400148  hand: Mountain x1; Maelstrom Archangel x2; Jetmir's Garden x1; Jared Carthalion x1; Garth One-Eye x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 42801ms  keep-rollout  size7 play r=0 seed=11400714888096404739  hand: Mountain x1; Ancient Cornucopia x1; Island x1; Garth One-Eye x1; Deathrite Shaman x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 180907ms  keep-rollout  size7 play r=0 seed=11400714885127395832  hand: Mountain x1; Maelstrom Archangel x1; Lightning Greaves x1; Godless Shrine x1; Garth One-Eye x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 36424ms  keep-rollout  size7 play r=0 seed=11400714890499411948  hand: Mountain x1; Ancient Cornucopia x1; Maelstrom Archangel x1; Garth One-Eye x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 297107ms  keep-rollout  size7 draw r=0 seed=11400714885628397334  hand: Mountain x1; Maelstrom Archangel x1; Lightning Greaves x1; Jetmir's Garden x1; Island x1; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 30773ms  keep-rollout  size7 play r=0 seed=11400714901665445446  hand: Nicol Bolas, Planeswalker x1; Island x1; Garth One-Eye x1; Faeburrow Elder x1; Cosmic Spider-Man x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 111613ms  keep-rollout  size7 play r=0 seed=11400714901460444831  hand: Nicol Bolas, Planeswalker x1; Island x1; Faeburrow Elder x1; Cosmic Spider-Man x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 55977ms  keep-rollout  size7 draw r=0 seed=11400714904971455363  hand: Nicol Bolas, Planeswalker x1; Lightning Greaves x1; Faeburrow Elder x2; Deathrite Shaman x2; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 43690ms  keep-rollout  size7 draw r=0 seed=11400714905433456749  hand: Nicol Bolas, Planeswalker x1; Lightning Greaves x1; Island x1; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 99527ms  keep-rollout  size7 play r=0 seed=11400714910613472290  hand: Nicol Bolas, Planeswalker x1; Maelstrom Archangel x2; Jetmir's Garden x1; Faeburrow Elder x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 121757ms  keep-rollout  size7 play r=0 seed=11400714911208474075  hand: Nicol Bolas, Planeswalker x1; Maelstrom Archangel x3; Godless Shrine x1; Garth One-Eye x1; Breeding Pool x1; 
+[keepgen] SLOW-ROLLOUT 167239ms  keep-rollout  size7 draw r=0 seed=11400714910301471353  hand: Nicol Bolas, Planeswalker x1; Maelstrom Archangel x2; Island x1; Garth One-Eye x1; Cosmic Spider-Man x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 36805ms  keep-rollout  size7 play r=0 seed=11400714920958503325  hand: Nicol Bolas, Planeswalker x1; Misty Rainforest x1; Ancient Cornucopia x1; Faeburrow Elder x4; 
+[keepgen] SLOW-ROLLOUT 45177ms  keep-rollout  size7 draw r=0 seed=11400714924890515120  hand: Nicol Bolas, Planeswalker x1; Mountain x1; Garth One-Eye x1; Faeburrow Elder x2; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 110048ms  keep-rollout  size7 draw r=0 seed=11400714926696520538  hand: Nicol Bolas, Planeswalker x1; Mountain x1; Lightning Greaves x1; Cosmic Spider-Man x2; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 69065ms  keep-rollout  size7 draw r=0 seed=11400714936419549707  hand: Nicol Bolas, Planeswalker x2; Lightning Greaves x1; Jetmir's Garden x1; Jared Carthalion x1; Faeburrow Elder x2; 
+[keepgen] SLOW-ROLLOUT 34699ms  keep-rollout  size7 play r=0 seed=11400714949714589593  hand: Oko, Thief of Crowns x1; Lightning Greaves x1; Faeburrow Elder x2; Cosmic Spider-Man x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 40154ms  keep-rollout  size7 draw r=0 seed=11400714949781589793  hand: Oko, Thief of Crowns x1; Lightning Greaves x1; Garth One-Eye x1; Cosmic Spider-Man x1; Bloom Tender x1; Blood Crypt x1; Birds of Paradise x1; 
+[keepgen] SLOW-ROLLOUT 43477ms  keep-rollout  size7 draw r=0 seed=11400714949802589856  hand: Oko, Thief of Crowns x1; Lightning Greaves x1; Garth One-Eye x1; Deathrite Shaman x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 44428ms  keep-rollout  size7 draw r=0 seed=11400714950127590831  hand: Oko, Thief of Crowns x1; Lightning Greaves x1; Island x1; Breeding Pool x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 38881ms  keep-rollout  size7 play r=0 seed=11400714950397591642  hand: Oko, Thief of Crowns x1; Lightning Greaves x1; Island x1; Godless Shrine x1; Garth One-Eye x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 35548ms  keep-rollout  size7 draw r=0 seed=11400714950895593135  hand: Oko, Thief of Crowns x1; Lightning Greaves x1; Jared Carthalion x2; Faeburrow Elder x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 32344ms  keep-rollout  size7 draw r=0 seed=11400714952245597185  hand: Oko, Thief of Crowns x1; Maelstrom Archangel x1; Godless Shrine x1; Garth One-Eye x1; Faeburrow Elder x1; Cosmic Spider-Man x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 130600ms  keep-rollout  size7 draw r=0 seed=11400714953198600044  hand: Oko, Thief of Crowns x1; Maelstrom Archangel x1; Jetmir's Garden x1; Deathrite Shaman x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 35513ms  keep-rollout  size7 play r=0 seed=11400714969413648690  hand: Oko, Thief of Crowns x1; Mountain x1; Faeburrow Elder x1; Cosmic Spider-Man x1; Bloom Tender x2; Birds of Paradise x1; 
+[keepgen] SLOW-ROLLOUT 30097ms  keep-rollout  size7 draw r=0 seed=11400714969841649973  hand: Oko, Thief of Crowns x1; Mountain x1; Godless Shrine x1; Garth One-Eye x1; Cosmic Spider-Man x2; Breeding Pool x1; 
+[keepgen] SLOW-ROLLOUT 33679ms  keep-rollout  size7 play r=0 seed=11400714970032650547  hand: Oko, Thief of Crowns x1; Mountain x1; Island x1; Garth One-Eye x1; Bloom Tender x2; Birds of Paradise x1; 
+[keepgen] SLOW-ROLLOUT 38078ms  keep-rollout  size7 play r=0 seed=11400714971566655149  hand: Oko, Thief of Crowns x1; Mountain x1; Lightning Greaves x1; Faeburrow Elder x2; Deathrite Shaman x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 40051ms  keep-rollout  size7 draw r=0 seed=11400714971582655196  hand: Oko, Thief of Crowns x1; Mountain x1; Lightning Greaves x1; Garth One-Eye x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 37394ms  keep-rollout  size7 draw r=0 seed=11400714971626655328  hand: Oko, Thief of Crowns x1; Mountain x1; Lightning Greaves x1; Garth One-Eye x1; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 59879ms  keep-rollout  size7 play r=0 seed=11400714971810655881  hand: Oko, Thief of Crowns x1; Mountain x1; Lightning Greaves x1; Island x1; Garth One-Eye x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 32409ms  keep-rollout  size7 draw r=0 seed=11400714973444660782  hand: Oko, Thief of Crowns x1; Mountain x1; Maelstrom Archangel x1; Lightning Greaves x1; Jetmir's Garden x1; Garth One-Eye x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 57086ms  keep-rollout  size7 play r=0 seed=11400714973528661035  hand: Oko, Thief of Crowns x1; Mountain x1; Maelstrom Archangel x2; Faeburrow Elder x1; Cosmic Spider-Man x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 188405ms  keep-rollout  size7 draw r=0 seed=11400714971802655856  hand: Oko, Thief of Crowns x1; Mountain x1; Lightning Greaves x1; Island x1; Faeburrow Elder x2; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 60748ms  keep-rollout  size7 draw r=0 seed=11400714974201663053  hand: Oko, Thief of Crowns x1; Mountain x1; Ancient Cornucopia x1; Godless Shrine x1; Faeburrow Elder x1; Deathrite Shaman x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 153543ms  keep-rollout  size7 play r=0 seed=11400714972975659376  hand: Oko, Thief of Crowns x1; Mountain x1; Maelstrom Archangel x1; Jetmir's Garden x1; Cosmic Spider-Man x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 444386ms  keep-rollout  size7 play r=0 seed=11400714972660658431  hand: Oko, Thief of Crowns x1; Mountain x1; Maelstrom Archangel x1; Island x1; Faeburrow Elder x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 70971ms  keep-rollout  size7 play r=0 seed=11400714980480681891  hand: Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Lightning Greaves x1; Faeburrow Elder x3; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 31412ms  keep-rollout  size7 draw r=0 seed=11400714981272684266  hand: Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Maelstrom Archangel x1; Deathrite Shaman x1; Cosmic Spider-Man x2; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 56661ms  keep-rollout  size7 play r=0 seed=11400714981572685167  hand: Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Maelstrom Archangel x1; Island x1; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 36892ms  keep-rollout  size7 draw r=0 seed=11400714982155686915  hand: Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Maelstrom Archangel x1; Lightning Greaves x1; Faeburrow Elder x1; Deathrite Shaman x1; Cosmic Spider-Man x1; 
+[keepgen] SLOW-ROLLOUT 63098ms  keep-rollout  size7 play r=0 seed=11400714982766688749  hand: Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Maelstrom Archangel x3; Faeburrow Elder x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 31621ms  keep-rollout  size7 play r=0 seed=11400714987462702837  hand: Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Mountain x1; Island x1; Faeburrow Elder x1; Cosmic Spider-Man x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 58715ms  keep-rollout  size7 play r=0 seed=11400714988730706641  hand: Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Mountain x1; Maelstrom Archangel x4; 
+[keepgen] SLOW-ROLLOUT 82047ms  keep-rollout  size7 play r=0 seed=11400714990485711906  hand: Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x2; Jared Carthalion x2; Garth One-Eye x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 51475ms  keep-rollout  size7 play r=0 seed=11400714991566715149  hand: Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x2; Ancient Cornucopia x1; Garth One-Eye x1; Deathrite Shaman x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 666921ms  keep-rollout  size7 play r=0 seed=11400714979370678561  hand: Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Jared Carthalion x1; Godless Shrine x1; Faeburrow Elder x2; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 31111ms  keep-rollout  size7 draw r=0 seed=11400714998508735974  hand: Overgrown Tomb x1; Lightning Greaves x1; Island x1; Garth One-Eye x1; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 119451ms  keep-rollout  size7 play r=0 seed=11400714997625733326  hand: Overgrown Tomb x1; Jetmir's Garden x1; Jared Carthalion x2; Garth One-Eye x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 50450ms  keep-rollout  size7 draw r=0 seed=11400714999999740447  hand: Overgrown Tomb x1; Maelstrom Archangel x1; Faeburrow Elder x1; Cosmic Spider-Man x2; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 34226ms  keep-rollout  size7 draw r=0 seed=11400715004228753134  hand: Overgrown Tomb x1; Maelstrom Archangel x3; Jared Carthalion x1; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 245146ms  keep-rollout  size7 draw r=0 seed=11400715002774748772  hand: Overgrown Tomb x1; Maelstrom Archangel x1; Lightning Greaves x1; Jetmir's Garden x1; Godless Shrine x1; Faeburrow Elder x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 530932ms  keep-rollout  size7 draw r=0 seed=11400715002038746564  hand: Overgrown Tomb x1; Maelstrom Archangel x1; Lightning Greaves x1; Cosmic Spider-Man x2; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 66643ms  keep-rollout  size7 draw r=0 seed=11400715017525793025  hand: Overgrown Tomb x1; Mountain x1; Cosmic Spider-Man x2; Breeding Pool x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 35724ms  keep-rollout  size7 play r=0 seed=11400715019244798183  hand: Overgrown Tomb x1; Mountain x1; Jetmir's Garden x1; Godless Shrine x1; Faeburrow Elder x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 631127ms  keep-rollout  size7 draw r=0 seed=11400715000499741947  hand: Overgrown Tomb x1; Maelstrom Archangel x1; Island x1; Deathrite Shaman x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 32983ms  keep-rollout  size7 play r=0 seed=11400715019655799416  hand: Overgrown Tomb x1; Mountain x1; Lightning Greaves x1; Cosmic Spider-Man x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 43501ms  keep-rollout  size7 play r=0 seed=11400715020198801045  hand: Overgrown Tomb x1; Mountain x1; Lightning Greaves x1; Jared Carthalion x1; Island x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 41984ms  keep-rollout  size7 play r=0 seed=11400715020669802458  hand: Overgrown Tomb x1; Mountain x1; Maelstrom Archangel x1; Garth One-Eye x1; Cosmic Spider-Man x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 194800ms  keep-rollout  size7 play r=0 seed=11400715017639793368  hand: Overgrown Tomb x1; Mountain x1; Faeburrow Elder x1; Deathrite Shaman x1; Breeding Pool x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 50883ms  keep-rollout  size7 draw r=0 seed=11400715020596802238  hand: Overgrown Tomb x1; Mountain x1; Maelstrom Archangel x1; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 108255ms  keep-rollout  size7 play r=0 seed=11400715020089800718  hand: Overgrown Tomb x1; Mountain x1; Lightning Greaves x1; Jared Carthalion x1; Cosmic Spider-Man x2; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 79247ms  keep-rollout  size7 draw r=0 seed=11400715020834802952  hand: Overgrown Tomb x1; Mountain x1; Maelstrom Archangel x1; Island x1; Cosmic Spider-Man x1; Breeding Pool x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 37504ms  keep-rollout  size7 play r=0 seed=11400715021801805854  hand: Overgrown Tomb x1; Mountain x1; Maelstrom Archangel x2; Godless Shrine x1; Garth One-Eye x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 85059ms  keep-rollout  size7 draw r=0 seed=11400715020794802832  hand: Overgrown Tomb x1; Mountain x1; Maelstrom Archangel x1; Godless Shrine x1; Garth One-Eye x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 92769ms  keep-rollout  size7 draw r=0 seed=11400715020863803039  hand: Overgrown Tomb x1; Mountain x1; Maelstrom Archangel x1; Island x1; Faeburrow Elder x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 254966ms  keep-rollout  size7 draw r=0 seed=11400715017616793298  hand: Overgrown Tomb x1; Mountain x1; Faeburrow Elder x1; Cosmic Spider-Man x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 142992ms  keep-rollout  size7 play r=0 seed=11400715019989800418  hand: Overgrown Tomb x1; Mountain x1; Lightning Greaves x1; Island x1; Faeburrow Elder x1; Breeding Pool x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 42284ms  keep-rollout  size7 draw r=0 seed=11400715028557826121  hand: Overgrown Tomb x1; Nicol Bolas, Planeswalker x1; Lightning Greaves x1; Breeding Pool x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 214579ms  keep-rollout  size7 play r=0 seed=11400715026769820758  hand: Overgrown Tomb x1; Nicol Bolas, Planeswalker x1; Garth One-Eye x1; Faeburrow Elder x2; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 251639ms  keep-rollout  size7 draw r=0 seed=11400715026769820757  hand: Overgrown Tomb x1; Nicol Bolas, Planeswalker x1; Garth One-Eye x1; Faeburrow Elder x2; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 178923ms  keep-rollout  size7 draw r=0 seed=11400715038588856214  hand: Overgrown Tomb x1; Nicol Bolas, Planeswalker x2; Jared Carthalion x1; Godless Shrine x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 119311ms  keep-rollout  size7 draw r=0 seed=11400715041760865730  hand: Overgrown Tomb x1; Oko, Thief of Crowns x1; Garth One-Eye x1; Cosmic Spider-Man x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 907899ms  keep-rollout  size7 draw r=0 seed=11400715017639793367  hand: Overgrown Tomb x1; Mountain x1; Faeburrow Elder x1; Deathrite Shaman x1; Breeding Pool x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 39195ms  keep-rollout  size7 play r=0 seed=11400715043767871752  hand: Overgrown Tomb x1; Oko, Thief of Crowns x1; Lightning Greaves x1; Faeburrow Elder x2; Cosmic Spider-Man x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 47196ms  keep-rollout  size7 play r=0 seed=11400715044535874056  hand: Overgrown Tomb x1; Oko, Thief of Crowns x1; Maelstrom Archangel x1; Cosmic Spider-Man x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 79064ms  keep-rollout  size7 play r=0 seed=11400715046064878643  hand: Overgrown Tomb x1; Oko, Thief of Crowns x1; Maelstrom Archangel x3; Faeburrow Elder x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 44243ms  keep-rollout  size7 play r=0 seed=11400715051058893625  hand: Overgrown Tomb x1; Oko, Thief of Crowns x1; Mountain x1; Jetmir's Garden x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 70653ms  keep-rollout  size7 play r=0 seed=11400715050900893151  hand: Overgrown Tomb x1; Oko, Thief of Crowns x1; Mountain x1; Jared Carthalion x1; Faeburrow Elder x2; Cosmic Spider-Man x1; 
+[keepgen] SLOW-ROLLOUT 114613ms  keep-rollout  size7 play r=0 seed=11400715050432891747  hand: Overgrown Tomb x1; Oko, Thief of Crowns x1; Mountain x1; Cosmic Spider-Man x2; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 80137ms  keep-rollout  size7 play r=0 seed=11400715051402894657  hand: Overgrown Tomb x1; Oko, Thief of Crowns x1; Mountain x1; Lightning Greaves x1; Godless Shrine x1; Garth One-Eye x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 109088ms  keep-rollout  size7 draw r=0 seed=11400715051326894428  hand: Overgrown Tomb x1; Oko, Thief of Crowns x1; Mountain x1; Lightning Greaves x1; Faeburrow Elder x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 34332ms  keep-rollout  size7 draw r=0 seed=11400715053775901775  hand: Overgrown Tomb x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Jared Carthalion x2; Faeburrow Elder x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 859738ms  keep-rollout  size7 draw r=0 seed=11400715036028848534  hand: Overgrown Tomb x1; Nicol Bolas, Planeswalker x1; Mountain x1; Jetmir's Garden x1; Garth One-Eye x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 54670ms  keep-rollout  size7 play r=0 seed=11400715056157908922  hand: Overgrown Tomb x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Mountain x1; Jetmir's Garden x1; Faeburrow Elder x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 351585ms  keep-rollout  size7 draw r=0 seed=11400715051242894176  hand: Overgrown Tomb x1; Oko, Thief of Crowns x1; Mountain x1; Jetmir's Garden x1; Jared Carthalion x1; Faeburrow Elder x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 32423ms  keep-rollout  size7 draw r=0 seed=11400715061949926297  hand: Progenitus x1; Lightning Greaves x1; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 39995ms  keep-rollout  size7 play r=0 seed=11400715062500927951  hand: Progenitus x1; Lightning Greaves x1; Island x1; Deathrite Shaman x4; 
+[keepgen] SLOW-ROLLOUT 264594ms  keep-rollout  size7 play r=0 seed=11400715056112908787  hand: Overgrown Tomb x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Mountain x1; Jared Carthalion x1; Godless Shrine x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 87211ms  keep-rollout  size7 draw r=0 seed=11400715062867929051  hand: Progenitus x1; Lightning Greaves x1; Jared Carthalion x1; Faeburrow Elder x3; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 104481ms  keep-rollout  size7 play r=0 seed=11400715083062989637  hand: Progenitus x1; Mountain x1; Jared Carthalion x2; Island x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 57342ms  keep-rollout  size7 draw r=0 seed=11400715087373002566  hand: Progenitus x1; Mountain x1; Ancient Cornucopia x1; Lightning Greaves x1; Jetmir's Garden x1; Faeburrow Elder x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 51821ms  keep-rollout  size7 play r=0 seed=11400715093809021875  hand: Progenitus x1; Nicol Bolas, Planeswalker x1; Maelstrom Archangel x1; Godless Shrine x1; Faeburrow Elder x3; 
+[keepgen] SLOW-ROLLOUT 30813ms  keep-rollout  size7 play r=0 seed=11400715107883064097  hand: Progenitus x1; Oko, Thief of Crowns x1; Lightning Greaves x1; Faeburrow Elder x2; Deathrite Shaman x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 46572ms  keep-rollout  size7 draw r=0 seed=11400715107758063721  hand: Progenitus x1; Oko, Thief of Crowns x1; Lightning Greaves x1; Bloom Tender x2; Blood Crypt x1; Birds of Paradise x1; 
+[keepgen] SLOW-ROLLOUT 177911ms  keep-rollout  size7 draw r=0 seed=11400715115118085801  hand: Progenitus x1; Oko, Thief of Crowns x1; Mountain x1; Jared Carthalion x2; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 33743ms  keep-rollout  size7 play r=0 seed=11400715122263107237  hand: Progenitus x1; Overgrown Tomb x1; Island x1; Garth One-Eye x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 96202ms  keep-rollout  size7 play r=0 seed=11400715120935103253  hand: Progenitus x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x2; Jetmir's Garden x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 117813ms  keep-rollout  size7 draw r=0 seed=11400715122195107032  hand: Progenitus x1; Overgrown Tomb x1; Island x1; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 36864ms  keep-rollout  size7 play r=0 seed=11400715133203140057  hand: Progenitus x1; Overgrown Tomb x1; Nicol Bolas, Planeswalker x1; Cosmic Spider-Man x2; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 54440ms  keep-rollout  size7 play r=0 seed=11400715206672360464  hand: Scalding Tarn x1; Overgrown Tomb x1; Island x1; Garth One-Eye x1; Breeding Pool x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 57122ms  keep-rollout  size7 play r=0 seed=11400715253718501602  hand: Scalding Tarn x2; Jetmir's Garden x1; Island x1; Deathrite Shaman x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 33383ms  keep-rollout  size7 draw r=0 seed=11400715292167616948  hand: Steam Vents x1; Faeburrow Elder x2; Deathrite Shaman x2; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 47781ms  keep-rollout  size7 play r=0 seed=11400715292427617729  hand: Steam Vents x1; Garth One-Eye x1; Faeburrow Elder x2; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 42477ms  keep-rollout  size7 play r=0 seed=11400715296963631337  hand: Steam Vents x1; Lightning Greaves x1; Island x1; Deathrite Shaman x3; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 44476ms  keep-rollout  size7 play r=0 seed=11400715297527633029  hand: Steam Vents x1; Lightning Greaves x1; Jared Carthalion x1; Island x1; Deathrite Shaman x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 47459ms  keep-rollout  size7 draw r=0 seed=11400715298649636394  hand: Steam Vents x1; Maelstrom Archangel x1; Faeburrow Elder x2; Deathrite Shaman x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 48027ms  keep-rollout  size7 play r=0 seed=11400715299207638069  hand: Steam Vents x1; Maelstrom Archangel x1; Island x1; Garth One-Eye x1; Deathrite Shaman x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 46540ms  keep-rollout  size7 play r=0 seed=11400715301093643727  hand: Steam Vents x1; Maelstrom Archangel x1; Lightning Greaves x1; Jared Carthalion x1; Garth One-Eye x1; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 36040ms  keep-rollout  size7 play r=0 seed=11400715301494644930  hand: Steam Vents x1; Maelstrom Archangel x2; Cosmic Spider-Man x2; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 274878ms  keep-rollout  size7 draw r=0 seed=11400715296920631207  hand: Steam Vents x1; Lightning Greaves x1; Island x1; Cosmic Spider-Man x2; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 276320ms  keep-rollout  size7 draw r=0 seed=11400715296977631378  hand: Steam Vents x1; Lightning Greaves x1; Island x1; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 46418ms  keep-rollout  size7 play r=0 seed=11400715303728651632  hand: Steam Vents x1; Ancient Cornucopia x1; Island x1; Deathrite Shaman x2; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 415388ms  keep-rollout  size7 draw r=0 seed=11400715297574633169  hand: Steam Vents x1; Lightning Greaves x1; Jared Carthalion x1; Island x1; Garth One-Eye x1; Breeding Pool x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 48069ms  keep-rollout  size7 play r=0 seed=11400715316592690224  hand: Steam Vents x1; Mountain x1; Godless Shrine x1; Faeburrow Elder x3; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 41188ms  keep-rollout  size7 draw r=0 seed=11400715318320695407  hand: Steam Vents x1; Mountain x1; Lightning Greaves x1; Faeburrow Elder x1; Deathrite Shaman x1; Cosmic Spider-Man x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 156391ms  keep-rollout  size7 draw r=0 seed=11400715316262689233  hand: Steam Vents x1; Mountain x1; Faeburrow Elder x2; Cosmic Spider-Man x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 36132ms  keep-rollout  size7 draw r=0 seed=11400715318606696265  hand: Steam Vents x1; Mountain x1; Lightning Greaves x1; Island x1; Garth One-Eye x1; Faeburrow Elder x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 53369ms  keep-rollout  size7 play r=0 seed=11400715318566696146  hand: Steam Vents x1; Mountain x1; Lightning Greaves x1; Island x1; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 37458ms  keep-rollout  size7 play r=0 seed=11400715325551717101  hand: Steam Vents x1; Nicol Bolas, Planeswalker x1; Godless Shrine x1; Garth One-Eye x1; Faeburrow Elder x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 30142ms  keep-rollout  size7 draw r=0 seed=11400715327205722062  hand: Steam Vents x1; Nicol Bolas, Planeswalker x1; Lightning Greaves x1; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 34287ms  keep-rollout  size7 play r=0 seed=11400715328144724880  hand: Steam Vents x1; Nicol Bolas, Planeswalker x1; Maelstrom Archangel x1; Garth One-Eye x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 34243ms  keep-rollout  size7 draw r=0 seed=11400715329749729694  hand: Steam Vents x1; Nicol Bolas, Planeswalker x1; Ancient Cornucopia x1; Faeburrow Elder x2; Deathrite Shaman x1; Birds of Paradise x1; 
+[keepgen] SLOW-ROLLOUT 36407ms  keep-rollout  size7 draw r=0 seed=11400715334771744760  hand: Steam Vents x1; Nicol Bolas, Planeswalker x1; Mountain x1; Lightning Greaves x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 51107ms  keep-rollout  size7 draw r=0 seed=11400715334891745120  hand: Steam Vents x1; Nicol Bolas, Planeswalker x1; Mountain x1; Lightning Greaves x1; Island x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 32587ms  keep-rollout  size7 draw r=0 seed=11400715342348767491  hand: Steam Vents x1; Oko, Thief of Crowns x1; Lightning Greaves x1; Faeburrow Elder x2; Deathrite Shaman x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 48418ms  keep-rollout  size7 play r=0 seed=11400715342604768260  hand: Steam Vents x1; Oko, Thief of Crowns x1; Lightning Greaves x1; Island x1; Garth One-Eye x1; Deathrite Shaman x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 109389ms  keep-rollout  size7 draw r=0 seed=11400715342235767152  hand: Steam Vents x1; Oko, Thief of Crowns x1; Lightning Greaves x1; Cosmic Spider-Man x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 35919ms  keep-rollout  size7 play r=0 seed=11400715344552774104  hand: Steam Vents x1; Oko, Thief of Crowns x1; Maelstrom Archangel x2; Lightning Greaves x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 31309ms  keep-rollout  size7 draw r=0 seed=11400715345214776089  hand: Steam Vents x1; Oko, Thief of Crowns x1; Ancient Cornucopia x1; Jared Carthalion x1; Faeburrow Elder x3; 
+[keepgen] SLOW-ROLLOUT 64130ms  keep-rollout  size7 play r=0 seed=11400715349540789068  hand: Steam Vents x1; Oko, Thief of Crowns x1; Mountain x1; Jared Carthalion x1; Island x1; Bloom Tender x1; Birds of Paradise x1; 
+[keepgen] SLOW-ROLLOUT 47342ms  keep-rollout  size7 play r=0 seed=11400715350213791087  hand: Steam Vents x1; Oko, Thief of Crowns x1; Mountain x1; Maelstrom Archangel x1; Faeburrow Elder x3; 
+[keepgen] SLOW-ROLLOUT 30050ms  keep-rollout  size7 draw r=0 seed=11400715350442791773  hand: Steam Vents x1; Oko, Thief of Crowns x1; Mountain x1; Maelstrom Archangel x1; Lightning Greaves x1; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 1416653ms  keep-rollout  size7 play r=0 seed=11400715319976700376  hand: Steam Vents x1; Mountain x1; Maelstrom Archangel x1; Lightning Greaves x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 106195ms  keep-rollout  size7 draw r=0 seed=11400715350519792004  hand: Steam Vents x1; Oko, Thief of Crowns x1; Mountain x1; Maelstrom Archangel x2; Cosmic Spider-Man x2; 
+[keepgen] SLOW-ROLLOUT 41509ms  keep-rollout  size7 play r=0 seed=11400715352757798719  hand: Steam Vents x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Lightning Greaves x1; Island x1; Faeburrow Elder x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 55383ms  keep-rollout  size7 draw r=0 seed=11400715352780798787  hand: Steam Vents x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Lightning Greaves x1; Jared Carthalion x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 1851211ms  keep-rollout  size7 draw r=0 seed=11400715316091688720  hand: Steam Vents x1; Mountain x1; Cosmic Spider-Man x1; Breeding Pool x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 54355ms  keep-rollout  size7 draw r=0 seed=11400715354830804937  hand: Steam Vents x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Mountain x1; Lightning Greaves x1; Jared Carthalion x1; Faeburrow Elder x1; 
+[keepgen] SLOW-ROLLOUT 67120ms  keep-rollout  size7 draw r=0 seed=11400715354778804781  hand: Steam Vents x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Mountain x1; Lightning Greaves x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 67983ms  keep-rollout  size7 play r=0 seed=11400715357466812846  hand: Steam Vents x1; Overgrown Tomb x1; Jared Carthalion x2; Island x1; Garth One-Eye x1; Breeding Pool x1; 
+[keepgen] SLOW-ROLLOUT 119256ms  keep-rollout  size7 play r=0 seed=11400715359477818879  hand: Steam Vents x1; Overgrown Tomb x1; Maelstrom Archangel x1; Jared Carthalion x1; Faeburrow Elder x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 45241ms  keep-rollout  size7 play r=0 seed=11400715365201836051  hand: Steam Vents x1; Overgrown Tomb x1; Mountain x1; Island x1; Breeding Pool x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 62524ms  keep-rollout  size7 play r=0 seed=11400715366418839702  hand: Steam Vents x1; Overgrown Tomb x1; Mountain x1; Maelstrom Archangel x2; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 39275ms  keep-rollout  size7 play r=0 seed=11400715368019844505  hand: Steam Vents x1; Overgrown Tomb x1; Nicol Bolas, Planeswalker x1; Island x1; Garth One-Eye x1; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 186981ms  keep-rollout  size7 play r=0 seed=11400715365272836264  hand: Steam Vents x1; Overgrown Tomb x1; Mountain x1; Island x1; Garth One-Eye x1; Cosmic Spider-Man x2; 
+[keepgen] SLOW-ROLLOUT 106827ms  keep-rollout  size7 draw r=0 seed=11400715367962844333  hand: Steam Vents x1; Overgrown Tomb x1; Nicol Bolas, Planeswalker x1; Island x1; Cosmic Spider-Man x1; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 30640ms  keep-rollout  size7 draw r=0 seed=11400715372219857104  hand: Steam Vents x1; Overgrown Tomb x1; Oko, Thief of Crowns x1; Island x1; Deathrite Shaman x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 38768ms  keep-rollout  size7 play r=0 seed=11400715373559861125  hand: Steam Vents x1; Overgrown Tomb x1; Oko, Thief of Crowns x1; Ancient Cornucopia x1; Faeburrow Elder x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 343516ms  keep-rollout  size7 draw r=0 seed=11400715365449836794  hand: Steam Vents x1; Overgrown Tomb x1; Mountain x1; Jared Carthalion x1; Island x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 143089ms  keep-rollout  size7 play r=0 seed=11400715379942880274  hand: Steam Vents x1; Progenitus x1; Maelstrom Archangel x1; Jared Carthalion x2; Island x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 37655ms  keep-rollout  size7 draw r=0 seed=11400715392847918988  hand: Steam Vents x1; Progenitus x1; Oko, Thief of Crowns x1; Jetmir's Garden x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 32570ms  keep-rollout  size7 play r=0 seed=11400715394946925286  hand: Steam Vents x1; Progenitus x1; Oko, Thief of Crowns x1; Mountain x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 30179ms  keep-rollout  size7 play r=0 seed=11400715401283944297  hand: Steam Vents x1; Progenitus x1; Overgrown Tomb x1; Oko, Thief of Crowns x1; Lightning Greaves x1; Faeburrow Elder x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 59844ms  keep-rollout  size7 draw r=0 seed=11400715445201076047  hand: Stomping Ground x1; Jared Carthalion x1; Faeburrow Elder x1; Deathrite Shaman x1; Cosmic Spider-Man x2; Breeding Pool x1; 
+[keepgen] SLOW-ROLLOUT 35686ms  keep-rollout  size7 draw r=0 seed=11400715448784086796  hand: Stomping Ground x1; Lightning Greaves x1; Jared Carthalion x1; Cosmic Spider-Man x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 41585ms  keep-rollout  size7 play r=0 seed=11400715450377091576  hand: Stomping Ground x1; Maelstrom Archangel x1; Garth One-Eye x1; Faeburrow Elder x2; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 316743ms  keep-rollout  size7 play r=0 seed=11400715444775074770  hand: Stomping Ground x1; Island x1; Garth One-Eye x1; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 179858ms  keep-rollout  size7 play r=0 seed=11400715453527101026  hand: Stomping Ground x1; Maelstrom Archangel x2; Jared Carthalion x1; Faeburrow Elder x2; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 36078ms  keep-rollout  size7 draw r=0 seed=11400715468632146340  hand: Stomping Ground x1; Mountain x1; Jared Carthalion x1; Faeburrow Elder x1; Cosmic Spider-Man x2; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 50987ms  keep-rollout  size7 draw r=0 seed=11400715468626146322  hand: Stomping Ground x1; Mountain x1; Jared Carthalion x1; Faeburrow Elder x1; Cosmic Spider-Man x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 50383ms  keep-rollout  size7 draw r=0 seed=11400715468851146997  hand: Stomping Ground x1; Mountain x1; Jared Carthalion x1; Island x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 50613ms  keep-rollout  size7 play r=0 seed=11400715469146147883  hand: Stomping Ground x1; Mountain x1; Jetmir's Garden x1; Breeding Pool x1; Bloom Tender x2; Birds of Paradise x1; 
+[keepgen] SLOW-ROLLOUT 843401ms  keep-rollout  size7 play r=0 seed=11400715447551083098  hand: Stomping Ground x1; Jetmir's Garden x1; Jared Carthalion x1; Godless Shrine x1; Garth One-Eye x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 55397ms  keep-rollout  size7 play r=0 seed=11400715469973150364  hand: Stomping Ground x1; Mountain x1; Lightning Greaves x1; Garth One-Eye x1; Faeburrow Elder x1; Breeding Pool x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 35466ms  keep-rollout  size7 draw r=0 seed=11400715470299151341  hand: Stomping Ground x1; Mountain x1; Lightning Greaves x1; Jared Carthalion x1; Garth One-Eye x1; Deathrite Shaman x1; Cosmic Spider-Man x1; 
+[keepgen] SLOW-ROLLOUT 95038ms  keep-rollout  size7 draw r=0 seed=11400715469416148692  hand: Stomping Ground x1; Mountain x1; Jetmir's Garden x1; Godless Shrine x1; Garth One-Eye x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 38234ms  keep-rollout  size7 draw r=0 seed=11400715470874153066  hand: Stomping Ground x1; Mountain x1; Maelstrom Archangel x1; Godless Shrine x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 112999ms  keep-rollout  size7 play r=0 seed=11400715471961156328  hand: Stomping Ground x1; Mountain x1; Maelstrom Archangel x2; Island x1; Cosmic Spider-Man x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 302870ms  keep-rollout  size7 play r=0 seed=11400715469657149416  hand: Stomping Ground x1; Mountain x1; Jetmir's Garden x1; Jared Carthalion x1; Garth One-Eye x1; Faeburrow Elder x1; Cosmic Spider-Man x1; 
+[keepgen] SLOW-ROLLOUT 31131ms  keep-rollout  size7 draw r=0 seed=11400715477984174396  hand: Stomping Ground x1; Nicol Bolas, Planeswalker x1; Jared Carthalion x2; Godless Shrine x1; Deathrite Shaman x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 400701ms  keep-rollout  size7 draw r=0 seed=11400715470968153348  hand: Stomping Ground x1; Mountain x1; Maelstrom Archangel x1; Island x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 184554ms  keep-rollout  size7 draw r=0 seed=11400715485642197370  hand: Stomping Ground x1; Nicol Bolas, Planeswalker x1; Mountain x1; Garth One-Eye x1; Faeburrow Elder x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 173654ms  keep-rollout  size7 play r=0 seed=11400715486424199717  hand: Stomping Ground x1; Nicol Bolas, Planeswalker x1; Mountain x1; Lightning Greaves x1; Garth One-Eye x1; Faeburrow Elder x2; 
+[keepgen] SLOW-ROLLOUT 115470ms  keep-rollout  size7 play r=0 seed=11400715489027207526  hand: Stomping Ground x1; Nicol Bolas, Planeswalker x2; Jetmir's Garden x1; Jared Carthalion x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 215521ms  keep-rollout  size7 draw r=0 seed=11400715486692200520  hand: Stomping Ground x1; Nicol Bolas, Planeswalker x1; Mountain x1; Maelstrom Archangel x1; Garth One-Eye x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 33947ms  keep-rollout  size7 draw r=0 seed=11400715492057216615  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Godless Shrine x1; Cosmic Spider-Man x2; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 194553ms  keep-rollout  size7 draw r=0 seed=11400715488228205128  hand: Stomping Ground x1; Nicol Bolas, Planeswalker x2; Cosmic Spider-Man x1; Breeding Pool x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 182511ms  keep-rollout  size7 draw r=0 seed=11400715489128207828  hand: Stomping Ground x1; Nicol Bolas, Planeswalker x2; Lightning Greaves x1; Faeburrow Elder x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 52157ms  keep-rollout  size7 draw r=0 seed=11400715492701218547  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Jared Carthalion x1; Garth One-Eye x1; Cosmic Spider-Man x1; Breeding Pool x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 51805ms  keep-rollout  size7 play r=0 seed=11400715493871222058  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Lightning Greaves x1; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 39108ms  keep-rollout  size7 draw r=0 seed=11400715495483226893  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Maelstrom Archangel x1; Jetmir's Garden x1; Jared Carthalion x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 34785ms  keep-rollout  size7 draw r=0 seed=11400715495567227145  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Maelstrom Archangel x1; Lightning Greaves x1; Deathrite Shaman x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 52672ms  keep-rollout  size7 play r=0 seed=11400715496092228721  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Maelstrom Archangel x2; Jetmir's Garden x1; Godless Shrine x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 109747ms  keep-rollout  size7 play r=0 seed=11400715495287226306  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Maelstrom Archangel x1; Jared Carthalion x2; Faeburrow Elder x2; 
+[keepgen] SLOW-ROLLOUT 553366ms  keep-rollout  size7 play r=0 seed=11400715491030213535  hand: Stomping Ground x1; Nicol Bolas, Planeswalker x2; Mountain x1; Garth One-Eye x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 40004ms  keep-rollout  size7 draw r=0 seed=11400715501437244755  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Mountain x1; Lightning Greaves x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 55777ms  keep-rollout  size7 draw r=0 seed=11400715501494244926  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Mountain x1; Lightning Greaves x1; Faeburrow Elder x3; 
+[keepgen] SLOW-ROLLOUT 194851ms  keep-rollout  size7 draw r=0 seed=11400715501053243603  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Mountain x1; Jared Carthalion x1; Garth One-Eye x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 43397ms  keep-rollout  size7 play r=0 seed=11400715503805251860  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Jared Carthalion x1; Garth One-Eye x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 34761ms  keep-rollout  size7 draw r=0 seed=11400715504309253371  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Lightning Greaves x1; Island x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 68494ms  keep-rollout  size7 play r=0 seed=11400715504232253141  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Lightning Greaves x1; Faeburrow Elder x1; Cosmic Spider-Man x1; Breeding Pool x1; 
+[keepgen] SLOW-ROLLOUT 56874ms  keep-rollout  size7 draw r=0 seed=11400715506246259182  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Mountain x1; Jared Carthalion x1; Faeburrow Elder x1; Cosmic Spider-Man x1; 
+[keepgen] SLOW-ROLLOUT 34427ms  keep-rollout  size7 play r=0 seed=11400715507048261589  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x2; Lightning Greaves x1; Faeburrow Elder x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 73618ms  keep-rollout  size7 draw r=0 seed=11400715506842260970  hand: Stomping Ground x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x2; Godless Shrine x1; Cosmic Spider-Man x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 40754ms  keep-rollout  size7 draw r=0 seed=11400715507875264069  hand: Stomping Ground x1; Overgrown Tomb x1; Garth One-Eye x1; Faeburrow Elder x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 46565ms  keep-rollout  size7 draw r=0 seed=11400715507922264210  hand: Stomping Ground x1; Overgrown Tomb x1; Garth One-Eye x1; Faeburrow Elder x2; Cosmic Spider-Man x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 37390ms  keep-rollout  size7 play r=0 seed=11400715508230265135  hand: Stomping Ground x1; Overgrown Tomb x1; Island x1; Faeburrow Elder x1; Breeding Pool x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 100014ms  keep-rollout  size7 draw r=0 seed=11400715507686263502  hand: Stomping Ground x1; Overgrown Tomb x1; Faeburrow Elder x1; Cosmic Spider-Man x2; Breeding Pool x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 60634ms  keep-rollout  size7 play r=0 seed=11400715508643266374  hand: Stomping Ground x1; Overgrown Tomb x1; Jared Carthalion x1; Garth One-Eye x1; Faeburrow Elder x1; Cosmic Spider-Man x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 33661ms  keep-rollout  size7 play r=0 seed=11400715509736269653  hand: Stomping Ground x1; Overgrown Tomb x1; Lightning Greaves x1; Deathrite Shaman x1; Breeding Pool x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 32034ms  keep-rollout  size7 draw r=0 seed=11400715510130270834  hand: Stomping Ground x1; Overgrown Tomb x1; Lightning Greaves x1; Jared Carthalion x1; Bloom Tender x2; Birds of Paradise x1; 
+[keepgen] SLOW-ROLLOUT 42866ms  keep-rollout  size7 play r=0 seed=11400715510146270883  hand: Stomping Ground x1; Overgrown Tomb x1; Lightning Greaves x1; Jared Carthalion x1; Cosmic Spider-Man x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 77250ms  keep-rollout  size7 draw r=0 seed=11400715510954273306  hand: Stomping Ground x1; Overgrown Tomb x1; Maelstrom Archangel x1; Island x1; Garth One-Eye x1; Cosmic Spider-Man x1; Breeding Pool x1; 
+[keepgen] SLOW-ROLLOUT 163992ms  keep-rollout  size7 play r=0 seed=11400715510300271345  hand: Stomping Ground x1; Overgrown Tomb x1; Lightning Greaves x1; Jared Carthalion x2; Breeding Pool x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 258634ms  keep-rollout  size7 draw r=0 seed=11400715509674269466  hand: Stomping Ground x1; Overgrown Tomb x1; Jetmir's Garden x1; Jared Carthalion x2; Garth One-Eye x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 288941ms  keep-rollout  size7 draw r=0 seed=11400715509722269610  hand: Stomping Ground x1; Overgrown Tomb x1; Lightning Greaves x1; Cosmic Spider-Man x2; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 250033ms  keep-rollout  size7 play r=0 seed=11400715512089276712  hand: Stomping Ground x1; Overgrown Tomb x1; Maelstrom Archangel x2; Lightning Greaves x1; Jetmir's Garden x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 74900ms  keep-rollout  size7 play r=0 seed=11400715516565290140  hand: Stomping Ground x1; Overgrown Tomb x1; Mountain x1; Faeburrow Elder x1; Deathrite Shaman x1; Cosmic Spider-Man x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 33625ms  keep-rollout  size7 play r=0 seed=11400715517380292585  hand: Stomping Ground x1; Overgrown Tomb x1; Mountain x1; Lightning Greaves x1; Faeburrow Elder x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 60503ms  keep-rollout  size7 draw r=0 seed=11400715517011291477  hand: Stomping Ground x1; Overgrown Tomb x1; Mountain x1; Jared Carthalion x1; Godless Shrine x1; Garth One-Eye x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 79624ms  keep-rollout  size7 play r=0 seed=11400715516784290797  hand: Stomping Ground x1; Overgrown Tomb x1; Mountain x1; Island x1; Cosmic Spider-Man x2; Breeding Pool x1; 
+[keepgen] SLOW-ROLLOUT 69040ms  keep-rollout  size7 play r=0 seed=11400715517449292792  hand: Stomping Ground x1; Overgrown Tomb x1; Mountain x1; Lightning Greaves x1; Godless Shrine x1; Faeburrow Elder x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 57526ms  keep-rollout  size7 draw r=0 seed=11400715517689293511  hand: Stomping Ground x1; Overgrown Tomb x1; Mountain x1; Maelstrom Archangel x1; Faeburrow Elder x2; Cosmic Spider-Man x1; 
+[keepgen] SLOW-ROLLOUT 50841ms  keep-rollout  size7 draw r=0 seed=11400715520164300936  hand: Stomping Ground x1; Overgrown Tomb x1; Nicol Bolas, Planeswalker x1; Lightning Greaves x1; Garth One-Eye x1; Cosmic Spider-Man x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 138039ms  keep-rollout  size7 play r=0 seed=11400715520220301105  hand: Stomping Ground x1; Overgrown Tomb x1; Nicol Bolas, Planeswalker x1; Lightning Greaves x1; Island x1; Breeding Pool x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 41593ms  keep-rollout  size7 play r=0 seed=11400715522771308758  hand: Stomping Ground x1; Overgrown Tomb x1; Nicol Bolas, Planeswalker x2; Godless Shrine x1; Garth One-Eye x1; Cosmic Spider-Man x1; 
+[keepgen] SLOW-ROLLOUT 53869ms  keep-rollout  size7 play r=0 seed=11400715522727308626  hand: Stomping Ground x1; Overgrown Tomb x1; Nicol Bolas, Planeswalker x2; Garth One-Eye x1; Cosmic Spider-Man x2; 
+[keepgen] SLOW-ROLLOUT 66327ms  keep-rollout  size7 draw r=0 seed=11400715524044312576  hand: Stomping Ground x1; Overgrown Tomb x1; Oko, Thief of Crowns x1; Jared Carthalion x1; Island x1; Garth One-Eye x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 100874ms  keep-rollout  size7 play r=0 seed=11400715523584311197  hand: Stomping Ground x1; Overgrown Tomb x1; Oko, Thief of Crowns x1; Faeburrow Elder x2; Cosmic Spider-Man x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 60120ms  keep-rollout  size7 play r=0 seed=11400715524670314455  hand: Stomping Ground x1; Overgrown Tomb x1; Oko, Thief of Crowns x1; Maelstrom Archangel x1; Faeburrow Elder x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 307652ms  keep-rollout  size7 play r=0 seed=11400715521972306361  hand: Stomping Ground x1; Overgrown Tomb x1; Nicol Bolas, Planeswalker x1; Mountain x1; Breeding Pool x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 80442ms  keep-rollout  size7 draw r=0 seed=11400715526257319215  hand: Stomping Ground x1; Overgrown Tomb x1; Oko, Thief of Crowns x1; Mountain x1; Faeburrow Elder x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 139349ms  keep-rollout  size7 draw r=0 seed=11400715526283319293  hand: Stomping Ground x1; Overgrown Tomb x1; Oko, Thief of Crowns x1; Mountain x1; Garth One-Eye x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 659100ms  keep-rollout  size7 play r=0 seed=11400715516771290758  hand: Stomping Ground x1; Overgrown Tomb x1; Mountain x1; Island x1; Breeding Pool x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 438889ms  keep-rollout  size7 draw r=0 seed=11400715524380313584  hand: Stomping Ground x1; Overgrown Tomb x1; Oko, Thief of Crowns x1; Lightning Greaves x1; Faeburrow Elder x1; Bloom Tender x1; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 275486ms  keep-rollout  size7 play r=0 seed=11400715526900321145  hand: Stomping Ground x1; Overgrown Tomb x1; Oko, Thief of Crowns x1; Nicol Bolas, Planeswalker x1; Bloom Tender x2; Blood Crypt x1; 
+[keepgen] SLOW-ROLLOUT 57252ms  keep-rollout  size7 play r=0 seed=11400715549362388531  hand: Stomping Ground x1; Progenitus x1; Overgrown Tomb x1; Maelstrom Archangel x1; Faeburrow Elder x1; Bloom Tender x2; 
+[keepgen] SLOW-ROLLOUT 51645ms  keep-rollout  size7 draw r=0 seed=11400715551292394320  hand: Stomping Ground x1; Progenitus x1; Overgrown Tomb x1; Mountain x1; Maelstrom Archangel x1; Garth One-Eye x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 42652ms  keep-rollout  size7 play r=0 seed=11400715552000396445  hand: Stomping Ground x1; Progenitus x1; Overgrown Tomb x1; Nicol Bolas, Planeswalker x1; Maelstrom Archangel x1; Jared Carthalion x1; Bloom Tender x1; 
+[keepgen] SLOW-ROLLOUT 49598ms  keep-rollout  size7 play r=0 seed=11400715552958399319  hand: Stomping Ground x1; Progenitus x1; Overgrown Tomb x1; Oko, Thief of Crowns x1; Maelstrom Archangel x1; Jared Carthalion x1; Cosmic Spider-Man x1; 

@@ -150,6 +150,32 @@ EquivReport DiscoverEquivalence(const Decklist& deck, const MulliganProfile& pro
             else { parent[find(k)] = find(inert_root); }
         }
     }
+    // Merge all FETCHLANDS BY CONSTRUCTION (user rule, 2026-08-14). A fetchland is a hand slot that
+    // says "a land of the right colour, one life, next land drop"; which one you hold is a difference
+    // the KEEP decision does not turn on. The threshold cannot be trusted to find this: on FiveColour
+    // the five-fetch cycle measured 0.0125-0.035 apart -- above the documented 0.01, below the 0.06
+    // that separates genuinely different cards -- so every fetch took its own hand dimension and the
+    // size-7 table came out 2.86x larger than it needed to be (5,655,953 cells vs 1,977,898). Leaving a
+    // 2.9x cost difference to whether a distance lands either side of a constant is not a rule, it is a
+    // coin flip; a threshold of 0.04 happens to work on this deck and that is luck.
+    //
+    // Unlike the inert merge above this is an APPROXIMATION, not an identity -- fetches differ in the
+    // types they can find, so a deck whose fetches reach genuinely different colour sets loses that
+    // distinction. It is accepted deliberately, bounded by the measured 0.035 turns, because the
+    // alternative is a table nobody can afford to generate. (The rule stops at fetchlands: DUALS look
+    // similar but measured ~5x further apart (0.0725-0.0775) on the same deck, and that is real signal
+    // -- domain sources like Faeburrow Elder / Bloom Tender scale with the COLOURS you control, so
+    // which dual you hold genuinely matters. Merging those is a 16x trap.)
+    int fetch_root = -1;
+    for (int k = 0; k < N; ++k)
+    {
+        auto def = CardDatabase::Instance().LookupCached(reps[k]);
+        if (def && !def->params.fetch_land_types.empty())
+        {
+            if (fetch_root < 0) { fetch_root = k; }
+            else { parent[find(k)] = find(fetch_root); }
+        }
+    }
     EquivReport rep;
     rep.probes         = probes;
     rep.distinct_cards = N;

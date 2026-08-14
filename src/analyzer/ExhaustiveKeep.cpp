@@ -423,6 +423,11 @@ static std::string RolloutConfigDigest(const Decklist& deck, const MulliganProfi
 // manual force-merge chain produces exactly ONE value the rest of the function reads -- `eq`.
 // Every other local here (the fingerprints, the cache path, the merge scratch) dies with it, so
 // the seam is airtight and the move is mechanical.
+// Bump when DiscoverEquivalence's OUTPUT can move for unchanged inputs (a new by-construction merge,
+// a change to the clustering). Gates the discovery cache below.
+//   1 = single-linkage + inert merge     2 = + by-construction fetchland merge (2026-08-14)
+static constexpr int kDiscoveryVersion = 2;
+
 static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganProfile& profile,
                                            const ExhaustiveKeepConfig& cfg,
                                            const std::string& play_digest)
@@ -465,7 +470,15 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
                             && m.value("commit", std::string("\x01")) == eq_commit
                             // Play-behaviour identity: a cache written under different play (engine, card
                             // data, value sidecar) must MISS even when every param above matches.
-                            && m.value("play_digest", std::string("\x01")) == play_digest;
+                            && m.value("play_digest", std::string("\x01")) == play_digest
+                            // Discovery ALGORITHM identity. Every field above describes discovery's
+                            // INPUTS; none describes what discovery DOES with them, so a change to the
+                            // clustering itself produced a silent stale hit -- the by-construction
+                            // fetchland merge (2026-08-14) would have kept handing back the K=31
+                            // pre-merge buckets on every deck that already had a cache. Bump
+                            // kDiscoveryVersion whenever DiscoverEquivalence's output can move for
+                            // unchanged inputs. An old cache has no field -> 0 -> MISS.
+                            && m.value("disco_ver", 0) == kDiscoveryVersion;
             if (match)
             {
                 eq.probes         = m.value("probes", 0);
@@ -502,6 +515,7 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
                            {"budget_ms", cfg.budget_ms}, {"threshold_x1e6", eq_thr_x1e6},
                            {"equiv_seed", cfg.equiv_seed}, {"max_turns", cfg.max_turns},
                            {"commit", eq_commit}, {"play_digest", play_digest},
+                           {"disco_ver", kDiscoveryVersion},
                            {"distinct_cards", eq.distinct_cards} };
             nlohmann::json jclasses = nlohmann::json::array();
             for (const EquivClass& ec : eq.classes)
