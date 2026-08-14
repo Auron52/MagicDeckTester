@@ -121,10 +121,32 @@ first.
 ## Measurement plan (before any adoption)
 
 1. `MTG_CANON_SIMKEY=1` on the gi=17 monster (zero new code; running 2026-08-14): how much of the
-   1.02M is order-permutation identity, and does the answer change?
+   1.02M is order-permutation identity, and does the answer change? **DONE — canon ADOPTED
+   default-ON 2026-08-14/15** (suite nets −0.047/−0.054/−0.10, must-find 7/7 after the
+   order-exactness fixes; see `th-d5-five-hour-game.md`).
 2. Dominance census probe (MTG_BP_DUP_PROBE precedent — temporary, stripped after): at each
    end-of-turn boundary, bucket sibling states as {identical, dominated, incomparable} under the
    sound core. This prices the lossless tier before it is built.
+
+   **FIRST PRICING (2026-08-15, `MTG_DOM_CENSUS` probe now in tree — TEMPORARY).** Probe sits at
+   the candidate loop's post-`SimulateEndAndStartNextTurn` point (sibling frontier, per pass,
+   archive capped 256); every non-count axis fail-closes to equality (graveyards, opponent board,
+   ANY perm with counters/damage/attachments/temp state), so these are FLOORS — a Sandstone Needle
+   with depletion counters pushes its whole board to exact-match, which is exactly the
+   counter-direction tier this doc proposes and the probe does not yet implement.
+   At suite budget (d5 b20):
+   - mirrorwing, 100 games: 545,931 EOT siblings — 23.8% canon-IDENTICAL to an archived sibling,
+     **1.6% strictly dominated (the new prunable mass), 1.1% dominated an earlier (already-rolled)
+     sibling**;
+   - mirrorwing gi=17 (the census monster, now a 6-turn game under canon): 3,519 siblings, 37.9%
+     identical, 4.2% dominated;
+   - treasure_hunt, 100 games: near-zero (20,481 siblings, 2 dominated) — the gy-equality
+     fail-close bites a retrace deck by construction (its graveyard is live state).
+   Reading: at SUITE budgets the lossless-floor mass is single-digit percent — real but not the
+   monster-killer; the identical fraction is largely absorbed by the TT already. The interesting
+   cases remain unbounded/monster decisions (huge sibling sets, cap-truncated here) and the
+   counter-direction + heuristic (board-vs-hand) tiers, which this floor deliberately excludes.
+   Next: extend the probe with per-type counter direction, then price the monsters at b0.
 3. If built: A/B win-turn + cost on the regression suite train seeds, validate on held-out, full
    standing gate (play-affecting). Measure the heuristic tier separately, per deck.
 4. **MUST-FIND gate (user, 2026-08-14, from the canon adoption):** dominance is a JUDGMENT prune

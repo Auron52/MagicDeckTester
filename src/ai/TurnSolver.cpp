@@ -15139,6 +15139,136 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state)
     if (CanonSimKeyOn()) { Fold(k, FsOrderSig(state)); }
     return k;
 }
+
+// --- MTG_DOM_CENSUS (TEMPORARY probe; MTG_BP_DUP_PROBE precedent -- strip after pricing) ------
+// Prices the EOT dominance prune (docs/design/eot-dominance-pruning.md) BEFORE building it: at the
+// candidate loop's end-of-turn boundary (sibling frontier -- same decision), bucket each new state
+// vs its archived siblings as identical / dominated / incomparable under the SOUND core:
+//   comparable ONLY at equal library positions (same draws consumed) with equal graveyards and an
+//   equal opponent board (fail-closed axes); any perm carrying counters / damage / attachments /
+//   temp state on either side must match EXACTLY (fail-closed to equality -- underCOUNTS dominance
+//   for e.g. depletion counters, so the census is a floor); the remaining "simple" board and the
+//   hand compare as multisets (B subset-of A, with A at least as untapped / combat-ready per name);
+//   life: ours higher dominates, opponent's lower dominates.
+// Census only -- prunes NOTHING, changes NOTHING; totals print at process exit.
+inline bool DomCensusOn() { static const bool v = EnvOn("MTG_DOM_CENSUS"); return v; }
+namespace domcensus
+{
+    struct Snap
+    {
+        TranspositionTable::Key key;                     // identity bucket (canon simkey)
+        std::size_t lib0 = 0;
+        int life0 = 0, life1 = 0;
+        std::vector<std::uint64_t> hand;                 // sorted name hashes (player 0)
+        std::vector<std::array<std::uint64_t, 4>> bf;    // {name, total, untapped, ready} sorted
+        std::vector<std::uint64_t> exact;                // fail-closed: complex perms, gy0/gy1, opp bf
+    };
+    struct Totals
+    {
+        std::atomic<unsigned long long> snaps{0}, identical{0}, dominated{0},
+                                        dominates_archived{0}, incomparable_pairs{0};
+        ~Totals()
+        {
+            if (!DomCensusOn()) { return; }
+            std::fprintf(stderr,
+                "[dom-census] snaps=%llu identical=%llu dominated=%llu (would prune) "
+                "dominates_archived=%llu (late better) incomparable_pairs=%llu\n",
+                snaps.load(), identical.load(), dominated.load(),
+                dominates_archived.load(), incomparable_pairs.load());
+        }
+    };
+    inline Totals& T() { static Totals t; return t; }
+
+    inline Snap Build(const GameState& s)
+    {
+        Snap n;
+        n.key   = BuildSimKey(s, 0, 0, false);
+        n.lib0  = s.players[0].library.size();
+        n.life0 = s.players[0].life;
+        n.life1 = s.players[1].life;
+        for (const Card& c : s.players[0].hand) { n.hand.push_back(c.m_name_hash); }
+        std::sort(n.hand.begin(), n.hand.end());
+        auto mixv = [](std::uint64_t a, std::uint64_t b)
+        { a ^= b + 0x9e3779b97f4a7c15ull + (a << 6) + (a >> 2); return a; };
+        // Boundary must be clean; a dirty boundary fail-closes the whole state via `exact`.
+        if (s.floating_mana.Total() > 0 || s.spells_cast_this_turn > 0 || !s.stack.empty())
+        { n.exact.push_back(0xD117Bull); }
+        std::map<std::uint64_t, std::array<std::uint64_t, 3>> counts;   // name -> total/untapped/ready
+        for (const Permanent& p : s.battlefield)
+        {
+            const bool complex = p.charge_counters != 0 || p.age_counters != 0
+                || p.storage_counters != 0 || p.storage_hold_this_turn || !p.counters.empty()
+                || p.damage != 0 || p.temp_power_bonus != 0 || p.temp_tough_bonus != 0
+                || p.temp_haste || p.exile_at_end || p.is_animated
+                || p.aura_attached_to >= 0 || p.equipped_to >= 0;
+            if (p.controller_index != 0 || complex)
+            {
+                std::uint64_t h = p.card.m_name_hash;
+                h = mixv(h, static_cast<std::uint64_t>(p.controller_index));
+                h = mixv(h, p.tapped ? 1u : 0u);
+                h = mixv(h, p.entered_this_turn ? 1u : 0u);
+                h = mixv(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(p.charge_counters)));
+                h = mixv(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(p.storage_counters)));
+                h = mixv(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(p.damage)));
+                for (const Counter& c : p.counters)
+                { h = mixv(h, static_cast<std::uint64_t>(c.type)); h = mixv(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(c.count))); }
+                n.exact.push_back(h);
+                continue;
+            }
+            auto& e = counts[p.card.m_name_hash];
+            e[0]++;
+            if (!p.tapped) { e[1]++; }
+            if (!p.entered_this_turn) { e[2]++; }
+        }
+        for (const auto& [name, e] : counts) { n.bf.push_back({name, e[0], e[1], e[2]}); }
+        for (int pi = 0; pi < 2; ++pi)
+        {
+            for (const Card& c : s.players[pi].graveyard)
+            { n.exact.push_back(mixv(0x67F0ull + static_cast<std::uint64_t>(pi), c.m_name_hash)); }
+        }
+        std::sort(n.exact.begin(), n.exact.end());
+        return n;
+    }
+
+    // Does A dominate-or-equal B? (comparable axes checked by caller symmetric parts via two calls)
+    inline bool Covers(const Snap& A, const Snap& B)
+    {
+        if (A.lib0 != B.lib0 || A.exact != B.exact) { return false; }
+        if (A.life0 < B.life0 || A.life1 > B.life1) { return false; }
+        // hand multiset: B subset-of A (both sorted)
+        { std::size_t i = 0;
+          for (std::uint64_t h : B.hand)
+          { while (i < A.hand.size() && A.hand[i] < h) { ++i; }
+            if (i >= A.hand.size() || A.hand[i] != h) { return false; } ++i; } }
+        // simple board per name: A has at least as many, at least as untapped/ready
+        { std::size_t i = 0;
+          for (const auto& b : B.bf)
+          { while (i < A.bf.size() && A.bf[i][0] < b[0]) { ++i; }
+            if (i >= A.bf.size() || A.bf[i][0] != b[0]) { return false; }
+            if (A.bf[i][1] < b[1] || A.bf[i][2] < b[2] || A.bf[i][3] < b[3]) { return false; } } }
+        return true;
+    }
+
+    // Record one end-of-turn sibling; compare vs the archived frontier. Census only.
+    inline void Check(std::vector<Snap>& archive, const GameState& s)
+    {
+        Snap n = Build(s);
+        T().snaps.fetch_add(1, std::memory_order_relaxed);
+        bool is_dominated = false, dominates_some = false, is_identical = false;
+        for (const Snap& a : archive)
+        {
+            if (a.key == n.key) { is_identical = true; break; }
+            const bool ab = Covers(a, n), ba = Covers(n, a);
+            if (ab && !ba)      { is_dominated = true; break; }
+            else if (ba && !ab) { dominates_some = true; }
+            else                { T().incomparable_pairs.fetch_add(1, std::memory_order_relaxed); }
+        }
+        if      (is_identical)   { T().identical.fetch_add(1, std::memory_order_relaxed); }
+        else if (is_dominated)   { T().dominated.fetch_add(1, std::memory_order_relaxed); }
+        else if (dominates_some) { T().dominates_archived.fetch_add(1, std::memory_order_relaxed); }
+        if (!is_identical && !is_dominated && archive.size() < 256) { archive.push_back(std::move(n)); }
+    }
+}
 // GLOBAL entry pool shared by every live line cache in the process (MTG_FSL_POOL, entries;
 // 0/unset = off = byte-identical). The per-cache cap (MTG_FSL_CAP) bounds ONE decision's cache;
 // this bounds their SUM. Rationale (Mirrorwing, 2026-08-14): line-cache appetite is heavily
@@ -18006,6 +18136,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         bool bp_variants_here = false;
         for (const Plan& p : candidates) { if (p.bp_choice >= 0) { bp_variants_here = true; break; } }
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
+        // TEMPORARY (MTG_DOM_CENSUS): per-pass end-of-turn sibling archive -- census only, see helper.
+        std::vector<domcensus::Snap> dom_archive;
         for (const Plan& plan : candidates)
         {
             // --- Overrun guard: finish if almost done, else abort + roll back ---
@@ -18085,6 +18217,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // inside SimulateToEnd's per-turn SolveWithLookahead, so no greedy land
             // play happens here.
             if (!SimulateEndAndStartNextTurn(copy)) { ++candidates_done; continue; }
+            if (DomCensusOn()) { domcensus::Check(dom_archive, copy); }   // TEMPORARY census
 
             // Simulate remaining turns at this pass's sub_depth. The rollout runs to
             // completion (enforce_budget=false inside), only consuming budget; the
