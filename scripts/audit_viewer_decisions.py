@@ -141,6 +141,25 @@ MANIFEST = {
     # sub-decision surfaced inside the main_phase plan variants (like tutor_to_hand/fetch), plus
     # the sacrifice_land additional cost surfaces the shared `sacrifice` decision.
     "tutor_land_to_battlefield": ("main_phase",        truthy),
+    # ---- KittyEquipment (2026-08-13) ----
+    # Equipment: WHICH creature to equip is a main_phase plan-variant choice (one Equip action
+    # per (equipment, host) pair; human play opens every legal host via UnprunedGate::EquipHost).
+    "is_equipment":          ("main_phase",           truthy),
+    # Armored Skyhunter attack-dig: WHICH revealed Aura/Equipment to put reuses the `dig`
+    # decision (FireAttackDigAttach -> g_play_dig_chooser); WHICH creature it attaches to is the
+    # new `attach_host` type (WriteAttachHostDecisionJson / attach_host board prompt).
+    "attack_dig_attach_count": ("dig",                positive),
+    # Umezawa's Jitte: counter-spend at combat is the turn-keyed `jitte` type (--jitte
+    # side-channel, WriteJitteDecisionJson / jittePanelHtml); the -1/-1 and lifegain modes are
+    # main_phase JitteModeAbility plan actions.
+    "equip_combat_damage_charges": ("jitte",          positive),
+    # Balan attach-all + Stoneforge put: battlefield activations surfaced as their own
+    # main_phase plan lines (AttachAllEquipment / PutFromHandAbility; attachall=/sfput= verbs).
+    "attach_all_equipment_cost": ("main_phase",       truthy),
+    "tap_put_from_hand_cost":    ("main_phase",       truthy),
+    # Unexpectedly Absent: target rides the shared `target` decision (tuck branch consults
+    # g_play_target_chooser); X rides the chosen_x plan-variant axis.
+    "tuck_to_library":       ("target",               truthy),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
 
@@ -342,6 +361,29 @@ INERT_PARAMS = {
     "token_copy_of_target": "automatic token copy of the chosen target (rides solo_target_trick)",
     "etb_lifegain": "automatic land ETB lifegain (Kazandu Refuge)",
     "checkland_subtypes": "static land entry condition (Rootbound Crag), no choice",
+    # --- KittyEquipment: equipment rider/legality/trigger detail params (NO new player choice) ---
+    # The choice-bearing equipment params are in MANIFEST above: is_equipment (host pick ->
+    # main_phase equip variants + attach_host), attack_dig_attach_count (-> dig + attach_host),
+    # equip_combat_damage_charges (-> jitte), attach_all_equipment_cost / tap_put_from_hand_cost
+    # (-> main_phase), tuck_to_library (-> target). Everything below is payload/legality detail
+    # riding one of those, or an automatic trigger.
+    "equip_power_bonus": "equipment stat grant (rides is_equipment)",
+    "equip_tough_bonus": "equipment stat grant (rides is_equipment)",
+    "equip_grants_lifelink": "automatic lifelink grant while equipped, no choice",
+    "equip_min_power": "equip legality gate (O-Naginata power>=3); narrows is_equipment host variants, no extra choice",
+    "equip_sacrifices_prior_host": "mandatory unattach-sac trigger (Grafted Wargear), no choice",
+    "metalcraft_equip_zero_artifacts": "static conditional cost modifier (Puresteel metalcraft), no choice",
+    "double_strike_while_equipped": "static conditional keyword grant (Kor Duelist), no choice",
+    "double_strike_min_equipment": "static conditional keyword grant threshold (Balan), no choice",
+    "draw_on_equipment_etb": "Puresteel may-draw auto-resolved as always-draw (strictly good; disclosed in 6a), no meaningful choice",
+    "upkeep_tokens_per_equipment": "mandatory upkeep trigger (Kemba cat per Equipment), token count computed, no choice",
+    "charge_pump_power": "Jitte mode payload detail (mode pick surfaces as main_phase JitteModeAbility; combat spend rides equip_combat_damage_charges -> jitte)",
+    "charge_pump_tough": "Jitte mode payload detail (rides equip_combat_damage_charges)",
+    "charge_minus_power": "Jitte -1/-1 mode payload detail (the creature pick surfaces as per-target main_phase JitteModeAbility variants)",
+    "charge_minus_tough": "Jitte -1/-1 mode payload detail (rides equip_combat_damage_charges)",
+    "charge_lifegain": "Jitte lifegain mode payload detail (mode pick surfaces as main_phase JitteModeAbility)",
+    "allow_self_target": "targeting-legality broadening detail (Unexpectedly Absent; the pick itself rides tuck_to_library -> target)",
+    "tap_put_from_hand_types": "put-from-hand card-type filter detail (rides tap_put_from_hand_cost -> main_phase)",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click
@@ -514,10 +556,23 @@ def oracle_advisories(card):
     return out
 
 
-def step(deck, prof, seed, gi, choices, max_turns):
-    cmd = [BIN, deck, "--profile", prof, "--claude-play", "--seed", str(seed),
+def step(deck, prof, seed, gi, choices, max_turns, jitte=None):
+    # Game seed = base + gi: the engine uses --seed VERBATIM as the game's shuffle seed
+    # (--game-index only sets numbering/labels -- same convention as the single-game repro
+    # recipe). Passing a constant base seed here made every "game" of the sweep the SAME
+    # shuffle replayed n_games times, which silently gutted coverage and made every
+    # verify-card "seed-search" search one game.
+    #
+    # --jitte-prompt: surface the turn-keyed jitte side-channel decision (Umezawa's Jitte
+    # counter spend) exactly as the play viewer does (server.js always passes it). Without it
+    # the engine silently replays the greedy default -- which reads as a HARD MISS here.
+    # Harmless on decks without a Jitte (the chooser never fires). Replies accumulate in
+    # `jitte` as "turn:count" pairs, NOT in the positional --choices stream.
+    cmd = [BIN, deck, "--profile", prof, "--claude-play", "--seed", str(seed + gi),
            "--game-index", str(gi), "--max-turns", str(max_turns),
-           "--reveal", "6", "--choices", ",".join(map(str, choices))]
+           "--reveal", "6", "--choices", ",".join(map(str, choices)), "--jitte-prompt"]
+    if jitte:
+        cmd += ["--jitte", ",".join(jitte)]
     out = subprocess.run(cmd, capture_output=True, text=True).stdout
     if RES_RE.search(out):
         return None
@@ -589,13 +644,14 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
     cast_seen_anywhere = False
     drawn_games = 0             # games where the card was ever in hand (distinguishes NOT_FORCED reasons)
     for gi in range(budget):
-        choices, guard = [], 0
+        choices, jitte, guard = [], [], 0
         observed = set()            # (type, source_lc)
         cast_here = False
         in_hand_here = False
+        seen_states = set()         # repeat-state pass rule; see run_sweep
         while guard < 220:
             guard += 1
-            d = step(deck, prof, base_seed, gi, choices, max_turns)
+            d = step(deck, prof, base_seed, gi, choices, max_turns, jitte)
             if d is None:
                 break
             t = d.get("type")
@@ -605,6 +661,16 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
             if any(str(c.get("name", "")).lower() == target_lc for c in hand):
                 in_hand_here = True
             choice = pick_toward(d, target_lc)
+            if t == "jitte":                 # side-channel reply, keyed by turn (see step())
+                jitte.append(f"{d.get('turn')}:{choice}")
+                continue
+            if t == "main_phase":
+                key = (d.get("turn"),
+                       tuple(sorted(p.get("summary", "") for p in d.get("plans", []))))
+                if key in seen_states:
+                    choice = -1
+                else:
+                    seen_states.add(key)
             if t == "main_phase" and isinstance(choice, int) and choice >= 0:
                 for pl in d.get("plans", []):
                     if pl.get("index") == choice and target_lc in pl.get("summary", "").lower():
@@ -641,14 +707,30 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns):
     cast_text = []
     stuck = 0                       # games that hit the guard without finishing (driver pathology)
     for gi in range(n_games):
-        choices, guard = [], 0
+        choices, jitte, guard = [], [], 0
+        seen_states = set()         # (turn, plan-summaries) already offered this game -- see below
         while guard < GUARD:
             guard += 1
-            d = step(deck, prof, base_seed, gi, choices, max_turns)
+            d = step(deck, prof, base_seed, gi, choices, max_turns, jitte)
             if d is None:
                 break
             observed[d.get("type", "?")] += 1
             choice = pick(d)
+            if d.get("type") == "jitte":     # side-channel reply, keyed by turn (see step())
+                jitte.append(f"{d.get('turn')}:{choice}")
+                continue
+            # Free repeatable actions (equip {0}: Lightning Greaves, metalcraft) legally recur
+            # forever -- the engine faithfully re-offers "move the equipment back" after every
+            # apply, so a driver that always takes a plan toggles it until the guard trips.
+            # A real player passes; do the same when this exact decision state has already
+            # been offered this game (progress always changes the plan list).
+            if d.get("type") == "main_phase":
+                key = (d.get("turn"),
+                       tuple(sorted(p.get("summary", "") for p in d.get("plans", []))))
+                if key in seen_states:
+                    choice = -1
+                else:
+                    seen_states.add(key)
             if d.get("type") == "main_phase" and isinstance(choice, int) and choice >= 0:
                 for pl in d.get("plans", []):
                     if pl.get("index") == choice:
