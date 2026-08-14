@@ -502,6 +502,10 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     { j.arm.ladder_value_leaf = jspec["ladder_value_leaf"].get<bool>() ? 1 : 0; }
     if (jspec.contains("value_startgate_alpha"))
     { j.arm.startgate_alpha = jspec["value_startgate_alpha"].get<double>(); }
+    // PATH-TO-TRUST arm (see ValueArm.h): both are process-wide statics, so carrying them per job is
+    // what lets ONE pooled batch run the A/B instead of one invocation per arm.
+    if (jspec.contains("esc_to_trust")) { j.arm.esc_to_trust = jspec["esc_to_trust"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("trust_slack"))  { j.arm.trust_slack  = jspec["trust_slack"].get<double>(); }
     j.arm.value_profile   = jspec.value("value_profile", std::string());
     // "deck_numbering": path to {"Card Name": [n1, n2, ...]}. Throws on a bad path/parse -- a
     // mis-specified numbering must fail loudly, never silently fall back to per-deck numbering

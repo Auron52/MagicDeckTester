@@ -15187,7 +15187,15 @@ namespace
     // bounded (kTrustPathSlack) rather than open-ended, and a path that does not fit falls through to
     // the ordinary gate, which commits where it can and lets the normal escalation run. Escalation
     // stays the fallback; it is never skipped because trust was unaffordable (user, 2026-08-14).
-    constexpr double kTrustPathSlack = 1.25;
+    // ADOPTED 2026-08-14 at 2.0, from a slack sweep validated on held-out seeds:
+    //   slack   train dturns        HELD-OUT dturns        work
+    //    1.00   -0.0080 (t 4.90)    --                     1.058x
+    //    1.25   -0.0107 (t 4.34)    -0.0070 (t 4.04)       1.068x
+    //    2.00   -0.0147 (t 4.07)    -0.0150 (t 11.62)      1.220x
+    // 2.0 is better on BOTH sets, improves 4/4 held-out seeds, and its held-out estimate matches
+    // train almost exactly (no selection decay). NOTE the curve has NOT been shown to turn over --
+    // 2.0 is the best value TESTED, not a located optimum; 4.0 was never measured.
+    constexpr double kTrustPathSlack = 2.0;
     // Set by FullSearchLineHybrid around the value probe only (thread_local: one decision, one
     // thread). 0 => inactive => the gate below is byte-identical to the alpha-only version.
     thread_local int    g_trust_target = 0;    // the deck's value trust depth
@@ -15341,7 +15349,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                                      ? static_cast<double>(std::max<long long>(0, g_probe_leaves[lastd]))
                                      : 0.0;
                 const double avoided = g_trust_R * leaves;
-                if (path <= kTrustPathSlack * (remaining + avoided)) { fits = true; }
+                // Slack: per-job override (A/B sweep) else the compiled bound.
+                const double slack = (valuearm::t_arm.trust_slack > 0.0)
+                                   ? valuearm::t_arm.trust_slack : kTrustPathSlack;
+                if (path <= slack * (remaining + avoided)) { fits = true; }
             }
             if (!fits) { break; }
         }
@@ -15791,7 +15802,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // Armed for the PROBE only (the escalation's own ladder must not see it -- its passes cancel
     // nothing). Default OFF => target 0 => the gate is byte-identical. R mirrors the escalation
     // predictor's frozen constant so both sides of the comparison use one cost model.
-    static const bool s_esc_to_trust = EnvOn("MTG_ESC_TO_TRUST");
+    static const bool s_esc_to_trust_env = EnvOn("MTG_ESC_TO_TRUST", true);   // ADOPTED default ON
+    // Per-job override (see ValueArm.h) so ONE pooled batch can carry both arms of the A/B;
+    // -1 = unset => the env static => byte-identical off the batch path.
+    const bool s_esc_to_trust = (valuearm::t_arm.esc_to_trust >= 0)
+                              ? (valuearm::t_arm.esc_to_trust != 0) : s_esc_to_trust_env;
     const bool trust_push = s_esc_to_trust && value_min_depth > 0 && value_min_depth <= depth;
     {
         TrustPathGuard _tpg(trust_push ? value_min_depth : 0,
