@@ -14740,6 +14740,19 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // permanent keeps the EXACT prior key (byte-identical).
         if (perm.age_counters > 0)
         { Fold(tk, 0xA6E0); Fold(tk, static_cast<uint64_t>(perm.age_counters)); }
+        // Storage battery (Dwarven Hold / Mercadian Bazaar): burst amount and StorageSourceLive both
+        // read the charge + hold flag, so two states differing only there solve DIFFERENTLY and must
+        // not share a TT entry. This hole was LATENT under ordered keys (permuted histories usually
+        // kept the colliding states apart by accident) and became live under MTG_CANON_SIMKEY, which
+        // merges exactly those permutations -- the dragonstorm suite regression that exposed it
+        // (2026-08-14). Same key-hole class the mana cache patched 2026-08-12. Folded ONLY when
+        // charged/held, so every deck without storage lands keeps the EXACT prior key.
+        if (perm.storage_counters > 0 || perm.storage_hold_this_turn)
+        {
+            Fold(tk, 0x570A6E);
+            Fold(tk, static_cast<uint64_t>(perm.storage_counters));
+            Fold(tk, perm.storage_hold_this_turn ? 1u : 0u);
+        }
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_power_bonus)));
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.temp_tough_bonus)));
         // Until-EOT haste (Expedite) / exile-at-end (Twinflame token): future-determining (attack

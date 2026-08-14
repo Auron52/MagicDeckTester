@@ -41,8 +41,16 @@ Then B is dominated by A iff, as multisets/values:
 
 - hand_B SUBSET-OF hand_A;
 - board_B SUBSET-OF board_A, and each matched permanent in A is in at-least-as-good state
-  (untapped >= tapped; counters: depletion charges >=, storage >=, +1/+1 >=; summoning-sick only if
-  B's copy is too);
+  (untapped >= tapped; summoning-sick only if B's copy is too);
+- **counters compare by per-TYPE monotonicity direction** (user refinement, 2026-08-14): identity
+  needs equality, dominance needs only the right inequality per type -- MORE dominates for +1/+1,
+  storage charges, depletion charges remaining; FEWER dominates for -1/-1 / other negative counters
+  and marked damage. **Vial charge is NOT monotone** (the useful charge tracks the curve: 2 is
+  ideal for 2-drops, 5 overshoots it) -- Vial and any other aim-for-a-value counter require
+  EQUALITY. Any type without a declared direction: require equality (safe default). The 2026-08-14 storage key-hole find (BuildSimKey
+  omitted `storage_counters`, exposed by canon on dragonstorm) is the cautionary tale for this
+  table: every counter type IS future-determining, so the dominance comparison must enumerate them
+  all -- an omitted type must fail closed (equality), never be silently ignored;
 - graveyard_B SUBSET-OF graveyard_A when any deck card reads the graveyard (gy_self_power_bonus,
   retrace, Deathrite fuel) — else graveyards may be ignored;
 - floating_B <= floating_A per colour; life_B <= life_A; storm/turn counters equal.
@@ -56,9 +64,14 @@ heuristic-optimization route, not a silent switch.
 
 The user's "board creature >= same card in hand" rule collapses far more (deploy-order near-misses
 become comparable) but is deck-dependent: THIS deck sometimes wants instants IN HAND (a Zada turn
-casts from hand; an empty hand is a dead magnet), and a discard/madness deck inverts the axis
-entirely. Ship it, if measured good, in the archetype provider (per-deck), never the root — same
-placement rule as every heuristic-optimization adoption.
+casts from hand; an empty hand is a dead magnet); a discard/madness deck inverts the axis entirely;
+and **ETB abilities are the sharpest counterexample** (user, 2026-08-14) — a creature whose
+enter-the-battlefield trigger has a payoff condition can be strictly better HELD (cast it when the
+payoff is live: more counters to place, a board to pump, a trigger to double), so board >= hand is
+wrong exactly when the ETB is why the card is in the deck. Framing: these are good ON-BY-DEFAULT
+heuristics, not sound rules — ship the default in the archetype provider with per-deck opt-out
+(or opt-in for the inverted decks), never as root engine truth; the measured A/B decides each
+deck's setting, same placement rule as every heuristic-optimization adoption.
 
 ## Implementation sketch
 
