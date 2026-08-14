@@ -142,6 +142,14 @@ by one question:
   byte-identical to control; 5c one game (ship) +1. The historical "searched measured worse"
   (antilife+hinata seed 1001) does NOT reproduce on these decks/seeds — relevant to the
   kill-the-greedy directive; needs the suite-wide re-check on the other second-main decks.
+  **Suite-wide re-check (smoke s1001 at SHIPPING config, same session): the historical result
+  DOES still reproduce there** — antilife d3 +0.0040, fivecolour d3 +0.0067, hinata d3
+  +0.0267, digest-only churn at d5 (burn / mirrorwing / goblins-d3 byte-identical). The
+  battery's neutrality was at explicit d3/d5 with a fixed 200 ms budget; at the decks'
+  value-play depths/budgets the searched second main still costs a little. CONCLUSION: the
+  greedy second main cannot be removed on today's measurement; it stays blocked on the
+  classification parity work below, exactly as this design intends ("classification makes
+  the searched second main affordable").
 - **First classify round: hinata +0.15 avg at ALL of ship/d3/d5** (13–15 recurring games +1,
   gi=87 win-at-8 → unwon; depth-independent = a lost LINE). ROOT-CAUSED via gi=6 log diff:
   **Soulfire Eruption was Main2'd by the bare DirectDamage rule, but it is an impulse engine**
