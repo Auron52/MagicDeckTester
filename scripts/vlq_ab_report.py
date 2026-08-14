@@ -17,7 +17,7 @@ import re
 import sys
 from collections import defaultdict
 
-LINE = re.compile(r"([A-Za-z0-9]+)_s(\d+): played=(\d+) avg=([\d.]+) digest=(\w+)")
+LINE = re.compile(r"([A-Za-z0-9]+)_s(\d+): played=(\d+) avg=([\d.]+) digest=(\w+)(?: ms=(\d+))?")
 
 
 def main(path, baseline=None):
@@ -25,7 +25,8 @@ def main(path, baseline=None):
     for ln in open(path):
         m = LINE.match(ln.strip())
         if m:
-            arms[m.group(1)][int(m.group(2))] = (int(m.group(3)), float(m.group(4)), m.group(5))
+            arms[m.group(1)][int(m.group(2))] = (int(m.group(3)), float(m.group(4)), m.group(5),
+                                                 int(m.group(6) or 0))
 
     if not arms:
         print(f"no job lines parsed from {path}")
@@ -53,12 +54,22 @@ def main(path, baseline=None):
     def wavg(a):
         return sum(arms[a][s][1] * arms[a][s][0] for s in seeds) / n
 
+    # COST comes with the quality read for free: every job line carries ms= (that job's core-time),
+    # so per-arm total core-time and its ratio to baseline report the performance of every arm from
+    # the same games the quality verdict used. An arm whose delta is neutral but whose cost is 2x is
+    # a real finding (trust/hybrid moves are cost levers first) -- and it was invisible before this.
+    def cost_s(a):
+        return sum(arms[a][s][3] for s in seeds) / 1000.0
+
     base_avg = wavg(baseline)
-    print(f"\n{'arm':<12} {'avg':<10} {'delta':<10} {'paired t':<10} {'better/worse/tied':<20} same-digest")
+    base_cost = cost_s(baseline)
+    print(f"\n{'arm':<12} {'avg':<10} {'delta':<10} {'paired t':<10} {'better/worse/tied':<20} "
+          f"{'same-digest':<12} {'core-s':<9} vs-base")
     for a in names:
         avg = wavg(a)
         if a == baseline:
-            print(f"{a+' (base)':<12} {avg:<10.5f} {'-':<10} {'-':<10} {'-':<20} -")
+            print(f"{a+' (base)':<12} {avg:<10.5f} {'-':<10} {'-':<10} {'-':<20} {'-':<12} "
+                  f"{cost_s(a):<9.0f} -")
             continue
         diffs = [arms[a][s][1] - arms[baseline][s][1] for s in seeds]
         mean = sum(diffs) / len(diffs)
@@ -73,8 +84,10 @@ def main(path, baseline=None):
             note = "  <- BYTE-IDENTICAL to baseline (this arm is not engaging)"
         if sd < 1e-12 and same != len(seeds):
             note = "  <- ZERO VARIANCE, suspect replayed games"
+        ratio = (f"{cost_s(a)/base_cost:.2f}x" if base_cost > 0 else "n/a")
         print(f"{a:<12} {avg:<10.5f} {avg-base_avg:<+10.5f} {t:<10} "
-              f"{f'{better}/{worse}/{len(seeds)-better-worse}':<20} {same}/{len(seeds)}{note}")
+              f"{f'{better}/{worse}/{len(seeds)-better-worse}':<20} {f'{same}/{len(seeds)}':<12} "
+              f"{cost_s(a):<9.0f} {ratio}{note}")
     print("\n[negative delta = better; THE metric is avg turn-to-win with unwon scored max_turns+1]")
     return 0
 
