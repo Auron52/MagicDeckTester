@@ -7926,6 +7926,53 @@ namespace
     }
 }
 
+// ---- Prepay DECLINE probe (MTG_PREPAY_PROBE) ---------------------------------------------------
+// The batch prepay IS the "solve the ideal total cost once, then work back" design: when it takes,
+// each cast is arithmetic on the pre-loaded pool and no per-cast tap search happens at all. When it
+// DECLINES, every cast in the turn falls back to TapForCostSharedOnce's backtracker -- the call shape
+// the payment cache does not cover, and 55% of all payment nodes (see the mana-cache node split).
+// So "why is payment still expensive?" is really "why does the prepay decline?", and that is a
+// question about THIS function, not about the cache. Diagnostic only; off by default.
+namespace
+{
+enum PrepayOutcome { PP_OK = 0, PP_DIG, PP_FLOOD, PP_FLOAT_NZ, PP_PRODUCER, PP_NO_DEF, PP_XSPELL,
+                     PP_SOULFIRE, PP_HINATA, PP_FEW_CASTS, PP_UNPAYABLE, PP_WILD, PP_N };
+const char* const kPrepayName[PP_N] = {
+    "PREPAID (no per-cast search)", "declined: dig-draw", "declined: flood engine",
+    "declined: float non-empty", "declined: producer (ritual/rock)", "declined: no card def",
+    "declined: {X} spell", "declined: soulfire discount", "declined: hinata discount",
+    "declined: <2 casts (single-cast turn)", "declined: combined UNPAYABLE",
+    "declined: wild -> pip pinning ambiguous" };
+struct PrepayProbe
+{
+    std::atomic<std::uint64_t> n[PP_N];
+    ~PrepayProbe()
+    {
+        if (!EnvOn("MTG_PREPAY_PROBE")) { return; }
+        std::uint64_t tot = 0;
+        for (int i = 0; i < PP_N; ++i) { tot += n[i].load(std::memory_order_relaxed); }
+        if (!tot) { return; }
+        std::fprintf(stderr, "\n=== BATCH PREPAY: %llu calls ===\n", (unsigned long long)tot);
+        for (int i = 0; i < PP_N; ++i)
+        {
+            const std::uint64_t v = n[i].load(std::memory_order_relaxed);
+            if (v) { std::fprintf(stderr, "  %-42s %10llu  (%5.1f%%)\n", kPrepayName[i],
+                                  (unsigned long long)v, 100.0 * (double)v / (double)tot); }
+        }
+    }
+};
+PrepayProbe g_prepay_probe;
+// Namespace-scope, not a function-local `static const bool`: this is called on every prepay attempt
+// (1.95M times in 14 FiveColour games), and a function-local static forces a thread-safe init-guard
+// check on EVERY call -- the same ~0.9% self-cost that moved tapstats::g_enabled out of its function.
+const bool g_prepay_probe_on = EnvOn("MTG_PREPAY_PROBE");
+inline bool Pp(PrepayOutcome o)
+{
+    if (g_prepay_probe_on) { g_prepay_probe.n[o].fetch_add(1, std::memory_order_relaxed); }
+    return false;   // every decline site returns false, so `return Pp(...)` reads as the decline
+}
+}  // namespace
+
 bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts)
 {
     static const bool s_enabled = !EnvOn("MTG_NO_BATCH_PAY");
@@ -7954,16 +8001,16 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     {
         for (const Action& a : acts)
         {
-            if (a.kind == Action::Kind::DigDraw) { return false; }
+            if (a.kind == Action::Kind::DigDraw) { return Pp(PP_DIG); }
             if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
             { continue; }
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-            if (d && d->tmpl == CardTemplate::DrawUntilNonland) { return false; }
+            if (d && d->tmpl == CardTemplate::DrawUntilNonland) { return Pp(PP_FLOOD); }
         }
     }
     // A non-empty float (e.g. a ritual's output) would be clobbered by the pre-load; producer turns
     // are declined below regardless, but guard here too so the reserve stays byte-identical there.
-    if (state.floating_mana.Total() != 0) { return false; }
+    if (state.floating_mana.Total() != 0) { return Pp(PP_FLOAT_NZ); }
 
     const int active = state.active_player_index;
     ManaCost combined;
@@ -7977,14 +8024,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
-        if (a.ritual_float > 0 || a.rock_mana.Total() > 0) { return false; } // producer breaks fungibility
+        if (a.ritual_float > 0 || a.rock_mana.Total() > 0) { return Pp(PP_PRODUCER); } // producer breaks fungibility
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-        if (!d) { return false; }
+        if (!d) { return Pp(PP_NO_DEF); }
         // A fixed upfront combined is only valid when no cast's cost can shrink/grow dynamically:
         // {X} spells and Hinata/Soulfire per-target discounts change the cost as the line resolves.
-        if (d->card.m_mana_cost.has_x && a.chosen_x > 0) { return false; }
-        if (SoulfireOwnTargetDiscount(*d, state, active, a.soulfire_own_targets) > 0) { return false; }
-        if (HinataGenericDiscount(*d, state, a.chosen_x) > 0) { return false; }
+        if (d->card.m_mana_cost.has_x && a.chosen_x > 0) { return Pp(PP_XSPELL); }
+        if (SoulfireOwnTargetDiscount(*d, state, active, a.soulfire_own_targets) > 0) { return Pp(PP_SOULFIRE); }
+        if (HinataGenericDiscount(*d, state, a.chosen_x) > 0) { return Pp(PP_HINATA); }
         ManaCost ec = EffectiveCost(*d, state);
         combined.generic += ec.generic; combined.white += ec.white; combined.blue += ec.blue;
         combined.black += ec.black; combined.red += ec.red; combined.green += ec.green;
@@ -7994,7 +8041,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     }
     // A single cast is already optimal via the per-cast complete-solver fallback; the inter-cast
     // stranding needs >=2 casts sharing the pool. <2 -> decline (single-cast turns byte-identical).
-    if (eligible < 2 || combined.ManaValue() == 0) { return false; }
+    if (eligible < 2 || combined.ManaValue() == 0) { return Pp(PP_FEW_CASTS); }
 
     // Snapshot exactly what a tap can touch so a declined solve (wild output) rolls back cleanly.
     const std::vector<Permanent> bf_snap = state.battlefield;
@@ -8080,7 +8127,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         state.players[active].life         = la;
         state.players[1 - active].life     = lo;
         state.opponent_lost_life_this_turn = oll;
-        return false;
+        return Pp(ok ? PP_WILD : PP_UNPAYABLE);
     }
 
     // Pre-load floating as the combined cost: COLOURED/{C} pips pinned to their colours (produced
@@ -8095,6 +8142,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                      + combined.red + combined.green + combined.colorless;
     pool.wild = produced.Total() - pinned;
     state.floating_mana = pool;
+    Pp(PP_OK);
     return true;
 }
 
