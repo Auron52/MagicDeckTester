@@ -472,6 +472,80 @@ price equips at post-subset artifact count (heuristic-optimization route).
 decision; commit of this tree — nothing committed yet; value-leaf + exhaustive mulligan
 profile — separate skills, on request (generate LATE, post-commit-freeze per their Rule 0).
 
+## USER HEURISTIC DOCTRINE (2026-08-14, post-push directives) — IN FLIGHT
+
+User-directed equip/Jitte/UA doctrine to encode as provider prunes + one RULES fix.
+Verbatim intent, then the implementation plan. STATUS AT CHECKPOINT: design done, sites
+identified, NOTHING IMPLEMENTED YET.
+
+**Directives (user):**
+1. Jitte: search should ALWAYS use +2/+2 (combat greedy spend — already the default);
+   never enumerate the -1/-1 / gain-2-life modes in autonomous search (no goldfish value).
+2. Unexpectedly Absent: just don't cast it in autonomous search, for now.
+3. Equip consolidation: stack extra power on ONE creature, preferring creatures with or
+   that GAIN double strike (Kor Duelist while equipped, Balan at 2+). Re-equips (moving an
+   attached equipment) only from a non-double-strike host to a double-strike(-potential)
+   host. Grafted Wargear: never move it except to a ds creature for lethal ("I don't think
+   it's worth it otherwise, though we can test this"). Lifelink/trample exceptions don't
+   matter in goldfish. Exception: Kemba vs double-striker stays a SEARCHED decision (or a
+   kills-this-turn heuristic) — enumerate both candidates.
+4. Lightning Greaves: (a) may need to MOVE to unshroud a host so another equipment can be
+   equipped (SHROUD MUST BLOCK targeted equip — currently NOT enforced, see rules fix);
+   matters mostly at exactly ONE creature (with more you park Greaves elsewhere);
+   (b) use to enable Stoneforge Mystic's tap-put by granting haste (CanTapNow ALREADY
+   handles equip-granted haste — no engine change needed); (c) otherwise haste the largest
+   (ds-weighted) summoning-sick creature; (d) Greaves goes LAST after all other equipment
+   lands on the host (because its shroud blocks later equips).
+5. User confirmed: Balan's attach-all and Skyhunter's attach-dig do NOT target → shroud
+   does not block them. Regular equip DOES target → blocked.
+
+**Implementation plan (sites identified):**
+- RULES FIX — shroud blocks targeted attach/targeting:
+  * `CreatureHasShroud(p, state)` helper in SpellEffects.h (mirror CreatureHasLifelink:
+    scan attached equipment for equip_grants_shroud; Greaves is the only source).
+  * Equip enumeration legality (TurnSolver equip block ~L4276-4378, host loop ~4336):
+    exclude E→X when X is phase-start shrouded, UNLESS a move of X's shroud equipment is
+    also enumerable — then offer it plus a subset guard `SubsetHasShroudBlockedEquip`
+    (twin in consider ~L6556 area + eval_and_push ~L11055 area, beside
+    SubsetHasStrandedEquip) rejecting subsets that equip→X without co-selecting the
+    Greaves-off-X move. Set-level achievability: a legal sequential order always exists
+    (move Greaves first / equip destination before Greaves arrives).
+  * Order the `equips` vector (built ~L4185-4202): non-shroud-granting first,
+    shroud-granting LAST → plans apply Greaves last (directive 4d) since subset apply
+    order = candidate order.
+  * Jitte -1/-1 target loop (~L4644) + UA human-play target enumeration: exclude shrouded
+    creatures (autonomous unaffected — opponent spawns are never shrouded).
+  * Legality enforced even under open_all/human play (a rule, not a prune — the
+    equip_min_power precedent at ~L4340). Legacy hatch MTG_LEGACY_SHROUD=1 = old
+    (unenforced) behavior, EnvOn per conventions.
+  * RISK: FiveColour also plays Lightning Greaves — enforcement may change its plans →
+    smoke may legitimately move (a rules fix, GT rebaseline = user call). Watch the smoke.
+- PRUNES (EquipmentProvider-owned; open under HumanPlayActive / gates):
+  * Jitte modes: skip the whole JitteModeAbility enumeration (~L4634-4680) unless
+    HumanPlayActive() or a new UnprunedGate::JitteMode ("jittemode" — verb already exists
+    in CheckLine). Combat spend stays greedy +2/+2 (JitteSpendCount default -1).
+  * UA: skip its hand-cast enumeration (Removal+tuck_to_library sites: TurnSolver L3117
+    (X-variants) — the cast-collection site) unless HumanPlayActive() or new
+    UnprunedGate::UACast ("uacast"). Rollout resolution branch (L8831) stays (needed for
+    human-play replay).
+  * Consolidation (new provider hook, e.g. EquipConsolidation() default false, Equipment
+    true): rider candidates = top ds-potential host (ds now, or double_strike_while_equipped,
+    or double_strike_min_equipment reachable) + Kemba (upkeep_tokens_per_equipment) when
+    present (searched pair, directive 3); no ds-potential host → top rider_delta host.
+    MOVES (attached_to != 0) only when current host NOT ds-now AND destination is
+    ds-potential — applies to Wargear too (replaces its rider_open=all-hosts under the
+    consolidated policy; rider_open stays under open_all). Haste-granting equips (Greaves)
+    EXEMPT from the moves-only-to-ds rule (shroud-dance/parking).
+  * Greaves haste ranking under consolidation: score boost for (i) a summoning-sick
+    untapped Stoneforge with a matching Equipment in hand (enables the tap-put — directive
+    4b), (ii) ds-weighted largest sick creature (pw doubled if ds-potential). Width stays 2.
+- MEASURE (after implementation): seed-300001 battery d0/d3/d5 + MTG_UNPRUNE=equiphost +
+  MTG_EQUIP_ALL_HOSTS arms (per-game diff; user's Wargear/Kemba claims are the testable
+  deltas), wall-time comparison (expect FASTER — fewer equip branches), pathological-seed
+  probes (300003 gi=2 d5; 300040 gi=39 d3; 300018 gi=17 fd), 5h sweep, full smoke
+  (FiveColour shroud watch). Report per-game regressions with explanations; adoption =
+  user call if anything moves outside the doctrine's predictions.
+
 ## Stage 6a — heuristics & assumptions disclosure
 
 Per the search-primary core bar: the search decides; these are the PRUNES/defaults that
