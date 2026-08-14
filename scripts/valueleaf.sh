@@ -151,16 +151,21 @@ INTRACTABLE_SPG=60
 #     ONE Mirrorwing mass-draw decision was measured at ~28 GB uncapped (2026-08-11), and phase A
 #     with both caches unlimited on 32 workers OOM'd a 23 GB box 3.2 h in (2026-08-13).
 # Sizing: budget = MemTotal minus 5 GB (system + engine baseline), split per worker; TT takes 1/3 at
-# 64 B/entry, the line cache 2/3 at an assumed ~8 KB/entry (deliberately pessimistic -- the caches
-# only lose recompute when the guess is off, the box only OOMs when it is optimistic). On a
-# 47 GB / 24-worker box this lands near the matrix driver's long-standing MTG_TT_CAP=8000000.
+# 64 B/entry, the line cache 2/3 at a MEASURED ~1 KB/entry. The first cut assumed 8 KB/entry out of
+# pessimism and that guess was the dominant cost of the whole phase: a three-cap probe on a heavy
+# label game (900011, 2026-08-13) measured ~600 B/entry from the RSS/entries slope and a 3-5x WALL
+# penalty from cap recompute (uncapped 58 s vs 295 s at cap 10K, peak RSS 125 MB), while the phase's
+# 6-hour monster games sat at 0.2 GB RSS -- strangled by entry count with 14 GB of budget unused.
+# 1 KB keeps ~40% headroom over the measurement; the box only OOMs if real entries exceed it by 3x
+# CONCURRENTLY on every worker, which the measured sizes put far out of reach. On a 47 GB /
+# 24-worker box this lands near the matrix driver's long-standing MTG_TT_CAP=8000000.
 # Exported for every phase; the matrix driver's env.setdefault yields to these.
 _mem_mb=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo)
 _nw=$(nproc)
 _budget_mb=$(( _mem_mb - 5120 )); [ "$_budget_mb" -lt 2048 ] && _budget_mb=2048
 _pw_kb=$(( _budget_mb * 1024 / _nw ))
 export MTG_TT_CAP=$((  _pw_kb * 1024 / 3 / 64   ))
-export MTG_FSL_CAP=$(( _pw_kb * 2 / 3 / 8      ))
+export MTG_FSL_CAP=$(( _pw_kb * 2 / 3          ))
 AB_GAMES=1000
 AB_SEEDS="600000 601000 602000 603000 604000 605000 606000 607000"
 PLAY_GAMES=500
