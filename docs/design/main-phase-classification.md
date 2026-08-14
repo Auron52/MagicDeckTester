@@ -267,6 +267,15 @@ tutor-to-hand deferred re-solve (`MTG_TUTOR_RESOLVE`). Hinata battery (vs contro
 | + land drop | +MTG_MAIN2_DROP | +0.24 | +0.21 | +0.20 |
 | + tutor re-solve | +MTG_TUTOR_RESOLVE | +0.20 | +0.19 | +0.17 |
 | + searchable site-3 | +MTG_BP_SITES=63 | +0.23 | +0.14 | +0.16 |
+| + Soulfire staging re-solve | classify+drop+MTG_ACQ_RESOLVE | +0.08 | +0.10 | +0.08 |
+| + site-3 on top | +MTG_BP_SITES=63 | +0.11 | **+0.05** | **+0.05** |
+
+(The tutor lever was renamed into the MTG_ACQ_RESOLVE family: mid-phase ACQUISITION re-solves —
+tutor_to_hand fetch + Soulfire's damage_equals_top_mv staged exile, which had registered with NO
+breakpoint class at all. With the family on, hinata's core-ms sits ~3x BELOW control at d3
+(127k vs 392k): the classification is now nearly quality-neutral AND much cheaper at searched
+depths. BP_SITES=63 helps d3/d5 but costs at ship — budget dilution in the value-leaf hybrid.
+Residual ~10 games (9–13 worse vs 1–3 better): the disposition-flip class, still open.)
 
 Recovered outright: the Gamble-class (gi=22, 99) and the drawn-land-class (gi=10, 17, 21, 32,
 42, 80, 95, 97, 98) games. **Residual (~16 games, e.g. gi=6/71/87): clairvoyant DISPOSITION
