@@ -268,9 +268,14 @@ bool GenericProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) co
     return lands_in_play < 2;
 }
 
-bool GenericProvider::CastEnablerFirst(const GameState&, const std::string&) const
+bool GenericProvider::CastEnablerFirst(const GameState&, const std::string& card_name) const
 {
-    return false;   // no enabler-first sequencing in a generic deck.
+    // Param-derived ENABLES edge (docs/design/card-dependency-map.md): a lifegain->loss
+    // enabler casts + resolves before its payloads so a same-turn payload sees the flip
+    // active. Was an AntiLifegainProvider override; the test is a pure card-parameter check
+    // with no archetype knowledge, so it belongs here (identical set, ordering audit item 3:
+    // the generic default now agrees with the generic CastOrderRank 0 tier below).
+    return ::IsLifegainToLossCard(card_name);
 }
 
 bool GenericProvider::DiscardLandsFirst(const GameState&) const
@@ -986,9 +991,19 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
     //      where the ordering search cannot reach the exiled casts.
     //   15 a mana ritual: must resolve BEFORE the payoff so its float is available to pay the
     //      bigger spell. Between creatures (10) and other noncreatures (20).
+    // DEPENDENCY-MAP tiers (docs/design/card-dependency-map.md):
+    //    0 a lifegain->loss ENABLER (Tainted Remedy / Plague Drone): FIRST, so every same-turn
+    //      opponent-lifegain payload (alt costs, Aria's ETB, Fiery Justice's rider) resolves
+    //      with the flip already active. Was an AntiLifegainProvider override; pure card-
+    //      parameter test, so it lives here (any deck with the edge gets the order for free).
+    //   19 a CAST-PAYOFF (verse_damage, Aria of Flame): benefits from every instant/sorcery
+    //      cast AFTER it resolves, so it goes right before the generic tier-20 spells that
+    //      feed its verse counters (and before any alt-cost payload burst it escalates).
+    if (def.params.lifegain_to_loss)             { return 0; }
     if (def.params.max_casts_after >= 0)         { return 18; }
     if (!def.params.reduces_spell_color.empty()) { return 16; }
     if (IsManaRitual(def))                       { return 15; }
+    if (def.params.verse_damage)                 { return 19; }
     if (def.params.on_cast_trigger_damage > 0) { return 30; }
     // Destroy-all-enchantments (Reverent Silence) wipes our OWN Aria/Remedy, so cast it LAST --
     // after this turn's wincon casts (Aria's lethal ETB reversal) have already resolved. Casting
@@ -1521,20 +1536,10 @@ bool AntiLifegainProvider::CanAutoFireAltPayload(const GameState& s, int control
     return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller);
 }
 
-bool AntiLifegainProvider::CastEnablerFirst(const GameState&, const std::string& card_name) const
-{
-    // Enabler-first: lifegain_to_loss cards (Tainted Remedy / Plague Drone) cast + resolve
-    // before payloads so a same-turn payload sees the enabler active.
-    return ::IsLifegainToLossCard(card_name);
-}
-
-int AntiLifegainProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
-{
-    // Enabler-first (Tainted Remedy / Plague Drone) so a same-turn payload resolves with the
-    // lifegain->loss flip already active; otherwise the generic ranks.
-    if (CastEnablerFirst(s, def.card.m_name)) { return 0; }
-    return GenericProvider::CastOrderRank(s, def);
-}
+// CastEnablerFirst / CastOrderRank: no overrides -- the enabler-first sequencing this provider
+// used to hand-code is now the generic param-derived ENABLES tier (lifegain_to_loss -> rank 0,
+// docs/design/card-dependency-map.md); the generic rank also orders Aria (verse_damage, 19)
+// before the instants that feed it and Reverent Silence (destroy_all_enchantments, 30) last.
 
 bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int controller,
                                                      const CardDefinition& def) const

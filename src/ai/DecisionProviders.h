@@ -146,9 +146,9 @@ public:
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
     bool CanAutoFireAltPayload(const GameState&, int, const CardDefinition&) const override;
-    bool CastEnablerFirst(const GameState&, const std::string&) const override;
+    // CastEnablerFirst / CastOrderRank: no overrides -- enabler-first is the generic
+    // param-derived ENABLES tier now (lifegain_to_loss -> rank 0, card-dependency-map).
     bool ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const override;
-    int  CastOrderRank(const GameState&, const CardDefinition&) const override;
     // Tainted Remedy and Plague Drone are the SAME role (opponent lifegain -> loss) and you only
     // need one at a time, so holding one makes the other a redundant required piece rather than a
     // protected "last copy" (user 2026-08-07).

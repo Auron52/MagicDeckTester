@@ -290,6 +290,56 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path) -> list[dict]
     return coverage
 
 # ---------------------------------------------------------------------------
+# Card dependency map (docs/design/card-dependency-map.md)
+# ---------------------------------------------------------------------------
+
+def DeriveDependencyMap(card_names: list[str], cards_json: Path) -> dict:
+    """
+    Mirror of the engine's param-derived dependency edges (GoldFishRunner::DeriveDependencyPulls
+    + the generic CastOrderRank tiers), printed so a human reviews what the engine inferred --
+    a missing edge is an implementation-review item, same as a coverage gap. Edge types:
+      ENABLES      lifegain_to_loss enabler -> each opponent-lifegain payload
+      CAST-PAYOFF  verse_damage card <- each instant/sorcery cast (benefits when cast after it)
+      DESTROYS     destroy_all_enchantments card -> each enchantment (ordered last, needs a
+                   surviving enabler or subset-level lethality)
+    """
+    entries = {}
+    if cards_json.exists():
+        with open(cards_json, encoding="utf-8") as f:
+            data = json.load(f)
+        for card in data.get("cards", []):
+            if card.get("name") in card_names:
+                entries[card["name"]] = card
+
+    def params(n): return entries[n].get("parameters", {}) or {}
+    def types(n):  return entries[n].get("types", []) or []
+
+    enablers = [n for n in entries if params(n).get("lifegain_to_loss")]
+    payloads = [n for n in entries if params(n).get("alt_lifegain_cost", 0) > 0
+                or params(n).get("opponent_lifegain", 0) > 0
+                or params(n).get("etb_opponent_lifegain", 0) > 0
+                or params(n).get("tap_opponent_lifegain", 0) > 0
+                or params(n).get("controller_lifegain_equals_power")]
+    verses   = [n for n in entries if params(n).get("verse_damage")]
+    casts    = [n for n in entries if "Instant" in types(n) or "Sorcery" in types(n)]
+    destroys = [n for n in entries if params(n).get("destroy_all_enchantments")]
+    enchants = [n for n in entries if "Enchantment" in types(n)]
+
+    edges = []
+    for a in enablers:
+        for b in payloads:
+            edges.append({"type": "ENABLES", "from": a, "to": b})
+    for a in verses:
+        for b in casts:
+            if b != a:
+                edges.append({"type": "CAST-PAYOFF", "payoff": a, "feeder": b})
+    for a in destroys:
+        for b in enchants:
+            if b != a:
+                edges.append({"type": "DESTROYS", "from": a, "to": b})
+    return {"edges": edges} if edges else {"edges": []}
+
+# ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
 
@@ -739,6 +789,9 @@ def Main():
         "cards":    card_names,
         "missing":  missing,
         "coverage": coverage,
+        # Engine-inferred card dependency edges (review item: a missing edge here means the
+        # implementation lacks the param that would derive it -- same class as a coverage gap).
+        "dependency_map": DeriveDependencyMap(existing, cards_json),
     }
 
     if args.coverage_only:

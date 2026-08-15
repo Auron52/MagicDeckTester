@@ -229,6 +229,14 @@ struct GameState
     // classifier inactive for any state not built through SetupGame (conservative: a filter that
     // silently narrows nothing beats one that silently deletes casts).
     bool                     uses_second_main      = false;
+    // CARD-DEPENDENCY-MAP pulls (GoldFishRunner::DeriveDependencyPulls, stamped by SetupGame; see
+    // docs/design/card-dependency-map.md). Closure over the deck's dependency edges: an ENABLER
+    // (lifegain_to_loss) must be considerable in the phase of its opponent-lifegain payloads, and a
+    // CAST-PAYOFF card (verse_damage) wants to resolve before the instant/sorcery casts that feed
+    // it -- when the feeding side classifies Main1, these pull to Main1 too. Default FALSE = no
+    // pull = prior classifier behaviour for any state not built through SetupGame.
+    bool                     dep_enabler_main1     = false;
+    bool                     dep_castpayoff_main1  = false;
 
     // SEARCHED Goblin Lackey put (Plan::lackey_choice): an index into the provider's ranked
     // CombatCheatCandidates list, or -1 for the provider's top pick. Unlike the scry/ETB-dig pins

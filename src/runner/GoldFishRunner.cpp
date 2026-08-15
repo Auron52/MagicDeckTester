@@ -138,6 +138,93 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
     return false;
 }
 
+// Card-dependency-map closure (docs/design/card-dependency-map.md, USER design 2026-08-15): a
+// card's main-phase class is a consequence of the deck's dependency graph, not an intrinsic
+// property. Derived mechanically from CardParams -- no per-deck hand code:
+//   ENABLES      A(lifegain_to_loss) -> B gives the opponent life. An enabler must be
+//                considerable in the phase of its payloads, so if any payload classifies Main1
+//                the enabler pulls to Main1 (antilife: Invigorate's alt cost is a Main1 pump ->
+//                Tainted Remedy / Plague Drone pull forward).
+//   CAST-PAYOFF  A(verse_damage) benefits from every instant/sorcery cast AFTER it resolves,
+//                so if any of those casts classify Main1 the payoff pulls to Main1 (Aria of
+//                Flame before Invigorate).
+// Computed to FIXPOINT because a pulled card can itself be the Main1 payload that pulls the
+// next edge (Aria is both a cast-payoff and a Remedy payload). The static Main1 test mirrors
+// the classifier's attack-helping classes (ClassifyMainPhase) -- the only class that is Main1
+// in every state; state-dependent classes (haste creatures etc.) are deliberately not counted,
+// so a pull only fires off an edge that holds in EVERY game state (a false negative keeps the
+// prior classification = the narrow, safe direction for a pull).
+GoldFishRunner::DependencyPulls GoldFishRunner::DeriveDependencyPulls(const Decklist& deck)
+{
+    auto static_main1 = [](const CardDefinition& d)
+    {
+        if (d.tmpl == CardTemplate::Haste || d.tmpl == CardTemplate::PumpSpell
+            || d.tmpl == CardTemplate::LordEffect)                           { return true; }
+        const CardParams& p = d.params;
+        return p.is_equipment || p.grants_haste || p.grants_temp_haste || p.equip_grants_haste
+            || p.grants_double_strike || p.team_pump_cost.has_value()
+            || p.firebreathing_cost.has_value() || p.power_bonus > 0 || p.tough_bonus > 0
+            || p.scales_per_matching || p.affects_all_creatures || p.domain_self_pump
+            || p.power_equals_creature_count;
+    };
+    // Opponent-lifegain payload of an ENABLES edge. Grove's tap drip (tap_opponent_lifegain)
+    // is a land -- never classified, never Main1 -- so it cannot pull; castable payloads only.
+    auto op_lifegain_payload = [](const CardParams& p)
+    {
+        return p.alt_lifegain_cost > 0 || p.opponent_lifegain > 0
+            || p.etb_opponent_lifegain > 0 || p.controller_lifegain_equals_power;
+    };
+
+    std::vector<const CardDefinition*> defs;
+    {
+        std::set<std::string> seen;
+        for (const Card& c : deck.mainboard)
+        {
+            if (!seen.insert(c.m_name).second) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && !d->card.IsLand()) { defs.push_back(d); }
+        }
+    }
+
+    DependencyPulls pulls;
+    // Main1 under the CURRENT pull state -- re-evaluated each fixpoint round.
+    auto is_main1 = [&](const CardDefinition& d)
+    {
+        if (static_main1(d))                                    { return true; }
+        if (d.params.lifegain_to_loss && pulls.enabler_main1)   { return true; }
+        if (d.params.verse_damage && pulls.castpayoff_main1)    { return true; }
+        return false;
+    };
+    bool changed = true;
+    while (changed)
+    {
+        changed = false;
+        bool has_enabler = false, has_verse = false;
+        bool main1_payload = false, main1_cast = false;
+        for (const CardDefinition* d : defs)
+        {
+            if (d->params.lifegain_to_loss) { has_enabler = true; }
+            if (d->params.verse_damage)     { has_verse = true; }
+            if (is_main1(*d))
+            {
+                if (op_lifegain_payload(d->params))                 { main1_payload = true; }
+                if (d->card.IsInstant() || d->card.IsSorcery())     { main1_cast = true; }
+            }
+        }
+        if (!pulls.enabler_main1 && has_enabler && main1_payload)
+        {
+            pulls.enabler_main1 = true;
+            changed = true;
+        }
+        if (!pulls.castpayoff_main1 && has_verse && main1_cast)
+        {
+            pulls.castpayoff_main1 = true;
+            changed = true;
+        }
+    }
+    return pulls;
+}
+
 // ---- Card numbering --------------------------------------------------------
 
 // Assigns stable integer IDs to each card copy in the deck.
@@ -531,6 +618,11 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     // casts deferred INTO one (defer == delete there). Stamped from the same detector the runner
     // uses to decide whether to play post-combat mains, so the two can never disagree.
     state.uses_second_main     = DeckUsesSecondMain(deck);
+    // Card-dependency-map pull closure (DeriveDependencyPulls above): which dependency classes
+    // the classifier pulls to Main1 for this deck.
+    const DependencyPulls dep_pulls = DeriveDependencyPulls(deck);
+    state.dep_enabler_main1    = dep_pulls.enabler_main1;
+    state.dep_castpayoff_main1 = dep_pulls.castpayoff_main1;
 
     state.players[0].library.assign(deck.mainboard.begin(), deck.mainboard.end());
 

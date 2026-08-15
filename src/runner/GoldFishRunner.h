@@ -97,4 +97,13 @@ public:
     // Deck-level input to the main-phase classifier: any attack-feeding card in the deck?
     // Stamped onto GameState::deck_feeds_combat by SetupGame (see the .cpp note).
     static bool DeckFeedsCombat(const Decklist& deck);
+    // Card-dependency-map closure (docs/design/card-dependency-map.md): which dependency
+    // classes the main-phase classifier pulls to Main1 for this deck. Stamped onto
+    // GameState::dep_enabler_main1 / dep_castpayoff_main1 by SetupGame.
+    struct DependencyPulls
+    {
+        bool enabler_main1    = false;   // lifegain_to_loss enablers -> Main1
+        bool castpayoff_main1 = false;   // verse_damage cast-payoffs -> Main1
+    };
+    static DependencyPulls DeriveDependencyPulls(const Decklist& deck);
 };

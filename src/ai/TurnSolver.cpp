@@ -3202,6 +3202,17 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
         || p.scales_per_matching || p.affects_all_creatures || p.domain_self_pump
         || p.power_equals_creature_count)
     { return MP::Main1; }
+    // CARD-DEPENDENCY-MAP pull-forward (docs/design/card-dependency-map.md, USER 2026-08-15):
+    // a card's phase is a consequence of the deck's dependency graph. A lifegain->loss ENABLER
+    // must be considerable in the phase of its payloads (Invigorate's alt cost is a Main1 pump
+    // -> Tainted Remedy / Plague Drone pull to Main1); a CAST-PAYOFF card (verse_damage) wants
+    // to resolve BEFORE the instant/sorcery casts that feed it (Aria of Flame pulls to Main1
+    // ahead of the Main1 instants -- also what makes it castable off creature mana BEFORE those
+    // creatures attack, antilife gi=149). The closure is computed per-deck at SetupGame
+    // (GoldFishRunner::DeriveDependencyPulls); an unstamped state keeps both flags false = no
+    // pull = prior behaviour.
+    if (p.lifegain_to_loss && state.dep_enabler_main1)    { return MP::Main1; }
+    if (p.verse_damage && state.dep_castpayoff_main1)     { return MP::Main1; }
     // DOUBT-DEFERRAL sub-lever (MTG_DOUBT_MAIN2, default OFF): the USER's one-pool placement
     // rule -- with the attack-helping classes explicit above, tutors classify as card-flow
     // (Both, like draws) and the residual doubt class defers to Main2 so the non-combat hand
