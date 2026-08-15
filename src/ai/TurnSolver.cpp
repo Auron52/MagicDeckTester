@@ -3187,6 +3187,34 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
     // Spectacle: the alternate cost turns ON during combat (Light Up the Stage -- the USER's
     // named example), so post-combat is cheaper-or-equal and never worse.
     if (p.spectacle_cost.has_value()) { return MP::Main2; }
+    // ATTACK-HELPING classes stay pre-combat (USER placement rule 2026-08-15: bake in "the
+    // cards that help with the attack phase" explicitly, so the residual doubt class can
+    // defer). Mirrors the per-card signals DeckFeedsCombat scans -- pumps, anthems, haste
+    // granters, equipment, firebreathing, board-scaling -- each one changes THIS turn's
+    // combat when cast pre-combat. (Prowess is handled at the filter level: it stands down
+    // entirely when a prowess attacker is available, board or hand+haste.)
+    if (def.tmpl == CardTemplate::PumpSpell || def.tmpl == CardTemplate::LordEffect
+        || def.tmpl == CardTemplate::Haste)
+    { return MP::Main1; }
+    if (p.is_equipment || p.grants_haste || p.grants_temp_haste || p.equip_grants_haste
+        || p.grants_double_strike || p.team_pump_cost.has_value()
+        || p.firebreathing_cost.has_value() || p.power_bonus > 0 || p.tough_bonus > 0
+        || p.scales_per_matching || p.affects_all_creatures || p.domain_self_pump
+        || p.power_equals_creature_count)
+    { return MP::Main1; }
+    // DOUBT-DEFERRAL sub-lever (MTG_DOUBT_MAIN2, default OFF): the USER's one-pool placement
+    // rule -- with the attack-helping classes explicit above, tutors classify as card-flow
+    // (Both, like draws) and the residual doubt class defers to Main2 so the non-combat hand
+    // evaluates against ONE mana allocation. MEASURED AS-IS it REGRESSES (antilife 4.3267 ->
+    // 4.3933): the collapsed m2 set is priced/ordered by machinery still tuned for small
+    // homogeneous sets (ordering-audit items: OrderingOpaque blanket, phase-blind subset
+    // scoring, sequenced-ritual asymmetry, executor continuation raw order). Adopt only after
+    // that hardening lands and the flip re-measures neutral-or-better.
+    static const bool s_doubt_main2 = EnvOn("MTG_DOUBT_MAIN2");
+    if (s_doubt_main2
+        && (p.tutor_to_hand || p.tutor_to_top || p.tutor_land_to_battlefield
+            || p.tutor_to_battlefield))
+    { return state.deck_feeds_combat ? MP::Both : MP::Main2; }
     switch (def.tmpl)
     {
         case CardTemplate::DirectDamage:
@@ -3230,11 +3258,14 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
             return haste ? MP::Main1 : MP::Main2;
         }
         default:
-            // When in doubt, keep pre-combat (wider, never wrong) -- EXCEPT in a deck with no
-            // main-1 effects at all: there the doubt has nothing to protect (no modelled way
-            // for any cast to feed the attack), and the USER's rule sends everything second
-            // main. Doubt-class customs deliberately do NOT count toward DeckFeedsCombat, so
-            // this cannot flip itself.
+            // When in doubt, keep pre-combat (wider, never wrong in the base world) -- EXCEPT
+            // in a deck with no main-1 effects at all, where the USER's rule sends everything
+            // second main. Under MTG_DOUBT_MAIN2 (see above) the doubt class defers instead:
+            // in the collapsed world "Main1 by doubt" is not free -- it SPLITS the turn's
+            // mana into two pools solved separately (antilife gi=58: doubt-Main1 Swords
+            // front-ran W,W pre-combat and starved the deferred Fiery Justice). That flip is
+            // parked default-off until the m2 ordering hardening makes it measure clean.
+            if (s_doubt_main2) { return MP::Main2; }
             return state.deck_feeds_combat ? MP::Main1 : MP::Main2;
     }
 }

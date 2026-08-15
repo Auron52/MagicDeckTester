@@ -2566,9 +2566,55 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         for (const Action& a : extra.actions)
         { if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); } }
-        for (const Action& a : extra.actions)
+        // Continuation casts in the SAME canonical order the rollout's apply_plan_actions
+        // realises (ordering-audit 2026-08-15, item 2: this loop ran in RAW plan order, so a
+        // continuation holding more than one cast could execute a different sequence than the
+        // one the search scored -- the classic lockstep failure, previously masked because
+        // continuations were near-singletons). searched_order pins the vector order; otherwise
+        // an OPAQUE set (cantrip/staging present) applies enablers first (CastOrderRank-stable,
+        // rest in plan order) and a CLEAN set stable-sorts by CastOrderLess -- the exact branch
+        // pair of the main cast loop below / TurnSolver's apply.
+        std::vector<int> cont_order;
+        for (int i = 0; i < static_cast<int>(extra.actions.size()); ++i)
         {
-            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+            const Action& a = extra.actions[i];
+            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { cont_order.push_back(i); }
+        }
+        if (!extra.searched_order && cont_order.size() > 1)
+        {
+            bool cont_opaque = false;
+            for (int i : cont_order)
+            { if (OrderingOpaque(extra.actions[i].card_name)) { cont_opaque = true; break; } }
+            if (cont_opaque)
+            {
+                std::vector<int> ena, rest;
+                for (int i : cont_order)
+                {
+                    const Action& a = extra.actions[i];
+                    const bool is_ena = !a.alt_cost
+                        && ResolveProvider(state).CastEnablerFirst(state, a.card_name);
+                    (is_ena ? ena : rest).push_back(i);
+                }
+                std::stable_sort(ena.begin(), ena.end(), [&](int x, int y)
+                {
+                    const CardDefinition* dx = CardDatabase::Instance().Lookup(extra.actions[x].card_name);
+                    const CardDefinition* dy = CardDatabase::Instance().Lookup(extra.actions[y].card_name);
+                    if (!dx || !dy) { return false; }
+                    return ResolveProvider(state).CastOrderRank(state, *dx)
+                         < ResolveProvider(state).CastOrderRank(state, *dy);
+                });
+                cont_order = std::move(ena);
+                cont_order.insert(cont_order.end(), rest.begin(), rest.end());
+            }
+            else
+            {
+                std::stable_sort(cont_order.begin(), cont_order.end(), [&](int x, int y)
+                { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
+            }
+        }
+        for (int ci : cont_order)
+        {
+            const Action& a = extra.actions[ci];
             {
                 cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); resolve_now();
                 if (is_draw_engine(a.card_name))
