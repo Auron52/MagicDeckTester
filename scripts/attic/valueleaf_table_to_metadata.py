@@ -563,11 +563,27 @@ def write_deck(block, tol, offset, margin, dry, scalar_cap=None, set_esc_cap=Tru
     nd = collections.OrderedDict()
     nd["value_leaf_table"] = table
     nd["value_fallback_crossover"] = fb
+    # TRUST IS PROPOSED HERE AND DECIDED BY GAMES (user, 2026-08-15): "how we should be handling
+    # trust is by playing with it A/B on vs off in additional games and verifying that the results
+    # are good. So the tolerance here would just gate an acceptance test."
+    #
+    # So the matrix no longer SHIPS `value_trust_depth`; it names a CANDIDATE. The table is a
+    # measurement of two arms run separately, and trust is a claim about what happens when the
+    # hybrid keeps a leaf line inside real, budgeted play -- which is not the same experiment. The
+    # tolerance's job is now to decide whether a candidate is worth spending games on, not to settle
+    # it. `valueleaf.sh` phase E runs trustON vs trustOFF on fresh seeds and promotes the candidate
+    # into `value_trust_depth` (in the STAGED file -- still not adoption) only if it clears the
+    # acceptance test; see scripts/vlq_trust_accept.py.
+    #
+    # Until that runs the staged model carries NO trust, which is the safe side: every unverified
+    # line stays eligible to escalate. A regeneration of a deck that currently ships trust therefore
+    # has to re-earn it, deliberately -- the old value was derived under the same unverified rule.
     if trust_depth is not None:
-        nd["value_trust_depth"] = trust_depth
+        nd["value_trust_depth_candidate"] = trust_depth
     nd["value_no_fallback"] = no_fallback
     for k, v in d.items():
-        if k not in ("value_leaf_table", "value_fallback_crossover", "value_trust_depth", "value_no_fallback"):
+        if k not in ("value_leaf_table", "value_fallback_crossover", "value_trust_depth",
+                     "value_trust_depth_candidate", "value_no_fallback"):
             nd[k] = v
 
     # AUTO-DERIVE the single-depth escalation cap. The heuristic escalation runs ONE predicted-affordable pass
@@ -592,7 +608,7 @@ def write_deck(block, tol, offset, margin, dry, scalar_cap=None, set_esc_cap=Tru
             # Binds only where the ladder is SHORTER than the play depth: burn/knights are unchanged.
             vp["escalation_cap"] = min(int(vp["target_depth"]), max(hd))
 
-    td = "UNSET" if trust_depth is None else str(trust_depth)
+    td = "UNSET" if trust_depth is None else "%d?(candidate)" % trust_depth
     ov_note = "" if not manual else "  [manual: %s]" % ",".join(
         "c%s:%s->%s" % (k, (v.get("from") if isinstance(v, dict) else "?"),
                         (v.get("to") if isinstance(v, dict) else v)) for k, v in manual.items())

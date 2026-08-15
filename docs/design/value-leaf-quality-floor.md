@@ -94,6 +94,31 @@ Driver-side, in the deriver, applying to every deck:
    takes its SAFE value. Never let a starved cell buy "keep the leaf". *(For `value_trust_depth` this
    now falls out of 2 -- fewer games means a wider bound means no trust. Still open for the
    crossover.)*
+2a. **SHIPPED: trust is NOMINATED by the matrix and DECIDED by games.** User, 2026-08-15:
+   *"Realistically how we should be handling trust is by playing with it A/B on vs off in additional
+   games and verifying that the results are good. So the tolerance here would just gate an acceptance
+   test."* The matrix cannot settle it: it measures the two arms SEPARATELY and UNBOUNDED, while
+   trust is a claim about what happens when leaf lines are kept inside real BUDGETED play, where the
+   skipped escalation is spent widening the search instead. Different experiment.
+
+   So phase D writes `value_trust_depth_candidate` and phase E runs **trustON vs trustOFF** on 8
+   held-out seeds x 1000 games -- pooled into the SAME batch as the existing A/B and play sweeps, on
+   seeds disjoint from both and spaced exactly games-apart so the arms tile once (rule 7).
+   `scripts/vlq_trust_accept.py` applies the verdict and, on acceptance, promotes the candidate into
+   `value_trust_depth` **in the staged file** -- still not adoption.
+
+   **NON-INFERIORITY, not an improvement test.** Trust is a cost lever whose upside is the escalation
+   it skips, so the claim under test is that skipping does not cost QUALITY: accept iff the
+   one-sided 95% bound on (ON - OFF) is at or below tol. Requiring ON to measure BETTER would reject
+   a lever that is exactly neutral and cheaper, which is the outcome we most expect and most want.
+   Not accepted => no trust => everything stays eligible to escalate, the side that cannot cost
+   quality. The script also refuses on a seed-tiling violation, and flags an arm pair that came back
+   byte-identical on every seed (the lever never engaged -- accepting would be accepting nothing).
+
+   First run, burn: candidate d4, ON-OFF **+0.00000 turns** (95% upper +0.00000) over 8 x 1000, at
+   **0.96x the cost**, 7/8 seeds byte-identical -- ACCEPTED and promoted. Exactly the expected shape:
+   quality-neutral, and the saving is the escalations it stopped paying for.
+
 2. **SHIPPED: noise-aware margin instead of a hard tolerance.** `value_trust_depth` is now an
    EQUIVALENCE claim: the PAIRED gap `V_d - h_conv`, over the games both cells hold, must have its
    one-sided 95% upper bound at or below `tol` -- not merely its point estimate. Thin or noisy

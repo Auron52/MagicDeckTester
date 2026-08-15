@@ -159,8 +159,8 @@ run's rows, table or markers.
 | A split | bucket by seed, dedupe on `(seed, turn)`, sort | no |
 | B train | GBDT → `logs/eval/<stem>.value.STAGED.json` | no |
 | C matrix | H×V depth matrix, the whole thing in ONE pool | yes — one pooled batch, one tail |
-| D metadata | derive crossover + `value_trust_depth` into the staged sidecar | no |
-| E measure | staged-vs-live A/B + play sweep | yes — one pooled batch |
+| D metadata | derive crossover + NOMINATE a `value_trust_depth_candidate` into the staged sidecar | no |
+| E measure | staged-vs-live A/B + play sweep + **trust acceptance (ON vs OFF)** | yes — one pooled batch |
 
 Every batch is a barrier that returns only when its slowest game finishes, so what matters is **how
 many times you pay that tail**, not how big each batch is. Three is the floor and phase C now sits at
@@ -216,6 +216,15 @@ decides; it stays pure heuristic at `MTG_VALUE_MODEL=0`.
   (Creature Giving: H4 == H3 exactly), the leaf has little room at in-play depths.
 - **Crossover / `value_trust_depth`**: UNSET means the leaf never matched the heuristic inside
   tolerance at a depth we actually play — normal, and not a failure.
+- **Trust is NOMINATED by the matrix and DECIDED by games** (user, 2026-08-15). Phase D writes
+  `value_trust_depth_candidate`; phase E runs trustON vs trustOFF on 8 held-out seeds × 1000 games
+  and promotes it into `value_trust_depth` (still only in the STAGED file) iff the one-sided 95%
+  bound on ON−OFF sits at or below tol. The tolerance's only job is to gate that test — it does not
+  settle trust, because the matrix measures the arms separately and UNBOUNDED while trust is a claim
+  about keeping leaf lines inside real budgeted play. Non-inferiority, not improvement: trust is a
+  cost lever whose upside is the escalation it skips, so the claim under test is that skipping does
+  not cost quality. Not accepted ⇒ no trust ⇒ everything stays eligible to escalate, which is the
+  side that cannot cost quality (`docs/design/value-leaf-quality-floor.md`).
 - **Phase E A/B** is the adoption gate, at the deck's real play point. Judge on avg win turn.
 
 **Adoption is not the default outcome.** Of the last nine models, one was a clear win, six were

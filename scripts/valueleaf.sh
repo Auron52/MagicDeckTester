@@ -219,6 +219,20 @@ AB_GAMES=1000
 AB_SEEDS="600000 601000 602000 603000 604000 605000 606000 607000"
 PLAY_GAMES=500
 PLAY_SEEDS="610000 611000 612000 613000"
+# TRUST ACCEPTANCE arms (user, 2026-08-15): the depth matrix nominates a `value_trust_depth`
+# CANDIDATE and these games decide it, because trust is a claim about keeping leaf lines inside real
+# BUDGETED play and the matrix measures the two arms separately and unbounded. Same power as the
+# adoption A/B (8 seeds x 1000) because it IS an adoption decision.
+#
+# SEEDS DISJOINT FROM EVERYTHING, and spaced exactly games-apart so the arms tile their seed space
+# once: game identity is base+game_index, so closer spacing makes jobs REPLAY games -- which once
+# turned 1.3 sigma into a fake -14.4 sigma. 620000+ sits clear of AB (600000-607999) and play
+# (610000-613999). vlq_trust_accept.py re-checks the tiling rather than trusting this comment.
+TRUST_GAMES=1000
+TRUST_SEEDS="620000 621000 622000 623000 624000 625000 626000 627000"
+# Non-inferiority margin for the acceptance test, in LP turns. Same number as the deriver's --tol,
+# and deliberately so: the tolerance's ONLY job is now to gate this test.
+TRUST_TOL=0.002
 ROW_K=3
 
 # key | deck-dir | stem | matrix-key | row-seed-base | row-games -- GENERATED, never edited.
@@ -551,6 +565,28 @@ phase_measure() {
             h_job "$key-live_s$s"   "$(deck_file "$vroot/$key/live" "$stem")"   "$vroot/$key/live/$stem.profile.json"   "$AB_GAMES" "$s"
             h_job "$key-staged_s$s" "$(deck_file "$vroot/$key/staged" "$stem")" "$vroot/$key/staged/$stem.profile.json" "$AB_GAMES" "$s"
         done
+        # TRUST ACCEPTANCE arms, pooled into this same queue (never a second batch -- a wave is a
+        # loop). Only when the matrix nominated a candidate; the OFF arm is the staged model exactly
+        # as it stands (no trust), the ON arm is that plus value_trust_depth = the candidate, so the
+        # single difference between them is the lever under test.
+        _cand=$(python3 -c "
+import json,sys
+try:    print(json.load(open('$staged')).get('value_trust_depth_candidate') or '')
+except Exception: print('')")
+        if [ -n "$_cand" ]; then
+            python3 - "$staged" "$vroot/$key/trust_on.value.json" "$_cand" <<'PY'
+import json, sys
+v = json.load(open(sys.argv[1]))
+v["value_trust_depth"] = int(sys.argv[3])
+json.dump(v, open(sys.argv[2], "w"), indent=1)
+PY
+            make_variant_deck "$vroot/$key/ptrust_on"  "$dir" "$stem" "$vroot/$key/trust_on.value.json"
+            make_variant_deck "$vroot/$key/ptrust_off" "$dir" "$stem" "$staged"
+            for s in $TRUST_SEEDS; do
+                h_job "$key-trustON_s$s"  "$(deck_file "$vroot/$key/ptrust_on" "$stem")"  "$vroot/$key/ptrust_on/$stem.profile.json"  "$TRUST_GAMES" "$s"
+                h_job "$key-trustOFF_s$s" "$(deck_file "$vroot/$key/ptrust_off" "$stem")" "$vroot/$key/ptrust_off/$stem.profile.json" "$TRUST_GAMES" "$s"
+            done
+        fi
         # play-profile sweep: target_depth around the shipped one, on the REGENERATED model.
         # escalation_cap tracks target_depth, CLAMPED to the measured ladder (see the heredoc below);
         # moving depth alone would otherwise silently change what the cap does.
@@ -614,6 +650,15 @@ PY
         echo "=== $key: play-profile target_depth sweep (baseline $bl = shipped) ===" | tee -a "$VLQ/driver.log"
         grep -E "^(d[0-9]+|dflt)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_play.log"
         python3 scripts/vlq_ab_report.py "$VLQ/m_${key}_play.log" "$bl" 2>&1 | tee -a "$VLQ/driver.log"
+        # TRUST ACCEPTANCE. The matrix nominated the candidate; these games decide it. --apply
+        # promotes an accepted candidate into the STAGED model's value_trust_depth, which is not
+        # adoption -- the staged model only goes live when a human installs it, exactly as before.
+        if grep -qE "^trust(ON|OFF)_s" "$VLQ/m_$key.log"; then
+            echo "=== $key: trust acceptance (ON vs OFF, held-out seeds) ===" | tee -a "$VLQ/driver.log"
+            grep -E "^trust(ON|OFF)_s" "$VLQ/m_$key.log" > "$VLQ/m_${key}_trust.log"
+            python3 scripts/vlq_trust_accept.py "$VLQ/m_${key}_trust.log" \
+                "logs/eval/$stem.value.STAGED.json" --tol "$TRUST_TOL" --apply 2>&1 | tee -a "$VLQ/driver.log"
+        fi
     done
     mark "$E_MARK"
 }
