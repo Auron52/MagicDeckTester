@@ -1876,32 +1876,36 @@ inline bool McLeftoverShape() { static const bool v = EnvOn("MTG_MANA_CACHE_LEFT
 // HARD DEPENDENCY: this is only sound while the sibling collapse is ON. With MTG_NO_TAP_DUP_COLLAPSE=1
 // the DFS may tap a non-prefix member, so canonical keying disables itself with it.
 //
-// *** DEFAULT OFF -- NOT YET CORRECT. The descriptor equivalence is INCOMPLETE. ***
-// The win is real and large (payment nodes 6,584,731 -> 1,833,273, -72.2%; hit rate 83.6% -> 92.7%),
-// and it survives a 1,300-game A/B across the three source-awkward decks (Anti-Lifegain = drip +
-// Tainted Remedy, Dragonstorm = storage, FiveColour = Deathrite) with identical digests AND identical
-// per-game logs. But the full smoke suite fails 8/36: slivers d3, th d0, antilife d3, hinata d3/d5,
-// mirrorwing d0/d3/d5. Two of those move the average (antilife 4.2200 -> 4.2160, mirrorwing d3 5.2400
-// -> 5.2333), so this is a real play divergence, not a digest technicality.
+// *** SOUND NOW, BUT DEFAULT OFF: IT COSTS MORE THAN IT SAVES. ***
 //
-// MINIMAL REPRO: treasure_hunt d0 seed 1001, 1000 games -> 6 diverge (games 504, 744, ...), same win
-// turn, different line. Depth 0 means no search at all, so the gap is in the executor's per-cast
-// payment, which is the leftover shape (collapse_colors off).
+// ROOT CAUSE of the first version's divergence (found 2026-08-15): not the descriptor contents at all,
+// but EXPLORATION ORDER. The DFS iterates candidates in battlefield-index order, so two boards with
+// the same source MULTISET but a different interleaving explore differently and find different first
+// solutions -- [Mountain@1, Island@2] tries the Mountain first, [Island@1, Mountain@2] tries the
+// Island -- and for a cost either can pay, a tap-set cached from one is the wrong answer for the
+// other. Rare by construction, which is why it showed as 6 diverged games in 1000 at treasure_hunt d0
+// and passed a 1,300-game A/B on three other decks.
 //
-// What that says: two permanents can pass the sibling collapse's test -- same def, same
-// chain-eligibility, same storage counters/hold, same full counters vector -- and still not be
-// interchangeable for the RESULTING STATE. The collapse only ever prunes subtrees isomorphic to
-// PROVEN FAILURES, which is a weaker claim than "either may be tapped and the game continues
-// identically". Canonicalising needs the stronger property, and the missing component is not yet
-// identified. Candidates not yet ruled out: attachments (equipment/auras on a mana dork), and any
-// per-permanent field a later decision reads that the tap set makes observable.
+// The fix is to key on the ordered SEQUENCE of descriptors instead of the multiset: same sequence =>
+// isomorphic search => same solution, expressed as ordinal positions in the source list. Absolute
+// indices still drop out (which is the part that created spurious keys); the interleaving does not.
+// Verified: treasure_hunt d0 seed 1001 divergences 6 -> 0, smoke 36/36 with 0 play-changed, and
+// identical digests AND per-game logs across a 1,300-game six-config A/B.
 //
-// Kept as a lever, not deleted, because the measurement is the expensive part and it is done.
-// MTG_MANA_CACHE_CANON=1 enables it for further diagnosis. See
-// docs/design/fivecolour-mulligan-and-slow-atom.md section 5c.
+// But the sequence key only cuts solve nodes -22% (6,584,731 -> 5,116,093), where the unsound multiset
+// version cut 72%, and -22% of a ~10% slice does not pay for hashing a descriptor per source on every
+// call. Best-of-two at 20 threads, indexed vs canonical: al_d5 -1.4%, fc_d3 +0.8%, ds_d3 +1.7%,
+// ds_d5 +2.3%, fc_d5 +2.3%, al_d3 +4.5%. Consistently NEGATIVE.
+//
+// The 72% is still reachable, but only by canonicalising the DFS's OWN iteration order (sort candidates
+// by descriptor rather than by index), which makes the multiset key sound. That changes which solution
+// is found, so it is a play change needing a full A/B and a GT rebaseline -- not a byte-identical perf
+// edit. Recorded in docs/design/fivecolour-mulligan-and-slow-atom.md section 5c.
+//
+// MTG_MANA_CACHE_CANON=1 enables the sound sequence version.
 inline bool McCanonKey()
 {
-    static const bool v = EnvOn("MTG_MANA_CACHE_CANON") && !EnvOn("MTG_NO_TAP_DUP_COLLAPSE");
+    static const bool v = EnvOn("MTG_MANA_CACHE_CANON");
     return v;
 }
 inline bool McSimpleTap(const CardDefinition* d)
@@ -1928,7 +1932,6 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
     // battlefield slot so the store/hit paths can rank a source within its group by a single scan.
     const bool canon = (out_desc != nullptr);
     if (canon) { out_desc->assign(state.battlefield.size(), 0ull); }
-    std::uint64_t ms1 = 0, ms2 = 0;
     const int active = state.active_player_index;
     const int n = static_cast<int>(state.battlefield.size());
     int gy_fuel = -1;       // lazy, hashed once on the first Deathrite-style source
@@ -1980,10 +1983,16 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         // production is counter-independent, and the indexed key never had to say so (same index =>
         // same permanent). Ineligible sources (tapped/reserved/sick dork) keep their own descriptor;
         // they are never tapped, so they only ever affect the key, never the tap-set.
+        // CanTapNow is the single most expensive read in this loop, so compute it ONCE per source and
+        // share it between the eligibility bit here and the dork-eligibility mix below. The first cut
+        // called it twice per dork per key build, which is a large part of why canonical keying showed
+        // no wall gain despite -22% solve nodes.
+        int dork_elig = -1;   // -1 = not a dork / not needed
         if (canon)
         {
-            const bool elig = !p.tapped && !((reserved_mask >> i) & 1ull)
-                           && !(d->tmpl == CardTemplate::ManaDork && !CanTapNow(p, state.battlefield));
+            if (!p.tapped && d->tmpl == CardTemplate::ManaDork)
+            { dork_elig = CanTapNow(p, state.battlefield) ? 1 : 0; }
+            const bool elig = !p.tapped && !((reserved_mask >> i) & 1ull) && dork_elig != 0;
             mix(dh, elig ? 0xE11Cull : 0xE11Dull);
             mix(dh, static_cast<std::uint64_t>(p.counters.size()));
             for (const Counter& ctr : p.counters)
@@ -2000,7 +2009,7 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
             // sickness flip changes without touching (def, tapped) -- the Mirrorwing case.
             if (d->tmpl == CardTemplate::ManaDork)
             {
-                const bool elig = CanTapNow(p, state.battlefield);
+                const bool elig = (dork_elig >= 0) ? (dork_elig != 0) : CanTapNow(p, state.battlefield);
                 smix(elig ? 0xE119'01ull : 0xE119'02ull, elig ? 0xE119'03ull : 0xE119'05ull);
             }
             // Storage battery: burst amount = min(counters, shortfall) and StorageSourceLive gates on
@@ -2042,21 +2051,15 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
             { smix(static_cast<std::uint64_t>(c) + 1,
                    (static_cast<std::uint64_t>(c) + 1) * 0x9E3779B97F4A7C15ull); }
         }
-        // Commutative, but the two accumulators must be INDEPENDENT functions of dh. The first cut used
-        // ms2 += dh * C, and sum(dh*C) == C*sum(dh) -- a linear image of ms1, so the "128-bit" key was
-        // really 64 with a verify that re-derived it and could not catch a multiset collision. It
-        // diverged on a 200-game FiveColour job (caught by the per-game log diff, not by the digest of
-        // a smaller run). ms2 now sums an AVALANCHED image of dh, which no longer factors out. XOR is
-        // not an option here: it cancels on even multiplicity, so {A,A} would collide with {}.
-        if (canon)
-        {
-            (*out_desc)[i] = dh;
-            std::uint64_t a = dh;
-            a ^= a >> 33; a *= 0xff51afd7ed558ccdull; a ^= a >> 29; a *= 0xc4ceb9fe1a85ec53ull; a ^= a >> 32;
-            ms1 += dh; ms2 += a;
-        }
+        // ORDERED, not commutative -- and that is the whole correctness argument. The multiset version
+        // was unsound: the DFS iterates candidates in BATTLEFIELD-INDEX order, so two boards with the
+        // same source multiset but a different INTERLEAVING explore differently and find different
+        // first solutions ([Mountain@1, Island@2] tries Mountain first; [Island@1, Mountain@2] tries
+        // Island first), and a tap-set cached from one is simply the wrong answer for the other.
+        // Hashing the SEQUENCE of descriptors keeps exploration order in the key while still dropping
+        // the absolute indices, which is the part that was creating spurious keys.
+        if (canon) { (*out_desc)[i] = dh; mix(h1, dh); mix(h2, dh * 0x9E3779B97F4A7C15ull); }
     }
-    if (canon) { mix(h1, ms1); mix(h2, ms2); }
     auto mixcost = [&](std::uint64_t& h){
         mix(h, static_cast<std::uint64_t>(cost.generic));
         mix(h, static_cast<std::uint64_t>(cost.white) | (static_cast<std::uint64_t>(cost.blue) << 16)
@@ -2148,7 +2151,12 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 {
                     idx = -1;
                     for (int q = 0, seen = 0; q < static_cast<int>(mc_desc.size()); ++q)
-                    { if (mc_desc[q] == t.desc && seen++ == t.idx) { idx = q; break; } }
+                    { if (mc_desc[q] != 0ull && seen++ == t.idx) { idx = q; break; } }
+                    // The descriptor is re-checked, not just the position: a mismatch means the key
+                    // let through two boards whose source lists are not actually isomorphic, which is
+                    // a bug rather than a miss -- fail closed to the real solve instead of tapping the
+                    // wrong permanent.
+                    if (idx < 0 || mc_desc[idx] != t.desc) { idx = -1; }
                     if (idx < 0) { break; }
                 }
                 Permanent& p = state.battlefield[idx];
@@ -2254,8 +2262,8 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                     {
                         desc = (i < static_cast<int>(mc_desc.size())) ? mc_desc[i] : 0ull;
                         if (desc == 0ull) { storable = false; break; }   // tapped a source the key never saw
-                        slot = 0;                                        // rank within its group, index order
-                        for (int q = 0; q < i; ++q) { if (mc_desc[q] == desc) { ++slot; } }
+                        slot = 0;                                        // ORDINAL position in the source list
+                        for (int q = 0; q < i; ++q) { if (mc_desc[q] != 0ull) { ++slot; } }
                     }
                     e.taps.push_back({ desc, slot, burn });
                 }

@@ -256,33 +256,50 @@ what makes realisation cheap: only the lowest-index currently-untapped member of
 explorable, so a solution taps a PREFIX of each group, and an entry can store (descriptor, RANK)
 instead of an index.
 
-**Two things went wrong, and the second is unresolved.**
+**Three things went wrong. All are now understood; the net result is a negative.**
 
 1. *Fixed.* The first sort-free version accumulated `ms2 += dh * C`, and `sum(dh*C) == C*sum(dh)` -- a
    linear image of `ms1`, so the "128-bit" key was really 64 with a verify that merely re-derived it.
-   It diverged on a 200-game job. `ms2` now sums an AVALANCHED image of `dh`. (XOR is not an option:
-   it cancels on even multiplicity, so `{A,A}` would collide with `{}`.) Dropping the sort also
-   removed a real cost -- the sorted version measured Dragonstorm 2-3% SLOWER, because a sort per call
-   outweighs the solves it saves on a low-redundancy board.
+   Caught by a per-game log diff on a 200-game job that a 14-game digest check had passed.
 
-2. *Open.* **The descriptor equivalence is incomplete.** With the hash fixed, a 1,300-game A/B across
-   the three source-awkward decks passes with identical digests AND identical per-game logs -- but the
-   full smoke suite fails **8/36**: slivers d3, th d0, antilife d3, hinata d3/d5, mirrorwing d0/d3/d5.
-   Two move the average (antilife 4.2200 -> 4.2160, mirrorwing d3 5.2400 -> 5.2333), so it is a real
-   play divergence.
+2. *Fixed.* Dropping the sort was itself necessary: the sorted version measured Dragonstorm **2-3%
+   SLOWER**, a sort per call outweighing the solves it saves on a low-redundancy board.
 
-   **Minimal repro: `treasure_hunt` d0 seed 1001, 1000 games -> 6 diverge** (games 504, 744, ...), same
-   win turn, different line. Depth 0 means no search at all, so the gap is in the executor's per-cast
-   payment -- the leftover shape.
+3. *ROOT CAUSE, fixed.* The multiset key was **unsound**, and not because the descriptor was missing a
+   field. The DFS iterates candidates in BATTLEFIELD-INDEX order, so two boards with the same source
+   multiset but a different INTERLEAVING explore differently and find different first solutions:
 
-   The lesson to carry: the sibling collapse only ever prunes subtrees isomorphic to **proven
-   failures**, which is strictly weaker than "either member may be tapped and the game continues
-   identically". Canonicalising needs the stronger property. The missing component is not yet
-   identified -- attachments (equipment/auras on a mana dork) and any per-permanent field a later
-   decision reads are the leading candidates.
+   ```
+   Board A: [Mountain@1, Island@2]  -> tries Mountain first
+   Board B: [Island@1,  Mountain@2] -> tries Island   first
+   ```
 
-Kept as `MTG_MANA_CACHE_CANON=1`, default OFF, because the measurement is the expensive part and it is
-done: whoever closes the equivalence gap gets a 72% cut in payment nodes waiting for them.
+   For a cost either can pay, a tap-set cached from A is simply the wrong answer for B. Rare by
+   construction -- 6 diverged games in 1000 at `treasure_hunt` d0, while a 1,300-game A/B on three
+   other decks passed clean.
+
+   The sound weakening is to key on the ordered **SEQUENCE** of descriptors rather than the multiset:
+   same sequence => isomorphic search => same solution, stored as ordinal positions in the source list.
+   Absolute indices still drop out (the part that created spurious keys); the interleaving does not.
+   Verified: `treasure_hunt` d0 divergences **6 -> 0**, smoke 36/36 with 0 play-changed, identical
+   digests AND per-game logs across the 1,300-game six-config A/B.
+
+**And then it does not pay.** The sequence key cuts solve nodes only **-22%** (6,584,731 ->
+5,116,093) where the unsound multiset version cut 72% -- and -22% of a ~10% slice does not cover
+hashing a descriptor per source on every call. Best-of-two at 20 threads, indexed vs canonical:
+
+```
+al_d5  -1.4%    fc_d3  +0.8%    ds_d3  +1.7%    ds_d5  +2.3%    fc_d5  +2.3%    al_d3  +4.5%
+```
+
+Consistently negative, even after deduplicating the `CanTapNow` call the first cut made twice per dork.
+So it ships **default OFF** (`MTG_MANA_CACHE_CANON=1` to enable).
+
+**The 72% is still on the table, but it is no longer a byte-identical edit.** It requires
+canonicalising the DFS's OWN iteration order -- sort candidates by descriptor rather than by index --
+which makes the multiset key sound by construction. That changes which solution is found, so it is a
+play change needing a full A/B and a GT rebaseline. Whether a 72% cut to a ~10% slice justifies moving
+every deck's ground truth is a judgement call, not a perf edit.
 
 **The correction that matters more:** the 22.3% "mana payment" figure in section 3's perf profile came
 from the DEGENERATE rollouts, not from normal play. Payment dominates the TAIL. That is why the tail
