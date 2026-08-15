@@ -125,9 +125,20 @@ its strongest measured form, and it is the same seam as the standing goal of pur
 from the search.
 
 **Falsifiable prediction for that work:** on this repro, an engine whose recursion plays a turn the
-way the rollout/executor does should report `T1 pass=5 win=5`. That is a one-command check
-(`MTG_TRACE=search mtg --batch logs/mwprof/h5_gi14.manifest.json --threads 1`), and it is a
-sharper acceptance test than any aggregate, because breadth is already excluded as a confound.
+way the rollout/executor does should report `T1 pass=5 win=5`. It is a sharper acceptance test than
+any aggregate, because breadth is already excluded as a confound.
+
+**The repro is COMMITTED and portable** — `test/repros/mirrorwing_h5_gi14.manifest.json`, with the
+expected output and the acceptance criterion in `test/repros/README.md`:
+
+```bash
+MTG_TRACE=search ./build/Release/mtg --batch test/repros/mirrorwing_h5_gi14.manifest.json --threads 1
+```
+
+~25 s, one game, every referenced path tracked (the original under `logs/mwprof/` is gitignored and
+so machine-local; it also pointed at a gitignored `logs/eval/...STAGED.json`, whose `eval_model` is
+byte-identical to the committed deck sidecar the portable copy uses — verified to reproduce
+`pass=5 win=8 cost=1332428` exactly).
 
 The search's own predicted continuation (`[fd-pred]`, T1 line) is a slow clock that never closes:
 opp_life 20 -> 19 -> 15 -> 13 -> 11 -> 9. Real play, from the same T1 play, wins on T5.
