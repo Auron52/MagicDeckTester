@@ -1,4 +1,4 @@
-# Regression ground truth -- commit a459e62  date 2026-08-15
+# Regression ground truth -- commit 601fb0c  date 2026-08-15
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -19,10 +19,10 @@ knights_smoke_d5_s1001=4.3933/160dd7e447cde867
 antilife_smoke_d0_s1001=5.5660/85bbc11753f3c9e0
 antilife_smoke_d3_s1001=4.2200/0066ad33a3488793
 antilife_smoke_d5_s1001=4.1800/b039c9b65e4c175c
-hinata_smoke_d0_s1001=7.0160/47cc2f0a99c87e49
+hinata_smoke_d0_s1001=7.0090/cce88be008c2d6a1
 hinata_smoke_d3_s1001=5.7400/37a9229d829b038a
 hinata_smoke_d5_s1001=5.8800/f4bcffe988ecf8ca
-dragonstorm_smoke_d0_s1001=5.4300/8b942b0216ec5ee0
+dragonstorm_smoke_d0_s1001=5.3990/5a580c8f85c8986b
 dragonstorm_smoke_d3_s1001=4.5133/c4271ca08cadc4e2
 dragonstorm_smoke_d5_s1001=4.4667/8cf792208eab7cc6
 auras_smoke_d0_s1001=4.3760/d0a56ce8cb114f9d
@@ -47,7 +47,7 @@ slivers_regression_d3_s2002=4.2225/5173163dfc3e5ad2
 slivers_regression_d3_s3003=4.2500/edb2df8a91b6fa2d
 slivers_regression_d5_s2002=4.2267/9a7881046751fd73
 slivers_regression_d5_s3003=4.2500/a3530f38aea047ed
-burn_regression_d0_s2002=4.4260/7758958ee04e5983
+burn_regression_d0_s2002=4.4250/83822e9fb2cf158f
 burn_regression_d3_s2002=4.3440/e693c357a77ce752
 burn_regression_d3_s3003=4.2500/5ac4c47e6e46ae43
 burn_regression_d5_s2002=4.3440/e693c357a77ce752
@@ -67,12 +67,12 @@ antilife_regression_d3_s2002=4.2867/8c8be6a8e99c98c3
 antilife_regression_d3_s3003=4.2567/e69592c3681211f7
 antilife_regression_d5_s2002=4.3120/a5628e21199083bd
 antilife_regression_d5_s3003=4.2320/d5ac1929c2007c41
-hinata_regression_d0_s2002=7.1060/04ac5048aeedb80d
+hinata_regression_d0_s2002=7.0990/d058ed1e5b059f5e
 hinata_regression_d3_s2002=5.7050/ee39eff432137134
-hinata_regression_d3_s3003=5.7250/c4f1fb2a40f2b8a8
+hinata_regression_d3_s3003=5.7250/27ce7f582a0cd44a
 hinata_regression_d5_s2002=5.6800/0be81ee38b4a8483
 hinata_regression_d5_s3003=5.7400/f826c9f5251f179d
-dragonstorm_regression_d0_s2002=5.4650/c537d79d193f1be9
+dragonstorm_regression_d0_s2002=5.4370/91a66065e112b7de
 dragonstorm_regression_d3_s2002=4.3367/24618f8756c50232
 dragonstorm_regression_d3_s3003=4.4767/2c75ca10ec7b81d1
 dragonstorm_regression_d5_s2002=4.3000/1ef6ace05f76fcac
