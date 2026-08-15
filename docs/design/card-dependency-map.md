@@ -108,3 +108,28 @@ binary; results envs backed up as `regression.env.bak_depmap_{base,stackdoubt,st
   m2-emission class on decks not yet dug. `MTG_DOUBT_MAIN2` therefore stays PARKED
   default-off; the antilife method (per-game lever bisect → FSLineTail trace → derive the
   missing edge/emission) is the route for the 5c and goblins digs.
+
+**5c/goblins digs (2026-08-15, commit 1e6ef5e).** Both decks' exemplars fix ONLY under
+`MTG_UNPRUNE=mainphase` and are budget-independent — classification/model semantics, not
+starvation. Two mechanisms found:
+
+* **Goblins outlet asymmetry (FIXED — mana-infrastructure Main1 pull):** the m2 enumeration
+  collects activations from the battlefield only, so a sac-outlet producer (Skirk Prospector)
+  cast in the same m2 funds nothing in that plan — the put-token-sac → Goblin King line was
+  invisible to every tail (gi=153 3→4). Rule: an activated mana producer usable while
+  summoning-sick (`sac_creature_outlet` + `sac_outlet_add_mana_amount > 0`) classifies Main1.
+  Measured: gi=153/267 fixed, none regressed, goblins doubt gap +0.0433 → +0.0367; smoke
+  36/36 byte-identical.
+* **SYSTEMIC (OPEN — the next arc): the first-verified-win early-stop's ladder premise breaks
+  under the collapse.** `FSLineWin`/`FSLineTail` commit the FIRST verified win at the pass
+  horizon edge, justified by "every shallower pass was a complete refutation" — but when an
+  m2-line's verification fails at the shallower pass for MODEL reasons (the outlet asymmetry
+  above; 5c's attack-hold/partition interplay on gi=1), a deeper pass's first verified win is
+  NOT minimal, and the sibling that wins a turn earlier is never evaluated (goblins gi=153 at
+  d4: Prospector's win-4 locked out Lackey's win-3 — read directly off the new
+  `MTG_M2T_TRACE`). Ties additionally fall to `MoveOrderPlans` static value. Drives the
+  remaining 11 goblins + 15 fivecolour doubt-worse games. Fix needs care: the early-stop is
+  load-bearing for wall-clock everywhere; candidate shapes are (a) restrict the early return
+  to `win == turn_number`, (b) complete-nodes mode (the `BpWaveCompleteNodes` precedent) under
+  the collapse, (c) repair the specific model gaps so the premise holds. Dig instruments:
+  `MTG_M2T_TRACE`/`MTG_FSW_TRACE` (+`_TURN`).
