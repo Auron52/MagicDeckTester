@@ -566,6 +566,36 @@ Two counters in that run must NOT be read as evidence:
   run will always print `harm=0`.
 - **`mismatch: axes=N` is the one to actually watch here** (see next section).
 
+### HELD-OUT VALIDATION on overnight seeds — PASSED (2026-08-15)
+
+`MTG_DOM_PRUNE=1 bash test/regression.sh --overnight` (seeds 4004/5005/6006/7007, 144 configs,
+makespan 10m08s):
+
+```
+[searched] slower=2  faster=15  play-changed=139
+[d0      ] slower=0  faster=0   play-changed=0
+```
+
+NET mean delta across all 144 configs: **−0.000183 turns**. Nine configs improved, one worsened by
+0.0010 (`antilife_overnight_d5_s7007`); the largest single move was
+`fivecolour_overnight_d5_s5005` 5.0333 → 5.0233.
+
+**Both SLOWER games classify as `churn`**, via `test/classify_turn_later.sh overnight` — each
+recovers its original win turn at 4x AND 16x the case budget:
+
+| game | old | new | classification |
+|---|---|---|---|
+| `antilife_overnight_d5_s7007` gi74 | 6 | 7 | churn (4x=6, 16x=6) |
+| `fivecolour_overnight_d5_s6006` gi62 | 5 | 6 | churn (4x=5, 16x=5) |
+
+So neither is the prune deleting a reachable line; both are budget-boundary variance. Consistent
+with must-find, which loses nothing at unbounded budget.
+
+Coverage note: the audit reports `no-run-dir: 18`. Those are all **d0** entries at seeds 5005/7007 —
+stale `gt_logs` from an older matrix that the current matrix does not run at those seeds. They are
+not a gap in this A/B: d0 does no search, so a search-side prune cannot reach them (and d0 shows
+0/0/0). All 144 configs the matrix does define were run.
+
 ### EQUALITY PROBE UNDER PRUNE-ONLY — the axes' own soundness signal
 
 Because the simkey branch is census-gated, a prune-only run exercises the comparator's equality
@@ -638,9 +668,10 @@ by itself. Its value is purely as a diagnostic for `Covers()`, which shares the 
 
 ### What is OPEN — resume here
 
-1. **Held-out validation on OVERNIGHT seeds** (4004/5005/6006/7007). Train seeds are done and clean
-   (0 slower, net -0.0003); this is the last evidence needed before an adoption decision, which is
-   the user's call on the NET loss-penalized delta.
+1. **ADOPTION DECISION — the user's call, and the only thing left.** Every gate now passes (see
+   "THE EVIDENCE, ASSEMBLED" below). Adopting means flipping `MTG_DOM_PRUNE` to default-ON and
+   rebaselining GT via `--accept` on each mode, since play moves at an unchanged score. Do NOT flip
+   the default without the user saying so.
 2. **Equality-probe residual** (low priority): ~0.003% ident_mismatch survives with both caches
    capped. Bounded above by the TT cap not being a true off switch. Only worth chasing if the
    must-find gate ever regresses.
@@ -653,6 +684,27 @@ by itself. Its value is purely as a diagnostic for `Covers()`, which shares the 
    (not the storm path — that deck has no suspend).
 5. **The heuristic board-vs-hand tier**, still deliberately excluded. NOT the graveyard subset rule:
    the learned-model reader makes that zone non-monotone in either direction, so that tier is closed.
+
+### THE EVIDENCE, ASSEMBLED (2026-08-15)
+
+Everything the adoption decision rests on, in one place:
+
+| gate | result |
+|---|---|
+| **Must-find**, `--budget-ms 0`, all 12 decks | **zero wins lost**; prune ON/OFF find an identical win set |
+| **Train seeds** (2002/3003), 60 configs, 26,300 games | 0 slower, 2 faster, 11 play-changed; NET **-0.000333** |
+| **Held-out** (4004/5005/6006/7007), 144 configs | 2 slower (**both churn**), 15 faster, 139 play-changed; NET **-0.000183** |
+| **Cost** | none measurable (104 s vs ~100 s; overnight 10m08s) |
+| **Clean-env smoke** (both flags off) | 36/36 byte-identical |
+| **Prunable mass** | up to 31.9% of EOT states (burn); 1.5M states on fivecolour |
+
+Reading: the prune is SOUND on the direct test (must-find), NEUTRAL-to-slightly-POSITIVE on quality
+across both train and held-out seeds, and FREE at a fixed budget. Its payoff is not the -0.0002 turn
+delta -- that is noise-level and the honest way to state it is "costs nothing" -- but the state mass
+it removes, which buys more search per unit budget on exactly the decks that are hardest to search.
+
+What adoption does NOT rest on: `harm` (structural 0 under prune) and `ident_mismatch` (96% TT, not
+the axes). Both are documented above precisely so they are not mistaken for evidence either way.
 
 ### Traps worth not re-learning
 
