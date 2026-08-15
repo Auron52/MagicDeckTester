@@ -510,22 +510,66 @@ ONCE where the models are attached and carry it as a stamped VALUE on `GameState
 — correct and free (back to 50 s, three identical runs). The general lesson: a per-game constant
 derived from a POINTER must be stamped beside the pointer, never memoised on its identity.
 
-## Next steps (2026-08-15, in priority order)
+## STATE OF PLAY (2026-08-15) — read this first on resume
 
-1. **Move the check to the FSLineWin/FSLineTail frontier** (see the section above). Nothing else on
-   this list can be answered until the prune is on the path that chooses the committed play — not
-   the cost question, not the must-find gate, not the monsters. This is now the only real next step.
-2. **Then re-price at the new site**, and re-run the cost measurement at `--budget-ms 0` (which will
-   actually reach the prune once it is there).
-3. **Then the must-find gate.** Non-negotiable before adoption, and the gate this prune is most
-   likely to fail.
-4. **Explain the two zero results** — auras' 0 comparable pairs (suspected: the attachment
-   fail-close makes every permanent unique by copy id, so no two boards ever match) and
-   creature_giving's 5,181 unusable states (cause unknown; not the storm path, that deck has no
-   suspend). Both may be recoverable reach, and neither is worth chasing before step 1.
-5. **Last, the tier this build deliberately excludes** — the heuristic board-vs-hand rule with its
-   per-deck opt-out. NOT the graveyard subset rule: the learned-model reader (`GraveyardSize` as an
-   eval feature) means the zone is not monotone in either direction, so that tier is closed.
+**Shipped, both flags default OFF, clean smoke 36/36 byte-identical.** Commits `7ec5c75e` →
+`3b6c309b` on `phase-1-2-deck-analyzer`.
+
+- `src/ai/Dominance.h` — one comparator, two consumers (`MTG_DOM_CENSUS` prices, `MTG_DOM_PRUNE`
+  drops). Every field is a declared axis, an exact-match field, or a boundary assertion; undeclared
+  fails closed. `MTG_DOM_ARCHIVE` (default 256) bounds the frontier.
+- Applied at the **FSLineWin `pre` frontier**, archive threaded into `FSLineTail` (both its EOT
+  sites). This was moved off `SolveWithLookahead` — see the application-point section.
+- Axis directions: generic monotone table in `DecisionProvider`, per-deck overrides in the archetype
+  (`CreatureGivingProvider` declares opponent-board + age counters as MoreDominates).
+- Graveyard/exile are a per-reader PROJECTION (`GyReader` bits on `GameState::deck_gy_readers`
+  + the model's `graveyard_size`/`exile_size` branch check via `GameState::m_model_feat_mask`).
+
+**Measured (60g, d5, b20, s1001):** burn 31.9% dominated, goblins 25.8%, fivecolour 18.1%
+(1.5M states), antilife 6.5%, knights 4.2%, mirrorwing 2.2%, slivers 2.0%; hinata/th/dragonstorm/
+creature_giving/auras ≈ 0.
+
+**Suite A/B (smoke, prune on):** 0 slower, 1 faster, 4 play-changed at the same score. No cost
+change (50 s vs 48 s makespan).
+
+### What is DONE
+
+1. ~~Move the check to the FSLineWin/FSLineTail frontier~~ — done (`3c3f06bf`).
+2. ~~Re-price at the new site~~ — done (`4f71986c`, table above).
+3. **Must-find gate: 10 of 12 decks PASS, zero wins lost** — burn, slivers, knights, antilife,
+   goblins, th, auras, creature_giving, dragonstorm, hinata.
+4. ~~Diagnose the harm signal~~ — done (`3b6c309b`): two mechanisms, both the EVALUATOR being
+   non-monotone (learned value leaf; greedy beyond-horizon rollout), not a hole in the axes.
+
+### What is OPEN — resume here
+
+1. **FINISH MUST-FIND on fivecolour and mirrorwing.** The gate is INCOMPLETE without them, and they
+   matter most (heaviest decks, two of the three highest harm rates). Command shape:
+   `MTG_DUMP_WINS=1 MTG_DOM_PRUNE=0|1 mtg <deck> --profile <prof> --games 12 --seed 1001 --depth 5
+   --budget-ms 0 --ignore-play-profile --lookahead-bottoming`, then diff the per-game `wt=` values;
+   any `on > off` is a FAILED gate. Expensive — run unattended.
+2. **Regression-mode A/B on train seeds** (`MTG_DOM_PRUNE=1 bash test/regression.sh`), then held-out
+   validation on overnight seeds. Adoption decision on the NET loss-penalized delta.
+3. **Cost.** Still unquantified. At a fixed ms budget the prune buys more search per unit budget
+   rather than wall time, so the honest measurement is quality at fixed budget (the A/B above) plus
+   wall time at `--budget-ms 0`.
+4. **Two unexplained zeros** (low priority): auras' ~0 comparable pairs (suspected: the attachment
+   fail-close makes every permanent unique by copy id) and creature_giving's 0.5% unusable states
+   (not the storm path — that deck has no suspend).
+5. **The heuristic board-vs-hand tier**, still deliberately excluded. NOT the graveyard subset rule:
+   the learned-model reader makes that zone non-monotone in either direction, so that tier is closed.
+
+### Traps worth not re-learning
+
+- A per-game constant derived from a POINTER must be STAMPED beside the pointer, never memoised on
+  pointer identity — the `thread_local` version was an ABA hazard that made the search
+  nondeterministic (3/4/5 failures across identical runs). Fixed via `m_model_feat_mask`.
+- The canon-identity "noise floor" control is DEGENERATE at the FSLineWin site (canon-identical
+  states share an FSLineCache entry, so they agree by construction). Do not reuse it as a floor here.
+- `eq_byaxes` is 0 everywhere: the comparator's EQUALITY case never fires (the canon simkey catches
+  those pairs first), so any clean result from it is vacuous. The relation's value is in STRICT
+  dominance only.
+- `--budget-ms 0` IS unbounded (`FromVirtualMs(<=0)` → `Unlimited()`), not "no search".
 
 ## Sequencing
 
