@@ -578,6 +578,55 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
         eq.classes = std::move(kept);
         std::cerr << "[keepgen] force-merge applied: -> " << eq.classes.size() << " buckets\n" << std::flush;
     }
+
+    // ---- K SANITY CHECK (user, 2026-08-15: "we never want to be caught off-guard by a different K") ----
+    //
+    // K decides what a generation IS: the hand space is C(K+6,7), so one extra bucket can multiply the
+    // table and the wall-clock, and a changed K silently produces a DIFFERENTLY SHAPED table that cannot
+    // pool with sidecars built at the old K. It moves for reasons that are easy to miss -- a card edit, a
+    // discovery parameter, a play change that moves the digest, a discovery-algorithm bump -- so it must
+    // never be discovered after the hours are spent.
+    //
+    // The expected value lives in the PLAY PROFILE (`value_play.expected_buckets`), recorded by the
+    // value-leaf's final stage at the same time it derives the mulligan-gen settings (that stage is
+    // already assessing generation viability, so it is the natural place that knows K). This generator
+    // only CHECKS: it never writes a tracked artifact behind the user's back.
+    //
+    // Checked HERE, after the cache-hit/fresh-discovery join AND after force-merge, so it sees the same
+    // final K every downstream consumer does, by whichever route it arrived.
+    {
+        const long long K         = static_cast<long long>(eq.classes.size());
+        const long long expect_vp = static_cast<long long>(profile.value_play.expected_buckets);
+        const bool accept = [] { const char* e = std::getenv("MTG_KEEP_ACCEPT_K");
+                                 return e && *e && std::string(e) != "0"; }();
+        if (expect_vp > 0 && expect_vp != K && !accept)
+        {
+            std::cerr << "\n[keepgen] *** BUCKET COUNT (K) MISMATCH -- REFUSING TO GENERATE ***\n"
+                      << "    expected K=" << expect_vp << " (value_play.expected_buckets)\n"
+                      << "    discovered K=" << K << "\n"
+                      << "    The hand space is C(K+6,7), so this is a DIFFERENT table: its cost and its\n"
+                      << "    shape both move, and it cannot pool with sidecars generated at K="
+                      << expect_vp << ".\n"
+                      << "    Find out WHAT changed the bucketing before spending the hours -- a card\n"
+                      << "    edit, a discovery parameter, the play digest, or a discovery-algorithm bump.\n"
+                      << "    If the change is intended, re-run with MTG_KEEP_ACCEPT_K=1 and update\n"
+                      << "    value_play.expected_buckets to " << K << ".\n\n" << std::flush;
+            throw std::runtime_error("keepgen: bucket count K changed (" + std::to_string(expect_vp)
+                                     + " -> " + std::to_string(K) + "); see the message above");
+        }
+        if (expect_vp <= 0)
+        {
+            std::cerr << "[keepgen] K=" << K << " -- NOT YET RECORDED. Set value_play.expected_buckets="
+                      << K << " in this deck's .value.json (the value-leaf's final stage fills it in\n"
+                      << "          automatically) so later runs are guarded against a silent K change.\n"
+                      << std::flush;
+        }
+        else if (expect_vp == K)
+        { std::cerr << "[keepgen] K check OK: K=" << K << " matches value_play.expected_buckets\n" << std::flush; }
+        else
+        { std::cerr << "[keepgen] K CHANGED " << expect_vp << " -> " << K
+                    << ", accepted via MTG_KEEP_ACCEPT_K; update value_play.expected_buckets\n" << std::flush; }
+    }
     return eq;
 }
 

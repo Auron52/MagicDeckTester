@@ -101,6 +101,9 @@ struct ExhaustiveKeepConfig
                                 // CLI so a resume never re-derives buckets; MTG_EQUIV_CACHE overrides the
                                 // path. Keyed on deck/params/equiv_seed AND the play digest, so a changed
                                 // engine, card or value sidecar can never produce a stale hit.
+                                // records this deck's EXPECTED bucket count. First generation records it
+                                // (for the user to confirm); every later run must MATCH or the generator
+                                // REFUSES. See the lock note in BuildEquivalenceClasses.
     std::string commit;         // play-logic identity stamped into the raw sidecar (from MTG_COMMIT)
     std::string force_merge;    // MANUAL bucket override (MTG_EQUIV_FORCE_MERGE): ";"-separated groups,
                                 // each a ","-separated list of card names, unioned into ONE bucket AFTER

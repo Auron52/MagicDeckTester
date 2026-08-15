@@ -74,6 +74,13 @@ struct ValuePlay
     // Set when the play profile is created (or left 0 to inherit play).
     int    mull_gen_depth     = 0;
     int    mull_gen_budget_ms = 0;
+    // EXPECTED equivalence-bucket count K for this deck (`value_play.expected_buckets`), recorded once
+    // and thereafter CHECKED. K decides what a generation IS -- the hand space is C(K+6,7) -- so a
+    // silent change is a differently-shaped, differently-priced table that cannot pool with the old
+    // sidecars. The keep generator refuses on a mismatch (user, 2026-08-15: "we never want to be caught
+    // off-guard by a different K"). 0/unset => nothing recorded yet => the generator reports the value
+    // for a human to record instead of guarding.
+    int    expected_buckets   = 0;
     bool present() const { return target_depth > 0; }
     bool drives()  const { return target_depth > 0 && enabled; }   // actually steers play (adopted)
     // Effective mulligan-gen depth/budget: explicit mull_gen_* if set, else the play depth/budget, else the

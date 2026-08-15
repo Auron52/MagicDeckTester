@@ -1081,6 +1081,7 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
                 // Optional mulligan-gen depth/budget override (0 => inherit the play depth/budget).
                 profile.value_play.mull_gen_depth     = vp.value("mull_gen_depth", 0);
                 profile.value_play.mull_gen_budget_ms = vp.value("mull_gen_budget_ms", 0);
+                profile.value_play.expected_buckets   = vp.value("expected_buckets", 0);
                 auto parse_costs = [](const nlohmann::json& arr) {
                     std::vector<double> v;
                     if (arr.is_array()) { for (const auto& e : arr) { v.push_back(e.is_number() ? e.get<double>() : 0.0); } }
