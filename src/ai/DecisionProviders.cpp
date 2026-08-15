@@ -1650,6 +1650,32 @@ static bool AttackHasNonPowerValue(const GameState& s, const Permanent& p)
 }
 
 // Exalted-aware attack declaration (see the header note). Honoured in lockstep by every combat site
+// Aria of Flame's ETB gift, priced by conversion state (stack-vs-base dig 2026-08-15, gi=136).
+// The ETB gives the opponent `gift` life. CONVERTED (a lifegain->loss enabler live) that is
+// `gift` damage on resolution -- credit it. UNBACKED it actively heals the opponent AND spends
+// a future finisher, but the generic eval gave it the flat +1 fallback, so a tie-break
+// (MoveOrderPlans static value) preferred a plan carrying a spare Aria over the same plan
+// without it -- the [tie] audit's "free action" exactly, and gi=136 turned a base win-7 into a
+// LOSS gifting +10 at T3. Half-weight penalty pre-conversion: the verse engine is real value
+// (the first pre-Remedy Aria is routinely a strictly-better cast and stays one -- selection is
+// by win turn, this value only orders/breaks ties), so deter the SPARE copy without zeroing
+// the engine.
+bool AntiLifegainProvider::ArchetypeCardValue(const GameState& s, const CardDefinition& def,
+                                              int DMG, int& out) const
+{
+    const int gift = def.params.etb_opponent_lifegain;
+    if (gift <= 0) { return false; }
+    bool enabler_live = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.lifegain_to_loss) { enabler_live = true; break; }
+    }
+    out = enabler_live ? (1 + gift) * DMG : DMG - (gift * DMG) / 2;
+    return true;
+}
+
 // (all gate on ShouldAttackWith): the projection, the rollout, and the real DeclareAttackers.
 bool AntiLifegainProvider::ShouldAttackWith(const GameState& s, const Permanent& p) const
 {

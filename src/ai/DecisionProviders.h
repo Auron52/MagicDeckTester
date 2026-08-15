@@ -143,6 +143,7 @@ class AntiLifegainProvider : public GenericProvider
 {
 public:
     const char* Name() const override { return "AntiLifegain"; }
+    bool ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
     bool CanAutoFireAltPayload(const GameState&, int, const CardDefinition&) const override;
