@@ -111,6 +111,12 @@ in-phase; `MTG_MAIN2_DROP` covers only the land drop.
   value-flat nodes — a decision-theory property of the engine, only addressable at the
   architecture level (honest/common-future evaluation would break commit-the-line's
   replay contract; noshuffle is measured worse).
+* **RESOLVED 2026-08-15: the card dependency map (card-dependency-map.md, commits 2409fb1 +
+  14487b0) eliminates the doubt residual entirely.** With the map, the antilife 300g doubt
+  gap is −0.003 at budget 10 (doubt now marginally BETTER) and exactly 0 at unbounded
+  (4.2833 == 4.2833, 0/300 games diverged — the arms play identical games). Both exemplars
+  below hit their targets (gi=28 4→3, gi=149 5→4). The doubt flip's re-measure for adoption
+  is the suite-wide stack A/B. Historical analysis kept below.
 * **The residual is BUDGET-INDEPENDENT and two exemplars are fully root-caused
   (2026-08-15, USER-directed dig).** The doubt gap is +0.067 at budget 10, +0.073 at 40,
   +0.067 at 1,000,000 (unbounded, the USER's bar): the lines are unreachable/mis-ranked at

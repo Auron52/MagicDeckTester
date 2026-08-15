@@ -71,8 +71,28 @@ derived map as part of coverage/review output so a human sees the edges the engi
 
 ## Status
 
-Design agreed with USER 2026-08-15. Not yet implemented. Exemplar repros:
-gi=28 `--seed 2030 --game-index 28`, gi=149 `--seed 2151 --game-index 149`, antilife d3
-budget 10, doubt stack (`MTG_PHASE_CLASSIFY=1 MTG_SEARCH_SECOND_MAIN=1 MTG_MAIN2_DROP=1
-MTG_ACQ_RESOLVE=1 MTG_BP_SITES=63 MTG_DOUBT_MAIN2=1`); targets 4→3 and 5→4 respectively,
-then unbounded 300g gap → ~0.
+**IMPLEMENTED 2026-08-15 (commits 2409fb1 + 14487b0). Acceptance bar met exactly.**
+
+* 2409fb1 — the map itself: `GoldFishRunner::DeriveDependencyPulls` (per-deck fixpoint,
+  stamped on GameState), `ClassifyMainPhase` pull-forward, generic `CastOrderRank` tiers
+  (lifegain_to_loss → 0 subsuming the antilife overrides; verse_damage → 19; destroy_all was
+  already 30), analyzer prints the edge list. **Both exemplars hit target from this commit
+  alone**: gi=149 (seed 2151) 5→4; gi=28 (seed 2030) 4→3 — Aria's rank-19 converted ETB
+  resolves before the m2 harvest, so the per-card lethality gate sees the reduced life total.
+  Base impact: 3 antilife smoke keys are the ordering improvement itself (d0 5.5660→5.5650,
+  d3/d5 avg unchanged, lines realize MORE damage in-turn); GT accepted.
+* 14487b0 — the emission heuristic. The USER's first choice (drop the tight gate outright)
+  was tried and REFUTED by measurement: greedy re-bricks (smoke d0 5.5650→5.9270 with
+  outright losses — the gi=36/84 class exactly). Per the fallback, the heuristic was fixed
+  instead: SEARCH nodes bypass the provider gate (`search_risky_live`: Remedy live → emit,
+  search judges), `risky_in_hand` loses its per-card narrowing, and
+  `SubsetHasUnbackedAltPayload`'s wipe-lethality is SUBSET-level (in-subset direct damage +
+  converted ETB/riders + pending attack). Greedy keeps the tight gate; the cast-time re-check
+  stays accurate because the wipe casts LAST (rank 30) after the subset's damage has landed.
+  Smoke: d0 byte-identical, d3/d5 digest-only at identical avg.
+
+**Doubt-flip measurement with the map (antilife 300g, seed 2002 d3):** budget 10 — doubt
+4.3200 vs nodoubt 4.3233 (was +0.067 WORSE, now marginally better); **unbounded — 4.2833 ==
+4.2833 with 0/300 games diverged** (the arms play identical games; the USER's "unbounded
+should be 0" bar met exactly). Suite-wide stack A/B (round 3) is the remaining adoption
+evidence for `MTG_DOUBT_MAIN2`.
