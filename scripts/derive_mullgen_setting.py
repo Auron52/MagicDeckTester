@@ -128,22 +128,21 @@ def main():
 
     print("deck=%s  play=d%d b%d  value_trust_depth=%s" % (deck.stem, play_d, play_b, trust))
 
-    # ------------------------------------------------------------------ the trusted short-circuit
-    if trust is not None and trust <= play_d:
-        print("\nTRUSTED at the play depth (V%d <= d%d) -> generate at PLAY SETTINGS; emit no "
-              "override." % (trust, play_d))
-        print("  Reaching the leaf terminates the rollout instead of playing it out, so play settings "
-              "are\n  typically both the cheapest arm AND exact. Nothing to trade off.")
-        if args.write:
-            dropped = [k for k in ("mull_gen_depth", "mull_gen_budget_ms") if k in vp]
-            for k in dropped:
-                vp.pop(k)
-            if dropped:
-                json.dump(vjson, open(vpath, "w"), indent=1)
-                print("  dropped %s from %s" % (",".join(dropped), vpath.name))
-        return
-
-    # ------------------------------------------------------------------ the untrusted measurement
+    # ---------------------------------------------------------------------------- always MEASURE
+    # There is deliberately NO trusted short-circuit. It is tempting -- on a trusted deck, reaching
+    # the value leaf terminates the rollout instead of playing it out, so play settings are often the
+    # CHEAPEST arm as well as exact (slivers: 1,496 units/rollout vs 2,431 for d3 b3). But "often" is
+    # not "always", and the counterexample is not marginal: burn is trusted at its play depth (V5 <=
+    # d6) and its play settings still cost 18,844 units/rollout, against 1,253 for d1 b3 at rho 0.999
+    # -- 15x the cost for +0.001 rank fidelity. Whether the leaf truncates enough to pay for the depth
+    # is a property of the DECK, so it is measured, not assumed (user: "We don't always want to take
+    # d3 b3 just because it is the default. We want to figure out the best option for the deck.").
+    #
+    # Trust still shapes the CANDIDATE SET -- the trust depth is where the cliff can be, so it must be
+    # on the list -- it just does not decide the answer.
+    if trust is not None:
+        print("  (trusted at V%d%s -- trust depth is a CANDIDATE, not a short-circuit; see burn)"
+              % (trust, " <= play depth" if trust <= play_d else " > play depth"))
     cands = [(1, 3), (2, 3), (3, 3), (3, 20)]
     if trust is not None:
         cands.append((trust, 3))

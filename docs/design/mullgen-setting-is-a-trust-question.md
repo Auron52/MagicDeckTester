@@ -111,27 +111,41 @@ Two measurements make this concrete, both on slivers:
 So cost is **not monotonic in depth**, and a (depth, budget) pair -- not a depth -- is the setting.
 This is the same cliff the value-leaf skill documents as a 1.35-84.8x hazard when a sidecar is missing.
 
-## What this means for the deriver
+## What this means for the deriver: MEASURE, do not short-circuit on trust
 
-The existing rule in `valueleaf_table_to_metadata.py` -- *leaf trusted at the shipped play depth ->
-emit no override, i.e. generate at play settings* -- is **CORRECT, and better than it knew**. For a
-trusted deck the play settings are not merely acceptable, they are frequently the CHEAPEST arm
-available (slivers: 1,496 vs 2,431 for `d3 b3`) while being perfect by construction. There is no
-speed-vs-quality trade-off to arbitrate on such a deck.
+A tempting rule -- *leaf trusted at the shipped play depth -> generate at play settings* -- is what
+`valueleaf_table_to_metadata.py` already does, and on two decks it is exactly right: slivers' play
+settings are the CHEAPEST arm available (1,496 vs 2,431 for `d3 b3`) and exact by construction, and
+knights' cost only +32%.
 
-An earlier draft of this work proposed rewriting that rule to be cost-primary. **That proposal was
-based on the corrupted measurement and is withdrawn.**
+**But it is not a rule, and the counterexample is not marginal.** `burn` is trusted at its play depth
+(V5 <= d6) and its play settings still cost **18,844** units/rollout against **1,253** for `d1 b3` at
+rho **0.999** -- 15x the cost for +0.001 rank fidelity. Whether the leaf truncates enough to pay for
+the depth is a property of the DECK. So the derivation MEASURES in both branches; trust shapes the
+CANDIDATE SET (the trust depth is where the cliff can be, so it must be on the list) but does not
+decide the answer.
 
-What the deriver should gain is the UNTRUSTED branch, which is where a real choice exists:
+An earlier draft of this work proposed the opposite rewrite -- cost-primary, ignoring fidelity. That
+was based on the corrupted measurement and is **withdrawn**; the floor is real.
 
-* trusted at the play depth -> generate at play settings (unchanged).
-* otherwise -> the candidate set must be (depth, budget) PAIRS including the deck's trust depth, and
-  the pick should be the cheapest pair clearing a rank-fidelity floor -- measured on the deck, because
-  the direction is deck-shaped (fivecolour's cost inverts; see `mullgen-depth-cost-vs-quality.md`).
+`scripts/derive_mullgen_setting.py` implements this. It uses `MTG_SCORE_HANDS=N` (random openers
+sampled from the decklist) rather than bucket comps, because the comp path's bucket map is an OUTPUT
+of the very generation being configured -- on a new deck it does not exist exactly when the derivation
+wants it. Worked results: burn picks `d1 b3` at 0.10x the play cost, treasure_hunt picks `d3 b3` at
+0.25x, slivers picks `d3 b3` at 0.60x.
 
-`MTG_SCORE_HANDS=N` exists for exactly this: it scores N random openers sampled from the decklist, so
-the derivation needs no bucket map, no discovery and no prior profile -- the comp path cannot be used
-here because its bucket map is an OUTPUT of the very generation being configured.
+### Caveat: the answer depends on WHICH HANDS are sampled, and neither population is exactly right
+
+The sweep samples the MOST FREQUENT bucket comps; the deriver samples RANDOM OPENERS. They agree on
+fidelity (slivers `d3 b3`: 0.984 vs 0.9977) but can disagree on the COST RANKING -- on slivers the
+sweep makes `d5 b20` the cheapest arm (1,496 < 2,431) while the deriver makes it the dearest
+(5,568 > 3,313). The leaf evidently truncates better on typical hands than on awkward ones, so a
+frequency-weighted sample flatters the deep arms.
+
+Neither is the population the GENERATOR actually pays for: it evaluates every DISTINCT composition,
+roughly uniformly, not weighted by draw frequency. Frequency weighting is arguably right for QUALITY
+(the policy matters most on hands you actually see) and wrong for COST. Treat a cost ratio inside
+~2x as unresolved, and prefer the fidelity ordering, which is stable across both populations.
 
 ## Open
 
