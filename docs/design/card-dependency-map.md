@@ -94,5 +94,17 @@ derived map as part of coverage/review output so a human sees the edges the engi
 **Doubt-flip measurement with the map (antilife 300g, seed 2002 d3):** budget 10 — doubt
 4.3200 vs nodoubt 4.3233 (was +0.067 WORSE, now marginally better); **unbounded — 4.2833 ==
 4.2833 with 0/300 games diverged** (the arms play identical games; the USER's "unbounded
-should be 0" bar met exactly). Suite-wide stack A/B (round 3) is the remaining adoption
-evidence for `MTG_DOUBT_MAIN2`.
+should be 0" bar met exactly).
+
+**Suite-wide round 3 (regression mode, 60 keys, both arms vs a fresh base control under this
+binary; results envs backed up as `regression.env.bak_depmap_{base,stackdoubt,stacknodoubt}`):**
+
+* Stack WITHOUT doubt vs base: near-neutral — net +0.066, 12 better / 8 worse / 40 same.
+  Residual costs antilife (+0.037 d3_s2002, +0.020/+0.012 d5) + hinata mixed + 5c d5 (+0.02);
+  gains burn (−0.01 all four) + creature_giving (−0.01..−0.02) + 5c d3.
+* Doubt vs nodoubt WITHIN the stack: **antilife clean** (−0.003/+0.007/+0.004 — the +0.067
+  arc this doc exists for is resolved), but the flip still costs **fivecolour**
+  (+0.04..+0.09, all four configs) and **goblins** (+0.04, all four) — the same dependency /
+  m2-emission class on decks not yet dug. `MTG_DOUBT_MAIN2` therefore stays PARKED
+  default-off; the antilife method (per-game lever bisect → FSLineTail trace → derive the
+  missing edge/emission) is the route for the 5c and goblins digs.
