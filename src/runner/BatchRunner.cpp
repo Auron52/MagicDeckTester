@@ -1301,8 +1301,37 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                         cell_ceiling[static_cast<std::size_t>(cid)]->frozen.load(
                             std::memory_order_acquire) > 0
                         || cell_abandon_units[static_cast<std::size_t>(cid)] > 0;
-                    if (!bounded)
+                    // A WORK ceiling bounds UNITS, not SECONDS, and the two come apart on exactly
+                    // the games this rule exists for. Measured on the Mirrorwing matrix: four games
+                    // (one game index, at H1/H2/H3/H4 of one seed) each ran ~6 HOURS without
+                    // reaching a 20M-unit ceiling -- under ~900 units/s against the 5k-27k that
+                    // typical cells of the same matrix sustain. Pathological games are slow PER
+                    // UNIT, not merely long in units. With `bounded` true the wall-clock rule
+                    // declined to act, nothing else could, and the pool sat on 4 of 32 cores for
+                    // four and a half hours with the run unable to finish.
+                    //
+                    // So the yield is now BOUNDED itself: past a hard multiple of max_game_sec the
+                    // old cell condemnation returns as the backstop. Losing one cell is a bad
+                    // outcome; a run that cannot terminate is a worse one, and it takes every cell
+                    // with it. The multiple is generous because a legitimately-bounded game should
+                    // never reach it -- at the shipped 3600 s limit this fires at 3 hours, and the
+                    // games that provoked it were already at six.
+                    constexpr double kHardOverrunFactor = 3.0;
+                    const bool hard_overrun =
+                        static_cast<double>(ms) > condemn.max_game_sec * kHardOverrunFactor * 1000.0;
+                    if (!bounded || hard_overrun)
                     {
+                        if (hard_overrun && bounded)
+                        {
+                            std::fprintf(stderr,
+                                "[batch] HARD OVERRUN cell=%s: %.1f s is past %.0fx max_game_sec "
+                                "(%.1f s) even though the per-game WORK ceiling is armed -- a unit "
+                                "ceiling does not bound wall clock, so condemning as the backstop.\n",
+                                cell_name[static_cast<std::size_t>(cid)].c_str(),
+                                static_cast<double>(ms) / 1000.0, kHardOverrunFactor,
+                                condemn.max_game_sec);
+                            std::fflush(stderr);
+                        }
                         condemn_cell(cid, "on an IN-FLIGHT game at",
                                      static_cast<double>(ms) / 1000.0, condemn.max_game_sec);
                         continue;
