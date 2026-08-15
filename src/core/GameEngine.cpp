@@ -345,6 +345,13 @@ void GameEngine::UpkeepTail(GameState& state)
     PerformUpkeepCumulativeGifts(state);
     PerformUpkeepSacTutor(state);
 
+    // Echo (CR 702.29) at TRUE upkeep timing -- BEFORE the draw step, after the other upkeep
+    // triggers, mirroring the rollout's position in SimulateEndAndStartNextTurn (lockstep). See
+    // AIEngine::ResolveEchoUpkeep for why this matters (goblins gi=149: a declined echo's
+    // death-trigger impulse exile must eat the pre-draw library top, exactly as the search
+    // modelled it). Param-gated on echo_cost -> byte-identical for every non-echo deck.
+    m_ai.ResolveEchoUpkeep(state);
+
     ResolveStack(state);
 }
 

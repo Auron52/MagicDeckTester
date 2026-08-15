@@ -3877,9 +3877,23 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
             const int count = amount / per;
             if (count > 1)
             {
+                // DIG INSTRUMENT (MTG_SAC_TRACE, default off): per-sac victim picks for the burst,
+                // printed by BOTH worlds (shared helper) -- diff apply vs exec to find the first
+                // diverging victim (gi=149 lockstep dig 2026-08-15).
+                static const bool s_sac_trace = std::getenv("MTG_SAC_TRACE") != nullptr
+                                            && std::string(std::getenv("MTG_SAC_TRACE")) != "0";
                 for (int n = 0; n < count; ++n)
                 {
                     const int vid = CanonicalSacVictim(state, controller, sac_source_id, need_sub);
+                    if (s_sac_trace)
+                    {
+                        std::string vname = "(none)";
+                        for (const Permanent& q : state.battlefield)
+                        { if (q.controller_index == controller && q.card.m_number == vid) { vname = q.card.m_name.str(); break; } }
+                        std::fprintf(stderr, "[sac] T%d burst %d/%d src=%s vid=%d (%s) bf=%d\n",
+                                     state.turn_number, n + 1, count, src_name.c_str(), vid,
+                                     vname.c_str(), static_cast<int>(state.battlefield.size()));
+                    }
                     if (vid < 0) { break; }   // ran out of Goblins to sacrifice
                     // Human play picks each victim in turn (one prompt per sac in the burst); with no
                     // chooser this is -1 and the card-number path below runs byte-identically.

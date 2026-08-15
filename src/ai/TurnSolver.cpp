@@ -17002,8 +17002,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     std::cerr << "[fd-pred]   turn=" << copy.turn_number
                               << " POST-CLEANUP hand_lands=" << pre_hand_lands
                               << " handsize=" << copy.ActivePlayer().hand.size()
+                              << " hand=[";
+                    for (const Card& hc : copy.ActivePlayer().hand)
+                    { std::cerr << hc.m_name << "#" << hc.m_number << (hc.m_is_staged ? "*" : "") << "; "; }
+                    std::cerr << "]"
                               << " nomax=" << pre_nomax << " libtop=";
-                    for (std::size_t li = 0; li < lib.size() && li < 6; ++li)
+                    for (std::size_t li = 0; li < lib.size() && li < 12; ++li)
                     { std::cerr << lib[li].m_name << "; "; }
                     std::cerr << " (libsize=" << lib.size() << ")\n";
                 }

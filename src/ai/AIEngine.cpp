@@ -926,16 +926,75 @@ int AIEngine::HeuristicBottomPick(const std::vector<Card>& hand,
     return chosen;
 }
 
+void AIEngine::ResolveEchoUpkeep(GameState& state)
+{
+    bool echo_processed = false;   // did an echo obligation actually come due THIS pass?
+    for (std::size_t i = 0; i < state.battlefield.size(); )
+    {
+        Permanent& p = state.battlefield[i];
+        if (p.controller_index != state.active_player_index || p.echo_resolved)
+        { ++i; continue; }
+        const CardDefinition* edef = CardDatabase::Instance().LookupCached(p.card);
+        if (!edef || !edef->params.echo_cost) { ++i; continue; }
+        p.echo_resolved = true;   // obligation resolved this upkeep, whatever the outcome
+        echo_processed  = true;
+        const CardParams& ep = edef->params;
+        // Affordability decided up front so the human-play chooser is offered only a REAL choice
+        // (paying is possible); if unaffordable the creature is simply sacrificed (no decision).
+        // AvailableManaPool is a read-only snapshot (taps nothing), so computing it unconditionally
+        // is behaviourally identical to the old non-self_token-only path.
+        ManaPool avail = AvailableManaPool(state);
+        const bool affordable = avail.CanPay(*ep.echo_cost);
+        // Pay-vs-decline JUDGEMENT is provider-owned (PayEchoToKeep) so the executor and the rollout
+        // (TurnSolver) share one decision -> lockstep. Default reproduces the old fixed heuristic
+        // (self-replacing body declines, else pays); GoblinsProvider adds the Mogg lethal/no-gas keep.
+        bool pay = affordable && ResolveProvider(state).PayEchoToKeep(state, p);
+        // Human play (--claude-play/viewer): let the player decide pay-vs-sacrifice when affordable.
+        // Guarded to the REAL executor (never a clairvoyant rollout, which must play autonomously so
+        // the kept hand reproduces the search) -> autonomous play + ground truth are byte-identical.
+        if (m_external_echo_chooser && !m_in_rollout && affordable)
+        { pay = m_external_echo_chooser(state, p, pay); }
+        bool kept = false;
+        if (pay) { kept = TapForCost(state, *ep.echo_cost, avail, /*for_creature=*/false); }
+        if (kept) { ++i; continue; }
+        // Declined or unaffordable -> sacrifice; fire OnCreatureDies (Mogg's death token, etc.).
+        const Card dead = p.card;
+        const int  ctrl = p.controller_index;
+        state.players[ctrl].graveyard.push_back(dead);
+        state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+        OnCreatureDies(state, ctrl, dead);   // may append a token at the end -> safe (no echo_cost)
+        // Do not advance i: the erased slot now holds the next permanent.
+    }
+    // END OF THE UPKEEP STEP (CR 500.4): the pool empties. Echo is resolved here rather than in
+    // GameEngine::UpkeepStep (see the note above) purely so it can tap through AIEngine's mana
+    // API -- but its TIMING is still the upkeep, so mana over-produced paying an echo cost must
+    // NOT survive into this main phase. Lockstep partner: TurnSolver::SimulateEndAndStartNextTurn.
+    // See UpkeepFloatClearEnabled (viewer issue #6, Goblins s19 gi18 T4 floated {R}x5).
+    //
+    // Gated on echo_processed, and that gate is LOAD-BEARING, not caution: TakeTurn can be
+    // called a SECOND time with is_pre_combat_main still true (the staged-draw / depth-0 second
+    // pass -- see the `return true` sites below), so an unconditional clear here fires again
+    // MID-main-phase and wipes a ritual float the first pass built up. Measured: it cost
+    // Dragonstorm d0 85 slower / 37 play-changed games (gi11 6->loss) while Goblins, the deck
+    // this fixes, was untouched. The echo loop is idempotent via Permanent::echo_resolved, so
+    // keying on "an obligation actually came due in THIS pass" inherits that once-per-turn
+    // latch. Nothing else floats mana during upkeep, so this is exactly the echo leftover.
+    if (echo_processed && UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; }
+}
+
 void AIEngine::FlagNonConvergence(const GameState& state, const TurnSolver::Plan& plan,
                                   int committed_win, int committed_sub_depth)
 {
     const int turn = state.turn_number;
 
-    // A win is exhaustively VERIFIED only when the committing pass ran at full
-    // depth, the win is within the horizon, and the win sits inside that pass's
-    // branched lookahead (so "no earlier win" was actually proved, not assumed).
-    const bool verified = committed_sub_depth == m_lookahead_depth - 1
-                       && committed_win <= m_max_turns
+    // A win is VERIFIED when it is within the committing pass's own branched horizon (real
+    // simulation reached it) and within the game bound. The old extra conjunct
+    // `committed_sub_depth == m_lookahead_depth - 1` limited this to full-depth passes, which
+    // let every SHALLOWER ladder commit evade the detector -- under iterative deepening a d2
+    // pass commits only after d1's complete refutation, so its in-horizon win carries the same
+    // proof, and goblins gi=149's d2-pass win-3 that realized as 5 was exactly the class this
+    // flag exists to announce (2026-08-15 dig). Diagnostic-only (MTG_FLAG_NONCONV, default off).
+    const bool verified = committed_win <= m_max_turns
                        && committed_win - turn <= committed_sub_depth;
     if (!verified) { return; }
 
@@ -1347,74 +1406,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         ap_ref.hand.push_back(sc.card);
     }
 
-    // Echo upkeep resolution (Mogg War Marshal {1}{R}, Stingscourger {3}{R}) -- executor world.
-    // "At the beginning of your upkeep, if this came under your control since your last upkeep,
-    // sacrifice it unless you pay its echo cost" (CR 702.29). This lives at the top of the pre-combat
-    // main rather than GameEngine::UpkeepStep because paying the echo taps lands through AIEngine's
-    // (private) mana API -- BuildAvailableMana + TapForCost, the byte-identical mirror of the rollout's
-    // TapForCostDirect -- so both worlds spend identical mana. Resolving here (before any land drop or
-    // cast, and before the search/ewins enumeration below) makes the tapped mana unavailable for this
-    // turn's plays and removes any declined body before combat -- functionally the upkeep timing for a
-    // goldfish. Guarded to pre_combat so a permanent that entered THIS turn is not charged until its
-    // next upkeep, and the per-permanent echo_resolved flag makes it idempotent (a no-op in-rollout,
-    // where SimulateEndAndStartNextTurn already resolved it). Heuristic (deterministic, no branch): a
-    // creature whose own death makes a replacement token (Mogg -- dies_watch_includes_self + a death
-    // token) DECLINES (net same body, saves mana); any other echo creature (Stingscourger) PAYS if
-    // affordable, else is sacrificed. Gated on echo_cost -> byte-identical for every non-echo deck.
+    // Echo upkeep resolution -- IDEMPOTENT BACKSTOP. The real resolution now runs at true upkeep
+    // timing (GameEngine::UpkeepTail -> ResolveEchoUpkeep, BEFORE the draw step): resolving it here
+    // at the top of the pre-combat main -- AFTER the draw -- de-synced the executor from the rollout
+    // (which resolves echo pre-draw in SimulateEndAndStartNextTurn) whenever a lapse's death trigger
+    // consumes library cards. Goblins gi=149 (seed 3152, 2026-08-15): Mogg's declined echo dies into
+    // a live Rundvelt Hordemaster, whose impulse exile eats the library top -- pre-draw it ate the
+    // Warchief and the draw was a Mountain (the committed win-3 line's 3rd land + staged Muxus);
+    // post-draw the Warchief was drawn and the Mountain exiled, leaving Muxus one mana short. This
+    // call remains for resume paths that skip the upkeep (echo_resolved makes it a no-op after the
+    // upkeep-timed pass ran).
     if (is_pre_combat_main)
     {
-        bool echo_processed = false;   // did an echo obligation actually come due THIS pass?
-        for (std::size_t i = 0; i < state.battlefield.size(); )
-        {
-            Permanent& p = state.battlefield[i];
-            if (p.controller_index != state.active_player_index || p.echo_resolved)
-            { ++i; continue; }
-            const CardDefinition* edef = CardDatabase::Instance().LookupCached(p.card);
-            if (!edef || !edef->params.echo_cost) { ++i; continue; }
-            p.echo_resolved = true;   // obligation resolved this upkeep, whatever the outcome
-            echo_processed  = true;
-            const CardParams& ep = edef->params;
-            // Affordability decided up front so the human-play chooser is offered only a REAL choice
-            // (paying is possible); if unaffordable the creature is simply sacrificed (no decision).
-            // AvailableManaPool is a read-only snapshot (taps nothing), so computing it unconditionally
-            // is behaviourally identical to the old non-self_token-only path.
-            ManaPool avail = AvailableManaPool(state);
-            const bool affordable = avail.CanPay(*ep.echo_cost);
-            // Pay-vs-decline JUDGEMENT is provider-owned (PayEchoToKeep) so the executor and the rollout
-            // (TurnSolver) share one decision -> lockstep. Default reproduces the old fixed heuristic
-            // (self-replacing body declines, else pays); GoblinsProvider adds the Mogg lethal/no-gas keep.
-            bool pay = affordable && ResolveProvider(state).PayEchoToKeep(state, p);
-            // Human play (--claude-play/viewer): let the player decide pay-vs-sacrifice when affordable.
-            // Guarded to the REAL executor (never a clairvoyant rollout, which must play autonomously so
-            // the kept hand reproduces the search) -> autonomous play + ground truth are byte-identical.
-            if (m_external_echo_chooser && !m_in_rollout && affordable)
-            { pay = m_external_echo_chooser(state, p, pay); }
-            bool kept = false;
-            if (pay) { kept = TapForCost(state, *ep.echo_cost, avail, /*for_creature=*/false); }
-            if (kept) { ++i; continue; }
-            // Declined or unaffordable -> sacrifice; fire OnCreatureDies (Mogg's death token, etc.).
-            const Card dead = p.card;
-            const int  ctrl = p.controller_index;
-            state.players[ctrl].graveyard.push_back(dead);
-            state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
-            OnCreatureDies(state, ctrl, dead);   // may append a token at the end -> safe (no echo_cost)
-            // Do not advance i: the erased slot now holds the next permanent.
-        }
-        // END OF THE UPKEEP STEP (CR 500.4): the pool empties. Echo is resolved here rather than in
-        // GameEngine::UpkeepStep (see the note above) purely so it can tap through AIEngine's mana
-        // API -- but its TIMING is still the upkeep, so mana over-produced paying an echo cost must
-        // NOT survive into this main phase. Lockstep partner: TurnSolver::SimulateEndAndStartNextTurn.
-        // See UpkeepFloatClearEnabled (viewer issue #6, Goblins s19 gi18 T4 floated {R}x5).
-        //
-        // Gated on echo_processed, and that gate is LOAD-BEARING, not caution: TakeTurn can be
-        // called a SECOND time with is_pre_combat_main still true (the staged-draw / depth-0 second
-        // pass -- see the `return true` sites below), so an unconditional clear here fires again
-        // MID-main-phase and wipes a ritual float the first pass built up. Measured: it cost
-        // Dragonstorm d0 85 slower / 37 play-changed games (gi11 6->loss) while Goblins, the deck
-        // this fixes, was untouched. The echo loop is idempotent via Permanent::echo_resolved, so
-        // keying on "an obligation actually came due in THIS pass" inherits that once-per-turn
-        // latch. Nothing else floats mana during upkeep, so this is exactly the echo leftover.
-        if (echo_processed && UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; }
+        ResolveEchoUpkeep(state);
     }
 
     // Enumerate-all-earliest-wins dump (offline rule-miner; inert unless MTG_DUMP_EWINS).
@@ -2131,8 +2135,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 os << " | libtop=";
                 {
                     const Player& tp = state.ActivePlayer();
-                    for (int li = 0; li < 3 && li < static_cast<int>(tp.library.size()); ++li)
-                    { os << tp.library[li].m_name << "; "; }
+                    for (int li = 0; li < 12 && li < static_cast<int>(tp.library.size()); ++li)
+                    { os << tp.library[li].m_name << "#" << tp.library[li].m_number << "; "; }
                 }
                 os << " | plan=";
                 if (plan.land_decided && !plan.land_to_play.empty())

@@ -159,16 +159,25 @@ losses?"). Every remaining doubt-worse game across the whole suite is attributed
   Main1 — the put board can attack the same turn (the reveal held the haste lord; the m1
   Muxus attacked for 43 on the spot) and is visible to the m2 plans. Deferring can never
   help. Goblins s2002 stays 0/300 under the pull; nodoubt arms unchanged.
-* **goblins gi=149 s3003 (3→5 both depths) — OPEN, the m2 payment-optimism class (ordering
-  audit item 5/7), NOT classification:** the doubt-routed T2-m2 plan
-  `[Pashalik Mons, Mogg War Marshal, SacForMana(Prospector)×1]` totals 5 mana against 2
-  Mountains + 1 planned sac; the search's m2 branch scored it win-3 under the optimistic
-  simultaneous affordability model, the realization needs extra unplanned Prospector sacs
-  whose Mons pings + Hordemaster exiles gut the T3 board (attack 14 < lethal) → realizes 5.
-  The commit came from the ladder's d2 pass, which the `MTG_FLAG_NONCONV` verified-gate
-  (`sub_depth == lookahead-1`) does not cover — that is why no [nonconv] fires. Fix lives in
-  the m2-hardening queue: the tight sequenced affordability model for FSLineTail's m2 branch
-  (audit item 5), or complete explicit sac plans.
+* **goblins gi=149 s3003 (3→5 both depths) — FIXED 2026-08-15: ECHO TIMING lockstep bug
+  (rules fix, base-affecting), NOT classification and NOT payment optimism (first attribution
+  superseded by the deep dig).** Chain of evidence: `MTG_FD_ORACLE` flags predicted 3 @T1 /
+  realized 5; `MTG_BP_TRACE`+`MTG_FD_TRACE` show the committed T3 `Muxus` cast FAILING by
+  exactly 1 mana in the executor while paying in the apply replay; `MTG_SAC_TRACE` (new
+  instrument) shows IDENTICAL sac victims both worlds; the 12-card libtop diff isolates a
+  single one-card draw transposition (#19 Warchief ↔ #29 Mountain). Root: the ROLLOUT
+  resolves echo (CR 702.29) in the upkeep BEFORE the draw, the EXECUTOR resolved it at the
+  top of the pre-combat main AFTER the draw ("functionally the upkeep timing" — true until a
+  lapse's death trigger consumes library cards: Mogg's declined echo dies into a live
+  Rundvelt Hordemaster whose impulse exile eats the library top). Pre-draw the exile ate the
+  Warchief and the draw was the Mountain (3rd land + staged-Muxus win-3); post-draw the
+  Warchief was drawn and Muxus came up one mana short. Fix: `AIEngine::ResolveEchoUpkeep`
+  called from `GameEngine::UpkeepTail` (pre-draw, mirroring the rollout's position);
+  idempotent backstop kept in TakeTurn for upkeep-skipping resume paths. gi=149 doubt 5→3
+  (now matching nodoubt's 3). Base impact goblins-only: smoke d3 3.6533→3.6467 (better),
+  d0/d5 digest-only; GT accepted. Side finding fixed the same day: `MTG_FLAG_NONCONV`'s
+  verified gate required the full-depth pass, so every shallower-ladder commit evaded the
+  detector — relaxed to "win within the committing pass's own horizon".
 * **fivecolour gi=15 + gi=29 d5 s2002 (5→6 each; gi=15 also the d3 1w) — the fetch-crack
   shuffle-clairvoyance tie-flip class** (midphase-ordering-audit.md, root-caused 2026-08-15):
   T1 crack-vs-hold at a value-flat node; the arms' libraries diverge from the first fetch.

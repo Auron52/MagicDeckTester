@@ -38,6 +38,16 @@ public:
     // compared at game end so it never fires on games that win on time via combat.
     void OnGameEnd(const GameState& state, int win_turn);
 
+    // Echo upkeep resolution (CR 702.29) at TRUE upkeep timing -- called from
+    // GameEngine::UpkeepTail BEFORE the draw step, mirroring the rollout's position in
+    // SimulateEndAndStartNextTurn. Lives on AIEngine (not GameEngine) because paying the echo
+    // taps lands through this class's mana API. Idempotent per permanent (echo_resolved), so
+    // the TakeTurn backstop call for upkeep-skipping resume paths is a no-op after this ran.
+    // Moved from the top of the pre-combat main (post-draw) 2026-08-15: a declined echo whose
+    // death trigger consumes library cards (Mogg -> Rundvelt Hordemaster impulse exile)
+    // resolved one card later than the rollout modelled, transposing the draw (goblins gi=149).
+    void ResolveEchoUpkeep(GameState& state);
+
     // Returns the card names of the hand kept after the most recent HandleMulligan call.
     const std::vector<std::string>& GetKeptOpeningHand() const { return m_kept_opening_hand; }
 
