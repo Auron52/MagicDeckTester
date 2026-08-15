@@ -183,6 +183,43 @@ INTRACTABLE_MEDIAN_SPG=30
 # a larger sample buys precision nobody needs at the price of the exposure this is removing.
 ABANDON_K=25
 ABANDON_CALIB=10
+# ABSOLUTE FLOOR under the ratio (user, 2026-08-15: "it must be above 10 minutes... maybe even 30
+# minutes. Beyond that, I think it's okay to condemn").
+#
+# WHY A RATIO ALONE IS NOT ENOUGH. `k x median` has no notion of how expensive a cell is in absolute
+# terms, so on a CHEAP cell it condemns games that cost nothing. Measured on the Mirrorwing matrix
+# before this existed: V1 (9.6 ms/game median) lost 6.3% of its games and H1 (611 ms) 6.0% -- pure
+# data loss, since there is no cost explosion to protect against at that scale. And because a game
+# abandoned in ANY cell is excluded from ALL of them (the driver unions the abandoned sets so every
+# cell holds the same games), a cheap cell's spurious abandonment takes that game away from the
+# EXPENSIVE rows too. The floor makes the ratio inert where it is not needed and leaves it governing
+# the top of the ladder, which is the only place it was ever meant to act.
+#
+# CALIBRATION. The ceiling must stay in work UNITS -- that is what makes the abandoned set identical
+# on every machine and the skip list shareable (ai/GameWorkMeter.h) -- but "30 minutes" is wall clock,
+# and the conversion is WORKLOAD-dependent, not just deck-dependent.
+#
+# Calibrated from the Mirrorwing matrix ITSELF (median units per cell, from the CEILING lines, over
+# that cell's reported ms/game):
+#     H1 22.7k   H2 18.6k   H3 12.4k   H4 10.2k   H5 6.6k   units/core-second
+#     V1 19.9k   V2 26.6k   V4 11.9k   V8 4.8k
+# i.e. ~5k-27k, call it ~10k on the expensive cells where the monsters actually live. 1800 s x 10k
+# ~= 18M, rounded to 20M.
+#
+# A FIRST CUT USED 250M AND WAS WRONG BY ~10x. It came from timing the comp scorer at depth 3 /
+# budget 3 ms, which measured ~135k units/core-s -- a budget-limited shallow search, where nodes are
+# cheap and plentiful. The matrix runs UNBOUNDED search against a value leaf, where each node costs
+# far more wall-clock, so the same unit count buys an order of magnitude more time. At 250M the floor
+# was ~7 HOURS: it would have let through the 6.41-hour game the phase-A heartbeat had already
+# recorded, i.e. silently disabled the very mechanism it was meant to bound. CALIBRATE AGAINST THE
+# WORKLOAD YOU ARE BOUNDING, not a convenient proxy.
+#
+# CONSEQUENCE, and it is intended: 25 x median tops out around 7.8M on this deck (H4), which is under
+# the floor, so the ratio never fires here and the rule reduces to "abandon a game costing more than
+# ~30 minutes". That is exactly the user's call ("it must be above 10 minutes... maybe even 30
+# minutes. Beyond that, I think it's okay to condemn"). The ratio remains in force for any deck whose
+# cells are expensive enough that 25 x median exceeds the floor.
+ABANDON_FLOOR_UNITS=20000000
 # MEMORY BOUNDS, derived from the box -- generous, but never OOM (user, 2026-08-13). Both caches are
 # RESULT-NEUTRAL memos (a refused insert just recomputes; play is byte-identical -- see
 # TranspositionTable::Cap and FslCap in TurnSolver.cpp), so capping them costs only tail-game
@@ -525,6 +562,7 @@ phase_matrix() {
         --value-min-depth 0 --intractable-median-sec-per-game "$INTRACTABLE_MEDIAN_SPG" \
         --never-condemn-at-or-below "$NEVER_CONDEMN" \
         --abandon-k "$ABANDON_K" --abandon-calib "$ABANDON_CALIB" \
+        --abandon-floor-units "$ABANDON_FLOOR_UNITS" \
         --out "$MATRIX_TXT" >> "$VLQ/matrix.log" 2>&1
     [ -s "$MATRIX_TXT" ] || { log "PHASE C ABORT: no matrix output"; return 1; }
     log "PHASE C done"

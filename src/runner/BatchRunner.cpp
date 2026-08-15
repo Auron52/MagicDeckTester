@@ -84,6 +84,20 @@ struct Job
     // cap under the calibration window without letting it decide the ceiling.
     double          abandon_k           = 0.0;   // 0 = no relative ceiling
     int             abandon_calib       = 0;     // games forming the sample (by GLOBAL index)
+    // ABSOLUTE FLOOR under the relative ceiling: a game is never abandoned for costing less than
+    // this, no matter how far above its cell's median it sits. 0 = no floor (pre-2026-08-15).
+    //
+    // WHY. `k x median` alone has no notion of how expensive the cell is in absolute terms, so on a
+    // CHEAP cell it condemns games that cost nothing. Measured on the Mirrorwing matrix: V1 has a
+    // 9.6 ms median and was still losing 6.3% of its games, and H1 (611 ms) 6.0% -- pure data loss,
+    // since there is no cost explosion to protect against at that scale. Worse, the abandon rate then
+    // varies per cell (6% at V1 to 31% at H5), and the whole point of the matrix is COMPARING cells:
+    // a per-cell filter is what raises `UNEQUAL GAME SETS` and is the same mechanism that once flipped
+    // the sign of FiveColour's V6-H5 comparison.
+    //
+    // The floor makes the mechanism INERT on cheap cells (where k x median sits under it) and leaves
+    // it governing on expensive ones, which is the only place it was ever meant to act.
+    long long       abandon_floor_units = 0;
     int             max_turns           = 8;   // goldfish horizon (see main.cpp); per-job overridable
     bool            second_main         = false;  // precomputed DeckUsesSecondMain
     int             sched_weight        = 0;   // optional LPT scheduling priority (higher = run first);
@@ -542,6 +556,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     j.abandon_units       = jspec.value("abandon_units", 0LL);   // per-game ceiling; see Job::abandon_units
     j.abandon_k           = jspec.value("abandon_k", 0.0);       // ...or k x the cell's own median
     j.abandon_calib       = jspec.value("abandon_calib", 0);     //    over its first N games
+    j.abandon_floor_units = jspec.value("abandon_floor_units", 0LL);  // ...never below this (absolute)
 
     // Per-job VALUE-LEAF ARM (see ai/ValueArm.h). Every key is optional and every default is the
     // "unset" sentinel, so a manifest that omits them all runs exactly as before.
@@ -823,6 +838,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         int                    need  = 0;      // calibration games present in THIS manifest
         int                    calib = 0;
         double                 k     = 0.0;
+        long long              floor_units = 0;   // absolute floor; see Job::abandon_floor_units
         // Worker slots currently running one of this cell's calibration games. The freeze needs to
         // know that every unfinished sample game already sits above the middle value, and a running
         // game's progress is only readable through the slot it publishes to (ai/GameWorkMeter.h).
@@ -863,6 +879,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         ++cc.need;
         cc.calib = j.abandon_calib;
         cc.k     = j.abandon_k;
+        cc.floor_units = std::max(cc.floor_units, j.abandon_floor_units);
         any_relative = true;
     }
     if (any_relative)
@@ -1549,7 +1566,8 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                             std::sort(pre.begin(), pre.end());
                             const long long pmed = pre[kCalibPrefix / 2];
                             const long long prov = std::max<long long>(
-                                1, static_cast<long long>(kProvisionalSlack * cc.k * pmed));
+                                std::max<long long>(1, cc.floor_units),
+                                static_cast<long long>(kProvisionalSlack * cc.k * pmed));
                             long long expect = 0;
                             if (cc.late.compare_exchange_strong(expect, prov,
                                                                 std::memory_order_acq_rel))
@@ -1605,8 +1623,13 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                             const std::size_t n = static_cast<std::size_t>(cc.need);
                             const long long med = (n % 2 == 1) ? s[n / 2]
                                                                : (s[n / 2 - 1] + s[n / 2]) / 2;
-                            const long long lim =
-                                std::max<long long>(1, static_cast<long long>(cc.k * med));
+                            // The floor is applied HERE, not at the comparison site, so the ceiling
+                            // that gets reported, stored and handed back on resume is the effective
+                            // one -- a floor applied only at the test would make the logged number a
+                            // lie and would not survive the driver's resume path.
+                            const long long lim = std::max<long long>(
+                                std::max<long long>(1, cc.floor_units),
+                                static_cast<long long>(cc.k * med));
                             cc.frozen.store(lim, std::memory_order_release);
                             // The running calibration games watch `late`, so the freeze has to land
                             // there too -- that is the channel that reaches INTO the window. Plain

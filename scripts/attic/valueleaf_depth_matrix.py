@@ -1065,6 +1065,14 @@ def run_incremental(args):
                      "abandon_units":(0 if _capped else (c.get("ceil") or args.abandon_units)),
                      "abandon_k":(0.0 if (_capped or c.get("ceil")) else args.abandon_k),
                      "abandon_calib":(0 if (_capped or c.get("ceil")) else args.abandon_calib),
+                     # ABSOLUTE FLOOR under the ratio. `k x median` knows nothing about how expensive
+                     # the cell is in absolute terms, so on a CHEAP cell it condemns games that cost
+                     # nothing: measured on this deck's own matrix, V1 (9.6 ms median) was losing 6.3%
+                     # of its games and H1 (611 ms) 6.0%. That is not a saving, it is data loss -- and
+                     # because a game abandoned in ANY cell is dropped from ALL of them (see the union
+                     # at reduce time), a cheap cell's spurious abandonment costs the EXPENSIVE rows
+                     # their games too. The floor makes the ratio inert wherever it is not needed.
+                     "abandon_floor_units":(0 if _capped else args.abandon_floor_units),
                      "cell":"%s_%s%d_s%d" % (dname, c["arm"], c["depth"], c["seed"]),
                      "row":"%s_%s%d" % (dname, c["arm"], c["depth"]),
                      # Priority for the pool's own sort (BatchRunner sorts by this DESCENDING). Packed
@@ -1392,6 +1400,19 @@ def main():
                          "that actually wants using is relative to a cell's own median (cells span 11 ms to "
                          "700 s per game), and MTG_DUMP_UNITS exists to measure that distribution before a "
                          "multiplier is chosen. Prefer --abandon-k, which does that per cell.")
+    ap.add_argument("--abandon-floor-units",type=int,default=0,
+                    help="ABSOLUTE FLOOR under --abandon-k: never abandon a game costing less than this, "
+                         "however far above its cell's median it sits. 0 = no floor. A pure ratio has no "
+                         "notion of absolute cost, so on a cheap cell it voids games that cost nothing -- "
+                         "measured on Mirrorwing, V1 (9.6 ms/game median) lost 6.3% of its games and H1 "
+                         "(611 ms) 6.0%, for no saving whatever. And since a game abandoned in ANY cell is "
+                         "excluded from ALL of them, that loss propagates to the expensive rows as well. "
+                         "Set it to the cost below which a game is simply not a problem; the mechanism then "
+                         "governs only the top of the ladder, which is the only place it was meant to act. "
+                         "Units are deterministic, so this stays machine-independent -- but converting a "
+                         "wall-clock intent into units is DECK-DEPENDENT: measured single-threaded, slivers "
+                         "runs ~296k units/core-s and Mirrorwing ~135k, so the same floor buys different "
+                         "amounts of time per deck. Quote the deck you calibrated against.")
     ap.add_argument("--abandon-k",type=float,default=0.0,
                     help="RELATIVE per-game ceiling: abandon a game past k x the median cost of its own "
                          "cell's first --abandon-calib games. This is the form that can serve a whole "
