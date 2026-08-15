@@ -619,51 +619,40 @@ def write_deck(block, tol, offset, margin, dry, scalar_cap=None, set_esc_cap=Tru
     # hands). `fix(keepgen): discovery runs under PLAY settings` made mull_gen_* a pure COST knob, which
     # is the property that makes it derivable at all.
     #
-    # THE RULE
-    #   * Leaf TRUSTED at the shipped play depth -> emit NO override, i.e. generate at play settings.
-    #     A trusted leaf is exactly what makes play-settings generation cheap WITHOUT giving up quality
-    #     (rollouts stop at the leaf instead of playing on), so overriding such a deck down to a cheap
-    #     depth throws that away and labels hands under a policy the deck does not use. User: "we are
-    #     not planning to run decks that have a fast trusted leaf under d3 b3 ... Slivers and Knights
-    #     especially should take advantage of the trusted leaf."
-    #   * Otherwise -> the shallowest MEASURED heuristic depth that has converged (H[d] within tol of
-    #     h_conv). That is the reliability half: shallower measurably misranks hands, deeper buys
-    #     nothing and forfeits the point of the override.
+    # THE RULE THIS USED TO APPLY IS DISPROVEN -- IT NO LONGER WRITES A SETTING FROM THE TABLE.
     #
-    # BUDGET IS DELIBERATELY NOT INVENTED. The matrix measures depth, not a cost-vs-budget curve, so an
-    # existing mull_gen_budget_ms is PRESERVED and an absent one stays absent (inheriting play). Deriving
-    # a number here would be a guess wearing a measurement's clothes.
+    # It applied: leaf trusted at the play depth -> drop the override (generate at play settings);
+    # otherwise -> the shallowest converged heuristic depth. Both halves failed when measured
+    # (docs/design/mullgen-setting-is-a-trust-question.md):
+    #
+    #   * The TRUSTED half is not a rule. On slivers it is right for the right reason -- play settings
+    #     are the CHEAPEST arm (1,496 units/rollout vs 2,431 for d3 b3) because reaching the leaf
+    #     terminates the rollout. But burn is trusted at its play depth too and its play settings cost
+    #     18,844 against 1,253 for d1 b3 at rho 0.999 -- 15x for +0.001 rank fidelity. Whether the leaf
+    #     truncates enough to pay for the depth is a property of the DECK.
+    #   * The OTHERWISE half read a depth off the H ladder, which measures how well a depth PLAYS, not
+    #     how well it RANKS hands. Those differ: most of a weak labeller's error is a uniform shift that
+    #     a ranking cancels (burn at d0 carries +0.199 turns of bias of which only 0.106 reorders).
+    #   * And at THIS phase trust_depth is only a CANDIDATE -- it is decided by the phase-E acceptance
+    #     A/B -- so keying a written setting on it here is keying it on a number that may not survive.
+    #
+    # The setting also is not a depth at all but a (depth, budget) PAIR: cost is not monotonic in depth,
+    # because reaching the leaf needs depth >= trust AND enough budget to COMPLETE that depth. On slivers
+    # d3 b20 costs 11,551 units while d5 b20 costs 1,496 -- deeper at the same budget is 7.7x cheaper.
+    #
+    # So this phase REPORTS and defers to the measured deriver, which scores real openers under candidate
+    # pairs and picks the cheapest clearing a rank-fidelity floor. Nothing is written from the table.
     if set_mullgen and not allow_partial:
         vp = nd.get("value_play")
         if isinstance(vp, dict):
-            td_play = int(vp.get("target_depth") or 0)
-            trusted = (trust_depth is not None and td_play and trust_depth <= td_play)
-            if trusted:
-                dropped = [k for k in ("mull_gen_depth", "mull_gen_budget_ms") if k in vp]
-                for k in dropped:
-                    vp.pop(k)
-                if dropped:
-                    print("    mull_gen: DROPPED %s -- leaf trusted at V%d <= play d%d, so generate at "
-                          "play settings" % (",".join(dropped), trust_depth, td_play))
-            else:
-                conv = [d for d in hd if H[d] - h_conv <= tol]
-                if conv:
-                    gd = conv[0]
-                    if td_play:
-                        gd = min(gd, td_play)
-                    if vp.get("mull_gen_depth") != gd:
-                        print("    mull_gen: depth -> d%d (shallowest converged heuristic depth; "
-                              "trust=%s)" % (gd, "UNSET" if trust_depth is None else "V%d" % trust_depth))
-                    vp["mull_gen_depth"] = gd
-                    # budget: preserved if present, never invented (see the note above).
-                else:
-                    print("    mull_gen: NOT derived -- heuristic never converges within tol; "
-                          "leaving the existing setting alone")
+            cur = ("d%s b%s" % (vp.get("mull_gen_depth"), vp.get("mull_gen_budget_ms"))
+                   if "mull_gen_depth" in vp else "(none -> inherits play)")
+            print("    mull_gen: NOT derived from the table (the table's rule is disproven -- see "
+                  "docs/design/mullgen-setting-is-a-trust-question.md).\n"
+                  "              current=%s   measure it with:\n"
+                  "              python3 scripts/derive_mullgen_setting.py <decklist> --write" % cur)
     elif set_mullgen and allow_partial:
-        # A PARTIAL table must not be read as convergence: a truncated ladder's shallowest "converged"
-        # depth is an artifact of where measurement stopped. Say so and change nothing.
-        print("    mull_gen: SKIPPED -- partial matrix (--allow-partial); refusing to derive a setting "
-              "from an incomplete ladder")
+        print("    mull_gen: SKIPPED -- partial matrix (--allow-partial)")
 
     td = "UNSET" if trust_depth is None else "%d?(candidate)" % trust_depth
     ov_note = "" if not manual else "  [manual: %s]" % ",".join(
