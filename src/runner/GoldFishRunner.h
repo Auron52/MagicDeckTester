@@ -106,4 +106,7 @@ public:
         bool castpayoff_main1 = false;   // verse_damage cast-payoffs -> Main1
     };
     static DependencyPulls DeriveDependencyPulls(const Decklist& deck);
+    // Deck-level input to EOT dominance: WHICH projection of a graveyard this deck can observe
+    // (GyReader bits). Stamped onto GameState::deck_gy_readers by SetupGame (see the .cpp note).
+    static std::uint32_t DeckGraveyardReaders(const Decklist& deck);
 };

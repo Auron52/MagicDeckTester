@@ -7,6 +7,7 @@
 #include "Combat.h"
 #include "EngineFlags.h"
 #include "TranspositionTable.h"
+#include "Dominance.h"              // EOT state dominance (MTG_DOM_CENSUS / MTG_DOM_PRUNE)
 #include "KeepModel.h"              // MidGameEvaluator / ExtractMidGameFeatures (learned d0 eval)
 #include "Profiler.h"
 #include "../core/ManaPool.h"
@@ -15532,133 +15533,167 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state)
     return k;
 }
 
-// --- MTG_DOM_CENSUS (TEMPORARY probe; MTG_BP_DUP_PROBE precedent -- strip after pricing) ------
-// Prices the EOT dominance prune (docs/design/eot-dominance-pruning.md) BEFORE building it: at the
-// candidate loop's end-of-turn boundary (sibling frontier -- same decision), bucket each new state
-// vs its archived siblings as identical / dominated / incomparable under the SOUND core:
-//   comparable ONLY at equal library positions (same draws consumed) with equal graveyards and an
-//   equal opponent board (fail-closed axes); any perm carrying counters / damage / attachments /
-//   temp state on either side must match EXACTLY (fail-closed to equality -- underCOUNTS dominance
-//   for e.g. depletion counters, so the census is a floor); the remaining "simple" board and the
-//   hand compare as multisets (B subset-of A, with A at least as untapped / combat-ready per name);
-//   life: ours higher dominates, opponent's lower dominates.
-// Census only -- prunes NOTHING, changes NOTHING; totals print at process exit.
+// --- EOT DOMINANCE (docs/design/eot-dominance-pruning.md) -------------------------------------
+// The sibling-frontier application point for state dominance: at the candidate loop's end-of-turn
+// boundary, every new state is compared against the siblings of the SAME decision -- same consumed
+// draws, same boundary, so comparability holds by construction (the doc's preferred first form;
+// cross-decision archives only once this one is proven).
+//
+// Two flags over ONE comparator (dominance::Covers, src/ai/Dominance.h):
+//   MTG_DOM_CENSUS -- bucket siblings as identical / dominated / incomparable and prune NOTHING.
+//                     Pricing only; totals print at process exit.
+//   MTG_DOM_PRUNE  -- actually drop a dominated sibling before its rollout is paid for.
+// Both default OFF: one flag check per candidate, nothing else runs -> byte-identical.
+//
+// MTG_DOM_PRUNE is PLAY-AFFECTING and not byte-identical even when the dominance argument holds:
+// a dropped line can win a `plan.value` tie-break today. It therefore takes the full standing gate
+// (suite A/B on train seeds, held-out validation, GT rebaseline) PLUS the doc's MUST-FIND gate --
+// every previously-found win reproduced at --budget-ms 0 with the prune on. That extra gate exists
+// because this is a JUDGEMENT prune: unlike identity collapse there is no per-state validity
+// argument, so its failure mode is a reachable win silently deleted.
 inline bool DomCensusOn() { static const bool v = EnvOn("MTG_DOM_CENSUS"); return v; }
-namespace domcensus
+inline bool DomPruneOn()  { static const bool v = EnvOn("MTG_DOM_PRUNE");  return v; }
+inline bool DomActive()   { return DomCensusOn() || DomPruneOn(); }
+namespace domin
 {
-    struct Snap
-    {
-        TranspositionTable::Key key;                     // identity bucket (canon simkey)
-        std::size_t lib0 = 0;
-        int life0 = 0, life1 = 0;
-        std::vector<std::uint64_t> hand;                 // sorted name hashes (player 0)
-        std::vector<std::array<std::uint64_t, 4>> bf;    // {name, total, untapped, ready} sorted
-        std::vector<std::uint64_t> exact;                // fail-closed: complex perms, gy0/gy1, opp bf
-    };
+    // Pareto-frontier archive width per decision pass. The frontier is normally a handful of
+    // states; the cap is the memory backstop the doc asks for, and overflowing it degrades to
+    // today's behaviour (a state past the cap is simply never compared against) rather than
+    // costing soundness. MTG_DOM_ARCHIVE=<n> for the A/B.
+    inline int ArchiveCap() { static const int v = EnvInt("MTG_DOM_ARCHIVE", 256); return v; }
+
     struct Totals
     {
-        std::atomic<unsigned long long> snaps{0}, identical{0}, dominated{0},
-                                        dominates_archived{0}, incomparable_pairs{0};
+        std::atomic<unsigned long long> snaps{0}, incomparable_state{0}, identical{0},
+                                        dominated{0}, dominates_archived{0}, pruned{0},
+                                        harm{0}, harm_turns{0}, ident_mismatch{0},
+                                        key_mismatch{0}, eq_byaxes{0};
         ~Totals()
         {
-            if (!DomCensusOn()) { return; }
+            if (!DomActive()) { return; }
             std::fprintf(stderr,
-                "[dom-census] snaps=%llu identical=%llu dominated=%llu (would prune) "
-                "dominates_archived=%llu (late better) incomparable_pairs=%llu\n",
-                snaps.load(), identical.load(), dominated.load(),
-                dominates_archived.load(), incomparable_pairs.load());
+                "[dom] snaps=%llu unusable=%llu identical=%llu dominated=%llu "
+                "dominates_archived=%llu (late better) pruned=%llu harm=%llu (turns=%llu) "
+                "eq_byaxes=%llu mismatch: key=%llu axes=%llu\n",
+                snaps.load(), incomparable_state.load(), identical.load(), dominated.load(),
+                dominates_archived.load(), pruned.load(), harm.load(), harm_turns.load(),
+                eq_byaxes.load(), key_mismatch.load(), ident_mismatch.load());
         }
     };
     inline Totals& T() { static Totals t; return t; }
 
-    inline Snap Build(const GameState& s)
+    // What Check() decided about one candidate, so the caller can feed back the rollout result.
+    struct Probe
     {
-        Snap n;
-        n.key   = BuildSimKey(s, 0, 0, false);
-        n.lib0  = s.players[0].library.size();
-        n.life0 = s.players[0].life;
-        n.life1 = s.players[1].life;
-        for (const Card& c : s.players[0].hand) { n.hand.push_back(c.m_name_hash); }
-        std::sort(n.hand.begin(), n.hand.end());
-        auto mixv = [](std::uint64_t a, std::uint64_t b)
-        { a ^= b + 0x9e3779b97f4a7c15ull + (a << 6) + (a >> 2); return a; };
-        // Boundary must be clean; a dirty boundary fail-closes the whole state via `exact`.
-        if (s.floating_mana.Total() > 0 || s.spells_cast_this_turn > 0 || !s.stack.empty())
-        { n.exact.push_back(0xD117Bull); }
-        std::map<std::uint64_t, std::array<std::uint64_t, 3>> counts;   // name -> total/untapped/ready
-        for (const Permanent& p : s.battlefield)
+        bool prune     = false;
+        int  dominator = -1;   // archive index of the state that dominates this one (-1 = none)
+        int  equal_to  = -1;   // archive index of a state we judged EQUIVALENT to this one
+        bool eq_bykey  = false;// true = matched by the engine's canon simkey, false = by our axes
+        int  slot      = -1;   // this state's own archive index (-1 = not archived)
+    };
+
+    // HARM COUNTER (census only) -- the measurement that tells a SOUND prune from a HARMFUL one.
+    //
+    // Dominance claims "A can reach anything B can", which is a statement about OPTIMAL play. The
+    // rollout that scores these candidates is a GREEDY walker, so it may simply fail to find, from
+    // A, the win it happened to find from B. `harm` counts exactly that: a dominated candidate whose
+    // rollout returned a STRICTLY BETTER win turn than its dominator's. Every one of those is a win
+    // the prune would have deleted. Census mode rolls every candidate out anyway, so this costs
+    // nothing extra -- and it is measurable WITHOUT the must-find gate, which is what makes it
+    // usable at the current application point.
+    inline void RecordWin(std::vector<dominance::DomSnap>& archive, const Probe& p, int win_turn)
+    {
+        if (p.slot >= 0 && p.slot < static_cast<int>(archive.size()))
+        { archive[p.slot].win_turn = win_turn; }
+        // EQUIVALENCE CHECK -- the sharp soundness probe. Two states we judged EQUIVALENT must
+        // score the same, and the branch-and-bound cutoff only ever TIGHTENS across a pass, so a
+        // later candidate can only score WORSE by luck, never better. A later equivalent state
+        // scoring STRICTLY BETTER is therefore not noise: it means the axis set calls two states
+        // the same when the engine can tell them apart -- a missed field. Expected to be 0.
+        if (p.equal_to >= 0 && p.equal_to < static_cast<int>(archive.size()))
         {
-            const bool complex = p.charge_counters != 0 || p.age_counters != 0
-                || p.storage_counters != 0 || p.storage_hold_this_turn || !p.counters.empty()
-                || p.damage != 0 || p.temp_power_bonus != 0 || p.temp_tough_bonus != 0
-                || p.temp_haste || p.exile_at_end || p.is_animated
-                || p.aura_attached_to >= 0 || p.equipped_to >= 0;
-            if (p.controller_index != 0 || complex)
+            const int eq_win = archive[p.equal_to].win_turn;
+            if (eq_win >= 0 && win_turn < eq_win)
             {
-                std::uint64_t h = p.card.m_name_hash;
-                h = mixv(h, static_cast<std::uint64_t>(p.controller_index));
-                h = mixv(h, p.tapped ? 1u : 0u);
-                h = mixv(h, p.entered_this_turn ? 1u : 0u);
-                h = mixv(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(p.charge_counters)));
-                h = mixv(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(p.storage_counters)));
-                h = mixv(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(p.damage)));
-                for (const Counter& c : p.counters)
-                { h = mixv(h, static_cast<std::uint64_t>(c.type)); h = mixv(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(c.count))); }
-                n.exact.push_back(h);
-                continue;
+                // Split by WHICH notion of equivalence matched: the engine's own canon simkey
+                // (a key hole, not ours) versus this comparator's mutual coverage (ours).
+                if (p.eq_bykey) { T().key_mismatch.fetch_add(1, std::memory_order_relaxed); }
+                else            { T().ident_mismatch.fetch_add(1, std::memory_order_relaxed); }
             }
-            auto& e = counts[p.card.m_name_hash];
-            e[0]++;
-            if (!p.tapped) { e[1]++; }
-            if (!p.entered_this_turn) { e[2]++; }
         }
-        for (const auto& [name, e] : counts) { n.bf.push_back({name, e[0], e[1], e[2]}); }
-        for (int pi = 0; pi < 2; ++pi)
+        if (p.dominator < 0 || p.dominator >= static_cast<int>(archive.size())) { return; }
+        const int dom_win = archive[p.dominator].win_turn;
+        if (dom_win >= 0 && win_turn < dom_win)
         {
-            for (const Card& c : s.players[pi].graveyard)
-            { n.exact.push_back(mixv(0x67F0ull + static_cast<std::uint64_t>(pi), c.m_name_hash)); }
+            T().harm.fetch_add(1, std::memory_order_relaxed);
+            T().harm_turns.fetch_add(static_cast<unsigned long long>(dom_win - win_turn),
+                                     std::memory_order_relaxed);
         }
-        std::sort(n.exact.begin(), n.exact.end());
-        return n;
     }
 
-    // Does A dominate-or-equal B? (comparable axes checked by caller symmetric parts via two calls)
-    inline bool Covers(const Snap& A, const Snap& B)
+    // Record one end-of-turn sibling against the pass's frontier. Returns TRUE when the caller
+    // should PRUNE this candidate (dominated by an already-scored sibling, and MTG_DOM_PRUNE is on).
+    //
+    // "Identical" is bucketed off the canon sim key purely for continuity with the 2026-08-15
+    // pricing; it is computed only in census mode because the prune has no use for it (mutual
+    // coverage already subsumes it, and BuildSimKey is not free).
+    inline Probe Check(std::vector<dominance::DomSnap>& archive, const GameState& s)
     {
-        if (A.lib0 != B.lib0 || A.exact != B.exact) { return false; }
-        if (A.life0 < B.life0 || A.life1 > B.life1) { return false; }
-        // hand multiset: B subset-of A (both sorted)
-        { std::size_t i = 0;
-          for (std::uint64_t h : B.hand)
-          { while (i < A.hand.size() && A.hand[i] < h) { ++i; }
-            if (i >= A.hand.size() || A.hand[i] != h) { return false; } ++i; } }
-        // simple board per name: A has at least as many, at least as untapped/ready
-        { std::size_t i = 0;
-          for (const auto& b : B.bf)
-          { while (i < A.bf.size() && A.bf[i][0] < b[0]) { ++i; }
-            if (i >= A.bf.size() || A.bf[i][0] != b[0]) { return false; }
-            if (A.bf[i][1] < b[1] || A.bf[i][2] < b[2] || A.bf[i][3] < b[3]) { return false; } } }
-        return true;
-    }
-
-    // Record one end-of-turn sibling; compare vs the archived frontier. Census only.
-    inline void Check(std::vector<Snap>& archive, const GameState& s)
-    {
-        Snap n = Build(s);
+        Probe out;
+        const bool census = DomCensusOn();
+        std::uint64_t h1 = 0, h2 = 0;
+        if (census)
+        {
+            const TranspositionTable::Key k = BuildSimKey(s, 0, 0, false);
+            h1 = k.h1; h2 = k.h2;
+        }
+        dominance::DomSnap n = dominance::Build(s, ResolveProvider(s), h1, h2);
         T().snaps.fetch_add(1, std::memory_order_relaxed);
-        bool is_dominated = false, dominates_some = false, is_identical = false;
-        for (const Snap& a : archive)
+        if (!n.comparable)
         {
-            if (a.key == n.key) { is_identical = true; break; }
-            const bool ab = Covers(a, n), ba = Covers(n, a);
-            if (ab && !ba)      { is_dominated = true; break; }
-            else if (ba && !ab) { dominates_some = true; }
-            else                { T().incomparable_pairs.fetch_add(1, std::memory_order_relaxed); }
+            // A dirty boundary or an unsupported state: compares with nothing, prunes nothing,
+            // and is NOT archived (it could not dominate anything either).
+            T().incomparable_state.fetch_add(1, std::memory_order_relaxed);
+            return out;
         }
+
+        bool is_identical = false, is_dominated = false, dominates_some = false;
+        for (std::size_t ai = 0; ai < archive.size(); ++ai)
+        {
+            const dominance::DomSnap& a = archive[ai];
+            if (census && a.ident_h1 == n.ident_h1 && a.ident_h2 == n.ident_h2)
+            { is_identical = true; out.equal_to = static_cast<int>(ai); out.eq_bykey = true; break; }
+            const bool ab = dominance::Covers(a, n);
+            const bool ba = dominance::Covers(n, a);
+            if (ab && ba)       { is_identical = true;             // equivalent: nothing new here
+                                  T().eq_byaxes.fetch_add(1, std::memory_order_relaxed);
+                                  out.equal_to = static_cast<int>(ai); break; }
+            if (ab)             { is_dominated = true;            // strictly worse than a scored line
+                                  out.dominator = static_cast<int>(ai); break; }
+            if (ba)             { dominates_some = true; }        // strictly better, but `a` already ran
+        }
+
         if      (is_identical)   { T().identical.fetch_add(1, std::memory_order_relaxed); }
         else if (is_dominated)   { T().dominated.fetch_add(1, std::memory_order_relaxed); }
         else if (dominates_some) { T().dominates_archived.fetch_add(1, std::memory_order_relaxed); }
-        if (!is_identical && !is_dominated && archive.size() < 256) { archive.push_back(std::move(n)); }
+
+        // Only a state that is genuinely NEW joins the frontier -- an identical or dominated one
+        // would add nothing and would waste a cap slot.
+        if (!is_identical && !is_dominated
+            && static_cast<int>(archive.size()) < ArchiveCap())
+        {
+            out.slot = static_cast<int>(archive.size());
+            archive.push_back(std::move(n));
+        }
+        // An IDENTICAL sibling is left to the existing dedups (reframe / bp) rather than pruned
+        // here: those are result-neutral by construction, this flag is not, so the prune claims
+        // only the mass its own argument covers.
+        if (is_dominated && DomPruneOn())
+        {
+            T().pruned.fetch_add(1, std::memory_order_relaxed);
+            out.prune = true;
+        }
+        return out;
     }
 }
 // GLOBAL entry pool shared by every live line cache in the process (MTG_FSL_POOL, entries;
@@ -15912,9 +15947,14 @@ static void ExpireStagedCards(GameState& state)
 // `depth` further complete turns. The returned line is prefixed with the chosen
 // second-main phase (when second_main) and continues with the recursed turns.
 // `cutoff` is the incumbent best (a line that cannot win by it is abandoned).
+// `dom_arch` is the CALLER's end-of-turn sibling frontier (FSLineWin's `pre` loop). The EOT
+// transition for a pre-combat sibling happens one frame down, in here, so the archive has to be
+// threaded rather than owned locally -- see the dominance section above. nullptr (every other
+// caller) disables the check entirely.
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
                                          int cutoff, bool second_main, TranspositionTable* tt,
-                                         FSLineCache* lc, SearchBudget* budget)
+                                         FSLineCache* lc, SearchBudget* budget,
+                                         std::vector<dominance::DomSnap>* dom_arch = nullptr)
 {
     // Mid-pass overrun guard (see FSLineWin): abort the runaway pass.
     if (budget && budget->Overrun()) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
@@ -15993,6 +16033,15 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             }
             if (!SimulateEndAndStartNextTurn(s2)) { continue; }
             ExpireStagedCards(s2);
+            // EOT dominance on the caller's frontier. Every (pre-combat x second-main) combination
+            // reaching here came from the SAME node with the SAME draws consumed, so they are all
+            // siblings in the sense the comparability argument needs.
+            domin::Probe dprobe;
+            if (DomActive() && dom_arch)
+            {
+                dprobe = domin::Check(*dom_arch, s2);
+                if (dprobe.prune) { continue; }
+            }
             TurnSolver::SearchLine sub =
                 FSLineWin(s2, depth, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget);
             if (m2t_here)
@@ -16001,6 +16050,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                              state.turn_number, depth, m2t_sum(q).c_str(), sub.win_turn,
                              best.win_turn, cutoff);
             }
+            if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, sub.win_turn); }
             if (sub.win_turn < best.win_turn)
             {
                 best.win_turn = sub.win_turn;
@@ -16025,7 +16075,18 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     GameState s = state;
     if (!SimulateEndAndStartNextTurn(s)) { return { max_turns + 1, {} }; }
     ExpireStagedCards(s);
-    return FSLineWin(s, depth, max_turns, cutoff, second_main, tt, lc, budget);
+    // Single-main decks reach the boundary here instead of the `post` loop above; this is where
+    // their pre-combat siblings actually become comparable.
+    domin::Probe dprobe;
+    if (DomActive() && dom_arch)
+    {
+        dprobe = domin::Check(*dom_arch, s);
+        if (dprobe.prune) { return { max_turns + 1, {} }; }
+    }
+    TurnSolver::SearchLine tail_line =
+        FSLineWin(s, depth, max_turns, cutoff, second_main, tt, lc, budget);
+    if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, tail_line.win_turn); }
+    return tail_line;
 }
 
 // `state` is positioned at the START of the active player's pre-combat main (land
@@ -16197,6 +16258,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     std::vector<std::pair<int, std::vector<std::string>>> tie_scan;
     PROF_INC(fsw_nodes);
     PROF_ADD(fsw_cands, pre.size());
+    // EOT dominance frontier for THIS node: every plan in `pre` is applied to the same `state`, so
+    // the states they reach at the next turn boundary consumed the same draws and are comparable by
+    // construction (the doc's preferred sibling-frontier form). The boundary itself is inside
+    // FSLineTail, hence the threading. Off (both flags unset) -> never touched.
+    std::vector<dominance::DomSnap> dom_arch;
     for (const TurnSolver::Plan& p : pre)
     {
         // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
@@ -16244,7 +16310,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         }
 
         TurnSolver::SearchLine tail =
-            FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget);
+            FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget,
+                       &dom_arch);
         // DIG INSTRUMENT (MTG_FSW_TRACE, default off): dump this node's plans + tail win turns
         // for turn MTG_FSW_TURN -- the m1-side companion of MTG_M2T_TRACE above.
         {
@@ -18577,8 +18644,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         bool bp_variants_here = false;
         for (const Plan& p : candidates) { if (p.bp_choice >= 0) { bp_variants_here = true; break; } }
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
-        // TEMPORARY (MTG_DOM_CENSUS): per-pass end-of-turn sibling archive -- census only, see helper.
-        std::vector<domcensus::Snap> dom_archive;
+        // EOT dominance (MTG_DOM_CENSUS / MTG_DOM_PRUNE): the per-pass end-of-turn sibling frontier.
+        // Per PASS, not per decision: every candidate in this loop reaches its boundary having
+        // consumed the SAME draws, which is the comparability precondition. See the helper above.
+        std::vector<dominance::DomSnap> dom_archive;
         for (const Plan& plan : candidates)
         {
             // --- Overrun guard: finish if almost done, else abort + roll back ---
@@ -18658,13 +18727,26 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // inside SimulateToEnd's per-turn SolveWithLookahead, so no greedy land
             // play happens here.
             if (!SimulateEndAndStartNextTurn(copy)) { ++candidates_done; continue; }
-            if (DomCensusOn()) { domcensus::Check(dom_archive, copy); }   // TEMPORARY census
+            // EOT dominance. Placed AFTER this turn's win checks above, so a candidate that WINS
+            // has already returned and can never be pruned here -- only its (losing-this-turn)
+            // future is what dominance claims is safe to drop. candidates_done still counts a
+            // pruned candidate: the apply was paid for, so the overrun guard's per-candidate
+            // average must see it.
+            domin::Probe dom_probe;
+            if (DomActive())
+            {
+                dom_probe = domin::Check(dom_archive, copy);
+                if (dom_probe.prune) { ++candidates_done; continue; }
+            }
 
             // Simulate remaining turns at this pass's sub_depth. The rollout runs to
             // completion (enforce_budget=false inside), only consuming budget; the
             // within-pass running best (pass_best_win) is the branch-and-bound cutoff.
             int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
                                          pass_best_win, second_main, tt);
+            // Feed the rollout result back so the census can count HARM -- a dominated candidate
+            // that outscored its dominator is a win the prune would have deleted (see RecordWin).
+            if (DomActive()) { domin::RecordWin(dom_archive, dom_probe, win_turn); }
             if (trace_this)
             {
                 std::cerr << "  " << PlanDesc(plan)

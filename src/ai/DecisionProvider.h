@@ -78,6 +78,33 @@ struct ScaledCastVariant
     ManaCost cost;       // finalized total cost for committing that much face
 };
 
+// --- EOT dominance axis directions (docs/design/eot-dominance-pruning.md) -------------------------
+// Which way is a resource axis MONOTONE for this deck? With everything else equal, does MORE of it
+// dominate, does FEWER, or is neither true? EqualRequired is the FAIL-CLOSED default: an axis with
+// no declared direction stops being a comparable axis and becomes an exact-match field, so an
+// undeclared (or newly added) resource can only cost the prune reach, never soundness. That rule is
+// the 2026-08-14 storage-counter key-hole lesson applied preemptively: BuildSimKey omitted
+// `storage_counters` and canon exposed it on dragonstorm, so here every counter type is enumerated
+// and anything unenumerated fails closed.
+enum class DomDir : std::uint8_t { EqualRequired, MoreDominates, FewerDominates };
+
+// The per-permanent resource axes that carry a direction. Everything NOT listed here (name,
+// controller, owner, token-ness, attachment wiring, once-per-turn flags) is an exact-match field.
+enum class DomAxis : std::uint8_t
+{
+    ChargeCounters,      // Permanent::charge_counters   -- Aether Vial
+    StorageCounters,     // Permanent::storage_counters  -- Dwarven Hold / Mercadian Bazaar
+    VerseCounters,       // Permanent::verse_counters    -- Aria of Flame
+    AgeCounters,         // Permanent::age_counters      -- cumulative upkeep (Varchild's)
+    Loyalty,             // Permanent::loyalty           -- planeswalkers
+    PlusOnePlusOne,      // Counter::Type::PlusOnePlusOne
+    MinusOneMinusOne,    // Counter::Type::MinusOneMinusOne
+    LoyaltyCounter,      // Counter::Type::Loyalty       -- viewer mirror of Permanent::loyalty
+    PoisonCounter,       // Counter::Type::Poison
+    DepletionCounter,    // Counter::Type::Depletion     -- Sandstone Needle / Saprazzan Skerry
+    _Count
+};
+
 class DecisionProvider
 {
 public:
@@ -526,6 +553,58 @@ public:
         const bool self_token = ep.dies_watch_includes_self && ep.dies_trigger_creates_tokens > 0;
         return !self_token;
     }
+
+    // DominanceAxisDirection -- EOT dominance: which way is this resource axis monotone?
+    //
+    // The DEFAULT table below is the GENERIC truth -- an axis is listed monotone here only when
+    // more (or fewer) of it is STRICTLY BETTER for any deck that can hold it, under goldfish rules
+    // (the opponent never attacks and never blocks, so an opposing body is inert rather than a
+    // threat). An axis whose direction is deck-dependent stays EqualRequired here and is declared
+    // by the archetype provider that knows its deck -- that split is the USER's (2026-08-15): the
+    // default provider carries what is strictly better, archetypes carry the overrides.
+    //
+    // The two judgement calls worth naming:
+    //   * ChargeCounters is EqualRequired, NOT MoreDominates. Aether Vial's useful charge TRACKS
+    //     THE CURVE (2 is ideal for a deck of 2-drops; 5 overshoots and puts nothing onto the
+    //     battlefield), so it is the one counter where more is genuinely worse. Aim-for-a-value
+    //     counters are never monotone.
+    //   * AgeCounters is EqualRequired because cumulative upkeep is a COST generically (each
+    //     counter is another upkeep payment) but FUEL for a deck built on what it pays out --
+    //     Varchild's War-Riders gifts the opponent Survivors, which is exactly what a
+    //     creature-giving shell wants. Deck-dependent, so it belongs to the archetype.
+    virtual DomDir DominanceAxisDirection(DomAxis a) const
+    {
+        switch (a)
+        {
+            // Strictly better with MORE: each is a stored resource that only ever buys something.
+            case DomAxis::StorageCounters:  return DomDir::MoreDominates;  // bigger burst
+            case DomAxis::VerseCounters:    return DomDir::MoreDominates;  // Aria deals verse-count
+            case DomAxis::Loyalty:          return DomDir::MoreDominates;  // more activations left
+            case DomAxis::LoyaltyCounter:   return DomDir::MoreDominates;  // mirror of the above
+            case DomAxis::PlusOnePlusOne:   return DomDir::MoreDominates;  // bigger creature
+            // Depletion counters are the ones REMAINING (DecrementDepletionOnTap removes one per
+            // tap and the land is sacrificed at zero), so more counters = more taps left.
+            case DomAxis::DepletionCounter: return DomDir::MoreDominates;
+            // Strictly better with FEWER.
+            case DomAxis::MinusOneMinusOne: return DomDir::FewerDominates; // smaller creature
+            // Deck-dependent or non-monotone -> exact match (see the note above). PoisonCounter is
+            // fail-closed for a structural reason rather than a deck one: its direction depends on
+            // WHOSE it is (ours is a loss clock, an opponent's is a win con) and this per-axis table
+            // cannot say "per side". Nothing in the card pool creates one today, so equality is free.
+            case DomAxis::ChargeCounters:   return DomDir::EqualRequired;
+            case DomAxis::AgeCounters:      return DomDir::EqualRequired;
+            case DomAxis::PoisonCounter:    return DomDir::EqualRequired;
+            default:                        return DomDir::EqualRequired;
+        }
+    }
+
+    // DominanceOpponentBoard -- EOT dominance: how do the OPPONENT's permanents compare? For nearly
+    // every goldfish deck the axis is inert (the passive opponent gains permanents only from our own
+    // effects), so equality holds trivially and the fail-closed default costs nothing. A deck that
+    // GIVES the opponent permanents as fuel declares a direction instead -- creature-giving drains
+    // per enemy body, so for it MORE enemy creatures dominates (USER, 2026-08-14). Undeclared ->
+    // EqualRequired, the same fail-closed rule as an unknown counter.
+    virtual DomDir DominanceOpponentBoard() const { return DomDir::EqualRequired; }
 
     // ShouldEmitUntapRitual -- emit the untap-RITUAL cast variant for an {X} untap spell (Reality Spasm)?
     // The variant floats mana for a same-turn payoff and only earns its keep with Hinata's

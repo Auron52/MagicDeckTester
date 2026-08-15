@@ -224,6 +224,64 @@ GoldFishRunner::DependencyPulls GoldFishRunner::DeriveDependencyPulls(const Deck
     }
     return pulls;
 }
+// WHICH PROJECTION of a graveyard can this deck observe? The deck-level half of EOT dominance's
+// graveyard axis (docs/design/eot-dominance-pruning.md); the other half is the learned model's
+// feature check in ai/Dominance.h.
+//
+// This returns a MASK, not a bool, because what makes a graveyard matter is the TYPE of cards in it
+// (USER, 2026-08-15: "is there Throes of Chaos (retrace) in TH, or fetchlands (for DRS) in
+// fivecolour?"). Treasure Hunt can only ever read its RETRACE cards; Deathrite can only ever read
+// COUNTS of lands / instants-or-sorceries / creatures. Everything else in those graveyards is
+// unobservable, so dominance folds only the selected projection and two graveyards differing solely
+// in unread cards still compare equal.
+//
+// SOUNDNESS-CRITICAL and must stay complete: a reader with no bit is one dominance cannot see, and
+// that drops reachable lines. Rebuilt 2026-08-15 from an ENGINE-side audit of every site that reads
+// graveyard contents, not from the gy_* param names -- the name-based version missed three of these
+// (marked). `graveyard_replace_shuffle_library` (Progenitus) is deliberately absent: it replaces the
+// trip TO the graveyard and never reads its contents.
+std::uint32_t GoldFishRunner::DeckGraveyardReaders(const Decklist& deck)
+{
+    std::uint32_t m = GyR_None;
+    for (const Card& c : deck.mainboard)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        if (!def) { return 0xFFFFFFFFu; }          // unknown card -> observe everything (fail closed)
+        const CardParams& p = def->params;
+
+        if (p.retrace)                      { m |= GyR_RetraceNames; }   // castable from the graveyard
+        if (p.gy_self_power_bonus > 0
+            || p.ritual_float_gy_self_bonus) { m |= GyR_SelfCopyNames; } // per-copy-of-this-name counts
+        // Deathrite Shaman: all three abilities are fungible WITHIN a type filter (deterministic
+        // first-match pick), so only the per-type COUNTS are observable -- which lands went to the
+        // graveyard never matters, only how many did.
+        if (p.gy_land_exile_mana
+            || p.gy_exile_instant_sorcery_drain > 0
+            || p.gy_exile_creature_lifegain > 0) { m |= GyR_TypeCounts; }
+        // Regrowth returns ANY card, so nothing about the zone is unobservable. Garth can conjure
+        // Regrowth (and Black Lotus, a sac-for-mana source -> colour demand).
+        if (p.return_target_from_graveyard)  { m |= GyR_AllNames; }
+        if (p.garth_copy_ability)            { m |= GyR_AllNames | GyR_ColorDemand; }
+        // -- MISSED CLASS 1: nested in a loyalty ability rather than a gy_* param. Jared Carthalion
+        // -6 returns the highest-MV MULTICOLORED card, and its all-colors rider makes Treasures
+        // (a sac-for-mana source -> the colour-demand scan below).
+        for (const CardParams::LoyaltyAbilityParam& la : p.loyalty_abilities)
+        { if (la.effect == "regrow_multicolored") { m |= GyR_MulticolorNames | GyR_ColorDemand; } }
+        // -- MISSED CLASS 2: the Land's Edge definition lookup falls through hand -> library ->
+        // GRAVEYARD (DecisionProviders.cpp), so a graveyard copy can decide the extra-lethal model.
+        if (p.discard_land_damage > 0)       { m |= GyR_LandsEdgeNames; }
+        // -- MISSED CLASS 3: ChosenFloatColorCandidates sums coloured pips over NONLAND graveyard
+        // cards for any deck with a sac-for-mana source or an Apex-style impulse cast.
+        // `creates_treasures` counts because the Treasure Token IS such a source and is NOT in the
+        // decklist to be scanned -- which is how mirrorwing reaches this path.
+        if (p.sac_for_mana_amount > 0 || p.creates_treasures > 0 || p.impulse_exile > 0)
+        { m |= GyR_ColorDemand; }
+    }
+    // MISSED CLASS 4 (a learned model branching on graveyard_size) is NOT here: it is a per-GAME
+    // property of the attached model rather than of the decklist, and it observes only the SIZE, so
+    // dominance checks it directly (ai/Dominance.h).
+    return m;
+}
 
 // ---- Card numbering --------------------------------------------------------
 
@@ -623,6 +681,7 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     const DependencyPulls dep_pulls = DeriveDependencyPulls(deck);
     state.dep_enabler_main1    = dep_pulls.enabler_main1;
     state.dep_castpayoff_main1 = dep_pulls.castpayoff_main1;
+    state.deck_gy_readers      = DeckGraveyardReaders(deck); // EOT dominance's graveyard projection
 
     state.players[0].library.assign(deck.mainboard.begin(), deck.mainboard.end());
 

@@ -74,6 +74,22 @@ class DecisionProvider;
 // non-owning pointer, threaded like m_provider. Forward-declared to keep the AI layer out of core.
 struct MidGameEvaluator;
 
+// What a deck is able to OBSERVE about a graveyard (GameState::deck_gy_readers). Each bit is a
+// distinct reader in the engine, and dominance folds only the corresponding projection -- so a
+// graveyard's irrelevant cards never block a comparison. SOUNDNESS-CRITICAL: a reader with no bit
+// here is a reader dominance cannot see, so any new graveyard-reading path must add one.
+enum GyReader : std::uint32_t
+{
+    GyR_None            = 0,
+    GyR_AllNames        = 1u << 0,  // Regrowth / Garth: ANY card can return to hand -> full multiset
+    GyR_RetraceNames    = 1u << 1,  // retrace cards are castable FROM the graveyard (Throes, Flame Jab)
+    GyR_SelfCopyNames   = 1u << 2,  // "per copy of THIS card in a graveyard" (Ancestral Anger, Rite of Flame)
+    GyR_MulticolorNames = 1u << 3,  // Jared Carthalion -6: highest-MV MULTICOLORED card returns
+    GyR_LandsEdgeNames  = 1u << 4,  // Land's Edge definition lookup falls through to the graveyard
+    GyR_TypeCounts      = 1u << 5,  // Deathrite: COUNTS of land / instant-or-sorcery / creature cards
+    GyR_ColorDemand     = 1u << 6,  // ChosenFloatColorCandidates: coloured pips over NONLAND gy cards
+};
+
 enum class Phase { Beginning, PreCombatMain, Combat, PostCombatMain, Ending };
 enum class Step  { Untap, Upkeep, Draw, MainPhase,
                    BeginCombat, DeclareAttackers, DeclareBlockers, CombatDamage, EndCombat,
@@ -237,6 +253,16 @@ struct GameState
     // pull = prior classifier behaviour for any state not built through SetupGame.
     bool                     dep_enabler_main1     = false;
     bool                     dep_castpayoff_main1  = false;
+    // Deck-level input to EOT DOMINANCE: WHICH PROJECTION of a graveyard this deck can observe
+    // (GoldFishRunner::DeckGraveyardReaders, stamped by SetupGame; bits from GyReader below).
+    // Conditional like the storm counter -- on for the cards/decks that can read it, ignored
+    // otherwise (USER, 2026-08-15) -- but a MASK rather than a bool, because what matters is the
+    // TYPE of cards in the graveyard, not the whole zone (USER, 2026-08-15: "is there Throes of
+    // Chaos (retrace) in TH, or fetchlands (for DRS) in fivecolour?"). Dominance folds only the
+    // projection these bits select, so two graveyards differing only in cards nothing can read
+    // still compare equal. Default = every bit set = fail closed (fold everything) for any state
+    // not built through SetupGame.
+    std::uint32_t            deck_gy_readers       = 0xFFFFFFFFu;
 
     // SEARCHED Goblin Lackey put (Plan::lackey_choice): an index into the provider's ranked
     // CombatCheatCandidates list, or -1 for the provider's top pick. Unlike the scry/ETB-dig pins
@@ -293,6 +319,14 @@ struct GameState
     // whose Score is higher=better. nullptr / empty / flag-off -> the exact rollout (byte-identical).
     // NEVER folded into BuildSimKey (a per-deck constant). See docs/design/learned-d0-policy.md.
     const MidGameEvaluator* m_value_model = nullptr;
+    // Which MidGameFeature indices the attached models can BRANCH on, as a bitmask -- stamped
+    // beside the two pointers above and carried through every deep copy. EOT dominance needs it to
+    // decide whether the graveyard / exile zones are observable (ai/Dominance.h), and it must be a
+    // stamped VALUE rather than something derived on demand from the pointers: a thread_local memo
+    // keyed on pointer identity is an ABA hazard -- a freed profile and a newly-allocated one can
+    // land on the same address, return a STALE mask, and make the search nondeterministic (measured
+    // 2026-08-15: prune-arm smoke gave 3/4/5 failures across identical runs). 0 = no model attached.
+    std::uint64_t m_model_feat_mask = 0;
 
     Player&       ActivePlayer()       { return players[active_player_index]; }
     const Player& ActivePlayer() const { return players[active_player_index]; }

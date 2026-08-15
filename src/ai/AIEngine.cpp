@@ -1,6 +1,7 @@
 #include "ValueArm.h"
 #include "../core/EnvFlags.h"
 #include "AIEngine.h"
+#include "Dominance.h"   // ModelFeatureMask (stamped onto GameState::m_model_feat_mask)
 #include "ManaPayment.h"
 #include "LandPlay.h"
 #include "Combat.h"
@@ -397,6 +398,10 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // ... and the deck's learned leaf value model (replaces the search's horizon rollout when
     // MTG_VALUE_MODEL is set). Same non-owning / deep-copy propagation. See GameState::m_value_model.
     state.m_value_model = m_profile.value_model.empty() ? nullptr : &m_profile.value_model;
+    // Fold both models' branchable-feature masks once, here, where they are attached (see
+    // GameState::m_model_feat_mask -- deriving it on demand from the pointers is an ABA hazard).
+    state.m_model_feat_mask = dominance::ModelFeatureMask(state.m_evaluator)
+                            | dominance::ModelFeatureMask(state.m_value_model);
 
     ap.library.DrawN(7, ap.hand);
 
@@ -1067,6 +1072,8 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
     // byte-for-byte the same speed). Non-owning; m_profile outlives every deep copy the search makes.
     trial.m_value_model = m_profile.value_model.empty() ? nullptr : &m_profile.value_model;
     trial.m_evaluator   = m_profile.eval_model.empty()  ? nullptr : &m_profile.eval_model;
+    trial.m_model_feat_mask = dominance::ModelFeatureMask(trial.m_evaluator)
+                            | dominance::ModelFeatureMask(trial.m_value_model);
     ShuffleEvalGuard  _seg(true);   // decoupling instrument: rollout shuffles use shuffle_salt_search
     // The rollout PlayOut shares this AIEngine by reference, so isolate its committed
     // full-depth line: stash the real game's line, run the rollout on a fresh empty

@@ -509,6 +509,27 @@ public:
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
+
+    // EOT dominance: the two axes this deck inverts relative to the generic table (USER,
+    // 2026-08-14 -- the archetype declares what is deck-dependent; see DecisionProvider.h).
+    //
+    // The opponent's board is this deck's RESOURCE, not a threat: the drain watchers (Suture
+    // Priest / the Wardens) bill per enemy body entering and dying, and Defense of the Heart's
+    // intervening-if wants the opponent at three or more creatures. Vs the passive goldfish
+    // opponent (never attacks, never blocks) an extra enemy creature has no downside at all, so
+    // MORE dominates.
+    DomDir DominanceOpponentBoard() const override { return DomDir::MoreDominates; }
+
+    // Varchild's War-Riders' cumulative-upkeep age counters are generically a COST -- one more
+    // upkeep payment per counter -- which is why the default table fails them closed. Here the
+    // payment IS the payoff: PerformUpkeepCumulativeGifts gifts `age_counters` Survivors to the
+    // opponent every upkeep and nothing is ever sacrificed for it, so a higher age is strictly
+    // more fuel every turn from now on.
+    DomDir DominanceAxisDirection(DomAxis a) const override
+    {
+        if (a == DomAxis::AgeCounters) { return DomDir::MoreDominates; }
+        return GenericProvider::DominanceAxisDirection(a);
+    }
 };
 
 // FiveColour (5-colour domain/goodstuff): eleven fetchlands feeding six shocks, two triomes and
