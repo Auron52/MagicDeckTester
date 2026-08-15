@@ -121,6 +121,24 @@ apparent -24% was cross-run noise; FiveColour holds no ordered-class cantrips an
 the makespan). The lever's value scales with cantrip-chain density -- re-measure when a
 chain-heavy deck/config is in front of us, and extend scope before judging it inert.
 
+## Attribution round (2026-08-15) -- who owns which delta
+
+Isolated arms on the canon tree (battery, 100 games x 6 jobs, S0 = no levers):
+
+* **Searched second main (C0 vs S1, its own delta): NET POSITIVE.** 5c neutral (1 game better
+  at d3), hinata better at ALL depths (-0.04/-0.04/-0.03; 12 better vs 3 worse incl. an unwon
+  game recovered). The earlier "searched-m2 regresses" reading conflated it with the classify
+  family's own ship cost. With the m2-search memo the cost is recovered too (1:56 -> 1:33).
+* **MTG_BP_SITES=63**: confirmed depth-conditional -- helps d3/d5 (+0.01/+0.04 vs +0.06/+0.08
+  without), costs ship (+0.07 vs +0.04). Adoption shape: on at explicit depths, off at ship.
+* **5c_ship +0.10 (14 games, IDENTICAL in every classify-family arm)**: bisection says
+  MTG_MAIN2_DROP alone flips gi=1 and gi=24, others need lever combos. Dissection of BOTH
+  dissected games shows the divergence is a TURN-1 LAND-CHOICE TIE FLIP into a different
+  FETCH -> reshuffle -> decorrelated draw stream -- the disposition-flip apparatus class, not a
+  main-2 decision at all. Whether the new tie resolution is systematically worse (12-2 is
+  asymmetric, ~0.7% under pure luck) is exactly what the held-out adoption A/B must decide;
+  per-game dissection cannot (the games are incomparable after the shuffle).
+
 ## Ranked next collapses (not yet built)
 
 3. **Skip the always-empty m1 harvest on total-Main2 decks** (~37% of hinata's harvest calls).
