@@ -85,16 +85,36 @@ the unsafe side. Two instances, both real:
   threshold on a noisy cell flip-flops near the boundary -- a noise-aware margin (clear tol by > cell
   SE) is a deferred improvement."*
 
-## The proposed rule (NOT implemented)
+## The proposed rule (2 of 4 SHIPPED)
 
 Driver-side, in the deriver, applying to every deck:
 
 1. **Conservative default on thin evidence.** If a cell supporting a lever is reference-capped
    (intractable), quality-capped, or holds materially fewer games than its comparators, the lever
-   takes its SAFE value. Never let a starved cell buy "keep the leaf".
-2. **Noise-aware margin instead of a hard tolerance.** A gap must clear the tolerance by more than
-   the cell's own SE before it moves a lever. This is the Knights deferral, and Creature Giving is a
-   second instance of the same boundary case.
+   takes its SAFE value. Never let a starved cell buy "keep the leaf". *(For `value_trust_depth` this
+   now falls out of 2 -- fewer games means a wider bound means no trust. Still open for the
+   crossover.)*
+2. **SHIPPED: noise-aware margin instead of a hard tolerance.** `value_trust_depth` is now an
+   EQUIVALENCE claim: the PAIRED gap `V_d - h_conv`, over the games both cells hold, must have its
+   one-sided 95% upper bound at or below `tol` -- not merely its point estimate. Thin or noisy
+   evidence therefore fails SAFE, which is the direction that cannot cost quality. A table with no
+   per-game record (every pre-2026-08 matrix, including Creature Giving's) falls back to the old
+   point test, because an error bar cannot be added retroactively and turning those decks' trust off
+   on absent evidence would be the same mistake in the other direction. The gap, SE, bound, paired-N
+   and sample resolution are recorded per depth in `value_leaf_table.trust_gap_bounds`, so an UNSET
+   that measured a real gap can be told apart from one that ran out of evidence -- those call for
+   opposite responses (accept it, vs. measure more games).
+
+   **What it does NOT do: fold in the rule-of-three resolution floor**, and that was measured rather
+   than assumed. The first cut did fold it in, by analogy with the matrix driver's rung test, and it
+   flipped burn from `trust=4` to UNSET -- on V6, which is identical to the heuristic on every one of
+   its 1,445 paired games. At `tol=0.0020`, `3/n < tol` needs n >= 1500 paired games, and a cell tops
+   out at 4 seeds x 400 before any skip-list attrition. Folding it in makes the rule unreachable at
+   every sample we run, i.e. a test that can only return one answer. **So the floor is reported, not
+   applied:** the deriver warns once per deck when `tol` sits below the sample's resolution, and
+   emits an explicit INCONCLUSIVE note when the interval straddles `tol` (burn V3: gap +0.0021,
+   interval [+0.00011, +0.00405]). Whether to answer that with a bigger sample or a bigger `tol` is a
+   policy call with play consequences, and it is deliberately left to a human.
 3. **Separate the two questions when reporting.** *When do we verify* (`value_trust_depth`) is a
    BUDGET-ALLOCATION question; *what do we take after verifying* (`value_no_fallback` +
    `take_heuristic_at_hdepth`) is the only QUALITY question. An A/B that moves both at once cannot

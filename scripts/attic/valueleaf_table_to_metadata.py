@@ -218,13 +218,73 @@ def repair_from_cells(blocks, cells_path, log=sys.stderr.write):
                 if abs(new - blk[key][d]) > 5e-5: moved.append((arm, d, blk[key][d], new))
                 blk[key][d] = new
                 (blk["hg_cell"] if arm == "H" else blk["vg_cell"])[d] = n
+                # KEEP the per-game vector, keyed on (seed, offset) so two cells can be paired
+                # GAME BY GAME later. `derive` needs it to put an error bar on V_d - h_conv: the
+                # difference between two rows is what the trust gate reads, and a row mean alone
+                # cannot say whether a 0.0038 gap is a real one or the sampling noise of one cell
+                # (see gap_bound).
+                blk.setdefault("_pg", {})[(arm, d)] = {
+                    (seed, o): (g[o] if g[o] is not None else float(mt + 1))
+                    for seed, b in basis.items()
+                    for c in [next((x for x in dc if x["seed"] == seed and x["arm"] == arm
+                                    and x["depth"] == d), None)] if c
+                    for g in [per_game(c)]
+                    for o in b if o in g}
         log("NOTE %s: rows recomputed over the PAIRED game set (%s)%s\n"
             % (name, ", ".join("s%d:%dg" % (s, len(b)) for s, b in sorted(basis.items())),
                "" if not moved else
                "; moved " + ", ".join("%s%d %.4f->%.4f" % m for m in moved)))
 
 
-def derive(H, V, tol, offset, margin, scalar_cap=None):
+def gap_bound(pg, a, b):
+    """One-sided 95% UPPER bound on the PAIRED gap LP(a) - LP(b), over the games both cells hold.
+
+    WHY THE TRUST GATE NEEDS THIS. `value_trust_depth` decides whether the hybrid may KEEP a
+    value-leaf line without escalating it -- the one lever on which a weak leaf can cost quality
+    rather than time (docs/design/value-leaf-quality-floor.md). It was decided by a point estimate
+    against a hard constant: `V_d - h_conv <= tol`. A point estimate has no idea whether it is
+    looking at a real gap or at one cell's sampling noise, so the verdict flip-flops near the
+    boundary -- which is exactly what the Knights decline recorded ("the hard 0.002 threshold on a
+    noisy cell flip-flops near the boundary; a noise-aware margin, clear tol by > cell SE, is a
+    deferred improvement"), and Creature Giving is a second instance at +0.0038 against tol 0.0020.
+
+    So the claim has to be an EQUIVALENCE claim, the same shape the matrix driver's rung
+    condemnation uses: the leaf is trusted only when the gap is BOUNDED below tol, not merely
+    measured below it. That also makes thin evidence fail SAFE by construction -- fewer games means
+    a wider bound means no trust -- which is the direction that cannot cost quality.
+
+    PAIRED, because the difference between two depths is an order of magnitude under the
+    between-GAME spread; unpaired, this would mostly measure which hands each cell drew.
+
+    Returns (mean, se, upper, n, resolution) or None when either cell has no per-game record.
+
+    `resolution` = 3*step/n is the rule-of-three bound: the smallest gap this SAMPLE SIZE could ever
+    certify, since k=0 differing games in n pairs still admits a differing-game rate up to 3/n and a
+    game that does differ moves the score by at least one whole turn. It is REPORTED, not folded into
+    the verdict, and the difference matters: the matrix driver's rung test does fold it in, because
+    there the question is "is this rung dead" and over-caution merely keeps measuring. Here it would
+    make the rule UNREACHABLE -- at tol=0.0020, `3/n < tol` needs n >= 1500 paired games, and a cell
+    tops out at 4 seeds x 400 before any skip-list attrition (burn measured 1,445). Folding it in
+    turned burn's V6 -- identical to the heuristic on every one of those 1,445 games -- into NOT
+    TRUSTED, i.e. it silently flipped a shipped deck to always-escalate on a knife edge. A test that
+    can only ever return one answer is not measuring anything. So when tol sits below the sample's
+    resolution, the honest move is to SAY the sample cannot settle it and let a human choose between
+    a bigger sample and a bigger tol -- not to quietly pick the strict answer.
+    """
+    ga, gb = pg.get(a), pg.get(b)
+    if not ga or not gb: return None
+    common = sorted(set(ga) & set(gb))
+    n = len(common)
+    if n < 2: return None
+    diffs = [ga[k] - gb[k] for k in common]
+    mean = sum(diffs) / n
+    var = sum((d - mean) ** 2 for d in diffs) / (n - 1)
+    se = (var / n) ** 0.5
+    step = min((abs(d) for d in diffs if d), default=1.0)
+    return mean, se, mean + 1.645 * se, n, 3.0 * step / n
+
+
+def derive(H, V, tol, offset, margin, scalar_cap=None, pg=None, log=None):
     """Derive the PLAY-TIME scalars (h_conv, trust_depth, no_fallback) plus sorted depth lists.
 
     The scalars use ONLY the in-play depth range (depths <= scalar_cap): play searches to <= this depth and
@@ -237,7 +297,44 @@ def derive(H, V, tol, offset, margin, scalar_cap=None):
     hd_s = [d for d in hd if scalar_cap is None or d <= scalar_cap] or hd   # in-play H depths
     vd_s = [d for d in vd if scalar_cap is None or d <= scalar_cap] or vd   # in-play V depths
     h_conv = min(H[d] for d in hd_s)
-    trusted = [d for d in vd_s if V[d] - h_conv <= tol]
+    # The H depth h_conv came from -- the cell the trust gate is actually comparing against, and the
+    # one the paired bound has to be taken over.
+    h_conv_d = min(hd_s, key=lambda d: H[d])
+    # NOISE-AWARE TRUST (see gap_bound). Trust requires the gap to be BOUNDED below tol, not merely
+    # measured below it. Falls back to the old point rule ONLY when there is no per-game record to
+    # bound with -- a legacy table cannot be given an error bar retroactively, and silently turning
+    # every such deck's trust off would be a behaviour change made on absent evidence rather than on
+    # measured evidence.
+    trusted = []
+    warned = False
+    for d in vd_s:
+        b = gap_bound(pg or {}, ("V", d), ("H", h_conv_d))
+        if b is None:
+            if V[d] - h_conv <= tol: trusted.append(d)
+            continue
+        mean, se, upper, n, resolution = b
+        if upper <= tol: trusted.append(d)
+        elif log and V[d] - h_conv <= tol:
+            # The case this rule exists for: the point estimate says trust, the bound says the
+            # evidence does not support it. Report it, because it is a verdict CHANGE.
+            log("NOTE V%d point gap %+.4f is within tol=%.4f but its one-sided 95%% upper bound is "
+                "%.5f over %d paired games (se %.5f) -- NOT trusted (noise-aware margin)\n"
+                % (d, mean, tol, upper, n, se))
+        elif log and mean - 1.645 * se <= tol < upper:
+            # INCONCLUSIVE, and that is a different verdict from "measured worse". The response to
+            # this one is more games; the response to a real gap is to accept UNSET.
+            log("NOTE V%d gap %+.4f is INCONCLUSIVE against tol=%.4f: the 90%% interval "
+                "[%+.5f, %+.5f] straddles it on %d paired games. UNSET is the safe default, but the "
+                "fix here is MORE GAMES, not acceptance.\n"
+                % (d, mean, tol, mean - 1.645 * se, upper, n))
+        # Once per deck, not per depth: the resolution is a property of the SAMPLE (3/n), so the
+        # same line for every V row is noise around a single fact.
+        if log and tol < resolution and not warned:
+            warned = True
+            log("WARN tol=%.4f is BELOW this sample's resolution %.5f (3/n at n=%d paired games) -- "
+                "no sample this size can certify a gap that small in either direction. Raise the "
+                "sample or the tolerance; a trust verdict at this tol is not evidence.\n"
+                % (tol, resolution, n))
     trust_depth = trusted[0] if trusted else None
     top_v = max(vd_s)
     ref_h = max(top_v - offset, min(hd_s))        # depth the take-crossover credits the deepest leaf against
@@ -372,7 +469,23 @@ def write_deck(block, tol, offset, margin, dry, scalar_cap=None, set_esc_cap=Tru
     target_depth = _vp.get("target_depth")
     if scalar_cap is None:
         scalar_cap = int(target_depth) if target_depth else 5
-    h_conv, trust_depth, no_fallback, ref_h, hd, vd, top_v = derive(H, V, tol, offset, margin, scalar_cap)
+    h_conv, trust_depth, no_fallback, ref_h, hd, vd, top_v = derive(
+        H, V, tol, offset, margin, scalar_cap,
+        pg=block.get("_pg"), log=lambda s: sys.stderr.write("  %-9s %s" % (deck, s)))
+    # Re-run the bounds purely to RECORD them (derive() consumes them for the verdict).
+    _hcd = min([d for d in sorted(H) if scalar_cap is None or d <= scalar_cap] or sorted(H),
+               key=lambda d: H[d])
+    trust_ev = collections.OrderedDict()
+    for d in [x for x in sorted(V) if scalar_cap is None or x <= scalar_cap] or sorted(V):
+        b = gap_bound(block.get("_pg") or {}, ("V", d), ("H", _hcd))
+        trust_ev["V%d" % d] = (
+            collections.OrderedDict([("gap", round(b[0], 5)), ("se", round(b[1], 5)),
+                                     ("upper95", round(b[2], 5)), ("paired_games", b[3]),
+                                     ("sample_resolution", round(b[4], 5))])
+            if b else
+            collections.OrderedDict([("gap", round(V[d] - h_conv, 5)), ("se", None),
+                                     ("upper95", None), ("paired_games", None),
+                                     ("note", "no per-game record: point test only")]))
     problem = completeness_error(deck, V, trust_depth, no_fallback, h_conv, tol, target_depth)
     if problem and not allow_partial:
         print("  %-9s ✗ REFUSING TO WRITE (incomplete/inconclusive table): %s" % (deck, problem))
@@ -414,9 +527,19 @@ def write_deck(block, tol, offset, margin, dry, scalar_cap=None, set_esc_cap=Tru
         ("crossover_offset", offset),
         ("no_fallback_margin", margin),
         ("monotonicity_warnings", warns),
+        # The trust gate's EVIDENCE, per in-play value depth: the paired gap to the h_conv cell, its
+        # standard error, the one-sided 95% upper bound the rule actually tests, and the number of
+        # paired games behind it. Recorded because the scalar alone cannot be audited -- a reader
+        # otherwise cannot tell a trust UNSET that measured a real gap from one that ran out of
+        # evidence, and those call for opposite responses (accept it vs. measure more games).
+        ("trust_gap_bounds", trust_ev),
         ("derivation",
          "PLAY SCALARS use only in-play depths (<= h_conv_depth_cap): h_conv = min heuristic_lp over those; "
-         "value_trust_depth = min{d<=cap: value_leaf_lp[d]-h_conv <= tol}; value_no_fallback likewise. "
+         "value_trust_depth = min{d<=cap: the PAIRED gap value_leaf_lp[d]-h_conv is BOUNDED below tol, i.e. "
+         "its one-sided 95% upper bound <= tol} -- an equivalence claim, so thin or noisy evidence fails "
+         "SAFE (no trust => always eligible to escalate), which is the direction that cannot cost quality. "
+         "A table with no per-game record falls back to the old point test value_leaf_lp[d]-h_conv <= tol. "
+         "value_no_fallback still uses the point rule. "
          "(Deep cells d>cap extend the table+crossover for the anchor but do NOT move the escalation gate; "
          "a trust_depth > search_depth is equivalent to UNSET in play.) crossover spans ALL depths."),
     ])
