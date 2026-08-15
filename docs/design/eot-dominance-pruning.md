@@ -685,6 +685,44 @@ by itself. Its value is purely as a diagnostic for `Covers()`, which shares the 
 5. **The heuristic board-vs-hand tier**, still deliberately excluded. NOT the graveyard subset rule:
    the learned-model reader makes that zone non-monotone in either direction, so that tier is closed.
 
+### PERFORMANCE AT UNBOUNDED BUDGET — the measurement that was missing (2026-08-15)
+
+The fixed-budget A/Bs CANNOT show a speedup: the search spends its whole per-decision budget either
+way, so wall time is pinned by the budget (104 s vs ~100 s is noise, not a benefit). A fixed budget
+can only show the prune as BETTER QUALITY, and that came out at noise level (net -0.0002 turns).
+The real perf question is at `--budget-ms 0`, where the search runs to completion and a smaller tree
+is less work.
+
+Deterministic device (user's suggestion, to remove wall-clock variance): census `snaps` -- the count
+of EOT states the search actually reaches -- with `MTG_DOM_CENSUS=1` in BOTH arms so instrumentation
+is identical and only `MTG_DOM_PRUNE` differs. Thread-invariant and exactly reproducible.
+
+| deck | dominated mass | snaps off | snaps on | work saved | wall @ b0 |
+|---|---:|---:|---:|---:|---|
+| burn | 31.9% | 23,853 | 12,383 | **48.09%** | 0.2 s -> 0.1 s (too fast to matter) |
+| **fivecolour** | 18.1% | 42,570,521 | 25,864,275 | **39.24%** | **328.8 s -> 206.9 s = 1.59x** |
+| antilife | 6.5% | 4,944 | 4,896 | 0.97% | -- |
+| goblins | 25.8% | 2,393 | 2,374 | 0.79% | 3.7 s -> 3.2 s |
+| slivers | 2.0% | 28,631 | 28,538 | 0.32% | -- |
+| **mirrorwing** | 2.2% | 1,709,482 | 1,706,868 | **0.15%** | 100.4 s -> 105.5 s = **0.95x (net COST)** |
+| hinata | 0.18% | -- | -- | -- | 7.2 s -> 7.6 s = 0.95x |
+
+Two findings that change how this should be read:
+
+1. **DOMINATED MASS DOES NOT PREDICT WORK SAVED.** goblins prunes 25.8% of its EOT states and saves
+   0.79% of the tree; burn prunes 31.9% and saves 48%. What matters is whether a pruned state would
+   have expanded a LARGE SUBTREE, not how many get pruned. Every earlier "up to 31.9% of states"
+   claim in this doc implied a payoff that does not follow -- read the work-saved column instead.
+2. **MIRRORWING, THE DECK THAT MOTIVATED THE WHOLE DESIGN, GETS NOTHING** (0.15% work saved) and
+   pays ~5% for the comparator. The "Why now" section at the top of this doc prices the Class B
+   monster as the target; the prune does not touch it. That section should not be read as a
+   justification any more.
+
+The benefit is real but confined to fivecolour among the expensive decks: 39% less work, 1.59x wall
+clock, corroborated by two independent measures. It is also the ONLY deck whose aggregate quality
+moved in either A/B (train 5.0300 -> 5.0100; held-out 5.0333 -> 5.0233) -- same cause, showing up as
+quality at fixed budget and as time at unbounded budget.
+
 ### THE EVIDENCE, ASSEMBLED (2026-08-15)
 
 Everything the adoption decision rests on, in one place:
@@ -694,14 +732,15 @@ Everything the adoption decision rests on, in one place:
 | **Must-find**, `--budget-ms 0`, all 12 decks | **zero wins lost**; prune ON/OFF find an identical win set |
 | **Train seeds** (2002/3003), 60 configs, 26,300 games | 0 slower, 2 faster, 11 play-changed; NET **-0.000333** |
 | **Held-out** (4004/5005/6006/7007), 144 configs | 2 slower (**both churn**), 15 faster, 139 play-changed; NET **-0.000183** |
-| **Cost** | none measurable (104 s vs ~100 s; overnight 10m08s) |
+| **Cost @ FIXED budget** | none measurable (104 s vs ~100 s; overnight 10m08s) |
+| **Benefit @ UNBOUNDED budget** | fivecolour **1.59x** (39.2% less work); mirrorwing **0.95x** (net cost); rest ~0 |
 | **Clean-env smoke** (both flags off) | 36/36 byte-identical |
-| **Prunable mass** | up to 31.9% of EOT states (burn); 1.5M states on fivecolour |
+| **Work actually saved** | fivecolour 39.2%, burn 48.1%; mirrorwing 0.15%, goblins 0.79%, slivers 0.32% |
 
-Reading: the prune is SOUND on the direct test (must-find), NEUTRAL-to-slightly-POSITIVE on quality
-across both train and held-out seeds, and FREE at a fixed budget. Its payoff is not the -0.0002 turn
-delta -- that is noise-level and the honest way to state it is "costs nothing" -- but the state mass
-it removes, which buys more search per unit budget on exactly the decks that are hardest to search.
+Reading: the prune is SOUND on the direct test (must-find), NEUTRAL on quality across both train and
+held-out seeds, and FREE at a fixed budget. Its payoff is a 1.59x unbounded-budget speedup on
+fivecolour and nothing anywhere else -- a NET COST on mirrorwing. So this is not a general engine
+win; at most it is a PER-DECK one.
 
 What adoption does NOT rest on: `harm` (structural 0 under prune) and `ident_mismatch` (96% TT, not
 the axes). Both are documented above precisely so they are not mistaken for evidence either way.
