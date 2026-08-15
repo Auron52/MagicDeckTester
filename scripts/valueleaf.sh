@@ -220,6 +220,13 @@ ABANDON_CALIB=10
 # minutes. Beyond that, I think it's okay to condemn"). The ratio remains in force for any deck whose
 # cells are expensive enough that 25 x median exceeds the floor.
 ABANDON_FLOOR_UNITS=20000000
+# The SAME number is also passed as --abandon-units, i.e. as the ABSOLUTE cap that applies DURING the
+# calibration window. Without it a cell whose first games are all monsters never completes a
+# calibration sample, so no median exists, so no relative ceiling ever arms, so those games run
+# unbounded until the wall-clock rule condemns the WHOLE CELL. That is not hypothetical: it is exactly
+# how V6/V7/V8 on seed 11011 were lost (condemned at 3656-4188 s with games=0 and ceil=0), while H5 on
+# the same seed survived a LONGER game (4200 s) purely because its ceiling had armed. The floor only
+# reaches the relative path, which needs a median that never arrived.
 # MEMORY BOUNDS, derived from the box -- generous, but never OOM (user, 2026-08-13). Both caches are
 # RESULT-NEUTRAL memos (a refused insert just recomputes; play is byte-identical -- see
 # TranspositionTable::Cap and FslCap in TurnSolver.cpp), so capping them costs only tail-game
@@ -563,6 +570,7 @@ phase_matrix() {
         --never-condemn-at-or-below "$NEVER_CONDEMN" \
         --abandon-k "$ABANDON_K" --abandon-calib "$ABANDON_CALIB" \
         --abandon-floor-units "$ABANDON_FLOOR_UNITS" \
+        --abandon-units "$ABANDON_FLOOR_UNITS" \
         --out "$MATRIX_TXT" >> "$VLQ/matrix.log" 2>&1
     [ -s "$MATRIX_TXT" ] || { log "PHASE C ABORT: no matrix output"; return 1; }
     log "PHASE C done"
@@ -570,6 +578,30 @@ phase_matrix() {
 }
 
 # --------------------------------------------------- PHASE D: table -> metadata (no games, no tail)
+# ------------------------------- PHASE C.5: can the ABANDONED games have changed the table's answers?
+# The matrix reports "games that COMPLETE within the ceiling", not all games. That is usually
+# harmless, but it is not harmless BY CONSTRUCTION, and every completed game is retained on disk, so
+# the question is answerable for free. See scripts/matrix_risk_gate.py.
+#
+# It does NOT auto-raise the ceiling. Three outcomes with different remedies: a filter-decided verdict
+# wants more CEILING, a noise-dominated one wants more GAMES, and a pile of condemnations is an
+# ENGINE-optimisation signal that a bigger ceiling would only hide (user: "If we have a ton of
+# condemnations it means we need more optimizations"). Deferring is a real answer, not a failure.
+phase_riskgate() {
+    done_p C_riskgate && return 0
+    log "PHASE C.5: matrix risk gate"
+    python3 scripts/matrix_risk_gate.py "$VLQ" 2>&1 | tee -a "$VLQ/driver.log"
+    local rc=${PIPESTATUS[0]}
+    case "$rc" in
+      0) log "PHASE C.5: CLEAN -- the filter cannot have changed a verdict" ;;
+      3) log "PHASE C.5: RERUN RECOMMENDED -- see the gate output above; NOT auto-launched" ;;
+      4) log "PHASE C.5: DEFER -- a human decides. Stopping before the derivation reads this table."
+         return 1 ;;
+      *) log "PHASE C.5: gate failed (rc=$rc)"; return 1 ;;
+    esac
+    mark C_riskgate
+}
+
 phase_meta() {
     done_p D_meta && return 0
     local keys; keys=$(staged_keys)
@@ -701,6 +733,34 @@ PY
     mark "$E_MARK"
 }
 
+# ------------- PHASE F: the deck's MULLIGAN-GENERATION contract, written into its play profile
+# Last, because both halves need the value model to exist (user: "a step near the end of the value-leaf
+# that fills in the play profile with the right generation setting for mulligan profiles... At the same
+# time as we are figuring out the best mulligan settings we can also store K if it isn't already there").
+#
+#   * mull_gen_depth / mull_gen_budget_ms -- picked by MEASUREMENT (derive_mullgen_setting.py), not
+#     read off the depth table. That rule was tried and disproven: burn is trusted at its play depth
+#     yet its play settings cost 15x d1 b3 for +0.001 rank fidelity, and the H ladder measures how a
+#     depth PLAYS, not how it RANKS hands. See docs/design/mullgen-setting-is-a-trust-question.md.
+#   * expected_buckets (K) -- recorded ONCE, from a discovery-only pass (minutes, not the hours a
+#     table costs). ExhaustiveKeep already REFUSES to generate when discovery disagrees with this
+#     field, but nothing wrote it, so that guard sat inert: a check whose input never arrives is not
+#     a check.
+phase_mullgen() {
+    done_p F_mullgen && return 0
+    log "PHASE F: mulligan-generation contract (setting by measurement, + record K)"
+    local row key dir stem mkey base games df
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem mkey base games <<< "$row"
+        # Only decks this run actually staged a model for.
+        [ -s "logs/eval/$stem.value.STAGED.json" ] || continue
+        df=$(deck_file "$dir" "$stem")
+        [ -n "$df" ] || { log "  PHASE F: no decklist for $stem under $dir -- skipped"; continue; }
+        python3 scripts/mullgen_finalize.py "$df" --write 2>&1 | tee -a "$VLQ/driver.log"
+    done
+    mark F_mullgen
+}
+
 case "${1:-status}" in
 finish|run)
     # `finish` is the escape hatch for the one downside of pooling: phase A is all-or-nothing, so
@@ -719,7 +779,8 @@ finish|run)
         mark A_rows
     fi
     log "=== value-leaf + play-profile regeneration: START (3 pooled phases, 3 tails) ==="
-    for ph in phase_freeze phase_rows phase_split phase_train phase_matrix phase_meta phase_measure; do
+    for ph in phase_freeze phase_rows phase_split phase_train phase_matrix phase_riskgate \
+              phase_meta phase_measure phase_mullgen; do
         check_freeze || exit 1
         $ph || { log "STOPPED at $ph"; exit 1; }
     done
@@ -731,8 +792,9 @@ status)
     ph_label() { case $1 in
         00_freeze) echo "0 freeze+build";; A_rows)   echo "A rows        ";;
         A_split)   echo "A split       ";; B_train)  echo "B train       ";;
-        C_matrix)  echo "C matrix      ";; D_meta)   echo "D metadata    ";;
-        E_measure) echo "E measure     ";; esac; }
+        C_matrix)  echo "C matrix      ";; C_riskgate) echo "C.5 risk gate ";;
+        D_meta)    echo "D metadata    ";; E_measure)  echo "E measure     ";;
+        F_mullgen) echo "F mullgen set ";; esac; }
     echo "queue dir  : $VLQ"
     echo "frozen at  : $(cat "$VLQ/freeze.commit" 2>/dev/null || echo '(not started)')"
     now=$(src_fingerprint); frz=$(cat "$VLQ/freeze.src" 2>/dev/null || echo "")
@@ -748,7 +810,7 @@ status)
     fi
     echo
     echo "phases:"
-    for p in 00_freeze A_rows A_split B_train C_matrix D_meta E_measure; do
+    for p in 00_freeze A_rows A_split B_train C_matrix C_riskgate D_meta E_measure F_mullgen; do
         if done_p "$p"; then printf "  [x] %s  %s\n" "$(ph_label "$p")" "$(cat "$DONE/$p")"
         else                 printf "  [ ] %s\n" "$(ph_label "$p")"; fi
     done

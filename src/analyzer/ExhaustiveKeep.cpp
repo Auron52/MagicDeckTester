@@ -1567,6 +1567,30 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     const int K = static_cast<int>(eq.classes.size());
     Slow().Dump(std::cerr, "after equivalence discovery");
 
+    // DISCOVERY-ONLY (MTG_KEEP_DISCOVERY_ONLY): stop here and report K.
+    //
+    // Exists so the value-leaf's final phase can RECORD the bucket count into
+    // value_play.expected_buckets without paying for a table. Discovery is minutes; the table it
+    // normally precedes is hours to days, so without this the only way to learn K was to start a
+    // generation -- which is why the expected_buckets guard shipped with nothing able to populate it.
+    // Bucketing reads the deck's PLAY settings, so the K printed here is the same K a later real
+    // generation will discover, which is exactly what makes it worth recording.
+    if (EnvOn("MTG_KEEP_DISCOVERY_ONLY"))
+    {
+        os << "=== EXHAUSTIVE KEEP (deck=" << deck.mainboard.size() << " cards, " << K
+           << " buckets) ===\n";
+        for (int b = 0; b < K; ++b)
+        {
+            os << "  [" << b << "]";
+            for (const std::string& n : eq.classes[static_cast<std::size_t>(b)].members)
+            { os << " " << n; }
+            os << "\n";
+        }
+        os << "discovery-only: K=" << K << "\n";
+        os.flush();
+        return;
+    }
+
     std::map<std::string, int> bucket_of;             // card name -> bucket index
     std::vector<int>  count(K, 0);                    // deck copies in each bucket
     std::vector<Card> rep(K);                         // a representative Card per bucket
