@@ -2502,9 +2502,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // than a used-flag) is what keeps a nested searched continuation in lockstep -- the rollout
     // scored bp_at, so the executor must apply it at that same breakpoint, not the first one.
     int bp_seen_exec = 0;
+    // MTG_CANTRIP_ORDER site for the NEXT resolve_draw_breakpoint call (set right before each
+    // call; the lambda binds it at entry). Lockstep twin of the rollout's deferred_cantrip_site
+    // binding in ApplyPlanDirect -- both worlds must enumerate the continuation under the same
+    // watermark or the searched bp_choice indexes a different list. Inert when the lever is off.
+    const CardDefinition* rdb_site = nullptr;
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
+        TurnSolver::CantripOrderScope _cos(rdb_site);
         Player& rp = state.ActivePlayer();
         std::vector<StagedCard> snap = rp.staged_cards;
         rp.staged_cards.clear();
@@ -2565,7 +2571,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
             {
                 cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); resolve_now();
-                if (is_draw_engine(a.card_name)) { resolve_draw_breakpoint(bp_depth + 1); }
+                if (is_draw_engine(a.card_name))
+                {
+                    rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    resolve_draw_breakpoint(bp_depth + 1);
+                }
             }
         }
         for (const Action& a : extra.actions)
@@ -2702,7 +2712,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 if (fd_plan_committed)
                 { if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; } }
-                else { resolve_draw_breakpoint(0); }
+                else
+                {
+                    rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    resolve_draw_breakpoint(0);
+                }
             }
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
         }
@@ -2787,7 +2801,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 if (fd_plan_committed)
                 { if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; } }
-                else { resolve_draw_breakpoint(0); }
+                else
+                {
+                    rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    resolve_draw_breakpoint(0);
+                }
             }
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
         }

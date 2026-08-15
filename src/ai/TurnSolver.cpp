@@ -465,14 +465,30 @@ static thread_local int g_cs_solver_nest  = 0;   // inside any SolveWithLookahea
 // MTG_CONSIDER_STATS diagnostics to scope duplicate counting the same way.
 static thread_local uint64_t g_decision_epoch = 0;
 
+// MTG_CANTRIP_ORDER watermark: the cantrip-class cast whose breakpoint CONTINUATION is being
+// enumerated on this thread (nullptr = no continuation context / lever off). Set only via
+// TurnSolver::CantripOrderScope; read by CollectActions (the ban), the bp-enum cache key (fold),
+// and the memo wrappers (bypass). Declared this early so all of those see it. Full design at the
+// helpers above CollectActions.
+static thread_local const CardDefinition* g_cantrip_order_site = nullptr;
+
+// Memoized SEARCHED second main (defined after BuildBreakpointKey, far below): under
+// MTG_SEARCH_SECOND_MAIN + MTG_SOLVE_MEMO together, each DISTINCT post-combat state is searched
+// exactly once per decision and every later arrival reuses that searched plan. This is the
+// single-consideration architecture (USER 2026-08-15): no greedy solve within the search, and one
+// place where each spell is searched -- re-searching the same state per sibling/pass was exactly
+// the cost that made plain MTG_SEARCH_SECOND_MAIN regress at fixed budget (80% exact repeats).
+static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int depth, int max_turns,
+                                                   SearchBudget* budget, bool second_main,
+                                                   TranspositionTable* tt);
+
 static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int depth, int max_turns,
                                                 SearchBudget* budget, bool second_main,
                                                 TranspositionTable* tt)
 {
     struct M2Guard { M2Guard() { ++g_cs_m2solve_nest; } ~M2Guard() { --g_cs_m2solve_nest; } } _m2g;
     if (depth <= 0 || GreedySecondMainEnabled()) { return TurnSolver::Solve(state, false); }
-    return TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/false, depth, max_turns, budget,
-                                          /*enforce_budget=*/false, second_main, tt);
+    return SearchedSecondMainMemoized(state, depth, max_turns, budget, second_main, tt);
 }
 
 static void ComputeAvailableColors(const GameState& state, bool have[5])
@@ -2896,6 +2912,87 @@ static void ApplyCantripFirstOrder(std::vector<Action>& acts)
     for (Action& a : rest)     { acts.push_back(std::move(a)); }
 }
 
+// --- Canonical cantrip ordering (MTG_CANTRIP_ORDER, DEFAULT OFF -- measurement lever) ----------
+//
+// USER design 2026-08-15: within a turn's cantrip chain, explore only the CANONICAL order --
+// "if you had Ponder and Preordain in hand, ... allow only Ponder + Preordain by disallowing
+// Ponder to be cast if a Preordain has already been cast". The breakpoint fan otherwise explores
+// permutations of the same cantrip subset as separate chains (k cantrips -> up to k! chains, each
+// its own family of near-duplicate states).
+//
+// Canonical total order (rank): mana value first (cheaper first -- the user's main rule), then a
+// semantic tier within equal cost -- reorder/shuffle manipulators (cast_reorder: Ponder) BEFORE
+// scry-setters (cast_scry: Preordain; a later shuffle would waste the scry), then plain draw,
+// then staging/impulse engines LAST (expressive_iteration / stages_cards: EI, Light Up the Stage
+// -- they want maximum mana and information for their take), then name (determinism).
+//
+// LOSSLESS GUARD (the refinement the user approved alongside): the ban only fires when the
+// banned candidate's printed cost is COMPONENTWISE <= the site's -- then the candidate was
+// payable whenever the site was, so the candidate-first twin chain was enumerable at the root fan
+// and this prune deletes a true permutation duplicate, never a subset. X costs and hybrid pips
+// bail out (their payability comparison is not componentwise).
+//
+// v1 SCOPE: the ban applies inside the DEFERRED plain-cantrip/trick continuation (sites 3/5) and
+// the executor's live fallback re-solve -- the chain the user's example describes. Cards the site
+// itself drew are NOT exempted yet (they have no cast-first twin, so banning them is lossy); if
+// the A/B shows a drawn-cantrip regression, that exemption is the first fix.
+inline bool CantripOrderEnabled()
+{
+    static const bool v = EnvOn("MTG_CANTRIP_ORDER");
+    return v;
+}
+
+// Semantic tier within equal mana value; -1 = not in the ordered class.
+static int CantripOrderTier(const CardDefinition& def)
+{
+    if (!def.card.IsInstant() && !def.card.IsSorcery()) { return -1; }
+    const CardParams& p = def.params;
+    if (p.expressive_iteration || p.stages_cards) { return 3; }
+    if (p.draw <= 0) { return -1; }
+    if (p.cast_reorder > 0) { return 0; }
+    if (p.cast_scry > 0) { return 1; }
+    return 2;
+}
+
+// Should `cand` be suppressed in the continuation of `site`? True iff cand is canonically BEFORE
+// site (casting it now would realise a non-canonical order) AND the lossless cost guard holds.
+static bool CantripOrderBans(const CardDefinition& site, const CardDefinition& cand)
+{
+    const int ts = CantripOrderTier(site);
+    const int tc = CantripOrderTier(cand);
+    if (ts < 0 || tc < 0) { return false; }
+    const ManaCost& b = site.card.m_mana_cost;
+    const ManaCost& a = cand.card.m_mana_cost;
+    if (a.has_x || b.has_x || a.hybrid_count > 0 || b.hybrid_count > 0) { return false; }
+    const int mva = a.ManaValue();
+    const int mvb = b.ManaValue();
+    // Canonical strictly-before test on (mana value, tier, name).
+    if (mva != mvb)
+    { if (mva > mvb) { return false; } }
+    else if (tc != ts)
+    { if (tc > ts) { return false; } }
+    else if (!(cand.card.m_name.str() < site.card.m_name.str()))
+    { return false; }
+    // Lossless guard: cand payable whenever site was (componentwise <=).
+    return a.generic <= b.generic && a.white <= b.white && a.blue <= b.blue
+        && a.black <= b.black && a.red <= b.red && a.green <= b.green
+        && a.colorless <= b.colorless;
+}
+
+// RAII binding of the continuation's site (both worlds use it -- the rollout's deferred re-solve
+// and the executor's resolve_draw_breakpoint -- which is the lockstep). A site outside the
+// ordered class CLEARS the watermark (its continuation is not a cantrip-permutation context).
+TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site)
+    : m_saved(g_cantrip_order_site)
+{
+    if (!CantripOrderEnabled()) { return; }
+    g_cantrip_order_site = (site != nullptr && CantripOrderTier(*site) >= 0) ? site : nullptr;
+}
+TurnSolver::CantripOrderScope::~CantripOrderScope()
+{
+    g_cantrip_order_site = m_saved;
+}
+
 // ---- CollectActions ------------------------------------------------------
 //
 // The single enumeration of action SOURCES, shared by Solve and EnumeratePlans.
@@ -3188,6 +3285,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                       || def.card.HasKeyword(Keyword::Flash)
                       || state.stack.empty();
         if (!timing_ok) { continue; }
+
+        // Canonical cantrip ordering (MTG_CANTRIP_ORDER, see the helpers above): inside a
+        // cantrip-class continuation, a canonically-EARLIER cantrip is a permutation duplicate
+        // of a chain the root fan already enumerates -- suppress it. nullptr (lever off / not a
+        // continuation) => byte-identical.
+        if (g_cantrip_order_site != nullptr && CantripOrderBans(*g_cantrip_order_site, def))
+        { continue; }
 
         // EMISSION PRUNE: no line this turn could pay for this card, so it is a dead odometer digit.
         // Compared against an OPTIMISTIC ceiling (see OptimisticTurnMana), so this can only drop
@@ -6936,8 +7040,15 @@ namespace solvememo
                                            TranspositionTable::KeyHash> t_cache;
     constexpr std::size_t kCap = 16384;
 
+    // SEARCHED second-main memo (SearchedSecondMainMemoized): same Entry/epoch discipline, its
+    // own map because the key namespace differs (depth is folded in -- a searched plan's fidelity
+    // is part of what is being reused) and because these entries are worth their own stats line.
+    inline thread_local std::unordered_map<TranspositionTable::Key, Entry,
+                                           TranspositionTable::KeyHash> t_m2cache;
+
     inline std::atomic<uint64_t> g_hits{0}, g_misses{0}, g_clears{0};
     inline std::atomic<uint64_t> g_verified{0}, g_mismatches{0};
+    inline std::atomic<uint64_t> g_m2_hits{0}, g_m2_misses{0}, g_m2_clears{0};
 
     inline bool SamePlan(const TurnSolver::Plan& a, const TurnSolver::Plan& b)
     {
@@ -6974,6 +7085,13 @@ namespace solvememo
                              (unsigned long long)g_mismatches.load());
             }
             std::fprintf(stderr, "\n");
+            if (g_m2_hits.load() + g_m2_misses.load() > 0)
+            {
+                std::fprintf(stderr, "[m2-search-memo] hits=%llu misses=%llu clears=%llu\n",
+                             (unsigned long long)g_m2_hits.load(),
+                             (unsigned long long)g_m2_misses.load(),
+                             (unsigned long long)g_m2_clears.load());
+            }
         }
     };
     inline Dumper g_dumper;
@@ -6982,8 +7100,10 @@ namespace solvememo
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 {
     // Memo only inside a search decision (a driver frame is on the stack): the decision epoch is
-    // fresh there, and the live executor path stays untouched by construction.
+    // fresh there, and the live executor path stays untouched by construction. A bound
+    // MTG_CANTRIP_ORDER site bypasses (the ban changes Solve's candidate set per site).
     const bool memo_ok = solvememo::Enabled() && !HumanPlayActive()
+                      && g_cantrip_order_site == nullptr
                       && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
     if (!memo_ok) { return SolveUncached(state, is_pre_combat); }
 
@@ -8422,6 +8542,7 @@ struct BpPrefixSnap
     bool trick_armed  = false;       // deferred_trick_armed (site 5 vs 3)
     bool cascade_free = false;       // one-shot free-cast marker, captured for exactness
     int  pin_top = -1, pin_etbdig = -1, pin_tutor = -1, pin_reorder = -1;   // scripted-pin state
+    const CardDefinition* deferred_site = nullptr;   // MTG_CANTRIP_ORDER watermark (registry-stable)
 };
 
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
@@ -8471,6 +8592,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // (the old inline behaviour) for the A/B. Inert for decks without plain cantrips.
     static const bool s_defer_cantrip = !EnvOn("MTG_NO_DEFER_CANTRIP");
     bool deferred_cantrip_resolve = false;
+    // The cast that armed the deferred re-solve (registry-stable pointer; nullptr when unarmed).
+    // Carried so the continuation can bind the MTG_CANTRIP_ORDER watermark to its site; with
+    // several arming casts in one plan the LAST one wins, which matches whose continuation the
+    // single deferred re-solve actually is. Inert (never read) when the lever is off.
+    const CardDefinition* deferred_cantrip_site = nullptr;
     // Which CLASS armed the deferred re-solve: a solo-target trick with a draw/Treasure payload is
     // site 5 (searchable by default), a plain cantrip is site 3 (the admitted quality prune). One
     // deferred breakpoint per apply; if BOTH classes armed it, the trick class owns the numbering
@@ -9101,7 +9227,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // T4 kill plays Crackle out of this exile). Arm the deferred acquisition re-solve
                 // (AcqResolveEnabled / MTG_ACQ_RESOLVE, same family as the tutor fetch above).
                 if (AcqResolveEnabled() && !s_human_play && sink_stack.empty())
-                { deferred_cantrip_resolve = true; }
+                { deferred_cantrip_resolve = true; deferred_cantrip_site = &def; }
             }
 
             if (t == Targeting::Any || t == Targeting::Player)
@@ -9491,6 +9617,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             else if (s_defer_cantrip && plain_cantrip && sink_stack.empty())
             {
                 deferred_cantrip_resolve = true;
+                deferred_cantrip_site    = &def;
             }
             else
             {
@@ -9761,7 +9888,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // breakpoint script. DEFAULT OFF until measured.
             if (AcqResolveEnabled() && def.params.tutor_to_hand && !s_human_play
                 && sink_stack.empty())
-            { deferred_cantrip_resolve = true; }
+            { deferred_cantrip_resolve = true; deferred_cantrip_site = &def; }
         }
         else if (def.params.tutor_land_to_battlefield)
         {
@@ -9874,6 +10001,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (s_defer_cantrip && sink_stack.empty())
                 {
                     deferred_cantrip_resolve = true;
+                    deferred_cantrip_site    = &def;
                     deferred_trick_armed     = true;   // site 5, not the plain-cantrip site 3
                 }
                 else if (def.params.cast_draw > 0)
@@ -10318,6 +10446,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         bp_seen                  = bp_resume->bp_seen;
         deferred_cantrip_resolve = true;                  // captured AT the armed re-solve
+        deferred_cantrip_site    = bp_resume->deferred_site;
         deferred_trick_armed     = bp_resume->trick_armed;
         cascade_free             = bp_resume->cascade_free;
         g_bp_seen_last           = bp_resume->bp_seen;    // as a full apply would have left it
@@ -10462,8 +10591,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_etbdig   = g_scripted_etbdig_choice;
             bp_capture->pin_tutor    = g_scripted_tutor_choice;
             bp_capture->pin_reorder  = g_scripted_reorder_choice;
+            bp_capture->deferred_site = deferred_cantrip_site;
         }
         deferred_cantrip_resolve = false;
+        // MTG_CANTRIP_ORDER: bind the continuation to its site for the whole re-solve (the
+        // searched list, the greedy fallback, and the continuation's own application). The
+        // executor's twin binding is in AIEngine::resolve_draw_breakpoint -- lockstep pair.
+        TurnSolver::CantripOrderScope _cos(deferred_cantrip_site);
+        deferred_cantrip_site = nullptr;
         if (out_breakpoint) { sink_stack.push_back(out_breakpoint); }
         TurnSolver::Plan extra;
         // Trick-armed (Gold Rush / draw-payload trick) => site 5 (searchable); plain cantrip =>
@@ -14494,6 +14629,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                       && g_bp_enum_depth == 0
                       && groupwave::g_state.tranche_rank < 0
                       && g_search_candidate_enum
+                      && g_cantrip_order_site == nullptr
                       && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
     if (!memo_ok) { return EnumeratePlansWithLandUncached(state, is_pre_combat); }
 
@@ -18526,6 +18662,54 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     return k;
 }
 
+// Memoized SEARCHED second main -- the single-consideration architecture (USER 2026-08-15: "I
+// don't want greedy solve within the search"; "the purpose of ... exactly one place to search
+// each spell is to avoid that"). Active only when MTG_SEARCH_SECOND_MAIN (searched, not greedy)
+// AND MTG_SOLVE_MEMO (once per state) are BOTH set: each distinct post-combat state is searched
+// once per decision (key = BuildBreakpointKey + the search fidelity `depth`, scope =
+// g_decision_epoch) and every later arrival -- other candidates, deferred-wave variants, deeper
+// passes, rollout future turns -- reuses that searched plan. Plain MTG_SEARCH_SECOND_MAIN re-ran
+// the nested search per arrival (80% exact state repeats measured), which is exactly why it
+// regressed at fixed budget (S0/S1 A/B 2026-08-15: ship +0.10/+0.08, wall +35%).
+//
+// Deliberately NOT byte-identical to the unmemoized searched mode: a hit skips the nested
+// search's budget consumption, so the outer deepening fits more passes -- that changed budget
+// dynamic is part of what the adoption A/B judges. With MTG_SOLVE_MEMO unset this function is a
+// pure pass-through (byte-identical to plain MTG_SEARCH_SECOND_MAIN).
+static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int depth, int max_turns,
+                                                   SearchBudget* budget, bool second_main,
+                                                   TranspositionTable* tt)
+{
+    if (!solvememo::Enabled() || HumanPlayActive() || g_cantrip_order_site != nullptr)
+    {
+        return TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/false, depth, max_turns,
+                                              budget, /*enforce_budget=*/false, second_main, tt);
+    }
+
+    TranspositionTable::Key k = BuildBreakpointKey(state, /*is_pre_combat=*/false);
+    Fold(k, 0x5E2C);                                // searched-m2 key namespace
+    Fold(k, static_cast<uint64_t>(depth));          // fidelity is part of what is reused
+    auto& cache = solvememo::t_m2cache;
+    auto it = cache.find(k);
+    if (it != cache.end() && it->second.epoch == g_decision_epoch)
+    {
+        solvememo::g_m2_hits.fetch_add(1, std::memory_order_relaxed);
+        return it->second.plan;
+    }
+
+    solvememo::g_m2_misses.fetch_add(1, std::memory_order_relaxed);
+    TurnSolver::Plan p = TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/false, depth,
+                                                        max_turns, budget,
+                                                        /*enforce_budget=*/false, second_main, tt);
+    if (cache.size() >= solvememo::kCap)
+    {
+        cache.clear();
+        solvememo::g_m2_clears.fetch_add(1, std::memory_order_relaxed);
+    }
+    cache[k] = solvememo::Entry{ g_decision_epoch, p };
+    return p;
+}
+
 // Probe for the TH depth-curve regression (docs/design/th-d5-five-hour-game.md): is the enum memo
 // below THRASHING (its 8192 cap is cleared wholesale on overflow), and how many DISTINCT breakpoint
 // states does a game really visit? MTG_BP_ENUM_PROBE=1 prints the tallies at exit; the counters are
@@ -18578,6 +18762,9 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
     if (s_cache)
     {
         key = BuildBreakpointKey(state, is_pre_combat);
+        // MTG_CANTRIP_ORDER: the continuation list depends on the bound site (its ban filters
+        // CollectActions), so the same state under different sites must not share an entry.
+        if (g_cantrip_order_site != nullptr) { Fold(key, g_cantrip_order_site->card.m_name_hash); }
         BpEnumMap::const_iterator it = cache.find(key);
         if (it != cache.end())
         {

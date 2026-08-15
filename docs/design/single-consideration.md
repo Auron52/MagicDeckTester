@@ -96,6 +96,31 @@ The lever stays in-tree DEFAULT OFF as a measured negative (and the verify machi
 reusable); do NOT flip it on. If it is ever revisited, the fix must remove the per-call key
 cost (e.g. an incrementally-maintained state hash), not tune the cache.
 
+## Collapse #3 — canonical cantrip ordering (`MTG_CANTRIP_ORDER`, built 2026-08-15, DEFAULT OFF)
+
+USER design: within a turn's cantrip chain, explore only the canonical order ("allow only
+Ponder + Preordain by disallowing Ponder after a Preordain"). Canonical rank = mana value
+(cheaper first), then semantic tier within equal cost (reorder/shuffle manipulators before
+scry-setters before plain draw before staging/impulse engines), then name. The **lossless
+guard** (approved alongside): the ban fires only when the banned cantrip's printed cost is
+componentwise <= the site's -- then the cantrip-first twin chain was always enumerable and the
+prune deletes a true permutation duplicate, never a subset. X/hybrid costs bail out.
+
+Implementation: `TurnSolver::CantripOrderScope` binds the continuation's site in BOTH worlds
+(rollout deferred site-3/5 re-solve in ApplyPlanDirect incl. the BpPrefixSnap resume path;
+executor resolve_draw_breakpoint -- the lockstep pair); `CollectActions` suppresses banned
+candidates; the bp-enum cache key folds the site; the (default-off) memos bypass under a bound
+site. v1 scope: the deferred plain-cantrip/trick continuation; nested/inline sites (0/2) and a
+drawn-card exemption are the extensions if measurement wants them.
+
+**Measured (2026-08-15, canon tree, classify-family levers):** off = byte-identical (smoke ALL
+PASS). On: battery 599/600 games identical, the ONE diverged game IMPROVED (hi_d5 gi=38 wt
+7 -> 6 -- the pruned duplicate freed a breakpoint-width slot for a genuinely different
+continuation, the single-consideration thesis in action). Wall ~neutral on this battery (an
+apparent -24% was cross-run noise; FiveColour holds no ordered-class cantrips and dominates
+the makespan). The lever's value scales with cantrip-chain density -- re-measure when a
+chain-heavy deck/config is in front of us, and extend scope before judging it inert.
+
 ## Ranked next collapses (not yet built)
 
 3. **Skip the always-empty m1 harvest on total-Main2 decks** (~37% of hinata's harvest calls).

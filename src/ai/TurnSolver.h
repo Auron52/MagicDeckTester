@@ -451,6 +451,23 @@ public:
     // interiors only) memoizes this per decision -- see namespace solvememo in TurnSolver.cpp.
     static Plan SolveUncached(const GameState& state, bool is_pre_combat);
 
+    // MTG_CANTRIP_ORDER (canonical cantrip ordering, default off) plumbing: binds the cantrip
+    // whose breakpoint continuation is being enumerated on this thread, so CollectActions can
+    // suppress canonically-earlier cantrips (permutation dedup). Used by BOTH worlds -- the
+    // rollout's deferred re-solve (ApplyPlanDirect) and the executor's live fallback
+    // (AIEngine::resolve_draw_breakpoint) -- which is the lockstep. No-op when the lever is off
+    // or `site` is not in the ordered class (clears instead). See TurnSolver.cpp for the design.
+    class CantripOrderScope
+    {
+    public:
+        explicit CantripOrderScope(const CardDefinition* site);
+        ~CantripOrderScope();
+        CantripOrderScope(const CantripOrderScope&) = delete;
+        CantripOrderScope& operator=(const CantripOrderScope&) = delete;
+    private:
+        const CardDefinition* m_saved;
+    };
+
     // Enable per-pass per-candidate trace output for top-level T1 decisions.
     static void SetTraceSolve(bool enable);
     static bool GetTraceSolve();
