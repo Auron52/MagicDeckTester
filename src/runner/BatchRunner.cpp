@@ -157,6 +157,18 @@ struct CondemnRule
     // and a 21.4-hour game answers far too late.
     // 0 / absent => the in-flight rule is off.
     double max_game_sec        = 0.0;
+    // Path the DRIVER may write row names into, one per line, to condemn them mid-run. The pool
+    // re-reads it on every heartbeat tick.
+    //
+    // This exists for the one verdict the engine cannot reach on its own: QUALITY. "Does depth d buy
+    // anything over d-1?" is a paired comparison against games this process may never have seen --
+    // on a resume the earlier ones live only in the driver's state file -- so the driver owns the
+    // test and needs a way to say so before the run ends. Without a channel the rule could only fire
+    // at the NEXT resume, which for a single long phase-C invocation means never, i.e. it would save
+    // nothing on the run that is actually paying for the dead rung.
+    //
+    // Empty => no polling, no file, byte-identical.
+    std::string control_file;
     // How many games of a single NOT-YET-JUDGED condemnable cell may be in flight at once. This is
     // what stops LPT from putting the whole box on work that is about to be thrown away: the cell is
     // metered in at this rate and refilled on each uncondemned completion, while protected cells use
@@ -657,9 +669,11 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         condemn.reference_games     = c.value("reference_games", 0);
         condemn.never_condemn_depth = c.value("never_condemn_depth", 0);
         condemn.max_game_sec        = c.value("max_game_sec", 0.0);
+        condemn.control_file        = c.value("control_file", std::string());
         condemn.drip                = std::max(1, c.value("drip", 1));
         condemn.enabled             = (condemn.median_sec_per_game > 0.0 && condemn.reference_games > 0)
-                                   || condemn.max_game_sec > 0.0;
+                                   || condemn.max_game_sec > 0.0
+                                   || !condemn.control_file.empty();
     }
 
     // Dense cell indices, so the per-game hot path indexes a vector instead of hashing a string.
@@ -745,10 +759,12 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     // dequeue with a condemned cell. Both write kSkipped, but they mean opposite things downstream
     // (see BatchJobResult::abandoned), and a short chunk cannot tell them apart on its own.
     std::vector<std::vector<char>> abandoned_at(jobs.size());
-    // Per-game search work, for calibrating the per-game ceiling. Off by default: it is a diagnostic,
-    // and pre-sizing a third per-game vector for every batch that will never read it is pure waste.
+    // Per-game search work. ALWAYS recorded now, not just under MTG_DUMP_UNITS: reduce_job uses it
+    // to decide, at reduce time, whether a CALIBRATION game exceeded the ceiling its own sample went
+    // on to produce (see the calibration rule there). MTG_DUMP_UNITS still controls whether it is
+    // written to disk. One long long per game -- 166 KB for a 20,800-game matrix.
     static const bool s_dump_units = EnvOn("MTG_DUMP_UNITS");
-    std::vector<std::vector<long long>> units(s_dump_units ? jobs.size() : 0);
+    std::vector<std::vector<long long>> units(jobs.size());
     // Per-job core-milliseconds (see BatchJobResult::elapsed_ms). Relaxed adds: the value is read
     // only after the job's last game lands, and that read is already ordered by the acq_rel
     // remaining-counter decrement below.
@@ -759,7 +775,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         win_turns[j].assign(jobs[j].games, -1);
         digests[j].assign(jobs[j].games, 0);
         abandoned_at[j].assign(jobs[j].games, 0);
-        if (s_dump_units) { units[j].assign(jobs[j].games, 0); }
+        units[j].assign(jobs[j].games, 0);
     }
 
     // Flatten every game of every job into one work list.
@@ -793,6 +809,10 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         int                    need  = 0;      // calibration games present in THIS manifest
         int                    calib = 0;
         double                 k     = 0.0;
+        // Worker slots currently running one of this cell's calibration games. The freeze needs to
+        // know that every unfinished sample game already sits above the middle value, and a running
+        // game's progress is only readable through the slot it publishes to (ai/GameWorkMeter.h).
+        std::vector<int>       running_slots;
     };
     std::vector<std::unique_ptr<CellCeiling>> cell_ceiling(static_cast<std::size_t>(std::max(1, n_cells)));
     for (std::unique_ptr<CellCeiling>& p : cell_ceiling) { p = std::make_unique<CellCeiling>(); }
@@ -1015,6 +1035,12 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     num_threads = std::min<int>(num_threads, std::max<std::size_t>(1, items.size()));
     concurrency_util::LogWorkerThreads(std::cerr, "batch", requested, num_threads);
 
+    // Progress of the game each worker slot is running, published by the meter but ONLY while that
+    // game belongs to a cell's calibration sample (ai/GameWorkMeter.h). The freeze reads it to prove
+    // an unfinished sample game already sits above the sample's middle value.
+    std::vector<std::atomic<long long>> slot_units(static_cast<std::size_t>(std::max(1, num_threads)));
+    for (std::atomic<long long>& a : slot_units) { a.store(0, std::memory_order_relaxed); }
+
     // Reduce one job's per-game win turns to its aggregate (average over WINS only --
     // matches GoldFishRunner). Used both for the streamed per-job callback and the
     // final returned vector.
@@ -1032,17 +1058,37 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         wt_played.reserve(win_turns[j].size());
         dg_played.reserve(digests[j].size());
         gi_played.reserve(win_turns[j].size());
+        // THE CALIBRATION RULE, applied here rather than during the run, and this is what makes the
+        // abandoned set a function of the DATA instead of the schedule. A calibration game runs
+        // without the relative ceiling (it is one of the games that defines it), and once the ceiling
+        // freezes the running ones are stopped -- but whether a given sample game was still running
+        // at that instant is a race. So the verdict is re-derived here from cost alone: a calibration
+        // game is abandoned iff its work reached the ceiling its own sample produced, whether it was
+        // stopped mid-flight or finished first. The set is then exactly {g : cost(g) >= ceiling},
+        // identical on every machine, and the mid-flight abort is a pure cost saving with no bearing
+        // on which games the table keeps.
+        //
+        // Safe against the reduce racing the freeze: a job holding calibration games also holds the
+        // cell's HELD games (the driver's chunk is larger than the calibration window), and those
+        // cannot run until the freeze -- so the job cannot complete before the ceiling exists.
+        const CellCeiling& jcc = *cell_ceiling[static_cast<std::size_t>(jobs[j].cell_id)];
+        const long long    jceil = jcc.frozen.load(std::memory_order_acquire);
         for (std::size_t i = 0; i < win_turns[j].size(); ++i)
         {
+            const int gidx = jobs[j].game_index + static_cast<int>(i);
             if (win_turns[j][i] == kSkipped)
             {
-                if (abandoned_at[j][i])
-                { r.abandoned.push_back(jobs[j].game_index + static_cast<int>(i)); }
+                if (abandoned_at[j][i]) { r.abandoned.push_back(gidx); }
+                continue;
+            }
+            if (jcc.need > 0 && jceil > 0 && gidx < jcc.calib && units[j][i] >= jceil)
+            {
+                r.abandoned.push_back(gidx);
                 continue;
             }
             wt_played.push_back(win_turns[j][i]);
             dg_played.push_back(digests[j][i]);
-            gi_played.push_back(jobs[j].game_index + static_cast<int>(i));
+            gi_played.push_back(gidx);
             if (s_dump_units) { r.units.push_back(units[j][i]); }
         }
         r.games_played = static_cast<int>(wt_played.size());
@@ -1108,6 +1154,40 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     row_name[static_cast<std::size_t>(rid)].c_str(), why, v, limit,
                     fb ? "this cell" : "every cell of this row");
             };
+
+            // (0) DRIVER-SUPPLIED verdicts (see CondemnRule::control_file). One row name per line.
+            //
+            // These deliberately IGNORE never_condemn_depth, and that is the whole point of keeping
+            // them on a separate path. The d<=5 floor protects the crossover rungs from the COST
+            // guards, which are wall-clock and can fire because the box was busy -- an accident that
+            // would leave a hole in the answer. A driver verdict is not an accident: it arrives only
+            // after a paired equivalence test has MEASURED that the extra depth buys nothing, on a
+            // sample large enough to bound the difference, and the rung keeps the games that proved
+            // it. Capping there removes cost, not answer. Applied to H4->H5 -- dead on every deck
+            // measured -- it is the only place the rule could ever pay off, and the floor would
+            // otherwise make it unreachable.
+            if (!condemn.control_file.empty())
+            {
+                std::ifstream cf(condemn.control_file);
+                std::string   line;
+                while (std::getline(cf, line))
+                {
+                    while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
+                    { line.pop_back(); }
+                    if (line.empty()) { continue; }
+                    for (int rid = 0; rid < n_rows; ++rid)
+                    {
+                        if (row_name[static_cast<std::size_t>(rid)] != line) { continue; }
+                        if (row_condemned[rid].exchange(1, std::memory_order_relaxed) != 0) { break; }
+                        std::fprintf(stderr,
+                            "[goldfish] CONDEMNED row=%s on the DRIVER's verdict (extra depth "
+                            "measured equivalent); remaining games of every cell of this row are "
+                            "skipped\n", line.c_str());
+                        std::fflush(stderr);
+                        break;
+                    }
+                }
+            }
 
             // (1) Single pathological game, judged while it runs. Deliberately still per CELL: one
             // game is one observation, and widening its blast radius to the row would remove four
@@ -1282,6 +1362,19 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 const long long ceiling =
                     (!is_calib && frozen > 0) ? frozen : job.abandon_units;
                 gamework::Begin(ceiling);
+                // A calibration game PUBLISHES its progress and watches the cell's ceiling, so the
+                // freeze on another thread can (a) prove this game is above the sample's middle
+                // value and stop waiting for it, and (b) stop it the moment the ceiling exists.
+                // Registered here rather than inside Begin so the slot bookkeeping and the sample
+                // stay under the same lock.
+                if (is_calib && frozen == 0)
+                {
+                    {
+                        std::lock_guard<std::mutex> lk(cc.m);
+                        cc.running_slots.push_back(static_cast<int>(slot));
+                    }
+                    gamework::PublishTo(&slot_units[slot], &cc.frozen);
+                }
                 int wt = engine->RunGame(state, job.max_turns);
                 const long long g_units = gamework::Used();
                 gamework::End();
@@ -1316,26 +1409,65 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 {
                     std::lock_guard<std::mutex> lk(cc.m);
                     cc.sample.push_back(g_units);
-                    if (static_cast<int>(cc.sample.size()) >= cc.need
-                        && cc.frozen.load(std::memory_order_relaxed) == 0)
+                    cc.running_slots.erase(std::remove(cc.running_slots.begin(),
+                                                       cc.running_slots.end(),
+                                                       static_cast<int>(slot)),
+                                           cc.running_slots.end());
+                    if (cc.frozen.load(std::memory_order_relaxed) == 0)
                     {
+                        // FREEZE AS SOON AS THE MEDIAN IS DETERMINED, not when the last sample game
+                        // lands. The median of `need` values only depends on the order statistics up
+                        // to index hi = need/2, so it is already pinned once
+                        //   (a) every sample game has been dispatched -- completed + running == need,
+                        //       or an unstarted one could still come in below and move it;
+                        //   (b) hi+1 of them have COMPLETED, giving s[0..hi]; and
+                        //   (c) every still-running one has already consumed >= s[hi], so its final
+                        //       value can only land at or above hi and cannot displace s[0..hi].
+                        // Under (a)-(c) the final sorted sample agrees with `s` on every index the
+                        // median reads, so freezing now yields exactly the number that waiting would.
+                        //
+                        // This is what makes the ceiling reach INTO its own calibration window: the
+                        // frozen value is published to the running games (t_late_limit), and they are
+                        // provably above the median, so stopping them cannot change it. Measured
+                        // motivation: FiveColour V5's game 6 was 82.3% of the cell's total work and
+                        // sat inside the window, so waiting for it cost more than every other game
+                        // in the cell put together.
                         std::vector<long long> s = cc.sample;
                         std::sort(s.begin(), s.end());
-                        const std::size_t n = s.size();
-                        const long long med = (n % 2 == 1) ? s[n / 2]
-                                                           : (s[n / 2 - 1] + s[n / 2]) / 2;
-                        const long long lim = std::max<long long>(1, static_cast<long long>(cc.k * med));
-                        cc.frozen.store(lim, std::memory_order_release);
-                        std::fprintf(stderr,
-                                     "[batch] CEILING cell=%s calib=%d median=%lld k=%.1f units=%lld"
-                                     "  (min %lld max %lld)\n",
-                                     job.cell.c_str(), static_cast<int>(n), med, cc.k, lim,
-                                     s.front(), s.back());
-                        std::fflush(stderr);
+                        const std::size_t hi = static_cast<std::size_t>(cc.need) / 2;
+                        const bool all_dispatched =
+                            static_cast<int>(cc.sample.size() + cc.running_slots.size()) == cc.need;
+                        bool determined = all_dispatched && s.size() > hi;
+                        if (determined)
+                        {
+                            for (int rs : cc.running_slots)
+                            {
+                                if (slot_units[static_cast<std::size_t>(rs)]
+                                        .load(std::memory_order_relaxed) < s[hi])
+                                { determined = false; break; }
+                            }
+                        }
+                        if (determined)
+                        {
+                            const std::size_t n = static_cast<std::size_t>(cc.need);
+                            const long long med = (n % 2 == 1) ? s[n / 2]
+                                                               : (s[n / 2 - 1] + s[n / 2]) / 2;
+                            const long long lim =
+                                std::max<long long>(1, static_cast<long long>(cc.k * med));
+                            cc.frozen.store(lim, std::memory_order_release);
+                            std::fprintf(stderr,
+                                         "[batch] CEILING cell=%s calib=%d median=%lld k=%.1f "
+                                         "units=%lld  (from %d completed, %d still running above "
+                                         "the median)\n",
+                                         job.cell.c_str(), cc.need, med, cc.k, lim,
+                                         static_cast<int>(cc.sample.size()),
+                                         static_cast<int>(cc.running_slots.size()));
+                            std::fflush(stderr);
+                        }
                     }
                 }
                 win_turns[wi.job][wi.game] = wt;
-                if (s_dump_units) { units[wi.job][wi.game] = g_units; }
+                units[wi.job][wi.game] = g_units;
                 const long long g_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - g_t0).count();
                 job_ms[wi.job].fetch_add(g_ms, std::memory_order_relaxed);

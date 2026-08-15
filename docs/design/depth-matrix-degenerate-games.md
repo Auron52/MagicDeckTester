@@ -13,7 +13,8 @@ enabler.
 | 3b. THRESHOLD POLICY | SHIPPED 2026-08-15 — `abandon_k` x the median of a cell's first `abandon_calib` games, frozen and recorded. See below |
 | 4. median condemnation | SHIPPED 2026-08-15. Row-wide aggregation was `230765d`; the statistic is now a MEDIAN, the limit is `median_sec_per_game` (30 s, down from a 60 s mean), and both old spellings REFUSE rather than being reinterpreted |
 | 5. ladder tops at H5 | SHIPPED (`cbb7876`), H6 dropped |
-| 6. quality-based rung condemnation | OPEN — the 0.0075 equivalence threshold is derived below but not implemented |
+| 6. quality-based rung condemnation | SHIPPED 2026-08-15. Paired equivalence test at 0.0075 turns, one-sided 95% upper bound, driven into the live pool through `condemn.control_file` |
+| 7. skip list applied CONTINUOUSLY | SHIPPED 2026-08-15 — it was only applied at the start of a run, so a run that finished never applied it at all. See below |
 
 ## The threshold policy: k x the cell's own CALIBRATED median
 
@@ -83,7 +84,7 @@ concentration grows monotonically with depth on both arms. This is the whole cas
 ceiling in one table: no per-cell condemnation rule can reach it (the cell's other 24 games are
 ordinary), and no micro-optimisation matters against 6,623x.
 
-### Follow-up: freeze as soon as the median is DETERMINED, and apply it to the sample itself
+### Freezing as soon as the median is DETERMINED — SHIPPED 2026-08-15
 
 **The calibration window is exempt, and on this deck that is exactly where the worst game landed.**
 V5's 614,043,981-unit game is game 6 -- inside the first 10 -- so the armed run paid it in full,
@@ -106,11 +107,35 @@ things follow, and the second is the point:
   number that was frozen, so the abandoned set stays a function of (deck, arm, depth, seed, k, calib)
   and nothing depends on when the check happened to run.
 
-What it needs that does not exist yet: a running game's consumed units are `thread_local` in
-`ai/GameWorkMeter.h`, readable only by the thread running it, so the check needs a per-slot atomic
-the meter publishes to (the heartbeat already tracks running games per slot and is the natural
-place). Until then the residual exposure is `calib` unbounded games per cell -- 10 instead of 400,
-a 40x cut, but not elimination.
+A running game's consumed units are `thread_local`, so the meter now PUBLISHES them to a per-slot
+atomic -- strided (every 4,096 units) and only while the game belongs to a calibration sample, so
+every other game and every non-batch caller pays one predictable null check. A second pointer at the
+cell's ceiling lets a calibration game stop when the ceiling freezes underneath it.
+
+**Determinism is restored at REDUCE time, not by the abort.** Whether a given sample game was still
+running at the instant of the freeze is a race, so the verdict is re-derived from cost alone when the
+job is reduced: a calibration game is abandoned iff its work reached the ceiling its own sample
+produced, whether it was stopped mid-flight or finished first. The abandoned set is then exactly
+`{g : cost(g) >= ceiling}` on every machine, and the mid-flight abort is a pure cost saving with no
+bearing on which games the table keeps. (Safe against the reduce racing the freeze: a job holding
+calibration games also holds that cell's HELD games, and those cannot run until the freeze, so the
+job cannot complete before the ceiling exists.)
+
+Measured, FiveColour seed 8008, H1-H3 + V1-V5 at 25 games/cell:
+
+```
+                                    wall     V5's worst game
+  no ceiling                     46 min      614,043,981 units, ran to completion
+  ceiling, calibration exempt   >32 min      614,043,981 units, ran to completion (game 6, in-window)
+  ceiling + early freeze           35 s      abandoned at 625,175 units
+```
+
+Same 8 cells. The abandoned set is still reproduced exactly by an independent prediction from the
+unbounded run's unit counts, on all 8 cells, and the 170 surviving games are byte-identical to the
+unbounded baseline in win turn and play digest. Across three repeats the freeze POINT moved (H2 froze
+at 7 completed / 3 running, then 6/4, then 7/3 -- the schedule is genuinely non-deterministic) while
+the frozen ceilings and the skip list came out identical every time, which is the property that
+matters.
 
 **Graceful degradation (`--max-skip-frac`, default 0.10).** Past some rate the dropped games are not
 a tail but the distribution. It is also a runaway: `target` grows by the skip count, and a ceiling
@@ -118,6 +143,72 @@ below a cell's own median abandons every backfilled game too -- demonstrated wit
 absolute ceiling on burn, where H3 went 19 games, then 31, climbing with no end. Over the cap, the
 ceiling is DISARMED for that deck+seed and the table says so. The relative ceiling makes this
 unlikely by construction, so it is a backstop for a bad k, not the primary guard.
+
+## The skip list was never applied WITHIN a run (fixed 2026-08-15)
+
+§2 says it plainly -- "Detection is per-cell, application is global" -- and `apply_skiplist` does
+exactly that. It was just only ever called ONCE, at the start of a run, while the list it applies
+GROWS throughout. A run that finishes therefore never applies its own abandonments at all: the cells
+that already played a game keep its result, and only the cell that abandoned it loses it.
+
+Measured on burn (user caught it, 2026-08-15). Seed 8008 abandoned 28 games. At the end of the run
+H1 still held all 28 of them and H4 held 7 -- so H4 was missing 21 games that H3 had, and those 21
+were precisely the expensive ones, because the expensive ones are what gets abandoned. The row means
+that came out:
+
+```
+                       H1      H2      H3      H4      H5     <- each over its OWN game set
+  before the fix    4.3387  4.3362  4.3350  4.2589  4.2815
+  after the fix     4.2354  4.2327  4.2327  4.2327  4.2327    <- all over ONE set of 357 games
+```
+
+H3 vs H4 read as a 0.076-turn gain from one extra rung (0.105 on seed 9009). Paired on the games
+both cells held, they were identical to four decimals -- and after the fix they simply *are*
+identical, because the row means are now over the same games. Every apparent H-rung improvement on
+this deck was the artifact.
+
+Two parts to the fix, and the second one matters as much as the first:
+
+* sweep on EVERY chunk, not only on the ones that grow the list -- a chunk landing after the last
+  abandonment would otherwise re-introduce an offset the other cells have dropped, and with no later
+  growth nothing would sweep it out again;
+* sweep through `_chunk_restrict`, not by filtering the incoming rows. Filtering by hand left the
+  chunk's `g` disagreeing with its own `n` and `lp`, so the table reported 400-game counts over
+  372-game data -- a different wrong answer that looked righter.
+
+The table now also CHECKS the invariant instead of assuming it: comparable cells (not reference-
+capped, not rung-capped) must hold identical game sets, and it says `!! UNEQUAL GAME SETS` if they
+ever do not. An earlier attempt at this compensated inside `emit_table` by averaging over the
+intersection; that was removed. A second mechanism silently papering over the first is how the
+divergence stays invisible -- the guard reports, the skip list fixes.
+
+## Quality-based rung condemnation, and the channel it needed
+
+The rule is §6's: condemn a rung when the extra depth buys nothing, on a PAIRED equivalence test
+(one-sided 95% upper bound below 0.0075 turns), never on a point estimate. Gated on a minimum pair
+count and on 90% coverage of the shallower rung so a fluke early sample cannot condemn a live one.
+
+Two things it needed that were not obvious:
+
+* **The driver has to own the test, and needed a way to say so mid-run.** The comparison is against
+  games this process may never have seen -- on a resume half the sample lives only in the state file
+  -- so the engine cannot reach the verdict itself. `condemn.control_file` is a path the driver
+  appends row names to and the pool re-reads on each heartbeat tick. Without it the rule could only
+  fire at the NEXT resume, i.e. never for a single long phase-C invocation, which is exactly the run
+  paying for the dead rung.
+* **These verdicts IGNORE `never_condemn_depth`, deliberately.** The d<=5 floor protects the
+  crossover rungs from the COST guards, which are wall-clock and can fire because the box was busy --
+  an accident that would leave a hole in the answer. A quality verdict is not an accident: it has
+  MEASURED equivalence on a sample large enough to bound the difference, and the rung keeps the games
+  that proved it. Since every H4->H5 ever measured is dead, the floor would otherwise make the rule
+  unreachable exactly where it pays.
+
+A quality-capped cell is marked `=` in the table, distinct from `*` (intractable / reference-only),
+and is excluded from the equal-game-set check: it stopped early on purpose, so it holds a subset.
+**Known limitation:** its row mean is therefore over fewer games than a full cell's, and the metadata
+writer consumes those row means. The equivalence test that capped it is paired and sound; the row
+mean it leaves behind is not paired against its neighbour. Making the metadata deriver read per-game
+data rather than table means is the open follow-up.
 
 ## The race that was silently disabling per-game storage (fixed 2026-08-15)
 
