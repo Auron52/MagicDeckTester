@@ -87,8 +87,47 @@ Hierarch, per `h5_gi14_fd.log`). So the depth-5 search chose the correct first p
 **What this rules in and out.** It is NOT a top-level enumeration hole -- the winning line was
 enumerated AND selected. The entire error is in the CONTINUATION VALUE: the recursion's model of
 T2..T5 from that exact position reaches T8, while real play from the identical position reaches T5.
-That confirms prime suspect (a) (deferred draw-breakpoint re-solves missing inside RECURSED future
-turns) and eliminates suspect (b) AT THE TOP LEVEL (it may still apply inside the recursion).
+
+> **CORRECTION (2026-08-15).** An earlier revision of this section claimed the above "confirms
+> prime suspect (a)". It does not, and suspect (a) as written is FALSE: `BpSearchInRollouts()`
+> defaults ON, so the searched-breakpoint fan-out is emitted at EVERY ply and every rollout turn,
+> not only at the committed node. `TurnSolver.cpp` ~15757 says so explicitly AND warns that a stale
+> comment claiming deeper nodes keep the greedy continuation "mis-aimed the whole 2026-08-06
+> depth-curve investigation". Do not re-derive that hypothesis from the numbers; check the flag.
+
+### 3c. BREADTH IS NOT THE ANSWER -- three levers measured, all negative
+
+Every knob that gives the search MORE to look at fails to recover the T5 win on the gi=14 repro
+(T1 pass=5, via `logs/mwprof/h5_gi14.manifest.json`):
+
+| arm | win | cost | reading |
+|---|---:|---:|---|
+| baseline (`W=2`, `BP_DEPTH=1`) | 8 | 1,332,428 | -- |
+| `MTG_NO_GROUP_CAP=1` | 8 | 1,332,428 | byte-identical: the group cap never binds here |
+| `MTG_UNPRUNED=1` | **9** | 2,803,021 | **WORSE at 2.1x cost** |
+| `MTG_BP_SEARCH=8` | 8 | 1,391,451 | -- |
+| `MTG_BP_SEARCH=8 MTG_BP_DEPTH=3` | 8 | 1,656,519 | -- |
+| `MTG_BP_SEARCH=16 MTG_BP_DEPTH=4` | 8 | 2,248,452 | 1.7x cost, same wrong answer |
+
+Two conclusions:
+
+1. **Suspect (b) is DEAD.** Removing pruning entirely cannot delete lines -- it can only add them --
+   so a completeness hole cannot explain an answer that gets WORSE when prunes come off. The group
+   cap is provably inert here (byte-identical).
+2. **The searched-breakpoint approximation is not the gap either.** Widening the fan-out 8x and
+   nesting it 4 deep buys 1.7x the cost and zero improvement.
+
+**What is left is a MODEL difference, not a SEARCH difference.** Within one engine, the greedy
+ROLLOUT from end-of-T2 reaches a T5 win (pass=2 -> win 5) while the RECURSION over T3..T5 never does
+(pass=5 -> win 8), and no amount of breadth closes the gap. The recursion is not a narrower version
+of the rollout; the two model the turn DIFFERENTLY. That is the "search must model play" thesis in
+its strongest measured form, and it is the same seam as the standing goal of purging greedy rollouts
+from the search.
+
+**Falsifiable prediction for that work:** on this repro, an engine whose recursion plays a turn the
+way the rollout/executor does should report `T1 pass=5 win=5`. That is a one-command check
+(`MTG_TRACE=search mtg --batch logs/mwprof/h5_gi14.manifest.json --threads 1`), and it is a
+sharper acceptance test than any aggregate, because breadth is already excluded as a confound.
 
 The search's own predicted continuation (`[fd-pred]`, T1 line) is a slow clock that never closes:
 opp_life 20 -> 19 -> 15 -> 13 -> 11 -> 9. Real play, from the same T1 play, wins on T5.
@@ -102,11 +141,12 @@ opp_life 20 -> 19 -> 15 -> 13 -> 11 -> 9. Real play, from the same T1 play, wins
    MTG_BP_DUP_PROBE precedent) to answer, level by level: is each step of the known winning line
    ENUMERATED at the corresponding recursion depth? First site where it is not (or where its value
    is mis-scored) is the defect site.
-3. Prime suspects, in order: (a) deferred draw-breakpoint re-solves inside RECURSED future turns
-   (the site-5 machinery made continuations searchable at the current decision — verify the same
-   coverage exists at depth: a T2-in-recursion Fists cast must open the same continuation the real
-   T2 would); (b) EnumGroupCap / group-wave tranche limits at inner recursion depths dropping the
-   explosive groups; (c) strive/target folds pruning the winning variant at depth.
+3. ~~Prime suspects (a) breakpoint coverage at depth, (b) EnumGroupCap / group-wave tranche
+   limits, (c) strive/target folds~~ — **(a) and (b) are MEASURED FALSE; see 3c.** (a) is false by
+   construction (`BpSearchInRollouts()` defaults ON) and unfixable by width; (b) cannot produce an
+   answer that worsens when pruning is removed. (c) is untested but inherits (b)'s problem: it is a
+   pruning hypothesis, and `MTG_UNPRUNED=1` made things worse. Target the rollout-vs-recursion MODEL
+   difference instead.
 4. Any fix is play-changing (better verification => different committed lines): full standing gate
    (smoke + regression + GT rebaseline if play moves), and re-measure the H ladder afterwards —
    win-break firing should collapse the Class B exhaustion class outright.
