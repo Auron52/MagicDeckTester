@@ -1214,21 +1214,6 @@ static bool RemedyActiveOrInHand(const GameState& state, int active)
     return false;
 }
 
-// True if a lifegain->loss enabler that SURVIVES an enchantment wipe -- a CREATURE (Plague
-// Drone) -- is in the active player's hand. The Reverent Silence in-hand emission gate needs
-// this stronger form: an enchantment Remedy cast the same turn resolves before Silence
-// (enabler-first) and is then wiped by it, bricking the combo (the provider's gi=84 lesson),
-// so only a creature enabler backs a NON-lethal same-turn Silence.
-static bool CreatureRemedyInHand(const GameState& state, int active)
-{
-    for (const Card& c : state.players[active].hand)
-    {
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d && d->params.lifegain_to_loss && d->card.IsCreature()) { return true; }
-    }
-    return false;
-}
-
 // Plan-validity gate for Swords to Plowshares (controller_lifegain_equals_power): its exile-
 // lifegain rider only helps once a lifegain->loss enabler is live when it resolves. A subset that
 // casts Swords is valid ONLY if an enabler is already in play OR the SAME subset casts one
@@ -1285,6 +1270,29 @@ static bool SubsetHasUnbackedAltPayload(const GameState& state,
         }
     }
     const int opp_life = state.players[1 - state.active_player_index].life;
+    // SUBSET-level lethality for the wipe test (docs/design/card-dependency-map.md): whether the
+    // wipe is moot ("the game is won before the enabler matters again") depends on everything the
+    // subset deals, not on the wipe card alone -- the canonical order (enabler rank 0, Aria's
+    // verse/ETB 19, destroy_all 30) resolves every other payload's converted damage BEFORE the
+    // wipe. Summed lazily (only a destroy_all pick under an in-subset-only enabler needs it):
+    // per action, direct damage (an alt action's direct_damage already equals its
+    // alt_lifegain_cost, so the terms never double-count), the converted ETB gift (Aria), and a
+    // hard-cast's converted lifegain rider (Fiery Justice); plus this turn's pending attack.
+    // Terms the emission does not price stay uncounted -> the test under-counts, i.e. errs toward
+    // keeping the subset invalid (the narrow, safe direction for a validity gate).
+    auto subset_lethal_damage = [&]()
+    {
+        int total = 0;
+        for (int j2 : sel)
+        {
+            const Action& b = cands[j2];
+            if (b.def == nullptr) { continue; }
+            total += b.direct_damage;
+            total += b.def->params.etb_opponent_lifegain;
+            if (!b.alt_cost) { total += b.def->params.opponent_lifegain; }
+        }
+        return total + PendingAttackDamage(state);
+    };
     for (int j : sel)
     {
         const Action& a = cands[j];
@@ -1292,7 +1300,7 @@ static bool SubsetHasUnbackedAltPayload(const GameState& state,
         if (a.def->params.destroy_all_enchantments)
         {
             if (creature_enabler)                                          { continue; }
-            if (enabler && opp_life <= a.def->params.alt_lifegain_cost)    { continue; }
+            if (enabler && opp_life <= subset_lethal_damage())             { continue; }
             return true;   // wipe kills every in-subset enabler and it isn't lethal -> bricked
         }
         if (!enabler) { return true; }   // safe payload with no enabler -> free life for the opponent
@@ -3751,14 +3759,25 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 && (RemedyActive(state, state.active_player_index)
                     || (collapse_in_hand
                         && RemedyActiveOrInHand(state, state.active_player_index)));
+            // (No creature-enabler / per-card-lethal narrowing here: lethality is a SUBSET
+            // property -- a same-subset Aria's converted ETB lands before the wipe -- so the
+            // judgement lives in SubsetHasUnbackedAltPayload's subset-level test, and the
+            // emission just offers the card whenever an enabler is live or in hand.)
             const bool risky_in_hand = collapse_in_hand
                 && def.params.destroy_all_enchantments
-                && (CreatureRemedyInHand(state, state.active_player_index)
-                    || (RemedyActiveOrInHand(state, state.active_player_index)
-                        && state.players[1 - state.active_player_index].life
-                               <= def.params.alt_lifegain_cost));
+                && RemedyActiveOrInHand(state, state.active_player_index);
+            // SEARCH-side wide emission for the risky wipe under a LIVE Remedy: whether the
+            // free 6 is worth wiping our own combo is a genuine search decision, so a real
+            // search node just offers it (the provider gate's tight Drone/per-card-lethal
+            // conditions exist to protect the GREEDY consumer -- dropping them for greedy
+            // re-bricked gi=36/84-class games, smoke d0 5.5650 -> 5.9270). Mirrors
+            // spec_search_burn's shape for the safe alts.
+            const bool search_risky_live = g_search_candidate_enum
+                && def.params.destroy_all_enchantments
+                && RemedyActive(state, state.active_player_index);
             if ((ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def)
-                 || DecisionUnpruned(UnprunedGate::AltPayload) || spec_search_burn || risky_in_hand)
+                 || DecisionUnpruned(UnprunedGate::AltPayload) || spec_search_burn || risky_in_hand
+                 || search_risky_live)
                 && AltPayloadTargetLegal(state, def))
             {
                 constexpr int DMG = 100;

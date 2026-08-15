@@ -1545,10 +1545,19 @@ bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int con
                                                      const CardDefinition& def) const
 {
     if (DecisionUnpruned(UnprunedGate::AltPayload)) { return true; }   // unpruned A/B: let the search judge the wipe.
-    // Reverent Silence's destroy-all-enchantments wipes our OWN Aria/Remedy. Casting it
-    // non-lethally with no surviving enabler bricks the combo (the greedy second-main rollout
-    // overvalues the immediate 6 -- regression gi=36: opp 23, single Tainted Remedy, no Drone
-    // -> Reverent destroys the only enabler and the deck stalls). Emit it only when:
+    // GREEDY-ONLY gate (docs/design/card-dependency-map.md). Reverent Silence's destroy-all-
+    // enchantments wipes our OWN Aria/Remedy; the greedy second-main/rollout policy overvalues
+    // the immediate 6 and bricks the combo (regressions gi=36/84 -- and DROPPING this gate
+    // outright, USER's first-choice experiment 2026-08-15, re-bricked exactly that class: smoke
+    // d0 5.5650 -> 5.9270 with outright losses). So the GREEDY consumer keeps the tight
+    // conditions below, while SEARCH nodes bypass this gate entirely (CollectActions'
+    // search_risky_live emission: Remedy live -> emit, the search + the SUBSET-level lethality
+    // in SubsetHasUnbackedAltPayload judge the wipe -- per-card lethality at emission cannot see
+    // a same-subset Aria's converted ETB landing first). The cast-time re-check in the rollout
+    // apply still consults THIS gate and stays accurate for search-committed lines: the
+    // canonical order casts the wipe LAST (rank 30), so the subset's converted damage has
+    // already landed and the per-card test evaluates against the reduced life total.
+    // Emit only when:
     //   (a) a Plague Drone (lifegain_to_loss CREATURE) is IN PLAY -- it survives the wipe, so
     //       the enabler stays online. An enchantment Remedy does NOT survive, even a 2nd one
     //       cast the same turn (enabler-first casts it before Reverent, so it is wiped too --
