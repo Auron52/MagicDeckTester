@@ -83,11 +83,34 @@ in-phase; `MTG_MAIN2_DROP` covers only the land drop.
   gi=58), but measured AS-IS it regresses antilife 4.3267→4.3933 — the flip feeds MORE mass
   into the m2 set before the hardening above exists. Re-measure after items 1/4/5 land.
   **Dissected (24 worse / 4 better on antilife d3; the 4 better INCLUDE the partition-class
-  games gi=87/118/286, so the design intent works):** the dominant new pathology is the
-  MAIN2_DROP land fold with a fully-empty pre-combat plan — gi=1's committed line SKIPS the
-  land drop on T1 AND T2 and pitches Birds then Swords at cleanup (defer-land + discard
-  ranked above play-Mire). The flip's re-measure is blocked on that land-fold defect, which
-  is upstream of the three ordering items.
+  games gi=87/118/286, so the design intent works):** the visually-dominant pathology is
+  gi=1's committed line SKIPPING the land drop on T1 AND T2 and pitching Birds then Swords
+  at cleanup (defer-land + discard ranked above play-Mire).
+* **The land-skip pathology ROOT-CAUSED (2026-08-15) — it is NOT a ranking bug, and the
+  "defer wins only when strictly better" fix direction is REFUTED.** Full FSLine + rollout
+  tracing on gi=1 (`--seed 2003 --game-index 1`) showed: every T1 land option is a
+  FETCH, whose in-search crack RESHUFFLES the library (`ShuffleAfterSearch`, CRN-keyed),
+  while the defer/do-nothing arm keeps the NATURAL order. Commit-the-line's evaluation is
+  deliberately clairvoyant and lockstep with the executor, so each arm's rollout REALIZES
+  its own (known) future order — and when the natural order is hot (gi=1: Swords T2,
+  Remedy T3), every no-shuffle line systematically beats every crack line (heur d1 tails:
+  defer=5 < Mire=6 < Marsh=8). With doubt-on emptying the m1 cast set, this shuffle-order
+  difference is the ONLY signal left, so total passivity wins strictly — no tie-break or
+  land-credit can fix an arm that genuinely scores better. Verified both ways:
+  `MTG_NO_SEARCH_SHUFFLE=1` (order invariant to cracking) flips gi=1 to lands played
+  T1-T3, win at 4. The value model is NOT the blocker (`MTG_VALUE_MODEL=0` still skips).
+  **But the aggregate doubt cost is NOT this class:** the 4-arm 300g A/B (stack±doubt ×
+  ±NO_SEARCH_SHUFFLE, seed 2002 d3) gives 4.3267/4.3933 (shuffle) vs 4.7200/4.7933
+  (noshuffle) — the doubt gap is ~+0.07 in BOTH universes (27 worse/6 better even with
+  order invariance), and noshuffle itself is a −0.4 game-model regression (it reverts the
+  rules-correct search shuffle, changing the executor too — not a candidate). So: the
+  doubt flip's residual cost lives in the m2-emission semantics this doc catalogues
+  (post-combat pump emission needs an attacker, alt-payload gates, item 1/3/4/5), spread
+  thin across games; the flip stays PARKED until that hardening lands, and the land-skip
+  *shape* of the failures is an artifact of clairvoyant crack-vs-no-crack comparison at
+  value-flat nodes — a decision-theory property of the engine, only addressable at the
+  architecture level (honest/common-future evaluation would break commit-the-line's
+  replay contract; noshuffle is measured worse).
 * The explicit attack-helping classification (PumpSpell/Lord/Haste templates, equipment,
   haste-granters, firebreathing, board-scaling, pump params) is IN (behaviour-neutral today —
   it encodes what doubt-Main1 gave those cards implicitly) and is the precondition for any
