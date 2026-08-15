@@ -425,11 +425,17 @@ so they are all siblings in the sense the argument needs.
 The census now fires at unbounded budget (burn b0: 7,367 dominated of 19,623), which is what makes
 the gate below runnable.
 
-### MUST-FIND GATE — PASSED (first time it could be run)
+### MUST-FIND GATE — PASSED, ALL 12 DECKS
 
 `--budget-ms 0`, per-game win turns via `MTG_DUMP_WINS`, prune OFF vs ON: **zero wins lost** on
-burn, slivers, knights, antilife, goblins (24 games each) and th (12 games). No game's win turn
-regressed; aggregate averages identical to 4 dp.
+burn, slivers, knights, antilife, goblins (24 games each) and th (12 games); then auras,
+creature_giving (24 each), dragonstorm (16), hinata, fivecolour, mirrorwing (12 each). No game's
+win turn regressed on any deck, none gained either — the two arms find an identical win set.
+Aggregate averages identical to 4 dp.
+
+Method note for anyone re-running it: the arms must differ ONLY in `MTG_DOM_PRUNE`, and the budget
+must be 0 (unbounded). At a finite budget the arms search different amounts of tree, so a win-turn
+difference no longer isolates the prune from budget truncation, and the gate stops meaning anything.
 
 ### Suite A/B at the corrected site
 
@@ -536,20 +542,22 @@ change (50 s vs 48 s makespan).
 
 1. ~~Move the check to the FSLineWin/FSLineTail frontier~~ — done (`3c3f06bf`).
 2. ~~Re-price at the new site~~ — done (`4f71986c`, table above).
-3. **Must-find gate: 10 of 12 decks PASS, zero wins lost** — burn, slivers, knights, antilife,
-   goblins, th, auras, creature_giving, dragonstorm, hinata.
+3. **Must-find gate: ALL 12 decks PASS, zero wins lost** — burn, slivers, knights, antilife,
+   goblins, th, auras, creature_giving, dragonstorm, hinata (2026-08-14/15), plus **fivecolour and
+   mirrorwing** (2026-08-15, 12 games each at `--budget-ms 0`). No game's win turn regressed on any
+   deck, and no deck gained one either — prune ON and OFF find an identical win set. The gate is
+   now COMPLETE; the two heaviest decks, which are also two of the three highest-harm ones, clear
+   it despite node-level harm of 1,521 (mirrorwing) and 8,685 (fivecolour). That gap between
+   node-level harm and zero game-level loss is the point made under "Yet must-find still passes":
+   FSLineWin re-explores, so a locally-deleted better line is recovered elsewhere.
 4. ~~Diagnose the harm signal~~ — done (`3b6c309b`): two mechanisms, both the EVALUATOR being
    non-monotone (learned value leaf; greedy beyond-horizon rollout), not a hole in the axes.
 
 ### What is OPEN — resume here
 
-1. **FINISH MUST-FIND on fivecolour and mirrorwing.** The gate is INCOMPLETE without them, and they
-   matter most (heaviest decks, two of the three highest harm rates). Command shape:
-   `MTG_DUMP_WINS=1 MTG_DOM_PRUNE=0|1 mtg <deck> --profile <prof> --games 12 --seed 1001 --depth 5
-   --budget-ms 0 --ignore-play-profile --lookahead-bottoming`, then diff the per-game `wt=` values;
-   any `on > off` is a FAILED gate. Expensive — run unattended.
-2. **Regression-mode A/B on train seeds** (`MTG_DOM_PRUNE=1 bash test/regression.sh`), then held-out
-   validation on overnight seeds. Adoption decision on the NET loss-penalized delta.
+1. **Regression-mode A/B on train seeds** (`MTG_DOM_PRUNE=1 bash test/regression.sh`), then held-out
+   validation on overnight seeds. Adoption decision on the NET loss-penalized delta. This is now
+   the gating item — must-find is done.
 3. **Cost.** Still unquantified. At a fixed ms budget the prune buys more search per unit budget
    rather than wall time, so the honest measurement is quality at fixed budget (the A/B above) plus
    wall time at `--budget-ms 0`.
