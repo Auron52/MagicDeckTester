@@ -3293,6 +3293,12 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
             // These templates carry no lord/anthem statics BY DEFINITION, so a fresh
             // (summoning-sick) body affects this turn's combat only if it can attack NOW --
             // or if entering pumps a board-scaling attacker / expands domain mana.
+            // EXCEPTION -- EXALTED (antilife stack dig 2026-08-15, gi=29/76/162): exalted is an
+            // attack-helping STATIC that pumps this turn's lone attacker from the sidelines, so
+            // a summoning-sick Ignoble Hierarch cast PRE-combat still changes this turn's
+            // combat. Deferring it to m2 cost the exalted pump, held whole attack phases, and
+            // flipped T1 land picks downstream (gi=76 win 4->5).
+            if (def.card.HasKeyword(Keyword::Exalted)) { return MP::Main1; }
             if (scaling_attacker) { return MP::Main1; }
             const bool haste = def.card.HasKeyword(Keyword::Haste)
                             || HasHasteFromLords(def.card, state.battlefield,
