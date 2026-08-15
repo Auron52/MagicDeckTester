@@ -14112,7 +14112,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             {
                 // Unpruned audit: search EVERY fetch candidate (no cap), so a costly
                 // fetch-target heuristic can be detected. See DecisionUnpruned.
-                int cap = DecisionUnpruned(UnprunedGate::Fetch) ? static_cast<int>(cands.size())
+                // Collapsed main (MainPhaseFilterActive): ALSO no cap. With the casts deferred
+                // past combat, the pre-combat plans are (land x EMPTY), so the fetch target is
+                // the ONLY decision this phase and its value shows purely through the m2
+                // continuation -- the top-2 truncation was tuned for the joint (land x casts)
+                // enumeration and silently deletes the colour line the deferred main needed
+                // (5c d3 s2002: cap 5.0150 vs no-cap 4.9250, BETTER than the 4.9550 base).
+                int cap = (DecisionUnpruned(UnprunedGate::Fetch) || MainPhaseFilterActive(state))
+                                             ? static_cast<int>(cands.size())
                                              : kMaxFetchSearchTargets;
                 int n = std::min(static_cast<int>(cands.size()), cap);
                 for (int i = 0; i < n; ++i) { add_for_land(ln, cands[i]); }
