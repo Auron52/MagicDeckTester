@@ -393,12 +393,16 @@ axes — and gi51's T6→T7 is the same variance the engine already tolerates on
 states. Consistent with this, harm falls as budget rises (mirrorwing 0.175% at b60 → 0.048% at
 b200): more search, fewer missed re-finds.
 
-**One probe came out VACUOUS and must not be read as evidence.** A second check counted states this
-comparator judged EQUIVALENT (mutual coverage) that then scored differently; it reported 0. But
-`eq_byaxes` — how often mutual coverage fired at all — is **0 on every deck measured**. The canon
-simkey is tested first and catches every such pair, so the comparator's equivalence relation is never
-exercised and its clean result says nothing. (It also means the relation's whole value is in STRICT
-dominance, not in its equality case.) A real validation of the axes still needs the must-find gate.
+**One probe came out VACUOUS and must not be read as evidence — IN CENSUS MODE.** A second check
+counted states this comparator judged EQUIVALENT (mutual coverage) that then scored differently; it
+reported 0. But `eq_byaxes` — how often mutual coverage fired at all — is **0 on every deck measured
+under census**. The canon simkey is tested first and catches every such pair, so the comparator's
+equivalence relation is never exercised and its clean result says nothing. A real validation of the
+axes still needs the must-find gate.
+
+**The same probe is LIVE under prune-only, and it is worth watching there.** The simkey branch in
+`domin::Check` is guarded by `if (census && ...)`, so when only `MTG_DOM_PRUNE` is set every equality
+decision falls through to the axes. See "EQUALITY PROBE UNDER PRUNE-ONLY" below.
 
 Also noted: at b200, knights and slivers produce NO census output at all — the site is never reached,
 exactly as at `--budget-ms 0`. More evidence for the section below.
@@ -538,6 +542,85 @@ creature_giving/auras ≈ 0.
 **Suite A/B (smoke, prune on):** 0 slower, 1 faster, 4 play-changed at the same score. No cost
 change (50 s vs 48 s makespan).
 
+### REGRESSION A/B on train seeds — PASSED (2026-08-15)
+
+`MTG_DOM_PRUNE=1 bash test/regression.sh` (seeds 2002/3003, 60 configs, 26,300 games), audited
+against committed ground truth:
+
+```
+[searched] slower=0  faster=2  play-changed=11
+[d0      ] slower=0  faster=0  play-changed=0
+```
+
+Exactly one config's aggregate moved: `fivecolour_regression_d5_s3003` 5.0300 → **5.0100**. NET mean
+delta across all 60 configs: **−0.000333 turns** (negative = faster). All 11 play-changed games are
+"kept hand + draws IDENTICAL → clean like-for-like LINE change" at an unchanged win turn. Batch
+makespan 104 s, i.e. no measurable cost at a fixed budget.
+
+**Zero slowdowns at searched depth on train seeds.** Held-out (overnight seeds) still owed.
+
+Two counters in that run must NOT be read as evidence:
+
+- **`harm=0` is structural, not a result.** Prune mode never rolls the pruned candidate out, so
+  there is no win turn to compare — the harm counter is census-only by construction. A prune-mode
+  run will always print `harm=0`.
+- **`mismatch: axes=N` is the one to actually watch here** (see next section).
+
+### EQUALITY PROBE UNDER PRUNE-ONLY — the axes' own soundness signal
+
+Because the simkey branch is census-gated, a prune-only run exercises the comparator's equality
+relation on every pair: the regression run above logged `eq_byaxes=34,473,864` with
+`ident_mismatch=2,851` (0.008%). That counter is supposed to be **0**: it means two states the axes
+call EQUAL scored differently, i.e. the engine can tell apart something the axes fold together. It
+matters beyond the equality case, because the same axis set powers `Covers()` — a genuine hole there
+would mean a `Covers()` that is also wrong, which is an unsound PRUNE.
+
+Localized (12 games, d5, s3003, b20) to **two decks only**:
+
+| deck | eq pairs | ident_mismatch | rate |
+|---|---:|---:|---:|
+| mirrorwing | 103,085 | 20 | 0.019% |
+| fivecolour | 504,218 | 32 | 0.006% |
+| burn / goblins / antilife / knights / slivers / dragonstorm / creature_giving / th / auras | — | **0** | 0 |
+
+**The confound is CACHE WARMING, and it must be ruled out before calling this a missed field.** The
+"a later equivalent state can only score WORSE" argument rests on the branch-and-bound cutoff only
+tightening across a pass. At a FINITE budget that argument is incomplete: a later candidate searches
+a warmer TT/line cache and can therefore complete more search within the same ms, finding a
+genuinely better win with no missing field involved. The two decks implicated are the two heaviest
+searches in the suite — precisely where a 20 ms budget binds hardest, exactly as the warming
+hypothesis predicts. burn/goblins/antilife show 0 at b20 AND b0 (identical counters at both, so the
+budget never binds for them).
+
+**Warming was RULED OUT.** At `--budget-ms 0` the signal survives and mirrorwing's rate more than
+doubles: mirrorwing 1,583 / 3,904,802 (0.041%), fivecolour 105 / 3,387,253 (0.0031%). Not budget
+truncation.
+
+**The mechanism is the TRANSPOSITION TABLE, not the axes** (mirrorwing, 4 games, d5, b0):
+
+| arm | eq pairs | ident_mismatch | rate |
+|---|---:|---:|---:|
+| baseline | 1,940,494 | 1,545 | 0.0796% |
+| `MTG_FSL_CAP=1` (line cache off) | 3,110,170 | 2,165 | 0.0696% |
+| `MTG_TT_CAP=1` (TT off) | 1,939,319 | **58** | **0.0030%** |
+| both off | 3,146,594 | 76 | 0.0024% |
+
+Dropping the TT removes ~96% of the disagreement at an essentially unchanged pair count (1.939M vs
+1.940M) — a 27x rate drop. Dropping the line cache removes none of it. So the probe is mostly
+measuring TT bound fidelity: a TT hit can return a value computed under different alpha/beta bounds,
+which lets a later equal state score better without any missing field. That property is
+**pre-existing and prune-independent** (the TT is on either way); this probe merely made it visible.
+It is a separate question from dominance and is NOT a blocker here.
+
+**Residual: ~0.003% (58-76) with caches off — still not 0.** Note `MTG_TT_CAP=1` is the minimum, not
+"off" (0 = unlimited), so some TT effect remains in even that arm. The residual is therefore an upper
+bound on any genuine missed field, and it is small. Left OPEN at low priority; the direct test of the
+axes is the must-find gate, which passes 12/12 including both decks implicated here.
+
+Worth keeping straight: the equality case **never prunes** (`if (is_dominated && DomPruneOn())` —
+identical states are deliberately left to the existing dedups), so an equality hole deletes nothing
+by itself. Its value is purely as a diagnostic for `Covers()`, which shares the axis set.
+
 ### What is DONE
 
 1. ~~Move the check to the FSLineWin/FSLineTail frontier~~ — done (`3c3f06bf`).
@@ -555,10 +638,14 @@ change (50 s vs 48 s makespan).
 
 ### What is OPEN — resume here
 
-1. **Regression-mode A/B on train seeds** (`MTG_DOM_PRUNE=1 bash test/regression.sh`), then held-out
-   validation on overnight seeds. Adoption decision on the NET loss-penalized delta. This is now
-   the gating item — must-find is done.
-3. **Cost.** Still unquantified. At a fixed ms budget the prune buys more search per unit budget
+1. **Held-out validation on OVERNIGHT seeds** (4004/5005/6006/7007). Train seeds are done and clean
+   (0 slower, net -0.0003); this is the last evidence needed before an adoption decision, which is
+   the user's call on the NET loss-penalized delta.
+2. **Equality-probe residual** (low priority): ~0.003% ident_mismatch survives with both caches
+   capped. Bounded above by the TT cap not being a true off switch. Only worth chasing if the
+   must-find gate ever regresses.
+3. **Cost.** Partly answered: the train-seed A/B ran 104 s vs a ~100 s baseline makespan, i.e. no
+   measurable cost at a fixed budget. At a fixed ms budget the prune buys more search per unit budget
    rather than wall time, so the honest measurement is quality at fixed budget (the A/B above) plus
    wall time at `--budget-ms 0`.
 4. **Two unexplained zeros** (low priority): auras' ~0 comparable pairs (suspected: the attachment
@@ -574,9 +661,12 @@ change (50 s vs 48 s makespan).
   nondeterministic (3/4/5 failures across identical runs). Fixed via `m_model_feat_mask`.
 - The canon-identity "noise floor" control is DEGENERATE at the FSLineWin site (canon-identical
   states share an FSLineCache entry, so they agree by construction). Do not reuse it as a floor here.
-- `eq_byaxes` is 0 everywhere: the comparator's EQUALITY case never fires (the canon simkey catches
-  those pairs first), so any clean result from it is vacuous. The relation's value is in STRICT
-  dominance only.
+- `eq_byaxes` is 0 **in CENSUS mode only** — and knowing which mode you are in is the whole point.
+  The canon-simkey equality branch in `domin::Check` is gated on `census`, so with census ON the
+  simkey catches every equal pair first and the comparator's own equality case never fires (a clean
+  result from it is vacuous). With **PRUNE alone**, that branch is skipped and every equality
+  decision goes through the axes: `eq_byaxes` jumps to 34.4M on a regression run and the
+  `ident_mismatch` probe becomes LIVE. Do not carry the "vacuous" reading across modes.
 - `--budget-ms 0` IS unbounded (`FromVirtualMs(<=0)` → `Unlimited()`), not "no search".
 
 ## Sequencing
