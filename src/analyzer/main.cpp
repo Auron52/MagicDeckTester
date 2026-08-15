@@ -23,6 +23,7 @@
 #include "../deck/DeckLoader.h"
 #include "../cards/CardDatabase.h"
 #include "../ai/MulliganProfileIO.h"
+#include "../ai/GameWorkMeter.h"
 #include <cstdlib>
 #include <cstdio>
 
@@ -380,15 +381,59 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
     // the plain-name-only lookup found nothing, left `buckets` empty, and made K=0 -- whereupon the
     // hand-filling loop below copies zero cards and EVERY composition scores as unwon (max_turns+1)
     // with se 0. A silent all-unwon result reads as data, not as a failure.
+    // HAND MODE (MTG_SCORE_HANDS=N): score N random OPENING HANDS instead of bucket compositions.
+    //
+    // Exists so the generation setting can be derived for a deck that has NO mulligan artifacts yet.
+    // The comp path needs a committed exhaustive sidecar for its bucket map, but that sidecar is an
+    // OUTPUT of the very generation we are trying to configure -- so at the end of a value-leaf run on
+    // a new deck it does not exist, and the derivation would be impossible exactly when it is wanted.
+    // Ranking fidelity does not need buckets: sampling openers straight from the decklist asks the
+    // same question ("does this depth order hands like the shipped policy does?") with no dependency
+    // on discovery, bucketing, or a prior profile.
+    const int nhands = EnvInt("MTG_SCORE_HANDS", 0);
+
     std::filesystem::path in_path =
         a.deck_path.parent_path() / (a.deck_path.stem().string() + ".keepmodel.exhaustive.profile.json");
     if (!std::filesystem::exists(in_path) && std::filesystem::exists(in_path.string() + ".gz"))
     { in_path = in_path.string() + ".gz"; }
-    MulliganProfile profile = LoadDeckProfile(in_path);
+    MulliganProfile profile;
+    if (std::filesystem::exists(in_path)) { profile = LoadDeckProfile(in_path); }
+    else if (nhands > 0)
+    {
+        // No exhaustive sidecar (the new-deck case): fall back to the deck's PLAY profile so rollouts
+        // still see required_pieces / vial_target_mv / the value sidecar.
+        std::filesystem::path pp =
+            a.deck_path.parent_path() / (a.deck_path.stem().string() + ".profile.json");
+        profile = std::filesystem::exists(pp) ? LoadDeckProfile(pp) : MulliganProfile::DefaultProfile();
+    }
+    else { profile = LoadDeckProfile(in_path); }
+
+    // Attach the deck's learned leaf VALUE sidecar, exactly as the keep-GENERATION path does.
+    //
+    // Without this the scorer rolls out a VALUE-LESS policy that no deck with a value model actually
+    // plays -- the same latent bug called out at the generation call site, which had simply never been
+    // fixed on this path. It corrupts BOTH halves of a depth comparison:
+    //   * QUALITY: the "reference" arm (the deck's shipped play settings) is not the shipped policy at
+    //     all, so every fidelity number is measured against the wrong target.
+    //   * COST: at or above value_trust_depth the search TRUSTS the leaf instead of playing on to the
+    //     horizon. Value-less, a play-settings rollout plays the whole game out, which made the play
+    //     arm look far more expensive than it is (slivers measured 6.3x the cost of d3b3 -- the
+    //     opposite of this deck's known behaviour at its trusted depth).
+    // Presence-gated, so it is a no-op for value-less decks and cannot change their numbers.
+    //
+    // NOTE the path: AttachValueSidecar derives `<stem>.value.json` by stripping a literal
+    // ".profile.json" SUFFIX, so it must be handed the deck's PLAY profile path. Passing `in_path`
+    // (the exhaustive sidecar, "<deck>.keepmodel.exhaustive.profile.json.gz") silently no-ops -- the
+    // ".gz" fails the suffix test, and even unzipped the stem would resolve to
+    // "<deck>.keepmodel.exhaustive.value.json", which does not exist. A silent no-op here is
+    // indistinguishable from "this deck has no value model", which is how the bug hid.
+    AttachValueSidecar(profile,
+                       a.deck_path.parent_path() / (a.deck_path.stem().string() + ".profile.json"));
+
     static const ExhaustiveKeepPolicy kNoExhaustive;
     const auto& buckets = (profile.exhaustive_keep ? *profile.exhaustive_keep : kNoExhaustive).buckets;
     const int K = static_cast<int>(buckets.size());
-    if (K == 0)
+    if (K == 0 && nhands <= 0)
     { std::cerr << "MTG_SCORE_COMPS: no exhaustive keep sidecar beside " << a.deck_path
                 << " (looked for " << in_path << ") -- refusing to score with an empty bucket map\n";
       return 1; }
@@ -403,38 +448,78 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
     // behind budget-vs-R as a generation cost lever. Default is unchanged, so existing runs are
     // byte-identical.
     const int budget_ms = EnvInt("MTG_SCORE_BUDGET_MS", 20);
-    const char* fp = std::getenv("MTG_SCORE_FILE");
-    std::ifstream fin(fp ? fp : "");
-    if (!fin) { std::cerr << "MTG_SCORE_FILE not readable\n"; return 1; }
     MulliganProfile rp = profile; rp.keep_model = KeepModel{};
     const bool second_main = GoldFishRunner::DeckUsesSecondMain(a.deck);
 
-    // Parse all comps up front so the (independent) per-comp evaluations can be threaded.
-    struct Item { std::string line; std::vector<int> comp; };
+    // An item is either a bucket COMPOSITION (comp mode) or an explicit list of card NAMES (hand
+    // mode). Parsed up front so the independent per-item evaluations can be threaded.
+    struct Item { std::string line; std::vector<int> comp; std::vector<std::string> names; };
     std::vector<Item> items;
-    std::string line;
-    while (std::getline(fin, line))
+
+    if (nhands > 0)
     {
-        if (line.empty()) { continue; }
-        auto colon = line.find(':');
-        std::vector<int> comp; std::string rest = line.substr(colon + 1); std::size_t p = 0;
-        while (p < rest.size()) { std::size_t c = rest.find(',', p);
-            comp.push_back(std::stoi(rest.substr(p, c - p)));
-            if (c == std::string::npos) { break; } p = c + 1; }
-        comp.resize(K, 0);
-        items.push_back({ line, std::move(comp) });
+        // Deal N openers from the deck itself, so the sampled hands follow the real opening-hand
+        // distribution. Seeded off a fixed base: the SAME hands at every depth, which is what makes
+        // the depth comparison paired (common random numbers) rather than a race between samples.
+        const uint64_t hand_base = static_cast<uint64_t>(EnvInt("MTG_SCORE_HAND_SEED", 424242));
+        for (int h = 0; h < nhands; ++h)
+        {
+            const uint64_t hs = hand_base + 0x9E3779B97F4A7C15ULL * static_cast<uint64_t>(h + 1);
+            GameState s0 = GoldFishRunner::SetupGame(a.deck, hs);
+            // SetupGame stocks the library but does NOT deal an opener, so shuffle and take the top 7
+            // to get a hand from the real opening distribution.
+            Player& p0 = s0.ActivePlayer();
+            p0.library.Shuffle(SaltSeed(hs, 0xA11CEULL));
+            std::vector<std::string> names;
+            for (std::size_t i = 0; i < p0.library.size() && names.size() < 7; ++i)
+            { names.push_back(p0.library[i].m_name.str()); }
+            if (names.size() < 7)
+            { std::cerr << "MTG_SCORE_HANDS: deck yielded only " << names.size()
+                        << " cards for an opener -- refusing\n"; return 1; }
+            std::string lbl = "H" + std::to_string(h) + ":";
+            for (std::size_t i = 0; i < names.size(); ++i)
+            { lbl += (i ? "|" : "") + names[i]; }
+            items.push_back({ lbl, {}, std::move(names) });
+        }
+    }
+    else
+    {
+        const char* fp = std::getenv("MTG_SCORE_FILE");
+        std::ifstream fin(fp ? fp : "");
+        if (!fin) { std::cerr << "MTG_SCORE_FILE not readable\n"; return 1; }
+        std::string line;
+        while (std::getline(fin, line))
+        {
+            if (line.empty()) { continue; }
+            auto colon = line.find(':');
+            std::vector<int> comp; std::string rest = line.substr(colon + 1); std::size_t p = 0;
+            while (p < rest.size()) { std::size_t c = rest.find(',', p);
+                comp.push_back(std::stoi(rest.substr(p, c - p)));
+                if (c == std::string::npos) { break; } p = c + 1; }
+            comp.resize(K, 0);
+            items.push_back({ line, std::move(comp), {} });
+        }
     }
     std::vector<std::array<double, 4>> out(items.size(), { 0, 0, 0, 0 });  // dmean,dse,pmean,pse
     std::atomic<int> next{0};
+    // DETERMINISTIC COST. Wall-clock cannot price a generation setting: it moves with whatever else
+    // is on the box (measured -- two unrelated 12-core runs made an arm look 3x its true cost) and
+    // differs per machine, so a setting derived from seconds is not reproducible and cannot survive
+    // the cross-machine profile handoff. Work units are the currency SearchBudget is denominated in
+    // and are a pure function of (deck, seed, depth, budget), so this counter is exact after a
+    // handful of rollouts and identical everywhere. See ai/GameWorkMeter.h.
+    std::atomic<long long> total_work{0};
     const std::map<std::string, int>& bofref = bof;   // const ref -> concurrent-safe find()
     auto worker = [&]()
     {
         AIEngine ai(rp, depth, budget_ms); ai.SetSearchPostCombat(second_main);
+        long long my_work = 0;
         for (;;)
         {
             int w = next.fetch_add(1);
             if (w >= static_cast<int>(items.size())) { break; }
             const std::vector<int>& comp = items[w].comp;
+            const std::vector<std::string>& want = items[w].names;
             for (int pd = 0; pd < 2; ++pd)
             {
                 double sum = 0, sumsq = 0;
@@ -447,6 +532,19 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
                     s.vial_target_mv    = rp.vial_target_mv;
                     s.on_the_play       = (pd == 1);
                     Player& ap = s.ActivePlayer(); ap.hand.clear();
+                    // Branch on the MODE, not on whether `want` happens to be non-empty: an empty
+                    // name list used to fall through to the comp path, where comp[] is sized 0 while
+                    // K is not, and index out of bounds (a segfault, found exactly this way).
+                    if (nhands > 0)
+                    {
+                        // hand mode: pull the exact named cards out of the library
+                        for (const std::string& nm : want) {
+                            for (std::size_t k = 0; k < ap.library.size(); ++k) {
+                                if (ap.library[k].m_name.str() == nm)
+                                { ap.hand.push_back(ap.library[k]);
+                                  ap.library.erase(ap.library.begin()+k); break; } } }
+                    }
+                    else
                     for (int b = 0; b < K; ++b) { int need = comp[b];
                         for (std::size_t k = 0; k < ap.library.size() && need > 0; ) {
                             auto bit = bofref.find(ap.library[k].m_name.str());
@@ -454,7 +552,9 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
                             { ap.hand.push_back(ap.library[k]); ap.library.erase(ap.library.begin()+k); --need; }
                             else { ++k; } } }
                     ap.library.Shuffle(SaltSeed(rs, 0x5EED5ULL));   // unbias continuation (see ExhaustiveKeep)
+                    gamework::Begin(0);   // disarmed: reset the counter, never abandon a scoring rollout
                     double wt = ai.RolloutKeepWinTurn(s, 0, a.max_turns);
+                    my_work += gamework::Used();
                     sum += wt; sumsq += wt*wt;
                 }
                 double mean = sum / R;
@@ -463,6 +563,7 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
                 out[w][pd * 2 + 1] = R > 1 ? std::sqrt(var / R) : 0.0;
             }
         }
+        total_work.fetch_add(my_work, std::memory_order_relaxed);
     };
     int nthreads = std::max(1, std::min(concurrency_util::AffinityCpuCount(),
                                         static_cast<int>(items.size())));
@@ -476,6 +577,15 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
                   << out[i][2] << " " << out[i][3] << "\n";
     }
     std::cout << std::flush;
+    // stderr, so stdout stays exactly the parseable comp table it has always been.
+    const long long rollouts = static_cast<long long>(items.size()) * 2 * R;
+    std::cerr << "[score] depth=" << depth << " budget_ms=" << budget_ms
+              << " comps=" << items.size() << " R=" << R
+              << " rollouts=" << rollouts
+              << " work_units=" << total_work.load()
+              << " units_per_rollout="
+              << (rollouts > 0 ? static_cast<double>(total_work.load()) / static_cast<double>(rollouts) : 0.0)
+              << "\n";
     return 0;
 }
 
