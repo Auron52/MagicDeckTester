@@ -914,6 +914,9 @@ bool GenericProvider::ShouldAttackWith(const GameState&, const Permanent&) const
 // (antilife gi=9: the one-dork Exalted swing left 3 non-creature sources, so {3}{B} Plague
 // Drone was unreachable EVERY turn and the whole line slipped a turn). Colour-blind count
 // (mana value only): over-holding costs a 1-point chip, under-holding costs a turn.
+static int  AttackPowerOf(const GameState& s, const Permanent& p);          // defined below
+static bool AttackHasNonPowerValue(const GameState& s, const Permanent& p); // defined below
+
 static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& p)
 {
     if (p.tapped || !p.card.IsCreature())                   { return false; }
@@ -935,6 +938,24 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
         if (q.card.IsLand() || qd->params.mana_rock) { ++total; }
     }
     if (creature_src <= 0) { return false; }
+    // EXALTED correction (antilife stack-vs-base dig 2026-08-15, gi=76): the "attack is worth
+    // at most a chip" premise fails when the 0-power dork IS the deck's attack -- swinging
+    // alone it deals CountExalted damage (2+ with a second Hierarch out). When the board's
+    // exalted count is >= 2 and no other real attacker exists, the forgone swing is worth more
+    // than the held tempo (gi=76: holding cost 4 damage across T2/T3 and a full turn to enable
+    // a BIRDS, 4->5). The motivating gi=9 case (SINGLE exalted -- a genuine 1-point chip --
+    // enabling {3}{B} Plague Drone) still holds.
+    if (CountExalted(s.battlefield, active) >= 2)
+    {
+        bool other_attacker = false;
+        for (const Permanent& q : s.battlefield)
+        {
+            if (&q == &p || q.controller_index != active)                 { continue; }
+            if (!CanAttackFull(q, s.battlefield, active))                 { continue; }
+            if (AttackPowerOf(s, q) > 0 || AttackHasNonPowerValue(s, q))  { other_attacker = true; break; }
+        }
+        if (!other_attacker) { return false; }   // p would BE the exalted swing -- worth >= 2
+    }
     const int noncreature = total - creature_src;
     for (const Card& c : s.players[active].hand)
     {
