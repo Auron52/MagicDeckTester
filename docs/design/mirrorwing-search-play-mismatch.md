@@ -53,10 +53,51 @@ of missed wins:
 So the mismatch costs WALL-CLOCK (proven, large) and possibly line quality on close decisions
 (plausible, unproven); it does not cost games in the audited cases.
 
+## 3b. NARROWED (2026-08-15): the search picks the RIGHT play and MIS-VALUES it
+
+Two measurements on the gi=14 repro move this from "the search underestimates" to a located defect.
+
+**(i) The ladder commits the deepest pass unconditionally, and deeper is systematically WORSE.**
+`TurnSolver.cpp` ~16535 does `line = attempt; committed_depth = pass_depth;` with no comparison
+against the previous pass. On the repro's T1 decision the reported win DEGRADES with depth:
+
+| pass | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| win | 6 | **5** | 6 | 7 | **8** |
+| cost | 4 | 38 | 625 | 5,807 | **1,600,619** |
+
+Pass 2 already had the right answer (5, at 38 units). Pass 5 overwrote it with 8, for 42,000x the
+cost. Whatever the root cause, a ladder whose deeper rungs report worse values is not merely slow.
+
+**(ii) The committed play IS the winning play — only its VALUATION is wrong.** `MTG_DUMP_EWINS`
+(real library order) on the same T1 state:
+
+```
+{"ewins":{"seed":8022,"turn":1,"earliest":5,"candidates":[
+  {"win":5,"land":"Forest","casts":["Ignoble Hierarch"]},   <-- what the search COMMITTED
+  {"win":5,"land":"Forest","casts":[]},
+  {"win":5,"land":"Rootbound Crag","casts":[]},
+  {"win":6,"land":"","casts":[]}]}}
+```
+
+`earliest=5`, and the top candidate is EXACTLY the search's committed T1 line (Forest + Ignoble
+Hierarch, per `h5_gi14_fd.log`). So the depth-5 search chose the correct first play and scored it
+**8 instead of 5**.
+
+**What this rules in and out.** It is NOT a top-level enumeration hole -- the winning line was
+enumerated AND selected. The entire error is in the CONTINUATION VALUE: the recursion's model of
+T2..T5 from that exact position reaches T8, while real play from the identical position reaches T5.
+That confirms prime suspect (a) (deferred draw-breakpoint re-solves missing inside RECURSED future
+turns) and eliminates suspect (b) AT THE TOP LEVEL (it may still apply inside the recursion).
+
+The search's own predicted continuation (`[fd-pred]`, T1 line) is a slow clock that never closes:
+opp_life 20 -> 19 -> 15 -> 13 -> 11 -> 9. Real play, from the same T1 play, wins on T5.
+
 ## 4. Investigation plan
 
-1. From `h5_gi14_fd.log`, extract the actual winning line (T1..T5 committed plans, including the
-   mid-turn re-solve continuations).
+1. ~~From `h5_gi14_fd.log`, extract the actual winning line~~ — DONE (see 3b): the committed T1 play
+   is the winning play; the error is in the continuation value, so the probe below should target
+   the RECURSED turns, not the top-level enumeration.
 2. Instrument the T1 pass-5 recursion (temporary probe, stripped after diagnosis — the
    MTG_BP_DUP_PROBE precedent) to answer, level by level: is each step of the known winning line
    ENUMERATED at the corresponding recursion depth? First site where it is not (or where its value
