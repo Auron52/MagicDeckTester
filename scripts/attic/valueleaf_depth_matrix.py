@@ -277,7 +277,23 @@ def dead_rung(cells, deck, arm, depth, thresh, min_pairs, coverage):
     mean = sum(diffs)/n
     var  = sum((d-mean)**2 for d in diffs)/(n-1) if n > 1 else 0.0
     se   = (var/n) ** 0.5
-    upper = mean + 1.645*se          # one-sided 95%
+    # RESOLUTION FLOOR. A sample in which the two rungs agreed on EVERY game has se == 0, so the
+    # bound is 0 and the rung is certified dead against any threshold from any sample size -- which
+    # is exactly what happened on burn (2026-08-15): all nine rungs condemned at the 201-pair
+    # minimum, every one reporting "improvement +0.0000, se 0.0000". Zero observed variance is not
+    # zero uncertainty. With k=0 differing games in n pairs the rule of three bounds the rate of a
+    # differing game at 3/n, and a game that does differ moves this score by at least one whole turn
+    # (win turns are integers, a loss scores max_turns+1), so the effect cannot honestly be bounded
+    # below 3*step/n however flat the sample looks -- at n=201 that is 0.0149 turns, twice the
+    # threshold the sample was claiming to clear.
+    #
+    # Applied at EVERY k rather than only at 0, because the normal bound understates a
+    # handful-of-events sample too (k=1 gives ~2.6/n where the Poisson bound is ~4.7/n). Its
+    # practical effect is to make a near-degenerate rung wait for ~400 paired games before it can be
+    # condemned, which is the sample a 0.0075-turn claim actually needs; a rung with real variance
+    # is unaffected (FiveColour's H4->H5 floor at n=1600 is 0.0019).
+    step  = min((abs(d) for d in diffs if d), default=1.0)
+    upper = max(mean + 1.645*se, 3.0*step/n)          # one-sided 95%, floored at the resolution
     return (upper < thresh), {"n":n, "improvement":mean, "se":se, "upper":upper}
 
 
@@ -959,8 +975,11 @@ def run_incremental(args):
         with open(control_path, "a") as fh:
             for (dname, arm, depth), _ in fresh: fh.write("%s_%s%d\n" % (dname, arm, depth))
         for (dname, arm, depth), d in fresh:
+            # 5 decimals on the BOUND, not 4: the resolution floor (3*step/n) puts a flat rung's
+            # verdict right at the threshold, and at 4 decimals the line printed "0.0075 < 0.0075",
+            # which reads as a broken comparison rather than 0.00748 < 0.0075.
             log("  QUALITY-DEAD %s %s%d: %s%d->%s%d improvement %+.4f turns, se %.4f, one-sided 95%% "
-                "upper bound %.4f < %.4f on %d paired games -- capping the rung"
+                "upper bound %.5f < %.4f on %d paired games -- capping the rung"
                 % (dname, arm, depth, arm, depth-1, arm, depth,
                    d["improvement"], d["se"], d["upper"], args.quality_threshold, d["n"]))
 

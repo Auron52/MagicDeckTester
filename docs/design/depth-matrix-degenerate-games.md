@@ -3,7 +3,9 @@
 Design agreed with the user 2026-08-13/14, from the FiveColour value-leaf run. Four changes with one
 enabler.
 
-**STATUS 2026-08-15 — 1, 2, 3, 5 and the THRESHOLD POLICY have SHIPPED; 4 partly; 6 is open.**
+**STATUS 2026-08-15 — every piece SHIPPED, and the whole pipeline has now been run end to end
+(`valueleaf.sh run decks/burn`, 4m36s: 10,808 rows -> model -> 52 matrix cells -> metadata -> A/B).
+That run found the quality rule's zero-variance hole; see §"Quality-based rung condemnation".**
 
 | piece | state |
 |---|---|
@@ -202,6 +204,22 @@ Two things it needed that were not obvious:
   MEASURED equivalence on a sample large enough to bound the difference, and the rung keeps the games
   that proved it. Since every H4->H5 ever measured is dead, the floor would otherwise make the rule
   unreachable exactly where it pays.
+
+* **A ZERO-VARIANCE SAMPLE IS NOT ZERO UNCERTAINTY** -- found by the first end-to-end pipeline run
+  (burn, 2026-08-15), which condemned all NINE of its rungs at the 201-pair minimum, every one
+  reporting `improvement +0.0000, se 0.0000`. When the two rungs agree on every game the sample se is
+  0, so the bound is 0, so the rung is certified against ANY threshold from ANY sample size -- the
+  test degenerates into "these 201 games were identical", which on a depth-insensitive deck is the
+  normal case rather than evidence. The fix is a RESOLUTION FLOOR: with k=0 differing games in n
+  pairs the rule of three bounds the rate of a differing game at 3/n, and a game that does differ
+  moves this score by at least a whole turn, so the effect cannot be bounded below `3*step/n` --
+  0.0149 at n=201, twice the threshold the sample claimed to clear. Floored at every k, not only 0,
+  because the normal bound understates a handful-of-events sample too (k=1 gives ~2.6/n against a
+  ~4.7/n Poisson bound). Its practical effect is a minimum of ~400 paired games before a perfectly
+  flat rung can be condemned (`3/0.0075 = 400`), which is simply the sample a 0.0075-turn claim
+  needs; a rung with real variance is untouched (FiveColour's H4->H5 floor at n=1600 is 0.0019).
+  Re-measured on burn: the same nine rungs now condemn at 401-424 pairs instead of 201, at bounds of
+  0.00748-0.00752 -- i.e. the floor, not the sample, is what they finally clear.
 
 A quality-capped cell is marked `=` in the table, distinct from `*` (intractable / reference-only),
 and is excluded from the equal-game-set check: it stopped early on purpose, so it holds a subset.
