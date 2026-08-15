@@ -369,3 +369,69 @@ degenerate tail still needs the breadth fix in item 1.
 
 Related: `depth-matrix-degenerate-games.md` (the perf profile and the per-game abort),
 `.claude/skills/mulligan-profile.md` (feasibility guide), `mana-source-reservation.md`.
+
+## 6. Where the time actually goes -- and WHICH WORKLOAD you mean (2026-08-15)
+
+Section 5d closed mana as a lever. Re-profiling after the Deathrite lifegain cut (b77b2ac)
+produced the answer to "what dominates FiveColour" -- and the answer turned out to depend
+entirely on which workload is meant, which is worth stating loudly because it silently
+misdirected an afternoon:
+
+**Mulligan GENERATION runs `mull_gen_depth: 3` / `budget_ms: 3`, NOT the shipped d6/b20.**
+
+| bucket | keep-GEN (d3/b3) | play d5 (shipped) |
+|---|---|---|
+| PLAN-ENUM | **24.2%** | 15.6% |
+| MACHINERY (alloc / state copy / containers) | 21.2% | 23.2% |
+| MANA | 18.8% | 14.8% |
+| value-leaf EVAL | 7.9% | **18.7%** |
+| APPLY/SIM | 10.3% | 11.1% |
+
+The value leaf leads shipped PLAY and is nearly irrelevant to GENERATION. Mana leads neither,
+but note it is HIGHER in gen than in play, and the leading mana symbol flips: `TapForCostSharedOnce`
+in play, the **backtracker** (`TapForCostBacktrackWorker` 3.02 + `TapForCostBacktrack` 1.44 +
+1.06 inlined ~= 5.5%) in gen. That is the Bloom Tender atom of section 3 -- present, but not the
+average-case leader.
+
+### 6a. Call-graph attribution (the part worth keeping)
+
+Flat profiles say WHERE, not WHY. A dwarf call-graph pass (single-thread, attached after setup)
+attributed the machinery bucket:
+
+* `operator new` is **diffuse** -- no single caller above 0.5% (GameState copy 0.48, TapForCostSharedOnce
+  0.44, vector<int>::push_back 0.44, vector<Action>::reserve 0.24, CollectActions 0.21...). There is
+  no one allocation to kill; this is a broad refactor, not a fix.
+* `__memset_avx2` is **0.61 of its 0.69% from `TapForCostBacktrackWorker`** -> shipped, see below.
+* `GameState::GameState(const&)` is **1.61% from `FSLineTail`** (then FSLineWin 0.51, SolveWithLookahead
+  0.43, EnumeratePlansWithLandUncached 0.20) -- concentrated, NOT diffuse.
+
+### 6b. Shipped from this pass (both byte-identical, no GT rebaseline, no regeneration)
+
+* **Value-leaf flat layout** (f84969e): 120 trees x depth 4 = ~480 dependent loads over a 79.5 KB
+  pointer-chased structure -> complete trees in level order, implicit 2i+1/2i+2 indexing, ~14 KB
+  internals + ~15 KB leaves. **fc_d5 median -3.94% (6/6 paired runs negative), fc_d3 -1.64%.**
+* **Tap failure-memo bucket trim** (f9d1b4c): clear() memsets a retained bucket array that never
+  shrinks (max 20,753 buckets = 162 KB per clear; 26.7% of clears on a memo nothing was inserted
+  into). **Only ~1% on gen throughput, neutral on play** -- the max is not the typical. Free, so kept.
+
+### 6c. DEFERRED: GameState copies in FSLineTail (1.61%)
+
+The one concentrated machinery target left. `FSLineTail` copies a whole `GameState` (2 `Player`s,
+stack/battlefield/exile vectors) per horizon line. Not attempted here. The obvious shapes are an
+undo/scratch-state reuse (one state per depth, mutate-and-restore) or shrinking what a line actually
+needs to copy. Both are behaviour-preserving in principle but touch the search's hot path, so either
+needs a full digest check -- and note that unlike the two above, an undo scheme is easy to get
+subtly wrong in a way a 36-case smoke will not catch.
+
+### 6d. Method traps this pass hit (all cost real time)
+
+* **`perf` cannot write its data file under `/workspaces`** -- it is a 9p (`C:\`) mount and perf dies
+  with `failed to write perf data, error: Bad address` after ~1 KB. Write to `/tmp`.
+* **`MTG_KEEP_REPLAY` of one captured hand is useless for profiling** -- the rollout is <1 s of a
+  ~35 s process, so ~99% of samples are startup + hand enumeration. Attach `perf -p` to a running gen.
+* **A capture replayed at a different `--seed` is a DIFFERENT rollout of the same hand.** Six hands
+  captured at 11-31 minutes replayed in 37-592 ms; that is NOT evidence they got faster.
+* **Bucket the profile on the FUNCTION NAME only.** Matching mangled signatures counts every function
+  whose *parameters* mention `allocator`/`unordered_map` and inflated MACHINERY from 21% to 29%.
+* **`pkill -f <string>` matches its own shell** if the command line contains that string. It killed
+  an A/B run before it started.
