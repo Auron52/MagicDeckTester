@@ -62,12 +62,28 @@ struct Job
     int             budget_ms           = 0;
     // Per-GAME work ceiling in search units (see ai/GameWorkMeter.h). 0 = disarmed = byte-identical
     // to a manifest that omits it. A game that hits it is VOIDED -- recorded kSkipped, dropped from
-    // the job's average, and reported on stderr so the caller can build a skip list. The ceiling is
-    // supplied by the caller rather than derived here on purpose: the useful threshold is relative
-    // to the cell's own median cost (cells span 11 ms to 700 s per game), and only the driver that
-    // owns the whole matrix can compute that. The engine's job is to enforce an absolute number
-    // deterministically.
+    // the job's average, and reported on stderr so the caller can build a skip list.
     long long       abandon_units       = 0;
+    // ...or, instead of an absolute number, a ceiling RELATIVE to this cell's own cost: k x the
+    // median of the cell's first `abandon_calib` games. An absolute ceiling cannot serve a matrix
+    // whose cells span 11 ms to 700 s per game -- measured on burn, six cells alone spanned 150x in
+    // median units (V1 50, H3 7,506) -- so one number is either inert at the top of the ladder or
+    // shreds the bottom of it.
+    //
+    // THE CALIBRATION SAMPLE IS A FIXED SET OF GAMES, NOT A RUNNING MEDIAN. A running median depends
+    // on which games happen to have finished when the next one starts, i.e. on thread interleave, so
+    // the abandoned set would differ run to run and machine to machine -- destroying the one property
+    // the unit currency was chosen for (ai/GameWorkMeter.h). Instead the sample is exactly the games
+    // with GLOBAL index < abandon_calib; they run with no relative ceiling, everything above that
+    // index is HELD BACK until the cell's median is known, and the resulting ceiling is FROZEN and
+    // reported on stderr so the driver can store it and hand it straight back on the next resume
+    // (where those calibration games no longer appear). A cell with no calibration games in the
+    // manifest and no absolute ceiling therefore runs unbounded -- the pre-existing behaviour.
+    //
+    // abandon_units still applies DURING calibration, so a caller can put a generous absolute safety
+    // cap under the calibration window without letting it decide the ceiling.
+    double          abandon_k           = 0.0;   // 0 = no relative ceiling
+    int             abandon_calib       = 0;     // games forming the sample (by GLOBAL index)
     int             max_turns           = 8;   // goldfish horizon (see main.cpp); per-job overridable
     bool            second_main         = false;  // precomputed DeckUsesSecondMain
     int             sched_weight        = 0;   // optional LPT scheduling priority (higher = run first);
@@ -93,7 +109,7 @@ struct Job
     // a sample of it: judging each seed's cell separately let one 32-minute game condemn V6/V7/V8 on
     // seed 8008 alone while the other three seeds ran 4-10x under the limit and filled -- which makes
     // rows NON-COMPARABLE, since which seeds a row carries moves its mean further than the effects
-    // under study (docs/design/condemnation-row-average.md). The MEAN rule therefore accumulates and
+    // under study (docs/design/condemnation-row-average.md). The MEDIAN rule therefore accumulates and
     // judges here; max_game_sec stays per-cell (one pathological game should not take 4 seeds' cells
     // with it). Empty in the manifest => the job's cell key, i.e. per-cell judgment exactly as before
     // -- every existing manifest is byte-identical.
@@ -113,15 +129,32 @@ struct Job
 struct CondemnRule
 {
     bool   enabled             = false;
-    double sec_per_game        = 0.0;   // condemn a cell whose MEAN cost exceeds this
+    // Condemn a row whose MEDIAN cost per game exceeds this. The question the matrix actually needs
+    // answered is "can we escalate to this depth SOME of the time, at a cost that is not insane?" --
+    // because that is the only situation the derived policy is ever applied in. Shipped play is
+    // budgeted, so it never processes a pathological position at depth anyway; a cell is therefore
+    // usable if a typical game is affordable, however ugly its tail, and unusable only when the
+    // majority of its games are impractical (which is precisely "the median exceeds the limit").
+    //
+    // WHY NOT THE MEAN, which this replaced. Two reasons, and the second one is fatal:
+    //   * it answers the wrong question. A mean conflates "many moderately slow games" (condemn --
+    //     there is nothing to salvage) with "a few catastrophic ones" (abandon those and keep the
+    //     cell), which call for opposite responses. One 32-minute game put V6/V7/V8@8008 1-3% over a
+    //     60 s/game limit and condemned three healthy cells whose other 49 games ran ~19.5 s/game.
+    //   * with the per-game ceiling armed it is not even well defined. A ceiling'd game contributes
+    //     its TRUNCATED cost, so a cell with 10% abandoned games reads 0.9m + 0.1*(k*m) -- at k=25
+    //     that is 3.4x the median with 74% of it contributed by games we discard, and at k=10 it is
+    //     1.9x. The verdict would follow an arbitrary constant. A median does not move at all.
+    double median_sec_per_game = 0.0;
     int    reference_games     = 0;     // ...but only after it has this many games (the sample)
     int    never_condemn_depth = 0;     // ...and never at or below this depth (the d<=5 ladder IS
                                         //    the crossover; condemning there leaves a HOLE, not a saving)
     // SEPARATE limit for a SINGLE game, applied to games still running (see the in-flight hook).
     // Deliberately not sec_per_game: these measure different things, and sharing the number would
-    // condemn a cell with a 5 s/game mean because one game took 61 s. The mean rule asks "is filling
-    // this cell affordable?"; this one asks "is this individual game pathological?" -- which the mean
-    // cannot answer at all until the game finishes, and a 21.4-hour game answers far too late.
+    // condemn a cell whose typical game is 5 s because one game took 61 s. The median rule asks "can
+    // we escalate to this depth some of the time, affordably?"; this one asks "is this individual
+    // game pathological?" -- which a per-row statistic cannot answer at all until the game finishes,
+    // and a 21.4-hour game answers far too late.
     // 0 / absent => the in-flight rule is off.
     double max_game_sec        = 0.0;
     // How many games of a single NOT-YET-JUDGED condemnable cell may be in flight at once. This is
@@ -271,7 +304,7 @@ public:
     bool on() const { return enabled_; }
 
     // Called once per period with EVERY in-flight game as (cell_id, elapsed ms). One call with the
-    // whole set, not one per game, because the mean rule needs to aggregate per cell before judging.
+    // whole set, not one per game, because the row rule needs to aggregate per cell before judging.
     using InFlight = std::vector<std::pair<int, long long>>;
     void SetInFlightHook(std::function<void(const InFlight&)> f) { on_inflight_ = std::move(f); }
 
@@ -491,6 +524,8 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     j.sched_weight        = jspec.value("weight", 0);      // LPT priority override (see Job::sched_weight)
     j.max_turns           = jspec.value("max_turns", 8);   // global goldfish horizon; per-job override
     j.abandon_units       = jspec.value("abandon_units", 0LL);   // per-game ceiling; see Job::abandon_units
+    j.abandon_k           = jspec.value("abandon_k", 0.0);       // ...or k x the cell's own median
+    j.abandon_calib       = jspec.value("abandon_calib", 0);     //    over its first N games
 
     // Per-job VALUE-LEAF ARM (see ai/ValueArm.h). Every key is optional and every default is the
     // "unset" sentinel, so a manifest that omits them all runs exactly as before.
@@ -606,12 +641,24 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     if (manifest.contains("condemn") && manifest["condemn"].is_object())
     {
         const json& c = manifest["condemn"];
-        condemn.sec_per_game        = c.value("sec_per_game", 0.0);
+        // REFUSED, not silently reinterpreted. `sec_per_game` was a MEAN limit; the rule is now a
+        // MEDIAN one (see CondemnRule), and the same number means something different under it --
+        // the mean carried tail inflation the median does not, so a limit sized for one is wrong for
+        // the other. Accepting the old key would hand back a table condemned on a threshold nobody
+        // chose. Same convention as valueleaf.sh's RETIRED_KNOBS: a retired setting errors.
+        if (c.contains("sec_per_game"))
+        {
+            throw std::runtime_error(
+                "manifest condemn.sec_per_game is RETIRED: the tractability rule now judges the "
+                "MEDIAN cost per game, not the mean, so the limit means something different and "
+                "must be re-chosen. Use \"median_sec_per_game\".");
+        }
+        condemn.median_sec_per_game = c.value("median_sec_per_game", 0.0);
         condemn.reference_games     = c.value("reference_games", 0);
         condemn.never_condemn_depth = c.value("never_condemn_depth", 0);
         condemn.max_game_sec        = c.value("max_game_sec", 0.0);
         condemn.drip                = std::max(1, c.value("drip", 1));
-        condemn.enabled             = (condemn.sec_per_game > 0.0 && condemn.reference_games > 0)
+        condemn.enabled             = (condemn.median_sec_per_game > 0.0 && condemn.reference_games > 0)
                                    || condemn.max_game_sec > 0.0;
     }
 
@@ -621,7 +668,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     int n_cells = 0;
     std::vector<std::string> cell_name;
     std::vector<int>         cell_depth;   // for the never-condemn floor, off the first job of the cell
-    // ROW indices for the mean rule (see Job::row). A job with no "row" judges on its cell key, so a
+    // ROW indices for the median rule (see Job::row). A job with no "row" judges on its cell key, so a
     // manifest that never says "row" behaves exactly as before -- per-cell judgment, or per-job when
     // it says neither.
     int n_rows = 0;
@@ -663,21 +710,41 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             cell_row[static_cast<std::size_t>(j.cell_id)] = j.row_id;
         }
     }
-    // games/ms accumulate as the pool runs, keyed on the ROW (the mean rule's judgment unit);
+    // Per-game costs accumulate as the pool runs, keyed on the ROW (the rule's judgment unit);
     // `condemned` latches once and is only ever set true. Cells keep their own latch because
     // max_game_sec still condemns per cell, and a skip must honour either verdict.
+    //
+    // The median needs the SAMPLE, not a running sum, so this is a vector per row behind one mutex
+    // rather than an atomic. That is affordable precisely because it is touched once per GAME: a
+    // sort of at most a few thousand longs against a game that took seconds to minutes. row_games
+    // stays atomic because `classify` reads it on the hot dequeue path to decide when a row is
+    // released from metering, and that must not take a lock.
     std::vector<std::atomic<int>>       row_games(static_cast<std::size_t>(n_rows));
-    std::vector<std::atomic<long long>> row_ms(static_cast<std::size_t>(n_rows));
+    std::vector<std::vector<long long>> row_sample(static_cast<std::size_t>(n_rows));
+    std::mutex                          row_sample_mtx;
     std::vector<std::atomic<int>>       row_condemned(static_cast<std::size_t>(n_rows));
     std::vector<std::atomic<int>>       cell_condemned(static_cast<std::size_t>(n_cells));
-    for (int i = 0; i < n_rows; ++i)
-    { row_games[i].store(0); row_ms[i].store(0); row_condemned[i].store(0); }
+    for (int i = 0; i < n_rows; ++i) { row_games[i].store(0); row_condemned[i].store(0); }
     for (int i = 0; i < n_cells; ++i) { cell_condemned[i].store(0); }
+    // Median of a copy (the caller's vector is shared state and may be a partial sample with
+    // in-flight games appended). Lower median on an even count: deterministic, and it errs toward
+    // keeping a row rather than condemning it.
+    auto median_ms = [](std::vector<long long> v) -> double
+    {
+        if (v.empty()) { return 0.0; }
+        const std::size_t mid = v.size() / 2;
+        std::nth_element(v.begin(), v.begin() + static_cast<std::ptrdiff_t>(mid), v.end());
+        return static_cast<double>(v[mid]);
+    };
 
     // Per-job, per-game results. Pre-sized so workers write to disjoint slots with
     // no synchronisation. games[j][gi] = win turn (<=0 means no win).
     std::vector<std::vector<int>> win_turns(jobs.size());
     std::vector<std::vector<uint64_t>> digests(jobs.size());
+    // Which of the kSkipped slots were ABANDONED at the work ceiling, as opposed to skipped at
+    // dequeue with a condemned cell. Both write kSkipped, but they mean opposite things downstream
+    // (see BatchJobResult::abandoned), and a short chunk cannot tell them apart on its own.
+    std::vector<std::vector<char>> abandoned_at(jobs.size());
     // Per-game search work, for calibrating the per-game ceiling. Off by default: it is a diagnostic,
     // and pre-sizing a third per-game vector for every batch that will never read it is pure waste.
     static const bool s_dump_units = EnvOn("MTG_DUMP_UNITS");
@@ -691,6 +758,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     {
         win_turns[j].assign(jobs[j].games, -1);
         digests[j].assign(jobs[j].games, 0);
+        abandoned_at[j].assign(jobs[j].games, 0);
         if (s_dump_units) { units[j].assign(jobs[j].games, 0); }
     }
 
@@ -704,6 +772,46 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         {
             for (int gi = 0; gi < jobs[j].games; ++gi) { items.push_back({j, gi}); }
         }
+    }
+
+    // ---------------------------------------------------- RELATIVE PER-GAME CEILING (see Job::abandon_k)
+    // One of these per cell, holding the calibration sample and the ceiling frozen from it. The
+    // sample is the cell's games with GLOBAL index < abandon_calib, counted HERE from the work list
+    // -- so `need` is a property of the manifest, not of completion order, and the freeze happens at
+    // the same point on every machine. `frozen` is the only field the hot path reads, so it is the
+    // only one that is atomic; the sample is built under the mutex, once per calibration game.
+    struct CellCeiling
+    {
+        // 0 = still calibrating (the cell's non-calibration games are HELD); >0 = the frozen ceiling;
+        // -1 = resolved with no ceiling. The -1 state is not cosmetic: a cell condemned partway
+        // through its calibration never completes the sample, so without an explicit release its
+        // held games would sit in `parked` with nothing left to promote them -- every worker
+        // waiting on the condition variable, the run hung. Any non-zero value releases.
+        std::atomic<long long> frozen{0};
+        std::mutex             m;
+        std::vector<long long> sample;
+        int                    need  = 0;      // calibration games present in THIS manifest
+        int                    calib = 0;
+        double                 k     = 0.0;
+    };
+    std::vector<std::unique_ptr<CellCeiling>> cell_ceiling(static_cast<std::size_t>(std::max(1, n_cells)));
+    for (std::unique_ptr<CellCeiling>& p : cell_ceiling) { p = std::make_unique<CellCeiling>(); }
+    bool any_relative = false;
+    for (const WorkItem& wi : items)
+    {
+        const Job& j = jobs[wi.job];
+        if (j.abandon_k <= 0.0 || j.abandon_calib <= 0) { continue; }
+        if (j.game_index + wi.game >= j.abandon_calib) { continue; }
+        CellCeiling& cc = *cell_ceiling[static_cast<std::size_t>(j.cell_id)];
+        ++cc.need;
+        cc.calib = j.abandon_calib;
+        cc.k     = j.abandon_k;
+        any_relative = true;
+    }
+    if (any_relative)
+    {
+        std::cerr << "[batch] relative per-game ceiling armed: each cell runs its first "
+                  << "abandon_calib games unbounded, then freezes k x their median for the rest\n";
     }
 
     // LPT scheduling: run the most expensive games first so cheap games backfill
@@ -765,8 +873,9 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         // once per multi-second game.
         std::map<std::size_t, WorkItem>                          ready;
         std::vector<std::deque<std::pair<std::size_t, WorkItem>>> parked;   // per cell, with index
-        std::vector<int>                  inflight;           // condemnable games running, per cell
-        long long                         outstanding = 0;    // condemnable games not yet finalised
+        std::vector<int>                  inflight;           // games running, per cell
+        long long                         outstanding = 0;    // items taken but not yet finalised
+        long long                         parked_total = 0;   // items sitting in `parked`
         int                               drip = 1;
         // Verdict for a condemnable item, evaluated under the pool lock at Take time (it reads the
         // judgment atomics, which move under the workers and the heartbeat).
@@ -790,34 +899,49 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     if (v == Verdict::kCapped)
                     {
                         parked[cell_of(wi)].push_back({idx, wi});
+                        ++parked_total;
                         continue;
                     }
-                    if (v == Verdict::kCondemnable) { ++inflight[cell_of(wi)]; }
+                    // Every taken item counts against its cell, not just condemnable ones: a cell
+                    // can now also park work behind its CALIBRATION (see CellCeiling), and that
+                    // includes protected d<=5 cells -- which is the point, since the protected H
+                    // rungs are exactly where the degenerate games live.
+                    ++inflight[cell_of(wi)];
                     out = wi;
                     return true;
                 }
-                if (outstanding <= 0) { return false; }
-                // Everything left is parked behind a drip cap: wait for one of those cells' games
-                // to land rather than exiting, or the run would end with games unplayed. Liveness
-                // holds because a cell only ever parks work while it has >= 1 game in flight, and
-                // that game's OnFinished promotes the parked items.
+                // Nothing parked and nothing left to hand out: this worker is done, regardless of how
+                // many games are still RUNNING elsewhere. Waiting on `outstanding` alone would hold
+                // every idle worker on the condition variable until the very last game of the run
+                // landed -- correct, but it turns a drained queue into a thread-join that only
+                // happens at the end.
+                if (parked_total <= 0 || outstanding <= 0) { return false; }
+                // Everything left is parked behind a drip cap or a pending calibration: wait for one
+                // of those cells' games to land rather than exiting, or the run would end with games
+                // unplayed. Liveness holds because a cell only ever parks work while it has >= 1 game
+                // in flight, and that game's OnFinished promotes the parked items.
                 cv.wait(lk);
             }
         }
 
-        // One condemnable game finalised (played or skipped). Frees the cell's in-flight slot and
-        // promotes its parked items for re-evaluation -- they may now be under the cap, their row
-        // may have crossed reference_games (released for good), or a condemnation may have landed
-        // (they drain as skips). Promotion is wholesale rather than one-at-a-time: Take re-parks
-        // whatever is still capped, and the churn is bounded by the cell's own game count, once per
-        // finished game -- microseconds against multi-second games.
+        // One game finalised (played or skipped). Frees the cell's in-flight slot and promotes its
+        // parked items for re-evaluation -- they may now be under the drip cap, their row may have
+        // crossed reference_games (released for good), their cell's ceiling may have just frozen, or
+        // a condemnation may have landed (they drain as skips). Promotion is wholesale rather than
+        // one-at-a-time: Take re-parks whatever is still capped, and the churn is bounded by the
+        // cell's own game count, once per finished game -- microseconds against multi-second games.
         void OnFinished(int cell_id)
         {
             std::lock_guard<std::mutex> lk(mtx);
             --outstanding;
             --inflight[static_cast<std::size_t>(cell_id)];
             auto& q = parked[static_cast<std::size_t>(cell_id)];
-            while (!q.empty()) { ready.emplace(q.front().first, q.front().second); q.pop_front(); }
+            while (!q.empty())
+            {
+                ready.emplace(q.front().first, q.front().second);
+                q.pop_front();
+                --parked_total;
+            }
             cv.notify_all();
         }
 
@@ -835,31 +959,46 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             const Job& j = jobs[wi.job];
             if (condemn.enabled && j.depth > condemn.never_condemn_depth) { ++n_condemnable; }
         }
-        pool.outstanding = n_condemnable;
-        if (pool.outstanding > 0)
+        // EVERY item, not just the condemnable ones. This is the counter Take waits on when all
+        // remaining work is parked, and calibration now parks work in PROTECTED cells too -- so
+        // counting only condemnable games would let Take return false with a protected cell's games
+        // still sitting in `parked`, silently dropping them from the run.
+        pool.outstanding = static_cast<long long>(items.size());
+        if (n_condemnable > 0)
         {
-            std::cerr << "[batch] metering " << pool.outstanding << " games of condemnable cells at "
+            std::cerr << "[batch] metering " << n_condemnable << " games of condemnable cells at "
                       << condemn.drip << " in flight per cell until judged; "
                       << (items.size() - static_cast<std::size_t>(n_condemnable))
                       << " protected games run alongside\n";
         }
     }
-    // The mean rule is active iff both its parameters are set; without it a cell is never "proven
+    // The median rule is active iff both its parameters are set; without it a cell is never "proven
     // tractable" (row_games does not accrue), so metering persists for the whole run -- exactly the
     // old drip-forever semantics, which is right when only max_game_sec is guarding.
-    const bool mean_rule_on = condemn.sec_per_game > 0.0 && condemn.reference_games > 0;
+    const bool median_rule_on = condemn.median_sec_per_game > 0.0 && condemn.reference_games > 0;
     pool.classify = [&](const WorkItem& wi) -> Pool::Verdict
     {
         const Job& j = jobs[wi.job];
+        // CALIBRATION GATE, ahead of everything else -- including the d<=5 protection, which is about
+        // never CONDEMNING a cell the crossover is read from, not about letting its individual games
+        // run unbounded. A cell whose relative ceiling is not frozen yet runs only its calibration
+        // games; the rest wait. Held work is released by the freeze in the worker, which happens
+        // before that game's OnFinished promotes the cell's parked items.
+        {
+            const CellCeiling& cc = *cell_ceiling[static_cast<std::size_t>(j.cell_id)];
+            if (cc.need > 0 && cc.frozen.load(std::memory_order_acquire) == 0
+                && j.game_index + wi.game >= cc.calib)
+            { return Pool::Verdict::kCapped; }
+        }
         if (!condemn.enabled || j.depth <= condemn.never_condemn_depth)
         { return Pool::Verdict::kProtected; }
-        // Condemned (row by the mean rule, cell by max_game_sec): take it -- it drains as a skip.
+        // Condemned (row by the median rule, cell by max_game_sec): take it -- it drains as a skip.
         if (row_condemned[j.row_id].load(std::memory_order_relaxed) != 0
             || cell_condemned[j.cell_id].load(std::memory_order_relaxed) != 0)
         { return Pool::Verdict::kCondemnable; }
         // Judged tractable: the row reached its reference sample uncondemned. Released from
         // metering -- from here it runs in plain static order.
-        if (mean_rule_on
+        if (median_rule_on
             && row_games[j.row_id].load(std::memory_order_relaxed) >= condemn.reference_games)
         { return Pool::Verdict::kCondemnable; }
         // Unjudged: metered at `drip` in flight per cell.
@@ -895,7 +1034,12 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         gi_played.reserve(win_turns[j].size());
         for (std::size_t i = 0; i < win_turns[j].size(); ++i)
         {
-            if (win_turns[j][i] == kSkipped) { continue; }
+            if (win_turns[j][i] == kSkipped)
+            {
+                if (abandoned_at[j][i])
+                { r.abandoned.push_back(jobs[j].game_index + static_cast<int>(i)); }
+                continue;
+            }
             wt_played.push_back(win_turns[j][i]);
             dg_played.push_back(digests[j][i]);
             gi_played.push_back(jobs[j].game_index + static_cast<int>(i));
@@ -979,31 +1123,40 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 }
             }
 
-            // (2) The MEAN rule, with in-flight games folded in -- aggregated on the ROW, same unit
-            // as the finished-game rule. A running game's elapsed time is a LOWER BOUND on its final
-            // cost, so this mean can only UNDERSTATE the row -- if it already exceeds the limit, the
-            // finished-only mean must exceed it too. That makes condemning here sound (no false
-            // positive is possible from the partial term) while catching the case the finished-only
-            // rule is blind to: a row whose expensive games are all still running reads as free
-            // until the first one lands, which on an explosive deck is hours.
-            if (condemn.sec_per_game > 0.0 && condemn.reference_games > 0)
+            // (2) The MEDIAN rule, with in-flight games folded in -- aggregated on the ROW, same
+            // unit as the finished-game rule. A running game's elapsed time is a LOWER BOUND on its
+            // final cost, and a median is MONOTONE in every element, so raising any of those partial
+            // values can only raise the median: this median can therefore only UNDERSTATE the row's
+            // final one. If it already exceeds the limit the finished sample must too, so condemning
+            // here cannot be a false positive from the partial term -- the same soundness argument
+            // the mean version had, and it survives the change of statistic intact. What it catches
+            // is the case the finished-only rule is blind to: a row whose expensive games are all
+            // still running reads as free until the first one lands, which on an explosive deck is
+            // hours.
+            if (condemn.median_sec_per_game > 0.0 && condemn.reference_games > 0)
             {
-                std::unordered_map<int, std::pair<int, long long>> agg;   // row -> (games, ms)
+                std::unordered_map<int, std::vector<long long>> agg;   // row -> in-flight elapsed
                 for (const auto& [cid, ms] : live)
                 {
                     if (cid < 0 || cid >= n_cells) { continue; }
-                    auto& a = agg[cell_row[static_cast<std::size_t>(cid)]];
-                    ++a.first; a.second += ms;
+                    agg[cell_row[static_cast<std::size_t>(cid)]].push_back(ms);
                 }
-                for (const auto& [rid, a] : agg)
+                for (const auto& [rid, partial] : agg)
                 {
                     if (rid < 0 || rid >= n_rows) { continue; }
-                    const int       n   = row_games[rid].load(std::memory_order_relaxed) + a.first;
-                    const long long tot = row_ms[rid].load(std::memory_order_relaxed) + a.second;
-                    if (n >= condemn.reference_games
-                        && static_cast<double>(tot) / n > condemn.sec_per_game * 1000.0)
-                    { condemn_row(rid, "at a running mean (in-flight included) of",
-                                  static_cast<double>(tot) / n / 1000.0, condemn.sec_per_game); }
+                    const int n = row_games[rid].load(std::memory_order_relaxed)
+                                + static_cast<int>(partial.size());
+                    if (n < condemn.reference_games) { continue; }
+                    std::vector<long long> s;
+                    {
+                        std::lock_guard<std::mutex> lk(row_sample_mtx);
+                        s = row_sample[static_cast<std::size_t>(rid)];
+                    }
+                    s.insert(s.end(), partial.begin(), partial.end());
+                    const double med = median_ms(std::move(s));
+                    if (med > condemn.median_sec_per_game * 1000.0)
+                    { condemn_row(rid, "at a running MEDIAN (in-flight included) of",
+                                  med / 1000.0, condemn.median_sec_per_game); }
                 }
             }
         });
@@ -1036,7 +1189,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // CONDEMNED row or cell: drop this game rather than run it. Checked as the item
                 // comes off the queue (not at a barrier), so a cell stops consuming cores the moment
                 // it is ruled intractable and every other cell keeps running undisturbed. Either
-                // verdict skips: the mean rule condemns the ROW, max_game_sec condemns the CELL.
+                // verdict skips: the median rule condemns the ROW, max_game_sec condemns the CELL.
                 // `condemnable` (job.depth above the floor) gates the skip so a protected d<=5 job
                 // can never be skipped through a shared row/cell key -- the floor is structural, not
                 // just a property of who sets the latch.
@@ -1045,8 +1198,18 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                         || cell_condemned[jobs[wi.job].cell_id].load(std::memory_order_relaxed) != 0))
                 {
                     win_turns[wi.job][wi.game] = kSkipped;
-                    // Finalise in the pool as well: a skipped game is still a condemnable game
-                    // accounted for, and if `outstanding` never drains the workers wait forever.
+                    // A condemned cell will never finish its calibration sample, so RELEASE the
+                    // games it is holding (see CellCeiling::frozen) -- they are about to drain as
+                    // skips too. Without this the cell's held games have nothing left that could
+                    // promote them and the whole run blocks on the condition variable.
+                    {
+                        CellCeiling& cc = *cell_ceiling[static_cast<std::size_t>(job.cell_id)];
+                        long long expect = 0;
+                        if (cc.need > 0)
+                        { cc.frozen.compare_exchange_strong(expect, -1, std::memory_order_acq_rel); }
+                    }
+                    // Finalise in the pool as well: a skipped game is still a game accounted for,
+                    // and if `outstanding` never drains the workers wait forever.
                     pool.OnFinished(job.cell_id);
                     if (on_job_done && remaining[wi.job].fetch_sub(1, std::memory_order_acq_rel) == 1)
                     {
@@ -1108,7 +1271,17 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // Arm the per-game work ceiling (see ai/GameWorkMeter.h). Paired with End() below so
                 // a pooled worker thread can never carry one game's meter into the next; Begin also
                 // resets, so the pairing is belt-and-braces rather than load-bearing.
-                gamework::Begin(job.abandon_units);
+                //
+                // The FROZEN relative ceiling wins when the cell has one; the absolute number is the
+                // fallback and is also what guards the calibration window itself (Job::abandon_k).
+                // A calibration game is identified by GLOBAL index, so which games are exempt does
+                // not depend on the order the pool happened to run them in.
+                CellCeiling& cc = *cell_ceiling[static_cast<std::size_t>(job.cell_id)];
+                const bool is_calib = cc.need > 0 && global_gi < cc.calib;
+                const long long frozen = cc.frozen.load(std::memory_order_acquire);
+                const long long ceiling =
+                    (!is_calib && frozen > 0) ? frozen : job.abandon_units;
+                gamework::Begin(ceiling);
                 int wt = engine->RunGame(state, job.max_turns);
                 const long long g_units = gamework::Used();
                 gamework::End();
@@ -1118,6 +1291,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     // not drag the cell's average toward max_turns+1 -- which is the whole point:
                     // scoring it as a loss would make skipping CHANGE the number we are measuring.
                     wt = kSkipped;
+                    abandoned_at[wi.job][wi.game] = 1;
                     // The caller needs to know WHICH game, in the same self-contained form as
                     // SLOW-GAME, because the skip list is per (deck, seed, offset) and is what every
                     // other cell filters on. Units, not ms: the decision was deterministic and the
@@ -1125,11 +1299,40 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     std::fprintf(stderr,
                                  "[goldfish] ABANDONED job=%s gi=%d units=%lld limit=%lld  repro: "
                                  "--seed %llu --game-index %d --games 1\n",
-                                 job.name.c_str(), global_gi, g_units, job.abandon_units,
+                                 job.name.c_str(), global_gi, g_units, ceiling,
                                  static_cast<unsigned long long>(job.seed
                                                                  + static_cast<uint64_t>(wi.game)),
                                  global_gi);
                     std::fflush(stderr);
+                }
+                // CALIBRATION. Fold this game into its cell's sample and, on the last one, FREEZE the
+                // ceiling. Done before OnFinished below, so the games this cell has parked are
+                // promoted into a pool that already knows the ceiling. Reported on stderr because the
+                // driver has to store it: the calibration games do not appear in the manifest of a
+                // later resume, so without the recorded number that resume would run unbounded --
+                // and a ceiling recomputed from a different sample would abandon a different set,
+                // which is exactly the reproducibility this whole mechanism is built on.
+                if (is_calib)
+                {
+                    std::lock_guard<std::mutex> lk(cc.m);
+                    cc.sample.push_back(g_units);
+                    if (static_cast<int>(cc.sample.size()) >= cc.need
+                        && cc.frozen.load(std::memory_order_relaxed) == 0)
+                    {
+                        std::vector<long long> s = cc.sample;
+                        std::sort(s.begin(), s.end());
+                        const std::size_t n = s.size();
+                        const long long med = (n % 2 == 1) ? s[n / 2]
+                                                           : (s[n / 2 - 1] + s[n / 2]) / 2;
+                        const long long lim = std::max<long long>(1, static_cast<long long>(cc.k * med));
+                        cc.frozen.store(lim, std::memory_order_release);
+                        std::fprintf(stderr,
+                                     "[batch] CEILING cell=%s calib=%d median=%lld k=%.1f units=%lld"
+                                     "  (min %lld max %lld)\n",
+                                     job.cell.c_str(), static_cast<int>(n), med, cc.k, lim,
+                                     s.front(), s.back());
+                        std::fflush(stderr);
+                    }
                 }
                 win_turns[wi.job][wi.game] = wt;
                 if (s_dump_units) { units[wi.job][wi.game] = g_units; }
@@ -1143,28 +1346,39 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // barrier: the point of the pool is that no cell ever waits on another, and a
                 // barrier reintroduces exactly the synchronisation the pool exists to remove.
                 //
-                // The MEAN accumulates and judges on the ROW (deck+arm+depth), not the cell:
+                // The MEDIAN accumulates and judges on the ROW (deck+arm+depth), not the cell:
                 // tractability is a property of the depth, and judging each seed's cell separately
                 // let one outlier game remove a single seed from a row, making rows non-comparable
                 // (docs/design/condemnation-row-average.md). With no "row" in the manifest the row
                 // IS the cell and this is the old per-cell rule verbatim.
-                if (condemn.sec_per_game > 0.0 && condemn.reference_games > 0
+                if (condemn.median_sec_per_game > 0.0 && condemn.reference_games > 0
                     && job.depth > condemn.never_condemn_depth)
                 {
                     const int rid = job.row_id;
-                    const int   n  = row_games[rid].fetch_add(1, std::memory_order_relaxed) + 1;
-                    const long long tot = row_ms[rid].fetch_add(g_ms, std::memory_order_relaxed) + g_ms;
+                    const int n   = row_games[rid].fetch_add(1, std::memory_order_relaxed) + 1;
+                    // An ABANDONED game is folded in at its (truncated) cost rather than dropped.
+                    // It is impractical by definition -- that is why it was abandoned -- and
+                    // excluding it would let a row where most games are pathological look healthy
+                    // from the few that survived, which is exactly the verdict this rule exists to
+                    // reach.
+                    double med = 0.0;
+                    {
+                        std::lock_guard<std::mutex> lk(row_sample_mtx);
+                        row_sample[static_cast<std::size_t>(rid)].push_back(g_ms);
+                        if (n >= condemn.reference_games)
+                        { med = median_ms(row_sample[static_cast<std::size_t>(rid)]); }
+                    }
                     if (n >= condemn.reference_games
-                        && static_cast<double>(tot) / n > condemn.sec_per_game * 1000.0
+                        && med > condemn.median_sec_per_game * 1000.0
                         && row_condemned[rid].exchange(1, std::memory_order_relaxed) == 0)
                     {
                         const bool fb = row_is_cell[static_cast<std::size_t>(rid)] != 0;
                         std::fprintf(stderr,
-                            "[goldfish] CONDEMNED %s=%s after %d games at %.1f s/game "
+                            "[goldfish] CONDEMNED %s=%s after %d games at a MEDIAN of %.1f s/game "
                             "(limit %.1f); remaining games of %s are skipped\n",
                             fb ? "cell" : "row",
                             row_name[static_cast<std::size_t>(rid)].c_str(),
-                            n, static_cast<double>(tot) / n / 1000.0, condemn.sec_per_game,
+                            n, med / 1000.0, condemn.median_sec_per_game,
                             fb ? "this cell" : "every cell of this row");
                     }
                 }
@@ -1209,10 +1423,14 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
 
                 // Finalise in the pool: frees this cell's in-flight slot and promotes its parked
                 // games, which Take re-classifies -- released outright if the row has now been
-                // judged (tractable or condemned), metered back in otherwise. Sibling cells of a
-                // condemned row drain the same way as their own in-flight games land and their
-                // parked work re-enters as cheap dequeue-time skips.
-                if (condemnable) { pool.OnFinished(job.cell_id); }
+                // judged (tractable or condemned) or the cell's ceiling has just frozen, metered
+                // back in otherwise. Sibling cells of a condemned row drain the same way as their
+                // own in-flight games land and their parked work re-enters as cheap dequeue-time
+                // skips. Called for EVERY game, not only condemnable ones: `outstanding` now counts
+                // every item (a protected cell can park work behind its calibration), and a
+                // protected game that never finalised would leave that counter permanently above
+                // zero -- Take would block on the condition variable at the end of the run.
+                pool.OnFinished(job.cell_id);
 
                 // Stream this job the instant its last game lands.
                 if (on_job_done

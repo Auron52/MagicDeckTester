@@ -3817,15 +3817,17 @@ int main(int argc, char* argv[])
                 // max_turns" threshold, and reporting it makes readers treat it as the priority
                 // metric. avg (to 4 dp) + the play digest are the case fingerprint. (games_won lives
                 // in the result for a future 1v1 mode.) See ComputeAvgTurns / docs metric-avg-loss-as-9.
-                char dbuf[17];
-                std::snprintf(dbuf, sizeof(dbuf), "%016llx",
-                              static_cast<unsigned long long>(r.case_digest));
-                char avgbuf[32];
-                std::snprintf(avgbuf, sizeof(avgbuf), "%.4f", r.avg_turns);
-                std::cout << r.name << ": played=" << r.games_played
-                          << " avg=" << avgbuf
-                          << " digest=" << dbuf
-                          << " ms=" << r.elapsed_ms << "\n" << std::flush;
+                // FILES FIRST, THEN THE LINE. The result line is what a driver waits on, so it has
+                // to be a PROMISE that this job's per-game files are already on disk. Announcing
+                // first is a race the driver loses often enough to matter: it wakes from readline,
+                // opens <name>.wins before this thread has written it, finds nothing, and falls
+                // back to storing the chunk MEAN-ONLY. Measured 2026-08-15 on a 12-chunk burn
+                // matrix: 9 of 12 chunks lost their per-game rows that way, and the loss is worse
+                // than it looks -- a chunk SHORTENED by abandonment then records n survivors with
+                // no offsets, so it is read as covering off..off+n (a contiguous range it does not
+                // hold: one chunk stored "0..7" while actually holding {1,2,4,7,12,17,19,22}), and
+                // the abandoned games never reach the skip list, so every resume re-runs and
+                // re-abandons them at full cost. Ordering costs one small write before a print.
                 if (!game_log_dir.empty())
                 {
                     WriteGameLog(game_log_dir, r.name, r.win_turns, r.digests, r.game_indices);
@@ -3842,7 +3844,31 @@ int main(int argc, char* argv[])
                                << ' ' << r.units[i] << '\n';
                         }
                     }
+                    // Games ABANDONED at the work ceiling, one global index per line. A driver
+                    // cannot infer these from the hole in <name>.wins: a job also finishes short
+                    // when its cell was condemned and its remaining games were skipped at dequeue,
+                    // and those two holes call for opposite handling (BatchJobResult::abandoned).
+                    // Written only when there are any, so the usual case adds no file.
+                    if (!r.abandoned.empty())
+                    {
+                        std::ofstream ao(game_log_dir / (r.name + ".abandoned"));
+                        for (int gi : r.abandoned) { ao << gi << '\n'; }
+                    }
                 }
+                // Goldfish metric = avg (mean turn-to-win; an unwon game is scored max_turns+1).
+                // Win/loss is NOT reported: a goldfishing loss is an arbitrary "no lethal by
+                // max_turns" threshold, and reporting it makes readers treat it as the priority
+                // metric. avg (to 4 dp) + the play digest are the case fingerprint. (games_won lives
+                // in the result for a future 1v1 mode.) See ComputeAvgTurns / docs metric-avg-loss-as-9.
+                char dbuf[17];
+                std::snprintf(dbuf, sizeof(dbuf), "%016llx",
+                              static_cast<unsigned long long>(r.case_digest));
+                char avgbuf[32];
+                std::snprintf(avgbuf, sizeof(avgbuf), "%.4f", r.avg_turns);
+                std::cout << r.name << ": played=" << r.games_played
+                          << " avg=" << avgbuf
+                          << " digest=" << dbuf
+                          << " ms=" << r.elapsed_ms << "\n" << std::flush;
             };
             std::vector<BatchJobResult> results =
                 BatchRunner::RunManifest(manifest, num_threads, on_job_done, game_trace_dir);

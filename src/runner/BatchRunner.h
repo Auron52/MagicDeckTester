@@ -29,6 +29,16 @@ struct BatchJobResult
     // milliseconds for the same reason the ceiling is in units -- a wall-clock calibration would
     // pick a different threshold on every machine and under every load.
     std::vector<long long> units;
+    // GLOBAL indices of games ABANDONED at the per-game work ceiling. NOT derivable from the gap
+    // between `game_indices` and the job's range: a short job has two different kinds of hole, and
+    // they mean opposite things. An ABANDONED game is degenerate -- every cell of that (deck, seed)
+    // must exclude it so the comparison stays over one game set. A game merely SKIPPED at dequeue
+    // because its own cell was condemned was never played at all; it is fine everywhere else, and
+    // excluding it globally throws away a good game in every other cell. Inferring one from a short
+    // chunk conflated them, and a condemned cell then truncated its whole seed: a burn probe
+    // (2026-08-15) put a condemned V6/V7's 20 unrun games into the shared skip list and the table
+    // announced them as "20 degenerate game(s) abandoned at the per-game work ceiling".
+    std::vector<int>      abandoned;
     uint64_t              case_digest = 0;  // fold of per-game digests in game order (a case fingerprint)
     // SUM of this job's per-game wall times, in ms -- core-milliseconds, not elapsed span. Games of
     // one job interleave with other jobs across the pool, so an elapsed first-to-last span would

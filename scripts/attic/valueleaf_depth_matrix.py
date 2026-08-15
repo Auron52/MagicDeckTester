@@ -216,6 +216,18 @@ def _read_wins(winsdir, nm):
         return None
 
 
+def _read_abandoned(winsdir, nm):
+    """Global indices the pool ABANDONED at the per-game work ceiling, from `<winsdir>/<nm>.abandoned`.
+
+    Written by the engine only when there are any (BatchJobResult::abandoned), and written BEFORE the
+    job's result line is printed, so it is on disk by the time this is read. Missing file = none."""
+    try:
+        with open(os.path.join(winsdir, nm + ".abandoned")) as fh:
+            return [int(l) for l in fh if l.strip()]
+    except (OSError, ValueError):
+        return []
+
+
 def cell_mean(c): return c["lp_mean"]
 
 
@@ -602,7 +614,7 @@ def run_incremental(args):
             for d in args.hdepths: cells.append(dict(deck=dname,arm="H",depth=d,seed=seed))
             for d in args.vdepths: cells.append(dict(deck=dname,arm="V",depth=d,seed=seed))
     for c in cells:
-        c.update(chunks=[], intractable=False, running=False, first_wall=None); _refresh(c)
+        c.update(chunks=[], intractable=False, running=False, first_wall=None, ceil=0); _refresh(c)
     state_path=args.out+".cells.json"
     src_now=_src_fingerprint()
     if os.path.exists(state_path):                       # resume: skip already-committed chunks
@@ -620,6 +632,11 @@ def run_incremental(args):
                 s=saved.get(_cell_key(c))
                 if not s: continue
                 c["intractable"]=s["intractable"]; c["first_wall"]=s.get("first_wall")
+                # The frozen per-game ceiling, carried across resumes. It CANNOT be recomputed here:
+                # its calibration games are below this resume's starting offset, so a fresh
+                # calibration would use a different sample, produce a different ceiling and abandon a
+                # different set of games -- the run would stop being reproducible halfway through.
+                c["ceil"]=s.get("ceil",0)
                 if s.get("chunks"):
                     c["chunks"]=s["chunks"]
                 elif s.get("games"):
@@ -666,6 +683,23 @@ def run_incremental(args):
         pass
 
     def skiplist(c): return skipped.get((c["deck"], c["seed"]), ())
+
+    # ---------------------------------------------------------------- GRACEFUL DEGRADATION
+    # Skipping only makes sense for a heavy TAIL. Past some rate the games being dropped are not a
+    # tail any more, they are the distribution, and filtering them changes what the table measures
+    # into something no reader would recognise. It is also a RUNAWAY: target() grows by the size of
+    # the skip list, so every pass adds games, and a ceiling below a cell's own median means each new
+    # game abandons too and the target never converges. Demonstrated 2026-08-15 with a deliberately
+    # low ceiling on burn -- H3 (median 7,506 units, ceiling 5,000) went 19 games, then 31, climbing
+    # with no end. The relative ceiling makes this unlikely by construction (k x the cell's OWN
+    # median cannot sit below it), so this is the backstop for a bad k, not the primary guard.
+    #
+    # Evaluated per (deck, seed) at manifest-build time: once the list is over the cap the ceiling is
+    # DISARMED for that deck+seed, which is the only stable answer. Merely refusing to record further
+    # skips would be worse than doing nothing -- the pool would keep abandoning those games while the
+    # driver kept re-queueing them, at full cost, forever.
+    def skip_capped(deck, seed):
+        return len(skipped.get((deck, seed), ())) > args.max_skip_frac * args.target
 
     def target(c):
         if c["intractable"]: return min(args.reference_target, args.target)
@@ -818,7 +852,7 @@ def run_incremental(args):
     def write_state():
         tmp=state_path+".tmp"
         json.dump([{k:c[k] for k in ("deck","arm","depth","seed","games","lp_sum","lp_mean","batches",
-                                     "ms","intractable","first_wall","chunks")} for c in cells], open(tmp,"w"))
+                                     "ms","intractable","first_wall","chunks","ceil")} for c in cells], open(tmp,"w"))
         os.replace(tmp,state_path)
         if skipped:
             tmp2=skip_path+".tmp"
@@ -851,10 +885,18 @@ def run_incremental(args):
     def run_pool(chunks):
         by_name={}
         jobs=[]
+        capped_seen=set()
         for ch in chunks:
                 c=ch["c"]
                 dname, arm = c["deck"], c["arm"]
                 deck_file, prof, mt = DECKS[dname]
+                _capped = skip_capped(dname, c["seed"])
+                if _capped and (dname, c["seed"]) not in capped_seen:
+                    capped_seen.add((dname, c["seed"]))
+                    print("  !! %s seed %d is over the skip cap (%d skipped > %.0f%% of %d): the "
+                          "per-game ceiling is DISARMED for it -- these games are the distribution, "
+                          "not a tail" % (dname, c["seed"], len(skipped.get((dname,c["seed"]),())),
+                                          100*args.max_skip_frac, args.target), flush=True)
                 nm="%s%d_s%d_off%d" % (c["arm"], c["depth"], c["seed"], ch["off"])
                 by_name[nm]=ch
                 job={"name":nm, "deck":deck_file, "profile":PROFILES.get(dname),
@@ -873,8 +915,22 @@ def run_incremental(args):
                      # and never one SEED's (one 32-minute game condemned V6/V7/V8 on seed 8008
                      # alone, 1-3% over the limit, while the other three seeds ran 4-10x under it
                      # -- docs/design/condemnation-row-average.md).
-                     # Per-game work ceiling (0 = off). Absolute today; see --abandon-units.
-                     "abandon_units":args.abandon_units,
+                     # PER-GAME WORK CEILING (0 = off). Three states, in priority order:
+                     #   * the cell has a FROZEN ceiling (from an earlier pass, stored in the state
+                     #     file) -- hand it straight back, because its calibration games are below
+                     #     this resume's offsets and could never be re-measured here;
+                     #   * --abandon-k is set and the cell has no ceiling yet -- ask the pool to
+                     #     calibrate: it runs the cell's first --abandon-calib games under whatever
+                     #     absolute cap is set (usually none) and freezes k x their median;
+                     #   * neither -- the plain absolute number, or 0 for unbounded.
+                     # A ratio is the only form that can serve the whole table: on burn, six cells
+                     # spanned 150x in median units, and this deck's H5 is another three orders out.
+                     # ...and NOTHING at all once this deck+seed is over the skip cap (see
+                     # skip_capped): past that rate the filter is reshaping the population rather
+                     # than trimming a tail, and it cannot converge.
+                     "abandon_units":(0 if _capped else (c.get("ceil") or args.abandon_units)),
+                     "abandon_k":(0.0 if (_capped or c.get("ceil")) else args.abandon_k),
+                     "abandon_calib":(0 if (_capped or c.get("ceil")) else args.abandon_calib),
                      "cell":"%s_%s%d_s%d" % (dname, c["arm"], c["depth"], c["seed"]),
                      "row":"%s_%s%d" % (dname, c["arm"], c["depth"]),
                      # Priority for the pool's own sort (BatchRunner sorts by this DESCENDING). Packed
@@ -897,7 +953,7 @@ def run_incremental(args):
                 jobs.append(job)
         man=args.out+".manifest.json"
         # CONDEMNATION now travels with the manifest and is applied inside the pool, continuously.
-        condemn={"sec_per_game":args.intractable_sec_per_game,
+        condemn={"median_sec_per_game":args.intractable_median_sec_per_game,
                  "reference_games":args.reference_target,
                  "never_condemn_depth":args.never_condemn_at_or_below,
                  "max_game_sec":args.max_game_sec,
@@ -972,6 +1028,18 @@ def run_incremental(args):
                                 if "%s_%s%d_s%d" % (c["deck"],c["arm"],c["depth"],c["seed"]) == m.group(1):
                                     c["intractable"]=True
                         continue
+                    # The pool froze a cell's relative per-game ceiling. STORE IT: the calibration
+                    # games are the cell's first N offsets, so a later resume -- which starts above
+                    # them -- has no way to derive the same number again, and a ceiling derived from
+                    # a different sample abandons a different set of games.
+                    if "CEILING" in l:
+                        print(l.rstrip(), flush=True)
+                        mc=re.search(r"cell=(\S+).*?units=(\d+)", l)
+                        if mc:
+                            for c in cells:
+                                if "%s_%s%d_s%d" % (c["deck"],c["arm"],c["depth"],c["seed"]) == mc.group(1):
+                                    c["ceil"]=int(mc.group(2))
+                        continue
                     if "SLOW-GAME" not in l: continue
                     with _slow_lock:
                         with open(slow_path,"a") as fh: fh.write("%s %s\n" % (tag, l.strip()))
@@ -1011,12 +1079,44 @@ def run_incremental(args):
             # recorded so they are neither re-queued (they would abandon again) nor counted toward
             # the target, and so every OTHER cell can exclude the same games (see the skip list).
             if p < ch["n"]:
-                ran={o for o, _ in (wins or [])}
+                if wins is None:
+                    # REFUSE IT. A short chunk with no per-game rows cannot say WHICH games it holds,
+                    # and _chunk_offsets falls back to off..off+n -- a contiguous range it does not
+                    # have. One measured case stored "0..7" while actually holding {1,2,4,7,12,17,19,
+                    # 22}, so every paired comparison against it would intersect on the wrong game
+                    # identities: silently comparing different games, which is the one defect
+                    # per-game storage exists to end. Dropping the chunk costs a re-run of games we
+                    # can still identify; keeping it corrupts the table. The engine writes the .wins
+                    # file BEFORE announcing the job, so this should now only fire on a real I/O
+                    # failure -- loudly, because it means the pool and the driver disagree.
+                    print("  !! chunk %s came back %d/%d with NO per-game rows -- DISCARDED (cannot "
+                          "identify which games survived; they will be re-queued)" % (nm, p, ch["n"]),
+                          flush=True)
+                    continue
+                ran={o for o, _ in wins}
                 lost=[o for o in range(ch["off"], ch["off"]+ch["n"]) if o not in ran]
-                if lost and wins is not None:
-                    skipped.setdefault((c["deck"], c["seed"]), set()).update(lost)
-                    print("  chunk %s came back %d/%d: offsets %s did not complete"
-                          % (nm, p, ch["n"], _fmt_ranges(sorted(lost))), flush=True)
+                # TWO KINDS OF HOLE, and only one of them belongs in the skip list.
+                #   ABANDONED  -- the game hit the per-game work ceiling. It is DEGENERATE, it will
+                #                 abandon again at full cost, and every cell of this (deck,seed) has
+                #                 to exclude it or the comparison stops being over one game set.
+                #   NOT RUN    -- the game was skipped at dequeue because its own CELL was condemned.
+                #                 It is a perfectly ordinary game everywhere else. Putting it in the
+                #                 shared list discards a good game in EVERY other cell of the seed,
+                #                 and the condemned cell is capped at its reference sample anyway.
+                # These used to be conflated (a short chunk was all "abandoned"), so one condemned
+                # cell truncated its whole seed: a burn probe condemned V6/V7 after 5 of 25 games and
+                # the table reported the 20 unrun games as "degenerate ... abandoned at the per-game
+                # work ceiling". The engine now names the abandoned ones explicitly.
+                ab=set(_read_abandoned(winsdir, nm))
+                gone=[o for o in lost if o in ab]
+                unrun=[o for o in lost if o not in ab]
+                if gone:
+                    skipped.setdefault((c["deck"], c["seed"]), set()).update(gone)
+                    print("  chunk %s came back %d/%d: ABANDONED %s (added to the skip list)"
+                          % (nm, p, ch["n"], _fmt_ranges(sorted(gone))), flush=True)
+                if unrun:
+                    print("  chunk %s came back %d/%d: %s not run (cell condemned) -- NOT skipped"
+                          % (nm, p, ch["n"], _fmt_ranges(sorted(unrun))), flush=True)
             c["chunks"].append(rec)
             _refresh(c)
             if c["first_wall"] is None: c["first_wall"]=wall
@@ -1090,9 +1190,18 @@ def main():
     ap.add_argument("--reference-target",type=int,default=100,
                     help="games/cell to stop at once a cell is marked INTRACTABLE (a slow, not-production-usable "
                          "cell still gets a reference value; default 100)")
-    ap.add_argument("--intractable-sec-per-game",type=float,default=2.0,
-                    help="a batch slower than this (wall sec / game, single-threaded) marks its cell intractable "
-                         "-> capped at --reference-target. Checked on every batch (first batch is the main signal).")
+    ap.add_argument("--intractable-median-sec-per-game",type=float,default=30.0,
+                    help="condemn a ROW whose MEDIAN game costs more than this (wall sec/game) -> capped at "
+                         "--reference-target. The question is 'can we escalate to this depth SOME of the time at "
+                         "a cost that is not insane?', because that is the only regime the derived policy is ever "
+                         "applied in -- shipped play is budgeted and never processes a pathological position at "
+                         "depth. So a row is usable when a TYPICAL game is affordable however ugly its tail (the "
+                         "per-game ceiling truncates the tail), and unusable only when the majority of its games "
+                         "are impractical, which is exactly 'the median exceeds the limit'. NOTE the number is "
+                         "smaller than the old mean limit and must be: a mean carried the tail inflation a median "
+                         "does not, so the same value means something stricter here.")
+    ap.add_argument("--intractable-sec-per-game",type=float,default=None,
+                    help=argparse.SUPPRESS)   # RETIRED -- refused below, see --intractable-median-sec-per-game
     ap.add_argument("--never-condemn-at-or-below",type=int,default=5,
                     help="cells at or below this DEPTH are never marked intractable, however slow they measure. "
                          "These are the cells the trust-depth decision reads, so condemning one leaves a hole in "
@@ -1101,7 +1210,8 @@ def main():
     ap.add_argument("--max-game-sec",type=float,default=3600.0,
                     help="condemn a cell as soon as ONE of its games has been RUNNING this long -- checked on "
                          "in-flight games, so it does not wait for the game to end. Deliberately separate from "
-                         "--intractable-sec-per-game: that one is a MEAN (is filling this cell affordable?), this "
+                         "--intractable-median-sec-per-game: that one is a MEDIAN over the row (can we escalate to this "
+                         "depth some of the time, affordably?), this "
                          "one is about a single pathological game, and sharing the number would condemn a cell "
                          "with a 5 s/game mean over one 61 s game. 0 disables. Default 3600 (a run measured "
                          "2026-08-10 had a single game at 21.4 HOURS, invisible until it finished).")
@@ -1114,7 +1224,31 @@ def main():
                          "skip list be shared and the run stay reproducible. ABSOLUTE for now: the threshold "
                          "that actually wants using is relative to a cell's own median (cells span 11 ms to "
                          "700 s per game), and MTG_DUMP_UNITS exists to measure that distribution before a "
-                         "multiplier is chosen. Until then this is a calibration lever, not a production knob.")
+                         "multiplier is chosen. Prefer --abandon-k, which does that per cell.")
+    ap.add_argument("--abandon-k",type=float,default=0.0,
+                    help="RELATIVE per-game ceiling: abandon a game past k x the median cost of its own "
+                         "cell's first --abandon-calib games. This is the form that can serve a whole "
+                         "matrix -- an absolute number cannot, because cells span 11 ms to 700 s per game "
+                         "(measured on burn alone, six cells spanned 150x in median units). The sample is a "
+                         "FIXED set of games (the lowest offsets), never a running median, so the abandoned "
+                         "set stays a deterministic function of (deck, arm, depth, seed, k, calib) rather "
+                         "than of thread interleave. The frozen ceiling is reported by the pool, stored per "
+                         "cell, and handed back on every resume. 0 = off.")
+    ap.add_argument("--max-skip-frac",type=float,default=0.10,
+                    help="stop abandoning once a (deck,seed) has skipped more than this fraction of --target. "
+                         "Past that rate the games being dropped are not a tail but the distribution, and "
+                         "filtering them silently changes what the table measures; it also cannot converge, "
+                         "because the target grows by the skip count and a ceiling below a cell's own median "
+                         "abandons every backfilled game too. The ceiling is disarmed for that deck+seed and "
+                         "the table says so. 0 disables the cap (not recommended).")
+    ap.add_argument("--abandon-calib",type=int,default=10,
+                    help="games forming a cell's calibration sample for --abandon-k. They run WITHOUT a "
+                         "relative ceiling (--abandon-units still applies if set, as a safety cap), and the "
+                         "cell's remaining games are held back until the sample completes -- a per-cell "
+                         "dependency, not a barrier: every other cell keeps running. Small on purpose: the "
+                         "ceiling only has to separate a typical game from a 100x monster, so median noise "
+                         "is irrelevant, while a large sample lengthens the window in which the cell's "
+                         "worst game is still unbounded.")
     ap.add_argument("--drip",type=int,default=1,
                     help="games of a single NOT-YET-JUDGED condemnable cell allowed in flight at once. LPT would "
                          "otherwise put every thread on the most expensive cell in the table -- which is exactly "
@@ -1131,6 +1265,11 @@ def main():
     if not args.incremental:
         sys.exit("the monolithic path is REMOVED -- incremental batching is the only route "
                  "(one pooled queue, resumable, no per-cell tail). Drop --no-incremental.")
+    if args.intractable_sec_per_game is not None:
+        sys.exit("--intractable-sec-per-game is RETIRED: the tractability rule now judges the MEDIAN "
+                 "cost per game, not the mean. The same number means something stricter under a "
+                 "median (a mean carried tail inflation a median does not), so the limit has to be "
+                 "re-chosen rather than carried over. Use --intractable-median-sec-per-game.")
     if args.never_condemn_at_or_below < 5:
         sys.exit("--never-condemn-at-or-below must be >= 5: the d<=5 H cells ARE the crossover, so "
                  "condemning one leaves a hole in the answer rather than saving cost.")

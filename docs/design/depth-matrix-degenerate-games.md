@@ -3,23 +3,139 @@
 Design agreed with the user 2026-08-13/14, from the FiveColour value-leaf run. Four changes with one
 enabler.
 
-**STATUS 2026-08-14 — 1, 2, 3 and 5 have SHIPPED; 4 partly; 6 is open.**
+**STATUS 2026-08-15 — 1, 2, 3, 5 and the THRESHOLD POLICY have SHIPPED; 4 partly; 6 is open.**
 
 | piece | state |
 |---|---|
-| 1. per-game storage | SHIPPED (`b579db0`, then pairs). Chunks carry `g` = [(offset, win turn)], read from the `.wins` file; retention is per GAME (`_chunk_restrict`), legacy mean-only chunks stay atomic |
-| 2. skip + backfill | SHIPPED. `<out>.skipped.json` per (deck, seed); `target` grows by its size so cells backfill; `apply_skiplist` excludes the union from every cell; the table discloses it as `~~ FILTERED` |
+| 1. per-game storage | SHIPPED (`b579db0`, then pairs). Chunks carry `g` = [(offset, win turn)], read from the `.wins` file; retention is per GAME (`_chunk_restrict`), legacy mean-only chunks stay atomic. **It was silently failing on most chunks until 2026-08-15 — see the race below** |
+| 2. skip + backfill | SHIPPED. `<out>.skipped.json` per (deck, seed); `target` grows by its size so cells backfill; `apply_skiplist` excludes the union from every cell; the table discloses it as `~~ FILTERED`. Backfill verified end-to-end 2026-08-15 |
 | 3. a real abort | SHIPPED. `ai/GameWorkMeter.h` + `GameEngine::kAbandoned` + `abandon_units` per manifest job. Deterministic, in work units, disarmed by default |
-| 4. median condemnation | ROW-WIDE half shipped on the other machine (`230765d`); the MEDIAN statistic is still open |
+| 3b. THRESHOLD POLICY | SHIPPED 2026-08-15 — `abandon_k` x the median of a cell's first `abandon_calib` games, frozen and recorded. See below |
+| 4. median condemnation | SHIPPED 2026-08-15. Row-wide aggregation was `230765d`; the statistic is now a MEDIAN, the limit is `median_sec_per_game` (30 s, down from a 60 s mean), and both old spellings REFUSE rather than being reinterpreted |
 | 5. ladder tops at H5 | SHIPPED (`cbb7876`), H6 dropped |
 | 6. quality-based rung condemnation | OPEN — the 0.0075 equivalence threshold is derived below but not implemented |
 
-**What is left before this can drive a real run: the THRESHOLD POLICY.** The ceiling is currently
-supplied by the caller as an absolute unit count; nothing computes "k x this cell's median" yet.
-`MTG_DUMP_UNITS` now writes a `<job>.units` file so the distribution can be MEASURED rather than
-guessed -- a first sample (FiveColour, d3 b10, 25 games) gives median 36,451 units and max 408,902,
-i.e. 11.2x the median at a cheap depth. k, whether the median is per-cell or per-row, and the
-graceful-degradation rate all want that data before being fixed in code.
+## The threshold policy: k x the cell's own CALIBRATED median
+
+An absolute ceiling cannot serve a matrix. Measured on **burn**, the cheapest deck in the repo, six
+cells alone span 150x in median units (V1 50, V2 341, V3 1,269, H1 777, H2 3,326, H3 7,506) -- and
+FiveColour's H5 is orders further out. One number is either inert at the top of the ladder or shreds
+the bottom. At k=3 on burn the same single knob produced ceilings of 168 (V1) through 50,343 (H3).
+
+**The sample is a FIXED set of games, not a running median.** A running median depends on which games
+happen to have finished when the next one starts -- i.e. on thread interleave -- so the abandoned set
+would differ run to run and machine to machine, destroying the one property the unit currency was
+chosen for. Instead:
+
+* the calibration sample is exactly the cell's games with GLOBAL index < `abandon_calib`;
+* those games run with no relative ceiling, and everything above that index is HELD BACK (a per-cell
+  dependency in the existing drip/park machinery, **not** a barrier -- every other cell keeps running);
+* on the last calibration game the ceiling freezes at `k x median`, and the pool reports
+  `[batch] CEILING cell=... calib=... median=... k=... units=...`;
+* the driver STORES it per cell and hands it straight back on the next resume, where those
+  calibration games no longer appear and could never be re-measured. A ceiling recomputed from a
+  different sample would abandon a different set -- reproducibility would break halfway through a run.
+
+Verified on burn (k=3, calib=10): the abandoned set is reproduced exactly by an independent
+prediction from the unbounded run's unit counts, on all six cells; survivors are byte-identical to
+the unbounded baseline in win turn, play digest AND unit count; the frozen ceilings round-trip
+through a resume.
+
+**Sample-size caveat.** At `calib=10` the calibration median ran 1.3-2.2x above the cell's true
+median on burn (H3: 16,781 vs 7,506), so the effective k varies by about that much between cells. It
+errs LOOSE, which is the safe direction, and it is irrelevant against monsters at 100-1000x the
+median -- but "k=20" is not precisely 20x the typical game. A larger sample tightens it at the cost
+of a longer window in which the cell's worst game is still unbounded, which is the expensive
+trade at H5.
+
+**What the calibration window costs, measured on FiveColour.** Ten games per cell still run
+unbounded, and on this deck that window is enough to catch a monster: V3's own 10-game sample spanned
+2,380 to **2,359,567** units (81x its median) and H2's spanned 10,555 to 1,438,186. The hold-back
+then makes that particular game worse rather than better -- the cell's other 15 games sit parked
+behind it instead of running alongside. That is the deliberate price of reproducibility: releasing
+them early would mean which games ran unbounded depended on timing, and the abandoned set would stop
+being a function of (deck, arm, depth, seed, k, calib). It is bounded and it is concentrated where it
+does least harm -- `calib` games instead of `target` games (10 vs 400, a 40x cut in unbounded
+exposure), all of it at the START of a run when 52 other cells are competing for the box.
+
+**Why one number could never have worked, on the real deck.** FiveColour medians, seed 8008, from the
+calibration samples: V1 266, V2 3,752, V3 28,975, H1 11,603, H2 127,533, H3 508,841 units. That is
+1,900x across six cells of ONE deck at shallow depths, with H growing roughly an order of magnitude
+per rung -- and the matrix runs to H5 and V8.
+
+### How concentrated the cost actually is (FiveColour, seed 8008, 25 games/cell, unbounded)
+
+```
+cell    median u        max u   max/med   worst game as % of the CELL's total work
+V1           213        3,159       15x    19.6%
+V2         3,473       89,707       26x    34.4%
+V3        23,462    2,359,567      101x    59.4%
+V4        97,643  168,381,673    1,724x    92.2%
+V5        92,711  614,043,981    6,623x    82.3%
+H1        11,558      155,806       13x    28.9%
+H2        88,943    1,671,831       19x    28.1%
+H3       448,783   11,821,796       26x    27.9%
+```
+
+The doc's original estimate -- "1-2% of games carry roughly half an arm's cost" -- understates the
+deep cells. At V4 and V5 a SINGLE game out of 25 is 82-92% of everything the cell costs, and the
+concentration grows monotonically with depth on both arms. This is the whole case for a per-game
+ceiling in one table: no per-cell condemnation rule can reach it (the cell's other 24 games are
+ordinary), and no micro-optimisation matters against 6,623x.
+
+### Follow-up: freeze as soon as the median is DETERMINED, and apply it to the sample itself
+
+**The calibration window is exempt, and on this deck that is exactly where the worst game landed.**
+V5's 614,043,981-unit game is game 6 -- inside the first 10 -- so the armed run paid it in full,
+25 minutes and counting, with the cell's other 15 games parked behind it. V4's game 6 (168,381,673
+units, 12.6 minutes) was the same hand one rung shallower. At k=5 the V5 ceiling would have been
+463,555 units, so that one game ran ~1,300x past what the ceiling would have allowed, purely because
+of where it sat in the ordering. This is the one place the mechanism still cannot help, and there is
+a clean way to close it that keeps determinism:
+
+The median of an N-sample is DETERMINED before all N finish. With N=10 it is the mean of the 5th and
+6th smallest, so once 6 games have completed and every still-running calibration game has already
+consumed more units than the 6th smallest completed value, the final median is known -- the
+unfinished games can only land above it, and their exact values cannot move it. Freeze there. Two
+things follow, and the second is the point:
+
+* the cell's held games start ~immediately rather than waiting on its slowest sample game, which is
+  the utilisation half;
+* the frozen ceiling can then be applied to the still-running CALIBRATION games as well. That is
+  sound precisely because they are known to sit above the median: abandoning them cannot change the
+  number that was frozen, so the abandoned set stays a function of (deck, arm, depth, seed, k, calib)
+  and nothing depends on when the check happened to run.
+
+What it needs that does not exist yet: a running game's consumed units are `thread_local` in
+`ai/GameWorkMeter.h`, readable only by the thread running it, so the check needs a per-slot atomic
+the meter publishes to (the heartbeat already tracks running games per slot and is the natural
+place). Until then the residual exposure is `calib` unbounded games per cell -- 10 instead of 400,
+a 40x cut, but not elimination.
+
+**Graceful degradation (`--max-skip-frac`, default 0.10).** Past some rate the dropped games are not
+a tail but the distribution. It is also a runaway: `target` grows by the skip count, and a ceiling
+below a cell's own median abandons every backfilled game too -- demonstrated with a deliberately low
+absolute ceiling on burn, where H3 went 19 games, then 31, climbing with no end. Over the cap, the
+ceiling is DISARMED for that deck+seed and the table says so. The relative ceiling makes this
+unlikely by construction, so it is a backstop for a bad k, not the primary guard.
+
+## The race that was silently disabling per-game storage (fixed 2026-08-15)
+
+`--batch` printed a job's result line BEFORE writing its `.wins`/`.units` files, so a driver waiting
+on that line could open the file before it existed. Measured on a 12-chunk burn matrix: **9 of 12
+chunks** lost their per-game rows and were stored mean-only. The damage is worse than losing detail:
+
+* a chunk SHORTENED by abandonment then records n survivors with no offsets, and `_chunk_offsets`
+  falls back to `off..off+n` -- a contiguous range it does not hold. One measured chunk was stored as
+  covering "0..7" while actually holding {1,2,4,7,12,17,19,22}, so every paired comparison against it
+  would intersect on the wrong game identities. That is exactly the defect per-game storage exists to
+  end (§1), reintroduced underneath it.
+* the abandoned games never reached the skip list, so every resume re-ran and re-abandoned them at
+  full cost -- the failure §2's skip list is built to prevent.
+
+Two fixes: the engine writes the files before announcing the job (the line is now a promise that they
+are on disk), and the driver REFUSES a short chunk that has no per-game rows rather than storing it
+with a fabricated range.
 
 The motivating run: 22,400 games, 88% complete after 28 hours, then stalled with **6 games running,
 one of them for 26.5 hours**, holding 6 of 24 cores. Those six games could not change any conclusion
@@ -115,10 +231,17 @@ comparisons. With per-game storage no re-running follows.
 The skip list is shared per (deck, seed), so all cells of a seed grow together and stay aligned.
 
 **The estimand changes and MUST be recorded in the artifact.** The table then answers "on games that
-complete in reasonable time, is the leaf as good as H5?" rather than "on all games". That is arguably
-the better question -- budgeted play never searches a degenerate position to completion, so its
-unbounded quality was never decision-relevant -- but a reader comparing against an unfiltered table
-would otherwise be comparing different populations. Write the skip list into the table.
+complete in reasonable time, is the leaf as good as H5?" rather than "on all games". A reader
+comparing against an unfiltered table would otherwise be comparing different populations, so the skip
+list goes into the table.
+
+But do not read the filter as a regrettable compromise -- **it is the correct population** (user,
+2026-08-15). Shipped play is BUDGETED; it will never process one of these positions at depth, because
+the budget truncates the search long before. So the filtered games are not cases production reaches
+and then handles badly, they are cases production never reaches at all. Measuring their unbounded
+quality would be characterising a regime that does not occur, and letting them into the average moves
+the number the policy is derived from. The question the table exists to answer is: *on the cases
+where we do escalate, and the cost is not insane, does the leaf match H5?*
 
 ## 3. A real ABORT, not a repurposed budget — SHIPPED
 
@@ -154,16 +277,21 @@ Note the selection effect visible in that table -- the average over survivors mo
 the ceiling tightens), because expensive games are systematically harder hands. That is the estimand
 change, and it is why the filter has to be disclosed in the artifact rather than applied silently.
 
-## 4. Condemn on the MEDIAN, row-wide
+## 4. Condemn on the MEDIAN, row-wide — SHIPPED
 
 Supersedes the statistic in `condemnation-row-average.md` (the row-wide aggregation there still
 holds; this refines what is aggregated).
 
-Today: a raw MEAN over 50 games of one (deck, arm, depth, SEED) cell. One 32-minute game carried
-V6/V7/V8@8008 1-3% over a 60 s/game limit while the other 49 games ran ~19.5 s/game.
+**The question the rule has to answer is "can we escalate to this depth SOME of the time, at a cost
+that is not insane?"** (user, 2026-08-15) -- because that is the only regime the derived policy is
+applied in. A row is therefore usable when a TYPICAL game is affordable, however ugly its tail (§2's
+ceiling truncates the tail), and unusable only when the MAJORITY of its games are impractical. That
+sentence *is* a median guard.
 
-"Condemn if the majority of games are slow" IS a median guard, and a median is immune to one or two
-long tails by construction. Measured against what actually happened:
+What was there before: a raw MEAN over 50 games. One 32-minute game carried V6/V7/V8@8008 over a
+60 s/game limit while the other 49 games ran ~19.5 s/game. (The final means below sit just under 60;
+condemnation fired earlier, when n was small enough for the one monster to dominate -- which is its
+own defect, a verdict that depends on when you look.)
 
 ```
 cell            games   >60s   % over    mean s/game   mean rule   median rule
@@ -173,15 +301,39 @@ V8@8008            50     12    24.0%          58.5s     CONDEMN          keep
 H6@9009             4      4   100.0%        1319.1s     CONDEMN       CONDEMN
 ```
 
-**The 60 s/game limit is calibrated for cheap decks.** H5 has 30-60% of its games over it, and over
-half on two seeds -- a median guard at 60 s would condemn H5 on this deck. That is not a tail; that is
-the whole distribution. Skipping cannot rescue a cell whose MEDIAN exceeds the limit, only one with a
-heavy tail. So the limit must scale (per-depth, or relative to the arm's shallower rung) or H5 keeps
-its protection -- otherwise we lose the reference the trust criterion is defined against.
+**Two reasons the mean had to go, and the second is fatal:**
 
-**Graceful degradation:** if the skip rate in a cell exceeds some percentage, stop skipping and condemn
-instead. That matters most for the decks we most want -- dragonstorm's H3-H6 were ALL condemned, so a
-skip policy there would fire constantly.
+1. It answers the wrong question. A mean conflates "many moderately slow games" -- condemn, there is
+   nothing to salvage -- with "a few catastrophic ones" -- abandon those and keep the row. Opposite
+   responses, same statistic.
+2. With the §2 ceiling armed it is not well defined. A ceiling'd game contributes its TRUNCATED cost,
+   so a row with 10% abandoned games reads `0.9m + 0.1(km)` = **3.4x its median at k=25 and 1.9x at
+   k=10**. The verdict would follow an arbitrary constant, and 74% of the statistic would come from
+   games the table discards. A median does not move at all.
+
+**The H5 objection that used to sit here was wrong, and it was blocking this.** It read: "H5 has
+30-60% of its games over the limit, so a median guard would condemn H5 -- the reference trust is
+defined against." H5 is *structurally exempt*: `never_condemn_at_or_below` is clamped to >=5 (the
+driver exits below that) and `HDEPTHS` tops out at 5, so no H cell is condemnable whatever the
+statistic is. The only condemnable rows in a real run are V6/V7/V8.
+
+**The limit came DOWN with the statistic, and had to.** A mean carried tail inflation a median does
+not, so reusing 60 would have loosened the guard by roughly 3x. `median_sec_per_game` is 30: healthy
+V6-V8 cells measured ~19.5 s/game typical (~1.5x headroom), and a row sitting at the limit costs
+400 games x 4 seeds x 30 s = 13.3 core-hours. Both old spellings -- the `--intractable-sec-per-game`
+flag and the `condemn.sec_per_game` manifest key -- REFUSE rather than being reinterpreted, because
+the same number means something stricter under a median and a silently-carried-over limit would
+condemn on a threshold nobody chose.
+
+**In-flight soundness survives the change.** The heartbeat rule folds running games in at their
+elapsed time, a LOWER bound on their final cost. A median is monotone in every element, so raising
+those partial values can only raise it: the in-flight median can only UNDERSTATE the final one, and
+condemning on it cannot be a false positive from the partial term. Same argument the mean version
+had, intact.
+
+**Graceful degradation** is `--max-skip-frac` (default 0.10): past that skip rate the ceiling is
+disarmed for the deck+seed, because filtering is then reshaping the population rather than trimming
+it. That matters most for the decks we most want -- dragonstorm's deep rungs were all condemned.
 
 Caveat on the percentages above: `slow_games.log` accumulates across resumes, so re-run games are
 double-counted (`H6@8008` shows 11 records for 7 games). The V-cell result is robust (24% is nowhere

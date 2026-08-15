@@ -136,11 +136,53 @@ VDEPTHS="1 2 3 4 5 6 7 8"
 # game, so every leaf is terminal and the learned evaluator is never consulted. FiveColour has
 # max_turns=8, so H8 == V8 -- never pay ~68 core-hours to re-measure a cell the V arm already has.
 HDEPTHS="1 2 3 4 5"
-# Tractability guard, seconds/game. This is a SAFETY VALVE against a genuinely exploding cell, not a
-# budget: at 3.0 it condemned cells running at 4.33 s/game whose full fill cost 4 CORE-HOURS in total
-# -- 0.3% of the run that skipped them -- and left H1-5 unmeasured on two decks, which is what the
-# table is derived from. Set it high enough that only a real explosion trips it.
-INTRACTABLE_SPG=60
+# Tractability guard: condemn a row whose MEDIAN game costs more than this many seconds.
+#
+# THE QUESTION IT ASKS is "can we escalate to this depth SOME of the time, at a cost that is not
+# insane?" -- because that is the only regime the table's answer is ever applied in. Shipped play is
+# BUDGETED, so it never processes a pathological position at depth; the deep unbounded games are not
+# cases production will ever reach. So a row is usable when a TYPICAL game is affordable however ugly
+# its tail (ABANDON_K truncates the tail), and unusable only when the MAJORITY of its games are
+# impractical -- which is exactly "the median exceeds the limit". Nothing else can be salvaged there:
+# skipping past that rate is reshaping the population, not trimming it (see --max-skip-frac).
+#
+# THIS WAS A MEAN AT 60 AND THE STATISTIC WAS WRONG, twice over. A mean conflates "many moderately
+# slow games" (condemn) with "a few catastrophic ones" (abandon those, keep the row), which want
+# opposite responses: one 32-minute game put V6/V7/V8@8008 1-3% over the old 60 s limit and condemned
+# three healthy cells whose other 49 games ran ~19.5 s/game. And once ABANDON_K is armed the mean is
+# not even well defined -- a ceiling'd game contributes its TRUNCATED cost, so a row with 10%
+# abandoned games reads 3.4x its median at k=25 and 1.9x at k=10, i.e. the verdict follows an
+# arbitrary constant. A median moves not at all.
+#
+# 30 s/game: healthy V6-V8 cells measured ~19.5 s/game typical, so this leaves ~1.5x headroom over
+# the case we know we want to keep, and a row at the limit costs 400 games x 4 seeds x 30 s = 13.3
+# core-hours. It is deliberately LOWER than the old 60 -- a mean carried tail inflation a median does
+# not, so carrying the number across would have quietly loosened the guard by roughly 3x.
+#
+# NOTE only V6/V7/V8 are ever subject to this: NEVER_CONDEMN is clamped to >=5 and HDEPTHS tops out
+# at 5, so every H cell is structurally exempt whatever the statistic says.
+INTRACTABLE_MEDIAN_SPG=30
+# PER-GAME WORK CEILING, relative. A game past ABANDON_K x the median cost of its own cell's first
+# ABANDON_CALIB games is VOIDED -- no result, excluded from every cell of its (deck,seed), and
+# backfilled so the cell still reaches its game count. This is the guard nothing else provides:
+# INTRACTABLE_MEDIAN_SPG and the in-flight max_game_sec both condemn a ROW or CELL, and neither stops a game that
+# is already running. That is the 2026-08 stall exactly -- a matrix finished 88% of 22,400 games and
+# then sat for 26.5 more hours on six of them, one cell having been condemned at the one-hour mark
+# while its game ran on for another 25. Roughly 1-2% of games carry about half of an arm's cost.
+#
+# RELATIVE, because absolute cannot work here: on burn -- the CHEAPEST deck in the repo -- six cells
+# span 150x in median units (V1 50, H3 7,506), and this deck's H5 is orders further out again. One
+# absolute number is either inert at the top of the ladder or shreds the bottom of it. The sample is
+# a FIXED set of games (the cell's lowest offsets), never a running median, so the abandoned set
+# stays reproducible across machines and resumes rather than following thread interleave.
+#
+# k=25 sits above the natural spread and far below the pathology: measured max/median per cell is
+# 2.1-7.1x on burn and 11.2x on a FiveColour keep-gen sample, while the games this exists to stop are
+# 100-1000x. calib=10 is deliberately small -- the ceiling only has to separate a typical game from a
+# monster, so median noise is irrelevant, while every calibration game is one that runs UNBOUNDED, so
+# a larger sample buys precision nobody needs at the price of the exposure this is removing.
+ABANDON_K=25
+ABANDON_CALIB=10
 # MEMORY BOUNDS, derived from the box -- generous, but never OOM (user, 2026-08-13). Both caches are
 # RESULT-NEUTRAL memos (a refused insert just recomputes; play is byte-identical -- see
 # TranspositionTable::Cap and FslCap in TurnSolver.cpp), so capping them costs only tail-game
@@ -444,7 +486,8 @@ PY
 # ------------------------------------ PHASE C: every deck's matrix cells, ONE work-stealing pool
 # Incremental, batched, tractability-aware: cells advance in 25-game batches submitted round-robin into
 # a work-stealing pool, so a cell stuck on a long game holds ONE worker while the rest keep churning,
-# and a cell slower than --intractable-sec-per-game is capped at a reference sample rather than burning
+# and a row whose MEDIAN game is slower than --intractable-median-sec-per-game is capped at a reference
+# sample rather than burning
 # the box on a cell no production run could use. Passing every deck at once means one pool and one tail
 # instead of one per deck. Run with the box to ITSELF: the cutoff is wall-clock based, so a loaded box
 # misclassifies slow cells as intractable and silently truncates the table.
@@ -460,13 +503,14 @@ phase_matrix() {
     done_p C_matrix && return 0
     local keys; keys=$(staged_keys)
     [ -n "$keys" ] || { log "PHASE C ABORT: no staged models"; return 1; }
-    log "PHASE C: matrix over$keys -- ONE pool, all available cores, target $MATRIX_TARGET/cell, H=[$HDEPTHS], V=[$VDEPTHS], cutoff ${INTRACTABLE_SPG}s/game, never-condemn<=$NEVER_CONDEMN"
+    log "PHASE C: matrix over$keys -- ONE pool, all available cores, target $MATRIX_TARGET/cell, H=[$HDEPTHS], V=[$VDEPTHS], cutoff median ${INTRACTABLE_MEDIAN_SPG}s/game, never-condemn<=$NEVER_CONDEMN, per-game ceiling ${ABANDON_K}x median of first $ABANDON_CALIB"
     MTG_SLOW_GAME_LOG="$SLOW_GAME_LOG" \
     python3 scripts/attic/valueleaf_depth_matrix.py --incremental --decks $keys \
         --hdepths $HDEPTHS --vdepths $VDEPTHS --seeds 8008 9009 10010 11011 \
         --target "$MATRIX_TARGET" --reference-target "$MATRIX_REF" --batch 25 \
-        --value-min-depth 0 --intractable-sec-per-game "$INTRACTABLE_SPG" \
+        --value-min-depth 0 --intractable-median-sec-per-game "$INTRACTABLE_MEDIAN_SPG" \
         --never-condemn-at-or-below "$NEVER_CONDEMN" \
+        --abandon-k "$ABANDON_K" --abandon-calib "$ABANDON_CALIB" \
         --out "$MATRIX_TXT" >> "$VLQ/matrix.log" 2>&1
     [ -s "$MATRIX_TXT" ] || { log "PHASE C ABORT: no matrix output"; return 1; }
     log "PHASE C done"
