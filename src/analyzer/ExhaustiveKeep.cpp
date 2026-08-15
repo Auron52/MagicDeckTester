@@ -426,7 +426,10 @@ static std::string RolloutConfigDigest(const Decklist& deck, const MulliganProfi
 // Bump when DiscoverEquivalence's OUTPUT can move for unchanged inputs (a new by-construction merge,
 // a change to the clustering). Gates the discovery cache below.
 //   1 = single-linkage + inert merge     2 = + by-construction fetchland merge (2026-08-14)
-static constexpr int kDiscoveryVersion = 2;
+//   3 = discovery runs under PLAY settings, not mull_gen_* (2026-08-15). The cached depth/budget_ms
+//       fields now mean the DISCOVERY pair; an old cache holds the gen pair under the same names, so
+//       it could match on paper while describing different buckets. Bumping forces the MISS.
+static constexpr int kDiscoveryVersion = 3;
 
 static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganProfile& profile,
                                            const ExhaustiveKeepConfig& cfg,
@@ -462,8 +465,8 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
             const auto& m = cj["meta"];
             const bool match = m.value("deck_fp", 0ULL) == eq_deck_fp
                             && m.value("probes", -1) == cfg.probes
-                            && m.value("depth", -1) == cfg.depth
-                            && m.value("budget_ms", -1) == cfg.budget_ms
+                            && m.value("depth", -1) == cfg.equiv_depth
+                            && m.value("budget_ms", -1) == cfg.equiv_budget_ms
                             && m.value("threshold_x1e6", ~0LL) == eq_thr_x1e6
                             && m.value("equiv_seed", ~0ULL) == cfg.equiv_seed
                             && m.value("max_turns", -1) == cfg.max_turns
@@ -501,9 +504,9 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
     }
     if (!eq_loaded)
     {
-        std::cerr << "[keepgen] equivalence discovery: " << cfg.probes << " probes, depth " << cfg.depth
+        std::cerr << "[keepgen] equivalence discovery: " << cfg.probes << " probes, depth " << cfg.equiv_depth
                   << " ...\n" << std::flush;
-        eq = DiscoverEquivalence(deck, profile, cfg.probes, cfg.depth, cfg.budget_ms,
+        eq = DiscoverEquivalence(deck, profile, cfg.probes, cfg.equiv_depth, cfg.equiv_budget_ms,
                                  cfg.threshold, cfg.equiv_seed, cfg.max_turns);
         std::cerr << "[keepgen] equivalence discovery done: " << eq.classes.size() << " raw buckets ("
                   << static_cast<long long>(std::chrono::duration<double>(
@@ -511,8 +514,8 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
         if (eq_cache && *eq_cache)
         {
             nlohmann::json cj;
-            cj["meta"] = { {"deck_fp", eq_deck_fp}, {"probes", cfg.probes}, {"depth", cfg.depth},
-                           {"budget_ms", cfg.budget_ms}, {"threshold_x1e6", eq_thr_x1e6},
+            cj["meta"] = { {"deck_fp", eq_deck_fp}, {"probes", cfg.probes}, {"depth", cfg.equiv_depth},
+                           {"budget_ms", cfg.equiv_budget_ms}, {"threshold_x1e6", eq_thr_x1e6},
                            {"equiv_seed", cfg.equiv_seed}, {"max_turns", cfg.max_turns},
                            {"commit", eq_commit}, {"play_digest", play_digest},
                            {"disco_ver", kDiscoveryVersion},

@@ -23,8 +23,23 @@ struct ExhaustiveKeepConfig
 {
     int      probes    = 400;   // equivalence-discovery probes (bucket resolution)
     double   threshold = 0.01;  // equivalence single-linkage merge distance
-    int      depth     = 5;     // rollout search depth (match keep-model labels)
-    int      budget_ms = 20;
+    int      depth     = 5;     // LABEL-ROLLOUT search depth (match keep-model labels). A pure COST knob:
+    int      budget_ms = 20;    // it sets how hard each cell's rollouts search, nothing else.
+    // DISCOVERY (equivalence-bucketing) search settings -- deliberately SEPARATE from the label-rollout
+    // pair above, and sourced from the deck's SHIPPED PLAY settings rather than from mull_gen_*.
+    //
+    // Why they must not be the same knob (measured 2026-08-15): bucketing asks "are these two cards
+    // interchangeable for THIS deck?", which is a property of the deck AS PLAYED -- it has no business
+    // moving when we pick a cheaper label-rollout setting. When they were one field, lowering the gen
+    // depth silently re-bucketed the deck, and because hand count grows as C(K+6,7) a WEAKER setting
+    // could cost far MORE: on slivers, K went 10 -> 13 -> 11 for gen d3/d2/d1, i.e. 14,117 -> 61,001
+    // distinct hands (4.3x) at d2. It also made `mull_gen_*` silently non-comparable across machines
+    // and made any gen-depth A/B measure two things at once.
+    //
+    // Keeping them separate is what makes `mull_gen_depth` / `mull_gen_budget_ms` a pure cost knob, and
+    // what lets the documented MTG_EQUIV_DEPTH / MTG_EQUIV_BUDGET pins actually work on the recipe path.
+    int      equiv_depth     = 5;
+    int      equiv_budget_ms = 20;
     int      rollouts  = 100;   // R_max: the per-cell rollout CAP (label precision ceiling). Must be >= 2:
                                 // a cap of 1 leaves no room for a floor below it, and the generator has
                                 // only the adaptive/continuous path (a cap of 1 is rejected, not downgraded).

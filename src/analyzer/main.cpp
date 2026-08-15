@@ -173,7 +173,11 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
                         return (s && *s) ? std::max(0.0, std::atof(s)) : 0.01; }();
     cfg.depth     = env_int("MTG_EQUIV_DEPTH", 5, 0);
     cfg.budget_ms = env_int("MTG_EQUIV_BUDGET", 20, 0);  // per-decision rollout search budget (ms);
-                                                         // feeds discovery, rollouts AND play digest
+                                                         // feeds rollouts AND play digest
+    // DISCOVERY settings. On this (manual/env) route they intentionally track the same env pair, so the
+    // path stays byte-identical; the recipe branch below re-points them at the deck's PLAY settings.
+    cfg.equiv_depth     = cfg.depth;
+    cfg.equiv_budget_ms = cfg.budget_ms;
     cfg.rollouts  = env_int("MTG_KEEP_ROLLOUTS", 100, 1);   // cap R; <2 is rejected by the generator
     // The adaptive FLOOR is derived by the generator (clamped into [1, cap-1]) -- there is no knob. The
     // old MTG_KEEP_R_FLOOR did not tune the schedule, it SELECTED one: unset (the default!) or >= cap meant
@@ -243,6 +247,7 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
     // overrides for the raw MTG_KEEP_EXHAUSTIVE path). Keep is always adaptive (floor 2); the recipes
     // differ in whether BOTTOMING is adaptive and in the cap R. See the recipe study in memory/docs.
     std::string depth_src = "gen-default", budget_src = "gen-default";
+    std::string equiv_src = "gen-default";   // where the DISCOVERY (bucketing) depth came from
     if (!a.gen_recipe.empty())
     {
         // Deterministic seed by DEFAULT for the recipe path. The global default randomizes the seed
@@ -282,6 +287,17 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
         const auto& vp = profile.value_play;
         cfg.depth     = vp.MullGenDepth(5);
         cfg.budget_ms = vp.MullGenBudgetMs(20);
+        // DISCOVERY runs under the deck's SHIPPED PLAY settings, NOT mull_gen_* (user call, 2026-08-15).
+        // Bucketing asks whether two cards are interchangeable for this deck AS PLAYED, so it must not
+        // move when we pick cheaper label rollouts. Before this split, `cfg.depth` fed discovery too, so
+        // lowering the gen depth silently re-bucketed the deck -- and since hand count grows as
+        // C(K+6,7), a cheaper setting could cost far more (slivers: K 10->13 at gen d2 = 4.3x the hands).
+        // An explicit MTG_EQUIV_* pin still wins, which is what the pooling checklist documents and what
+        // the recipe path previously ignored outright.
+        cfg.equiv_depth     = env_int("MTG_EQUIV_DEPTH",  vp.target_depth > 0 ? vp.target_depth : 5, 0);
+        cfg.equiv_budget_ms = env_int("MTG_EQUIV_BUDGET", vp.budget_ms    > 0 ? vp.budget_ms    : 20, 0);
+        equiv_src = std::getenv("MTG_EQUIV_DEPTH") ? "MTG_EQUIV_DEPTH (pinned)"
+                  : vp.target_depth > 0            ? "value_play.target_depth (play)" : "gen-default";
         depth_src  = vp.mull_gen_depth > 0 ? "value_play.mull_gen_depth"
                    : vp.target_depth   > 0 ? "value_play.target_depth" : "gen-default";
         budget_src = vp.mull_gen_budget_ms > 0 ? "value_play.mull_gen_budget_ms"
@@ -326,6 +342,10 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
                   << "  (adaptive keep -- the only schedule; clamped below the cap)\n";
         std::cout << "  rollout depth   : " << cfg.depth     << "  (source: " << depth_src  << ")\n";
         std::cout << "  rollout budget  : " << cfg.budget_ms << " ms  (source: " << budget_src << ")\n";
+        // Print discovery separately: these drive the BUCKETS (and thus the hand count), and conflating
+        // them with the rollout pair is exactly the confusion this split removes.
+        std::cout << "  discovery depth : " << cfg.equiv_depth     << "  (source: " << equiv_src << ")\n";
+        std::cout << "  discovery budget: " << cfg.equiv_budget_ms << " ms\n";
         std::cout << "  flip_eps        : " << cfg.flip_eps << "   se_prior: " << cfg.se_prior
                   << "   r_batch: " << cfg.r_batch << "\n";
         std::cout << "  max_mull        : " << cfg.max_mull << "   max_turns: " << cfg.max_turns << "\n";
