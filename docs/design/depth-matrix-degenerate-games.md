@@ -205,10 +205,18 @@ Two things it needed that were not obvious:
 
 A quality-capped cell is marked `=` in the table, distinct from `*` (intractable / reference-only),
 and is excluded from the equal-game-set check: it stopped early on purpose, so it holds a subset.
-**Known limitation:** its row mean is therefore over fewer games than a full cell's, and the metadata
-writer consumes those row means. The equivalence test that capped it is paired and sound; the row
-mean it leaves behind is not paired against its neighbour. Making the metadata deriver read per-game
-data rather than table means is the open follow-up.
+
+**So the metadata deriver reads PER-GAME DATA, not the table's row means.** Everything it produces --
+`value_trust_depth`, `value_no_fallback`, the crossover -- is a COMPARISON between one depth's LP and
+another's, so the two have to be over the same games or part of the difference is just which hands
+each cell drew. `valueleaf_table_to_metadata.py` now recomputes every row over one game set per seed
+from `<log>.cells.json` (intersecting the cells that are not reference-capped; a 50-game reference
+cell would otherwise drag the whole deck down to 50). Verified against the burn matrix where the
+rungs were genuinely unequal: the deriver moved H1 4.3387->4.2354, H2 4.3362->4.2327, H3
+4.3350->4.2327, H4 4.2589->4.2327, recovering exactly the values a separately-fixed run produced --
+two independent paths landing on the same numbers, and H2 = H3 = H4 as the paired truth. A legacy
+table with no per-game records still derives, with a note saying the rows are only comparable if
+every cell held the same games.
 
 ## The race that was silently disabling per-game storage (fixed 2026-08-15)
 

@@ -154,6 +154,76 @@ def parse_log(path, average=False):
     return blocks
 
 
+def repair_from_cells(blocks, cells_path, log=sys.stderr.write):
+    """Recompute every row's LP over ONE GAME SET per seed, from the per-game records.
+
+    THE TABLE'S ROW MEANS ARE NOT ALWAYS COMPARABLE, AND THIS FUNCTION IS WHY THAT MATTERS HERE.
+    Everything downstream -- trust_depth, no_fallback, the crossover -- is a COMPARISON between one
+    depth's LP and another's, so the two have to be over the same games or the difference is partly
+    just which hands each cell drew. The matrix keeps comparable cells aligned (a game abandoned in
+    any cell is dropped from all of them), but two kinds of cell legitimately hold less: one capped
+    at a reference sample, and one whose rung was capped after being measured EQUIVALENT to the rung
+    below. The first is already excluded from the ladder; the second is not, and it is the one whose
+    row mean would otherwise silently carry a different population into the derivation.
+
+    Measured cost of not doing this, burn 2026-08-15: H3 over 400 games read 4.3350 and H4 over 360
+    read 4.2589 -- an apparent 0.076-turn gain from one extra rung. Over the games both held, the two
+    were identical to four decimals. A derivation reading those means would place the crossover a
+    rung early on nothing at all.
+
+    Reference-capped (intractable) cells are excluded from the basis rather than intersected into it:
+    one 50-game cell would drag every row in the deck down to 50 games.
+    """
+    try:
+        cells = json.load(open(cells_path))
+    except (OSError, ValueError) as e:
+        log("NOTE per-game repair SKIPPED (%s): rows are the table's own means, which are only\n"
+            "     comparable if every cell held the same games -- see emit_table's UNEQUAL GAME SETS guard\n"
+            % e)
+        return
+    def per_game(c):
+        return {int(o): (float(w) if w > 0 else None) for x in c.get("chunks", [])
+                for o, w in (x.get("g") or ())}
+    for name, blk in blocks.items():
+        dc = [c for c in cells if c["deck"] == name]
+        if not dc: continue
+        basis, mt = {}, None
+        for seed in sorted({c["seed"] for c in dc}):
+            usable = [c for c in dc if c["seed"] == seed and not c.get("intractable")
+                      and any(x.get("g") for x in c.get("chunks", []))]
+            if usable: basis[seed] = set.intersection(*[set(per_game(c)) for c in usable])
+        if not basis: continue
+        # max_turns, for the loss penalty -- recovered from the deck registry the same way the
+        # matrix driver does, so a loss scores identically on both sides.
+        try:
+            import deck_registry as _dr
+            mt = _dr.discover()[name.replace(_dr.STAGED_SUFFIX, "")].max_turns
+        except Exception:
+            mt = 8
+        moved = []
+        for arm, key in (("H", "H"), ("V", "V")):
+            for d in sorted(blk[key]):
+                if (arm, d) in blk["ref_only"]: continue
+                vals, n = [], 0
+                for seed, b in basis.items():
+                    c = next((x for x in dc if x["seed"] == seed and x["arm"] == arm
+                              and x["depth"] == d), None)
+                    if c is None: continue
+                    g = per_game(c)
+                    common = [(g[o] if g[o] is not None else float(mt + 1)) for o in b if o in g]
+                    if not common: continue
+                    vals.append(sum(common) / len(common)); n = len(common)
+                if not vals: continue
+                new = sum(vals) / len(vals)
+                if abs(new - blk[key][d]) > 5e-5: moved.append((arm, d, blk[key][d], new))
+                blk[key][d] = new
+                (blk["hg_cell"] if arm == "H" else blk["vg_cell"])[d] = n
+        log("NOTE %s: rows recomputed over the PAIRED game set (%s)%s\n"
+            % (name, ", ".join("s%d:%dg" % (s, len(b)) for s, b in sorted(basis.items())),
+               "" if not moved else
+               "; moved " + ", ".join("%s%d %.4f->%.4f" % m for m in moved)))
+
+
 def derive(H, V, tol, offset, margin, scalar_cap=None):
     """Derive the PLAY-TIME scalars (h_conv, trust_depth, no_fallback) plus sorted depth lists.
 
@@ -442,10 +512,23 @@ def main():
     ap.add_argument("--no-escalation-cap", action="store_true",
                     help="do NOT auto-set value_play.escalation_cap = target_depth (leave the single-depth "
                          "escalation OFF / legacy ladder). Default: auto-enable it (climb-adaptive, quality-neutral).")
+    ap.add_argument("--cells", default=None,
+                    help="per-game records from the matrix run (default: <log>.cells.json when it exists). "
+                         "Every row is recomputed over ONE game set per seed from these, because the "
+                         "derivation is entirely COMPARISONS between depths and the table's row means are "
+                         "only comparable when every cell held the same games -- a rung capped after being "
+                         "measured equivalent holds fewer, and reading its mean placed the crossover a rung "
+                         "early on a 0.076-turn difference that was purely which hands each cell drew.")
     ap.add_argument("--dry-run", action="store_true", help="print the derivation but do NOT write")
     args = ap.parse_args()
 
     blocks = parse_log(args.log, average=args.average_seeds)
+    cells_path = args.cells or (args.log + ".cells.json")
+    if blocks and os.path.exists(cells_path):
+        repair_from_cells(blocks, cells_path)
+    elif blocks:
+        sys.stderr.write("NOTE no per-game records at %s -- rows are the table's own means. They are "
+                         "comparable only if every cell held the same games.\n" % cells_path)
     if not blocks:
         print("no deck blocks parsed from %s" % args.log); sys.exit(1)
     want = args.decks or list(blocks)
