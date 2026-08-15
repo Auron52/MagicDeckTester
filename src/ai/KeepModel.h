@@ -1,5 +1,7 @@
 #pragma once
 #include "../core/Card.h"   // Color
+#include <algorithm>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -542,13 +544,170 @@ struct MidGameEvaluator
         return tree[i].value;
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // FLAT FORM: a perf-only re-layout of `trees`, built once at load and never serialized. The model
+    // file is untouched -- this changes HOW the same trees are stored in memory, not what they say, so
+    // it needs no retraining and no regeneration of any sidecar.
+    //
+    // Why. `trees` is a vector<vector<>>: one scattered heap block per tree, 24 B per node. FiveColour's
+    // value leaf is 120 trees / 3312 nodes = 79.5 KB, over L1d, and Score() walks it as ~480 DEPENDENT
+    // loads (one chain per tree, no ILP across levels) -- 15.5% of shipped-play self time, the single
+    // biggest symbol in the engine. The trees are also perfectly regular: every one is depth 4, and the
+    // max node count is 31 = a complete depth-4 tree.
+    //
+    // So store each tree as a COMPLETE tree in level order and index it implicitly (children of i at
+    // 2i+1 / 2i+2). Child pointers disappear; internals become two int arrays (~14 KB for FiveColour)
+    // and leaves one long long array (~15 KB), both L1-resident; and traversal becomes a fixed `depth`
+    // branch-free steps with no leaf test in the loop.
+    //
+    // Byte-identical. A tree shallower down one branch is padded by giving the pad internals a
+    // never-taken split (feature 0, threshold INT_MAX -> `fv <= thr` always true -> always left), and
+    // storing the original leaf's value at every leaf slot the pad funnels into. So every feature
+    // vector reaches a slot holding exactly the value the pointer walk would have returned, and the
+    // sum over trees is the same integer in the same order. Any tree that is malformed (bad child
+    // index, cycle, or too deep to pad) is left OUT of the flat form and evaluated by the original
+    // EvalTree, so even a corrupt model scores identically.
+    // feature+threshold INTERLEAVED (not two parallel arrays): the walk reads both for the same slot,
+    // so pairing them puts them in one cache line and halves the loads per level.
+    struct FlatSplit { int feature; int threshold; };
+    struct FlatTrees
+    {
+        std::vector<FlatSplit> split;    // complete internals, level order: (2^d - 1) per flat tree
+        std::vector<long long> leaf;     // (2^d) per flat tree
+        std::vector<int>       off_i, off_l, depth;   // per flat tree
+        std::vector<int>       fallback; // indices into `trees` that could not be flattened
+        int  max_feature = -1;           // largest split index in `split` (hoists the bounds check)
+        bool built = false;
+    };
+    FlatTrees flat;
+
+    // Max padded depth worth flattening: 2^12 leaves is already far past any tree this trainer emits
+    // (measured max depth 4), and the cap keeps a pathological model from exploding memory.
+    static constexpr int kMaxFlatDepth = 12;
+
+    // Build the flat form. Call ONCE after loading, before any worker thread runs (the loaders do);
+    // Score() is const and never mutates, so there is no lazy-init race.
+    void BuildFlat()
+    {
+        flat = FlatTrees{};
+        for (std::size_t ti = 0; ti < trees.size(); ++ti)
+        {
+            const std::vector<MidGameTreeNode>& t = trees[ti];
+            if (t.empty()) { continue; }            // contributes 0, exactly as EvalTree returns
+            const int d = FlatDepth(t);
+            if (d < 0) { flat.fallback.push_back(static_cast<int>(ti)); continue; }
+            const int n_int = (1 << d) - 1, n_leaf = (1 << d);
+            flat.off_i.push_back(static_cast<int>(flat.split.size()));
+            flat.off_l.push_back(static_cast<int>(flat.leaf.size()));
+            flat.depth.push_back(d);
+            flat.split.resize(flat.split.size() + static_cast<std::size_t>(n_int));
+            flat.leaf .resize(flat.leaf .size() + static_cast<std::size_t>(n_leaf));
+            Emit(t, 0, 0, 0, d, flat.off_i.back(), flat.off_l.back());
+        }
+        for (const FlatSplit& s : flat.split) { flat.max_feature = std::max(flat.max_feature, s.feature); }
+        flat.built = true;
+    }
+
     long long Score(const std::vector<int>& feats) const
     {
         long long s = intercept;
         const int n = std::min(static_cast<int>(feats.size()), static_cast<int>(coefs.size()));
         for (int i = 0; i < n; ++i) { s += coefs[i] * static_cast<long long>(feats[i]); }
-        for (const std::vector<MidGameTreeNode>& t : trees) { s += EvalTree(t, feats); }
+        if (!flat.built)
+        {
+            for (const std::vector<MidGameTreeNode>& t : trees) { s += EvalTree(t, feats); }
+            return s;
+        }
+        const int nf = static_cast<int>(feats.size());
+        const int* __restrict fv_base = feats.data();
+        // The out-of-range rule (EvalTree substitutes 0 for a feature index past the vector) is
+        // loop-invariant: if every split index in the model is in range, no level can ever need it.
+        // Hoist it to one comparison for the whole ensemble instead of one per level.
+        const bool in_range = (flat.max_feature < nf);
+        const std::size_t nt = flat.depth.size();
+        for (std::size_t k = 0; k < nt; ++k)
+        {
+            const FlatSplit* __restrict sp = flat.split.data() + flat.off_i[k];
+            const int d = flat.depth[k];
+            int idx = 0;
+            if (in_range)
+            {
+                for (int lvl = 0; lvl < d; ++lvl)
+                {
+                    const FlatSplit& n = sp[idx];
+                    idx = 2 * idx + 1 + (fv_base[n.feature] > n.threshold ? 1 : 0);
+                }
+            }
+            else
+            {
+                for (int lvl = 0; lvl < d; ++lvl)
+                {
+                    const FlatSplit& n = sp[idx];
+                    const int fv = (n.feature < nf) ? fv_base[n.feature] : 0;
+                    idx = 2 * idx + 1 + (fv > n.threshold ? 1 : 0);
+                }
+            }
+            s += flat.leaf[flat.off_l[k] + idx - ((1 << d) - 1)];
+        }
+        for (int ti : flat.fallback) { s += EvalTree(trees[static_cast<std::size_t>(ti)], feats); }
         return s;
+    }
+
+private:
+    // Depth of the complete tree needed to hold `t`, or -1 if `t` cannot be flattened (bad child
+    // index, cycle, or deeper than kMaxFlatDepth). Walks with an explicit visited-depth bound.
+    static int FlatDepth(const std::vector<MidGameTreeNode>& t)
+    {
+        struct W { int i, d; };
+        std::vector<W> st{ { 0, 0 } };
+        int max_d = 0;
+        int steps = 0;
+        const int budget = 4 * static_cast<int>(t.size()) + 8;
+        while (!st.empty())
+        {
+            if (++steps > budget) { return -1; }                       // cycle guard
+            const W w = st.back(); st.pop_back();
+            if (w.i < 0 || w.i >= static_cast<int>(t.size())) { return -1; }
+            const MidGameTreeNode& n = t[static_cast<std::size_t>(w.i)];
+            if (n.feature < 0) { max_d = std::max(max_d, w.d); continue; }
+            if (w.d >= kMaxFlatDepth) { return -1; }
+            // EvalTree treats an out-of-range child as a LEAF returning n.value; that is a malformed
+            // model, so decline rather than try to reproduce it here.
+            if (n.left  < 0 || n.left  >= static_cast<int>(t.size())) { return -1; }
+            if (n.right < 0 || n.right >= static_cast<int>(t.size())) { return -1; }
+            st.push_back({ n.left,  w.d + 1 });
+            st.push_back({ n.right, w.d + 1 });
+        }
+        return max_d;
+    }
+
+    // Write node `src` of `t` into complete-tree slot `pos` at level `lvl`, padding down to `d`.
+    void Emit(const std::vector<MidGameTreeNode>& t, int src, int pos, int lvl, int d,
+              int base_i, int base_l)
+    {
+        if (lvl == d)   // leaf level: `src` must be a leaf (padding funnels here too)
+        {
+            flat.leaf[static_cast<std::size_t>(base_l + pos - ((1 << d) - 1))]
+                = t[static_cast<std::size_t>(src)].value;
+            return;
+        }
+        const MidGameTreeNode& n = t[static_cast<std::size_t>(src)];
+        if (n.feature < 0)
+        {
+            // Early leaf: pad with a never-taken split (feature 0 vs INT_MAX -> `fv > thr` is false for
+            // every possible fv, so the walk always goes left) and fill the slots below with this
+            // leaf's value.
+            flat.split[static_cast<std::size_t>(base_i + pos)]
+                = { 0, std::numeric_limits<int>::max() };
+            Emit(t, src, 2 * pos + 1, lvl + 1, d, base_i, base_l);
+            // The right subtree is unreachable, but its leaf slots exist; fill them with the same
+            // value so a padded slot can never read as uninitialized.
+            Emit(t, src, 2 * pos + 2, lvl + 1, d, base_i, base_l);
+            return;
+        }
+        flat.split[static_cast<std::size_t>(base_i + pos)] = { n.feature, n.threshold };
+        Emit(t, n.left,  2 * pos + 1, lvl + 1, d, base_i, base_l);
+        Emit(t, n.right, 2 * pos + 2, lvl + 1, d, base_i, base_l);
     }
 };
 

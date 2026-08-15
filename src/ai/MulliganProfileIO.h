@@ -1,6 +1,7 @@
 #pragma once
 #include "ValueArm.h"
 #include "MulliganProfile.h"
+#include "../core/EnvFlags.h"   // EnvOn (MTG_VALUE_FLAT)
 #include <nlohmann/json.hpp>
 #include <cstdint>
 #include <cstdlib>
@@ -955,6 +956,12 @@ inline MidGameEvaluator EvalModelFromJsonObj(const nlohmann::json& j)
         const int keep = std::atoi(mt);
         if (keep > 0 && keep < static_cast<int>(e.trees.size())) { e.trees.resize(static_cast<size_t>(keep)); }
     }
+    // Perf-only re-layout of the ensemble (see MidGameEvaluator::BuildFlat). Built HERE, at load, so
+    // Score() stays const and lock-free -- a lazy build would race across the search's worker threads.
+    // Must come after MTG_EVAL_MAX_TREES above, which changes which trees exist.
+    // MTG_VALUE_FLAT=0 keeps the original pointer walk (standing A/B lever on one binary; Score() must
+    // return the same long long either way, so any digest difference between the arms is a bug).
+    if (EnvOn("MTG_VALUE_FLAT", true)) { e.BuildFlat(); }
     return e;
 }
 
