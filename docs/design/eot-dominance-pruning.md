@@ -522,7 +522,12 @@ derived from a POINTER must be stamped beside the pointer, never memoised on its
 
 ## STATE OF PLAY (2026-08-15) — read this first on resume
 
-**Shipped, both flags default OFF, clean smoke 36/36 byte-identical.** Commits `7ec5c75e` →
+> **OUTCOME: NOT ADOPTED (user decision, 2026-08-15).** Every gate passed; the prune is still off,
+> because the benefit is unreachable at the fixed budgets every real workload uses, and the risk is
+> structural rather than fixable. Full reasoning in "THE DECISION" below — read that BEFORE reading
+> the passing gates, or the evidence reads like a case for adoption when it is not one.
+
+**Built, both flags default OFF, clean smoke 36/36 byte-identical.** Commits `7ec5c75e` →
 `3b6c309b` on `phase-1-2-deck-analyzer`.
 
 - `src/ai/Dominance.h` — one comparator, two consumers (`MTG_DOM_CENSUS` prices, `MTG_DOM_PRUNE`
@@ -668,10 +673,8 @@ by itself. Its value is purely as a diagnostic for `Covers()`, which shares the 
 
 ### What is OPEN — resume here
 
-1. **ADOPTION DECISION — the user's call, and the only thing left.** Every gate now passes (see
-   "THE EVIDENCE, ASSEMBLED" below). Adopting means flipping `MTG_DOM_PRUNE` to default-ON and
-   rebaselining GT via `--accept` on each mode, since play moves at an unchanged score. Do NOT flip
-   the default without the user saying so.
+1. ~~ADOPTION DECISION~~ — **DECIDED 2026-08-15: NOT ADOPTED.** See "THE DECISION" below. Nothing
+   is open here; do not re-open it by re-reading the passing gates.
 2. **Equality-probe residual** (low priority): ~0.003% ident_mismatch survives with both caches
    capped. Bounded above by the TT cap not being a true off switch. Only worth chasing if the
    must-find gate ever regresses.
@@ -744,6 +747,44 @@ win; at most it is a PER-DECK one.
 
 What adoption does NOT rest on: `harm` (structural 0 under prune) and `ident_mismatch` (96% TT, not
 the axes). Both are documented above precisely so they are not mistaken for evidence either way.
+
+### THE DECISION (user, 2026-08-15): NOT ADOPTED — keep flag-gated, default OFF
+
+Every gate passed, and the prune is still not adopted. The reasoning, recorded so it is not
+re-litigated from the passing gates alone:
+
+**The benefit does not exist in the conditions this project runs in.** Every real workload uses a
+FIXED per-decision budget — 10/20 ms in the suite and `analyze_deck`, 40/80/200 ms in the heavier
+matrix cases, 3000 ms in `analyze_earliest_wins`. (The one `budget_ms: 0` in `analyze_deck.py` is
+paired with `depth: 0` — that is NO search, not unbounded search.) At a fixed budget the search
+spends its whole budget either way, so the prune can only pay as better quality, and that measured
+at noise: net -0.0002 turns on train AND held-out. The 1.59x is real but only at unbounded budget,
+which nothing in production uses.
+
+**The risk is structural, not a bug to fix.** Dominance is an ORDERING relation: its soundness needs
+the axis set to be complete AND the evaluator to be MONOTONE in resources. The second is false here
+— the leaf is a greedy beyond-horizon rollout plus a GBDT value model, and a tree ensemble is not
+monotone. The harm counter measures this directly (8,685 on fivecolour, 1,521 on mirrorwing). So a
+perfect axis set would still leave real residual risk; it is inherent to ordering states by a
+non-monotone evaluator, and it would need re-validating every time the value model is regenerated
+or the rollout heuristics change. Contrast `MTG_CANON_SIMKEY`, an IDENTITY relation whose only
+failure mode is a key hole — a findable, permanently fixable bug, with the evaluator irrelevant
+because both sides of the collapse are the same state. That is why the same must-find gate carries
+less weight here: for canon it verifies a fixable property, for dominance it samples an unfixable
+one.
+
+**And the motivating case does not benefit.** The "Why now" section prices the mirrorwing Class B
+monster as the target; the prune saves 0.15% of its tree and costs ~5%.
+
+What "keep, default OFF" means in practice: both flags stay off, no GT rebaseline, `Dominance.h`
+stays as validated dormant code, and the census stays available as a diagnostic for future search
+work. The one live cost is the maintenance hazard now documented at the top of `Dominance.h` — a
+newly added `Permanent`/`Player`/`GameState` field is INVISIBLE to `Build()` (fail-OPEN), not
+exact-matched. `static_assert`s on the three struct sizes now turn that into a build failure rather
+than silent unsoundness.
+
+**Before ever re-enabling this: re-measure the BENEFIT, not the gates.** The gates will very likely
+still pass; that was never the blocker.
 
 ### Traps worth not re-learning
 

@@ -2,6 +2,36 @@
 
 // End-of-turn STATE DOMINANCE -- the sound core of docs/design/eot-dominance-pruning.md.
 //
+// ============================================================================================
+// STATUS: NOT ADOPTED (user decision, 2026-08-15). BOTH FLAGS DEFAULT OFF; this file is DORMANT.
+//
+// It passed every gate -- must-find 12/12 decks (zero wins lost at unbounded budget), train and
+// held-out regression A/Bs (0 and 2 slower, the latter both classified `churn`), clean-env smoke
+// byte-identical. It was not adopted because the BENEFIT DOES NOT APPEAR IN THE CONDITIONS THIS
+// PROJECT ACTUALLY RUNS IN:
+//   * at a FIXED per-decision budget (what every real workload uses -- 10/20/40/80/200/3000 ms)
+//     the search spends its budget either way, so the prune can only show up as better quality,
+//     and that measured at noise level (net -0.0002 turns across both seed sets);
+//   * at UNBOUNDED budget it is a genuine 1.59x on fivecolour (39.2% fewer states, deterministic)
+//     -- but nothing in production searches unbounded, so that speedup is unreachable in practice;
+//   * on mirrorwing, the Class B monster that MOTIVATED the whole design, it saves 0.15% of the
+//     tree and costs ~5%.
+// Do not re-enable on the strength of the passing gates alone -- re-measure the benefit first.
+// ============================================================================================
+//
+// !!! MAINTENANCE HAZARD -- READ BEFORE ADDING A FIELD TO Permanent / Player / GameState !!!
+//
+// The "fails closed" discipline below is enforced by the AUTHOR, not by the compiler. Build()
+// folds an EXPLICIT list of fields, so a NEWLY ADDED field is not "undeclared -> exact match" --
+// it is INVISIBLE, which is fail-OPEN: two states differing only in the new field compare EQUAL
+// or DOMINATING, and the prune deletes a reachable line. The static_asserts below are a tripwire
+// for exactly that: if one fires, a struct grew, and you must classify every new field into one
+// of the three categories (directional axis / exact match / boundary assertion) and fold it in
+// Build() before updating the expected size. Do NOT just bump the number.
+//
+// This hazard is dormant while the flags are off, and it is the main reason re-enabling this file
+// is not free.
+//
 // Two states reached by different lines of the SAME decision, at the SAME end-of-turn boundary,
 // with the SAME draws consumed, can be ordered: if A holds every resource B holds and more, then
 // under goldfish rules (the opponent never attacks and never blocks, so no resource can be turned
@@ -38,6 +68,25 @@
 #include <array>
 #include <cstdint>
 #include <vector>
+
+// TRIPWIRE for the maintenance hazard documented at the top of this file. Build() folds an
+// explicit field list, so a struct that GROWS silently gains a field this comparator cannot see --
+// fail-OPEN, i.e. a deleted reachable line rather than merely lost reach. These asserts turn that
+// silent unsoundness into a BUILD FAILURE. When one fires: classify each new field as a directional
+// axis, an exact-match field, or a boundary assertion; fold it into Build(); THEN update the size.
+// Bumping the number without doing that re-opens the hole these asserts exist to close.
+//
+// Sizes are a proxy, not a proof (a same-size field swap slips through, and padding is
+// ABI-dependent), so they are a prompt to re-check, not a guarantee of correctness.
+static_assert(sizeof(Permanent) == 256,
+              "Permanent changed size -- fold any new field into dominance::Build() (see the "
+              "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
+static_assert(sizeof(Player) == 152,
+              "Player changed size -- fold any new field into dominance::Build() (see the "
+              "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
+static_assert(sizeof(GameState) == 576,
+              "GameState changed size -- fold any new field into dominance::Build() (see the "
+              "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
 namespace dominance
 {
