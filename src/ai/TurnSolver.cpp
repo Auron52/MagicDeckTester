@@ -3221,6 +3221,15 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
     // pull = prior behaviour.
     if (p.lifegain_to_loss && state.dep_enabler_main1)    { return MP::Main1; }
     if (p.verse_damage && state.dep_castpayoff_main1)     { return MP::Main1; }
+    // MANA-INFRASTRUCTURE pull (dependency-map extension, goblins doubt dig 2026-08-15): an
+    // ACTIVATED mana producer usable while summoning-sick (sac outlet -- Skirk Prospector) is an
+    // enabler of every same-turn cast. The m2 enumeration collects activations from the
+    // BATTLEFIELD only, so a producer cast in the same m2 contributes nothing to the plan that
+    // casts it -- deferring it disconnects its mana from the casts it funds (gi=153: the
+    // put-token-sac -> Goblin King line vanished from every tail and the T1 pick flipped to the
+    // wrong 1-drop, 3 -> 4). Keep it pre-combat, where the phase boundary makes its activations
+    // visible to the post-combat plans.
+    if (p.sac_creature_outlet && p.sac_outlet_add_mana_amount > 0) { return MP::Main1; }
     // DOUBT-DEFERRAL sub-lever (MTG_DOUBT_MAIN2, default OFF): the USER's one-pool placement
     // rule -- with the attack-helping classes explicit above, tutors classify as card-flow
     // (Both, like draws) and the residual doubt class defers to Main2 so the non-combat hand
@@ -15911,6 +15920,21 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         best.win_turn = max_turns + 1;
         int _beam_i = 0;
         const bool beam_here = (g_esc_beam_width > 0 && depth <= g_esc_beam_leafdepth);
+        // DIG INSTRUMENT (MTG_M2T_TRACE, default off): dump this m2 branch's plans + tail win
+        // turns for turn MTG_M2T_TURN. The doubt-dig method's second step (after the per-game
+        // unprune-lever bisect): it shows which m2 candidate lost and to what tie/cutoff --
+        // goblins gi=153's outlet asymmetry and the first-verified-win lock-out were both read
+        // directly off this trace. Companion: MTG_FSW_TRACE (the m1 plan loop, FSLineWin).
+        static const bool s_m2t = EnvOn("MTG_M2T_TRACE");
+        static const int  s_m2t_turn = EnvInt("MTG_M2T_TURN", 1);
+        const bool m2t_here = s_m2t && state.turn_number == s_m2t_turn;
+        auto m2t_sum = [](const TurnSolver::Plan& p)
+        {
+            std::string s;
+            if (!p.land_to_play.empty()) { s += "land=" + p.land_to_play + ";"; }
+            for (const Action& a : p.actions) { s += a.card_name + ","; }
+            return s.empty() ? std::string("(pass)") : s;
+        };
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
@@ -15932,6 +15956,12 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             ExpireStagedCards(s2);
             TurnSolver::SearchLine sub =
                 FSLineWin(s2, depth, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget);
+            if (m2t_here)
+            {
+                std::fprintf(stderr, "[m2t] T%d d%d q=%s sub=%d best=%d cutoff=%d\n",
+                             state.turn_number, depth, m2t_sum(q).c_str(), sub.win_turn,
+                             best.win_turn, cutoff);
+            }
             if (sub.win_turn < best.win_turn)
             {
                 best.win_turn = sub.win_turn;
@@ -16176,6 +16206,21 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
 
         TurnSolver::SearchLine tail =
             FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget);
+        // DIG INSTRUMENT (MTG_FSW_TRACE, default off): dump this node's plans + tail win turns
+        // for turn MTG_FSW_TURN -- the m1-side companion of MTG_M2T_TRACE above.
+        {
+            static const bool s_fsw = EnvOn("MTG_FSW_TRACE");
+            static const int  s_fsw_turn = EnvInt("MTG_FSW_TURN", 2);
+            if (s_fsw && state.turn_number == s_fsw_turn)
+            {
+                std::string sum;
+                if (p.land_decided) { sum += "land=" + p.land_to_play + ";"; }
+                for (const Action& a : p.actions) { sum += a.card_name + ","; }
+                std::fprintf(stderr, "[fsw] T%d d%d p=%s tail=%d best=%d cutoff=%d\n",
+                             state.turn_number, depth, sum.empty() ? "(pass)" : sum.c_str(),
+                             tail.win_turn, best.win_turn, cutoff);
+            }
+        }
         if (rec_vals) { node_vals.push_back(tail.win_turn); }   // value-rank for the beam reorder
         if (tie_scan_here) { tie_scan.emplace_back(tail.win_turn, PlanActionKeys(p)); }
         if (tail.win_turn < best.win_turn)
