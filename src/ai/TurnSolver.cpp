@@ -3155,6 +3155,12 @@ static bool MainPhaseFilterActive(const GameState& state)
     // force lever is now safe to set SUITE-WIDE (single-main decks simply never filter).
     if (!state.uses_second_main) { return false; }
     if (s_kill || HumanPlayActive()) { return false; }
+    // SEARCHED play only (USER doctrine: no greedy solve within the search). At depth 0 the
+    // deferred casts would be decided by the greedy second main -- the forbidden pairing; the
+    // round-2 suite measured it at +0.13..+0.24 on every multi-main deck's d0 config while the
+    // searched depths recovered. Applies even under the force lever, so a suite-wide stack run
+    // leaves d0 configs at base behaviour by construction.
+    if (!SearchedPlayActive()) { return false; }
     if (!s_force && !ResolveProvider(state).ClassifiesMainPhases()) { return false; }
     return !DecisionUnpruned(UnprunedGate::MainPhase);
 }
