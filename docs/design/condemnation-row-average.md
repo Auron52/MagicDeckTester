@@ -136,17 +136,49 @@ Verified on a 3-cell synthetic (burn d6, `max_game_sec` 0.02 s so every game tri
 | `c_k` | `abandon_k` (frozen) | condemned at 5 games | **35/40 played**, 5 abandoned at the ceiling |
 | `c_none` | none | condemned at 5 games | condemned at 5 games (unchanged) |
 
-**Residual, deliberately left armed: the CALIBRATION WINDOW.** A cell using `abandon_k` has no
-ceiling for its first `abandon_calib` games, so `max_game_sec` still condemns the cell if one of
-those runs past the limit. That is intentional -- during the window nothing else can stop the game,
-and there is no deterministic way to drop just that one: a wall-clock abort would either corrupt the
-calibration sample (a truncated cost changes the median, hence the cell's whole abandoned set,
-machine-dependently) or shrink it, which is the same problem one step removed. The window is already
-minimised from the other end by freeze-when-determined, which is what let the ceiling reach INTO its
-own calibration window (`depth-matrix-degenerate-games.md`; 46 min -> 35 s on FiveColour). If a run
-is ever seen condemning a cell from inside the window, the fix is a deterministic PREFIX ceiling
-(bound calibration game `i` by `k x` the median of the completed games with global index `< i`,
-which is order-independent and so still reproducible), not a wall-clock abort.
+### The calibration window: the PREFIX ceiling (SHIPPED 2026-08-15)
+
+That left one residual -- a cell using `abandon_k` has no ceiling for its first `abandon_calib`
+games, so a monster INSIDE the window ran unbounded and `max_game_sec` was still the only thing that
+could react, i.e. still condemned a cell on one observation. The user asked the right question of it:
+*"don't we use the median now?"* We do -- just not soon enough. The fix is to **start using a median
+earlier**, not to add another wall-clock rule.
+
+**PROVISIONAL CEILING.** Once a cell's first `kCalibPrefix` = 3 games *by global index* are in, arm
+`kProvisionalSlack (4) x k x median(those three)` for the rest of the window, published to games
+already running through the same late-limit channel the freeze uses. The prefix is fixed BY INDEX, so
+the value is a deterministic function of the data exactly like the frozen ceiling -- "the first three
+to finish" would follow the thread interleave and make it machine-dependent.
+
+It is deliberately SLACK. A 3-game median is a noisy estimate of a 10-game one, and this ceiling is
+not trying to be the real one: it only has to stop the pathology (100-1000x the median) without
+touching the natural spread (2.1-7.1x on burn, 11.2x on a FiveColour sample). At slack 4 and k=25 it
+cuts at ~100x the prefix median, normally LOOSER than the frozen ceiling that follows -- which makes
+the change **result-neutral**: a game it stops was already going to be dropped by `cost >= frozen` at
+reduce time, so only the wall clock spent running it goes away.
+
+Two details it needed:
+
+* **A game CUT at a ceiling enters the calibration sample as THE CEILING**, not as the units it
+  happened to hold when the abort landed. That number is timing-dependent (the limit is read on
+  another thread, on a 4096-unit publish stride -- measured overshoots of ~2,800 units), and feeding
+  it to a median would make the frozen ceiling machine-dependent. The substitution is exact rather
+  than approximate: a cut game is at or above the limit and every uncut game is below it, so the
+  ORDER is preserved and the median is identical to what true costs would give.
+* **Both limits are re-derived at reduce time and OR'd.** A game cut at the provisional ceiling
+  records a truncated cost that can sit BELOW the frozen ceiling (when the prefix median ran under
+  the full one), so the frozen test alone would silently keep it on one machine and drop it on
+  another. `recorded >= provisional` is true for every cut game everywhere.
+
+Verified on burn (25 games, `abandon_calib` 10, `k` forced to 0.5 so the window actually cuts):
+the abandoned set is exactly `{cost >= frozen} u {i >= 3 : cost >= provisional}` predicted from the
+UNBOUNDED run's per-game costs, byte-identical across three runs at 2-7 threads while the freeze
+POINT moved (9 completed/1 running vs 8/2). The window's worst game was cut at 24,584 units against
+an unbounded cost of 95,493 -- 3.9x less work, in the one place nothing could previously stop it.
+
+**What is left is one game per cell.** Games 0-2 have no prefix and still run unbounded, so
+`max_game_sec` remains the backstop there. Shrinking that further would mean deriving a ceiling from
+fewer than three games, which is a noise problem, not a mechanism problem.
 
 ## Gate
 

@@ -51,6 +51,13 @@ median -- but "k=20" is not precisely 20x the typical game. A larger sample tigh
 of a longer window in which the cell's worst game is still unbounded, which is the expensive
 trade at H5.
 
+**UPDATE 2026-08-15: the window is now bounded from game 3 onward** by a PROVISIONAL ceiling --
+`4 x k x` the median of the cell's first THREE games by index, published to running games through the
+same late-limit channel. The section below describes the exposure as it stood before that; what
+remains of it is games 0-2 rather than all ten. Full rationale, the two determinism details it needed
+(a cut game enters the sample as its CEILING; both limits are re-derived and OR'd at reduce time) and
+the verification are in `condemnation-row-average.md` §"The calibration window".
+
 **What the calibration window costs, measured on FiveColour.** Ten games per cell still run
 unbounded, and on this deck that window is enough to catch a monster: V3's own 10-game sample spanned
 2,380 to **2,359,567** units (81x its median) and H2's spanned 10,555 to 1,438,186. The hold-back

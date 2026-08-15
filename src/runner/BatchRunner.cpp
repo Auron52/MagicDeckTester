@@ -808,8 +808,18 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         // held games would sit in `parked` with nothing left to promote them -- every worker
         // waiting on the condition variable, the run hung. Any non-zero value releases.
         std::atomic<long long> frozen{0};
+        // PROVISIONAL ceiling, armed from the first kCalibPrefix calibration games so the window is
+        // not unbounded while it waits for the rest (see the arming site). Recorded separately from
+        // `late` because reduce_job re-derives the abandoned set from it.
+        std::atomic<long long> provis{0};
+        // The limit a RUNNING calibration game watches: the provisional one first, overwritten by
+        // the frozen one. One channel, so the meter's hot path keeps a single pointer.
+        std::atomic<long long> late{0};
         std::mutex             m;
-        std::vector<long long> sample;
+        // (global index, cost) -- the INDEX is load-bearing: the provisional ceiling is the median of
+        // a set fixed by index, never of "whichever finished first", which would follow the thread
+        // interleave and make the ceiling machine-dependent.
+        std::vector<std::pair<int, long long>> sample;
         int                    need  = 0;      // calibration games present in THIS manifest
         int                    calib = 0;
         double                 k     = 0.0;
@@ -818,6 +828,29 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         // game's progress is only readable through the slot it publishes to (ai/GameWorkMeter.h).
         std::vector<int>       running_slots;
     };
+    // THE CALIBRATION WINDOW'S OWN GUARD. A cell using a relative ceiling has none until its sample
+    // completes, which left one hole nothing covered: a monster INSIDE the window ran unbounded, and
+    // the only thing that could react was `max_game_sec` -- a wall-clock rule whose response is to
+    // condemn the whole cell (one seed of the row, on one observation). Freezing as soon as the
+    // median is DETERMINED already shortened that window from "all ten" to "until six land"; this
+    // closes the rest by starting to use a median EARLIER instead of by adding another wall-clock
+    // rule.
+    //
+    // The prefix is fixed BY INDEX (the cell's first kCalibPrefix games), so the value is a
+    // deterministic function of the data exactly like the frozen ceiling -- unlike "the first three
+    // to finish", which would follow the interleave. Three is the smallest sample with a real median.
+    //
+    // DELIBERATELY SLACK. A 3-game median is a noisy estimate of a 10-game one, and this ceiling is
+    // not trying to be the real one -- it only has to stop the pathology (measured 100-1000x the
+    // median) without touching the natural spread (2.1-7.1x on burn, 11.2x on a FiveColour sample).
+    // At slack 4 and k=25 it cuts at ~100x the prefix median, so it is normally LOOSER than the
+    // frozen ceiling that follows, which makes this change result-neutral: a game it stops was
+    // already going to be dropped by `cost >= frozen` at reduce time, so only the wall-clock cost of
+    // running it goes away. (If the prefix median lands more than 4x under the full one, the
+    // provisional ceiling can drop a game the frozen one would have kept -- still deterministic, and
+    // the rarity is the point of the slack.)
+    constexpr int       kCalibPrefix     = 3;
+    constexpr long long kProvisionalSlack = 4;
     std::vector<std::unique_ptr<CellCeiling>> cell_ceiling(static_cast<std::size_t>(std::max(1, n_cells)));
     for (std::unique_ptr<CellCeiling>& p : cell_ceiling) { p = std::make_unique<CellCeiling>(); }
     bool any_relative = false;
@@ -1091,6 +1124,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         // cannot run until the freeze -- so the job cannot complete before the ceiling exists.
         const CellCeiling& jcc = *cell_ceiling[static_cast<std::size_t>(jobs[j].cell_id)];
         const long long    jceil = jcc.frozen.load(std::memory_order_acquire);
+        const long long    jprov = jcc.provis.load(std::memory_order_acquire);
         for (std::size_t i = 0; i < win_turns[j].size(); ++i)
         {
             const int gidx = jobs[j].game_index + static_cast<int>(i);
@@ -1099,7 +1133,16 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 if (abandoned_at[j][i]) { r.abandoned.push_back(gidx); }
                 continue;
             }
-            if (jcc.need > 0 && jceil > 0 && gidx < jcc.calib && units[j][i] >= jceil)
+            // Two limits can apply inside the calibration window and BOTH are re-derived here, so
+            // the verdict never depends on which one a thread happened to see first. The frozen
+            // ceiling covers the whole window; the provisional one covers the games at or above
+            // kCalibPrefix. The OR is what makes it timing-independent: a game cut at the
+            // provisional ceiling records a truncated cost that may sit BELOW the frozen ceiling
+            // (when the prefix median ran under the full one), and the provisional term catches it
+            // regardless -- `recorded >= provisional` is true for every cut game on every machine.
+            if (jcc.need > 0 && gidx < jcc.calib
+                && ((jceil > 0 && units[j][i] >= jceil)
+                    || (jprov > 0 && gidx >= kCalibPrefix && units[j][i] >= jprov)))
             {
                 r.abandoned.push_back(gidx);
                 continue;
@@ -1417,8 +1460,12 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 CellCeiling& cc = *cell_ceiling[static_cast<std::size_t>(job.cell_id)];
                 const bool is_calib = cc.need > 0 && global_gi < cc.calib;
                 const long long frozen = cc.frozen.load(std::memory_order_acquire);
+                // A calibration game starting after the PROVISIONAL ceiling exists is bounded by it
+                // from its first node, rather than only through the late-limit channel.
+                const long long late_now = is_calib ? cc.late.load(std::memory_order_acquire) : 0;
                 const long long ceiling =
-                    (!is_calib && frozen > 0) ? frozen : job.abandon_units;
+                    (!is_calib && frozen > 0) ? frozen
+                                              : (late_now > 0 ? late_now : job.abandon_units);
                 gamework::Begin(ceiling);
                 // A calibration game PUBLISHES its progress and watches the cell's ceiling, so the
                 // freeze on another thread can (a) prove this game is above the sample's middle
@@ -1431,7 +1478,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                         std::lock_guard<std::mutex> lk(cc.m);
                         cc.running_slots.push_back(static_cast<int>(slot));
                     }
-                    gamework::PublishTo(&slot_units[slot], &cc.frozen);
+                    gamework::PublishTo(&slot_units[slot], &cc.late);
                 }
                 int wt = engine->RunGame(state, job.max_turns);
                 const long long g_units = gamework::Used();
@@ -1466,11 +1513,57 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 if (is_calib)
                 {
                     std::lock_guard<std::mutex> lk(cc.m);
-                    cc.sample.push_back(g_units);
+                    // A game CUT at a ceiling enters the sample as THE CEILING, not as the units it
+                    // happened to have when the abort landed. That number is timing-dependent (the
+                    // limit is read on another thread, on a publish stride), and feeding it into a
+                    // median would make the frozen ceiling machine-dependent -- the one property
+                    // this whole mechanism is built on. Substituting the limit is exact rather than
+                    // approximate for the median's purposes: a cut game is by definition at or above
+                    // the limit and every uncut game is below it, so the ORDER is preserved and the
+                    // median is identical to what the true costs would have given (unless half the
+                    // sample was cut, which is a cell in far worse trouble than its ceiling).
+                    long long stat = g_units;
+                    if (abandoned_at[wi.job][wi.game])
+                    {
+                        const long long lim_late = cc.late.load(std::memory_order_acquire);
+                        long long applied = ceiling > 0 ? ceiling : lim_late;
+                        if (ceiling > 0 && lim_late > 0) { applied = std::min(ceiling, lim_late); }
+                        if (applied > 0) { stat = std::min(stat, applied); }
+                    }
+                    cc.sample.emplace_back(global_gi, stat);
                     cc.running_slots.erase(std::remove(cc.running_slots.begin(),
                                                        cc.running_slots.end(),
                                                        static_cast<int>(slot)),
                                            cc.running_slots.end());
+                    // PROVISIONAL CEILING (see kCalibPrefix): as soon as the cell's first three
+                    // games by INDEX are in, arm a slack multiple of their median so the rest of the
+                    // window is bounded instead of open. CAS from 0 so it can never overwrite a
+                    // freeze that already happened.
+                    if (cc.late.load(std::memory_order_relaxed) == 0 && cc.calib > kCalibPrefix)
+                    {
+                        std::vector<long long> pre;
+                        for (const auto& [pgi, pc] : cc.sample)
+                        { if (pgi < kCalibPrefix) { pre.push_back(pc); } }
+                        if (static_cast<int>(pre.size()) == kCalibPrefix)
+                        {
+                            std::sort(pre.begin(), pre.end());
+                            const long long pmed = pre[kCalibPrefix / 2];
+                            const long long prov = std::max<long long>(
+                                1, static_cast<long long>(kProvisionalSlack * cc.k * pmed));
+                            long long expect = 0;
+                            if (cc.late.compare_exchange_strong(expect, prov,
+                                                                std::memory_order_acq_rel))
+                            {
+                                cc.provis.store(prov, std::memory_order_release);
+                                std::fprintf(stderr,
+                                    "[batch] PROVISIONAL ceiling cell=%s from the first %d games "
+                                    "(median=%lld) units=%lld -- bounds the rest of the calibration "
+                                    "window until the full sample freezes\n",
+                                    job.cell.c_str(), kCalibPrefix, pmed, prov);
+                                std::fflush(stderr);
+                            }
+                        }
+                    }
                     if (cc.frozen.load(std::memory_order_relaxed) == 0)
                     {
                         // FREEZE AS SOON AS THE MEDIAN IS DETERMINED, not when the last sample game
@@ -1490,7 +1583,9 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                         // motivation: FiveColour V5's game 6 was 82.3% of the cell's total work and
                         // sat inside the window, so waiting for it cost more than every other game
                         // in the cell put together.
-                        std::vector<long long> s = cc.sample;
+                        std::vector<long long> s;
+                        s.reserve(cc.sample.size());
+                        for (const auto& [sgi, sc] : cc.sample) { (void)sgi; s.push_back(sc); }
                         std::sort(s.begin(), s.end());
                         const std::size_t hi = static_cast<std::size_t>(cc.need) / 2;
                         const bool all_dispatched =
@@ -1513,6 +1608,10 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                             const long long lim =
                                 std::max<long long>(1, static_cast<long long>(cc.k * med));
                             cc.frozen.store(lim, std::memory_order_release);
+                            // The running calibration games watch `late`, so the freeze has to land
+                            // there too -- that is the channel that reaches INTO the window. Plain
+                            // store, not a CAS: the frozen ceiling supersedes the provisional one.
+                            cc.late.store(lim, std::memory_order_release);
                             std::fprintf(stderr,
                                          "[batch] CEILING cell=%s calib=%d median=%lld k=%.1f "
                                          "units=%lld  (from %d completed, %d still running above "
