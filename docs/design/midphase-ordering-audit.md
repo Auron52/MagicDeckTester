@@ -82,6 +82,12 @@ in-phase; `MTG_MAIN2_DROP` covers only the land drop.
   Main2). Structurally right (it removes the cross-phase mana partition class, antilife
   gi=58), but measured AS-IS it regresses antilife 4.3267→4.3933 — the flip feeds MORE mass
   into the m2 set before the hardening above exists. Re-measure after items 1/4/5 land.
+  **Dissected (24 worse / 4 better on antilife d3; the 4 better INCLUDE the partition-class
+  games gi=87/118/286, so the design intent works):** the dominant new pathology is the
+  MAIN2_DROP land fold with a fully-empty pre-combat plan — gi=1's committed line SKIPS the
+  land drop on T1 AND T2 and pitches Birds then Swords at cleanup (defer-land + discard
+  ranked above play-Mire). The flip's re-measure is blocked on that land-fold defect, which
+  is upstream of the three ordering items.
 * The explicit attack-helping classification (PumpSpell/Lord/Haste templates, equipment,
   haste-granters, firebreathing, board-scaling, pump params) is IN (behaviour-neutral today —
   it encodes what doubt-Main1 gave those cards implicitly) and is the precondition for any
