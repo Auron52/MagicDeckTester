@@ -301,6 +301,48 @@ which makes the multiset key sound by construction. That changes which solution 
 play change needing a full A/B and a GT rebaseline. Whether a 72% cut to a ~10% slice justifies moving
 every deck's ground truth is a judgement call, not a perf edit.
 
+### 5d. Does mana grow on the tail? NO -- it shrinks. (2026-08-15)
+
+The premise behind attacking mana was that its 18.4% share would GROW in the degenerate regime. It
+does not. Profiling one genuinely slow keep-rollout (harvested fresh at HEAD, 16,808 samples,
+single-threaded so the shares are clean) against the healthy gen pool:
+
+```
+category                  healthy gen   TAIL rollout    delta
+  MANA: payment solve         10.22%          7.63%     -2.59
+  MANA: pool/produces          4.61%          3.79%     -0.82
+  MANA: cost/eligibility       3.49%          3.38%     -0.11
+  SEARCH: solve               26.47%         21.38%     -5.09
+  EVAL                        10.70%         11.34%     +0.64
+  MACHINERY                   20.85%         21.94%     +1.09
+  OTHER (flat tail)           22.95%         31.14%     +8.19
+  >>> ALL MANA                18.32%         14.80%     -3.52  (0.81x)
+```
+
+Mana and search both SHRINK on the tail; the extra cost goes into an even flatter tail of everything
+else. The tail rollout's biggest single symbol is `MidGameEvaluator::Score` at 6.32%, then
+`SolveUncached` 4.88%, `CollectActions` 4.09%, `GameState` copy 3.24%. There is no dominator anywhere.
+
+**Caveat, stated plainly: n=1, and it is the wrong shape.** Slow rollouts are rare enough (one over 8 s
+in four minutes on 24 cores) that this is a single sample, and its hand is Deathrite Shaman x4 -- NOT
+the Bloom Tender board that made up 78.3% of the original corpus. So this does not settle the Bloom
+Tender case; it only shows that "the tail is mana-bound" is not true in general.
+
+**What this closes.** Three rounds of mana work (scaling-source keying, the leftover shape, canonical
+keying) delivered one real win (the leftover shape, -9.1% off the no-cache baseline) and two
+measured-negative results. The remaining mana slice is ~4% solver plus ~10% helpers, in a regime where
+mana is not even the largest block. Per the user (2026-08-15): "it's only worth optimizing where there
+is real headroom; digging into 4% isn't worth our time." Mana optimisation is CLOSED unless a
+Bloom-Tender-shaped tail profile reopens it.
+
+**Where the headroom actually is,** if this is picked up again -- MACHINERY at ~21% (allocation, copies,
+container churn: `operator new` 3.1%, `GameState` copy 2.2-3.2%, `memset` 2.2%, `malloc`/`free` ~2%) is
+the largest coherent block that is not algorithmic, and reducing it is behaviour-neutral. `EVAL` at
+~11% holds the single biggest symbol in the engine. (Note: an earlier "29.5% machinery" figure was
+WRONG -- it matched on full mangled signatures, so any function whose parameter list mentions
+`unordered_map` or `allocator` was counted. Match on the function NAME only; the corrected figure is
+21.3%.)
+
 **The correction that matters more:** the 22.3% "mana payment" figure in section 3's perf profile came
 from the DEGENERATE rollouts, not from normal play. Payment dominates the TAIL. That is why the tail
 wants the breadth fix (item 1) and not more memoisation -- a memo can only ever attack repeats, and
