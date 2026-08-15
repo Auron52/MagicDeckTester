@@ -111,6 +111,35 @@ in-phase; `MTG_MAIN2_DROP` covers only the land drop.
   value-flat nodes — a decision-theory property of the engine, only addressable at the
   architecture level (honest/common-future evaluation would break commit-the-line's
   replay contract; noshuffle is measured worse).
+* **The residual is BUDGET-INDEPENDENT and two exemplars are fully root-caused
+  (2026-08-15, USER-directed dig).** The doubt gap is +0.067 at budget 10, +0.073 at 40,
+  +0.067 at 1,000,000 (unbounded, the USER's bar): the lines are unreachable/mis-ranked at
+  any budget, not starved. Per-game lever bisect + FSLine tail tracing:
+  - **gi=28 (fixed by `MTG_UNPRUNE=altpayload`, 4→3): per-CARD lethality test at emission
+    where lethality is a SUBSET property.** The winning line is T2-m2
+    `[Tainted Remedy, Invigorate]` → T3-m2 `[Aria of Flame, Reverent Silence]`. The pair IS
+    enumerated at T2 (tail tied 4 vs Fiery Justice's 4; FJ's higher static value wins the
+    tie) — the real block is one level down: with Remedy LIVE, Silence emission is
+    provider-gated (`AntiLifegainProvider::ShouldEmitRiskyAltPayload`) on Drone-in-play OR
+    `opp_life <= 5 + ReadyAttackPower`, which cannot see the same-subset Aria whose
+    converted ETB (−10) lands first. `SubsetHasUnbackedAltPayload`'s destroy_all branch has
+    the SAME too-weak per-card lethal test. The gate was tightened to protect the GREEDY m2
+    (gi=36/84); under classify the SEARCHED m2 inherits it. Fix shape: search-only emission
+    (g_search_candidate_enum) when Remedy is live + subset-level lethality (sum in-subset
+    converted damage + attack) in the validity gate; greedy path keeps the tight provider
+    gate.
+  - **gi=149 (fixed only by `MTG_UNPRUNE=mainphase`, i.e. no collapse): cross-phase mana
+    partition for POSITIVE-power mana creatures.** T3 `[Remedy, hold Invigs]` ties 5 with
+    the leak `[Remedy, Invig, Invig]` because the T4 payoff (base: m1
+    `[Aria, Invig, Invig]` + attack, win) is invisible under doubt: Aria classifies Main2,
+    and the T4 mana is Stomping + two Ignoble Hierarchs — the Hierarchs are the ATTACKERS
+    and the MANA, so a post-combat Aria is unaffordable once they attack. The round-2
+    `AttackWith` mana-hold covers only 0-power dorks (free hold); a 1-power exalted
+    Hierarch is a real attack-vs-mana tradeoff no heuristic should decide blind. Fix shape:
+    classification must not defer a card past combat when it is affordable ONLY with
+    creature mana (the hold's own condition, `noncreature < mv <= total`, applied at
+    ClassifyMainPhase as a Main1 override) — never defer a cast past the combat that taps
+    its payment.
 * The explicit attack-helping classification (PumpSpell/Lord/Haste templates, equipment,
   haste-granters, firebreathing, board-scaling, pump params) is IN (behaviour-neutral today —
   it encodes what doubt-Main1 gave those cards implicitly) and is the precondition for any
