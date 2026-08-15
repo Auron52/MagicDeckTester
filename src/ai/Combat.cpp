@@ -15,7 +15,7 @@ std::vector<int> DeclareAttackerIndices(const GameState& state)
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != active) { continue; }
         if (!CanAttackFull(p, state.battlefield, active)) { continue; }
-        if (!provider.ShouldAttackWith(state, p)) { continue; }
+        if (!provider.AttackWith(state, p)) { continue; }
         atk_idx.push_back(i);
     }
     return atk_idx;

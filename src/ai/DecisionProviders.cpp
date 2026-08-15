@@ -900,6 +900,53 @@ bool GenericProvider::ShouldAttackWith(const GameState&, const Permanent&) const
     return true;    // goldfish default: attack with everything that can attack (no blockers).
 }
 
+// Collapsed-main mana hold (see DecisionProvider::AttackWith in the header). With the
+// main-phase filter active the attack runs BEFORE the turn's casts, so an attacking mana
+// creature taps a source the deferred main still needs -- the base architecture never had
+// this problem (main 1 spent the mana, the attack got the leftovers). Hold an untapped
+// 0-power mana dork when some hand spell is affordable only with creature mana: its attack
+// is worth at most an Exalted chip, the held mana is routinely a full turn of tempo
+// (antilife gi=9: the one-dork Exalted swing left 3 non-creature sources, so {3}{B} Plague
+// Drone was unreachable EVERY turn and the whole line slipped a turn). Colour-blind count
+// (mana value only): over-holding costs a 1-point chip, under-holding costs a turn.
+static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& p)
+{
+    if (p.tapped || !p.card.IsCreature())                   { return false; }
+    if (p.EffectivePower() > 0)                             { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (!d || d->tmpl != CardTemplate::ManaDork)            { return false; }
+    if (!CanTapNow(p, s.battlefield))                       { return false; }
+    if (!TurnSolver::CollapsedMainActive(s))                { return false; }
+
+    const int active = s.active_player_index;
+    int total = 0, creature_src = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != active || q.tapped) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (!qd) { continue; }
+        const bool dork = qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, s.battlefield);
+        if (dork) { ++creature_src; ++total; continue; }
+        if (q.card.IsLand() || qd->params.mana_rock) { ++total; }
+    }
+    if (creature_src <= 0) { return false; }
+    const int noncreature = total - creature_src;
+    for (const Card& c : s.players[active].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+        if (!hd || hd->card.IsLand()) { continue; }
+        const int mv = hd->card.m_mana_cost.ManaValue();
+        if (mv > noncreature && mv <= total) { return true; }   // castable only with creature mana
+    }
+    return false;
+}
+
+bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker) const
+{
+    if (HoldManaSourceForCollapsedMain(s, attacker)) { return false; }
+    return ShouldAttackWith(s, attacker);
+}
+
 int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     // See DecisionProvider::CastOrderRank. Reliable deck-agnostic order so the canonical line
@@ -4455,7 +4502,7 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
     {
         if (q.controller_index != active)                  { continue; }
         if (!CanAttackFull(q, s.battlefield, active))      { continue; }
-        if (!ShouldAttackWith(s, q))                       { continue; }
+        if (!AttackWith(s, q))                             { continue; }
         atk += AttackPowerOf(s, q);
     }
     if (atk >= opp_life) { return true; }                   // keeping the body wins this turn -> PAY

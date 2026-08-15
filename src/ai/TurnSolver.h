@@ -472,6 +472,13 @@ public:
     static void SetTraceSolve(bool enable);
     static bool GetTraceSolve();
 
+    // Is the main-phase classification filter active for this state (the collapsed main)?
+    // Exported for the shared attack predicate (DecisionProvider::AttackWith): with the filter
+    // on, the turn's casts run AFTER combat, so the attack policy must know it is competing
+    // with the deferred main for creature mana. False whenever the lever/provider is off,
+    // in human play, and under MTG_UNPRUNE=mainphase -- same carve-outs as the filter itself.
+    static bool CollapsedMainActive(const GameState& state);
+
     // Is this run SEARCHED play (lookahead depth > 0)? Set once from the AIEngine constructor.
     // Gates cantrip-first ordering (docs/design/cantrip-first-collapse.md), whose justification --
     // an earlier draw improves the decisions that FOLLOW it -- presupposes a searcher able to act

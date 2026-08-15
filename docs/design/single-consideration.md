@@ -139,6 +139,43 @@ Isolated arms on the canon tree (battery, 100 games x 6 jobs, S0 = no levers):
   asymmetric, ~0.7% under pure luck) is exactly what the held-out adoption A/B must decide;
   per-game dissection cannot (the games are incomparable after the shuffle).
 
+## Suite A/B round 2 (2026-08-15) -- what the phase boundary was secretly doing
+
+Round 1's lesson (burn: bolts classified Main2 starved prowess -- fixed via the prowess
+stand-down, f4698d1) generalizes: **the m1/m2 boundary carried implicit semantics beyond
+scheduling, and each collapse defect is one of those semantics surfacing.** Antilife (+0.15
+at d3, 35 games worse / 1 better -- far too asymmetric for the fetch-flip apparatus class)
+root-caused to TWO of them, dissected via gi=9 (identical draws, pure play divergence):
+
+1. **Enabler-first emission (fixed, necessary but small alone).** Base play cast Plague
+   Drone in m1, so the m2 harvest saw a live Remedy and emitted Reverent Silence / stacked
+   the safe payloads. In the collapsed main the enabler is still in HAND at enumeration, so
+   the risky/speculative alt gates (all keyed on a battlefield inverter) never fired. Fix =
+   the Swords `RemedyActiveOrInHand` precedent applied to alt payloads: collection-time
+   in-hand emission (search nodes only, `MainPhaseFilterActive`-gated -> base byte-identical),
+   plan validity `SubsetHasUnbackedAltPayload` (same-subset enabler required; Reverent
+   Silence needs a CREATURE enabler unless its payload is lethal on the spot), enabler-first
+   `CastOrderRank` + the existing cast-time re-check make it safe end to end. Measured:
+   -0.02 alone -- necessary for the combo lines but NOT the main defect.
+
+2. **Attack/cast mana ordering (fixed, the main defect).** Base order is casts -> attack:
+   main 1 spends the mana, the attack gets the leftover bodies. The collapse inverts it:
+   attack -> casts, so the greedy attack policy (exalted chip with a lone 0-power dork) taps
+   a mana creature BEFORE the deferred main runs -- antilife's m2 saw 3 non-creature sources
+   every turn and {3}{B} Plague Drone was unreachable at tempo (the FSLineTail plan dump
+   showed the T3 m2 list as literally `[Fiery Justice] | []`). Fix =
+   `DecisionProvider::AttackWith`, a NON-virtual wrapper every combat site now calls
+   (declaration + all projections -- never call `ShouldAttackWith` directly at a combat
+   site): under `TurnSolver::CollapsedMainActive` it holds an untapped 0-power mana dork
+   when some hand spell is affordable only with creature mana, then defers to the
+   archetype's `ShouldAttackWith`. Pure pass-through when the filter is off.
+
+Result: antilife stack 4.4367 -> 4.3267 (control 4.2867 = GT exactly; 35 worse -> 11
+worse / 1 better). **Residual +0.04 open**: gi=58 shows the collapsed m2 picking
+{Swords,Swords,Cutter} (13 dmg) over the lethal {Cutter,FJ,Swords} (22 dmg) with identical
+resources -- a post-combat plan-enumeration gap (not MAIN2_DROP; the design combo alone
+reproduces it), next round's dissection target.
+
 ## Ranked next collapses (not yet built)
 
 3. **Skip the always-empty m1 harvest on total-Main2 decks** (~37% of hinata's harvest calls).

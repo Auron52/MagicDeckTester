@@ -836,7 +836,7 @@ static std::vector<AttackingManaSource> CollectAttackingManaSources(const GameSt
         }
         // Only creatures PendingAttackDamage actually counted can be discounted from it.
         if (!CanAttackFull(p, state.battlefield, active)) { continue; }
-        if (!ResolveProvider(state).ShouldAttackWith(state, p)) { continue; }
+        if (!ResolveProvider(state).AttackWith(state, p)) { continue; }
 
         const bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state.battlefield, active, animated, &p);
@@ -905,7 +905,7 @@ static int PendingAttackDamage(const GameState& state)
     {
         if (p.controller_index != active) { continue; }
         if (!CanAttackFull(p, state.battlefield, active)) { continue; }
-        if (!ResolveProvider(state).ShouldAttackWith(state, p)) { continue; }
+        if (!ResolveProvider(state).AttackWith(state, p)) { continue; }
         bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(
             p.card, state.battlefield, active, animated, &p);
@@ -996,7 +996,7 @@ static int CountProwessAttackers(const GameState& state)
     {
         if (p.controller_index == state.active_player_index
             && CanAttackFull(p, state.battlefield, state.active_player_index)
-            && ResolveProvider(state).ShouldAttackWith(state, p)
+            && ResolveProvider(state).AttackWith(state, p)
             && p.card.HasKeyword(Keyword::Prowess))
         {
             ++count;
@@ -1214,6 +1214,21 @@ static bool RemedyActiveOrInHand(const GameState& state, int active)
     return false;
 }
 
+// True if a lifegain->loss enabler that SURVIVES an enchantment wipe -- a CREATURE (Plague
+// Drone) -- is in the active player's hand. The Reverent Silence in-hand emission gate needs
+// this stronger form: an enchantment Remedy cast the same turn resolves before Silence
+// (enabler-first) and is then wiped by it, bricking the combo (the provider's gi=84 lesson),
+// so only a creature enabler backs a NON-lethal same-turn Silence.
+static bool CreatureRemedyInHand(const GameState& state, int active)
+{
+    for (const Card& c : state.players[active].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.lifegain_to_loss && d->card.IsCreature()) { return true; }
+    }
+    return false;
+}
+
 // Plan-validity gate for Swords to Plowshares (controller_lifegain_equals_power): its exile-
 // lifegain rider only helps once a lifegain->loss enabler is live when it resolves. A subset that
 // casts Swords is valid ONLY if an enabler is already in play OR the SAME subset casts one
@@ -1236,6 +1251,53 @@ static bool SubsetHasUnbackedLifegainRemoval(const GameState& state,
     if (!has_removal)                                   { return false; }
     if (RemedyActive(state, state.active_player_index)) { return false; }
     return !has_enabler;   // removal present, no enabler live and none cast this turn -> unbacked
+}
+
+// Plan-validity gate for a FREE alt-cost payload (Reverent Silence / Skyshroud Cutter /
+// Invigorate: "an opponent gains N life") selected with NO lifegain->loss enabler live: the
+// payload only deals damage under an enabler, otherwise it just hands the passive opponent N
+// life. Under the collapsed main (MainPhaseFilterActive) the enumeration offers these with the
+// enabler still in HAND (the phase boundary that used to guarantee "enabler resolved first" is
+// gone), so validity mirrors the Swords gate: the SAME subset must cast an enabler
+// (enabler-first ordering resolves it before the payload). Reverent Silence
+// (destroy_all_enchantments) is stricter: its wipe kills a same-turn enchantment Remedy, so it
+// needs a CREATURE enabler (Plague Drone) in the subset -- unless its own payload is lethal on
+// the spot (wiping the combo is moot once the game is won; conservative: payload damage alone,
+// no attacker credit). Bails under a live Remedy (base emissions) and the AltPayload unpruned
+// A/B (the search judges there) -> byte-identical for every existing configuration.
+static bool SubsetHasUnbackedAltPayload(const GameState& state,
+                                        const std::vector<Action>& cands,
+                                        const std::vector<int>& sel)
+{
+    bool has_alt = false;
+    for (int j : sel) { if (cands[j].alt_cost) { has_alt = true; break; } }
+    if (!has_alt)                                       { return false; }
+    if (RemedyActive(state, state.active_player_index)) { return false; }
+    if (DecisionUnpruned(UnprunedGate::AltPayload))     { return false; }
+    bool enabler = false, creature_enabler = false;
+    for (int j : sel)
+    {
+        const CardDefinition* d = cands[j].def;
+        if (d && d->params.lifegain_to_loss)
+        {
+            enabler = true;
+            if (d->card.IsCreature()) { creature_enabler = true; }
+        }
+    }
+    const int opp_life = state.players[1 - state.active_player_index].life;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (!a.alt_cost || a.def == nullptr) { continue; }
+        if (a.def->params.destroy_all_enchantments)
+        {
+            if (creature_enabler)                                          { continue; }
+            if (enabler && opp_life <= a.def->params.alt_lifegain_cost)    { continue; }
+            return true;   // wipe kills every in-subset enabler and it isn't lethal -> bricked
+        }
+        if (!enabler) { return true; }   // safe payload with no enabler -> free life for the opponent
+    }
+    return false;
 }
 
 // Payoff-prune (DecisionProvider::PrunesAcceleratorWithoutPayoff -- the ritual-guard's search-side analog;
@@ -3097,6 +3159,11 @@ static bool MainPhaseFilterActive(const GameState& state)
     return !DecisionUnpruned(UnprunedGate::MainPhase);
 }
 
+bool TurnSolver::CollapsedMainActive(const GameState& state)
+{
+    return MainPhaseFilterActive(state);
+}
+
 // Base template rules; the provider's per-card doctrine (MainPhaseOverride) wins where set.
 // Everything that is not a hand cast (equips, Vial puts, digs, loyalty, channels, retrace) is
 // untouched -- Main1 here just means "keep in the pre-combat enumeration".
@@ -3361,7 +3428,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // ShouldEmitRiskyAltPayload, so on the goldfish path it still falls through to
                 // `continue` (auto-fired) exactly as if skipped here.
                 const bool alt_burn_live = def.params.alt_lifegain_cost > 0
-                    && RemedyActive(state, state.active_player_index)
+                    && (RemedyActive(state, state.active_player_index)
+                        // Collapsed main: the enabler may still be in hand (cast same subset,
+                        // enabler-first); search-only, plan validity backs it (see the
+                        // spec_search_burn extension below -- same mechanism).
+                        || (MainPhaseFilterActive(state) && g_search_candidate_enum
+                            && RemedyActiveOrInHand(state, state.active_player_index)))
                     && ControlsSubtype(state, state.active_player_index, def.params.alt_cost_requires_subtype)
                     && AltPayloadTargetLegal(state, def);
                 if (!alt_burn_live) { continue; }
@@ -3614,11 +3686,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // rollout-evaluated search, never the greedy Solve()/leaf (which keeps the auto-fire and
             // would otherwise waste it early -- that is the tuned d0 behaviour). A committed plan
             // that casts it removes it from hand so the auto-fire/redirect skip it (no double).
+            // Collapsed-main extension (MainPhaseFilterActive): the phase boundary WAS the
+            // enabler-first mechanism -- base play casts the Drone in main 1 and the m2 harvest
+            // sees RemedyActive on the battlefield. With one collapsed main the enabler is still
+            // in HAND at enumeration, so (search nodes only, mirroring the Swords
+            // RemedyActiveOrInHand precedent) offer the payload anyway; plan validity
+            // (SubsetHasUnbackedAltPayload, Solve::consider + eval_and_push) requires the SAME
+            // subset to cast an enabler, enabler-first ordering (CastOrderRank 0) resolves it
+            // before the payload, and the cast-time guard re-checks the live board. Reverent
+            // Silence additionally needs a CREATURE enabler in hand (an enchantment Remedy is
+            // wiped by its own resolution -- gi=84) unless its payload is lethal on the spot.
+            const bool collapse_in_hand = MainPhaseFilterActive(state) && g_search_candidate_enum
+                && !RemedyActive(state, state.active_player_index);
             const bool spec_search_burn = g_search_candidate_enum
                 && !def.params.destroy_all_enchantments
-                && RemedyActive(state, state.active_player_index);
+                && (RemedyActive(state, state.active_player_index)
+                    || (collapse_in_hand
+                        && RemedyActiveOrInHand(state, state.active_player_index)));
+            const bool risky_in_hand = collapse_in_hand
+                && def.params.destroy_all_enchantments
+                && (CreatureRemedyInHand(state, state.active_player_index)
+                    || (RemedyActiveOrInHand(state, state.active_player_index)
+                        && state.players[1 - state.active_player_index].life
+                               <= def.params.alt_lifegain_cost));
             if ((ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def)
-                 || DecisionUnpruned(UnprunedGate::AltPayload) || spec_search_burn)
+                 || DecisionUnpruned(UnprunedGate::AltPayload) || spec_search_burn || risky_in_hand)
                 && AltPayloadTargetLegal(state, def))
             {
                 constexpr int DMG = 100;
@@ -7340,6 +7432,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
+        // Reject a free alt-cost payload not backed by a live/same-turn enabler (collapsed-main
+        // twin of the Swords gate; inert wherever the extended emission never fires).
+        if (SubsetHasUnbackedAltPayload(state, cands, sel)) { return; }
         // Payoff-prune (PrunesAcceleratorWithoutPayoff): drop a ritual-accelerant subset that casts no payoff
         // (Dragon/Dragonstorm/Apex). Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-
         // gated; inert for every other deck -> byte-identical. storm_in_hand feeds the storm-hold rule
@@ -12051,6 +12146,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
         if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
+        // Reject a free alt-cost payload not backed by a live/same-turn enabler (collapsed-main
+        // twin of the Swords gate; inert wherever the extended emission never fires). Lockstep
+        // twin of the check in Solve::consider.
+        if (SubsetHasUnbackedAltPayload(state, cands, sel)) { return; }
         // Payoff-prune (PrunesAcceleratorWithoutPayoff): drop a ritual-accelerant subset that casts no payoff
         // (Dragon/Dragonstorm/Apex) from the SEARCH branch list -- this is where the freed budget
         // comes from. Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-gated; inert

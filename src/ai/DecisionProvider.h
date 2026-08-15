@@ -368,6 +368,17 @@ public:
     // override never makes the search predict an attack the executor won't make.
     virtual bool ShouldAttackWith(const GameState& s, const Permanent& attacker) const = 0;
 
+    // AttackWith -- the gate every combat site actually calls (declaration + all projections;
+    // NEVER call ShouldAttackWith directly at a combat site). Non-virtual: it applies the
+    // engine-level collapsed-main mana hold first -- with the main-phase filter active
+    // (TurnSolver::CollapsedMainActive) the turn's casts run AFTER combat, so an attacking
+    // mana creature would tap a source the deferred main still needs; a 0-power mana dork is
+    // held when some hand spell is affordable only with creature mana (the phase boundary the
+    // filter removed was ALSO the mana-allocation order: main 1 spent mana, the attack got
+    // the leftovers). Then defers to the archetype's ShouldAttackWith. Inert (pure
+    // pass-through) whenever the filter is off -> byte-identical base behaviour.
+    bool AttackWith(const GameState& s, const Permanent& attacker) const;
+
     // PostDrawKeepLandName -- which land to play AFTER a deferred draw-engine (Treasure Hunt) resolves and
     // the draw is known. Returns the NAME of a card in hand to play as the deferred land drop:
     // the Treasure-Hunt provider returns a drawn no-max-hand-size land (Reliquary Tower) when the
