@@ -5012,7 +5012,27 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     actions.push_back(std::move(a));
                 }
             }
-            if (pd->params.gy_exile_creature_lifegain > 0)
+            // GOLDFISH CUT -- ADOPTED 2026-08-15, DEFAULT ON (MTG_SKIP_INERT_LIFEGAIN=0 restores it).
+            // Measured byte-identical (6 configs, 1300 games: identical digests AND per-game logs), so
+            // the search never actually TOOK this action -- and -11.9% on FiveColour d3, the
+            // Deathrite-heavy case (noise floor ~4%, from the two Deathrite-less decks in the same A/B).
+            // The lifegain mode buys nothing against a passive
+            // opponent -- the enumerator already concedes this by scoring it `eval = 1` -- but it was
+            // still emitted, so every fueled Deathrite multiplied the plan space by an action the
+            // search then had to price and reject. It also competes for the SAME {T} as the mana tap
+            // and the drain mode, and costs {G} on top. On a Deathrite-heavy board (the x4 hand that
+            // came out of the tail harvest) that is a real branching multiplier for zero value.
+            //
+            // NOT provably inert, which is why this is measured rather than assumed: life is a
+            // resource this deck SPENDS (fetchlands 1, shocklands 2, City of Brass 1), and a shock
+            // land enters untapped only while `life > etb_pay_life_to_untap`. So at very low life,
+            // gaining 2 could keep a Steam Vents untapped. The A/B below decides whether that ever
+            // happens in practice.
+            //
+            // PHASE 2: a real opponent attacks, and then lifegain is not inert at all -- this cut must
+            // be reverted with the goldfish assumption it rests on.
+            static const bool s_skip_inert_lifegain = EnvOn("MTG_SKIP_INERT_LIFEGAIN", true);
+            if (pd->params.gy_exile_creature_lifegain > 0 && !s_skip_inert_lifegain)
             {
                 bool fuel = false;
                 for (const Card& c : gy) { if (ZoneCard(c).IsCreature()) { fuel = true; break; } }
