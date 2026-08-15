@@ -222,6 +222,13 @@ struct GameState
     // main-1 effects casts EVERYTHING second main, draws included). Default TRUE = the wide/safe
     // reading for any state not built through SetupGame.
     bool                     deck_feeds_combat     = true;
+    // Does this game PLAY a post-combat main at all (GoldFishRunner::DeckUsesSecondMain, stamped
+    // by SetupGame)? The main-phase classifier is gated on it STRUCTURALLY: deferring a cast to
+    // main 2 on a game with no main 2 would DELETE the cast (the "never suite-wide" hazard the
+    // battery manifest used to warn about -- now impossible by construction). Default FALSE =
+    // classifier inactive for any state not built through SetupGame (conservative: a filter that
+    // silently narrows nothing beats one that silently deletes casts).
+    bool                     uses_second_main      = false;
 
     // SEARCHED Goblin Lackey put (Plan::lackey_choice): an index into the provider's ranked
     // CombatCheatCandidates list, or -1 for the provider's top pick. Unlike the scry/ETB-dig pins

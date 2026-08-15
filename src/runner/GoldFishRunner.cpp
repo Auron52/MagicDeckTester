@@ -122,6 +122,10 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
         if (def->tmpl == CardTemplate::Haste || def->tmpl == CardTemplate::PumpSpell
             || def->tmpl == CardTemplate::LordEffect)                        { return true; }
         if (def->card.HasKeyword(Keyword::Haste))                            { return true; }
+        // Prowess: EVERY pre-combat noncreature cast pumps the attack, so any spell in the deck
+        // is a potential combat feeder (the suite caught this: classifying burn's plain bolts
+        // Main2 starved Monastery Swiftspear, +0.39 avg at every depth).
+        if (def->card.HasKeyword(Keyword::Prowess))                          { return true; }
         const CardParams& p = def->params;
         if (p.grants_haste || p.grants_temp_haste || p.equip_grants_haste
             || p.grants_double_strike)                                       { return true; }
@@ -523,6 +527,10 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     state.shuffle_salt_opening = s_shuffle_salt_opening;
     state.shuffle_salt_search  = s_have_salt_search ? s_shuffle_salt_search : s_shuffle_salt;
     state.deck_feeds_combat    = DeckFeedsCombat(deck);   // main-phase classifier's deck-level input
+    // Structural gate for the classifier: a deck that never plays a second main must never have
+    // casts deferred INTO one (defer == delete there). Stamped from the same detector the runner
+    // uses to decide whether to play post-combat mains, so the two can never disagree.
+    state.uses_second_main     = DeckUsesSecondMain(deck);
 
     state.players[0].library.assign(deck.mainboard.begin(), deck.mainboard.end());
 

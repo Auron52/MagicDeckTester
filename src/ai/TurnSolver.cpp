@@ -3087,7 +3087,11 @@ static bool BoardHasScalingAttacker(const GameState& state)
 static bool MainPhaseFilterActive(const GameState& state)
 {
     static const bool s_kill  = EnvOn("MTG_NO_PHASE_CLASSIFY");  // DEFAULT unset; =1 kills the filter
-    static const bool s_force = EnvOn("MTG_PHASE_CLASSIFY");     // A/B lever (second-main decks ONLY)
+    static const bool s_force = EnvOn("MTG_PHASE_CLASSIFY");     // A/B lever
+    // STRUCTURAL gate: deferring a cast to main 2 on a game with no main 2 deletes it. Stamped by
+    // SetupGame from the same detector that decides whether post-combat mains are played, so the
+    // force lever is now safe to set SUITE-WIDE (single-main decks simply never filter).
+    if (!state.uses_second_main) { return false; }
     if (s_kill || HumanPlayActive()) { return false; }
     if (!s_force && !ResolveProvider(state).ClassifiesMainPhases()) { return false; }
     return !DecisionUnpruned(UnprunedGate::MainPhase);
@@ -5378,12 +5382,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         const DecisionProvider& prov = ResolveProvider(state);
         const bool haste_access     = HasteAccessThisTurn(state);
         const bool scaling_attacker = BoardHasScalingAttacker(state);
-        actions.erase(std::remove_if(actions.begin(), actions.end(),
-            [&](const Action& a)
+        // PROWESS access: a prowess attacker available THIS turn makes EVERY cast a combat
+        // feeder (each noncreature spell pumps it pre-combat), so the whole hand is the USER's
+        // doubt class -> Main1 -> the filter stands down for this state. Board attackers, plus a
+        // prowess creature in hand that could attack same-turn (own haste or haste access).
+        // Suite-caught: without this, burn's plain bolts classified Main2 and starved Monastery
+        // Swiftspear (+0.39 avg at every depth).
+        bool prowess_access = CountProwessAttackers(state) > 0;
+        if (!prowess_access)
+        {
+            for (const Card& hc : state.ActivePlayer().hand)
             {
-                return ClassifyMainPhase(state, prov, a, haste_access, scaling_attacker)
-                       == DecisionProvider::MainPhase::Main2;
-            }), actions.end());
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd && hd->card.HasKeyword(Keyword::Prowess)
+                    && (hd->card.HasKeyword(Keyword::Haste) || haste_access))
+                { prowess_access = true; break; }
+            }
+        }
+        if (!prowess_access)
+        {
+            actions.erase(std::remove_if(actions.begin(), actions.end(),
+                [&](const Action& a)
+                {
+                    return ClassifyMainPhase(state, prov, a, haste_access, scaling_attacker)
+                           == DecisionProvider::MainPhase::Main2;
+                }), actions.end());
+        }
     }
 
     return actions;
