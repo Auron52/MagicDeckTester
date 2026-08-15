@@ -39,13 +39,22 @@ wall-clock is the right proxy). Quality is the same run's `avg (turns)`.
 | dragonstorm | 5.3 | 4.6 | 4.4 | 4.4083 | 4.4083 | 4.4417 | 0.0000 | +0.0334 |
 | th | 2.2 | 2.1 | 2.0 | 3.9833 | 4.0000 | 4.0167 | +0.0167 | +0.0334 |
 | creature_giving | 3.8 | 3.4 | 3.1 | 4.7083 | 4.7083 | 4.7083 | 0.0000 | 0.0000 |
-| **mirrorwing** (60g) | 16.6 | 13.3 | 13.2 | — | — | — | — | — |
-
-(hinata / fivecolour rows still running when this was written.)
+| hinata | 15.7 | 16.7 | 14.7 | 5.9000 | 5.9000 | 5.9000 | 0.0000 | 0.0000 |
+| mirrorwing | 15.6 | 14.3 | 13.3 | 4.9583 | 4.9667 | 4.9667 | +0.0084 | +0.0084 |
+| **fivecolour** | **17.4** | **42.1** | **27.8** | 5.1417 | 5.1750 | 5.1833 | +0.0333 | +0.0416 |
 
 **Findings so far:**
 
-1. **The saving is SMALL — ~1.25x at best, not a multiple.** Mirrorwing d3->d2 is 1.25x, d3->d1 is
+0. **ON FIVECOLOUR, LOWER DEPTH IS DRAMATICALLY *MORE* EXPENSIVE: d2 is 2.4x SLOWER than d3
+   (42.1 s vs 17.4 s) and d1 is 1.6x slower (27.8 s)** — while ALSO labelling worse (+0.033 /
+   +0.042 turns). It is the single worst arm in the table on both axes at once. So "lower depth is
+   cheaper" is not a rule; on 1 of 12 decks it inverts hard, and it inverts on a deck that currently
+   CARRIES `mull_gen d3 b3`. Suspected cause (UNVERIFIED, do not repeat as fact): fivecolour's
+   `value_trust_depth` is 6, so every arm here commits below the trust depth and runs the heuristic
+   escalation instead of taking the trusted leaf — which would make the arms differ in escalation
+   work rather than in search work. Worth confirming before anyone tunes this deck's gen depth.
+
+1. **Elsewhere the saving is SMALL — ~1.25x at best, not a multiple.** Mirrorwing d3->d2 is 1.25x, d3->d1 is
    1.26x. Against a generation the deferral doc prices in the many-hours-to-days range, 25% does not
    change feasibility; it shortens a multi-day run.
 2. **d1 is NOT cheaper than d2** (mirrorwing 1.26x vs 1.25x; goblins 10.2s vs 12.1s is the one real
@@ -55,8 +64,12 @@ wall-clock is the right proxy). Quality is the same run's `avg (turns)`.
 3. **Quality loss is small but real and one-directional** — every nonzero delta is a LOSS, on 9 of 9
    decks, which is what a systematically weaker labeller should look like. d2 costs 0 to +0.017
    turns; d1 costs up to +0.042.
-4. Cost is deck-shaped: goblins/antilife/mirrorwing pay real seconds; knights/burn/slivers are
-   already trivial and have nothing to save.
+4. Cost is deck-shaped: goblins/antilife/mirrorwing/fivecolour pay real seconds; knights/burn/
+   slivers are already trivial and have nothing to save. hinata is flat (15.7/16.7/14.7) — depth is
+   not its cost driver at all.
+5. **The practical rule is therefore: MEASURE THE DECK, do not assume the direction.** A 12-deck
+   sweep at 120 games costs a couple of minutes per deck and would have caught the fivecolour
+   inversion before a generation was launched on it.
 
 ## What this measures, and what it does NOT
 
