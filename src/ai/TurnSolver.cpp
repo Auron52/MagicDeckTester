@@ -3230,6 +3230,13 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
     // wrong 1-drop, 3 -> 4). Keep it pre-combat, where the phase boundary makes its activations
     // visible to the post-combat plans.
     if (p.sac_creature_outlet && p.sac_outlet_add_mana_amount > 0) { return MP::Main1; }
+    // Same battlefield-only-activation asymmetry, LOYALTY form (5c gi=1 dig 2026-08-15): a
+    // planeswalker cast within an m2 plan can never activate in that plan (activations are
+    // collected from the battlefield), so its same-turn loyalty ability -- legal in real MTG
+    // the turn it enters -- slips a whole turn. Keep walkers pre-combat, where the phase
+    // boundary makes the activation visible to the post-combat plans (Jared m1 -> m2 +1 Kavu
+    // -> the 3/3 attacks next turn; deferred, the Kavu and the win slip a turn, 4 -> 5).
+    if (!p.loyalty_abilities.empty()) { return MP::Main1; }
     // DOUBT-DEFERRAL sub-lever (MTG_DOUBT_MAIN2, default OFF): the USER's one-pool placement
     // rule -- with the attack-helping classes explicit above, tutors classify as card-flow
     // (Both, like draws) and the residual doubt class defers to Main2 so the non-combat hand
@@ -3293,6 +3300,22 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
             // mana into two pools solved separately (antilife gi=58: doubt-Main1 Swords
             // front-ran W,W pre-combat and starved the deferred Fiery Justice). That flip is
             // parked default-off until the m2 ordering hardening makes it measure clean.
+            // CREATURE default (dependency-map family, goblins gi=42 dig 2026-08-15): a
+            // creature-typed card reaching here has no attack-helping statics (those
+            // classified above), so its combat contribution is exactly "can the body attack
+            // NOW" -- the same test the vanilla/dork case applies. Custom-template creatures
+            // (token makers -- Mogg War Marshal) were skipping it: with a live haste lord
+            // (Goblin Chieftain) a pre-combat Marshal is two hasty lord-pumped bodies, but
+            // doubt deferred it past combat and the kill slipped a turn (gi=42 5->6).
+            if (def.card.IsCreature())
+            {
+                if (scaling_attacker) { return MP::Main1; }
+                if (def.card.HasKeyword(Keyword::Haste)
+                    || HasHasteFromLords(def.card, state.battlefield,
+                                         state.active_player_index)
+                    || hand_haste_access)
+                { return MP::Main1; }
+            }
             if (s_doubt_main2) { return MP::Main2; }
             return state.deck_feeds_combat ? MP::Main1 : MP::Main2;
     }

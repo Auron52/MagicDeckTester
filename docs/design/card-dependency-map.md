@@ -120,16 +120,32 @@ starvation. Two mechanisms found:
   summoning-sick (`sac_creature_outlet` + `sac_outlet_add_mana_amount > 0`) classifies Main1.
   Measured: gi=153/267 fixed, none regressed, goblins doubt gap +0.0433 → +0.0367; smoke
   36/36 byte-identical.
-* **SYSTEMIC (OPEN — the next arc): the first-verified-win early-stop's ladder premise breaks
-  under the collapse.** `FSLineWin`/`FSLineTail` commit the FIRST verified win at the pass
-  horizon edge, justified by "every shallower pass was a complete refutation" — but when an
-  m2-line's verification fails at the shallower pass for MODEL reasons (the outlet asymmetry
-  above; 5c's attack-hold/partition interplay on gi=1), a deeper pass's first verified win is
-  NOT minimal, and the sibling that wins a turn earlier is never evaluated (goblins gi=153 at
-  d4: Prospector's win-4 locked out Lackey's win-3 — read directly off the new
-  `MTG_M2T_TRACE`). Ties additionally fall to `MoveOrderPlans` static value. Drives the
-  remaining 11 goblins + 15 fivecolour doubt-worse games. Fix needs care: the early-stop is
-  load-bearing for wall-clock everywhere; candidate shapes are (a) restrict the early return
-  to `win == turn_number`, (b) complete-nodes mode (the `BpWaveCompleteNodes` precedent) under
-  the collapse, (c) repair the specific model gaps so the premise holds. Dig instruments:
+* **SYSTEMIC (RESOLVED 2026-08-15 — shape (c) won; the early-stop hypothesis is REFUTED as
+  the driver): the first-verified-win early-stop's ladder premise breaks under the collapse
+  ONLY when a model gap makes shallower-pass verification fail.** `FSLineWin`/`FSLineTail`
+  commit the FIRST verified win at the pass horizon edge, justified by "every shallower pass
+  was a complete refutation" — a real lock-out was read off `MTG_M2T_TRACE` (goblins gi=153
+  at d4: Prospector's win-4 locked out Lackey's win-3). But digging the remaining 11 goblins
+  + 15 fivecolour doubt-worse games found each was DOWNSTREAM of a classification gap; with
+  the gaps repaired the ladder premise holds again and NO search change was needed (the
+  early-stop — wall-clock load-bearing everywhere — is untouched). The two gaps, both
+  ClassifyMainPhase, both the dependency-map family:
+  - **Creature default skipped the haste-now test (goblins gi=42, closed ALL 11 games):**
+    custom-template creatures (token makers — Mogg War Marshal) fell to `default:` → doubt →
+    Main2, skipping the vanilla/dork case's "can the body attack NOW" test. With a live
+    haste lord (Goblin Chieftain) a pre-combat Marshal is two hasty lord-pumped bodies;
+    deferred, the kill slips a turn. Fix: creature-typed cards in `default:` get the same
+    scaling-attacker + haste-now test before the doubt deferral.
+  - **Loyalty form of the battlefield-only-activation asymmetry (5c gi=1, closed 14 of 15):**
+    plan-collected activations come from the battlefield, so a planeswalker cast within an
+    m2 plan can never activate in that plan — Jared Carthalion's same-turn +1 (a 3/3 Kavu)
+    slips a whole turn, and doubt's T3-m2 Jared line verified win-5 while nodoubt's m1 Jared
+    → m2 +1 Kavu verified win-4 (Spider-Man-first then locked in at the d3 horizon edge).
+    Fix: `loyalty_abilities` non-empty → Main1 (mirror of the sac-outlet pull).
+  **Measured (300g seed 2002 d3 b10 pairs): goblins doubt gap +0.0367 → 0.0000 with 0/300
+  diverged; fivecolour +0.0433 → 0.0000 (1 worse / 1 better — gi=15, a T1 fetch-crack
+  shuffle-clairvoyance tie-flip, the documented architecture-level class — net zero);
+  antilife unchanged (b10 −0.0033, unbounded exactly 0, 0/300 diverged — the USER bar
+  stays met). Both nodoubt arms 0/300 diverged vs the pre-fix binary; smoke ALL PASS
+  (base byte-identical — both pulls are lever-gated).** Dig instruments:
   `MTG_M2T_TRACE`/`MTG_FSW_TRACE` (+`_TURN`).
