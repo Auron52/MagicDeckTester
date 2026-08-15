@@ -209,6 +209,30 @@ the 300g d3 pairs attributed; three base-affecting fixes landed:**
   lethal-relevant (`opp_life <= exalted + FreePayloadKillCeiling`), leaving the motivating
   gi=9 hold (healthy opp, ceiling unreachable) untouched. gi=9/76/36/84/184 all verified
   unchanged.
+**5c + hinata churn VERIFIED (2026-08-16, "let's verify those remaining games"). Re-measured
+all 8 hinata/5c d3+d5 stack-vs-base keys under the post-fix binary (two pooled batches):
+5c d3 now net BETTER both seeds (−0.010/−0.005, 12w/15b + 17w/18b); 5c d5 +0.02/+0.02
+(9w/7b, 7w/6b); hinata d3 +0.02/+0.03; hinata d5 +0.06/−0.02. Sum +0.115 over 8 keys.
+Every big mover and a 3-game sample of the 1-turn flips dug — ALL land in the
+clairvoyance / re-roll family, no heuristic-gate misjudgment found:**
+
+* **hinata gi=33 d5 s2002 (6→LOSS under full stack):** lever ladder 6→7(cs)→7→8(acq)→9(bp63)
+  = per-lever re-rolls. At the cs T1 root's m2 node the search STRICTLY prefers holding
+  Ponder (pass sub=5 vs Ponder sub=6 — determinized clairvoyant preference, no gate
+  involved); the unverified win-5 projection drifts on re-solve (MTG_FLAG_NONCONV silent:
+  projection was heuristic-leaf, not a verified win). The stack's 9 is a re-rolled tail
+  outcome, mechanically identical to antilife gi=245.
+* **5c gi=97 d5 s3003 (5→7, m2drop trigger):** T1 land choice Blood Crypt vs Zagoth Triome
+  is an ALL-TIE at the deepest fsw pass (every land + pass tail=5); the committed Crypt
+  line colour-starves the green dorks for 3 turns (Tender/Birds/Elder held, no G source,
+  T3 heath uncracked) and drifts to 7. Tie-break could be colour-aware ("play the
+  colour-completing tapped land on the free turn") — noted as a candidate heuristic-
+  optimization item, NOT a defect (the search scored the options equal).
+* **hinata gi=40 d3 s3003 (4→6):** non-monotone ladder (4→5→5→4→6) = re-roll churn.
+* **Samples 5c gi=11 d5, hinata gi=140 d3, hinata gi=37 d3:** same-turn m1→m2 deferral is
+  neutral on its own; the 1-turn losses come from a later clairvoyant hold (gi=11: Oko held
+  T2, cast T3-m2, fetch-crack timing re-rolls the library) or are non-monotone (gi=37).
+
 * **gi=245 s3003 (6→LOSS) — rollout-mediated shuffle clairvoyance, accepted:** hand of
   three fetches; at the stack's T1 root EVERY option ties at 9 (the levered rollout's own
   fetch timing shuffles differently and finds no win) while base's rollout finds a
