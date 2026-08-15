@@ -191,3 +191,28 @@ losses?"). Every remaining doubt-worse game across the whole suite is attributed
 **Post-analysis suite state: doubt-vs-nodoubt residual ≈ +0.04 net over 60 keys before the
 Muxus pull, ≈ +0.025 after (goblins s3003 +0.0067 = gi=149 alone; 5c d5 +0.02 = the two
 tie-flips; antilife ±0.007 = two ties minus one gain). No unexplained games remain.**
+
+**Antilife stack-vs-base digs COMPLETE (2026-08-15 overnight session). Every worse game in
+the 300g d3 pairs attributed; three base-affecting fixes landed:**
+
+* **gi=184 s2002 (4→5) — FIXED: verse-blind alt-payload lethal test.** Both arms reach an
+  identical T4 (Remedy live, fresh Aria, opp 7); the stack's searched m2 skipped Reverent
+  Silence because the per-card lethal formula (`opp_life <= alt + ReadyAttackPower`) missed
+  the verse trigger the cast itself fires (6 alt + 1 verse = exactly 7). Fix:
+  `VerseDamageFromCast` counted into all three lethal checks (auto-fire close-out, emission
+  gate, cast-time re-check). Base benefits too (the greedy m2 harvest uses the same gate).
+* **gi=230 s3003 (4→5, surfaced BY the verse fix improving base) — FIXED, two layers:**
+  (1) `ReadyAttackPower` read a lone exalted Ignoble Hierarch as 0 power — now counts the
+  ALONE shape (`best_single + CountExalted`, the gi=87 lethal-projection precedent);
+  (2) `HoldManaSourceForCollapsedMain` benched the lone exalted dork at opp 8 = 1 swing +
+  6 Silence alt + 1 verse — the single-exalted release now fires when the chip is
+  lethal-relevant (`opp_life <= exalted + FreePayloadKillCeiling`), leaving the motivating
+  gi=9 hold (healthy opp, ceiling unreachable) untouched. gi=9/76/36/84/184 all verified
+  unchanged.
+* **gi=245 s3003 (6→LOSS) — rollout-mediated shuffle clairvoyance, accepted:** hand of
+  three fetches; at the stack's T1 root EVERY option ties at 9 (the levered rollout's own
+  fetch timing shuffles differently and finds no win) while base's rollout finds a
+  clairvoyant win-5 via holding all lands two turns. The post-divergence loss (two
+  gift-Arias, no Remedy/instants drawn) is an artifact of the divergent shuffle, not a
+  play defect. Same family: gi=29/58 (T1 land tie-flips), gi=118, gi=254, gi=3, gi=96
+  (tutor-timing flip). gi=3 closed itself under the verse fix (tie landscape shifted).

@@ -916,6 +916,26 @@ bool GenericProvider::ShouldAttackWith(const GameState&, const Permanent&) const
 // (mana value only): over-holding costs a 1-point chip, under-holding costs a turn.
 static int  AttackPowerOf(const GameState& s, const Permanent& p);          // defined below
 static bool AttackHasNonPowerValue(const GameState& s, const Permanent& p); // defined below
+static int  VerseDamageFromCast(const GameState& s, int controller,
+                                const CardDefinition& def);                 // defined below
+
+// Free-payload kill ceiling: the damage the hand's FREE alt-cost payloads (Reverent Silence
+// class: "opponent gains N instead of paying" -> N damage under a live lifegain->loss enabler)
+// could add THIS turn, verse triggers included. 0 without a live Remedy -- the payloads are
+// then gifts, not damage. Consulted by the hold rule below to price a forgone exalted swing.
+static int FreePayloadKillCeiling(const GameState& s, int controller)
+{
+    if (!RemedyActive(s, controller)) { return 0; }
+    int total = 0;
+    for (const Card& c : s.players[controller].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->params.alt_lifegain_cost <= 0) { continue; }
+        if (!ControlsSubtype(s, controller, d->params.alt_cost_requires_subtype)) { continue; }
+        total += d->params.alt_lifegain_cost + VerseDamageFromCast(s, controller, *d);
+    }
+    return total;
+}
 
 static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& p)
 {
@@ -945,7 +965,8 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
     // than the held tempo (gi=76: holding cost 4 damage across T2/T3 and a full turn to enable
     // a BIRDS, 4->5). The motivating gi=9 case (SINGLE exalted -- a genuine 1-point chip --
     // enabling {3}{B} Plague Drone) still holds.
-    if (CountExalted(s.battlefield, active) >= 2)
+    const int exalted = CountExalted(s.battlefield, active);
+    if (exalted >= 1)
     {
         bool other_attacker = false;
         for (const Permanent& q : s.battlefield)
@@ -954,7 +975,18 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
             if (!CanAttackFull(q, s.battlefield, active))                 { continue; }
             if (AttackPowerOf(s, q) > 0 || AttackHasNonPowerValue(s, q))  { other_attacker = true; break; }
         }
-        if (!other_attacker) { return false; }   // p would BE the exalted swing -- worth >= 2
+        if (!other_attacker)
+        {
+            if (exalted >= 2) { return false; }   // p would BE the exalted swing -- worth >= 2
+            // LETHAL-RELEVANT single chip (gi=230): a 1-point exalted swing is no longer "at
+            // most a chip" when it completes a this-turn kill -- opp at 8 with a free Reverent
+            // Silence in hand (6 alt + 1 verse) needs exactly the swing to reach 0. Release
+            // the hold when swing + the free-payload ceiling covers the opponent's life; the
+            // motivating gi=9 hold (chip vs a full turn of Plague Drone tempo, opp far from
+            // dead) is untouched because the ceiling cannot reach a healthy life total.
+            if (s.players[1 - active].life <= exalted + FreePayloadKillCeiling(s, active))
+            { return false; }
+        }
     }
     const int noncreature = total - creature_src;
     for (const Card& c : s.players[active].hand)
@@ -1496,19 +1528,61 @@ AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_ind
     return out;
 }
 
+// Verse damage the CAST of this payload itself would deal: each on-battlefield CAST-PAYOFF
+// permanent (verse_damage, Aria of Flame) triggers on an instant/sorcery cast for
+// (counters + 1) real damage -- Remedy-independent, so it always lands. The lethal checks
+// below must count it: at gi=184 the opponent sat at 7 with a fresh Aria out, and
+// "6 alt + 0 ready attack" read non-lethal while the actual cast deals 6 + 1 verse = 7.
+// Returns 0 for a non-instant/sorcery payload (no trigger fires).
+static int VerseDamageFromCast(const GameState& s, int controller, const CardDefinition& def)
+{
+    if (!def.card.IsInstant() && !def.card.IsSorcery()) { return 0; }
+    int total = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.verse_damage) { total += p.verse_counters + 1; }
+    }
+    return total;
+}
+
 // Total power of the controller's creatures that can still attack this turn (untapped, not
 // summoning-sick). Used by the Reverent-Silence lethal checks below so the "free payload + this
 // turn's swing finishes the opponent" formula is identical at emission and at auto-fire time.
+// Counts BOTH attack shapes (the lethal-projection precedent above): SWARM (summed power) and
+// ALONE (best single attacker + the full Exalted count) -- a lone 0-power Ignoble Hierarch
+// swings for 1 under its own Exalted, and reading it as 0 scored the gi=230 kill
+// (opp 8 = 6 alt + 1 verse + 1 exalted swing) as non-lethal.
 static int ReadyAttackPower(const GameState& s, int controller)
 {
+    // PHASE-HONEST: "this turn's swing" only exists while combat is still ahead. Post-combat
+    // (the m2 harvest, the collapsed-main cast pass -- its attack runs BEFORE the casts) an
+    // untapped creature that did not attack contributes NOTHING this turn; counting it fired
+    // a NON-lethal Reverent Silence at opp 7 = "6 alt + 2 phantom exalted" (regression d0
+    // gi=61/161: the wipe stripped the Remedy, the next Aria GIFTED 10, win-5 became a loss).
+    // Both worlds maintain GameState::phase (executor: GameEngine; rollout: SimulateCombat /
+    // SimulateEndAndStartNextTurn), so the gate is faithful in the apply path too.
+    if (s.phase == Phase::PostCombatMain || s.phase == Phase::Combat
+        || s.phase == Phase::Ending)
+    { return 0; }
     int atk = 0;
+    int best_single = 0;
+    bool any_ready = false;
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index == controller && p.card.IsCreature() && p.CanAttack())
         {
+            any_ready = true;
             int pw = p.EffectivePower();
             if (pw > 0) { atk += pw; }
+            best_single = std::max(best_single, std::max(pw, 0));
         }
+    }
+    if (any_ready)
+    {
+        const int alone = best_single + CountExalted(s.battlefield, controller);
+        if (alone > atk) { atk = alone; }
     }
     return atk;
 }
@@ -1539,7 +1613,8 @@ bool AntiLifegainProvider::CanAutoFireAltPayload(const GameState& s, int control
         && ::ControlsSubtype(s, controller, def.params.alt_cost_requires_subtype)
         && ::AltPayloadTargetLegal(s, def)
         && s.players[1 - controller].life > 0
-        && s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller))
+        && s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller)
+                                             + VerseDamageFromCast(s, controller, def))
     {
         return true;
     }
@@ -1554,7 +1629,8 @@ bool AntiLifegainProvider::CanAutoFireAltPayload(const GameState& s, int control
     if (def.params.alt_lifegain_cost <= 0 || !def.params.destroy_all_enchantments) { return false; }
     if (!::RemedyActive(s, controller)) { return false; }
     if (!::ControlsSubtype(s, controller, def.params.alt_cost_requires_subtype)) { return false; }
-    return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller);
+    return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller)
+                                             + VerseDamageFromCast(s, controller, def);
 }
 
 // CastEnablerFirst / CastOrderRank: no overrides -- the enabler-first sequencing this provider
@@ -1597,7 +1673,8 @@ bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int con
     }
 
     // (b) lethal in combination with this turn's attackers
-    return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller);
+    return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller)
+                                             + VerseDamageFromCast(s, controller, def);
 }
 
 bool AntiLifegainProvider::OpponentLifegainUseful(const GameState& s, int controller) const
