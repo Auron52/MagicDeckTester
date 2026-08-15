@@ -18674,13 +18674,19 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
 //
 // Deliberately NOT byte-identical to the unmemoized searched mode: a hit skips the nested
 // search's budget consumption, so the outer deepening fits more passes -- that changed budget
-// dynamic is part of what the adoption A/B judges. With MTG_SOLVE_MEMO unset this function is a
-// pure pass-through (byte-identical to plain MTG_SEARCH_SECOND_MAIN).
+// dynamic is part of what the adoption A/B judges.
+//
+// The memo is PART OF searched-second-main mode (USER 2026-08-15: it is how "one place to search
+// each spell" is implemented, and it has nothing to do with the greedy-Solve memo it borrows
+// cache plumbing from -- coupling it to MTG_SOLVE_MEMO made a greedy-named lever load-bearing
+// for the no-greedy stack). MTG_NO_M2_SEARCH_MEMO=1 restores the unmemoized searched mode (the
+// A/B hatch; that configuration is the measured historical regression, S1 in the design doc).
 static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int depth, int max_turns,
                                                    SearchBudget* budget, bool second_main,
                                                    TranspositionTable* tt)
 {
-    if (!solvememo::Enabled() || HumanPlayActive() || g_cantrip_order_site != nullptr)
+    static const bool s_no_memo = EnvOn("MTG_NO_M2_SEARCH_MEMO");
+    if (s_no_memo || HumanPlayActive() || g_cantrip_order_site != nullptr)
     {
         return TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/false, depth, max_turns,
                                               budget, /*enforce_budget=*/false, second_main, tt);
