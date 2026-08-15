@@ -1244,7 +1244,58 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     // empty memo and inserts exactly the same proven-failure keys, so every prune is unchanged. Safe as
     // thread_local (each gen worker has its own) because no nested top-level backtrack runs in a subtree.
     static thread_local TapBacktrackMemo s_memo_tl;
-    if (top_level && n <= 64) { s_memo_tl.clear(); fail_memo = &s_memo_tl; }
+    if (top_level && n <= 64)
+    {
+        // ...but clear() also MEMSETS that retained bucket array, unconditionally, and the array never
+        // shrinks. So the reuse above has a second-order cost the original change did not anticipate:
+        // one degenerate payment (a domain dork -- Bloom Tender / Faeburrow Elder -- on a fixing board
+        // inflates this memo enormously) permanently enlarges the array, and every LATER payment on
+        // that thread pays a full-array memset, however cheap that payment is. A thread that ever saw
+        // one bad hand carries the tax for the rest of the run, which is why it shows up worse under
+        // the 12-thread generator than single-threaded.
+        //
+        // Two bounded fixes, BOTH byte-identical: a top-level call's only requirement is that it sees
+        // an EMPTY memo, and neither which keys get inserted nor which proven failures get pruned can
+        // depend on HOW the buckets were emptied (or on how many buckets there are -- the memo is
+        // keyed by the full pair, never by bucket index, so there is no collision path either).
+        //   * nothing was inserted  -> the array is already all-zero: skip the memset entirely.
+        //   * the array outgrew the cap -> swap in a fresh, small table: one bounded allocation
+        //     instead of an unbounded clear. A later degenerate hand simply re-grows it.
+        // Kept as TWO independent levers, because they are not the same bet:
+        //   MTG_TAP_MEMO_SKIP_EMPTY -- if this call's predecessor inserted nothing, the bucket array is
+        //     already all-zero, so the memset is pure waste. No trade-off at all: strictly less work,
+        //     and (measured on fc_d3) 26.7% of top-level calls are in exactly this state.
+        //   MTG_TAP_MEMO_CAP -- past the cap, swap in a fresh small table rather than memset a huge one.
+        //     This DOES trade: cheap payments stop paying for the big array, but a thread doing repeated
+        //     degenerate payments must re-grow (rehash) each time instead of reusing the wide table. On
+        //     a deck whose tail is degenerate payments that could cost more than it saves, so it is
+        //     measured on its own rather than bundled into the free half.
+        static const bool s_memo_skip_empty = EnvOn("MTG_TAP_MEMO_SKIP_EMPTY", true);
+        static const bool s_memo_cap        = EnvOn("MTG_TAP_MEMO_CAP", true);
+        const bool memo_was_empty = s_memo_tl.empty();
+        if (tapstats::Enabled())
+        {
+            (memo_was_empty ? tapstats::g_memo_clear_empty : tapstats::g_memo_clear_full)
+                .fetch_add(1, std::memory_order_relaxed);
+        }
+        // 1024 buckets = an 8 KB memset, about where clearing stops being cheap.
+        constexpr std::size_t kMemoBucketCap = 1024;
+        if (s_memo_cap && s_memo_tl.bucket_count() > kMemoBucketCap)
+        {
+            TapBacktrackMemo fresh;
+            s_memo_tl.swap(fresh);
+            if (tapstats::Enabled()) { tapstats::g_memo_reset.fetch_add(1, std::memory_order_relaxed); }
+        }
+        else if (!s_memo_skip_empty || !memo_was_empty) { s_memo_tl.clear(); }
+        if (tapstats::Enabled())
+        {
+            const std::uint64_t bc = static_cast<std::uint64_t>(s_memo_tl.bucket_count());
+            std::uint64_t prev = tapstats::g_memo_max_buckets.load(std::memory_order_relaxed);
+            while (bc > prev && !tapstats::g_memo_max_buckets.compare_exchange_weak(
+                                    prev, bc, std::memory_order_relaxed)) {}
+        }
+        fail_memo = &s_memo_tl;
+    }
 
     // Structural mana-source list (the controller's BasicLand / ManaDork / mana_rock permanents +
     // their cached def), enumerated ONCE at the top-level call and threaded to every node. The

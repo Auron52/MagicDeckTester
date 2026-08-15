@@ -7021,6 +7021,16 @@ namespace tapstats
     // at 1). Ratios between two buckets survive the inflation roughly; absolute shares do not.
     inline std::atomic<std::uint64_t> g_mc_nodes_miss{0};
     inline std::atomic<std::uint64_t> g_mc_nodes_skip{0};
+    // FAILURE-MEMO BUCKET RETENTION. The thread_local memo is emptied with clear(), which RETAINS the
+    // bucket array (deliberately -- no per-call bucket alloc) but also memsets it, and the array never
+    // shrinks. So a single degenerate payment that inflates the table taxes every LATER cheap payment
+    // on that thread for the rest of the run. These say whether that is actually happening: the largest
+    // array ever retained, and the split of top-level calls that paid a memset for a memo they never
+    // inserted a key into (clear_empty -- pure waste) vs one they did (clear_full).
+    inline std::atomic<std::uint64_t> g_memo_max_buckets{0};
+    inline std::atomic<std::uint64_t> g_memo_clear_empty{0};
+    inline std::atomic<std::uint64_t> g_memo_clear_full{0};
+    inline std::atomic<std::uint64_t> g_memo_reset{0};      // over-cap tables swapped out for a fresh one
     struct Dumper {
         ~Dumper()
         {
@@ -7069,6 +7079,14 @@ namespace tapstats
                 mm ? (double)nmiss / (double)mm : 0.0,
                 nskip, nodes ? 100.0 * (double)nskip / (double)nodes : 0.0,
                 (ms + mk) ? (double)nskip / (double)(ms + mk) : 0.0);
+            const unsigned long long ce = g_memo_clear_empty.load(), cf = g_memo_clear_full.load();
+            std::fprintf(stderr,
+                "=== MEMO BUCKETS: max retained=%llu (%.1f KB memset per clear at that size)  "
+                "clears: empty=%llu (%.1f%% -- memset of an all-zero array) full=%llu  resets=%llu ===\n",
+                (unsigned long long)g_memo_max_buckets.load(),
+                (double)g_memo_max_buckets.load() * 8.0 / 1024.0,
+                ce, (ce + cf) ? 100.0 * (double)ce / (double)(ce + cf) : 0.0, cf,
+                (unsigned long long)g_memo_reset.load());
         }
     };
     inline Dumper g_dumper;
