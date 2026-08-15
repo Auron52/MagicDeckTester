@@ -453,7 +453,8 @@ def completeness_error(deck, V, trust_depth, no_fallback, h_conv, tol, target_de
             % (max(vdall), target_depth, detail, target_depth))
 
 
-def write_deck(block, tol, offset, margin, dry, scalar_cap=None, set_esc_cap=True, allow_partial=False):
+def write_deck(block, tol, offset, margin, dry, scalar_cap=None, set_esc_cap=True, allow_partial=False,
+               set_mullgen=True):
     deck = block["deck"]
     prof = NAME2VALUE.get(deck)
     if prof is None:
@@ -608,6 +609,62 @@ def write_deck(block, tol, offset, margin, dry, scalar_cap=None, set_esc_cap=Tru
             # Binds only where the ladder is SHORTER than the play depth: burn/knights are unchanged.
             vp["escalation_cap"] = min(int(vp["target_depth"]), max(hd))
 
+    # AUTO-DERIVE THE MULLIGAN-GENERATION SETTING (value_play.mull_gen_*). User call 2026-08-15:
+    # this belongs at the end of the value-leaf run, "based on both performance and what we consider a
+    # reliable setting", because setting it by hand is trickier and unnecessary.
+    #
+    # SAFE ONLY BECAUSE discovery no longer reads these fields. mull_gen_* used to feed equivalence
+    # DISCOVERY as well as the label rollouts, so writing them moved the BUCKETS -- and hand count grows
+    # as C(K+6,7), so a "cheaper" pick could cost far more (slivers: K 10->13 at gen d2 = 4.3x the
+    # hands). `fix(keepgen): discovery runs under PLAY settings` made mull_gen_* a pure COST knob, which
+    # is the property that makes it derivable at all.
+    #
+    # THE RULE
+    #   * Leaf TRUSTED at the shipped play depth -> emit NO override, i.e. generate at play settings.
+    #     A trusted leaf is exactly what makes play-settings generation cheap WITHOUT giving up quality
+    #     (rollouts stop at the leaf instead of playing on), so overriding such a deck down to a cheap
+    #     depth throws that away and labels hands under a policy the deck does not use. User: "we are
+    #     not planning to run decks that have a fast trusted leaf under d3 b3 ... Slivers and Knights
+    #     especially should take advantage of the trusted leaf."
+    #   * Otherwise -> the shallowest MEASURED heuristic depth that has converged (H[d] within tol of
+    #     h_conv). That is the reliability half: shallower measurably misranks hands, deeper buys
+    #     nothing and forfeits the point of the override.
+    #
+    # BUDGET IS DELIBERATELY NOT INVENTED. The matrix measures depth, not a cost-vs-budget curve, so an
+    # existing mull_gen_budget_ms is PRESERVED and an absent one stays absent (inheriting play). Deriving
+    # a number here would be a guess wearing a measurement's clothes.
+    if set_mullgen and not allow_partial:
+        vp = nd.get("value_play")
+        if isinstance(vp, dict):
+            td_play = int(vp.get("target_depth") or 0)
+            trusted = (trust_depth is not None and td_play and trust_depth <= td_play)
+            if trusted:
+                dropped = [k for k in ("mull_gen_depth", "mull_gen_budget_ms") if k in vp]
+                for k in dropped:
+                    vp.pop(k)
+                if dropped:
+                    print("    mull_gen: DROPPED %s -- leaf trusted at V%d <= play d%d, so generate at "
+                          "play settings" % (",".join(dropped), trust_depth, td_play))
+            else:
+                conv = [d for d in hd if H[d] - h_conv <= tol]
+                if conv:
+                    gd = conv[0]
+                    if td_play:
+                        gd = min(gd, td_play)
+                    if vp.get("mull_gen_depth") != gd:
+                        print("    mull_gen: depth -> d%d (shallowest converged heuristic depth; "
+                              "trust=%s)" % (gd, "UNSET" if trust_depth is None else "V%d" % trust_depth))
+                    vp["mull_gen_depth"] = gd
+                    # budget: preserved if present, never invented (see the note above).
+                else:
+                    print("    mull_gen: NOT derived -- heuristic never converges within tol; "
+                          "leaving the existing setting alone")
+    elif set_mullgen and allow_partial:
+        # A PARTIAL table must not be read as convergence: a truncated ladder's shallowest "converged"
+        # depth is an artifact of where measurement stopped. Say so and change nothing.
+        print("    mull_gen: SKIPPED -- partial matrix (--allow-partial); refusing to derive a setting "
+              "from an incomplete ladder")
+
     td = "UNSET" if trust_depth is None else "%d?(candidate)" % trust_depth
     ov_note = "" if not manual else "  [manual: %s]" % ",".join(
         "c%s:%s->%s" % (k, (v.get("from") if isinstance(v, dict) else "?"),
@@ -658,6 +715,12 @@ def main():
                          "only comparable when every cell held the same games -- a rung capped after being "
                          "measured equivalent holds fewer, and reading its mean placed the crossover a rung "
                          "early on a 0.076-turn difference that was purely which hands each cell drew.")
+    ap.add_argument("--no-mullgen", action="store_true",
+                    help="do NOT auto-derive value_play.mull_gen_* (the mulligan-GENERATION setting). "
+                         "Default: derive it -- a leaf trusted at the play depth drops the override so "
+                         "generation runs at play settings and exploits the trusted leaf; anything else "
+                         "gets the shallowest converged heuristic depth. Budget is never invented: an "
+                         "existing mull_gen_budget_ms is preserved, an absent one stays absent.")
     ap.add_argument("--dry-run", action="store_true", help="print the derivation but do NOT write")
     args = ap.parse_args()
 
@@ -678,7 +741,8 @@ def main():
         if deck not in blocks:
             print("  %-9s SKIP (not in log)" % deck); continue
         ok &= write_deck(blocks[deck], args.tol, args.offset, args.margin, args.dry_run, args.scalar_max_depth,
-                         set_esc_cap=not args.no_escalation_cap, allow_partial=args.allow_partial)
+                         set_esc_cap=not args.no_escalation_cap, allow_partial=args.allow_partial,
+                         set_mullgen=not args.no_mullgen)
     if not ok:
         print("REFUSED to write one or more decks (incomplete/inconclusive table). "
               "Extend the ladder and re-measure, or pass --allow-partial if the state is intentional.")

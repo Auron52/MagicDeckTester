@@ -5,9 +5,15 @@ profile's mulligan-GENERATION setting in automatically, "based on both performan
 consider a reliable setting" — because setting it by hand "is trickier and unnecessary in the grand
 scheme of things."
 
-Status: DESIGNED, not implemented. The rule below is derivable from data the pipeline already has;
-what is missing is one real value-leaf run to validate it against before letting it auto-write config
-for every future deck.
+Status: **IMPLEMENTED 2026-08-15** in `scripts/attic/valueleaf_table_to_metadata.py` (the phase-D
+deriver that already ships `value_trust_depth` / `value_fallback_crossover` / `escalation_cap`), with
+`--no-mullgen` to opt out.
+
+Validated by driving the REAL `write_deck` with synthetic tables (no matrix log exists on this box --
+they are per-run and gitignored), covering all four cases: trusted-at-play-depth drops the override;
+untrusted derives the converged depth and PRESERVES an existing budget; an absent budget stays absent;
+and a truncated ladder under `--allow-partial` changes nothing. **Still owed: one real value-leaf run
+end-to-end**, since the synthetic check exercises the rule and not the log-parsing path into it.
 
 ## Why this is now safe (and was not, before 2026-08-15)
 
