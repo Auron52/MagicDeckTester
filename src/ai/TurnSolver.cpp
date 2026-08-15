@@ -3237,6 +3237,13 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
     // boundary makes the activation visible to the post-combat plans (Jared m1 -> m2 +1 Kavu
     // -> the 3/3 attacks next turn; deferred, the Kavu and the win slip a turn, 4 -> 5).
     if (!p.loyalty_abilities.empty()) { return MP::Main1; }
+    // ETB MASS-PUT form (goblins gi=219 dig 2026-08-15): a creature whose ETB puts creatures
+    // onto the battlefield (Muxus reveal-6) must resolve PRE-combat -- the put board can attack
+    // this same turn (the reveal can contain the haste lord that unlocks it: gi=219's m1 Muxus
+    // attacked for 43 on the spot) and is visible to the post-combat plans; an m2-cast Muxus's
+    // army can do neither until next turn (3 -> 4). Same battlefield-visibility argument as the
+    // sac-outlet and loyalty pulls.
+    if (!p.etb_reveal_put_subtypes.empty()) { return MP::Main1; }
     // DOUBT-DEFERRAL sub-lever (MTG_DOUBT_MAIN2, default OFF): the USER's one-pool placement
     // rule -- with the attack-helping classes explicit above, tutors classify as card-flow
     // (Both, like draws) and the residual doubt class defers to Main2 so the non-combat hand
@@ -15955,7 +15962,16 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         {
             std::string s;
             if (!p.land_to_play.empty()) { s += "land=" + p.land_to_play + ";"; }
-            for (const Action& a : p.actions) { s += a.card_name + ","; }
+            for (const Action& a : p.actions)
+            {
+                // Non-cast kinds tagged so the trace distinguishes a sac ACTIVATION from a cast
+                // (gi=149 dig: a "Skirk Prospector" entry can be either).
+                if (a.kind == Action::Kind::SacCreatureOutlet) { s += "sac<"; }
+                else if (a.kind != Action::Kind::CastFromHand) { s += "k" + std::to_string(static_cast<int>(a.kind)) + "<"; }
+                s += a.card_name;
+                if (a.kind != Action::Kind::CastFromHand)      { s += ">"; }
+                s += ",";
+            }
             return s.empty() ? std::string("(pass)") : s;
         };
         for (const TurnSolver::Plan& q : post)

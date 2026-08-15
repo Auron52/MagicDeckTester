@@ -148,4 +148,37 @@ starvation. Two mechanisms found:
   antilife unchanged (b10 −0.0033, unbounded exactly 0, 0/300 diverged — the USER bar
   stays met). Both nodoubt arms 0/300 diverged vs the pre-fix binary; smoke ALL PASS
   (base byte-identical — both pulls are lever-gated).** Dig instruments:
-  `MTG_M2T_TRACE`/`MTG_FSW_TRACE` (+`_TURN`).
+  `MTG_M2T_TRACE`/`MTG_FSW_TRACE` (+`_TURN`; m2t now tags non-cast action kinds, e.g.
+  `k7<X>` = SacForMana).
+
+**Residual-key analysis COMPLETE (2026-08-15, "have we analyzed all of the remaining
+losses?"). Every remaining doubt-worse game across the whole suite is attributed:**
+
+* **goblins gi=219 s3003 (3→4 both depths) — FIXED, third battlefield-visibility pull:**
+  a creature whose ETB mass-puts creatures (Muxus `etb_reveal_put_subtypes`) classifies
+  Main1 — the put board can attack the same turn (the reveal held the haste lord; the m1
+  Muxus attacked for 43 on the spot) and is visible to the m2 plans. Deferring can never
+  help. Goblins s2002 stays 0/300 under the pull; nodoubt arms unchanged.
+* **goblins gi=149 s3003 (3→5 both depths) — OPEN, the m2 payment-optimism class (ordering
+  audit item 5/7), NOT classification:** the doubt-routed T2-m2 plan
+  `[Pashalik Mons, Mogg War Marshal, SacForMana(Prospector)×1]` totals 5 mana against 2
+  Mountains + 1 planned sac; the search's m2 branch scored it win-3 under the optimistic
+  simultaneous affordability model, the realization needs extra unplanned Prospector sacs
+  whose Mons pings + Hordemaster exiles gut the T3 board (attack 14 < lethal) → realizes 5.
+  The commit came from the ladder's d2 pass, which the `MTG_FLAG_NONCONV` verified-gate
+  (`sub_depth == lookahead-1`) does not cover — that is why no [nonconv] fires. Fix lives in
+  the m2-hardening queue: the tight sequenced affordability model for FSLineTail's m2 branch
+  (audit item 5), or complete explicit sac plans.
+* **fivecolour gi=15 + gi=29 d5 s2002 (5→6 each; gi=15 also the d3 1w) — the fetch-crack
+  shuffle-clairvoyance tie-flip class** (midphase-ordering-audit.md, root-caused 2026-08-15):
+  T1 crack-vs-hold at a value-flat node; the arms' libraries diverge from the first fetch.
+  Architecture-level (clairvoyant crack comparison); not addressable by classification.
+* **antilife gi=112 s3003 (3→4 both depths) — converted-package sequencing tie:** doubt
+  spends Invigorate-alt at T2 for 4 damage; nodoubt holds it and assembles the T3
+  Aria+Swords lethal. m2-ordering family, 1 game. **antilife gi=36 s3003 (4→5 d3 only) —
+  T1 Enlightened-Tutor timing tie-flip** (tutor-to-top reorders the library = the same
+  clairvoyance family). Offset by gi=122 s2002 where doubt is 1 game BETTER.
+
+**Post-analysis suite state: doubt-vs-nodoubt residual ≈ +0.04 net over 60 keys before the
+Muxus pull, ≈ +0.025 after (goblins s3003 +0.0067 = gi=149 alone; 5c d5 +0.02 = the two
+tie-flips; antilife ±0.007 = two ties minus one gain). No unexplained games remain.**
