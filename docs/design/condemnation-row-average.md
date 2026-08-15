@@ -105,13 +105,48 @@ Seed balance needs no extra machinery: the pool admits condemnable work at `drip
 a row's games arrive roughly evenly across its seeds and the aggregate is not dominated by whichever
 seed the scheduler reached first.
 
-### Also worth fixing at the same site
+### Also worth fixing at the same site (SHIPPED 2026-08-15)
 
-`max_game_sec` condemns the whole cell from ONE in-flight game (it is what took H6@8008 and H6@9009).
-As a liveness guard it is right to fire -- nothing should wait an hour on one game -- but the response
-should be to abandon THAT GAME, not the cell: same one-observation-kills-a-cell shape as above, one
-level down. Skipping the game keeps the rest of the cell's seeds aligned. Left out of the primary
-change because it alters what a condemned cell's game set means, and wants its own measurement.
+`max_game_sec` condemned the whole cell from ONE in-flight game (it is what took H6@8008 and
+H6@9009). As a liveness guard it is right to fire -- nothing should wait an hour on one game -- but
+the response should be to abandon THAT GAME, not the cell: the same one-observation-kills-a-cell
+shape as above, one level down.
+
+**It is fixed by SUBTRACTION, not by teaching this rule to abandon.** The abandon-that-game response
+now exists and is the per-game work ceiling (`ai/GameWorkMeter.h`): it stops the game itself, counted
+in work UNITS, so the set it drops is a deterministic function of `(deck, seed, depth, arm, limit)`
+and is what the table-wide skip list is built from. `max_game_sec` cannot do that job, because it is
+keyed on WALL CLOCK -- an abort here would drop a different game on a different box, or on the same
+box under different load, and a wall-clock entry in a shared skip list makes the whole matrix
+quietly unreproducible. So the rule was made to YIELD instead: **a cell whose per-game work ceiling
+is armed (a frozen `abandon_k` ceiling, or an absolute `abandon_units`) is never condemned by
+`max_game_sec`.** It prints one `[batch] OVER max_game_sec cell=...` line per cell and leaves the
+cell alone.
+
+Where the ceiling is in force, condemning was not merely disproportionate (one observation against
+350 games, and the row loses a whole seed) but wrong on its own terms: the game is already bounded,
+so an overrun says the box is loaded or `k` is too loose -- neither of which is a property of this
+depth's tractability.
+
+Verified on a 3-cell synthetic (burn d6, `max_game_sec` 0.02 s so every game trips):
+
+| cell | ceiling | before | after |
+|---|---|---|---|
+| `c_units` | `abandon_units` | condemned at 5 games | **40/40 played**, one OVER note |
+| `c_k` | `abandon_k` (frozen) | condemned at 5 games | **35/40 played**, 5 abandoned at the ceiling |
+| `c_none` | none | condemned at 5 games | condemned at 5 games (unchanged) |
+
+**Residual, deliberately left armed: the CALIBRATION WINDOW.** A cell using `abandon_k` has no
+ceiling for its first `abandon_calib` games, so `max_game_sec` still condemns the cell if one of
+those runs past the limit. That is intentional -- during the window nothing else can stop the game,
+and there is no deterministic way to drop just that one: a wall-clock abort would either corrupt the
+calibration sample (a truncated cost changes the median, hence the cell's whole abandoned set,
+machine-dependently) or shrink it, which is the same problem one step removed. The window is already
+minimised from the other end by freeze-when-determined, which is what let the ceiling reach INTO its
+own calibration window (`depth-matrix-degenerate-games.md`; 46 min -> 35 s on FiveColour). If a run
+is ever seen condemning a cell from inside the window, the fix is a deterministic PREFIX ceiling
+(bound calibration game `i` by `k x` the median of the completed games with global index `< i`,
+which is order-independent and so still reproducible), not a wall-clock abort.
 
 ## Gate
 

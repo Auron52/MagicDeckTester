@@ -1164,6 +1164,15 @@ def run_incremental(args):
                                 if "%s_%s%d_s%d" % (c["deck"],c["arm"],c["depth"],c["seed"]) == mc.group(1):
                                     c["ceil"]=int(mc.group(2))
                         continue
+                    # NOT a verdict: the pool DECLINED to condemn a cell whose game ran past
+                    # max_game_sec, because that cell's per-game work ceiling is armed and the game
+                    # is therefore already bounded (BatchRunner's in-flight rule (1)). Nothing in the
+                    # cell state changes -- but this is the one signal that the ceiling is too loose
+                    # for this cell or that the box is loaded, and everything not matched here is
+                    # dropped, so without this line it would be invisible in a matrix run.
+                    if "OVER max_game_sec" in l:
+                        print(l.rstrip(), flush=True)
+                        continue
                     if "SLOW-GAME" not in l: continue
                     with _slow_lock:
                         with open(slow_path,"a") as fh: fh.write("%s %s\n" % (tag, l.strip()))

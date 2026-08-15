@@ -155,6 +155,10 @@ struct CondemnRule
     // we escalate to this depth some of the time, affordably?"; this one asks "is this individual
     // game pathological?" -- which a per-row statistic cannot answer at all until the game finishes,
     // and a 21.4-hour game answers far too late.
+    //
+    // A LIVENESS BACKSTOP ONLY, and it yields: a cell whose per-game WORK ceiling is armed
+    // (ai/GameWorkMeter.h) is never condemned by this rule, because that game is already bounded and
+    // by something DETERMINISTIC. See the in-flight hook, rule (1).
     // 0 / absent => the in-flight rule is off.
     double max_game_sec        = 0.0;
     // Path the DRIVER may write row names into, one per line, to condemn them mid-run. The pool
@@ -833,6 +837,20 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         std::cerr << "[batch] relative per-game ceiling armed: each cell runs its first "
                   << "abandon_calib games unbounded, then freezes k x their median for the rest\n";
     }
+    // ABSOLUTE per-game ceiling per cell (max over its jobs; they agree in every manifest the driver
+    // writes). Read by the in-flight max_game_sec rule to tell a cell whose games are already
+    // deterministically bounded from one where nothing is guarding them -- see rule (1).
+    std::vector<long long> cell_abandon_units(static_cast<std::size_t>(std::max(1, n_cells)), 0);
+    for (const Job& j : jobs)
+    {
+        long long& u = cell_abandon_units[static_cast<std::size_t>(j.cell_id)];
+        u = std::max(u, j.abandon_units);
+    }
+    // One "over max_game_sec but bounded" report per cell. The hook re-fires every heartbeat tick
+    // while the game is still running, and the point of the line is that a human should look at k,
+    // not that they should read it forty times.
+    std::vector<std::atomic<int>> cell_overrun_noted(static_cast<std::size_t>(std::max(1, n_cells)));
+    for (int i = 0; i < std::max(1, n_cells); ++i) { cell_overrun_noted[i].store(0); }
 
     // LPT scheduling: run the most expensive games first so cheap games backfill
     // the tail. An explicit per-job `weight` wins first (for jobs whose true cost the
@@ -1189,17 +1207,57 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 }
             }
 
-            // (1) Single pathological game, judged while it runs. Deliberately still per CELL: one
-            // game is one observation, and widening its blast radius to the row would remove four
-            // seeds on it instead of one (the abandon-the-game rework is deferred separately --
-            // docs/design/condemnation-row-average.md, "Also worth fixing").
+            // (1) Single pathological game, judged while it runs -- a LIVENESS backstop, and only
+            // where nothing else is guarding the game.
+            //
+            // The right response to one pathological game is to abandon THAT GAME, not the cell
+            // ("Also worth fixing", docs/design/condemnation-row-average.md). That response now
+            // EXISTS and is the per-game work ceiling (ai/GameWorkMeter.h): it stops the game
+            // itself, in work units, so the set it drops is a deterministic function of the data and
+            // can be shared as a skip list. This rule cannot do the same thing -- it is keyed on
+            // WALL CLOCK, so an abort here would drop a different game on a different box, or on the
+            // same box under different load, and a wall-clock entry in a table-wide skip list
+            // silently makes the matrix unreproducible. So the fix is not to teach this rule to
+            // abandon; it is to make it YIELD wherever the deterministic ceiling is already in force.
+            //
+            // Where it is in force, condemning is not merely disproportionate (one observation
+            // against 350 games, and the row loses a whole seed -- which moves a row mean further
+            // than the effects the matrix is built to measure) but WRONG ON ITS OWN TERMS: the game
+            // is already bounded, so its overrun says the box is loaded or k is too high, neither of
+            // which is a property of this depth's tractability. Report and leave the cell alone.
+            //
+            // Where it is NOT in force -- a legacy manifest with no ceiling at all, or the
+            // calibration window of a cell whose ceiling has yet to freeze -- nothing else can stop
+            // the game, so the old cell condemnation stands as the backstop it was always meant to
+            // be. Deliberately still per CELL and never per row: one game is one observation, and
+            // widening the blast radius would take four seeds on it instead of one.
             if (condemn.max_game_sec > 0.0)
             {
                 for (const auto& [cid, ms] : live)
                 {
-                    if (static_cast<double>(ms) > condemn.max_game_sec * 1000.0)
-                    { condemn_cell(cid, "on an IN-FLIGHT game at", static_cast<double>(ms) / 1000.0,
-                                   condemn.max_game_sec); }
+                    if (static_cast<double>(ms) <= condemn.max_game_sec * 1000.0) { continue; }
+                    if (cid < 0 || cid >= n_cells) { continue; }
+                    const bool bounded =
+                        cell_ceiling[static_cast<std::size_t>(cid)]->frozen.load(
+                            std::memory_order_acquire) > 0
+                        || cell_abandon_units[static_cast<std::size_t>(cid)] > 0;
+                    if (!bounded)
+                    {
+                        condemn_cell(cid, "on an IN-FLIGHT game at",
+                                     static_cast<double>(ms) / 1000.0, condemn.max_game_sec);
+                        continue;
+                    }
+                    if (cell_overrun_noted[cid].exchange(1, std::memory_order_relaxed) == 0)
+                    {
+                        std::fprintf(stderr,
+                            "[batch] OVER max_game_sec cell=%s: a game has been running %.1f s "
+                            "(limit %.1f) but the cell's per-game WORK ceiling is armed, so the "
+                            "game is bounded and the cell is NOT condemned. If this repeats, the "
+                            "ceiling (abandon_k) is too loose for this cell or the box is loaded.\n",
+                            cell_name[static_cast<std::size_t>(cid)].c_str(),
+                            static_cast<double>(ms) / 1000.0, condemn.max_game_sec);
+                        std::fflush(stderr);
+                    }
                 }
             }
 
