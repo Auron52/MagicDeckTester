@@ -103,6 +103,64 @@ Mulligan generation for Mirrorwing is **405,756 cells**; the probe alone project
 throughput decaying 57 -> 10 cells/s as pathological cells accumulated. Generation is dominated by
 this tail, and the tail is the most backtracker-dominated part of it.
 
+## AUTHORITATIVE: 35 min of REAL generation, not a repro (2026-08-16)
+
+The two repros above are hand-picked slow rollouts, so their shares are open to the objection that
+they profile the tail rather than the job. They do not. `perf record -F 99` over the full 32-thread
+`--gen-mulligan recommend` floor pass -- **6.8M samples, 35 min, the whole cell population** -- gives
+a HIGHER share than the severe repro did:
+
+| category | whole run (35 min) |
+|---|---|
+| **backtracker** | **76.9%** |
+| other (flat tail, nothing above 0.37%) | 7.6% |
+| plan/search | 6.7% |
+| other mana | 4.5% |
+| alloc/copy | 2.4% |
+
+All mana >= 81%. Everything non-mana is 16.7%, so eliminating every one of those perfectly yields
+**1.20x**. Removing the backtracker entirely is a **4.3x** ceiling on generation.
+
+**THE TAIL IS NOT WHERE THE TIME IS -- which makes the case stronger, not weaker.** Deduping the
+probe run's slow log by rollout identity, the rollouts over the 30 s stream threshold account for
+only **4.4%** of core-seconds (3,782 of 86,400). The backtracker's 77% is therefore paid by ORDINARY
+cells, in the 2-30 s band that never gets logged (`SlowRollouts.h` notes healthy rollouts are
+0.3-2 s). Fixing this is not a tail fix.
+
+### The throughput collapse IS the backtracker
+
+Generation does not run at a steady rate -- feed throughput decays about 5x over the first 35 min,
+reproducibly. Real probe: 57 -> 62 -> 42 -> 22 -> 16 -> 18 -> 18 -> 10 -> 10 rollouts/s. Profiled
+rerun: 85 -> 55 -> 35 -> 12 -> 15 -> 22 -> 17. Splitting the SAME profile by time window explains it
+outright:
+
+| window | backtracker | plan/search | other | alloc/copy | other mana |
+|---|---|---|---|---|---|
+| first 15% of wall clock | **37.0%** | 21.6% | 23.9% | 7.1% | 8.0% |
+| middle (40-55%) | **90.8%** | 2.0% | 2.0% | 0.8% | 3.0% |
+| last 15% | **89.7%** | 1.9% | 2.2% | 0.9% | 3.8% |
+
+The run starts at 37% payment-solving and settles at ~90%: degenerate boards accumulate on the
+threads and never leave, so the steady state of generation is a box solving mana payments. The
+5x rate decay and the 77% share are one phenomenon, not two.
+
+Two consequences worth stating plainly:
+
+* **Non-mana optimisation targets exist only in the first ~5 minutes.** plan/search at 21.6% and
+  alloc/copy at 7.1% are real in the early window and gone by the middle one. Any work on them
+  should be justified against a DIFFERENT workload (play, the regression suite, the depth matrix),
+  never against mulligan generation.
+* **A profile's answer depends on when you take it.** The mild repro (49%), the severe repro (74%),
+  the first 15% of a real run (37%) and its steady state (90%) are all correct measurements of
+  different things. Only the whole-run figure prices the job.
+
+Reproduce: `perf record -F 99 -o /tmp/x.perf.data -- ./build/Profile/mtg-analyze <deck> --cards-json
+src/cards/data/cards.json --gen-mulligan recommend`, then
+`perf report --no-children --stdio -i /tmp/x.perf.data | python3 scripts/perf_categorize.py`
+(`--time 0%-15%` etc. for the windows). Two environment traps: perf cannot write its data file to
+the workspace mount here (`failed to write perf data, error: Bad address` -- write to `/tmp`), and
+`--no-children` is a `perf report` option, not a `perf record` one.
+
 ## There is no second lever (checked)
 
 Full self-time categorisation of both repros. Every non-backtracker category COLLAPSES on the severe
