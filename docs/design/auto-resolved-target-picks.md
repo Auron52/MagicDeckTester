@@ -47,10 +47,10 @@ Two defects, and the second is not merely a ranking complaint:
   far cheaper to destroy than a dual. The scan `break`s on the first land, so a
   token later in battlefield order is never reachable.
 * **Among lands it takes the earliest-played**, which is typically the key fixer.
-* **Consequence: Bolas is effectively a 6-mana blank.** His only other ability is
+* **Consequence: Bolas is effectively an 8-mana blank.** His only other ability is
   -9, unreachable from a starting loyalty of 5 without two +3 activations. If +3 is
   correctly priced as "destroy your best land", the search declines it — so the
-  ultimate is unreachable *by construction*, and a six-mana card does nothing. The
+  ultimate is unreachable *by construction*, and an eight-mana card does nothing. The
   inexpressible line is not a marginal upgrade; it is the card's whole plan.
 
 ### 2. Jared Carthalion -3 — `counters_up_to_two` (FiveColour)
@@ -98,8 +98,8 @@ The Oko fix was justified by a **concrete failing game** (the fivecolour 6->7
 family), not by inspection. None of the five above has that evidence yet. The
 honest next step is to measure how often each ability is *activated at all* in real
 games before spending base-play risk on it — several of these cards are expensive
-and late (Bolas is six mana in a deck that often wins around turn 6), so a
-theoretically-inexpressible line may simply never come up.
+and late (Bolas costs {4}{U}{B}{B}{R} = EIGHT mana in a deck that often wins around
+turn 5-6), so a theoretically-inexpressible line may simply never come up.
 
 **Blocked on:** free cores. Measuring requires a run, and doing it alongside another
 batch risks CPU oversubscription, which is a known determinism hazard in this repo.

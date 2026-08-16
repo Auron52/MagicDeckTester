@@ -205,6 +205,7 @@ void GameEngine::UntapStep(GameState& state)
         {
             p.tapped            = false;
             p.entered_this_turn = false;
+            p.gained_control_this_turn = false;   // control-change sickness clears on YOUR untap (CR 302.6)
             p.storage_hold_this_turn = false;   // #6: the tap-vs-charge hold is a per-turn human choice
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn

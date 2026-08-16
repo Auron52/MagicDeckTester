@@ -5207,6 +5207,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 const CardParams::LoyaltyAbilityParam& ab = pd->params.loyalty_abilities[li];
                 if (ab.delta < 0 && p.loyalty < -ab.delta) { continue; }   // cost unpayable
                 int ev = 1;
+                int steal_target = 0;   // steal_creature: the searched victim (0 = n/a)
                 if (ab.effect == "kavu_token") { ev = 3 * DMG; }
                 else if (ab.effect == "counters_up_to_two")
                 {
@@ -5228,14 +5229,44 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 else if (ab.effect == "destroy_own_noncreature")
                 {
-                    bool fuel = false;
+                    // Fuel = ANY legal target. The opponent's noncreature permanents come first
+                    // (OpponentPlaysLands): destroying one is free, which is the whole point --
+                    // without a target the +3 -> +3 -> -9 ramp cannot be walked at all.
+                    bool opp_fuel = false, own_fuel = false;
                     for (const Permanent& q : state.battlefield)
                     {
-                        if (q.controller_index == state.active_player_index
-                            && !q.card.IsCreature() && q.card.m_number != p.card.m_number) { fuel = true; break; }
+                        if (q.card.IsCreature()) { continue; }
+                        if (q.controller_index != state.active_player_index) { opp_fuel = true; break; }
+                        if (q.card.m_number != p.card.m_number
+                            && !q.card.HasType(CardType::Planeswalker)) { own_fuel = true; }
                     }
-                    if (!fuel) { continue; }
-                    ev = 1;   // a real cost -- the search prices the destroyed permanent itself
+                    if (!opp_fuel && !own_fuel) { continue; }
+                    // Free when it eats THEIR permanent; a real cost when it eats ours (the search
+                    // prices the destroyed permanent itself through the rollout either way).
+                    ev = 1;
+                }
+                else if (ab.effect == "steal_creature")
+                {
+                    // Bolas -2 ("gain control of target creature"). The card note used to call this
+                    // a pure loyalty sink because the only targets are opponent spawn tokens "that
+                    // never attack/block for anyone" -- true of a spawn the OPPONENT controls, false
+                    // of one we have taken (USER, 2026-08-16). Pattern 8 spawns a 6/6.
+                    // Target is SEARCHED (enchant_target), like Oko's elk_target.
+                    int best = 0, best_pow = 0;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index == state.active_player_index) { continue; }
+                        if (!q.card.IsCreature()) { continue; }
+                        const int pw = q.EffectivePower();
+                        if (pw > best_pow) { best_pow = pw; best = q.card.m_number; }
+                    }
+                    if (best_pow <= 0) { continue; }   // nothing worth taking
+                    steal_target = best;
+                    // It CANNOT attack this turn -- gaining control resets summoning sickness
+                    // (CR 302.6) -- so the swing starts next turn. Price it as the attacks it will
+                    // actually make inside the horizon, not as immediate damage.
+                    ev = best_pow * DMG * std::max(0, ExpectedAttacks(state) - 1);
+                    if (ev <= 0) { continue; }
                 }
                 else if (ab.effect == "face_damage") { ev = ab.amount * DMG; }
                 else if (ab.effect == "food_token") { ev = DMG / 3; }
@@ -5305,6 +5336,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.cost            = ManaCost{};   // the cost is the loyalty delta
                 a.sac_source_id   = p.card.m_number;
                 a.loyalty_ability = li;
+                a.enchant_target  = steal_target;   // 0 for every ability that takes no target
                 a.eval            = ev;
                 a.is_noncreature  = true;
                 actions.push_back(std::move(a));
@@ -11398,6 +11430,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         {
             p.tapped            = false;
             p.entered_this_turn = false;
+            p.gained_control_this_turn = false;   // control-change sickness clears on YOUR untap (CR 302.6)
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }

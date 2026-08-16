@@ -1954,7 +1954,7 @@ inline bool CanAttackFull(
     // false), or it has haste. Mutavault grants NO haste itself, so a land animated the
     // turn it was played cannot attack unless a haste lord (e.g. Cloudshredder Sliver,
     // which hastes the animated land as it is every creature type) grants it.
-    if (!p.entered_this_turn)                   { return true; }
+    if (!p.entered_this_turn && !p.gained_control_this_turn) { return true; }
     if (p.card.HasKeyword(Keyword::Haste))      { return true; }
     if (p.temp_haste)                           { return true; }   // Expedite until-EOT haste
     if (HasHasteFromLords(p.card, battlefield, controller_index, p.is_animated)) { return true; }
@@ -2768,19 +2768,45 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
     }
     else if (ab.effect == "destroy_own_noncreature")
     {
-        // Bolas +3 ("destroy target noncreature permanent"): vs a permanent-less passive opponent
-        // the only legal targets are OUR OWN noncreature permanents -- a real, costly loyalty
-        // ramp the search prices holistically. AUTO-RESOLVED pick (disclosed): the first own
-        // LAND in battlefield order (most replaceable), else the first own noncreature
-        // non-planeswalker permanent, excluding the activating walker itself.
+        // Bolas +3 ("destroy target noncreature permanent"). The ability REQUIRES a target, so
+        // with a permanent-less opponent the only legal ones were OURS -- and destroying our own
+        // land is a real cost the search rightly declined. Since -9 is unreachable from loyalty 5
+        // without two +3s, that made an EIGHT-mana walker inert BY CONSTRUCTION (USER, 2026-08-16:
+        // "you need a target to use the ability and destroying your own stuff is bad").
+        // FiveColourProvider::OpponentPlaysLands now gives the passive opponent lands, so the
+        // faithful play is available and this resolves to THEIR permanent first: free loyalty ramp,
+        // and their lands are inert props so nothing else about the game changes.
         int pick = -1;
+        // Pass 1 -- an OPPONENT noncreature permanent (the real MTG play, and free).
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             const Permanent& q = state.battlefield[i];
-            if (q.controller_index != controller || q.card.IsCreature()) { continue; }
-            if (q.card.m_number == walker_id) { continue; }
-            if (q.card.IsLand()) { pick = i; break; }
-            if (pick < 0 && !q.card.HasType(CardType::Planeswalker)) { pick = i; }
+            if (q.controller_index == controller || q.card.IsCreature()) { continue; }
+            pick = i;
+            break;
+        }
+        // Pass 2 -- fall back to our own only if they have none. AUTO-RESOLVED (disclosed): the
+        // most REPLACEABLE own permanent. A token (Food / Treasure) goes before a land: the old
+        // rule took the first LAND in battlefield order and called it "most replaceable", but a
+        // land is the LEAST replaceable noncreature permanent in a five-colour manabase, and
+        // battlefield order makes that the earliest-played land -- usually the key fixer.
+        if (pick < 0)
+        {
+            int land_pick = -1, other_pick = -1;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& q = state.battlefield[i];
+                if (q.controller_index != controller || q.card.IsCreature()) { continue; }
+                if (q.card.m_number == walker_id) { continue; }
+                if (q.card.HasType(CardType::Planeswalker)) { continue; }
+                if (q.is_token) { pick = i; break; }              // most replaceable
+                if (q.card.IsLand()) { if (land_pick < 0) { land_pick = i; } continue; }
+                if (other_pick < 0) { other_pick = i; }
+            }
+            // Token first is the only ordering change; land-before-other keeps the historical rule
+            // (which of a Cornucopia / Mana Cannons / a dual is "most replaceable" is a judgement
+            // this fallback -- reachable only once the opponent's lands are gone -- cannot earn).
+            if (pick < 0) { pick = land_pick >= 0 ? land_pick : other_pick; }
         }
         if (pick >= 0)
         {
@@ -2790,6 +2816,30 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
             if (!dead.is_token)
             { state.players[dead.owner_index].graveyard.push_back(dead.card); }
             state.battlefield.erase(state.battlefield.begin() + pick);
+        }
+    }
+    else if (ab.effect == "steal_creature")
+    {
+        // Bolas -2 ("gain control of target creature"). Target is SEARCHED (elk_target parameter,
+        // shared with Oko's +1); 0 falls back to the opponent's highest-power creature.
+        int pick = -1, best_pow = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.controller_index == controller || !q.card.IsCreature()) { continue; }
+            if (elk_target != 0) { if (q.card.m_number == elk_target) { pick = i; break; } continue; }
+            const int pw = q.EffectivePower();
+            if (pw > best_pow) { best_pow = pw; pick = i; }
+        }
+        if (pick >= 0)
+        {
+            Permanent& got = state.battlefield[pick];
+            got.controller_index = controller;
+            // CR 302.6: summoning sickness tracks CONTROL duration. The spawn was created with
+            // entered_this_turn = false ("already present"), so WITHOUT this it would attack the
+            // very turn it was stolen. USER, 2026-08-16. Haste would still override.
+            got.gained_control_this_turn = true;
+            got.tapped                   = false;
         }
     }
     else if (ab.effect == "face_damage")

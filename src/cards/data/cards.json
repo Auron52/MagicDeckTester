@@ -3827,7 +3827,7 @@
     "Bolas"
    ],
    "keywords": [],
-   "oracle_text": "+3: Destroy target noncreature permanent.\n-2: Gain control of target creature.\n-9: Nicol Bolas, Planeswalker deals 7 damage to target player or planeswalker. That player or that planeswalker's controller discards seven cards, then sacrifices seven permanents. [Enters L5. +3 implemented FAITHFULLY: vs a permanent-less passive opponent its only legal targets are OUR OWN noncreature permanents -- a real, costly ramp toward -9 the search prices; AUTO-RESOLVED pick = first own land, else first own noncreature non-walker (disclosed). -2 NOT ENUMERATED (user-approved): the only possible targets are opponent spawn tokens that never attack/block for anyone -- a pure loyalty sink. -9: 7 face damage implemented; discard-7/sac-7 riders inert vs a hand-less opponent (user-approved). Legend rule engine-enforced (x2).]",
+   "oracle_text": "+3: Destroy target noncreature permanent.\n-2: Gain control of target creature.\n-9: Nicol Bolas, Planeswalker deals 7 damage to target player or planeswalker. That player or that planeswalker's controller discards seven cards, then sacrifices seven permanents. [Enters L5. +3 implemented FAITHFULLY. The ability REQUIRES a target, and with a permanent-less opponent the only legal ones were ours -- destroying our own land is a real cost the search rightly declined, and since -9 is unreachable from loyalty 5 without two +3s that left this EIGHT-mana walker inert BY CONSTRUCTION (USER 2026-08-16). FiveColourProvider::OpponentPlaysLands now gives the passive opponent lands (same hook HinataProvider uses), so +3 resolves to THEIR noncreature permanent first: free loyalty ramp, and their lands are inert props so nothing else changes. AUTO-RESOLVED fallback if they have none (disclosed): most-replaceable own permanent -- token, else land, else other noncreature non-walker. -2 NOW ENUMERATED; its old premise was FALSE. The note used to call it a pure loyalty sink because the only targets are spawn tokens that never attack/block -- true of a spawn the OPPONENT controls, false of one we have TAKEN (USER 2026-08-16), and pattern 8 spawns a 6/6. Target is SEARCHED via the shared elk_target parameter. Required new machinery: Permanent::gained_control_this_turn, because CanAttackFull gated summoning sickness on entered_this_turn alone and spawns are created with entered_this_turn = false (treated as already present), so flipping controller_index would have let a stolen creature attack THE SAME TURN. CR 302.6 ties sickness to how long you have CONTROLLED the permanent -- the Oko case in mirror image (there the engine was too restrictive, here too permissive). Eval prices the swing from NEXT turn (ExpectedAttacks-1), never as immediate damage. -9: 7 face damage implemented; discard-7/sac-7 riders inert vs a hand-less opponent (user-approved). Legend rule engine-enforced (x2).]",
    "template": "custom",
    "parameters": {
     "loyalty_start": 5,
@@ -3835,6 +3835,10 @@
      {
       "delta": 3,
       "effect": "destroy_own_noncreature"
+     },
+     {
+      "delta": -2,
+      "effect": "steal_creature"
      },
      {
       "delta": -9,

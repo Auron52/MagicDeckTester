@@ -22,6 +22,14 @@ struct Permanent
     int       pending_death_trigger = 0;
     std::vector<Counter> counters;
     bool      entered_this_turn    = false;  // summoning sickness tracker
+    // Summoning sickness tracks how long you have CONTROLLED a permanent, not how long it has been
+    // on the battlefield (CR 302.6), so gaining control resets it independently of entered_this_turn.
+    // Needed because the two can disagree: a scheduled opponent spawn is created with
+    // entered_this_turn = false ("treated as already present"), so a stolen one would otherwise be
+    // able to attack THE SAME TURN it was stolen. USER, 2026-08-16: "note that they do have
+    // summoning sickness when they are stolen". Cleared with entered_this_turn at turn start; haste
+    // still overrides, exactly as for a freshly-cast creature.
+    bool      gained_control_this_turn = false;
     Permanent* attached_to         = nullptr;
     // Aura attachment (Bogles / hexproof-auras). For an Aura enchantment on the battlefield,
     // this is the card.m_number of the creature it enchants (0 = not an Aura / unattached).
@@ -125,7 +133,8 @@ struct Permanent
         {
             return false;
         }
-        return !entered_this_turn || card.HasKeyword(Keyword::Haste) || is_animated;
+        if (is_animated) { return true; }   // animation grants haste
+        return !(entered_this_turn || gained_control_this_turn) || card.HasKeyword(Keyword::Haste);
     }
 
     // A permanent can be tapped for an activated ability unless it is a summoning-sick
@@ -136,7 +145,7 @@ struct Permanent
         {
             return true;
         }
-        return !entered_this_turn || card.HasKeyword(Keyword::Haste);
+        return !(entered_this_turn || gained_control_this_turn) || card.HasKeyword(Keyword::Haste);
     }
 };
 

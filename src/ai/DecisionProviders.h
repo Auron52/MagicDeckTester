@@ -571,6 +571,13 @@ public:
     // a Food that does not exist yet). NOT active until ClassifiesMainPhases()/MTG_PHASE_CLASSIFY.
     std::optional<MainPhase> MainPhaseOverride(const GameState& s,
                                                const CardDefinition& def) const override;
+    // Nicol Bolas +3 is "destroy target NONCREATURE permanent" -- it REQUIRES a target, and with a
+    // land-less opponent the only legal ones are ours. Destroying our own land is a real cost, so
+    // the search correctly declined the ability; but -9 is unreachable from loyalty 5 without two
+    // +3s, which left an EIGHT-mana walker ({4}{U}{B}{B}{R}) inert BY CONSTRUCTION. Opting in gives the passive opponent
+    // lands (inert props -- destroying one changes nothing else), so the faithful play is available
+    // and +3 becomes the free ramp it is meant to be. Same reason HinataProvider opts in.
+    bool OpponentPlaysLands() const override { return true; }
 };
 
 // Mirrorwing/Zada spell-copy swarm: overrides ONLY the trick-target narrowing (a 5f perf prune --
