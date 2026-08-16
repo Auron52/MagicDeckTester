@@ -7127,6 +7127,17 @@ namespace tapstats
     // (Mirrorwing measured n=105 against 33 sources -- 63 of the 105 were Treasure tokens, which are
     // sac-for-mana ACTIONS and never enter the source list at all).
     inline std::atomic<std::uint64_t> g_max_src{0};
+    // CALL-SITE ATTRIBUTION (2026-08-16, docs/design/fivecolour-payment-query-fold.md step 0).
+    // Every top-level backtracker entry comes from exactly one of four sites. Which one dominates
+    // decides the whole FiveColour tractability plan: per-PLAN prepay means the payment fold already
+    // exists (BatchPrepayMainCasts folds a plan's casts into ONE combined cost) and the lever is
+    // search BREADTH; per-CAST fallback means the fold is missing at the enumerator.
+    inline std::atomic<std::uint64_t> g_site_prepay_held{0};   // BatchPrepayMainCasts, reserved attempt
+    inline std::atomic<std::uint64_t> g_site_prepay_plain{0};  // BatchPrepayMainCasts, unrestricted
+    inline std::atomic<std::uint64_t> g_site_percast{0};       // per-cast fallback (greedy failed)
+    inline std::atomic<std::uint64_t> g_site_percast_filter{0};// per-cast floating-fed filter retry
+    inline std::atomic<std::uint64_t> g_prepay_calls{0};       // BatchPrepayMainCasts invocations
+    inline std::atomic<std::uint64_t> g_prepay_declined{0};    // ...that declined (-> per-cast path)
     // Outcome split of the top-level entries (payable vs unpayable) + the nodes each outcome consumed.
     // Answers: is the backtracker mostly PROVING FAILURE (a byte-identical exact-frontier prune would
     // remove those nodes) or mostly SEARCHING FOR A PAYMENT it does find (only pay-from-frontier or a
@@ -7197,6 +7208,17 @@ namespace tapstats
                 nfail, (nok + nfail) ? 100.0 * (double)nfail / (double)(nok + nfail) : 0.0,
                 efail ? (double)nfail / (double)efail : 0.0);
             const unsigned long long fp = g_flow_prune.load(), fb = g_flow_bail.load();
+            std::fprintf(stderr,
+                "=== PAYMENT SITES: prepay-held=%llu  prepay-plain=%llu  per-cast=%llu  "
+                "per-cast-filter=%llu  ||  BatchPrepay calls=%llu declined=%llu (%.1f%%) ===\n",
+                (unsigned long long)g_site_prepay_held.load(),
+                (unsigned long long)g_site_prepay_plain.load(),
+                (unsigned long long)g_site_percast.load(),
+                (unsigned long long)g_site_percast_filter.load(),
+                (unsigned long long)g_prepay_calls.load(),
+                (unsigned long long)g_prepay_declined.load(),
+                g_prepay_calls.load() ? 100.0 * (double)g_prepay_declined.load()
+                                              / (double)g_prepay_calls.load() : 0.0);
             std::fprintf(stderr,
                 "=== FLOW PRUNE: pruned=%llu (%.1f%% of top-level entries)  bailed=%llu (%.1f%%) ===\n",
                 fp, top ? 100.0 * (double)fp / (double)top : 0.0,

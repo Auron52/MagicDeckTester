@@ -8880,6 +8880,16 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
 {
     static const bool s_enabled = !EnvOn("MTG_NO_BATCH_PAY");
     if (!s_enabled) { return false; }
+    // Attribution (fivecolour-payment-query-fold.md step 0): count every invocation, and every one
+    // that DECLINES -- a decline is what routes the turn's casts to the per-cast fallback, i.e. what
+    // turns one folded question into one question per cast.
+    if (tapstats::Enabled()) { tapstats::g_prepay_calls.fetch_add(1, std::memory_order_relaxed); }
+    struct PrepayDeclineTag {
+        bool ok = false;
+        ~PrepayDeclineTag()
+        { if (!ok && tapstats::Enabled())
+          { tapstats::g_prepay_declined.fetch_add(1, std::memory_order_relaxed); } }
+    } _decl;
     // DRAW-SAFE: decline the whole-turn prepay on a FLOOD-ENGINE turn. The prepay assumes `acts` IS
     // the turn's cast set. That is FALSE after a dig: Treasure Hunt DRAWS the cards cast later the
     // same turn at a post-draw breakpoint (recorded in Action::breakpoint_casts). Prepaying only the
@@ -8999,6 +9009,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     bool ok = false;
     if (reserved)
     {
+        if (tapstats::Enabled()) { tapstats::g_site_prepay_held.fetch_add(1, std::memory_order_relaxed); }
         ok = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures, ManaPool{},
                                  /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
                                  /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/reserved,
@@ -9016,6 +9027,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     }
     if (!ok)   // no depletion land to hold, or the held attempt failed: the original unrestricted solve
     {
+        if (tapstats::Enabled()) { tapstats::g_site_prepay_plain.fetch_add(1, std::memory_order_relaxed); }
         ok = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures, ManaPool{},
                                  /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
                                  /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/0,
@@ -9046,7 +9058,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     pool.wild = produced.Total() - pinned;
     state.floating_mana = pool;
     Pp(PP_OK);
-    return true;
+    _decl.ok = true; return true;
 }
 
 // ---- Deferred-breakpoint PREFIX-RESUME cache (see docs/design/mirrorwing-gen-perf-profile.md) --

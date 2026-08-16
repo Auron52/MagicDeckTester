@@ -390,6 +390,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     state.players[active].life = life_pre;
     state.players[active].graveyard = gy_pre;
     ManaPool bt_leftover;
+    if (tapstats::Enabled()) { tapstats::g_site_percast.fetch_add(1, std::memory_order_relaxed); }
     if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover,
                             /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
     { commit_leftover(bt_leftover); return true; }
@@ -407,6 +408,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         state.players[active].life  = life_pre;
         state.players[active].graveyard = gy_pre;
         ManaPool bt2_leftover;
+        if (tapstats::Enabled()) { tapstats::g_site_percast_filter.fetch_add(1, std::memory_order_relaxed); }
         if (TapForCostBacktrack(state, cost_in, for_creature, reserve_pre, nullptr, nullptr,
                                 &bt2_leftover, /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
         {

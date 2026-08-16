@@ -1,7 +1,8 @@
 # Making the FiveColour mulligan run feasible: fold the payment QUERIES
 
 2026-08-16. Self-contained; read this and `fivecolour-mulligan-and-slow-atom.md` §5 and you can start.
-**Status: measured and scoped. NOT implemented — step 0 below is deliberately unfinished.**
+**Status: STEP 0 DONE (2026-08-16) — and it picked branch (a). The payment fold ALREADY EXISTS;
+the lever is search BREADTH. The §"design" below is therefore NOT the work — see §Step 0 RESULT.**
 
 ## The whole problem in one ratio
 
@@ -83,3 +84,44 @@ sweep's 14/18 games).
 * The number that matters is **rollouts/s/core on the gen workload**, not play wall-clock. Re-measure
   the 12-game entries/game table above; it is deterministic and immune to load, unlike wall time
   (see `thread-wall-timings-and-misdirected-logs`).
+
+
+## STEP 0 RESULT — branch (a). Do NOT build the payment fold.
+
+Instrumented all four top-level payment call sites plus `BatchPrepayMainCasts` invocations/declines
+(`MTG_TAP_STATS`, `=== PAYMENT SITES:` line). 12 games, seed 1001, `--threads 1`:
+
+| | FiveColour | Goblins | ratio |
+|---|---|---|---|
+| **BatchPrepayMainCasts invocations / game** | **407,187** | **317** | **1,284x** |
+| payment entries (solves) / game | 5,567 | 6 | 928x |
+| prepay-held / prepay-plain / per-cast | 320,326 / 316,002 / 170,290 | 0 / 180 / 227 | |
+
+The three site counters sum to **806,618**, exactly the mana cache's total calls (739,814 hits +
+66,804 misses) — so the attribution is complete, and every payment question is accounted for.
+
+**The verdict.** `BatchPrepayMainCasts` — which already folds a whole plan's casts into ONE combined
+cost and a single backtrack — is called **407,187 times per game** on FiveColour against Goblins' 317.
+The payment queries are a downstream SYMPTOM of plan applications, and they scale with them (1,284x
+plans → 928x payments). Building an enumerator-level payment fold would have optimised the symptom.
+
+**The atom, restated for the third and final time:** FiveColour's search applies ~1,284x more PLANS
+per game. That is enumeration breadth × rollout count, not mana payment.
+
+This is corroborated by the independent `perf` profile (`engine-cost-profile-2026-08-16.md`), whose
+top FiveColour-gen costs are ALL per-plan-application: `EnumeratePlansWithLand` 25.0%,
+`SimulateEndAndStartNextTurn` 24.8%, `GameState` copy 12.5%, allocator 13.4%. Three independent
+measurement paths now agree.
+
+### Where to go next (unmeasured — size before building, cf. `profile-before-optimizing`)
+
+1. **Fewer plans per node.** FiveColour uses the GENERIC group cap; Mirrorwing overrides `EnumGroupCap`
+   to 8 for exactly this reason. A cap is a QUALITY prune though — Goblins measured a gentle top-6 cap
+   at +0.0025 rollout win-turn and top-4 at +0.085, so it must clear both seed sets.
+2. **Cheaper plan application.** `GameState` copy + allocator churn are ~26% combined and are
+   byte-identical to attack (no play risk, no rebaseline). Lower ceiling, zero downside.
+3. **Note the decline rate: 92.2% of the 4.9M prepay invocations DECLINE** (87% before ever reaching a
+   backtrack). Worth understanding why before anything else — a fold that declines 9 times in 10 may be
+   cheap to fix and would cut the per-cast fallback traffic (170,290 calls) too.
+
+Deliberately NOT recommending one yet. Every previous confident story about this deck was wrong.
