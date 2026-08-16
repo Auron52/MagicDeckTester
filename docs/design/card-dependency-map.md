@@ -264,7 +264,26 @@ base bugs the aggregate had hidden:**
     (main2drop / acq / bp63) break them.
   - hinata's skewed 6→8 bucket (13 vs 4) and goblins gi=403.
 
-**HELD-OUT A/B COMPLETE (2026-08-16): the full stack (`MTG_PHASE_CLASSIFY + MTG_SEARCH_
+**HELD-OUT A/B RE-RUN AFTER THE THREE FIXES (2026-08-16, both arms rebuilt): the stack is now
+NET BETTER on held-out seeds — `−0.0148` summed per-key gap over 144 keys (was `+0.0330`),
+95 keys byte-identical (was 92). The two BASE fixes also improve the base arm itself: 24 of
+144 keys moved vs the accepted overnight GT, net `−0.0075`.**
+
+| deck | sum gap (was) | games w/b (was) | reading |
+|------|---------------|-----------------|---------|
+| burn | −0.120 (−0.120) | 15w/135b | unchanged one-sided win |
+| fivecolour | −0.089 (−0.078) | 241w/269b | churn, net better |
+| creature | −0.075 (−0.075) | 7w/65b | unchanged one-sided win |
+| goblins | **+0.002** (+0.014) | **6w/4b** (18w/4b) | phantom board-lethal fix landed |
+| antilife | **+0.085** (+0.110) | **112w/41b** (139w/45b) | drip + hold fixes landed |
+| hinata | +0.182 (+0.182) | 255w/254b | untouched — pure churn, as diagnosed |
+| 6 others | 0 | 0w/0b | filter stands down |
+
+Antilife's remaining +0.085 is still ~3:1 one-sided, so more of it is real; hinata's exact
+non-movement is itself confirmation that its 255w/254b really is symmetric churn and not a
+defect the fixes would have touched.
+
+**HELD-OUT A/B (pre-fix baseline, 2026-08-16): the full stack (`MTG_PHASE_CLASSIFY + MTG_SEARCH_
 SECOND_MAIN + MTG_MAIN2_DROP + MTG_ACQ_RESOLVE + MTG_BP_SITES=63`) measured on ALL 144
 overnight keys (base arm = the accepted overnight GT under the same binary; stack arm =
 one pooled 144-job batch, 20/20 workers, ~40 min). NET +0.0330 summed per-key gap over
