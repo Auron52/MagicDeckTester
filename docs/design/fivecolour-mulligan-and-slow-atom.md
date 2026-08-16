@@ -495,3 +495,54 @@ leads play. Flat profile and slow-game list agree, which is why this one is wort
 
 So the tractability lever for this deck is **domain-mana payment**, not bottoming, not R, not the
 recipe. Until that is cheaper, the projection above is what an exhaustive profile costs.
+
+## 5. The atom re-measured at HEAD (2026-08-16): it is the QUERY COUNT, not the query cost
+
+Re-measured because sections 3-4 predate the scaling fix, the value leaf, and the 2026-08-16 gate
+fixes. Same settings for every deck (12 games, seed 1001, `--threads 1`, `MTG_TAP_STATS`):
+
+| deck | payment entries/game | nodes/game | nodes/entry |
+|---|---|---|---|
+| FiveColour | **5,567** | 224,625 | 40.3 |
+| Goblins | **6** | 12 | 1.9 |
+
+**FiveColour asks ~930x more mana-feasibility questions per game.** Cost per question is only 21x
+worse. So the deck's ~23x rollout penalty (55 cells/s on 23 cores against the skill's ~110
+rollouts/s/core guide) is driven by HOW OFTEN payment is asked, not by how expensive each answer is.
+
+This retro-explains the parked flow-guided tap order (`flow-guided-tap-order.md`): it cut backtracker
+nodes 13.6x and moved total runtime ~1%, on BOTH the play and the gen workload. It made each answer
+cheaper. The engine was still asking a thousand times more often.
+
+Current split at HEAD (FiveColour, same run):
+
+```
+payable   55.8% of entries but 98.3% of NODES   (71.1 nodes/entry for a ~4.5-source answer)
+UNpayable 44.2% of entries,     1.7% of nodes   (1.6/entry -- at its floor)
+mana cache hit=91.7% of consulted   skipped: shape=0  key=0   flow-prune bail=0.0%
+```
+
+Note what this says about the cache: **it already absorbs 91.7%**, so the ~67k lookups per game are
+overwhelmingly repeats of a question already answered. The residue is not solves, it is the per-query
+KEY BUILD -- a scan of every mana source (with `CanTapNow`) on every lookup, hit or miss. That cost is
+proportional to the query count and no cache can remove it.
+
+**So the two candidate levers, in order:**
+
+1. **Ask fewer times.** The queries come from plan-enumeration breadth (`EnumeratePlansWithLand` is
+   the top inclusive cost on this workload). A five-colour board multiplies castable subsets, each
+   needing a feasibility check. This is the doc's original "fold keyed on the realised colour set"
+   direction, applied one level UP -- at the enumerator, not the tap DFS.
+2. **Make asking cheaper.** Hoist/incrementalise the mana-cache key: the battlefield is invariant
+   across a whole enumeration, so the per-source scan could be built ONCE per enumeration instead of
+   once per query. Byte-identical by the same argument the key already relies on (a payment only
+   TAPS; nothing enters, leaves or changes colour).
+
+Neither is measured yet. Do (2) first -- it is bounded, byte-identical, and its size is directly the
+key-build share of the 806,618 lookups per 12 games; (1) is the bigger prize and the riskier change.
+
+**Sizing what "possible" needs.** At K=27 (fetch cycle merged) the size-7 phase is 1,977,898 cells;
+at R=10 (the floor for a shippable runtime profile) that is 39.6M rollouts. At the guide's
+110 rollouts/s/core x 23 cores that is ~4.3 h. At FiveColour's measured 4.8 rollouts/s/core it is
+~100 h. **The entire feasibility question is that one ratio** -- close the query-count gap and the run
+lands in hours, not days. No change to K or R is needed if the rollout rate becomes typical.
