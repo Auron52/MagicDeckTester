@@ -318,6 +318,35 @@ base bugs the aggregate had hidden:**
   symmetric (antilife 5→4:21 vs 4→5:15; 5→6:11 vs 6→5:9), and the one ONE-SIDED bucket is a
   **win** — 4→3 in 10 games with 0 reverse. Lesson worth keeping: a one-sided-looking family
   extracted from a loser list proves nothing until the reverse direction is counted.
+* **CORRECTION (USER, 2026-08-16): "not point-fixable" was too quick — one of them WAS a card
+  bug.** See the Oko entry below: `elk_transform` was hardcoded to Food tokens, so the engine
+  could not express "turn a 0/1 dork into a 3/3 attacker" at all, and the fivecolour 6→7 family I
+  had written off as a search tie-break was a *symptom* of that. **The first question for any
+  residual family must be "can the engine even EXPRESS the line base takes?" — before any
+  tie-break or churn attribution.** Applying that lens to the antilife residue immediately split
+  it three ways (below), one of which converges on an already-open item.
+* **THE LAND-CHOICE TIE-BREAK NOW HAS THREE INDEPENDENT EXEMPLARS AND ONE COMMON FIX.** The
+  sharpest is **antilife gi=519 (4→5)**: the arms diverge at the T1 LAND. Base plays Windswept
+  Heath (a fetch → a green source) and casts Birds of Paradise; the classify arm plays Godless
+  Shrine (W/B) and then **cannot cast Birds at all — it has no green source**. The mechanism is
+  precise: Birds is a ManaDork, so classification defers it to Main2 and the main-1 pool has
+  nothing to cast; with no cast to enable, every land option ties and the choice falls to
+  `GreedyLandChoiceIndex`, whose four passes (`untapped+multi`, `untapped+any`, `tapped+multi`,
+  `tapped+any`) are **colour-blind about what is in hand** and so prefer the shock dual over the
+  fetch. antilife gi=367 is the same shape (Temple Garden vs Windswept Heath at T1).
+  This is the SAME defect as the two tie-break candidates already logged — 5c gi=97 (an all-tie
+  T1 land pick that colour-starves the green dorks for three turns) and antilife gi=38 (Grove
+  gifting a life on a coloured pip) — plus a fourth variant, the hinata d0 `tapped-on-a-free-turn`
+  case. One fix addresses all four: **make the land tie-break aware of the WHOLE hand, not the
+  phase-filtered pool** — prefer a land that makes an otherwise-uncastable hand card castable,
+  then prefer not gifting life, then prefer the tapped land when the untapped one buys nothing.
+  Two caveats for whoever implements it: a FETCHLAND produces nothing directly (its colour value
+  is its fetch targets, so the test must look through `FetchCandidates`), and this changes BASE
+  play for every deck — it is a `heuristic-optimization.md` job (propose variants → sweep train
+  seeds → validate on overnight), not a point fix.
+  The rest of the antilife residue is NOT this: gi=554 is a same-land different-cast choice, and
+  gi=963 is benign (the deferred Birds IS cast in T1 main 2 and the board is identical by
+  end of turn — a pure phase-order difference that re-rolls downstream).
 * **THE RESIDUAL FAMILIES ARE NOT POINT-FIXABLE BUGS (2026-08-16, every open game dug).** After
   BUG 6 the surviving stack-vs-base losers were traced individually, and they collapse into three
   causes, none of which is a mechanical defect. Recording this so the next session does not
