@@ -3427,6 +3427,26 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
 // reached a rollout. sum_final and rollout calls are unchanged by construction.
 static constexpr int kNoManaCeiling = std::numeric_limits<int>::max();
 
+// Is a free-cast charge live this turn (Maelstrom Archangel)? Either already BANKED
+// (free_casts_available, set once combat damage lands -> the post-combat main), or still COMING: an
+// untapped free-cast creature that can attack will connect against a goldfish that never blocks, so
+// the pre-combat main should not treat the spell it frees as unaffordable (USER 2026-08-16: "if you
+// have an archangel that is able to attack, one spell will always be cast and should not be blocked
+// by available mana"). Both readings over-approximate, which is the safe direction for a prune.
+static bool FreeCastChargeLive(const GameState& state)
+{
+    if (state.free_casts_available > 0) { return true; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.combat_damage_free_cast
+            && CanAttackFull(p, state.battlefield, state.active_player_index))
+        { return true; }
+    }
+    return false;
+}
+
 static int OptimisticTurnMana(const GameState& state)
 {
     const Player& ap = state.ActivePlayer();
@@ -3495,20 +3515,12 @@ static int OptimisticTurnMana(const GameState& state)
     // finite instead of bailing out on every board holding an Archangel. Gated on the BANK, not on the
     // card: pre-combat the bank is 0 and no free cast is available that main phase, so the pre-combat
     // enumeration keeps its full-strength bound.
-    if (state.free_casts_available > 0)
-    {
-        std::vector<int> hand_mv;
-        hand_mv.reserve(ap.hand.size());
-        for (const Card& c : ap.hand)
-        {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-            if (d && !d->card.IsLand()) { hand_mv.push_back(d->card.m_mana_cost.ManaValue()); }
-        }
-        std::sort(hand_mv.begin(), hand_mv.end(), std::greater<int>());
-        const int charges = std::min<int>(state.free_casts_available,
-                                          static_cast<int>(hand_mv.size()));
-        for (int i = 0; i < charges; ++i) { m += hand_mv[i]; }
-    }
+    // NOTE on free casts (Maelstrom Archangel): they are deliberately NOT credited into `m`.
+    // A free cast is a cost bypass for exactly ONE spell, whereas `m` is the per-card ceiling applied
+    // to EVERY candidate -- inflating it by the free spell's cost would let every expensive card in
+    // hand through the filter (USER 2026-08-16: "the prune should still apply to everything else").
+    // The exemption is applied at the filter instead, in CollectActions, and only while a charge
+    // actually exists. See FreeCastChargeAvailable below.
 
     // SCALING SOURCES (domain_mana: Faeburrow Elder / Bloom Tender). Each taps for one mana of every
     // colour among permanents, so a coloured permanent played this turn RAISES their yield -- the
@@ -3540,6 +3552,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     bool has_creature_target = HasLegalCreatureTarget(state);
     int  n = static_cast<int>(ap.hand.size());
     const int mana_ceiling = g_emit_prune ? OptimisticTurnMana(state) : kNoManaCeiling;
+    // Hoisted: one battlefield scan per CollectActions call, not one per candidate card, and only
+    // when the prune is on (this is a millions-of-calls hot path). See the exemption below.
+    const bool free_charge_live = g_emit_prune && FreeCastChargeLive(state);
 
     std::vector<Action> actions;
     // Reserve an optimistic upper bound so the push_backs below never re-grow the backing store
@@ -3600,10 +3615,26 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // here because EffectiveCost returns the FIXED part -- if that alone is unaffordable, no
         // value of X helps. Aether Vial does not enter into it: putting a creature onto the
         // battlefield is an ActivateVial action, a different kind, which this does not touch.
+        // FREE-CAST EXEMPTION (USER 2026-08-16). A card whose cost exceeds the ceiling is normally
+        // uncastable this turn -- unless a free-cast charge pays for it, which bypasses mana entirely
+        // (Maelstrom Archangel: "cast a spell from your hand without paying its mana cost"). Since the
+        // enumeration cannot know WHICH card the charge will take, any over-ceiling card is a
+        // candidate, so while a charge exists this one filter stands down. It is scoped as narrowly as
+        // possible: only this cost filter, only while a charge is live, and the ceiling itself is left
+        // at true mana so the prune still applies at full strength to every other card and every other
+        // gate ("the prune should still apply to everything else"). Cards under the ceiling are
+        // unaffected either way, so on a turn with no free cast this is exactly the old behaviour.
+        //
+        // `free_casts_available` covers the post-combat main, where the charge is already banked. The
+        // attack test covers the PRE-combat main, where the bank is still 0 but an Archangel that can
+        // attack will connect against a goldfish that never blocks -- "one spell will always be cast
+        // and should not be blocked by available mana". Both are over-approximations, which is the
+        // safe direction for a prune: an unused exemption only means one card was not filtered.
         if (g_emit_prune && def.params.alt_lifegain_cost <= 0
             && def.params.alt_cost_requires_subtype.empty()
             && !def.params.spectacle_cost.has_value()
-            && EffectiveCost(def, state).ManaValue() > mana_ceiling)
+            && EffectiveCost(def, state).ManaValue() > mana_ceiling
+            && !free_charge_live)
         { continue; }
 
         // Flood-engine gate: a Treasure Hunt (DrawUntilNonland) or a cascade/retrace card
