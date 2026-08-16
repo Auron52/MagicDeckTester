@@ -4798,11 +4798,34 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // Shared with Apex of Power's colour enumeration (ChosenFloatColorCandidates).
             std::vector<std::string> colors = ChosenFloatColorCandidates(state);
 
+            // FUNGIBLE-SOURCE CAP (DecisionProvider::FungibleSacSourceCap; USER 2026-08-16). Identical
+            // untapped sac sources are interchangeable -- k of them is the whole decision, WHICH k is
+            // noise -- but each emits |colors| actions and each becomes its own odometer group, so N of
+            // them multiply the plan space by (1+|colors|)^N for N+1 real outcomes. Enumerate at most
+            // `dup_cap` per (definition, storage/counter state) class; the remainder stay in play and
+            // are re-enumerated at the next breakpoint once some are spent. Classes are keyed on the
+            // same permanent state the tap backtracker's identical-sibling collapse uses, so two
+            // sources are only pooled when their activations really are interchangeable.
+            static const int s_dup_cap_env = []{ const char* e = std::getenv("MTG_SAC_DUP_CAP");
+                return (e && *e) ? std::atoi(e) : -1; }();
+            const int dup_cap = s_dup_cap_env >= 0 ? s_dup_cap_env
+                                                   : ResolveProvider(state).FungibleSacSourceCap();
+            // (def, storage_counters, counter-signature) -> how many already emitted.
+            std::vector<std::pair<std::pair<const CardDefinition*, int>, int>> dup_seen;
             for (const Permanent& p : state.battlefield)
             {
                 if (p.controller_index != state.active_player_index || p.tapped) { continue; }
                 const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
                 if (!pd || pd->params.sac_for_mana_amount <= 0) { continue; }
+                if (dup_cap > 0 && p.counters.empty())   // countered sources are never pooled
+                {
+                    const std::pair<const CardDefinition*, int> cls{ pd, p.storage_counters };
+                    auto it = std::find_if(dup_seen.begin(), dup_seen.end(),
+                                           [&](const auto& s) { return s.first == cls; });
+                    if (it == dup_seen.end()) { dup_seen.push_back({ cls, 1 }); }
+                    else if (it->second >= dup_cap) { continue; }   // fungible with one already emitted
+                    else { ++it->second; }
+                }
                 for (const std::string& col : colors)
                 {
                     Action a;

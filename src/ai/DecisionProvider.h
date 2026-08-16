@@ -799,6 +799,32 @@ public:
     // docs/design/dragonstorm-search-pruning.md (Step 2).
     virtual bool UseAccelPrefixCollapse() const { return false; }
 
+    // FungibleSacSourceCap -- how many INTERCHANGEABLE sac-for-mana sources (Treasure tokens, a pile
+    // of identical Lotus/Black Lotus) CollectActions enumerates. N identical untapped Treasures are
+    // fungible: cracking any k of them produces the same mana, so k is the only real decision and the
+    // WHICH is noise -- but each source emits one Action per candidate colour and each multi-colour
+    // source becomes its own odometer GROUP, so the plan space carries a (1+variants)^N factor for a
+    // choice with N+1 distinct outcomes. Measured on Mirrorwing (USER sighting 2026-08-16): a rollout
+    // board reached 63 untapped Treasures -- 126 SacForMana actions, a 3^63 group product -- because
+    // Zada copies Gold Rush once per creature and a rollout never spends the tokens, so they simply
+    // ACCUMULATE. Capping at K keeps the first K of each fungible class; the rest stay on the
+    // battlefield and are re-enumerated at the NEXT breakpoint once some have been used (USER: "when
+    // they are used and we have another breakpoint at that point we can use the remainder"), so no
+    // mana is unreachable -- it is deferred, in the same doctrine as the deferred group waves.
+    //
+    // NOT byte-identical only where a board holds MORE than K identical untapped sac sources; every
+    // deck in the suite that runs one (Dragonstorm's Lotus Bloom, FiveColour's conjured Lotus) is far
+    // below the cap, so they are unaffected. USER 2026-08-16: "only combo decks might want more and we
+    // can figure that problem out when we get to it" -- hence a provider hook rather than a constant.
+    // MTG_SAC_DUP_CAP=N overrides (0 = uncapped) for a one-binary A/B.
+    //
+    // Deliberately a CAP and not an auto-float of the excess (the other option the user raised): for
+    // this deck the Treasures are not merely mana, they are the Gold Rush pump SCALER
+    // (pump_per_treasure_power, "+2/+2 for each Treasure you control"), so cracking a Treasure the
+    // line does not need actively shrinks every later pump. Dropping the choice is safe; taking it
+    // for free is not.
+    virtual int FungibleSacSourceCap() const { return 8; }
+
     // UseSpliceCollapse -- Desperate Ritual SPLICE-count collapse gate. When true, TurnSolver's
     // CollectActions emits only TWO splice variants per same-named splice_onto_arcane copy -- the BARE cast
     // (k=0) and the position's MAX-CHAIN cast (k = N-1-pos, N = copies in hand) -- instead of the full
