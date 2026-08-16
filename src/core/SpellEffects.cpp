@@ -1090,12 +1090,35 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         if (def->params.creature_mana_only && !for_creature) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }
-        // Unmodellable source types -> the whole oracle bails (it would MIS-credit their yield):
-        // storage bursts a variable amount; scaled pays a feeder for N-of-one. Every other source --
-        // including a bounce/Karoo land (produces_amount>=2) -- is uniformly "one tap -> `amt` mana of
-        // ONE chosen colour among `produces`" (the worker's loop below), so `amt` is its flow capacity.
-        if (def->params.storage_land || IsScaledManaLand(*def))
+        // Unmodellable source type -> the whole oracle bails (it would MIS-credit its yield): a scaled
+        // land pays a feeder for N-of-one-colour. Every other source -- including a bounce/Karoo land
+        // (produces_amount>=2) -- is uniformly "one tap -> `amt` mana of ONE chosen colour among
+        // `produces`" (the worker's loop below), so `amt` is its flow capacity.
+        //
+        // Three Tree City (the only IsScaledManaLand card) stays on the bail path by USER DECISION
+        // 2026-08-16 -- "it's okay to bail on three tree city; goblins doesn't have huge issues with
+        // performance". It is the same shape as domain if it is ever wanted: yield N across its colour
+        // set, invariant during a payment, colour search-chosen.
+        if (IsScaledManaLand(*def))
         { if (out_bailed) { *out_bailed = true; } return false; }
+
+        // STORAGE LANDS (Dwarven Hold, Mercadian Bazaar) are modelled EXACTLY, not bailed. The worker
+        // bursts `min(storage_counters, shortfall)` mana of its `produces` colour in one tap, so the
+        // counter count is a tight cap on what this source can ever contribute -- and StorageSourceLive
+        // above has already excluded an uncharged or held land, so the count is positive here. The
+        // "{T}: put a storage counter" mode makes no mana and is dominated. This is a per-PERMANENT
+        // yield rather than a per-CARD one, which is the only reason it needs its own branch.
+        if (def->params.storage_land)
+        {
+            std::uint8_t sbits = 0;
+            for (Color c : def->params.produces)
+            { sbits |= static_cast<std::uint8_t>(1u << static_cast<int>(c)); }
+            if (sbits == 0) { continue; }
+            const int burst = PermanentManaYield(state.battlefield[i], *def);
+            if (burst <= 0) { continue; }
+            srcs.push_back({ sbits, burst, burst });   // one colour takes the whole burst
+            continue;
+        }
 
         // FILTERS (Cascade Bluffs is_filter; Ferrous Lake / Izzet Signet ramp_filter) are modelled by
         // their GROSS output with the input IGNORED (2026-08-16). A filter is a GAIN edge -- pay one
