@@ -112,3 +112,57 @@ cheaper second main, not a bigger allowance.
 * Hinata's +0.0131 is unattributed and is the LARGEST single blocker. It is not this
   lever (+0.0006 alone). Isolate the remaining five levers against it.
 * `MTG_BP_SITES=63` (searched breakpoint sites) has not been isolated at all.
+
+---
+
+## MEASURED: the budget sweep, and the six-vs-five result (2026-08-16)
+
+### Budget sweep — the lever is pure downside ON ITS OWN
+
+`MTG_SEARCH_SECOND_MAIN=1` vs base, antilife d3+d5 x seeds 2002/3003, 1,100 games
+per budget:
+
+```
+ budget  better  worse    net     mean   win->loss
+     10       1      5     +9   +0.0082      2
+     20       1      4     +6   +0.0055      1
+     40       0      2     +2   +0.0018      0
+     80       0      0     +0   +0.0000      0
+    160       0      0     +0   +0.0000      0
+```
+
+Harm decays monotonically to EXACTLY zero — the truncation signature (a real defect
+does not vanish with budget). But note the second half: **at budget 80+ the lever
+changes nothing at all.** Given room, the searched second main plays the same turns
+as the greedy one on this deck. Combined with the single-lever run (2 games better /
+8 worse across ALL decks, no deck gaining), the lever is *on its own* harmful when
+starved and inert when not.
+
+### ...but it is NOT separable — it MASKS most of hinata's damage
+
+Dropping it from the stack (five levers: CLASSIFY, MAIN2_DROP, ACQ_RESOLVE,
+BP_SITES=63, DOUBT_MAIN2):
+
+| deck | 6-lever | 5-lever | verdict |
+|---|---|---|---|
+| antilife | +0.0071 | **-0.0005** | fixed, as predicted |
+| fivecolour | -0.0125 | **-0.0163** | better |
+| burn | -0.0067 | -0.0067 | unchanged |
+| creature_giving | -0.0086 | -0.0086 | unchanged |
+| **hinata** | +0.0131 | **+0.0425** | **3x WORSE** |
+| TOTAL | -0.0008 | +0.0001 | a wash either way |
+
+So the searched second main was *compensating* for whatever hurts hinata. Removing
+it removes the compensation and exposes the underlying damage. **The levers interact;
+they cannot be adopted or rejected individually on single-lever numbers alone.**
+
+### Where that leaves adoption
+
+In the five-lever config every deck except hinata is negative (good):
+antilife -0.0005, burn -0.0067, creature_giving -0.0086, fivecolour -0.0163.
+**Hinata alone holds the stack at zero.** Find and fix hinata's cause and the
+remaining set should be clearly adoptable; that is now the single highest-value
+piece of work on this arc.
+
+Do NOT read the +0.0425 as "the second main is good for hinata and should ship for
+it" — that would be adopting a lever because it masks a defect. Fix the defect.
