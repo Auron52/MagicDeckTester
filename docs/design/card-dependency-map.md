@@ -392,6 +392,23 @@ base bugs the aggregate had hidden:**
   ordering, gi=531 was one of the OTHER things the same gate switches on (the collapsed-main
   dork hold), which no amount of re-classifying could reach.
 
+**FINAL HELD-OUT A/B (2026-08-16, after BUG 4/5/6 — GT rebaselined AND the stack arm re-run, so
+both arms are the same post-BUG-6 binary). NET `−0.1443` over 144 keys, 95 byte-identical.**
+The arc's trajectory on this one number: `+0.0330` → `−0.0148` (BUG 1/2/3) → `−0.1333`
+(BUG 4/5) → **`−0.1443`** (BUG 6).
+
+| deck | sum gap | reading |
+|------|---------|---------|
+| fivecolour | −0.187 | 219w/280b |
+| burn | −0.120 | 15w/135b — one-sided WIN (5→4 in 118 games vs 10 reverse) |
+| creature | −0.075 | 7w/65b — one-sided WIN (5→4 in 40 vs 3) |
+| goblins | +0.002 | 6w/4b |
+| antilife | +0.053 | 81w/40b (was +0.064, and +0.110 at the start of the census) |
+| hinata | +0.182 | 255w/254b — w/b byte-identical across FOUR separate measurements = churn |
+
+Remaining one-sided LOSS buckets, all characterised above and none point-fixable: antilife 4→5
+(31 v 12) and 5→7 (7 v 1), fivecolour 6→7 (8 v 2), hinata 6→8 (13 v 4).
+
 **HELD-OUT A/B AFTER BUG 4 + BUG 5 (2026-08-16, stack arm re-run over all 144 overnight keys;
 base arm unchanged because both fixes are lever-gated and the regression suite measured 60/60
 keys byte-identical). NET `−0.1333` (was `−0.0148`) — a further `0.119` improvement on held-out
