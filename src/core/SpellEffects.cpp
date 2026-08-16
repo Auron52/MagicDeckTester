@@ -1090,14 +1090,53 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         if (def->params.creature_mana_only && !for_creature) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }
-        // Unmodellable source types -> the whole oracle bails (it would MIS-credit their yield): a
-        // filter/ramp consumes+converts floating; storage bursts a variable amount; scaled pays a
-        // feeder for N-of-one. Every other source -- including a bounce/Karoo land
-        // (produces_amount>=2) -- is uniformly "one tap -> `amt` mana of ONE chosen colour among
-        // `produces`" (the worker's loop below), so `amt` is its flow capacity.
-        if (def->params.is_filter || def->params.ramp_filter
-            || def->params.storage_land || IsScaledManaLand(*def))
+        // Unmodellable source types -> the whole oracle bails (it would MIS-credit their yield):
+        // storage bursts a variable amount; scaled pays a feeder for N-of-one. Every other source --
+        // including a bounce/Karoo land (produces_amount>=2) -- is uniformly "one tap -> `amt` mana of
+        // ONE chosen colour among `produces`" (the worker's loop below), so `amt` is its flow capacity.
+        if (def->params.storage_land || IsScaledManaLand(*def))
         { if (out_bailed) { *out_bailed = true; } return false; }
+
+        // FILTERS (Cascade Bluffs is_filter; Ferrous Lake / Izzet Signet ramp_filter) are modelled by
+        // their GROSS output with the input IGNORED (2026-08-16). A filter is a GAIN edge -- pay one
+        // mana, get two -- and max-flow conserves flow, so its exact shape is not expressible in this
+        // graph. Ignoring the feed can only ADD supply, and this oracle only ever claims INFEASIBLE,
+        // so an over-credit is sound by construction: it can refuse to prune, never prune a payable
+        // cost. They used to bail, which switched the ORACLE OFF for the whole payment -- on `th` that
+        // was 95.3% of top-level entries, with `pruned` correspondingly at 0.1%.
+        //
+        // The tempting tighter model -- credit the NET +1 -- is UNSOUND, and the counterexample is
+        // ordinary: Cascade Bluffs + Forest paying {U}{R}. Real play taps the Forest for {G}, feeds it
+        // to the Bluffs, and takes {U}{R}. A net-1 model sees one unit from the Bluffs and a {G} that
+        // reaches neither pip -> flow 1 < 2 -> it prunes a payable cost. The whole POINT of a filter is
+        // that the fed mana's colour does not matter, and only the gross form expresses that.
+        //
+        // Yields are read off the worker's own branches below, never off the oracle text:
+        //   is_filter   -- "feed 1, Add 2" adds exactly two mana and BOTH may be the same colour (the
+        //                  c1/c2 double loop over `produces`), so amt = 2 AND per_col = 2. Its free
+        //                  "{T}: Add {C}" mode is dominated by that except against a strict {C} pip,
+        //                  so Colorless joins the colour set -- the one over-credit here that is not
+        //                  forced, and it costs nothing on any deck in the suite (no {C} pips).
+        //   ramp_filter -- "feed 1, Add one of each `produces` colour": amt = |produces|, per_col = 1.
+        //                  Exactly the domain shape.
+        if (def->params.is_filter || def->params.ramp_filter)
+        {
+            std::uint8_t fbits = 0;
+            for (Color c : def->params.produces)
+            { fbits |= static_cast<std::uint8_t>(1u << static_cast<int>(c)); }
+            if (fbits == 0) { continue; }   // no colours -> this filter makes nothing usable
+            if (def->params.is_filter)
+            {
+                fbits |= static_cast<std::uint8_t>(1u << static_cast<int>(Color::Colorless));
+                srcs.push_back({ fbits, 2, 2 });
+            }
+            else
+            {
+                const int ftotal = __builtin_popcount(static_cast<unsigned>(fbits));
+                srcs.push_back({ fbits, ftotal, 1 });
+            }
+            continue;
+        }
 
         // DOMAIN (Bloom Tender / Faeburrow Elder) is modelled EXACTLY rather than bailed (USER
         // 2026-08-16). It used to sit in the bail list above because it breaks the one-tap-one-colour
