@@ -125,3 +125,48 @@ measurement paths now agree.
    cheap to fix and would cut the per-cast fallback traffic (170,290 calls) too.
 
 Deliberately NOT recommending one yet. Every previous confident story about this deck was wrong.
+
+## The actual design (USER, 2026-08-16): "figure out what we can generate, then use that to evaluate different plans"
+
+Compute ONCE per board what mana it can generate, then evaluate every candidate plan against that
+structure. The point is NOT to make payment cheaper -- it is to **reject a plan before it costs a
+`GameState` copy and a turn simulation**.
+
+That distinction is the whole value, and it is why my earlier framing was too small:
+
+| target | measured share of runtime | ceiling |
+|---|---|---|
+| payment SOLVING (backtracker) | ~1-2% (flow-order cut nodes 13.9M -> 1.46M for ~1%) | ~2% |
+| plan APPLICATION (copy 12.5% + turn sim 24.8% + allocator 13.4%) | ~50% | the 23x lives here |
+
+FiveColour applies **407,187 plans/game** (Goblins: 317). Every one pays a copy + simulate. A
+colour-aware frontier that answers "is this cost multiset generatable from this board?" cheaply lets
+the enumerator drop unaffordable plans at zero application cost.
+
+**The structure already exists.** `TapFlowInfeasible` (SpellEffects.cpp) builds exactly this: a
+max-flow over sources -> colours -> demand, with **zero bail clauses on all 12 suite decks** (verified
+2026-08-16) and exact modelling of filters, storage, domain and scaled sources. Today it is solved
+per (board, cost) and thrown away. Built once per board and kept, each plan becomes an incremental
+feasibility query (augmenting paths against the retained flow) instead of a fresh solve.
+
+### Prior art -- read before building
+
+A per-card scalar version of this ALREADY SHIPPED and saved nothing: `OptimisticTurnMana` /
+`MTG_EMIT_PRUNE` (default OFF) dropped 37% of emissions for **zero work saved, ~0.4% CPU = noise**
+(`d8d7da10`), because it is redundant with the enumerator's own per-subset gate. Two differences make
+this proposal not that:
+* it is COLOUR-AWARE (a max-flow, not a scalar total) -- the scalar bound is far too loose on a
+  five-colour board, which is exactly why it never fired usefully;
+* it filters whole PLANS before application, not single cards before emission -- so what it saves is
+  the copy+simulate, not an emission.
+
+### Size it before building (the standing rule on this deck)
+
+The prize is (fraction of the 407,187 plans/game that a colour-exact frontier would reject) x (cost of
+a plan application). If most applied plans are affordable, this saves nothing and the lever is a
+breadth cap instead. **Measure first**: count applied plans, and how many are rejected on mana at
+each stage (the 92.2% BatchPrepay decline rate is a hint, not an answer -- 87% of declines happen
+before any backtrack, so their cause is not yet known).
+
+Soundness bar unchanged: the frontier must be EXACT or a conservative OVER-estimate falling through to
+the real solve. An under-estimate silently drops legal casts (`60b56ae1`, 14/18 games).
