@@ -149,6 +149,36 @@ Escalation is then PRINTED rather than inferred by subtracting two row means -- 
    deleted -- what it must still catch is a cell whose per-game identities are unknown (the
    `wins is None` case), which corrupts any intersection.
 
+## The same defect appears a THIRD time: the paired basis in the metadata deriver
+
+`valueleaf_table_to_metadata.py` builds the paired basis as
+
+```python
+usable = [c for c in dc if c["seed"] == seed and not c.get("intractable")
+          and any(x.get("g") for x in c.get("chunks", []))]
+basis[seed] = set.intersection(*[set(per_game(c)) for c in usable])
+```
+
+It intersects over every cell that is not flagged `intractable` -- INCLUDING rows it has already
+excluded from the ladder as reference-only. Measured on Mirrorwing 2026-08-16: V7 and V8 were
+condemned at 256-269 games and were merely `qdead` (not `intractable`) on three of four seeds, so
+they clamped the basis to ~260 games there, while on s11011 -- where both happened to be flagged
+`intractable` -- the basis was the full 400. The paired ladder read 1,180 games instead of 1,561, and
+the trust verdict came back "sample below resolution" as a pure artifact of rows that no decision
+reads.
+
+The principle is the one this whole document is about, stated once more: **a cell that is not in the
+comparison must not constrain the comparison basis.** Three locations now:
+
+1. `apply_skiplist` -- unions abandonments over cells the table excludes.
+2. The backfill amplification that union causes.
+3. This -- reference-only rows clamping the paired intersection.
+
+The immediate workaround was to set `intractable=True` on those V7/V8 cells, which is what the
+emitted table already asserted about the rows (`V7=...* V8=...*`). The real fix is to build the basis
+from the cells a decision actually reads, which under the edge table is automatic: each edge
+intersects its OWN two cells and nothing else can clamp it.
+
 ## Migration
 
 **Phase 1 -- pure addition, no consumer changes.** Emit the edge table alongside the current one,
