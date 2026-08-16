@@ -1250,6 +1250,53 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         srcs.push_back({ bits, amt, amt, i });   // non-domain: one colour takes the whole tap
     }
 
+    // SCARCITY-FIRST BIAS. Edmonds-Karp finds *a* max flow, and any of them proves feasibility --
+    // but when the assignment is reused as a tap-order hint, WHICH one matters: spending a flexible
+    // source on a pip a restrictive one could have paid leaves the board worse off for the rest of
+    // the turn. The engine's greedy payment path already believes this (the "scarcity-first tap
+    // order" this backtracker is the fallback for), so bias the flow the same way -- BFS explores
+    // adjacency in order, so sorting the sources by how FEW colours they can make puts restrictive
+    // sources on the first augmenting paths. Sound regardless: any max flow proves the same thing,
+    // so the prune verdict cannot change, only the assignment it hands back.
+    const bool want_assign = FlowOrderEnabled();
+    // TEMPORARY A/B HATCH: separates the scarcity bias from the flow order itself so all three arms
+    // come from ONE binary. Default ON with the order; MTG_FLOW_SCARCITY=0 gives bare flow order.
+    static const bool s_scarcity = EnvOn("MTG_FLOW_SCARCITY", true);
+    if (want_assign && s_scarcity && srcs.size() > 1)
+    {
+        // ...EXCEPT where tapping is itself a BONUS. Anti-Lifegain wins through Grove of the
+        // Burnwillows: its coloured tap gives the opponent life, which a Tainted Remedy / Plague
+        // Drone turns into DAMAGE, so the deck WANTS that tap. Grove makes {R}, {G} and {C}, so a
+        // naive scarcity rank calls it the least scarce source on the board and spends basics
+        // instead -- throwing the drip away. Measured: that alone cost a hand-played reference its
+        // turn-4 kill (references/Anti-Lifegain/claude_s5_gi4.json replayed T4 -> T5), which is
+        // exactly what the reference gate exists to catch. Rank a live drip source as MAXIMALLY
+        // scarce so the flow spends it first. The worker's own drip branch already asks the same
+        // question (OpponentLifegainUseful) when choosing the {C} mode vs a coloured one; this
+        // keeps the assignment consistent with it instead of fighting it.
+        bool any_drip = false;
+        for (const SrcColset& sc : srcs)
+        {
+            const Permanent& p = state.battlefield[sc.bf];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.tap_opponent_lifegain > 0) { any_drip = true; break; }
+        }
+        const bool drip_useful = any_drip
+            && ResolveProvider(state).OpponentLifegainUseful(state, active);
+        auto rank = [&](const SrcColset& sc) -> int
+        {
+            if (drip_useful)
+            {
+                const CardDefinition* d =
+                    CardDatabase::Instance().LookupCached(state.battlefield[sc.bf].card);
+                if (d && d->params.tap_opponent_lifegain > 0) { return -1; }   // spend it FIRST
+            }
+            return __builtin_popcount(static_cast<unsigned>(sc.bits));
+        };
+        std::stable_sort(srcs.begin(), srcs.end(),
+                         [&](const SrcColset& a, const SrcColset& b) { return rank(a) < rank(b); });
+    }
+
     const int m = static_cast<int>(srcs.size());
     const int demand = cost.ManaValue();
     if (demand == 0) { if (out_bailed) { *out_bailed = true; } return false; }   // nothing to pay (unreachable)
@@ -1274,7 +1321,6 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
     // The per-colour edge bookkeeping exists ONLY to publish the assignment for the tap-order hint.
     // The oracle itself is default-ON and on the hot path, so when the hint is disabled none of this
     // is recorded and the default build is exactly the pre-hint oracle.
-    const bool want_assign = FlowOrderEnabled();
     struct ColEdge { int s, c, eid; };
     static thread_local std::vector<ColEdge> s_col_edge;   // forward edge id of each src->colour
     s_col_edge.clear();

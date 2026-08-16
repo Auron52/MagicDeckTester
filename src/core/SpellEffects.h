@@ -7206,6 +7206,24 @@ inline bool FlowPruneEnabled()
 // (equally legal) tap set, which leaves different sources untapped and so changes later decisions.
 // It is therefore a HEURISTIC change, measured by the suite on avg-win-turn as well as cost, not a
 // lossless one -- hence its own flag rather than folding into FlowPruneEnabled.
+//
+// STAYS DEFAULT OFF -- adoption was attempted on 2026-08-16 and REFUSED BY THE HELD-OUT SEEDS.
+// Net avg-win-turn vs baseline (negative = better), summed over every case in each tier:
+//
+//                                smoke (s1001)   regression (s2002/3003)     TOTAL
+//   flow order only                   +0.0082                   +0.0330    +0.0412
+//   flow order + scarcity bias        -0.0550                   +0.0690    +0.0140
+//
+// Both are WORSE. The scarcity arm's -0.0550 on smoke is exactly the selection artifact the
+// heuristic-optimization skill warns about -- it reverses on the held-out seeds, and only the SUM
+// decides. With the cost saving measured at ~1% of runtime (section 8 of the design doc), there is
+// nothing to trade the play regression against, so ground truth was deliberately NOT rebaselined.
+//
+// Kept behind the flag rather than deleted because the MECHANISM is sound and cheap to re-test: the
+// oracle really does compute an assignment it currently discards, and the node counts really do fall
+// 9.5-13.6x. What is unproven is that any particular assignment is a GOOD tap order. A future attempt
+// should rank sources by something the engine already values, and must clear BOTH seed sets.
+// MTG_FLOW_ORDER=1 enables it; MTG_FLOW_SCARCITY=0 then gives the bare (unbiased) order.
 inline bool FlowOrderEnabled()
 { static const bool v = EnvOn("MTG_FLOW_ORDER"); return v; }
 
