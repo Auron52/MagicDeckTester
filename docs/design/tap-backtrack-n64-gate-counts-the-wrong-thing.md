@@ -115,6 +115,18 @@ defect, not a mana defect, and fixing the memo gate will make the search reach t
 rather than avoid them. Worth its own investigation, and probably worth more than the mana fix:
 degenerate cells are expensive precisely because the game does not end.
 
+**LEAD HYPOTHESIS: the chain is being resolved in SECOND MAIN.** The pump is "until end of turn", so
+a Gold Rush chain cast post-combat mints all 63 Treasures and a +126/+126 pump AFTER the attack step
+has passed -- every point of it wasted, and the board rolls into the next turn with the Treasures but
+none of the damage. That fits everything observed: an enormous board, an opponent still at 20, and a
+game that does not end. It also predicts the pathology is self-inflicted rather than unlucky, since
+the same line cast in FIRST main is lethal on the spot.
+
+How to test it: the sampled state carries the main-phase flag -- re-run the instrument (see the
+commit that added `[bf>64]`) and print `is_pre_combat` / the main ordinal alongside the tally. If it
+is second main, the fix is an ordering/gating question (do not offer a pure-pump line post-combat
+when it could have been first main), not an evaluation-weight question.
+
 A caveat before anyone chases it: this state was sampled inside a SEARCH ROLLOUT, not necessarily
 from the line actually played (that run's avg win turn was 5.05 over 60 games). Confirm it appears in
 committed play before treating it as a shipped misplay.
