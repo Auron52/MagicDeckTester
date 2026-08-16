@@ -7400,7 +7400,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     ManaPool pool             = AvailableManaPool(state);
     ManaPool pool_noncreature = BuildNonCreaturePool(state);
     int total_lands  = CountLands(state);
-    int pending_atk  = PendingAttackDamage(state);
+    // PHASE-HONEST pending attack (see the sibling in EnumeratePlans): in the POST-combat main
+    // this turn's combat is over, so no attack damage is pending. Counting it there is a phantom
+    // -- and it feeds the board-lethal short-circuit below, which then emits ONLY the
+    // do-nothing plan and never enumerates the cast that is ACTUALLY lethal.
+    int pending_atk  = is_pre_combat ? PendingAttackDamage(state) : 0;
     // Creature mana sources counted in pending_atk -- a subset that taps them to pay loses their
     // attack (see CollectAttackingManaSources).
     const std::vector<AttackingManaSource> atk_mana_srcs = CollectAttackingManaSources(state);
@@ -11961,7 +11965,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     ManaPool      pool            = AvailableManaPool(state);
     ManaPool      pool_noncreature = BuildNonCreaturePool(state);
     int           total_lands     = CountLands(state);
-    int           pending_atk     = PendingAttackDamage(state);
+    // PHASE-HONEST pending attack. In the POST-combat main the attack has already happened, so
+    // nothing is pending -- but PendingAttackDamage counts every creature that COULD attack, and
+    // combat itself can add one (Goblin Lackey cheats a body in; Goblin Chieftain gives it haste).
+    // That phantom made the board-lethal short-circuit below fire in main 2 and return ONLY the
+    // do-nothing plan, stranding a lethal Lightning Bolt in hand with the mana to cast it
+    // (goblins gi=187: opp at 1, T3 win became T4). Same class as ReadyAttackPower's phase gate.
+    int           pending_atk     = is_pre_combat ? PendingAttackDamage(state) : 0;
     const std::vector<AttackingManaSource> atk_mana_srcs = CollectAttackingManaSources(state);
     int           prowess_attackers    = CountProwessAttackers(state);
     std::vector<TriggerSource> trigger_sources = CollectTriggerSources(state);
