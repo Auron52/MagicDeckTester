@@ -106,8 +106,12 @@ Zada, Hedron Grinder: copy an instant/sorcery targeting only Zada, for EACH othe
 
 With 63 Treasures on board the pump is **+126/+126**, and Zada copies it onto every creature. The
 Treasures are themselves minted by the copies, so the pump escalates as the chain resolves — the last
-copy in that state is pumping +126/+126. Against 20 life, with ~35 creatures, any single attack step
-ends it by an enormous margin.
+copy in that state is pumping +126/+126.
+
+**And it does not take an alpha strike — it takes ONE attacker.** Gold Rush must target only Zada for
+the magnet to copy it, so Zada herself takes the pump: a 3/3 becomes **129/129**. Attacking with the
+magnet alone, in first main, is lethal against 20 life six times over. Any search that reaches this
+board and does not win is failing at something far simpler than combat maths.
 
 So the engine assembled a board that is lethal many times over and did not convert. Whatever the
 cause — not attacking, or valuing "make another Treasure" above "win now" — it is a play/evaluation
