@@ -209,6 +209,42 @@ the 300g d3 pairs attributed; three base-affecting fixes landed:**
   lethal-relevant (`opp_life <= exalted + FreePayloadKillCeiling`), leaving the motivating
   gi=9 hold (healthy opp, ceiling unreachable) untouched. gi=9/76/36/84/184 all verified
   unchanged.
+**HELD-OUT CENSUS DUG (2026-08-16, USER: "evaluate the lost games"). Bucketing all 322
+regressed games by severity + transition SEPARATED churn from real defects, and found TWO
+base bugs the aggregate had hidden:**
+
+* **Census method (reusable):** per-deck buckets of (+1/+2/+3+) vs (−1/−2/−3+) plus
+  win→loss / loss→win, then the base→stack win-turn TRANSITION table. Churn is
+  near-symmetric per bucket; a real defect is one-sided. Verdicts: **hinata = churn**
+  (5→6:102 vs 6→5:106, 6→7:67 vs 64, 8→9:15 vs 9→8:18, win→loss 20 vs loss→win 27; only
+  6→8 is skewed 13:4); **antilife = REAL** (139w/45b ≈ 3:1, dominated by 4→5:53 and
+  5→6:33, and d0 is byte-identical on all 8000 games = purely search-side); **goblins =
+  REAL** (14 of 18 the same 3→4, at BOTH d3 and d5 with identical game indices =
+  depth-independent ⇒ a play rule, not search churn).
+* **BUG 1 — phase-blind `pending_atk` → phantom board-lethal short-circuit (FIXED,
+  fc08cce, BASE):** `PendingAttackDamage` counts every creature that COULD attack; in the
+  POST-combat main the attack already happened, and combat itself can ADD a creature
+  (Goblin Lackey cheats a body in from hand, Goblin Chieftain gives it haste). Both
+  enumerators fed that phantom to the board-lethal short-circuit, which emits ONLY the
+  do-nothing plan and skips the odometer. goblins gi=187: opponent at 1, lethal Lightning
+  Bolt in hand, untapped Mountain — the second main enumerated exactly one plan (empty,
+  flagged `wins_this_turn`) and passed; T3 became T4. Fix: `pending_atk = is_pre_combat ?
+  PendingAttackDamage(state) : 0` at both sites. 6 of 7 dug goblins games closed. Base:
+  goblins d0 4.101→4.097 (smoke), 4.140→4.136 (regression). The greedy `Solve` path
+  carried it too, so this was never classify-specific — classification only EXPOSED it by
+  deferring casts into main 2.
+* **BUG 2 — drip sweep spent mana the second main needed (FIXED, 04b13b0, BASE):**
+  `TapDripLandsIfUseful` swept leftover Groves in the PRE-combat main; with payloads
+  deferred post-combat that stole the {R}/{G} the second main needed for Fiery Justice.
+  gi=454: base taps Grove AS PAYMENT and lands exactly-lethal 20 on T4 (10+3+6+1 drip);
+  deferred, T4→T5. Now sweeps at the turn's LAST main (both rollout and executor). Base
+  neutral-to-better (regression −0.0066). Closes 3 of 10 dug antilife 4→5 games.
+* **STILL OPEN:** 7 of the 10 dug antilife 4→5 games have a THIRD cause (gi=38/174/514/
+  530/531/545/41). Shape seen so far: the T3 choice between the enabler (Tainted Remedy)
+  and a 1-mana dork scores tail=5 for BOTH under classification while base realises 4 —
+  i.e. the search cannot see the T4 payload dump once the payloads are Main2-classified.
+  Also open: hinata's skewed 6→8 bucket (13 vs 4) and goblins gi=403.
+
 **HELD-OUT A/B COMPLETE (2026-08-16): the full stack (`MTG_PHASE_CLASSIFY + MTG_SEARCH_
 SECOND_MAIN + MTG_MAIN2_DROP + MTG_ACQ_RESOLVE + MTG_BP_SITES=63`) measured on ALL 144
 overnight keys (base arm = the accepted overnight GT under the same binary; stack arm =
