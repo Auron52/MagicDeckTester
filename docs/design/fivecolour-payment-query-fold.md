@@ -240,6 +240,34 @@ instructions` is unavailable and there is no contention-proof counter for an all
 (node counts are identical by construction). Many SHORT alternating runs comparing minima is the
 workable substitute — and the full separation above is stronger evidence than any single pair.
 
+### Kill 4 — `EnumGroupCap` is NOT the FiveColour lever (2026-08-16)
+
+The "fewer plans per node" candidate above was swept with `MTG_SOLVE_GROUP_CAP` (150 games, seed
+1001). Both metrics here are DETERMINISTIC — avg win turn for quality, `interior_nodes` (= plans
+applied) for cost — so this measurement is immune to the machine contention that made wall clock
+unusable that evening:
+
+| cap | avg win turn | interior_nodes | cost cut |
+|---|---|---|---|
+| 12 (base) | 5.1133 | 10,738,054 | — |
+| 10 | 5.1133 | 10,738,054 | 0.00% |
+| 8 | 5.1133 | 10,732,887 | 0.05% |
+| 6 | 5.1133 | 10,469,369 | 2.5% |
+| 4 | **5.1867 (WORSE)** | 9,178,364 | 14.5% |
+
+The cap does not bind: identical node counts at 10 and 12, and it only starts removing real work at
+the point where it also starts costing quality. **FiveColour's breadth is not many GROUPS.** The
+branch stats say the same thing from the other side — the `groups=9-12` bucket has 102 calls out of
+2.09M, while the dominant bucket is `groups=0-4 board=7-10` with **1,147,215 calls at an average
+odometer of just 10.1**.
+
+So the 23x is not wide nodes, it is MANY nodes: 2,090,441 enumeration calls per 12 games with a
+modest odometer each. That is the search visiting more states, which is what a five-colour deck with
+many permanents and many activatable sources genuinely produces — not an inefficiency with a switch.
+Anyone returning to this should treat "make FiveColour's search cheaper per node" as largely
+exhausted (four independent kills above) and attack either the NUMBER of nodes (depth/beam policy,
+which is a quality trade needing both seed sets) or accept the rate and size K/R around it.
+
 ### Still un-taken (not caches)
 
 * **Land-fan sharing.** `EnumeratePlansWithLand` re-runs the whole spell odometer once per land
