@@ -209,6 +209,27 @@ the 300g d3 pairs attributed; three base-affecting fixes landed:**
   lethal-relevant (`opp_life <= exalted + FreePayloadKillCeiling`), leaving the motivating
   gi=9 hold (healthy opp, ceiling unreachable) untouched. gi=9/76/36/84/184 all verified
   unchanged.
+**HELD-OUT A/B COMPLETE (2026-08-16): the full stack (`MTG_PHASE_CLASSIFY + MTG_SEARCH_
+SECOND_MAIN + MTG_MAIN2_DROP + MTG_ACQ_RESOLVE + MTG_BP_SITES=63`) measured on ALL 144
+overnight keys (base arm = the accepted overnight GT under the same binary; stack arm =
+one pooled 144-job batch, 20/20 workers, ~40 min). NET +0.0330 summed per-key gap over
+144 keys, 92 keys byte-identical — essentially neutral, and consistent with the train-seed
+attribution (clairvoyance churn, no systematic defect):**
+
+| deck | sum gap | games w/b | reading |
+|------|---------|-----------|---------|
+| burn | **−0.120** | 15w/135b | one-sided REAL improvement |
+| creature | **−0.075** | 7w/65b | one-sided REAL improvement |
+| fivecolour | −0.078 | 243w/267b | churn, net better |
+| hinata | +0.182 | 255w/254b | symmetric churn, slight net worse |
+| antilife | +0.110 | 139w/45b | the known clairvoyance families |
+| goblins | +0.014 | 18w/4b | small residual |
+| auras/dragonstorm/knights/mirrorwing/slivers/th | 0 | 0w/0b | filter stands down (uses_second_main) |
+
+The burn and creature improvements are one-sided (9:1 and 9:1 better:worse), i.e. genuine
+searched-second-main wins, not tie re-rolls. Adoption of the stack remains the USER's call;
+this table is the held-out evidence base.
+
 **5c + hinata churn VERIFIED (2026-08-16, "let's verify those remaining games"). Re-measured
 all 8 hinata/5c d3+d5 stack-vs-base keys under the post-fix binary (two pooled batches):
 5c d3 now net BETTER both seeds (−0.010/−0.005, 12w/15b + 17w/18b); 5c d5 +0.02/+0.02
