@@ -1259,8 +1259,9 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
     // sources on the first augmenting paths. Sound regardless: any max flow proves the same thing,
     // so the prune verdict cannot change, only the assignment it hands back.
     const bool want_assign = FlowOrderEnabled();
-    // TEMPORARY A/B HATCH: separates the scarcity bias from the flow order itself so all three arms
-    // come from ONE binary. Default ON with the order; MTG_FLOW_SCARCITY=0 gives bare flow order.
+    // Separates the scarcity bias from the flow order itself so all three arms come from ONE binary.
+    // Default ON with the order; MTG_FLOW_SCARCITY=0 gives the bare (unbiased) order. Both levers are
+    // PARKED -- see docs/design/flow-guided-tap-order.md for what was measured and where to resume.
     static const bool s_scarcity = EnvOn("MTG_FLOW_SCARCITY", true);
     if (want_assign && s_scarcity && srcs.size() > 1)
     {

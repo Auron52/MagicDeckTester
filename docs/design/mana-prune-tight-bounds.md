@@ -342,6 +342,10 @@ saves no work at all. Anyone arriving here wanting the engine faster should star
 not from this document; the prior measurement on this deck put PLAN-ENUM at 24.2% of mulligan gen
 and the value leaf at 7.9%, which is where the time actually is.
 
+The flow-guided tap order that came out of this is PARKED, not abandoned — its full measurement and
+resume route are in `flow-guided-tap-order.md`. The remaining prize is priced in
+`engine-cost-profile-2026-08-16.md`.
+
 The one thing worth carrying forward is the method, which caught three separate mirages in a day:
 a percentage of switched-off-ness (bail%), a percentage of dropped candidates (37% of emissions),
 and a large ratio on a real counter (13.6x nodes) each looked like a win and none of them was one.
