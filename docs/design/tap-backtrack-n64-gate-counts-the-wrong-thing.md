@@ -119,21 +119,54 @@ defect, not a mana defect, and fixing the memo gate will make the search reach t
 rather than avoid them. Worth its own investigation, and probably worth more than the mana fix:
 degenerate cells are expensive precisely because the game does not end.
 
-**LEAD HYPOTHESIS: the chain is being resolved in SECOND MAIN.** The pump is "until end of turn", so
-a Gold Rush chain cast post-combat mints all 63 Treasures and a +126/+126 pump AFTER the attack step
-has passed -- every point of it wasted, and the board rolls into the next turn with the Treasures but
-none of the damage. That fits everything observed: an enormous board, an opponent still at 20, and a
-game that does not end. It also predicts the pathology is self-inflicted rather than unlucky, since
-the same line cast in FIRST main is lethal on the spot.
+**~~LEAD HYPOTHESIS: the chain is resolved in SECOND MAIN.~~ REFUTED 2026-08-16 — measured.**
+The hypothesis was that an until-end-of-turn pump cast post-combat wastes every point of itself. It
+does not happen, for two independent reasons:
 
-How to test it: the sampled state carries the main-phase flag -- re-run the instrument (see the
-commit that added `[bf>64]`) and print `is_pre_combat` / the main ordinal alongside the tally. If it
-is second main, the fix is an ordering/gating question (do not offer a pure-pump line post-combat
-when it could have been first main), not an evaluation-weight question.
+* **Mirrorwing has no second main to cast into.** `GoldFishRunner::DeckUsesSecondMain` returns true
+  only for spectacle / lifegain-to-loss / Hinata's reducer / combat-damage-cheat / attack-draw /
+  combat-damage-free-cast / attack-dig+equip-draw. Checked every card in the deck: **not one carries
+  any of those signals**, so `state.uses_second_main` is false and the search never considers a
+  post-combat main.
+* **And the played line confirms it.** 200 games, logged: **1,570 of 1,570 casts are in MAIN_1**, with
+  1,001 land drops and 517 attacks. **Zero MAIN_2 casts, in any game.**
 
-A caveat before anyone chases it: this state was sampled inside a SEARCH ROLLOUT, not necessarily
-from the line actually played (that run's avg win turn was 5.05 over 60 games). Confirm it appears in
-committed play before treating it as a shipped misplay.
+So "force first main" is already the behaviour, with nothing to force and nothing to gain. Recorded
+because the hypothesis was stated confidently here and is wrong; do not re-derive it.
+
+**What the state actually is: idle accumulation inside rollouts, not a wasted combat.** The 63
+Treasures are not one explosive turn -- Zada copies Gold Rush once per creature, each copy mints a
+Treasure, and a long rollout line has no reason to ever CRACK one, so they simply pile up turn over
+turn. Two measurements pin it to rollouts specifically:
+
+* largest own battlefield in **committed play**: 47 permanents (over 200 games) -- never past 64;
+* `MTG_ENUM_STATS=1 MTG_ENUM_STATS_MIN=1e5` over 300 games at `--max-turns 12`: **zero** enumerations
+  with a plan-space bound above 1e5.
+
+The board is only reachable in the search's own hypothetical futures. That is why it never shows up
+as a misplay and why it costs mulligan GENERATION rather than play.
+
+## The real defect class: an optimization gated on the WRONG POPULATION
+
+USER, 2026-08-16: *"isn't the problem anyway that we break the limit for the optimization? if so, we
+should just prevent that rather than artificially restricting it."* Exactly right, and there are
+**two** instances of it, both writing `state.battlefield.size() <= 64` for a quantity that counts
+only the active player's mana sources:
+
+| optimization | gate | index space it actually needs | status |
+|---|---|---|---|
+| tap failure memo | `n <= 64` | tapped SOURCES (33) | **FIXED** — gated on `cands.size()` |
+| payable mana cache | `state.battlefield.size() <= 64` (SpellEffects.cpp ~2463) | `pre_tapped`, a SOURCE tap-set | **STILL BROKEN** |
+
+The mana cache's 64-limit exists solely for `pre_tapped |= (1ull << i)` (~2594), whose only consumer
+is the "newly tapped by this solve" test (~2642) -- a source-set quantity, battlefield-indexed. On the
+Mirrorwing board (105 permanents, 33 sources) the payable-mana cache is therefore switched off by 63
+Treasures it would never index, exactly as the memo was. Note canonical keying (`McCanonKey`) already
+excludes the index and hashes a commutative descriptor multiset, so the source-relative index space it
+needs is largely built. **Fix it the same way: gate on the active player's source count.**
+
+Do this BEFORE reaching for further quality prunes: it is byte-identical and it restores an
+optimization we already own, rather than restricting what the engine is allowed to consider.
 
 ## FiveColour
 
