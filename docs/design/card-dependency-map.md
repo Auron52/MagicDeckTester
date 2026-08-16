@@ -325,6 +325,38 @@ base bugs the aggregate had hidden:**
   residual family must be "can the engine even EXPRESS the line base takes?" — before any
   tie-break or churn attribution.** Applying that lens to the antilife residue immediately split
   it three ways (below), one of which converges on an already-open item.
+* **DEFER-THE-DROP (USER 2026-08-16: "why not delay the land to main2 if we don't need it main
+  1?") — BUILT, lever-gated, MEASUREMENT PENDING.** A better fix than the colour-aware ranker
+  below: don't *predict* which colours main 2 will need, just make the decision after the
+  information arrives. When the drop is still available post-combat (`Main2DropEnabled`) and this
+  is the pre-combat main of a second-main deck, the plan tie-break now orders the DEFER (no-land)
+  plans first — reusing the exact hook Burn already uses for landfall banking
+  (`PreferHoldLandDrop`). It is safe BY CONSTRUCTION, not by heuristic: the tie-break only
+  reorders plans already tied on `wins_this_turn` AND `value`, so a plan whose land actually pays
+  for a main-1 cast scores strictly higher and still wins — which is the answer to the USER's
+  stranding concern ("cases where there are plays in main1 and not playing our land there would
+  strand the mana"). It is also why no colour-aware ranker is needed once the drop moves: in main
+  2 the plan that plays the land AND casts the spell simply out-values the one that does not, so
+  the search picks the right land itself. Closes antilife gi=519 and gi=8; off-switch
+  `MTG_NO_DEFER_DROP=1` for the isolating A/B. Base byte-identical (36/36 smoke, 0 play changes).
+* **THE ENGINE CANNOT REPRESENT AN UNCRACKED FETCHLAND — a second "can it express the line?"
+  finding, and a bigger one than Oko.** USER: "thinking about how a human plays, they would
+  probably drop the land main1 if there was anything to play there, but also think about what they
+  need to play in main 2. With a fetch they might defer cracking it until the second main...
+  Fetchlands are the most flexible lands, so deferring the crack is rarely a bad play. Unless you
+  already know what you want to do with it (or need the mana now)."
+  That line is **not expressible**: `PlayLandByName` (`src/ai/LandPlay.cpp`) moves the fetchland
+  from hand to GRAVEYARD and resolves `PerformFetch` in the same atomic step, so there is no
+  battlefield state where a fetch is down but uncracked. Consequences: the colour choice cannot be
+  deferred, the fetch cannot be held for information, and the SHUFFLE happens at play time rather
+  than crack time. It is strictly better play to keep the option, and it is why the defer-the-drop
+  rule above is only an approximation — deferring the whole DROP risks stranding main-1 mana,
+  whereas deferring only the CRACK never does.
+  Scope warning for whoever takes it: fetchlands are in antilife, fivecolour, hinata and burn, so
+  this changes base play broadly, and because it moves the shuffle point it re-rolls every
+  downstream draw — expect near-total GT churn at every tier, which makes the usual
+  "byte-identical elsewhere" safety net unavailable. Model it as a battlefield permanent with a
+  sac-to-search activated ability (the sac-outlet machinery is the closest existing shape).
 * **THE LAND-CHOICE TIE-BREAK NOW HAS THREE INDEPENDENT EXEMPLARS AND ONE COMMON FIX.** The
   sharpest is **antilife gi=519 (4→5)**: the arms diverge at the T1 LAND. Base plays Windswept
   Heath (a fetch → a green source) and casts Birds of Paradise; the classify arm plays Godless

@@ -14503,7 +14503,29 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         }
     }
 
-    const bool hold_land = ResolveProvider(state).PreferHoldLandDrop(state, state.active_player_index);
+    // DEFER-THE-DROP (USER 2026-08-16: "why not delay the land to main2 if we don't need it main
+    // 1?"). When the drop is STILL AVAILABLE post-combat (Main2DropEnabled) and this is the
+    // pre-combat main of a deck that actually plays a second one, holding the land is weakly
+    // dominant: a land played in main 2 is identical to the same land played in main 1 unless
+    // main 1 needed its mana -- and deferring buys the information about what main 2 wants.
+    //
+    // This is safe BY CONSTRUCTION rather than by heuristic: the flag only reorders plans that are
+    // already tied on wins_this_turn AND value, so a plan whose land actually pays for a main-1
+    // cast scores strictly higher and still wins. It is also why no colour-aware land ranker is
+    // needed here -- once the choice happens in main 2, the plan that plays the land AND casts the
+    // spell simply out-values the one that does not, and the search picks the right land itself.
+    //
+    // The motivating class (antilife gi=519, gi=367, gi=38): a ManaDork is Main2-classified, so
+    // main 1 has nothing to cast, every land ties, and the tie-break took the greedy "untapped +
+    // multicolour" pick -- a Godless Shrine over a Windswept Heath -- leaving the deck with NO
+    // green source and a Birds of Paradise it could no longer cast at all.
+    // Off-switch MTG_NO_DEFER_DROP=1 for the isolating A/B (the rule only ever fires under
+    // MTG_MAIN2_DROP, so the base engine is byte-identical either way).
+    static const bool s_no_defer_drop = EnvOn("MTG_NO_DEFER_DROP");
+    const bool defer_drop = is_pre_combat && state.uses_second_main && Main2DropEnabled()
+                         && !s_no_defer_drop;
+    const bool hold_land = defer_drop
+                        || ResolveProvider(state).PreferHoldLandDrop(state, state.active_player_index);
     std::stable_sort(all.begin(), all.end(),
         [&](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
