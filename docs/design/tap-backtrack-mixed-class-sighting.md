@@ -102,3 +102,30 @@ class product by up to 5x. It is not slow in itself.
 Mulligan generation for Mirrorwing is **405,756 cells**; the probe alone projected 9+ hours with
 throughput decaying 57 -> 10 cells/s as pathological cells accumulated. Generation is dominated by
 this tail, and the tail is the most backtracker-dominated part of it.
+
+## There is no second lever (checked)
+
+Full self-time categorisation of both repros. Every non-backtracker category COLLAPSES on the severe
+case -- the one that actually consumes generation wall clock:
+
+| category | mild (11.3 s) | severe (45 s) |
+|---|---|---|
+| **backtracker (payment solve)** | **49.1%** | **74.5%** |
+| other mana logic | 7.5% | 5.6% |
+| plan/search | 14.1% | 5.5% |
+| other (flat tail) | 13.1% | 5.5% |
+| true alloc/copy | 9.5% | 5.2% |
+
+Mana handling in total is **80%** of the severe case. All four non-backtracker categories combined are
+~22%, so eliminating every one of them perfectly yields **1.28x**. Nothing else is worth touching for
+this workload.
+
+The mild case's more promising-looking spread (plan/search 14%, alloc 9.5%) is an ARTIFACT of
+profiling a fast rollout. `true alloc/copy` is also diffuse -- eight-plus sites, nothing above 1.2%
+(`operator new`, `~vector<Action>`, `Action` copy-ctor, `memmove`, `push_back`) -- so it is a broad
+`reserve`/pooling exercise worth maybe 3-5% realised, not a fix.
+
+CAUTION when categorising a perf report: matching demangled symbols on their full signature buckets
+any function TAKING a `std::vector` parameter as "allocation" (`CanTapNow`, `SubsetPayable`,
+`SubsetWastesCreatureSacMana`, the `SolveUncached` lambda all have vector params). That inflated
+"alloc churn" to 20% here before it was corrected to 9.5%. Match on the function NAME only.
