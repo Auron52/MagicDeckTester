@@ -1029,7 +1029,20 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
     // {X} and hybrid pips are outside this model (X is chosen elsewhere; hybrids need per-assignment
     // expansion) -> bail rather than risk an under-credit. cost.has_x with x_pips==0 is inert, but a
     // set has_x flag still signals an unresolved-X context, so stay conservative.
-    if (cost.hybrid_count > 0 || cost.has_x) { if (out_bailed) { *out_bailed = true; } return false; }
+    // HYBRID still bails: Card.h bakes each hybrid pip into its FIRST colour, so the flat cost
+    // demands a specific colour where either would do. Modelling that as written would OVER-constrain
+    // the colour demand and could report infeasible for a payable cost -- an unsound prune. (It is
+    // expressible in this graph -- one demand node per hybrid pip fed by both colours -- but that is
+    // a separate change with its own proof.)
+    //
+    // {X} does NOT need to bail (2026-08-16). ManaValue() is generic + coloured pips and does NOT
+    // include X (which lives in has_x/x_pips), so `demand` here is already the FIXED part -- a valid
+    // LOWER bound on what the spell really costs, because X only ever adds generic. If the board
+    // cannot satisfy the fixed part, no value of X can help, so proving infeasibility on it is sound.
+    // This is exactly how the per-card emit ceiling already reasons ("EffectiveCost returns the FIXED
+    // part -- if that alone is unaffordable, no value of X helps"). If a caller has already baked a
+    // chosen X into `generic`, demand is the exact cost instead, which is sound too.
+    if (cost.hybrid_count > 0) { if (out_bailed) { *out_bailed = true; } return false; }
 
     const int active = state.active_player_index;
 

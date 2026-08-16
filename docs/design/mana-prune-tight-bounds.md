@@ -163,11 +163,13 @@ something where there was a prune to be had — but FiveColour's fix halved back
 
 Every one of these is the same bail-instead-of-bound shape, and each has a sound over-approximation:
 
-* **`{X}` spells** (hinata) — the cheapest fix and provably safe. X only ADDS to the cost, so the
+* **`{X}` spells** (hinata) — **DONE.** Provably safe, and it was a one-line removal. X only ADDS to the cost, so the
   FIXED part is a lower bound on demand: if the oracle cannot satisfy the fixed part, no value of X
   helps. Check the fixed part instead of bailing. (The existing per-card ceiling already reasons this
   way — "EffectiveCost returns the FIXED part; if that alone is unaffordable, no value of X helps".)
-* **Scaled mana land** (goblins, Three Tree City) — the same shape as domain: yield is a function of
+* **Scaled mana land** (goblins, Three Tree City) — **DEPRIORITISED by the user 2026-08-16**:
+  *"it's okay to bail on three tree city or to bound it to some safe cap. Goblins doesn't have huge
+  issues with performance."* The bail stays. If it is ever revisited it is the same shape as domain: yield is a function of
   the board (creature count), invariant during a payment, and the colour is search-chosen. Credit
   `amt = N` across its colour set exactly as domain now is.
 * **Storage lands** (dragonstorm) — bounded by their counters; credit the counters.
@@ -177,6 +179,8 @@ Every one of these is the same bail-instead-of-bound shape, and each has a sound
   in its colours) and ignore the input it consumes. That is weaker than exact, but it is an upper
   bound — which is all a prune needs — and it converts th from 95.3% bailed to 0%.
 
-Order by measured prize: `th` → `goblins` → `hinata` → `dragonstorm`. Acceptance test for each is
+Order by measured prize, as revised: **`th` (filters) is the only one worth real effort**; goblins is
+deprioritised by the user (no performance problem there), `{X}` is done, and dragonstorm's 5.0% is
+small. `th` → dragonstorm, with goblins left bailing. Acceptance test for each is
 the one in §2 (prune ON vs OFF must stay outcome-identical across all 36 smoke configs), plus
 `MTG_TAP_STATS` showing bail% falling and nodes with it.
