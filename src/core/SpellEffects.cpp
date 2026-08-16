@@ -1056,7 +1056,11 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
 
     // First pass: validate every eligible source fits the 1-tap->1-mana model and collect colour
     // sets. `rp_ready` mirrors the worker's lazy Reflecting-Pool union (computed once, aliased).
-    struct SrcColset { std::uint8_t bits; int amt; };   // bit c => may make colour c; amt = mana/tap
+    // bits: colour c is reachable from this source. amt = TOTAL mana one tap yields (the S->src cap).
+    // per_col = the most one tap can put into a SINGLE colour (the src->colour cap). They differ only
+    // for a DOMAIN source: a normal source picks ONE colour and puts all `amt` there (per_col == amt),
+    // whereas domain makes one of EACH colour in its set at once (amt == |set|, per_col == 1).
+    struct SrcColset { std::uint8_t bits; int amt; int per_col; };
     static thread_local std::vector<SrcColset> srcs;
     srcs.clear();
     bool rp_ready = (rp_colors != nullptr);
@@ -1074,13 +1078,41 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }
         // Unmodellable source types -> the whole oracle bails (it would MIS-credit their yield): a
-        // filter/ramp consumes+converts floating; domain makes one of EACH colour (not a choice);
-        // storage bursts a variable amount; scaled pays a feeder for N-of-one. Every other source --
-        // including a bounce/Karoo land (produces_amount>=2) -- is uniformly "one tap -> `amt` mana of
-        // ONE chosen colour among `produces`" (the worker's loop below), so `amt` is its flow capacity.
-        if (def->params.is_filter || def->params.ramp_filter || def->params.domain_mana
+        // filter/ramp consumes+converts floating; storage bursts a variable amount; scaled pays a
+        // feeder for N-of-one. Every other source -- including a bounce/Karoo land
+        // (produces_amount>=2) -- is uniformly "one tap -> `amt` mana of ONE chosen colour among
+        // `produces`" (the worker's loop below), so `amt` is its flow capacity.
+        if (def->params.is_filter || def->params.ramp_filter
             || def->params.storage_land || IsScaledManaLand(*def))
         { if (out_bailed) { *out_bailed = true; } return false; }
+
+        // DOMAIN (Bloom Tender / Faeburrow Elder) is modelled EXACTLY rather than bailed (USER
+        // 2026-08-16). It used to sit in the bail list above because it breaks the one-tap-one-colour
+        // shape -- but that made the oracle switch ITSELF OFF for any board holding one, which on
+        // FiveColour is most boards from turn two: measured 45.2% of top-level entries bailing while
+        // 44.3% of entries were unpayable and burned 51.2% of all backtracker nodes proving it. The
+        // pruner was absent exactly where it was needed.
+        //
+        // The fix is a capacity shape, not an approximation. "{T}: for each color among permanents you
+        // control, add one mana of that color" is not a CHOICE, so it is more constrained than a normal
+        // source, not less: total yield = |domain set| (the S->src cap) with at most ONE mana into each
+        // colour (the src->colour cap). With all five colours out -- typical here within a few turns --
+        // that is exactly five mana, one of each. Never an under-credit, so the prune stays LOSSLESS:
+        // it can only refuse to prune, never prune something payable.
+        //
+        // The domain set is EffectiveProduces (the colours-pass union), and it is invariant across a
+        // payment because no permanent enters or leaves mid-tap-backtrack -- the same invariant this
+        // function already relies on for Reflecting Pool's union just below.
+        if (def->params.domain_mana)
+        {
+            std::uint8_t dbits = 0;
+            for (Color c : EffectiveProduces(state, active, *def))
+            { dbits |= static_cast<std::uint8_t>(1u << static_cast<int>(c)); }
+            if (dbits == 0) { continue; }   // no colours among our permanents -> this tap makes nothing
+            const int dtotal = __builtin_popcount(static_cast<unsigned>(dbits));
+            srcs.push_back({ dbits, dtotal, 1 });
+            continue;
+        }
         const int amt = ManaProducedPerTap(*def);   // 1 for a normal land/dork/rock; 2 for a Karoo
 
         // Colour set (SUPERSET, over-credit safe) -- mirror the worker's produces/reflecting/cco
@@ -1102,7 +1134,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             { bits |= (1u << static_cast<int>(Color::Colorless)); }   // drip land's {C} mode
         }
         if (bits == 0) { continue; }   // solo Reflecting Pool etc.: makes nothing usable -> no supply
-        srcs.push_back({ bits, amt });
+        srcs.push_back({ bits, amt, amt });   // non-domain: one colour takes the whole tap
     }
 
     const int m = static_cast<int>(srcs.size());
@@ -1127,8 +1159,10 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
     for (int s = 0; s < m; ++s)
     {
         add_edge(S, FIRST_SRC + s, srcs[s].amt);   // one tap yields `amt` mana (1, or 2 for a Karoo)
+        // per_col == amt for every ordinary source (byte-identical to the old single-cap form); it is
+        // 1 for a domain source, which is what stops the flow sending all |set| mana into one colour.
         for (int c = 0; c < 6; ++c)
-        { if (srcs[s].bits & (1u << c)) { add_edge(FIRST_SRC + s, COL0 + c, srcs[s].amt); } }
+        { if (srcs[s].bits & (1u << c)) { add_edge(FIRST_SRC + s, COL0 + c, srcs[s].per_col); } }
     }
 
     // Edmonds-Karp: BFS augmenting paths until saturated or no path. demand is small (<= ~15).
