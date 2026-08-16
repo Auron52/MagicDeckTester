@@ -228,7 +228,7 @@ ABANDON_CALIB=25
 # ~30 minutes". That is exactly the user's call ("it must be above 10 minutes... maybe even 30
 # minutes. Beyond that, I think it's okay to condemn"). The ratio remains in force for any deck whose
 # cells are expensive enough that 25 x median exceeds the floor.
-ABANDON_FLOOR_UNITS=20000000
+ABANDON_FLOOR_UNITS=40000000
 # The SAME number is also passed as --abandon-units, i.e. as the ABSOLUTE cap that applies DURING the
 # calibration window. Without it a cell whose first games are all monsters never completes a
 # calibration sample, so no median exists, so no relative ceiling ever arms, so those games run
