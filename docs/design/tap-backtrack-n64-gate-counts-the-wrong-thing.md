@@ -134,17 +134,42 @@ does not happen, for two independent reasons:
 So "force first main" is already the behaviour, with nothing to force and nothing to gain. Recorded
 because the hypothesis was stated confidently here and is wrong; do not re-derive it.
 
-**What the state actually is: idle accumulation inside rollouts, not a wasted combat.** The 63
-Treasures are not one explosive turn -- Zada copies Gold Rush once per creature, each copy mints a
-Treasure, and a long rollout line has no reason to ever CRACK one, so they simply pile up turn over
-turn. Two measurements pin it to rollouts specifically:
+**What the state actually is: a MID-GO-OFF board on a turn that is already lethal.** (An earlier
+draft of this doc said "idle accumulation across turns". That was WRONG -- measured and refuted the
+same day. USER: *"turn after turn adding treasures still means an easy lethal. It is really difficult
+to almost impossible to build up that many treasures without attacking for lethal."* Correct.)
+
+Treasure counts over every board state in 200 logged games:
+
+```
+    0 treasures : 3158 states        9 treasures : 8
+    1 treasures :  491               10,11,15,18 : 2 each
+    2 treasures :   66               27, 28      : 2 each
+    3-8         :  108 total
+```
+
+Treasures do NOT pile up: the distribution collapses immediately, and every count above 8 belongs to a
+single board state. The games that reach one end with the opponent at **-566, -303, -293, -140, -113,
+-98, -90, -61, -32, -25, -17** life. The Treasures and the kill land on the SAME turn -- the state is
+the go-off turn, sampled pre-combat while the copy chain is still resolving.
+
+So the board is healthy, winning, and correctly converted. **The pathology is pure COST on a turn that
+is already won.** The engine assembles 566 damage when 20 wins, and pays a 3^63 group product to do
+it. Two measurements place that cost outside committed play:
 
 * largest own battlefield in **committed play**: 47 permanents (over 200 games) -- never past 64;
 * `MTG_ENUM_STATS=1 MTG_ENUM_STATS_MIN=1e5` over 300 games at `--max-turns 12`: **zero** enumerations
   with a plan-space bound above 1e5.
 
-The board is only reachable in the search's own hypothetical futures. That is why it never shows up
-as a misplay and why it costs mulligan GENERATION rather than play.
+Only the deepest go-off lines cross 64, which is why this is rare in play and common in mulligan
+GENERATION (which explores many hypothetical go-off lines per hand).
+
+**This makes a lethal short-circuit the highest-value lever, above any mana fix.** Once the assembled
+line is lethal there is nothing left to decide -- and the codebase already has exactly this pattern
+for the same problem on another deck (Dragonstorm's go-off recognizer + storm-hold, `e58d6bc` /
+`5711999`, both adopted, d0 -0.33). USER: *"any line that produces that many treasures is guaranteed
+to win on attack"*, *"you literally only need to attack with the magnet."* The -566 life totals above
+are the direct measurement of how much enumeration is spent past the win.
 
 ## The real defect class: an optimization gated on the WRONG POPULATION
 
