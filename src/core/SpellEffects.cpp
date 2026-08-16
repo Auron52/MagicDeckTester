@@ -2505,7 +2505,36 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
     // fit the tap-set bitmask. The output mode and the incoming floating pool are KEYED rather than
     // excluded (see McLeftoverShape), so both payment questions are cacheable; =0 restores the old
     // batch-prepay-only reach.
-    const bool mc = ManaCacheEnabled() && rp_colors == nullptr && state.battlefield.size() <= 64
+    // SOURCE-ORDINAL INDEX SPACE (2026-08-16, same defect as the failure memo's n>64 gate). The only
+    // thing the 64-limit ever protected is `pre_tapped`, a bitmask whose sole consumer is the "newly
+    // tapped by this solve" test in the store block -- a SOURCE-set quantity. Gating it on
+    // battlefield.size() switched the whole payable-mana cache off on boards whose extra permanents
+    // it would never index: Mirrorwing reaches 105 permanents against 33 mana sources, 63 of the
+    // difference being Treasure tokens (sac-for-mana ACTIONS, absent from the source list entirely).
+    // So the cache was disabled by exactly the tokens that made the turn expensive. `mc_ord` maps a
+    // battlefield slot to its ordinal among the active player's mana sources (-1 = not a source),
+    // which is the same ordinal the canonical key's tap records already use.
+    // MTG_MANA_CACHE_BF_GATE=1 restores the old board-size gate from ONE binary (A/B hatch).
+    static thread_local std::vector<int> mc_ord;
+    int mc_nsrc = 0;
+    {
+        const int nbf = static_cast<int>(state.battlefield.size());
+        mc_ord.assign(static_cast<std::size_t>(nbf), -1);
+        const int act = state.active_player_index;
+        for (int i = 0; i < nbf; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != act) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d) { continue; }
+            if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
+                  || d->params.mana_rock)) { continue; }
+            mc_ord[static_cast<std::size_t>(i)] = mc_nsrc++;
+        }
+    }
+    static const bool s_mc_bf_gate = EnvOn("MTG_MANA_CACHE_BF_GATE");
+    const bool mc_fits = s_mc_bf_gate ? (state.battlefield.size() <= 64) : (mc_nsrc <= 64);
+    const bool mc = ManaCacheEnabled() && rp_colors == nullptr && mc_fits
                     && (McLeftoverShape()
                         || (out_full_pool != nullptr && out_leftover == nullptr && floating.Total() == 0));
     std::uint64_t mk1 = 0, mk2 = 0, pre_tapped = 0; bool mc_active = false;
@@ -2591,7 +2620,10 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         for (int i = 0; i < n; ++i)
         { const Permanent& p = state.battlefield[i];
           if (p.controller_index != active) { continue; }
-          if (p.tapped) { pre_tapped |= (1ull << i); }
+          // Bit = the SOURCE ORDINAL (see mc_ord above), so a token-flooded board cannot overflow
+          // the mask. Under the A/B hatch the old battlefield-index bit is used instead.
+          const int ob = s_mc_bf_gate ? i : mc_ord[static_cast<std::size_t>(i)];
+          if (p.tapped && ob >= 0) { pre_tapped |= (1ull << ob); }
           if (p.storage_counters > 0) { mc_storage_pre.push_back({ i, p.storage_counters }); } }
     }
 
@@ -2639,7 +2671,16 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             {
                 const Permanent& p = state.battlefield[i];
                 if (p.controller_index != active) { continue; }
-                if (p.tapped && !((pre_tapped >> i) & 1))   // newly tapped by this solve
+                // Same ordinal index space as the pre-scan above, and symmetric with it: a permanent
+                // with no ordinal is not a mana source, and a payment only ever taps sources (the
+                // backtracker iterates `cands`, which is exactly this predicate). The pre-scan sets
+                // no bit for such a permanent, so this scan must not read one either -- otherwise an
+                // ordinary tapped ATTACKER would read a foreign source's bit. Skipping them is what
+                // the old battlefield-indexed code did in effect, since a pre-tapped non-source had
+                // its own bit set and fell straight through this test.
+                const int ob = s_mc_bf_gate ? i : mc_ord[static_cast<std::size_t>(i)];
+                if (ob < 0) { continue; }
+                if (p.tapped && !((pre_tapped >> ob) & 1))   // newly tapped by this solve
                 {
                     const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
                     if (!McAllSources() && !McSimpleTap(pd)) { storable = false; break; }

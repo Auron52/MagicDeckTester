@@ -4806,6 +4806,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // are re-enumerated at the next breakpoint once some are spent. Classes are keyed on the
             // same permanent state the tap backtracker's identical-sibling collapse uses, so two
             // sources are only pooled when their activations really are interchangeable.
+            //
+            // The cap is the engine's 64-bit source-set width (the failure memo's and the mana
+            // cache's shared limit), NOT a tuned constant -- we ignore exactly the excess that would
+            // push a fungible class past it and nothing more. Every board in the suite is far below
+            // 64 identical untapped sac sources, so this is inert for them.
             static const int s_dup_cap_env = []{ const char* e = std::getenv("MTG_SAC_DUP_CAP");
                 return (e && *e) ? std::atoi(e) : -1; }();
             const int dup_cap = s_dup_cap_env >= 0 ? s_dup_cap_env

@@ -818,12 +818,22 @@ public:
     // can figure that problem out when we get to it" -- hence a provider hook rather than a constant.
     // MTG_SAC_DUP_CAP=N overrides (0 = uncapped) for a one-binary A/B.
     //
+    // THE NUMBER IS DERIVED FROM THE LIMIT, NOT PICKED (USER 2026-08-16: "I would just do it in the
+    // context of the gate -- i.e. how many do we need to ignore"). 64 is the engine's standing
+    // bitmask width: the tap failure memo and the payable-mana cache both key a 64-bit source set,
+    // and a sac source is a potential mana contributor to the same payment. So the cap is the number
+    // that keeps a fungible class inside that width -- ignore only the excess, never more. USER on
+    // why 64 is the right ceiling: "64 mana is enough for everything except infinite mana win lines".
+    // A combo deck that genuinely wants an unbounded pile overrides this hook ("only combo decks
+    // might want more and we can figure that problem out when we get to it").
+    //
     // Deliberately a CAP and not an auto-float of the excess (the other option the user raised): for
     // this deck the Treasures are not merely mana, they are the Gold Rush pump SCALER
     // (pump_per_treasure_power, "+2/+2 for each Treasure you control"), so cracking a Treasure the
-    // line does not need actively shrinks every later pump. Dropping the choice is safe; taking it
-    // for free is not.
-    virtual int FungibleSacSourceCap() const { return 8; }
+    // line does not need actively shrinks every later pump. At the magnitudes involved this is moot
+    // (20 Treasures is already lethal), but dropping a choice is unconditionally safe where taking
+    // one is not.
+    virtual int FungibleSacSourceCap() const { return 64; }
 
     // UseSpliceCollapse -- Desperate Ritual SPLICE-count collapse gate. When true, TurnSolver's
     // CollectActions emits only TWO splice variants per same-named splice_onto_arcane copy -- the BARE cast
