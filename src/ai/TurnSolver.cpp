@@ -1045,6 +1045,28 @@ static int ExpectedAttacks(const GameState& state)
     return std::max(1, std::min(remaining, 5));
 }
 
+static bool RemedyActiveOrInHand(const GameState& state, int active);   // defined below
+
+// NET face swing of a damage spell that also carries an "target opponent gains N life" rider
+// (Fiery Justice: 5 damage, opponent gains 5). The rider is NOT cosmetic and its SIGN flips on
+// the board: with a lifegain->loss enabler live -- or castable from hand first, since enabler-first
+// ordering (CastOrderRank 0) resolves it before the payload -- the gift converts to damage and the
+// spell swings damage+N; UNBACKED it is a straight gift and the spell swings damage-N.
+//
+// Both the ranking (EvalCard) and the reach/lethality term (Action::direct_damage) used to read the
+// printed `damage` alone, so an unbacked Fiery Justice scored a full 5 face when its true swing is
+// ZERO -- and worse than zero once a Grove of the Burnwillows pip is tapped to pay for it. antilife
+// gi=839: the searched second main cast it on T2 with no enabler and the opponent went 20 -> 21,
+// burning the card that made base's T3 exactly lethal (3 -> 4). The correction cuts both ways: a
+// BACKED Fiery Justice was also under-valued at 5 when it really swings 10.
+static int NetOpponentSwing(const CardDefinition& def, const GameState& state, int base_damage)
+{
+    const int gift = def.params.opponent_lifegain;
+    if (gift <= 0) { return base_damage; }
+    return RemedyActiveOrInHand(state, state.active_player_index) ? base_damage + gift
+                                                                  : base_damage - gift;
+}
+
 // Evaluate a card's contribution to winning, accounting for tempo.
 // Uses a fixed unit of 100 per damage-equivalent so integer arithmetic
 // stays precise even with multipliers.
@@ -1059,7 +1081,7 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
         // spell is still selected when it extends the total subset (e.g. Shard
         // Volley + Bolt beats Bolt alone).
         int penalty = def.params.sacrifice_land ? (DMG / 2) : 0;
-        return def.params.damage * DMG - penalty;
+        return NetOpponentSwing(def, state, def.params.damage) * DMG - penalty;
     }
 
     if (def.card.IsCreature())
@@ -1239,6 +1261,57 @@ static bool SubsetHasUnbackedLifegainRemoval(const GameState& state,
     return !has_enabler;   // removal present, no enabler live and none cast this turn -> unbacked
 }
 
+// Plan-validity gate for a HARD-CAST damage spell whose rider GIVES the opponent life (Fiery
+// Justice: "deals 5 damage ... target opponent gains 5 life") selected with no lifegain->loss
+// enabler live and none cast in the same subset. This is the THIRD member of the unbacked-payload
+// family, alongside the alt-payload gate below and the Swords gate above, and it was the missing
+// one: unbacked, Fiery Justice's net face swing is damage - gift = ZERO, so casting it spends a
+// card and three coloured pips to move the opponent's life total the wrong way once a Grove of the
+// Burnwillows pip pays for it (antilife gi=839: the searched second main cast it on T2 with no
+// enabler, opponent 20 -> 21, burning the card that made base's T3 exactly lethal -- 3 -> 4).
+//
+// Only prunes a STRICTLY DOMINATED cast (net swing <= 0 -> it can never be reach and can never be
+// lethal), so it cannot drop a winning line -- the unbounded-search bar. Verse damage IS counted:
+// casting any instant/sorcery under an Aria of Flame pings for (counters + 1), which can make the
+// cast worth it on its own, and a same-subset Aria counts too because the canonical order resolves
+// it (CastOrderRank 19) before the spells that feed it. Counting verse can only make the gate fire
+// LESS, which is the safe direction for a validity gate.
+static bool SubsetHasUnbackedGiftDamage(const GameState& state,
+                                        const std::vector<Action>& cands,
+                                        const std::vector<int>& sel)
+{
+    const int active = state.active_player_index;
+    bool has_gift = false, has_enabler = false;
+    int  verse = 0;
+    for (int j : sel)
+    {
+        const CardDefinition* d = cands[j].def;
+        if (!d) { continue; }
+        if (d->params.lifegain_to_loss) { has_enabler = true; }
+        if (d->params.verse_damage)     { verse += 1; }   // enters with 0 counters -> pings 1
+        if (d->tmpl == CardTemplate::DirectDamage && d->params.opponent_lifegain > 0)
+        { has_gift = true; }
+    }
+    if (!has_gift)                 { return false; }
+    if (RemedyActive(state, active)) { return false; }
+    if (has_enabler)               { return false; }   // enabler-first converts the rider
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.verse_damage) { verse += p.verse_counters + 1; }
+    }
+    for (int j : sel)
+    {
+        const CardDefinition* d = cands[j].def;
+        if (!d || d->tmpl != CardTemplate::DirectDamage || d->params.opponent_lifegain <= 0)
+        { continue; }
+        const int net = d->params.damage - d->params.opponent_lifegain + verse;
+        if (net <= 0) { return true; }   // strictly dominated: costs a card to help the opponent
+    }
+    return false;
+}
+
 // Plan-validity gate for a FREE alt-cost payload (Reverent Silence / Skyshroud Cutter /
 // Invigorate: "an opponent gains N life") selected with NO lifegain->loss enabler live: the
 // payload only deals damage under an enabler, otherwise it just hands the passive opponent N
@@ -1290,7 +1363,10 @@ static bool SubsetHasUnbackedAltPayload(const GameState& state,
             if (b.def == nullptr) { continue; }
             total += b.direct_damage;
             total += b.def->params.etb_opponent_lifegain;
-            if (!b.alt_cost) { total += b.def->params.opponent_lifegain; }
+            // The opponent_lifegain rider is NO LONGER added here: it is folded into
+            // direct_damage at emission (NetOpponentSwing), enabler-aware in BOTH directions.
+            // This lambda only runs with an enabler in the subset -- hence in hand -- so the
+            // folded term is the converted (+gift) one and adding it again would double-count.
         }
         return total + PendingAttackDamage(state);
     };
@@ -4324,6 +4400,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             {
                 direct = def.params.landfall_damage;
             }
+            // Net the opponent-lifegain rider (see NetOpponentSwing): unbacked it is a gift, not
+            // reach. subset_lethal_damage no longer adds the rider separately -- it is folded here.
+            direct = NetOpponentSwing(def, state, direct);
         }
         else if (def.tmpl == CardTemplate::DirectDamage
                  && def.params.targeting == Targeting::Creature
@@ -7552,6 +7631,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject a free alt-cost payload not backed by a live/same-turn enabler (collapsed-main
         // twin of the Swords gate; inert wherever the extended emission never fires).
         if (SubsetHasUnbackedAltPayload(state, cands, sel)) { return; }
+        if (SubsetHasUnbackedGiftDamage(state, cands, sel)) { return; }
         // Payoff-prune (PrunesAcceleratorWithoutPayoff): drop a ritual-accelerant subset that casts no payoff
         // (Dragon/Dragonstorm/Apex). Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-
         // gated; inert for every other deck -> byte-identical. storm_in_hand feeds the storm-hold rule
@@ -12282,6 +12362,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // twin of the Swords gate; inert wherever the extended emission never fires). Lockstep
         // twin of the check in Solve::consider.
         if (SubsetHasUnbackedAltPayload(state, cands, sel)) { return; }
+        if (SubsetHasUnbackedGiftDamage(state, cands, sel)) { return; }
         // Payoff-prune (PrunesAcceleratorWithoutPayoff): drop a ritual-accelerant subset that casts no payoff
         // (Dragon/Dragonstorm/Apex) from the SEARCH branch list -- this is where the freed budget
         // comes from. Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-gated; inert

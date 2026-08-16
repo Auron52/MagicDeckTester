@@ -280,7 +280,65 @@ base bugs the aggregate had hidden:**
   Base byte-identical — 36/36 smoke and 60/60 regression keys, 0 play changes — because the
   whole hold path is unreachable unless `CollapsedMainActive` (no provider sets
   `ClassifiesMainPhases()`, so it needs `MTG_PHASE_CLASSIFY`).
+* **BUG 6 — an unbacked lifegain RIDER was valued as free damage (FIXED, BASE-affecting):** the
+  biggest of the census bugs, and the only one that is a genuine *modelling* error rather than a
+  heuristic mis-gate. Fiery Justice reads "deals 5 damage divided as you choose... **target
+  opponent gains 5 life**". Both the ranking (`EvalCard`) and the reach/lethality term
+  (`Action::direct_damage`) read the printed `damage` alone, so with no lifegain→loss enabler live
+  the engine scored it a full **+5 face** when its true swing is **ZERO** — and worse than zero
+  once a Grove of the Burnwillows pip pays for it. antilife gi=839: the second main cast it on T2
+  with no enabler and the opponent went **20 → 21**, burning the card that made base's T3 exactly
+  lethal (3→4). Three coupled changes:
+  1. `NetOpponentSwing` — one helper, enabler-aware in BOTH directions: backed, the rider converts
+     and the spell swings `damage + gift`; unbacked it swings `damage − gift`. Fed to `EvalCard`
+     and to `direct`. Note the correction cuts both ways — a **backed** Fiery Justice was also
+     *under*-valued at 5 when it really swings 10.
+  2. `SubsetHasUnbackedGiftDamage` — the missing THIRD member of the unbacked-payload family
+     (alongside the alt-payload gate and the Swords gate). A subset casting such a spell with no
+     enabler live and none in the subset is invalid when the net swing is ≤ 0. It prunes only a
+     **strictly dominated** cast (net ≤ 0 can never be reach and can never be lethal), so it
+     cannot drop a winning line. Verse damage is counted — casting any instant/sorcery under an
+     Aria pings for (counters+1), which can justify the cast on its own — and counting it can only
+     make the gate fire LESS, the safe direction for a validity gate.
+  3. The hold's affordability scan drops such a card too: once the gate refuses the cast, holding
+     a dork to keep it affordable is holding for a cast that provably will not happen. Same for an
+     unbacked `etb_opponent_lifegain` permanent (Aria, gifts 10) — gi=215's lone Hierarch was
+     pinned on T2 for exactly that, and base's swing-for-1 made its T3 exactly lethal.
+
+  **Measured (BASE, no levers): antilife d0 `5.0880 → 4.9060` on smoke and `5.2390 → 4.9890` on
+  regression — and the per-game audit is one-sided, `167 faster vs 2 slower`.** The searched
+  depths score IDENTICALLY (4.2800/4.2067/4.3040/4.2120 unchanged, 83 games play-changed at the
+  same score): the search could already see past the bad valuation, so this is precisely a
+  greedy/leaf-policy fix. Every other deck byte-identical (only antilife carries
+  `opponent_lifegain`). GT accepted at smoke + regression.
+* **`MTG_MAIN2_DROP` RESOLVED — it is CHURN, not a defect.** The "17 antilife games break on
+  m2d" reading was **selection bias**: it counted only games that got worse. Measured properly
+  (m2d arm vs cs arm, same binary, all overnight keys): antilife `+0.0090` with **44 worse / 47
+  better**, fivecolour `+0.0333` 37w/30b, goblins `−0.0020` 3w/5b. Every large bucket is
+  symmetric (antilife 5→4:21 vs 4→5:15; 5→6:11 vs 6→5:9), and the one ONE-SIDED bucket is a
+  **win** — 4→3 in 10 games with 0 reverse. Lesson worth keeping: a one-sided-looking family
+  extracted from a loser list proves nothing until the reverse direction is counted.
 * **STILL OPEN, and now split by cause:**
+  - **hinata gi=1061 / gi=1987 (d0, MTG_ACQ_RESOLVE, 6→8) — a THIRD land-choice tie-break
+    exemplar, and the sharpest one:** these are **d0** games (no search at all), so per the
+    d0-only rule the cause is the executor/greedy path, and both seeds fail identically. The
+    lever is not the defect — it only changes *when* Preordain is cast (T2 instead of T3), which
+    changes which lands are in hand at the T3 drop. With BOTH a Forbidden Orchard (untapped) and
+    a Mystic Monastery (`enters_tapped`) in hand on a turn that casts nothing, the greedy ranker
+    played the **Orchard**; T4 then wanted 4 mana for Hinata and the freshly-played tapped
+    Monastery supplied 3, so Hinata slipped a turn and the win went 6→8. `GreedyLandChoiceIndex`
+    (`src/ai/LandPlay.cpp`) ranks untapped over tapped **unconditionally** — passes are
+    `0 untapped+multi, 1 untapped+any, 2 tapped+multi, 3 tapped+any` — so it cannot express
+    "play the tapped land on a turn the extra mana buys nothing", which is a standard play rule.
+    Deliberately NOT point-fixed: the obvious cheap tests do not work here. The turn was **not**
+    idle by mana value (Remand `{1}{U}` and three X-spells at X=0 were nominally affordable), so
+    a "nothing castable" gate never fires, and a "does the extra mana make something new
+    affordable" gate is tripped by Distorting Wake at X=0. Getting it right needs "would the
+    policy actually TAP that source this turn" — the same *what does the mana buy* shape as
+    BUG 3/5, but on the land drop. That belongs in the heuristic-optimization loop (propose
+    variants → sweep → validate), not a point fix, and it would change BASE play at every depth,
+    so it needs a full GT rebaseline. Note both `AIEngine::TryPlayLand` and TurnSolver's
+    `greedy_land_name` share this one ranker, so a single edit keeps them in lockstep.
   - **gi=38 — drip-land TIE (not a bug, a tie-break candidate):** the arms diverge at T1,
     base playing Bloodstained Mire while classify plays Grove of the Burnwillows and taps it
     for a {G} pip — **gifting the opponent 1 life** with no Remedy live to reverse it (opp 21).

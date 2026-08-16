@@ -983,6 +983,28 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
         if (hd->params.alt_lifegain_cost > 0
             && ControlsSubtype(s, active, hd->params.alt_cost_requires_subtype))
         { continue; }
+        // ... and the same for a damage spell whose RIDER gifts life (Fiery Justice: 5 damage,
+        // opponent gains 5 -> net ZERO swing unbacked). SubsetHasUnbackedGiftDamage now refuses to
+        // cast it in that state, so holding a dork to keep it affordable is holding for a cast that
+        // provably will not happen (gi=839: the lone Hierarch pinned on T2 for a Fiery Justice the
+        // plan-validity gate rejects; base swung for 1 and its T3 was exactly lethal, 3 -> 4).
+        if (hd->params.opponent_lifegain > 0
+            && hd->params.damage - hd->params.opponent_lifegain <= 0
+            && !RemedyActive(s, active))
+        { continue; }
+        // UNBACKED-GIFT EXCLUSION (antilife cs-vs-base dig 2026-08-16, gi=215/839/8/550/798 --
+        // the 10-vs-0 one-sided 3 -> 4 bucket): a card whose resolution HANDS the opponent life
+        // and deals no damage of its own is, with no lifegain->loss enabler live, a pure gift the
+        // policy will not cast (the provider's own EtbGiftValue scores it negative). Holding a
+        // dork back to keep it "affordable" therefore buys nothing THIS turn -- and the hold only
+        // ever matters this turn, since every source unhtaps on the next one. gi=215: Aria of
+        // Flame ({2}{R}, gifts 10 with no Remedy out) pinned the lone Hierarch on T2; base swung
+        // it for 1 exalted and its T3 was EXACTLY lethal, while the held line finished the same
+        // T3 on 1 life and needed a fourth turn. Keyed on params, so it generalises to any
+        // enabler deck; inert wherever nothing gifts life.
+        if (hd->params.etb_opponent_lifegain > 0 && hd->params.damage <= 0
+            && !RemedyActive(s, active))
+        { continue; }
         const int mv = hd->card.m_mana_cost.ManaValue();
         if (mv <= noncreature || mv > total) { continue; }
         needs_creature_mana = true;
