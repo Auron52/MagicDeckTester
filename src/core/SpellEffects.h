@@ -4205,7 +4205,7 @@ inline void PerformUpkeepSacTutor(GameState& state)
             OnGoblinEnters(state, active, slot);   // param-gated ETBs: Phantasm gift / Wurm sweep
         }
 
-        // "...then shuffle" (deterministic + lockstep; inert unless MTG_SEARCH_SHUFFLE).
+        // "...then shuffle" (deterministic + lockstep). ON BY DEFAULT; MTG_NO_SEARCH_SHUFFLE opts out.
         ShuffleAfterSearch(state, active);
 
         if (g_play_event_sink)   // nulled by RevealLogPause during search/rollout -> byte-identical
@@ -6872,8 +6872,10 @@ inline void PerformFetch(GameState& state, int controller_index,
         perm.entered_this_turn = true;
         state.battlefield.push_back(perm);
     }
-    // Searching the library shuffles it (CR 701.19). Deterministic + lockstep; no-op
-    // unless MTG_SEARCH_SHUFFLE is set.
+    // Searching the library shuffles it (CR 701.19). Deterministic + lockstep, and ON BY
+    // DEFAULT -- SearchShuffleEnabled() is !EnvOn("MTG_NO_SEARCH_SHUFFLE"), so the opt-OUT is
+    // MTG_NO_SEARCH_SHUFFLE. (There is no MTG_SEARCH_SHUFFLE opt-in; comments claiming this is
+    // inert by default were stale and inverted the real default.)
     ShuffleAfterSearch(state, controller_index);
 }
 
@@ -6968,7 +6970,8 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
         perm.entered_this_turn = true;
         state.battlefield.push_back(perm);
     }
-    // "...then shuffle" (CR 701.19); deterministic + lockstep; inert unless MTG_SEARCH_SHUFFLE.
+    // "...then shuffle" (CR 701.19); deterministic + lockstep. ON BY DEFAULT (opt-OUT is
+    // MTG_NO_SEARCH_SHUFFLE).
     ShuffleAfterSearch(state, controller_index);
 }
 

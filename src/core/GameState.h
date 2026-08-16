@@ -205,8 +205,8 @@ struct GameState
     uint64_t                 search_count          = 0;   // # library SEARCHES (fetch/tutor) this game; seeds the
                                                           // deterministic mid-game shuffle (ShuffleAfterSearch).
                                                           // Copied with state so the search rollout reproduces the
-                                                          // same shuffle the executor will -> lockstep. Inert (always
-                                                          // 0) unless MTG_SEARCH_SHUFFLE is set.
+                                                          // same shuffle the executor will -> lockstep. LIVE by
+                                                          // default; MTG_NO_SEARCH_SHUFFLE opts out.
     // Shuffle-variance instrument (SaltSeed): an INDEPENDENT salt folded into the deterministic
     // shuffle seeds so the SAME game (fixed game_seed / decisions) can be replayed with different
     // shuffle REALISATIONS. shuffle_salt salts MID-GAME shuffles only (SearchShuffleSeed / Gamble),

@@ -153,8 +153,8 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     const std::string fetched_name = c.m_name;
     ap.library.erase(ap.library.begin() + idx);
     // Searching the library shuffles it (CR 701.19) -- BEFORE a "put on top" placement
-    // (you shuffle, then put the card on top). Deterministic + lockstep; no-op unless
-    // MTG_SEARCH_SHUFFLE is set.
+    // (you shuffle, then put the card on top). Deterministic + lockstep, ON BY DEFAULT
+    // (opt-OUT is MTG_NO_SEARCH_SHUFFLE).
     ShuffleAfterSearch(state, controller_index);
     if (pp.tutor_to_hand)     { ap.hand.push_back(std::move(c)); }
     else if (pp.tutor_to_top) { ap.library.insert(ap.library.begin(), std::move(c)); }
