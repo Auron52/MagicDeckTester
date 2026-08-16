@@ -1,4 +1,4 @@
-# Regression ground truth -- commit f21b046  date 2026-08-16
+# Regression ground truth -- commit 2cd3f51  date 2026-08-16
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -97,11 +97,11 @@ mirrorwing_regression_d3_s2002=5.0600/03291f5c2285acb9
 mirrorwing_regression_d3_s3003=4.9300/2a975b0ba900986e
 mirrorwing_regression_d5_s2002=4.9900/2dbe4399aa1a12c3
 mirrorwing_regression_d5_s3003=4.9300/6ff9b3af4665456d
-fivecolour_regression_d0_s2002=6.1870/ce1427130763427e
-fivecolour_regression_d3_s2002=4.9550/c52307a22e669341
-fivecolour_regression_d3_s3003=5.0700/6e64210b3cb01437
-fivecolour_regression_d5_s2002=4.8600/09733bd5f06d915a
-fivecolour_regression_d5_s3003=5.0100/bdb644e70922096c
+fivecolour_regression_d0_s2002=6.1820/f9b3a8c10b48ef70
+fivecolour_regression_d3_s2002=4.9550/d7723dfe23735207
+fivecolour_regression_d3_s3003=5.0700/7db62ff56a224c4a
+fivecolour_regression_d5_s2002=4.8600/1833f2fab3e64972
+fivecolour_regression_d5_s3003=5.0100/348e49e6202a68b6
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/fe364b007bbfaa56
