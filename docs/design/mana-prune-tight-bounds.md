@@ -141,3 +141,42 @@ Note `ComputeAvailableColors` already has a widen for the COLOUR gate (credit co
 permanent would add once it resolves, `fivecolour_domain_widen.json`) and it is deliberately loose —
 "no castability test: a looser necessary condition is still sound". The same tightening applies
 there, and it is the same one flow call.
+
+## 4. The REMAINING bail-outs, measured per deck (2026-08-16)
+
+Domain was not the only switch-it-off. Running every suite deck at d3 with `MTG_TAP_STATS=1` and
+reading `FLOW PRUNE: bailed` gives the live inventory — eight of twelve decks now never bail, and
+the four that do each trip a different clause:
+
+| deck | bailed | pruned | cause |
+|---|---|---|---|
+| **th** | **95.3%** | 0.1% | filter lands — Cascade Bluffs (`is_filter`), Ferrous Lake (`ramp_filter`) |
+| **goblins** | **73.3%** | 0.0% | **Three Tree City** (`IsScaledManaLand`) |
+| hinata | 16.4% | 17.4% | Cascade Bluffs + Izzet Signet, plus four `{X}` spells (Crackle with Power, Distorting Wake, Icy Blast, Reality Spasm) |
+| dragonstorm | 5.0% | 0.0% | storage lands — Mercadian Bazaar, Dwarven Hold |
+| antilife, auras, burn, creature_giving, fivecolour, knights, mirrorwing, slivers | 0.0% | 0–39.6% | — |
+
+`th` and `goblins` are effectively running with the oracle off, and both show `pruned ≈ 0` as a
+result. Note bail% is an upper bound on the prize, not the prize itself — a bail only costs
+something where there was a prune to be had — but FiveColour's fix halved backtracker nodes off a
+45.2% bail, so the correlation is worth taking seriously.
+
+Every one of these is the same bail-instead-of-bound shape, and each has a sound over-approximation:
+
+* **`{X}` spells** (hinata) — the cheapest fix and provably safe. X only ADDS to the cost, so the
+  FIXED part is a lower bound on demand: if the oracle cannot satisfy the fixed part, no value of X
+  helps. Check the fixed part instead of bailing. (The existing per-card ceiling already reasons this
+  way — "EffectiveCost returns the FIXED part; if that alone is unaffordable, no value of X helps".)
+* **Scaled mana land** (goblins, Three Tree City) — the same shape as domain: yield is a function of
+  the board (creature count), invariant during a payment, and the colour is search-chosen. Credit
+  `amt = N` across its colour set exactly as domain now is.
+* **Storage lands** (dragonstorm) — bounded by their counters; credit the counters.
+* **Filter lands** (th, hinata) — the genuinely hard one, and the reason to do it LAST. A filter is a
+  GAIN edge (pay one, get two), and standard max-flow conserves flow, so it cannot be an edge in this
+  graph. The sound move is to over-credit: model the filter as a plain source of its OUTPUT (two mana
+  in its colours) and ignore the input it consumes. That is weaker than exact, but it is an upper
+  bound — which is all a prune needs — and it converts th from 95.3% bailed to 0%.
+
+Order by measured prize: `th` → `goblins` → `hinata` → `dragonstorm`. Acceptance test for each is
+the one in §2 (prune ON vs OFF must stay outcome-identical across all 36 smoke configs), plus
+`MTG_TAP_STATS` showing bail% falling and nodes with it.
