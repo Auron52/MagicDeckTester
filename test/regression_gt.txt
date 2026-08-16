@@ -1,4 +1,4 @@
-# Regression ground truth -- commit e7df6c4  date 2026-08-16
+# Regression ground truth -- commit 7c8ebb2  date 2026-08-16
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -152,18 +152,18 @@ knights_overnight_d5_s4004=4.3260/dad12f45fab0b31c
 knights_overnight_d5_s5005=4.3560/4f4c688fb55f4207
 knights_overnight_d5_s6006=4.3420/e1da54fc293df617
 knights_overnight_d5_s7007=4.3390/6fed1005ceef752e
-antilife_overnight_d0_s4004=5.1085/03af70ef0f396dd5
-antilife_overnight_d0_s6006=5.1335/9aecbe0c611be29f
-antilife_overnight_d0_s8008=5.1300/3c231847f33bbc13
-antilife_overnight_d0_s10010=5.0680/2f4e2bee89515ee3
-antilife_overnight_d3_s4004=4.2270/93286a15074d190a
-antilife_overnight_d3_s5005=4.2540/cc09981240522637
-antilife_overnight_d3_s6006=4.2200/92be8a3967f3ff5b
-antilife_overnight_d3_s7007=4.1940/77dedd3cca5acb7e
-antilife_overnight_d5_s4004=4.2240/67ceb586f078ff78
-antilife_overnight_d5_s5005=4.2570/ad255fb63ccb3902
-antilife_overnight_d5_s6006=4.2180/a235a468a6d5acd0
-antilife_overnight_d5_s7007=4.1840/227b7fc8e98327c0
+antilife_overnight_d0_s4004=4.9325/7981491b14c077ac
+antilife_overnight_d0_s6006=4.9375/ad79cea97e773ba7
+antilife_overnight_d0_s8008=4.9395/046543fdcf6574ab
+antilife_overnight_d0_s10010=4.8570/694a05a3a077d1d2
+antilife_overnight_d3_s4004=4.2240/4f2572701a1a461a
+antilife_overnight_d3_s5005=4.2530/0d3f4b85f9c1b057
+antilife_overnight_d3_s6006=4.2160/8f87abe46f0a2344
+antilife_overnight_d3_s7007=4.1900/3d5c0102c2ad4281
+antilife_overnight_d5_s4004=4.2220/2c9f0a1bef7fb295
+antilife_overnight_d5_s5005=4.2570/7479a94f31a082cf
+antilife_overnight_d5_s6006=4.2160/cd85619f380659aa
+antilife_overnight_d5_s7007=4.1860/6f5c85c99e91352b
 hinata_overnight_d0_s4004=7.0830/4ead0fa1de433a6e
 hinata_overnight_d0_s6006=7.0495/a4a29fe301750603
 hinata_overnight_d0_s8008=7.0690/5efd34f616312252
