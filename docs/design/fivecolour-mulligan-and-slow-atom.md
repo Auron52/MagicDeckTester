@@ -435,3 +435,63 @@ subtly wrong in a way a 36-case smoke will not catch.
   whose *parameters* mention `allocator`/`unordered_map` and inflated MACHINERY from 21% to 29%.
 * **`pkill -f <string>` matches its own shell** if the command line contains that string. It killed
   an A/B run before it started.
+
+## 7. The recommend probe LANDED (2026-08-16): exhaustive gen is a WEEK, not a night
+
+The full R=1 floor pass over every cell finished — `--gen-mulligan recommend` on mainline
+(`3b1b1d2`), inheriting `value_play.mull_gen_depth: 3` / `mull_gen_budget_ms: 3`, K=27 with the five
+fetchlands merged. It resumed the existing journal (48,220 cell-sides) and completed the remaining
+5.2M, then wrote the poolable probe chunk and stopped, as `recommend_only` promises (no refine, no
+profile).
+
+```
+floor pass: 39,289 s (10.9 h) @ 132 rollouts/s;  5,273,162 cells (both pd)
+projected COMPLETE (full bottom, R40): ~440.6 h   (upper bound; adaptive keep trims it)
+projected FAST     (adaptive,   R30): ~220.3 h
+overnight target ~8 h  ->  BOTH exceed (~27.5x even for FAST)
+```
+
+**This is the answer to "can FiveColour have an exhaustive mulligan profile": not on one box.** Nine
+to eighteen days. The recipe choice (complete vs fast) is not the lever here — fast is still 27.5x
+over an overnight window — so the options are another machine, a weekend-plus, a multi-machine pool
+(the parity-fingerprint handoff in `.claude/skills/mulligan-profile.md`), or accepting a
+lower tier for this deck. The probe chunk is banked either way:
+`FiveColour.keepmodel.exhaustive.raw.json.probe` is a byte-identical r=0 slice that any later
+`complete`/`fast` run reuses, so the 10.9 h is never repaid.
+
+### 7a. The slow games name ONE card
+
+259 slow rollouts are on file (`<raw>.slow.log`, cumulative across this probe and the earlier run —
+this probe itself streamed only 3, because resuming meant the pathological cells were already
+banked). Their shape:
+
+| | |
+|---|---|
+| total | 30,599 core-seconds (~8.5 core-hours) in 259 rollouts |
+| worst | **1,851 s — one rollout, 30.9 minutes** |
+| distribution | 8 over 600 s; 47 in 120–600 s; 56 in 60–120 s; 147 in 30–60 s |
+| shape | **all 259 are size-7**; play/draw split even (131/128) |
+
+Card presence across those 259 hands, and the share of slow SECONDS in hands containing each:
+
+| card | in hands | share of slow time |
+|---|---|---|
+| **Bloom Tender** | **78.4%** | **84.4%** |
+| Faeburrow Elder | 45.6% | 37.6% |
+| Mountain | 40.9% | 51.9% |
+| Blood Crypt | 37.5% | 50.3% |
+| Overgrown Tomb | 35.5% | 41.0% |
+| Stomping Ground | 29.7% | 31.9% |
+| Breeding Pool | 24.7% | 33.9% |
+
+Bloom Tender is in four of every five slow hands and five of every six slow seconds. The mechanism
+is not incidental and the co-occurrence table states it: Bloom Tender and Faeburrow Elder are both
+`domain_mana` — *"{T}: For each color among permanents you control, add one mana of that color"* —
+so each extra distinct COLOUR on board multiplies what one tap yields, and every card riding with
+them in the slow list is a colour-fixer (Mountain, Blood Crypt, Overgrown Tomb, Stomping Ground,
+Breeding Pool). That is the same finding section 6 reached from the other end: the mana BACKTRACKER
+(`TapForCostBacktrackWorker` + `TapForCostBacktrack`, ~5.5%) leads gen where `TapForCostSharedOnce`
+leads play. Flat profile and slow-game list agree, which is why this one is worth trusting.
+
+So the tractability lever for this deck is **domain-mana payment**, not bottoming, not R, not the
+recipe. Until that is cheaper, the projection above is what an exhaustive profile costs.
