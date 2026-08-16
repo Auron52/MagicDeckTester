@@ -316,3 +316,33 @@ the bail counter tells you where the pruner is *absent*, not where it would have
    which is noise. Flipping the default would take on the risk of a prune with no measured benefit.
    Revisit the moment §3a lands — that is the change that turns the 37% of dropped emissions into
    work actually saved, and the same two measurements will price it.
+
+## 8. THE BOTTOM LINE: the tap backtracker is ~1% of engine cost (2026-08-16)
+
+Everything above optimises the mana backtracker. After closing every bail clause, the next question
+was where the backtracker's own time goes, and the answer was clear: on FiveColour, **98.3% of its
+nodes are spent on payments that SUCCEED** (37,203 entries, 71.3 nodes each), against just 1.7% on
+proving costs unpayable (29,556 entries, 1.6 nodes each). The infeasibility work is finished — 1.6
+nodes to prove a cost unpayable is the floor.
+
+So the successful-payment path was attacked directly, and successfully: the oracle already computes
+a max-flow assignment for every feasible payment and discards it, so `0b222dc` publishes it and uses
+it to order the source AND colour loops. Nodes fall **9.5–13.6x** and a payable entry drops to 4.3
+nodes for a 4.5-source answer — the backtracker stops searching and walks straight to the answer.
+
+**And the total does not move.** Paired CPU (minima, arm order alternated): 16.64 vs 16.72s at play
+depth, 7.78 vs 7.72s at gen settings, 80.47 vs 79.77s over 300 gen-settings games during which nodes
+fell 13.9M → 1.46M. The 300-game run existed specifically to let the slow tail show up in the total.
+It did not.
+
+**Therefore: the tap backtracker is roughly 1% of engine cost, at play depth and at mulligan-gen
+settings alike, and no further work on it can pay.** That retires this whole line of investigation —
+including §3a and §5, whose remaining prize was measured against a mechanism (the emit ceiling) that
+saves no work at all. Anyone arriving here wanting the engine faster should start from a profile,
+not from this document; the prior measurement on this deck put PLAN-ENUM at 24.2% of mulligan gen
+and the value leaf at 7.9%, which is where the time actually is.
+
+The one thing worth carrying forward is the method, which caught three separate mirages in a day:
+a percentage of switched-off-ness (bail%), a percentage of dropped candidates (37% of emissions),
+and a large ratio on a real counter (13.6x nodes) each looked like a win and none of them was one.
+Price the change in the currency you actually care about — total time — before believing any of them.
