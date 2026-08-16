@@ -1454,19 +1454,57 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     // active player's tapped-source bitmask (complete: untapped sources = the remaining choices; cost,
     // for_creature and the RP union are invariant per top-level call) plus the packed floating pool;
     // stored as the full pair (not a lossy hash) so a hash collision can never cause a false prune.
-    // Set up once at the top-level call and threaded down; disabled when n>64 (bitmask won't fit).
+    // Set up once at the top-level call and threaded down; disabled when the bitmask won't fit --
+    // which is a bound on the SOURCE count, not the board size (see the gate below).
     const bool top_level = (fail_memo == nullptr);
+
+    // Structural mana-source list (the controller's BasicLand / ManaDork / mana_rock permanents +
+    // their cached def), enumerated ONCE at the top-level call and threaded to every node. The
+    // recursion then iterates ~sources instead of the whole battlefield and never re-runs the
+    // LookupCached hash: a token-flooded OPPONENT board (Forbidden Orchard / Hunted Phantasm /
+    // Varchild's) is skipped entirely instead of rescanned at each of the millions of nodes. This is
+    // a SUPERSET of the per-node `is_src` structural test (ManaDork's CanTapNow check stays per-node),
+    // and the battlefield is invariant during a payment, so it is byte-identical. thread_local buffer:
+    // rebuilt at each top-level call, reused via the threaded pointer by that call's subtree (no nested
+    // top-level backtrack exists within a subtree, so the buffer is never clobbered mid-iteration).
+    // Built BEFORE the failure memo because the memo's fit test is `cands.size()`, not `n`.
+    static thread_local std::vector<std::pair<int, const CardDefinition*>> s_src_cands_buf;
+    if (top_level)
+    {
+        s_src_cands_buf.clear();
+        for (int i = 0; i < n; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != active) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d) { continue; }
+            if (d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
+                || d->params.mana_rock)
+            { s_src_cands_buf.push_back({ i, d }); }
+        }
+        src_cands = &s_src_cands_buf;
+    }
+
+    // Does the memo's 64-bit tapped-set bitmask fit? It indexes SOURCES (by position in the list
+    // just built), so the source count is the bound. MTG_TAP_MEMO_BF_GATE=1 restores the old
+    // board-size test for a one-binary A/B; see TapMemoBattlefieldGate() for the measurement.
+    const bool memo_fits = top_level
+        && (TapMemoBattlefieldGate() ? (n <= 64) : (s_src_cands_buf.size() <= 64));
     if (tapstats::Enabled())
     {
         tapstats::g_nodes.fetch_add(1, std::memory_order_relaxed);   // every recursion node
         if (top_level)
         {
             tapstats::g_backtrack_entries.fetch_add(1, std::memory_order_relaxed);
-            if (n > 64) { tapstats::g_top_memo_off.fetch_add(1, std::memory_order_relaxed); }
+            if (!memo_fits) { tapstats::g_top_memo_off.fetch_add(1, std::memory_order_relaxed); }
             std::uint64_t prev = tapstats::g_max_n.load(std::memory_order_relaxed);
             while (static_cast<std::uint64_t>(n) > prev &&
                    !tapstats::g_max_n.compare_exchange_weak(prev, static_cast<std::uint64_t>(n),
                                                             std::memory_order_relaxed)) {}
+            const std::uint64_t ns = static_cast<std::uint64_t>(s_src_cands_buf.size());
+            std::uint64_t sprev = tapstats::g_max_src.load(std::memory_order_relaxed);
+            while (ns > sprev && !tapstats::g_max_src.compare_exchange_weak(
+                                     sprev, ns, std::memory_order_relaxed)) {}
         }
     }
     // Reuse the failure-memo's bucket allocation across the (hundreds of thousands of) top-level calls
@@ -1477,7 +1515,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     // empty memo and inserts exactly the same proven-failure keys, so every prune is unchanged. Safe as
     // thread_local (each gen worker has its own) because no nested top-level backtrack runs in a subtree.
     static thread_local TapBacktrackMemo s_memo_tl;
-    if (top_level && n <= 64)
+    if (memo_fits)
     {
         // ...but clear() also MEMSETS that retained bucket array, unconditionally, and the array never
         // shrinks. So the reuse above has a second-order cost the original change did not anticipate:
@@ -1530,34 +1568,11 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         fail_memo = &s_memo_tl;
     }
 
-    // Structural mana-source list (the controller's BasicLand / ManaDork / mana_rock permanents +
-    // their cached def), enumerated ONCE at the top-level call and threaded to every node. The
-    // recursion then iterates ~sources instead of the whole battlefield and never re-runs the
-    // LookupCached hash: a token-flooded OPPONENT board (Forbidden Orchard / Hunted Phantasm /
-    // Varchild's) is skipped entirely instead of rescanned at each of the millions of nodes. This is
-    // a SUPERSET of the per-node `is_src` structural test (ManaDork's CanTapNow check stays per-node),
-    // and the battlefield is invariant during a payment, so it is byte-identical. thread_local buffer:
-    // rebuilt at each top-level call, reused via the threaded pointer by that call's subtree (no nested
-    // top-level backtrack exists within a subtree, so the buffer is never clobbered mid-iteration).
-    static thread_local std::vector<std::pair<int, const CardDefinition*>> s_src_cands_buf;
     // Cached flow-oracle verdict: with MTG_FLOW_ORDER the oracle runs early (to permute the source
     // list) and the prune block below reuses the answer instead of solving the same max-flow twice.
     bool flow_done = false, flow_infeasible = false, flow_bailed = false;
     if (top_level)
     {
-        s_src_cands_buf.clear();
-        for (int i = 0; i < n; ++i)
-        {
-            const Permanent& p = state.battlefield[i];
-            if (p.controller_index != active) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (!d) { continue; }
-            if (d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
-                || d->params.mana_rock)
-            { s_src_cands_buf.push_back({ i, d }); }
-        }
-        src_cands = &s_src_cands_buf;
-
         // FLOW-GUIDED TAP ORDER (MTG_FLOW_ORDER). Run the oracle HERE, once, while the candidate
         // list is still ours to permute, and put the sources its max-flow actually used at the
         // front -- stably, so the existing battlefield order survives within each group. The
@@ -1664,12 +1679,37 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // the O(n) battlefield rescan that used to run per node. Byte-identical: the top-level scan
         // captures the same already-tapped permanents, and the recursion only ever taps active-player
         // sources by index, so the running mask equals what the per-node scan would have produced.
+        //
+        // INDEXED BY POSITION IN `cands`, not by battlefield index (2026-08-16). Why that is also
+        // byte-identical: within one top-level call the mask is ONLY ever compared for equality
+        // (fail_memo->count / insert), and every node's mask is
+        //     {entry-tapped set}  U  {sources tapped by this node's ancestors}
+        // where the first term is a constant of the call. An ancestor-tapped source was untapped at
+        // entry (the loop skips tapped ones), so the two terms are disjoint under both indexings and
+        // two nodes collide iff their ancestor-tapped SOURCE SETS are equal. Position-in-`cands` is a
+        // bijection onto those sources, so exactly the same nodes collide and exactly the same proven
+        // failures are pruned. The old mask additionally set bits for the active player's tapped
+        // NON-source permanents; nothing enters or leaves the battlefield during a payment and the
+        // recursion only taps sources, so those bits were constant within a call and dropping them
+        // changes no comparison. What it buys: a board's Treasures, creatures and opposing permanents
+        // no longer consume key space, so a 33-source board keeps its memo at any board size.
         if (top_level)
         {
-            for (int i = 0; i < n; ++i)
+            if (TapMemoBattlefieldGate())
             {
-                if (state.battlefield[i].controller_index == active && state.battlefield[i].tapped)
-                { tapped_mask |= (1ull << i); }
+                for (int i = 0; i < n; ++i)
+                {
+                    if (state.battlefield[i].controller_index == active && state.battlefield[i].tapped)
+                    { tapped_mask |= (1ull << i); }
+                }
+            }
+            else
+            {
+                for (std::size_t cq = 0; cq < cands.size(); ++cq)
+                {
+                    if (state.battlefield[cands[cq].first].tapped)
+                    { tapped_mask |= (1ull << (cq & 63)); }
+                }
             }
         }
         key.first = tapped_mask;
@@ -1931,7 +1971,12 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             if (drip_ok && def->params.tap_opponent_lifegain > 0)
             { OpponentGainsLife(state, active, def->params.tap_opponent_lifegain); }
             if (TapForCostBacktrackWorker(state, cost, for_creature, next, rp_colors, fail_memo, out_leftover,
-                                    tapped_mask | (1ull << i),
+                                    // memo bit = this source's POSITION in `cands` (see key.first
+                                    // above). The `& 63` keeps the shift defined when the mask is
+                                    // unused anyway (memo not installed); wherever the memo IS live
+                                    // the index is < 64 by the gate, so the value is unchanged.
+                                    tapped_mask | (1ull << ((TapMemoBattlefieldGate()
+                                                             ? static_cast<std::size_t>(i) : ci) & 63)),
                                     untapped_max < 0 ? -1 : untapped_max - src_max_net,
                                     reserved_mask, out_full_pool, src_cands)) { return true; }
             state.battlefield[i].tapped = tapped_snap;   // only this source was touched at this level

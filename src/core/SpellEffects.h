@@ -7074,8 +7074,13 @@ namespace tapstats
     inline bool Enabled() { return g_enabled; }
     inline std::atomic<std::uint64_t> g_backtrack_entries{0};
     inline std::atomic<std::uint64_t> g_nodes{0};          // ALL recursion nodes (top-level + deep)
-    inline std::atomic<std::uint64_t> g_top_memo_off{0};   // top-level calls with n>64 (fail-memo disabled)
+    inline std::atomic<std::uint64_t> g_top_memo_off{0};   // top-level calls that ran with NO fail-memo
     inline std::atomic<std::uint64_t> g_max_n{0};          // max battlefield size seen at a top-level call
+    // Max SOURCE-list size at a top-level call. The pair (max_n, max_src) is the whole argument for
+    // indexing the memo by source position: on the boards that disabled the memo these differ by 3x
+    // (Mirrorwing measured n=105 against 33 sources -- 63 of the 105 were Treasure tokens, which are
+    // sac-for-mana ACTIONS and never enter the source list at all).
+    inline std::atomic<std::uint64_t> g_max_src{0};
     // Outcome split of the top-level entries (payable vs unpayable) + the nodes each outcome consumed.
     // Answers: is the backtracker mostly PROVING FAILURE (a byte-identical exact-frontier prune would
     // remove those nodes) or mostly SEARCHING FOR A PAYMENT it does find (only pay-from-frontier or a
@@ -7133,9 +7138,10 @@ namespace tapstats
             const unsigned long long nok = g_nodes_ok.load(), nfail = g_nodes_fail.load();
             std::fprintf(stderr,
                 "\n=== TAP STATS: top-level entries=%llu  total nodes=%llu  nodes/entry=%.1f"
-                "  memo-off(n>64) top-level=%llu  max board n=%llu ===\n",
+                "  memo-off top-level=%llu  max board n=%llu  max sources=%llu ===\n",
                 top, nodes, top ? (double)nodes / (double)top : 0.0,
-                (unsigned long long)g_top_memo_off.load(), (unsigned long long)g_max_n.load());
+                (unsigned long long)g_top_memo_off.load(), (unsigned long long)g_max_n.load(),
+                (unsigned long long)g_max_src.load());
             std::fprintf(stderr,
                 "=== TAP OUTCOME: payable entries=%llu (%.1f%%, %llu nodes, %.1f/entry)  "
                 "UNpayable entries=%llu (%.1f%%, %llu nodes = %.1f%% of nodes, %.1f/entry) ===\n",
@@ -7188,6 +7194,19 @@ namespace tapstats
 // Default ON: it is LOSSLESS (an upper bound only ever short-circuits provably-unpayable costs).
 inline bool MaxManaGateEnabled()
 { static const bool v = !EnvOn("MTG_NO_MAXMANA_GATE"); return v; }
+
+// FAILURE-MEMO INDEX SPACE. The memo's 64-bit key indexes the active player's tappable mana SOURCES,
+// so the "won't fit in a bitmask" limit is a limit on the SOURCE COUNT -- but until 2026-08-16 it was
+// tested against state.battlefield.size(), i.e. every permanent both players control. On a fanned-out
+// board those differ enormously (Mirrorwing: n=105, sources=33, the other 63 being Treasure tokens),
+// so the memo -- and, until it was decoupled, the flow-prune oracle with it -- was switched off by
+// permanents it would never have indexed. Set to 1 to restore the old battlefield-indexed behaviour
+// from ONE binary (A/B hatch; output must be byte-identical either way -- see the worker's key
+// construction for why position-in-`cands` is a bijection onto the same equality classes).
+// Namespace-scope inline const, not a function-local static: this is read per recursion node, where a
+// thread-safe init guard measured ~0.9% self-cost (see the tapstats note above).
+inline const bool g_tap_memo_bf_gate = EnvOn("MTG_TAP_MEMO_BF_GATE");
+inline bool TapMemoBattlefieldGate() { return g_tap_memo_bf_gate; }
 
 // Flow-prune oracle (byte-identical contention-aware infeasibility test at the top-level tap
 // backtracker entry; see TapFlowInfeasible in SpellEffects.cpp). ON by default; MTG_NO_FLOW_PRUNE=1
