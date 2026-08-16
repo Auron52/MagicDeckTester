@@ -567,3 +567,55 @@ clairvoyance / re-roll family, no heuristic-gate misjudgment found:**
   gift-Arias, no Remedy/instants drawn) is an artifact of the divergent shuffle, not a
   play defect. Same family: gi=29/58 (T1 land tie-flips), gi=118, gi=254, gi=3, gi=96
   (tutor-timing flip). gi=3 closed itself under the verse fix (tie landscape shifted).
+
+---
+
+## MEASURED: defer-the-drop is CHURN (2026-08-16)
+
+The USER-proposed rule from `67bd91d` -- when `is_pre_combat && uses_second_main &&
+Main2DropEnabled()`, order no-land plans first among plans already tied on wins AND
+value -- was isolated with `MTG_NO_DEFER_DROP=1`. Both arms ran `MTG_MAIN2_DROP=1`
+over the same 36-job pool (antilife + fivecolour + goblins, d0/d3/d5, overnight
+seeds), 42,800 games per arm.
+
+```
+on = 4.6812   off = 4.6813   NET DELTA = -0.0001
+keys:  6 better, 7 worse, 23 identical
+games: 49 better, 56 worse, 42,695 unchanged
+```
+
+**Verdict: do not adopt.** The effect is indistinguishable from zero (~4 turns
+total across 42,800 games, against a per-game sd near 1.3). Goblins is byte-identical
+across all 16,000 of its games -- correct, it has no second main, so the rule never
+fires.
+
+**My safety argument was reasoning, not evidence, and the data partly refutes it.**
+I argued the rule could not strand main-1 mana because the tie-break only reorders
+plans already tied on wins AND value, so a land that pays for a main-1 cast scores
+strictly higher and still wins. The per-game transition table disagrees in one bucket:
+
+```
+   4 -> 5   22 games WORSE          5 -> 4    9 games better
+   6 -> 5   24 games better         5 -> 6   23 games WORSE
+```
+
+The 6<->5 bucket is symmetric -- textbook churn. The 4->5 bucket is **one-sided**,
+22 against 9 (p ~ 0.015 one-sided under a symmetry null), and losing a turn-4 win is
+exactly the shape the USER warned about: *"cases where there are plays in main1 and
+not playing our land there would strand the mana."* Being tied on `value` is not the
+same as being tied on tempo; the value function does not fully price the drop.
+
+What keeps the net at zero is the opposite tail -- 6 games where an UNWON game (9)
+became a win (9->5, 9->6, 9->7, 9->8). Those are worth more per game than the
+one-turn losses, so a near-zero net hides two real and opposing effects rather than
+indicating the rule does nothing.
+
+**Status of the code:** `67bd91d` stays in the tree but is dead in practice -- it is
+gated on `Main2DropEnabled()`, and `MTG_MAIN2_DROP` is itself default-off and was
+already resolved as churn. Removing it is a reasonable clean-up; keeping it costs
+nothing. USER's call, like every lever in this arc.
+
+**Method note (reusable):** the per-game transition table is what made this
+readable. The headline delta said "nothing happened"; the bucket table said "two
+opposing real effects that cancel". Always print the reverse direction -- the same
+symmetry rule that retired `MTG_MAIN2_DROP`.
