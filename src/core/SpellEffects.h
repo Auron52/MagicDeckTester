@@ -559,9 +559,55 @@ inline void OpponentGainsLife(GameState& state, int controller_index, int amount
 // executor (AIEngine::TakeTurn) both call it once per turn at the same point and stay in lockstep.
 // Tapping untapped lands only makes it idempotent within a turn (a multi-segment claude-play main never
 // double-drips). Inert for every deck without a tap_opponent_lifegain land + a useful-lifegain combo.
+// True when the drip lands we are about to sweep are still LOAD-BEARING for a cast later this
+// turn -- i.e. spending them for 1 damage would put the most expensive still-castable hand card
+// out of reach. Only meaningful on a deck that actually plays a second main, where the payloads
+// are cast post-combat.
+//
+// This replaces 04b13b0's approach of MOVING the sweep to the last main. That fixed the same
+// problem (antilife gi=454: a pre-combat sweep stole the Grove and the second main could no
+// longer pay {R}{G}{W} for Fiery Justice, T4 -> T5) but it created a post-main decision point
+// that recorded human games predate -- the replay answered it with the engine default and
+// claude_s10_gi9 lost a turn, leaving the reference gate red for the whole arc. Keeping the
+// sweep WHERE IT WAS and gating it on need introduces no new decision point, so recordings
+// still replay.
+//
+// Deliberately mana-COUNT based, not a full colour solve: this runs on every turn of every
+// rollout, and the cheap slack test already separates "genuinely leftover" from "the second
+// main wants this". A colour-exact version belongs with the main-2 reservation work
+// (docs/design/main2-aware-mana-choice.md), which is the general form of this same question.
+inline bool DripManaWantedLaterThisTurn(const GameState& state, int controller_index)
+{
+    if (!state.uses_second_main) { return false; }
+    int untapped = 0, drips = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const bool produces = d->card.IsLand() || !d->params.produces.empty();
+        if (!produces) { continue; }
+        ++untapped;
+        if (d->params.tap_opponent_lifegain > 0) { ++drips; }
+    }
+    if (drips <= 0) { return false; }
+    int best_mv = 0;
+    for (const Card& c : state.players[controller_index].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->card.IsLand()) { continue; }
+        const int mv = d->card.m_mana_cost.ManaValue();
+        if (mv <= untapped && mv > best_mv) { best_mv = mv; }
+    }
+    // Sweeping costs `drips` sources. If what we could still cast needs them, keep them.
+    return best_mv > untapped - drips;
+}
+
 inline void TapDripLandsIfUseful(GameState& state, int controller_index)
 {
     if (!ResolveProvider(state).OpponentLifegainUseful(state, controller_index)) { return; }
+    // "Leftover" must mean genuinely leftover -- see DripManaWantedLaterThisTurn.
+    if (DripManaWantedLaterThisTurn(state, controller_index)) { return; }
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller_index || p.tapped) { continue; }
