@@ -3464,9 +3464,22 @@ static int OptimisticTurnMana(const GameState& state)
     // a slack constant -- fragile, and wrong once more than the next one is missed -- detect whether
     // the turn's budget could grow AT ALL, and simply decline to prune when it could. The prune then
     // only ever fires on states where mana is what the board plainly produces.
-    auto budget_can_grow = [](const CardDefinition& d)
+    // A MANA ROCK IS NOT AUTOMATICALLY GROWTH (user 2026-08-16: "that's silly, Ancient Cornucopia is
+    // not a net mana adder"). Both halves of the old unconditional `mana_rock` test were wrong:
+    //   * ON THE BATTLEFIELD a rock is already counted -- AvailableManaPool credits it unconditionally
+    //     -- so it cannot grow the budget at all, and declining to prune because one is in play threw
+    //     the whole ceiling away for every rock deck.
+    //   * FROM HAND it costs its mana value and returns ManaProducedPerTap, so it grows the budget only
+    //     when NET POSITIVE. Sol Ring ({1} for two) does. Ancient Cornucopia is {2}{G} for one mana of
+    //     any colour: net MINUS TWO. Crediting it as growth is backwards -- a line containing it needs
+    //     two MORE mana, not fewer.
+    // `from_hand` is what separates the two; every other term is zone-independent.
+    auto budget_can_grow = [](const CardDefinition& d, bool from_hand)
     {
-        return d.params.ritual_floating_mana > 0 || d.params.mana_rock
+        if (from_hand && d.params.mana_rock
+            && ManaProducedPerTap(d) > d.card.m_mana_cost.ManaValue())
+        { return true; }
+        return d.params.ritual_floating_mana > 0
             || d.params.sac_creature_outlet   || d.params.hinata_cost_reducer
             || d.params.affinity_for_subtype  || !d.params.reduces_spell_color.empty()
             || !d.params.reduces_spell_subtype.empty()
@@ -3477,7 +3490,7 @@ static int OptimisticTurnMana(const GameState& state)
     {
         if (p.controller_index != state.active_player_index) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && budget_can_grow(*d)) { return kNoManaCeiling; }
+        if (d && budget_can_grow(*d, /*from_hand=*/false)) { return kNoManaCeiling; }
         // SAC-FOR-MANA (Treasure token / Lotus Bloom / Black Lotus). AvailableManaPool deliberately
         // does NOT count these -- they are modelled as an ACTION (Kind::SacForMana), not a source --
         // so without crediting them here the ceiling under-counts by exactly the mana the line means
@@ -3493,7 +3506,7 @@ static int OptimisticTurnMana(const GameState& state)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d) { return kNoManaCeiling; }               // unknown card: assume it could
         if (d->card.IsLand()) { any_land_in_hand = true; continue; }
-        if (budget_can_grow(*d)) { return kNoManaCeiling; }
+        if (budget_can_grow(*d, /*from_hand=*/true)) { return kNoManaCeiling; }
         // A spell that MINTS sac-for-mana tokens (Gold Rush) grows the turn's budget once it resolves.
         // Credited GROSS -- the cast's own cost is not subtracted -- because the ceiling only needs an
         // upper bound, and an over-credit can never prune a payable line.

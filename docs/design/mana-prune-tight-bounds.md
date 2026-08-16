@@ -1,9 +1,25 @@
 # Tight mana bounds for pruning — what is SHIPPED, what is BROKEN, and the order to fix it
 
-Status: one fix SHIPPED (`160c44e`), one defect FOUND AND MEASURED (not fixed), one design agreed.
-Direction set by the user 2026-08-16: *"we should be looking for a relatively tight bound that is not
-highly computationally expensive and using that to prune. Dropping individual cards from
-consideration based on these is another way we can prune many plans."* Self-contained.
+Status: the flow oracle is DONE — every bail clause is gone and 12 of 12 suite decks bail 0%. The
+emit ceiling is sound and always finite. What remains is TIGHTNESS, and §5 measures exactly how much
+is on the table. Direction set by the user 2026-08-16: *"we should be looking for a relatively tight
+bound that is not highly computationally expensive and using that to prune. Dropping individual cards
+from consideration based on these is another way we can prune many plans."* Self-contained.
+
+| # | change | commit | measured effect |
+|---|---|---|---|
+| 1 | domain sources modelled | `160c44e` | fivecolour backtracker nodes HALVED |
+| 2 | free-cast + Treasure under-credits | `4d59cf2` `f81936d` | ceiling became outcome-lossless |
+| 3 | `{X}` bail removed | `fac7d4b` | hinata bail 16.4% → 15.8% |
+| 4 | filter lands modelled | `3276311` | hinata unpayable-proving nodes −34.5%; **th's 87.6% bail was worth nothing** |
+| 5 | storage lands modelled | `042a097` | dragonstorm nodes −16.3% |
+| 6 | Three Tree City safe cap | `c41880c` | nothing today; oracle now UNCONDITIONAL |
+| 7 | `mana_rock` is not growth | this commit | ~900k declines → applications, zero play change |
+
+The recurring lesson across 4, 6 and 7: **a percentage of switched-off-ness is an upper bound on the
+prize, and it is often entirely slack.** th bailed 87.6% and gave up nothing; the rock fix converted
+~900,000 "decline to prune" decisions into real ceiling applications and changed no play at all.
+Measure the prize, not the symptom.
 
 ## 1. SHIPPED: the flow oracle no longer bails on domain sources
 
@@ -76,10 +92,10 @@ MTG_EMIT_PRUNE=1 ./build/Release/mtg --batch <manifest> --threads 0 | grep -oP '
 diff off.fp on.fp     # must be empty.  NB: strip ms= -- wall time differs per run and is not a result
 ```
 
-### 2a. A correct sub-fix, held until the above is fixed
+### 2a. SHIPPED: a mana rock is not automatically growth
 
-`budget_can_grow` declines the prune whenever any permanent or hand card has `mana_rock`. Both sides
-of that are wrong (user: *"Ancient Cornucopia is not a net mana adder"*):
+`budget_can_grow` used to decline the prune whenever any permanent or hand card had `mana_rock`.
+Both sides of that were wrong (user: *"that's silly, Ancient Cornucopia is not a net mana adder"*):
 
 * **on the battlefield** a rock is already counted — `AvailableManaPool` credits `mana_rock`
   unconditionally — so it cannot grow the budget at all;
@@ -88,11 +104,24 @@ of that are wrong (user: *"Ancient Cornucopia is not a net mana adder"*):
   colour: **net −2**. It does not raise the ceiling, it means a line containing it needs two MORE
   mana. Crediting it as growth is backwards.
 
-The fix is a `from_hand` parameter plus `ManaProducedPerTap(d) > d.card.m_mana_cost.ManaValue()`.
-Measured: it is a no-op on Mirrorwing (no rock — bit-identical to HEAD, which confirms the change
-touches only rock decks) and on FiveColour it makes the prune fire more, which under a LOSSY prune
-reads as a further regression (d0 6.2340 → 6.2500). **Correct in itself, harmful while §2 stands.**
-Apply it after, not before.
+Fixed with a `from_hand` parameter plus `ManaProducedPerTap(d) > d.card.m_mana_cost.ManaValue()`.
+
+The earlier reading of this fix ("on FiveColour it makes the prune fire more, d0 6.2340 → 6.2500")
+was an artefact of the LOSSY ceiling it was measured against; with §2 fixed it is outcome-lossless
+like everything else. What it does do is remove the last source of an INFINITE ceiling: on FiveColour
+`inf-ceiling` went from the dominant case to **exactly zero**.
+
+It is also the clearest example of the "measure the prize" lesson. A temporary counter in the branch
+shows it is reached **385k times on the battlefield and 510k times from hand in 60 FiveColour games**
+— nearly a million decisions flipped from "decline to prune" to "apply the ceiling" — and *not one
+play changed*, on 1000 d0 + 150 d3 + 75 d5 games. Correct, live, and worth nothing on its own,
+because an optimistic ceiling that is finally applied is still an optimistic ceiling. §5 is the
+follow-on.
+
+**Trap for anyone re-running these probes:** `--depth N` is REFUSED on a deck whose profile enables
+`value_play` ("omit --depth to use it"). A run that hits that error produces no games and every
+instrument reads zero — which looks exactly like "the branch is dead code". Omit `--depth` and use
+the profile's own depth.
 
 ## 3. AGREED DESIGN: per-card feasibility as an odometer-dimension prune
 
@@ -142,45 +171,107 @@ permanent would add once it resolves, `fivecolour_domain_widen.json`) and it is 
 "no castability test: a looser necessary condition is still sound". The same tightening applies
 there, and it is the same one flow call.
 
-## 4. The REMAINING bail-outs, measured per deck (2026-08-16)
+### 3b. Why the domain tightening is designed but NOT shipped
 
-Domain was not the only switch-it-off. Running every suite deck at d3 with `MTG_TAP_STATS=1` and
-reading `FLOW PRUNE: bailed` gives the live inventory — eight of twelve decks now never bail, and
-the four that do each trip a different clause:
+The soundness obligation is "no colour can join the domain this turn that the bound did not
+anticipate". One load-bearing fact makes that tractable, and it is worth recording because it is not
+obvious: **tokens in this engine are colourless.** `CreateToken` (`SpellEffects.h`) builds a `Card`
+with a name, types, subtypes and P/T and *never a mana cost*, so `HasColor()` is false for every
+colour and `DomainColors` — which reads the permanents' own colours, per the rules — can never see a
+token. So the whole `*_creates_tokens` param surface (a dozen-plus fields) is irrelevant here, and
+"which colours could arrive" reduces to "which permanent CARDS could enter".
 
-| deck | bailed | pruned | cause |
-|---|---|---|---|
-| **th** | **95.3%** | 0.1% | filter lands — Cascade Bluffs (`is_filter`), Ferrous Lake (`ramp_filter`) |
-| **goblins** | **73.3%** | 0.0% | **Three Tree City** (`IsScaledManaLand`) |
-| hinata | 16.4% | 17.4% | Cascade Bluffs + Izzet Signet, plus four `{X}` spells (Crackle with Power, Distorting Wake, Icy Blast, Reality Spasm) |
-| dragonstorm | 5.0% | 0.0% | storage lands — Mercadian Bazaar, Dwarven Hold |
-| antilife, auras, burn, creature_giving, fivecolour, knights, mirrorwing, slivers | 0.0% | 0–39.6% | — |
+What is left open is the residual hole: a permanent card entering from the GRAVEYARD or LIBRARY
+rather than from hand — Garth One-Eye's activated abilities, Muxus's `etb_mass_put`, reanimation.
+Those are driven by a battlefield permanent or a hand card, so a hand-only colour union is NOT a
+superset, and closing it means enumerating put-onto-battlefield params. That is precisely the chase
+`OptimisticTurnMana`'s own comment warns against ("rather than chase every mechanism with a slack
+constant — fragile, and wrong once more than the next one is missed"), and getting it wrong drops
+legal plays silently on any deck outside the suite.
 
-`th` and `goblins` are effectively running with the oracle off, and both show `pruned ≈ 0` as a
-result. Note bail% is an upper bound on the prize, not the prize itself — a bail only costs
-something where there was a prune to be had — but FiveColour's fix halved backtracker nodes off a
-45.2% bail, so the correlation is worth taking seriously.
+Note also that the *first* half of the user's tightening is already implied and needs no code:
+Bloom Tender can gain at most 4 and Faeburrow at most 3 **because a dork's own colours are its own
+permanent's colours**, so they are already inside `have` and `5 - have` is already ≤ 4 / ≤ 3.
 
-Every one of these is the same bail-instead-of-bound shape, and each has a sound over-approximation:
+So the shippable part is the castability gate alone, and it needs the graveyard/library question
+answered first. Do not ship a hand-only version: it is unsound on FiveColour itself (Garth).
 
-* **`{X}` spells** (hinata) — **DONE.** Provably safe, and it was a one-line removal. X only ADDS to the cost, so the
-  FIXED part is a lower bound on demand: if the oracle cannot satisfy the fixed part, no value of X
-  helps. Check the fixed part instead of bailing. (The existing per-card ceiling already reasons this
-  way — "EffectiveCost returns the FIXED part; if that alone is unaffordable, no value of X helps".)
-* **Scaled mana land** (goblins, Three Tree City) — **DEPRIORITISED by the user 2026-08-16**:
-  *"it's okay to bail on three tree city or to bound it to some safe cap. Goblins doesn't have huge
-  issues with performance."* The bail stays. If it is ever revisited it is the same shape as domain: yield is a function of
-  the board (creature count), invariant during a payment, and the colour is search-chosen. Credit
-  `amt = N` across its colour set exactly as domain now is.
-* **Storage lands** (dragonstorm) — bounded by their counters; credit the counters.
-* **Filter lands** (th, hinata) — the genuinely hard one, and the reason to do it LAST. A filter is a
-  GAIN edge (pay one, get two), and standard max-flow conserves flow, so it cannot be an edge in this
-  graph. The sound move is to over-credit: model the filter as a plain source of its OUTPUT (two mana
-  in its colours) and ignore the input it consumes. That is weaker than exact, but it is an upper
-  bound — which is all a prune needs — and it converts th from 95.3% bailed to 0%.
+## 5. WHERE THE REMAINING PRIZE IS — the ceiling is loose, and by exactly how much
 
-Order by measured prize, as revised: **`th` (filters) is the only one worth real effort**; goblins is
-deprioritised by the user (no performance problem there), `{X}` is done, and dragonstorm's 5.0% is
-small. `th` → dragonstorm, with goblins left bailing. Acceptance test for each is
-the one in §2 (prune ON vs OFF must stay outcome-identical across all 36 smoke configs), plus
-`MTG_TAP_STATS` showing bail% falling and nodes with it.
+With every bail gone and the ceiling always finite, the question is no longer "is the prune switched
+on" but "does the bound bind". Measured on FiveColour (60 games, profile depth, a temporary counter
+at the emit filter recording `mana_ceiling - EffectiveCost.ManaValue()` for every candidate):
+
+```
+seen=14,000,000   dropped=5,187,795 (37.1%)   inf-ceiling=0
+slack:   0        1        2        3        4       5       6       7      8 ...
+     1,469,795 1,371,050 1,342,375 1,284,214 1,006,627 776,233 581,582 378,354 213,491
+```
+
+Two readings, both actionable:
+
+* the prune already **drops 37% of all candidate emissions** — this is not a marginal mechanism;
+* the slack distribution is front-loaded, so tightening the bound converts almost linearly into
+  drops. Tightening by 1 adds ~1.47M, by 2 ~2.84M, by 3 ~4.18M, by 4 ~5.47M — i.e. **a 4-mana
+  tightening roughly DOUBLES the number of candidates pruned.**
+
+Four mana is exactly the size of the domain fiction (§3a): `live_dorks * (5 - have)` is +4 with one
+dork on a one-colour board and +6 with two. That is what makes §3a the highest-value item left, and
+also why it must be got right rather than got quickly.
+
+The same probe is the honest way to price any future bound change: slack histogram before, slack
+histogram after, then the ON-vs-OFF acceptance test in §2.
+
+## 6. The bail-outs: CLOSED (2026-08-16)
+
+Every clause is gone. **All 12 suite decks now bail 0%** (20 games each at profile depth, `MTG_TAP_STATS=1`):
+
+| deck | bailed before | bailed now | pruned now | total nodes |
+|---|---|---|---|---|
+| th | 87.6% | **0%** | 0.6% | 4,227 |
+| goblins | 74.4% | **0%** | 0.0% | 8,102 |
+| hinata | 13.4% | **0%** | 7.4% | 16,374 |
+| dragonstorm | 0.7% | **0%** | 4.2% | 993 |
+| slivers / antilife / creature_giving / mirrorwing / fivecolour | 0% | 0% | 10–13.6% | 13.8k / 7.1k / 413k / 80.8k / 2.17M |
+| burn / auras / knights | 0% | 0% | 0–1.9% | 843 / 4,529 / 13,168 |
+
+How each was closed, and what it was actually worth:
+
+* **`{X}` spells** (`fac7d4b`) — one-line removal. X only ADDS to the cost, so the FIXED part that
+  `ManaValue()` returns is a valid lower bound on demand: if the board cannot satisfy the fixed part,
+  no value of X helps. (The per-card ceiling already reasoned this way.)
+* **Filter lands** (`3276311`) — model the GROSS output and ignore the input. A filter is a gain edge
+  and max-flow conserves flow, so exactness is unavailable; over-crediting is always sound here.
+  `is_filter` → `amt = 2, per_col = 2` (both mana may be the same colour), plus Colorless so a strict
+  `{C}` pip is not lost; `ramp_filter` → `amt = |produces|, per_col = 1`. **The tempting net-1 model
+  is unsound**: Cascade Bluffs + Forest really does pay `{U}{R}` (tap Forest for `{G}`, feed it), and
+  a net-1 model sees a `{G}` reaching neither pip and prunes it. Worth −34.5% unpayable-proving nodes
+  on hinata and **nothing at all on th**, whose 87.6% bail was entirely slack.
+* **Storage lands** (`042a097`) — exact, not an over-credit: the worker bursts
+  `min(storage_counters, shortfall)`, so the live counter count is a tight cap, and
+  `StorageSourceLive` has already excluded an uncharged/held land. Dragonstorm nodes −16.3%.
+* **Scaled mana land** (`c41880c`) — the user's own second option, *"or to bound it to some safe
+  cap"*. Ignore the `{2}` feeder (another gain edge), credit gross N over every colour plus Colorless.
+  Goblins: bail 74.4% → 0%, pruned 0 → 0, nodes 8,102 → 8,102. Buys nothing today — a land making
+  N-of-any-colour for free makes nearly every cost look feasible — but it is strictly no-worse than
+  the bail (identical node counts prove it) and it makes the oracle UNCONDITIONAL, so no source type
+  can silently switch the pruner off for a future deck.
+
+The prioritisation lesson, since the audit that drove it got the order exactly backwards: **bail% is
+an upper bound on the prize and it is frequently all slack.** th led the table at 87.6% and delivered
+zero; hinata, at a sixth of that rate, gave up a third of its unpayable-proving work. The
+correlation held on FiveColour's domain fix and nowhere else. Rank by measured prize next time —
+the bail counter tells you where the pruner is *absent*, not where it would have *helped*.
+
+## 7. What is left
+
+1. **§3a domain tightening** — the highest-value item (§5 prices it at roughly double the drops), and
+   blocked on the graveyard/library question in §3b, not on effort.
+2. **§3 per-card feasibility prune** — note it needs a COLOUR-aware supply model, not the MV ceiling:
+   a plan may play a land and then cast, so testing a card against only the currently-untapped board
+   under-credits and would be unsound.
+3. **USER CALL: ship `MTG_EMIT_PRUNE` on by default?** It is now sound (all 36 smoke configs
+   outcome-identical ON vs OFF, five differing on digest only — the enumeration set changing, which
+   is the point) and it drops 37% of candidate emissions on FiveColour. It has never been measured
+   for SPEED on a sound bound; every previous number was taken against the lossy version. The
+   remaining unknown is whether 37% fewer emissions pays for the ceiling's own cost.
