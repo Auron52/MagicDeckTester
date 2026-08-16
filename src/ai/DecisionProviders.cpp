@@ -958,6 +958,26 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
         if (q.card.IsLand() || qd->params.mana_rock) { ++total; }
     }
     if (creature_src <= 0) { return false; }
+    // WHAT THE HELD MANA BUYS -- computed FIRST, because the exalted releases below are only
+    // sound once we know it. A hand card is creature-mana-dependent when it is affordable with
+    // the dorks and NOT without them; whether any such card is a DAMAGE payload decides whether
+    // a 2-point exalted swing is the better use of the same permanent.
+    const int noncreature = total - creature_src;
+    bool needs_creature_mana = false;
+    bool needed_deals_damage = false;
+    for (const Card& c : s.players[active].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+        if (!hd || hd->card.IsLand()) { continue; }
+        const int mv = hd->card.m_mana_cost.ManaValue();
+        if (mv <= noncreature || mv > total) { continue; }
+        needs_creature_mana = true;
+        const CardParams& hp = hd->params;
+        if (hp.damage > 0 || hp.opponent_lifegain > 0 || hp.etb_opponent_lifegain > 0
+            || hp.alt_lifegain_cost > 0 || hp.verse_damage || hp.lifegain_to_loss)
+        { needed_deals_damage = true; }
+    }
+    if (!needs_creature_mana) { return false; }   // nothing to hold for
     // EXALTED correction (antilife stack-vs-base dig 2026-08-15, gi=76): the "attack is worth
     // at most a chip" premise fails when the 0-power dork IS the deck's attack -- swinging
     // alone it deals CountExalted damage (2+ with a second Hierarch out). When the board's
@@ -977,7 +997,14 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
         }
         if (!other_attacker)
         {
-            if (exalted >= 2) { return false; }   // p would BE the exalted swing -- worth >= 2
+            // ... but NOT when the held mana buys DAMAGE (held-out census 2026-08-16, gi=530):
+            // under the collapsed main the attack runs BEFORE the casts, so releasing the dorks
+            // taps the deck's whole mana base and the post-combat payload dump cannot be paid.
+            // gi=530: two Hierarchs attacking is worth 2 (and attacking with BOTH forfeits
+            // exalted entirely), while the same mana casts Fiery Justice for the T4 kill --
+            // measured base tail=4 vs classify tail=5 at the identical node. gi=76's release
+            // stands: there the creature-mana-dependent card was a BIRDS (ramp, no damage).
+            if (exalted >= 2 && !needed_deals_damage) { return false; }
             // LETHAL-RELEVANT single chip (gi=230): a 1-point exalted swing is no longer "at
             // most a chip" when it completes a this-turn kill -- opp at 8 with a free Reverent
             // Silence in hand (6 alt + 1 verse) needs exactly the swing to reach 0. Release
@@ -988,15 +1015,7 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
             { return false; }
         }
     }
-    const int noncreature = total - creature_src;
-    for (const Card& c : s.players[active].hand)
-    {
-        const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
-        if (!hd || hd->card.IsLand()) { continue; }
-        const int mv = hd->card.m_mana_cost.ManaValue();
-        if (mv > noncreature && mv <= total) { return true; }   // castable only with creature mana
-    }
-    return false;
+    return true;
 }
 
 bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker) const
