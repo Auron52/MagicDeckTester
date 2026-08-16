@@ -250,6 +250,36 @@ base bugs the aggregate had hidden:**
   ≥2 release on the needed cards not being damage payloads. gi=76's release stands (its
   creature-mana-dependent card was a Birds — ramp); gi=9/230/184 unchanged. Base byte-identical
   (all 36 smoke keys).
+* **BUG 4 — the dork hold priced a FREE-alt card at its printed mana value (FIXED, lever-gated):**
+  `HoldManaSourceForCollapsedMain` decides "is some hand spell affordable only with creature
+  mana?" by comparing each card's printed mana value against the non-creature sources. But
+  Reverent Silence / Skyshroud Cutter / Invigorate each carry an alternative cost ("rather than
+  pay this spell's mana cost, an opponent gains N") that is payable **with zero mana** whenever
+  the required Forest is on board — so their printed cost says nothing about what the deferred
+  main needs. gi=531: Reverent Silence's printed `{3}{G}` pinned BOTH dorks on T2 **and** T3;
+  the classify arm forfeited two exalted swings, cast nothing at all on T3, and its T4 dump
+  landed the opponent on exactly **2** life — the two forfeited chips — while base closed at 0
+  (4→5). Fix: skip a hand card from the affordability scan when its alt cost is payable now.
+  This is a statement about AFFORDABILITY, not about whether firing the alt is wise — the
+  payload's own gates (`CanAutoFireAltPayload` / `ShouldEmitRiskyAltPayload`) still decide that.
+* **BUG 5 — the dork hold was ALL-OR-NOTHING (FIXED, lever-gated):** any creature-mana-dependent
+  hand card pinned *every* dork, even when the deferred cast needed only one of them. Under the
+  collapsed main the attack is declared BEFORE the deferred casts, so the blanket hold simply
+  deletes the exalted swing. gi=174 T4: opponent on 11, two lands covering `{G}{W}`, two dorks,
+  and Fiery Justice (`{R}{G}{W}`, 10 damage under the Remedy) needing exactly ONE dork for its
+  `{R}` — the hold pinned both, the turn ended at 1 life instead of 0, and the win slipped 4→5.
+  Bisected with a temporary `MTG_TMP_M1` classifier override: forcing Fiery Justice to Main1
+  restored the T4 kill, which located the cost in the m2 attack/cast ordering rather than in the
+  classification itself. Fix: track `need_creature_src = max(mv − noncreature)` over the
+  creature-mana-dependent cards and release the hold once `creature_src − 1 >= need_creature_src`.
+  Releasing several dorks is safe because `ShouldAttackWith` gives the lone-attacker slot to the
+  lowest-index eligible body, so exalted is never broken. Colour-blind like the count it extends;
+  the colour-aware form is the open source tie-break item (see gi=38 / 5c gi=97).
+  Both fixes preserve every motivating guard: gi=9 (single-dork chip vs Plague Drone tempo),
+  gi=76 (exalted ≥2 release), gi=184, gi=230 (lethal-relevant chip), gi=530 (BUG 3's node).
+  Base byte-identical — 36/36 smoke and 60/60 regression keys, 0 play changes — because the
+  whole hold path is unreachable unless `CollapsedMainActive` (no provider sets
+  `ClassifiesMainPhases()`, so it needs `MTG_PHASE_CLASSIFY`).
 * **STILL OPEN, and now split by cause:**
   - **gi=38 — drip-land TIE (not a bug, a tie-break candidate):** the arms diverge at T1,
     base playing Bloodstained Mire while classify plays Grove of the Burnwillows and taps it
@@ -259,10 +289,46 @@ base bugs the aggregate had hidden:**
     does not gift life when the alternatives score equal"). Same shape as 5c gi=97's
     colour-aware tie-break candidate. The fetch-vs-Grove choice also reshuffles, so everything
     downstream is a different game (clairvoyance family).
-  - **gi=174 / gi=531** — T2 cast-choice differences, not yet root-caused.
-  - **gi=514 / gi=545 / gi=41** — fine at classify+ssm; only the LATER levers
-    (main2drop / acq / bp63) break them.
+  - ~~**gi=174 / gi=531**~~ — ROOT-CAUSED and FIXED as BUG 5 and BUG 4 above. Both now match
+    base at classify (4/4); gi=174 matches under the full stack too, and gi=41 came along.
+  - **gi=514 / gi=545 / gi=531-at-stack** — fine at classify+ssm; only the LATER levers
+    (main2drop / acq / bp63) break them. Unchanged by BUG 4/5.
   - hinata's skewed 6→8 bucket (13 vs 4) and goblins gi=403.
+
+  **Method note (reusable): `MTG_UNPRUNE=mainphase` is the first question to ask.** For both
+  gi=174 and gi=531 the regression survived a **100× budget increase** (10 → 1000 virtual-ms,
+  identical result), which rules out search truncation and says a *prune* is dropping the line —
+  exactly the unbounded test the USER's no-lossy-truncation bar calls for. `MTG_UNPRUNE=mainphase`
+  then recovered both, and the follow-up that forcing *every nonland* to Main1 recovered only
+  gi=174 is what split the two causes: gi=174 was the per-card classification's downstream
+  ordering, gi=531 was one of the OTHER things the same gate switches on (the collapsed-main
+  dork hold), which no amount of re-classifying could reach.
+
+**HELD-OUT A/B AFTER BUG 4 + BUG 5 (2026-08-16, stack arm re-run over all 144 overnight keys;
+base arm unchanged because both fixes are lever-gated and the regression suite measured 60/60
+keys byte-identical). NET `−0.1333` (was `−0.0148`) — a further `0.119` improvement on held-out
+seeds, 95/144 keys byte-identical. No deck got worse:**
+
+| deck | sum gap | (was) | games w/b | reading |
+|------|---------|-------|-----------|---------|
+| fivecolour | **−0.187** | −0.089 | 219w/280b | **biggest winner** — 5→4 in 181 games vs 4→5 in 108 |
+| burn | −0.120 | −0.120 | 15w/135b | untouched |
+| creature | −0.075 | −0.075 | 7w/65b | untouched |
+| goblins | +0.002 | +0.002 | 6w/4b | untouched |
+| antilife | **+0.064** | +0.085 | 94w/45b | the motivating deck — 18 worse games closed |
+| hinata | +0.182 | +0.182 | 255w/254b | byte-identical w/b — confirms it is pure churn |
+
+**The headline is that an ANTILIFE dig improved FIVECOLOUR ~5× more.** `HoldManaSourceForCollapsedMain`
+is a `DecisionProvider` base-class rule, not an archetype override, so it governs every deck that
+plays a collapsed main with mana creatures — and fivecolour, with the most dorks and the most
+colour-hungry casts, was paying the blanket hold on far more turns than the deck the bug was found
+in. Worth remembering when triaging: a lever-gated regression that looks archetype-specific may
+sit in shared code.
+
+Residual one-sided buckets (the next digs, both NEW to this table):
+* **antilife 4→5: 32 vs 14 reverse** — still ~2:1, so a third cause remains in the antilife family.
+* **antilife 5→7: 7 vs 2**, **fivecolour 6→7: 8 vs 2** — small but one-sided.
+The big fivecolour 5↔6 (101/94) and antilife 5↔6 (23/15) buckets are symmetric = churn.
 
 **HELD-OUT A/B RE-RUN AFTER THE THREE FIXES (2026-08-16, both arms rebuilt): the stack is now
 NET BETTER on held-out seeds — `−0.0148` summed per-key gap over 144 keys (was `+0.0330`),

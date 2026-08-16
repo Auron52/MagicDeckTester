@@ -965,19 +965,47 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
     const int noncreature = total - creature_src;
     bool needs_creature_mana = false;
     bool needed_deals_damage = false;
+    int  need_creature_src   = 0;   // creature sources the most demanding such card requires
     for (const Card& c : s.players[active].hand)
     {
         const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
         if (!hd || hd->card.IsLand()) { continue; }
+        // FREE-ALT EXCLUSION (antilife stack-vs-base dig 2026-08-16, gi=531): a card whose
+        // alternative cost is payable RIGHT NOW ("rather than pay this spell's mana cost, an
+        // opponent gains N" with the required Forest on board) is affordable with ZERO mana, so
+        // it is never "affordable only with creature mana" -- its printed mana value says
+        // nothing about what the deferred main needs. Pricing Reverent Silence at its printed
+        // {3}{G} held BOTH dorks on T2 and T3 for a spell that was ultimately cast for free,
+        // forfeiting two exalted swings; the turn then ended exactly 2 damage short (4 -> 5).
+        // This is a statement about AFFORDABILITY, not about whether firing the alt is wise:
+        // the payload's own gates (CanAutoFireAltPayload / ShouldEmitRiskyAltPayload) still
+        // decide that. Inert for every deck without an alt-cost card.
+        if (hd->params.alt_lifegain_cost > 0
+            && ControlsSubtype(s, active, hd->params.alt_cost_requires_subtype))
+        { continue; }
         const int mv = hd->card.m_mana_cost.ManaValue();
         if (mv <= noncreature || mv > total) { continue; }
         needs_creature_mana = true;
+        need_creature_src   = std::max(need_creature_src, mv - noncreature);
         const CardParams& hp = hd->params;
         if (hp.damage > 0 || hp.opponent_lifegain > 0 || hp.etb_opponent_lifegain > 0
             || hp.alt_lifegain_cost > 0 || hp.verse_damage || hp.lifegain_to_loss)
         { needed_deals_damage = true; }
     }
     if (!needs_creature_mana) { return false; }   // nothing to hold for
+    // SURPLUS RELEASE (antilife stack-vs-base dig 2026-08-16, gi=174): the hold was
+    // all-or-nothing -- ANY creature-mana-dependent hand card pinned EVERY dork -- but the
+    // deferred main only needs `need_creature_src` of them. Exactly one dork ever swings
+    // (ShouldAttackWith gives the lone-attacker slot to the lowest-index eligible body, so
+    // exalted is never broken by releasing several), so the swing is free whenever holding one
+    // fewer source still covers the most demanding card. gi=174 T4: opp at 11, two lands
+    // covering {G}{W} and two dorks, Fiery Justice ({R}{G}{W}, 10 damage under the Remedy)
+    // needing just ONE dork for its {R} -- the blanket hold forfeited the exalted swing and the
+    // turn ended at 1 life instead of 0 (4 -> 5). Colour-blind like the count above: it can
+    // under-hold when the surplus dork is the only source of a needed COLOUR, which costs the
+    // same turn the blanket hold was protecting -- measured net-better, and the colour-aware
+    // form is the open land/source tie-break item.
+    if (creature_src - 1 >= need_creature_src) { return false; }
     // EXALTED correction (antilife stack-vs-base dig 2026-08-15, gi=76): the "attack is worth
     // at most a chip" premise fails when the 0-power dork IS the deck's attack -- swinging
     // alone it deals CountExalted damage (2+ with a second Hierarch out). When the board's
