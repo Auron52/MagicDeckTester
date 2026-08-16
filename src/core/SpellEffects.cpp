@@ -1090,17 +1090,39 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         if (def->params.creature_mana_only && !for_creature) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }
-        // Unmodellable source type -> the whole oracle bails (it would MIS-credit its yield): a scaled
-        // land pays a feeder for N-of-one-colour. Every other source -- including a bounce/Karoo land
-        // (produces_amount>=2) -- is uniformly "one tap -> `amt` mana of ONE chosen colour among
-        // `produces`" (the worker's loop below), so `amt` is its flow capacity.
+        // SCALED MANA LAND (Three Tree City) is bounded by a SAFE CAP rather than bailed -- the user's
+        // own second option, 2026-08-16: "it's okay to bail on three tree city or to bound it to some
+        // safe cap. Goblins doesn't have huge issues with performance." Bounding is strictly better
+        // than bailing here for the same reason it was for the filters: a bail turns the oracle off for
+        // the WHOLE payment (74.4% of goblins' top-level entries, with pruned stuck at 0), whereas a
+        // loose-but-sound cap still prunes everything the rest of the board rules out.
         //
-        // Three Tree City (the only IsScaledManaLand card) stays on the bail path by USER DECISION
-        // 2026-08-16 -- "it's okay to bail on three tree city; goblins doesn't have huge issues with
-        // performance". It is the same shape as domain if it is ever wanted: yield N across its colour
-        // set, invariant during a payment, colour search-chosen.
+        // "{2},{T}: choose a color, add N of it", N = creatures you control. The {2} feeder is a cost,
+        // so like a filter it is a GAIN edge this graph cannot express -- ignore the feeder and credit
+        // the gross N, which can only ADD supply. The colour is search-chosen, so the set is every
+        // colour, plus Colorless for the basic "{T}: Add {C}" mode in `produces`. One tap puts the
+        // whole N into the ONE chosen colour, so per_col == amt.
+        //
+        // The cap is deliberately loose (N mana of any colour from one land, with the {2} free), which
+        // is why this is the LAST clause to have been worth writing rather than the first. Loose is
+        // still sound: this oracle only ever claims INFEASIBLE.
         if (IsScaledManaLand(*def))
-        { if (out_bailed) { *out_bailed = true; } return false; }
+        {
+            std::uint8_t nbits = 0;
+            for (Color c : def->params.produces)
+            { nbits |= static_cast<std::uint8_t>(1u << static_cast<int>(c)); }
+            nbits |= static_cast<std::uint8_t>((1u << static_cast<int>(Color::White))
+                                             | (1u << static_cast<int>(Color::Blue))
+                                             | (1u << static_cast<int>(Color::Black))
+                                             | (1u << static_cast<int>(Color::Red))
+                                             | (1u << static_cast<int>(Color::Green)));
+            // The scaled ability yields N; the basic {C} mode yields ManaProducedPerTap. Credit the
+            // larger -- an N of zero (no creatures) leaves the plain land, which is exact.
+            const int scaled = std::max(ScaledManaCreatureCount(state), ManaProducedPerTap(*def));
+            if (scaled <= 0) { continue; }
+            srcs.push_back({ nbits, scaled, scaled });
+            continue;
+        }
 
         // STORAGE LANDS (Dwarven Hold, Mercadian Bazaar) are modelled EXACTLY, not bailed. The worker
         // bursts `min(storage_counters, shortfall)` mana of its `produces` colour in one tap, so the
