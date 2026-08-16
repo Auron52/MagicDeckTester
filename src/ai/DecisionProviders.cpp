@@ -6479,7 +6479,12 @@ FiveColourProvider::MainPhaseOverride(const GameState& s, const CardDefinition& 
     // Mana Cannons: on-cast face damage, fires identically from either main.
     if (p.multicolor_cast_damage_per_color)                    { return MainPhase::Main2; }
     if (def.card.m_name == "Nicol Bolas, Planeswalker")        { return MainPhase::Main2; }
-    if (def.card.m_name == "Oko, Thief of Crowns")             { return MainPhase::Main2; }
+    // Oko is NO LONGER forced to Main2 (USER 2026-08-16). The premise was that his abilities do
+    // nothing pre-combat, which was only true because elk_transform was hardcoded to Food tokens:
+    // his +1 turns an artifact OR CREATURE into a 3/3, and a permanent controlled since the turn
+    // began attacks immediately (CR 302.6), so Elking a 0/1 dork is a pre-combat attack. With the
+    // target searched, the generic loyalty_abilities -> Main1 pull is the correct class for him --
+    // the same reasoning that already keeps Jared off this list.
     return std::nullopt;
 }
 

@@ -5241,14 +5241,62 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 else if (ab.effect == "food_token") { ev = DMG / 3; }
                 else if (ab.effect == "elk_transform")
                 {
-                    bool fuel = false;
+                    static thread_local std::vector<int> elk_targets;
+                    // Oko +1 target set. Previously fuelled ONLY by an own Food Token, which made
+                    // the deck's real value line unreachable: Elking a 0/1 mana dork gives a 3/3
+                    // that ATTACKS THIS TURN (summoning sickness tracks control duration, CR
+                    // 302.6, not creature-ness), at the cost of that dork's mana ability. That is
+                    // a genuine trade, so it is the SEARCH's call -- emit one action per candidate
+                    // and let the plan comparison price it. Candidates: every own Food Token, plus
+                    // every own attack-eligible permanent whose effective power is below the 3 the
+                    // Elk would set (Elking a bigger body is a strict downgrade and stays out).
+                    elk_targets.clear();
                     for (const Permanent& q : state.battlefield)
                     {
-                        if (q.controller_index == state.active_player_index
-                            && q.card.m_name.str() == "Food Token") { fuel = true; break; }
+                        if (q.controller_index != state.active_player_index) { continue; }
+                        if (q.card.m_name.str() == "Food Token") { elk_targets.push_back(q.card.m_number); continue; }
+                        if (!q.card.IsCreature() && !q.card.HasType(CardType::Artifact))    { continue; }
+                        if (q.card.IsCreature() && q.EffectivePower() >= 3)  { continue; }
+                        if (!CanAttackFull(q, state.battlefield, state.active_player_index)) { continue; }
+                        elk_targets.push_back(q.card.m_number);
                     }
-                    if (!fuel) { continue; }
-                    ev = 2 * DMG;
+                    if (elk_targets.empty()) { continue; }
+                    for (int tgt : elk_targets)
+                    {
+                        // TARGET-AWARE value: the Elk sets base P/T to 3/3, so the gain is
+                        // (3 - the body's current power) -- 3 for a Food/artifact, 3 for a 0/1
+                        // dork, 0 for something already 3 power. A flat value here made the
+                        // GREEDY d0 policy Elk a mana dork as readily as a Food (measured: smoke
+                        // fivecolour d0 6.1850 -> 6.1940), because "loses all abilities" kills
+                        // that dork's mana and nothing priced it. Charge the same ramp value
+                        // EvalCard credits a dork for, so a Food is preferred while the dork swap
+                        // stays available when the extra power is what matters.
+                        int gain = 3;
+                        bool costs_mana = false;
+                        for (const Permanent& q : state.battlefield)
+                        {
+                            if (q.card.m_number != tgt) { continue; }
+                            if (q.card.IsCreature()) { gain -= std::max(0, q.EffectivePower()); }
+                            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                            if (qd && (qd->tmpl == CardTemplate::ManaDork || !qd->params.produces.empty()))
+                            { costs_mana = true; }
+                            break;
+                        }
+                        if (gain <= 0) { continue; }
+                        Action ea;
+                        ea.kind            = Action::Kind::ActivateLoyalty;
+                        ea.card_name       = p.card.m_name;
+                        ea.hand_index      = -1;
+                        ea.cost            = ManaCost{};
+                        ea.sac_source_id   = p.card.m_number;
+                        ea.loyalty_ability = li;
+                        ea.enchant_target  = tgt;
+                        ea.eval            = gain * DMG
+                                             - (costs_mana ? s_dork_ramp * std::min(ExpectedAttacks(state), 4) : 0);
+                        ea.is_noncreature  = true;
+                        actions.push_back(std::move(ea));
+                    }
+                    continue;   // emitted per target above
                 }
                 Action a;
                 a.kind            = Action::Kind::ActivateLoyalty;
@@ -10881,7 +10929,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         else if (a.kind == Action::Kind::ActivateLoyalty)
         {
             // Planeswalker loyalty: no mana cost (the cost is the loyalty delta, paid inside).
-            ApplyLoyaltyAbility(state, state.active_player_index, a.sac_source_id, a.loyalty_ability);
+            ApplyLoyaltyAbility(state, state.active_player_index, a.sac_source_id, a.loyalty_ability,
+                                a.enchant_target);
         }
         else if (a.kind == Action::Kind::GarthActivate)
         {
@@ -13183,8 +13232,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                   + ">" + std::to_string(act.sac_victim_id)); break;
                 // Planeswalker: which walker AND which ability are distinct decisions.
                 case Action::Kind::ActivateLoyalty:
+                    // ...and WHICH target for a targeted ability (Oko +1 elk_transform):
+                    // two targets are two distinct decisions, so the dedup must not fold them.
                     msf.push_back("PW#" + std::to_string(act.sac_source_id)
-                                  + "a" + std::to_string(act.loyalty_ability)); break;
+                                  + "a" + std::to_string(act.loyalty_ability)
+                                  + "t" + std::to_string(act.enchant_target)); break;
                 // Garth: which name is a distinct decision (once-per-game each -- core invariant).
                 case Action::Kind::GarthActivate:
                     msf.push_back("GARTH#" + std::to_string(act.sac_source_id)

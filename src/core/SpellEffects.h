@@ -2642,7 +2642,10 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
 // (which creatures get Jared's counters, which card Regrowth returns, which own permanent Bolas
 // destroys, which Food becomes an Elk) use deterministic provably-reasonable picks, disclosed in
 // the deck's 6a table. Applied identically by the rollout and executor trailing passes (lockstep).
-inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id, int ability_index)
+// `elk_target` = the card.m_number of the permanent Oko's +1 turns into a 3/3 Elk (0 = the legacy
+// "first own Food Token" pick). SEARCHED, not hardcoded: see the enumeration note in TurnSolver.
+inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id, int ability_index,
+                                int elk_target = 0)
 {
     int wi = -1;
     const CardDefinition* d = nullptr;
@@ -2805,15 +2808,36 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
     }
     else if (ab.effect == "elk_transform")
     {
-        // Oko +1 ("target artifact or creature loses all abilities, becomes a 3/3 green Elk"):
-        // NARROWED to the value line -- transform an own Food token into a 3/3 body (enumerated
-        // only when a Food exists; Elking a real creature is strictly worse here and is not
-        // offered -- disclosed 6a). Keeps entered_this_turn (a fresh Food makes a summoning-sick
-        // Elk, faithful).
-        for (Permanent& q : state.battlefield)
+        // Oko +1: "target artifact or creature loses all abilities and becomes a green Elk
+        // creature with base power and toughness 3/3."
+        //
+        // The target is SEARCHED (elk_target), not hardcoded. It used to be narrowed to "the first
+        // own Food Token", on the stated premise that "Elking a real creature is strictly worse" --
+        // which is false, and on FiveColour badly so (USER 2026-08-16). The deck's creatures are
+        // 0/1 mana dorks: Elking a Birds of Paradise yields a 3/3 that ATTACKS THAT TURN, because
+        // summoning sickness tracks how long you have CONTROLLED the permanent (CR 302.6), not how
+        // long it has been a creature. So the swap is a real trade the search must weigh -- +3
+        // power now against losing a mana source ("loses all abilities" kills the mana ability) --
+        // and hardcoding it away made Oko look like it did nothing pre-combat.
+        //
+        // entered_this_turn is preserved either way (a Food made THIS turn still makes a
+        // summoning-sick Elk, faithful).
+        int ti = -1;
+        for (int qi = 0; qi < static_cast<int>(state.battlefield.size()); ++qi)
         {
+            const Permanent& q = state.battlefield[qi];
             if (q.controller_index != controller) { continue; }
-            if (q.card.m_name.str() != "Food Token") { continue; }
+            if (elk_target != 0)
+            {
+                if (q.card.m_number != elk_target) { continue; }
+                if (!q.card.IsCreature() && !q.card.HasType(CardType::Artifact)) { continue; }
+            }
+            else if (q.card.m_name.str() != "Food Token") { continue; }
+            ti = qi; break;
+        }
+        if (ti >= 0)
+        {
+            Permanent& q = state.battlefield[ti];
             q.card.m_name = "Elk";
             q.card.RehashName();
             q.card.m_type_mask    = 0;
@@ -2824,7 +2848,8 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
             q.card.m_keyword_mask = 0;
             q.card.m_color_mask   = 0;
             q.card.AddColor(Color::Green);
-            break;
+            // Counters/temp buffs are NOT cleared: the Elk keeps them (CR 613 -- the P/T-setting
+            // effect applies in layer 7b, +1/+1 counters in 7d, so a countered Elk is bigger).
         }
     }
 

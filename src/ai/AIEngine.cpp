@@ -3048,7 +3048,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::ActivateLoyalty)
         {
             // Planeswalker loyalty (executor mirror; no mana cost).
-            ApplyLoyaltyAbility(state, state.active_player_index, a.sac_source_id, a.loyalty_ability);
+            ApplyLoyaltyAbility(state, state.active_player_index, a.sac_source_id, a.loyalty_ability,
+                                a.enchant_target);   // Oko +1: the searched Elk target (lockstep)
         }
         else if (a.kind == Action::Kind::GarthActivate)
         {
