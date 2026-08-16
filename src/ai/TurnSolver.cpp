@@ -3458,6 +3458,14 @@ static int OptimisticTurnMana(const GameState& state)
         if (p.controller_index != state.active_player_index) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && budget_can_grow(*d)) { return kNoManaCeiling; }
+        // SAC-FOR-MANA (Treasure token / Lotus Bloom / Black Lotus). AvailableManaPool deliberately
+        // does NOT count these -- they are modelled as an ACTION (Kind::SacForMana), not a source --
+        // so without crediting them here the ceiling under-counts by exactly the mana the line means
+        // to spend, and the prune drops it. This is the Mirrorwing half of the lossy-prune defect:
+        // Gold Rush mints Treasures and the enumeration then could not afford what they paid for.
+        // Cracking one yields sac_for_mana_amount once, so this is EXACT, not a slack constant.
+        if (d && !p.tapped && d->params.sac_for_mana_amount > 0)
+        { m += d->params.sac_for_mana_amount; }
     }
     bool any_land_in_hand = false;
     for (const Card& c : ap.hand)
@@ -3466,8 +3474,41 @@ static int OptimisticTurnMana(const GameState& state)
         if (!d) { return kNoManaCeiling; }               // unknown card: assume it could
         if (d->card.IsLand()) { any_land_in_hand = true; continue; }
         if (budget_can_grow(*d)) { return kNoManaCeiling; }
+        // A spell that MINTS sac-for-mana tokens (Gold Rush) grows the turn's budget once it resolves.
+        // Credited GROSS -- the cast's own cost is not subtracted -- because the ceiling only needs an
+        // upper bound, and an over-credit can never prune a payable line.
+        if (d->params.creates_treasures > 0) { m += d->params.creates_treasures; }
     }
     if (any_land_in_hand) { m += 3; } // a land drop, at more than any single land in any deck produces
+
+    // BANKED FREE CAST (Maelstrom Archangel -- GameState::free_casts_available). THE defect that made
+    // this whole prune lossy: a free cast is a cost BYPASS, not a mana source, so a total-MANA ceiling
+    // cannot express it at all and the bound simply dropped the spell. Found on fivecolour d0 gi1
+    // (MTG_EMIT_PRUNE on vs off): T5 connects with the Archangel, banks a charge, and the post-combat
+    // main casts Unite the Coalition -- mana value SEVEN -- for free. The ceiling saw 7 > budget and
+    // pruned it, costing the game a turn (6 -> 7). 53 of 1000 d0 games moved, every one worse.
+    //
+    // Bounded rather than declined (the tight-bound direction, user 2026-08-16): each banked charge
+    // frees exactly ONE spell, so a subset spending a charge really needs (total MV - that spell's MV).
+    // That spell is in hand, so crediting the N LARGEST hand mana values for N charges is a sound
+    // over-credit -- never an under-count, so the prune stays lossless -- while keeping the ceiling
+    // finite instead of bailing out on every board holding an Archangel. Gated on the BANK, not on the
+    // card: pre-combat the bank is 0 and no free cast is available that main phase, so the pre-combat
+    // enumeration keeps its full-strength bound.
+    if (state.free_casts_available > 0)
+    {
+        std::vector<int> hand_mv;
+        hand_mv.reserve(ap.hand.size());
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && !d->card.IsLand()) { hand_mv.push_back(d->card.m_mana_cost.ManaValue()); }
+        }
+        std::sort(hand_mv.begin(), hand_mv.end(), std::greater<int>());
+        const int charges = std::min<int>(state.free_casts_available,
+                                          static_cast<int>(hand_mv.size()));
+        for (int i = 0; i < charges; ++i) { m += hand_mv[i]; }
+    }
 
     // SCALING SOURCES (domain_mana: Faeburrow Elder / Bloom Tender). Each taps for one mana of every
     // colour among permanents, so a coloured permanent played this turn RAISES their yield -- the

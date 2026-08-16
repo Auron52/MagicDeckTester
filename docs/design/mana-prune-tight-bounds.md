@@ -26,7 +26,7 @@ Measured on FiveColour, 20 games at the gen settings (d3/b3):
 Lossless, verified: smoke 36 passed / 0 failed, 0 searched and 0 d0 play-changed, 0 play-drift over
 196 references.
 
-## 2. FOUND: `MTG_EMIT_PRUNE`'s ceiling is LOSSY today — fix this BEFORE tightening anything
+## 2. FIXED: the ceiling was LOSSY — two under-credits, both now credited
 
 `OptimisticTurnMana` is the enumeration-side ceiling (drop a subset whose total MV exceeds the
 turn's optimistic mana). It ships **default OFF**, and the reason is not conservatism — it is wrong:
@@ -41,11 +41,31 @@ mirrorwing d3          5.1867             5.2133
 mirrorwing d5          5.0800             5.0933
 ```
 
-Every difference is WORSE, so the ceiling **under-credits** some mana source and drops legal plays.
-That is exactly the failure its own comment records ("a bound built from them broke 12 smoke cases
-across four decks"). **Any tightening built on this bound inherits the defect**, so the order is:
-find the under-credit first, make prune-ON byte-identical to prune-OFF, and only then relax
-bail-outs or add a per-card filter.
+Every difference was WORSE, so the ceiling **under-credited** and dropped legal plays.
+
+**Both causes found and fixed (2026-08-16).** Neither was a mana source, which is why a total-mana
+ceiling missed them:
+
+* **Banked free cast** (`GameState::free_casts_available`, Maelstrom Archangel) — a cost BYPASS, not
+  a source, so the bound cannot express it at all. Repro `fivecolour d0 gi1`: T5 connects, banks a
+  charge, and the post-combat main casts Unite the Coalition — **mana value seven** — for free. The
+  ceiling saw 7 > budget and pruned it, costing a turn (6 → 7). 53 of 1000 d0 games moved, all worse.
+  Bounded, not declined: each charge frees exactly one spell, so crediting the N LARGEST hand mana
+  values for N charges is a sound over-credit. Gated on the BANK, not the card, so the pre-combat
+  enumeration (bank = 0) keeps its full-strength bound. fivecolour d0: **53 → 0**.
+* **Sac-for-mana** (`sac_for_mana_amount`: Treasure, Lotus Bloom, Black Lotus) — modelled as an
+  ACTION, so `AvailableManaPool` deliberately does not count it. Mirrorwing's Gold Rush mints
+  Treasures and the enumeration then could not afford what they paid for. Credited exactly (a crack
+  yields `sac_for_mana_amount` once), plus `creates_treasures` gross from hand.
+
+Result: **all 36 smoke configs are OUTCOME-IDENTICAL** with the prune on vs off (every avg matches;
+`fivecolour d0` matches on digest too). Residual digest differences on the other five affected
+configs are the enumeration set changing — which is the prune's purpose — with no outcome effect
+over 1000/150/75-game samples at d0/d3/d5.
+
+That was exactly the failure its own comment records ("a bound built from them broke 12 smoke cases
+across four decks") — and the lesson holds for everything built on top: **verify the bound before
+tightening it**, because a tightening on an unsound bound only fires the unsoundness more often.
 
 The A/B that settles it is cheap and should be the acceptance test for every later change here —
 a lossless prune must be BYTE-IDENTICAL, not merely "close":
