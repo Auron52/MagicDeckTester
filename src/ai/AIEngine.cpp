@@ -3094,7 +3094,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // searched/committed line. After the cast loop so a spell that needed Grove's mana tapped it
     // first. Inert without a Remedy active + an untapped tap_opponent_lifegain land (every deck but
     // Anti-Lifegain).
-    if (is_pre_combat_main) { TapDripLandsIfUseful(state, state.active_player_index); }
+    // LAST MAIN of the turn, not the pre-combat one: on a second-main deck a pre-combat sweep
+    // spends mana the post-combat casts still need (see ApplyPlanDirect's twin for the antilife
+    // gi=454 case). Mirrors the rollout exactly -> lockstep.
+    const bool drip_last_main = state.uses_second_main ? !is_pre_combat_main : is_pre_combat_main;
+    if (drip_last_main) { TapDripLandsIfUseful(state, state.active_player_index); }
 
     // Animate lands and activate tap-token abilities with mana remaining after spells.
     // Only in pre-combat main so any resulting creatures can attack this turn.

@@ -11015,9 +11015,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
     // Grove of the Burnwillows drip: once a Remedy is live, tap any still-untapped Grove for its
     // free 1-damage ping even with nothing to cast (see TapDripLandsIfUseful). After all casts so
-    // a spell that needed Grove's mana tapped it first; once per turn (pre-combat main only). The
+    // a spell that needed Grove's mana tapped it first; once per turn, at the turn's LAST main. The
     // real executor (AIEngine::TakeTurn) calls the same helper at the same point -> lockstep.
-    if (is_pre_combat) { TapDripLandsIfUseful(state, state.active_player_index); }
+    //
+    // LAST MAIN, not "pre-combat main" (antilife 4->5 family, held-out census 2026-08-16): the
+    // sweep is only free when nothing LATER in the turn needs that mana. On a second-main deck the
+    // payloads are cast post-combat, so a pre-combat sweep SPENDS the Grove for 1 damage and the
+    // second main can no longer pay {R}{G}{W} for Fiery Justice -- the enabler-then-dump kill
+    // falls apart and the win slips a turn (gi=454: base taps Grove AS PAYMENT in main 1 and gets
+    // both the drip and the spell, for exactly-lethal 20). Sweeping in the second main keeps the
+    // once-per-turn drip while leaving the mana available to the casts that need it.
+    const bool last_main = state.uses_second_main ? !is_pre_combat : is_pre_combat;
+    if (last_main) { TapDripLandsIfUseful(state, state.active_player_index); }
 
     // Sacrifice depletion lands (e.g. Saprazzan Skerry) exhausted by this turn's taps.
     SacrificeDepletedLands(state);
