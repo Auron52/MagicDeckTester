@@ -7195,6 +7195,20 @@ inline bool MaxManaGateEnabled()
 inline bool FlowPruneEnabled()
 { static const bool v = !EnvOn("MTG_NO_FLOW_PRUNE"); return v; }
 
+// FLOW-GUIDED TAP ORDER. The oracle above already computes a max-flow assignment for every FEASIBLE
+// payment and discards it; this reuses it to order the backtracker's source loop, so the first
+// branch tried is the one the flow already proved sufficient. Measured on FiveColour: the flow's
+// source set is EXACTLY the set the backtracker ends up tapping 75.8% of the time, a superset a
+// further 0.7%, overlapping 23.6%, and DISJOINT 0% -- it is never a wrong guess. Meanwhile a
+// successful payment costs 71.3 nodes to rediscover an answer that averages 4.5 sources.
+//
+// NOT byte-identical, unlike every other lever here: a different source ORDER finds a different
+// (equally legal) tap set, which leaves different sources untapped and so changes later decisions.
+// It is therefore a HEURISTIC change, measured by the suite on avg-win-turn as well as cost, not a
+// lossless one -- hence its own flag rather than folding into FlowPruneEnabled.
+inline bool FlowOrderEnabled()
+{ static const bool v = EnvOn("MTG_FLOW_ORDER"); return v; }
+
 // UPPER bound on the net mana one tap of `def` can add to the floating pool -- used to bound the
 // total mana still extractable from a set of untapped sources. Deliberately over- (never under-)
 // counts so the gate stays lossless: an unfed filter/ramp-filter or a solo Reflecting Pool really

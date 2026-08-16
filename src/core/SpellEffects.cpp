@@ -1019,6 +1019,22 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
 // -> colour_c (cap INF, all six -- wild pays any pip incl {C}); colour_c -> T (cap strict demand:
 // cost.white.. + colorless); colour_c -> GEN (cap INF; any colour pays a generic pip); GEN -> T
 // (cap cost.generic). Feasible iff maxflow == cost.ManaValue().
+// ---- The flow oracle's ASSIGNMENT, published for the tap-order hint ---------------------------
+// A max-flow does not merely answer "is this cost payable" -- the saturating flow IS an assignment
+// of sources to colour demands. The oracle used to compute one for every feasible top-level payment
+// and throw it away, leaving the backtracker to rediscover the same answer by search. These two hold
+// the assignment for the caller (bitmask of battlefield indices whose S->src edge carried flow).
+// Indices >= 64 are simply absent: the oracle only runs when the failure memo is live (n <= 64).
+static thread_local std::uint64_t g_flow_src_mask  = 0;
+static thread_local bool          g_flow_src_valid = false;
+// Per-battlefield-index colour bitmask: which colours the flow asked THIS source to make. The source
+// set alone is not the useful half -- on a five-colour board the backtracker's fan-out is
+// sources x colours, and the colour choice is the wider of the two dimensions.
+static thread_local std::uint8_t  g_flow_col_mask[64] = {};
+// True while a published assignment applies to the payment currently being solved. Set once at the
+// top-level call and read by the recursion, so a nested node never consults a stale mask.
+static thread_local bool          g_flow_order_live = false;
+
 static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool for_creature,
                               const ManaPool& floating, const std::vector<Color>* rp_colors,
                               std::uint64_t reserved_mask,
@@ -1073,7 +1089,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
     // per_col = the most one tap can put into a SINGLE colour (the src->colour cap). They differ only
     // for a DOMAIN source: a normal source picks ONE colour and puts all `amt` there (per_col == amt),
     // whereas domain makes one of EACH colour in its set at once (amt == |set|, per_col == 1).
-    struct SrcColset { std::uint8_t bits; int amt; int per_col; };
+    struct SrcColset { std::uint8_t bits; int amt; int per_col; int bf; };
     static thread_local std::vector<SrcColset> srcs;
     srcs.clear();
     bool rp_ready = (rp_colors != nullptr);
@@ -1120,7 +1136,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             // larger -- an N of zero (no creatures) leaves the plain land, which is exact.
             const int scaled = std::max(ScaledManaCreatureCount(state), ManaProducedPerTap(*def));
             if (scaled <= 0) { continue; }
-            srcs.push_back({ nbits, scaled, scaled });
+            srcs.push_back({ nbits, scaled, scaled, i });
             continue;
         }
 
@@ -1138,7 +1154,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             if (sbits == 0) { continue; }
             const int burst = PermanentManaYield(state.battlefield[i], *def);
             if (burst <= 0) { continue; }
-            srcs.push_back({ sbits, burst, burst });   // one colour takes the whole burst
+            srcs.push_back({ sbits, burst, burst, i });   // one colour takes the whole burst
             continue;
         }
 
@@ -1173,12 +1189,12 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             if (def->params.is_filter)
             {
                 fbits |= static_cast<std::uint8_t>(1u << static_cast<int>(Color::Colorless));
-                srcs.push_back({ fbits, 2, 2 });
+                srcs.push_back({ fbits, 2, 2, i });
             }
             else
             {
                 const int ftotal = __builtin_popcount(static_cast<unsigned>(fbits));
-                srcs.push_back({ fbits, ftotal, 1 });
+                srcs.push_back({ fbits, ftotal, 1, i });
             }
             continue;
         }
@@ -1207,7 +1223,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             { dbits |= static_cast<std::uint8_t>(1u << static_cast<int>(c)); }
             if (dbits == 0) { continue; }   // no colours among our permanents -> this tap makes nothing
             const int dtotal = __builtin_popcount(static_cast<unsigned>(dbits));
-            srcs.push_back({ dbits, dtotal, 1 });
+            srcs.push_back({ dbits, dtotal, 1, i });
             continue;
         }
         const int amt = ManaProducedPerTap(*def);   // 1 for a normal land/dork/rock; 2 for a Karoo
@@ -1231,7 +1247,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             { bits |= (1u << static_cast<int>(Color::Colorless)); }   // drip land's {C} mode
         }
         if (bits == 0) { continue; }   // solo Reflecting Pool etc.: makes nothing usable -> no supply
-        srcs.push_back({ bits, amt, amt });   // non-domain: one colour takes the whole tap
+        srcs.push_back({ bits, amt, amt, i });   // non-domain: one colour takes the whole tap
     }
 
     const int m = static_cast<int>(srcs.size());
@@ -1253,13 +1269,27 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
     }
     if (cost.generic > 0) { add_edge(GEN, T, cost.generic); }
     if (floating.wild > 0) { add_edge(S, WILD, floating.wild); }
+    static thread_local std::vector<int> s_src_edge;   // forward edge id of each S->src
+    s_src_edge.assign(static_cast<std::size_t>(m), -1);
+    // The per-colour edge bookkeeping exists ONLY to publish the assignment for the tap-order hint.
+    // The oracle itself is default-ON and on the hot path, so when the hint is disabled none of this
+    // is recorded and the default build is exactly the pre-hint oracle.
+    const bool want_assign = FlowOrderEnabled();
+    struct ColEdge { int s, c, eid; };
+    static thread_local std::vector<ColEdge> s_col_edge;   // forward edge id of each src->colour
+    s_col_edge.clear();
     for (int s = 0; s < m; ++s)
     {
+        s_src_edge[static_cast<std::size_t>(s)] = static_cast<int>(g_edges.size());
         add_edge(S, FIRST_SRC + s, srcs[s].amt);   // one tap yields `amt` mana (1, or 2 for a Karoo)
         // per_col == amt for every ordinary source (byte-identical to the old single-cap form); it is
         // 1 for a domain source, which is what stops the flow sending all |set| mana into one colour.
         for (int c = 0; c < 6; ++c)
-        { if (srcs[s].bits & (1u << c)) { add_edge(FIRST_SRC + s, COL0 + c, srcs[s].per_col); } }
+        {
+            if (!(srcs[s].bits & (1u << c))) { continue; }
+            if (want_assign) { s_col_edge.push_back({ s, c, static_cast<int>(g_edges.size()) }); }
+            add_edge(FIRST_SRC + s, COL0 + c, srcs[s].per_col);
+        }
     }
 
     // Edmonds-Karp: BFS augmenting paths until saturated or no path. demand is small (<= ~15).
@@ -1290,6 +1320,28 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         for (int v = T; v != S; )
         { g_edges[prev_edge[v]].cap -= bott; g_edges[prev_edge[v] ^ 1].cap += bott; v = g_edges[prev_edge[v] ^ 1].to; }
         flow += bott;
+    }
+    // On a FEASIBLE verdict, publish which sources the flow used, for the tap-order hint.
+    g_flow_src_valid = false;
+    g_flow_src_mask  = 0;
+    if (want_assign && flow >= demand)
+    {
+        for (int s = 0; s < m; ++s)
+        {
+            const int eid = s_src_edge[static_cast<std::size_t>(s)];
+            if (eid < 0) { continue; }
+            const int used = srcs[s].amt - g_edges[eid].cap;   // residual tells how much flow went
+            if (used > 0 && srcs[s].bf >= 0 && srcs[s].bf < 64)
+            { g_flow_src_mask |= (1ull << srcs[s].bf); g_flow_col_mask[srcs[s].bf] = 0; }
+        }
+        for (const ColEdge& ce : s_col_edge)
+        {
+            const int bf = srcs[ce.s].bf;
+            if (bf < 0 || bf >= 64 || !((g_flow_src_mask >> bf) & 1ull)) { continue; }
+            if (srcs[ce.s].per_col - g_edges[ce.eid].cap > 0)
+            { g_flow_col_mask[bf] |= static_cast<std::uint8_t>(1u << ce.c); }
+        }
+        g_flow_src_valid = true;
     }
     return flow < demand;   // could not saturate the full cost -> DEFINITELY infeasible
 }
@@ -1438,6 +1490,9 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     // rebuilt at each top-level call, reused via the threaded pointer by that call's subtree (no nested
     // top-level backtrack exists within a subtree, so the buffer is never clobbered mid-iteration).
     static thread_local std::vector<std::pair<int, const CardDefinition*>> s_src_cands_buf;
+    // Cached flow-oracle verdict: with MTG_FLOW_ORDER the oracle runs early (to permute the source
+    // list) and the prune block below reuses the answer instead of solving the same max-flow twice.
+    bool flow_done = false, flow_infeasible = false, flow_bailed = false;
     if (top_level)
     {
         s_src_cands_buf.clear();
@@ -1452,6 +1507,35 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             { s_src_cands_buf.push_back({ i, d }); }
         }
         src_cands = &s_src_cands_buf;
+
+        // FLOW-GUIDED TAP ORDER (MTG_FLOW_ORDER). Run the oracle HERE, once, while the candidate
+        // list is still ours to permute, and put the sources its max-flow actually used at the
+        // front -- stably, so the existing battlefield order survives within each group. The
+        // backtracker then tries the assignment the flow already proved sufficient before anything
+        // else, instead of rediscovering it by search (71.3 nodes per successful payment on
+        // FiveColour, for an answer averaging 4.5 sources).
+        //
+        // Ordering here rather than later is deliberate: the identical-sibling dup-collapse chain
+        // below is built OVER this list and its correctness argument is "an earlier chain member was
+        // reached by this node's loop before ci", so the permutation must happen before the chain is
+        // built, never after. The verdict is cached into flow_* and reused by the prune block further
+        // down, so enabling this costs no extra max-flow.
+        g_flow_order_live = false;
+        if (fail_memo && FlowPruneEnabled() && FlowOrderEnabled())
+        {
+            flow_done = true;
+            flow_infeasible = TapFlowInfeasible(state, cost, for_creature, floating, rp_colors,
+                                                reserved_mask, s_src_cands_buf,
+                                                tapstats::Enabled() ? &flow_bailed : nullptr);
+            if (!flow_infeasible && g_flow_src_valid && g_flow_src_mask != 0)
+            {
+                g_flow_order_live = true;   // the hint is live for this whole payment subtree
+                std::stable_partition(s_src_cands_buf.begin(), s_src_cands_buf.end(),
+                    [](const std::pair<int, const CardDefinition*>& c)
+                    { return c.first >= 0 && c.first < 64
+                          && ((g_flow_src_mask >> c.first) & 1ull) != 0; });
+            }
+        }
     }
     const std::vector<std::pair<int, const CardDefinition*>>& cands = *src_cands;
 
@@ -1604,9 +1688,11 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     // active (n<=64); a deep node's partial-tap state is already handled by the memo + B&B gate.
     if (top_level && fail_memo && FlowPruneEnabled())
     {
-        bool bailed = false;
-        const bool infeasible = TapFlowInfeasible(state, cost, for_creature, floating, rp_colors,
-                                                  reserved_mask, cands, tapstats::Enabled() ? &bailed : nullptr);
+        bool bailed = flow_bailed;
+        const bool infeasible = flow_done
+            ? flow_infeasible
+            : TapFlowInfeasible(state, cost, for_creature, floating, rp_colors,
+                                reserved_mask, cands, tapstats::Enabled() ? &bailed : nullptr);
         if (infeasible)
         {
             if (tapstats::Enabled()) { tapstats::g_flow_prune.fetch_add(1, std::memory_order_relaxed); }
@@ -1870,8 +1956,25 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 // the coloured branches (matches the TapDripLandsIfUseful sweep). Inert for non-drip lands.
                 if (def->params.tap_opponent_lifegain > 0 && !ResolveProvider(state).OpponentLifegainUseful(state, active))
                 { ManaPool f = floating; f.Add(Color::Colorless, amt); if (activate(f, /*drip_ok=*/false, storage_burn)) { return true; } }
+                // FLOW-GUIDED COLOUR ORDER (MTG_FLOW_ORDER). The max-flow assigned this source a
+                // colour; try that one first. This is the wider of the backtracker's two branching
+                // dimensions -- ordering the SOURCE list alone measured as a wash (+0.4% nodes),
+                // because a five-colour source still fans out over every colour it can make.
+                // Stable: the flow's colours keep their `produces` order, then the rest in theirs.
+                const std::vector<Color>* order_ptr = &produces;
+                static thread_local std::vector<Color> s_col_order;
+                if (g_flow_order_live && i >= 0 && i < 64 && g_flow_col_mask[i] != 0)
+                {
+                    const std::uint8_t fm = g_flow_col_mask[i];
+                    s_col_order.clear();
+                    for (Color c : produces)
+                    { if (fm & (1u << static_cast<int>(c))) { s_col_order.push_back(c); } }
+                    for (Color c : produces)
+                    { if (!(fm & (1u << static_cast<int>(c)))) { s_col_order.push_back(c); } }
+                    order_ptr = &s_col_order;
+                }
                 bool generic_rep_done = false;   // collapse: explore one generic-only colour, skip the rest
-                for (Color c : produces)
+                for (Color c : *order_ptr)
                 {
                     if (collapse_colors && !(special_mask & (1u << static_cast<int>(c))))
                     {
