@@ -222,6 +222,45 @@ also why it must be got right rather than got quickly.
 The same probe is the honest way to price any future bound change: slack histogram before, slack
 histogram after, then the ON-vs-OFF acceptance test in §2.
 
+### 5a. But the drops are FREE TODAY — the prune saves no work at all
+
+Before treating "37% of emissions dropped" as a speedup, price it. Two measurements, both saying the
+same thing:
+
+**Deterministic work counters, prune ON vs OFF (15 games each, profile depth, single-threaded):**
+
+| deck | rollout calls | rollout steps | interior nodes | backtracker nodes |
+|---|---|---|---|---|
+| fivecolour | identical | identical | identical | identical |
+| mirrorwing | identical | 208,941 → 208,977 (+0.017%) | identical | identical |
+| hinata | identical | identical | identical | identical |
+| goblins | identical | identical | identical | identical |
+
+The search tree is byte-identical. The pruned candidates never became tree nodes in the first place
+— they were going to be rejected downstream as unaffordable at no search cost — so the prune is not
+removing work, it is removing work that was already free.
+
+**Paired CPU time (FiveColour, 12 games, single-threaded, arm order alternated):**
+
+| arm | measurements (user CPU s) | min | median |
+|---|---|---|---|
+| ON | 16.74, 16.59, 16.47, 16.55, 17.10 | 16.47 | 16.59 |
+| OFF | 16.98, 16.54, 16.62, 16.63, 16.88 | 16.54 | 16.63 |
+
+**~0.4% apart: noise.** `MTG_EMIT_PRUNE` is performance-neutral today.
+
+**METHOD WARNING, and it nearly produced a false result.** The first pass of this same A/B read
+OFF 46.42s / ON 37.10s — a "20% win" — and a second read gave ON 48.93 / OFF 29.80, which reverses
+it. Both were contention: the identical workload runs in **16.5s** on a quiet box, so the machine
+was inflating user CPU by up to 3x. USER CPU IS NOT IMMUNE TO LOAD (cache and memory-bandwidth
+contention buy more cycles for the same instructions). Alternate the arm order, repeat until the
+numbers stop moving, and compare MINIMA — a single paired sample here would have shipped a
+fabricated speedup, in either direction.
+
+The consequence for the open decision: enabling this prune by default buys nothing measurable *now*.
+Its value is entirely contingent on §3a — a bound that actually binds is what turns the 37% into
+saved work.
+
 ## 6. The bail-outs: CLOSED (2026-08-16)
 
 Every clause is gone. **All 12 suite decks now bail 0%** (20 games each at profile depth, `MTG_TAP_STATS=1`):
@@ -270,8 +309,10 @@ the bail counter tells you where the pruner is *absent*, not where it would have
 2. **§3 per-card feasibility prune** — note it needs a COLOUR-aware supply model, not the MV ceiling:
    a plan may play a land and then cast, so testing a card against only the currently-untapped board
    under-credits and would be unsound.
-3. **USER CALL: ship `MTG_EMIT_PRUNE` on by default?** It is now sound (all 36 smoke configs
-   outcome-identical ON vs OFF, five differing on digest only — the enumeration set changing, which
-   is the point) and it drops 37% of candidate emissions on FiveColour. It has never been measured
-   for SPEED on a sound bound; every previous number was taken against the lossy version. The
-   remaining unknown is whether 37% fewer emissions pays for the ceiling's own cost.
+3. **USER CALL: ship `MTG_EMIT_PRUNE` on by default? RECOMMENDATION: not yet.** It is now sound
+   (all 36 smoke configs outcome-identical ON vs OFF, five differing on digest only — the
+   enumeration set changing, which is the point), so there is no correctness reason to keep it off.
+   But §5a measures it as performance-NEUTRAL: identical search work on four decks and ~0.4% CPU,
+   which is noise. Flipping the default would take on the risk of a prune with no measured benefit.
+   Revisit the moment §3a lands — that is the change that turns the 37% of dropped emissions into
+   work actually saved, and the same two measurements will price it.
