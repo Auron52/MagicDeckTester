@@ -74,31 +74,42 @@ abandoned game costs NINE extra games. Measured on this run:
 run's critical path: the phase-C tail was H1..H4 on seed 9009 sitting at offsets 400..475, i.e.
 nothing but backfill.
 
-BACKFILL EXISTS ONLY TO REPAIR DAMAGE THE UNION CAUSES. Remove the union and it has no job: each
-edge loses only what ITS TWO cells abandoned, which is far less than what all nine abandoned
-together. Paired sample per edge, within one nominal 400-game span:
+BACKFILL EXISTS ONLY TO REPAIR DAMAGE THE UNION CAUSES -- but removing it is NOT the win, and an
+earlier revision of this document got that wrong. Backfill restores each cell to the full target, so
+today's arm must be priced WITH it. Correctly measured, over 4 seeds x a 400 nominal target:
 
-| edge | union + backfill (today) | pairwise, no backfill | delta |
+| edge | A: today (union+backfill) | B: pairwise, no backfill | C: pairwise, same queue |
 |---|---|---|---|
-| H1->H2 | 1339 | 1587 | +18.5% |
-| H2->H3 | 1339 | 1522 | +13.7% |
-| H3->H4 | 1339 | 1415 | +5.7% |
-| V1->V2 | 1339 | 1600 | +19.5% |
-| V2->V3 | 1339 | 1599 | +19.4% |
-| V3->V4 | 1339 | 1579 | +17.9% |
-| V4->V5 | 1339 | 1527 | +14.0% |
+| H1->H2 | 1600 | 1587 | 1848 |
+| H2->H3 | 1600 | 1522 | 1783 |
+| H3->H4 | 1600 | 1415 | 1676 |
+| V1->V2 | 1600 | 1600 | 1861 |
+| V2->V3 | 1600 | 1599 | 1860 |
+| V3->V4 | 1600 | 1579 | 1840 |
+| V4->V5 | 1600 | 1527 | 1788 |
+| **TOTAL** | **11200** | **10829** (-3.3%) | **12656** (+13.0%) |
+| games run per cell | 476 | 400 | 476 |
 
-More paired games on every edge while running 2,349 FEWER games.
+So dropping backfill SAVES 16% of the work and COSTS 3.3% of the sample. It is a defensible trade on
+cost-per-sample, but it is not free and it is not the point.
 
-**Per-cell backfill is NOT the answer, and must not be built** (user, 2026-08-16: *"I don't like that
-idea, because it means those games won't align with other cells"*). Backfilling only into the cell
-that abandoned produces an index no other cell ran, so it pairs with NOTHING: it inflates that cell's
-game count while adding zero to any comparison. The choice is global backfill (aligned, 9x cost) or
-no backfill (cheap, and still more paired sample). Take no backfill.
+THE UNION IS THE DEFECT; QUEUE LENGTH IS AN INDEPENDENT KNOB. Today they are entangled, because
+backfill exists to undo the union's deletions. Separate them:
 
-ALIGNMENT IMPROVES. Every cell runs the identical nominal span 0..target-1, so every comparison is on
-shared indices by construction. It is TODAY's scheme that pushes cells out to offsets 400..475 --
-indices that exist only because something was abandoned somewhere.
+  * **Remove the union.** Every cell keeps every game it completed; each comparison intersects the
+    two cells involved. That alone is +13.0% paired sample at IDENTICAL cost (column C).
+  * **Then choose a span ONCE, up front** -- no dynamic backfill loop at all. 0..475 for +13% at
+    today's cost, or 0..399 for -3.3% at 16% less cost. A policy decision, not a mechanism.
+
+**Per-cell backfill must NOT be built** (user, 2026-08-16: *"I don't like that idea, because it means
+those games won't align with other cells"*). Backfilling only into the cell that abandoned produces an
+index no other cell ran, so it pairs with NOTHING: it inflates that cell's game count while adding
+zero to every comparison.
+
+ALIGNMENT IS PRESERVED BY EITHER SPAN. Every cell runs the IDENTICAL index range, so all pairings are
+on shared indices; what differs between cells is only which of those they finished, which is exactly
+what the intersection handles. It is TODAY's dynamic backfill that makes the queue length a function
+of how much was abandoned.
 
 ## Proposed artifact: an EDGE table
 
