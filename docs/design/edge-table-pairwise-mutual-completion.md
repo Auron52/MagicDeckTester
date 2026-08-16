@@ -56,6 +56,50 @@ The gain concentrates on **V5->V6, V6->V7, V7->V8** -- precisely the edges whose
 those rungs. About +20% n is about 9% tighter `se`, free, on the deciding comparisons. H4->H5 gains
 +1%, because the reference already abandons nearly everything any other cell does.
 
+## Backfill becomes unnecessary -- and that is the larger saving
+
+Today an abandoned game is removed from EVERY cell (the union) and then BACKFILLED: a new index is
+queued so each cell still reaches `--target`. Because a seed has 9 live cells (H1-H4, V1-V5), one
+abandoned game costs NINE extra games. Measured on this run:
+
+| seed | abandoned | extra games forced |
+|---|---|---|
+| 8008 | 61 | 549 |
+| 9009 | 76 | 684 |
+| 10010 | 65 | 585 |
+| 11011 | 59 | 531 |
+| | **261** | **2,349** |
+
+2,349 games -- about 12% of the whole matrix -- is backfill created by abandonment. It is also the
+run's critical path: the phase-C tail was H1..H4 on seed 9009 sitting at offsets 400..475, i.e.
+nothing but backfill.
+
+BACKFILL EXISTS ONLY TO REPAIR DAMAGE THE UNION CAUSES. Remove the union and it has no job: each
+edge loses only what ITS TWO cells abandoned, which is far less than what all nine abandoned
+together. Paired sample per edge, within one nominal 400-game span:
+
+| edge | union + backfill (today) | pairwise, no backfill | delta |
+|---|---|---|---|
+| H1->H2 | 1339 | 1587 | +18.5% |
+| H2->H3 | 1339 | 1522 | +13.7% |
+| H3->H4 | 1339 | 1415 | +5.7% |
+| V1->V2 | 1339 | 1600 | +19.5% |
+| V2->V3 | 1339 | 1599 | +19.4% |
+| V3->V4 | 1339 | 1579 | +17.9% |
+| V4->V5 | 1339 | 1527 | +14.0% |
+
+More paired games on every edge while running 2,349 FEWER games.
+
+**Per-cell backfill is NOT the answer, and must not be built** (user, 2026-08-16: *"I don't like that
+idea, because it means those games won't align with other cells"*). Backfilling only into the cell
+that abandoned produces an index no other cell ran, so it pairs with NOTHING: it inflates that cell's
+game count while adding zero to any comparison. The choice is global backfill (aligned, 9x cost) or
+no backfill (cheap, and still more paired sample). Take no backfill.
+
+ALIGNMENT IMPROVES. Every cell runs the identical nominal span 0..target-1, so every comparison is on
+shared indices by construction. It is TODAY's scheme that pushes cells out to offsets 400..475 --
+indices that exist only because something was abandoned somewhere.
+
 ## Proposed artifact: an EDGE table
 
 Rows are comparisons, not cells; each on its own mutually-completed set:
