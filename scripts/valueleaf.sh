@@ -178,11 +178,20 @@ INTRACTABLE_MEDIAN_SPG=30
 #
 # k=25 sits above the natural spread and far below the pathology: measured max/median per cell is
 # 2.1-7.1x on burn and 11.2x on a FiveColour keep-gen sample, while the games this exists to stop are
-# 100-1000x. calib=10 is deliberately small -- the ceiling only has to separate a typical game from a
-# monster, so median noise is irrelevant, while every calibration game is one that runs UNBOUNDED, so
-# a larger sample buys precision nobody needs at the price of the exposure this is removing.
+# 100-1000x.
+#
+# calib=25 (user, 2026-08-16: "we should try at least 25 games and take the median there", under the
+# standing constraint "we don't want a worse result than the original strategy"). It was 10 on the
+# argument that every calibration game runs UNBOUNDED, so a bigger sample buys precision at the price
+# of exposure. THAT ARGUMENT NO LONGER HOLDS: since the provisional prefix ceiling (BatchRunner's
+# kCalibPrefix), only the cell's first THREE games are ever unbounded -- games 3..calib-1 run under
+# 4 x k x the prefix median. The exposure is therefore a constant, independent of calib, and raising
+# the sample is a one-way trade: a median of 25 is far less likely to land freakishly low than a
+# median of 10, and a low median is precisely what condemns ordinary games. What calib does still buy
+# is a longer HOLD (a cell's remaining games wait for its sample) -- a scheduling cost, per-cell and
+# not a barrier, which 52 cells over 32 cores absorb.
 ABANDON_K=25
-ABANDON_CALIB=10
+ABANDON_CALIB=25
 # ABSOLUTE FLOOR under the ratio (user, 2026-08-15: "it must be above 10 minutes... maybe even 30
 # minutes. Beyond that, I think it's okay to condemn").
 #

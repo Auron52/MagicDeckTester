@@ -1446,14 +1446,15 @@ def main():
                          "because the target grows by the skip count and a ceiling below a cell's own median "
                          "abandons every backfilled game too. The ceiling is disarmed for that deck+seed and "
                          "the table says so. 0 disables the cap (not recommended).")
-    ap.add_argument("--abandon-calib",type=int,default=10,
-                    help="games forming a cell's calibration sample for --abandon-k. They run WITHOUT a "
-                         "relative ceiling (--abandon-units still applies if set, as a safety cap), and the "
-                         "cell's remaining games are held back until the sample completes -- a per-cell "
-                         "dependency, not a barrier: every other cell keeps running. Small on purpose: the "
-                         "ceiling only has to separate a typical game from a 100x monster, so median noise "
-                         "is irrelevant, while a large sample lengthens the window in which the cell's "
-                         "worst game is still unbounded.")
+    ap.add_argument("--abandon-calib",type=int,default=25,
+                    help="games forming a cell's calibration sample for --abandon-k. Only the first "
+                         "kCalibPrefix (3) of them run truly unbounded; the rest run under the PROVISIONAL "
+                         "prefix ceiling, and --abandon-units applies throughout as a safety cap. The cell's "
+                         "remaining games are held back until the sample completes -- a per-cell dependency, "
+                         "not a barrier: every other cell keeps running. Was 10, on the argument that every "
+                         "calibration game was unbounded; the provisional ceiling made the unbounded window a "
+                         "constant, so the sample size is now free to buy what it is actually for -- a median "
+                         "that does not land freakishly low and condemn ordinary games.")
     ap.add_argument("--drip",type=int,default=1,
                     help="games of a single NOT-YET-JUDGED condemnable cell allowed in flight at once. LPT would "
                          "otherwise put every thread on the most expensive cell in the table -- which is exactly "
