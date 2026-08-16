@@ -1097,7 +1097,10 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
     {
         const int i = cand.first;
         if (state.battlefield[i].tapped) { continue; }
-        if (reserved_mask & (1ull << i)) { continue; }
+        // i >= 64 cannot be represented in the 64-bit reserved mask, so treat it as UNRESERVED
+        // (shifting by >= the width is UB). Sound in the safe direction: crediting a source that is
+        // actually reserved only ADDS supply, and this oracle only ever claims INFEASIBLE.
+        if (i < 64 && (reserved_mask & (1ull << i))) { continue; }
         const CardDefinition* def = cand.second;
         const bool is_src = (def->tmpl == CardTemplate::BasicLand)
                          || (def->tmpl == CardTemplate::ManaDork && CanTapNow(state.battlefield[i], state.battlefield))
@@ -1731,9 +1734,21 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
 
     // Flow-prune oracle: prove this cost contention-infeasible up front so we return the same false
     // without walking the exponential tree to prove it (byte-identical -- see TapFlowInfeasible). Run
-    // ONLY at the top level (it examines all untapped sources fresh) and only when the fail-memo is
-    // active (n<=64); a deep node's partial-tap state is already handled by the memo + B&B gate.
-    if (top_level && fail_memo && FlowPruneEnabled())
+    // at EVERY top-level call: it examines all untapped sources fresh and does not depend on the
+    // failure memo. A deep node's partial-tap state is still left to the memo + B&B gate.
+    //
+    // DECOUPLED FROM THE MEMO 2026-08-16. This used to read `top_level && fail_memo && ...`, and
+    // `fail_memo` is only installed when `n <= 64` -- so the n>64 guard, whose stated purpose is that
+    // the memo's 64-bit source bitmask will not fit, was ALSO switching off the infeasibility oracle,
+    // on exactly the boards that need it most. Measured on Mirrorwing mulligan generation (see
+    // docs/design/tap-backtrack-mixed-class-sighting.md): a fanned-out board reaches n=70-80, 99.9% of
+    // top-level entries ran with no memo AND no oracle, and proving a cost UNPAYABLE cost 3,692 then
+    // 12,644 nodes per entry -- against 1.6 nodes/entry wherever the oracle is live. The oracle needs
+    // nothing from the memo; its single `insert` below is documented as harmless and is now guarded.
+    // A/B hatch for the decoupling itself: MTG_FLOW_PRUNE_MEMO_GATED=1 restores the old
+    // (memo-gated) behaviour from ONE binary, so the fix can be measured without two builds.
+    static const bool s_memo_gated = EnvOn("MTG_FLOW_PRUNE_MEMO_GATED");
+    if (top_level && (fail_memo || !s_memo_gated) && FlowPruneEnabled())
     {
         bool bailed = flow_bailed;
         const bool infeasible = flow_done
@@ -1743,7 +1758,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         if (infeasible)
         {
             if (tapstats::Enabled()) { tapstats::g_flow_prune.fetch_add(1, std::memory_order_relaxed); }
-            fail_memo->insert(key);   // consistency with the B&B gate's prune (harmless at top level)
+            if (fail_memo) { fail_memo->insert(key); }   // consistency with the B&B gate's prune (harmless at top level)
             return false;
         }
         if (tapstats::Enabled() && bailed) { tapstats::g_flow_bail.fetch_add(1, std::memory_order_relaxed); }

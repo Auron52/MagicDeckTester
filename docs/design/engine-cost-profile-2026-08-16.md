@@ -1,5 +1,15 @@
 # Where the engine's time actually goes (perf, 2026-08-16)
 
+> **CORRECTION (same day).** The 18.4% attributed to the cleanup-discard ranking below is WRONG, and
+> so is the recommendation built on it. `perf` is severely throttled in this container: a 120-game run
+> that should yield ~24,000 samples produced **~1,000**, and a single 3.6 s game at `-F 4999` produced
+> **270**. Two independent deterministic measurements put the ranking at **~1.5%**, not 18.4%:
+> (a) running it TWICE per call (byte-identical, so the delta is its exact cost) moved a degenerate
+> game from 3.26 s to 3.31 s — minima of 5 alternating pairs; (b) 4,087 calls x ~10 us = ~0.04 s of a
+> 3.26 s game. Treat every perf percentage in this file as indicative only, and prefer deterministic
+> counters or a double-the-work A/B. The subsystem ORDERING is probably still right; the magnitudes
+> are not.
+
 Recorded because a full day was spent optimising the mana tap backtracker before anyone measured
 that it is **~1% of engine cost** (`docs/design/mana-prune-tight-bounds.md` §8). Step 0 of any perf
 task is this document's method, not a component's internal ratio.
