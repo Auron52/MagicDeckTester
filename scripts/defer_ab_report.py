@@ -86,3 +86,34 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# ---- worse-game ledger -------------------------------------------------------
+# USER doctrine 2026-08-16: adopting on a positive NET must not mean ignoring the
+# games that got worse. Emit a repro contract per regressed game so the remainder
+# is a work list, not a footnote.
+def worse_ledger(on_dir, off_dir, out_path):
+    import os
+    rows = []
+    for k in sorted(os.listdir(on_dir)):
+        if not k.endswith(".wins") or not os.path.exists(os.path.join(off_dir, k)):
+            continue
+        a, b = load(os.path.join(on_dir, k)), load(os.path.join(off_dir, k))
+        stem = k[:-5]
+        seed = int(stem.split("_s")[-1])
+        depth = "d0" if "_d0_" in stem else ("d3" if "_d3_" in stem else "d5")
+        for g in sorted(set(a) & set(b)):
+            if a[g] > b[g]:
+                rows.append((stem, g, b[g], a[g], seed, depth))
+    with open(out_path, "w") as f:
+        f.write("# regressed games: key gi was->now  |  repro\n")
+        for stem, g, was, now, seed, depth in rows:
+            dflag = {"d0": "--depth 0", "d3": "--depth 3 --budget-ms 10",
+                     "d5": "--budget-ms 20"}[depth]
+            f.write(f"{stem} gi={g} {was}->{now}\n"
+                    f"    ./build/Release/mtg <deck> --seed {seed + g} --game-index {g} "
+                    f"--games 1 --threads 1 {dflag} --ignore-play-profile 2>&1\n")
+    return len(rows)
+
+if __name__ == "__main__" and len(sys.argv) > 3:
+    n = worse_ledger(sys.argv[1], sys.argv[2], sys.argv[3])
+    print(f"\nworse-game ledger: {n} games -> {sys.argv[3]}")

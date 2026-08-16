@@ -14557,8 +14557,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     static const bool s_no_defer_drop = EnvOn("MTG_NO_DEFER_DROP");
     const bool defer_drop = is_pre_combat && state.uses_second_main && Main2DropEnabled()
                          && !s_no_defer_drop;
-    const bool hold_land = defer_drop
-                        || ResolveProvider(state).PreferHoldLandDrop(state, state.active_player_index);
+    const bool provider_hold = ResolveProvider(state).PreferHoldLandDrop(state, state.active_player_index);
+    const bool hold_land = defer_drop || provider_hold;
     std::stable_sort(all.begin(), all.end(),
         [&](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
@@ -14569,7 +14569,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                 const bool a_has = !a.land_to_play.empty();
                 const bool b_has = !b.land_to_play.empty();
                 // (1) develop first -- UNLESS banking for landfall, then hold (no-land) first.
-                if (a_has != b_has) { return hold_land ? (a_has < b_has) : (a_has > b_has); }
+                if (a_has != b_has)
+                {
+                    // Provider hold (Burn banking a landfall drop) is unconditional, as before.
+                    if (provider_hold) { return a_has < b_has; }
+                    // USER refinement, 2026-08-16: "defer it when you have nothing else going in
+                    // main 1 -- in that case it makes sense. Deferring it when you have main 1
+                    // plays is probably not a good idea."
+                    //
+                    // The first cut deferred whenever two plans tied on wins AND value, on the
+                    // argument that a land which pays for a main-1 cast scores strictly higher and
+                    // so still wins. Measurement refuted that: net was 0.0000 overall, but the
+                    // 4->5 bucket was ONE-SIDED, 22 games worse against 9 better -- deferring cost
+                    // turn-4 wins. Tied on `value` is NOT tied on TEMPO, so an equal-value plan
+                    // could still strand the mana. Gate on the actual condition instead: hold the
+                    // drop only when the no-land plan casts NOTHING this main phase.
+                    if (defer_drop)
+                    {
+                        const TurnSolver::Plan& noland = a_has ? b : a;
+                        if (noland.actions.empty()) { return a_has < b_has; }
+                    }
+                    return a_has > b_has;
+                }
                 if (a_has && b_has)
                 {
                     const bool a_tap = land_good_early_tapped(a.land_to_play);
