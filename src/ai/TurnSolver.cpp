@@ -68,6 +68,27 @@ static std::atomic<long long> g_rollout_steps{0};
 // save on the escalation. See docs/design/escalation-interior-reuse.md.
 static std::atomic<long long> g_interior_nodes{0};
 static std::atomic<long long> g_interior_nodes_esc{0};   // interior nodes done under the heuristic escalation
+// Per-plan state REUSE (DEFAULT ON; MTG_NO_STATE_REUSE=1 restores per-plan construction).
+// Every plan loop applies its plan to a COPY of the SAME parent state. Copy-CONSTRUCTING that copy
+// inside the loop frees the previous plan's buffers and mallocs new ones of nearly identical size,
+// once per plan -- and FiveColour applies 1.48M plans in 12 games, which is exactly why
+// GameState's copy ctor (12.5%) and the allocator (operator new 6.8 + delete 2.1 + free 2.1 +
+// malloc 1.2 + memmove 1.2 = 13.4%) sit at the top of the profile
+// (docs/design/engine-cost-profile-2026-08-16.md). Hoisting the buffer OUT of the loop and
+// copy-ASSIGNING reuses the previous plan's capacity: after the first plan every vector is already
+// big enough, so steady-state allocation is ~zero. This is the one cross-plan reuse the
+// measurements support -- the VALUE caches (mana, solve, enum memo) are all measured non-payers
+// (docs/design/fivecolour-payment-query-fold.md), because the plans genuinely differ; what repeats
+// across them is not the answer but the ALLOCATION.
+// Byte-identical by construction: assignment overwrites every field with the values the ctor would
+// have produced, and only the storage is reused. The `else` arm move-assigns a fresh temporary, so
+// it reproduces the old per-plan alloc/free exactly for the A/B.
+static const bool s_state_reuse = !EnvOn("MTG_NO_STATE_REUSE");
+inline void LoadPlanState(GameState& dst, const GameState& src, bool reuse)
+{
+    if (reuse) { dst = src; }                 // reuse dst's capacity
+    else       { dst = GameState(src); }      // fresh buffers (the pre-change behaviour)
+}
 // Matched-depth escalation measurement (MTG_ESC_MEASURE): per escalation, the ladder's work units
 // (budget->Used() delta) vs a COLD single pass at the ladder's ACTUAL committed depth (fresh caches).
 // This is the apples-to-apples "skip earlier depths" test -- same target depth, ladder vs single-pass.
@@ -16364,12 +16385,16 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             }
             return s.empty() ? std::string("(pass)") : s;
         };
+        // Hoisted per-plan scratch board -- see LoadPlanState (capacity reuse across plans).
+        const bool reuse_s2 = s_state_reuse;
+        GameState  s2_buf;
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
             if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; break; }   // value-guided beam (near-leaf only)
             if (budget) { budget->Consume(1); }   // one interior node (plan applied)
-            GameState s2 = state;
+            LoadPlanState(s2_buf, state, reuse_s2);
+            GameState& s2 = s2_buf;
             std::vector<Action> bp;
             ApplyPlanDirect(s2, q, false, &bp);
             // Self-lethal second main (Eidolon on-cast self-damage) -> we die to the
@@ -16613,6 +16638,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // construction (the doc's preferred sibling-frontier form). The boundary itself is inside
     // FSLineTail, hence the threading. Off (both flags unset) -> never touched.
     std::vector<dominance::DomSnap> dom_arch;
+    // Per-plan scratch board, hoisted so each plan reuses the previous plan's heap capacity
+    // (see LoadPlanState). Nothing in the body stores a pointer/reference to it past its
+    // iteration, and it is never moved from, so reuse cannot alias.
+    const bool reuse_s = s_state_reuse;
+    GameState  s_buf;
     for (const TurnSolver::Plan& p : pre)
     {
         // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
@@ -16626,7 +16656,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             g_interior_nodes.fetch_add(1, std::memory_order_relaxed);
             if (g_force_heuristic_leaf) { g_interior_nodes_esc.fetch_add(1, std::memory_order_relaxed); }
         }
-        GameState s = state;
+        LoadPlanState(s_buf, state, reuse_s);
+        GameState& s = s_buf;
         std::vector<Action> bp;
         ApplyPlanDirect(s, p, true, &bp);
         // Breakpoint-variant dedup (see bp_seen_states): a variant whose continuation lands on an
@@ -18496,9 +18527,12 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         std::size_t unsettled = 0;
         // Pass 0: the cases that need no search at all -- a plan that kills us via its own on-cast
         // triggers, and a plan that wins this turn (the floor; no later pass can beat it).
+        // Hoisted scratch board -- see LoadPlanState (capacity reuse across plans).
+        GameState p0_buf;
         for (std::size_t i = 0; i < pre.size(); ++i)
         {
-            GameState s = state;
+            LoadPlanState(p0_buf, state, s_state_reuse);
+            GameState& s = p0_buf;
             std::vector<Action> bp;
             ApplyPlanDirect(s, pre[i], true, &bp);
             if (s.ActivePlayer().life <= 0) { settled[i] = 1; continue; }   // -> max_turns+1
@@ -18516,6 +18550,8 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         // candidate fell through as a loss. Caught by the earlier/later gate: Hinata seed 555000
         // turn 8 labelled 8 by the old path and 9 by the ladder -- the one and only row that has
         // ever moved LATER.
+        // Hoisted across BOTH loops -- see LoadPlanState (capacity reuse across plans/passes).
+        GameState pass_buf;
         for (int dd = 0; dd <= depth - 1 && unsettled > 0; ++dd)
         {
             const int cut = state.turn_number + dd;
@@ -18529,8 +18565,10 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 FSLineCache&        lc_use = s_cold_cache ? lc_cold : lc;
                 // Re-apply per pass rather than caching |candidates| GameStates: the apply is cheap
                 // next to the search, and a plan-count that can reach the thousands makes holding
-                // one board per candidate the expensive choice.
-                GameState s = state;
+                // one board per candidate the expensive choice. The scratch board itself IS reused
+                // across candidates though (LoadPlanState) -- that costs one board, not |candidates|.
+                LoadPlanState(pass_buf, state, s_state_reuse);
+                GameState& s = pass_buf;
                 std::vector<Action> bp;
                 ApplyPlanDirect(s, pre[i], true, &bp);
                 AnimateLandsShared(s, nullptr);

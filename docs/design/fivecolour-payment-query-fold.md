@@ -170,3 +170,84 @@ before any backtrack, so their cause is not yet known).
 
 Soundness bar unchanged: the frontier must be EXACT or a conservative OVER-estimate falling through to
 the real solve. An under-estimate silently drops legal casts (`60b56ae1`, 14/18 games).
+
+## SIZING RESULT (2026-08-16) — the frontier is DEAD, and so is every VALUE cache across plans
+
+The sizing run the section above demanded was run. It refutes the frontier, by the frontier's own
+stated precondition ("if most applied plans are affordable, this saves nothing"). **Most are.**
+
+**Kill 1 — there is no mana duplication to cache.** `MTG_ENUM_STATS`, 12 games seed 1001:
+
+| mana-side key | combos | collapse |
+|---|---|---|
+| exact (mana+storm+cards+colour) | 173,616 -> 173,526 | **1.00x** |
+| demand-bucketed | 173,526 | 1.00x |
+| mana only (loosest possible — storm AND cards-spent identity discarded) | 159,428 | 1.09x |
+
+A cache needs repeats. The existing symmetry prunes have already taken them: even the loosest key
+that throws away information the engine actually needs finds 9%. **Do not build a mana cache.**
+
+**Kill 2 — the 92.2% prepay decline rate was never a failure signal.** `MTG_PREPAY_PROBE`, same run,
+4,886,249 calls:
+
+| outcome | share |
+|---|---|
+| declined: <2 casts (single-cast turn) | **89.0%** |
+| PREPAID (folded, succeeded) | 7.8% |
+| declined: producer (ritual/rock) | 1.8% |
+| **declined: combined UNPAYABLE** | **1.1%** |
+| declined: float non-empty | 0.2% |
+
+89% of declines are turns with 0 or 1 mana-paying cast, where folding one cost into one cost is a
+no-op — the decline costs nothing and there is nothing to fix. Only **1.1%** are unaffordable, so a
+frontier rejecting plans pre-application would skip ~1% of the 407,187 applications/game. Against
+plan application's ~50% of runtime that is ~0.5%, i.e. noise — the same verdict, for the same
+reason, as the scalar `MTG_EMIT_PRUNE` prior art.
+
+**Kill 3 — `MTG_SOLVE_MEMO` is worth ZERO at HEAD.** Re-A/B'd (12 games, paired, alternating,
+comparing minima): baseline **18.42s** vs memo **18.46s**, identical `interior_nodes=1480179` and
+identical avg. The memo is live and hitting (42% hit rate) — it just costs what it saves. The
+`single-consideration.md` figure of −21% was measured at d3/budget-200ms; the shipped FiveColour
+play config is d6/budget-20ms `value_play`, and the collapse does not survive the config change.
+Independently, it memoizes the GREEDY second-main solve, a path the engine is actively removing.
+
+### What the three kills have in common
+
+The plans genuinely differ. What repeats across them is **not the answer — it is the allocation**.
+Every plan loop applies its plan to a copy of the SAME parent state, copy-CONSTRUCTED inside the
+loop, so each of FiveColour's 1.48M plan applications frees the previous plan's buffers and mallocs
+new ones of nearly identical size. That is precisely why `GameState`'s copy ctor (12.5%) and the
+allocator (13.4%) top the profile. The fix is capacity reuse, not memoisation: hoist the scratch
+board out of the loop and copy-ASSIGN (`s_state_reuse` / `LoadPlanState`, TurnSolver.cpp;
+`MTG_NO_STATE_REUSE=1` restores per-plan construction for the A/B). Byte-identical by construction.
+
+**Measured: −4%** (FiveColour, 4 games, seed 1001, `--threads 1`, 10 alternating runs per arm).
+The box was contended (load 22, another agent building), so wall clock alone is untrustworthy —
+but the distributions are CLEANLY SEPARATED, every `on` sample faster than every `off` sample:
+
+```
+off:  5.347 5.353 5.355 5.355 5.366 5.377 5.435 5.457 5.467 5.551     (min 5.347)
+on:   5.111 5.142 5.160 5.179 5.180 5.205 5.207 5.211 5.218 5.247     (min 5.111)
+```
+
+Identity held on every run (`avg=5.2500`, `interior_nodes=1480179` on all arms). Hoisted at the two
+interior-node loops (FSLineWin's plan loop, FSLineTail's second-main loop) plus the two FSLineWin
+ladder passes; the ladder pair added nothing measurable (−3.9% vs −4.4%, same experiment noise),
+which is expected — they are far colder than the two interior-node loops.
+
+Method note: hardware counters are `<not supported>` in this container, so `perf stat -e
+instructions` is unavailable and there is no contention-proof counter for an allocation change
+(node counts are identical by construction). Many SHORT alternating runs comparing minima is the
+workable substitute — and the full separation above is stronger evidence than any single pair.
+
+### Still un-taken (not caches)
+
+* **Land-fan sharing.** `EnumeratePlansWithLand` re-runs the whole spell odometer once per land
+  candidate (~4.3x on 5c). NOT cacheable by equality — `land_sig` already dedups interchangeable
+  lands, so the surviving candidates genuinely produce different enumerations. The route is
+  structural (the land-after-draws timing doctrine), which deletes the fan rather than caching it.
+* **Odometer rejection rate.** 29.6M odometer positions produce 2.8M emitted plans (10.6x). The
+  mana gate prunes SELECTIONS, not DIGITS (TurnSolver.cpp ~3420), so uncastable cards still become
+  odometer digits. The enumerator's own `two-stage gating potential` line prices the fix at only
+  **1.24x fewer visits**, and it applies to just the 79,489 of 2,090,441 calls that have a mana
+  side — so this is a few percent at best, not the 23x.
