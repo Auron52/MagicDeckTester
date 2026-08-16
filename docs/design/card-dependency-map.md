@@ -318,6 +318,30 @@ base bugs the aggregate had hidden:**
   symmetric (antilife 5→4:21 vs 4→5:15; 5→6:11 vs 6→5:9), and the one ONE-SIDED bucket is a
   **win** — 4→3 in 10 games with 0 reverse. Lesson worth keeping: a one-sided-looking family
   extracted from a loser list proves nothing until the reverse direction is counted.
+* **THE RESIDUAL FAMILIES ARE NOT POINT-FIXABLE BUGS (2026-08-16, every open game dug).** After
+  BUG 6 the surviving stack-vs-base losers were traced individually, and they collapse into three
+  causes, none of which is a mechanical defect. Recording this so the next session does not
+  re-dig them one game at a time — further point-fixing here would be fitting noise.
+  1. **Two mana pools solved SEQUENTIALLY (the structural one).** A card base casts in main 1 is
+     deferred to main 2; main 1 commits its mana first without knowing what main 2 wants, so the
+     deployment drifts a phase — and for a permanent whose value accrues over turns (a mana dork,
+     a planeswalker) a phase becomes a turn. antilife gi=8: main 1 spends all three sources on
+     Remedy+Invigorate, so the deferred Birds waits until T3. fivecolour gi=41 is the sharpest —
+     **CS leaves 2 of 3 mana unused on T3**, casting a 1-mana Deathrite in main 2 when a 3-mana
+     Oko was available, and the whole line finishes exactly one turn later. This is the limitation
+     already named in the `MTG_DOUBT_MAIN2` comment ("it SPLITS the turn's mana into two pools
+     solved separately"); the honest fix is JOINT m1+m2 mana allocation, an architectural change,
+     not another gate.
+  2. **T1 tie re-rolls.** goblins gi=403 is a first-turn one-drop pick (Goblin Lackey vs Skirk
+     Prospector) and fivecolour gi=320 a first-turn land pick; everything downstream is a
+     different game. Same family as the land tie-break candidates.
+  3. **Leaf preference inside a main-2-only deck.** fivecolour's `deck_feeds_combat` is false, so
+     the default branch sends essentially the whole deck to Main2 and the m1 plan pool holds land
+     drops only — verified in the `[fsw]` trace, where every T3 main-1 plan is `p=land=...;` with
+     no cast at all. That is BY DESIGN and matches the USER's ruling that an empty Main1 on a
+     non-combat deck is expected, not a symptom. The 6→7 bucket (7 vs 2) is then the m2 search
+     preferring a different card from a differently-composed pool — a valuation preference, not a
+     gate misjudgment, and small against fivecolour's overall −0.187 stack gain.
 * **STILL OPEN, and now split by cause:**
   - **hinata gi=1061 / gi=1987 (d0, MTG_ACQ_RESOLVE, 6→8) — a THIRD land-choice tie-break
     exemplar, and the sharpest one:** these are **d0** games (no search at all), so per the
@@ -349,9 +373,15 @@ base bugs the aggregate had hidden:**
     downstream is a different game (clairvoyance family).
   - ~~**gi=174 / gi=531**~~ — ROOT-CAUSED and FIXED as BUG 5 and BUG 4 above. Both now match
     base at classify (4/4); gi=174 matches under the full stack too, and gi=41 came along.
-  - **gi=514 / gi=545 / gi=531-at-stack** — fine at classify+ssm; only the LATER levers
-    (main2drop / acq / bp63) break them. Unchanged by BUG 4/5.
-  - hinata's skewed 6→8 bucket (13 vs 4) and goblins gi=403.
+  - ~~**gi=514 / gi=545 / gi=531-at-stack**~~ — CLOSED: the "later levers" family was
+    MTG_MAIN2_DROP, now measured as churn (see above), and all three match base at classify.
+  - ~~**hinata's skewed 6→8 bucket (13 vs 4)**~~ — RESOLVED: 2 of the 13 are the d0 land-ranker
+    exemplar above; the other 11 have NON-MONOTONE lever ladders (6/8/7/7/8, 6/7/7/6/8,
+    6/8/6/6/8), the churn signature — a real defect does not un-break and re-break as levers
+    stack. Consistent with the earlier hinata verdict, and with hinata's w/b being byte-identical
+    across three separate stack measurements.
+  - ~~**goblins gi=403**~~ — a T1 one-drop tie (Lackey vs Prospector); see the residual-families
+    note above.
 
   **Method note (reusable): `MTG_UNPRUNE=mainphase` is the first question to ask.** For both
   gi=174 and gi=531 the regression survived a **100× budget increase** (10 → 1000 virtual-ms,
