@@ -239,11 +239,30 @@ base bugs the aggregate had hidden:**
   gi=454: base taps Grove AS PAYMENT and lands exactly-lethal 20 on T4 (10+3+6+1 drip);
   deferred, T4→T5. Now sweeps at the turn's LAST main (both rollout and executor). Base
   neutral-to-better (regression −0.0066). Closes 3 of 10 dug antilife 4→5 games.
-* **STILL OPEN:** 7 of the 10 dug antilife 4→5 games have a THIRD cause (gi=38/174/514/
-  530/531/545/41). Shape seen so far: the T3 choice between the enabler (Tainted Remedy)
-  and a 1-mana dork scores tail=5 for BOTH under classification while base realises 4 —
-  i.e. the search cannot see the T4 payload dump once the payloads are Main2-classified.
-  Also open: hinata's skewed 6→8 bucket (13 vs 4) and goblins gi=403.
+* **BUG 3 — the exalted hold-release ignored what the held mana BUYS (FIXED, 6dce43c,
+  lever-gated):** `HoldManaSourceForCollapsedMain` released the dorks whenever the board had
+  ≥2 exalted and no other attacker, deciding BEFORE looking at the hand. Under the collapsed
+  main the attack runs first, so releasing taps the whole mana base and the post-combat dump
+  cannot be paid. gi=530: two Hierarchs attacking is worth 2 (and attacking with BOTH
+  forfeits exalted entirely) while the same mana casts Fiery Justice for the T4 kill —
+  measured at the identical node, base scores `Tainted Remedy` **tail=4** and classify scored
+  it **tail=5**. Fix: compute `needs_creature_mana` / `needed_deals_damage` first and gate the
+  ≥2 release on the needed cards not being damage payloads. gi=76's release stands (its
+  creature-mana-dependent card was a Birds — ramp); gi=9/230/184 unchanged. Base byte-identical
+  (all 36 smoke keys).
+* **STILL OPEN, and now split by cause:**
+  - **gi=38 — drip-land TIE (not a bug, a tie-break candidate):** the arms diverge at T1,
+    base playing Bloodstained Mire while classify plays Grove of the Burnwillows and taps it
+    for a {G} pip — **gifting the opponent 1 life** with no Remedy live to reverse it (opp 21).
+    A specific coloured pip must tap Grove's coloured mode, so the gift is unavoidable ONCE
+    the land is chosen; the fix belongs in the land-choice tie-break ("prefer a source that
+    does not gift life when the alternatives score equal"). Same shape as 5c gi=97's
+    colour-aware tie-break candidate. The fetch-vs-Grove choice also reshuffles, so everything
+    downstream is a different game (clairvoyance family).
+  - **gi=174 / gi=531** — T2 cast-choice differences, not yet root-caused.
+  - **gi=514 / gi=545 / gi=41** — fine at classify+ssm; only the LATER levers
+    (main2drop / acq / bp63) break them.
+  - hinata's skewed 6→8 bucket (13 vs 4) and goblins gi=403.
 
 **HELD-OUT A/B COMPLETE (2026-08-16): the full stack (`MTG_PHASE_CLASSIFY + MTG_SEARCH_
 SECOND_MAIN + MTG_MAIN2_DROP + MTG_ACQ_RESOLVE + MTG_BP_SITES=63`) measured on ALL 144
