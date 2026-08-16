@@ -602,6 +602,19 @@ public:
     // cap of 12 groups never binds there; 8 keeps the worst node ~=400k positions. Same gated
     // breadth-policy shape as the base hook (MTG_UNPRUNED / MTG_NO_GROUP_CAP opens it).
     int EnumGroupCap() const override { return 8; }
+    // Board-lethal short-circuit (USER 2026-08-16: "any line that produces that many treasures is
+    // guaranteed to win on attack"; "you literally only need to attack with the magnet"). When the
+    // CURRENT board's attack-all damage already kills, attacking wins now, so the cast-subset
+    // odometer is skippable -- win-turn-invariant, so the suite's avg fingerprint cannot move, only
+    // which equally-winning plan is recorded.
+    //
+    // This deck is the shape the cut exists for. Zada/Mirrorwing copy a trick once per creature, so
+    // a Gold Rush chain leaves every creature at +2/+2 PER TREASURE: the measured go-off boards run
+    // the opponent to -566, -303, -293 life -- 25x lethal -- and the enumerator is meanwhile facing
+    // 63 fungible Treasures (a 3^63 group product) deciding which to crack for mana it cannot spend.
+    // The pathology was never a game failing to convert (Treasures and the kill land on the SAME
+    // turn); it is pure enumeration cost on a turn already won, which is exactly what this cut ends.
+    bool UseLethalShortCircuit() const override { return true; }
     // Legend-rule keep with the user's Twinflame exception (Stage 6 directive, analysis ledger):
     // keep the hasty exile-at-end COPY over a summoning-sick original iff attacking with the copy
     // wins THIS turn and attacking without it does not. Decided by simulating combat both ways.
