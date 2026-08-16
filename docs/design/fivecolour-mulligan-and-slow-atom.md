@@ -522,24 +522,28 @@ UNpayable 44.2% of entries,     1.7% of nodes   (1.6/entry -- at its floor)
 mana cache hit=91.7% of consulted   skipped: shape=0  key=0   flow-prune bail=0.0%
 ```
 
-Note what this says about the cache: **it already absorbs 91.7%**, so the ~67k lookups per game are
-overwhelmingly repeats of a question already answered. The residue is not solves, it is the per-query
-KEY BUILD -- a scan of every mana source (with `CanTapNow`) on every lookup, hit or miss. That cost is
-proportional to the query count and no cache can remove it.
+**CORRECTION (same day).** An earlier draft of this section said the residue was the per-query KEY
+BUILD and recommended hoisting it first. That was wrong, and the run's own numbers say so:
 
-**So the two candidate levers, in order:**
+```
+hit=739,814   miss=66,804   top-level entries=66,804      <- misses EQUAL backtracker entries
+```
 
-1. **Ask fewer times.** The queries come from plan-enumeration breadth (`EnumeratePlansWithLand` is
-   the top inclusive cost on this workload). A five-colour board multiplies castable subsets, each
-   needing a feasibility check. This is the doc's original "fold keyed on the realised colour set"
-   direction, applied one level UP -- at the enumerator, not the tap DFS.
-2. **Make asking cheaper.** Hoist/incrementalise the mana-cache key: the battlefield is invariant
-   across a whole enumeration, so the per-source scan could be built ONCE per enumeration instead of
-   once per query. Byte-identical by the same argument the key already relies on (a payment only
-   TAPS; nothing enters, leaves or changes colour).
+Misses equal entries exactly, so every repeat is already absorbed and only genuine misses reach the
+solver. The cache is not leaking; it is working. What remains is **5,567 GENUINELY DISTINCT payment
+questions per game** -- new (cost, tap-state, floating) combinations never asked before. A cache
+cannot answer a question that has never been asked. Goblins asks 6.
 
-Neither is measured yet. Do (2) first -- it is bounded, byte-identical, and its size is directly the
-key-build share of the 806,618 lookups per 12 games; (1) is the bigger prize and the riskier change.
+The arithmetic confirms which half dominates: 5,567 distinct solves x 40.3 nodes = 224,625 nodes/game,
+exactly the measured figure (Goblins: 6 x 1.9 = 12). The key build is real work -- ~67k source scans
+per game, hit or miss -- but it is the LINEAR half, and it cannot move a 23x ratio on its own.
+
+**So the levers, correctly ordered:**
+
+1. **Ask fewer DISTINCT questions -- the real lever.** See section 6.
+2. **Make asking cheaper** -- hoist the mana-cache key build to once per enumeration (the battlefield
+   is invariant across a payment, the same argument the key already relies on). Bounded and
+   byte-identical, but it only touches the linear half. Worth doing; not sufficient.
 
 **Sizing what "possible" needs.** At K=27 (fetch cycle merged) the size-7 phase is 1,977,898 cells;
 at R=10 (the floor for a shippable runtime profile) that is 39.6M rollouts. At the guide's
