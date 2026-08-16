@@ -71,10 +71,33 @@ carry no play risk — verify with the standing smoke digest check.
    A top-1 fast path plus `thread_local` scratch buffers addresses all three without touching the
    ranking's semantics. Care: indices shift after each erase, so "compute once, reuse" needs the
    remap — the safest first cut is the top-1 path plus scratch reuse, leaving the loop alone.
-2. **`RevealLogPause` (2.7%).** It already has a no-op fast path, but computes it by reading **28
-   thread-local pointers** on every construction, and it is constructed millions of times per search
-   game. One `g_play_hooks_installed` counter maintained at the ~28 install sites replaces 28 loads
-   with one. Mechanical, but every install site must be covered.
+2. **`RevealLogPause` (2.7%). — DONE 2026-08-16.** It already has a no-op fast path, but computes it
+   by reading **28 thread-local pointers** on every construction, and it is constructed millions of
+   times per search game. One `g_play_hooks_installed` counter maintained at the ~28 install sites
+   replaces 28 loads with one. Mechanical, but every install site must be covered.
+
+   **Shipped as a STICKY `thread_local bool`, not a counter.** The install-site audit found that all
+   26 chooser/sink hooks are installed from exactly one function (`ClaudePlayHarness::Install`,
+   src/main.cpp) — except `g_play_soulfire_chooser`, installed in `RunClaudePlay` itself and
+   **missing from `ClearClaudePlayChoosers`** (a real pre-existing leak, fixed in the same series).
+   That single overwrite-without-a-paired-clear is exactly what would make an increment/decrement
+   counter read STALE LOW, the one unsound direction — it would let a human chooser fire inside the
+   search. A sticky flag that is never cleared can only ever be stale HIGH, which merely takes
+   today's full save/null/restore path. So the sticky form is not a simplification, it is the sound
+   one. Invariant: *if `!g_play_hooks_installed` then all 26 hooks are null* — monotone, so the
+   restoring destructor writes back nulls whenever the flag is false.
+
+   `g_reveal_logger` and `g_real_resolution` stay LIVE reads on purpose. `g_reveal_logger` is set
+   per-game by `GameEngine::RunGame`'s `RevealScope`, so folding it into a sticky flag would
+   permanently kill the fast path on every logged/digest run — strictly worse than today, where the
+   outer pause nulls it and the hot nested pauses still take the fast path.
+
+   Hatches: `MTG_PAUSE_HOOK_FLAG=0` restores the 26-pointer scan; `MTG_PAUSE_HOOK_AUDIT=1` runs the
+   scan AND aborts if the flag ever disagrees in the unsafe direction. **Verified**: audit-mode smoke
+   is clean over all 36 cases *and* the 196 reference replays — which matter because
+   `test/viewer_protocol_check.py` drives `--claude-play`, the only path where a hook is ever
+   non-null, so it is the one test that actually exercises install-site exhaustiveness. All 36
+   digests identical across flag-on / flag-off / audit arms.
 3. **Allocator churn (13.4%).** Largely downstream of 1, of `GameState` copies, and of small
    per-call vectors in hot helpers. Worth re-profiling after 1 rather than attacking blind.
 

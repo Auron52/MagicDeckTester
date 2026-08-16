@@ -47,6 +47,19 @@ thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink = nullpt
 thread_local std::vector<PlayEvent>* g_play_event_sink = nullptr;
 thread_local std::vector<std::string>* g_play_dropped_cast_sink = nullptr;
 thread_local bool g_human_play_suppressed = false;
+// See GameLogger.h. STICKY: set when a human-play hook is installed, NEVER cleared. Sticky rather
+// than a +1/-1 counter so that under-counting -- the only unsafe direction -- is structurally
+// impossible: a counter that missed a clear-site would read low and let a human chooser fire
+// inside the search, whereas a sticky flag can only ever be stale TRUE (= today's slow path).
+thread_local bool g_play_hooks_installed = false;
+
+void PauseHookAuditFail()
+{
+    std::fprintf(stderr,
+                 "[pause-hook-audit] FATAL: g_play_hooks_installed is FALSE but a g_play_* hook is "
+                 "non-null -- an install site is missing the flag set (see GameLogger.h).\n");
+    std::abort();
+}
 
 // Affordability audit (MTG_AFFORD_AUDIT): plan-cast payment-failure counters, dumped at process exit.
 std::atomic<long> g_afford_rollout_fails{0};

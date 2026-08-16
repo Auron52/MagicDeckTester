@@ -1832,6 +1832,12 @@ g_play_draw_sink = nullptr;
 g_play_reveal_sink = nullptr;
 g_play_event_sink = nullptr;
 g_play_dropped_cast_sink = nullptr;
+// Was MISSING: installed at RunClaudePlay (the only g_play_* hook set outside Install), so the
+// global outlived the harness it pointed into. Harmless only because the process returns from main
+// straight after -- but this function's whole point is that one list makes a gap visible.
+g_play_soulfire_chooser = nullptr;
+// NOTE: g_play_hooks_installed is deliberately NOT reset here -- it is sticky by design (see
+// GameLogger.h). Clearing it would be the one unsafe direction if a hook were ever re-installed.
 }
 
 // The per-game trace file a --log-dir run writes: the reference format the play viewer and
@@ -2023,6 +2029,10 @@ struct ClaudePlayHarness
 
 void ClaudePlayHarness::Install(AIEngine& ai)
 {
+    // MUST precede every hook install (see g_play_hooks_installed in GameLogger.h): this is what
+    // tells RevealLogPause it can no longer take the "nothing is installed" fast path. Set once,
+    // never cleared -- ClearClaudePlayChoosers deliberately leaves it true (sticky by design).
+    g_play_hooks_installed   = true;
     g_play_draw_sink         = &draw_log;
     g_play_reveal_sink       = &reveal_log;
     g_play_event_sink        = &event_log;
@@ -3228,6 +3238,9 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     h.storage_hold_prompt  = storage_hold_prompt;
     h.jitte_by_turn        = ParseFirebreatheSpec(jitte_spec);   // same "turn:count" format
     h.jitte_prompt         = jitte_prompt;
+    // Belt-and-braces (see g_play_hooks_installed): this process drives human choosers, so it must
+    // never take the pause fast path even if a future chooser is installed outside Install().
+    g_play_hooks_installed = true;
     h.Install(ai);
 
     GameEngine engine(ai);

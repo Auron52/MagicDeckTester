@@ -634,6 +634,52 @@ inline void EmitPlayEvent(int turn, const char* kind, std::string text)
 // byte-identical (appending to an external vector never touches GameState). Inert unless set.
 extern thread_local std::vector<std::string>* g_play_dropped_cast_sink;
 
+// ---- RevealLogPause fast-path flag (PURE PERF; docs/design/engine-cost-profile-2026-08-16.md #2) --
+// RevealLogPause proves "nothing is installed" by loading 26 chooser/sink pointers, and it is
+// constructed millions of times per search game. This flag replaces those 26 loads with one.
+//
+// CONTRACT: the flag may be stale TRUE -- that is SAFE, it just takes today's full save/null/restore
+// path, which is exactly correct and only slower. It must NEVER be stale FALSE, which would let a
+// human chooser fire inside the search. So: SET IT AT EVERY SITE THAT INSTALLS A g_play_* HOOK, and
+// never clear it. Today that is one place, ClaudePlayHarness::Install (src/main.cpp), plus a
+// belt-and-braces set at the top of RunClaudePlay.
+//
+// g_reveal_logger and g_real_resolution are deliberately NOT covered and stay live reads:
+// g_reveal_logger is set per-game by GameEngine::RunGame's RevealScope, so folding it into a sticky
+// flag would permanently kill the fast path on every logged/digest run -- strictly worse than today,
+// where the outer pause nulls it and the nested pauses (the hot case) still hit the fast path.
+extern thread_local bool g_play_hooks_installed;
+void PauseHookAuditFail();
+
+// The pre-flag predicate, kept as the hatch + audit reference implementation.
+inline bool AllPlayHooksNull()
+{
+    return g_play_top_chooser == nullptr && g_play_target_chooser == nullptr
+        && g_play_bounce_chooser == nullptr && g_play_dig_chooser == nullptr
+        && g_play_discard_chooser == nullptr && g_play_ei_chooser == nullptr
+        && g_play_retrace_chooser == nullptr && g_play_soulfire_chooser == nullptr
+        && g_play_draw_sink == nullptr && g_play_reveal_sink == nullptr
+        && g_play_event_sink == nullptr && g_play_dropped_cast_sink == nullptr
+        && g_play_sacrifice_chooser == nullptr && g_play_replicate_chooser == nullptr
+        && g_play_land_entry_chooser == nullptr && g_play_dragon_chooser == nullptr
+        && g_play_sac_tutor_chooser == nullptr && g_play_lackey_chooser == nullptr
+        && g_play_free_cast_chooser == nullptr && g_play_lightpaws_chooser == nullptr
+        && g_play_firebreathe_chooser == nullptr && g_play_cast_order_chooser == nullptr
+        && g_play_storage_hold_chooser == nullptr && g_play_tutor_chooser == nullptr
+        && g_play_attach_host_chooser == nullptr && g_play_jitte_chooser == nullptr;
+}
+
+// 0 = flag fast path (DEFAULT). 1 = MTG_PAUSE_HOOK_FLAG=0, the original 26-pointer scan (identical
+// answer, slower) -- the revert hatch. 2 = MTG_PAUSE_HOOK_AUDIT=1, behave as mode 1 AND abort if the
+// flag disagrees in the UNSAFE direction. Mode 2 is what empirically proves install-site
+// exhaustiveness: run it over a claude-play replay, the only path where a hook is ever non-null.
+inline int PauseHookMode()
+{
+    static const int m = EnvOn("MTG_PAUSE_HOOK_AUDIT") ? 2
+                       : (EnvOn("MTG_PAUSE_HOOK_FLAG", true) ? 0 : 1);
+    return m;
+}
+
 // RAII: null g_reveal_logger AND g_play_top_chooser for the current scope. Placed at the top of
 // every search / rollout "thinking" function so planning-time scry/dig calls are neither logged
 // nor handed to the human chooser; restores the previous values on exit (so nested scopes compose).
@@ -678,20 +724,13 @@ struct RevealLogPause
         // One pass of null-checks replaces ~52 loads + ~52 stores across ctor+dtor (~5.6% of a
         // search game's Ir, gdb/callgrind 2026-08-12). Byte-identical: the skipped work writes
         // back exactly the values already present.
-        noop = !g_real_resolution && g_reveal_logger == nullptr
-            && g_play_top_chooser == nullptr && g_play_target_chooser == nullptr
-            && g_play_bounce_chooser == nullptr && g_play_dig_chooser == nullptr
-            && g_play_discard_chooser == nullptr && g_play_ei_chooser == nullptr
-            && g_play_retrace_chooser == nullptr && g_play_soulfire_chooser == nullptr
-            && g_play_draw_sink == nullptr && g_play_reveal_sink == nullptr
-            && g_play_event_sink == nullptr && g_play_dropped_cast_sink == nullptr
-            && g_play_sacrifice_chooser == nullptr && g_play_replicate_chooser == nullptr
-            && g_play_land_entry_chooser == nullptr && g_play_dragon_chooser == nullptr
-            && g_play_sac_tutor_chooser == nullptr && g_play_lackey_chooser == nullptr
-            && g_play_free_cast_chooser == nullptr && g_play_lightpaws_chooser == nullptr
-            && g_play_firebreathe_chooser == nullptr && g_play_cast_order_chooser == nullptr
-            && g_play_storage_hold_chooser == nullptr && g_play_tutor_chooser == nullptr
-            && g_play_attach_host_chooser == nullptr && g_play_jitte_chooser == nullptr;
+        // The 26 chooser/sink loads collapse to ONE sticky-flag load (g_play_hooks_installed, see
+        // above). g_real_resolution and g_reveal_logger stay live reads -- both legitimately vary
+        // per scope, and the first is what short-circuits this whole test at top-level real play.
+        const int  mode     = PauseHookMode();
+        const bool no_hooks = (mode == 0) ? !g_play_hooks_installed : AllPlayHooksNull();
+        if (mode == 2 && !g_play_hooks_installed && !no_hooks) { PauseHookAuditFail(); }
+        noop = !g_real_resolution && g_reveal_logger == nullptr && no_hooks;
         if (noop) { return; }
         saved = g_reveal_logger; saved_real = g_real_resolution; saved_chooser = g_play_top_chooser;
         saved_tchooser = g_play_target_chooser; saved_bchooser = g_play_bounce_chooser;
