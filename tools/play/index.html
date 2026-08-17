@@ -425,7 +425,6 @@
   <h1>MagicDeckTester — Play</h1>
   <label>Deck <select id="deck"></select></label>
   <label>Seed <input id="seed" type="number" value="1"/></label>
-  <label>Max turns <input id="maxturns" type="number" value="8"/></label>
   <button id="newgame" class="primary">New game</button>
   <button id="nextgame" title="increment Seed + Game# and start a fresh game">Next game ▸</button>
   <button id="undo" disabled>Undo</button>
@@ -464,13 +463,18 @@ const scryImg = (name, ver) => 'https://api.scryfall.com/cards/named?exact='+enc
 
 // S.plan is the ordered turn plan: [{name, kind}] in the sequence the player queued them.
 // kind: 'land' | 'permanent' | 'spell'(instant/sorcery). At most one land.
+// Game length cap. FIXED, not a user setting (viewer issue #5): it is not a display preference --
+// max_turns is part of the search's simulation horizon (it keys the transposition table and defines
+// the no-win turn), so changing it changes the engine's own decisions and would make every saved
+// reference replay against a different game. 8 covers every deck's win turn with room to spare.
+const MAX_TURNS = 8;
 let S = { choices:[], history:[], decision:null, prev:null, over:false, result:null,
           plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{}, storageHold:{}, castOrder:{}, jitte:{} };
 
 function cfg(extra) {
   return Object.assign({
     deck:$('deck').value, seed:+$('seed').value, gameIndex:Math.max(0,(+$('seed').value||0)-1),
-    maxTurns:+$('maxturns').value, depth:0, choices:S.choices,
+    maxTurns:MAX_TURNS, depth:0, choices:S.choices,
     firebreathe:S.firebreathe||{},   // #4 turn-keyed side-channel (separate from the positional choices)
     jitte:S.jitte||{},               // Umezawa's Jitte counter-spend, turn-keyed like firebreathe
     storageHold:S.storageHold||{},   // #6 (turn,land_idx)-keyed tap-vs-charge side-channel
@@ -557,7 +561,7 @@ function retargetPlanAura(planIdx, num) {
   renderBoard();
   return true;
 }
-function clearPlan() { S.plan=[]; S.leMode=false; S.vialMode=null; hideVerdict(); renderBoard(); }
+function clearPlan() { S.plan=[]; S.segmentsLeft=0; S.leMode=false; S.vialMode=null; hideVerdict(); renderBoard(); }
 
 // ---- rendering -------------------------------------------------------------
 // Colored counter badges for a permanent {counters:[{kind,label,count}]}. One circle per kind.
@@ -569,13 +573,22 @@ function counterBadges(o) {
   }).join('')+`</span>`;
 }
 // Floating (unspent) mana pips beside the Lands header. me.floating_mana is absent when empty.
+// The `wild` bucket is NOT "a big pile of any-colour mana" -- no card in any deck makes that, and
+// reading it that way is what made a 6-wild pool look like a rules violation (viewer issue #6). It is
+// the GENERIC part of the mana the engine pre-tapped for the line you committed: the whole turn's
+// combined cost is solved in one go (TurnSolver::BatchPrepayMainCasts), the coloured pips are pinned
+// to their colours, and the generic remainder + any over-production from a lumpy source (a Karoo's
+// 2-for-1 tap, a depletion land) is held in this bucket so a generic pip can never eat a colour a
+// later cast in the same line needs. It stays visible across a mid-phase re-prompt (a cantrip draw
+// breakpoint) because mana empties at the END of a phase, not between spells (CR 500.4) -- so it is
+// really yours to spend on the rest of this main phase. Labelled for what it is.
 function floatingManaHtml(me) {
   const fm = me.floating_mana; if (!fm) return '';
   const order = [['W','#f0e6c8','white'],['U','#a6d8ff','blue'],['B','#b0a4bc','black'],
-                 ['R','#ffb0a0','red'],['G','#a8e0b0','green'],['C','#d8d8d8','colorless'],['wild','#ffd86b','any-color']];
+                 ['R','#ffb0a0','red'],['G','#a8e0b0','green'],['C','#d8d8d8','colorless'],['wild','#ffd86b','generic']];
   const pips = order.filter(([k])=>fm[k]>0).map(([k,col,nm])=>
-    `<span class="mpip" style="background:${col}" title="${fm[k]} ${esc(nm)} mana">${k==='wild'?'✦':k}${fm[k]>1?'×'+fm[k]:''}</span>`).join('');
-  return pips ? `<span class="floatmana" title="floating (unspent) mana in your pool">${pips}</span>` : '';
+    `<span class="mpip" style="background:${col}" title="${fm[k]} ${esc(nm)} mana${k==='wild'?' — already tapped for this line; pays generic costs':''}">${k==='wild'?'◇':k}${fm[k]>1?'×'+fm[k]:''}</span>`).join('');
+  return pips ? `<span class="floatmana" title="floating (unspent) mana in your pool — it survives until the end of this phase (CR 500.4)">${pips}</span>` : '';
 }
 // Dig abilities (human play). The engine enumerates cycling (a land in HAND, e.g. Lonely Sandbar /
 // Forgotten Cave) and sac-to-draw (a land in play, e.g. Fiery Islet) as standalone ONE-action plans
@@ -957,7 +970,7 @@ function renderBanner() {
     b.className = r.won?'win':'loss';
     const oppFin = r.opponent_life!=null ? ` · opponent at ${r.opponent_life}` : '';
     b.innerHTML = r.won ? `🏆 Won — Turn ${r.win_turn}<small>${r.decisions_made} decisions · no clairvoyance${oppFin}</small>`
-                        : `✖ No win within ${$('maxturns').value} turns<small>${r.decisions_made} decisions${oppFin}</small>`;
+                        : `✖ No win within ${MAX_TURNS} turns<small>${r.decisions_made} decisions${oppFin}</small>`;
   } else b.style.display='none';
 }
 
@@ -1027,7 +1040,7 @@ function renderHand() {
   for (const name of order) {
     const c=byName[name];
     const land = c.kind==='land';
-    const q = land ? (planLand()&&planLand().name===c.name?1:0) : plannedCount(c.name);
+    const q = land ? LB.planLands(S.plan).filter(p=>p.name===c.name).length : plannedCount(c.name);
     const leN = land ? S.plan.filter(p=>p.kind==='le' && p.name===c.name).length : 0;  // copies moved to Land's Edge
     const total = counts[c.name]||0;
     const spent = land && (q+leN) >= total;          // every copy is played or discarded -> dim it
@@ -1050,7 +1063,7 @@ function renderHand() {
     for (const c of staged) {
       const key=c.name+'@'+c.staged_until; if(sseen.has(key)) continue; sseen.add(key);
       const land = c.kind==='land';
-      const q = land ? (planLand()&&planLand().name===c.name?1:0) : plannedCount(c.name);
+      const q = land ? LB.planLands(S.plan).filter(p=>p.name===c.name).length : plannedCount(c.name);
       const total = scounts[key]||1;   // how many staged copies of this name/expiry
       html += `<span class="thumb staged ${land?'land':'spell'} ${q?'queued':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
         `<img loading="lazy" src="${scryImg(c.name,'small')}" alt="${esc(c.name)}" onerror="this.style.opacity=.15"/>`+
@@ -1199,7 +1212,14 @@ function activateAbility(name) {
 async function commitLine() {
   if (S.busy) return; S.busy=true;
   const btn=$('commit'); if(btn){btn.disabled=true; btn.textContent='Checking…';}
-  const line=encodeLine();
+  // A plan holding TWO land drops (a Scale the Heights bonus) is committed as consecutive SEGMENTS:
+  // the engine's Plan carries one land, and committing does not end the phase, so "land, land, then
+  // cast" is expressible -- it just takes two commits. Send the first land alone here; applyAccepted
+  // leaves the rest of the plan queued and advanceTo re-fires this for the next segment (viewer
+  // issue #7: the second land used to silently REPLACE the first).
+  const segs = LB.encodeSegments(S.plan);
+  S.segmentsLeft = segs.length - 1;
+  const line = segs[0];
   const res=await post('/api/validate', cfg({ line }));
   S.busy=false;
   if (res.kind==='validation') return handleVerdict(res, line);
@@ -1384,8 +1404,14 @@ function applyAccepted(planIndex, label) {
     }
   }
   S.prev = S.decision; S.choices.push(planIndex);
-  (S.steps=S.steps||[]).push({ n:1, auto:!!(S.decision && S.decision._autoStep), co:coKey });
-  S.plan=[]; S.leMode=false; S.vialMode=null;
+  // A multi-segment line (two land drops) keeps the REST of the plan queued: only the land just
+  // committed leaves it, and advanceTo auto-commits the next segment. `auto` groups the segments
+  // for undo, so stepping back rolls the whole human-declared line, not half of it.
+  const chaining = (S.segmentsLeft||0) > 0;
+  (S.steps=S.steps||[]).push({ n:1, auto:!!(S.decision && S.decision._autoStep) || chaining, co:coKey });
+  if (chaining) { const l = LB.planLands(S.plan)[0]; S.plan = S.plan.filter(p=>p!==l); }
+  else          { S.plan=[]; }
+  S.leMode=false; S.vialMode=null;
   renderHistory(); hideVerdict(); step();
 }
 function handleVerdict(v, line) {
@@ -1398,6 +1424,7 @@ function handleVerdict(v, line) {
   // Power. A reject means "your intended turn didn't happen" -> hand control back; the user re-declares
   // Pass phase / Pass turn on the next decision. (Commit-phase never sets the flag, so it's unaffected.)
   S.commitTurn = null; S.commitTurnPasses = 0;
+  S.segmentsLeft = 0;   // a rejected segment stops the multi-land chain (viewer issue #7)
   const cls=v.verdict==='legal_not_enumerated'?'legal':(v.verdict==='unsupported'?'unsupported':'illegal');
   const tag=v.verdict==='legal_not_enumerated'?'legal · not enumerated':(v.verdict==='unsupported'?'unsupported':'illegal');
   const head=v.verdict==='legal_not_enumerated'?'Rules-legal, but the model never enumerated it.'
@@ -2569,7 +2596,20 @@ function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)
   // checkpoint and step() replays + re-logs the decision exactly. One checkpoint per shown decision.
   (S.checkpoints=S.checkpoints||[]).push({ histLen:S.history.length, lastGy:Object.assign({},S.lastGy||{}),
     lastCasts:new Set(S.lastCasts||[]), handOrder:S.handOrder?S.handOrder.slice():undefined });
-  if (dec && dec.type==='main_phase') { logDraws(dec); logReveals(dec); logEvents(dec); logGyAdds(dec.me); renderHistory(); }
+  if (dec && dec.type==='main_phase') {
+    // One decision's payload can span TWO turns -- the previous turn's combat/damage events arrive
+    // together with this turn's draws -- so pushing source-by-source printed "T4 ＋ drew: Mountain"
+    // ABOVE "T3 ⚔ attacked", which reads as the attack happening after the next turn's draw. Order
+    // the batch by the turn each line belongs to; Array#sort is stable, so within a turn every
+    // source keeps its own sequence.
+    const mark = S.history.length;
+    logDraws(dec); logReveals(dec); logEvents(dec); logGyAdds(dec.me);
+    if (S.history.length - mark > 1) {
+      const tail = S.history.splice(mark).sort((a,b)=>(+a.turn||0)-(+b.turn||0));
+      tail.forEach(e=>S.history.push(e));
+    }
+    renderHistory();
+  }
   // Options-menu "let AI decide": auto-reply the heuristic default without surfacing the modal
   // (default for the repetitive shock/reveal land-entry choice). Short-circuits before rendering.
   if (autoResolveDecision(dec)) return;
@@ -2579,7 +2619,15 @@ function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)
   // re-prompt in the SAME main -- e.g. Anti-Lifegain seed 1 game 0, which re-prompts a pre_main at
   // turn 4 with the opponent at -1). Don't make the user click through a decided game -- auto-pass an
   // empty line to fetch the result. Fires on ANY main decision with a dead opponent (both phases).
-  if (!undoing && isDeadOpponentMain(dec)) { dec._autoStep=true; S.plan=[]; commitLine(); return; }
+  if (!undoing && isDeadOpponentMain(dec)) { dec._autoStep=true; S.plan=[]; S.segmentsLeft=0; commitLine(); return; }
+  // Next segment of a multi-land line (see commitLine): the land just resolved, the engine re-prompted
+  // in the same phase, and the rest of the human's plan is still queued -- commit it without a click.
+  // Only decided on a MAIN-phase frame: a land's own ETB decision (a Karoo bounce) sits in between and
+  // must not cancel the chain.
+  if (!undoing && (S.segmentsLeft||0) > 0 && dec && dec.type==='main_phase') {
+    if (S.plan.length) { dec._autoStep=true; commitLine(); return; }
+    S.segmentsLeft = 0;
+  }
   // "Commit turn": auto-pass every remaining MAIN-phase decision of the same turn (a post-combat
   // Main 2, or a draw-breakpoint re-prompt) so the user jumps to the next turn without clicking
   // through the rest of this one. Stops as soon as the turn advances, a non-main decision appears
