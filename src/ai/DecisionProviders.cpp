@@ -1114,6 +1114,10 @@ bool IsIdealOrderCantrip(const CardDefinition& def)
     return def.card.m_mana_cost.ManaValue() <= IdealOrderCantripMaxMv();
 }
 
+// See IdealOrderSuppressScope: the range's cost-efficient end is this same rank with the tier
+// below stood down, so the two ends share one definition.
+thread_local bool g_suppress_ideal_order_tier = false;
+
 bool IsIdealOrderDraw(const CardDefinition& def)
 {
     return def.tmpl == CardTemplate::DrawUntilNonland
@@ -1185,12 +1189,14 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
     // tried before and "fixes some games and breaks others", because a draw cast first can spend
     // the mana the rest of the line needed. That is exactly the case the USER's design answers with
     // a RANGE (ideal -> cost-efficient) rather than a fixed position: start here, and fall back
-    // toward the cost-efficient slot only when the ideal order cannot actually be paid for. Until
-    // that ladder exists this lever is DEFAULT OFF and is expected to be a mixed result; it is
-    // wired now so the per-deck ranking can be reviewed (mtg <deck> --cast-order-report) against
-    // the same numbers play would use.
+    // toward the cost-efficient slot only when the ideal order cannot actually be paid for. That
+    // ladder is MTG_ORDER_RANGE (ApplyCastOrderRangeLadder in ManaPayment.cpp); this tier is the
+    // range's IDEAL end and the un-promoted rank below is its cost-efficient end. Both levers are
+    // DEFAULT OFF, and this one alone is expected to be a mixed result -- it is wired so the
+    // per-deck ranking can be reviewed (mtg <deck> --cast-order-report) against the numbers play
+    // would use.
     static const bool s_ideal_order = EnvOn("MTG_IDEAL_ORDER");
-    if (s_ideal_order && IsIdealOrderCantrip(def)) { return 2; }
+    if (s_ideal_order && !g_suppress_ideal_order_tier && IsIdealOrderCantrip(def)) { return 2; }
     if (def.params.lifegain_to_loss)             { return 0; }
     if (def.params.max_casts_after >= 0)         { return 18; }
     if (!def.params.reduces_spell_color.empty()) { return 16; }

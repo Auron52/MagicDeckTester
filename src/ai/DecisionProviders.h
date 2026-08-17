@@ -697,6 +697,27 @@ bool IsIdealOrderDraw(const CardDefinition& def);
 bool IsIdealOrderCantrip(const CardDefinition& def);
 int  IdealOrderCantripMaxMv();
 
+// The COST-EFFICIENT end of a card's cast-order RANGE is its rank WITHOUT the ideal-order
+// promotion (docs/design/cast-order-ideal-with-ranges.md, step 2). Recovering it by duplicating
+// the tier table would create exactly the twin this codebase keeps paying for, so CastOrderRangeOf
+// asks the SAME provider twice, with this suppression set the second time -- the two ends of the
+// range can then never drift from the one rank definition. Thread-local: one provider instance
+// serves every worker thread. Set ONLY by IdealOrderSuppressScope, and only around a rank query
+// (never around a cast), so nothing in play reads a suppressed rank.
+extern thread_local bool g_suppress_ideal_order_tier;
+
+class IdealOrderSuppressScope
+{
+public:
+    IdealOrderSuppressScope() : m_prev(g_suppress_ideal_order_tier)
+    { g_suppress_ideal_order_tier = true; }
+    ~IdealOrderSuppressScope() { g_suppress_ideal_order_tier = m_prev; }
+    IdealOrderSuppressScope(const IdealOrderSuppressScope&)            = delete;
+    IdealOrderSuppressScope& operator=(const IdealOrderSuppressScope&) = delete;
+private:
+    bool m_prev;
+};
+
 inline const DecisionProvider& ResolveProvider(const GameState& s)
 {
     return s.m_provider ? *s.m_provider : DefaultProvider();

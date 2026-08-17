@@ -45,6 +45,50 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
 bool CastOrderLess(const GameState& state, const Action& a, const Action& b);
 bool OrderingOpaque(const std::string& name);
 
+// The same comparator with the two ranks supplied by the caller. CastOrderLess is this function
+// with the ranks read from the provider; the ladder below passes an EFFECTIVE rank instead, so a
+// spell walked down its range sorts at its new position without a second comparator to keep in
+// lockstep with this one.
+bool CastOrderLessRanked(const GameState& state, const Action& a, int rank_a,
+                                                 const Action& b, int rank_b);
+
+// ---- The cast-order RANGE and its fallback ladder (step 2 of the USER's design) ---------------
+// docs/design/cast-order-ideal-with-ranges.md:
+//
+//   "We only search order in order to ensure our ideal order can be cast and choose a less ideal
+//    order if not. ... It should be from ideal -> cost-efficient."
+//
+// A spell that affects affordability does not get a position, it gets a RANGE. `ideal` is where
+// the ordering principles want it (draw first, reducer before the reduced, enabler before the
+// payoff); `cost_efficient` is the un-promoted rank, which is the order that is known to pay
+// because it is the order the engine has always used. ideal == cost_efficient for every card
+// with no promotion, and that is every card when MTG_IDEAL_ORDER is off -> the ladder is inert.
+struct CastOrderRange
+{
+    int  ideal          = 0;
+    int  cost_efficient = 0;
+    bool Ranged() const { return ideal < cost_efficient; }
+};
+CastOrderRange CastOrderRangeOf(const GameState& state, const CardDefinition& def);
+bool           CastOrderRangeEnabled();   // MTG_ORDER_RANGE
+
+// Step 3: does the OPAQUE apply path order its casts, instead of keeping plan order? This is what
+// gives the range a domain -- every promoted card in the database is OrderingOpaque (verified over
+// cards.json: 11 promoted cards, 0 of them clean), so with the opaque path in plan order the
+// ladder above can never fire. Retiring the bail-out does NOT mean routing these sets down the
+// clean branch: the breakpoint / staging machinery lives in the opaque one and must stay. Only the
+// ORDER of the non-enabler casts changes. MTG_ORDER_OPAQUE, default off.
+bool OpaqueCastOrderEnabled();
+
+// THE fallback ladder. `order` holds indices into `actions` already sorted the way the caller
+// sorts today; on return it is the IDEAL order, with each ranged spell walked toward its
+// cost-efficient end only as far as paying for the line requires. Never reorders a spell that has
+// no range, never makes a payable line unpayable (its terminal rung is the cost-efficient order),
+// and returns `order` untouched when the lever is off, when no spell in the set has a range, or
+// when the set's costs cannot be projected (see the definition).
+void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>& actions,
+                               std::vector<int>& order);
+
 // THE accounting mana pool (C1 unit 4): everything the active player's untapped sources could
 // produce this phase, plus the turn-scoped floating reserve. Was a byte-identical twin pair
 // (TurnSolver's file-static BuildPool / AIEngine::BuildAvailableMana); both sides now call this.

@@ -3,10 +3,13 @@
 // former AIEngine::TapForCostOnce and TurnSolver TapForCostDirectOnce twins (303 of ~380 lines
 // were already identical); comments were merged from both.
 #include "ManaPayment.h"
+#include "DecisionProviders.h"   // IdealOrderSuppressScope (the range's cost-efficient end)
 #include "EngineFlags.h"
 #include "../cards/CardDatabase.h"
 #include "../core/SpellEffects.h"
 
+#include <algorithm>
+#include <cstdio>
 #include <functional>
 #include <vector>
 
@@ -545,24 +548,32 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
 // than {1}{R}. Ranking by the printed cost put the spliced copy early and dropped it exactly like
 // Seething Song. Was a byte-identical twin pair (TurnSolver's CastOrderLess / AIEngine's
 // CastOrderLessAI); executor and rollout now share this definition.
-bool CastOrderLess(const GameState& state, const Action& a, const Action& b)
+bool CastOrderLessRanked(const GameState& state, const Action& a, int ra,
+                                                 const Action& b, int rb)
 {
+    if (ra != rb) { return ra < rb; }
+    if (LegacyCastTierOrder()) { return false; }                                   // stable: keep plan order
+    if (!ResolveProvider(state).CastCheapestFirstWithinTier()) { return false; }   // stable: keep plan order
     // Reuse the action's memoized def (back-filled once per node, == Lookup(card_name)) instead of
     // re-hashing the name string on every comparison -- this comparator runs O(n log n) per sort.
     // Byte-identical; def==nullptr (an action from a path that didn't back-fill) falls back to Lookup.
     const CardDefinition* da = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
     const CardDefinition* db = b.def ? b.def : CardDatabase::Instance().Lookup(b.card_name);
-    const int ra = da ? ResolveProvider(state).CastOrderRank(state, *da) : 20;
-    const int rb = db ? ResolveProvider(state).CastOrderRank(state, *db) : 20;
-    if (ra != rb) { return ra < rb; }
-    if (LegacyCastTierOrder()) { return false; }                                   // stable: keep plan order
-    if (!ResolveProvider(state).CastCheapestFirstWithinTier()) { return false; }   // stable: keep plan order
     // ONLY among mana accelerants. Applying it to every equal-rank tie also reordered CREATURES,
     // where cost is the wrong key and ETB order carries real value: Scourge of Valkas damages per
     // Dragon that enters, so "Lathliss then Scourge" and "Scourge then Lathliss" differ by 3 damage
     // (dragonstorm_overnight_d3_s7007 gi310 lost a turn to exactly that swap, with identical draws).
     if (!da || !db || !IsManaRitual(*da) || !IsManaRitual(*db)) { return false; }
     return a.cost.ManaValue() < b.cost.ManaValue();
+}
+
+bool CastOrderLess(const GameState& state, const Action& a, const Action& b)
+{
+    const CardDefinition* da = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const CardDefinition* db = b.def ? b.def : CardDatabase::Instance().Lookup(b.card_name);
+    const int ra = da ? ResolveProvider(state).CastOrderRank(state, *da) : 20;
+    const int rb = db ? ResolveProvider(state).CastOrderRank(state, *db) : 20;
+    return CastOrderLessRanked(state, a, ra, b, rb);
 }
 
 // A cast whose resolution triggers a mid-turn re-solve breakpoint (draw / staging / cascade
@@ -585,6 +596,158 @@ bool OrderingOpaque(const std::string& name)
         // Zada/Mirrorwing solo-target trick: every trick in the deck cantrips (cast_draw), and a
         // magnet fan-out mass-draws mid-turn -- the post-draw re-solve owns the ordering.
         || d->params.solo_target_trick;
+}
+
+// ---- The cast-order RANGE and its fallback ladder ---------------------------------------------
+// See ManaPayment.h for the shape and docs/design/cast-order-ideal-with-ranges.md for the design.
+
+bool CastOrderRangeEnabled()
+{
+    static const bool on = EnvOn("MTG_ORDER_RANGE");
+    return on;
+}
+
+bool OpaqueCastOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_ORDER_OPAQUE");
+    return on;
+}
+
+CastOrderRange CastOrderRangeOf(const GameState& state, const CardDefinition& def)
+{
+    const int ideal = ResolveProvider(state).CastOrderRank(state, def);
+    int cost_efficient = ideal;
+    {
+        IdealOrderSuppressScope _no_promotion;
+        cost_efficient = ResolveProvider(state).CastOrderRank(state, def);
+    }
+    // A promotion can only move a card EARLIER, so the suppressed rank is the far end. The max()
+    // is defensive: an archetype override that ignores the tier returns the same number twice,
+    // which collapses the range to a point and makes the ladder inert for that card.
+    return CastOrderRange{ ideal, std::max(ideal, cost_efficient) };
+}
+
+// Can this set's line be PROJECTED from a fixed per-cast cost? This asks the same fungibility
+// question BatchPrepayMainCasts asks before folding a turn's casts into one combined cost, and it
+// declines for the same reasons plus one:
+//   * a PRODUCER (ritual float / same-turn rock ramp) changes what the later casts can pay with,
+//     and its output colour is not carried on the action in a form this projection can spend;
+//   * a DYNAMIC cost ({X}, Hinata/Soulfire per-target discounts) is not the cost that will be paid;
+//   * a not-yet-live SPECTACLE cost is ORDER-DEPENDENT -- Light Up the Stage is {2}{R} until an
+//     opponent has lost life and {R} after, so its stamped cost is only right at the position the
+//     enumeration gave it. That dependency is precisely what the range does not yet carry (the
+//     worked example in the design doc), so a spectacle set keeps its current order rather than
+//     being walked against a cost that is about to change underneath it.
+// Declining leaves `order` exactly as the caller sorted it.
+static bool LadderProjectable(const GameState& state, const std::vector<Action>& acts,
+                              const std::vector<int>& order)
+{
+    const int active = state.active_player_index;
+    for (int i : order)
+    {
+        const Action& a = acts[i];
+        if (a.alt_cost) { continue; }                       // pays no mana at all
+        if (a.ritual_float > 0 || a.rock_mana.Total() > 0) { return false; }
+        if (a.has_spectacle && !state.opponent_lost_life_this_turn) { return false; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (!d) { return false; }
+        if (d->card.m_mana_cost.has_x && a.chosen_x > 0) { return false; }
+        if (SoulfireOwnTargetDiscount(*d, state, active, a.soulfire_own_targets) > 0) { return false; }
+        if (HinataGenericDiscount(*d, state, a.chosen_x) > 0) { return false; }
+    }
+    return true;
+}
+
+// The ORDER POSITION of the first cast the line cannot pay for, or -1 when all of them pay.
+// Projected against AvailableManaPool -- the same aggregate accounting pool the batch pre-payment
+// uses, not a per-source solve, so it is approximate in the same direction and to the same degree.
+// That is safe here in a way it would not be at a payment site: a wrong answer picks a DIFFERENT
+// legal order, never an illegal one, because every rung of the ladder is an order the engine would
+// have been willing to execute anyway.
+static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& acts,
+                             const std::vector<int>& order)
+{
+    ManaPool pool = AvailableManaPool(state);   // already includes the turn-scoped float
+    for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
+    {
+        const Action& a = acts[order[pos]];
+        if (a.alt_cost) { continue; }
+        if (!pool.CanPay(a.cost)) { return pos; }
+        PayFromPool(pool, a.cost);
+    }
+    return -1;
+}
+
+void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>& acts,
+                               std::vector<int>& order)
+{
+    if (!CastOrderRangeEnabled() || order.size() < 2) { return; }
+
+    // Both ends of every ordered cast's range, keyed by ACTION index (the order vector is
+    // permuted below, so positions are not a stable key).
+    std::vector<int>  ideal(acts.size(), 20);
+    std::vector<int>  ceff(acts.size(), 20);
+    std::vector<char> demoted(acts.size(), 0);
+    bool any_ranged = false;
+    for (int i : order)
+    {
+        const Action& a = acts[i];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CastOrderRange r = d ? CastOrderRangeOf(state, *d) : CastOrderRange{ 20, 20 };
+        ideal[i] = r.ideal;
+        ceff[i]  = r.cost_efficient;
+        if (r.Ranged()) { any_ranged = true; }
+    }
+    // MTG_ORDER_RANGE_PROBE: one line per invocation, so "the ladder never fired" can be told
+    // apart from "the ladder ran and the ideal order paid" -- the two look identical in play and
+    // mean opposite things about whether the lever has a domain at all.
+    static const bool s_probe = EnvOn("MTG_ORDER_RANGE_PROBE");
+    auto probe = [&](const char* what)
+    { if (s_probe) { std::fprintf(stderr, "[order-range] turn=%d n=%d %s\n",
+                                  state.turn_number, static_cast<int>(order.size()), what); } };
+
+    // No spell in this set has a range -> its order is already the only one the principles allow,
+    // and today's sort produced it. Byte-identical, and the common case (this is the early-out
+    // that keeps the ladder off the hot path).
+    if (!any_ranged)                                   { probe("skip: no ranged spell");  return; }
+    if (!LadderProjectable(state, acts, order))        { probe("skip: not projectable");  return; }
+    probe("enter");
+    const std::vector<int> base = order;   // re-sorted from here every rung, so "stable => plan
+                                           // order breaks ties" keeps meaning plan order
+    auto eff = [&](int i) { return demoted[i] ? ceff[i] : ideal[i]; };
+    for (std::size_t rung = 0; rung <= order.size(); ++rung)
+    {
+        order = base;
+        std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+        { return CastOrderLessRanked(state, acts[x], eff(x), acts[y], eff(y)); });
+
+        const int fail = FirstUnpayablePos(state, acts, order);
+        if (fail < 0)
+        {
+            probe(rung == 0 ? "ideal order pays" : "stepped-down order pays");
+            return;   // this rung pays -- the most ideal order that does
+        }
+
+        // Walk down the ranged spell CLOSEST to the failure (searching the prefix up to and
+        // including the failing cast, which is itself a candidate when it has a range). That is
+        // the minimal deviation from ideal that can free the mana the failed cast wanted; one
+        // step per spell, so the walk terminates at the all-cost-efficient rung -- the order the
+        // engine used before the promotion existed, which is known to be castable.
+        int victim = -1;
+        for (int pos = 0; pos <= fail && pos < static_cast<int>(order.size()); ++pos)
+        {
+            const int i = order[pos];
+            if (!demoted[i] && ideal[i] < ceff[i]) { victim = i; }
+        }
+        if (victim < 0) { break; }   // nothing left to walk: this is the terminal rung
+        demoted[victim] = 1;
+        if (s_probe)
+        {
+            std::fprintf(stderr, "[order-range] turn=%d fail_pos=%d demote=%s %d->%d\n",
+                         state.turn_number, fail, acts[victim].card_name.str().c_str(),
+                         ideal[victim], ceff[victim]);
+        }
+    }
 }
 
 // THE accounting mana pool (C1 unit 4). Depletion lands contribute 2, multi-color lands 1 wild,

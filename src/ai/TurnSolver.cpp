@@ -11039,10 +11039,27 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         spec_hoisted_sac.insert(ai);
                     }
                 }
-                for (const Action& a : acts)
+                // ORDER within the opaque set (MTG_ORDER_OPAQUE, step 3 of
+                // cast-order-ideal-with-ranges.md). Membership is untouched -- only the sequence
+                // changes, and the range ladder decides how far the ideal order survives payment.
+                // Off -> `ord` is plan order -> byte-identical. Mirrored in AIEngine::TakeTurn.
+                std::vector<int> ord;
+                for (int i = 0; i < static_cast<int>(acts.size()); ++i)
                 {
+                    const Action& a = acts[i];
                     if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
-                    { prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); fire_unlock(); }
+                    { ord.push_back(i); }
+                }
+                if (OpaqueCastOrderEnabled())
+                {
+                    std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
+                    { return CastOrderLess(state, acts[x], acts[y]); });
+                    ApplyCastOrderRangeLadder(state, acts, ord);
+                }
+                for (int i : ord)
+                {
+                    const Action& a = acts[i];
+                    prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); fire_unlock();
                 }
             }
             else
@@ -11059,6 +11076,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
                 std::stable_sort(order.begin(), order.end(), [&](int x, int y)
                 { return CastOrderLess(state, acts[x], acts[y]); });
+                // RANGE ladder (MTG_ORDER_RANGE): re-place the ranged spells at their IDEAL end
+                // and walk them back only as far as paying for the line requires. Inert with the
+                // lever off / no ranged spell in the set. Mirrored in AIEngine::TakeTurn (lockstep).
+                ApplyCastOrderRangeLadder(state, acts, order);
                 for (int i : order)
                 {
                     const Action& a = acts[i];

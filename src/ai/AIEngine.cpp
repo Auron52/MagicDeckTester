@@ -2879,8 +2879,31 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             spec_hoisted_sac.insert(ai);
         }
     }
-    for (const Action& a : plan.actions)
+    // ORDER within the opaque set (MTG_ORDER_OPAQUE, step 3 of cast-order-ideal-with-ranges.md):
+    // the bail-out's premise is that a re-solve breakpoint makes the order situation-dependent, but
+    // USER principle 1 answers the situation -- the draw goes FIRST, so the land drop and the rest
+    // of the line are chosen with what it found. The breakpoint / staging handling in the body is
+    // untouched; only the sequence changes, and the range ladder decides how far the promotion
+    // survives payment. Off -> `ord` is plan order -> byte-identical. Mirrored in ApplyPlanDirect.
+    std::vector<int> ord;
+    for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
     {
+        const Action& a = plan.actions[i];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (!a.alt_cost && (a.sacrifice_land
+                            || ResolveProvider(state).CastEnablerFirst(state, a.card_name)))
+        { continue; }
+        ord.push_back(i);
+    }
+    if (OpaqueCastOrderEnabled())
+    {
+        std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
+        { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
+        ApplyCastOrderRangeLadder(state, plan.actions, ord);
+    }
+    for (int oi : ord)
+    {
+        const Action& a = plan.actions[oi];
         if (a.kind == Action::Kind::CastFromHand && a.alt_cost)
         {
             cast_alt(a.card_name, a.alt_lifegain); resolve_now();
@@ -2927,6 +2950,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     }
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
     { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
+    // RANGE ladder (MTG_ORDER_RANGE): re-place the ranged spells at their IDEAL end and walk them
+    // back only as far as paying for the line requires. Inert with the lever off / no ranged spell
+    // in the set. Mirrored in ApplyPlanDirect (lockstep).
+    ApplyCastOrderRangeLadder(state, plan.actions, order);
     for (int oi : order)
     {
         const Action& a = plan.actions[oi];
