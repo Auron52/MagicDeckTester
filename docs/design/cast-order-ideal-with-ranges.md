@@ -107,6 +107,34 @@ Two properties that make this the single-consideration answer rather than anothe
 * It **considers each spell once** in the common case: the ideal order is attempted first, and a
   spell only moves when payment actually failed, which is a fact, not a guess.
 
+## The boundary: an order is not a COMMITMENT past a draw
+
+**USER 2026-08-17:** "Note that this optimal cast order still doesn't prevent us from reconsidering
+spells or lands we drew."
+
+This is the line between "considered once" and "reconsidered because new information arrived", and
+it is the whole point of principle 1 rather than an exception to it. The draw goes first precisely
+SO THAT the land drop and the rituals are decided with what it found. Retiring `OrderingOpaque`
+(step 3 below) therefore removes the ORDER fan around a draw -- it does NOT commit the turn's line
+before the draw resolves, and it does not remove the post-draw re-solve.
+
+What is settled once, and what is re-decided, after a draw:
+
+| | after the draw |
+|---|---|
+| a cast already in hand AND already payable pre-land | settled -- its position was decided, it is not re-offered |
+| a card the draw ADDED | fully reconsidered, entering the order at its own ideal position |
+| the LAND DROP | fully reconsidered -- a drawn land is playable, which is why the draw preceded it |
+| a cast that only the new land can pay for | fully reconsidered (it was not payable when the order was built) |
+
+That table is exactly the partition already implemented in
+`breakpoint-phase-classification.md` / `MTG_BP_CLASSIFY`, and the code honours it structurally
+rather than by rule: `CollectActions` skips lands before the filter is reached
+(TurnSolver.cpp:3667), so a land can never be dropped, and both filter arms require
+`BpCardWasInHandBefore`, so a drawn card can never be dropped. The two designs are the same
+statement seen from two sides -- order settles what we HAVE, and new information reopens exactly
+what it touched.
+
 ## What this replaces
 
 * `OrderingOpaque`'s blanket bail-out for draw-containing sets -- superseded by principle 1 (draw
