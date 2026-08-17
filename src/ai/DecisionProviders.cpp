@@ -1845,20 +1845,17 @@ bool AntiLifegainProvider::ArchetypeCardValue(const GameState& s, const CardDefi
     return true;
 }
 
-// (all gate on ShouldAttackWith): the projection, the rollout, and the real DeclareAttackers.
-bool AntiLifegainProvider::ShouldAttackWith(const GameState& s, const Permanent& p) const
+// The exalted-aware hold, shared by every provider whose deck runs Exalted on a 0-power body, and
+// honoured in lockstep by all three combat sites that gate on ShouldAttackWith: the PendingAttackDamage
+// projection, the rollout's ApplyCombat, and the real DeclareAttackers.
+// Extracted from AntiLifegainProvider so MirrorwingProvider (4x Ignoble Hierarch) can apply the same
+// rule: it became load-bearing there the moment the whole-turn dork reservation started LEAVING
+// those dorks untapped, since an untapped 0-power dork that then swings alongside the real attacker
+// deals nothing AND cancels the lone-attacker bonus -- a strict 1-damage loss, exactly the
+// "reservation only pays off with the exalted-aware attack declaration" caveat in
+// docs/design/mana-source-reservation.md.
+static bool ExaltedAwareShouldAttack(const GameState& s, const Permanent& p)
 {
-    // Default ON; off-switch MTG_NO_EXALTED_ATTACK reverts to generic attack-with-everything
-    // (byte-identical to the pre-fix baseline) for A/B. Net win: +2-3% d0 wins and faster searched
-    // avgs on Anti-Lifegain (the only exalted deck), 0 win<->loss. A handful of searched-depth games
-    // win a turn LATER, but that was shown to be fetch-shuffle DRAW VARIANCE, not a bug: the more
-    // accurate exalted valuation flips an early land tie-break, a fetchland reshuffles, and the game
-    // draws differently. Among 462 games with IDENTICAL draw sequences, ON never wins later (0
-    // regressions); every turn-later game has a divergent post-fetch draw. See the reservation design
-    // doc's exalted section.
-    static const bool enabled = !EnvOn("MTG_NO_EXALTED_ATTACK");
-    if (!enabled) { return true; }
-
     if (AttackPowerOf(s, p) > 0)        { return true; }   // deals damage (incl. an Invigorate-pumped dork)
     if (AttackHasNonPowerValue(s, p))   { return true; }   // attack-trigger value
 
@@ -1881,6 +1878,32 @@ bool AntiLifegainProvider::ShouldAttackWith(const GameState& s, const Permanent&
     }
     if (CountExalted(s.battlefield, active) <= 0) { return false; }   // pointless swing, no Exalted to earn
     return (p_idx == lone_idx);
+}
+
+bool AntiLifegainProvider::ShouldAttackWith(const GameState& s, const Permanent& p) const
+{
+    // Default ON; off-switch MTG_NO_EXALTED_ATTACK reverts to generic attack-with-everything
+    // (byte-identical to the pre-fix baseline) for A/B. Net win: +2-3% d0 wins and faster searched
+    // avgs on Anti-Lifegain (the only exalted deck at the time), 0 win<->loss. A handful of searched
+    // games win a turn LATER, but that was shown to be fetch-shuffle DRAW VARIANCE, not a bug: the
+    // more accurate exalted valuation flips an early land tie-break, a fetchland reshuffles, and the
+    // game draws differently. Among 462 games with IDENTICAL draw sequences, ON never wins later (0
+    // regressions); every turn-later game has a divergent post-fetch draw. See the reservation design
+    // doc's exalted section.
+    static const bool enabled = !EnvOn("MTG_NO_EXALTED_ATTACK");
+    if (!enabled) { return true; }
+    return ExaltedAwareShouldAttack(s, p);
+}
+
+bool MirrorwingProvider::ShouldAttackWith(const GameState& s, const Permanent& p) const
+{
+    // Same rule, same switch (see ExaltedAwareShouldAttack): this deck plays 4x Ignoble Hierarch, so
+    // a 0-power Elvish Mystic / second Hierarch swinging next to Zada trades the Exalted +1/+1 for
+    // nothing. Only bites a dork the whole-turn reservation left untapped -- before that they were
+    // nearly always tapped for mana, which is why the deck never needed the rule.
+    static const bool enabled = !EnvOn("MTG_NO_EXALTED_ATTACK");
+    if (!enabled) { return true; }
+    return ExaltedAwareShouldAttack(s, p);
 }
 
 // Cleanup discard: the USER-AUTHORED bucket policy (2026-08-07). Three buckets -- ENABLER,

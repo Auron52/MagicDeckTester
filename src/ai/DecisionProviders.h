@@ -596,6 +596,11 @@ public:
     // (d) redundancy (>=2 GR in hand + a board: "no point holding back").
     // MTG_UNPRUNE=treasuretrickcast opens it for audit.
     bool TrickCastSensible(const GameState&, int, const CardDefinition&) const override;
+    // Exalted-aware attack declaration (shared with AntiLifegainProvider): hold back a 0-power,
+    // no-trigger mana dork rather than swinging it next to the real attacker -- it deals nothing and
+    // cancels Ignoble Hierarch's lone-attacker bonus. Became load-bearing when the whole-turn dork
+    // reservation started leaving those dorks untapped. MTG_NO_EXALTED_ATTACK reverts.
+    bool ShouldAttackWith(const GameState& s, const Permanent& attacker) const override;
     // Enumeration breadth: a post-fan-out hand holds 10-12 castable groups x ~5 trick-target
     // options each -- the full product is computationally infeasible (a single node measured a
     // 4 GiB digit store / billions of positions; see analysis-mirrorwing-dragon.md). The generic
