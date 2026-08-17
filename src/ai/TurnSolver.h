@@ -502,6 +502,14 @@ public:
     // in human play, and under MTG_UNPRUNE=mainphase -- same carve-outs as the filter itself.
     static bool CollapsedMainActive(const GameState& state);
 
+    // Baseline main-phase classification for a hand cast, for the per-deck review report
+    // (--cast-order-report). Uses the SAME ClassifyMainPhase the filter uses, so the reviewed
+    // table cannot drift from play. Evaluated against the given (report) state, i.e. an empty
+    // board: no haste access and no scaling attacker, which is the deck's baseline answer.
+    // Returns 0 = Main1, 1 = Main2, 2 = Both (DecisionProvider::MainPhase, as an int so this
+    // header needs only the forward declaration).
+    static int ClassifyCastMainPhase(const GameState& state, const CardDefinition& def);
+
     // Is this run SEARCHED play (lookahead depth > 0)? Set once from the AIEngine constructor.
     // Gates cantrip-first ordering (docs/design/cantrip-first-collapse.md), whose justification --
     // an earlier draw improves the decisions that FOLLOW it -- presupposes a searcher able to act

@@ -1079,6 +1079,41 @@ bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker)
 // the SAME card classes OrderingOpaque lists (draw / staging / cascade / retrace / impulse /
 // solo-target trick / EI), because those are precisely the ones whose order it currently refuses to
 // decide. See docs/design/cast-order-ideal-with-ranges.md.
+// Which draws actually WANT to go first (USER 2026-08-17: "there needs to be some discernment on
+// the order and range"). Drawing is not the criterion -- Magma Opus (8), Apex of Power (10) and
+// Throes of Chaos (4) all draw, and "cast it first" is not a real instruction for any of them:
+// they ARE the turn, so leading with one is not information-gathering, it is the payoff.
+//
+// The discernment is DERIVED rather than chosen: a draw belongs in the information tier when
+// casting it first leaves the turn's mana essentially intact. `IdealOrderCantripMaxMv` (2) is the
+// point at which that stops being true for every deck in the suite -- Ponder/Preordain (1),
+// Expressive Iteration / Light Up the Stage / Treasure Hunt (2) qualify; the three above do not.
+// MTG_IDEAL_CANTRIP_MV overrides it for an A/B.
+//
+// A non-cantrip draw is NOT thereby banned from going early: it keeps its natural (cost-efficient)
+// rank, which is the far end of its RANGE, and the ladder can still walk it toward the ideal end
+// when the mana is genuinely there. Discernment picks the rank; the range keeps the option.
+int IdealOrderCantripMaxMv()
+{
+    static const int mv = EnvInt("MTG_IDEAL_CANTRIP_MV", 2);
+    return mv;
+}
+
+bool IsIdealOrderCantrip(const CardDefinition& def)
+{
+    if (!IsIdealOrderDraw(def)) { return false; }
+    // SPECTACLE IS NOT A CHEAPER CANTRIP -- it is a CONDITIONAL one, and the condition is an
+    // ordering fact (USER 2026-08-17: "spectacle is messier, because it gets cost reductions by
+    // going after the first damage spell"). Light Up the Stage is {2}{R} printed and {R} only once
+    // an opponent has lost life, so ranking it by its cheapest cost would put it FIRST -- exactly
+    // where spectacle is NOT live and it costs the full three. Its ideal slot is "after the first
+    // damage source", which is principle 3 (enabler before payoff) pointing at a cost rather than
+    // an effect: the burn spell ENABLES the cheap draw. A scalar rank cannot say that, so the
+    // printed cost stands here and spectacle draws stay at their cost-efficient end until the
+    // range carries a dependency. Recorded in cast-order-ideal-with-ranges.md as open work.
+    return def.card.m_mana_cost.ManaValue() <= IdealOrderCantripMaxMv();
+}
+
 bool IsIdealOrderDraw(const CardDefinition& def)
 {
     return def.tmpl == CardTemplate::DrawUntilNonland
@@ -1155,7 +1190,7 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
     // wired now so the per-deck ranking can be reviewed (mtg <deck> --cast-order-report) against
     // the same numbers play would use.
     static const bool s_ideal_order = EnvOn("MTG_IDEAL_ORDER");
-    if (s_ideal_order && IsIdealOrderDraw(def))  { return 2; }
+    if (s_ideal_order && IsIdealOrderCantrip(def)) { return 2; }
     if (def.params.lifegain_to_loss)             { return 0; }
     if (def.params.max_casts_after >= 0)         { return 18; }
     if (!def.params.reduces_spell_color.empty()) { return 16; }

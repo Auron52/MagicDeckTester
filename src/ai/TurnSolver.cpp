@@ -3234,6 +3234,27 @@ bool TurnSolver::BreakpointHandSnapshotWanted()
     return CantripOrderEnabled() || BpClassifyEnabled();
 }
 
+// Defined below (the classifier the m1/m2 filter uses); forward-declared so the report wrapper can
+// sit with the other TurnSolver:: entry points rather than being ordered by the file.
+static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
+                                                     const DecisionProvider& prov,
+                                                     const Action& a,
+                                                     bool hand_haste_access,
+                                                     bool scaling_attacker);
+
+int TurnSolver::ClassifyCastMainPhase(const GameState& state, const CardDefinition& def)
+{
+    Action a;
+    a.kind      = Action::Kind::CastFromHand;
+    a.def       = &def;
+    a.card_name = def.card.m_name;
+    a.cost      = def.card.m_mana_cost;
+    using MP = DecisionProvider::MainPhase;
+    const MP mp = ClassifyMainPhase(state, ResolveProvider(state), a,
+                                    /*hand_haste_access=*/false, /*scaling_attacker=*/false);
+    return mp == MP::Main1 ? 0 : (mp == MP::Main2 ? 1 : 2);
+}
+
 std::vector<int> TurnSolver::HandCardNumbers(const GameState& state)
 {
     std::vector<int> out;

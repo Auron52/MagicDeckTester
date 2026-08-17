@@ -3772,7 +3772,8 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
     state.m_provider = &SelectDecisionProvider(deck);
     const DecisionProvider& prov = *state.m_provider;
 
-    struct Row { std::string name; int rank; int mv; int count; bool is_draw; };
+    struct Row { std::string name; int rank; int ideal; int mv; int count; std::string note;
+                 const char* mp; };
     std::vector<Row> rows;
     for (const Card& c : deck.mainboard)
     {
@@ -3781,8 +3782,28 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
         bool seen = false;
         for (Row& r : rows) { if (r.name == c.m_name.str()) { ++r.count; seen = true; break; } }
         if (seen) { continue; }
-        rows.push_back(Row{ c.m_name.str(), prov.CastOrderRank(state, *d),
-                            d->card.m_mana_cost.ManaValue(), 1, IsIdealOrderDraw(*d) });
+        const int rank = prov.CastOrderRank(state, *d);
+        // The RANGE's ideal end. A draw's ideal position is the information tier whether or not the
+        // discernment awarded it that RANK -- that is the point of a range: the ladder may still
+        // walk a big draw early when the mana is genuinely there. Affordability-affecting cards
+        // (rituals, rocks, reducers) already sit at their ideal end, so range == rank for them.
+        const int ideal = IsIdealOrderDraw(*d) ? 2 : rank;
+        const int mp = TurnSolver::ClassifyCastMainPhase(state, *d);
+        const char* mps = (mp == 0 ? "m1" : (mp == 1 ? "m2" : "both"));
+        std::string note;
+        if (IsIdealOrderDraw(*d))
+        {
+            note = IsIdealOrderCantrip(*d)
+                 ? "cantrip"
+                 : "draw, but its cost IS the turn -> cost-efficient end";
+        }
+        if (d->params.spectacle_cost)
+        {
+            note += note.empty() ? "" : "; ";
+            note += "SPECTACLE: cheap only after damage -- conditional position, see doc";
+        }
+        rows.push_back(Row{ c.m_name.str(), rank, ideal,
+                            d->card.m_mana_cost.ManaValue(), 1, note, mps });
     }
     std::stable_sort(rows.begin(), rows.end(),
         [](const Row& a, const Row& b)
@@ -3814,7 +3835,8 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
     std::cout << "# Cast order -- " << deck_path << "\n";
     std::cout << "# provider: " << prov.Name()
               << "   ideal-order draw tier: " << (EnvOn("MTG_IDEAL_ORDER") ? "ON" : "off")
-              << "\n#\n# rank  n  mv  card\n";
+              << "   cantrip max mv: " << IdealOrderCantripMaxMv()
+              << "\n#\n# rank  range      main  n  mv  card\n";
     int last = -999;
     for (const Row& r : rows)
     {
@@ -3824,8 +3846,12 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
             std::cout << "#\n# [" << r.rank << "] " << (*t ? t : "(unclassified)") << "\n";
             last = r.rank;
         }
-        std::cout << "  " << r.rank << "   " << r.count << "  " << r.mv << "  " << r.name
-                  << (r.is_draw ? "   (draw)" : "") << "\n";
+        std::string range = (r.ideal == r.rank)
+                          ? std::string("-")
+                          : ("[" + std::to_string(r.ideal) + ".." + std::to_string(r.rank) + "]");
+        std::cout << "  " << r.rank << "     " << range << "   " << r.mp << "    " << r.count
+                  << "  " << r.mv << "  " << r.name
+                  << (r.note.empty() ? "" : "   -- " + r.note) << "\n";
     }
     return 0;
 }

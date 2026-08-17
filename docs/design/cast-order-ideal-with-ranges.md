@@ -147,6 +147,55 @@ what it touched.
   drawn-card exemption stays necessary and is already implemented
   (`breakpoint-phase-classification.md`).
 
+## Worked example: Light Up the Stage, where all three axes are ONE decision
+
+USER 2026-08-17, in sequence: "spectacle is messier, because it gets cost reductions by going after
+the first damage spell" / "it also likes to sometimes go second main" / "for the cost reduction" /
+"the difficult part is that it is better main 1, but only if spectacle is enabled" / "the reason
+being prowess and drawing into haste."
+
+Light Up the Stage is `{2}{R}`, Spectacle `{R}`, and exiles two cards playable *until the end of
+your next turn*. Every axis this document separates turns out to be the same question for it:
+
+* **Order.** Its cheap mode is enabled by a PRIOR cast that dealt damage. So its ideal slot is not
+  "first" (principle 1) -- it is "after the first damage source", which is principle 3 (enabler
+  before payoff) pointing at a COST rather than an effect: the burn spell enables the cheap draw.
+  Ranking it by its cheapest cost, as a first attempt did, puts it exactly where spectacle is off
+  and it costs the full three.
+* **Main phase.** Combat damage also turns spectacle on, so main 2 buys the discount for free --
+  which is why it "likes to sometimes go second main".
+* **...but main 1 is better when spectacle is ALREADY enabled**, because the exiled cards are
+  playable THIS turn: casting it in main 1 leaves this turn's mana to actually spend them, and it
+  feeds combat two ways -- prowess triggers before attackers are declared, and a haste creature
+  among the exiled cards can attack the turn it is found. Casting it in main 2 wastes both.
+
+So its position is CONDITIONAL on a prior cast in the same main, and the m1/m2 answer depends on
+the order answer. A scalar rank cannot express that, and neither can a main-phase label chosen
+independently of the order. This is the concrete case that motivates carrying a DEPENDENCY on the
+range rather than only a span of positions, and it is why the review (below) covers order, range
+and m1/m2 together rather than one at a time.
+
+Status: NOT implemented. The engine currently ranks it by printed cost at the cost-efficient end,
+which is safe (it never claims spectacle is live when it is not) but leaves the good line to the
+search. The prowess half is already modelled elsewhere -- `MainPhaseFilterActive` stands the whole
+m1/m2 filter down when a prowess attacker is available, the fix for burn's round-1 regression where
+Main2-classified bolts starved Monastery Swiftspear.
+
+## THE REVIEW RULE (USER 2026-08-17)
+
+> "I think, as a rule, the order and range + 2nd vs 1st main should be reviewed by the user."
+> "But ideally, AI or coded rules would help also to come up with a good approach, so that the
+> review is easy."
+
+Order, range and main-phase assignment are a per-deck judgement the USER signs off, not something
+adopted from a measurement alone. The engine's job is to PROPOSE a defensible ranking from coded
+rules and card data, and to make the review cheap -- surface the derivation and flag the uncertain
+calls, so what is reviewed is a handful of judgements rather than the whole card list.
+
+`mtg <deck> --cast-order-report` is that proposal, and `docs/design/cast-order-rankings.md` is it
+for all decks. It prints rank, range, main phase and the rule that decided each, straight from the
+deck's real provider, so the reviewed table cannot drift from what plays.
+
 ## Build order
 
 Each step is independently measurable, default-off, and byte-identical off.

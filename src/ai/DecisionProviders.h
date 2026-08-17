@@ -692,6 +692,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck);
 // ideal-order rank and the --cast-order-report so the report cannot drift from play.
 bool IsIdealOrderDraw(const CardDefinition& def);
 
+// Does this draw want the INFORMATION tier (rank 2)? A draw whose cost is the turn (Magma Opus,
+// Apex of Power) does not -- see the definition. Max mv for a cantrip: MTG_IDEAL_CANTRIP_MV.
+bool IsIdealOrderCantrip(const CardDefinition& def);
+int  IdealOrderCantripMaxMv();
+
 inline const DecisionProvider& ResolveProvider(const GameState& s)
 {
     return s.m_provider ? *s.m_provider : DefaultProvider();
