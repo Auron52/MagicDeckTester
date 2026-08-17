@@ -5534,17 +5534,26 @@ inline int RitualFloatAmount(const GameState& state, const CardDefinition& def, 
 // floats -- Lotus Bloom's SacForMana and (next) Apex of Power's "add ten of one colour" -- so all
 // three route colour identically and stay lockstep. Floats (not a literal tap): the planner credits
 // the same gross amount, so the search's projected combo and the executed combo never diverge.
-inline void AddChosenColorFloat(GameState& state, const std::string& col, int amt)
+// Add `amt` mana of the named colour ("" / unknown = wild) to ANY pool. Split out of
+// AddChosenColorFloat so the cast-order range ladder can credit a producer's output into its
+// projection pool with the same colour semantics the real float uses, rather than a second copy
+// of this switch that would drift the moment a colour is added.
+inline void AddColorToPool(ManaPool& pool, const std::string& col, int amt)
 {
     if (amt <= 0) { return; }
-    if (col.empty())      { state.floating_mana.wild      += amt; }
-    else if (col == "W")  { state.floating_mana.white     += amt; }
-    else if (col == "U")  { state.floating_mana.blue      += amt; }
-    else if (col == "B")  { state.floating_mana.black     += amt; }
-    else if (col == "R")  { state.floating_mana.red       += amt; }
-    else if (col == "G")  { state.floating_mana.green     += amt; }
-    else if (col == "C")  { state.floating_mana.colorless += amt; }
-    else                  { state.floating_mana.wild      += amt; }  // unknown -> wild
+    if (col.empty())      { pool.wild      += amt; }
+    else if (col == "W")  { pool.white     += amt; }
+    else if (col == "U")  { pool.blue      += amt; }
+    else if (col == "B")  { pool.black     += amt; }
+    else if (col == "R")  { pool.red       += amt; }
+    else if (col == "G")  { pool.green     += amt; }
+    else if (col == "C")  { pool.colorless += amt; }
+    else                  { pool.wild      += amt; }  // unknown -> wild
+}
+
+inline void AddChosenColorFloat(GameState& state, const std::string& col, int amt)
+{
+    AddColorToPool(state.floating_mana, col, amt);
 }
 
 // Apply a ritual's floating mana ON RESOLUTION (shared by EffectHandler -- the real executor --

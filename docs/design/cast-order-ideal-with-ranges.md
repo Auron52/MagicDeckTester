@@ -196,21 +196,71 @@ calls, so what is reviewed is a handful of judgements rather than the whole card
 for all decks. It prints rank, range, main phase and the rule that decided each, straight from the
 deck's real provider, so the reviewed table cannot drift from what plays.
 
+## What step 2 turned out to be, and why step 3 is not optional
+
+**Step 2 has no domain on its own, and that is structural rather than a matter of tuning.** The
+ladder was first wired at the two CLEAN-set sort sites -- the only places the engine reorders casts
+today -- and measured ZERO invocations. The reason is a fact about the card pool, not about the
+decks: `IsIdealOrderCantrip` is a subset of `IsIdealOrderDraw`, and `IsIdealOrderDraw` is
+`OrderingOpaque` plus `cast_draw` / `cast_reorder`. Checked over all of `cards.json`: **11 cards are
+promoted, and every one of them is `OrderingOpaque`.** The single promotable card whose only
+draw-ness is `cast_draw` is Magma Opus, at mv 8 -- excluded by the discernment rule. So a promoted
+card is *by construction* in a set that keeps its plan order, and the ladder can never fire.
+
+Hence step 3 ships alongside step 2. Two things it is NOT:
+
+* It is **not** narrowing `OrderingOpaque` so cantrip sets take the clean branch. The clean branch
+  has no breakpoint handling ("No draw engine here, so no breakpoint handling is needed") -- routing
+  a Ponder set through it would delete the post-draw re-solve, which is the opposite of principle 1.
+* It is **not** a change of MEMBERSHIP. The same casts happen; only their sequence moves. The
+  enabler pre-pass, the Spectacle hoist, the staging break and the trailing sac/graveyard loops are
+  all untouched, in both worlds.
+
+What it is: the opaque path's "rest in plan order" loop becomes "rest in ladder order"
+(`MTG_ORDER_OPAQUE`).
+
+### The ladder, as built
+
+`ApplyCastOrderRangeLadder` (ManaPayment.cpp, shared by executor and rollout):
+
+1. Read both ends of every ordered cast's range. Return if none has a span -- the common case, and
+   the early-out that keeps this off the hot path.
+2. Return if the set's costs cannot be PROJECTED. `LadderProjectable` declines a producer (ritual
+   float / rock ramp), a dynamic cost ({X}, Hinata/Soulfire per-target discounts) -- the same
+   fungibility question `BatchPrepayMainCasts` asks -- and, additionally, a **not-yet-live spectacle
+   cost**, which is order-DEPENDENT and therefore the one thing a stamped per-cast cost cannot
+   describe. That is the Light Up the Stage gap below, declined rather than guessed at.
+3. Sort at the IDEAL end and project the line against `AvailableManaPool`. If it pays, done.
+4. Otherwise walk down the ranged spell CLOSEST to the failure (the failing cast itself is a
+   candidate when it has a range) and re-project. One step per spell, so the walk terminates at the
+   all-cost-efficient rung -- the order the engine used before the promotion existed.
+
+The projection is approximate exactly as far as `AvailableManaPool` is (an aggregate pool, not a
+per-source solve). That is safe *here* in a way it would not be at a payment site: every rung is an
+order the engine would have executed anyway, so a wrong projection picks a different LEGAL order,
+never an illegal one.
+
+`MTG_ORDER_RANGE_PROBE` reports entries and skips as well as demotions, because "the ladder never
+fired" and "the ladder fired and the ideal order paid" look identical in play and mean opposite
+things -- the first measurement above was the former, and only a probe that counts entries could
+say so.
+
 ## Build order
 
 Each step is independently measurable, default-off, and byte-identical off.
 
-1. **Rank the three principles** in the generic `CastOrderRank`: draws ahead of the land drop and
-   rituals; cost reducers ahead of their reducible casts; enablers ahead of payoffs (generalising
-   Anti-Lifegain's rank 0). Gate: `MTG_IDEAL_ORDER`. Measure alone -- this alone should move play
-   on cantrip decks with the breakpoint class OFF, and it is the cheap half.
-2. **Give affordability-affecting spells a range** and implement the fallback ladder at the payment
-   site (`ManaPayment`), so an unpayable ideal order steps down instead of failing. Gate:
-   `MTG_ORDER_RANGE`. This is what lets step 1 be aggressive without stranding mana.
-3. **Retire `OrderingOpaque` for the draw class** once 1+2 hold, and measure the breakpoint fan's
-   cost with the order no longer ambiguous. Expected: rollout calls fall back toward the 1,625
-   baseline, and the cantrip class becomes affordable at hinata's budget of 10 -- which is the
-   5->8 family (`classify-stack-adoptable-subset.md`).
+1. **DONE (e9e0c8d, 6d4761b)** -- **rank the three principles** in the generic `CastOrderRank`:
+   draws ahead of the land drop and rituals; cost reducers ahead of their reducible casts; enablers
+   ahead of payoffs (generalising Anti-Lifegain's rank 0). Gate: `MTG_IDEAL_ORDER`. Only the draw
+   tier is wired; principles 2 and 3 were already ranks (16 and 0/19).
+2. **DONE (2ee99b9)** -- **give affordability-affecting spells a range** and implement the fallback
+   ladder, so an unpayable ideal order steps down instead of failing. Gate: `MTG_ORDER_RANGE`. This
+   is what lets step 1 be aggressive without stranding mana.
+3. **DONE (2ee99b9)** -- **retire `OrderingOpaque`'s ORDER bail-out** (not the breakpoint machinery
+   -- see above). Gate: `MTG_ORDER_OPAQUE`. Then measure the breakpoint fan's cost with the order no
+   longer ambiguous. Hoped-for: rollout calls fall back toward the 1,625 baseline, and the cantrip
+   class becomes affordable at hinata's budget of 10 -- which is the 5->8 family
+   (`classify-stack-adoptable-subset.md`). NOT yet measured.
 4. Suite train, then held-out overnight, before any adoption claim. Adoption is the USER's call.
 
 ## Open questions to settle by measurement, not assumption

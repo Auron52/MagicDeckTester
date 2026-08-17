@@ -627,17 +627,22 @@ CastOrderRange CastOrderRangeOf(const GameState& state, const CardDefinition& de
     return CastOrderRange{ ideal, std::max(ideal, cost_efficient) };
 }
 
-// Can this set's line be PROJECTED from a fixed per-cast cost? This asks the same fungibility
-// question BatchPrepayMainCasts asks before folding a turn's casts into one combined cost, and it
-// declines for the same reasons plus one:
-//   * a PRODUCER (ritual float / same-turn rock ramp) changes what the later casts can pay with,
-//     and its output colour is not carried on the action in a form this projection can spend;
-//   * a DYNAMIC cost ({X}, Hinata/Soulfire per-target discounts) is not the cost that will be paid;
-//   * a not-yet-live SPECTACLE cost is ORDER-DEPENDENT -- Light Up the Stage is {2}{R} until an
-//     opponent has lost life and {R} after, so its stamped cost is only right at the position the
-//     enumeration gave it. That dependency is precisely what the range does not yet carry (the
+// Can this set's line be PROJECTED from a fixed per-cast cost? Two things make a stamped cost the
+// wrong number to walk an order against:
+//   * a DYNAMIC cost -- the Hinata / Soulfire per-target discounts depend on a board that changes
+//     as the line resolves, so the same cast costs differently at a different position. ({X} is
+//     NOT in this class: chosen_x is fixed at enumeration and Action::cost already carries the X
+//     generic, which is why an X ritual is projectable where the batch pre-payment declines it --
+//     the prepay commits real mana up front, this only picks an order.)
+//   * a not-yet-live SPECTACLE cost, which is ORDER-DEPENDENT: Light Up the Stage is {2}{R} until
+//     an opponent has lost life and {R} after, so its stamped cost is only right at the position
+//     the enumeration gave it. That is precisely the dependency the range does not yet carry (the
 //     worked example in the design doc), so a spectacle set keeps its current order rather than
 //     being walked against a cost that is about to change underneath it.
+// A PRODUCER (ritual float / same-turn rock ramp) is NOT a decline: the projection credits its
+// output below. Declining it was measured to be the ladder's whole failure -- hinata's combo turns
+// are producer turns, so exactly the lines where casting a cantrip first is catastrophic were the
+// ones the ladder refused to look at, and the range arm scored identically to the promotion alone.
 // Declining leaves `order` exactly as the caller sorted it.
 static bool LadderProjectable(const GameState& state, const std::vector<Action>& acts,
                               const std::vector<int>& order)
@@ -647,11 +652,9 @@ static bool LadderProjectable(const GameState& state, const std::vector<Action>&
     {
         const Action& a = acts[i];
         if (a.alt_cost) { continue; }                       // pays no mana at all
-        if (a.ritual_float > 0 || a.rock_mana.Total() > 0) { return false; }
         if (a.has_spectacle && !state.opponent_lost_life_this_turn) { return false; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         if (!d) { return false; }
-        if (d->card.m_mana_cost.has_x && a.chosen_x > 0) { return false; }
         if (SoulfireOwnTargetDiscount(*d, state, active, a.soulfire_own_targets) > 0) { return false; }
         if (HinataGenericDiscount(*d, state, a.chosen_x) > 0) { return false; }
     }
@@ -674,6 +677,21 @@ static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& 
         if (a.alt_cost) { continue; }
         if (!pool.CanPay(a.cost)) { return pos; }
         PayFromPool(pool, a.cost);
+        // Credit what this cast PRODUCES, so the rest of the line is projected against the mana it
+        // will actually have. Same two terms the enumeration's subset math credits (Action carries
+        // both precisely so no per-node card lookup is needed), and the same colour semantics the
+        // real float uses -- a ritual's own colour when it has one (the Dragonstorm rituals float
+        // {R}, which cannot pay an off-colour pip), the searched colour for the chosen-colour
+        // dimension, wild otherwise. Both terms are zero for every non-producer -> no cost.
+        if (a.ritual_float > 0)
+        {
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            const std::string& col = !a.chosen_float_color.str().empty()
+                                   ? a.chosen_float_color.str()
+                                   : (d ? d->params.ritual_float_color : std::string());
+            AddColorToPool(pool, col, a.ritual_float);
+        }
+        if (a.rock_mana.Total() > 0) { pool.AddPool(a.rock_mana); }
     }
     return -1;
 }
