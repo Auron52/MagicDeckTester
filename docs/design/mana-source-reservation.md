@@ -179,9 +179,54 @@ Lossless per the heuristic skill's Rule 0b infinite-budget test: it is a permuta
 candidate list, not a cap — the backtracker still descends into a creature when the payment needs
 one, so no tap set becomes unreachable.
 
-Adoption (pending the report to the user): delete the selector, ship the creature-last stable
-partition as the default behind an off-switch, skip it while `g_flow_order_live` (so it cannot undo
-the parked flow permutation), and rebaseline smoke + regression.
+ADOPTED (`efa341ab`, GT `4e4c2a02`): the creature-last stable partition ships default-on behind
+`MTG_NO_TAP_SPARE_CREATURES`, skipped while `g_flow_order_live` so it cannot undo the parked flow
+permutation. The off-switch is byte-identical to the pre-adoption GT.
+
+#### FOUR REFINEMENTS MEASURED AND REJECTED (2026-08-17) — do not re-derive these
+
+All four came from the user's own counterexamples to the shipped rule, and all four measured worse.
+Deltas are vs the ADOPTED baseline above, net avg win turn summed over the tier (negative = better).
+
+| variant | smoke | regression | held-out | verdict |
+|---|---|---|---|---|
+| `ManaSourceRank` as a SECONDARY key (scarcity within the land group) | +0.0303 | — | — | rejected |
+| spare only where the deck's `ShouldAttackWith` says it would attack | −0.0444 | **+0.0180** | −0.0200 | **rejected — play-drift** |
+| ...the same, but a board-visible COPY MAGNET spares everything | −0.0434 | — | — | rejected (never beat the simpler arm) |
+| user's tiering: inflexible lands < creatures < flexible/depletion/storage | +0.0470 | — | — | rejected |
+
+**The `ShouldAttackWith` arm is the interesting failure and the one worth understanding.** The idea
+is right on its face — a creature that adds no damage to this turn's attack can be tapped freely, and
+it composes beautifully (`GenericProvider` returns true always, so a deck with no attack rule keeps
+sparing everything, and Hinata / FiveColour / Anti-Lifegain each already carry a dork-holding rule it
+would inherit). It won big on smoke. It then **reversed on the regression seeds, including on
+mirrorwing itself** (−0.0444 smoke / +0.0100 regression / −0.0150 held-out — sign-inconsistent, the
+overfit signature), and it broke a reference:
+
+```
+Anti-Lifegain/claude_s5_gi4.json: replay win_turn=5 vs ref win_turn=4
+```
+
+That is **the same reference, broken the same way, as the flow-order scarcity bias** (see
+`flow-guided-tap-order.md`, which fixed it by ranking a live drip source maximally scarce). Freeing
+the 0-power Ignoble Hierarch to tap means the payment stops reaching for Grove of the Burnwillows —
+and Grove's drip, under a Tainted Remedy, IS the damage that wins on turn 4. So on Anti-Lifegain
+**"spare the body" and "fire the drip" are the same decision**, and any refinement that separates
+them — however correct it is about combat — throws the win condition away. Two references have now
+been lost to exactly this mechanism; a third attempt should expect it.
+
+Two structural facts that bound the remaining space, both checked rather than assumed:
+
+* **No deck in the repo holds both a storage land and a mana creature** (Dragonstorm has Dwarven Hold
+  + Mercadian Bazaar and zero dorks; slivers has the only {C}-manland and zero dorks). The
+  storage-vs-creature ordering is unreachable today and cannot be measured here.
+* **Depletion vs creature IS live, on exactly one deck** — Mirrorwing runs Sandstone Needle alongside
+  Elvish Mystic and Ignoble Hierarch. `ManaSourceRank` ranks a depletion land by COLOUR (Needle =
+  mono, 10) on the reasoning that depletion is ramp you normally want to spend, so the shipped
+  partition will burn a counter ahead of a dork. Overriding that to 55 is the fourth row above, and
+  it lost. Note the tension in the source material: viewer issue #9 asked for precisely the shipped
+  behaviour ("the Hierarch tapped, when we should use the Sandstone Needle instead"), while the
+  general principle argues the other way. The measurement sides with issue #9.
 
 The pump-waste is otherwise a VIEWER-only gap (the AI's `FindBestOwnAttacker` is tap-aware: resolved
 after payment, `CanAttackFull` skips tapped, so it never wastes its own pump — see
