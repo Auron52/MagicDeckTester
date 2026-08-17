@@ -2245,6 +2245,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if (plan.lackey_choice >= 0) { state.scripted_cheat_choice = plan.lackey_choice; }
 
     // Cast a spell from hand by name.
+    // PRE-DRAW hand for the next resolve_draw_breakpoint -- lockstep twin of ApplyPlanDirect's
+    // deferred_hand_before. Written by cast_by_name (the only point that reliably precedes the
+    // cantrip's own draw) and bound by the scope inside resolve_draw_breakpoint. Declared here
+    // because cast_by_name captures it. Empty is the SAFE value: every card then reads as new, so
+    // both consumers stand down. See docs/design/breakpoint-phase-classification.md.
+    std::vector<int> rdb_hand;
+
     auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "",
                             int chosen_x = 0, int own_targets = 0, int ponder_keep = -1,
                             int crackle_targets = -1,   // -1 = legacy auto-max discount (see Action::crackle_targets)
@@ -2254,6 +2261,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             bool free_cast = false)      // Archangel: spend a banked free cast
     {
         Player& ap = state.ActivePlayer();
+        // PRE-CAST hand snapshot for the breakpoint drawn-card exemption (lockstep twin of
+        // ApplyPlanDirect's apply_one capture). It MUST be taken here rather than where rdb_site is
+        // armed: the arming sites run after `cast_by_name(...); resolve_now();`, so by then the
+        // cantrip has already drawn and the new card would read as old -- the exact case the
+        // exemption exists for. Gated on the levers that read it => ship pays nothing.
+        if (TurnSolver::BreakpointHandSnapshotWanted())
+        { rdb_hand = TurnSolver::HandCardNumbers(state); }
         // Prefer an expiring STAGED copy (Light Up the Stage etc.) over a persistent hand copy, so a
         // committed line that spends the staged copy this turn -- freeing the drawn copy for a later
         // turn -- replays exactly. Mirrors the land-play fix (TryPlaySpecificLand): the burn 6225
@@ -2521,7 +2535,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
-        TurnSolver::CantripOrderScope _cos(rdb_site);
+        TurnSolver::CantripOrderScope _cos(rdb_site, &rdb_hand);
         Player& rp = state.ActivePlayer();
         std::vector<StagedCard> snap = rp.staged_cards;
         rp.staged_cards.clear();

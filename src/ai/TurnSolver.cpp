@@ -494,6 +494,31 @@ static thread_local uint64_t g_decision_epoch = 0;
 // helpers above CollectActions.
 static thread_local const CardDefinition* g_cantrip_order_site = nullptr;
 
+// PRE-DRAW hand (card numbers) of the breakpoint whose continuation is being enumerated, bound by
+// the same scope as the site above (nullptr = no continuation context). A card NOT in here entered
+// the hand AT the breakpoint, and is therefore first-class: exempt from the ordering ban and from
+// the MTG_BP_CLASSIFY drop, because it is a duplicate of nothing. See
+// docs/design/breakpoint-phase-classification.md.
+static thread_local const std::vector<int>* g_bp_hand_before = nullptr;
+
+// Was this card already in hand when the current breakpoint's cantrip was cast? True outside a
+// continuation (no snapshot bound => the "new card" concept does not apply and every caller's
+// existing behaviour stands).
+static bool BpCardWasInHandBefore(int card_number)
+{
+    if (g_bp_hand_before == nullptr) { return true; }
+    return std::find(g_bp_hand_before->begin(), g_bp_hand_before->end(), card_number)
+           != g_bp_hand_before->end();
+}
+
+// MTG_BP_CLASSIFY -- breakpoint-phase classification (USER 2026-08-17: "Just as we do for main 1
+// and main 2 we should do for breakpoints"). Default OFF => byte-identical.
+static bool BpClassifyEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CLASSIFY");
+    return on;
+}
+
 // Memoized SEARCHED second main (defined after BuildBreakpointKey, far below): under
 // MTG_SEARCH_SECOND_MAIN + MTG_SOLVE_MEMO together, each DISTINCT post-combat state is searched
 // exactly once per decision and every later arrival reuses that searched plan. This is the
@@ -3161,15 +3186,35 @@ static bool CantripOrderBans(const CardDefinition& site, const CardDefinition& c
 // RAII binding of the continuation's site (both worlds use it -- the rollout's deferred re-solve
 // and the executor's resolve_draw_breakpoint -- which is the lockstep). A site outside the
 // ordered class CLEARS the watermark (its continuation is not a cantrip-permutation context).
-TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site)
-    : m_saved(g_cantrip_order_site)
+TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site,
+                                                 const std::vector<int>* hand_before)
+    : m_saved(g_cantrip_order_site), m_saved_hand(g_bp_hand_before)
 {
+    // The hand snapshot binds whenever EITHER consumer is live: the ordering ban needs it to spare
+    // a drawn cantrip, and MTG_BP_CLASSIFY needs it to spare a drawn spell. Bound independently of
+    // the site so the classifier works at a breakpoint whose cantrip is outside the ordered class.
+    if (CantripOrderEnabled() || BpClassifyEnabled()) { g_bp_hand_before = hand_before; }
     if (!CantripOrderEnabled()) { return; }
     g_cantrip_order_site = (site != nullptr && CantripOrderTier(*site) >= 0) ? site : nullptr;
 }
 TurnSolver::CantripOrderScope::~CantripOrderScope()
 {
     g_cantrip_order_site = m_saved;
+    g_bp_hand_before     = m_saved_hand;
+}
+
+bool TurnSolver::BreakpointHandSnapshotWanted()
+{
+    return CantripOrderEnabled() || BpClassifyEnabled();
+}
+
+std::vector<int> TurnSolver::HandCardNumbers(const GameState& state)
+{
+    std::vector<int> out;
+    const Player& ap = state.players[state.active_player_index];
+    out.reserve(ap.hand.size());
+    for (const Card& c : ap.hand) { out.push_back(c.m_number); }
+    return out;
 }
 
 // ---- CollectActions ------------------------------------------------------
@@ -3640,8 +3685,39 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // cantrip-class continuation, a canonically-EARLIER cantrip is a permutation duplicate
         // of a chain the root fan already enumerates -- suppress it. nullptr (lever off / not a
         // continuation) => byte-identical.
-        if (g_cantrip_order_site != nullptr && CantripOrderBans(*g_cantrip_order_site, def))
+        //
+        // DRAWN-CARD EXEMPTION (USER 2026-08-17): "if the order was Ponder -> Preordain and you had
+        // no Ponder in hand you wouldn't be able to ignore the Ponder that Preordain drew." The
+        // permutation argument holds only for a cantrip that was ALREADY IN HAND when the chain
+        // started -- a cantrip this breakpoint DREW has no twin chain to be a duplicate of, so
+        // banning it deletes a real line. A new card is first-class.
+        if (g_cantrip_order_site != nullptr && CantripOrderBans(*g_cantrip_order_site, def)
+            && BpCardWasInHandBefore(ap.hand[i].m_number))
         { continue; }
+
+        // BREAKPOINT-PHASE CLASSIFICATION (MTG_BP_CLASSIFY, USER 2026-08-17: "just as we do for
+        // main 1 and main 2 we should do for breakpoints"). The m1/m2 filter below gives each cast
+        // ONE phase; this gives each cast ONE SIDE of a mid-turn draw. Drop a hand cast iff
+        //   (a) the card was already in hand before the breakpoint, AND
+        //   (b) the pool as it stands -- post-cantrip, BEFORE any new land -- already pays for it.
+        // Then for every land L the base plan {play L, cast cantrip, cast X} was payable from the
+        // same pool and was already enumerated, so this continuation copy is a true permutation
+        // duplicate and CastOrderRank decides the order. Kept, always: a card the breakpoint DREW
+        // (never considered before it), and anything that needs the new land (not payable here).
+        //
+        // Conservative BY CONSTRUCTION in the only direction that matters: every mechanism this
+        // plain-pool test under-counts (rituals, cost reducers, sac outlets, spectacle/alt costs,
+        // free casts -- see OptimisticTurnMana's bail-out list) makes it say "not payable", which
+        // KEEPS the action. Only an over-count could drop a line the base never enumerated, and
+        // AvailableManaPool credits nothing that is not already on the battlefield.
+        // See docs/design/breakpoint-phase-classification.md.
+        if (BpClassifyEnabled() && g_bp_hand_before != nullptr
+            && BpCardWasInHandBefore(ap.hand[i].m_number))
+        {
+            ManaPool now = AvailableManaPool(state);
+            now.AddPool(state.floating_mana);
+            if (now.CanPay(EffectiveCost(def, state))) { continue; }
+        }
 
         // EMISSION PRUNE: no line this turn could pay for this card, so it is a dead odometer digit.
         // Compared against an OPTIMISTIC ceiling (see OptimisticTurnMana), so this can only drop
@@ -9116,6 +9192,7 @@ struct BpPrefixSnap
     bool cascade_free = false;       // one-shot free-cast marker, captured for exactness
     int  pin_top = -1, pin_etbdig = -1, pin_tutor = -1, pin_reorder = -1;   // scripted-pin state
     const CardDefinition* deferred_site = nullptr;   // MTG_CANTRIP_ORDER watermark (registry-stable)
+    std::vector<int>      deferred_hand;             // PRE-DRAW hand of that site (drawn-card exemption)
 };
 
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
@@ -9170,6 +9247,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // several arming casts in one plan the LAST one wins, which matches whose continuation the
     // single deferred re-solve actually is. Inert (never read) when the lever is off.
     const CardDefinition* deferred_cantrip_site = nullptr;
+    // PRE-DRAW hand (card numbers) of the cast that armed the breakpoint above. Captured inside
+    // apply_one BEFORE the cast resolves, so a card the cantrip DREW is not in it -- that is what
+    // makes a new card first-class (see docs/design/breakpoint-phase-classification.md). Empty is
+    // the SAFE value: every card then reads as new, so both consumers stand down.
+    std::vector<int> deferred_hand_before;
     // Which CLASS armed the deferred re-solve: a solo-target trick with a draw/Treasure payload is
     // site 5 (searchable by default), a plain cantrip is site 3 (the admitted quality prune). One
     // deferred breakpoint per apply; if BOTH classes armed it, the trick class owns the numbering
@@ -9528,6 +9610,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // ~200k/game). Byte-identical: it->m_name == name so LookupCached(*it) == Lookup(name),
         // and the two early-returns (not in zone / unknown def) yield the same outcome in either
         // order.
+        // PRE-CAST hand snapshot for the breakpoint drawn-card exemption. Taken HERE, at the top
+        // of the cast, so it precedes every effect the card resolves -- the arming sites below run
+        // after the draws, so capturing at them would see the drawn card and call it old. Gated on
+        // the two levers that read it, so a ship config pays nothing and stays byte-identical
+        // (apply_one runs ~200k times a game). See docs/design/breakpoint-phase-classification.md.
+        std::vector<int> hand_at_cast;
+        if (TurnSolver::BreakpointHandSnapshotWanted())
+        { hand_at_cast = TurnSolver::HandCardNumbers(state); }
+
         std::vector<Card>& zone = from_graveyard ? ap.graveyard : ap.hand;
         // Choose WHICH copy of `name` to cast: prefer the EARLIEST-EXPIRING copy, so a staged
         // (exiled, expires end-of-turn) copy is spent before a persistent hand copy. Otherwise the
@@ -9800,7 +9891,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // T4 kill plays Crackle out of this exile). Arm the deferred acquisition re-solve
                 // (AcqResolveEnabled / MTG_ACQ_RESOLVE, same family as the tutor fetch above).
                 if (AcqResolveEnabled() && !s_human_play && sink_stack.empty())
-                { deferred_cantrip_resolve = true; deferred_cantrip_site = &def; }
+                { deferred_cantrip_resolve = true; deferred_cantrip_site = &def;
+                  deferred_hand_before = hand_at_cast; }
             }
 
             if (t == Targeting::Any || t == Targeting::Player)
@@ -10191,6 +10283,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 deferred_cantrip_resolve = true;
                 deferred_cantrip_site    = &def;
+                deferred_hand_before     = hand_at_cast;
             }
             else
             {
@@ -10461,7 +10554,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // breakpoint script. DEFAULT OFF until measured.
             if (AcqResolveEnabled() && def.params.tutor_to_hand && !s_human_play
                 && sink_stack.empty())
-            { deferred_cantrip_resolve = true; deferred_cantrip_site = &def; }
+            { deferred_cantrip_resolve = true; deferred_cantrip_site = &def;
+              deferred_hand_before = hand_at_cast; }
         }
         else if (def.params.tutor_land_to_battlefield)
         {
@@ -10575,6 +10669,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     deferred_cantrip_resolve = true;
                     deferred_cantrip_site    = &def;
+                    deferred_hand_before     = hand_at_cast;
                     deferred_trick_armed     = true;   // site 5, not the plain-cantrip site 3
                 }
                 else if (def.params.cast_draw > 0)
@@ -11020,6 +11115,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         bp_seen                  = bp_resume->bp_seen;
         deferred_cantrip_resolve = true;                  // captured AT the armed re-solve
         deferred_cantrip_site    = bp_resume->deferred_site;
+        deferred_hand_before     = bp_resume->deferred_hand;
         deferred_trick_armed     = bp_resume->trick_armed;
         cascade_free             = bp_resume->cascade_free;
         g_bp_seen_last           = bp_resume->bp_seen;    // as a full apply would have left it
@@ -11166,12 +11262,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_tutor    = g_scripted_tutor_choice;
             bp_capture->pin_reorder  = g_scripted_reorder_choice;
             bp_capture->deferred_site = deferred_cantrip_site;
+            bp_capture->deferred_hand = deferred_hand_before;
         }
         deferred_cantrip_resolve = false;
         // MTG_CANTRIP_ORDER: bind the continuation to its site for the whole re-solve (the
         // searched list, the greedy fallback, and the continuation's own application). The
         // executor's twin binding is in AIEngine::resolve_draw_breakpoint -- lockstep pair.
-        TurnSolver::CantripOrderScope _cos(deferred_cantrip_site);
+        TurnSolver::CantripOrderScope _cos(deferred_cantrip_site, &deferred_hand_before);
         deferred_cantrip_site = nullptr;
         if (out_breakpoint) { sink_stack.push_back(out_breakpoint); }
         TurnSolver::Plan extra;
@@ -19557,6 +19654,15 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameSta
         // MTG_CANTRIP_ORDER: the continuation list depends on the bound site (its ban filters
         // CollectActions), so the same state under different sites must not share an entry.
         if (g_cantrip_order_site != nullptr) { Fold(key, g_cantrip_order_site->card.m_name_hash); }
+        // The PRE-DRAW hand decides which cards are exempt (new) and which MTG_BP_CLASSIFY drops,
+        // so the same state under a different snapshot emits a different list and must not share
+        // an entry. Order-sensitive fold is fine: the snapshot is built in hand order in both
+        // worlds, from the same hand.
+        if (g_bp_hand_before != nullptr)
+        {
+            Fold(key, 0xB17Full);
+            for (int num : *g_bp_hand_before) { Fold(key, static_cast<uint64_t>(num)); }
+        }
         BpEnumMap::const_iterator it = cache.find(key);
         if (it != cache.end())
         {

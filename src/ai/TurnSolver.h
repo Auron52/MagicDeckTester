@@ -457,16 +457,37 @@ public:
     // rollout's deferred re-solve (ApplyPlanDirect) and the executor's live fallback
     // (AIEngine::resolve_draw_breakpoint) -- which is the lockstep. No-op when the lever is off
     // or `site` is not in the ordered class (clears instead). See TurnSolver.cpp for the design.
+    //
+    // `hand_before` is the PRE-DRAW hand (card numbers), captured where the site is armed. It is
+    // what makes a NEW card first-class (USER 2026-08-17, docs/design/breakpoint-phase-
+    // classification.md): a card the breakpoint DREW was never considered before it, so it is a
+    // duplicate of nothing. Two consumers, one snapshot:
+    //   * the ordering ban only fires for a cantrip that was already in hand -- "if the order was
+    //     Ponder -> Preordain and you had no Ponder in hand you wouldn't be able to ignore the
+    //     Ponder that Preordain drew" (the twin chain was never enumerable, so banning it deletes
+    //     a real line rather than a permutation duplicate);
+    //   * MTG_BP_CLASSIFY drops an already-in-hand cast that the pre-land pool already paid for.
+    // Passing nullptr (or an unarmed site) leaves both inert -- byte-identical.
     class CantripOrderScope
     {
     public:
-        explicit CantripOrderScope(const CardDefinition* site);
+        explicit CantripOrderScope(const CardDefinition* site,
+                                   const std::vector<int>* hand_before = nullptr);
         ~CantripOrderScope();
         CantripOrderScope(const CantripOrderScope&) = delete;
         CantripOrderScope& operator=(const CantripOrderScope&) = delete;
     private:
-        const CardDefinition* m_saved;
+        const CardDefinition*   m_saved;
+        const std::vector<int>* m_saved_hand;
     };
+
+    // Card numbers in the active player's hand, for the breakpoint snapshot above. Cheap (one
+    // small vector per armed breakpoint) and taken BEFORE the draw resolves.
+    static std::vector<int> HandCardNumbers(const GameState& state);
+
+    // Do either of the snapshot's consumers (MTG_CANTRIP_ORDER / MTG_BP_CLASSIFY) need it? False
+    // in every ship config, so the capture is skipped entirely on the cast hot path.
+    static bool BreakpointHandSnapshotWanted();
 
     // Enable per-pass per-candidate trace output for top-level T1 decisions.
     static void SetTraceSolve(bool enable);
