@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 68038f9c  date 2026-08-17
+# Regression ground truth -- commit a8b6d0e7  date 2026-08-17
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -212,18 +212,18 @@ goblins_overnight_d5_s4004=3.8330/33be138ade707529
 goblins_overnight_d5_s5005=3.7970/8a3de04d04b30d8b
 goblins_overnight_d5_s6006=3.8120/ebd1383ee55c5838
 goblins_overnight_d5_s7007=3.8150/9dc2fe26d2ef7907
-creature_giving_overnight_d0_s4004=5.8890/fcbe9b0d99fd399f
-creature_giving_overnight_d0_s6006=5.8190/ae14e1c108f9e501
-creature_giving_overnight_d0_s8008=5.8475/2df0d089f893f4d6
-creature_giving_overnight_d0_s10010=5.8600/b63e536c27201987
-creature_giving_overnight_d3_s4004=4.7770/ee09d8b9df8c7d75
-creature_giving_overnight_d3_s5005=4.7650/2fd47780d13872db
-creature_giving_overnight_d3_s6006=4.7610/25920a7f6812c302
-creature_giving_overnight_d3_s7007=4.7710/eb205991b1fa744e
-creature_giving_overnight_d5_s4004=4.7640/0f5abfd859fc1514
-creature_giving_overnight_d5_s5005=4.7460/b67bd1c067dd6c9c
-creature_giving_overnight_d5_s6006=4.7700/31691846b1ee4650
-creature_giving_overnight_d5_s7007=4.7860/fb8a8f1098869a75
+creature_giving_overnight_d0_s4004=5.6915/e97127d83dde0f8a
+creature_giving_overnight_d0_s6006=5.6825/309ae22f35864c9d
+creature_giving_overnight_d0_s8008=5.6890/4f7b7a74f9d56b61
+creature_giving_overnight_d0_s10010=5.6900/8ab75ececd837fb5
+creature_giving_overnight_d3_s4004=4.6740/2e74b6eb7eff0a85
+creature_giving_overnight_d3_s5005=4.6550/246671bfca60290f
+creature_giving_overnight_d3_s6006=4.6830/6470bdb20db931ba
+creature_giving_overnight_d3_s7007=4.6740/e4208573aa133bb6
+creature_giving_overnight_d5_s4004=4.6480/687bc213fb21c360
+creature_giving_overnight_d5_s5005=4.6480/538e853e3a33ad29
+creature_giving_overnight_d5_s6006=4.6880/bbc58501d5bc9a99
+creature_giving_overnight_d5_s7007=4.6600/4734ecc89c5d286f
 mirrorwing_overnight_d0_s4004=6.0665/e0568fd5046d01f9
 mirrorwing_overnight_d0_s6006=6.0600/3ee26fe39d9475c2
 mirrorwing_overnight_d0_s8008=6.0725/dcaeb44788a21dea
