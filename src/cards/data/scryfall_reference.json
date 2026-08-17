@@ -602,6 +602,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Fortifying Draught": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "You gain 2 life. Target creature gets +X/+X until end of turn, where X is the amount of life you gained this turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Frostboil Snarl": {
     "cmc": 0.0,
     "keywords": [],
@@ -902,6 +911,15 @@
     "toughness": "1",
     "type_line": "Creature — Goblin Shaman"
   },
+  "Impolite Entrance": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "Target creature gains trample and haste until end of turn.\nDraw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Inspiring Veteran": {
     "cmc": 2.0,
     "keywords": [],
@@ -1168,6 +1186,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact — Equipment"
+  },
+  "Luxurious Libation": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{X}{G}",
+    "oracle_text": "Target creature gets +X/+X until end of turn. Create a 1/1 green and white Citizen creature token.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Maelstrom Archangel": {
     "cmc": 5.0,
