@@ -113,17 +113,32 @@ build/Release/mtg decks/FiveColour/FiveColour.cod \
 * Everything in `CLAUDE.md` applies, especially: never `timeout`; never a merge commit (rebase);
   one pooled `mtg --batch` queue for long runs (waves are a loop); only the USER cancels a
   user-requested run past ~10 min.
-* **Three antilife smoke keys currently FAIL against GT** (d0 4.9060 -> 4.9030, d3/d5 digests moved).
-  These are PRE-EXISTING, from another agent's revert `1ecb2e25`, and are confirmed present with all
-  of this arc's hatches OFF. They are that agent's to rebaseline — do NOT rebaseline them as part of
-  perf work, and do NOT read them as a regression from a perf change.
+* ~~Three antilife smoke keys FAIL against GT.~~ **RESOLVED 2026-08-17** by another agent's overnight
+  rebaseline (`0cb6807b`, net −0.1889 across 36 keys). GT now matches byte-for-byte. Smoke is
+  **36 passed / 0 failed, ALL PASS**.
+
+## 6a. One loose end, closed by someone else (read this before re-investigating)
+
+Late on 2026-08-16 a smoke run showed a NEW failure — `reference reproducibility (--strict): a
+recorded human game no longer replays` — immediately after 12 hand-played Mirrorwing references were
+committed. The obvious inference (the new references drifted, or a perf change moved play) was
+**wrong on both counts**: the digests were all green, and the replay was not drifting, it was
+**exploding**. Root-caused and fixed independently by another agent as `767c0c6a`, *"the SacColor
+DEMAND filter is not a prune -- unpruning it cost 10 GB per replay"*
+(`docs/design/claude-play-unprune-blowup.md`). `5aeffecf` then moved the reference sweep to
+REGRESSION mode only. Do not re-open this; it is closed, and the references were never at fault.
 
 ## 7. Current validated state
 
+Re-verified 2026-08-17 on a REBUILT binary after rebasing onto the OOM fix (`767c0c6a`), which
+touched `src/ai/TurnSolver.cpp` — the repo's post-rebase rebuild-and-recheck rule:
+
 * Branch `phase-1-2-deck-analyzer`, all work pushed. Working tree clean.
-* Smoke: 33 pass / 3 fail (the antilife trio above). **36/36 digests identical** across
-  flag-on / flag-off / audit arms — byte-identity of this arc's changes is proven.
-* Regression: **60 passed, 0 failed, ALL PASS.**
+* Smoke: **36 passed, 0 failed — ALL PASS.** Byte-identity of this arc's changes was separately
+  proven by 36/36 digests identical across flag-on / flag-off / audit arms.
+* Regression: **60 passed, 0 failed — ALL PASS.** Reference sweep clean:
+  `156 ok, 52 repaired, 0 play-drift, 0 shuffle-dead, 0 enum-gap, 0 mull-drift, 0 contract-fail`
+  over 208 refs (includes the 12 new hand-played Mirrorwing games).
 * Shipped this arc: `d00d65c6` per-plan state reuse (−4%, `MTG_NO_STATE_REUSE=1` hatch);
   `b5c3de95` RevealLogPause sticky flag + a real `g_play_soulfire_chooser` leak fix
   (`MTG_PAUSE_HOOK_FLAG=0`, `MTG_PAUSE_HOOK_AUDIT=1` hatches); `e25fb644` the EnumGroupCap finding.
