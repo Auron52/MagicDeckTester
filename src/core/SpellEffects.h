@@ -4453,6 +4453,14 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
 
 inline bool IsSoloTargetTrick(const CardParams& p) { return p.solo_target_trick; }
 
+// Action::enchant_target sentinel for a solo-target trick pointed at the OPPONENT's creature.
+// "Target creature" is not "target creature you control": with no own creature on the board a
+// cantrip trick (Ancestral Anger / Expedite / Fists of Flame) is still castable by aiming it at
+// theirs, and against the passive opponent -- who never attacks and never blocks -- the pump that
+// lands there is inert, so the cast is purely "cash the card for its rider". A negative value
+// (never a real m_number) keeps every existing `enchant_target > 0` aura/trick guard untouched.
+inline constexpr int kTrickOpponentTarget = -1;
+
 // A real CR-121 DRAW of n cards for `controller`: counts Player::cards_drawn_this_turn (the Fists
 // of Flame pump reads it), feeds the viewer draw sink, and flags deck-out (CR 104.3c) exactly as
 // ResolveDrawSpell does.
@@ -4629,6 +4637,22 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
     // Resolve the declared target (by stable per-copy id; deck cards AND tokens are numbered --
     // see GameState::next_token_number).
     int ti = -1;
+    // kTrickOpponentTarget: "the opponent's creature" (see the sentinel's note). The passive
+    // opponent's spawned bodies carry no m_number, so the target cannot be named by id -- and it
+    // need not be: they are interchangeable (never attack, never block), so the sentinel resolves
+    // to the lowest-index one deterministically. Reached only from the no-own-creature enumeration.
+    if (target_number == kTrickOpponentTarget)
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != controller && (p.card.IsCreature() || p.is_animated))
+            { ti = i; break; }
+        }
+        if (ti < 0) { return false; }   // their creature is gone -> the spell fizzles (CR 608.2b)
+        ApplyTrickPayload(state, controller, def, ti);   // no fan-out: it is not our magnet
+        return true;
+    }
     if (target_number != 0)
     {
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)

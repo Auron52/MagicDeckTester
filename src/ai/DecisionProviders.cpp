@@ -130,12 +130,35 @@ bool DecisionUnpruned()
     return true;
 }
 
+// Gates HUMAN PLAY must not open, even under MTG_UNPRUNED. The general rule for un-pruning in the
+// play viewer is "the human, not a heuristic, owns the decision" -- but that only applies to a gate
+// whose decision the human actually makes THROUGH THE PLAN. TrickTarget is not one: a solo-target
+// trick's target is re-asked at RESOLUTION off the board (ResolveSoloTargetTrick's chooser offers
+// EVERY own creature, deliberately ignoring TrickTargetCandidates), so opening the gate adds nothing
+// the human can pick -- it only fans one enumerated plan per legal target, which
+//   (a) re-asks the same target as a redundant "choose the sub-decision" dialog BEFORE the board
+//       click the human actually uses (viewer issue #2), and
+//   (b) multiplies the plan odometer on exactly the boards this deck builds: measured on
+//       Mirrorwing s22 gi21 T4, one committed segment went 30ms -> 2.1s -> 21s -> 31s -> past the
+//       viewer's 120s step timeout ("the game timed out", viewer issues #4/#8/#11). With the gate
+//       pruned the same eleven segments run 33-74ms each.
+// MTG_HUMAN_TRICK_UNPRUNE=1 restores the old behaviour (the definitive with/without A/B still runs
+// autonomously, where MTG_HUMAN_PLAY is unset and this exemption is inert).
+static bool UnpruneHumanExempt(UnprunedGate g)
+{
+    static const bool hp      = EnvSet("MTG_HUMAN_PLAY");
+    static const bool restore = EnvOn("MTG_HUMAN_TRICK_UNPRUNE");
+    if (!hp || restore) { return false; }
+    return g == UnprunedGate::TrickTarget;
+}
+
 bool DecisionUnpruned(UnprunedGate g)
 {
     // Gate probe: record that this gate has a REACHABLE callsite for the current deck (see the probe
     // comment above). Cheap relaxed OR, only when probing; normal runs pay one predictable branch.
     if (g_gate_probe.load(std::memory_order_relaxed))
     { g_gates_queried.fetch_or(1u << static_cast<int>(g), std::memory_order_relaxed); }
+    if (UnpruneHumanExempt(g)) { return false; }     // human play never opens this gate (see above)
     if (DecisionUnpruned()) { return true; }         // global MTG_UNPRUNED opens every gate
     if (UnpruneHumanSuppressed()) { return false; }  // selective mode honours the same suppression
     return (UnpruneMask() >> static_cast<int>(g)) & 1u;
@@ -7027,6 +7050,7 @@ void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDef
 
     if (best_ready != 0)               { out.push_back(best_ready); }
     if (wants_sick && best_sick != 0)  { out.push_back(best_sick); }
+    const bool have_bf_target = !out.empty();   // a target that exists RIGHT NOW (see rider fallback)
 
     // Hand candidates (the same-plan "cast it, then point the trick at it" line): every hand
     // MAGNET (deduped by name), plus -- for haste/copy payloads -- the biggest hand creature.
@@ -7046,7 +7070,22 @@ void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDef
         const int pw = hd->card.m_power.value_or(0);
         if (wants_sick && pw > best_hand_pw) { best_hand_pw = pw; best_hand = hc.m_number; }
     }
-    if (best_hand != 0) { out.push_back(best_hand); }
+    // RIDER FALLBACK. Every pass above ranks a battlefield body by ATTACK value, so a board whose
+    // only creature is TAPPED (the post-combat main, after it swung) keeps NO present-tense target
+    // -- and if a hand magnet was kept, the only enumerated variant needs that creature cast in the
+    // same subset, which a post-combat mana pool usually can't afford. The trick then vanishes
+    // entirely, even though "cast Fists of Flame to DRAW A CARD" is a real line whose pump target
+    // is irrelevant (it dropped the recorded Mirrorwing s6 gi5 T3 post-main line). Same gap as the
+    // opponent-target one in CollectActions: a rider trick is bought for the rider, not the pump --
+    // so keep one body that exists NOW whenever none of the passes above did.
+    // MTG_NO_TRICK_RIDER_FALLBACK=1 restores the attack-only narrowing (the A/B lever: this widens
+    // the target group by one on post-combat boards, so it must be separable from the session's
+    // other Mirrorwing change when reading a suite delta).
+    static const bool s_rider_fallback = !EnvOn("MTG_NO_TRICK_RIDER_FALLBACK");
+    if (s_rider_fallback && !have_bf_target && best_sick != 0
+        && (def.params.cast_draw > 0 || def.params.creates_treasures > 0
+            || def.params.cast_lifegain > 0 || def.params.grants_extra_land_drop > 0))
+    { out.push_back(best_sick); }
     // out non-empty => CollectActions emits exactly these; if the board/hand had no candidates at
     // all (empty out would mean "no narrowing"), push a sentinel-free fallback: with no creatures
     // there are no legal targets and the caller's loops emit nothing anyway -- but out.empty()
