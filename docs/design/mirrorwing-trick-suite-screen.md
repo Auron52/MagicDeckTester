@@ -1,6 +1,6 @@
-# Screening the Mirrorwing trick suite (planned, blocked)
+# Screening the Mirrorwing trick suite
 
-**Status: PLANNED, not started. Blocked on three unimplemented cards and on the deck's own apparatus.**
+**Status: UNBLOCKED 2026-08-17. Both blockers cleared; keep-table generation for the swap list is RUNNING. See "Progress" at the end.**
 Written down because the sequencing decision has to be made BEFORE any generation is spent — the wrong
 choice there costs a full table regeneration per follow-up tweak.
 
@@ -73,3 +73,66 @@ Every apparatus measurement to date is on 4-card swaps. Two things do not transf
 2. Value-leaf, then mulligan profile, generated over the UNION deck on a frozen commit.
 3. Screen the suite swap; read `d*` against a `keep_delta` scatter measured for this edit.
 4. Follow-up tweaks inside the pool are reweights.
+
+
+---
+
+## Progress (2026-08-17)
+
+**Blocker 1 — the three cards — CLEARED.** Fortifying Draught, Impolite Entrance and Luxurious
+Libation are implemented, reviewed and committed (`66729658`). Costs/oracle verified verbatim
+against Scryfall; smoke 36/36 byte-identical, so all the new state and params are inert for the 17
+existing decks.
+
+**Blocker 2 — "the deck has no apparatus" — CLEARED and now STALE as written.** The deck has since
+shipped a `.value.json` AND an adopted exhaustive keep+bottom table (generated 14h15m, adopted
+2026-08-17, worth -0.20 turns at 0.256x cost), and all three regression modes were rebaselined
+under it.
+
+### What the sequencing advice got right, and what it got wrong
+
+This doc said to generate over the UNION so later tweaks are free reweights, and warned the choice
+must be made BEFORE spending generation. We generated over the SHIPPED list instead — but that was
+not a mistake, because that table is the production artifact the deck now ships.
+
+The doc's stated reason for the union ("an INTRODUCED card has no cells to reweight") is the weaker
+half of the argument. The stronger one, from the user: **a cell's value is an average over the
+library you draw from, so changing 11 of 60 cards moves the value of essentially every cell** --
+including hands made entirely of unchanged cards. Structural reusability is not the binding
+constraint; stale labels are. So a union table would not have avoided regeneration for a shipping
+decision either.
+
+What actually follows is the split the screening skill already encodes:
+
+* **To SCREEN** (compare arms, try combinations): share ONE apparatus across arms. That is Rule 0,
+  and it halves the se rather than approximating.
+* **To SHIP** a winning list: generate on that list. One cost, paid once, at the end.
+
+### K, measured rather than assumed
+
+Equivalence discovery on the swap list: **K = 16**, nothing merges (the base is K=17 with 17
+distinct cards, so nothing merges there either). Four distinct cards leave, three arrive.
+Consequently the swap deck is **cheaper** to generate than the base: 144,630 size-7 cells against
+202,878. Recorded as `value_play.expected_buckets: 16`; the generator's K guard caught the copied
+17 and refused before spending hours, which is the guard working as intended.
+
+### The bug this uncovered
+
+Luxurious Libation was **never cast** — `{X}` spells whose template is not `DirectDamage` were
+dropped from enumeration entirely. Found by neutralising the card's payload params and getting
+bit-identical digests. Fixed; the card is now worth ~1.7 turns on an isolation deck. See
+[[x-spell-tricks-dropped-from-enumeration]]. Had the screen run before this was caught, the swap
+arm would have played as if holding three blanks and the incumbent would have "won" for a reason
+that was not real.
+
+### Still open
+
+* **Impolite Entrance cannot be screened.** Trample is inert (no blockers) and sorcery-vs-instant is
+  not modelled, so its `cards.json` entry is parameter-identical to Expedite. Any arm containing it
+  measures "more Expedites", not the card. Its real merit is out of scope for this engine and stays
+  a judgement call. (User-approved deferral.)
+* **Luxurious Libation's token COLOUR** ("green and white") is not modelled — tokens carry subtypes
+  and P/T only. Flagged for sign-off, not self-certified. Nothing in either list reads colour.
+* **The union-bias bracket** this doc asks for still applies to whichever screen is run with a
+  shared table, and `keep_delta` scatter should be measured for THIS edit rather than read against
+  burn's four-card 0.054t.

@@ -15049,7 +15049,7 @@
  "value_play": {
   "mull_gen_depth": 2,
   "mull_gen_budget_ms": 3,
-  "expected_buckets": 17,
-  "mull_gen_note": "Derived by MEASUREMENT 2026-08-16 (scripts/derive_mullgen_setting.py, 24 hands R=12) against the deck's real play policy d5/b20 = BuiltinDefaultPlay, since this deck ships no explicit value_play block. d1/d2/d3 at b3 are INDISTINGUISHABLE in rank fidelity (rho 0.9922 / 0.9917 / 0.9915 -- differences are noise at 24 hands; d1 scores highest, which is not a real effect), so the tie is broken on units/rollout, which is the DETERMINISTIC work-unit currency and therefore exact: 9997 vs 11448 = 13% cheaper than the previous d3/b3. NOT d3/b20 (rho 0.9991) -- it costs 1.067x the play settings, i.e. more than just generating at play depth; a 'higher fidelity wins' rule would have picked it. Affects generation only; play is unchanged."
+  "expected_buckets": 16,
+  "mull_gen_note": "K=16 VERIFIED by equivalence discovery 2026-08-17 for the TRICK SUITE list (-4 Ancestral Anger, -2 Expedite, -2 Scale the Heights, -3 Twinflame; +4 Fortifying Draught, +4 Impolite Entrance, +3 Luxurious Libation): 4 distinct cards leave, 3 arrive, nothing merges, so 17 -> 16. The eval_model/value_play here are COPIED from Mirrorwing Dragon on purpose -- a screen shares ONE apparatus across arms (deck-screening Rule 0). Derived by MEASUREMENT 2026-08-16 (scripts/derive_mullgen_setting.py, 24 hands R=12) against the deck's real play policy d5/b20 = BuiltinDefaultPlay, since this deck ships no explicit value_play block. d1/d2/d3 at b3 are INDISTINGUISHABLE in rank fidelity (rho 0.9922 / 0.9917 / 0.9915 -- differences"
  }
 }
