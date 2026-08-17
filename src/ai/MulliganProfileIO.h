@@ -645,7 +645,85 @@ inline bool SaveDeckProfile(const std::filesystem::path& path, const MulliganPro
 {
     std::ofstream file(path);
     if (!file) { return false; }
-    file << DeckProfileToJson(profile);
+    if (!profile.HasExhaustiveKeep())
+    {
+        // Small / static-only profiles: unchanged (pretty-printed, byte-identical to before).
+        file << DeckProfileToJson(profile);
+        return file.good();
+    }
+    // Exhaustive-keep profiles: STREAM the write. Building the whole document as ONE nlohmann DOM --
+    // dominated by exhaustive_keep.entries[] (789k entries for Creature Giving) -- balloons to ~5 GB of
+    // value-nodes PLUS a full dump-string copy, which OOMs a 10 GB box in the merge/gen tail. This is the
+    // exact symmetric cost the LOAD side already avoids (see DeckProfileFromJson's streaming siphon): emit
+    // the small head via a DOM, then stream entries one at a time so the transient DOM never holds more
+    // than a single entry. Compact (no indent), matching the HasExhaustiveKeep() branch of
+    // DeckProfileToJson. Parses identically -- JSON object key order is irrelevant, and every entry is
+    // itself dumped by nlohmann so each is byte-identical to the monolithic path.
+    using json = nlohmann::json;
+    json root;
+    root["version"]  = 1;
+    root["mulligan"] = MulliganProfileToJsonObj(profile);
+    if (profile.vial_target_mv > 0) { root["vial_target_mv"] = profile.vial_target_mv; }
+    if (!profile.card_scores.empty())
+    {
+        json cs = json::object();
+        for (const auto& [name, marginals] : profile.card_scores)
+        {
+            json arr = json::array();
+            for (double v : marginals) { arr.push_back(v); }
+            cs[name] = arr;
+        }
+        root["card_scores"] = cs;
+        root["hand_score_threshold"] = profile.hand_score_threshold;
+    }
+    if (!profile.keep_model.empty()) { root["keep_model"] = KeepModelToJsonObj(profile.keep_model); }
+    // Everything except exhaustive_keep, dumped compact; drop the trailing '}' so we can append it.
+    std::string head = root.dump();
+    if (head.empty() || head.back() != '}') { return false; }
+    head.pop_back();
+    file << head;
+
+    // exhaustive_keep header (small: max_mull/R/buckets/...); drop its trailing '}' to append entries.
+    const ExhaustiveKeepPolicy& ek = *profile.exhaustive_keep;
+    json ekh;
+    ekh["max_mull"]          = ek.max_mull;
+    ekh["effective_R"]       = ek.effective_R;
+    ekh["bottoming_enabled"] = ek.bottoming_enabled;
+    if (!ek.commit.empty())      { ekh["commit"]      = ek.commit; }
+    if (!ek.play_digest.empty()) { ekh["play_digest"] = ek.play_digest; }
+    json buckets = json::array();
+    for (const std::vector<std::string>& b : ek.buckets)
+    {
+        json arr = json::array();
+        for (const std::string& n : b) { arr.push_back(n); }
+        buckets.push_back(arr);
+    }
+    ekh["buckets"] = buckets;
+    std::string ekhs = ekh.dump();
+    if (ekhs.empty() || ekhs.back() != '}') { return false; }
+    ekhs.pop_back();
+    file << (head.back() == '{' ? "" : ",") << "\"exhaustive_keep\":" << ekhs << ",\"entries\":[";
+
+    // Stream the bulk: one entry DOM at a time (matches ExhaustiveKeepToJsonObj's per-entry shape).
+    bool first = true;
+    for (const auto& [comp, flags] : ek.keep)
+    {
+        json je;
+        je["comp"] = comp;
+        je["keep"] = json::array();
+        for (char c : flags) { je["keep"].push_back(static_cast<int>(c)); }
+        auto bit = ek.bottom_keep.find(comp);
+        if (bit != ek.bottom_keep.end())
+        {
+            json bk = json::array();
+            for (const std::vector<int>& sub : bit->second) { bk.push_back(sub); }
+            je["bottom_keep"] = bk;
+        }
+        if (!first) { file << ','; }
+        first = false;
+        file << je.dump();
+    }
+    file << "]}}";   // close entries[], exhaustive_keep{}, root{}
     return file.good();
 }
 
