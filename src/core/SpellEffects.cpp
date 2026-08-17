@@ -1602,6 +1602,20 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             }
         }
     }
+    // SPARE THE BODY (see TapSpareCreaturesEnabled). Sort mana creatures to the BACK of the
+    // candidate list so the first solution this DFS finds spends the lands and reaches for a
+    // creature only when the payment needs one. Stable, so battlefield order survives within each
+    // group. Placed here for the same reason the flow permutation is: the identical-sibling
+    // dup-collapse chain below is built OVER this list and its correctness argument is "an earlier
+    // chain member was reached by this node's loop before ci", so any permutation must precede the
+    // chain build, never follow it. Skipped while the flow hint is live -- that permutation is the
+    // whole point of MTG_FLOW_ORDER and this one would undo it.
+    if (top_level && !g_flow_order_live && s_src_cands_buf.size() > 1 && TapSpareCreaturesEnabled())
+    {
+        std::stable_partition(s_src_cands_buf.begin(), s_src_cands_buf.end(),
+            [](const std::pair<int, const CardDefinition*>& c)
+            { return c.second->tmpl != CardTemplate::ManaDork; });
+    }
     const std::vector<std::pair<int, const CardDefinition*>>& cands = *src_cands;
 
     // Identical-source sibling collapse. On a fanned-out board (a dozen Treasures from copied Gold
