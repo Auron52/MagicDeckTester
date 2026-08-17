@@ -46,6 +46,23 @@ import json, os, re, subprocess, sys, glob
 MTG = os.environ.get("MTG_BIN", "./build/Release/mtg")
 STRICT = "--strict" in sys.argv[1:]
 
+# Per-replay ADDRESS-SPACE cap, in MB (MTG_REPLAY_AS_CAP_MB; 0 disables). A replay is an ordinary
+# few-MB run -- the whole 208-reference sweep peaks around 90 MB per process -- but the plan
+# enumerator's fan-out is combinatorial in the number of untapped fungible sac sources, and this
+# sweep runs `--threads` of them AT ONCE. When one went unbounded (a Mirrorwing board with 9
+# Treasures: 10,077,696 materialised plans, see docs/design/claude-play-unprune-blowup.md) at
+# --threads $(nproc) it did not fail a reference, it OOM'd the machine and killed the user's
+# session. The cap turns that back into one reference reporting a bad_alloc. Applied via `sh -c
+# ulimit` rather than subprocess's preexec_fn, which is not safe under a ThreadPoolExecutor.
+AS_CAP_MB = int(os.environ.get("MTG_REPLAY_AS_CAP_MB", "4096"))
+
+
+def capped(args):
+    """`args`, wrapped so the child runs under the address-space cap (unwrapped when disabled)."""
+    if AS_CAP_MB <= 0:
+        return args
+    return ["/bin/sh", "-c", f'ulimit -v {AS_CAP_MB * 1024}; exec "$@"', "sh"] + args
+
 # references/<dir> -> (deckfile, profile). Mirrors test/regression_cases.sh (per-deck folder
 # layout, docs/design/per-deck-folder-layout.md).
 DECKS = {
@@ -160,7 +177,7 @@ def replay(deck, prof, seed, gi, choices, force=None, extra=None, max_turns=8):
     # cap (MTG_PLAY_PLANS_CAP, default 200; ENOBUFS fix) would make any recorded pick beyond the
     # cap look unrepairable and read as play-drift (FiveColour s8 gi7 records index 304).
     env = dict(os.environ, MTG_PLAY_PLANS_CAP="0")
-    p = subprocess.run(args, capture_output=True, text=True, env=env)
+    p = subprocess.run(capped(args), capture_output=True, text=True, env=env)
     return p.returncode, p.stdout + p.stderr
 
 

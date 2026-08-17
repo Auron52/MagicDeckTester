@@ -2969,7 +2969,18 @@ static std::vector<std::string> ChosenFloatColorCandidates(const GameState& stat
         scan(p.card);
     }
     std::vector<int> idx;                                      // candidate colour indices, W,U,B,R,G order
-    for (int c = 0; c < 5; ++c) { if (open_all || demand[c] > 0) { idx.push_back(c); } }
+    // The DEMAND filter is not a heuristic and is NOT lifted by MTG_UNPRUNED(SacColor): a colour no
+    // card in ANY of the active player's zones has a pip for cannot be spent on anything, so the
+    // variant that floats it is a dead branch, not a choice the search (or a human) is being denied.
+    // What `open_all` lifts is the PROVIDER's haste-and-red collapse above, which does drop real
+    // options. Keeping the two joined made a sac source fan out to all five colours whenever any
+    // gate opened -- and since --claude-play sets MTG_UNPRUNED for the whole session, every reference
+    // replay enumerated 5 float colours per source instead of the deck's 2. Each source is its own
+    // odometer group, so on a Mirrorwing board with 9 untapped Treasures that is 6^9 = 10,077,696
+    // plans (>10 GB, materialised) where the deck's real colours give 3^9 = 19,683 (81 MB): the
+    // reference sweep at --threads $(nproc) is what OOM'd the box. See
+    // docs/design/claude-play-unprune-blowup.md.
+    for (int c = 0; c < 5; ++c) { if (demand[c] > 0) { idx.push_back(c); } }
     // Stable sort by DESCENDING demand -> equal-demand colours keep their W,U,B,R,G tiebreak order.
     std::stable_sort(idx.begin(), idx.end(), [&](int a, int b) { return demand[a] > demand[b]; });
     std::vector<std::string> colors;
