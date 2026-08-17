@@ -17,9 +17,9 @@
 set -u
 cd /workspaces/MagicDeckTester
 
-DECK="Mirrorwing Dragon"
+DECK="${1:-Mirrorwing Dragon}"
 SRC="decks/$DECK"
-STAGE="logs/mullgen_mirrorwing"
+STAGE="logs/mullgen_${2:-mirrorwing}"
 SD="$STAGE/staged"
 CJ="src/cards/data/cards.json"
 STATUS="$STAGE/STATUS.txt"
@@ -35,8 +35,12 @@ say "FREEZE commit=$(git rev-parse --short HEAD) src=$(git rev-parse HEAD:src)"
 
 # The staged dir is a fully-working deck folder: decklist + play profile + value sidecar (for the
 # mull_gen d2/b3 routing) + the equivalence gencache, so bucketing is not re-derived.
-cp "$SRC/$DECK.cod" "$SRC/$DECK.profile.json" "$SRC/$DECK.value.json" \
-   "$SRC/$DECK.keepmodel.gencache.json" "$SD/" || { say "FATAL: staging copy failed"; exit 1; }
+cp "$SRC/$DECK.cod" "$SRC/$DECK.profile.json" "$SRC/$DECK.value.json" "$SD/" \
+  || { say "FATAL: staging copy failed"; exit 1; }
+# The equivalence gencache is an OPTIONAL input (it only skips a re-derivation); a deck being
+# generated for the first time has none, and that must not abort the run.
+if [ -f "$SRC/$DECK.keepmodel.gencache.json" ]; then cp "$SRC/$DECK.keepmodel.gencache.json" "$SD/"
+else say "no gencache for $DECK -- equivalence discovery will re-derive it (first generation)"; fi
 say "staged deck at $SD (real deck folder is untouched)"
 
 # --- phase 1: generation ------------------------------------------------------------------------
@@ -51,12 +55,13 @@ if [ $rc -ne 0 ]; then
 fi
 ls -la "$SD" >> "$STATUS"
 
-# --- phase 2: regret read-out -------------------------------------------------------------------
-# Prints regret=+Xt for the generated table: how much loss the profile leaves on the table vs the
-# clairvoyant keep. Cheap, and it is the first number to read on Monday.
-say "PHASE 2 regret read-out"
-./build/Release/mtg-analyze "$SD/$DECK.cod" --cards-json "$CJ" > "$STAGE/regret.log" 2>&1
-grep -iE "regret|bottom" "$STAGE/regret.log" | head -20 >> "$STATUS"
+# --- phase 2: regret read-out (from the GENERATION LOG, not a re-analysis) ----------------------
+# NEVER run a bare `mtg-analyze <deck>` here. That is the analyzer's MAIN mode: it regenerates and
+# OVERWRITES <deck>.profile.json, which silently replaced the staged deck's card_scores mid-run on
+# 2026-08-17 and made the phase-3 arms differ by more than the thing under test. The regret figures
+# are already printed by generation itself.
+say "PHASE 2 regret read-out (parsed from gen.log)"
+grep -E "label noise|stderr|regret|EST\. win-turn" "$STAGE/gen.log" | tail -8 >> "$STATUS"
 
 # --- phase 3: in-play A/B, staged profile vs what the deck ships today ---------------------------
 # ONE pooled batch, both arms interleaved, chunked to 25 games so no single slow game strands a job.
