@@ -3760,6 +3760,76 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     return 0;
 }
 
+// ---- --cast-order-report ---------------------------------------------------------------------
+// Print this deck's CAST ORDER as the engine ranks it, so the ranking can be reviewed per deck
+// (USER 2026-08-17: "ideally we should create a ranking for each deck that I can check over").
+// The ranks come from the deck's REAL provider via CastOrderRank, not a re-implementation, so the
+// report cannot drift from play; MTG_IDEAL_ORDER=1 shows the ideal-order draw tier applied.
+// See docs/design/cast-order-ideal-with-ranges.md.
+static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path)
+{
+    GameState state;
+    state.m_provider = &SelectDecisionProvider(deck);
+    const DecisionProvider& prov = *state.m_provider;
+
+    struct Row { std::string name; int rank; int mv; int count; bool is_draw; };
+    std::vector<Row> rows;
+    for (const Card& c : deck.mainboard)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->card.IsLand()) { continue; }
+        bool seen = false;
+        for (Row& r : rows) { if (r.name == c.m_name.str()) { ++r.count; seen = true; break; } }
+        if (seen) { continue; }
+        rows.push_back(Row{ c.m_name.str(), prov.CastOrderRank(state, *d),
+                            d->card.m_mana_cost.ManaValue(), 1, IsIdealOrderDraw(*d) });
+    }
+    std::stable_sort(rows.begin(), rows.end(),
+        [](const Row& a, const Row& b)
+        { if (a.rank != b.rank) { return a.rank < b.rank; }
+          if (a.mv   != b.mv)   { return a.mv   < b.mv;   }
+          return a.name < b.name; });
+
+    // Tier names mirror GenericProvider::CastOrderRank's documented tiers exactly.
+    auto tier_name = [](int r) -> const char*
+    {
+        switch (r)
+        {
+            case 0:  return "ENABLER (lifegain->loss): first, so same-turn payloads see the flip";
+            case 2:  return "DRAW: information before land drops and rituals (MTG_IDEAL_ORDER)";
+            case 5:  return "MANA ROCK: online for the rest of the line";
+            case 10: return "CREATURE: before noncreature spells (prowess catches later casts)";
+            case 15: return "RITUAL: float online before the payoff";
+            case 16: return "COST REDUCER: after the rituals that fund it, before a restrictor";
+            case 18: return "CAST RESTRICTOR (Irencrag): last ritual, only the payoff may follow";
+            case 19: return "CAST PAYOFF (verse): before the spells that feed it";
+            case 20: return "other noncreature spell";
+            case 22: return "SCALING AURA: later, so earlier fetches can still take one";
+            case 23: return "AURA WITH ENCHANT REQUIREMENT: last (legality, not preference)";
+            case 30: return "LAST: on-cast self-damage / destroy-all-enchantments";
+            default: return "";
+        }
+    };
+
+    std::cout << "# Cast order -- " << deck_path << "\n";
+    std::cout << "# provider: " << prov.Name()
+              << "   ideal-order draw tier: " << (EnvOn("MTG_IDEAL_ORDER") ? "ON" : "off")
+              << "\n#\n# rank  n  mv  card\n";
+    int last = -999;
+    for (const Row& r : rows)
+    {
+        if (r.rank != last)
+        {
+            const char* t = tier_name(r.rank);
+            std::cout << "#\n# [" << r.rank << "] " << (*t ? t : "(unclassified)") << "\n";
+            last = r.rank;
+        }
+        std::cout << "  " << r.rank << "   " << r.count << "  " << r.mv << "  " << r.name
+                  << (r.is_draw ? "   (draw)" : "") << "\n";
+    }
+    return 0;
+}
+
 int main(int argc, char* argv[])
 {
     // Apply committed heuristic defaults BEFORE anything reads a toggle (env vars still override).
@@ -3939,6 +4009,7 @@ int main(int argc, char* argv[])
     uint64_t seed           = 0;
     bool     seed_provided  = false;
     bool     diag_depth     = false;
+    bool     cast_order_report = false;   // --cast-order-report: print the deck's cast order, then exit
     bool     trace_t1       = false;
     bool        claude_play = false;
     bool        force_exhaustive_keep = false;  // --exhaustive-keep: load the exhaustive keep sidecar
@@ -3969,6 +4040,7 @@ int main(int argc, char* argv[])
     for (int i = 2; i < argc; ++i)
     {
         std::string flag = argv[i];
+        if (flag == "--cast-order-report")   { cast_order_report = true; continue; }
         if (flag == "--diag-depth")          { diag_depth = true; continue; }
         if (flag == "--trace")               { trace_t1 = true; continue; }
         if (flag == "--claude-play")         { claude_play = true; continue; }
@@ -4104,6 +4176,7 @@ int main(int argc, char* argv[])
         }
 
         Decklist deck = DeckLoader::LoadFromFile(deck_path);
+        if (cast_order_report) { return RunCastOrderReport(deck, deck_path.string()); }
         std::cout << "Loaded " << deck.mainboard.size() << " mainboard card(s)";
         if (!deck.sideboard.empty())
         {

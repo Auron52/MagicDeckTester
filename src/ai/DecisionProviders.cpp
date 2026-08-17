@@ -1074,6 +1074,25 @@ bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker)
     return ShouldAttackWith(s, attacker);
 }
 
+// Does this card resolve into INFORMATION -- i.e. is it a "draw" for ordering purposes? Shared by
+// the ideal-order rank and the --cast-order-report so the report cannot drift from play. Deliberately
+// the SAME card classes OrderingOpaque lists (draw / staging / cascade / retrace / impulse /
+// solo-target trick / EI), because those are precisely the ones whose order it currently refuses to
+// decide. See docs/design/cast-order-ideal-with-ranges.md.
+bool IsIdealOrderDraw(const CardDefinition& def)
+{
+    return def.tmpl == CardTemplate::DrawUntilNonland
+        || def.params.draw > 0
+        || def.params.cast_draw > 0
+        || def.params.cast_reorder > 0
+        || def.params.stages_cards
+        || def.params.expressive_iteration
+        || def.params.impulse_exile > 0
+        || def.params.cascade_max_mv > 0
+        || def.params.retrace
+        || def.params.solo_target_trick;
+}
+
 int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     // See DecisionProvider::CastOrderRank. Reliable deck-agnostic order so the canonical line
@@ -1121,6 +1140,22 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
     //   19 a CAST-PAYOFF (verse_damage, Aria of Flame): benefits from every instant/sorcery
     //      cast AFTER it resolves, so it goes right before the generic tier-20 spells that
     //      feed its verse counters (and before any alt-cost payload burst it escalates).
+    // ---- IDEAL ORDER, tier 2: DRAW FIRST (MTG_IDEAL_ORDER, USER 2026-08-17) --------------------
+    // "Draw before playing land or rituals" -- principle 1 of docs/design/cast-order-ideal-with-
+    // ranges.md. A cantrip resolves into INFORMATION; the land drop and the ritual are commitments
+    // that are strictly better made once you have it. Ranked ahead of the mana rock (5) and the
+    // ritual (15) accordingly, and behind the lifegain enabler (0), which is a correctness edge.
+    //
+    // THIS RANK IS NOT SAFE ON ITS OWN, and the note above says why: a bare "draw first" rank was
+    // tried before and "fixes some games and breaks others", because a draw cast first can spend
+    // the mana the rest of the line needed. That is exactly the case the USER's design answers with
+    // a RANGE (ideal -> cost-efficient) rather than a fixed position: start here, and fall back
+    // toward the cost-efficient slot only when the ideal order cannot actually be paid for. Until
+    // that ladder exists this lever is DEFAULT OFF and is expected to be a mixed result; it is
+    // wired now so the per-deck ranking can be reviewed (mtg <deck> --cast-order-report) against
+    // the same numbers play would use.
+    static const bool s_ideal_order = EnvOn("MTG_IDEAL_ORDER");
+    if (s_ideal_order && IsIdealOrderDraw(def))  { return 2; }
     if (def.params.lifegain_to_loss)             { return 0; }
     if (def.params.max_casts_after >= 0)         { return 18; }
     if (!def.params.reduces_spell_color.empty()) { return 16; }
