@@ -6122,6 +6122,27 @@ inline bool AttackerReserveEnabled()
     return v;
 }
 
+// Whole-turn MANA-CREATURE reservation (BatchPrepayMainCasts): hold back EVERY untapped mana
+// creature -- not just the greatest-power attacker AttackerReserveEnabled already spares -- when the
+// turn's COMBINED main-cast cost is payable off the lands alone. This is the user's stated rule from
+// the play sessions, recorded in docs/design/mana-source-reservation.md: "if the current line can be
+// paid while leaving all special sources untapped, just leave them all up -- branch only when they
+// COMPETE." A land has no use but its mana; a creature does (it attacks, it carries Exalted, it is a
+// legal target for a pump/copy trick, it can be sacrificed), so spending a dork on a pip a land could
+// have covered throws that away for nothing. Reported twice from the viewer (Mirrorwing s1 T4: the
+// Hierarch tapped with a Mountain untapped; s24 T4: the Hierarch tapped instead of a Sandstone
+// Needle, which cost the attack that would have won the game).
+//
+// Same all-or-nothing "leave out if you can" soundness as depletion/attacker: it only declines to
+// PRE-tap, never removes a source, so a later post-draw re-solve can still tap what it needs; and if
+// holding them makes the turn unaffordable (or forces an ambiguous wild tap) the unrestricted solve
+// runs instead, so no line is ever lost. Default ON; off-switch MTG_NO_DORK_RESERVE for A/B.
+inline bool DorkReserveEnabled()
+{
+    static const bool v = !EnvOn("MTG_NO_DORK_RESERVE");
+    return v;
+}
+
 // Adds one untapped source's mana contribution to an accounting ManaPool, consistent
 // with the floating-pool payment logic in TapForCost / TapForCostDirect:
 //   - depletion / high-yield lands contribute produces_amount of their colour,

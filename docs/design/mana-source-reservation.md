@@ -105,6 +105,47 @@ it's validated by the seed A/B; `test/scenarios/dork_pump_target.json` guards th
 supports. GT rebaselined smoke + regression; **overnight antilife/hinata GT rebaselined in the same
 overnight pass as the exalted change.**
 
+#### SHIPPED (2026-08-17) — EVERY mana creature, and a hold LADDER
+
+Generalises the beater hold to **every untapped mana creature**, which is the user's own rule from the
+play sessions (quoted verbatim under "Direct user requirements" below): *if the line can be paid while
+leaving all special sources untapped, just leave them all up — branch only when they COMPETE.* A land
+has no use but its mana; a creature attacks, carries Exalted, is a legal target for a pump/copy trick,
+and can be sacrificed — so spending a dork on a pip a land could have covered throws that away for
+nothing. Gated `DorkReserveEnabled()` (default ON, off-switch `MTG_NO_DORK_RESERVE`). Mana **rocks**
+are deliberately not reserved: a rock has no other use, so holding one only risks a failed solve.
+
+The second half is the real fix. All-or-nothing (one held attempt, then unrestricted) throws away the
+**partial** save whenever the two reservable classes compete, so the hold silently released the dork:
+
+> Mirrorwing s24 gi23 T4 — board Forest, Forest, Mountain, Sandstone Needle (depletion), Ignoble
+> Hierarch; line = Gold Rush ×2 ({1}{G} twice). Holding **both** the Hierarch and the Needle leaves 3
+> mana for a 4-mana turn → infeasible → old code released both and tapped the Hierarch. Holding just
+> the Hierarch pays fine off Forest+Forest+Mountain+Needle. The tapped Hierarch could not attack, and
+> the game that should win on **T4 won on T5** (reported as viewer issue #9; also #1 and, per the
+> user, #12).
+
+So the single held attempt became a short **ladder**, most valuable hold first: (1) everything
+reservable, (2) creatures only, (3) depletion lands only, (4) unrestricted. Rungs 2–3 exist only when
+BOTH classes are non-empty, so a deck with no dork — or no depletion land — makes exactly the same
+single attempt as before (byte-identical, no extra solve). Creatures outrank a depletion counter: the
+counter is mana either way, the creature is a body.
+
+Measured (smoke, seed 1001, loss-penalized avg win turn, lower better; the trick-target changes of the
+same session isolated out with `MTG_NO_DORK_RESERVE=1`): d0 **hinata −0.009, mirrorwing −0.017,
+antilife +0.007**; searched **fivecolour −0.007 (d3) / −0.013 (d5), mirrorwing +0.020 (d3) / +0.013
+(d5)**; slivers / burn / treasure_hunt / knights / dragonstorm / auras / goblins byte-identical (no
+mana dork, or none ever reservable). Net across the suite is a small improvement, carried by d0 — the
+depth with no budget, i.e. the honest read on the heuristic itself. `test/classify_turn_later.sh`
+classifies 9 of the 13 searched slower games as budget **churn** (they recover at 4×/16×).
+
+Still open, and deliberately NOT done here: the **per-cast greedy** path (`ManaSourceRank`) is
+untouched, so on a turn the prepay declines (a single cast, a ritual/rock producer, an {X} spell) a
+mono-colour dork still ranks level with a basic land and battlefield order decides. Ranking mana
+creatures after every land is the obvious next lever; it needs its own A/B, since the scarcity
+principle (spend the least flexible first) and the utility principle (spare the body) genuinely
+disagree there.
+
 The pump-waste is otherwise a VIEWER-only gap (the AI's `FindBestOwnAttacker` is tap-aware: resolved
 after payment, `CanAttackFull` skips tapped, so it never wastes its own pump — see
 `docs/design/scenario-harness.md`). The precise per-target reservation (reserve exactly the human's

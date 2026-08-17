@@ -9234,7 +9234,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // (ApplyPlanDirect) and executor (AIEngine::TakeTurn) reach this through the same function, so the
     // held set stays in lockstep. Cheap prescan: no untapped depletion land -> reserved=0 (every
     // non-depletion deck skips the held attempt entirely -> byte-identical + no extra solve).
-    std::uint64_t reserved = 0;
+    std::uint64_t reserved = 0, reserved_depl = 0, reserved_crea = 0;
     const int n = static_cast<int>(state.battlefield.size());
     if (DepletionReserveEnabled() && n <= 64)
     {
@@ -9243,7 +9243,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             const Permanent& p = state.battlefield[i];
             if (p.controller_index != active || p.tapped) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d && d->params.enters_tapped_with_depletion > 0) { reserved |= (1ull << i); }
+            if (d && d->params.enters_tapped_with_depletion > 0) { reserved_depl |= (1ull << i); }
         }
     }
     // "Hold your beater": also reserve the controller's greatest-power attacker WHEN it's a mana
@@ -9260,26 +9260,53 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
             const bool mana_src = bd && !bp.tapped
                 && ((bd->tmpl == CardTemplate::ManaDork && CanTapNow(bp, state.battlefield)) || bd->params.mana_rock);
-            if (mana_src) { reserved |= (1ull << best); }
+            if (mana_src) { reserved_crea |= (1ull << best); }
         }
     }
+    // Every untapped mana CREATURE (the "hold your beater" rule generalised -- see
+    // DorkReserveEnabled): a land has no use but its mana, a creature does, so pay off the lands
+    // whenever the whole turn can be. A mana ROCK is deliberately NOT reserved: it has no other use,
+    // so holding it would only make the solve fail and cost a second backtrack.
+    if (DorkReserveEnabled() && n <= 64)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != active || p.tapped || !p.card.IsCreature()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+            { reserved_crea |= (1ull << i); }
+        }
+    }
+    reserved = reserved_depl | reserved_crea;
 
-    // Solve the combined cost. First try with the depletion lands HELD: if it pays wild-free their
-    // counters are preserved for free. If holding them makes the turn unaffordable or forces a
-    // wild/ambiguous tap, restore and solve WITHOUT the hold -- they are genuinely needed this turn.
-    // (All-or-nothing rather than a per-source maximal subset: cheaper -- 1 solve in the common
-    // slack case, <=2 otherwise -- and empirically indistinguishable on the depletion decks.)
+    // Solve the combined cost, HOLDING as much as the turn can spare. First try with everything
+    // reservable held: if it pays wild-free, those sources are preserved for free. If holding them
+    // makes the turn unaffordable (or forces a wild/ambiguous tap) fall down a short LADDER before
+    // giving up -- creatures alone, then depletion lands alone -- because all-or-nothing throws away
+    // the partial save whenever the two classes compete, which is exactly the reported case
+    // (Mirrorwing s24 T4: holding BOTH the Hierarch and the Sandstone Needle leaves 3 mana for a
+    // 4-mana turn, so the old code released the dork too and tapped it -- costing the attack that
+    // wins the game, while holding the dork and spending the Needle's counter pays fine). The rungs
+    // exist only when BOTH classes are non-empty, so a deck with no dork (or no depletion land) makes
+    // the same single held attempt as before -- byte-identical, no extra solve. Creatures outrank a
+    // depletion counter: a counter is mana either way, a creature is an attacker / trick target.
+    std::uint64_t rungs[3];
+    int n_rungs = 0;
+    if (reserved) { rungs[n_rungs++] = reserved; }
+    if (reserved_depl && reserved_crea && DorkReserveEnabled())
+    { rungs[n_rungs++] = reserved_crea; rungs[n_rungs++] = reserved_depl; }
     ManaPool produced;
     bool ok = false;
-    if (reserved)
+    for (int r = 0; r < n_rungs && !ok; ++r)
     {
         if (tapstats::Enabled()) { tapstats::g_site_prepay_held.fetch_add(1, std::memory_order_relaxed); }
         ok = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures, ManaPool{},
                                  /*rp_colors=*/nullptr, /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
-                                 /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/reserved,
+                                 /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/rungs[r],
                                  /*out_full_pool=*/&produced)
              && produced.wild == 0;
-        if (!ok)   // held attempt infeasible/ambiguous -> the lands are needed; restore for the plain solve
+        if (!ok)   // this hold is infeasible/ambiguous -> restore for the next rung (or the plain solve)
         {
             state.battlefield                  = bf_snap;
             state.floating_mana                = fm_snap;
@@ -9289,7 +9316,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             produced = ManaPool{};
         }
     }
-    if (!ok)   // no depletion land to hold, or the held attempt failed: the original unrestricted solve
+    if (!ok)   // nothing reservable, or every hold failed: the original unrestricted solve
     {
         if (tapstats::Enabled()) { tapstats::g_site_prepay_plain.fetch_add(1, std::memory_order_relaxed); }
         ok = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures, ManaPool{},
