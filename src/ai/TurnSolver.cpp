@@ -501,6 +501,21 @@ static thread_local const CardDefinition* g_cantrip_order_site = nullptr;
 // docs/design/breakpoint-phase-classification.md.
 static thread_local const std::vector<int>* g_bp_hand_before = nullptr;
 
+// Name hashes of the casts the BASE PLAN makes this turn, bound with the snapshot above. The test
+// for "already considered" is whether OUR PLAN DECLINES the card (USER 2026-08-17), not whether a
+// copy happened to be in hand: a card the plan intends to cast -- including one ordered AFTER the
+// cantrip, which is therefore still in hand at the breakpoint -- is not declined, and the
+// continuation is what realises it. Dropping those would delete the plan's own line rather than a
+// duplicate.
+static thread_local const std::vector<std::uint64_t>* g_bp_plan_casts = nullptr;
+
+static bool BpPlanCasts(std::uint64_t name_hash)
+{
+    if (g_bp_plan_casts == nullptr) { return false; }
+    return std::find(g_bp_plan_casts->begin(), g_bp_plan_casts->end(), name_hash)
+           != g_bp_plan_casts->end();
+}
+
 // Was this card already in hand when the current breakpoint's cantrip was cast? True outside a
 // continuation (no snapshot bound => the "new card" concept does not apply and every caller's
 // existing behaviour stands).
@@ -3194,9 +3209,12 @@ static bool CantripOrderBans(const CardDefinition& site, const CardDefinition& c
 // and the executor's resolve_draw_breakpoint -- which is the lockstep). A site outside the
 // ordered class CLEARS the watermark (its continuation is not a cantrip-permutation context).
 TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site,
-                                                 const std::vector<int>* hand_before)
-    : m_saved(g_cantrip_order_site), m_saved_hand(g_bp_hand_before)
+                                                 const std::vector<int>* hand_before,
+                                                 const std::vector<std::uint64_t>* plan_casts)
+    : m_saved(g_cantrip_order_site), m_saved_hand(g_bp_hand_before),
+      m_saved_casts(g_bp_plan_casts)
 {
+    if (CantripOrderEnabled() || BpClassifyEnabled()) { g_bp_plan_casts = plan_casts; }
     // The hand snapshot binds whenever EITHER consumer is live: the ordering ban needs it to spare
     // a drawn cantrip, and MTG_BP_CLASSIFY needs it to spare a drawn spell. Bound independently of
     // the site so the classifier works at a breakpoint whose cantrip is outside the ordered class.
@@ -3208,6 +3226,7 @@ TurnSolver::CantripOrderScope::~CantripOrderScope()
 {
     g_cantrip_order_site = m_saved;
     g_bp_hand_before     = m_saved_hand;
+    g_bp_plan_casts      = m_saved_casts;
 }
 
 bool TurnSolver::BreakpointHandSnapshotWanted()
@@ -3704,26 +3723,54 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
 
         // BREAKPOINT-PHASE CLASSIFICATION (MTG_BP_CLASSIFY, USER 2026-08-17: "just as we do for
         // main 1 and main 2 we should do for breakpoints"). The m1/m2 filter below gives each cast
-        // ONE phase; this gives each cast ONE SIDE of a mid-turn draw. Drop a hand cast iff
-        //   (a) the card was already in hand before the breakpoint, AND
-        //   (b) the pool as it stands -- post-cantrip, BEFORE any new land -- already pays for it.
-        // Then for every land L the base plan {play L, cast cantrip, cast X} was payable from the
-        // same pool and was already enumerated, so this continuation copy is a true permutation
-        // duplicate and CastOrderRank decides the order. Kept, always: a card the breakpoint DREW
-        // (never considered before it), and anything that needs the new land (not payable here).
+        // ONE phase; this gives each cast ONE SIDE of a mid-turn draw: a cast our plan already
+        // DECLINED, with the mana to have made it, was settled before the draw and the continuation
+        // re-offering it is a permutation duplicate of the sibling plan that took it.
         //
-        // Conservative BY CONSTRUCTION in the only direction that matters: every mechanism this
-        // plain-pool test under-counts (rituals, cost reducers, sac outlets, spectacle/alt costs,
-        // free casts -- see OptimisticTurnMana's bail-out list) makes it say "not payable", which
-        // KEEPS the action. Only an over-count could drop a line the base never enumerated, and
-        // AvailableManaPool credits nothing that is not already on the battlefield.
-        // See docs/design/breakpoint-phase-classification.md.
+        // "It comes down to whether our plan declines the card or not" (USER). Three consequences,
+        // and none of them is a special case -- they all fall out of that one question:
+        //
+        //  * A card the PLAN CASTS is not declined, so it is kept. This matters for a cast ordered
+        //    AFTER the cantrip: it is still in hand at the breakpoint, and the continuation is what
+        //    realises it, so a presence test would delete the plan's own line rather than a copy.
+        //  * COPIES ARE FUNGIBLE: "if we decided to skip card X in hand, a duplicate copy of X
+        //    being drawn doesn't change anything." Keying on m_number let a drawn duplicate read as
+        //    new and reopened a settled decision. But a copy drawn AFTER we cast the first is fine
+        //    to reconsider -- the plan did not decline that card, it cast it -- and that falls out
+        //    for free, because a cast copy has left the hand and is not in the declined set.
+        //  * EXPIRY DOMINATES: "if we decline to cast one that expires this turn, we don't need to
+        //    consider one that expires next turn or one from hand." Urgency is a total order
+        //    (soonest expiry first, a hand copy last, never expiring), and declining the most
+        //    urgent copy implies declining every less urgent one. The converse is the case that
+        //    keeps staged cards safe: a copy MORE urgent than anything we declined is a genuinely
+        //    new decision -- decline it and it is gone -- so it is kept.
+        //
+        // Payability is the last guard and is conservative in the only direction that matters:
+        // every mechanism this plain pre-land pool under-counts (rituals, cost reducers, sac
+        // outlets, spectacle/alt costs, free casts -- see OptimisticTurnMana's bail-out list) makes
+        // it say "not payable", which KEEPS the action, and a cast that needs the new land is not
+        // payable here by construction. See docs/design/breakpoint-phase-classification.md.
         if (BpClassifyEnabled() && g_bp_hand_before != nullptr
-            && BpCardWasInHandBefore(ap.hand[i].m_number))
+            && !BpPlanCasts(ap.hand[i].m_name_hash))
         {
-            ManaPool now = AvailableManaPool(state);
-            now.AddPool(state.floating_mana);
-            if (now.CanPay(EffectiveCost(def, state))) { continue; }
+            const Card& cand = ap.hand[i];
+            // Lower = more urgent. A staged copy expires; a hand copy never does.
+            auto urgency = [](const Card& c)
+            { return c.m_is_staged ? c.m_staged_expiry : std::numeric_limits<int>::max(); };
+            const int u_cand = urgency(cand);
+            bool dominated = false;
+            for (const Card& c : ap.hand)
+            {
+                if (c.m_name_hash != cand.m_name_hash) { continue; }
+                if (!BpCardWasInHandBefore(c.m_number)) { continue; }   // not declined: it is new
+                if (urgency(c) <= u_cand) { dominated = true; break; }
+            }
+            if (dominated)
+            {
+                ManaPool now = AvailableManaPool(state);
+                now.AddPool(state.floating_mana);
+                if (now.CanPay(EffectiveCost(def, state))) { continue; }
+            }
         }
 
         // EMISSION PRUNE: no line this turn could pay for this card, so it is a dead odometer digit.
@@ -9293,6 +9340,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // makes a new card first-class (see docs/design/breakpoint-phase-classification.md). Empty is
     // the SAFE value: every card then reads as new, so both consumers stand down.
     std::vector<int> deferred_hand_before;
+    // Name hashes of every hand cast THIS PLAN makes. Bound with the snapshot so the breakpoint
+    // filter can tell "the plan declined this card" from "the plan casts it later" -- the latter is
+    // still in hand at the breakpoint, and the continuation is what realises it. Gated: not built
+    // in a ship config.
+    std::vector<std::uint64_t> plan_cast_names;
+    if (TurnSolver::BreakpointHandSnapshotWanted())
+    {
+        for (const Action& pa : plan.actions)
+        {
+            if (pa.kind != Action::Kind::CastFromHand) { continue; }
+            plan_cast_names.push_back(std::hash<std::string>{}(pa.card_name));
+        }
+    }
     // Which CLASS armed the deferred re-solve: a solo-target trick with a draw/Treasure payload is
     // site 5 (searchable by default), a plain cantrip is site 3 (the admitted quality prune). One
     // deferred breakpoint per apply; if BOTH classes armed it, the trick class owns the numbering
@@ -11310,7 +11370,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // MTG_CANTRIP_ORDER: bind the continuation to its site for the whole re-solve (the
         // searched list, the greedy fallback, and the continuation's own application). The
         // executor's twin binding is in AIEngine::resolve_draw_breakpoint -- lockstep pair.
-        TurnSolver::CantripOrderScope _cos(deferred_cantrip_site, &deferred_hand_before);
+        TurnSolver::CantripOrderScope _cos(deferred_cantrip_site, &deferred_hand_before,
+                                           &plan_cast_names);
         deferred_cantrip_site = nullptr;
         if (out_breakpoint) { sink_stack.push_back(out_breakpoint); }
         TurnSolver::Plan extra;

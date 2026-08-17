@@ -472,13 +472,15 @@ public:
     {
     public:
         explicit CantripOrderScope(const CardDefinition* site,
-                                   const std::vector<int>* hand_before = nullptr);
+                                   const std::vector<int>* hand_before = nullptr,
+                                   const std::vector<std::uint64_t>* plan_casts = nullptr);
         ~CantripOrderScope();
         CantripOrderScope(const CantripOrderScope&) = delete;
         CantripOrderScope& operator=(const CantripOrderScope&) = delete;
     private:
         const CardDefinition*   m_saved;
         const std::vector<int>* m_saved_hand;
+        const std::vector<std::uint64_t>* m_saved_casts;
     };
 
     // Card numbers in the active player's hand, for the breakpoint snapshot above. Cheap (one

@@ -37,12 +37,30 @@ Measured cost of that, on `hinata_overnight_d3_s4004 gi=5` (seed 4009), which is
 
 ## The rule
 
-> In a breakpoint continuation, drop a hand cast **iff** (a) that card was already in hand before
-> the breakpoint, and (b) it is payable from the pool as it stands at the breakpoint, before any
-> new land.
+**USER 2026-08-17, the criterion:** "It comes down to whether our plan declines the card or not."
 
-Everything else is kept: a card **drawn** at the breakpoint, and anything that only becomes castable
-once the new land is down.
+> In a breakpoint continuation, drop a hand cast **iff** our plan DECLINED it -- i.e. the plan does
+> not cast that card, a copy at least as URGENT was already in hand before the breakpoint, and it is
+> payable from the pool as it stands, before any new land.
+
+Three things fall out of that one question rather than being special cases:
+
+* **A card the plan CASTS is never declined**, so it is kept. This matters for a cast ordered AFTER
+  the cantrip: it is still in hand at the breakpoint, and the continuation is what realises the rest
+  of the plan, so a mere presence test would delete the plan's own line rather than a duplicate.
+* **Copies are fungible** -- "if we decided to skip card X in hand within the order, a duplicate copy
+  of X being drawn doesn't change anything." Keying on the card INSTANCE (`m_number`) was wrong: it
+  let a drawn duplicate read as new and reopened a settled decision. And "a second copy that you
+  drew after casting the first is fine to reconsider, because it was not declined anywhere" falls
+  out for free -- a cast copy has left the hand, so it is not in the declined set.
+* **Expiry dominates** -- "if we decline to cast one that expires this turn, we don't need to
+  consider one that expires next turn or one from hand." Urgency is a total order (soonest expiry
+  first; a hand copy last, never expiring), and declining the most urgent copy implies declining
+  every less urgent one. The converse is what keeps staged cards safe: a copy MORE urgent than
+  anything declined is a genuinely new decision -- decline it and it is gone -- so it is kept.
+
+Everything else is kept: a card **drawn** at the breakpoint (the rule at k = 0), and anything that
+only becomes castable once the new land is down.
 
 **Why it is exact and not a heuristic.** If X was in hand and payable without the new land, then for
 every land L the base plan `{play L, cast cantrip, cast X}` was payable from the same pool and was
@@ -116,7 +134,7 @@ Mirrors the main-phase filter (`CollectActions`, TurnSolver.cpp:5909: a Main2-cl
 gated by `TurnSolver::BreakpointHandSnapshotWanted()`, so a ship config does not even build the
 vector on the cast hot path.
 
-**Criterion 2 -- HALF MET.** `MTG_BP_CANDS_PROBE`, one game (seed 4009 gi=5, four levers), cantrip
+**Criterion 2 -- HALF MET (first build; superseded below).** `MTG_BP_CANDS_PROBE`, one game (seed 4009 gi=5, four levers), cantrip
 site:
 
 | | classify off | classify on |
@@ -174,3 +192,28 @@ test can be made before `EnumeratePlansWithLand` is called. Expected shape: `n` 
 breakpoints) falls far below 2,361 and the wall moves toward 7.1 s.
 
 Nothing here is adopted; `MTG_BP_CLASSIFY` is default off and byte-identical off.
+
+
+---
+
+## MEASURED (2026-08-17, corrected rule: plan-decline + expiry dominance)
+
+Replacing the instance-keyed test with the USER's criterion moved the cost metric substantially,
+and the staged site most of all -- which is what the expiry point predicted.
+
+| | levers off | four levers | + `MTG_BP_CLASSIFY` |
+|---|---|---|---|
+| rollout calls | 1,625 | 3,275 | **2,218** |
+| interior nodes | 9,603 | 13,067 | **11,684** |
+| stages/EI unreachable | | 2,650 (86.9%) | **114 (44.7%)** |
+| stages/EI mean / max list | | 11.12 / 240 | **2.01 / 24** |
+| cantrip unreachable | | 7,351 (57.8%) | **3,767 (49.0%)** |
+
+**64% of the excess rollout calls are gone** (1,057 of the 1,650 the levers added). The staged
+site -- Light Up the Stage / Expressive Iteration -- collapses from a mean of 11 continuations with
+a 240-long tail to a mean of 2 with a max of 24, because urgency dominance settles the copies that
+the old class-key treated as incomparable.
+
+Off: still byte-identical -- smoke 36/36, 0 configs changed.
+
+The 5->8 family is still 2 of 7, unchanged. The remaining regression is not continuation breadth.

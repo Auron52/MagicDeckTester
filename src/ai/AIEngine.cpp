@@ -2251,6 +2251,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // because cast_by_name captures it. Empty is the SAFE value: every card then reads as new, so
     // both consumers stand down. See docs/design/breakpoint-phase-classification.md.
     std::vector<int> rdb_hand;
+    // Name hashes of the committed plan's hand casts -- lockstep twin of ApplyPlanDirect's
+    // plan_cast_names. A card the plan casts is never "declined", so the breakpoint filter keeps it.
+    std::vector<std::uint64_t> rdb_plan_casts;
 
     auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "",
                             int chosen_x = 0, int own_targets = 0, int ponder_keep = -1,
@@ -2535,7 +2538,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
-        TurnSolver::CantripOrderScope _cos(rdb_site, &rdb_hand);
+        TurnSolver::CantripOrderScope _cos(rdb_site, &rdb_hand, &rdb_plan_casts);
         Player& rp = state.ActivePlayer();
         std::vector<StagedCard> snap = rp.staged_cards;
         rp.staged_cards.clear();
@@ -2645,6 +2648,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (is_draw_engine(a.card_name))
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    if (TurnSolver::BreakpointHandSnapshotWanted())
+                    {
+                        rdb_plan_casts.clear();
+                        for (const Action& pa : extra.actions)
+                        {
+                            if (pa.kind != Action::Kind::CastFromHand) { continue; }
+                            rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
+                        }
+                    }
                     resolve_draw_breakpoint(bp_depth + 1);
                 }
             }
@@ -2786,6 +2798,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 else
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    if (TurnSolver::BreakpointHandSnapshotWanted())
+                    {
+                        rdb_plan_casts.clear();
+                        for (const Action& pa : plan.actions)
+                        {
+                            if (pa.kind != Action::Kind::CastFromHand) { continue; }
+                            rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
+                        }
+                    }
                     resolve_draw_breakpoint(0);
                 }
             }
@@ -2875,6 +2896,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 else
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    if (TurnSolver::BreakpointHandSnapshotWanted())
+                    {
+                        rdb_plan_casts.clear();
+                        for (const Action& pa : plan.actions)
+                        {
+                            if (pa.kind != Action::Kind::CastFromHand) { continue; }
+                            rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
+                        }
+                    }
                     resolve_draw_breakpoint(0);
                 }
             }
