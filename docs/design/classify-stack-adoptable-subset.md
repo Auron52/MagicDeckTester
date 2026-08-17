@@ -88,3 +88,59 @@ necessary but not sufficient -- always re-measure the actual candidate config.
   to refresh it; the four-lever config must then be validated against that.
 * fivecolour's +0.0044 is the last regression in the good set and is the remaining
   work before this is clean.
+
+---
+
+## HELD-OUT VALIDATION (overnight seeds, 2026-08-16) — it holds
+
+Four-lever subset (`MTG_MAIN2_DROP` + `MTG_ACQ_RESOLVE` + `MTG_BP_SITES=63` +
+`MTG_DOUBT_MAIN2`) vs the REFRESHED overnight base GT (`0cb6807`, which already
+contains the Bolas and drip-sweep fixes so the comparison is not confounded).
+205,600 games on seeds disjoint from the tuning tier:
+
+| deck | better | worse | mean | win->loss | loss->win |
+|---|---|---|---|---|---|
+| goblins | 304 | 66 | **-0.0135** | 0 | 11 |
+| hinata | 325 | 165 | **-0.0105** | 13 | 30 |
+| burn | 135 | 0 | **-0.0067** | 0 | 2 |
+| creature_giving | 65 | 7 | -0.0042 | 0 | 1 |
+| antilife | 28 | 29 | +0.0001 | 1 | 3 |
+| th | 10 | 25 | +0.0006 | 0 | 2 |
+| fivecolour | 20 | 45 | +0.0021 | 0 | 1 |
+| **TOTAL** | **887** | **337** | **-0.0028** | **14** | **50** |
+
+**Held-out (-0.0028) is BETTER than train (-0.0021)** — the subset generalises
+rather than degrading, which is the failure mode that usually kills a tuned config.
+Better:worse 2.6:1; **50 losses become wins against 14 wins becoming losses**.
+
+Two decks invisible on the regression tier are among the biggest winners: goblins
+(-0.0135, 11 losses converted) and hinata (-0.0105, 30 converted) — hinata being the
+deck that blocked the full stack. Burn is 135 better / 0 worse, again with no game
+harmed at all.
+
+### The remaining regressions (a work list, not a footnote)
+
+`logs/stack4/holdout_worse.txt` has all 337 with repro seeds. The three
+still-positive decks are tiny (fivecolour +0.0021, th +0.0006, antilife +0.0001 —
+antilife is 28 better / 29 worse, i.e. noise). The worst individual games are
+hinata's, and they cluster on one shape:
+
+```
+hinata_overnight_d3_s4004 gi=5   5->8   (seed 4009)
+hinata_overnight_d3_s4004 gi=58  6->9   (seed 4062)
+hinata_overnight_d5_s5005 gi=34  5->8   (seed 5039)
+hinata_overnight_d5_s5005 gi=94  5->8   (seed 5099)
+hinata_overnight_d5_s7007 gi=165 5->8   (seed 7172)
+hinata_overnight_d5_s7007 gi=220 5->8   (seed 7227)
+hinata_overnight_d5_s7007 gi=255 5->8   (seed 7262)
+```
+
+Repeated **5 -> 8** on hinata at both d3 and d5 is a family, not churn, and is worth
+digging even though hinata is net -0.0105 overall. Note hinata also has the most
+win->loss (13) *and* by far the most loss->win (30), so the deck is genuinely more
+volatile under the subset rather than uniformly better.
+
+### Status
+
+Measured, validated held-out, and NOT adopted. All four remain default-off.
+**Turning them on is the USER's call.**
