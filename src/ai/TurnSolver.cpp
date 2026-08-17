@@ -1203,9 +1203,16 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
         int pump = tp.power_bonus
                  + tp.gy_self_power_bonus                            // >= 1 + copies; estimate low
                  + tp.pump_per_cards_drawn_power * 2                 // ~2 draws seen by a mid copy
-                 + tp.pump_per_treasure_power * 2;                   // ~2 Treasures mid-stack
+                 + tp.pump_per_treasure_power * 2                    // ~2 Treasures mid-stack
+                 + tp.pump_per_life_gained_power * 2;                // ~2 life seen by a mid copy
+        // Luxurious Libation's +X/+X: X is a searched decision, not a constant, and this ordering
+        // heuristic runs BEFORE X is chosen -- so estimate the same "mid" magnitude the counters
+        // above use rather than pretending to know it. The SEARCH owns the real valuation (each X
+        // is its own plan variant), exactly as the comment above says.
+        pump += tp.pump_per_x_power * 2;
         per += pump * DMG;
         if (tp.token_copy_of_target) { per += 2 * DMG; }             // a hasted body for a turn
+        if (tp.trick_token_power > 0) { per += tp.trick_token_power * DMG; }   // a spare body
         if (tp.creates_treasures > 0) { per += tp.creates_treasures * (DMG / 2); }  // ramp
         int fanout = 1;
         for (const Permanent& p : state.battlefield)
@@ -3851,7 +3858,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // the search picks among the variants -- they share hand_index, so they are mutually
         // exclusive in the plan). Only X-damage (DirectDamage) is modeled today; other X
         // templates (DrawX) stay skipped until their effect is scaled in BOTH cast paths.
-        if (def.card.m_mana_cost.has_x)
+        // An {X} SOLO-TARGET TRICK (Luxurious Libation) needs the TRICK shape -- per-target
+        // variants and copy fan-out -- not this block's X-damage shape. This block ends in an
+        // unconditional `continue` for anything whose template is not DirectDamage, so WITHOUT this
+        // guard such a card is dropped from enumeration ENTIRELY and can never be cast at all (the
+        // measured symptom: neutralising Luxurious Libation's payload changed nothing over 100
+        // games, because it was never cast). Send it to the trick block below, which emits one
+        // variant per candidate X. No shipped card is both {X} and a trick, so this is
+        // byte-identical for every existing deck.
+        if (def.card.m_mana_cost.has_x && !def.params.solo_target_trick)
         {
             // Reality Spasm (untap RITUAL): emit ONE action that floats mana for a same-turn
             // payoff (Crackle). Only productive with Hinata in play (her discount makes the {X}
@@ -4408,10 +4423,34 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         if (def.params.solo_target_trick)
         {
             const ManaCost base_cost = EffectiveCost(def, state);
+            // {X} TRICKS (Luxurious Libation): one cast variant per candidate X. The variants share
+            // hand_index, so they are mutually exclusive within a plan and the SEARCH picks among
+            // them -- the provider narrows the range (XCandidates), never this machinery.
+            //
+            // X = 0 IS ALWAYS OFFERED, deliberately. GenericProvider::XCandidates returns EMPTY when
+            // max_affordable <= 0 ("empty -> not cast this turn"), which is right for an X BURN but
+            // wrong for a trick whose non-X riders carry the card: Libation at X=0 still costs {G}
+            // and still makes a Citizen token per copy, which under a magnet is a board of bodies.
+            // Adding an option is WIDENING, which the core invariant permits (only narrowing is
+            // reserved to providers).
+            //
+            // A non-{X} trick gets exactly {0} -> one action per target, i.e. byte-identical.
+            const int x_pips = std::max(1, def.card.m_mana_cost.has_x ? def.card.m_mana_cost.x_pips : 1);
+            std::vector<int> x_values{ 0 };
+            if (def.card.m_mana_cost.has_x)
+            {
+                const ManaPool xp = AvailableManaPool(state);
+                int max_x = (xp.Total() - base_cost.ManaValue()) / x_pips;
+                if (max_x < 0) { max_x = 0; }
+                for (int xv : ResolveProvider(state).XCandidates(state, def, max_x))
+                { if (xv > 0) { x_values.push_back(xv); } }
+            }
             // hand_name: non-empty iff the target is a SAME-PLAN HAND creature (stamped on the
             // action for the cheap subset legality filter).
             auto emit = [&](int tgt_num, int strive_k, const std::string& hand_name = std::string())
             {
+              for (int xv : x_values)
+              {
                 Action a;
                 a.kind           = Action::Kind::CastFromHand;
                 a.card_name      = ap.hand[i].m_name;
@@ -4433,7 +4472,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
                 a.enchant_target = tgt_num;
                 a.trick_hand_target = hand_name;
+                if (xv > 0) { a.cost.generic += xv * x_pips; a.chosen_x = xv; }
                 actions.push_back(std::move(a));
+              }
             };
             // Battlefield targets (+ strive counts for Twinflame), with a LOSSLESS equivalence
             // fold: two targets whose (name, attack-eligibility, temp bonuses, counters,
@@ -10644,8 +10685,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // payloads, strive extras -- in lockstep with EffectHandler's executor branch.
             // enchant_target = the searched creature target (0 = up-to-one untargeted);
             // own_targets is reused as Twinflame's searched strive-extras count.
+            // chosen_x carries Luxurious Libation's paid {X} (every copy copies it, CR 707.10).
             ResolveSoloTargetTrick(state, state.active_player_index, def, enchant_target,
-                                   own_targets);
+                                   own_targets, chosen_x);
             // Draw breakpoint (trick class, site 5): a magnet fan-out mass-draws, so newly revealed
             // cards must be castable with the mana still available this turn. Same SHAPE as the
             // plain-cantrip DrawSpell branch: defer at the MAIN-plan level (resolved after every
@@ -11667,6 +11709,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
     ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
+    ap.life_gained_this_turn      = 0;             // Fortifying Draught lifegain-count resets each turn (same lockstep)
 
     // Untap and advance Aether Vial counters (upkeep trigger).
     for (Permanent& p : state.battlefield)
@@ -15569,6 +15612,21 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             }
             if (reads_drawn)
             { Fold(k, 0xD7A3); Fold(k, static_cast<uint64_t>(p.cards_drawn_this_turn)); }
+        }
+        // Fortifying Draught lifegain-count: identical shape and identical reasoning to the
+        // drawn-count fold above -- future-determining only for a SAME-TURN cast that reads it, so
+        // it is gated on the hand actually holding a pump_per_life_gained_power card AND the count
+        // being nonzero. Every deck without such a card keeps the EXACT prior key.
+        if (p.life_gained_this_turn > 0)
+        {
+            bool reads_lifegain = false;
+            for (const Card& hc : p.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd && hd->params.pump_per_life_gained_power > 0) { reads_lifegain = true; break; }
+            }
+            if (reads_lifegain)
+            { Fold(k, 0x1F5E); Fold(k, static_cast<uint64_t>(p.life_gained_this_turn)); }
         }
         Fold(k, static_cast<uint64_t>(p.library.size()));
         if (!p.library.empty()) { Fold(k, p.library.front().m_name_hash); }

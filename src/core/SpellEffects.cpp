@@ -697,6 +697,7 @@ void ApplyJitteMode(GameState& state, int controller, int jitte_id, int mode, in
     {
         je->charge_counters -= 1;
         state.players[controller].life += d->params.charge_lifegain;
+        state.players[controller].life_gained_this_turn += d->params.charge_lifegain;
     }
 }
 

@@ -98,7 +98,8 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
             if (adef && adef->params.combat_damage_free_cast) { ++state.free_casts_available; }
             // Lifelink (modeled): combat damage also gains the controller that much life. Inert vs
             // the passive opponent's clock, tracked for life-total decks.
-            if (CreatureHasLifelink(p, state)) { state.players[active].life += power; }
+            if (CreatureHasLifelink(p, state))
+            { state.players[active].life += power; state.players[active].life_gained_this_turn += power; }
         }
         if (collect_descs && power > 0)
         { out.attacker_descs.push_back(p.card.m_name.str() + " (" + std::to_string(power) + ")"); }

@@ -1634,6 +1634,7 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
             && cast_def.card.ColorCount() > 0)
         {
             state.players[active].life += cast_def.card.ColorCount();
+            state.players[active].life_gained_this_turn += cast_def.card.ColorCount();
             state.battlefield[i].colored_cast_lifegain_used_this_turn = true;
         }
 
@@ -2108,12 +2109,14 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         if (wp.any_creature_enters_lifegain > 0)
         {
             state.players[w.controller_index].life += wp.any_creature_enters_lifegain;
+            state.players[w.controller_index].life_gained_this_turn += wp.any_creature_enters_lifegain;
             if (log) { note(w.controller_index, w.card.m_name.str()); }
         }
         // "Whenever another creature you control enters, you [may] gain N" (Suture Priest cl. 1).
         if (wp.own_creature_enters_lifegain > 0 && w.controller_index == entered_controller)
         {
             state.players[w.controller_index].life += wp.own_creature_enters_lifegain;
+            state.players[w.controller_index].life_gained_this_turn += wp.own_creature_enters_lifegain;
             if (log) { note(w.controller_index, w.card.m_name.str()); }
         }
         // "Whenever a creature an opponent controls enters, that player loses N" (Suture Priest
@@ -3158,6 +3161,7 @@ inline void ApplyGraveyardExileAbility(GameState& state, int controller, int sou
         else
         {
             state.players[controller].life += d->params.gy_exile_creature_lifegain;
+            state.players[controller].life_gained_this_turn += d->params.gy_exile_creature_lifegain;
         }
         return;
     }
@@ -4534,7 +4538,8 @@ inline void CreateTrickCopyToken(GameState& state, int controller, int src_i)
 // resolve). Every dynamic count (cards drawn this turn, Treasures, graveyard copies) is
 // recomputed HERE, per instance, so stacked copies escalate faithfully (draw first, THEN count --
 // oracle order for Fists; create the Treasure, THEN count -- oracle order for Gold Rush).
-inline void ApplyTrickPayload(GameState& state, int controller, const CardDefinition& def, int ti)
+inline void ApplyTrickPayload(GameState& state, int controller, const CardDefinition& def, int ti,
+                              int chosen_x)
 {
     const CardParams& pp = def.params;
     Player& pl = state.players[controller];
@@ -4542,7 +4547,7 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
     // Untargeted riders (resolve for every instance, targeted or not).
     TrickDraw(state, controller, pp.cast_draw);
     if (pp.creates_treasures > 0) { CreateTreasureTokens(state, controller, pp.creates_treasures); }
-    if (pp.cast_lifegain > 0)     { pl.life += pp.cast_lifegain; }
+    if (pp.cast_lifegain > 0)     { pl.life += pp.cast_lifegain; pl.life_gained_this_turn += pp.cast_lifegain; }
     if (pp.grants_extra_land_drop > 0) { pl.bonus_land_drops_this_turn += pp.grants_extra_land_drop; }
 
     if (ti < 0 || ti >= static_cast<int>(state.battlefield.size())) { return; }
@@ -4570,8 +4575,30 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
         pw += pp.pump_per_treasure_power * tr;
         tf += pp.pump_per_treasure_tough * tr;
     }
+    // Fortifying Draught: life gained this turn, read AFTER this instance's own cast_lifegain above
+    // (gain first, THEN count -- oracle order), so a magnet fan-out escalates copy by copy.
+    if (pp.pump_per_life_gained_power > 0 || pp.pump_per_life_gained_tough > 0)
+    {
+        const int lg = pl.life_gained_this_turn;
+        pw += pp.pump_per_life_gained_power * lg;
+        tf += pp.pump_per_life_gained_tough * lg;
+    }
+    // Luxurious Libation: the {X} PAID. Every copy of the spell copies X (CR 707.10), so unlike the
+    // escalating counters above this term is the SAME for every instance of a fan-out.
+    if (pp.pump_per_x_power > 0 || pp.pump_per_x_tough > 0)
+    {
+        pw += pp.pump_per_x_power * chosen_x;
+        tf += pp.pump_per_x_tough * chosen_x;
+    }
     if (pw != 0) { tgt.temp_power_bonus += pw; }
     if (tf != 0) { tgt.temp_tough_bonus += tf; }
+
+    // Luxurious Libation's token. Placed AFTER the pump deliberately -- its oracle order is
+    // "gets +X/+X ... Create a ... token", the OPPOSITE of Gold Rush (token first, then count
+    // Treasures), and it sits after the ti guard above so a fizzled cast (illegal target on
+    // resolution, CR 608.2b) creates no token. One per resolved instance.
+    if (pp.trick_token_power > 0 || pp.trick_token_toughness > 0)
+    { CreateToken(state, controller, pp.trick_token_power, pp.trick_token_toughness, pp.trick_token_subtypes); }
 
     // Twinflame: a hasted token copy of the recipient, exiled at the beginning of the end step.
     if (pp.token_copy_of_target) { CreateTrickCopyToken(state, controller, ti); }
@@ -4597,7 +4624,7 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
 // fizzles, CR 608.2b: no payloads, straight to the graveyard). The enumeration's same-plan subset
 // filter makes this unreachable in normal play; the guard keeps a stale plan safe.
 inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardDefinition& def,
-                                   int target_number, int strive_extras)
+                                   int target_number, int strive_extras, int chosen_x)
 {
     // Resolve the declared target (by stable per-copy id; deck cards AND tokens are numbered --
     // see GameState::next_token_number).
@@ -4761,7 +4788,7 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
     else if (ti >= 0) { order.push_back(ti); }
     else              { order.push_back(-1); }   // up-to-one, no target: one untargeted instance
 
-    for (int i : order) { ApplyTrickPayload(state, controller, def, i); }
+    for (int i : order) { ApplyTrickPayload(state, controller, def, i, chosen_x); }
     return true;
 }
 

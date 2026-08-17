@@ -36,6 +36,15 @@ struct Player
     // cast_draw / dig-draw resolvers, the shared trick draw). Reset at BOTH untap sites in
     // lockstep; folded into the sim key. 0 forever for decks with no drawn-count payload.
     int cards_drawn_this_turn = 0;
+    // LIFE GAINED this turn by this player (the sum of the amounts gained, NOT the net life change --
+    // life LOSS does not reduce it, per "the amount of life you gained this turn"). Read only by
+    // Fortifying Draught's pump_per_life_gained_power payload; incremented at every controller-side
+    // life-gain site (cast_lifegain, etb_lifegain, the creature-enters watchers, gy-exile lifegain,
+    // charge_lifegain, lifelink combat damage) -- deliberately NOT at the OPPONENT-lifegain site,
+    // which credits the other player. Reset at BOTH untap sites in lockstep with
+    // cards_drawn_this_turn; folded into the sim key under the same >0 guard, so it is 0 forever --
+    // and byte-identical -- for every deck with no lifegain-count payload.
+    int life_gained_this_turn = 0;
     int poison_counters            = 0;
 
     // Cards exiled by "Light Up the Stage" and similar; playable until their expiry turn.

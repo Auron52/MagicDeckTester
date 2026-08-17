@@ -776,6 +776,14 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.grants_temp_haste           = params.value("grants_temp_haste", false);
     p.counters_on_target          = params.value("counters_on_target", 0);
     p.cast_lifegain               = params.value("cast_lifegain", 0);
+    p.pump_per_life_gained_power  = params.value("pump_per_life_gained_power", 0);
+    p.pump_per_life_gained_tough  = params.value("pump_per_life_gained_tough", 0);
+    p.pump_per_x_power            = params.value("pump_per_x_power", 0);
+    p.pump_per_x_tough            = params.value("pump_per_x_tough", 0);
+    p.trick_token_power           = params.value("trick_token_power", 0);
+    p.trick_token_toughness       = params.value("trick_token_toughness", 0);
+    if (params.contains("trick_token_subtypes"))
+        p.trick_token_subtypes = params["trick_token_subtypes"].get<std::vector<std::string>>();
     p.grants_extra_land_drop      = params.value("grants_extra_land_drop", 0);
     p.token_copy_of_target        = params.value("token_copy_of_target", false);
     if (params.contains("strive_cost"))

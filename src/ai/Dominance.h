@@ -81,10 +81,10 @@
 static_assert(sizeof(Permanent) == 256,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
-static_assert(sizeof(Player) == 152,
+static_assert(sizeof(Player) == 160,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
-static_assert(sizeof(GameState) == 576,
+static_assert(sizeof(GameState) == 592,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -401,6 +401,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         fold(static_cast<std::uint64_t>(p.lands_played_this_turn));
         fold(static_cast<std::uint64_t>(p.bonus_land_drops_this_turn));
         fold(static_cast<std::uint64_t>(p.cards_drawn_this_turn));
+        fold(static_cast<std::uint64_t>(p.life_gained_this_turn));
         fold(static_cast<std::uint64_t>(p.poison_counters));
         // Staged (Light Up the Stage) and suspended (Lotus Bloom) cards are future-determining
         // zones with timers; exact match rather than a subset rule (a timer is not monotone).

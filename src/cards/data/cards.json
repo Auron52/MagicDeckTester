@@ -4122,6 +4122,44 @@
    }
   },
   {
+   "name": "Luxurious Libation",
+   "mana_cost": "{X}{G}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Target creature gets +X/+X until end of turn. Create a 1/1 green and white Citizen creature token. [solo_target_trick: +X/+X from the PAID {X} (pump_per_x_power/tough off the cast's chosen_x). A copy of a spell copies the value of X (CR 707.10), so every instance of a magnet fan-out pumps by the SAME X -- unlike the escalating drawn/Treasure/lifegain counters. One 1/1 Citizen token per resolved instance, created AFTER the pump (oracle order, the opposite of Gold Rush) and only on a non-fizzled resolution; each token is itself a further copy target next cast. PARTIAL: token colour (green and white) is not modelled -- the engine's tokens carry subtypes and P/T only, and no card in this deck reads a permanent's colour.]",
+   "template": "custom",
+   "parameters": {
+    "solo_target_trick": true,
+    "pump_per_x_power": 1,
+    "pump_per_x_tough": 1,
+    "trick_token_power": 1,
+    "trick_token_toughness": 1,
+    "trick_token_subtypes": [
+     "Citizen"
+    ]
+   }
+  },
+  {
+   "name": "Fortifying Draught",
+   "mana_cost": "{G}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "You gain 2 life. Target creature gets +X/+X until end of turn, where X is the amount of life you gained this turn. [solo_target_trick: per resolved copy, +2 life (cast_lifegain) and THEN +X/+X off Player::life_gained_this_turn (pump_per_life_gained_power/tough) -- gain first, then count, oracle order, so a magnet fan-out escalates copy by copy. X counts the turn's OTHER gains too (Kazandu Refuge's etb_lifegain, Scale the Heights' cast_lifegain), not just this card's. life_gained_this_turn sums AMOUNTS GAINED and is not reduced by life loss, per 'the amount of life you gained'.]",
+   "template": "custom",
+   "parameters": {
+    "solo_target_trick": true,
+    "cast_lifegain": 2,
+    "pump_per_life_gained_power": 1,
+    "pump_per_life_gained_tough": 1
+   }
+  },
+  {
    "name": "Gold Rush",
    "mana_cost": "{1}{G}",
    "types": [
@@ -4164,6 +4202,22 @@
    "subtypes": [],
    "keywords": [],
    "oracle_text": "Target creature gains haste until end of turn.\nDraw a card. [solo_target_trick: until-EOT haste via Permanent::temp_haste -- read by BOTH attack eligibility (CanAttackFull) and tap-ability eligibility (CanTapNow: a hasted fresh mana dork may tap for mana, CR 302.6). Cantrip draw per copy: targeting a magnet mass-draws (the deck's refuel line).]",
+   "template": "custom",
+   "parameters": {
+    "solo_target_trick": true,
+    "cast_draw": 1,
+    "grants_temp_haste": true
+   }
+  },
+  {
+   "name": "Impolite Entrance",
+   "mana_cost": "{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Target creature gains trample and haste until end of turn.\nDraw a card. [solo_target_trick: until-EOT haste via Permanent::temp_haste -- read by BOTH attack eligibility (CanAttackFull) and tap-ability eligibility (CanTapNow, CR 302.6). Cantrip draw per copy. PARTIAL: 'gains trample' NOT modelled; WHY inert -- the goldfish opponent never blocks (DecisionProviders: \"attack with everything that can attack (no blockers)\"), so trample changes no damage. User-approved deferral 2026-08-17; disclose in Stage 6a. NOTE: sorcery-vs-instant is also not modelled (casts resolve in MAIN_1), so under this engine the card is parameter-identical to Expedite -- a screen CANNOT distinguish the two, and Impolite Entrance's real merit (trample) is out of scope.]",
    "template": "custom",
    "parameters": {
     "solo_target_trick": true,

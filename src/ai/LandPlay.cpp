@@ -101,6 +101,7 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     if (def.params.etb_lifegain > 0)
     {
         ap.life += def.params.etb_lifegain;
+        ap.life_gained_this_turn += def.params.etb_lifegain;   // Kazandu Refuge feeds Fortifying Draught's X
     }
     // Forbidden Orchard played this turn: it is tapped for mana this turn too, so spawn the
     // opponent's Spirit now (the turn-start spawn only covers copies already in play).

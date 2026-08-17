@@ -1149,6 +1149,24 @@ struct CardParams
     int  counters_on_target = 0;
     // Scale the Heights: "You gain 2 life." (per resolved copy -- faithful escalation of life.)
     int  cast_lifegain = 0;
+    // Fortifying Draught: "+X/+X where X is the amount of life you gained this turn", computed AT
+    // RESOLUTION per copy AFTER that copy's own cast_lifegain (gain first, THEN count -- oracle
+    // order), off Player::life_gained_this_turn. So a magnet fan-out escalates: each copy gains its
+    // own 2 life before sizing its pump, and the count also picks up the turn's OTHER gains
+    // (Kazandu Refuge's ETB, Scale the Heights). 0 = no lifegain-count pump.
+    int  pump_per_life_gained_power = 0;
+    int  pump_per_life_gained_tough = 0;
+    // Luxurious Libation: "Target creature gets +X/+X until end of turn" where X is the {X} PAID.
+    // A copy of a spell copies the value of X (CR 707.10), so every instance of a magnet fan-out
+    // pumps by the SAME X -- unlike the escalating counters above. Multiplier per point of X.
+    int  pump_per_x_power = 0;
+    int  pump_per_x_tough = 0;
+    // Luxurious Libation: "Create a 1/1 green and white Citizen creature token." Created once per
+    // RESOLVED instance (a magnet fan-out makes one per copy, each of which is itself a further
+    // copy target next cast). Power 0 AND toughness 0 => no token.
+    int  trick_token_power = 0;
+    int  trick_token_toughness = 0;
+    std::vector<std::string> trick_token_subtypes;
     // Scale the Heights: "You may play an additional land this turn." -> +1
     // Player::bonus_land_drops_this_turn per resolved copy.
     int  grants_extra_land_drop = 0;

@@ -272,7 +272,8 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 {
                     ResolveSoloTargetTrick(state, entry.controller_index, def,
                                            entry.enchant_target,
-                                           entry.soulfire_own_targets.value_or(0));
+                                           entry.soulfire_own_targets.value_or(0),
+                                           entry.chosen_x.value_or(0));
                 }
                 // Unite the Coalition (user-approved collapse): the searched split S (on
                 // chosen_x) of the five mode-picks -> S x damage-per-choice to the opponent
