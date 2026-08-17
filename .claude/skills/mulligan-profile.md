@@ -36,6 +36,30 @@ fix changes the commit and **invalidates every prior sidecar** for that deck. Th
 Corollary: on the exhaustive route we **skip `analyze-deck`'s static-profile grid entirely** (it is its
 own expensive optimisation; don't pay for a baseline you're about to replace).
 
+### Rule 0 binds GENERATION, not a profile's lifetime — do NOT regenerate for every later commit
+
+Distinguish two things agents keep conflating (and getting stuck on the wrong one):
+
+- **Mid-generation invalidation (real).** A play-logic change *during* a gen — or across machines you
+  pool — is genuine invalidation: cells rolled before vs after the change use different play, so the table
+  ends up **skewed / unbalanced across entries** (some entries evaluated on old play, some on new). That
+  is the whole reason to freeze on ONE commit, and why the merge refuses to pool sidecars from different
+  commits.
+- **After-generation "invalidation" (a non-problem).** A finished, validated profile does **not** expire
+  when a *later, unrelated* commit moves its `play_digest`. The whole table was generated under one
+  consistent play logic, so it is internally balanced; a moved digest only means "these rollouts would
+  differ slightly if re-rolled today", not "this profile is now wrong". **You cannot — and must not —
+  regenerate every deck's profile for every engine commit.**
+
+The `play_digest`/`commit` fingerprints gate **pooling and resume** (the mid-gen concerns), NOT runtime
+*use*: at play time the profile is presence-gated and applied regardless of digest. So:
+
+> A profile stays adopted until it demonstrably **underperforms on the current engine**. The bar for
+> keeping/adopting is **net benefit under the CONFOUNDED bottoming A/B + no major regression in the
+> rebaseline on today's engine** — NOT a matching `play_digest`. Regenerate only when a change plausibly
+> and materially moves *this deck's* play (or the deck's list changes), confirmed by a **regression**,
+> not by a digest diff.
+
 ## The three mulligan tiers over a deck's life
 
 | tier | policy | cost | when |
