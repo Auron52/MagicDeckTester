@@ -361,8 +361,24 @@ done
 # SAME snapshot binary as the batch. --strict fails on play-drift (a recorded human line now ends
 # differently) and ENUM-GAP (a previously-offered plan vanished for an identical state); the
 # accepted classes (shuffle-dead, mull-drift) never gate. Threaded: the full sweep is seconds.
+#
+# REGRESSION MODE ONLY (USER, 2026-08-17: "I only want it to run in one mode. maybe full regression
+# to be safe"). It is a whole-corpus REPLAY, not a sampled batch, so running it in all three modes
+# re-measured the identical thing three times -- and each replay is a --claude-play process with
+# MTG_UNPRUNED set, i.e. the widest enumeration the engine ever performs (that is what OOM'd the
+# box; see docs/design/claude-play-unprune-blowup.md). Regression is the middle tier every real
+# change goes through, so the gate keeps its coverage: smoke stays a fast fingerprint check, and
+# overnight stops spending its concurrency on a sweep regression already ran. Force it in any mode
+# with VPC_ALWAYS=1; skip it entirely with VPC_SKIP=1.
 VPC="$HERE/viewer_protocol_check.py"
-if [ -f "$VPC" ] && command -v python3 >/dev/null 2>&1; then
+VPC_RUN=0
+[ "$MODE" = regression ] && VPC_RUN=1
+[ "${VPC_ALWAYS:-0}" = 1 ] && VPC_RUN=1
+[ "${VPC_SKIP:-0}" = 1 ] && VPC_RUN=0
+if [ "$VPC_RUN" != 1 ]; then
+  log ""
+  log "--- reference reproducibility: SKIPPED ($MODE; runs in regression mode -- VPC_ALWAYS=1 to force) ---"
+elif [ -f "$VPC" ] && command -v python3 >/dev/null 2>&1; then
   log ""
   log "--- reference reproducibility (viewer protocol, --strict) ---"
   VPC_THREADS=$THREADS; [ "$VPC_THREADS" -le 0 ] && VPC_THREADS=$(nproc 2>/dev/null || echo 8)

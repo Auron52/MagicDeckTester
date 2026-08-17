@@ -38,8 +38,9 @@ Usage:  python3 test/viewer_protocol_check.py                 # all references, 
         python3 test/viewer_protocol_check.py --sample        # one ref per deck (quick sanity)
         MTG_BIN=path python3 test/viewer_protocol_check.py    # against a specific binary
 
-test/regression.sh runs the full sweep --strict (threaded) after every batch, so reference
-reproducibility is a standing regression gate.
+test/regression.sh runs the full sweep --strict (threaded) in REGRESSION mode -- one mode, not all
+three: this is a whole-corpus replay, so re-running it in smoke and overnight re-measured the same
+thing (VPC_ALWAYS=1 forces it in any mode, VPC_SKIP=1 skips it).
 """
 import json, os, re, subprocess, sys, glob
 
@@ -610,7 +611,7 @@ def main():
         return 0
     # SAMPLE mode (--sample / VIEWER_PROTOCOL_SAMPLE): one reference per deck dir. Historical: the
     # serial per-step replay was multi-minute, so regression sampled. With --threads the FULL sweep
-    # is seconds and test/regression.sh runs it strict after every batch; sample mode remains for
+    # is seconds and test/regression.sh runs it strict in regression mode; sample mode remains for
     # the quickest possible ad-hoc sanity. Picks the first ref per deck for determinism.
     if "--sample" in sys.argv[1:] or os.environ.get("VIEWER_PROTOCOL_SAMPLE"):
         # The sample = one ref per deck (archetype coverage) + every PINNED ref. PROMOTE-ON-CATCH:
