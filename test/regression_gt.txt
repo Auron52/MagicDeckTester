@@ -1,4 +1,4 @@
-# Regression ground truth -- commit b688b3b  date 2026-08-17
+# Regression ground truth -- commit eabdf51f  date 2026-08-17
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -34,9 +34,9 @@ goblins_smoke_d5_s1001=3.5867/ae35ec1508aa9f11
 creature_giving_smoke_d0_s1001=5.7690/84ba9be4148c5a7c
 creature_giving_smoke_d3_s1001=4.8067/cbb6a847578b1474
 creature_giving_smoke_d5_s1001=4.8133/c5b09a5bfc8974a3
-mirrorwing_smoke_d0_s1001=6.3260/25e35c28be44cf2a
-mirrorwing_smoke_d3_s1001=5.1667/eced3827ef7eb795
-mirrorwing_smoke_d5_s1001=5.0667/8ac27b6f2e69857e
+mirrorwing_smoke_d0_s1001=6.0490/9783f6a29088919a
+mirrorwing_smoke_d3_s1001=5.0600/0629ad73d789aef8
+mirrorwing_smoke_d5_s1001=5.1867/c029c532937cc01f
 fivecolour_smoke_d0_s1001=6.1760/0e6fa95c371ba96c
 fivecolour_smoke_d3_s1001=5.1067/ff8a96d418578d34
 fivecolour_smoke_d5_s1001=5.2133/4d90e8633eb26827
@@ -92,11 +92,11 @@ creature_giving_regression_d3_s2002=4.8333/8f2c809d9be075d3
 creature_giving_regression_d3_s3003=4.7600/d6f2c50f296365a3
 creature_giving_regression_d5_s2002=4.7880/15838f61b1760d9a
 creature_giving_regression_d5_s3003=4.7360/9ab5f873be61901a
-mirrorwing_regression_d0_s2002=6.3300/1b3d293b40a26b6e
-mirrorwing_regression_d3_s2002=5.0450/d41c7aeacddb2a30
-mirrorwing_regression_d3_s3003=4.9050/1d29de4f7fe9d5c5
-mirrorwing_regression_d5_s2002=4.9700/e4e2b3e5f4156020
-mirrorwing_regression_d5_s3003=4.9100/a4803a8688d9ae53
+mirrorwing_regression_d0_s2002=6.0270/09a53858e7278b17
+mirrorwing_regression_d3_s2002=4.8050/faa3ed985cf6c147
+mirrorwing_regression_d3_s3003=4.9200/b4ea0c5e6d64f125
+mirrorwing_regression_d5_s2002=4.7900/c442e5832509bfe1
+mirrorwing_regression_d5_s3003=4.9000/60cf9d6621d1099b
 fivecolour_regression_d0_s2002=6.1820/f9b3a8c10b48ef70
 fivecolour_regression_d3_s2002=4.9550/d7723dfe23735207
 fivecolour_regression_d3_s3003=5.0700/7db62ff56a224c4a
