@@ -141,6 +141,31 @@ full and the partition only shrinks its OUTPUT. The duplicates are no longer *of
 still *computed*. This is exactly the distinction `single-consideration.md` draws in its ranked next
 collapses ("the right route ... **deletes the calls instead of caching them**").
 
+### Where the cost actually is (measured, after two wrong guesses)
+
+`MTG_ROLLOUT_STATS`, whole game, seed 4009 gi=5, budget 10:
+
+| config | rollout calls | interior nodes |
+|---|---|---|
+| base (class off) | 1,625 | 9,603 |
+| four levers | 3,275 (2.0x) | 13,067 |
+| four levers + `MTG_BP_CLASSIFY` | **2,677** | **11,161** |
+
+The partition removes **55% of the excess interior nodes** and 36% of the excess rollouts. So it is
+NOT inert -- it just does not show up in wall clock, because wall is dominated by the apply work
+that happens before the filter runs.
+
+Two guesses about the residual were measured and REFUTED, recorded so they are not retried:
+
+* **"The variants are extra rollouts."** Partly, but the scoring loop already carries a
+  breakpoint-variant dedup (`bp_seen_states` / `BuildDedupKey`, TurnSolver.cpp:16773): a variant
+  whose continuation lands on an already-scored state is dropped BEFORE its rollout. The duplicates
+  were already not being rolled out, which is the real reason the filter did not move wall clock.
+* **"The dedup still charges the budget."** It does -- `budget->Consume(1)` runs before the apply,
+  so a discarded variant costs a node. A `SearchBudget::Refund` on that path (tried behind
+  `MTG_BP_DEDUP_REFUND`) measured **inert** on all seven family games, alone and on top of the
+  classifier, so it was backed out. The budget spent on deduped variants is not what binds here.
+
 **Next, and it is the real step 3:** hoist the partition above the enumeration. A breakpoint whose
 post-draw hand contains no new castable card and no land-enabled cast has NO continuation that is
 not a permutation duplicate -- that breakpoint should not enumerate at all, rather than enumerate
