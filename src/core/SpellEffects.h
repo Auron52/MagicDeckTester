@@ -6143,6 +6143,34 @@ inline bool DorkReserveEnabled()
     return v;
 }
 
+// The same "a creature is worth more than its mana" rule, one layer down, for the payments the
+// reservation above does NOT own. TapForCostBacktrackWorker walks its candidate sources in raw
+// BATTLEFIELD ORDER and is first-solution-wins -- it taps cands[0] and recurses, so cands[0] is
+// spent whenever ANY payment containing it exists. So on every payment the greedy strands on, and
+// on every ladder rung where the reservation has released its hold, WHICH sources burn was decided
+// by the order permanents happen to sit in. Sorting mana creatures to the back of that list makes
+// the first solution found spend the lands and reach for a body only when the payment needs one.
+//
+// LOSSLESS: this permutes the DFS candidate list, it does not cap it -- the backtracker still
+// descends into a creature when nothing else pays, so no tap set becomes unreachable (the
+// heuristic skill's Rule 0b infinite-budget test). Default ON; off-switch MTG_NO_TAP_SPARE_CREATURES.
+//
+// Measured on three DISJOINT seed sets, net avg win turn summed over every case in the tier
+// (negative = better): smoke -0.0303, regression -0.0410, held-out -0.0517. It also cuts backtracker
+// nodes 11.4% (deterministic, MTG_TAP_STATS) -- irrelevant next to the backtracker's ~1% share of
+// runtime, but it is not a cost. Sorting the SAME list by ManaSourceRank instead measured WORSE
+// (+0.0050 smoke) -- scarcity-first is the right rule for the per-cast greedy and the wrong one here,
+// and it is the same verdict docs/design/flow-guided-tap-order.md reached independently. The gain
+// concentrates on Mirrorwing (-0.048 held-out, an order of magnitude over any other deck) because
+// Zada / Mirrorwing Dragon copy a solo-target trick for each OTHER creature you control: an untapped
+// creature is a copy target AND an attacker, so a 1/1 Elvish Mystic tapped for {G} forfeits its Gold
+// Rush copy and the swing that copy was for. See docs/design/mana-source-reservation.md.
+inline bool TapSpareCreaturesEnabled()
+{
+    static const bool v = !EnvOn("MTG_NO_TAP_SPARE_CREATURES");
+    return v;
+}
+
 // Adds one untapped source's mana contribution to an accounting ManaPool, consistent
 // with the floating-pool payment logic in TapForCost / TapForCostDirect:
 //   - depletion / high-yield lands contribute produces_amount of their colour,

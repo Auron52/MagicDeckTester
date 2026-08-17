@@ -139,12 +139,49 @@ mana dork, or none ever reservable). Net across the suite is a small improvement
 depth with no budget, i.e. the honest read on the heuristic itself. `test/classify_turn_later.sh`
 classifies 9 of the 13 searched slower games as budget **churn** (they recover at 4×/16×).
 
-Still open, and deliberately NOT done here: the **per-cast greedy** path (`ManaSourceRank`) is
-untouched, so on a turn the prepay declines (a single cast, a ritual/rock producer, an {X} spell) a
-mono-colour dork still ranks level with a basic land and battlefield order decides. Ranking mana
-creatures after every land is the obvious next lever; it needs its own A/B, since the scarcity
-principle (spend the least flexible first) and the utility principle (spare the body) genuinely
-disagree there.
+#### MEASURED (2026-08-17), NOT YET ADOPTED — the follow-up was in the BACKTRACKER, not the rank
+
+The follow-up above guessed wrong about where the residual lived. `ManaSourceRank` was never the
+gap: **`TapForCostBacktrackWorker` never consults it.** The backtracker walks its candidate sources
+in raw **battlefield order** and is first-solution-wins (it taps `cands[0]` and recurses, so
+`cands[0]` is spent whenever *any* payment containing it exists) — so on every payment the greedy
+strands on, and on every ladder rung where the reservation releases its hold, which sources get
+burned is decided by the order permanents happen to sit in. That is the actual mechanism behind the
+user's "the dork was tapped instead of a Mountain, for no reason whatsoever" (viewer issues #1/#9/#12).
+
+Two variants, behind a temporary `MTG_TAP_CAND_ORDER` selector (0 = baseline, byte-identical):
+
+| | smoke s1001 | regression s2002/3003 | **held-out** s4004/5005 | total |
+|---|---|---|---|---|
+| **1 — mana creatures last** | **−0.0303** | **−0.0410** | **−0.0517** | **−0.1230** |
+| 2 — full `ManaSourceRank` sort | +0.0050 | *(not run — lost on train)* | — | — |
+
+Net avg win turn, negative = better, summed over every case in the tier. Variant 1 improves on all
+three disjoint seed sets; no case regressed on smoke, one did by +0.0010 on regression (fivecolour
+d0) and antilife came back +0.0043 on held-out (a wash: −0.0040/−0.0040/+0.0043 across the three).
+References stayed at **0 play-drift, 0 enum-gap** (208 refs). It is also 11.4% *fewer* backtracker
+nodes (115,790 → 102,618 on 12 mirrorwing games, `MTG_TAP_STATS`, deterministic) — the backtracker is
+~1% of runtime, so that is a rounding error, not a reason.
+
+**Variant 2 losing is the same result the flow-order work already got** — see
+`flow-guided-tap-order.md`, where a colour-scarcity reorder of the same list measured +0.0140 and was
+refused. Scarcity-first is the right rule for the *greedy* (spend the least flexible first) and the
+wrong one here; "spare the body" is a different axis and it is the one that pays.
+
+**Why it concentrates on mirrorwing** (−0.0213 / −0.0300 / −0.0480, an order of magnitude more than
+any other deck): Zada / Mirrorwing Dragon copy a solo-target trick *for each other creature you
+control*, so an untapped creature is worth two things at once — a copy target and an attacker. A
+1/1 Elvish Mystic tapped for {G} forfeits its Gold Rush copy (+2/+2 per Treasure) **and** the swing
+that copy was for. Decks whose dorks are only mana move far less (fivecolour −0.008, antilife ~0),
+which is the shape you would predict and is why this is a real rule rather than a seed artifact.
+
+Lossless per the heuristic skill's Rule 0b infinite-budget test: it is a permutation of the DFS
+candidate list, not a cap — the backtracker still descends into a creature when the payment needs
+one, so no tap set becomes unreachable.
+
+Adoption (pending the report to the user): delete the selector, ship the creature-last stable
+partition as the default behind an off-switch, skip it while `g_flow_order_live` (so it cannot undo
+the parked flow permutation), and rebaseline smoke + regression.
 
 The pump-waste is otherwise a VIEWER-only gap (the AI's `FindBestOwnAttacker` is tap-aware: resolved
 after payment, `CanAttackFull` skips tapped, so it never wastes its own pump — see
