@@ -429,6 +429,13 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         if (!rt.empty()) { std::sort(rt.begin(), rt.end()); os << ", \"retrace_gy\": "; JsonNameArray(os, rt); }
     }
     os << ", \"library_size\": " << me.library.size();
+    // Land drops still available this turn (1 normally; more after a Scale the Heights / Explore
+    // grants one). A committed segment carries at most ONE land -- Plan::land_to_play is a single
+    // land by construction -- so the viewer needs this to tell "you're changing your mind about
+    // which land" (replace the queued one) from "you have a second drop" (queue both and commit
+    // them as consecutive segments; viewer issue #7).
+    os << ", \"land_drops_left\": "
+       << std::max(0, me.LandDropsAvailable() - me.lands_played_this_turn);
     // Floating (unspent) mana in the pool. Usually empty at a main-phase breakpoint (the pool is
     // cleared at turn start and a line is committed atomically), so emit only when non-empty.
     {

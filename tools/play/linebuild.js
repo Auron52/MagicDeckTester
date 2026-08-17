@@ -20,6 +20,16 @@
   'use strict';
 
   function planLand(plan) { return plan.find(p => p.kind === 'land') || null; }
+  // Every queued land, in queue order. A committed SEGMENT carries at most one (the engine's
+  // Plan::land_to_play is a single land), so a multi-land plan commits as consecutive segments --
+  // see encodeSegments.
+  function planLands(plan) { return plan.filter(p => p.kind === 'land'); }
+  // Land drops still available at this decision (engine truth: me.land_drops_left). Older decision
+  // payloads predate the field -> assume the ordinary one.
+  function landDropsLeft(decision) {
+    const n = decision && decision.me && decision.me.land_drops_left;
+    return (typeof n === 'number') ? n : 1;
+  }
 
   // Counts of REAL hand copies by name -- excludes staged (exiled-but-playable) cards, which are
   // shown and counted separately (else e.g. 1 hand Mountain + 2 staged Mountains mis-pip as x3).
@@ -47,7 +57,7 @@
   // queued land drop, minus those already queued, capped at lethal (mirrors the engine's enum cap).
   function leMax(decision, plan) {
     const le = decision && decision.lands_edge; if (!le) return 0;
-    const avail = (le.lands_in_hand || 0) - (planLand(plan) ? 1 : 0);
+    const avail = (le.lands_in_hand || 0) - planLands(plan).length;
     const lethal = le.rate > 0 ? Math.ceil((decision.opponent.life || 0) / le.rate) : 0;
     return Math.max(0, Math.min(avail, lethal));
   }
@@ -57,6 +67,18 @@
   // (the planbar chip, the ⟳ badge, the "puts no card onto the battlefield" checks) keeps working
   // untouched; only the encoding differs. One entry == one creature sacrificed.
   function isSacOut(p) { return p.kind === 'activate' && !!p.sacout; }
+
+  // A multi-land plan (a Scale the Heights bonus drop) as the SEGMENTS the engine can accept: one
+  // land-only segment per extra drop, then the final land WITH every cast. Lands go first so the
+  // casts are paid off the full set of lands the human meant to play -- committing a cast segment
+  // before its second land is what made "play two lands, then cast" unreachable. A single-land plan
+  // returns exactly one segment == encodeLine(plan), so nothing else changes.
+  function encodeSegments(plan) {
+    const lands = planLands(plan);
+    if (lands.length <= 1) { return [encodeLine(plan)]; }
+    const rest = plan.filter(p => p.kind !== 'land' || p === lands[lands.length - 1]);
+    return lands.slice(0, -1).map(l => 'land=' + l.name).concat([encodeLine(rest)]);
+  }
 
   function encodeLine(plan) {
     const parts = []; const l = planLand(plan); if (l) parts.push('land=' + l.name);
@@ -75,9 +97,19 @@
   // busy guard stays in index.html's wrapper; this is the pure state transition.
   function queueCard(decision, plan, name, kind) {
     if (kind === 'land') {
-      const cur = planLand(plan);
-      if (cur && cur.name === name) plan = plan.filter(p => p !== cur);        // toggle land off
-      else { plan = plan.filter(p => p.kind !== 'land'); plan.push({ name, kind }); }  // one land
+      const lands = planLands(plan);
+      const same = lands.filter(p => p.name === name);
+      // With a SPARE land drop (a Scale the Heights bonus) and a spare copy in hand, another land is
+      // an ADDITION, not a correction -- replacing the queued one silently ate the extra drop (viewer
+      // issue #7). At the ordinary one drop the old rules stand: the same land toggles off, a
+      // different one means "actually, this land instead". Removing one of two queued lands is the
+      // plan chip's ✕ / drag-back, as for any other queued entry.
+      if (lands.length < landDropsLeft(decision) && same.length < castableCount(decision, name)) {
+        plan.push({ name, kind });
+      } else if (same.length) {
+        const cur = same[same.length - 1];
+        plan = plan.filter(p => p !== cur);                                    // toggle that land off
+      } else { plan = plan.filter(p => p.kind !== 'land'); plan.push({ name, kind }); }
       // A queued land drop consumes a land that can no longer feed Land's Edge -> trim excess.
       while (leCount(plan) > leMax(decision, plan)) { const i = plan.map(p => p.kind).lastIndexOf('le'); if (i < 0) break; plan.splice(i, 1); }
     } else {
@@ -133,6 +165,7 @@
     return n;
   }
 
-  return { planLand, handCounts, stagedCounts, castableCount, plannedCount, leCount, leMax, encodeLine, queueCard, isSacOut,
+  return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
+           leCount, leMax, encodeLine, encodeSegments, queueCard, isSacOut,
            nextDimension, filterByChoice, dimensionsRemaining, choiceOf, subOf };
 });
