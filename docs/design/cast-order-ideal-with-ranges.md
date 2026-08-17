@@ -245,6 +245,84 @@ fired" and "the ladder fired and the ideal order paid" look identical in play an
 things -- the first measurement above was the former, and only a probe that counts entries could
 say so.
 
+## MEASURED (smoke, seed 1001, vs committed GT) -- the promotion is the weak half, not the range
+
+Per-game deltas, weighted by each case's game count over all 15,875 smoke games (negative = better).
+Every arm includes `MTG_ORDER_OPAQUE`, without which none of the rest has a domain.
+
+| arm | levers | per-game | verdict |
+|---|---|---|---|
+| B | `ORDER_OPAQUE` | **-0.00246** | ordering the opaque set is a real win on its own |
+| C | + `IDEAL_ORDER` | **+0.00151** | the promotion is a net LOSS |
+| D | + `ORDER_RANGE` (producer-declining ladder) | +0.00151 | ladder inert -- identical to C on every key |
+| D2 | + `ORDER_RANGE` (producer-aware) | **-0.00038** | the ladder repairs most of the promotion |
+| F | `ORDER_OPAQUE` + `IDEAL_ORDER` + `IDEAL_CANTRIP_MV=1`, **no range** | -0.00094 | the ladder's isolation arm |
+| E | F + `ORDER_RANGE` | **-0.00265** | best arm: mv bar + range, both needed |
+
+**Two suite runs of the SAME MODE must never run concurrently** -- `test/logs/<mode>/wins/` and
+`test/results/<mode>.env` are fixed per-mode paths, so a second run clobbers the first's per-game
+output and both arms read back a mixture. Two arms were invalidated that way here (the tell: a
+case reporting `got=(no output)`, and a digest appearing in one arm that belongs to the other).
+
+Per key (delta = got - exp; "churn" = play changed, avg identical):
+
+* **B**: burn churn x3; hinata d0 **-0.0060**, d3 +0.0067, d5 +0.0133; dragonstorm d0 **-0.0340**,
+  d3 -0.0066, d5 churn.
+* **C**: burn churn x3; th d0 +0.0140; hinata d0 **+0.0370**, d3 +0.0267, d5 +0.0267; dragonstorm
+  d0 -0.0340, d3 -0.0066; mirrorwing d0 +0.0020.
+* **D2**: as C except hinata d0 **+0.0090**, d3 **+0.0133**, d5 +0.0267.
+* **E**: burn churn x3; th **PASS** (Treasure Hunt is mv 2, so no longer promoted); hinata d0
+  **+0.0050**, d3 +0.0133, d5 +0.0267; dragonstorm d0 -0.0340, d3 -0.0066; mirrorwing d0
+  **-0.0160** (was +0.0020 -- Expressive Iteration at mv 2 was costing, not paying).
+
+### The discernment bar was wrong, and the measurement says where
+
+`IdealOrderCantripMaxMv` was set to 2 by the reasoning that Ponder/Preordain (1) and
+Expressive Iteration / Light Up the Stage / Treasure Hunt (2) all leave the turn's mana
+"essentially intact". Measured, that is false for the mv-2 half: dropping the bar to **1** removes
+th's +0.0140 entirely and flips mirrorwing d0 from +0.0020 to **-0.0160**, while costing nothing.
+A 2-mana cantrip is not a free look on these decks -- on a turn with 2-3 lands it IS the turn, which
+is the same argument that already excluded Magma Opus, just applied at the right threshold.
+
+Five things this settles:
+
+1. **The ORDER is worth having on its own.** Nearly all of arm B's win is dragonstorm d0 (-0.0340)
+   -- a ritual deck whose opaque sets were being cast in plan order. That is step 3 paying off with
+   principle 1 switched off. The promotion is only worth having once BOTH corrections are in
+   (the range, and the mv-1 bar): arm C +0.00151 -> arm E -0.00265.
+2. **The range works, and it is the single largest thing making the promotion viable.** Isolated at
+   the mv-1 bar (F vs E), the ladder is worth **-0.0017 per game** -- it recovers 83% of what the
+   promotion breaks on hinata d0 (+0.0300 -> +0.0050) and more than doubles the arm's total. And
+   arm D vs D2 shows the same lever is worth NOTHING when its projection declines producers: a
+   lever that early-outs looks exactly like a lever that fires and finds nothing, and only a probe
+   that counts ENTRIES tells them apart.
+3. **The best arm's margin over ordering-alone is THIN, and it is two decks pulling opposite ways.**
+   E beats B by only -0.00019 per game: mirrorwing d0 -16.0 game-turns against hinata +13.0. The
+   confident result on these seeds is `MTG_ORDER_OPAQUE` (-0.00246, almost all of it dragonstorm
+   d0); the promotion on top is at best a wash, and only after both corrections. Held-out seeds
+   should decide whether E's margin survives, and adoption is the USER's call either way.
+4. **The hinata regression is NOT truncation.** Same case (d3, 150 games, seed 1001) at 100x the
+   budget: base 5.7400 / 5.7067 / 5.7000 and promotion 5.7667 / 5.7333 / 5.7267 at budget
+   10 / 100 / 1000 -- the gap is +0.0267, +0.0266, +0.0267. Constant across two orders of
+   magnitude, so the search is not being starved; casting the cantrip first is simply worse play
+   there.
+
+### Why principle 1 under-delivers here: the engine already owns half of it
+
+"Draw before playing land or rituals" is two rules, and a cast-order rank can only express the
+second one -- the land drop is not a cast and is not in `CastOrderRank`'s domain at all:
+
+* **At depth > 0 the land drop is FOLDED INTO THE SEARCH** (`fold_land` in AIEngine::TakeTurn, and
+  `MTG_MAIN2_DROP` extends it to the second main). The search already weighs "land before or after
+  the cantrip", so promoting the cantrip ahead of the *casts* adds nothing there and only costs.
+* **At depth 0 the rule exists as ONE hand-written deck special case** -- "TH before land drop":
+  when Treasure Hunt is castable and no Reliquary Tower / Land's Edge is out, defer the land drop
+  so a land TH draws can be played. That is principle 1, for one card, written by hand.
+
+So the untested half of principle 1 is the *generalisation of that special case* to any castable
+promoted cantrip at depth 0 -- a land-drop deferral, not a cast-order rank. That is the candidate
+this measurement points at, and it is a different mechanism from the one measured above.
+
 ## Build order
 
 Each step is independently measurable, default-off, and byte-identical off.
