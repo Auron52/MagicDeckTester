@@ -142,6 +142,19 @@ node    test/viewer_linebuild_check.js     # browser line-building layer
   clean terminal (the `decide(deck,seed,gi,choices)→json` contract). Reports `repaired` /
   `play-drift` / `shuffle-dead` / `ENUM-GAP` as information; `--strict` also fails on play-drift
   and enum-gap. See docs/design/reference-intent-replay.md.
+- **`test/play_drive.js`** — the same two routes (`/api/step`, `/api/validate`) driven from a script
+  instead of a browser, so a line a user PASTED can be replayed headlessly and each commit timed:
+
+  ```bash
+  node test/play_drive.js --deck "Mirrorwing Dragon.cod" --seed 22 --gi 21 --dump \
+       --lines "land=Forest;cast=Elvish Mystic" --lines "land=Gruul Turf;cast=Elvish Mystic" ...
+  ```
+
+  `--pre a,b,c` pins the opening mulligan/bottom picks, `--prefer <text>` answers each board-target
+  prompt with the option whose label contains it, `--dump` prints the board (with tap state) at every
+  frame, and every step prints its wall time — which is how "committing is slow" became the measured
+  30ms → 2.1s → 21s → 31s → timeout escalation behind viewer issues #4/#8/#11.
+
 - **`viewer_linebuild_check.js`** — drives the **actual** GUI line-building code (`linebuild.js`,
   the same module `index.html` loads) headlessly: for every main-phase decision the user played, it
   rebuilds the chosen plan's land + hand casts via `LineBuild.queueCard()` and asserts the line

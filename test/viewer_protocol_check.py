@@ -335,6 +335,43 @@ def free_cast_intent(dec, kept, ri):
     return None
 
 
+def target_intent(dec, kept, ri):
+    """Answer an unaligned `target` frame from the RECORDED INTENT, not from a blind default.
+
+    A solo-target trick's target used to be a PLAN variant ("cast: Scale the Heights → Goblin
+    Instigator"), so references saved then recorded it inside the chosen plan's action
+    (`enchant_target_name`) and carry no `target` frame at all. It is now asked at RESOLUTION off
+    the board -- the plan no longer fans one variant per target -- so those references hit a frame
+    they predate, and the engine default aims somewhere else (Mirrorwing s3_gi2: the reference
+    pumped Goblin Instigator, the default picks another 1/1 and the win slips a turn). The
+    reference does record what it wanted; read it. Same shape as free_cast_intent.
+
+    Returns (pick, source) or None when the reference says nothing (caller falls back).
+    """
+    src, turn = dec.get("source"), dec.get("turn")
+    if not src:
+        return None
+    for rec in reversed(kept[:ri]):                 # the plan this cast came from, most recent first
+        rd = rec.get("decision") or {}
+        if rd.get("type") != "main_phase" or rd.get("turn") != turn:
+            continue
+        chosen = rec.get("chosen")
+        if not isinstance(chosen, int) or chosen < 0:
+            continue
+        plan = next((p for p in (rd.get("plans") or []) if p.get("index") == chosen), None)
+        if not plan:
+            continue
+        want = next((a.get("enchant_target_name") for a in (plan.get("actions") or [])
+                     if a.get("card") == src and a.get("enchant_target_name")), None)
+        if not want:
+            continue
+        for o in (dec.get("options") or []):
+            if (o.get("label") or "").startswith(want):
+                return o.get("index"), f"recorded-intent({want})"
+        return None
+    return None
+
+
 def check_reference(path, collect=None):
     """Replay one reference by INTENT, validating the contract at every step.
 
@@ -463,6 +500,11 @@ def check_reference(path, collect=None):
                 # free_cast_intent). Falls back to the engine default (decline) when the reference
                 # says nothing about that phase.
                 intent = free_cast_intent(dec, kept, ri)
+                pick, src = intent if intent else engine_default(dec)
+            elif dec.get("type") == "target":
+                # A trick target that used to ride the PLAN and is now asked at resolution: aim it
+                # where the reference's own plan aimed it (see target_intent).
+                intent = target_intent(dec, kept, ri)
                 pick, src = intent if intent else engine_default(dec)
             else:
                 pick, src = engine_default(dec)

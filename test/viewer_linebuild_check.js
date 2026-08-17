@@ -136,6 +136,53 @@ function checkDimensionWalk() {
   return fails;
 }
 
+// The BONUS LAND DROP path (viewer issue #7). A Scale the Heights / Explore grant makes
+// me.land_drops_left > 1, and the engine's Plan still carries ONE land -- so a two-land turn is
+// committed as consecutive SEGMENTS. Both halves of that live here (queueCard must ADD rather than
+// replace; encodeSegments must split lands-first), and neither is visible to the reference sweep,
+// since every saved reference predates the field. Synthetic + binary-free, like the dimension walk.
+function checkBonusLandDrop() {
+  const hand = [{ name: 'Forest', kind: 'land' }, { name: 'Forest', kind: 'land' },
+                { name: 'Mountain', kind: 'land' }, { name: 'Gold Rush', kind: 'nonpermanent' }];
+  const two = { me: { hand, land_drops_left: 2 } };
+  const one = { me: { hand, land_drops_left: 1 } };
+  const fails = [];
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+  // Two drops: two DIFFERENT lands + a cast -> land, then land + cast.
+  let p = [];
+  p = LB.queueCard(two, p, 'Forest', 'land');
+  p = LB.queueCard(two, p, 'Mountain', 'land');
+  p = LB.queueCard(two, p, 'Gold Rush', 'nonpermanent');
+  if (!eq(LB.encodeSegments(p), ['land=Forest', 'land=Mountain;cast=Gold Rush']))
+    fails.push(`two drops -> ${JSON.stringify(LB.encodeSegments(p))}`);
+
+  // Two drops, two copies of the SAME land: both queue (the copy cap is the hand, not the name).
+  let q = [];
+  q = LB.queueCard(two, q, 'Forest', 'land');
+  q = LB.queueCard(two, q, 'Forest', 'land');
+  if (!eq(LB.encodeSegments(q), ['land=Forest', 'land=Forest']))
+    fails.push(`two drops, two Forests -> ${JSON.stringify(LB.encodeSegments(q))}`);
+
+  // One drop: a second land is still a CORRECTION (replace), and the same land toggles OFF.
+  let r = [];
+  r = LB.queueCard(one, r, 'Forest', 'land');
+  r = LB.queueCard(one, r, 'Mountain', 'land');
+  if (!eq(LB.encodeSegments(r), ['land=Mountain'])) fails.push(`one drop replace -> ${JSON.stringify(r)}`);
+  let t = [];
+  t = LB.queueCard(one, t, 'Forest', 'land');
+  t = LB.queueCard(one, t, 'Forest', 'land');
+  if (t.length) fails.push(`one drop, same land twice should toggle off -> ${JSON.stringify(t)}`);
+
+  // No land_drops_left field (every saved reference): the one-drop rules must still apply.
+  const legacy = { me: { hand } };
+  let u = [];
+  u = LB.queueCard(legacy, u, 'Forest', 'land');
+  u = LB.queueCard(legacy, u, 'Mountain', 'land');
+  if (!eq(LB.encodeSegments(u), ['land=Mountain'])) fails.push(`legacy payload -> ${JSON.stringify(u)}`);
+  return fails;
+}
+
 function main() {
   const refs = collectRefs();
   if (!refs.length) { console.log('no reference games found under references/'); return 0; }
@@ -162,7 +209,11 @@ function main() {
   dimFails.forEach(m => console.log(`  FAIL  choose-picker walk: ${m}`));
   console.log(`Viewer choose-picker: 2-tutor line asks ${dimFails.length ? 'WRONG' : '2 pickers x 12 choices'} ` +
               `(${dimFails.length} FAIL)`);
-  return (fail + dimFails.length) ? 1 : 0;
+  const landFails = checkBonusLandDrop();
+  landFails.forEach(m => console.log(`  FAIL  bonus land drop: ${m}`));
+  console.log(`Viewer bonus land drop: ${landFails.length ? 'WRONG' : 'two drops commit as two segments'} ` +
+              `(${landFails.length} FAIL)`);
+  return (fail + dimFails.length + landFails.length) ? 1 : 0;
 }
 
 process.exit(main());
