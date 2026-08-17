@@ -246,6 +246,9 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             case Action::Kind::CastFromHand:
                 tag = a.card_name;
                 if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + EnchantTargetName(s, a.enchant_target); }
+                // The no-own-creature "cash the cantrip off their body" variant (kTrickOpponentTarget).
+                else if (a.enchant_target == kTrickOpponentTarget)
+                { tag += " \xE2\x86\x92 opponent's creature"; }
                 break;
             case Action::Kind::CastFromGraveyard: tag = a.card_name + " (retrace)"; break;
             case Action::Kind::ActivateVial:      tag = a.card_name + " (vial)"; break;

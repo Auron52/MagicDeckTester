@@ -4492,6 +4492,35 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
             }
             }
+            // No legal OWN target anywhere (empty board, or every creature filtered out) -- but the
+            // spell says "target CREATURE", not "target creature you control", so the opponent's is
+            // legal and the cast is still worth its RIDER (the cantrip draw / Treasure / life /
+            // bonus land drop). Without this a hand of Mountain + Ancestral Anger on turn 1 could
+            // not cash the cantrip at all (viewer issue #10, s25 gi24). ONE canonical variant is
+            // enough: the passive opponent never attacks or blocks, so which of their creatures
+            // takes the inert pump cannot matter -- and emitting it only in the no-own-target case
+            // leaves every normal board's branching factor untouched.
+            // `others == 0` is the precise test: with no own creature on the battlefield every
+            // own-target variant emitted above is a HAND creature, i.e. a line that must cast that
+            // creature first (SubsetHasMissingTrickTarget) -- so on a turn that cannot afford it,
+            // there is no present-tense target at all. (With at least one own body the provider's
+            // rider fallback guarantees one, so no opponent variant is needed.)
+            // `trick_up_to_one` is excluded: its untargeted cast (emitted just below) already
+            // delivers the rider with no target at all, so an opponent-target variant would be a
+            // duplicate line -- and one that shares its plan signature, since the signature only
+            // records a POSITIVE enchant_target.
+            if (others == 0 && !def.params.trick_up_to_one
+                && (def.params.cast_draw > 0 || def.params.creates_treasures > 0
+                    || def.params.cast_lifegain > 0 || def.params.grants_extra_land_drop > 0))
+            {
+                for (const Permanent& op : state.battlefield)
+                {
+                    if (op.controller_index == state.active_player_index) { continue; }
+                    if (!op.card.IsCreature() && !op.is_animated) { continue; }
+                    emit(kTrickOpponentTarget, 0);
+                    break;
+                }
+            }
             // USER rule (2026-08-12): with a magnet out, the untargeted "bank the Treasure, no
             // trigger" variant is dominated by targeting the magnet (same mana, strictly more
             // Treasures + pumps) -- suppressed under the same tricktarget gate (magnet_on_bf is
@@ -19709,7 +19738,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     // target). The land + the plan index come along so we can both honour the player's ORDER and
     // surface genuine sub-decision choices.
     struct Cand { int idx; std::vector<std::string> order; std::string sig, label;
-                  std::vector<std::string> cards; std::vector<SubChoice> subs; int sacs; };
+                  std::vector<std::string> cards; std::vector<SubChoice> subs; int sacs;
+                  int trick_rank; };   // solo-target-trick representative preference (lower = better)
     std::vector<Cand> cands;
     for (size_t i = 0; i < plans.size(); ++i)
     {
@@ -19808,15 +19838,55 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             toks.push_back(tok);
             artCards.push_back(card);
         };
+        // Solo-target-trick representative preference (see the trick branch below): magnet target 0,
+        // any other creature 1, untargeted 2, summed over the plan's trick casts. Lower wins the
+        // collapse, so the plan the viewer commits -- and therefore the PRESELECTED DEFAULT of the
+        // board-click target dialog that follows -- aims at the copy magnet (viewer issue #3: the
+        // second Ancestral Anger defaulted to Ignoble Hierarch instead of Zada).
+        int trickRank = 0;
         for (const Action& a : p.actions)
         {
             if (!a.tutor_target.empty())   { addSub(a.card_name + " \xE2\x86\x92 " + a.tutor_target, a.card_name + " \xE2\x86\x92", a.tutor_target, a.tutor_target, "tutor"); }
+            // Zada/Mirrorwing solo-target trick: the target rides enchant_target (the aura precedent),
+            // but it is NOT a sub-decision the human makes HERE. ResolveSoloTargetTrick re-asks it at
+            // RESOLUTION off the board, from the full rules-legal set (every own creature) -- so
+            // emitting it as a variant dimension stacked a redundant "choose how to resolve" dialog in
+            // FRONT of the board click that actually decides it (viewer issue #2; same reasoning as
+            // Ponder's keep/shuffle below). No sub => the plans that differ only in trick target share
+            // a signature and collapse to one representative, ranked magnet-first just above.
+            const CardDefinition* trdef = (a.enchant_target != 0 || a.kind == Action::Kind::CastFromHand)
+                                        ? CardDatabase::Instance().Lookup(a.card_name) : nullptr;
+            const bool is_trick = trdef && trdef->params.solo_target_trick;
+            if (is_trick)
+            {
+                // <= 0: the untargeted (up-to-one) cast, or the opponent-creature variant --
+                // both last-resort lines, so they lose the collapse to any real own target.
+                if (a.enchant_target <= 0) { trickRank += 2; }
+                else
+                {
+                    bool magnet = false;
+                    for (const Permanent& perm : state.battlefield)
+                        if (perm.card.m_number == a.enchant_target)
+                        {
+                            const CardDefinition* pd = CardDatabase::Instance().LookupCached(perm.card);
+                            magnet = pd && pd->params.copies_solo_targeted_spells; break;
+                        }
+                    if (!magnet)
+                        for (const Card& hc : state.ActivePlayer().hand)
+                            if (hc.m_number == a.enchant_target)
+                            {
+                                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                                magnet = hd && hd->params.copies_solo_targeted_spells; break;
+                            }
+                    trickRank += magnet ? 0 : 1;
+                }
+            }
             // Aura enchant TARGET: which creature this Aura attaches to. Emit a sub per legal target so the
             // viewer surfaces a "choose creature" art-grid (mirrors tutor_target) instead of silently taking
             // the heuristic's first-enumerated pick -- the human IS the decision-maker here. Resolve the
             // stable m_number to the creature's name for the grid art; the target is one of the player's
             // creatures on the battlefield (LegalEnchantTargets), so this always resolves.
-            if (a.enchant_target > 0)
+            if (a.enchant_target > 0 && !is_trick)
             {
                 std::string etn;
                 for (const Permanent& perm : state.battlefield)
@@ -19979,7 +20049,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             label += " \xE2\x80\x94 ";   // em dash separating the line from its sub-decisions
             for (size_t t = 0; t < toks.size(); ++t) { label += (t ? "; " : "") + toks[t]; }
         }
-        cands.push_back({ static_cast<int>(i), orderNames, sig, label, artCards, subs, planSacs });
+        cands.push_back({ static_cast<int>(i), orderNames, sig, label, artCards, subs, planSacs, trickRank });
     }
 
     // Honour the player's ORDER: prefer candidates whose cast sequence equals the queued order, so
@@ -20032,7 +20102,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                      [&](const Cand* a, const Cand* b) {
                          bool pa = isPayable(a->idx), pb = isPayable(b->idx);
                          if (pa != pb) { return pa; }        // payable before unpayable
-                         return a->sacs < b->sacs;           // then save one-shot sources when we can
+                         if (a->sacs != b->sacs) { return a->sacs < b->sacs; }  // save one-shot sources
+                         return a->trick_rank < b->trick_rank;  // then aim tricks at the copy magnet
                      });
 
     // NOTE (viewer issue #1 payability accept-gate): a matched-but-UNPAYABLE plan being accepted lets
