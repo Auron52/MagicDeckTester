@@ -1,4 +1,4 @@
-# Regression ground truth -- commit f5d20bf2  date 2026-08-17
+# Regression ground truth -- commit 68038f9c  date 2026-08-17
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -31,9 +31,9 @@ auras_smoke_d5_s1001=4.1320/6fac32fc45b724b1
 goblins_smoke_d0_s1001=4.0970/2366ad94c4c6cdb5
 goblins_smoke_d3_s1001=3.6467/795b4fac4a24e16d
 goblins_smoke_d5_s1001=3.5867/ae35ec1508aa9f11
-creature_giving_smoke_d0_s1001=5.7690/84ba9be4148c5a7c
-creature_giving_smoke_d3_s1001=4.8067/cbb6a847578b1474
-creature_giving_smoke_d5_s1001=4.8133/c5b09a5bfc8974a3
+creature_giving_smoke_d0_s1001=5.6230/421f78ba94e6f925
+creature_giving_smoke_d3_s1001=4.7333/74b12a52d89b2f70
+creature_giving_smoke_d5_s1001=4.6800/cf65563344116bc2
 mirrorwing_smoke_d0_s1001=6.0490/9783f6a29088919a
 mirrorwing_smoke_d3_s1001=5.0600/0629ad73d789aef8
 mirrorwing_smoke_d5_s1001=5.1867/c029c532937cc01f
@@ -87,11 +87,11 @@ goblins_regression_d3_s2002=3.8167/92fd3d35ef63657a
 goblins_regression_d3_s3003=3.8400/1a90eb7f241144fa
 goblins_regression_d5_s2002=3.8400/a39eac96f6b00c38
 goblins_regression_d5_s3003=3.8200/63410b335e444179
-creature_giving_regression_d0_s2002=5.8560/e0b42498388862ce
-creature_giving_regression_d3_s2002=4.8333/8f2c809d9be075d3
-creature_giving_regression_d3_s3003=4.7600/d6f2c50f296365a3
-creature_giving_regression_d5_s2002=4.7880/15838f61b1760d9a
-creature_giving_regression_d5_s3003=4.7360/9ab5f873be61901a
+creature_giving_regression_d0_s2002=5.7060/389b82089756192f
+creature_giving_regression_d3_s2002=4.6700/0e040da85438a4b9
+creature_giving_regression_d3_s3003=4.7133/abce0e575f25369a
+creature_giving_regression_d5_s2002=4.6400/b25b34229cff3d6c
+creature_giving_regression_d5_s3003=4.6920/cb0e3f456fccb3d8
 mirrorwing_regression_d0_s2002=6.0270/09a53858e7278b17
 mirrorwing_regression_d3_s2002=4.8050/faa3ed985cf6c147
 mirrorwing_regression_d3_s3003=4.9200/b4ea0c5e6d64f125
