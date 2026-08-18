@@ -9064,7 +9064,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // DorkReserveEnabled): a land has no use but its mana, a creature does, so pay off the lands
     // whenever the whole turn can be. A mana ROCK is deliberately NOT reserved: it has no other use,
     // so holding it would only make the solve fail and cost a second backtrack.
-    if (DorkReserveEnabled() && n <= 64)
+    // g_scripted_tapmode == 1: this plan variant is the SEARCHED "spend the dorks" branch, so skip
+    // the hold entirely and let the solve spend them like any other source (UnprunedGate::TapReserve).
+    if (DorkReserveEnabled() && g_scripted_tapmode != 1 && n <= 64)
     {
         for (int i = 0; i < n; ++i)
         {
@@ -9189,6 +9191,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     ScriptedReorder _sr(plan.ponder_choice);   // searched Ponder disposition (own pin; see ScriptedReorder)
     ScriptedTutor _stut(plan.tutor_choice);    // searched tutor pick by index, resolved at the true
                                                // mid-plan state (MTG_TUTOR_AXIS_RESOLVE); -1 inert
+    // Searched hold-vs-tap of the mana creatures. Scoped like the pins above, but NOT consumed by
+    // its first reader: every payment in the apply -- the whole-turn prepay and any post-draw
+    // re-solve -- must see the same mode, or one plan would be scored under two payment policies.
+    ScriptedTapMode _stm(plan.tapmode_choice);
 
     // Searched Goblin Lackey put: copied onto the STATE (not a scoped guard) because the trigger
     // fires later, in this turn's combat-damage step. Only a real variant writes it, so a plan that
@@ -15108,6 +15114,47 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
                               std::make_move_iterator(extra.end()));
+    }
+
+    // SEARCHED HOLD-vs-TAP of the mana creatures (UnprunedGate::TapReserve, default OFF).
+    //
+    // The oracle-first audit docs/design/mana-source-reservation.md has prescribed since 2026-07,
+    // and the answer to the USER's 2026-08-17 point that "general rules themselves lose to
+    // situational awareness": rather than rank the sources, emit the ALTERNATIVE PAYMENT as a plan
+    // variant and let the rollout score it. The heuristic stays the branch's default.
+    //
+    // Emitted only when the board actually holds an untapped mana creature the hold could bite on
+    // -- otherwise mode 1 pays identically and the variant is a duplicate that costs a rollout to
+    // discover it changed nothing (the same guard the cleanup-discard axis learned to apply).
+    if (DecisionUnpruned(UnprunedGate::TapReserve) && !HumanPlayActive())
+    {
+        const int active_bf = state.active_player_index;
+        bool has_dork = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active_bf || p.tapped || !p.card.IsCreature()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+            { has_dork = true; break; }
+        }
+        if (has_dork)
+        {
+            std::vector<TurnSolver::Plan> extra;
+            for (const TurnSolver::Plan& p : all)
+            {
+                // Base plans only -- one axis at a time, so cost stays additive (same trade as the
+                // scry / etbdig / discard axes above).
+                if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.tapmode_choice != 0) { continue; }
+                TurnSolver::Plan v = p;
+                v.tapmode_choice = 1;
+                extra.push_back(std::move(v));
+            }
+            TRACE("tapreserve", "T%d %zu plan(s) -> %zu spend-the-dork variant(s)",
+                  state.turn_number, all.size(), extra.size());
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
     }
 
     // SEARCHED CLEANUP DISCARD -- the post-dedup fan-out for the END-OF-TURN shed. Unlike every

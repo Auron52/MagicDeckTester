@@ -6639,6 +6639,31 @@ struct ScriptedEtbDig
     int saved;
 };
 
+// Searched HOLD-vs-TAP of the mana creatures (Plan::tapmode_choice, UnprunedGate::TapReserve).
+// 0 (default) == the shipped heuristic: reserve every mana creature for the whole turn and sort
+// them to the back of the tap backtracker's candidate list. 1 == spend them like any other source.
+//
+// This is the axis the static rules could not be: whether a body is worth more untapped than the
+// mana it makes is a per-LINE question (does anything pump it, does it swing for damage, is the
+// alternative source finite), and every static encoding of it measured worse than the blanket rule
+// (see the rejected table in docs/design/mana-source-reservation.md). So make it a branch and let
+// the rollout score both, with the blanket rule as the branch's DEFAULT.
+//
+// UNLIKE the etbdig/tutor pins this is NOT consumed by its first reader: it must hold for every
+// payment in the apply, so the scope is the whole plan. Not-reserving is strictly MORE permissive
+// than reserving (the hold only ever removes sources from a solve), so a variant can never make an
+// enumerated plan unexecutable -- it only changes which sources end up tapped.
+extern thread_local int g_scripted_tapmode;
+
+struct ScriptedTapMode
+{
+    explicit ScriptedTapMode(int k) : saved(g_scripted_tapmode) { g_scripted_tapmode = k; }
+    ~ScriptedTapMode() { g_scripted_tapmode = saved; }
+    ScriptedTapMode(const ScriptedTapMode&) = delete;
+    ScriptedTapMode& operator=(const ScriptedTapMode&) = delete;
+    int saved;
+};
+
 // Searched TUTOR pick by index (Plan::tutor_choice, MTG_TUTOR_AXIS_RESOLVE=1): k >= 0 makes the
 // next tutor resolution take the k-th candidate of the provider ranking computed AT THAT
 // RESOLUTION -- i.e. on the true mid-plan state -- instead of the front. Consumed by the first

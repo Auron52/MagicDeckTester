@@ -1610,7 +1610,8 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     // chain member was reached by this node's loop before ci", so any permutation must precede the
     // chain build, never follow it. Skipped while the flow hint is live -- that permutation is the
     // whole point of MTG_FLOW_ORDER and this one would undo it.
-    if (top_level && !g_flow_order_live && s_src_cands_buf.size() > 1 && TapSpareCreaturesEnabled())
+    if (top_level && !g_flow_order_live && s_src_cands_buf.size() > 1 && TapSpareCreaturesEnabled()
+        && g_scripted_tapmode != 1)   // 1 == the searched "spend the dorks" branch (TapReserve)
     {
         std::stable_partition(s_src_cands_buf.begin(), s_src_cands_buf.end(),
             [](const std::pair<int, const CardDefinition*>& c)
