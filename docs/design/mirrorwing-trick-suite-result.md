@@ -111,6 +111,99 @@ above baseline. **The user's prior was that Draught -- "very powerful" -- would 
 does not support that**, but the per-slot standard errors are 0.007-0.010 against differences of
 that same size, so it is suggestive at best.
 
+## Overnight three-arm campaign (2026-08-18 night): the per-card answer
+
+180,000 games (60,000 per arm, one seed, one shared apparatus), full per-game traces, plus a
+DEDICATED isolated arm `libonly` = base with Twinflame x3 -> Luxurious Libation x3 (its own keep
+table, 202,878 cells, 6.2 h).
+
+| comparison | delta | se | t | diverged |
+|---|---|---|---|---|
+| base -> libonly (Twinflame->Libation ONLY) | **-0.0135** | 0.0027 | -5.06 | 17.8% |
+| base -> trick (full 11-card swap) | **-0.0289** | 0.0038 | -7.62 | 34.5% |
+| libonly -> trick (the other 8 cards) | -0.0154 | 0.0033 | -4.64 | 27.9% |
+
+(The three sum exactly, but that is an arithmetic identity from measuring all arms on the same
+games, not independent confirmation.)
+
+### The replace map was wrong, and fixing it changed the per-card answer
+
+User, 2026-08-18: *"why are we replacing Expedite, when the other spell is basically a direct
+replacement"*. Correct -- Impolite Entrance IS Expedite's clone under this engine. The original map
+sent Expedite's slots to Fortifying Draught, which made every per-slot attribution an artifact of
+bookkeeping. Corrected map: Expedite->Entrance, Scale->Entrance, Anger->Draught, Twinflame->Libation.
+
+That also embeds a PLACEBO inside the main comparison -- the Expedite->Entrance slot holds
+engine-identical cards, so it must read zero. It reads **-0.0107 +/- 0.0066** (base vs trick) and
+**-0.0084 +/- 0.0040** (libonly vs trick): consistently ~-0.01. That is the residual bias of the
+slot-attribution method, MEASURED rather than assumed, and every slot estimate should be read net
+of it.
+
+| substitution | slot estimate | placebo-corrected | independent arm |
+|---|---|---|---|
+| Scale the Heights -> Impolite Entrance | -0.0920 +/- 0.0123 | **-0.081** | -- |
+| Twinflame -> Luxurious Libation | -0.0462 +/- 0.0106 | **-0.036** | **-0.0329 +/- 0.0058** |
+| Ancestral Anger -> Fortifying Draught | -0.0007 +/- 0.0090 | **+0.010** | -- |
+| Expedite -> Impolite Entrance | -0.0107 +/- 0.0066 | 0 by construction | -- |
+
+The placebo-corrected Twinflame->Libation (-0.036) lands on the dedicated arm's independent
+measurement (-0.0329). Two methods, different apparatus, agreeing.
+
+### Two results that invert the starting assumptions
+
+**Fortifying Draught is not carrying the swap; it may be a downgrade.** Anger -> Draught is null
+(-0.0007 +/- 0.0090) from base-vs-trick and **+0.0150 +/- 0.0068 (worse)** from libonly-vs-trick.
+Ancestral Anger -- a {R} cantrip whose pump escalates off its own graveyard copies -- is at least as
+good. The prior that Draught, "very powerful", would dominate is not supported.
+
+**The biggest single win is Scale the Heights -> Impolite Entrance** (-0.081 corrected, t = -7.49),
+a substitution that only exists BECAUSE the map was corrected.
+
+### Mechanism, from the traces
+
+Among divergences with IDENTICAL opening hands and identical mulligan counts (pure play), Libation
+beats Twinflame by deploying turns earlier:
+
+```
+gi=7774   base T8 -> libonly T4   base: T4 Twinflame({1}{R})
+                                  lib : T2 Luxurious Libation({1}{G})
+gi=14536  base T9 -> libonly T5   base: T7 Twinflame x2
+                                  lib : T2 Libation({X}{G}); T4 Libation({5}{G})
+gi=14562  base T9 -> libonly T5   base: never cast it
+                                  lib : T2 Luxurious Libation({X}{G})
+```
+
+Libation is live at X=0 for one mana -- it still makes a 1/1 Citizen and still triggers the magnet
+fan-out -- while Twinflame needs {1}{R} AND a board worth copying. In a deck that chains spells under
+Zada, a one-mana body-maker that is never dead beats a stronger card you cannot cast yet.
+
+### The undrawn-library effect scales with the size of the swap
+
+The control (games where NEITHER arm drew a substituted card) was the worry in the first
+measurement. Across the three pairs it tracks how much of the library changed:
+
+| pair | cards changed | control delta |
+|---|---|---|
+| base vs libonly | 3 | **+0.0013 +/- 0.0015** (zero) |
+| base vs trick | 11 | -0.0124 +/- 0.0025 |
+| libonly vs trick | 8 | -0.0157 +/- 0.0016 |
+
+With only 3 cards changed it VANISHES. So the effect is a genuine deck-composition effect on the
+search's rollouts, not a fixed modelling bias attached to the new cards -- which is the reassuring
+reading of the open question above, though it does not fully close it.
+
+### Artifacts
+
+`logs/overnight/reports/`: `REPORT.md`, three TSVs cataloguing all 48,128 divergent games
+(gi, seed, both win turns, first-differing turn, mulligans, slots drawn, casts with X), and three
+case files with 68 side-by-side per-turn studies plus viewer repro commands.
+
+### The deck this suggests, untested
+
+Keep Ancestral Anger x4 and Expedite x2; take Impolite Entrance for Scale the Heights and Luxurious
+Libation for Twinflame; play NO Fortifying Draught. That drops the one substitution measuring
+nothing and keeps both that measure well.
+
 ## Caveats to carry into any adoption decision
 
 - **Impolite Entrance's trample is NOT modelled** (the goldfish never blocks), so the trick arm is
