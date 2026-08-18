@@ -917,6 +917,14 @@ static bool ColorExactEnabled()
 // Mirrors TurnSolver's s_cco_noncreature_pool, which decides whether the NON-CREATURE flat pool books
 // a colored_creature_only source as {C} (correct) or as wild (the historical over-credit). The colour
 // model must follow whichever the pool used, or the two would disagree about the same board.
+// MTG_COLOR_SEQ: charge a plan's producers' own cost against the BOARD before spending what they
+// make. Default off -- it is a strict tightening of an already-adopted gate, so it changes play.
+static bool SeqProducerCreditEnabled()
+{
+    static const bool v = EnvOn("MTG_COLOR_SEQ");
+    return v;
+}
+
 static bool CcoNoncreaturePoolEnabled()
 {
     static const bool v = EnvOn("MTG_CCO_NONCREATURE_POOL");
@@ -936,7 +944,8 @@ ManaPool PoolCredit(const ManaPool& base, const ManaPool& eff)
     return c;
 }
 
-ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature)
+ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
+                                       const Permanent* skip)
 {
     ColorFeasibility f;
     if (!ColorExactEnabled()) { return f; }
@@ -959,7 +968,9 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature)
 
     auto add = [&](int mask, int count)
     {
-        if (mask == 0 || count <= 0) { return; }   // colourless-only: pays generic, never a pip
+        if (count <= 0) { return; }
+        f.total += count;                          // colourless-only units still pay GENERIC
+        if (mask == 0) { return; }                 // ... but never a coloured pip
         if ((mask & (mask - 1)) != 0) { has_multi = true; }
         for (unsigned s = 1; s < 32; ++s)
         { if (s & static_cast<unsigned>(mask)) { f.cover[s] += count; } }
@@ -972,6 +983,7 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature)
     auto add_one_of_each = [&](int mask)
     {
         if ((mask & (mask - 1)) != 0) { has_multi = true; }   // the SOURCE is still multi-colour
+        for (int i = 0; i < 5; ++i) { if (mask & (1 << i)) { ++f.total; } }
         for (unsigned s = 1; s < 32; ++s)
         {
             int n = 0;
@@ -985,6 +997,7 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature)
     // never saw.
     for (const Permanent& p : state.battlefield)
     {
+        if (&p == skip) { continue; }   // "what would still be payable if this source were gone?"
         if (p.controller_index != active || p.tapped) { continue; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
@@ -1101,6 +1114,27 @@ bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vect
         if (ndm < 16) { masks[ndm] = mask; counts[ndm] = n; ++ndm; }
     };
 
+    // SEQUENCED PRODUCER CREDIT (MTG_COLOR_SEQ). `credit` holds what the plan's own producers make,
+    // and the caller may spend it freely -- but a producer's output does not exist until its own cost
+    // is PAID, and that cost comes from the board. Hinata turn 1: {Sol Ring, Ponder} off a lone
+    // Forbidden Orchard is admitted today because the Orchard covers Ponder's {U} and Sol Ring's
+    // {C}{C} covers the total -- except the Orchard is also the only thing that can pay Sol Ring's
+    // {1}, and {C}{C} can never pay {U}. Unpayable in either order, enumerated anyway, one cast then
+    // silently dropped.
+    //
+    // The bound: paying the producers takes `prod_cost` units from the BOARD. Units outside a colour
+    // set S can absorb at most (total - cover[S]) of that, so at least the remainder must come out of
+    // S itself. Deduct it. Producers' own coloured pips are left OUT of the demand and their whole
+    // mana value charged here instead, which under-constrains their colours -- permissive, so this
+    // can still only prune. Zero producers => zero deduction => byte-identical.
+    int prod_cost = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.ritual_float > 0 || a.rock_mana.Total() > 0) { prod_cost += a.cost.ManaValue(); }
+    }
+    if (!SeqProducerCreditEnabled()) { prod_cost = 0; }
+
     for (int j : sel)
     {
         const Action& a = cands[j];
@@ -1108,6 +1142,8 @@ bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vect
         // The non-creature variant asks the narrower question the flat pool asks: can the NONCREATURE
         // casts alone be paid without the creature-only sources? Same split as noncreature_combined.
         if (noncreature_only && !a.is_noncreature) { continue; }
+        // A producer's own pips are charged via prod_cost above, not here (see the note).
+        if (prod_cost > 0 && (a.ritual_float > 0 || a.rock_mana.Total() > 0)) { continue; }
         int pips[5] = { a.cost.white, a.cost.blue, a.cost.black, a.cost.red, a.cost.green };
         // Un-bake hybrid pips: Card.h stores each in its FIRST colour's flat int, so reading the
         // flat pips alone would demand that colour and false-reject a subset the other half pays
@@ -1135,6 +1171,8 @@ bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vect
         if (need == 0) { continue; }
         int have = cover[s] + credit.wild;
         for (int i = 0; i < 5; ++i) { if (s & (1u << i)) { have += cred[i]; } }
+        // What the producers must draw out of S itself (see the note above).
+        if (prod_cost > 0) { have -= std::max(0, prod_cost - (total - cover[s])); }
         if (need > have) { return false; }
     }
     return true;

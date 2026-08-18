@@ -2776,7 +2776,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // The reserve scope is the other half -- it stops the enabler casts from spending the payoff's
     // scarce colour before the unlock lands. Both no-ops for every plan without that pairing.
     // See TurnSolver::ApplyManaUnlockEquips / ::ManaUnlockColorReserve.
-    PlanSourceReserveScope _unlock_reserve(TurnSolver::ManaUnlockColorReserve(state, plan.actions));
+    PlanSourceReserveScope _unlock_reserve(TurnSolver::PlanReserveSources(state, plan.actions));
     auto fire_unlock = [&]() { TurnSolver::ApplyManaUnlockEquips(state, plan.actions); };
     fire_unlock();
     // Cast-ordering search (C): a committed plan with searched_order set carries an

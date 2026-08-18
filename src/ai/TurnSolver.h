@@ -584,6 +584,26 @@ public:
     static std::vector<int> ManaUnlockColorReserve(const GameState& state,
                                                    const std::vector<Action>& acts);
 
+    // COLOUR-CRITICAL reserve (MTG_COLOR_RESERVE, default off). The batch pre-pay solves the turn's
+    // mana JOINTLY, but it declines on most interesting turns -- producers, {X} spells, per-target
+    // discounts, flood engines -- and every decline routes the turn to a per-cast greedy that can
+    // spend a flexible source an ordered-later cast needed, stranding it (the cast is then silently
+    // dropped). Measured: hinata declines ~81% of its multi-cast turns.
+    //
+    // This holds back the sources the plan cannot afford to lose: a source is CRITICAL when removing
+    // it makes the plan's combined coloured demand infeasible by the same Hall test the enumeration
+    // gate uses. It rides the existing reserve-then-fallback retry, so an early cast pays around a
+    // critical source while the cast that genuinely needs it still takes it on the fallback attempt
+    // -- slack-only, and it can never make a payable cost unpayable. Empty when the lever is off,
+    // when the plan has fewer than two mana casts, or when nothing is critical.
+    static std::vector<int> ColorCriticalReserve(const GameState& state,
+                                                 const std::vector<Action>& acts);
+
+    // The union both apply paths install (unlock pieces + colour-critical). One function so the
+    // executor and the rollout cannot drift on which sources are held.
+    static std::vector<int> PlanReserveSources(const GameState& state,
+                                               const std::vector<Action>& acts);
+
     // --- Human-play line reconciliation (tools/play GUI) ------------------------
     // A human assembles a free-form main-phase line by hand (play a land, cast some
     // spells) and commits it at the phase breakpoint. CheckLine reconciles that line

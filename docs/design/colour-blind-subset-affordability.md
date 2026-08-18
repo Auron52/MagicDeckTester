@@ -311,6 +311,61 @@ allocation bug, not a removed illegal play. One game in 247,775.
 | creature_giving | 11 | 4 | +7 |
 | fivecolour | 5 | 6 | -1 |
 
+### Chasing the remaining drops: two mechanisms tried, both measured INERT
+
+Both are built, sound, and default OFF. Neither is a fix, and the reason they are not is the useful
+part.
+
+**`MTG_COLOR_RESERVE` -- colour-critical reservation.** A source is critical when removing it makes
+the plan's combined coloured demand infeasible by the same Hall test the gate uses; hold those, so an
+early cast pays around them. It rides the existing reserve-then-fallback retry
+(`PlanSourceReserveScope`), so the cast that genuinely needs a critical source still takes it on the
+second attempt -- slack-only, never makes a payable cost unpayable. Both apply paths install it
+through one shared `PlanReserveSources`, so executor and rollout cannot drift.
+Measured: hinata d0 45 -> 44 drops, mirrorwing 4 -> 3, everything else unchanged.
+
+**`MTG_COLOR_SEQ` -- sequenced producer credit.** A producer's output does not exist until its own
+cost is paid, and that cost comes from the board. Hinata turn 1 `{Sol Ring, Ponder}` off a lone
+Forbidden Orchard is admitted today because the Orchard covers Ponder's `{U}` and Sol Ring's `{C}{C}`
+covers the total -- except the Orchard is also the only thing that can pay Sol Ring's `{1}`, and
+`{C}{C}` can never pay `{U}`. Unpayable in either order. The bound: paying the producers takes
+`prod_cost` units from the board, units outside a colour set S absorb at most `total - cover[S]` of
+that, so the remainder must come out of S. Probed at 102,448 rejections, zero false rejects.
+Measured: hinata d0 45 -> 43 drops. Nothing elsewhere.
+
+Kept default-off rather than deleted, on the `MTG_CCO_NONCREATURE_POOL` precedent -- a withdrawn
+mechanism stays reachable in one binary so its measurement is reproducible.
+
+### Why they are inert: my "allocation failure" diagnosis was wrong for the bulk
+
+The previous section of this document blamed whole-turn ALLOCATION for the remaining drops. That is
+true of the one game it was derived from and false of the population. Two corrections:
+
+**Most drops are deliberate optimism, not defects.** `GameLogger.h` says so directly: enumeration is
+intentionally optimistic *because the search discards unpayable lines*, so a suite run drops
+thousands. dragonstorm d0 drops 1665 of 2497 attempts. The number that matters is STRANDED
+ACCELERANTS, and both levers above leave it untouched (hinata d0 18, d3 162; dragonstorm d0 267,
+d3 136 -- identical on every arm).
+
+**The stranded accelerants are a ritual-chain bootstrap problem.** `MTG_AFFORD_AUDIT=2` on
+dragonstorm:
+
+```
+[afford-drop] t3 Seething Song  cost={2}{R}  total-short  pool[R1]
+    UNTAPPED{Mountain,Dwarven Hold,}  TAPPED{}
+```
+
+**Nothing is tapped.** The chain's first ritual is unaffordable from the opening board -- one Mountain
+plus an uncharged Dwarven Hold (a storage land yields its live counters, i.e. zero) -- and the whole
+declared chain then drops. No allocation decision is involved; the plan was never startable.
+
+The lead, for whoever picks this up: `SequencedRitualCredit` exists for exactly this, and the two
+enumerators gate it at DIFFERENT thresholds -- `SeqRitualCreditMode() >= 1` in `Solve`'s consider
+(TurnSolver.cpp ~8359) versus `>= 2` in `EnumeratePlans` (~13307), with the default 1 and the comment
+"DEFAULT: honest at the leaf". So the leaf is honest and the plan enumerator is optimistic. Whether
+raising the enumerator to the honest model fixes the dragonstorm bootstrap drops is one A/B
+(`MTG_RITUAL_SEQ_CREDIT=2`), and it needs the storage-land yield checked alongside it.
+
 ### Still not fixed: whole-turn mana ALLOCATION
 
 hinata / treasure_hunt / slivers colour-short drops did **not** move, and the gate rejects zero subsets

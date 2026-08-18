@@ -193,6 +193,9 @@ struct ColorFeasibility
 {
     // cover[S] = mana units that can pay a coloured pip of SOME colour in the 5-bit mask S (WUBRG).
     int  cover[32] = {0};
+    // Every board unit, colourless-only ones included -- they pay generic, and generic is what a
+    // producer's own cost is made of. Needed by the SEQUENCED credit bound below.
+    int  total     = 0;
     // False when the test must not run at all: the lever is off, the board holds a scaled land, or
     // no source is multi-colour (then the flat pool is already exact per colour and this adds
     // nothing). Callers MUST skip the check -- never prune -- when this is false.
@@ -210,7 +213,8 @@ struct ColorFeasibility
 // reused for every subset; only the per-subset credit varies. `noncreature` builds the counterpart
 // of BuildNonCreaturePool -- creature-only sources dropped -- because the flat pool runs that same
 // narrower test (eff_nc.CanPay) and carries the same colour-blind phantom inside it.
-ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature = false);
+ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature = false,
+                                       const Permanent* skip = nullptr);
 
 // The same-turn mana a subset credited on top of the board pool, i.e. `eff` minus `base` per colour
 // (clamped at zero). The enumerators only ever ADD to their credited pool -- the sequenced-ritual

@@ -1838,6 +1838,80 @@ int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action
 //     (more sources than pips) nothing is reserved, so the greedy keeps its freedom.
 // It rides the payment path's existing reserve-then-fallback, so over-reserving can never make a
 // cost unpayable -- at worst the held attempt fails and the normal payment runs, exactly as today.
+// See the header. A source is CRITICAL when the plan's combined coloured demand stops being
+// satisfiable once that source is gone -- exactly the Hall test the enumeration gate runs, asked
+// per-source instead of once. Reserving those makes an early cast pay around them; the cast that
+// genuinely needs one still gets it, because the reserve is a first ATTEMPT and the unreserved
+// payment follows it.
+// The plan-scoped reserve both apply paths install: the mana-unlock pieces plus the colour-critical
+// sources. ONE function so the executor and the rollout cannot drift on which sources are held --
+// the divergence class this file has been bitten by before.
+std::vector<int> TurnSolver::PlanReserveSources(const GameState& state,
+                                                const std::vector<Action>& acts)
+{
+    std::vector<int> out = ManaUnlockColorReserve(state, acts);
+    for (int n : ColorCriticalReserve(state, acts))
+    { if (std::find(out.begin(), out.end(), n) == out.end()) { out.push_back(n); } }
+    return out;
+}
+
+std::vector<int> TurnSolver::ColorCriticalReserve(const GameState& state,
+                                                  const std::vector<Action>& acts)
+{
+    std::vector<int> out;
+    static const bool s_on = EnvOn("MTG_COLOR_RESERVE");
+    if (!s_on) { return out; }
+
+    // Only the mana casts matter, and only from two up -- a single cast cannot be stranded by an
+    // earlier one, which is the same reason the batch pre-pay declines there.
+    std::vector<int> sel;
+    int mana_casts = 0;
+    for (int i = 0; i < static_cast<int>(acts.size()); ++i)
+    {
+        const Action& a = acts[i];
+        if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
+        { continue; }
+        if (a.free_cast || a.alt_cost) { continue; }        // costs no mana -> nothing to strand
+        sel.push_back(i);
+        if (a.cost.ManaValue() > 0) { ++mana_casts; }
+    }
+    if (mana_casts < 2) { return out; }
+
+    // Same-turn credit the plan's own producers supply, exactly as the enumerator credits it into
+    // `eff`: ritual float as wild, a cast rock by its real colours. WITHOUT this the check reads a
+    // producer turn as infeasible and bails -- and producer turns are precisely the ones the batch
+    // pre-pay also declines, i.e. the ones that strand. (First cut of this function omitted the
+    // credit and was inert on hinata for exactly that reason.)
+    ManaPool credit;
+    for (const Action& a : acts)
+    {
+        if (a.ritual_float > 0) { credit.wild += a.ritual_float; }
+        if (a.rock_mana.Total() > 0) { credit.AddPool(a.rock_mana); }
+    }
+
+    const ColorFeasibility full = BuildColorFeasibility(state);
+    if (!full.usable) { return out; }
+    // If the plan is not even jointly feasible as it stands, this is not the mechanism that will
+    // rescue it -- leave the payment alone rather than reserve against an impossible demand.
+    if (!full.Payable(acts, sel, credit)) { return out; }
+
+    const int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const bool is_src = (d->tmpl == CardTemplate::BasicLand)
+                         || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                         || d->params.mana_rock;
+        if (!is_src) { continue; }
+        const ColorFeasibility without = BuildColorFeasibility(state, /*noncreature=*/false, &p);
+        if (!without.usable) { continue; }
+        if (!without.Payable(acts, sel, credit)) { out.push_back(p.card.m_number); }
+    }
+    return out;
+}
+
 std::vector<int> TurnSolver::ManaUnlockColorReserve(const GameState& state,
                                                     const std::vector<Action>& acts)
 {
@@ -11099,7 +11173,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // other half: it stops the enabler casts from spending the payoff's scarce colour before the
         // unlock lands. Mirrored in AIEngine::TakeTurn through the same two functions -> lockstep.
         // Both no-ops for every other plan.
-        PlanSourceReserveScope _unlock_reserve(TurnSolver::ManaUnlockColorReserve(state, acts));
+        PlanSourceReserveScope _unlock_reserve(TurnSolver::PlanReserveSources(state, acts));
         auto fire_unlock = [&]() { TurnSolver::ApplyManaUnlockEquips(state, acts); };
         fire_unlock();
         if (explicit_order)
