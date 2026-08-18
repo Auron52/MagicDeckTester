@@ -125,6 +125,88 @@ Then a second seed block for robustness (5 pairs is enough): repeat with `--seed
   into `RolloutCfg` so sidecars from different arms refuse to pool.
 * Either way: append the numbers to this doc and to `fivecolour-mullgen-labeller-sweep.md`.
 
+## RESULT (2026-08-18, idle secondary box — 12 cores, load 0.4 at start, single thread)
+
+**Verdict: leaf-off is 1.57–2.20x SLOWER at d2/b1, with FULL distribution separation in both seed
+blocks. Decision rule 1 fires — keep the hybrid H21 labeller. Question closed.**
+
+Run at `91885099` (this repo's HEAD; `8bd337f8` is not in this history — see the caveat below),
+`build.sh` Release, no other work on the box. Harness: `logs/fc_leafcost/run.sh` (`/usr/bin/time` is
+absent in the dev container, so wall is `date +%s%N` around the process); raw logs in
+`logs/fc_leafcost/step2.log` and `step4.log`.
+
+### Step 1 — calibration gate: PASSED
+
+| d3/b3, seed 1001 | hybrid | leaf-off | ratio |
+|---|---|---|---|
+| this box | 33.78 s | 58.12 s | **1.72x** |
+| primary box (doc anchor) | 23.9 s | 40.3 s | 1.69x |
+
+Direction and magnitude both reproduce. Absolute seconds are ~1.4x the primary box (different CPU) —
+only ratios transfer, as the protocol says.
+
+### Step 2 — the experiment, d2/b1
+
+| seed | pairs | hybrid min / med / max | leaf-off min / med / max | ratio of minima | separated |
+|---|---|---|---|---|---|
+| 1001 | 10 | 21.55 / 21.70 / 23.16 s | 33.74 / 34.03 / 36.23 s | **1.566x** | YES (23.16 < 33.74) |
+| 2001 | 5 | 28.87 / 29.09 / 29.13 s | 63.46 / 63.75 / 64.02 s | **2.198x** | YES (29.13 < 63.46) |
+
+Both blocks separate with a wide margin — every leaf-off sample is slower than every hybrid sample,
+by 10.6 s and 34.3 s respectively. This is not a noise-limited result; the effect is 15–30x the
+within-arm spread.
+
+### Step 4 — the extras
+
+* **V-arm true wall ratio** (d2/b1, seed 1001, 5 alternating pairs): hybrid min 21.41 s vs V-arm min
+  3.69 s = **5.80x** (primary-box reference 5.1x; the units meter said 4.27x, again understating —
+  consistent with the calibration bias). V-arm avg 5.3667 vs hybrid 5.1750, i.e. the known
+  play-quality gap is visible here too.
+* **d3/b1 anchor** (3 pairs): hybrid min 24.93 s vs leaf-off min 33.87 s = **1.359x**, against the
+  doc's 1.33x on the primary box. Reproduces.
+
+### The trend prediction was WRONG — measure, don't extrapolate (again)
+
+The doc reasoned "the leaf edge shrinks with depth/budget, so d2/b1 should be small-but-positive".
+Measured on this box the edge is NOT monotone in depth/budget:
+
+| config | leaf edge (ratio of minima) |
+|---|---|
+| d3/b3 | 1.72x |
+| d3/b1 | 1.36x |
+| d2/b1 seed 1001 | 1.57x |
+| d2/b1 seed 2001 | 2.20x |
+
+d2/b1 is a LARGER edge than d3/b1, and the seed-to-seed spread (1.57x vs 2.20x) is bigger than the
+whole depth/budget effect — the leaf's value tracks how horizon-rollout-heavy the particular hands
+are, not the search shape. The `work_units` meter's 0.98x reading at d2/b1 was wrong by 60–120%,
+exactly in its documented bias direction. Nothing here changes the instrument note below; it
+confirms it.
+
+**Consequence for the open question:** a no-sidecar gen at d2/b1 is OFF the table on cost. Decoupling
+keep artifacts from value-leaf regeneration would cost 1.6–2.2x wall on the gen labeller — against a
+FAST projection already at ~132 h single-box, that is days, not hours. The fidelity half being
+settled (N21 ≈ H21 on label quality) does not rescue it.
+
+### Caveat to record: the anchor `avg` constants have drifted
+
+The protocol says the deterministic `avg` MUST match exactly or the binary is wrong. Measured here:
+
+| anchor | doc expects | measured |
+|---|---|---|
+| hybrid d3/b3 & d2/b1, seed 1001 | 5.1667 | **5.1750** |
+| leaf-off d3/b3, seed 1001 | 5.1750 | **5.1833** |
+| hybrid d2/b1, seed 2001 | 4.9000 | 4.9000 (exact) |
+
+This is one game in 120 shifting by one turn (+0.0083), in both arms, on seed 1001 only. It is NOT a
+build problem: the drift is engine commits that landed after the doc's anchor. `8bd337f8` does not
+exist in this repository's history at all (unpushed or rebased away on the primary box), while
+`e4690c37` (ADOPT colour-exact subset affordability) and `811d165c` (KAROO adds one of EACH colour)
+are same-day engine fixes that necessarily move FiveColour's play. The protocol's own escape hatch —
+"any commit >= 8bd337f8" — is the operative clause, and the ratio gate it really depends on passed.
+Ratios, not absolutes, carry the verdict. **Anyone re-running this should re-anchor the avg
+constants to 5.1750 / 5.1833 at `91885099` or later.**
+
 ## Instrument note worth keeping regardless of outcome
 
 `GameWorkMeter` `work_units` is the right currency for load-immune comparisons ONLY when both

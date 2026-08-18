@@ -169,3 +169,31 @@ the losing branches get deleted. Net of the whole arc: **the per-game levers tha
 labeller policy itself (H21, 1.67x) and V21 (4.27x, biased)** — the deck's per-game cost is
 genuinely its option volume, not an inefficiency with a switch, which is the same conclusion the
 six kills reached about per-node cost.
+
+## 7. Follow-on (2026-08-18, idle secondary box): the leaf-off gen labeller is DEAD on cost
+
+The open question from `fivecolour-gen-leaf-cost-wallclock.md` — could the gen labeller run at d2/b1
+*without* the value sidecar (N21), decoupling keep artifacts from value-leaf regeneration? — was
+measured on an idle 12-core box (the primary is contended). Full protocol, tables and caveats live in
+that doc; the answer:
+
+| d2/b1, 120 games, 1 thread | hybrid H21 (min) | leaf-off N21 (min) | ratio | separated |
+|---|---|---|---|---|
+| seed 1001 (10 alternating pairs) | 21.55 s | 33.74 s | **1.57x** | YES, wide |
+| seed 2001 (5 alternating pairs) | 28.87 s | 63.46 s | **2.20x** | YES, wide |
+
+Calibration gate reproduced first (d3/b3 1.72x here vs 1.69x on the primary; d3/b1 1.36x vs 1.33x),
+so the box and setup are sound. **Decision rule 1 fires: keep the hybrid H21 labeller.** N21's
+settled fidelity parity (rho 0.9882 vs 0.9891, 100% pairwise agreement) does not buy anything,
+because the operational benefit costs 1.6–2.2x wall on a FAST projection already at ~132 h.
+
+Two things worth carrying forward:
+
+* **The leaf edge is not monotone in depth/budget** (d3/b3 1.72x, d3/b1 1.36x, d2/b1 1.57–2.20x), and
+  the seed-to-seed spread exceeds the whole depth/budget effect. The extrapolation in the protocol
+  doc ("trend says small at d2/b1") was wrong by 60–120%. The leaf's value tracks how
+  horizon-rollout-heavy the hands are, not the search shape.
+* **V21's true wall ratio is 5.80x here** (21.41 s vs 3.69 s at d2/b1), not the 4.27x the `work_units`
+  meter reported — the meter understates horizon-rollout-heavy arms in the direction already
+  documented. Section 5's "~26 h on two boxes" for V21 is therefore CONSERVATIVE; the dork-hand bias
+  remains the argument against it, unchanged.
