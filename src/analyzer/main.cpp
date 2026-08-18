@@ -249,6 +249,7 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
     // differ in whether BOTTOMING is adaptive and in the cap R. See the recipe study in memory/docs.
     std::string depth_src = "gen-default", budget_src = "gen-default";
     std::string equiv_src = "gen-default";   // where the DISCOVERY (bucketing) depth came from
+    std::string rollouts_src = "recipe/default";   // where the cap R came from (see the cap-R pin)
     if (!a.gen_recipe.empty())
     {
         // Deterministic seed by DEFAULT for the recipe path. The global default randomizes the seed
@@ -328,6 +329,23 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
                       << "'. Use: complete | fast | recommend\n";
             return 1;
         }
+        // CAP-R PIN (EnvFlags rule 2 -- value-pinning, NOT a truthiness gate: "did the user pin a
+        // cap?" is a different question from the cap's value). A recipe is a preset over the two
+        // cost levers, and both shipped presets are sized for a SHIPPING artifact. A SCREENING
+        // apparatus is a different job: it wants the cheapest cap that still discriminates, matched
+        // across arms, and neither preset can express that. Measured on Mirrorwing Trick Suite, the
+        // recommend scout projected complete(R40) ~20.1 h and fast(R30) ~10.0 h -- both past the
+        // overnight window, against a few-hours budget.
+        //
+        // This pins ONLY the cap. The recipe keeps ownership of bottoming mode, the adaptive floor
+        // (there is no uniform-R mode -- see the MTG_KEEP_R_FLOOR note above) and the
+        // discovery-vs-gen settings split, so a pinned run is still a recipe run in every other
+        // respect. Unset -> the recipe's own cap, byte-identical.
+        if (EnvSet("MTG_KEEP_ROLLOUTS"))
+        {
+            cfg.rollouts = env_int("MTG_KEEP_ROLLOUTS", cfg.rollouts, 1);
+            rollouts_src = "MTG_KEEP_ROLLOUTS (pinned)";
+        }
     }
 
     // Always report the effective gen settings (even when they are just defaults) so a run is
@@ -338,7 +356,8 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
         std::cout << "  recipe          : " << trigger << "\n";
         std::cout << "  bottoming       : " << (cfg.adaptive_bottom ? "ADAPTIVE" : "FULL")
                   << "  (baked ON at runtime)\n";
-        std::cout << "  cap R (rollouts): " << cfg.rollouts << "\n";
+        std::cout << "  cap R (rollouts): " << cfg.rollouts
+                  << "  (source: " << rollouts_src << ")\n";
         std::cout << "  floor R         : " << (cfg.r_floor > 0 ? cfg.r_floor : 2)
                   << "  (adaptive keep -- the only schedule; clamped below the cap)\n";
         std::cout << "  rollout depth   : " << cfg.depth     << "  (source: " << depth_src  << ")\n";
