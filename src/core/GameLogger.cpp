@@ -115,6 +115,21 @@ struct AffordAuditDump
 AffordAuditDump g_afford_audit_dump;
 }  // namespace
 
+bool LegacyKarooPay() { static const bool v = EnvOn("MTG_LEGACY_KAROO"); return v; }
+std::atomic<long> g_illegal_bundle_taps{0};
+
+void NoteIllegalBundleTap(const std::string& source, int chosen_color, int amount)
+{
+    g_illegal_bundle_taps.fetch_add(1, std::memory_order_relaxed);
+    if (AffordAuditLevel() >= 2)
+    {
+        static const char* kC[] = { "W", "U", "B", "R", "G", "C" };
+        const int ci = chosen_color;
+        std::fprintf(stderr, "[illegal-bundle-tap] %s tapped for %d x {%s} (it adds one of each)\n",
+                     source.c_str(), amount, (ci >= 0 && ci < 6) ? kC[ci] : "?");
+    }
+}
+
 void NoteDroppedCast(const std::string& name, bool is_accelerant, bool colour_short)
 {
     std::lock_guard<std::mutex> lk(g_drop_mutex);

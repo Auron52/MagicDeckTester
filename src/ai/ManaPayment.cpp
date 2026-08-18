@@ -1060,8 +1060,10 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature)
         }
         // A KAROO ("{T}: Add {U}{R}", Izzet Boilerworks) is likewise one of each: its per-tap yield
         // equals its colour count. A plain dual has yield 1 and stays a free choice of one.
+        // (MTG_LEGACY_KAROO restores the pre-fix free-choice model here too, so the legacy arm's gate
+        //  and payment agree -- otherwise the gate would prune lines that arm can still pay.)
         if (static_cast<int>(prod.size()) > 1 && amt == static_cast<int>(prod.size())
-            && def->params.etb_bounce_land)
+            && def->params.etb_bounce_land && !LegacyKarooPay())
         {
             add_one_of_each(mask);
             continue;

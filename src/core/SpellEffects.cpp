@@ -2103,7 +2103,8 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 // the mispricing the domain_mana branch above calls out, and the same rule
                 // tap_source (ManaPayment.cpp) already applies on the greedy path; the backtracker
                 // was the unfixed twin, so the greedy refused these and the fallback allowed them.
-                if (amt > 1 && produces.size() > 1)
+                const bool bundle_src = (amt > 1 && produces.size() > 1);
+                if (bundle_src && !LegacyKarooPay())
                 {
                     ManaPool f = floating;
                     for (Color c : produces) { CcoAuditTap(*def, c, for_creature); f.Add(c, 1); }
@@ -2119,7 +2120,17 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                         generic_rep_done = true;
                     }
                     CcoAuditTap(*def, c, for_creature);   // audit: `produces` is cco-stripped above
-                    ManaPool f = floating; f.Add(c, amt); if (activate(f, /*drip_ok=*/true, storage_burn)) { return true; }
+                    ManaPool f = floating; f.Add(c, amt);
+                    if (activate(f, /*drip_ok=*/true, storage_burn))
+                    {
+                        // LEGACY-KAROO FORENSICS: this branch just took `amt` mana of ONE colour off a
+                        // multi-colour bundle source, and the recursion found a full payment from it --
+                        // so the accepted payment CONTAINS an illegal tap. Recorded (never in the fixed
+                        // build, where bundle_src short-circuits above) so a per-game replay can prove
+                        // whether an old line actually depended on one.
+                        if (bundle_src) { NoteIllegalBundleTap(def->card.m_name.str(), static_cast<int>(c), amt); }
+                        return true;
+                    }
                 }
             }
             // Three Tree City scaled mode: "{feeder},{T}: add N of a chosen colour" (N = creatures you

@@ -840,6 +840,17 @@ extern std::atomic<long> g_afford_real_attempts;
 //   TOTAL shortfall   -- not enough mana at all at this point in the turn. THIS is the class a cast
 //                        order can strand or save (the Dragonstorm defect).
 int  AffordAuditLevel();   // 0 = off, 1 = counters only, 2 = one line per drop
+
+// ---- LEGACY-KAROO FORENSICS (MTG_LEGACY_KAROO) ------------------------------------------------
+// A Karoo ("{T}: Add {W}{U}") adds one of EACH colour. TapForCostBacktrackWorker used to branch over
+// each colour and add the source's whole per-tap yield of THAT colour, so a lone Azorius Chancery
+// "paid" {U}{U}. MTG_LEGACY_KAROO=1 restores that behaviour so a game can be replayed on the old
+// rules, and NoteIllegalBundleTap records every accepted payment that actually CONTAINED such a tap.
+// That is what turns "this game got slower" into "this game's old line was illegal" -- per game,
+// rather than by deck-level inference. Never fires in the fixed build.
+bool LegacyKarooPay();
+void NoteIllegalBundleTap(const std::string& source, int chosen_color, int amount);
+extern std::atomic<long> g_illegal_bundle_taps;
 void NoteDroppedCast(const std::string& name, bool is_accelerant, bool colour_short);
 
 // RAII: suppress human-play (and, in a claude-play session, unpruned) semantics for the current

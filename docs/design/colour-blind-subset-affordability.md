@@ -262,6 +262,55 @@ Pinned by unit tests: a lone Azorius Chancery cannot pay `{1}{U}{U}`, and the gi
 `{3}{R}{R}`. `MTG_AFFORD_AUDIT=2` now prints one line per dropped cast (turn, cost, untapped and
 tapped sources), which is what made all of this legible.
 
+### Per-game verification of EVERY slower game (MTG_LEGACY_KAROO)
+
+The first pass justified the regression by deck partition -- "all 41 searched slowdowns are on the
+three Karoo decks". That argument does not hold up, for two reasons, and both were mine:
+
+* It covered only the SEARCHED-depth subset. Across all three tiers **355** games got slower, and
+  **5 of them are fivecolour, which has no Karoo at all**.
+* The same commit also made `ColorFeasibility` model Karoo/domain as fixed bundles, which touches
+  exactly the same decks. Deck partition therefore cannot separate the payment fix from the gate
+  change -- they are confounded.
+
+`MTG_LEGACY_KAROO=1` restores the pre-fix behaviour (in the payment AND in the gate's Karoo model, so
+the arm is coherent), and `NoteIllegalBundleTap` records every ACCEPTED payment that actually
+contained a bundle source tapped for N mana of one colour. Replaying all 355 slower games on that arm,
+one process per game:
+
+| outcome | n | meaning |
+|---|---|---|
+| legacy reproduces the old win turn **and** the old line contains an illegal tap | **348** | proven: the original line was illegal |
+| legacy reproduces it, no illegal tap, but the old line **silently DROPPED a cast** | 6 | the colour-blind phantom, not an illegal cast |
+| legacy arm unaffected / old line clean | **1** | NOT explained -- see below |
+
+The 6 are 5 fivecolour plus 1 mirrorwing, and they are the phantom this document is about rather than
+the Karoo bug -- e.g. fivecolour gi416 turn 3 declared `Maelstrom Archangel {W}{U}{B}{R}{G}` off four
+sources booked as `wild 5` (`Breeding Pool, Deathrite Shaman, Godless Shrine, Faeburrow Elder`) and
+dropped it. The tightened domain bundle model is what now refuses those.
+
+**The one genuine counter-example: `hinata_overnight_d0_s4004` gi1197, win T6 -> LOSS.** Its old line
+is clean -- zero illegal taps, zero dropped casts. `MTG_COLOR_EXACT=0` (gate off, Karoo payment still
+fixed) wins T6, so the cause is the GATE, not the payment fix. And the gate is right: at turn 4 it
+rejects `Hinata, Dawn-Crowned + Preordain + Sol Ring`, which needs two blue and a white off a Mystic
+Monastery plus an Izzet Boilerworks -- Hall gives demand 3 vs supply 2 over `{W,U}`, and the Monastery
+cannot pay both the white and a blue. What follows is the cost: the d0 greedy, having lost that
+subset, commits a different plan that ALSO contains Hinata, and then strands it --
+`[afford-drop] t4 Hinata COLOUR-short ... TAPPED{Izzet Boilerworks}` -- because an earlier cast in the
+turn took the Boilerworks. That is the whole-turn ALLOCATION defect below, surfacing because the gate
+changed which plan was chosen. So this game is collateral from correct pruning meeting an unfixed
+allocation bug, not a removed illegal play. One game in 247,775.
+
+**Counting the reverse direction** (the rule that a family is never called one-sided without it):
+160 games got FASTER. Net +195 slower out of 247,775 compared.
+
+| deck | slower | faster | net |
+|---|---|---|---|
+| mirrorwing | 268 | 102 | +166 |
+| hinata | 71 | 48 | +23 |
+| creature_giving | 11 | 4 | +7 |
+| fivecolour | 5 | 6 | -1 |
+
 ### Still not fixed: whole-turn mana ALLOCATION
 
 hinata / treasure_hunt / slivers colour-short drops did **not** move, and the gate rejects zero subsets
