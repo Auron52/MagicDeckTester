@@ -1,7 +1,10 @@
 # The enumeration admits subsets the board cannot pay: multi-colour sources collapse to `wild`
 
 Self-contained record (2026-08-18). Found while reviewing Anti-Lifegain's cast order; it is NOT an
-ordering bug and NOT specific to that deck. **Nothing is fixed yet — this is the spec for the fix.**
+ordering bug and NOT specific to that deck.
+
+**STATUS: BUILT and measured, behind `MTG_COLOR_EXACT` (default off). Adoption is the USER's call —
+see "What was built" at the end for the numbers and the soundness evidence.**
 
 ## The bug, in two lines
 
@@ -106,6 +109,76 @@ Constraints to respect:
 Expect a broad play change (it prunes subsets that were previously admitted), so: default-off lever
 first (suggested `MTG_COLOUR_EXACT`), measure smoke -> regression -> overnight, and a GT rebaseline
 on adoption. Adoption is the USER's call.
+
+## What was built (2026-08-18)
+
+`MTG_COLOR_EXACT`, default off. One new unit in the shared `ManaPayment.{h,cpp}` (so the executor and
+the rollout read the same model), called from the two subset enumerators in `TurnSolver.cpp`
+immediately after `SubsetPayable`.
+
+* `BuildColorFeasibility(state)` -> `ColorFeasibility{cover[32], usable}`. State-only, so it is built
+  ONCE per enumeration exactly like `ComputeAvailableColors`; `cover[S]` is the number of mana units
+  that can pay a coloured pip of some colour in the 5-bit set `S`.
+* `ColorFeasibility::Payable(cands, sel, credit)` -> Hall's condition over the 31 non-empty colour
+  sets. Each coloured pip is a demand carrying the mask of colours that may pay it; a hybrid pip is
+  un-baked into its two halves the way `SubsetPayable` already does (without that, `{B/G}` demands
+  BLACK and a green board is false-rejected). Generic and `{C}` pips are not modelled at all — any
+  unit pays them, and the flat `CanPay` that ran first already checked the total, so Hall on the
+  coloured pips is the exact remaining condition.
+* `PoolCredit(base, eff)` supplies the subset's same-turn credit (ritual float, rock production,
+  haste-dork unlock, domain widening) as extra units with the colours the pool recorded.
+
+Soundness is by over-approximation, never by guessing: a Karoo's two fixed colours become two free
+choices, a domain source becomes any colour, credit `wild` pays anything. The one shape no colour set
+can express is a CONVERSION source — Cascade Bluffs turns one `{U}` into `{R}{R}` — so a board
+holding a filter / ramp-filter / scaled land sets `usable = false` and the whole test stands down,
+leaving `SubsetPayableWithFilters` as the only authority there (the same three shapes
+`HasUntappedFilterSource` already routes to it).
+
+### The bug is gone
+
+`MTG_AFFORD_AUDIT`, Anti-Lifegain d0, 200 games: **14 drops / 876 attempts -> 0 / 863**. Every
+colour-short drop is eliminated and no `total-short` drop appears in its place. On the gi=697 repro
+the turn-5 subset now excludes the unpayable second white cast instead of enumerating it and letting
+cast order pick the victim.
+
+### Soundness measured, not asserted
+
+`MTG_COLOR_EXACT_PROBE` re-tests every rejection against the real payment path (`TapForCostDirect`
+on a copy — the executor's own code) and prints any rejection the board could actually have paid.
+
+| run | rejections | false rejects |
+|---|---|---|
+| full smoke suite, all decks, d0/d3/d5 (probe=1) | — | **0** |
+| Anti-Lifegain d0 x200 (probe=2) | 17 | **0** |
+| Anti-Lifegain d3 x40 (probe=2) | 2,608 | **0** |
+| FiveColour d0 x200 (probe=2) | 16 | **0** |
+| FiveColour d3 x40 (probe=2) | 34,733 | **0** |
+
+The probe has two levels precisely because a gate that never fires is indistinguishable from a gate
+that fires cleanly (the lesson the inert cast-order ladder taught). Level 2 prints the agreed
+rejections too, which is what makes the zeros above evidence rather than silence.
+
+### Measured effect (suite = the A/B, GT = the lever-off control)
+
+| tier | seeds | net summed delta | play-changed | worse |
+|---|---|---|---|---|
+| smoke | 1001 | **-0.0800** / 36 keys | 10 | 2 (fivecolour d3 +0.0067, d5 +0.0133) |
+| regression | 2002 + 3003 | **-0.1353** / 60 keys | 16 | **0** |
+
+Negative is better. Almost all of it is `creature_giving` d0 (-0.094 / -0.105); the other decks move
+a little or not at all, and 26 of 36 smoke keys are byte-identical, which is the check that the gate
+only bites boards that actually hold the phantom. With the lever OFF the suite is byte-identical to
+ground truth (36/36 pass, 0 configs changed), so nothing is on by default.
+
+### Not done
+
+* **The non-creature pool.** `eff_nc.CanPay(noncreature_combined)` gets the same flat treatment and
+  the same phantom is possible there (it needs a `creature_mana_only` source, e.g. Ancient Ziggurat).
+  Only the main pool is gated today.
+* **Held-out validation.** `--overnight` (seeds 4004/5005/6006/7007) has not been run.
+* Adoption, per standing doctrine, is the USER's call — and adopting means a GT rebaseline across all
+  three tiers, since the gate changes play on five decks.
 
 ## Related
 

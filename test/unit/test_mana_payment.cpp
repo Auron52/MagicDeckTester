@@ -120,6 +120,44 @@ PayEnd RunRollout(const GameState& board, const ManaCost& cost, bool for_creatur
     return Snapshot(s, ok);
 }
 
+// One cast of `name`, carrying the card's real cost (hybrid metadata included -- ColorFeasibility
+// un-bakes those, so Deathrite Shaman must arrive as a {B/G} pip and not as flat black).
+Action CastOf(const std::string& name, const GameState& s)
+{
+    const CardDefinition* def = CardDatabase::Instance().Lookup(name);
+    REQUIRE_MESSAGE(def != nullptr, "card not in cards.json: ", name);
+    Action a;
+    a.kind = Action::Kind::CastFromHand;
+    a.cost = EffectiveSpellCost(*def, s);
+    return a;
+}
+
+// "Would the colour-exact gate admit this set of casts off this board?"
+bool ColorExactAdmits(const GameState& board, const std::vector<std::string>& casts)
+{
+    const ColorFeasibility feas = BuildColorFeasibility(board);
+    REQUIRE(feas.usable);            // the fixtures below all hold a multi-colour source
+    std::vector<Action> cands;
+    std::vector<int>    sel;
+    for (const std::string& n : casts)
+    { sel.push_back(static_cast<int>(cands.size())); cands.push_back(CastOf(n, board)); }
+    return feas.Payable(cands, sel, ManaPool{});
+}
+
+// The combined cost of those same casts, as the enumerator sums it.
+ManaCost CombinedCost(const GameState& board, const std::vector<std::string>& casts)
+{
+    ManaCost c;
+    for (const std::string& n : casts)
+    {
+        const ManaCost one = CastOf(n, board).cost;
+        c.generic += one.generic; c.white += one.white; c.blue  += one.blue;
+        c.black   += one.black;   c.red   += one.red;   c.green += one.green;
+        c.colorless += one.colorless;
+    }
+    return c;
+}
+
 void CheckTwinsAgree(const GameState& board, const ManaCost& cost, bool for_creature,
                      bool expect_ok)
 {
@@ -187,6 +225,55 @@ TEST_CASE("turn-scoped reserve (floating ritual mana) drains before tapping")
     const PayEnd ex = RunExecutor(board, Cost(0, 0, 0, 0, 3), false);
     CHECK(ex.floating_total == 0);       // reserve consumed
     CHECK(ex.tapped == std::vector<bool>{true});
+}
+
+// ---- Colour-exact subset affordability (MTG_COLOR_EXACT) --------------------------------------
+// The flat accounting pool books every multi-colour source as one `wild` that pays ANY pip, so it
+// admits subsets the board cannot pay and the executor silently drops a cast. These pin the exact
+// board that surfaced it (Anti-Lifegain gi=697 turn 5) and the two ways the gate must NOT overreach.
+
+TEST_CASE("colour-exact: two white pips off one white source is rejected, one is not")
+{
+    EnsureCards();
+    // The lever is read once into a function-local static; set it before the first call.
+    setenv("MTG_COLOR_EXACT", "1", 1);
+    const GameState board = MakeBoard({"Godless Shrine", "Grove of the Burnwillows",
+                                       "Ignoble Hierarch", "Forest"});
+
+    // What the flat pool sees: green 1 + wild 3. It says the pair is affordable...
+    const ManaPool pool = AvailableManaPool(board);
+    CHECK(pool.wild == 3);
+    CHECK(pool.CanPay(CombinedCost(board, {"Fiery Justice", "Enlightened Tutor"})));
+
+    // ... but only Godless Shrine makes white, and the pair needs two white pips.
+    CHECK_FALSE(ColorExactAdmits(board, {"Fiery Justice", "Enlightened Tutor"}));
+
+    // Each on its own is genuinely payable and must survive.
+    CHECK(ColorExactAdmits(board, {"Fiery Justice"}));
+    CHECK(ColorExactAdmits(board, {"Enlightened Tutor"}));
+}
+
+TEST_CASE("colour-exact: hybrid pips are un-baked, not demanded in their first colour")
+{
+    EnsureCards();
+    setenv("MTG_COLOR_EXACT", "1", 1);
+    // {B/G}{B/G} with no black source at all: payable green, and the gate must say so. Reading the
+    // flat pips alone would demand BLACK twice and reject it (the pip is stored in its first colour).
+    const GameState board = MakeBoard({"Breeding Pool", "Forest"});
+    CHECK(ColorExactAdmits(board, {"Deathrite Shaman", "Deathrite Shaman"}));
+    // Three copies off two sources is short on COUNT, whichever colour pays.
+    CHECK_FALSE(ColorExactAdmits(board, {"Deathrite Shaman", "Deathrite Shaman",
+                                         "Deathrite Shaman"}));
+}
+
+TEST_CASE("colour-exact: a filter land switches the test off rather than guessing")
+{
+    EnsureCards();
+    setenv("MTG_COLOR_EXACT", "1", 1);
+    // Cascade Bluffs turns one {U} into {R}{R}; no per-source colour set expresses that, so the gate
+    // must decline to judge the board at all and leave it to the real-payment fallback.
+    const GameState board = MakeBoard({"Cascade Bluffs", "Island"});
+    CHECK_FALSE(BuildColorFeasibility(board).usable);
 }
 
 TEST_CASE("twin equivalence matrix: mixed board, sweep of costs")

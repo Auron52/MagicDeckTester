@@ -900,6 +900,163 @@ ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
     return pool;
 }
 
+// ---- Colour-exact subset affordability (MTG_COLOR_EXACT) --------------------------------------
+// Rationale, soundness argument and the over-approximation policy: see ManaPayment.h.
+
+static bool ColorExactEnabled()
+{
+    static const bool v = EnvOn("MTG_COLOR_EXACT");
+    return v;
+}
+
+ManaPool PoolCredit(const ManaPool& base, const ManaPool& eff)
+{
+    ManaPool c;
+    c.white     = std::max(0, eff.white     - base.white);
+    c.blue      = std::max(0, eff.blue      - base.blue);
+    c.black     = std::max(0, eff.black     - base.black);
+    c.red       = std::max(0, eff.red       - base.red);
+    c.green     = std::max(0, eff.green     - base.green);
+    c.colorless = std::max(0, eff.colorless - base.colorless);
+    c.wild      = std::max(0, eff.wild      - base.wild);
+    return c;
+}
+
+ColorFeasibility BuildColorFeasibility(const GameState& state)
+{
+    ColorFeasibility f;
+    if (!ColorExactEnabled()) { return f; }
+    // A CONVERSION source spends mana to make mana of another colour -- Cascade Bluffs turns one {U}
+    // into {R}{R}, Three Tree City feeds {2} for N of a chosen colour. No per-source colour set
+    // expresses that, and over-approximating it as "one unit, any colour" would false-reject a
+    // payable filter chain. Hand those boards back to SubsetPayableWithFilters, which pays for real.
+    // Same three shapes TurnSolver::HasUntappedFilterSource routes to that fallback.
+    const int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && (d->params.is_filter || d->params.ramp_filter || IsScaledManaLand(*d)))
+        { return f; }
+    }
+
+    const bool widen = EnvOn("MTG_DOMAIN_WIDEN", true);   // mirrors TurnSolver's DomainWidenEnabled
+    bool has_multi   = false;
+    int  gy_fuel     = -1;   // Deathrite fuel, counted lazily exactly as AvailableManaPool does
+
+    auto add = [&](int mask, int count)
+    {
+        if (mask == 0 || count <= 0) { return; }   // colourless-only: pays generic, never a pip
+        if ((mask & (mask - 1)) != 0) { has_multi = true; }
+        for (unsigned s = 1; s < 32; ++s)
+        { if (s & static_cast<unsigned>(mask)) { f.cover[s] += count; } }
+    };
+
+    // Same source filter as AvailableManaPool -- the pool this test post-filters must be built from
+    // exactly the same permanents, or it would prune lines the flat check paid for off a source it
+    // never saw.
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+        if (!def) { continue; }
+        const bool is_land = (def->tmpl == CardTemplate::BasicLand);
+        const bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                          || def->params.mana_rock;
+        if (!is_land && !is_dork) { continue; }
+        if (def->params.gy_land_exile_mana)
+        {
+            if (gy_fuel < 0) { gy_fuel = GraveyardLandFuel(state, active); }
+            if (gy_fuel <= 0) { continue; }
+            --gy_fuel;
+        }
+        int amt = PermanentManaYield(p, *def);
+        if (amt < 0) { amt = ManaProducedPerTap(*def); }
+        const std::vector<Color>& prod = EffectiveProduces(state, active, *def);
+        // Domain source: one mana of EACH colour among your permanents, so the yield is the colour
+        // count (AddSourceToPool does the same). Modelling those as free choices from the set is
+        // permissive, and MTG_DOMAIN_WIDEN's premise -- a coloured permanent cast earlier in the
+        // SAME plan widens the set -- makes the set itself subset-dependent, so open it to all five.
+        if (def->params.domain_mana)
+        {
+            amt = static_cast<int>(prod.size());
+            if (widen && amt > 0) { add(0x1F, amt); continue; }
+        }
+        int mask = 0;
+        for (Color c : prod)
+        {
+            const int ci = static_cast<int>(c);
+            if (ci >= 0 && ci < 5) { mask |= (1 << ci); }
+        }
+        add(mask, amt);
+    }
+    // The turn-scoped reserve is spendable on this phase's casts, so it is supply like any other.
+    if (FloatLeftoverManaEnabled())
+    {
+        const ManaPool& fl = state.floating_mana;
+        add(1 << 0, fl.white); add(1 << 1, fl.blue);  add(1 << 2, fl.black);
+        add(1 << 3, fl.red);   add(1 << 4, fl.green);
+        add(0x1F,   fl.wild);
+    }
+    // With no multi-colour source the flat pool holds no `wild` from the board and CanPayFlat is
+    // already exact per colour -- running the matching could only reach the same verdict.
+    f.usable = has_multi;
+    return f;
+}
+
+bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vector<int>& sel,
+                               const ManaPool& credit) const
+{
+    // Demands, keyed by the MASK of colours that may pay them. At most nine distinct masks (five
+    // singletons plus up to four hybrid pairs), so the Hall scan below stays a short walk.
+    int masks[16]; int counts[16]; int ndm = 0;
+    int total_pips = 0;
+    auto demand = [&](int mask, int n)
+    {
+        if (mask == 0 || n <= 0) { return; }
+        total_pips += n;
+        for (int i = 0; i < ndm; ++i) { if (masks[i] == mask) { counts[i] += n; return; } }
+        // Unreachable at 16 (five singletons + at most four hybrid pairs = nine), and dropping a
+        // demand only ever makes the test PASS, so an overflow could not turn into a false reject.
+        if (ndm < 16) { masks[ndm] = mask; counts[ndm] = n; ++ndm; }
+    };
+
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind == Action::Kind::ActivateVial) { continue; }   // no mana cost (mirrors SubsetPayable)
+        int pips[5] = { a.cost.white, a.cost.blue, a.cost.black, a.cost.red, a.cost.green };
+        // Un-bake hybrid pips: Card.h stores each in its FIRST colour's flat int, so reading the
+        // flat pips alone would demand that colour and false-reject a subset the other half pays
+        // (Deathrite Shaman {B/G} off a green board). Same peel as SubsetPayable.
+        for (int h = 0; h < a.cost.hybrid_count; ++h)
+        {
+            const int c1 = a.cost.hybrid_pair[h] >> 4;
+            const int c2 = a.cost.hybrid_pair[h] & 0xF;
+            int mask = 0;
+            if (c1 >= 0 && c1 < 5) { --pips[c1]; mask |= (1 << c1); }
+            if (c2 >= 0 && c2 < 5) { mask |= (1 << c2); }
+            demand(mask, 1);
+        }
+        for (int i = 0; i < 5; ++i) { demand(1 << i, pips[i]); }
+    }
+    // One coloured pip is decided by PRESENCE alone, which SubsetPayable already tested.
+    if (total_pips < 2) { return true; }
+
+    const int cred[5] = { credit.white, credit.blue, credit.black, credit.red, credit.green };
+    for (unsigned s = 1; s < 32; ++s)
+    {
+        int need = 0;
+        for (int i = 0; i < ndm; ++i)
+        { if ((static_cast<unsigned>(masks[i]) & ~s) == 0) { need += counts[i]; } }   // payable only from s
+        if (need == 0) { continue; }
+        int have = cover[s] + credit.wild;
+        for (int i = 0; i < 5; ++i) { if (s & (1u << i)) { have += cred[i]; } }
+        if (need > have) { return false; }
+    }
+    return true;
+}
+
 // Plan-scoped source reservation (see g_plan_reserved_sources). Stored as CARD NUMBERS, not
 // battlefield indices: a main phase can push new permanents and remove others (a sacrifice, a Karoo
 // bounce), so an index captured before the casts is not stable across them. Resolved to the

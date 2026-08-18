@@ -149,6 +149,65 @@ ManaPool AvailableManaPool(const GameState& state, const Permanent* skip = nullp
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco);
 
+// ---- COLOUR-EXACT SUBSET AFFORDABILITY (MTG_COLOR_EXACT) --------------------------------------
+//
+// The pool above is COLOUR-BLIND about its flexible sources: AddSourceToPool books every
+// multi-colour source as one `ManaPool::wild`, and CanPayFlat lets one wild satisfy ANY pip. So the
+// pool knows how MANY flexible sources there are but not WHICH colours they can actually make, and
+// a {R}{G} dual counts as able to pay {W}. The enumerator therefore admits subsets the board cannot
+// pay; the executor casts what it can and the rest is silently dropped, so WHICH spell is lost is
+// decided by cast order rather than by the search (Anti-Lifegain gi=697 T5: Fiery Justice {R}{G}{W}
+// + Enlightened Tutor {W} = two white off one Godless Shrine; the flat check reads deficit 3 <=
+// wild 3 and admits it). Measured 12 drops / 832 attempts at d0, every one colour-short.
+// See docs/design/colour-blind-subset-affordability.md.
+//
+// TurnSolver's SubsetPayable is the existing gate here and stops at PRESENCE ("does some untapped
+// source make white at all"); its comment says outright that it does not model count/contention and
+// leaves "needs 2 of a colour, only 1 source" to the real payment. This is that missing half: an
+// exact feasibility test on the COUNTS, run as a SOUND post-filter after the flat CanPay so it can
+// only ever reject a subset, never admit one.
+//
+// Exact via Hall's condition. Each coloured pip is a demand whose colour MASK is the set of colours
+// that may pay it (a singleton, or the two halves of a hybrid pip un-baked as SubsetPayable does);
+// each untapped source is a supply of `amt` units carrying the mask of colours it produces. A
+// feasible assignment exists iff for every colour set S, the pips payable ONLY from colours in S do
+// not outnumber the units touching S -- 31 subsets, over a demand list of at most nine distinct
+// masks. Generic and {C} pips are deliberately not modelled: any unit pays them, and the flat
+// CanPay that ran first already checked the total.
+//
+// Every source it cannot model exactly is OVER-approximated so the test stays a necessary
+// condition: a Karoo's two fixed colours become two free choices, a domain source becomes any
+// colour (a cast earlier in the same plan widens it), a scaled land's chosen colour becomes all
+// five, and same-turn credit (ritual float, rock production) enters as its pool colours with `wild`
+// paying anything. Filter lands are the one shape no over-approximation covers -- Cascade Bluffs
+// turns one {U} into {R}{R}, which no per-source colour set can express -- so a board holding one
+// switches the whole test off (usable = false) and keeps the existing
+// SubsetPayableWithFilters real-payment fallback as the only authority there.
+struct ColorFeasibility
+{
+    // cover[S] = mana units that can pay a coloured pip of SOME colour in the 5-bit mask S (WUBRG).
+    int  cover[32] = {0};
+    // False when the test must not run at all: the lever is off, the board holds a filter land, or
+    // no source is multi-colour (then the flat pool is already exact per colour and this adds
+    // nothing). Callers MUST skip the check -- never prune -- when this is false.
+    bool usable    = false;
+
+    // False only when NO assignment of the available mana to this subset's coloured pips exists.
+    // `credit` is the same-turn mana the caller folded on top of the board pool (PoolCredit below).
+    bool Payable(const std::vector<Action>& cands, const std::vector<int>& sel,
+                 const ManaPool& credit) const;
+};
+
+// Built ONCE per enumeration from the board (state-only, exactly like ComputeAvailableColors) and
+// reused for every subset; only the per-subset credit varies.
+ColorFeasibility BuildColorFeasibility(const GameState& state);
+
+// The same-turn mana a subset credited on top of the board pool, i.e. `eff` minus `base` per colour
+// (clamped at zero). The enumerators only ever ADD to their credited pool -- the sequenced-ritual
+// correction hands back part of what the simultaneous credit added, never more -- so this is the
+// exact extra supply the flat check was allowed to spend.
+ManaPool PoolCredit(const ManaPool& base, const ManaPool& eff);
+
 // PLAN-SCOPED source reservation -- the card numbers of battlefield sources the plan being applied
 // must hold untapped for a LATER cast in the same plan. It rides the SAME reserve-then-fallback
 // retry as ReservableSpecialMask (try holding them; if the cost cannot be met, pay normally), so it

@@ -844,6 +844,39 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
     return true;
 }
 
+// MTG_COLOR_EXACT_PROBE -- the soundness instrument for the colour-exact gate. The gate may only
+// ever reject a subset the board GENUINELY cannot pay, so every rejection is re-tested against the
+// real payment path (the same tap-for-real simulation the filter fallback uses, which is the
+// executor's own code). A line printed here is a FALSE REJECT and a bug in the gate, not a
+// heuristic call; a clean sweep over a deck is the evidence the gate is a pure tightening.
+// =1 reports only false rejects; =2 also reports the agreed ones, which is what tells a clean sweep
+// apart from a probe that never fired (the failure mode that once made an inert ladder look sound).
+static int ColorExactProbeLevel()
+{
+    static const int v = EnvOn("MTG_COLOR_EXACT_PROBE") ? EnvInt("MTG_COLOR_EXACT_PROBE", 1) : 0;
+    return v;
+}
+static bool ColorExactProbeOn() { return ColorExactProbeLevel() > 0; }
+
+static void ProbeColorExactReject(const GameState& state, const std::vector<Action>& cands,
+                                  const std::vector<int>& sel);
+
+// Definition of the probe declared above SubsetPayableWithFilters (which it calls).
+static void ProbeColorExactReject(const GameState& state, const std::vector<Action>& cands,
+                                  const std::vector<int>& sel)
+{
+    const bool really_unpayable = !SubsetPayableWithFilters(state, cands, sel);
+    if (really_unpayable && ColorExactProbeLevel() < 2) { return; }   // agreed, and not asked to say so
+    std::string names;
+    for (int j : sel)
+    {
+        if (!names.empty()) { names += " + "; }
+        names += cands[j].card_name.str();
+    }
+    std::fprintf(stderr, "[color-exact] %s turn=%d: %s\n",
+                 really_unpayable ? "reject" : "FALSE REJECT", state.turn_number, names.c_str());
+}
+
 // True if the active player controls an untapped filter / ramp-filter mana source, whose color
 // conversion the flat AvailableManaPool cannot model (so the affordability fallback above is needed).
 static bool HasUntappedFilterSource(const GameState& state)
@@ -8051,6 +8084,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
 
     bool have_colors[5];    // untapped-source colors -- state-only, computed once for all subsets
     ComputeAvailableColors(state, have_colors);
+    // Colour-EXACT affordability (MTG_COLOR_EXACT, default off -> usable == false -> inert). Same
+    // state-only, build-once shape as the presence gate above; see ManaPayment.h.
+    const ColorFeasibility colour_feas = BuildColorFeasibility(state);
 
     // Learned mid-game evaluator (per-deck, MTG_EVAL_MODEL-gated): when attached it RANKS non-lethal
     // plans by predicted win-turn in place of the EvalCard sum. nullptr in every default run
@@ -8258,6 +8294,15 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Accurate per-color payability (rejects wild-pool phantoms, e.g. a {U} hard-cast off a
         // W/R/B-only land). Strict tightening; inert for decks whose lands produce their colors.
         if (!SubsetPayable(have_colors, cands, sel))         { return; }
+        // ... and the COUNT the gate above deliberately does not model: two white pips off one white
+        // source. Only on the flat-pool path -- a subset rescued by SubsetPayableWithFilters was
+        // judged by a real payment, and colour_feas is unusable on a filter board anyway.
+        if (mana_ok && colour_feas.usable
+            && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff)))
+        {
+            if (ColorExactProbeOn()) { ProbeColorExactReject(state, cands, sel); }
+            return;
+        }
 
         // Irencrag Feat "you can cast only one more spell this turn": reject any subset that casts
         // more than max_casts_after spells AFTER the restricting ritual (ordered by CastOrderRank).
@@ -12900,6 +12945,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
     bool have_colors[5];   // untapped-source colors -- state-only, computed once for all subsets
     ComputeAvailableColors(state, have_colors);
+    // Colour-EXACT affordability (MTG_COLOR_EXACT, default off -> usable == false -> inert). Same
+    // state-only, build-once shape as the presence gate above; see ManaPayment.h.
+    const ColorFeasibility colour_feas = BuildColorFeasibility(state);
 
     // Evaluate one selected combination (a list of candidate indices) and, if
     // feasible, append the resulting plan. Mirrors the former per-mask body.
@@ -13222,6 +13270,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (discard_lands_used > lands_in_hand)              { return; }
         // Accurate per-color payability (rejects wild-pool phantoms; see SubsetPayable).
         if (!SubsetPayable(have_colors, cands, sel))         { return; }
+        // ... and the COUNT it does not model (see the twin in Solve::consider). Flat-pool path
+        // only: the filter fallback and the cost reframe both judge by other means.
+        if (mana_ok && colour_feas.usable
+            && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff)))
+        {
+            if (ColorExactProbeOn()) { ProbeColorExactReject(state, cands, sel); }
+            return;
+        }
 
         // Irencrag "one more spell this turn": reject subsets casting > max_casts_after spells after
         // the restricting ritual (mirrors Solve::consider; keeps the commit-the-line enumerator legal).
