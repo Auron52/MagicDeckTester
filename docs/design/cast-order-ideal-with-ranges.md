@@ -416,10 +416,27 @@ instruction 1 is the only thing that gives the phase column any effect on play a
 
 ### Instruction 2 is correct, live, and MEASURED -- two of my claims about it were wrong
 
-**Correction (USER, 2026-08-18: "That's wrong on Swords. We do cast it on opponent's creatures").**
-I had written that the play was unreachable because the goldfish opponent has no creatures. That is
-false: the opponent does have creatures -- usually tokens (Orchard Spirits) -- and Swords is cast on
-them. `docs/design/antilifegain-swords-targeting.md` is the record.
+**Correction (USER, 2026-08-18: "That's wrong on Swords. We do cast it on opponent's creatures"),
+and a second correction on top of it (USER: "we don't play Orchard. The opponent's creatures are
+only spawns that happen in specific matches").**
+
+I first wrote that the play was unreachable because the goldfish opponent has no creatures, then
+"corrected" that by quoting an Orchard-Spirit example out of
+`docs/design/antilifegain-swords-targeting.md` -- which describes a different context. This deck's
+list has **no Forbidden Orchard**, and none of the engine's three opponent-creature sources
+(`taps_spawn_opp_token`, `etb_opp_creates_tokens`, `cumulative_upkeep_opp_token`) is in it.
+
+The real source is `GoldFishRunner::PopulateOpponentSpawns`: a **10-game repeating cycle of passive
+opponent boards keyed by game index**. Slots 0 and 1 are pure goldfish; the other eight schedule
+creatures at set turns (a weenie swarm, a midrange 2/2 board, a lone 4/4 on T3, a 6/6 wall + 1/1,
+...). They never attack or block -- they exist to be targets. So **opponent creatures are present in
+8 of every 10 games**, on a fixed schedule.
+
+Verified in play, not inferred: 60 logged antilife games contain 115 Swords mentions and real casts
+such as `targets: [{cardName: "2/2 Creature", who: "opponent"}]` in game 13 (index 3 -> the midrange
+pattern) and game 29 (index 9 -> a 2/2 on T3), with **zero** Spirit tokens anywhere. That spawn
+cycle is also why the rank A/B below moves play at all -- had the target set been empty, Swords'
+rank could not have changed a single game.
 
 The play is not merely reachable, it is IMPLEMENTED, and by a route worth knowing:
 `TryPumpThenSwordsRedirect` (SpellEffects.h) pulls a free alt-cost Invigorate out of HAND during
