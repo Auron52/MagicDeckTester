@@ -14864,6 +14864,27 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             land_names.assign(1, forced);
         }
     }
+    // MTG_LAND_FAN_CAP=<n> (default 0 = off, byte-identical): truncate the land-candidate fan to n
+    // representatives, GREEDY PICK FIRST, then hand order. Measurement hatch for the FiveColour
+    // gen-labeller sizing (2026-08-18, user-directed): a 5c manabase defeats land_sig (nearly every
+    // land is genuinely distinct), so the fan is paid in full there -- and when a fetchland is in
+    // hand the choice is largely deferred anyway, so the fan may be redundant FOR THAT DECK. A cap,
+    // not a per-deck constant, so the sweep and any adoption stay one lever. Value-carrying int per
+    // coding-conventions (0 is off, not a legal cap).
+    static const int s_land_fan_cap = EnvInt("MTG_LAND_FAN_CAP", 0);
+    if (s_land_fan_cap > 0 && static_cast<int>(land_names.size()) > s_land_fan_cap)
+    {
+        std::vector<std::string> keep;
+        if (!greedy_land_name.empty()
+            && std::find(land_names.begin(), land_names.end(), greedy_land_name) != land_names.end())
+        { keep.push_back(greedy_land_name); }
+        for (const std::string& ln : land_names)
+        {
+            if (static_cast<int>(keep.size()) >= s_land_fan_cap) { break; }
+            if (std::find(keep.begin(), keep.end(), ln) == keep.end()) { keep.push_back(ln); }
+        }
+        land_names.swap(keep);
+    }
     // Land fan-out probe (MTG_TRACE=landfan): how many DISTINCT land options this turn's enumeration
     // branches over. One line per committed decision. The question it answers is whether an early
     // land PRUNE actually reduces total branching or merely defers it -- forcing the opening Mountain
@@ -14968,6 +14989,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                 int cap = (DecisionUnpruned(UnprunedGate::Fetch) || MainPhaseFilterActive(state))
                                              ? static_cast<int>(cands.size())
                                              : kMaxFetchSearchTargets;
+                // MTG_FETCH_FAN_CAP=<n> (default 0 = off, byte-identical): measurement hatch capping
+                // the fetch-target fan BELOW the provider cap and below the unpruned/collapsed-main
+                // overrides -- sibling of MTG_LAND_FAN_CAP above (FiveColour gen-labeller sizing).
+                // NOTE the collapsed-main override exists because the cap measured WORSE for 5c play
+                // (d3 s2002: 5.0150 capped vs 4.9250 uncapped) -- any adoption of this hatch is a
+                // labeller-fidelity question, not a free win.
+                static const int s_fetch_fan_cap = EnvInt("MTG_FETCH_FAN_CAP", 0);
+                if (s_fetch_fan_cap > 0) { cap = std::min(cap, s_fetch_fan_cap); }
                 int n = std::min(static_cast<int>(cands.size()), cap);
                 for (int i = 0; i < n; ++i) { add_for_land(ln, cands[i]); }
                 continue;

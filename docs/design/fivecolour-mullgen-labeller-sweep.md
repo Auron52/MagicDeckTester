@@ -141,3 +141,31 @@ its measured dork-hand bias is the argument against. A future design that genera
 V21 and re-labels only near-margin cells under H21 would capture most of the 4.27x without the bias,
 but cross-config pooling is exactly what the RolloutCfg gate exists to refuse — that is a real
 design, not a config change.
+
+## 6. Follow-on (2026-08-18, same day): the per-game structural levers, measured
+
+The user asked why per-game cost is high. Decomposition at the gen config (d2/b1, 120 games,
+`MTG_ENUM_STATS` + `MTG_ROLLOUT_STATS`, FiveColour vs Goblins): to play one ~5-turn game the search
+simulates **~4,700 hypothetical turns** (Goblins: 235) — 14,347 enumeration calls, 529k odometer
+positions, 2,495 leaf evals per game. Work volume is ~20x Goblins while wall is ~4.3x (FiveColour is
+CHEAPER per unit of work); the whole gap is volume: 1.4x longer games × more decisions/turn × more
+plans/decision (land fan + affordability barely pruning) × horizon amplification. None of it is
+redundant (the 1.00x dedup collapse).
+
+Three candidate levers were then sized/measured (user-directed). Hatches added for the sweep, both
+value-carrying ints, default 0 = off = byte-identical: `MTG_LAND_FAN_CAP` (truncate the
+land-candidate fan, greedy pick first) and `MTG_FETCH_FAN_CAP` (cap fetch targets below the provider
+cap and the collapsed-main override).
+
+| lever | measured (120-game proxy, d2/b1 base 15.5 s / 5.1667) | verdict |
+|---|---|---|
+| land-name fan cap=1 | 25.0 s, avg 5.3583 — **slower AND worse** | DEAD. Greedy land choice plays out badly enough that longer games swamp the enumeration saving — the same inversion shape as d1. The land fan is load-bearing for this deck. |
+| fetch-target fan cap=1 | 10.7 s (1.45x), avg 5.3500; fidelity rho 0.9567/0.9289, dispersion 0.163, pair-agree **99.1%** at 6,824 units/rollout | DEAD — **dominated by V21** (4,231 units, 99.5% pair-agree, rho 0.9533/0.9490). Anyone accepting this fidelity class should take V21 instead. Consistent with the in-play warning already in the code (5c d3 s2002: cap 5.0150 vs no-cap 4.9250). |
+| two-stage odometer digit-gating | sized from the enum stats at gen config: saves 5.6M of 63.5M odometer positions (8.8%); the odometer walk is ~10–15% of runtime → **~1–2% net** | NOT BUILT — below the user's stated headroom bar ("digging into 4% isn't worth our time", 2026-08-15). The 1.82x "two-stage visits" line applies only to the 8% of calls with a mana side. |
+| cheaper policy for later rollout turns | not built | user expects little vs d2/b1; no existing knob; escalation re-traversal is only 6.8% of interior nodes at d2/b1, bounding the adjacent "skip escalation" idea below the bar too. |
+
+Both hatches lost; per coding-conventions rule 5 they stay until this record + user sign-off, then
+the losing branches get deleted. Net of the whole arc: **the per-game levers that survive are the
+labeller policy itself (H21, 1.67x) and V21 (4.27x, biased)** — the deck's per-game cost is
+genuinely its option volume, not an inefficiency with a switch, which is the same conclusion the
+six kills reached about per-node cost.
