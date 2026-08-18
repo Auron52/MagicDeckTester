@@ -149,6 +149,58 @@ compare to base's R=40 for the same cells. Given the floor here is variance-domi
 against an own/foreign fit difference measured at ~0.004t elsewhere), the trade plausibly favours
 carrying — but measure it rather than assume it.
 
+## 7. Reuse at the ROLLOUT level, not the cell level — exact, and it removes §6's bias
+
+User, 2026-08-18: *"If we wanted to reuse only the games that don't have access to specific
+changed cards even that seems possible. Though we would need to include extra metadata into the
+generation."* Both halves are right, and this supersedes §6 where it applies.
+
+§6 carries a cell's *value*, which is an approximation: base's number is fit to base's library, so
+carried cells tilt the shared table toward base. §7 instead reuses base's individual ROLLOUTS as
+an exact estimator of one COMPONENT of the union's value:
+
+```
+V_union(cell) = P(touch)·E[V | touch]   +   P(no touch)·E[V | no touch]
+                └── sample fresh ──┘        └── reuse base's R=40 rollouts ──┘
+```
+
+Fresh rollouts are then spent only on games that actually draw a changed card — which is exactly
+where the new information is — and the rest is already paid for.
+
+### The trap: a touched/untouched FLAG is not enough
+
+"This rollout never drew a changed card" is conditioning on an OUTCOME, and it is not neutral.
+The longer a game runs the more cards it draws, and the LESS likely it is to have avoided all of
+the new cards. So the no-touch subset over-represents SHORT games — i.e. fast wins — and reusing
+it as-is makes every carried cell look optimistically fast.
+
+The correction is a per-rollout weight that depends on how many cards the rollout drew. Base's
+rollouts are all no-touch by construction (base holds none of the new cards), so they are an
+unbiased sample of base's value; turning them into the union's no-touch component needs each one
+weighted by the probability that all of the new cards would have fallen AFTER its k-th draw in a
+union shuffle — a closed-form combinatorial factor in (k, |new|, |library|).
+
+### The metadata generation must record
+
+Per rollout, therefore:
+- **k — the number of cards drawn** (the load-bearing one; without it the reuse is biased);
+- **which changed cards were touched** (drawn or in the opening hand), so the touch/no-touch
+  split can be recomputed for a DIFFERENT changed-set later without re-rolling;
+- the cell key and pd, which are already recorded.
+
+Recording the touched SET rather than a boolean is what makes the artifact reusable across future
+comparisons: a later screen that changes a different card can re-partition the same stored
+rollouts instead of regenerating them. That is the standing "new comparison work must exploit
+existing comparison work" requirement, satisfied at the rollout level.
+
+### Caveats to settle before building
+
+- Play decisions inside a rollout consult the DECK (e.g. mana/curve heuristics, the provider's
+  card-name lists). Verify a base rollout's decisions do not depend on the union's extra cards
+  being *present but undrawn*; if any do, the no-touch equivalence is weaker than stated.
+- The value-leaf sidecar and the play profile must match across the two, or the reused rollouts
+  were played by a different policy.
+
 ## What NOT to try
 
 **Matched synthetic seeds across arms.** Considered and rejected: the noise draw is keyed on
