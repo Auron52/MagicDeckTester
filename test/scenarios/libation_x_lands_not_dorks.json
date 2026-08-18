@@ -1,0 +1,15 @@
+{
+  "_comment": "Guards MirrorwingProvider::XCandidates -- Luxurious Libation's {X} must be the LAND-BASED max, not the mana-pool max. Board is all mana dorks + the magnet (user's construction, 2026-08-17): Zada 3/3 + 3x Elvish Mystic 1/1, all able to attack, 4 untapped Forests, and the ONLY card in hand is the X spell, so there is no competing mana sink. Libation targets Zada, which copies it for each other creature -> all 4 bodies get +X/+X. AvailableManaPool counts untapped DORKS as well as lands, so the generic prune's single max_affordable is 6 (tap 4 Forests AND all 3 Mystics) -- which leaves Zada attacking alone for 3+6 = 9. The land-only X=3 keeps every body attacking: 6 + 4+4+4 = 18. Intermediate values lose too (X=4 -> 17, X=5 -> 14), and X=0 -> 6, so opponent_life 18 makes X=3 the UNIQUE lethal line. PASS = engine wins T4, which it can only do by declining to tap a single dork. This fixture FAILS on the pre-2026-08-17 engine (whose only X>0 candidate was 6). library_filler is deliberately NOT a land (the default is Forest): a drawn 5th land would move every number above.",
+  "deck": "decks/Mirrorwing Trick Suite/Mirrorwing Trick Suite.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 18,
+  "battlefield": [
+    { "name": "Forest" }, { "name": "Forest" }, { "name": "Forest" }, { "name": "Forest" },
+    { "name": "Zada, Hedron Grinder" },
+    { "name": "Elvish Mystic" }, { "name": "Elvish Mystic" }, { "name": "Elvish Mystic" }
+  ],
+  "hand": [ "Luxurious Libation" ],
+  "library_filler": "Mirrorwing Dragon", "library_size": 40,
+  "depth": 5, "budget_ms": 100, "max_turns": 4,
+  "expect_win_turn": 4,
+  "log_out": "logs/play/libation_x_lands_not_dorks.json"
+}

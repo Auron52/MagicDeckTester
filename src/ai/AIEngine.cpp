@@ -3887,7 +3887,16 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     {
         // chosen_x is the resolved X for {X} spells; pass -1 when the spell has no {X}
         // so the viewer only annotates "X=N" where it is meaningful.
-        int logged_x = (def->card.m_mana_cost.has_x && chosen_x > 0) ? chosen_x : -1;
+        //
+        // X=0 IS a meaningful value and is logged as 0, not elided. The old test also required
+        // `chosen_x > 0`, which made "cast at X=0" indistinguishable in a game log from "this
+        // card has no X" -- and X=0 is a real, common line (Luxurious Libation for {G}: no pump,
+        // one Citizen per copy). That elision cost real diagnosis time: establishing that the
+        // Libation was cast at X=0 in 172 of 172 casts needed an MTG_UNPRUNED run to prove the
+        // field flowed at all, because absence was ambiguous. GameLogger's digest deliberately
+        // keeps folding the OLD expression, so this changes what the log SAYS, never what the
+        // engine DID -- every existing fingerprint is preserved byte for byte.
+        int logged_x = def->card.m_mana_cost.has_x ? chosen_x : -1;
         // Resolve the spell's targets to stable descriptors (card identity + controller),
         // so the viewer can show e.g. Crackle -> opponent, removal -> a specific creature.
         std::vector<GameLogger::TargetDesc> tgts;

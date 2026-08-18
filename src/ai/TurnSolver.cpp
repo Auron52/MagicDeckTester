@@ -1216,7 +1216,10 @@ static int NetOpponentSwing(const CardDefinition& def, const GameState& state, i
 // Evaluate a card's contribution to winning, accounting for tempo.
 // Uses a fixed unit of 100 per damage-equivalent so integer arithmetic
 // stays precise even with multipliers.
-static int EvalCard(const CardDefinition& def, const GameState& state)
+// `chosen_x` = the X this cast variant actually pays, or -1 when X is not yet decided (every caller
+// but the {X}-trick emitter). See the pump_per_x_power term in the solo_target_trick branch: with
+// -1 it keeps the historical "mid" constant, so every existing call site is byte-identical.
+static int EvalCard(const CardDefinition& def, const GameState& state, int chosen_x = -1)
 {
     constexpr int DMG = 100;  // points per damage-equivalent
 
@@ -1305,11 +1308,19 @@ static int EvalCard(const CardDefinition& def, const GameState& state)
                  + tp.pump_per_cards_drawn_power * 2                 // ~2 draws seen by a mid copy
                  + tp.pump_per_treasure_power * 2                    // ~2 Treasures mid-stack
                  + tp.pump_per_life_gained_power * 2;                // ~2 life seen by a mid copy
-        // Luxurious Libation's +X/+X: X is a searched decision, not a constant, and this ordering
-        // heuristic runs BEFORE X is chosen -- so estimate the same "mid" magnitude the counters
-        // above use rather than pretending to know it. The SEARCH owns the real valuation (each X
-        // is its own plan variant), exactly as the comment above says.
-        pump += tp.pump_per_x_power * 2;
+        // Luxurious Libation's +X/+X. When the caller has ALREADY fixed X for this cast variant
+        // (the {X}-trick emitter passes chosen_x >= 0), score the X it actually pays; otherwise
+        // fall back to the same "mid" constant the counters above use, because the ordering
+        // heuristic then genuinely runs before X is chosen.
+        //
+        // Passing the real X is REQUIRED, not a refinement. Each X is its own plan variant sharing
+        // one hand_index, and every variant used to receive the SAME eval from this function --
+        // so an X=4 plan and an X=0 plan were indistinguishable to plan ORDERING while the X=4 one
+        // cost 4 more mana. Measured on test/scenarios/libation_x_lands_not_dorks.json: the big-X
+        // plan was enumerated, passed every subset filter and was pushed onto the plan list, then
+        // never applied even once -- an exactly-lethal line the search could not see. The {X}-burn
+        // path never had this bug because it sets a.eval = x * mult * 100 (X-scaled) directly.
+        pump += tp.pump_per_x_power * (chosen_x >= 0 ? chosen_x : 2);
         per += pump * DMG;
         if (tp.token_copy_of_target) { per += 2 * DMG; }             // a hasted body for a turn
         if (tp.trick_token_power > 0) { per += tp.trick_token_power * DMG; }   // a spare body
@@ -2268,6 +2279,49 @@ static int FillScaledCastFace(const GameState& state, Action& a, int surplus_gen
     a.direct_damage   = best->face;
     a.eval            = best->face * 100;
     return extra;
+}
+
+// ---- Surplus fill for an {X} PUMP trick (Luxurious Libation) --------------------------------
+//
+// Sibling of FillScaledCastFace above, and the same idea: once a subset is chosen its cost is
+// known, so the mana it does NOT spend can be poured into a cast that scales. That is what makes X
+// "the maximum board power GIVEN THE REST OF THE PLAN" (user, 2026-08-18) rather than the maximum
+// assuming the spell gets everything -- the latter can only ever appear in a plan that casts
+// nothing else, which is why a {G} Fortifying Draught and a big-X Libation could never co-occur.
+// The provider's XCandidates still offers the all-in value directly; this adds the middle.
+//
+// TWO deliberate differences from FillScaledCastFace:
+//   * DORKS ARE EXEMPT. The surplus is board mana including untapped mana dorks, but a dork tapped
+//     for X cannot attack and wastes the +X/+X the fan-out puts on it. Subtracting the dork mana up
+//     front is the conservative form of the provider's power trade: X never spends a dork.
+//   * It returns an EVAL delta, never face damage. FillScaledCastFace's return is added to
+//     direct_dmg because a Magma face-burn really does hit the opponent; +X/+X is board power that
+//     only lands if those creatures connect, so folding it into direct_dmg would fabricate lethal.
+static int FillScaledXTrick(const GameState& state, Action& a, int surplus_generic)
+{
+    if (a.kind != Action::Kind::CastFromHand || surplus_generic <= 0) { return 0; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (!d || !d->params.solo_target_trick || d->params.pump_per_x_power <= 0) { return 0; }
+    if (!d->card.m_mana_cost.has_x) { return 0; }
+    const int pips = std::max(1, d->card.m_mana_cost.x_pips);
+
+    // Mana the dorks would contribute -- withheld, so X is paid from lands/rocks only.
+    int dork_mana = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (pd && pd->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) { ++dork_mana; }
+    }
+    const int spendable = surplus_generic - dork_mana;
+    if (spendable < pips) { return 0; }
+
+    const int extra = spendable / pips;
+    const int before = EvalCard(*d, state, a.chosen_x);
+    a.cost.generic += extra * pips;
+    a.chosen_x     += extra;
+    a.eval          = EvalCard(*d, state, a.chosen_x);
+    return a.eval - before;
 }
 
 // Choice-INDEPENDENT precompute shared by the two splice predicates below (sibling of
@@ -4903,7 +4957,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.cost.green   += strive_k * sc.green;
                     a.soulfire_own_targets = strive_k;   // reused: strive extra-target count
                 }
-                a.eval           = EvalCard(def, state);
+                // Score THIS variant's X, so the plan ordering can tell an X=4 cast from an X=0 one
+                // (see EvalCard's pump_per_x_power term). A non-{X} trick passes 0 into a term whose
+                // coefficient is 0, so it is byte-identical.
+                a.eval           = EvalCard(def, state, xv);
                 a.is_noncreature = true;
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
                 a.enchant_target = tgt_num;
@@ -8962,6 +9019,35 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 Action ca = cands[j];
                 int extra = FillScaledCastFace(state, ca, fill_surplus);
                 if (extra > 0) { direct_dmg += extra; total_eval += extra * 100; fill_j = j; fill_action = ca; break; }
+            }
+            // Nothing took the surplus as FACE damage -> offer it to an {X} pump trick instead
+            // (dork-exempt; see FillScaledXTrick). Board power, so it feeds total_eval ONLY --
+            // adding it to direct_dmg would invent lethal the creatures still have to connect for.
+            //
+            // NOT when the plan DRAWS (user, 2026-08-18: "when there are draw spells involved, we
+            // do not want to spend it all willy-nilly"). A cantrip trick under a magnet (Impolite
+            // Entrance / Fists of Flame, cast_draw>0) mass-draws MID-TURN and the engine re-solves
+            // at that draw breakpoint; mana already sunk into X cannot cast what the draw reveals.
+            // Filling is a commitment made before the information arrives, so on a drawing plan we
+            // leave the cast at its enumerated X. That still leaves the branch TWO options -- X=0
+            // (hold the mana for what we draw) and the provider's all-in candidate -- which is all
+            // this decision needs.
+            bool plan_draws = false;
+            for (int j : sel)
+            {
+                const CardDefinition* dd = cands[j].def ? cands[j].def
+                                         : CardDatabase::Instance().Lookup(cands[j].card_name);
+                if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
+                { plan_draws = true; break; }
+            }
+            if (fill_j < 0 && !plan_draws)
+            {
+                for (int j : sel)
+                {
+                    Action ca = cands[j];
+                    const int ev = FillScaledXTrick(state, ca, fill_surplus);
+                    if (ev > 0) { total_eval += ev; fill_j = j; fill_action = ca; break; }
+                }
             }
         }
 
@@ -14185,6 +14271,35 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 Action ca = cands[j];
                 int extra = FillScaledCastFace(state, ca, fill_surplus);
                 if (extra > 0) { direct_dmg += extra; total_eval += extra * 100; fill_j = j; fill_action = ca; break; }
+            }
+            // Nothing took the surplus as FACE damage -> offer it to an {X} pump trick instead
+            // (dork-exempt; see FillScaledXTrick). Board power, so it feeds total_eval ONLY --
+            // adding it to direct_dmg would invent lethal the creatures still have to connect for.
+            //
+            // NOT when the plan DRAWS (user, 2026-08-18: "when there are draw spells involved, we
+            // do not want to spend it all willy-nilly"). A cantrip trick under a magnet (Impolite
+            // Entrance / Fists of Flame, cast_draw>0) mass-draws MID-TURN and the engine re-solves
+            // at that draw breakpoint; mana already sunk into X cannot cast what the draw reveals.
+            // Filling is a commitment made before the information arrives, so on a drawing plan we
+            // leave the cast at its enumerated X. That still leaves the branch TWO options -- X=0
+            // (hold the mana for what we draw) and the provider's all-in candidate -- which is all
+            // this decision needs.
+            bool plan_draws = false;
+            for (int j : sel)
+            {
+                const CardDefinition* dd = cands[j].def ? cands[j].def
+                                         : CardDatabase::Instance().Lookup(cands[j].card_name);
+                if (dd && (dd->params.cast_draw > 0 || dd->tmpl == CardTemplate::DrawSpell))
+                { plan_draws = true; break; }
+            }
+            if (fill_j < 0 && !plan_draws)
+            {
+                for (int j : sel)
+                {
+                    Action ca = cands[j];
+                    const int ev = FillScaledXTrick(state, ca, fill_surplus);
+                    if (ev > 0) { total_eval += ev; fill_j = j; fill_action = ca; break; }
+                }
             }
         }
 

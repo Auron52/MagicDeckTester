@@ -728,6 +728,13 @@ public:
     // Review-artifact labels for the reviewed tiers (the generic table's names for 14/15/16/18
     // mean unrelated things).
     const char* CastOrderTierName(int rank) const override;
+    // Luxurious Libation's {X} (user, 2026-08-17): search exactly X=0 and the X that MAXIMISES
+    // ATTACKING BOARD POWER, spending mana dorks only where spending them actually raises that
+    // total. The generic prune's single {max_affordable} is "tap every land AND every dork",
+    // which wastes each tapped dork's attack and its own +X/+X -- measured, it lost 172 of 172
+    // casts to X=0, so the card's late "close the game" role never fired. Other {X} cards keep
+    // the generic prune; MTG_UNPRUNED opens the full range.
+    std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
 };
 
 // Equipment aggro (KittyEquipment). Detection keys on the equipment-deck gated params

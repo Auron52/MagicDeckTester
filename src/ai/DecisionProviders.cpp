@@ -8243,6 +8243,85 @@ bool MirrorwingProvider::StriveCountMaxOnly(const GameState&, const CardDefiniti
     return def.params.token_copy_of_target;   // Twinflame: K = 0 or max -- a lethal burst, not a dial
 }
 
+// ---- MirrorwingProvider::XCandidates ----------------------------------------
+//
+// Luxurious Libation ({X}{G}: +X/+X per resolved copy, then a 1/1 Citizen per copy) is TWO cards
+// at once (user, 2026-08-17): "X=0 is a 'generate more creatures' play and is cast early,
+// whereas X=maximum board power is cast late as a final pump to close the game".
+//
+// The generic prune proposes the single value {max_affordable}, and `max_affordable` reaches
+// this hook already computed off AvailableManaPool -- which counts untapped MANA DORKS and rocks
+// as well as lands (ManaPayment.cpp). So the ONLY X>0 the search ever saw was "tap every land
+// AND every Elvish Mystic and Ignoble Hierarch", which is close to always wrong for this deck: a
+// dork tapped for mana cannot attack, and the +X/+X the fan-out puts on it is wasted. Measured
+// over 300 games, the search took X=0 in 172 of 172 casts -- the closing role never fired once,
+// not because the search dislikes it but because the value that expresses it was never offered.
+//
+// So propose exactly the two values the user actually plays: X=0 (added unconditionally by the
+// trick enumerator itself) and the X that MAXIMISES ATTACKING BOARD POWER. Dorks are spent only
+// where spending them raises that total -- "generally not tap your dorks for mana unless that
+// actually increases the total power. Most of the time, this would mean tapping no dorks, but
+// there are boards where tapping one is correct." A SICK dork is free mana (it was never going
+// to attack); an attack-capable one costs its power, so those are spent cheapest-first and only
+// while the trade pays. Intermediate X values stay unsearched by explicit sign-off: "I'm okay
+// with missing weird clairvoyance cases where X is set somewhere in between."
+//
+// This is a NARROWING heuristic and therefore lives in the provider, never in the enumerator
+// (the core invariant). MTG_UNPRUNED restores the full 1..max range for the audit A/B.
+std::vector<int> MirrorwingProvider::XCandidates(const GameState& s, const CardDefinition& def,
+                                                 int max_affordable) const
+{
+    // Only the X-scaled pump trick takes this rule; every other {X} card keeps the generic prune
+    // (and the unpruned / human-play routes must see the whole range).
+    if (def.params.pump_per_x_power <= 0 || !def.params.solo_target_trick
+        || DecisionUnpruned(UnprunedGate::XSpell) || HumanPlayActive())
+    { return GenericProvider::XCandidates(s, def, max_affordable); }
+
+    if (max_affordable <= 0) { return {}; }   // X=0 only; the enumerator supplies it itself
+
+    const int me = s.active_player_index;
+    const CardDatabase& db = CardDatabase::Instance();
+
+    bool magnet = false;
+    int  atk_count = 0, atk_power = 0;
+    std::vector<int> atk_dork_power;   // attack-capable dorks: tapping one COSTS its attack
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = db.LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.copies_solo_targeted_spells) { magnet = true; }
+        if (!p.card.IsCreature()) { continue; }
+        const bool can_attack = CanAttackFull(p, s.battlefield, me);
+        if (can_attack) { ++atk_count; atk_power += p.EffectivePower(); }
+        if (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, s.battlefield) && can_attack)
+        { atk_dork_power.push_back(p.EffectivePower()); }
+    }
+    // Spend the cheapest attackers first, so j dorks tapped always costs the least power it can.
+    std::sort(atk_dork_power.begin(), atk_dork_power.end());
+
+    // Every creature the fan-out reaches gets +X; without a magnet the trick pumps its ONE
+    // target, so only a single attacker scales with X.
+    const int n_atk_dorks = static_cast<int>(atk_dork_power.size());
+    int best_x = 0, best_total = -1, lost_power = 0;
+    for (int j = 0; j <= n_atk_dorks; ++j)
+    {
+        // j = attack-capable dorks tapped. max_affordable already counts ALL of them, so
+        // declining to tap (n_atk_dorks - j) of them removes exactly that much X.
+        const int x = max_affordable - (n_atk_dorks - j);
+        if (j > 0) { lost_power += atk_dork_power[static_cast<std::size_t>(j - 1)]; }
+        if (x <= 0) { continue; }
+        const int attackers = atk_count - j;
+        if (attackers <= 0) { continue; }
+        const int pumped = magnet ? attackers : 1;
+        const int total  = (atk_power - lost_power) + pumped * x;
+        // Ties go to the SMALLER X: same damage for less mana leaves the rest of the turn open.
+        if (total > best_total) { best_total = total; best_x = x; }
+    }
+    if (best_x <= 0) { return {}; }
+    return { best_x };
+}
+
 // ---- MirrorwingProvider cleanup discard -------------------------------------
 //
 // USER-AUTHORED keep policy (Stage 6 review 2026-08-11, refined 2026-08-13): bucket the hand
@@ -8528,19 +8607,39 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
             const std::vector<int> anger = copies_of("Ancestral Anger");
             const std::vector<int> exped = copies_of("Expedite");
             const std::vector<int> scale = copies_of("Scale the Heights");
+            // The 2026-08-17 trick suite. These MUST be named here: the list's contract is that
+            // it covers EVERY card (the gi295 lesson recorded above), and an unnamed pump falls
+            // through to the shared ranking's highest-MV fallback -- which sheds the MAGNET.
+            // Their order RELATIVE to Anger/Expedite/Scale is near-unobservable, because no
+            // shipped decklist holds both suites (the swap trades one set for the other); it
+            // matters only for a pool/union arm. Within the new set: Libation first (it is a
+            // pump AND a body-maker, so it is live at X=0 on one mana), then Draught (escalating
+            // per-copy pump), then Entrance -- which is parameter-identical to Expedite under
+            // this engine (trample and sorcery-vs-instant are both unmodelled), so it is ranked
+            // beside it rather than on any measured difference.
+            const std::vector<int> libat = copies_of("Luxurious Libation");
+            const std::vector<int> draug = copies_of("Fortifying Draught");
+            const std::vector<int> entra = copies_of("Impolite Entrance");
             for (int i : grs) { pumps.push_back(i); }
             if (!tfs.empty())   { pumps.push_back(tfs[0]); }      // extras are dead (step 1)
             if (!fists.empty()) { pumps.push_back(fists[0]); }
             if (!anger.empty()) { pumps.push_back(anger[0]); }
             if (!exped.empty()) { pumps.push_back(exped[0]); }
             if (!scale.empty()) { pumps.push_back(scale[0]); }
-            std::size_t rounds = std::max({ fists.size(), anger.size(), exped.size(), scale.size() });
+            if (!libat.empty()) { pumps.push_back(libat[0]); }
+            if (!draug.empty()) { pumps.push_back(draug[0]); }
+            if (!entra.empty()) { pumps.push_back(entra[0]); }
+            std::size_t rounds = std::max({ fists.size(), anger.size(), exped.size(), scale.size(),
+                                            libat.size(), draug.size(), entra.size() });
             for (std::size_t r = 1; r < rounds; ++r)
             {
                 if (r < fists.size()) { pumps.push_back(fists[r]); }
                 if (r < anger.size()) { pumps.push_back(anger[r]); }
                 if (r < exped.size()) { pumps.push_back(exped[r]); }
                 if (r < scale.size()) { pumps.push_back(scale[r]); }
+                if (r < libat.size()) { pumps.push_back(libat[r]); }
+                if (r < draug.size()) { pumps.push_back(draug[r]); }
+                if (r < entra.size()) { pumps.push_back(entra[r]); }
             }
         }
         for (std::size_t k = pumps.size(); k-- > 2; ) { put(pumps[k]); }

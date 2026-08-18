@@ -216,7 +216,11 @@ void GameLogger::LogCastSpell(int card_num, const std::string& card_name,
                                const std::vector<TargetDesc>& targets)
 {
     if (!m_in_phase) { return; }
-    FoldStr("C"); FoldInt(card_num); FoldStr(mana_paid); FoldInt(chosen_x);
+    // The digest folds X only when POSITIVE. An {X} spell cast at X=0 is now reported as 0
+    // rather than elided (see AIEngine's logged_x), which is a change to what the log SAYS, not
+    // to what was played -- so the fold keeps the old expression and every recorded fingerprint,
+    // GT number and reference digest stays byte-identical.
+    FoldStr("C"); FoldInt(card_num); FoldStr(mana_paid); FoldInt(chosen_x > 0 ? chosen_x : -1);
     for (const TargetDesc& t : targets) { FoldStr(t.kind); FoldStr(t.who); FoldStr(t.card_name); }
     if (m_digest_only) { return; }
     Action a;
