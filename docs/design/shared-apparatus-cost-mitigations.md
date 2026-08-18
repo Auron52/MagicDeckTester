@@ -103,12 +103,53 @@ Where two candidates are behaviourally identical to the engine, the table alread
 but it is also a warning that the screen **cannot distinguish them**, which belongs in the
 report rather than in a delta.
 
-## What NOT to try
+## 6. Seed the union table from base's shipped R=40 cells — the BIGGEST win, and it is BUILDABLE
 
-**Seeding the union table from the base deck's shipped R=40 cells.** Tempting — base's 202,878
-reachable cells are exactly its shipped table's cell set, already generated at high R. It is
-invalid: a cell's value is estimated on the whole library, and the union deck is 71 cards, not
-60. The cells share a *key*, not a *value*.
+An earlier draft of this doc listed this under "what not to try", on the argument that a cell's
+value is estimated on the whole library and the union deck is 71 cards rather than 60, so the
+cells share a key and not a value. **That was wrong** (user pushed back, 2026-08-18) and the
+claim is withdrawn. The premise is true; the conclusion does not follow.
+
+The prize, computed against the real bucket set:
+
+```
+union cells reachable by either arm   286,714
+  ...of which base already has R=40   202,878   (70.8%)
+```
+
+~71% of the cells the union table needs already carry a HIGH-R estimate in the shipped base
+sidecar — versus the cap-R=10 / floor-R=2 the union run is paying for them now.
+
+**Why the library objection does not block it.** `MTG_KEEP_PRIOR_RAW`'s change-detection carry
+already solves exactly this shape: re-sample every cell only THINLY at the floor, compare to the
+prior, and spend the refine budget ONLY on cells that actually MOVED; unmoved cells keep the
+prior's higher-R value. So the differing library is handled EMPIRICALLY — cells where the 11
+extra cards never matter keep base's R=40 number, and cells the swap genuinely disturbs are
+re-rolled. The objection assumed every cell moves; the mechanism measures which ones do.
+
+**Matched rollout seeds are what make it work** (user, 2026-08-18: "as long as we match seeds
+anyway"). With shared draws, the thin floor estimate and the prior form a PAIRED difference, so
+a real move is detectable at floor R=2 — a comparison of two independent R=2 samples never
+could be. This is not an optimisation, it is the enabling condition.
+
+**Bucket translation is the missing piece, and the code already names it.** The gate refuses on
+`deck_fp`/`K` mismatch with the message "a changed decklist needs bucket translation, not yet
+built". Here the translation is a clean injection: base's 17 buckets map 1:1 into the union's 19,
+base's Expedite lands in the merged Expedite+Impolite Entrance bucket, and Fortifying Draught /
+Luxurious Libation enter at count 0.
+
+**Residual risk:** a false negative — a cell that moved but whose thin re-sample misses it. The
+carry is deliberately biased toward MOVED for this reason, and matched seeds tighten it further.
+
+**Bias to keep honest:** values carried from base are fit to BASE's library, so the shared table
+becomes asymmetrically fitted (better for base than for trick) where cells are carried rather
+than refined, unlike a union-generated table which is symmetrically foreign to both. That is a
+bias/variance trade, not a blocker, and it is measurable: high-R a sample of union cells and
+compare to base's R=40 for the same cells. Given the floor here is variance-dominated (0.0104,
+against an own/foreign fit difference measured at ~0.004t elsewhere), the trade plausibly favours
+carrying — but measure it rather than assume it.
+
+## What NOT to try
 
 **Matched synthetic seeds across arms.** Considered and rejected: the noise draw is keyed on
 the cell's bucket-count VECTOR, and the two arms' bucket orderings are unrelated (measured: 0 of
