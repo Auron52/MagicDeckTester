@@ -26,6 +26,7 @@
 #include "ai/MulliganProfileIO.h"
 #include "ai/Profiler.h"
 #include "ai/DecisionProviders.h"   // SelectDecisionProvider for --scenario
+#include "ai/ManaPayment.h"      // CastOrderKey for the --cast-order-report sort
 #include <nlohmann/json.hpp>        // --scenario board spec
 
 static void PrintUsage(const char* prog)
@@ -3784,8 +3785,8 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
     state.dep_enabler_main1    = pulls.enabler_main1;
     state.dep_castpayoff_main1 = pulls.castpayoff_main1;
 
-    struct Row { std::string name; int rank; int ideal; int mv; int count; std::string note;
-                 const char* mp; };
+    struct Row { std::string name; int rank; int key; int ideal; int mv; int count;
+                 std::string note; const char* mp; };
     std::vector<Row> rows;
     for (const Card& c : deck.mainboard)
     {
@@ -3814,13 +3815,17 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
             note += note.empty() ? "" : "; ";
             note += "SPECTACLE: cheap only after damage -- conditional position, see doc";
         }
-        rows.push_back(Row{ c.m_name.str(), rank, ideal,
+        // Sort by the REAL cast key, not the bare rank: with MTG_ORDER_M1_FIRST the natural
+        // phase breaks a rank tie (USER: "m1 cards should be first in the order if there is no
+        // reason to do it otherwise"), and a report that sorted by rank alone would show Birds of
+        // Paradise ahead of Ignoble Hierarch while play did the opposite.
+        rows.push_back(Row{ c.m_name.str(), rank, CastOrderKey(state, d, rank), ideal,
                             d->card.m_mana_cost.ManaValue(), 1, note, mps });
     }
     std::stable_sort(rows.begin(), rows.end(),
         [](const Row& a, const Row& b)
-        { if (a.rank != b.rank) { return a.rank < b.rank; }
-          if (a.mv   != b.mv)   { return a.mv   < b.mv;   }
+        { if (a.key != b.key) { return a.key < b.key; }
+          if (a.mv  != b.mv)  { return a.mv  < b.mv;  }
           return a.name < b.name; });
 
     // Tier names mirror GenericProvider::CastOrderRank's documented tiers exactly.
@@ -3837,12 +3842,30 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
             case 18: return "CAST RESTRICTOR (Irencrag): last ritual, only the payoff may follow";
             case 19: return "CAST PAYOFF (verse): before the spells that feed it";
             case 20: return "other noncreature spell";
+            case 21: return "POWER-PAYOFF (Swords): after the pumps that raise the power it pays";
+            case 24: return "GIFT BODY: an alt-cost gift wearing a creature's clothes -- with the m2 group";
             case 22: return "SCALING AURA: later, so earlier fetches can still take one";
             case 23: return "AURA WITH ENCHANT REQUIREMENT: last (legality, not preference)";
             case 30: return "LAST: on-cast self-damage / destroy-all-enchantments";
             default: return "";
         }
     };
+
+    // THE LAND DROP is part of the deck's order too (USER 2026-08-18: "land drops should be
+    // ordered for decks. In this case, it should be put at the start, since there is no draw"),
+    // but it is not a CAST and so has no CastOrderRank -- which is exactly why it was missing from
+    // a report built out of ranks. Print where it actually happens so the position is reviewable:
+    // at depth 0 it precedes every cast (one hand-written exception, the Treasure Hunt defer), and
+    // at depth > 0 it is folded into the search rather than ranked at all.
+    const bool deck_has_promoted_cantrip = [&]
+    {
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && IsIdealOrderCantrip(*d)) { return true; }
+        }
+        return false;
+    }();
 
     std::cout << "# Cast order -- " << deck_path << "\n";
     std::cout << "# provider: " << prov.Name()
@@ -3855,6 +3878,12 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
               << "\n# main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste"
                  " access, a scaling attacker) can move a creature m2 -> m1 in an actual game.\n"
               << "#\n# rank  range      main  n  mv  card\n";
+    std::cout << "#\n# [LAND] LAND DROP: "
+              << (deck_has_promoted_cantrip
+                    ? "this deck HAS a cantrip, so \"draw before the land\" is a live question"
+                    : "no cantrip in the deck, so nothing wants to precede it -> FIRST")
+              << "\n  land    -   m1    -  -   (the turn's land drop)"
+                 "   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0\n";
     int last = -999;
     for (const Row& r : rows)
     {

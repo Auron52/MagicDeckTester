@@ -45,12 +45,27 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
 bool CastOrderLess(const GameState& state, const Action& a, const Action& b);
 bool OrderingOpaque(const std::string& name);
 
-// The same comparator with the two ranks supplied by the caller. CastOrderLess is this function
-// with the ranks read from the provider; the ladder below passes an EFFECTIVE rank instead, so a
-// spell walked down its range sorts at its new position without a second comparator to keep in
-// lockstep with this one.
-bool CastOrderLessRanked(const GameState& state, const Action& a, int rank_a,
-                                                 const Action& b, int rank_b);
+// The same comparator with the two SORT KEYS supplied by the caller. CastOrderLess is this
+// function with the keys read from the provider; the ladder below passes an EFFECTIVE key instead,
+// so a spell walked down its range sorts at its new position without a second comparator to keep
+// in lockstep with this one.
+bool CastOrderLessRanked(const GameState& state, const Action& a, int key_a,
+                                                 const Action& b, int key_b);
+
+// THE cast sort key: the provider RANK, with the card's natural main PHASE folded in as the
+// tie-break beneath it.
+//
+//   USER 2026-08-18: "Generally, m1 cards should be first in the order if there is no reason to
+//   do it otherwise."
+//
+// The rank IS "a reason to do it otherwise", so it stays the primary key and the phase only
+// separates cards the rank ties -- Ignoble Hierarch (m1) ahead of Birds of Paradise (m2), both
+// rank-10 dorks. This is also the only way the m1/m2 classification reaches play at all today:
+// the pre-combat Main2 FILTER is opt-in per provider (ClassifiesMainPhases) and no provider opts
+// in, so without this the phase column is advisory. Gate: MTG_ORDER_M1_FIRST. Off -> the phase
+// term is constant and the key is the rank scaled, which orders identically to the bare rank.
+int  CastOrderKey(const GameState& state, const CardDefinition* def, int rank);
+bool OrderM1FirstEnabled();   // MTG_ORDER_M1_FIRST
 
 // ---- The cast-order RANGE and its fallback ladder (step 2 of the USER's design) ---------------
 // docs/design/cast-order-ideal-with-ranges.md:
@@ -88,6 +103,30 @@ bool OpaqueCastOrderEnabled();
 // when the set's costs cannot be projected (see the definition).
 void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>& actions,
                                std::vector<int>& order);
+
+// THE ENABLER/WIPE RECHECK -- the one line in the suite that a cast-ORDER cannot express.
+//
+//   USER 2026-08-18: "One tricky thing about this deck is that Tainted Remedy + Reverent Silence
+//   + Tainted Remedy + Reverent Silence is an actual play that interferes with the order a bit."
+//   ... "So essentially we are allowed to recheck Tainted Remedy + Reverent Silence at the end
+//   of the list."
+//
+// Reverent Silence's alt cost gifts the opponent 6 life, which a Tainted Remedy flips into 6
+// damage -- and its effect then DESTROYS that Remedy. So a second Silence needs a second Remedy
+// resolved after the first wipe. A rank is a total order on card TYPES and cannot alternate two
+// of them, so a rank sort emits Remedy, Remedy, Silence, Silence: the first wipe kills BOTH
+// Remedies and the second Silence gifts 6 life UNBACKED (the guards then decline it, and the
+// deck loses 6 damage it was entitled to).
+//
+// The USER's resolution is a second PASS rather than a cleverer rank: run the order once, then
+// re-offer the enabler/wipe pair at the end for the copies that are left. It is a permutation of
+// casts the plan already holds -- nothing is added, nothing is dropped. Gate: MTG_ORDER_RECHECK.
+void ApplyEnablerWipeRecheck(const GameState& state, const std::vector<Action>& actions,
+                             std::vector<int>& order);
+
+// MTG_ORDER_RECHECK. Shared with the ENUMERATION guard (SubsetHasUnbackedAltPayload), which may
+// only admit a replacement-enabler subset when this ordering pass is there to alternate it.
+bool OrderRecheckEnabled();
 
 // THE accounting mana pool (C1 unit 4): everything the active player's untapped sources could
 // produce this phase, plus the turn-scoped floating reserve. Was a byte-identical twin pair

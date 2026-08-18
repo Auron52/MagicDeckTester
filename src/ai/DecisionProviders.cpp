@@ -1788,10 +1788,53 @@ bool AntiLifegainProvider::CanAutoFireAltPayload(const GameState& s, int control
                                              + VerseDamageFromCast(s, controller, def);
 }
 
-// CastEnablerFirst / CastOrderRank: no overrides -- the enabler-first sequencing this provider
-// used to hand-code is now the generic param-derived ENABLES tier (lifegain_to_loss -> rank 0,
-// docs/design/card-dependency-map.md); the generic rank also orders Aria (verse_damage, 19)
-// before the instants that feed it and Reverent Silence (destroy_all_enchantments, 30) last.
+// CastEnablerFirst: no override -- the enabler-first sequencing this provider used to hand-code is
+// now the generic param-derived ENABLES tier (lifegain_to_loss -> rank 0,
+// docs/design/card-dependency-map.md); the generic rank also orders Aria (verse_damage, 19) before
+// the instants that feed it and Reverent Silence (destroy_all_enchantments, 30) last.
+//
+// ---- USER REVIEW of this deck's cast order, 2026-08-18 -------------------------------------
+// Two corrections to the generic ranking, both DERIVED from card params rather than name-keyed so
+// they generalise to any deck holding the same shapes. Gated on MTG_AL_ORDER, default off --
+// order is a reviewed judgement, and this is the proposal, not an adoption.
+//
+//   * "Swords should go after Invigorate (because of the invigorate swords play)." Swords to
+//     Plowshares pays its controller life EQUAL TO THE CREATURE'S POWER, which a Remedy flips
+//     into damage -- so every spell that RAISES power is an enabler of a bigger Swords, and the
+//     generic principle 3 (enabler before payoff) puts the pump first. Both sit at rank 20 today,
+//     so the tie was being broken by plan order.
+//   * "Skyshroud cutter can go lower in the cast order, to fit in with m2." A vanilla creature
+//     whose whole function is its alt-cost GIFT is a damage spell wearing a creature's clothes;
+//     ranking it at the rank-10 CREATURE tier casts it ahead of the deck's actual business.
+static bool AlOrderReviewEnabled()
+{
+    static const bool on = EnvOn("MTG_AL_ORDER");
+    return on;
+}
+
+int AntiLifegainProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (AlOrderReviewEnabled())
+    {
+        const CardParams& p = def.params;
+        if (p.controller_lifegain_equals_power) { return 21; }   // after the pumps (rank 20)
+        if (p.alt_lifegain_cost > 0 && def.card.IsCreature() && !p.lifegain_to_loss) { return 24; }
+    }
+    return GenericProvider::CastOrderRank(s, def);
+}
+
+// "Reverent Silence should be cast last, so it should be m2." (USER 2026-08-18.) The generic
+// classifier reaches it through the DOUBT default, which keeps a card pre-combat -- but this one
+// is not in doubt: it destroys the deck's own enchantments, so nothing it enables can be spent
+// afterwards in the same main, and the deck's whole pre-combat build-up wants to happen first.
+// Rank 30 already puts it last WITHIN a phase; this puts it in the later phase as well.
+std::optional<DecisionProvider::MainPhase>
+AntiLifegainProvider::MainPhaseOverride(const GameState&, const CardDefinition& def) const
+{
+    if (AlOrderReviewEnabled() && def.params.destroy_all_enchantments)
+    { return MainPhase::Main2; }
+    return std::nullopt;
+}
 
 bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int controller,
                                                      const CardDefinition& def) const
@@ -1827,6 +1870,15 @@ bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int con
         if (d && d->params.lifegain_to_loss && p.card.IsCreature()) { return true; }
     }
 
+    // NOT (c) "a REPLACEMENT enabler is in hand" -- TRIED AND MEASURED WORSE, 2026-08-18. The
+    // USER's Remedy/Silence/Remedy/Silence line is real and the ORDERING objection in (a) above is
+    // now obsolete (ApplyEnablerWipeRecheck holds the replacement back and casts it AFTER the
+    // wipe). But opening THIS gate on it hands the line to the GREEDY consumer, and that is the
+    // failure (a) was written about: smoke antilife d0 4.9030 -> 4.9550 (+0.0520) while the
+    // searched d3 IMPROVED 4.1880 -> 4.1840. The split is the whole point of the gate -- the
+    // search bypasses it already (CollectActions' search_risky_live emission), so the recheck
+    // ordering plus the subset-level replacement test in SubsetHasUnbackedAltPayload deliver the
+    // line to the search without letting the greedy policy brick the combo for an immediate 6.
     // (b) lethal in combination with this turn's attackers
     return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller)
                                              + VerseDamageFromCast(s, controller, def);

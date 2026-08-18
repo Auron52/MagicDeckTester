@@ -1402,6 +1402,9 @@ static bool SubsetHasUnbackedAltPayload(const GameState& state,
     if (RemedyActive(state, state.active_player_index)) { return false; }
     if (DecisionUnpruned(UnprunedGate::AltPayload))     { return false; }
     bool enabler = false, creature_enabler = false;
+    // For the REPLACEMENT test below: how many enablers the wipe would destroy (the enchantment
+    // ones -- a creature enabler survives it), and how many alt-cost wipes the subset casts.
+    int enchant_enablers = 0, alt_wipes = 0;
     for (int j : sel)
     {
         const CardDefinition* d = cands[j].def;
@@ -1409,7 +1412,9 @@ static bool SubsetHasUnbackedAltPayload(const GameState& state,
         {
             enabler = true;
             if (d->card.IsCreature()) { creature_enabler = true; }
+            else                      { ++enchant_enablers; }
         }
+        if (d && cands[j].alt_cost && d->params.destroy_all_enchantments) { ++alt_wipes; }
     }
     const int opp_life = state.players[1 - state.active_player_index].life;
     // SUBSET-level lethality for the wipe test (docs/design/card-dependency-map.md): whether the
@@ -1446,6 +1451,19 @@ static bool SubsetHasUnbackedAltPayload(const GameState& state,
         {
             if (creature_enabler)                                          { continue; }
             if (enabler && opp_life <= subset_lethal_damage())             { continue; }
+            // REPLACEMENT ENABLERS (USER 2026-08-18, the Remedy/Silence recheck). This branch read
+            // "the wipe kills every in-subset enabler, so the payload is unbacked" -- but the alt
+            // cost is PAID AT CAST (AIEngine::CastSpellFromHand: OpponentGainsLife fires before the
+            // spell resolves), so a live enchantment Remedy backs the Silence and only THEN dies.
+            // What the wipe really costs is the enabler for the NEXT one. So the subset is fine
+            // whenever it brings at least as many enchantment enablers as wipes: cast alternately
+            // -- Remedy, Silence, Remedy, Silence -- every wipe is paid for while an enabler is
+            // live. That alternation is not something a rank can express, which is why this is
+            // gated on the SAME lever as the ordering pass that produces it
+            // (ApplyEnablerWipeRecheck); loosening one without the other would emit a subset the
+            // order then bricks.
+            if (OrderRecheckEnabled() && enchant_enablers >= alt_wipes && enchant_enablers > 0)
+            { continue; }
             return true;   // wipe kills every in-subset enabler and it isn't lethal -> bricked
         }
         if (!enabler) { return true; }   // safe payload with no enabler -> free life for the opponent
@@ -11055,6 +11073,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
                     { return CastOrderLess(state, acts[x], acts[y]); });
                     ApplyCastOrderRangeLadder(state, acts, ord);
+                    ApplyEnablerWipeRecheck(state, acts, ord);
                 }
                 for (int i : ord)
                 {
@@ -11080,6 +11099,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // and walk them back only as far as paying for the line requires. Inert with the
                 // lever off / no ranged spell in the set. Mirrored in AIEngine::TakeTurn (lockstep).
                 ApplyCastOrderRangeLadder(state, acts, order);
+                ApplyEnablerWipeRecheck(state, acts, order);
                 for (int i : order)
                 {
                     const Action& a = acts[i];

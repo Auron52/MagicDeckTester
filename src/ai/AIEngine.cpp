@@ -2900,6 +2900,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
         { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
         ApplyCastOrderRangeLadder(state, plan.actions, ord);
+        ApplyEnablerWipeRecheck(state, plan.actions, ord);
     }
     for (int oi : ord)
     {
@@ -2954,6 +2955,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // back only as far as paying for the line requires. Inert with the lever off / no ranged spell
     // in the set. Mirrored in ApplyPlanDirect (lockstep).
     ApplyCastOrderRangeLadder(state, plan.actions, order);
+    ApplyEnablerWipeRecheck(state, plan.actions, order);
     for (int oi : order)
     {
         const Action& a = plan.actions[oi];

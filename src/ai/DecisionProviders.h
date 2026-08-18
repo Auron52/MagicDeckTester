@@ -147,8 +147,13 @@ public:
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
     bool CanAutoFireAltPayload(const GameState&, int, const CardDefinition&) const override;
-    // CastEnablerFirst / CastOrderRank: no overrides -- enabler-first is the generic
-    // param-derived ENABLES tier now (lifegain_to_loss -> rank 0, card-dependency-map).
+    // CastEnablerFirst: no override -- enabler-first is the generic param-derived ENABLES tier
+    // now (lifegain_to_loss -> rank 0, card-dependency-map).
+    // CastOrderRank / MainPhaseOverride: the USER's 2026-08-18 review of this deck's order --
+    // Swords after Invigorate, Skyshroud Cutter down with the m2 group, Reverent Silence Main2
+    // and last. Both gated on MTG_AL_ORDER (default off); see the definitions.
+    int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    std::optional<MainPhase> MainPhaseOverride(const GameState&, const CardDefinition&) const override;
     bool ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const override;
     // Tainted Remedy and Plague Drone are the SAME role (opponent lifegain -> loss) and you only
     // need one at a time, so holding one makes the other a redundant required piece rather than a

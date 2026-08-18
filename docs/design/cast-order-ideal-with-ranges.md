@@ -394,3 +394,66 @@ Each step is independently measurable, default-off, and byte-identical off.
   `docs/design/card-dependency-map.md` already carries the enabler/payoff pairs the arc has found.
 * **Range granularity.** The minimum viable range is two rungs (ideal, cost-efficient). Whether
   intermediate rungs ever pay is an empirical question and should not be built until one is shown.
+
+## USER REVIEW: Anti-Lifegain (2026-08-18)
+
+The first deck reviewed under the review rule. Five instructions, all implemented behind
+default-off levers, with what each one measured.
+
+| # | USER instruction | implemented as | measured |
+|---|---|---|---|
+| 1 | "m1 cards should be first in the order if there is no reason to do it otherwise" | `CastOrderKey` folds the natural phase in UNDER the rank (`MTG_ORDER_M1_FIRST`) -- Ignoble Hierarch (m1) now precedes Birds of Paradise (m2), both rank-10 dorks | neutral: +1.0 game-turns over 15,875 (7 decks change play, all d3/d5 pure churn) |
+| 2 | "Swords should go after Invigorate (because of the invigorate swords play)" | rank 21, DERIVED from `controller_lifegain_equals_power` -- a spell paying life equal to POWER is a payoff of every spell that raises power | inert, see below |
+| 3 | "Skyshroud cutter can go lower in the cast order, to fit in with m2" | rank 24, derived from "vanilla creature whose whole function is its alt-cost gift" | folded into the antilife delta |
+| 4 | "Reverent Silence should be cast last, so it should be m2" | `AntiLifegainProvider::MainPhaseOverride` -> Main2 | records the intent; changes nothing in play (see the note on the filter) |
+| 5 | "we are allowed to recheck Tainted Remedy + Reverent Silence at the end of the list" | `ApplyEnablerWipeRecheck` (`MTG_ORDER_RECHECK`) | the ordering WORKS; the delivery does not -- see below |
+
+### The m1/m2 column is advisory today
+
+`MainPhaseFilterActive` is opt-in per provider (`ClassifiesMainPhases`) and **no provider overrides
+it**, so the pre-combat Main2 filter never runs. Instruction 4 is therefore recorded but inert, and
+instruction 1 is the only thing that gives the phase column any effect on play at all.
+
+### Instruction 2 is correct and currently unreachable
+
+The "Invigorate Swords play" needs Swords to target an OPPONENT creature (its controller gains life
+equal to power -> flipped to damage by a Remedy), pumped first. Two things block it here, neither
+of them the order: Invigorate is modelled `target_own_creature: true`, and the goldfish opponent has
+no creatures for this deck to pump or exile. The rank is right; the play cannot happen as modelled.
+Swords' own card note already says as much ("Inert without Remedy vs a passive opponent").
+
+### Instruction 5: the line is now EXPRESSIBLE, and it still is not worth delivering
+
+Reverent Silence's alt cost gifts 6 life -- flipped to 6 damage by a live Remedy -- and then its
+resolution destroys that Remedy. The gift is **paid at cast** (`AIEngine::CastSpellFromHand`:
+`OpponentGainsLife` fires before resolution), so the Remedy backs the wipe and only then dies. A
+second Silence needs a second Remedy in between, which is the USER's alternation.
+
+`ShouldEmitRiskyAltPayload` condition (a) had rejected exactly this, in writing: *"the 'Reverent +
+2nd Remedy + Reverent' rebuild needs cross-turn sequencing the engine does not model"*, because
+*"enabler-first casts it before Reverent, so it is wiped too"*. **That reason was an ORDERING limit,
+and it is now false** -- `ApplyEnablerWipeRecheck` holds the replacement back and casts it after the
+wipe. Measured firing: 47 times in 250 games, including 2- and 3-wipe alternations.
+
+But the only route that reaches the line also hands it to the GREEDY consumer, and that is the
+failure the gate was built for:
+
+* `MTG_ORDER_RECHECK` + opening the gate on "a replacement enabler is in hand": antilife d0
+  **4.9030 -> 4.9550 (+0.0520)**, searched d3 **4.1880 -> 4.1840 (-0.0040)**, d5 churn.
+* `MTG_ORDER_RECHECK` with the gate left shut: **completely inert, 36/36 PASS.**
+
+So the ordering machinery is right and the delivery is wrong. The searched depths WANT the line; the
+greedy policy bricks the combo for an immediate 6, exactly as the old comment predicted, and it
+outweighs the gain 52:1 by game-count. The gate change is reverted and the measurement recorded in
+its place. **The clean route is search-only emission** -- `CollectActions`' `search_risky_live` path
+already bypasses the greedy gate when a Remedy is live, but does not enumerate the
+replacement-Remedy-then-second-Silence shape; teaching it to is the next step, and it leaves the
+greedy policy untouched by construction.
+
+### Instruction from the same review, not yet acted on
+
+"Land drops should be ordered for decks. In this case, it should be put at the start, since there is
+no draw." The land drop is now a ROW in `--cast-order-report` (it had none, because it is not a cast
+and has no `CastOrderRank`), annotated with how it is actually decided: before every cast at depth 0,
+folded into the search at depth > 0. For Anti-Lifegain "at the start" is what already happens. Making
+the position a per-deck reviewable *decision* is the open half of principle 1 (see above).

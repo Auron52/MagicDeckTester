@@ -567,12 +567,31 @@ bool CastOrderLessRanked(const GameState& state, const Action& a, int ra,
     return a.cost.ManaValue() < b.cost.ManaValue();
 }
 
+bool OrderM1FirstEnabled()
+{
+    static const bool on = EnvOn("MTG_ORDER_M1_FIRST");
+    return on;
+}
+
+int CastOrderKey(const GameState& state, const CardDefinition* def, int rank)
+{
+    // x4 leaves room for the three phase classes underneath each rank, so the rank stays the
+    // primary key exactly as before and the phase only breaks its ties.
+    const int key = rank * 4;
+    if (!OrderM1FirstEnabled() || def == nullptr) { return key; }
+    // ClassifyCastMainPhase: 0 = Main1, 1 = Main2, 2 = Both. Wanted order is Main1 < Both < Main2
+    // -- "both" is a card the classifier declined to defer, so it belongs with the pre-combat
+    // group rather than after the cards it positively judged post-combat.
+    const int mp = TurnSolver::ClassifyCastMainPhase(state, *def);
+    return key + (mp == 0 ? 0 : (mp == 2 ? 1 : 2));
+}
+
 bool CastOrderLess(const GameState& state, const Action& a, const Action& b)
 {
     const CardDefinition* da = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
     const CardDefinition* db = b.def ? b.def : CardDatabase::Instance().Lookup(b.card_name);
-    const int ra = da ? ResolveProvider(state).CastOrderRank(state, *da) : 20;
-    const int rb = db ? ResolveProvider(state).CastOrderRank(state, *db) : 20;
+    const int ra = CastOrderKey(state, da, da ? ResolveProvider(state).CastOrderRank(state, *da) : 20);
+    const int rb = CastOrderKey(state, db, db ? ResolveProvider(state).CastOrderRank(state, *db) : 20);
     return CastOrderLessRanked(state, a, ra, b, rb);
 }
 
@@ -696,6 +715,82 @@ static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& 
     return -1;
 }
 
+bool OrderRecheckEnabled()
+{
+    static const bool on = EnvOn("MTG_ORDER_RECHECK");
+    return on;
+}
+
+void ApplyEnablerWipeRecheck(const GameState& state, const std::vector<Action>& acts,
+                             std::vector<int>& order)
+{
+    if (!OrderRecheckEnabled() || order.size() < 4) { return; }   // 2 enablers + 2 wipes minimum
+
+    // A CREATURE enabler survives the wipe (Plague Drone is not an enchantment), so with one of
+    // those around every wipe is already backed and the plain order is right -- do nothing.
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.lifegain_to_loss && d->card.IsCreature()) { return; }
+    }
+
+    // Is an enabler ALREADY live? Then the first wipe is backed by the board and the plan's own
+    // enabler is redundant where the rank put it (first) -- it is the REPLACEMENT, and its job is
+    // to re-arm after the wipe. This is the case that actually occurs: a Reverent Silence is only
+    // ever emitted with a Remedy already on the battlefield, so "Remedy, Silence, Remedy, Silence"
+    // is really "[Remedy already out] Silence, Remedy, Silence".
+    bool backed_now = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.lifegain_to_loss) { backed_now = true; break; }
+    }
+
+    std::vector<int> enablers, wipes;   // positions WITHIN `order`
+    for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
+    {
+        const Action& a = acts[order[pos]];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (!d) { continue; }
+        if (d->params.lifegain_to_loss && d->card.IsCreature()) { return; }   // as above, in-plan
+        if (d->params.lifegain_to_loss)          { enablers.push_back(pos); }
+        if (d->params.destroy_all_enchantments)  { wipes.push_back(pos); }
+    }
+    if (wipes.size() < 2 && !(backed_now && wipes.size() >= 1 && !enablers.empty())) { return; }
+    if (enablers.empty()) { return; }
+
+    // Keep in place: the first enabler ONLY when nothing is live yet (it is what backs the first
+    // wipe), and the first wipe always -- that pass is the order, and it is correct. Everything
+    // left over is the recheck, alternating enabler/wipe so every wipe is paid for while an
+    // enabler is live. Placed at the END, which is where the USER put it.
+    const std::size_t first_enabler = backed_now ? 0 : 1;   // index into `enablers` to start moving
+    std::vector<char> moved(order.size(), 0);
+    std::vector<int>  tail;
+    for (std::size_t k = 0; first_enabler + k < enablers.size() || k + 1 < wipes.size(); ++k)
+    {
+        if (first_enabler + k < enablers.size())
+        { tail.push_back(order[enablers[first_enabler + k]]); moved[enablers[first_enabler + k]] = 1; }
+        if (k + 1 < wipes.size())
+        { tail.push_back(order[wipes[k + 1]]); moved[wipes[k + 1]] = 1; }
+    }
+    if (tail.empty()) { return; }
+    std::vector<int> rebuilt;
+    rebuilt.reserve(order.size());
+    for (std::size_t pos = 0; pos < order.size(); ++pos)
+    { if (!moved[pos]) { rebuilt.push_back(order[pos]); } }
+    rebuilt.insert(rebuilt.end(), tail.begin(), tail.end());
+    order.swap(rebuilt);
+
+    if (EnvOn("MTG_ORDER_RANGE_PROBE"))
+    {
+        std::fprintf(stderr, "[order-recheck] turn=%d enablers=%d wipes=%d -> %d recheck casts\n",
+                     state.turn_number, static_cast<int>(enablers.size()),
+                     static_cast<int>(wipes.size()), static_cast<int>(tail.size()));
+    }
+}
+
 void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>& acts,
                                std::vector<int>& order)
 {
@@ -712,8 +807,9 @@ void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>
         const Action& a = acts[i];
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         const CastOrderRange r = d ? CastOrderRangeOf(state, *d) : CastOrderRange{ 20, 20 };
-        ideal[i] = r.ideal;
-        ceff[i]  = r.cost_efficient;
+        // Both ends carry the SAME phase term, so folding it in preserves the span exactly.
+        ideal[i] = CastOrderKey(state, d, r.ideal);
+        ceff[i]  = CastOrderKey(state, d, r.cost_efficient);
         if (r.Ranged()) { any_ranged = true; }
     }
     // MTG_ORDER_RANGE_PROBE: one line per invocation, so "the ladder never fired" can be told
