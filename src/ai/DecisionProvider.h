@@ -384,6 +384,33 @@ public:
     // Default false. See docs/design/cast-order-ideal-with-ranges.md.
     virtual bool PromoteCantripsInCastOrder() const { return false; }
 
+    // OrderOpaqueCastsByRank -- per-deck opt-in to the MTG_ORDER_OPAQUE behaviour: rank-sort the
+    // casts of an ORDER-OPAQUE set (draw / staging / solo-target trick) instead of leaving the
+    // order to the search. USER doctrine (Mirrorwing review, 2026-08-18): "We need to order
+    // everything, not have search own the order in order to avoid high expenses. Most spells
+    // don't care about the order, so this becomes relatively easy." The adoption route for the
+    // arc's opaque lever: the global env flag measures, this hook is where a reviewed deck
+    // adopts. Default false -> byte-identical.
+    virtual bool OrderOpaqueCastsByRank() const { return false; }
+
+    // CastOrderFallbackRanks -- the FUNDING ladder for a cast whose ideal position is LATE but
+    // whose output (Treasures, ritual float) may be needed earlier to pay for the line. Returns
+    // the ranks to try in preference order (first = preferred); the range ladder walks down the
+    // list only while FirstUnpayablePos says the line cannot be paid. Distinct from the
+    // ideal->cost-efficient range, which walks a card LATER when its early position starves the
+    // line -- this walks a producer EARLIER when the line starves without it (USER, Mirrorwing
+    // review 2026-08-18: Gold Rush "should go after the Magnets at the earliest, but preferably
+    // you would be able to wait until after Twinflame or after draw"). Empty = no ladder.
+    virtual std::vector<int> CastOrderFallbackRanks(const GameState& s,
+                                                    const CardDefinition& def) const
+    { (void)s; (void)def; return {}; }
+
+    // CastOrderTierName -- the --cast-order-report's label for a rank TIER this provider defines.
+    // nullptr = use the generic tier table (main.cpp). Display only; exists because an archetype's
+    // ranks land on generic numbers with unrelated meanings (Mirrorwing's Fists@16 is not the
+    // generic COST REDUCER tier) and the report is the USER's review artifact.
+    virtual const char* CastOrderTierName(int rank) const { (void)rank; return nullptr; }
+
     // XCandidates -- candidate X values for an {X} spell (a branching-PRUNE heuristic). The engine
     // asks BEFORE emitting cast variants and emits one cast per returned value (the variants
     // share hand_index, so they are mutually exclusive in the plan), letting the search pick

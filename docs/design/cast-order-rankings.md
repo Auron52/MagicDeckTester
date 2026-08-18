@@ -38,6 +38,9 @@ about to change. See the worked example in the design doc.
 #
 # rank  range      main  n  mv  card
 #
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
 # [0] ENABLER (lifegain->loss): first, so same-turn payloads see the flip
   0     -   m1    4  3  Tainted Remedy
   0     -   m1    4  4  Plague Drone
@@ -70,6 +73,9 @@ about to change. See the worked example in the design doc.
 # main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
 #
 # rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
 #
 # [10] CREATURE: before noncreature spells (prowess catches later casts)
   10     -   m2    3  1  Gladecover Scout
@@ -104,6 +110,9 @@ about to change. See the worked example in the design doc.
 #
 # rank  range      main  n  mv  card
 #
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
 # [10] CREATURE: before noncreature spells (prowess catches later casts)
   10     -   m2    4  1  Birds of Paradise
   10     -   m2    4  1  Essence Warden
@@ -130,6 +139,9 @@ about to change. See the worked example in the design doc.
 #
 # rank  range      main  n  mv  card
 #
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
 # [5] MANA ROCK: online for the rest of the line
   5     -   m1    1  1  Sol Ring
 #
@@ -152,6 +164,9 @@ about to change. See the worked example in the design doc.
 # main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
 #
 # rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
 #
 # [10] CREATURE: before noncreature spells (prowess catches later casts)
   10     -   m1    3  5  Scourge of Valkas
@@ -192,6 +207,9 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 #
 # rank  range      main  n  mv  card
 #
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
 # [5] MANA ROCK: online for the rest of the line
   5     -   m1    1  3  Ancient Cornucopia
 #
@@ -224,6 +242,9 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 # main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
 #
 # rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
 #
 # [8] (unclassified)
   8     -   m1    1  3  Goblin Warchief
@@ -259,6 +280,9 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 # main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
 #
 # rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: this deck HAS a cantrip, so "draw before the land" is a live question
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
 #
 # [5] MANA ROCK: online for the rest of the line
   5     -   m2    1  1  Sol Ring
@@ -297,6 +321,9 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 #
 # rank  range      main  n  mv  card
 #
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
 # [5] MANA ROCK: online for the rest of the line
   5     -   m1    1  1  Sol Ring
 #
@@ -331,6 +358,9 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 #
 # rank  range      main  n  mv  card
 #
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
 # [10] CREATURE: before noncreature spells (prowess catches later casts)
   10     -   m2    4  1  Dauntless Bodyguard
   10     -   m2    4  1  Venerable Knight
@@ -357,6 +387,9 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 #
 # rank  range      main  n  mv  card
 #
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
 # [10] CREATURE: before noncreature spells (prowess catches later casts)
   10     -   m2    2  1  Birds of Paradise
   10     -   m1    4  1  Ignoble Hierarch
@@ -376,11 +409,56 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 #
 # rank  range      main  n  mv  card
 #
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
 # [20] other noncreature spell
   20     -   m2    2  1  Aether Vial
 ```
 
 ## Mirrorwing Dragon
+
+**REVIEW HELD (USER, 2026-08-18) — the reviewed order below is built behind `MTG_MW_ORDERED`
+(default off, one lever for the whole ruling; measurement pending, then default flip on
+approval).** The ruling, verbatim:
+
+> Fists after other draw makes sense. Draw spells Anger, Expedite, Impolite and Fists should come
+> before other spells, Gold Rush is an exception, so it might be worth considering it before and
+> after draw. (after is better because we might get more creatures on board after drawing new
+> cards. Luxurious Libation should be in the same camp as twinflame, I guess before it if both are
+> in the deck? We need to order everything, not have search own the order in order to avoid high
+> expenses. Most spells don't care about the order, so this becomes relatively easy.
+
+> To be clear, Magnets creatures, Libation and Twinflame are still before draw. Lands are more
+> arguable. The ideal is to play your land just before you need it, but its order often doesn't
+> matter unless you are starved of red or have only a come into play tapped land. So this is kind
+> of tricky. in theory the beginning of the turn and after draw are the two times. Actually, that
+> might be sufficient, because the main thing is we do not want to prevent reconsidering land
+> drops after we have drawn, but we get a chance to reconsider other lands that we draw with those
+> two positions. Gold Rush is probably the most difficult timing and might need more searching
+> unless we have a lot of mana up. Definitely it should go after the Magnets at the earliest, but
+> preferably you would be able to wait until after Twinflame or after draw.
+
+Scale the Heights joins the draw camp (confirmed in review: it literally draws, and its bonus
+land drop wants to be known before the turn commits). The encoded order: magnets(5) ->
+creatures(10) -> Libation(11) -> Twinflame(12) -> draws(14: Anger / Expedite / Impolite / Scale)
+-> Gold Rush(15, FUNDING ladder 15->13->6: prefers after-draw, walks earlier only while the line
+cannot pay -- "more searching unless we have a lot of mana up" as a deterministic fallback, not a
+fan-out) -> Fists(16) -> Draught(18). Under the lever the trick order is no longer search-owned
+(`OrderOpaqueCastsByRank`), and the old draws-first cantrip promotion (`MTG_MW_CANTRIP_ORDER`,
+the measured -20.0 arm) is SUPERSEDED: bodies come before draws because each body is one more
+copy of the mass-draw itself, so that measurement is dead and the new order is measured on its
+own merits.
+
+Two implementation notes. (1) The ladder's after-magnets rung (6) sorts identically to
+after-Twinflame (13) inside the apply path's trick set (bodies are hoisted out of it); the true
+"Gold Rush first, its Treasures then fund the bodies" line exists at the PLAN level via the
+deferred treasure breakpoint, so the rung is kept for intent and costs nothing. (2) The LAND
+ruling (two positions: start of turn, after draw) is NOT yet encoded -- at depth the search
+already places the drop freely; the d0 start-of-turn-only placement is the gap, tracked as the
+open item below.
+
+**Ordered report (`MTG_MW_ORDERED=1`), both decks:**
 
 ```
 # Cast order -- decks/Mirrorwing Dragon/Mirrorwing Dragon.cod
@@ -389,6 +467,82 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 # main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
 #
 # rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: this deck HAS a cantrip, so "draw before the land" is a live question
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
+# [5] MAGNET: the copy target must exist before any trick
+  5     -   m1    4  4  Zada, Hedron Grinder
+  5     -   m1    4  5  Mirrorwing Dragon
+#
+# [10] CREATURE: before noncreature spells (prowess catches later casts)
+  10     -   m2    4  1  Elvish Mystic
+  10     -   m1    4  1  Ignoble Hierarch
+  10     -   m1    4  2  Goblin Instigator
+#
+# [12] DOUBLER (Twinflame): after every other body, before the pumps
+  12     -   m1    3  2  Twinflame
+#
+# [14] DRAW: after the bodies (each body is one more copy of the mass-draw)
+  14     -   m1    4  1  Ancestral Anger
+  14     -   m1    2  1  Expedite
+  14     -   m1    2  3  Scale the Heights
+#
+# [15] GOLD RUSH: after the draws (post-draw bodies widen the fan-out); funding ladder walks it earlier
+  15     [6..15]   m1    4  2  Gold Rush   -- FUNDING ladder: prefers the late slot, walks earlier only while the line cannot pay (15->13->6)
+#
+# [16] PAYOFF (Fists): after every draw it counts
+  16     -   m1    4  2  Fists of Flame
+```
+
+```
+# Cast order -- decks/Mirrorwing Trick Suite/Mirrorwing Trick Suite.cod
+# provider: Mirrorwing   ideal-order draw tier: off   cantrip max mv: 1
+# deck flags: feeds_combat=yes uses_second_main=no enabler_pull=no castpayoff_pull=no
+# main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
+#
+# rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: this deck HAS a cantrip, so "draw before the land" is a live question
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
+# [5] MAGNET: the copy target must exist before any trick
+  5     -   m1    4  4  Zada, Hedron Grinder
+  5     -   m1    4  5  Mirrorwing Dragon
+#
+# [10] CREATURE: before noncreature spells (prowess catches later casts)
+  10     -   m2    4  1  Elvish Mystic
+  10     -   m1    4  1  Ignoble Hierarch
+  10     -   m1    4  2  Goblin Instigator
+#
+# [11] BODY-MAKER (Libation): its token is one more copy of everything after
+  11     -   m1    3  1  Luxurious Libation
+#
+# [14] DRAW: after the bodies (each body is one more copy of the mass-draw)
+  14     -   m1    4  1  Impolite Entrance
+#
+# [15] GOLD RUSH: after the draws (post-draw bodies widen the fan-out); funding ladder walks it earlier
+  15     [6..15]   m1    4  2  Gold Rush   -- FUNDING ladder: prefers the late slot, walks earlier only while the line cannot pay (15->13->6)
+#
+# [16] PAYOFF (Fists): after every draw it counts
+  16     -   m1    4  2  Fists of Flame
+#
+# [18] DRAUGHT: last -- X counts the turn's prior lifegain
+  18     -   m1    4  1  Fortifying Draught
+```
+
+**Baseline report (default config, what plays today):**
+
+```
+# Cast order -- decks/Mirrorwing Dragon/Mirrorwing Dragon.cod
+# provider: Mirrorwing   ideal-order draw tier: off   cantrip max mv: 1
+# deck flags: feeds_combat=yes uses_second_main=no enabler_pull=no castpayoff_pull=no
+# main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
+#
+# rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: this deck HAS a cantrip, so "draw before the land" is a live question
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
 #
 # [5] MANA ROCK: online for the rest of the line
   5     -   m1    4  4  Zada, Hedron Grinder
@@ -422,6 +576,9 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 #
 # rank  range      main  n  mv  card
 #
+# [LAND] LAND DROP: this deck HAS a cantrip, so "draw before the land" is a live question
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
 # [5] MANA ROCK: online for the rest of the line
   5     -   m1    4  4  Zada, Hedron Grinder
   5     -   m1    4  5  Mirrorwing Dragon
@@ -451,6 +608,9 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 #
 # rank  range      main  n  mv  card
 #
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
 # [5] MANA ROCK: online for the rest of the line
   5     -   m2    1  1  Sol Ring
 #
@@ -467,6 +627,9 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 # main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
 #
 # rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: this deck HAS a cantrip, so "draw before the land" is a live question
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
 #
 # [15] RITUAL: float online before the payoff
   15     -   m2    2  3  Seething Song
@@ -485,6 +648,9 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 # main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
 #
 # rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
 #
 # [10] CREATURE: before noncreature spells (prowess catches later casts)
   10     -   m1    4  1  Goblin Guide
@@ -511,6 +677,9 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 # main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
 #
 # rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
 #
 # [10] CREATURE: before noncreature spells (prowess catches later casts)
   10     -   m2    4  1  Galerider Sliver
@@ -539,6 +708,9 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 # main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
 #
 # rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
 #
 # [20] other noncreature spell
   20     [2..20]   m2    4  2  Treasure Hunt   -- draw, but its cost IS the turn -> cost-efficient end

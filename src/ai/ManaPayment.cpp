@@ -632,6 +632,11 @@ bool OpaqueCastOrderEnabled()
     return on;
 }
 
+bool OpaqueCastOrderActive(const GameState& state)
+{
+    return OpaqueCastOrderEnabled() || ResolveProvider(state).OrderOpaqueCastsByRank();
+}
+
 CastOrderRange CastOrderRangeOf(const GameState& state, const CardDefinition& def)
 {
     const int ideal = ResolveProvider(state).CastOrderRank(state, def);
@@ -711,6 +716,17 @@ static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& 
             AddColorToPool(pool, col, a.ritual_float);
         }
         if (a.rock_mana.Total() > 0) { pool.AddPool(a.rock_mana); }
+        // Treasures minted by the cast (Gold Rush) are same-turn mana through the deferred
+        // breakpoint re-solve (real SacForMana candidates), so the projection credits them as
+        // wild -- BASE count only (a magnet fan-out mints one per copy, but the fan width is a
+        // board fact this projection does not model). The under-credit is the safe direction:
+        // it can only walk a funding spell one rung earlier than strictly needed, never project
+        // an unpayable line as payable.
+        {
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d && d->params.creates_treasures > 0)
+            { AddColorToPool(pool, std::string(), d->params.creates_treasures); }
+        }
     }
     return -1;
 }
@@ -794,23 +810,40 @@ void ApplyEnablerWipeRecheck(const GameState& state, const std::vector<Action>& 
 void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>& acts,
                                std::vector<int>& order)
 {
-    if (!CastOrderRangeEnabled() || order.size() < 2) { return; }
+    // Entered by the global measurement arm (MTG_ORDER_RANGE) or by a provider that adopted the
+    // reviewed full order (OrderOpaqueCastsByRank -- Mirrorwing's MTG_MW_ORDERED carries its
+    // Gold Rush funding ladder through here).
+    if ((!CastOrderRangeEnabled() && !ResolveProvider(state).OrderOpaqueCastsByRank())
+        || order.size() < 2) { return; }
 
-    // Both ends of every ordered cast's range, keyed by ACTION index (the order vector is
-    // permuted below, so positions are not a stable key).
-    std::vector<int>  ideal(acts.size(), 20);
-    std::vector<int>  ceff(acts.size(), 20);
-    std::vector<char> demoted(acts.size(), 0);
+    // Every ordered cast's rank LADDER, keyed by ACTION index (the order vector is permuted
+    // below, so positions are not a stable key). rungs[i][0] is the preferred key; step[i]
+    // walks down the list. Two shapes feed it:
+    //   * the ideal -> cost-efficient RANGE (a draw promoted early, walked LATER when its early
+    //     position starves the line) -- the original two-point ladder;
+    //   * a provider FUNDING ladder (CastOrderFallbackRanks -- a producer preferred LATE, walked
+    //     EARLIER when the line starves without its output; Mirrorwing's Gold Rush 15->13->6).
+    std::vector<std::vector<int>> rungs(acts.size());
+    std::vector<int>              step(acts.size(), 0);
     bool any_ranged = false;
     for (int i : order)
     {
         const Action& a = acts[i];
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-        const CastOrderRange r = d ? CastOrderRangeOf(state, *d) : CastOrderRange{ 20, 20 };
-        // Both ends carry the SAME phase term, so folding it in preserves the span exactly.
-        ideal[i] = CastOrderKey(state, d, r.ideal);
-        ceff[i]  = CastOrderKey(state, d, r.cost_efficient);
-        if (r.Ranged()) { any_ranged = true; }
+        const std::vector<int> fb =
+            d ? ResolveProvider(state).CastOrderFallbackRanks(state, *d) : std::vector<int>{};
+        if (!fb.empty())
+        {
+            // Both ends carry the SAME phase term, so folding it in preserves the span exactly.
+            for (int r : fb) { rungs[i].push_back(CastOrderKey(state, d, r)); }
+        }
+        else
+        {
+            const CastOrderRange r = d ? CastOrderRangeOf(state, *d) : CastOrderRange{ 20, 20 };
+            rungs[i].push_back(CastOrderKey(state, d, r.ideal));
+            if (r.Ranged()) { rungs[i].push_back(CastOrderKey(state, d, r.cost_efficient)); }
+        }
+        if (rungs[i].size() > 1) { any_ranged = true; }
     }
     // MTG_ORDER_RANGE_PROBE: one line per invocation, so "the ladder never fired" can be told
     // apart from "the ladder ran and the ideal order paid" -- the two look identical in play and
@@ -828,8 +861,12 @@ void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>
     probe("enter");
     const std::vector<int> base = order;   // re-sorted from here every rung, so "stable => plan
                                            // order breaks ties" keeps meaning plan order
-    auto eff = [&](int i) { return demoted[i] ? ceff[i] : ideal[i]; };
-    for (std::size_t rung = 0; rung <= order.size(); ++rung)
+    auto eff       = [&](int i) { return rungs[i][step[i]]; };
+    auto can_step  = [&](int i) { return step[i] + 1 < static_cast<int>(rungs[i].size()); };
+    // Total demotion steps available bounds the walk (one step per iteration that fails).
+    std::size_t max_steps = 1;
+    for (int i : base) { max_steps += rungs[i].size() - 1; }
+    for (std::size_t rung = 0; rung < max_steps + 1; ++rung)
     {
         order = base;
         std::stable_sort(order.begin(), order.end(), [&](int x, int y)
@@ -845,22 +882,33 @@ void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>
         // Walk down the ranged spell CLOSEST to the failure (searching the prefix up to and
         // including the failing cast, which is itself a candidate when it has a range). That is
         // the minimal deviation from ideal that can free the mana the failed cast wanted; one
-        // step per spell, so the walk terminates at the all-cost-efficient rung -- the order the
-        // engine used before the promotion existed, which is known to be castable.
+        // step per spell per iteration, so the walk terminates at the all-fallen rung -- the
+        // order the engine used before the promotion existed, which is known to be castable.
         int victim = -1;
         for (int pos = 0; pos <= fail && pos < static_cast<int>(order.size()); ++pos)
         {
             const int i = order[pos];
-            if (!demoted[i] && ideal[i] < ceff[i]) { victim = i; }
+            if (can_step(i) && rungs[i][step[i] + 1] >= eff(i)) { victim = i; }
+        }
+        // No prefix victim: a FUNDING spell after the failure whose next rung moves it EARLIER
+        // (Gold Rush late -> earlier) can put its output in front of the failing cast. Take the
+        // one closest after the failure -- the minimal reorder that can fund it.
+        if (victim < 0)
+        {
+            for (int pos = fail + 1; pos < static_cast<int>(order.size()); ++pos)
+            {
+                const int i = order[pos];
+                if (can_step(i) && rungs[i][step[i] + 1] < eff(i)) { victim = i; break; }
+            }
         }
         if (victim < 0) { break; }   // nothing left to walk: this is the terminal rung
-        demoted[victim] = 1;
         if (s_probe)
         {
             std::fprintf(stderr, "[order-range] turn=%d fail_pos=%d demote=%s %d->%d\n",
                          state.turn_number, fail, acts[victim].card_name.str().c_str(),
-                         ideal[victim], ceff[victim]);
+                         eff(victim), rungs[victim][step[victim] + 1]);
         }
+        ++step[victim];
     }
 }
 

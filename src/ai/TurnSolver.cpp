@@ -11558,7 +11558,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
                     { ord.push_back(i); }
                 }
-                if (OpaqueCastOrderEnabled())
+                if (OpaqueCastOrderActive(state))
                 {
                     std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
                     { return CastOrderLess(state, acts[x], acts[y]); });

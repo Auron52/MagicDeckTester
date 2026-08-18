@@ -1,5 +1,20 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS UPDATE 2026-08-18 (later): the MIRRORWING review gate was HELD.
+>
+> The USER reviewed and ruled the full Mirrorwing order (recorded verbatim in
+> `cast-order-rankings.md` under "Mirrorwing Dragon"): bodies (magnets, creatures, Libation,
+> Twinflame) before draws, draws before Fists, Draught last, Gold Rush on a deterministic
+> FUNDING ladder (after-draw preferred, earlier only while the line cannot pay), and — the
+> structural ruling — "order everything, not have search own the order". Built behind
+> `MTG_MW_ORDERED` (default off, byte-identical off): provider ranks, opaque rank-sort adoption
+> hook (`OrderOpaqueCastsByRank`), the multi-rung/funding generalization of the range ladder
+> (`CastOrderFallbackRanks` + Treasure credit in `FirstUnpayablePos`), and supersession of
+> `MTG_MW_CANTRIP_ORDER` (the measured −20.0 draws-first arm is DEAD under this ruling — bodies
+> before draws; re-measure from scratch). OPEN under this ruling: the LAND two-position rule
+> (start of turn / after draw) is not yet encoded at d0; arm G's numbers do not carry over.
+> Other decks' review gates remain un-held.
+>
 > ## STATUS: ON HOLD as of 2026-08-18 (paused, not abandoned; nothing is half-applied)
 >
 > **The tree is in a clean parked state.** All four levers are DEFAULT OFF and byte-identical off

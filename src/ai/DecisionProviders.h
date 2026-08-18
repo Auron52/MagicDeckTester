@@ -654,12 +654,31 @@ public:
     bool StriveCountMaxOnly(const GameState&, const CardDefinition&) const override;
     // Go-off order (user round 3): magnets (5) before Twinflame (8) before the pump tricks --
     // the fan-out target must exist before the token doubler, the doubler before the pumps.
-    // Consumed by the opaque apply path's enabler sort in both worlds.
+    // Consumed by the opaque apply path's enabler sort in both worlds. Under MTG_MW_ORDERED the
+    // body camp gains Luxurious Libation (its token is one more copy target for everything after)
+    // and LOSES Gold Rush, whose position becomes the funding ladder below.
     bool CastEnablerFirst(const GameState&, const std::string&) const override;
+    // The FULL reviewed order (USER, 2026-08-18): magnets(5) -> creatures(10) -> Libation(11) ->
+    // Twinflame(12) -> draws(14) -> Gold Rush(15, ladder) -> Fists(16) -> Draught(18). Gated on
+    // MTG_MW_ORDERED; off -> the pre-review ranks (magnet 5 / doubler 12 / treasures 15).
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
     // Cantrip promotion: measured a consistent win on THIS deck and a loss on Hinata, so it lives
     // here rather than at the root. Default off (MTG_MW_CANTRIP_ORDER) -- see the definition.
+    // SUPERSEDED by the USER's reviewed order when MTG_MW_ORDERED is on: bodies (magnets,
+    // creatures, Libation, Twinflame) come BEFORE the draws -- each body is one more copy of the
+    // mass-draw itself -- so the draws-first promotion this hook awarded is the wrong shape.
     bool PromoteCantripsInCastOrder() const override;
+    // MTG_MW_ORDERED: the whole reviewed order replaces search ownership of the trick order
+    // (USER: "We need to order everything, not have search own the order in order to avoid high
+    // expenses"). Default off -> byte-identical.
+    bool OrderOpaqueCastsByRank() const override;
+    // Gold Rush is the one order-searched card left, as a deterministic FALLBACK not a fan-out
+    // (USER: "might need more searching unless we have a lot of mana up"): prefer after the draws
+    // (15), walk to after-Twinflame (13), then after-magnets (6), only while the line cannot pay.
+    std::vector<int> CastOrderFallbackRanks(const GameState&, const CardDefinition&) const override;
+    // Review-artifact labels for the reviewed tiers (the generic table's names for 14/15/16/18
+    // mean unrelated things).
+    const char* CastOrderTierName(int rank) const override;
 };
 
 // Equipment aggro (KittyEquipment). Detection keys on the equipment-deck gated params

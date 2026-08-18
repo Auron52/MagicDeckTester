@@ -3806,15 +3806,27 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
         for (Row& r : rows) { if (r.name == c.m_name.str()) { ++r.count; seen = true; break; } }
         if (seen) { continue; }
         const int rank = prov.CastOrderRank(state, *d);
-        // The RANGE's ideal end. A draw's ideal position is the information tier whether or not the
-        // discernment awarded it that RANK -- that is the point of a range: the ladder may still
-        // walk a big draw early when the mana is genuinely there. Affordability-affecting cards
-        // (rituals, rocks, reducers) already sit at their ideal end, so range == rank for them.
-        const int ideal = IsIdealOrderDraw(*d) ? 2 : rank;
+        // The RANGE's ideal end. A provider that adopted the reviewed full order
+        // (OrderOpaqueCastsByRank) has NO draw promotion -- its ranks ARE the order, and the only
+        // movement left is a FUNDING ladder (CastOrderFallbackRanks), whose earliest rung is shown
+        // as the range's far end. Otherwise the legacy display: a draw's ideal position is the
+        // information tier whether or not the discernment awarded it that RANK -- the ladder may
+        // still walk a big draw early when the mana is genuinely there.
+        const std::vector<int> fb = prov.CastOrderFallbackRanks(state, *d);
+        const bool adopted_order = prov.OrderOpaqueCastsByRank();
+        const int ideal = !fb.empty() ? *std::min_element(fb.begin(), fb.end())
+                        : (adopted_order ? rank : (IsIdealOrderDraw(*d) ? 2 : rank));
         const int mp = TurnSolver::ClassifyCastMainPhase(state, *d);
         const char* mps = (mp == 0 ? "m1" : (mp == 1 ? "m2" : "both"));
         std::string note;
-        if (IsIdealOrderDraw(*d))
+        if (!fb.empty())
+        {
+            note = "FUNDING ladder: prefers the late slot, walks earlier only while the line cannot pay (";
+            for (std::size_t fi = 0; fi < fb.size(); ++fi)
+            { note += (fi ? "->" : "") + std::to_string(fb[fi]); }
+            note += ")";
+        }
+        else if (!adopted_order && IsIdealOrderDraw(*d))
         {
             note = IsIdealOrderCantrip(*d)
                  ? "cantrip"
@@ -3838,9 +3850,11 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
           if (a.mv  != b.mv)  { return a.mv  < b.mv;  }
           return a.name < b.name; });
 
-    // Tier names mirror GenericProvider::CastOrderRank's documented tiers exactly.
-    auto tier_name = [](int r) -> const char*
+    // Tier names mirror GenericProvider::CastOrderRank's documented tiers exactly; a provider
+    // that defines its own tiers overrides per rank (CastOrderTierName).
+    auto tier_name = [&prov](int r) -> const char*
     {
+        if (const char* n = prov.CastOrderTierName(r)) { return n; }
         switch (r)
         {
             case 0:  return "ENABLER (lifegain->loss): first, so same-turn payloads see the flip";

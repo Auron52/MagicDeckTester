@@ -2631,6 +2631,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     return ResolveProvider(state).CastOrderRank(state, *dx)
                          < ResolveProvider(state).CastOrderRank(state, *dy);
                 });
+                // Mirror of the main opaque loop / apply_plan_actions (lockstep): with the opaque
+                // rank-sort active (global arm or a provider's adopted order, e.g. Mirrorwing's
+                // MTG_MW_ORDERED), the non-enabler rest is rank-ordered + laddered too, so a
+                // continuation realises the same sequence the rollout scored.
+                if (OpaqueCastOrderActive(state))
+                {
+                    std::stable_sort(rest.begin(), rest.end(), [&](int x, int y)
+                    { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
+                    ApplyCastOrderRangeLadder(state, extra.actions, rest);
+                    ApplyEnablerWipeRecheck(state, extra.actions, rest);
+                }
                 cont_order = std::move(ena);
                 cont_order.insert(cont_order.end(), rest.begin(), rest.end());
             }
@@ -2895,7 +2906,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         { continue; }
         ord.push_back(i);
     }
-    if (OpaqueCastOrderEnabled())
+    if (OpaqueCastOrderActive(state))
     {
         std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
         { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });

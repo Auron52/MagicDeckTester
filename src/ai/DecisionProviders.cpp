@@ -7301,10 +7301,32 @@ int MirrorwingProvider::LegendKeepIndex(const GameState& s, int controller,
 // honestly kind of bad without Mirrorwing or Zada on board as all other creatures are small --
 // without them you would only cast it when you are 1 damage short. Pretty rare."
 
+// MTG_MW_ORDERED -- the USER-reviewed FULL cast order for the Mirrorwing decks (review held
+// 2026-08-18; the ruling is recorded verbatim in docs/design/cast-order-rankings.md). One lever
+// carries the whole ruling -- ranks, hoist membership, opaque rank-sort, the Gold Rush funding
+// ladder, and the cantrip-promotion supersession -- so an A/B arm cannot get half of it. Default
+// OFF -> byte-identical pre-review behaviour; =1 to measure. On adoption this becomes a
+// default-on read with an off switch, as the other adopted per-deck rules are.
+static bool MirrorwingOrderedEnabled()
+{
+    static const bool on = EnvOn("MTG_MW_ORDERED");   // default OFF; =1 enables the reviewed order
+    return on;
+}
+
 bool MirrorwingProvider::CastEnablerFirst(const GameState&, const std::string& name) const
 {
     const CardDefinition* d = CardDatabase::Instance().Lookup(name);
     if (!d) { return false; }
+    if (MirrorwingOrderedEnabled())
+    {
+        // Reviewed body camp (USER 2026-08-18): "Magnets, creatures, Libation and Twinflame are
+        // still before draw" -- each body cast before a magnet fan-out is one more COPY of the
+        // mass-draw itself. Gold Rush LEAVES the hoist: unconditionally-early was the pre-review
+        // shape; its position is now the funding ladder (CastOrderFallbackRanks).
+        return d->card.IsCreature()                 // bodies first: more copies for the fan-outs
+            || d->params.token_copy_of_target       // Twinflame: double the board before the pumps
+            || d->params.trick_token_power > 0;     // Luxurious Libation: its token is a body too
+    }
     // ALL creatures precede the doubler (user round 3: "you might cast creatures before
     // Twinflame to get more [critters]"), the doubler precedes the pump tricks, and Gold Rush
     // precedes the DRAW tricks (user: "essentially a ritual... sometimes you need to cast it
@@ -7318,10 +7340,58 @@ bool MirrorwingProvider::CastEnablerFirst(const GameState&, const std::string& n
 
 int MirrorwingProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
+    if (MirrorwingOrderedEnabled())
+    {
+        // The FULL reviewed order (USER 2026-08-18). No card in this deck carries more than one
+        // of these params except Fists of Flame (cast_draw AND pump_per_cards_drawn), so the
+        // payoff check precedes the draw check. Creatures fall through to Generic's 10.
+        if (def.params.copies_solo_targeted_spells)       { return 5;  }  // magnets: first body
+        if (def.params.trick_token_power > 0)             { return 11; }  // Libation: body-maker, before the doubler
+        if (def.params.token_copy_of_target)              { return 12; }  // Twinflame: doubler, after every other body
+        if (def.params.pump_per_cards_drawn_power > 0)    { return 16; }  // Fists: the payoff, after every draw
+        if (def.params.cast_draw > 0)                     { return 14; }  // draws: Anger / Expedite / Impolite / Scale
+        if (def.params.creates_treasures > 0)             { return 15; }  // Gold Rush: preferred slot = after the draws
+        if (def.params.pump_per_life_gained_power > 0)    { return 18; }  // Draught: X counts the turn's PRIOR gains
+        return GenericProvider::CastOrderRank(s, def);
+    }
     if (def.params.copies_solo_targeted_spells) { return 5; }    // magnet first of the bodies
     if (def.params.token_copy_of_target)        { return 12; }   // after every creature (10), before tricks (20)
     if (def.params.creates_treasures > 0)       { return 15; }   // Gold Rush: after the doubler, before draw tricks
     return GenericProvider::CastOrderRank(s, def);
+}
+
+bool MirrorwingProvider::OrderOpaqueCastsByRank() const
+{
+    return MirrorwingOrderedEnabled();
+}
+
+const char* MirrorwingProvider::CastOrderTierName(int rank) const
+{
+    if (!MirrorwingOrderedEnabled()) { return nullptr; }
+    switch (rank)
+    {
+        case 5:  return "MAGNET: the copy target must exist before any trick";
+        case 11: return "BODY-MAKER (Libation): its token is one more copy of everything after";
+        case 12: return "DOUBLER (Twinflame): after every other body, before the pumps";
+        case 14: return "DRAW: after the bodies (each body is one more copy of the mass-draw)";
+        case 15: return "GOLD RUSH: after the draws (post-draw bodies widen the fan-out); funding ladder walks it earlier";
+        case 16: return "PAYOFF (Fists): after every draw it counts";
+        case 18: return "DRAUGHT: last -- X counts the turn's prior lifegain";
+        default: return nullptr;
+    }
+}
+
+std::vector<int> MirrorwingProvider::CastOrderFallbackRanks(const GameState&,
+                                                            const CardDefinition& def) const
+{
+    // Gold Rush's funding ladder (USER 2026-08-18): "Definitely it should go after the Magnets at
+    // the earliest, but preferably you would be able to wait until after Twinflame or after
+    // draw" -- and "might need more searching unless we have a lot of mana up", i.e. when the
+    // late slot pays there is nothing to search. Preferred 15 (after the draws: post-draw bodies
+    // widen its fan-out), then 13 (after Twinflame, before the draws), then 6 (after the
+    // magnets) -- each earlier rung only while FirstUnpayablePos says the line cannot be paid.
+    if (MirrorwingOrderedEnabled() && def.params.creates_treasures > 0) { return { 15, 13, 6 }; }
+    return {};
 }
 
 // Mirrorwing is the deck the cantrip promotion measurably SUITS -- every trick in it cantrips, so
@@ -7335,6 +7405,10 @@ int MirrorwingProvider::CastOrderRank(const GameState& s, const CardDefinition& 
 // an off switch, as the other adopted per-deck rules are.
 bool MirrorwingProvider::PromoteCantripsInCastOrder() const
 {
+    // SUPERSEDED by MTG_MW_ORDERED (USER review 2026-08-18): the reviewed order puts the bodies
+    // BEFORE the draws (each body is one more copy of the mass-draw), so the draws-first
+    // promotion this hook awarded is the wrong shape for this deck and must not combine with it.
+    if (MirrorwingOrderedEnabled()) { return false; }
     static const bool on = EnvOn("MTG_MW_CANTRIP_ORDER");
     return on;
 }

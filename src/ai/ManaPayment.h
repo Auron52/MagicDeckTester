@@ -95,6 +95,13 @@ bool           CastOrderRangeEnabled();   // MTG_ORDER_RANGE
 // ORDER of the non-enabler casts changes. MTG_ORDER_OPAQUE, default off.
 bool OpaqueCastOrderEnabled();
 
+// The one gate BOTH apply paths (executor TakeTurn / rollout ApplyPlanDirect) read for the
+// opaque rank-sort: the global measurement arm (MTG_ORDER_OPAQUE) or the state's provider having
+// adopted the reviewed full order (DecisionProvider::OrderOpaqueCastsByRank -- Mirrorwing's
+// MTG_MW_ORDERED). One shared reader so the two worlds cannot drift (the EngineFlags lockstep
+// rule, applied to a provider hook).
+bool OpaqueCastOrderActive(const GameState& state);
+
 // THE fallback ladder. `order` holds indices into `actions` already sorted the way the caller
 // sorts today; on return it is the IDEAL order, with each ranged spell walked toward its
 // cost-efficient end only as far as paying for the line requires. Never reorders a spell that has
