@@ -94,9 +94,21 @@ def main():
     for k in sorted(strata):
         print(_row(f"{k}" if k < ARGS.cap else f">={k}", strata[k]))
     print(_row("ALL", alld))
-    signs = {m > 0 for m in (st.mean(v) for v in strata.values() if len(v) > 30)}
-    if len(signs) > 1:
-        print("\n*** SIGN CHANGE across strata -- the pooled number is a MIXTURE, do not report it alone.")
+    # A sign change only counts when BOTH signs are individually significant. Flagging on a
+    # stratum that merely sits near zero (t = 0.14) cries wolf: attenuation is not reversal,
+    # and the two call for different conclusions.
+    sig = []
+    for v in strata.values():
+        if len(v) <= 30:
+            continue
+        m = st.mean(v); se = st.stdev(v) / len(v) ** .5
+        if se and abs(m / se) > 2.0:
+            sig.append(m > 0)
+    if len(set(sig)) > 1:
+        print("\n*** SIGN CHANGE across strata (both directions significant at |t|>2) -- the "
+              "pooled number is a MIXTURE, do not report it alone.")
+    elif sig and any(abs(st.mean(v)) < 0.25 * abs(st.mean(alld)) for v in strata.values() if len(v) > 30):
+        print("\n(attenuation, not reversal: some stratum is near zero but no significant sign flip)")
 
 
 if __name__ == "__main__":
