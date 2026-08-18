@@ -32,13 +32,43 @@ Output is analysed by AI and presented to the user, who can open any game in the
 (`tools/replay/index.html`, drag the game JSON) or re-play it in the **play viewer**
 (`tools/play/server.js`) from the printed `--seed S --game-index I` repro.
 
-## Rule 0 — MOST GAMES SHOULD NOT DIVERGE; the rate is a PAIRING GATE
+## Rule 0 — SAME INDEXED CARDS ⇒ SAME WIN TURN; that is the gate
 
-The expected rate is **low** (user, 2026-08-18). Two versions differing by 11 of 60 cards should
-play the great majority of games to the same win turn: the swap can only matter in a game where a
-swapped card is drawn *and* changes the line. A high divergence rate is therefore not a finding
-about the cards — it is evidence the **pairing is broken**, and the headline effect is untrustworthy
-until it is fixed. Check this number before reading anything else.
+The gate is **conditional**, and the conditional form is the one that means something (user,
+2026-08-18): among games where both arms held the **same indexed cards**, the win turn must be
+**identical** — not "usually equal", identical. The shuffle is seeded on card NUMBERS and the
+`replace` map keeps shared cards at the same numbers, so a game that never draws a swapped number
+plays a literally identical card sequence in both arms. A win-turn difference there cannot be the
+cards; it is apparatus or a bug.
+
+An earlier version of this rule stated it unconditionally — "most games should not diverge" — and
+that is **wrong for a deck that mass-draws**. Measured on Mirrorwing base-vs-trick (2,500 paired
+games, 11 of 60 cards swapped): the *unconditional* rate was **40.6%**, while the conditional
+invariant passed perfectly at **0 of 151 (0.00%)**. Reading the unconditional number as a pairing
+failure would have condemned a correctly-paired run. With cantrip fan-out under a magnet a deck
+sees most of its library, so a swapped card turns up in almost every game.
+
+So: compute BOTH, and gate on the conditional one.
+- **Conditional (the gate):** divergences among same-indexed-cards games. Must be ~0.
+- **Unconditional (context only):** the overall rate. High is normal for a heavy-draw deck and is
+  NOT by itself evidence of anything.
+
+### The unconditional rate still needs decomposing, just not as a gate
+
+When it IS high, find out where it starts, because "diverged" hides two very different causes:
+
+| where the divergence begins | meaning |
+|---|---|
+| at the mulligan (different keep or different bottom) | APPARATUS, unless a swapped card is in the hand |
+| in play, from identical keeps | the cards — the thing being measured |
+
+Measured on the same run: **72.4% of divergences began at a different mulligan decision**, and on
+hands containing no swapped card the two arms' tables disagreed on keep 13.7% of the time and on
+bottoming 56.9% of the time. That is two independently-noisy R=10 tables, not the edit — see
+[[shared-apparatus-cost-mitigations]]. Compare opening hands by card **NUMBER**, never by name: the
+`replace` map makes number 41 "Ancestral Anger" in one arm and "Impolite Entrance" in the other, so
+a name comparison scores an IDENTICAL keep as a different hand (it inflated this figure to 93.9%
+before the fix).
 
 ### The trap that produces a false high rate
 
