@@ -522,3 +522,40 @@ number has pointed at adoption and twice the configuration was wrong. If it is m
 time, look at the Dragonstorm searched depths and the reference gate FIRST; the mean disagrees with
 both, and the mean is not the bar. The demonstration that would actually justify mode 2 is
 0 play-drift -- i.e. evidence the sequenced model is EXACT at the enumerator -- not a better mean.
+
+### Held-out overnight: the original signature reproduces, and the effect is PER-DECK
+
+The overnight finished after the verdict was already in, so it changed nothing -- but it is the
+third independent measurement and it reproduces the 2026-08 rejection exactly. 16 of 162 keys
+changed; **no d0 key moved** (the audit's `d0 slower=91 play-changed=2883` line is MTG_DUMP_WINS
+log-ordering noise, not behaviour -- every d0 fingerprint is identical), confirming mode 2 is
+enumerator-only as documented.
+
+| deck | keys | result | sum |
+|---|---|---|---|
+| hinata | d3+d5 x 4 seeds | **8/8 green** | -0.0851 |
+| dragonstorm | d3+d5 x 4 seeds | **6/8 RED, 2 flat, 0 green** | +0.0199 |
+| | | **NET** | **-0.0652** |
+
+The aggregate is favourable and is driven ENTIRELY by hinata. Dragonstorm does not improve on a
+single key at any depth or seed. That is the same shape as the original rejection ("every
+Dragonstorm searched depth"), and the same shape as the reference gate (all 21 drifts Dragonstorm,
+Hinata2's 3 refs clean).
+
+**So the finding is not "mode 2 is wrong" -- it is "mode 2 is right for hinata and wrong for
+dragonstorm", and the mean hides that.** Which is exactly what a per-deck lever is for.
+
+**PROPOSED, NOT ADOPTED (per-deck adoption is a USER call, per the heuristic-optimization skill:
+adopt in the archetype provider, never the root):** scope mode 2 to the HINATA provider. On the
+evidence this arm is strictly better than both shipped alternatives:
+
+- keeps hinata's -0.0851 on held-out seeds (8/8 keys, no reds);
+- leaves dragonstorm on mode 1, so the 6 red keys never arise;
+- touches none of the 21 drifting Dragonstorm references, and hinata's own 3 references are already
+  clean under mode 2;
+- and it is the *honest* model at the site where hinata's stranded accelerants were measured
+  (162 -> 26 at d3).
+
+Still required before adoption: its own regression run demonstrating **0 play-drift**, plus the
+usual three tiers. Note the aggregate will look WORSE than global mode 2 (-0.0851 vs -0.0652 counts
+only hinata's keys) -- that is the point, not a defect.

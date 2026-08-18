@@ -6801,11 +6801,25 @@ static inline int ManaGateTriangular(int gy) { return gy > 1 ? gy * (gy - 1) / 2
 // not merely unpayable ones. That is a lossy prune and fails the standing core bar (heuristics may
 // only prune what is genuinely unreachable) regardless of the aggregate delta.
 //
+// The held-out overnight of the same re-test then reproduced the ORIGINAL signature exactly, and
+// shows the effect is PER-DECK rather than globally bad -- 16 keys changed, no d0 key moved:
+//     hinata      d3+d5, 4 seeds each:  8/8 GREEN   (sum -0.0851)
+//     dragonstorm d3+d5, 4 seeds each:  6/8 RED, 2 flat, 0 green  (sum +0.0199)
+//     NET -0.0652  -- favourable, and driven ENTIRELY by hinata
+// So mode 2 is not "wrong"; it is right for hinata and wrong for dragonstorm, and the mean hides
+// that. All 21 drifted references are Dragonstorm; Hinata2's 3 references did NOT drift.
+//
 // THE LESSON, for whoever measures this a third time: mode 2's aggregate has now been BETTER than
-// mode 1 in both attempts. Aggregate is not the bar. Check the Dragonstorm searched depths and the
-// reference gate FIRST -- they are what actually disqualifies it, and they disagree with the mean.
-// If a future engine change genuinely makes the sequenced model exact at the enumerator, the thing
-// to demonstrate is 0 play-drift, not a better mean.
+// mode 1 in ALL THREE measurements. Aggregate is not the bar. Check the Dragonstorm searched depths
+// and the reference gate FIRST -- they are what actually disqualifies it, and they disagree with the
+// mean. If a future engine change genuinely makes the sequenced model exact at the enumerator, the
+// thing to demonstrate is 0 play-drift, not a better mean.
+//
+// THE OPEN FOLLOW-UP (proposed, NOT adopted -- per-deck adoption is a USER call): scope mode 2 to
+// the HINATA archetype provider only, never the root. On the evidence above that arm is strictly
+// better than both shipped alternatives -- it keeps hinata's -0.0851, leaves dragonstorm on mode 1
+// (so the 6 red keys and all 21 reference drifts simply do not arise), and hinata's own references
+// are already clean under mode 2. It still needs its own suite run to confirm 0 play-drift.
 static int SeqRitualCreditMode()
 {
     static const int mode = []{
