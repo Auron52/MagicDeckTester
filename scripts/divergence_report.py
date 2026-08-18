@@ -45,8 +45,13 @@ def casts(g):
 
 def action_sig(g):
     """Per-turn action signature, for locating the first turn the lines diverge."""
-    return {t["turn"]: [(a.get("type"), a.get("cardName"), a.get("manaPaid", ""))
-                        for a in t.get("actions", [])] for t in g["turns"]}
+    # ONE ENTRY PER PHASE shares a turn number; a dict keyed on the turn keeps only the last
+    # phase and drops the main-phase casts, pushing "first divergence" later than it really is.
+    acc = collections.defaultdict(list)
+    for t in g["turns"]:
+        for a in t.get("actions", []):
+            acc[t["turn"]].append((a.get("type"), a.get("cardName"), a.get("manaPaid", "")))
+    return dict(acc)
 
 
 def first_divergence(a, b):
