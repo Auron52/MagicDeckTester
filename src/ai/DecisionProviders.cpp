@@ -1093,9 +1093,16 @@ bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker)
 // A non-cantrip draw is NOT thereby banned from going early: it keeps its natural (cost-efficient)
 // rank, which is the far end of its RANGE, and the ladder can still walk it toward the ideal end
 // when the mana is genuinely there. Discernment picks the rank; the range keeps the option.
+// MEASURED at 1, not reasoned at 2. The bar was first set to 2 on the argument that Expressive
+// Iteration / Light Up the Stage / Treasure Hunt (all mv 2) leave the turn's mana "essentially
+// intact". Smoke says otherwise: dropping the bar to 1 removes Treasure Hunt's +0.0140 d0
+// regression entirely and flips mirrorwing d0 from +0.0020 to -0.0160, at no cost anywhere. On a
+// two-or-three-land turn a 2-mana cantrip IS the turn -- the same argument that already excluded
+// Magma Opus, applied at the threshold the measurement picked rather than the one that sounded
+// right. MTG_IDEAL_CANTRIP_MV overrides it for an A/B.
 int IdealOrderCantripMaxMv()
 {
-    static const int mv = EnvInt("MTG_IDEAL_CANTRIP_MV", 2);
+    static const int mv = EnvInt("MTG_IDEAL_CANTRIP_MV", 1);
     return mv;
 }
 
@@ -1195,8 +1202,11 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
     // DEFAULT OFF, and this one alone is expected to be a mixed result -- it is wired so the
     // per-deck ranking can be reviewed (mtg <deck> --cast-order-report) against the numbers play
     // would use.
+    // MTG_IDEAL_ORDER promotes for EVERY deck (the measurement arm); PromoteCantripsInCastOrder is
+    // the per-deck route the measurement actually endorses -- see the hook's declaration.
     static const bool s_ideal_order = EnvOn("MTG_IDEAL_ORDER");
-    if (s_ideal_order && !g_suppress_ideal_order_tier && IsIdealOrderCantrip(def)) { return 2; }
+    if ((s_ideal_order || PromoteCantripsInCastOrder())
+        && !g_suppress_ideal_order_tier && IsIdealOrderCantrip(def)) { return 2; }
     if (def.params.lifegain_to_loss)             { return 0; }
     if (def.params.max_casts_after >= 0)         { return 18; }
     if (!def.params.reduces_spell_color.empty()) { return 16; }
@@ -7186,6 +7196,21 @@ int MirrorwingProvider::CastOrderRank(const GameState& s, const CardDefinition& 
     if (def.params.token_copy_of_target)        { return 12; }   // after every creature (10), before tricks (20)
     if (def.params.creates_treasures > 0)       { return 15; }   // Gold Rush: after the doubler, before draw tricks
     return GenericProvider::CastOrderRank(s, def);
+}
+
+// Mirrorwing is the deck the cantrip promotion measurably SUITS -- every trick in it cantrips, so
+// casting the 1-mana ones first is information before the fan-out is committed. Measured on both
+// seed sets (with MTG_ORDER_OPAQUE + MTG_ORDER_RANGE, which the promotion needs to have a domain
+// and to stay payable): regression d0 -0.0150, d3 -0.0100/-0.0100, d5 -0.0100, = -20.0 game-turns;
+// smoke d0 -0.0160. The mv-1 bar matters here specifically: at mv 2 the promotion also catches
+// Fists of Flame, the deck's PAYOFF, and mirrorwing d0 goes from -0.0160 to +0.0020.
+// DEFAULT OFF -- adoption is the USER's call (order/range/main-phase is a reviewed per-deck
+// judgement). MTG_MW_CANTRIP_ORDER=1 to measure; on adoption this becomes a default-on read with
+// an off switch, as the other adopted per-deck rules are.
+bool MirrorwingProvider::PromoteCantripsInCastOrder() const
+{
+    static const bool on = EnvOn("MTG_MW_CANTRIP_ORDER");
+    return on;
 }
 
 bool MirrorwingProvider::StriveCountMaxOnly(const GameState&, const CardDefinition& def) const

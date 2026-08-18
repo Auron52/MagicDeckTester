@@ -641,6 +641,9 @@ public:
     // Consumed by the opaque apply path's enabler sort in both worlds.
     bool CastEnablerFirst(const GameState&, const std::string&) const override;
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    // Cantrip promotion: measured a consistent win on THIS deck and a loss on Hinata, so it lives
+    // here rather than at the root. Default off (MTG_MW_CANTRIP_ORDER) -- see the definition.
+    bool PromoteCantripsInCastOrder() const override;
 };
 
 // Equipment aggro (KittyEquipment). Detection keys on the equipment-deck gated params

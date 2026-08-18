@@ -307,6 +307,49 @@ Five things this settles:
    magnitude, so the search is not being starved; casting the cantrip first is simply worse play
    there.
 
+### HELD-OUT (regression mode, seeds 2002/3003, 26,300 games) -- the promotion is a PER-DECK call
+
+| arm | per-game | dragonstorm | mirrorwing | hinata | burn |
+|---|---|---|---|---|---|
+| B (`ORDER_OPAQUE`) | -0.00236 | -57.04 | - | -6.00 | +1.00 |
+| E (+ ideal + range + mv 1, GLOBAL promotion) | -0.00232 | -57.04 | **-20.00** | **+15.00** | +1.00 |
+| **G (+ range, PER-DECK promotion)** | **-0.00312** | -57.04 | **-20.00** | **-6.00** | +1.00 |
+
+(game-turn totals, negative = better.)
+
+**Arm G is the answer the split predicts, and it lands on both seed sets** -- Mirrorwing's -20.00
+and Hinata's -6.00 at the same time, because each deck now gets the order it measures better with:
+
+| arm | smoke (15,875 games) | regression (26,300 games) |
+|---|---|---|
+| B | -0.00246 | -0.00236 |
+| E | -0.00265 | -0.00232 |
+| **G** | **-0.00346** | **-0.00312** |
+
+G is additive by construction: no deck is worse than under B, and the two decks that move are the
+two the promotion was measured on. It is also the arm with no seed-set disagreement -- unlike E,
+whose margin over B changed sign.
+
+**E's margin over B flips sign between the seed sets** -- -0.00019 on smoke, +0.00004 here. It is
+not there. But the per-deck split underneath it replicates precisely:
+
+* **`ORDER_OPAQUE` replicates and is the whole win**: dragonstorm d0 -0.0340 (smoke) / -0.0570
+  (regression), identical in both arms because the promotion does not touch that deck.
+* **Mirrorwing consistently GAINS from the promotion**: -16.0 game-turns (smoke) / -20.0
+  (regression), and on regression it is better on 4 of its 5 keys.
+* **Hinata consistently LOSES**: +13.0 (smoke) / +15.0 (regression).
+
+Two decks pulling opposite ways is not a lever to tune at the root, it is a per-deck judgement --
+so the promotion moved to `DecisionProvider::PromoteCantripsInCastOrder()` (default false),
+overridden by MirrorwingProvider behind `MTG_MW_CANTRIP_ORDER`. That is the skill's standing rule
+("adopt in the archetype provider, never the root") arrived at from the measurement rather than
+applied by habit. Adoption is still the USER's call.
+
+The mv bar moved 2 -> 1 as a *default* on the same evidence: it costs nothing anywhere, removes
+th's +0.0140, and is what makes the Mirrorwing win a win (at mv 2 the promotion also catches Fists
+of Flame, the deck's payoff, and mirrorwing d0 goes -0.0160 -> +0.0020). Inert while every
+promotion route is off.
+
 ### Why principle 1 under-delivers here: the engine already owns half of it
 
 "Draw before playing land or rituals" is two rules, and a cast-order rank can only express the

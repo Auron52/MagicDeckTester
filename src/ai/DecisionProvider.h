@@ -374,6 +374,16 @@ public:
     // Archetypes override (antilife: enablers rank 0 so a same-turn payload sees the flip).
     virtual int CastOrderRank(const GameState& s, const CardDefinition& def) const = 0;
 
+    // PromoteCantripsInCastOrder -- does this deck want its cheap cantrips promoted to the
+    // information tier (rank 2, "draw first")? This is a PER-DECK question and the measurement says
+    // so plainly: the same promotion, on both seed sets, is a consistent WIN on Mirrorwing (-20.0
+    // game-turns on regression, -16.0 on smoke) and a consistent LOSS on Hinata (+15.0 / +13.0).
+    // At the root they cancel -- the global arm's margin over ordering-alone flipped sign between
+    // seed sets (-0.00019 smoke, +0.00004 regression), i.e. it is not there. So the promotion
+    // belongs where the decks disagree: the archetype provider, never the root.
+    // Default false. See docs/design/cast-order-ideal-with-ranges.md.
+    virtual bool PromoteCantripsInCastOrder() const { return false; }
+
     // XCandidates -- candidate X values for an {X} spell (a branching-PRUNE heuristic). The engine
     // asks BEFORE emitting cast variants and emits one cast per returned value (the variants
     // share hand_index, so they are mutually exclusive in the plan), letting the search pick
