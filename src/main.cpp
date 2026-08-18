@@ -3771,6 +3771,18 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
     GameState state;
     state.m_provider = &SelectDecisionProvider(deck);
     const DecisionProvider& prov = *state.m_provider;
+    // Stamp the DECK-LEVEL inputs the main-phase classifier reads, exactly as SetupGame does.
+    // Without them the report answers a different question than play does: `deck_feeds_combat`
+    // defaults TRUE (so a non-combat deck's draws would read "both" instead of "m2"), and the
+    // dependency pulls default FALSE (so Anti-Lifegain's Tainted Remedy / Plague Drone enablers
+    // and its Aria of Flame cast-payoff would NOT show the Main1 pull the real game gives them).
+    // The per-STATE inputs -- haste from lords in play, hand haste access, a scaling attacker --
+    // are board facts with no static answer; the column is the BASELINE, and the header says so.
+    state.deck_feeds_combat = GoldFishRunner::DeckFeedsCombat(deck);
+    state.uses_second_main  = GoldFishRunner::DeckUsesSecondMain(deck);
+    const GoldFishRunner::DependencyPulls pulls = GoldFishRunner::DeriveDependencyPulls(deck);
+    state.dep_enabler_main1    = pulls.enabler_main1;
+    state.dep_castpayoff_main1 = pulls.castpayoff_main1;
 
     struct Row { std::string name; int rank; int ideal; int mv; int count; std::string note;
                  const char* mp; };
@@ -3836,7 +3848,13 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
     std::cout << "# provider: " << prov.Name()
               << "   ideal-order draw tier: " << (EnvOn("MTG_IDEAL_ORDER") ? "ON" : "off")
               << "   cantrip max mv: " << IdealOrderCantripMaxMv()
-              << "\n#\n# rank  range      main  n  mv  card\n";
+              << "\n# deck flags: feeds_combat=" << (state.deck_feeds_combat ? "yes" : "no")
+              << " uses_second_main=" << (state.uses_second_main ? "yes" : "no")
+              << " enabler_pull=" << (state.dep_enabler_main1 ? "yes" : "no")
+              << " castpayoff_pull=" << (state.dep_castpayoff_main1 ? "yes" : "no")
+              << "\n# main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste"
+                 " access, a scaling attacker) can move a creature m2 -> m1 in an actual game.\n"
+              << "#\n# rank  range      main  n  mv  card\n";
     int last = -999;
     for (const Row& r : rows)
     {
