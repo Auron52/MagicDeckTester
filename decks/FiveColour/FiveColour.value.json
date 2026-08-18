@@ -15078,8 +15078,8 @@
   "regime": "light",
   "note": "ADOPTED 2026-08-14 after a paired A/B: vs bare d5/b20 with NO sidecar, this config is -0.0108 +/- 0.0025 turns (t=4.32, n=8 seeds x 1000 games, 7/8 seeds improve) and 2.68x cheaper in wall time (2.35 vs 6.30 s/game) while searching a depth deeper. A d5/d6/d7 sweep with the sidecar is flat (d6-d5=-0.0015 t=0.52; d7-d6=-0.0005 t=1.00, digest-identical on 3/4 seeds -- the search has converged by 6). Depth 6 from the 400x4 matrix: the value ladder SATURATES at V6 (V5-V6=+0.0075 t=2.35 real; V6-V7=+0.0013 t=1.43; V7-V8=+0.0006 t=1.00), and V6 matches the deepest usable heuristic (V6-H5=+0.0019+/-0.0011, t=1.76, indistinguishable) at 12.7 s/game vs H5's 844 -- 66x cheaper. V5 does NOT qualify: V5-H5=+0.0090+/-0.0031, t=2.91, genuinely worse. All matrix figures PAIRED on identical 25-game blocks; the table's row means are over unequal game sets (H5 is 375/400 on two seeds) and read -0.0001, which is an artifact -- matched sets give +0.0020. escalation_cap=5 is clamped to the deepest MEASURED heuristic depth (H6 was never generated on any deck), and is no shallower than the pre-adoption d5 play depth.",
   "escalation_cap": 5,
-  "mull_gen_depth": 3,
-  "mull_gen_budget_ms": 3,
-  "mull_gen_note": "Mulligan GENERATION runs d3/b3, not the shipped d6/b20 (user, 2026-08-14). FiveColour is the costliest deck in the suite per game, and exhaustive keep generation pays a rollout per hand-composition per R -- at shipped depth that is not practical. Affects generation only; play is unchanged."
+  "mull_gen_depth": 2,
+  "mull_gen_budget_ms": 1,
+  "mull_gen_note": "Mulligan GENERATION runs d2/b1, not the shipped d6/b20 (adopted 2026-08-18, user-approved). Measured fidelity-EQUAL to the prior d3/b3 gen setting by the 200-hand paired battery vs the shipped policy (rho 0.9891 vs 0.9906, dispersion 0.081 vs 0.067, 100% pairwise agreement) and result-identical on 240/240 proxy games across two seed blocks (re-verified 120/120 under the colour-exact engine), at 1.67x less work. The sidecar stays ATTACHED for gen: leaf-off at d2/b1 measured 1.57-2.20x slower on an idle box (fully separated). See docs/design/fivecolour-mullgen-labeller-sweep.md and fivecolour-gen-leaf-cost-wallclock.md. Affects generation only; play is unchanged. NOTE: adopting this forfeited the banked d3/b3 floor probe (RolloutCfg comparability)."
  }
 }
