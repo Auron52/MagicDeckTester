@@ -1,5 +1,11 @@
 # Mana affordability arc -- handoff (2026-08-18)
 
+**STATUS: PARKED (USER decision, 2026-08-18, at e84752e).** Adopted work is green with
+off-switches; every extension tried past that point measured metric-inert (five mechanisms).
+Reopen triggers: a reference-gate red (enum-gap), a concrete repro game where a colour phantom
+-- not priced optimism -- costs a win, or the cast-order project reopening (first rule to
+review there: strand the cheapest, not the payoff -- the gi1197 lesson).
+
 Self-contained state of the subset-affordability / same-turn-mana work, for whoever picks it up.
 Everything referenced here is in git; no private notes are needed. The deep detail lives in
 `colour-blind-subset-affordability.md` -- this file is the map and the current state.
