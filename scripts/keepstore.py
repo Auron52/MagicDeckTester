@@ -29,14 +29,24 @@ would silently reweight every shared cell toward whichever arm had more rollouts
 arm would retroactively move results already reported. Per-arm counts are kept, so a
 count-weighted view stays derivable if that is ever wanted.
 
-POOLING IDENTITY IS `play_digest`, NOT `commit`
------------------------------------------------
+POOLING IDENTITY IS `play_digest`, NOT `commit` -- BUT PER ARM, NOT BETWEEN ARMS
+--------------------------------------------------------------------------------
 The raw sidecar stamps both. `commit` is a proxy that fails conservatively on ANY repo change; the
 `play_digest` is a measured 64-game rollout-behaviour fingerprint. Measured 2026-08-18: after three
 engine fixes moved the commit, Mirrorwing base's digest was still 09447aef3cbe3904 -- identical to
 the value stored in its sidecar built at commit a1be8ffc -- i.e. its 202,878 cells were still
-behaviourally valid and did not need regenerating. Gating on the commit would have thrown them
-away. So arms pool iff their digests agree (--force overrides, and says so).
+behaviourally valid and did not need regenerating. Gating on the commit would have thrown them away.
+
+The digest fingerprints deck AND engine, so arms -- which are DIFFERENT DECKS -- differ by
+construction (base 09447aef3cbe3904 vs trick 8d2b252c3d78dc3d on one engine). Requiring arms to
+AGREE, as this file first did, refuses every comparison the store exists for. The correct gate is
+per-arm CURRENCY: each arm's stored digest must still be what that deck produces under the engine
+about to be measured with. Pass it in via --current-digest.
+
+And compare LIKE FOR LIKE: the digest depends on the ROLLOUT CONFIG (a `fast` generation
+fingerprints d2/b3; MTG_KEEP_DISCOVERY_ONLY defaults to d5/b20). Mixing configs manufactures a false
+"stale" verdict -- it did on 2026-08-18, concluding both shipped tables had gone stale when neither
+had. Any digest registry built on top of this must record the config alongside the digest.
 
 REUSE, NOT REIMPLEMENTATION
 ---------------------------
@@ -52,7 +62,8 @@ the C++ hand weights use Comb(count[b], comp[b]), which is already 0 when comp[b
 
 Usage
 -----
-    keepstore.py import --out STORE --arm NAME=RAW [--arm NAME=RAW ...] [--force]
+    keepstore.py import --out STORE --arm NAME=RAW [--arm NAME=RAW ...] \
+                        [--current-digest NAME=HEX ...] [--equiv GENCACHE] [--force]
     keepstore.py stats  STORE
     keepstore.py emit   STORE --arm NAME --out RAW
     keepstore.py selftest
@@ -60,6 +71,7 @@ Usage
 import argparse
 import gzip
 import json
+import math
 import sys
 from collections import defaultdict
 
@@ -91,12 +103,37 @@ def dump_json(obj, path):
 
 
 # ------------------------------------------------------------ bucket algebra
-def bucket_key(names):
-    """A bucket's identity is its SET of card names, independent of arm-local ordering."""
+def bucket_key(names, equiv=None):
+    """A bucket's identity is its SET of card names, independent of arm-local ordering.
+
+    `equiv` (optional) maps a card name to the canonical CLASS of cards the engine cannot tell
+    apart. It exists because cross-deck equivalence is invisible to either deck alone: base holds
+    Expedite and no Impolite Entrance, trick holds Impolite Entrance and no Expedite, so neither
+    arm's own discovery can ever learn they are the same card to this engine (trample unmodelled --
+    the goldfish never blocks -- and sorcery-vs-instant unmodelled). Only a discovery pass over a
+    deck holding BOTH finds it. Without the merge those hands become arm-unique cells and the two
+    arms decide the same physical hand from two different estimates, which is apparatus noise.
+    """
+    if equiv:
+        merged = set()
+        for nm in names:
+            merged.update(equiv.get(nm, (nm,)))
+        return tuple(sorted(merged))
     return tuple(sorted(names))
 
 
-def build_union_buckets(arms):
+def load_equiv(path):
+    """Card -> canonical class tuple, from a keepmodel gencache's equivalence classes."""
+    classes = load_json(path).get("classes") or []
+    out = {}
+    for c in classes:
+        members = tuple(sorted(c["members"]))
+        for nm in members:
+            out[nm] = members
+    return out
+
+
+def build_union_buckets(arms, equiv=None):
     """Union bucket space over all arms.
 
     Refuses arms whose bucket partitions disagree on a shared card: if one arm merges two cards
@@ -108,7 +145,7 @@ def build_union_buckets(arms):
     order = []
     for arm in arms:
         for names in arm["buckets"]:
-            key = bucket_key(names)
+            key = bucket_key(names, equiv)
             for nm in key:
                 prev = card_owner.get(nm)
                 if prev is not None and prev != key:
@@ -126,8 +163,109 @@ def build_union_buckets(arms):
     return {key: i for i, key in enumerate(order)}, [list(k) for k in order]
 
 
+# ----------------------------------------------------------------- downsample
+def _splitmix_normal(seed, comp, H, pd):
+    """Deterministic standard normal, mirroring ExhaustiveKeep.cpp's synth_normal exactly.
+
+    Same stream shape (splitmix64 + Box-Muller, folded over the composition) so a store-side
+    downsample and the C++ MTG_KEEP_SYNTH_R reconstruction can be cross-checked against each other.
+    """
+    M = (1 << 64) - 1
+    x = (seed ^ (0x9E3779B97F4A7C15 * (H * 2 + pd + 1))) & M
+    for v in comp:
+        x ^= ((v + 1) * 0xD1B54A32D192ED03) & M
+        x = ((x ^ (x >> 29)) * 0xBF58476D1CE4E5B9) & M
+        x ^= x >> 32
+
+    def u01():
+        nonlocal x
+        x = (x + 0x9E3779B97F4A7C15) & M
+        z = x
+        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & M
+        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & M
+        z ^= z >> 31
+        return (z >> 11) * (1.0 / 9007199254740992.0)
+
+    u1 = max(1e-12, u01())
+    u2 = u01()
+    return math.sqrt(-2.0 * math.log(u1)) * math.cos(6.283185307179586 * u2)
+
+
+SE_PRIOR = 8.0   # matches ExhaustiveKeepConfig::se_prior and the C++ synth block
+
+
+def downsample_arm(store, arm_name, target_r, seed=0x5eed1234, keep_only=True):
+    """Redraw one arm's cell means as if sampled at target_r, in place.
+
+    WHY: arms generated at different R give their own unique cells different precision, and the arm
+    with the better-estimated unique hands simply plays them better -- an apparatus advantage that
+    reads as a deck difference. Matching R is what makes the comparison about the CARDS. (Shared
+    cells are already handled by equal-weight pooling; this is for the unique ones.)
+
+    V_hat ~ Normal(mean, vs/target_r), where vs is the cell's per-rollout variance shrunk toward the
+    size/pd pooled variance by SE_PRIOR (so a thin cell's fake-tight variance cannot pose as
+    confidence), clamped to that size/pd's observed cell-mean envelope because a k-sample mean is
+    bounded by it. The cell is then restated AS a target_r sample so downstream weighting sees the
+    precision it actually has.
+    """
+    KEEP_H = max(s["H"] for s in store["sizes"])   # the size-7 keep table
+    ai = next(i for i, a in enumerate(store["arms"]) if a["name"] == arm_name)
+    key = str(ai)
+    touched = 0
+    for size in store["sizes"]:
+        H = size["H"]
+        # keep_only: lower the KEEP table's R and leave the bottoming sub-tables at truth. This
+        # mirrors MTG_KEEP_SYNTH_KEEP_ONLY, and it is not a nicety -- resampling the sub-tables
+        # uniformly corrupts the bottoming argmin with a winner's curse (the C++ says so at the
+        # SYNTH_BOTTOM_R note). Measured here 2026-08-18: downsampling base's sub-tables too made
+        # base play 0.034t WORSE while trick gained, i.e. it manufactured most of an "effect".
+        if keep_only and H != KEEP_H:
+            continue
+        # Pooled per-rollout variance and mean envelope for this size/pd, over THIS arm's cells.
+        vg = [0.0] * PD
+        ng = [0] * PD
+        vmin = [float("inf")] * PD
+        vmax = [float("-inf")] * PD
+        for e in size["entries"]:
+            slot = e["arms"].get(key)
+            if not slot:
+                continue
+            for pd in range(PD):
+                c = slot["c"][pd]
+                if c < 1:
+                    continue
+                mn = slot["s"][pd] / c
+                vmin[pd] = min(vmin[pd], mn)
+                vmax[pd] = max(vmax[pd], mn)
+                if c > 1:
+                    vg[pd] += max(0.0, slot["q"][pd] / c - mn * mn)
+                    ng[pd] += 1
+        for pd in range(PD):
+            if ng[pd]:
+                vg[pd] /= ng[pd]
+        for e in size["entries"]:
+            slot = e["arms"].get(key)
+            if not slot:
+                continue
+            for pd in range(PD):
+                c = slot["c"][pd]
+                if c < 1 or c <= target_r:
+                    continue          # already at or below the target: nothing to degrade
+                mean = slot["s"][pd] / c
+                vc = max(0.0, slot["q"][pd] / c - mean * mean)
+                vs = (c * vc + SE_PRIOR * vg[pd]) / (c + SE_PRIOR)
+                sd = math.sqrt(max(0.0, vs) / target_r)
+                vhat = mean + sd * _splitmix_normal(seed, e["comp"], H, pd)
+                vhat = min(vmax[pd], max(vmin[pd], vhat))
+                slot["c"][pd] = target_r
+                slot["s"][pd] = vhat * target_r
+                slot["q"][pd] = (vs + vhat * vhat) * target_r
+                touched += 1
+    return touched
+
+
 # --------------------------------------------------------------------- import
-def import_arms(named_raws, force=False):
+def import_arms(named_raws, force=False, current_digests=None, equiv=None):
     """named_raws: list of (name, path). Returns the store dict."""
     arms = []
     for name, path in named_raws:
@@ -135,21 +273,49 @@ def import_arms(named_raws, force=False):
         arms.append({"name": name, "path": str(path),
                      "buckets": raw["buckets"], "meta": raw["meta"], "sizes": raw["sizes"]})
 
-    digests = {a["meta"].get("play_digest") for a in arms}
-    if len(digests) > 1:
-        msg = ("arms disagree on play_digest %s -- their rollouts were produced by different play "
-               "logic and are NOT poolable" % sorted(map(str, digests)))
-        if not force:
-            raise ValueError(msg + " (pass --force only if you know why)")
-        print("WARNING: " + msg + " -- pooling anyway (--force)", file=sys.stderr)
+    # Arms are DIFFERENT DECKS, so their play_digests differ BY CONSTRUCTION -- the digest
+    # fingerprints deck-AND-engine behaviour, not the engine alone (measured: base 09447aef3cbe3904
+    # vs trick 8d2b252c3d78dc3d, same engine). An earlier version of this gate required them to be
+    # EQUAL. That is the right rule for pooling ONE deck's chunks across machines (the
+    # mulligan-profile handoff it was modelled on) and exactly wrong here: it refuses every
+    # comparison this store exists to serve.
+    #
+    # What must actually hold is per-arm CURRENCY: each arm's stored digest is still what THAT deck
+    # produces under the engine we are about to measure with. The store cannot establish that alone
+    # (it would have to run the engine), so the caller measures it and passes it in.
+    #
+    # COMPARE LIKE FOR LIKE. The digest depends on the ROLLOUT CONFIG: a `fast` generation
+    # fingerprints at d2/b3, while MTG_KEEP_DISCOVERY_ONLY defaults to d5/b20. Comparing across
+    # configs manufactures a false "stale" verdict -- it did exactly that on 2026-08-18, and cost a
+    # wrong conclusion that both shipped tables had gone stale when neither had.
+    current_digests = current_digests or {}
+    unverified = []
+    for a in arms:
+        stored = str(a["meta"].get("play_digest"))
+        cur = current_digests.get(a["name"])
+        if cur is None:
+            unverified.append(a["name"])
+            continue
+        if str(cur) != stored:
+            msg = (f"arm {a['name']!r} is STALE: its rollouts fingerprint {stored}, but this engine "
+                   f"produces {cur} for that deck. Regenerate it -- or first confirm both digests "
+                   f"were measured at the SAME rollout config, which is the usual cause.")
+            if not force:
+                raise ValueError(msg + "  (--force pools anyway)")
+            print("WARNING: " + msg + " -- pooling anyway (--force)", file=sys.stderr)
+    if unverified:
+        print("WARNING: currency NOT verified for arm(s) " + ", ".join(unverified)
+              + "\n         pass --current-digest NAME=HEX, measured at the arm's GENERATION"
+                "\n         rollout config, or the store may be built on stale rollouts.",
+              file=sys.stderr)
 
-    index, union_buckets = build_union_buckets(arms)
+    index, union_buckets = build_union_buckets(arms, equiv)
 
     # Per-arm: union-index -> that arm's local bucket index, and its copy count per union bucket.
     for arm in arms:
         local_of_union = {}
         for local_i, names in enumerate(arm["buckets"]):
-            local_of_union[index[bucket_key(names)]] = local_i
+            local_of_union[index[bucket_key(names, equiv)]] = local_i
         arm["local_of_union"] = local_of_union
         arm["union_of_local"] = {v: k for k, v in local_of_union.items()}
 
@@ -187,8 +353,14 @@ def import_arms(named_raws, force=False):
     store = {
         "version": STORE_VERSION,
         "buckets": union_buckets,
+        # local_of_union is PERSISTED, not re-derived at emit time: with an --equiv merge the
+        # arm's own bucket key (("Expedite",)) is no longer a key of the union space
+        # (("Expedite","Impolite Entrance")), so recomputing it raises KeyError. The mapping is
+        # settled at import, when the equivalence is in hand; store it.
         "arms": [{"name": a["name"], "source": a["path"], "caps": a["caps"],
-                  "buckets": a["buckets"], "meta": a["meta"]} for a in arms],
+                  "buckets": a["buckets"], "meta": a["meta"],
+                  "local_of_union": {str(k): v for k, v in a["local_of_union"].items()}}
+                 for a in arms],
         "sizes": [],
     }
     for H in sorted(tables, reverse=True):
@@ -237,8 +409,11 @@ def emit_arm(store, arm_name):
     ai = names.index(arm_name)
     arm = store["arms"][ai]
 
-    index = {bucket_key(b): i for i, b in enumerate(store["buckets"])}
-    local_of_union = {index[bucket_key(b)]: i for i, b in enumerate(arm["buckets"])}
+    if arm.get("local_of_union"):
+        local_of_union = {int(k): v for k, v in arm["local_of_union"].items()}
+    else:   # stores written before the mapping was persisted (no --equiv merge possible there)
+        index = {bucket_key(b): i for i, b in enumerate(store["buckets"])}
+        local_of_union = {index[bucket_key(b)]: i for i, b in enumerate(arm["buckets"])}
     caps = arm["caps"]
 
     sizes_out = []
@@ -383,7 +558,17 @@ def main(argv=None):
     p_i.add_argument("--out", required=True)
     p_i.add_argument("--arm", action="append", required=True, metavar="NAME=RAW")
     p_i.add_argument("--force", action="store_true",
-                     help="pool arms whose play_digest disagrees (unsafe; says so loudly)")
+                     help="pool a STALE arm anyway (unsafe; says so loudly)")
+    p_i.add_argument("--current-digest", action="append", default=[], metavar="NAME=HEX",
+                     help="this engine's play digest for that arm's deck, measured at the arm's "
+                          "GENERATION rollout config (fast => d2/b3). Asserts currency.")
+    p_i.add_argument("--synth-r", action="append", default=[], metavar="NAME=R",
+                     help="restate that arm's cells as if sampled at R rollouts, so arms generated "
+                          "at different R give their unique cells MATCHED precision")
+    p_i.add_argument("--equiv", metavar="GENCACHE",
+                     help="a keepmodel gencache whose equivalence classes merge cards the engine "
+                          "cannot tell apart ACROSS arms (e.g. Expedite == Impolite Entrance). "
+                          "Neither arm alone can discover this; only a deck holding both can.")
 
     p_s = sub.add_parser("stats", help="summarise a store")
     p_s.add_argument("store")
@@ -405,7 +590,20 @@ def main(argv=None):
                 ap.error(f"--arm expects NAME=RAW, got {spec!r}")
             nm, _, path = spec.partition("=")
             pairs.append((nm, path))
-        store = import_arms(pairs, force=a.force)
+        cur = {}
+        for spec in a.current_digest:
+            if "=" not in spec:
+                ap.error(f"--current-digest expects NAME=HEX, got {spec!r}")
+            nm, _, hx = spec.partition("=")
+            cur[nm] = hx
+        equiv = load_equiv(a.equiv) if a.equiv else None
+        store = import_arms(pairs, force=a.force, current_digests=cur, equiv=equiv)
+        for spec in a.synth_r:
+            if "=" not in spec:
+                ap.error(f"--synth-r expects NAME=R, got {spec!r}")
+            nm, _, r = spec.partition("=")
+            n = downsample_arm(store, nm, int(r))
+            print(f"downsampled arm {nm!r} to R={r}: {n:,} cell-sides restated")
         dump_json(store, a.out)
         print(stats(store))
         print(f"\nwrote {a.out}")
