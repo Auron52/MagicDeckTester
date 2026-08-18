@@ -2,6 +2,7 @@
 #include <map>
 #include "ValueArm.h"
 #include "../core/EnvFlags.h"
+#include <iostream>
 #include <cstdlib>
 #include <cctype>
 #include <utility>
@@ -6855,6 +6856,12 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
     // early plays) and everything else. `want` counts PIPS, so a {W}{W} cost asks for two white
     // sources and feeds the depth term below.
     std::array<int, NC> want{}, accel_want{};
+    // How many DISTINCT accelerants in hand each colour would turn on. Deathrite Shaman is {B/G}, so
+    // GREEN casts both one-drop dorks (Birds {G} and Deathrite) while BLACK casts only Deathrite --
+    // which is exactly the user's T1 doctrine ("T1 green land is a priority. If we can't play T1
+    // green, we should play T1 black for Deathrite") falling out of the card costs instead of a
+    // hardcoded colour preference.
+    std::array<int, NC> accel_hits{};
     for (const Card& c : ap.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
@@ -6866,20 +6873,20 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
         {
             if (pips[i] <= 0) { continue; }
             want[i] = std::max(want[i], pips[i]);
-            if (accel) { accel_want[i] = std::max(accel_want[i], pips[i]); }
+            if (accel) { accel_want[i] = std::max(accel_want[i], pips[i]); ++accel_hits[i]; }
         }
     }
     bool any_uncovered_want = false;
     for (int i = 0; i < NC; ++i) { if (want[i] > 0 && src_cnt[i] == 0) { any_uncovered_want = true; } }
 
-    struct Key { int accel_new, spell_new, breadth, untapped, depth, colours; std::string name; };
+    struct Key { int enables_now, accel_new, spell_new, breadth, untapped, depth, colours; std::string name; };
     std::vector<Key> keys;
     keys.reserve(all.size());
     for (const std::string& nm : all)
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
-        if (!d) { keys.push_back({ 0, 0, 0, 0, 0, 0, nm }); continue; }
-        Key k{ 0, 0, 0, 0, 0, 0, nm };
+        if (!d) { keys.push_back({ 0, 0, 0, 0, 0, 0, 0, nm }); continue; }
+        Key k{ 0, 0, 0, 0, 0, 0, 0, nm };
         for (Color col : d->params.produces)
         {
             const int i = static_cast<int>(col);
@@ -6900,11 +6907,32 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
         // for the privilege, which the engine's own entry choice already weighs; here it is just a
         // tiebreak, and only while a wanted colour is still missing.
         k.untapped = (any_uncovered_want && !d->params.enters_tapped) ? 1 : 0;
+        // ENABLES A PLAY THIS TURN (user doctrine 2026-08-18: "the priority is getting to 5 colours,
+        // starting with Green T1 and prioritizing other colours we might need in our hand after
+        // that ... White is a good bet for T2 if we have Faeburrow Elder in hand").
+        //
+        // A land that ENTERS TAPPED cannot cast anything this turn, so when the fetch is what would
+        // turn on an accelerant in hand, entering untapped is not a tiebreak -- it is the whole
+        // point. Ranking it 5th (below breadth) let two TAPPED triomes take both cap slots on turn 1
+        // of reference claude_s7_gi6, so the turn-1 Birds of Paradise line was never branched on and
+        // the deck won a turn late. accel_new is the "a mana source in hand wants this colour and we
+        // do not have it" term, so `accel_new && untapped` is exactly "this fetch casts the dork
+        // NOW" -- Green for Birds on T1, White for Faeburrow on T2.
+        if (!d->params.enters_tapped)
+        {
+            for (Color col : d->params.produces)
+            {
+                const int i = static_cast<int>(col);
+                if (i < 0 || i >= NC || src_cnt[i] != 0) { continue; }
+                k.enables_now = std::max(k.enables_now, accel_hits[i]);
+            }
+        }
         keys.push_back(std::move(k));
     }
 
     std::stable_sort(keys.begin(), keys.end(), [](const Key& a, const Key& b)
     {
+        if (a.enables_now != b.enables_now) { return a.enables_now > b.enables_now; }
         if (a.accel_new != b.accel_new) { return a.accel_new > b.accel_new; }
         if (a.spell_new != b.spell_new) { return a.spell_new > b.spell_new; }
         if (a.breadth   != b.breadth)   { return a.breadth   > b.breadth;   }
@@ -6917,6 +6945,19 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
     std::vector<std::string> out;
     out.reserve(keys.size());
     for (const Key& k : keys) { out.push_back(k.name); }
+    // TEMPORARY diagnostic (MTG_FETCHRANK): print the ordered candidate list with its keys.
+    if (EnvOn("MTG_FETCHRANK"))
+    {
+        std::cerr << "[fetchrank T" << s.turn_number << " types=";
+        for (const std::string& t : fetch_pp.fetch_land_types) { std::cerr << t << ","; }
+        std::cerr << "] ";
+        for (const Key& k : keys)
+        {
+            std::cerr << k.name << "(a" << k.accel_new << " s" << k.spell_new << " b" << k.breadth
+                      << " u" << k.untapped << " d" << k.depth << " c" << k.colours << ") ";
+        }
+        std::cerr << "\n";
+    }
     return out;
 }
 
