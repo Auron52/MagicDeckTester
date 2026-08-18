@@ -48,6 +48,10 @@ correct*.
   enumerator (REJECTED), 3 diagnostic: gate only, no survivor-pool shrink.
 * **`MTG_LEGACY_KAROO`**, **`MTG_COLOR_EXACT=0`** -- off-switches for the two adopted fixes, for
   per-game attribution.
+* **`MTG_PREPAY_PROBE=1`** -- per-outcome census of `BatchPrepayMainCasts` (prepaid vs each decline
+  class), printed at process exit. The instrument that decomposed the allocation question.
+* **`MTG_PREPAY_MIXED=1`**, **`MTG_PREPAY_PRODUCER=1`** -- the two measured-inert prepay
+  extensions (default off, byte-identical off; see "Genuinely open" below).
 
 **The reference gate is the sharpest change-detector in the suite for Dragonstorm** and it runs in
 `regression` mode only (`VPC_ALWAYS=1` forces it elsewhere). Read the CLASSIFICATION line, not the
@@ -72,13 +76,22 @@ diagnosis that survived two commits.
 
 ## Genuinely open
 
-* **Whole-turn mana ALLOCATION** (the `hinata gi1197` class). The remaining hinata/th/slivers drops
-  are whole-turn allocation failures, not enumeration phantoms: the turn's casts are individually
-  payable but the tap assignment across the whole turn fails. This is the biggest real item.
+* **Whole-turn mana ALLOCATION -- now MEASURED, twice, and INERT (2026-08-18).** Two default-off
+  prepay extensions (`MTG_PREPAY_MIXED`, `MTG_PREPAY_PRODUCER`) cover its two largest decline
+  classes; both fire as designed at the instrument level and both are metric-inert-to-negative on
+  train seeds (producer v1: hinata d5 +0.0133). gi1197 itself replays as a LOSS under both: its
+  turn is genuinely overcommitted, so the defect is strand-SELECTION (which cast to drop), i.e.
+  the cast-order-under-shortfall family (ON HOLD, user-reviewed), not payment allocation. Full
+  numbers + the "why this family keeps measuring inert" mechanism:
+  `colour-blind-subset-affordability.md`, section "Whole-turn allocation, measured".
 * **Stranded accelerants at the enumerator.** Real, but per the law above the fix is NOT to prune.
   If it is worth fixing, it has to be at a site where a wrong answer is still filtered downstream.
 * **Storage-land yield** -- an uncharged Dwarven Hold appears not to be credited/charged correctly.
-* **`combined UNPAYABLE` declines on slivers/fivecolour** -- unexplained, never chased.
+* **`combined UNPAYABLE` declines on slivers/fivecolour** -- EXPLAINED (2026-08-18): the mixed-batch
+  conservatism the slivers-restricted-mana doc deferred ("unmotivated until a deck measurably needs
+  it"). An Aether Vial cast in the batch makes the combined solve treat the near-all-restricted
+  manabase as {C}-only. `MTG_PREPAY_MIXED` converts 327 of slivers' 420; the remaining 92 are
+  genuinely overcommitted turns. Metric-inert -- see above.
 * **Colour-exact coverage is PARTIAL**: hinata gets nothing from it (Cascade Bluffs / Izzet Signet
   stand the gate down), fivecolour only partially (`domain_mana`). `SubsetPayableWithFilters` as the
   exact test on filter boards is the obvious next step.

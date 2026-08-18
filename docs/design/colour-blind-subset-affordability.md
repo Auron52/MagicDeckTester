@@ -427,6 +427,61 @@ cast-order work in `cast-order-ideal-with-ranges.md`.
   sound tightening next to a loose bound.
 * `docs/design/cast-order-ideal-with-ranges.md` — the Anti-Lifegain review this surfaced from.
 
+### Whole-turn allocation, measured: two prepay extensions, both REAL-BUT-INERT (2026-08-18)
+
+The "wants a whole-turn joint payment (`BatchPrepayMainCasts` exists but does not cover these)"
+sentence above is now tested. Two default-off levers extend the prepay's coverage to two of its
+largest decline classes; both fire exactly as designed at the instrument level and neither moves
+the metric on train seeds. This is the third and fourth mechanism in this family to measure inert
+(after `MTG_COLOR_RESERVE` / `MTG_COLOR_SEQ`), and the reason is now understood rather than
+suspected — see "why inert" below.
+
+**`MTG_PREPAY_MIXED` — mixed-batch two-stage solve.** Closes the "Known limitation (mixed
+batches)" deferred in `slivers-restricted-mana-tap-order-bug.md` ("unmotivated until a deck
+measurably needs it" — slivers d0 s1001 measured 420 `combined UNPAYABLE` declines / 8280 prepay
+calls, i.e. every Vial+slivers batch off the restricted manabase). When the single combined solve
+(`for_creature=false`) fails on a mixed batch, solve the NONCREATURE portion (`for_creature=false`)
+and the CREATURE portion (`for_creature=true`) as two stages, either order, same hold ladder.
+Aggregate-legal by construction (each stage's taps cover its own class's pips, so a legal
+source-to-pip assignment exists under the fungible pool — the standard the all-creature path
+already applies). Measured: converts 327 of the 420 declines (92 are genuinely overcommitted);
+slivers real drops 201 -> 202; smoke A/B — slivers d0/d3 and fivecolour d3/d5 digest-only at
+identical avg, fivecolour d0 **+0.0010** (gi810 5->6), slivers d5 and everything else
+byte-identical. Net: line churn, no metric gain, one game worse.
+
+**`MTG_PREPAY_PRODUCER` — producer-tolerant prepay (v1, no output credit).** Folds a
+ritual/rock cast's COST into the combined solve without crediting its output — conservative: a
+plan that NEEDS the output declines to the greedy exactly as today. Measured d0 s1001: hinata
+converts only 56 of its 875 producer declines (251 become combined-UNPAYABLE = plans that lean on
+the output; the rest re-bail as {X}) and the avg moves **+0.0020 worse** (7.0040 -> 7.0060), drops
+unchanged at 290; dragonstorm is **byte-identical** (all 1078 producer batches need the credit).
+Smoke A/B: hinata d0 +0.0020, d3 digest-only, **d5 +0.0133 worse** (5.8800 -> 5.8933); fivecolour
+digest-only at all three depths; everything else incl. dragonstorm byte-identical. Net negative.
+The credited sequenced walk (v2) was deliberately NOT built: dragonstorm's stranded accelerants
+are dominated by the bootstrap class this doc already root-caused ("the plan was never
+startable"), which no realisation-side walk can pay either.
+
+**gi1197 reclassified.** The one genuine counter-example above (`hinata_overnight_d0_s4004`
+gi1197) replayed under BOTH levers, alone and together: still a loss. `MTG_AFFORD_AUDIT=2` on the
+replay shows the t4 batch is `combined UNPAYABLE` — genuinely overcommitted, so no whole-turn
+JOINT payment can realise it. What actually costs the game is WHICH casts the greedy strands
+(it strands Hinata, the payoff, and the Ornithopter, keeping the cheap casts). That is
+strand-SELECTION under shortfall — the cast-order-under-shortfall family
+(`cast-order-ideal-with-ranges.md`), a per-deck USER-REVIEWED area and currently ON HOLD — not a
+payment-allocation defect.
+
+**Why this family keeps measuring inert.** The prepay is one shared function: executor and
+rollout strand IDENTICALLY, so every strand is already priced into the score the search ranked
+lines by. A realisation-side fix therefore only helps where a strictly better line exists that
+scored badly SOLELY because of the shared strand — and three instruments' worth of measurement
+says that population is empty-to-negative on train seeds. The drops themselves are overwhelmingly
+the enumerator's load-bearing optimism (deliberate, per `GameLogger.h`), plus overcommitted turns
+where the real question is what to strand, not how to pay.
+
+Both levers kept default-off on the `MTG_CCO_NONCREATURE_POOL` precedent (a withdrawn mechanism
+stays reachable in one binary so its measurement is reproducible). Clean-env smoke after the
+change: 36/36 byte-identical.
+
 ### Mode-2 re-test: the smoke signal, and the test that decides it (2026-08-18)
 
 Smoke under `MTG_RITUAL_SEQ_CREDIT=2` (control = mode 1, the shipped default):

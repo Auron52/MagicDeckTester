@@ -9437,13 +9437,14 @@ namespace
 namespace
 {
 enum PrepayOutcome { PP_OK = 0, PP_DIG, PP_FLOOD, PP_FLOAT_NZ, PP_PRODUCER, PP_NO_DEF, PP_XSPELL,
-                     PP_SOULFIRE, PP_HINATA, PP_FEW_CASTS, PP_UNPAYABLE, PP_WILD, PP_N };
+                     PP_SOULFIRE, PP_HINATA, PP_FEW_CASTS, PP_UNPAYABLE, PP_WILD, PP_OK_MIXED, PP_N };
 const char* const kPrepayName[PP_N] = {
     "PREPAID (no per-cast search)", "declined: dig-draw", "declined: flood engine",
     "declined: float non-empty", "declined: producer (ritual/rock)", "declined: no card def",
     "declined: {X} spell", "declined: soulfire discount", "declined: hinata discount",
     "declined: <2 casts (single-cast turn)", "declined: combined UNPAYABLE",
-    "declined: wild -> pip pinning ambiguous" };
+    "declined: wild -> pip pinning ambiguous",
+    "PREPAID mixed two-stage (MTG_PREPAY_MIXED)" };
 struct PrepayProbe
 {
     std::atomic<std::uint64_t> n[PP_N];
@@ -9467,6 +9468,12 @@ PrepayProbe g_prepay_probe;
 // (1.95M times in 14 FiveColour games), and a function-local static forces a thread-safe init-guard
 // check on EVERY call -- the same ~0.9% self-cost that moved tapstats::g_enabled out of its function.
 const bool g_prepay_probe_on = EnvOn("MTG_PREPAY_PROBE");
+// MTG_PREPAY_MIXED (default off; =1 enables): mixed-batch two-stage prepay -- see the block in
+// BatchPrepayMainCasts. Namespace-scope for the same init-guard reason as g_prepay_probe_on.
+const bool g_prepay_mixed_on = EnvOn("MTG_PREPAY_MIXED");
+// MTG_PREPAY_PRODUCER (default off; =1 enables): producer-tolerant prepay -- see the note at the
+// PP_PRODUCER decline in BatchPrepayMainCasts.
+const bool g_prepay_producer_on = EnvOn("MTG_PREPAY_PRODUCER");
 inline bool Pp(PrepayOutcome o)
 {
     if (g_prepay_probe_on) { g_prepay_probe.n[o].fetch_add(1, std::memory_order_relaxed); }
@@ -9525,6 +9532,10 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
 
     const int active = state.active_player_index;
     ManaCost combined;
+    // Per-class split of `combined` for the mixed two-stage solve (MTG_PREPAY_MIXED): the creature
+    // casts' costs and the noncreature casts' costs, accumulated alongside. Unused unless the flag
+    // is on AND the single combined solve fails.
+    ManaCost c_crea, c_nonc;
     int eligible = 0;
     // Whether EVERY eligible cast is a creature. A colored_creature_only land (Sliver Hive / Secluded
     // Courtyard) makes its coloured mana only for creature spells, so the combined solve may only treat
@@ -9535,7 +9546,19 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
-        if (a.ritual_float > 0 || a.rock_mana.Total() > 0) { return Pp(PP_PRODUCER); } // producer breaks fungibility
+        // MTG_PREPAY_PRODUCER (default off; =1 enables): fold a producer cast's COST into the
+        // combined solve WITHOUT crediting its output. Conservative by construction: a plan that
+        // NEEDS the ritual/rock output to be affordable reads combined-UNPAYABLE and declines to
+        // the greedy exactly as today, while a turn that is payable outright (the hinata gi1197
+        // class: {Hinata, Preordain, Sol Ring}, where Sol Ring's mere presence declined the joint
+        // solve and the per-cast greedy then spent the colour fixers early and stranded Hinata)
+        // gets the anti-stranding joint payment. Output accounting stays exact: a ritual's float
+        // lands ON TOP of the pre-loaded pool at resolution (spendable leftover, same as the
+        // greedy's), and a rock simply enters untapped with its taps unneeded.
+        if (a.ritual_float > 0 || a.rock_mana.Total() > 0)
+        {
+            if (!g_prepay_producer_on) { return Pp(PP_PRODUCER); }   // producer breaks fungibility
+        }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         if (!d) { return Pp(PP_NO_DEF); }
         // A fixed upfront combined is only valid when no cast's cost can shrink/grow dynamically:
@@ -9547,6 +9570,10 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         combined.generic += ec.generic; combined.white += ec.white; combined.blue += ec.blue;
         combined.black += ec.black; combined.red += ec.red; combined.green += ec.green;
         combined.colorless += ec.colorless;
+        ManaCost& part = d->card.IsCreature() ? c_crea : c_nonc;   // mixed two-stage split
+        part.generic += ec.generic; part.white += ec.white; part.blue += ec.blue;
+        part.black += ec.black; part.red += ec.red; part.green += ec.green;
+        part.colorless += ec.colorless;
         if (!d->card.IsCreature()) { all_creatures = false; }
         ++eligible;
     }
@@ -9660,6 +9687,73 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                  /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/0,
                                  /*out_full_pool=*/&produced);
     }
+    // MIXED-BATCH TWO-STAGE SOLVE (MTG_PREPAY_MIXED, default off; =1 enables). A mixed batch's
+    // single combined solve runs with for_creature=false, so a colored_creature_only land
+    // (Sliver Hive / Cavern of Souls / Unclaimed Territory / Secluded Courtyard) contributes only
+    // {C} and a creature_mana_only land (Ancient Ziggurat) contributes nothing -- an Aether Vial
+    // plus slivers batch off that manabase reads combined-UNPAYABLE (420 of 8280 prepay calls on
+    // slivers d0 s1001) and the whole turn falls to the stranding per-cast greedy (its 201 real
+    // afford-drops). Two stages close it: pay the NONCREATURE portion with for_creature=false
+    // (restricted sources legally contribute only {C} there), then the CREATURE portion with
+    // for_creature=true on the remaining board (restricted colours legal), or the reverse order
+    // when one stage strands the other's scarce source. Aggregate-legal by construction: each
+    // stage's taps cover exactly its own class's pips, so a legal source-to-pip assignment exists
+    // even though the pre-loaded pool is fungible (same standard the all-creature path applies).
+    // Attempted ONLY where today declines -> flag off (or every attempt failing) is byte-identical.
+    // Closes the "Known limitation (mixed batches)" deferred in
+    // docs/design/slivers-restricted-mana-tap-order-bug.md, now measurably motivated.
+    bool mixed_ok = false;
+    if (!ok && !all_creatures && g_prepay_mixed_on && c_crea.ManaValue() > 0)
+    {
+        auto restore = [&]()
+        {
+            state.battlefield                  = bf_snap;
+            state.floating_mana                = fm_snap;
+            state.players[active].life         = la;
+            state.players[1 - active].life     = lo;
+            state.opponent_lost_life_this_turn = oll;
+            produced = ManaPool{};
+        };
+        // A zero-cost noncreature portion still lands here (the single solve ran with
+        // for_creature=false and may have failed on the creature pips alone): one creature-only
+        // stage is the whole retry then.
+        const bool have_nonc = c_nonc.ManaValue() > 0;
+        // Same hold ladder as the single solve -- every rung, then unreserved -- so a dork or
+        // depletion counter the turn can spare is still spared on this path.
+        for (int r = 0; r <= n_rungs && !mixed_ok; ++r)
+        {
+            const std::uint64_t hold = (r < n_rungs) ? rungs[r] : 0;
+            for (int order = 0; order < (have_nonc ? 2 : 1) && !mixed_ok; ++order)
+            {
+                restore();   // the failed solve above (or the prior attempt) may have tapped/paid
+                const bool      first_c = !(order == 0 && have_nonc);
+                const ManaCost& first   = first_c ? c_crea : c_nonc;
+                ManaPool p1, p2;
+                bool o = TapForCostBacktrack(state, first, first_c, ManaPool{},
+                                             /*rp_colors=*/nullptr, /*fail_memo=*/nullptr,
+                                             /*out_leftover=*/nullptr, /*tapped_mask=*/0,
+                                             /*untapped_max=*/-1, /*reserved_mask=*/hold,
+                                             /*out_full_pool=*/&p1);
+                if (o && have_nonc)
+                {
+                    const ManaCost& second = first_c ? c_nonc : c_crea;
+                    o = TapForCostBacktrack(state, second, !first_c, ManaPool{},
+                                            /*rp_colors=*/nullptr, /*fail_memo=*/nullptr,
+                                            /*out_leftover=*/nullptr, /*tapped_mask=*/0,
+                                            /*untapped_max=*/-1, /*reserved_mask=*/hold,
+                                            /*out_full_pool=*/&p2);
+                }
+                if (!o) { continue; }
+                ManaPool sum = p1;
+                sum.white += p2.white; sum.blue += p2.blue; sum.black += p2.black;
+                sum.red += p2.red; sum.green += p2.green; sum.colorless += p2.colorless;
+                sum.wild += p2.wild;
+                if (sum.wild != 0) { continue; }   // same ambiguous-pinning bar as the single solve
+                produced = sum; ok = true; mixed_ok = true;
+            }
+        }
+        if (!mixed_ok) { restore(); }
+    }
     // Decline when the full batch is unaffordable (fall back to greedy, which casts what it can) or
     // when the tap set makes "any colour" (wild) mana -- pinning colours to pips is then ambiguous.
     if (!ok || produced.wild > 0)
@@ -9684,7 +9778,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                      + combined.red + combined.green + combined.colorless;
     pool.wild = produced.Total() - pinned;
     state.floating_mana = pool;
-    Pp(PP_OK);
+    Pp(mixed_ok ? PP_OK_MIXED : PP_OK);
     _decl.ok = true; return true;
 }
 
