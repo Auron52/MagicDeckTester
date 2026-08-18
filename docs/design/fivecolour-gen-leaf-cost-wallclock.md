@@ -29,7 +29,16 @@ Two measurement routes are closed, which is why this doc exists:
    vs leaf-off. (Hardware counters are `<not supported>` in the dev container, so `perf stat -e
    instructions` is not an option there either.)
 
-## Known anchor points (idle primary box, HEAD `8bd337f8`, single thread, 120 games, seed 1001)
+## Known anchor points (idle primary box, single thread, 120 games, seed 1001)
+
+**Provenance note (2026-08-18, post-rebase):** the WALL anchors below were measured at the
+pre-rebase engine (`6732199a`-era tree). The branch has since taken colour-exact subset
+affordability (adopted default-on, GT rebaselined) and a Karoo mana fix, and the protocol's
+deterministic avg constants were RE-DERIVED at `91885099` (rebuilt, smoke 36/36 ALL PASS) —
+the avgs listed in the commands ARE current. The wall ratios below are therefore advisory;
+Step 1 exists to re-establish the direction on the new engine, which is all the gate needs.
+Also re-verified at `91885099`: d2/b1 vs d3/b3 remain result-identical on 120/120 proxy games,
+so the H21 labeller conclusion survives the engine change.
 
 | config | hybrid (sidecar attached) | `MTG_VALUE_PROFILE=none` | leaf edge |
 |---|---|---|---|
@@ -46,7 +55,7 @@ equally plausible. Measure, don't extrapolate — this repo has been burned by e
 ### Setup
 
 ```sh
-git checkout phase-1-2-deck-analyzer   # any commit >= 8bd337f8, clean tree
+git checkout phase-1-2-deck-analyzer   # any commit >= 91885099, clean tree
 ./build.sh                             # Release; NEVER raw cmake (CLAUDE.md)
 ```
 
@@ -62,8 +71,8 @@ run() { /usr/bin/time -f "%e s" env "$@" build/Release/mtg decks/FiveColour/Five
   --profile decks/FiveColour/FiveColour.profile.json --games 120 --seed 1001 --threads 1 \
   --max-turns 8 --ignore-play-profile --depth "$D" --budget-ms "$B" 2>&1 \
   | grep -E 'avg |s$'; }
-D=3 B=3 run                          # expect avg 5.1667; wall ~<X>
-D=3 B=3 run MTG_VALUE_PROFILE=none   # expect avg 5.1750; wall ~1.7x the line above
+D=3 B=3 run                          # expect avg 5.1750; wall ~<X>
+D=3 B=3 run MTG_VALUE_PROFILE=none   # expect avg 5.1833; wall direction: SLOWER (ratio to re-establish here)
 ```
 
 Absolute seconds will differ from the primary box (different CPU — only RATIOS transfer). If the
@@ -77,8 +86,8 @@ binary/commit — stop and rebuild.
 
 ```sh
 for i in 1 2 3 4 5 6 7 8 9 10; do
-  D=2 B=1 run                          # arm A: hybrid   (expect avg 5.1667 every time)
-  D=2 B=1 run MTG_VALUE_PROFILE=none   # arm B: leaf-off (its own constant avg every time)
+  D=2 B=1 run                          # arm A: hybrid   (expect avg 5.1750 every time)
+  D=2 B=1 run MTG_VALUE_PROFILE=none   # arm B: leaf-off (expect avg 5.1833 every time)
 done
 ```
 
