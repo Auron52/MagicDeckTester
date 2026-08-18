@@ -241,6 +241,33 @@ scarcity direction, which has now lost six independent times: flow-scarcity (+0.
 every variant that lets a creature go before any land loses and takes the Grove reference with it.
 Three separate projects have now lost `claude_s5_gi4.json` to that one mechanism.
 
+#### PARKED, UNMEASURED — the CONJUNCTION (user, 2026-08-17)
+
+The rule the user actually had in mind, which none of the six arms above tested: hold the
+depletion / storage / more-flexible land — i.e. spend the CREATURE instead — **if and only if that
+creature's damage is irrelevant** (0 power being the easy case). It is the INTERSECTION of two arms
+that were each tested alone and each failed for a different reason:
+
+* `ShouldAttackWith` (arm 2 in the rejected table) freed a no-damage creature against **every**
+  land, including the plain ones.
+* insertion-by-flexibility (the fifth arm) freed **every** creature against the flexible lands,
+  including the ones that swing for damage.
+
+The conjunction is strictly narrower than both, so it is a genuinely different variant and it is
+NOT refuted by their results. The user parked it rather than spend another cycle.
+
+**Predicted to hit the same wall, for a checkable reason.** Grove of the Burnwillows is a
+more-flexible land (`{R}{G}{C}`, rank 31) and Ignoble Hierarch is 0 power, so the conjunction fires
+on exactly the payment that decides `Anti-Lifegain/claude_s5_gi4.json`: Grove is held, the Hierarch
+is spent, the drip never fires and the turn-4 kill is gone — the same failure as the other three
+times. This is a PREDICTION from the mechanism, not a measurement; do not report it as one.
+
+If it is ever picked up, the known fix is already written: rank a LIVE drip source
+(`tap_opponent_lifegain > 0` and `OpponentLifegainUseful`) as maximally scarce so it is spent FIRST,
+which is what `flow-guided-tap-order.md` did to repair this identical break under its own flag. The
+honest test is therefore the conjunction **plus** that exception, measured on all three seed sets
+with the reference sweep strict — a variant that has never been run.
+
 Two structural facts that bound the remaining space, both checked rather than assumed:
 
 * **No deck in the repo holds both a storage land and a mana creature** (Dragonstorm has Dwarven Hold
