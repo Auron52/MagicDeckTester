@@ -87,7 +87,26 @@ Held-out is stronger than train, so this is not seed overfitting. FiveColour's 6
 `MTG_FETCHRANK=1` is kept as a diagnostic (prints the ordered candidate list with its keys); it is
 what located this and costs nothing when unset.
 
-## Not done
+## The doctrine, in full — and what is still open
 
-The doctrine's land-PLAY half — *"a good bet is to play a shock from hand T1 if it has green"* — is a
-different decision (which land to play from hand, not which land to fetch) and is untouched here.
+Recorded verbatim so it survives context loss; this is the queue for further fetch rules.
+
+> 1. "The priority is getting to 5 colours, starting with Green T1 and prioritizing other colours we
+>    might need in our hand after that."
+> 2. "When possible we should get 2 colours we are missing."
+> 3. "White is a good bet for T2 if we have Faeburrow Elder in hand."
+> 4. "As usual, a good bet is to play a shock from hand T1 if it has green. T1 green land is a
+>    priority. If we can't play T1 green, we should play T1 black for Deathrite."
+
+Status:
+
+| # | rule | status |
+|---|---|---|
+| 1 | 5 colours, green first on T1 | **DONE** — the `enables_now` key above |
+| 3 | white on T2 for Faeburrow | **DONE** — falls out of `accel_hits` (no separate rule) |
+| 4a | green T1 > black T1 (Deathrite) | **DONE** — falls out of `{B/G}` vs `{G}` in `accel_hits` |
+| 2 | prefer covering TWO missing colours | **PARTIAL** — `breadth` exists but sorts 4th, below `accel_new`/`spell_new`, so a land covering one wanted colour can still beat one covering two missing colours. Not yet measured as its own lever. |
+| 4b | play a SHOCK FROM HAND on T1 if it makes green | **NOT DONE** — a different decision (which land to PLAY, not which to fetch); lives in the land-drop choice, not `FetchCandidates`. |
+
+Rule 2 is the natural next lever on this function; rule 4b needs a different hook and should be
+scoped separately.
