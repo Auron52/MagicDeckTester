@@ -177,30 +177,40 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
 //
 // Every source it cannot model exactly is OVER-approximated so the test stays a necessary
 // condition: a Karoo's two fixed colours become two free choices, a domain source becomes any
-// colour (a cast earlier in the same plan widens it), a scaled land's chosen colour becomes all
-// five, and same-turn credit (ritual float, rock production) enters as its pool colours with `wild`
-// paying anything. Filter lands are the one shape no over-approximation covers -- Cascade Bluffs
-// turns one {U} into {R}{R}, which no per-source colour set can express -- so a board holding one
-// switches the whole test off (usable = false) and keeps the existing
-// SubsetPayableWithFilters real-payment fallback as the only authority there.
+// colour (a cast earlier in the same plan widens it), and same-turn credit (ritual float, rock
+// production) enters as its pool colours with `wild` paying anything.
+//
+// CONVERSION sources -- Cascade Bluffs turning one {U} into {R}{R}, Izzet Signet / Ferrous Lake
+// paying {1} for two -- are the shape the flat pool books as a NET (+1 wild, or {C} when unfed),
+// which no colour set can express. But their COLOURS remain a hard bound: a Bluffs can never make
+// white. So they are credited with their GROSS yield in their own colours and charged nothing for
+// the feed -- strictly more supply than reality, so still permissive, while keeping the colour
+// bound that is the whole point. The one shape with no bindable ceiling is a SCALED land (Three
+// Tree City: N of a chosen colour, N = creatures you control), where under-crediting would turn
+// into a false reject; a board holding one switches the test off (usable = false) and leaves
+// SubsetPayableWithFilters as the only authority.
 struct ColorFeasibility
 {
     // cover[S] = mana units that can pay a coloured pip of SOME colour in the 5-bit mask S (WUBRG).
     int  cover[32] = {0};
-    // False when the test must not run at all: the lever is off, the board holds a filter land, or
+    // False when the test must not run at all: the lever is off, the board holds a scaled land, or
     // no source is multi-colour (then the flat pool is already exact per colour and this adds
     // nothing). Callers MUST skip the check -- never prune -- when this is false.
     bool usable    = false;
 
     // False only when NO assignment of the available mana to this subset's coloured pips exists.
     // `credit` is the same-turn mana the caller folded on top of the board pool (PoolCredit below).
+    // `noncreature_only` scores just the subset's NONCREATURE casts, to pair with the pool built by
+    // BuildColorFeasibility(state, /*noncreature=*/true).
     bool Payable(const std::vector<Action>& cands, const std::vector<int>& sel,
-                 const ManaPool& credit) const;
+                 const ManaPool& credit, bool noncreature_only = false) const;
 };
 
 // Built ONCE per enumeration from the board (state-only, exactly like ComputeAvailableColors) and
-// reused for every subset; only the per-subset credit varies.
-ColorFeasibility BuildColorFeasibility(const GameState& state);
+// reused for every subset; only the per-subset credit varies. `noncreature` builds the counterpart
+// of BuildNonCreaturePool -- creature-only sources dropped -- because the flat pool runs that same
+// narrower test (eff_nc.CanPay) and carries the same colour-blind phantom inside it.
+ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature = false);
 
 // The same-turn mana a subset credited on top of the board pool, i.e. `eff` minus `base` per colour
 // (clamped at zero). The enumerators only ever ADD to their credited pool -- the sequenced-ritual

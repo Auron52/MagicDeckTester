@@ -839,6 +839,7 @@ extern std::atomic<long> g_afford_real_attempts;
 //                        passes a {R}{R}{R} cost off one red source). See exact-mana-enumeration.md.
 //   TOTAL shortfall   -- not enough mana at all at this point in the turn. THIS is the class a cast
 //                        order can strand or save (the Dragonstorm defect).
+int  AffordAuditLevel();   // 0 = off, 1 = counters only, 2 = one line per drop
 void NoteDroppedCast(const std::string& name, bool is_accelerant, bool colour_short);
 
 // RAII: suppress human-play (and, in a claude-play session, unpruned) semantics for the current

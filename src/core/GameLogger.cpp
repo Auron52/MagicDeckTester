@@ -69,6 +69,14 @@ std::atomic<long> g_afford_rollout_attempts{0};
 std::atomic<long> g_afford_real_fails{0};
 std::atomic<long> g_afford_real_attempts{0};
 bool AffordAuditOn() { static const bool on = EnvOn("MTG_AFFORD_AUDIT"); return on; }
+// =2 also prints one line PER DROP (turn, card, cost, what was still untapped). The aggregate counts
+// tell you a class of drop exists; only the per-drop line tells you whether the subset was ever
+// payable or whether an earlier cast in the same turn took the colour this one needed.
+int AffordAuditLevel()
+{
+    static const int lvl = AffordAuditOn() ? EnvInt("MTG_AFFORD_AUDIT", 1) : 0;
+    return lvl;
+}
 namespace {
 // Dropped-cast breakdown for the stranded-accelerant detector. Guarded by AffordAuditOn() at every
 // call site, so the lock is never taken (and the map never grows) in a normal run.

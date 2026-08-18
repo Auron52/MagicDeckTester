@@ -873,8 +873,22 @@ static void ProbeColorExactReject(const GameState& state, const std::vector<Acti
         if (!names.empty()) { names += " + "; }
         names += cands[j].card_name.str();
     }
-    std::fprintf(stderr, "[color-exact] %s turn=%d: %s\n",
-                 really_unpayable ? "reject" : "FALSE REJECT", state.turn_number, names.c_str());
+    std::string srcs;
+    if (!really_unpayable)
+    {
+        for (const Permanent& sp : state.battlefield)
+        {
+            if (sp.controller_index != state.active_player_index || sp.tapped) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(sp.card);
+            if (!sd) { continue; }
+            const bool is_src = (sd->tmpl == CardTemplate::BasicLand)
+                             || (sd->tmpl == CardTemplate::ManaDork) || sd->params.mana_rock;
+            if (is_src) { srcs += sp.card.m_name.str() + ","; }
+        }
+    }
+    std::fprintf(stderr, "[color-exact] %s turn=%d: %s%s%s\n",
+                 really_unpayable ? "reject" : "FALSE REJECT", state.turn_number, names.c_str(),
+                 srcs.empty() ? "" : "   UNTAPPED{", srcs.empty() ? "" : (srcs + "}").c_str());
 }
 
 // True if the active player controls an untapped filter / ramp-filter mana source, whose color
@@ -8084,9 +8098,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
 
     bool have_colors[5];    // untapped-source colors -- state-only, computed once for all subsets
     ComputeAvailableColors(state, have_colors);
-    // Colour-EXACT affordability (MTG_COLOR_EXACT, default off -> usable == false -> inert). Same
-    // state-only, build-once shape as the presence gate above; see ManaPayment.h.
-    const ColorFeasibility colour_feas = BuildColorFeasibility(state);
+    // Colour-EXACT affordability. Same state-only, build-once shape as the presence gate above; see
+    // ManaPayment.h. TWO pools, because the flat check is two tests: the whole subset against every
+    // source, and the NONCREATURE casts against the pool that drops creature-only sources.
+    const ColorFeasibility colour_feas    = BuildColorFeasibility(state);
+    const ColorFeasibility colour_feas_nc = BuildColorFeasibility(state, /*noncreature=*/true);
 
     // Learned mid-game evaluator (per-deck, MTG_EVAL_MODEL-gated): when attached it RANKS non-lethal
     // plans by predicted win-turn in place of the EvalCard sum. nullptr in every default run
@@ -8297,8 +8313,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // ... and the COUNT the gate above deliberately does not model: two white pips off one white
         // source. Only on the flat-pool path -- a subset rescued by SubsetPayableWithFilters was
         // judged by a real payment, and colour_feas is unusable on a filter board anyway.
-        if (mana_ok && colour_feas.usable
-            && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff)))
+        if (mana_ok
+            && ((colour_feas.usable
+                 && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff)))
+             || (colour_feas_nc.usable
+                 && !colour_feas_nc.Payable(cands, sel, PoolCredit(pool_noncreature, eff_nc),
+                                            /*noncreature_only=*/true))))
         {
             if (ColorExactProbeOn()) { ProbeColorExactReject(state, cands, sel); }
             return;
@@ -12945,9 +12965,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
     bool have_colors[5];   // untapped-source colors -- state-only, computed once for all subsets
     ComputeAvailableColors(state, have_colors);
-    // Colour-EXACT affordability (MTG_COLOR_EXACT, default off -> usable == false -> inert). Same
-    // state-only, build-once shape as the presence gate above; see ManaPayment.h.
-    const ColorFeasibility colour_feas = BuildColorFeasibility(state);
+    // Colour-EXACT affordability. Same state-only, build-once shape as the presence gate above; see
+    // ManaPayment.h. TWO pools, because the flat check is two tests: the whole subset against every
+    // source, and the NONCREATURE casts against the pool that drops creature-only sources.
+    const ColorFeasibility colour_feas    = BuildColorFeasibility(state);
+    const ColorFeasibility colour_feas_nc = BuildColorFeasibility(state, /*noncreature=*/true);
 
     // Evaluate one selected combination (a list of candidate indices) and, if
     // feasible, append the resulting plan. Mirrors the former per-mask body.
@@ -13272,8 +13294,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (!SubsetPayable(have_colors, cands, sel))         { return; }
         // ... and the COUNT it does not model (see the twin in Solve::consider). Flat-pool path
         // only: the filter fallback and the cost reframe both judge by other means.
-        if (mana_ok && colour_feas.usable
-            && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff)))
+        if (mana_ok
+            && ((colour_feas.usable
+                 && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff)))
+             || (colour_feas_nc.usable
+                 && !colour_feas_nc.Payable(cands, sel, PoolCredit(pool_noncreature, eff_nc),
+                                            /*noncreature_only=*/true))))
         {
             if (ColorExactProbeOn()) { ProbeColorExactReject(state, cands, sel); }
             return;

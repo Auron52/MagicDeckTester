@@ -127,8 +127,9 @@ Action CastOf(const std::string& name, const GameState& s)
     const CardDefinition* def = CardDatabase::Instance().Lookup(name);
     REQUIRE_MESSAGE(def != nullptr, "card not in cards.json: ", name);
     Action a;
-    a.kind = Action::Kind::CastFromHand;
-    a.cost = EffectiveSpellCost(*def, s);
+    a.kind           = Action::Kind::CastFromHand;
+    a.cost           = EffectiveSpellCost(*def, s);
+    a.is_noncreature = !def->card.IsCreature();
     return a;
 }
 
@@ -142,6 +143,20 @@ bool ColorExactAdmits(const GameState& board, const std::vector<std::string>& ca
     for (const std::string& n : casts)
     { sel.push_back(static_cast<int>(cands.size())); cands.push_back(CastOf(n, board)); }
     return feas.Payable(cands, sel, ManaPool{});
+}
+
+// The same question for a hand-built cost, against either the full pool or the NON-CREATURE one.
+bool ColorExactAdmitsCost(const GameState& board, const ManaCost& cost, bool noncreature)
+{
+    const ColorFeasibility feas = BuildColorFeasibility(board, noncreature);
+    REQUIRE(feas.usable);
+    Action a;
+    a.kind           = Action::Kind::CastFromHand;
+    a.cost           = cost;
+    a.is_noncreature = noncreature;
+    const std::vector<Action> cands{a};
+    const std::vector<int>    sel{0};
+    return feas.Payable(cands, sel, ManaPool{}, noncreature);
 }
 
 // The combined cost of those same casts, as the enumerator sums it.
@@ -266,14 +281,59 @@ TEST_CASE("colour-exact: hybrid pips are un-baked, not demanded in their first c
                                          "Deathrite Shaman"}));
 }
 
-TEST_CASE("colour-exact: a filter land switches the test off rather than guessing")
+TEST_CASE("colour-exact: a filter land is credited its GROSS yield, in its own colours only")
 {
     EnsureCards();
     setenv("MTG_COLOR_EXACT", "1", 1);
-    // Cascade Bluffs turns one {U} into {R}{R}; no per-source colour set expresses that, so the gate
-    // must decline to judge the board at all and leave it to the real-payment fallback.
+    // Cascade Bluffs turns one {U} into {R}{R}. The flat pool books that as one net wild, which loses
+    // the fact that it can make two red -- and also the fact that it can never make WHITE. Credit the
+    // gross in its own colours: permissive on count (so a real filter chain is never rejected), exact
+    // on colour (so the white shortfall is still caught).
     const GameState board = MakeBoard({"Cascade Bluffs", "Island"});
-    CHECK_FALSE(BuildColorFeasibility(board).usable);
+    CHECK(BuildColorFeasibility(board).usable);
+    // Feed the Island's {U} into the Bluffs for {R}{R}: genuinely payable, must not be rejected.
+    CHECK(ColorExactAdmitsCost(board, Cost(0, 0, 0, 0, /*r=*/2), false));
+
+    // ... but the Bluffs makes no white, so a second white pip has only one source to come from.
+    const GameState wboard = MakeBoard({"Cascade Bluffs", "Island", "Godless Shrine"});
+    CHECK(ColorExactAdmitsCost(wboard, Cost(0, /*w=*/1), false));
+    CHECK_FALSE(ColorExactAdmitsCost(wboard, Cost(0, /*w=*/2), false));
+}
+
+TEST_CASE("colour-exact: the NON-CREATURE pool is gated too (creature-only sources dropped)")
+{
+    EnsureCards();
+    setenv("MTG_COLOR_EXACT", "1", 1);
+    // Ancient Ziggurat makes any colour but only for creature spells. Two white pips on a NONCREATURE
+    // spell may therefore draw on Godless Shrine alone, even though the full pool holds two
+    // white-capable sources -- the phantom the flat eff_nc.CanPay admits (wild 2 covers deficit 2).
+    const GameState board = MakeBoard({"Ancient Ziggurat", "Godless Shrine", "Breeding Pool"});
+    ManaPool flat_nc; flat_nc.wild = 2;                     // Shrine + Breeding Pool, Ziggurat dropped
+    CHECK(flat_nc.CanPay(Cost(0, /*w=*/2)));                // the flat pool says {W}{W} is affordable
+
+    CHECK(ColorExactAdmitsCost(board, Cost(0, /*w=*/2), /*noncreature=*/true)  == false);
+    // A creature spell may use the Ziggurat, so the same cost is fine against the full pool.
+    CHECK(ColorExactAdmitsCost(board, Cost(0, /*w=*/2), /*noncreature=*/false) == true);
+}
+
+TEST_CASE("Karoo colour identity: Azorius Chancery makes ONE blue, not two")
+{
+    EnsureCards();
+    // "{T}: Add {W}{U}" is a fixed bundle -- one white and one blue -- not two mana of either. A
+    // board whose only blue source is a Chancery therefore cannot pay {1}{U}{U}.
+    const GameState board = MakeBoard({"Azorius Chancery", "Forest", "Stomping Ground"});
+    CheckTwinsAgree(board, Cost(/*generic=*/1, 0, /*u=*/2), false, /*expect_ok=*/false);
+    // The bundle's own colours are of course payable, and so is one blue plus generic.
+    CheckTwinsAgree(board, Cost(0, /*w=*/1, /*u=*/1), false, true);
+    CheckTwinsAgree(board, Cost(/*generic=*/2, 0, /*u=*/1), false, true);
+
+    // The live case this was found on: mirrorwing_smoke_d3_s1001 gi10 turn 5. Board is four Forests
+    // and one Gruul Turf ({R}{G}), i.e. exactly ONE red -- and the engine cast Mirrorwing Dragon
+    // {3}{R}{R} off it and won a turn earlier for the trouble. The GT it beat was inflated by an
+    // illegal payment, which is why fixing this makes the suite metric WORSE on Karoo decks.
+    const GameState mw = MakeBoard({"Gruul Turf", "Forest", "Forest", "Forest", "Forest"});
+    CheckTwinsAgree(mw, Cost(/*generic=*/3, 0, 0, 0, /*r=*/2), false, /*expect_ok=*/false);
+    CheckTwinsAgree(mw, Cost(/*generic=*/3, 0, 0, 0, /*r=*/1), false, true);   // one red is fine
 }
 
 TEST_CASE("twin equivalence matrix: mixed board, sweep of costs")

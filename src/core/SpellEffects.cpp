@@ -2096,6 +2096,20 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                     { if (!(fm & (1u << static_cast<int>(c)))) { s_col_order.push_back(c); } }
                     order_ptr = &s_col_order;
                 }
+                // KAROO / bundle source ("{T}: Add {W}{U}" -- Azorius Chancery, Izzet Boilerworks):
+                // a per-tap yield > 1 across MULTIPLE colours is one mana of EACH, not `amt` of any
+                // one. The per-colour loop below prices it as amt-of-one-colour, which offers a
+                // payment the card cannot make -- a lone Azorius Chancery "paying" {U}{U}. Exactly
+                // the mispricing the domain_mana branch above calls out, and the same rule
+                // tap_source (ManaPayment.cpp) already applies on the greedy path; the backtracker
+                // was the unfixed twin, so the greedy refused these and the fallback allowed them.
+                if (amt > 1 && produces.size() > 1)
+                {
+                    ManaPool f = floating;
+                    for (Color c : produces) { CcoAuditTap(*def, c, for_creature); f.Add(c, 1); }
+                    if (activate(f, /*drip_ok=*/true, storage_burn)) { return true; }
+                    continue;   // no single-colour branch exists for this source
+                }
                 bool generic_rep_done = false;   // collapse: explore one generic-only colour, skip the rest
                 for (Color c : *order_ptr)
                 {

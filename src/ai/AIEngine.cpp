@@ -3692,10 +3692,34 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             if (AffordAuditOn())
             {
                 g_afford_real_fails.fetch_add(1, std::memory_order_relaxed);
+                const bool colour_short = audit_have >= effective.ManaValue();
                 NoteDroppedCast(def->card.m_name.str(),
                                 IsManaRitual(*def)
                                     || (def->params.mana_rock && !def->card.IsCreature()),
-                                audit_have >= effective.ManaValue());
+                                colour_short);
+                if (AffordAuditLevel() >= 2)
+                {
+                    const ManaPool rem = AvailableManaPool(state);
+                    std::string untapped, tapped;
+                    for (const Permanent& sp : state.battlefield)
+                    {
+                        if (sp.controller_index != state.active_player_index) { continue; }
+                        const CardDefinition* sd = CardDatabase::Instance().LookupCached(sp.card);
+                        if (!sd) { continue; }
+                        const bool src = (sd->tmpl == CardTemplate::BasicLand)
+                                      || (sd->tmpl == CardTemplate::ManaDork) || sd->params.mana_rock;
+                        if (!src) { continue; }
+                        (sp.tapped ? tapped : untapped) += sp.card.m_name.str() + ",";
+                    }
+                    std::fprintf(stderr,
+                                 "[afford-drop] t%d %-24s cost=%-12s %s  pool[W%d U%d B%d R%d G%d C%d wild%d]"
+                                 "  UNTAPPED{%s}  TAPPED{%s}\n",
+                                 state.turn_number, def->card.m_name.str().c_str(),
+                                 effective.ToString().c_str(),
+                                 colour_short ? "COLOUR-short" : "total-short ",
+                                 rem.white, rem.blue, rem.black, rem.red, rem.green,
+                                 rem.colorless, rem.wild, untapped.c_str(), tapped.c_str());
+                }
             }
             return;
         }

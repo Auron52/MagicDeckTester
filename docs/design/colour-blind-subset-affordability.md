@@ -213,6 +213,73 @@ The follow-up this points at: `SubsetPayableWithFilters` already pays for real, 
 authority on filter boards. Running it as the exact test when `usable == false` would close the hinata
 gap at the cost of a real payment per surviving subset — a perf question, not a soundness one.
 
+### Follow-up round (2026-08-18): both gaps closed, and a RULES BUG fell out
+
+**1. Conversion sources are modelled instead of standing the test down.** A filter's colours are a
+hard bound even though its net yield is not (a Cascade Bluffs can never make white), so it is credited
+its GROSS yield in its own colours with no charge for the feed -- more supply than reality, so still
+permissive. Only a SCALED land (Three Tree City) still stands the test down, because its yield has no
+bindable ceiling; no suite deck plays one.
+
+**2. The non-creature pool is gated.** `eff_nc.CanPay(noncreature_combined)` carried the same phantom;
+`BuildColorFeasibility(state, /*noncreature=*/true)` mirrors `BuildNonCreaturePool` (creature-only
+sources dropped, `colored_creature_only` following `MTG_CCO_NONCREATURE_POOL`) and scores only the
+subset's noncreature casts.
+
+**3. Fixed bundles are modelled exactly.** A Karoo ("{T}: Add {W}{U}"), a domain source and a
+two-colour ramp filter add one mana of EACH colour -- they are not n free choices from a colour set.
+Crediting them as free choices was handing the test a second blue off an Izzet Boilerworks that can
+only make one.
+
+That last one is what exposed the real defect. With bundles modelled honestly the probe reported
+**8,616 FALSE REJECTS** -- and every one was the probe's ORACLE being wrong, not the gate:
+
+```
+[color-exact] FALSE REJECT turn=4: Hunted Phantasm   UNTAPPED{Forest,Azorius Chancery,Stomping Ground,}
+```
+
+`Hunted Phantasm` is `{1}{U}{U}`; the only blue source is an Azorius Chancery, which makes exactly one
+blue. The payment path was paying it anyway. `TapForCostBacktrackWorker` (SpellEffects.cpp) branched
+over each of a source's colours and added `amt` of THAT colour, so a yield-2 two-colour land offered
+`{U}{U}` or `{W}{W}` -- neither of which the card can produce. The `domain_mana` branch immediately
+above it documents this exact mispricing and was fixed for it; the Karoo case was the unfixed twin,
+and `tap_source` on the greedy path had always got it right, so the greedy refused these payments and
+the complete fallback allowed them.
+
+Live instance, `mirrorwing_smoke_d3_s1001` gi10 turn 5: board is four Forests and one Gruul Turf
+(`{R}{G}`, i.e. ONE red), and the engine cast **Mirrorwing Dragon `{3}{R}{R}`** off it and won on T6.
+
+**The suite metric gets WORSE, and that is the correct outcome.** Summed delta vs the previous GT:
+smoke +0.0950, regression +0.1080, overnight +0.1525. All 41 searched-depth slowdowns are on the
+three Karoo decks (mirrorwing 31, creature_giving 6, hinata 4) and ZERO on the nine decks without a
+Karoo. mirrorwing carries almost all of it (+0.1536 held out) because its namesake card is exactly the
+`{R}{R}` the Gruul Turf was illegally funding. Unlike `MTG_CCO_NONCREATURE_POOL` -- withdrawn because
+nothing illegal was ever played, so it had to earn its place on measurement -- this IS "we allowed
+invalid behaviour and now disallow it", so it ships unconditionally and the old ground truth is simply
+an inflated baseline.
+
+Pinned by unit tests: a lone Azorius Chancery cannot pay `{1}{U}{U}`, and the gi10 board cannot pay
+`{3}{R}{R}`. `MTG_AFFORD_AUDIT=2` now prints one line per dropped cast (turn, cost, untapped and
+tapped sources), which is what made all of this legible.
+
+### Still not fixed: whole-turn mana ALLOCATION
+
+hinata / treasure_hunt / slivers colour-short drops did **not** move, and the gate rejects zero subsets
+there. `MTG_AFFORD_AUDIT=2` shows why:
+
+```
+[afford-drop] t3 Hinata, Dawn-Crowned cost={1}{W}{U}{R} COLOUR-short
+    UNTAPPED{Forbidden Orchard,Forbidden Orchard,Sol Ring,}  TAPPED{Cascade Bluffs,}
+```
+
+Two any-colour sources for three coloured pips -- because an earlier cast that turn spent the Cascade
+Bluffs. At ENUMERATION time the Bluffs was untapped and the subset was genuinely payable, so the gate
+admitted it correctly. The turn's mana is then allocated per-cast by a greedy that spends flexible
+sources early and strands the payoff. That is a different defect from this one and no aggregate
+feasibility test can see it: the subset IS feasible, the allocation is not. It wants a whole-turn joint
+payment (`BatchPrepayMainCasts` exists but does not cover these), and it is the same family as the
+cast-order work in `cast-order-ideal-with-ranges.md`.
+
 ### Not done
 
 * **The non-creature pool.** `eff_nc.CanPay(noncreature_combined)` gets the same flat treatment and

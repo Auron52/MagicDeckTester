@@ -914,6 +914,15 @@ static bool ColorExactEnabled()
     return v;
 }
 
+// Mirrors TurnSolver's s_cco_noncreature_pool, which decides whether the NON-CREATURE flat pool books
+// a colored_creature_only source as {C} (correct) or as wild (the historical over-credit). The colour
+// model must follow whichever the pool used, or the two would disagree about the same board.
+static bool CcoNoncreaturePoolEnabled()
+{
+    static const bool v = EnvOn("MTG_CCO_NONCREATURE_POOL");
+    return v;
+}
+
 ManaPool PoolCredit(const ManaPool& base, const ManaPool& eff)
 {
     ManaPool c;
@@ -927,22 +936,21 @@ ManaPool PoolCredit(const ManaPool& base, const ManaPool& eff)
     return c;
 }
 
-ColorFeasibility BuildColorFeasibility(const GameState& state)
+ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature)
 {
     ColorFeasibility f;
     if (!ColorExactEnabled()) { return f; }
-    // A CONVERSION source spends mana to make mana of another colour -- Cascade Bluffs turns one {U}
-    // into {R}{R}, Three Tree City feeds {2} for N of a chosen colour. No per-source colour set
-    // expresses that, and over-approximating it as "one unit, any colour" would false-reject a
-    // payable filter chain. Hand those boards back to SubsetPayableWithFilters, which pays for real.
-    // Same three shapes TurnSolver::HasUntappedFilterSource routes to that fallback.
+    // A SCALED land (Three Tree City: "{2},{T}: add N of a chosen colour", N = creatures you control)
+    // is the one conversion shape with no yield ceiling this model can bound -- ScaledManaNetYield
+    // reports the NET over its basic {C} tap, not the gross, and under-crediting supply is the one
+    // error that turns into a false reject. Stand the whole test down on such a board and leave it to
+    // SubsetPayableWithFilters. No suite deck plays one, so this is inert today.
     const int active = state.active_player_index;
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active || p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && (d->params.is_filter || d->params.ramp_filter || IsScaledManaLand(*d)))
-        { return f; }
+        if (d && IsScaledManaLand(*d)) { return f; }
     }
 
     const bool widen = EnvOn("MTG_DOMAIN_WIDEN", true);   // mirrors TurnSolver's DomainWidenEnabled
@@ -956,6 +964,21 @@ ColorFeasibility BuildColorFeasibility(const GameState& state)
         for (unsigned s = 1; s < 32; ++s)
         { if (s & static_cast<unsigned>(mask)) { f.cover[s] += count; } }
     };
+    // A FIXED BUNDLE source ("add one mana of EACH of these colours" -- a Karoo, a domain source, a
+    // two-colour ramp filter) is NOT n free choices from its colour set. Crediting it as free choices
+    // hands the test a second blue off an Izzet Boilerworks that can only ever make one, which is
+    // exactly how a phantom survives. One single-colour unit per colour is the honest model, and it
+    // is still an over-approximation of nothing -- reality supplies exactly this.
+    auto add_one_of_each = [&](int mask)
+    {
+        if ((mask & (mask - 1)) != 0) { has_multi = true; }   // the SOURCE is still multi-colour
+        for (unsigned s = 1; s < 32; ++s)
+        {
+            int n = 0;
+            for (int i = 0; i < 5; ++i) { if ((mask & (1 << i)) && (s & (1u << i))) { ++n; } }
+            f.cover[s] += n;
+        }
+    };
 
     // Same source filter as AvailableManaPool -- the pool this test post-filters must be built from
     // exactly the same permanents, or it would prune lines the flat check paid for off a source it
@@ -965,6 +988,9 @@ ColorFeasibility BuildColorFeasibility(const GameState& state)
         if (p.controller_index != active || p.tapped) { continue; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
+        // The NON-CREATURE pool drops creature-only sources entirely (Ancient Ziggurat) -- mirrors
+        // BuildNonCreaturePool, whose flat pool this variant post-filters.
+        if (noncreature && def->params.creature_mana_only) { continue; }
         const bool is_land = (def->tmpl == CardTemplate::BasicLand);
         const bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                           || def->params.mana_rock;
@@ -975,23 +1001,70 @@ ColorFeasibility BuildColorFeasibility(const GameState& state)
             if (gy_fuel <= 0) { continue; }
             --gy_fuel;
         }
+        // A partially-creature-only source (Cavern of Souls) may pay a coloured pip only for a
+        // creature spell; its unrestricted mode is "{T}: Add {C}". Mask 0 -> no coloured coverage.
+        // Gated exactly as BuildNonCreaturePool gates it, so the two stay consistent by construction.
+        if (noncreature && def->params.colored_creature_only && CcoNoncreaturePoolEnabled())
+        { continue; }
+        // CONVERSION sources (Cascade Bluffs "{U/R},{T}: add two of U/R"; Izzet Signet / Ferrous Lake
+        // "{1},{T}: add <produces>"). The flat pool books their NET (+1 wild, or {C} when unfed), which
+        // no colour set can express -- but their COLOURS are still a hard bound (a Bluffs can never
+        // make white), and that bound is the whole value here. Credit the GROSS yield of their colours
+        // and charge nothing for the feed: strictly more supply than reality, hence permissive, hence
+        // it can still only prune. This is what lets the gate run on hinata / treasure_hunt at all,
+        // where standing down previously left every phantom in place.
+        if (def->params.is_filter || def->params.ramp_filter)
+        {
+            const std::vector<Color>& cprod = EffectiveProduces(state, active, *def);
+            int cmask = 0;
+            for (Color c : cprod)
+            {
+                const int ci = static_cast<int>(c);
+                if (ci >= 0 && ci < 5) { cmask |= (1 << ci); }
+            }
+            if (def->params.is_filter)
+            {
+                // "Add {U}{U}, {U}{R}, or {R}{R}" -- genuinely two FREE choices from its colours.
+                add(cmask, 2);
+            }
+            else if (cprod.size() >= 2)
+            {
+                // "{1},{T}: Add {U}{R}" -- one of EACH, not two of either. A fixed bundle, so credit
+                // it as such: exact, and it does not hand the test a second blue that cannot exist.
+                add_one_of_each(cmask);
+            }
+            else
+            {
+                add(cmask, 2);            // "{1},{T}: Add {B}{B}" -- two of the one colour
+            }
+            continue;
+        }
         int amt = PermanentManaYield(p, *def);
         if (amt < 0) { amt = ManaProducedPerTap(*def); }
         const std::vector<Color>& prod = EffectiveProduces(state, active, *def);
-        // Domain source: one mana of EACH colour among your permanents, so the yield is the colour
-        // count (AddSourceToPool does the same). Modelling those as free choices from the set is
-        // permissive, and MTG_DOMAIN_WIDEN's premise -- a coloured permanent cast earlier in the
-        // SAME plan widens the set -- makes the set itself subset-dependent, so open it to all five.
-        if (def->params.domain_mana)
-        {
-            amt = static_cast<int>(prod.size());
-            if (widen && amt > 0) { add(0x1F, amt); continue; }
-        }
         int mask = 0;
         for (Color c : prod)
         {
             const int ci = static_cast<int>(c);
             if (ci >= 0 && ci < 5) { mask |= (1 << ci); }
+        }
+        // Domain source (Faeburrow Elder / Bloom Tender): one mana of EACH colour among your
+        // permanents -- a fixed bundle, not a free choice. Under MTG_DOMAIN_WIDEN a permanent cast
+        // earlier in the SAME plan can widen the set, so open the BUNDLE to all five colours: still
+        // one per colour, which is exactly the ceiling reality can reach, and far tighter than the
+        // five free choices the old model handed out.
+        if (def->params.domain_mana)
+        {
+            add_one_of_each(widen ? 0x1F : mask);
+            continue;
+        }
+        // A KAROO ("{T}: Add {U}{R}", Izzet Boilerworks) is likewise one of each: its per-tap yield
+        // equals its colour count. A plain dual has yield 1 and stays a free choice of one.
+        if (static_cast<int>(prod.size()) > 1 && amt == static_cast<int>(prod.size())
+            && def->params.etb_bounce_land)
+        {
+            add_one_of_each(mask);
+            continue;
         }
         add(mask, amt);
     }
@@ -1010,7 +1083,7 @@ ColorFeasibility BuildColorFeasibility(const GameState& state)
 }
 
 bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vector<int>& sel,
-                               const ManaPool& credit) const
+                               const ManaPool& credit, bool noncreature_only) const
 {
     // Demands, keyed by the MASK of colours that may pay them. At most nine distinct masks (five
     // singletons plus up to four hybrid pairs), so the Hall scan below stays a short walk.
@@ -1030,6 +1103,9 @@ bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vect
     {
         const Action& a = cands[j];
         if (a.kind == Action::Kind::ActivateVial) { continue; }   // no mana cost (mirrors SubsetPayable)
+        // The non-creature variant asks the narrower question the flat pool asks: can the NONCREATURE
+        // casts alone be paid without the creature-only sources? Same split as noncreature_combined.
+        if (noncreature_only && !a.is_noncreature) { continue; }
         int pips[5] = { a.cost.white, a.cost.blue, a.cost.black, a.cost.red, a.cost.green };
         // Un-bake hybrid pips: Card.h stores each in its FIRST colour's flat int, so reading the
         // flat pips alone would demand that colour and false-reject a subset the other half pays
