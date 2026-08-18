@@ -359,12 +359,37 @@ dragonstorm:
 plus an uncharged Dwarven Hold (a storage land yields its live counters, i.e. zero) -- and the whole
 declared chain then drops. No allocation decision is involved; the plan was never startable.
 
-The lead, for whoever picks this up: `SequencedRitualCredit` exists for exactly this, and the two
-enumerators gate it at DIFFERENT thresholds -- `SeqRitualCreditMode() >= 1` in `Solve`'s consider
-(TurnSolver.cpp ~8359) versus `>= 2` in `EnumeratePlans` (~13307), with the default 1 and the comment
-"DEFAULT: honest at the leaf". So the leaf is honest and the plan enumerator is optimistic. Whether
-raising the enumerator to the honest model fixes the dragonstorm bootstrap drops is one A/B
-(`MTG_RITUAL_SEQ_CREDIT=2`), and it needs the storage-land yield checked alongside it.
+### THE FIX: `MTG_RITUAL_SEQ_CREDIT=2` -- the plan enumerator was the optimistic one
+
+`SequencedRitualCredit` already exists for exactly this, and the two enumerators gate it at DIFFERENT
+thresholds: `SeqRitualCreditMode() >= 1` in `Solve`'s consider (TurnSolver.cpp ~8359) versus `>= 2` in
+`EnumeratePlans` (~13307), default 1, comment "DEFAULT: honest at the leaf". So the LEAF is honest and
+the PLAN ENUMERATOR is optimistic -- which is why every one of these drops is at searched depth and d0
+is untouched (d0 goes through `Solve`, which already runs the honest model).
+
+Raising the enumerator to the honest model is one existing lever, no new code:
+
+| | stranded accelerants | total drops |
+|---|---|---|
+| hinata d3 | **162 -> 26** (-84%) | 262 -> 45 |
+| dragonstorm d3 | **136 -> 65** (-52%) | 206 -> 98 |
+| hinata d0 / dragonstorm d0 | unchanged | unchanged |
+| goblins (no rituals) | unchanged | unchanged |
+
+And it does not cost play -- it improves it, on both seed sets:
+
+| tier | net | keys moved | worse |
+|---|---|---|---|
+| smoke (1001) | **-0.0266** / 36 keys | 4 | 0 |
+| regression (2002+3003) | **-0.0634** / 60 keys | 8 | 1 (+0.0050) |
+
+hinata carries it (d5 -0.040 / -0.020, d3 -0.005); dragonstorm's play changes at the same score. This
+is the actual fix for "a plan declared and then not payable" at searched depth, and unlike the two
+mechanisms above it needs no new machinery -- only a default change from 1 to 2.
+
+**NOT adopted.** Flipping the default is a play change on hinata and dragonstorm and needs the
+held-out overnight plus a GT rebaseline; adoption is the USER's call. Check the storage-land yield
+alongside it (the dragonstorm bootstrap case involves an uncharged Dwarven Hold).
 
 ### Still not fixed: whole-turn mana ALLOCATION
 
