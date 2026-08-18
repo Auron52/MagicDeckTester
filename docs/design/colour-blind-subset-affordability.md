@@ -559,3 +559,50 @@ evidence this arm is strictly better than both shipped alternatives:
 Still required before adoption: its own regression run demonstrating **0 play-drift**, plus the
 usual three tiers. Note the aggregate will look WORSE than global mode 2 (-0.0851 vs -0.0652 counts
 only hinata's keys) -- that is the point, not a defect.
+
+### CORRECTION: why mode 2 loses -- measured, and it is NOT a soundness violation
+
+Two mechanisms were asserted for mode 2's damage earlier in this document. Both are WRONG, and the
+instruments that refute them are now in the tree.
+
+**Claim 1 (wrong): "the sequenced model rejects subsets the board can actually pay."**
+`MTG_SEQ_PROBE` dumps every subset the tightening turns from accepted to rejected -- the only place
+the model can remove a line. Over 40 Dragonstorm games it fires 689 times, and the audited sample
+are all genuinely uncastable: an empty pool against a 3-cost Seething Song; two red off a lone
+Sandstone Needle; `simul=9 seq=2`, crediting exactly the Rite of Flame that IS reachable while
+Irencrag Feat at cost 4 is not. The model is SOUND about payability.
+
+The one real defect found in it -- the walk pricing accelerants at full cost while the outer test
+priced them with same-turn Medallion/affinity discounts -- was fixed (strict loosening, default
+byte-identical) and is worth 2 of the 21 reference drifts. Real, but not the mechanism.
+
+**Claim 2 (wrong): "the human's recorded line is no longer offered."** This misread the drift text.
+`ENUM-GAP` is precisely the class "a recorded plan is gone with an IDENTICAL hand", and it is **0**
+under mode 2. The recorded plans are still enumerated; `play-drift` means the line replays but ends
+in a different outcome. The "N recorded decisions unused" tail is the replay ending early, not
+options vanishing.
+
+**What is actually true.** Mode 3 (gate only: reject unpayable subsets, but do NOT fold the shortfall
+into the surviving plan's spendable pool) is **byte-identical to mode 2 on every regression key and
+digest**. So none of the damage comes from the shrunken survivor pool; 100% of it comes from the
+rejections -- rejections that are individually correct.
+
+That leaves one explanation standing: **the enumerator's optimism is load-bearing.** A plan is a
+PROPOSAL that the executor realises with trimming, so a subset that cannot be paid as written is
+still a branch whose realisation is a good line. "Unpayable as stated" is not "unreachable", and a
+prune keyed on it is too tight in the only sense that matters -- which is exactly the user bar that
+a prune must never be too tight.
+
+**Consequence for the design.** Tightening the enumerator is the wrong target, and no amount of
+making the sequenced model *more exact about payability* will fix mode 2, because it is already
+right about payability. The mode-1 split is the architecturally correct one:
+
+> be HONEST where you SCORE (the leaf -- which is what stranded accelerants corrupt),
+> and OPTIMISTIC where you BRANCH (the enumerator -- which the search needs wide).
+
+**Open, and now the interesting one:** the LEAF is internally consistent but uniformly conservative
+about same-turn reducers -- `Solve::consider` applies no reducer credit to `combined` at all (the
+Medallion credit is deliberately EnumeratePlans-only). So the leaf misprices Dragonstorm's
+Medallion turns in the tight direction. Making the leaf reducer-aware on BOTH sides is a
+SCORING-accuracy change at the site where accuracy is wanted, not a prune -- the right shape of
+follow-up. It changes default play, so it needs the full three-tier cycle and a USER call.

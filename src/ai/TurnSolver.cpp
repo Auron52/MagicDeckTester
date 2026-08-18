@@ -6814,6 +6814,27 @@ static inline int ManaGateTriangular(int gy) { return gy > 1 ? gy * (gy - 1) / 2
 // it puts SEVEN cases in the red including every Dragonstorm searched depth. Mode 1 leaves
 // Dragonstorm strictly better with none.
 //
+// WHY mode 2 loses, established by measurement 2026-08-18 (this CORRECTS an earlier claim in this
+// file that it "deletes reachable branches because the model wrongly says unpayable" -- that was
+// wrong, and both instruments below say so):
+//   * MTG_SEQ_PROBE over 40 Dragonstorm games: 689 rejections, and the audited sample are all
+//     GENUINELY uncastable (empty pool vs a 3-cost Seething Song; 2 red off a lone Sandstone Needle;
+//     "simul=9 seq=2" crediting exactly the Rite of Flame that IS reachable while Irencrag Feat at
+//     cost 4 is not). The sequenced model is SOUND about payability.
+//   * The reference sweep reports ZERO enum-gaps under mode 2 -- and enum-gap is precisely the class
+//     "a recorded plan is gone with an IDENTICAL hand". The humans' recorded plans are still offered;
+//     the 21 drifts are outcome divergence, not vanished options.
+//   * Mode 3 (gate only, no pool shrink) is byte-identical to mode 2 across every regression key and
+//     digest, so 100% of the damage comes from the REJECTIONS, none from the shrunken survivor pool.
+// So: each rejected subset really is uncastable AS STATED, and removing it still costs Dragonstorm
+// its wins. The explanation left standing is that the enumerator's optimism is LOAD-BEARING -- a
+// plan is a PROPOSAL the executor realises with trimming, so a subset that cannot be paid as written
+// is still a branch whose realisation is a good line. "Unpayable as stated" is therefore NOT
+// "unreachable", and pruning on it is too tight in the only sense that matters.
+// That is also why the mode 1 split is the architecturally right one: be HONEST where you SCORE (the
+// leaf, which is what stranded accelerants corrupt) and OPTIMISTIC where you BRANCH (the enumerator,
+// which the search needs wide).
+//
 // RE-TESTED AND REJECTED A SECOND TIME, 2026-08-18. The re-test was legitimate -- the engine had
 // changed materially (the colour-exact affordability gate and the Karoo bundle-payment fix both
 // landed that day, and both change exactly what the enumerator may credit) -- and on the TRAIN tiers
@@ -13440,30 +13461,61 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // sequenced model too -- only the SURVIVORS need the walk. Most odometer positions are
         // rejected, so this keeps the honest model off the hot path (measured: Dragonstorm d5
         // +3.2% -> +1.5% instructions, Hinata2 d5 +0.2%).
-        const bool seq_on = any_ritual && simul_ritual_credit > 0 && SeqRitualCreditMode() >= 2;
-        int  seq_credit   = -1;   // sequenced credit actually folded into eff (-1 = not computed yet)
+        const int  seq_mode  = SeqRitualCreditMode();
+        const bool seq_on    = any_ritual && simul_ritual_credit > 0 && seq_mode >= 2;
+        // MODE 3 = GATE ONLY. Mode 2 does two separable things here: (a) it REJECTS subsets whose
+        // ritual chain is not realisable, and (b) it folds the shortfall into `eff`, shrinking the
+        // pool a SURVIVING plan may spend downstream (fill_surplus, the ritual-drop re-credit).
+        // MTG_SEQ_PROBE showed (a)'s rejections are all genuinely uncastable, and the reference
+        // sweep reports ZERO enum-gaps, so (a) is not what loses Dragonstorm its lines -- which
+        // leaves (b). Mode 3 keeps (a) and drops (b) to measure them apart. Mode 2's path is
+        // untouched (seq_spend is true there), so mode 2 stays byte-identical.
+        const bool seq_spend = (seq_mode == 2);
+        int  seq_credit   = -1;   // sequenced credit (-1 = not computed yet)
+        bool seq_applied  = false;
+        // Lazily compute the shortfall between the simultaneous and sequenced credit. No side
+        // effects, so the gate can consult it without committing the survivor to the smaller pool.
+        auto seq_back = [&]() -> int
+        {
+            if (seq_credit < 0)
+            {
+                // `&state` prices each accelerant with the SAME same-turn reducer/affinity discounts
+                // already applied to `combined` above. Without it the walk charges full price inside
+                // while the outer test charges the discounted price -- an internal inconsistency
+                // that can only make the walk tighter than truth. Solve's leaf applies no reducer
+                // credit to `combined`, so it stays undiscounted and byte-identical there.
+                seq_credit = SequencedRitualCredit(pool, cands, sel, /*exclude=*/-1, &state);
+            }
+            return std::max(0, simul_ritual_credit - seq_credit);
+        };
         // Fold the sequenced correction into eff/eff_nc. Must run for EVERY surviving position, not
         // just the mana_ok ones: `eff` is read downstream (fill_surplus, the ritual-drop re-credit),
         // so a position rescued by the filter/reframe fallback below would otherwise go on spending
         // the optimistic pool.
         auto apply_seq = [&]()
         {
-            if (seq_credit >= 0) { return; }
-            // `&state` prices each accelerant with the SAME same-turn reducer/affinity discounts
-            // already applied to `combined` above. Without it the walk charges full price inside
-            // while the outer test charges the discounted price -- the inconsistency that made this
-            // model reject payable Dragonstorm chains (Medallion + rituals). Solve's leaf applies no
-            // reducer credit to `combined`, so it stays undiscounted and byte-identical there.
-            seq_credit = SequencedRitualCredit(pool, cands, sel, /*exclude=*/-1, &state);
-            if (seq_credit >= simul_ritual_credit) { return; }
-            const int back = simul_ritual_credit - seq_credit;
+            if (seq_applied) { return; }
+            seq_applied = true;
+            const int back = seq_back();
+            if (back <= 0) { return; }
             eff.wild    -= back;
             eff_nc.wild -= back;
         };
         if (seq_on && mana_ok)
         {
-            apply_seq();
-            const bool ok_after = eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined);
+            bool ok_after = true;
+            if (seq_spend)
+            {
+                apply_seq();
+                ok_after = eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined);
+            }
+            else
+            {
+                const int back = seq_back();
+                ManaPool e = eff, e_nc = eff_nc;
+                e.wild -= back; e_nc.wild -= back;
+                ok_after = e.CanPay(combined) && e_nc.CanPay(noncreature_combined);
+            }
             // The tightening turned an ACCEPTED subset into a rejected one -- the only place this
             // model can REMOVE a line. Every such rejection must be genuinely uncastable in any
             // order; MTG_SEQ_PROBE dumps them for exactly that audit.
@@ -13475,7 +13527,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
         bool mana_reject = !mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel));
-        if (seq_on && !mana_reject) { apply_seq(); }   // survivor: keep its credited pool honest too
+        if (seq_on && seq_spend && !mana_reject) { apply_seq(); }   // survivor: keep its pool honest
         if (mana_reject && CostReframeEnabled())
         {
             // Cost reframe (MTG_COST_REFRAME): an INTERACTING subset (reducer/ritual/affinity/rock) the
