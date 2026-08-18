@@ -130,7 +130,7 @@ Then a second seed block for robustness (5 pairs is enough): repeat with `--seed
 **Verdict: leaf-off is 1.57–2.20x SLOWER at d2/b1, with FULL distribution separation in both seed
 blocks. Decision rule 1 fires — keep the hybrid H21 labeller. Question closed.**
 
-Run at `91885099` (this repo's HEAD; `8bd337f8` is not in this history — see the caveat below),
+Run at `91885099` (this repo's HEAD at the time; see the determinism check below),
 `build.sh` Release, no other work on the box. Harness: `logs/fc_leafcost/run.sh` (`/usr/bin/time` is
 absent in the dev container, so wall is `date +%s%N` around the process); raw logs in
 `logs/fc_leafcost/step2.log` and `step4.log`.
@@ -188,24 +188,26 @@ keep artifacts from value-leaf regeneration would cost 1.6–2.2x wall on the ge
 FAST projection already at ~132 h single-box, that is days, not hours. The fidelity half being
 settled (N21 ≈ H21 on label quality) does not rescue it.
 
-### Caveat to record: the anchor `avg` constants have drifted
+### Determinism check: the re-derived `avg` constants CONFIRM independently
 
-The protocol says the deterministic `avg` MUST match exactly or the binary is wrong. Measured here:
+The run was executed against the pre-refresh revision of this doc (which still listed the
+pre-rebase constants 5.1667 / 5.1750 and `8bd337f8` — a commit that does not exist in this
+repository's history at all, unpushed or rebased away on the primary box). Measured on this box at
+`91885099`:
 
-| anchor | doc expects | measured |
+| anchor | measured here | primary box's re-derivation (`a6b79000`) |
 |---|---|---|
-| hybrid d3/b3 & d2/b1, seed 1001 | 5.1667 | **5.1750** |
-| leaf-off d3/b3, seed 1001 | 5.1750 | **5.1833** |
-| hybrid d2/b1, seed 2001 | 4.9000 | 4.9000 (exact) |
+| hybrid d3/b3 & d2/b1, seed 1001 | **5.1750** | 5.1750 |
+| leaf-off d3/b3 & d2/b1, seed 1001 | **5.1833** | 5.1833 |
+| hybrid d2/b1, seed 2001 | **4.9000** | 4.9000 |
 
-This is one game in 120 shifting by one turn (+0.0083), in both arms, on seed 1001 only. It is NOT a
-build problem: the drift is engine commits that landed after the doc's anchor. `8bd337f8` does not
-exist in this repository's history at all (unpushed or rebased away on the primary box), while
-`e4690c37` (ADOPT colour-exact subset affordability) and `811d165c` (KAROO adds one of EACH colour)
-are same-day engine fixes that necessarily move FiveColour's play. The protocol's own escape hatch —
-"any commit >= 8bd337f8" — is the operative clause, and the ratio gate it really depends on passed.
-Ratios, not absolutes, carry the verdict. **Anyone re-running this should re-anchor the avg
-constants to 5.1750 / 5.1833 at `91885099` or later.**
+Every constant agrees to 4 dp on different hardware. That is a determinism handshake neither box
+set out to run: the primary re-derived the constants at `91885099` (smoke 36/36) while this box was
+mid-experiment, and the two agree exactly. The pre-rebase drift (+0.0083 on seed 1001 = one game in
+120 moving one turn, in both arms) is fully explained by `e4690c37` (ADOPT colour-exact subset
+affordability) and `811d165c` (KAROO adds one of EACH colour), and is now reflected in the protocol
+above. Nothing about the verdict rests on it — the ratio gate carries that — but the handshake means
+the two boxes are running the same engine, so these wall ratios and the primary's are comparable.
 
 ## Instrument note worth keeping regardless of outcome
 
