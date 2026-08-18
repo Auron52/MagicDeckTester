@@ -93,7 +93,13 @@ a 0.0246 difference, the same order as the effect).
 **This is the open question, and it is a MODELLING question, not a measurement one.** The
 measurement is verified; whether the engine values the new cards correctly is not.
 
-## Per-slot attribution: mostly unresolved
+## Per-slot attribution: mostly unresolved -- SUPERSEDED, and WRONG
+
+**Do not use this table.** It is kept only to record the error. It was computed under a `replace`
+map that sent Expedite's slots to Fortifying Draught, when Impolite Entrance is Expedite's engine
+clone -- so the slot labels describe bookkeeping, not card-for-card comparisons. The overnight
+section below supersedes it with the corrected map, and reaches a DIFFERENT conclusion about which
+substitutions carry the swap.
 
 Conditioning on which swapped SLOT a game drew selects the same games in both arms (common shuffle,
 aligned numbering), so this is a clean contrast. n = 40,000:
@@ -105,11 +111,9 @@ aligned numbering), so this is a clean contrast. n = 40,000:
 | 54,55 | Expedite -> Fortifying Draught | 14,597 | +0.0048 | 0.0099 | +0.48 |
 | 59,60 | Scale the Heights -> Fortifying Draught | 14,550 | -0.0156 | 0.0098 | -1.59 |
 
-Read these against the -0.0142 library baseline, not against zero. Doing so leaves Twinflame ->
-Luxurious Libation as the only slot carrying real signal, and both Fortifying Draught slots at or
-above baseline. **The user's prior was that Draught -- "very powerful" -- would carry the swap; this
-does not support that**, but the per-slot standard errors are 0.007-0.010 against differences of
-that same size, so it is suggestive at best.
+Read these against the -0.0142 library baseline, not against zero. (The conclusion drawn here at the
+time -- that Twinflame -> Libation was the only slot with signal -- survived; the claim about the
+Draught slots did not, because those slots were mislabelled. See the overnight section.)
 
 ## Overnight three-arm campaign (2026-08-18 night): the per-card answer
 
