@@ -8547,14 +8547,23 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         { if (i >= 0 && i < n && !listed[static_cast<std::size_t>(i)]
               && !ap.hand[i].m_is_staged) { listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i); } };
 
-        // 1. Dead cards: magnets beyond the kept one, Twinflame copies beyond the first.
+        // 1. Dead cards: magnets beyond the kept one, then copies beyond the first of the
+        //    "one is enough" spells. Twinflame and Luxurious Libation are both bought for the
+        //    EXTRA BODIES a magnet fan-out makes (hasted token copies / a 1/1 Citizen per
+        //    instance), and a second copy adds more of what the first already supplied rather
+        //    than a new line -- user, 2026-08-18: Libation is "mainly good for extra creatures,
+        //    but you don't really need multiple", i.e. rank it exactly as Twinflame is ranked.
         for (int i : magnets) { if (i != kept_magnet) { put(i); } }
         {
-            bool tf_seen = false;
-            for (int i = 0; i < n; ++i)
+            static const char* kOneIsEnough[] = { "Twinflame", "Luxurious Libation" };
+            for (const char* name : kOneIsEnough)
             {
-                if (ap.hand[i].m_is_staged || ap.hand[i].m_name != "Twinflame") { continue; }
-                if (tf_seen) { put(i); } else { tf_seen = true; }
+                bool seen = false;
+                for (int i = 0; i < n; ++i)
+                {
+                    if (ap.hand[i].m_is_staged || ap.hand[i].m_name != name) { continue; }
+                    if (seen) { put(i); } else { seen = true; }
+                }
             }
         }
 
@@ -8610,36 +8619,43 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
             // The 2026-08-17 trick suite. These MUST be named here: the list's contract is that
             // it covers EVERY card (the gi295 lesson recorded above), and an unnamed pump falls
             // through to the shared ranking's highest-MV fallback -- which sheds the MAGNET.
-            // Their order RELATIVE to Anger/Expedite/Scale is near-unobservable, because no
-            // shipped decklist holds both suites (the swap trades one set for the other); it
-            // matters only for a pool/union arm. Within the new set: Libation first (it is a
-            // pump AND a body-maker, so it is live at X=0 on one mana), then Draught (escalating
-            // per-copy pump), then Entrance -- which is parameter-identical to Expedite under
-            // this engine (trample and sorcery-vs-instant are both unmodelled), so it is ranked
-            // beside it rather than on any measured difference.
+            // The ranking below is the USER's (2026-08-18), not a measurement -- it is authored
+            // judgment about this deck, and it is the user's to make:
+            //   * Fortifying Draught ranks SECOND, behind only Gold Rush -- "our second-best
+            //     spell". Its extra copies stay in the variety round-robin and lead each round:
+            //     life_gained_this_turn accumulates, so a second Draught pumps strictly harder
+            //     than the first.
+            //   * Luxurious Libation is ranked as Twinflame is: first copy high, copies beyond
+            //     the first DEAD in step 1 above. Both are bought for extra bodies.
+            //   * Impolite Entrance sits beside Expedite, its "pal" -- under this engine the two
+            //     are parameter-identical (trample and sorcery-vs-instant both unmodelled), so
+            //     no ordering between them is even observable.
+            // Their order relative to Anger/Expedite/Scale never fires in a shipped decklist (no
+            // deck holds both suites -- the swap trades one set for the other); it matters only
+            // for a pool/union arm. Placement WITHIN the new set is very observable, though, and
+            // that is what the user set here.
             const std::vector<int> libat = copies_of("Luxurious Libation");
             const std::vector<int> draug = copies_of("Fortifying Draught");
             const std::vector<int> entra = copies_of("Impolite Entrance");
             for (int i : grs) { pumps.push_back(i); }
+            if (!draug.empty()) { pumps.push_back(draug[0]); }    // 2nd-best spell (user)
             if (!tfs.empty())   { pumps.push_back(tfs[0]); }      // extras are dead (step 1)
+            if (!libat.empty()) { pumps.push_back(libat[0]); }    // ditto -- bodies, one is enough
             if (!fists.empty()) { pumps.push_back(fists[0]); }
             if (!anger.empty()) { pumps.push_back(anger[0]); }
             if (!exped.empty()) { pumps.push_back(exped[0]); }
+            if (!entra.empty()) { pumps.push_back(entra[0]); }    // beside its pal Expedite
             if (!scale.empty()) { pumps.push_back(scale[0]); }
-            if (!libat.empty()) { pumps.push_back(libat[0]); }
-            if (!draug.empty()) { pumps.push_back(draug[0]); }
-            if (!entra.empty()) { pumps.push_back(entra[0]); }
-            std::size_t rounds = std::max({ fists.size(), anger.size(), exped.size(), scale.size(),
-                                            libat.size(), draug.size(), entra.size() });
+            std::size_t rounds = std::max({ draug.size(), fists.size(), anger.size(),
+                                            exped.size(), entra.size(), scale.size() });
             for (std::size_t r = 1; r < rounds; ++r)
             {
+                if (r < draug.size()) { pumps.push_back(draug[r]); }
                 if (r < fists.size()) { pumps.push_back(fists[r]); }
                 if (r < anger.size()) { pumps.push_back(anger[r]); }
                 if (r < exped.size()) { pumps.push_back(exped[r]); }
-                if (r < scale.size()) { pumps.push_back(scale[r]); }
-                if (r < libat.size()) { pumps.push_back(libat[r]); }
-                if (r < draug.size()) { pumps.push_back(draug[r]); }
                 if (r < entra.size()) { pumps.push_back(entra[r]); }
+                if (r < scale.size()) { pumps.push_back(scale[r]); }
             }
         }
         for (std::size_t k = pumps.size(); k-- > 2; ) { put(pumps[k]); }
