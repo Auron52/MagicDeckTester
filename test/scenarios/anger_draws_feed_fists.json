@@ -1,0 +1,15 @@
+{
+  "_comment": "Guards the Ancestral Anger -> Fists of Flame draw multiplier, the interaction that makes Anger competitive with a card that deals far more damage on its own (measured 2026-08-19: Draught beats Anger by 16 damage with no Fists, ties at one, LOSES by 16 at two). Same board as draught_magnet_escalation plus 2 more lands. Anger at the magnet is +1/+0 x4 AND draws 4 cards; Fists then draws first and counts cards_drawn_this_turn per copy, so its instances escalate 6/7/8/9 off Anger's refill instead of 2/3/4/5. 6 base + 4 + 30 = 40, so opponent_life 40 is EXACTLY lethal. If Anger's per-copy cantrip stops feeding Fists' count, this drops to 20 and fails.",
+  "deck": "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 40,
+  "battlefield": [
+    { "name": "Rootbound Crag" }, { "name": "Rootbound Crag" }, { "name": "Rootbound Crag" },
+    { "name": "Zada, Hedron Grinder" },
+    { "name": "Goblin Instigator" }, { "name": "Goblin Instigator" }, { "name": "Goblin Instigator" }
+  ],
+  "hand": [ "Ancestral Anger", "Fists of Flame" ],
+  "library_filler": "Mirrorwing Dragon", "library_size": 60,
+  "depth": 5, "budget_ms": 200, "max_turns": 4,
+  "expect_win_turn": 4,
+  "log_out": "logs/play/anger_draws_feed_fists.json"
+}

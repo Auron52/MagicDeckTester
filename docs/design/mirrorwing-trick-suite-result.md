@@ -155,10 +155,11 @@ measurement (-0.0329). Two methods, different apparatus, agreeing.
 
 ### Two results that invert the starting assumptions
 
-**Fortifying Draught is not carrying the swap; it may be a downgrade.** Anger -> Draught is null
-(-0.0007 +/- 0.0090) from base-vs-trick and **+0.0150 +/- 0.0068 (worse)** from libonly-vs-trick.
-Ancestral Anger -- a {R} cantrip whose pump escalates off its own graveyard copies -- is at least as
-good. The prior that Draught, "very powerful", would dominate is not supported.
+**Fortifying Draught is not carrying the swap** -- Anger -> Draught is null (-0.0007 +/- 0.0090)
+from base-vs-trick and +0.0150 +/- 0.0068 from libonly-vs-trick. **But do NOT read that null as
+"Draught is a downgrade": it is an average across a SIGN CHANGE, and the conclusion drawn here at the
+time was wrong.** See "The Draught null is a MIXTURE" below -- conditioned on Fists of Flame, Draught
+wins by 0.134 turns in 34% of games and loses in the rest.
 
 **The biggest single win is Scale the Heights -> Impolite Entrance** (-0.081 corrected, t = -7.49),
 a substitution that only exists BECAUSE the map was corrected.
@@ -195,6 +196,55 @@ measurement. Across the three pairs it tracks how much of the library changed:
 With only 3 cards changed it VANISHES. So the effect is a genuine deck-composition effect on the
 search's rollouts, not a fixed modelling bias attached to the new cards -- which is the reassuring
 reading of the open question above, though it does not fully close it.
+
+### The Draught null is a MIXTURE of two large opposite effects (resolved 2026-08-19)
+
+User challenge: *"I'm still a bit suspicious of Fortifying Draught being bad. The card literally does
+12 with three creatures and 20 with 4 creatures for G."* The arithmetic is right (copies resolve
+sequentially, each gains 2 THEN reads the running total, so instance i pumps +2i: 2+4+6 = 12 at three
+creatures, 2+4+6+8 = 20 at four), and the suspicion was justified. **Draught is not weak. The null is
+an average over two large, opposite, individually-significant effects that cancel.**
+
+The hidden variable is **Fists of Flame** (`pump_per_cards_drawn_power`, 4 copies in BOTH decks).
+Ancestral Anger at a magnet does not draw one card, it draws one PER COPY -- and every one of those
+feeds every later Fists instance, which draws first and then counts `cards_drawn_this_turn`. Anger's
+payload is therefore a MULTIPLIER on Fists, while Draught's is a one-shot. Measured on hand-built
+boards (Zada + 3 Goblin Instigator, no mana dorks, `test/scenarios/`):
+
+| Fists of Flame available | Anger line | Draught line | difference |
+|---|---|---|---|
+| 0 | 10 dmg | **26 dmg** | Draught +16 |
+| 1 | 40 dmg | 40 dmg | dead even |
+| 2 | **86 dmg** | 70 dmg | Anger +16 |
+
+**The crossover is at exactly one Fists of Flame, and the deck plays four.** Confirmed on the 60,000
+real games, restricted to games drawing ONLY this slot (so no other substitution contaminates):
+
+| Fists cast | games | base->trick delta | t | favours |
+|---|---:|---:|---:|---|
+| 0 | 2,709 | **-0.1336** | -8.35 | Draught |
+| 1 | 3,506 | +0.0454 | +3.95 | Anger |
+| 2 | 1,438 | +0.0654 | +3.18 | Anger |
+| 3+ | 208 | +0.0288 | +0.48 | Anger |
+| **ALL** | 7,861 | **-0.0131** | -1.52 | (the null) |
+
+Reproduced on the independent `libonly` vs `trick` pair to three decimals (-0.1328 / +0.0425 /
++0.0624). **In its 34% of games, Draught is worth 0.134 turns -- six times the entire trick-suite
+effect.** Reporting this slot as "null, Draught earns nothing" was averaging across a sign change.
+
+Guarded by `test/scenarios/draught_magnet_escalation.json` (the escalating fan-out is exactly lethal
+at 26) and `test/scenarios/anger_draws_feed_fists.json` (the draw multiplier is exactly lethal at 40).
+
+**Deckbuilding implication: these two cards are complementary, not competing.** Splitting the slot
+(some Anger, some Draught) is a screenable hypothesis that neither the 4/0 nor the 0/4 arm tested.
+
+**A latent heuristic inconsistency found while chasing this, NOT the cause.** `EstimateCardValue`'s
+d0 trick estimate scores an escalating counter as "~2 seen by a mid copy", in the units of that
+counter. Gold Rush gains 1 Treasure per instance (constant right, estimate 18 at fanout 4); Draught
+gains 2 LIFE per instance, so a mid copy sees ~4 -- it is scored 8 against a true 20, and against
+Gold Rush's 18 despite the two having a mathematically IDENTICAL +2i curve. Probed at depths 0/1/2/5:
+the search picked Draught correctly every time, so this did not produce the measured result. Recorded
+as a candidate heuristic fix (measure per `heuristic-optimization.md`, do not adopt on reasoning).
 
 ### Artifacts
 

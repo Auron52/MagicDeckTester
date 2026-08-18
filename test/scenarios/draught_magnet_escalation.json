@@ -1,0 +1,15 @@
+{
+  "_comment": "Guards Fortifying Draught's escalating magnet fan-out (cast_lifegain THEN pump_per_life_gained, oracle order, per resolved copy). Board: Zada 3/3 + 3x Goblin Instigator 1/1 = 6 base power, deliberately NO mana dorks so tap ordering cannot confound. One untapped Rootbound Crag pays the {G}. Draught targets Zada -> copied for each other creature; 4 instances resolve copies-first-then-original, each gaining 2 life and THEN reading the running total: +2/+2, +4/+4, +6/+6, and the original +8/+8. Bodies become 3/3, 5/5, 7/7 and Zada 11/11 = 26 power, so opponent_life 26 is EXACTLY lethal and no other line reaches it. A flat (non-escalating) pump, a wrong gain/count order, or a lost copy all fall short. Also asserts the 8 life gained (active_life 28).",
+  "deck": "decks/Mirrorwing Trick Suite/Mirrorwing Trick Suite.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 26,
+  "battlefield": [
+    { "name": "Rootbound Crag" },
+    { "name": "Zada, Hedron Grinder" },
+    { "name": "Goblin Instigator" }, { "name": "Goblin Instigator" }, { "name": "Goblin Instigator" }
+  ],
+  "hand": [ "Fortifying Draught" ],
+  "library_filler": "Mirrorwing Dragon", "library_size": 40,
+  "depth": 5, "budget_ms": 100, "max_turns": 4,
+  "expect_win_turn": 4,
+  "log_out": "logs/play/draught_magnet_escalation.json"
+}
