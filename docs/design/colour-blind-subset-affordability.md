@@ -426,3 +426,99 @@ cast-order work in `cast-order-ideal-with-ranges.md`.
 * `ManaPruneBound` / the SELECTION-EXACT gate (TurnSolver.cpp ~6737-6800) — prior art for adding a
   sound tightening next to a loose bound.
 * `docs/design/cast-order-ideal-with-ranges.md` — the Anti-Lifegain review this surfaced from.
+
+### Mode-2 re-test: the smoke signal, and the test that decides it (2026-08-18)
+
+Smoke under `MTG_RITUAL_SEQ_CREDIT=2` (control = mode 1, the shipped default):
+
+| key | GT | new | delta | changed games |
+|---|---|---|---|---|
+| hinata d3 | 5.7400 | 5.7267 | -0.0133 | gi47 6->5, gi70 5->4 |
+| hinata d5 | 5.8800 | 5.8667 | -0.0133 | gi19 **6->7**, gi39 6->5, gi47 6->5 |
+| dragonstorm d3 | 4.5133 | 4.5133 | 0.0000 | gi73 5->4, gi88 **5->6** |
+| dragonstorm d5 | 4.4667 | 4.4667 | 0.0000 | play churn only (digest moved, scores identical) |
+
+Net -0.0266; 2 searched slower, 5 faster, 22 play-changed.
+
+**dragonstorm d3 gi88 (5->6) is the game to understand.** Draws are IDENTICAL, so it is a clean
+like-for-like line change, not fetch/shuffle variance:
+
+```
+OLD (mode 1)                              NEW (mode 2)
+T1 land Mountain; Rite of Flame;          T1 land Mountain
+   Ruby Medallion                         T2 land Dwarven Hold
+T2 land Dwarven Hold; Pyretic Ritual;     T3 (nothing)
+   Irencrag Feat; Scourge of Valkas       T4 Ruby Medallion
+T3/T4/T5 ATTACK              -> WIN T5    T5 land Mountain
+                                          T6 Rite of Flame; Pyretic Ritual; Seething Song;
+                                             Apex of Power; Desperate Ritual; Irencrag Feat;
+                                             Dragonstorm; ATTACK  -> WIN T6 [opp -203]
+```
+
+Mode 2 stops developing for five turns and wins one turn later with 200 points of overkill.
+
+**What mode 2 actually changes.** Mode 1 applies the sequenced (honest) ritual model at the LEAF
+only (`Solve::consider` -- the greedy/d0 policy and the rollout leaf). Mode 2 additionally applies it
+in `EnumeratePlans`, i.e. it PRUNES THE SEARCH'S BRANCH LIST. That asymmetry is deliberate and is
+documented above `SeqRitualCreditMode()`: optimistic enumeration is safe inside the search because
+the search discards unpayable lines by rolling them out, whereas at depth 0 there is no search to
+filter them. So mode 2 is not "more honest everywhere" -- it is a prune, and a prune is only
+admissible if it is EXACT.
+
+**Ordering is not the flaw.** `SequencedRitualCredit` is not a single fixed order: it greedily
+credits every accelerant payable from pool + credit-so-far and re-passes to a FIXPOINT, so an
+accelerant skipped early is picked up once a later credit unlocks it. Every real ritual has
+float > cost (Rite of Flame 1->2, Pyretic/Desperate 2->3, Seething Song 3->5, Irencrag Feat 4->6,
+Lotus Bloom 0->3), so crediting is monotone and the fixpoint is maximal and order-independent.
+
+**The decisive test (NOT yet run).** Re-run dragonstorm d3 gi88 on BOTH arms at `--budget-ms 0`:
+  - recovers at infinite budget -> budget churn, benign search truncation;
+  - persists at infinite budget -> the mode-2 prune deleted a line the search can otherwise reach,
+    i.e. a LOSSY prune. That fails the standing core bar (heuristics may only prune what is
+    genuinely unreachable) independently of the aggregate delta, and mode 2 must be reverted to 1.
+
+Deliberately deferred until all three tiers finish: the suite's searched jobs are wall-clock
+budgeted, and stealing cores from an in-flight tier is the CPU-oversubscription that has produced
+nondeterministic results in this repo before.
+
+**The bar this must clear is NOT the aggregate.** The recorded rejection of mode 2 was on the
+held-out overnight -- seven cases red, including every Dragonstorm searched depth -- while its
+aggregate was BETTER than mode 1 (-0.2149 vs -0.1816). Smoke and regression are train tiers and
+cannot overturn that. The overnight decides.
+
+### VERDICT: mode 2 REJECTED a second time -- on the reference gate, not the aggregate
+
+The `--budget-ms 0` probe above was never needed. The regression tier carries an independent hard
+gate -- reference reproducibility (`--strict`), which replays the hand-played human games under
+`references/` -- and mode 2 fails it outright. Three regression runs on 2026-08-18, same 208 refs,
+the ONLY tree difference being the one-line default flip:
+
+| run | engine | play-drift |
+|---|---|---|
+| 06:24 | colour-exact adopted | 0 / 208 |
+| 07:38 | + Karoo bundle fix (= HEAD) | 0 / 208 |
+| 09:27 | + `MTG_RITUAL_SEQ_CREDIT=2` | **21 / 208, ALL Dragonstorm** |
+
+The drift text names the mechanism:
+
+```
+play-drift  Dragonstorm/claude_s3_gi2.json: replay won=False win_turn=-1 vs ref won=True win_turn=4;
+            18 decision(s) the ref predates answered by engine default;
+            terminated with 8/10 recorded decisions unused
+```
+
+The human's recorded choice is **no longer offered**. Those lines are legal, and the search reaches
+them under mode 1 -- so applying the sequenced model to `EnumeratePlans` deletes REACHABLE branches,
+not merely unpayable ones. That is a lossy prune, and it fails the standing core bar (heuristics may
+only prune what is genuinely unreachable) independently of any aggregate delta. It also explains
+smoke gi88 without needing the infinite-budget probe: Dragonstorm stops developing because the
+branch that curves out (T1 Rite of Flame + Ruby Medallion) is gone from the candidate set.
+
+Default reverted to 1. `MTG_RITUAL_SEQ_CREDIT=2` remains available as an opt-in lever.
+
+**The trap, stated for the next agent.** Mode 2's AGGREGATE has now been better than mode 1 in both
+attempts (-0.2149 vs -0.1816 in 2026-08, and -0.0266 smoke / -0.0634 regression today). Twice that
+number has pointed at adoption and twice the configuration was wrong. If it is measured a third
+time, look at the Dragonstorm searched depths and the reference gate FIRST; the mean disagrees with
+both, and the mean is not the bar. The demonstration that would actually justify mode 2 is
+0 play-drift -- i.e. evidence the sequenced model is EXACT at the enumerator -- not a better mean.

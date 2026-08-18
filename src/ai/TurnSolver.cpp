@@ -6787,6 +6787,25 @@ static inline int ManaGateTriangular(int gy) { return gy > 1 ? gy * (gy - 1) / 2
 // Mode 2 wins on aggregate and loses on the bar that matters (new, hard-to-recover regressions):
 // it puts SEVEN cases in the red including every Dragonstorm searched depth. Mode 1 leaves
 // Dragonstorm strictly better with none.
+//
+// RE-TESTED AND REJECTED A SECOND TIME, 2026-08-18. The re-test was legitimate -- the engine had
+// changed materially (the colour-exact affordability gate and the Karoo bundle-payment fix both
+// landed that day, and both change exactly what the enumerator may credit) -- and on the TRAIN tiers
+// mode 2 again looked good: smoke -0.0266, regression -0.0634, ~0 worse, with stranded accelerants
+// down 84% on hinata / 52% on dragonstorm. It was killed by an INDEPENDENT hard gate instead:
+//     reference reproducibility (--strict):  HEAD = 0 play-drift / 208 refs
+//                                          mode 2 = 21 play-drift / 208 refs, ALL Dragonstorm
+// i.e. 21 hand-played human reference games stop replaying ("terminated with N recorded decisions
+// unused" -- the human's own recorded line is no longer OFFERED). Those lines are legal and the
+// search reaches them under mode 1, so the mode-2 enumerator prune is removing REACHABLE branches,
+// not merely unpayable ones. That is a lossy prune and fails the standing core bar (heuristics may
+// only prune what is genuinely unreachable) regardless of the aggregate delta.
+//
+// THE LESSON, for whoever measures this a third time: mode 2's aggregate has now been BETTER than
+// mode 1 in both attempts. Aggregate is not the bar. Check the Dragonstorm searched depths and the
+// reference gate FIRST -- they are what actually disqualifies it, and they disagree with the mean.
+// If a future engine change genuinely makes the sequenced model exact at the enumerator, the thing
+// to demonstrate is 0 play-drift, not a better mean.
 static int SeqRitualCreditMode()
 {
     static const int mode = []{
