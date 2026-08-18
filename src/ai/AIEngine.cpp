@@ -412,6 +412,7 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // New game: drop any committed full-depth line from a previous game.
     m_committed_line.clear();
     m_discard_choice_pin = -1;
+    m_vial_choice_pin    = -1;
     m_fd_best_win  = max_turns + 1;
     m_fd_best_turn = 0;
 
@@ -1083,6 +1084,8 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
     m_committed_line.clear();
     const int saved_discard_pin = m_discard_choice_pin;
     m_discard_choice_pin = -1;
+    const int saved_vial_pin = m_vial_choice_pin;
+    m_vial_choice_pin = -1;
     GameEngine engine(*this);
     int win_turn = engine.PlayOutFrom(trial, max_turns, from);
     if (lands_out)
@@ -1094,6 +1097,7 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
     }
     m_committed_line = std::move(saved_line);
     m_discard_choice_pin = saved_discard_pin;
+    m_vial_choice_pin    = saved_vial_pin;
     m_in_rollout = false;
     m_logger     = saved;
     return win_turn > 0 ? win_turn : max_turns + 1;
@@ -1346,6 +1350,26 @@ bool AIEngine::DecideVialCharge(const GameState& state, const Permanent& vial)
     // hand reproduces the real search's game. Without the m_in_rollout guard the external chooser
     // would fire (exit 70 / consume a --choices token) from within a bottoming rollout for a Vial deck.
     if (m_external_vial_chooser && !m_in_rollout) { return m_external_vial_chooser(state, vial, heuristic); }
+
+    // LOCKSTEP (MTG_VIAL_AXIS): the executing plan's searched charge (Plan::vial_charge_choice via
+    // m_vial_choice_pin) decides the FIRST vial of this upkeep -- the search already chose between
+    // hold and charge under the same assumptions the committed line encodes, so re-deciding here
+    // (probe or heuristic) would deviate from the scored line. Consume-and-clear on first vial,
+    // byte-for-byte the rollout's semantics (TurnSolver::SimulateBeginningPhase). Never inside a
+    // rollout: a shared-engine playout saves/restores the pin and charges heuristically, as before.
+    //
+    // This RETIRES the probe on the searched path -- the axis is the decision, so the out-of-band
+    // trial games below must not also run and override it (the probe is an oracle replacing search
+    // judgment; see docs/design/searched-discard-as-search-node.md for the same ruling on the
+    // cleanup discard). With MTG_VIAL_AXIS off, nothing writes the pin and the probe path is
+    // reached exactly as before -> byte-identical.
+    if (!m_in_rollout && m_vial_choice_pin >= 0)
+    {
+        const bool pinned = (m_vial_choice_pin != 0);
+        m_vial_choice_pin = -1;
+        return pinned;
+    }
+    if (VialAxisEnabled()) { return heuristic; }   // axis owns the decision; the probe stays retired
 
     // SEARCHED charge (mirrors the searched cleanup discard): roll the game out under BOTH answers
     // and take the one that wins soonest, heuristic first so it owns every tie.
@@ -2057,6 +2081,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // the axis leaves a pre-combat pin standing -- the same last-writer-wins the scored
             // line saw. Inert while every provider's axis width is 1 (no plan carries the field).
             if (plan.discard_choice >= 0) { m_discard_choice_pin = plan.discard_choice; }
+            // Vial-charge lockstep: same write-when->=0 rule, but consumed at NEXT turn's upkeep
+            // (DecideVialCharge) rather than this turn's cleanup -- the pin rides across the boundary.
+            if (plan.vial_charge_choice >= 0) { m_vial_choice_pin = plan.vial_charge_choice; }
 
             // Divergence log (MTG_DIVERGENCE_LOG): on the search-driven path, compare the search's
             // committed plan to what greedy d0 would do at this SAME untouched state (diagnosis only;

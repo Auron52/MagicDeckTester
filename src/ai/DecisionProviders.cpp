@@ -272,9 +272,23 @@ int GenericProvider::LandsEdgeFireCount(const GameState&, int) const
     return 0;   // only Land's Edge decks activate this; archetype overrides.
 }
 
-bool GenericProvider::WantVialCharge(const GameState&, const Permanent&) const
+bool GenericProvider::WantVialCharge(const GameState& s, const Permanent& vial) const
 {
-    return false;   // only Aether Vial decks charge; archetype overrides.
+    // The hand-aware charge policy is the ROOT default, not an archetype opt-in (adopted 2026-08-18,
+    // user-directed). The previous `return false` was NOT a guard: every call site already gates on
+    // params.upkeep_adds_charge (AIEngine::ChargeRemainingVialsHeuristic, AIEngine::DecideVialCharge,
+    // TurnSolver's SimulateBeginningPhase), so this hook is only ever consulted for a real charge
+    // permanent and is inert for every deck without one. Its only live effect was to FREEZE the Vial
+    // in any deck routed to a non-VialProvider archetype -- Goblins (4x Aether Vial) never gained a
+    // counter in its life, and Minotaur is the same latent case.
+    //
+    // It also poisoned the search: the ROLLOUT models future upkeeps through this same hook, so both
+    // arms of the old out-of-band probe rolled out under "never charge again" and tied at every
+    // upkeep (`win(heur)=9 win(alt)=9`), leaving the Vial at 0 counters forever. Held-out measurement
+    // of the fix: goblins -0.2095 summed over 12 cases (342 games faster, 9 slower over 16,000);
+    // knights/slivers byte-identical (they already routed to VialProvider, which had this policy).
+    // See docs/design/searched-vial-charge.md.
+    return ::WantVialCharge(s, vial);
 }
 
 bool GenericProvider::ScryKeepOnTop(const GameState& s, const Card& top_card) const
@@ -3739,11 +3753,6 @@ bool TreasureHuntProvider::ArchetypeCardValue(const GameState& state, const Card
 }
 
 // ---- VialProvider -----------------------------------------------------------
-
-bool VialProvider::WantVialCharge(const GameState& s, const Permanent& vial) const
-{
-    return ::WantVialCharge(s, vial);
-}
 
 // ---- BurnProvider -----------------------------------------------------------
 

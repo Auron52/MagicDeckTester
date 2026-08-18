@@ -406,6 +406,20 @@ public:
         // reason as lackey_choice: cleanup runs after ApplyPlanDirect returns.
         int discard_choice = -1;
 
+        // AETHER VIAL upkeep charge (0 = hold, 1 = charge). -1 (default) == the provider heuristic
+        // (WantVialCharge), byte-identical to no branch.
+        //
+        // The decision is two-sided and MULTI-TURN: the Vial deploys a creature whose mana value
+        // EQUALS its counter count, so holding at k keeps a free MV-k deploy while charging trades it
+        // for MV-(k+1) from next turn on. Reaching a 3- or 5-drop takes several consecutive charges.
+        // That is exactly what the retired out-of-band probe (MTG_SEARCHED_VIAL) could not see: it
+        // rolled BOTH answers out under a continuation that never charges again, so the arms differed
+        // by at most one deploy and tied. As a plan axis the branch re-fans at every level of the
+        // recursion, so a multi-charge climb is a reachable line. Copied onto
+        // GameState::scripted_vial_charge rather than pinned by a scoped guard, for the same reason
+        // as discard_choice -- and one turn further out, since the upkeep is next turn's.
+        int vial_charge_choice = -1;
+
         // Commit-the-line (MTG_FULL_DEPTH): the casts the search's draw-breakpoint
         // re-solve(s) made this phase, after a main `actions` draw engine revealed new
         // cards. Top-level (triggered by the main plan); each entry nests its own

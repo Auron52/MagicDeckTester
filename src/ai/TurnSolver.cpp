@@ -9835,6 +9835,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Searched cleanup discard: same reasoning -- the shed happens in SimulateEndAndStartNextTurn,
     // after this function returns, so it rides the STATE rather than a scoped guard.
     if (plan.discard_choice >= 0) { state.scripted_discard_choice = plan.discard_choice; }
+    // Searched Aether Vial charge: same reasoning again, one turn further out -- the upkeep that
+    // reads this runs at the START OF NEXT TURN, so it must ride the state across the turn boundary.
+    if (plan.vial_charge_choice >= 0) { state.scripted_vial_charge = plan.vial_charge_choice; }
 
     // Commit-the-line recording (out_breakpoint != null, set only when building the
     // committed line): capture the casts each draw-breakpoint re-solve makes so the
@@ -12397,9 +12400,23 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (p.controller_index != state.active_player_index) { continue; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || !def->params.upkeep_adds_charge) { continue; }
-        // Hand-aware charge policy, shared with the real engine (AIEngine::DecideVialCharge)
+        // SEARCHED vial charge (Plan::vial_charge_choice -> GameState::scripted_vial_charge): the
+        // plan's pinned answer, consumed by the FIRST vial of this upkeep and cleared, so a
+        // multi-vial upkeep charges one searched vial and the rest fall back to the heuristic --
+        // the same one-per-plan convention as the cleanup-discard, ETB-dig and Lackey axes.
+        // Otherwise the hand-aware policy, shared with the real engine (AIEngine::DecideVialCharge)
         // so the rollout models the same charge the executor will make.
-        if (ResolveProvider(state).WantVialCharge(state, p)) { ++p.charge_counters; }
+        bool charge;
+        if (state.scripted_vial_charge >= 0)
+        {
+            charge = (state.scripted_vial_charge != 0);
+            state.scripted_vial_charge = -1;
+        }
+        else
+        {
+            charge = ResolveProvider(state).WantVialCharge(state, p);
+        }
+        if (charge) { ++p.charge_counters; }
     }
 
     // Upkeep token creation (e.g. Thrumming Hivepool). Iterate over initial size only.
@@ -15967,6 +15984,55 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
                               std::make_move_iterator(extra.end()));
+    }
+
+    // SEARCHED AETHER VIAL CHARGE -- the post-dedup fan-out for NEXT turn's upkeep charge. Like the
+    // cleanup discard the decision does not happen during the plan at all (it fires in the following
+    // upkeep, which is why the pick rides the STATE), and like the Ponder axis both answers are
+    // always legal, so there is no candidate list to size: emit hold and charge and let the base
+    // plan carry the heuristic. One of the two duplicates whatever the heuristic resolves to; a
+    // duplicate scores identically and the search tie-breaks to the base plan, so it costs a variant
+    // but cannot change the answer.
+    //
+    // Gated on a Vial actually being there to consume the pin -- on the battlefield now, or cast by
+    // this very plan (the Vial's first upkeep is the turn after it lands). A variant pinning an index
+    // nothing consumes is a duplicate plan that costs a rollout to discover it changed nothing.
+    if (VialAxisEnabled() && !HumanPlayActive())
+    {
+        auto is_vial = [](const CardDefinition* d)
+        { return d != nullptr && d->params.upkeep_adds_charge; };
+        bool vial_present = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            if (is_vial(CardDatabase::Instance().LookupCached(p.card))) { vial_present = true; break; }
+        }
+        if (vial_present || std::any_of(all.begin(), all.end(), [&](const TurnSolver::Plan& p)
+            {
+                return std::any_of(p.actions.begin(), p.actions.end(), [&](const Action& a)
+                { return a.kind == Action::Kind::CastFromHand
+                      && is_vial(CardDatabase::Instance().Lookup(a.card_name)); });
+            }))
+        {
+            std::vector<TurnSolver::Plan> extra;
+            for (const TurnSolver::Plan& p : all)
+            {
+                // Base plans only -- one axis at a time, so cost stays additive.
+                if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.discard_choice >= 0)
+                { continue; }
+                for (int k = 0; k <= 1; ++k)
+                {
+                    TurnSolver::Plan v = p;
+                    v.vial_charge_choice = k;
+                    extra.push_back(std::move(v));
+                }
+            }
+            TRACE("vialaxis", "T%d %zu plan(s) -> %zu vial-charge variant(s)",
+                  state.turn_number, all.size(), extra.size());
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
     }
 
     // SEARCHED PONDER KEEP-vs-SHUFFLE -- the post-dedup fan-out that makes the decision real. Both

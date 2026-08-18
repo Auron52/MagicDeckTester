@@ -295,6 +295,15 @@ private:
     // See docs/design/searched-discard-as-search-node.md (stage 1).
     int m_discard_choice_pin = -1;
 
+    // Searched AETHER VIAL CHARGE (Plan::vial_charge_choice, MTG_VIAL_AXIS): 0 = hold, 1 = charge,
+    // -1 = no pin (heuristic / probe as before). Same shape and lifetime rules as
+    // m_discard_choice_pin, with one difference that matters: the cleanup shed happens LATER THIS
+    // TURN, whereas the vial charge happens at the START OF NEXT TURN. So this pin deliberately
+    // survives the turn boundary -- it is written when the plan commits and consumed by the first
+    // vial of the following upkeep (DecideVialCharge). Saved/restored around shared-engine rollouts
+    // alongside m_committed_line so a probe/keep playout cannot eat the real game's pin.
+    int m_vial_choice_pin = -1;
+
     // Oracle (MTG_FD_ORACLE): earliest searched win predicted this game and the turn
     // it was predicted, to flag when a later recompute degrades below it (divergence).
     int m_fd_best_win  = 21;

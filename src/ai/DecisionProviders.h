@@ -240,8 +240,11 @@ public:
 class VialProvider : public GenericProvider
 {
 public:
+    // No overrides left: the hand-aware charge policy this class existed for is now the ROOT
+    // default (GenericProvider::WantVialCharge, adopted 2026-08-18) -- an archetype opt-in was the
+    // very thing that let Goblins/Minotaur silently lose their Vial. The class stays so routing and
+    // the batch [play] line still name the archetype.
     const char* Name() const override { return "Vial"; }
-    bool WantVialCharge(const GameState&, const Permanent&) const override;
 };
 
 

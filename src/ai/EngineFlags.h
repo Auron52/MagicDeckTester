@@ -109,3 +109,38 @@ inline bool BpTraceEnabled()
     static const bool v = EnvOn("MTG_BP_TRACE");
     return v;
 }
+
+// MTG_VIAL_AXIS -- the Aether Vial upkeep charge is decided IN-SEARCH, as a real plan axis
+// (TurnSolver::Plan::vial_charge_choice). DEFAULT ON; `=0` is the exact legacy hatch (the
+// out-of-band probe in AIEngine::DecideVialCharge, MTG_SEARCHED_VIAL, decides it as before).
+// Adopted 2026-08-18, user-directed: "the option to search needs to remain for all of the decks
+// ... even though we won't be taking it in most cases, maybe ever. There are cases where we might
+// want to take it, though. If it is really not obvious what decision to make."
+//
+// WHY THE PROBE IS NOT ENOUGH. It is the shape the 2026-08-06 ruling retired for the cleanup
+// discard: a side process that plays nested engine games per candidate and hands the executor a
+// pick -- neither the search deciding nor a heuristic pruning. It also cannot see THIS decision at
+// all. The Vial deploys a creature whose mana value EQUALS its counter count, so reaching a 3- or
+// 5-drop takes several CONSECUTIVE charges; the probe rolls both answers out under a continuation
+// that never charges again, so its arms differ by at most one deploy and tie. Measured: 671 probe
+// firings across goblins/knights/slivers, 0 deviations on goblins, and disabling it entirely was
+// byte-identical over 16,000 held-out goblins games. As an axis the branch re-fans at every level
+// of the recursion, so a multi-charge climb is a reachable line -- searched at declared depth under
+// the same memo, cutoffs and first-win ladder as everything else, with nested games impossible by
+// construction.
+//
+// NO OBVIOUSNESS GATE. A narrowed variant was built and measured (fan only when a creature sits at
+// exactly the current counter AND a bigger one is in hand): 4.6-9.8x less fan-out, and it cut the
+// slivers cost from +0.0640 to +0.0140. REJECTED anyway, on two grounds. It is a lossy prune under
+// Rule 0b -- "hold at k because I will draw an MV-k creature next turn" becomes unreachable even at
+// infinite budget -- and it decides which calls are obvious using the very heuristic the search
+// exists to be able to overrule. The branch stays open on every deck.
+//
+// Read by BOTH the rollout (TurnSolver: variant emission + SimulateBeginningPhase consume) and the
+// executor (AIEngine::DecideVialCharge, which retires the probe when the axis owns the decision) --
+// shared reader per the lockstep rule.
+inline bool VialAxisEnabled()
+{
+    static const bool v = EnvOn("MTG_VIAL_AXIS", true);
+    return v;
+}

@@ -280,6 +280,14 @@ struct GameState
     // Consumed by the first shed (later sheds of the same cleanup use the ranked default) and
     // cleared there, so it cannot leak into a later turn. -1 == the provider's top pick.
     int                      scripted_discard_choice = -1;
+    // Searched AETHER VIAL UPKEEP CHARGE (Plan::vial_charge_choice): 0 = hold, 1 = charge, -1 = the
+    // provider heuristic (WantVialCharge). Same state-pin shape as scripted_discard_choice and for
+    // the same reason, one turn further out: the charge fires at the NEXT turn's upkeep, long after
+    // the plan apply has returned, so a scoped guard would be gone. Consumed by the FIRST vial of
+    // that upkeep (later vials of the same upkeep use the heuristic) and cleared there, so it cannot
+    // leak into a later turn. NOTE it must survive the turn boundary -- do NOT clear it alongside
+    // scripted_cheat_choice in SimulateEndAndStartNextTurn, which runs BEFORE the upkeep that reads it.
+    int                      scripted_vial_charge    = -1;
     // Maelstrom Archangel free-cast BANK (user-approved 2026-08-06): each copy that deals combat
     // damage to the player increments this (Combat.cpp ResolveCombatDamage, the shared combat
     // core), and the post-combat main may cast that many hand spells without paying mana (a
