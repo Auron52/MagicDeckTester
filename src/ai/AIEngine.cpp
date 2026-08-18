@@ -2310,7 +2310,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // if no enabler survives the wipe and it isn't lethal, SKIP it rather than self-brick.
         const CardDefinition* adef = CardDatabase::Instance().LookupCached(*it);
         if (adef && adef->params.destroy_all_enchantments
-            && !ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, *adef))
+            && !ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, *adef, /*at_cast_time=*/true))
         {
             return;
         }

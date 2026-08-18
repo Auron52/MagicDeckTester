@@ -1,5 +1,21 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS UPDATE 2026-08-18 (latest): MIRRORWING and ANTI-LIFEGAIN orders ADOPTED default-on.
+>
+> Both review gates were held and both packages flipped the same day, each with the full
+> measurement ladder (train tiers + held-out per-deck keys) green:
+> * **`MTG_MW_ORDERED` DEFAULT ON** — the full reviewed Mirrorwing order. Held-out: 11 green /
+>   1 flat / 0 red, per-game 96 faster / 8 slower (both searched slower = budget churn).
+> * **`MTG_AL_ORDER` + `MTG_ORDER_RECHECK` DEFAULT ON** — the reviewed Anti-Lifegain order plus
+>   the Remedy/Silence alternation. The risky-wipe replacement term is scoped to the CAST-TIME
+>   guard (search-committed chains execute; the greedy never initiates — two measured d0-red arms
+>   taught the scoping, see cast-order-rankings.md). Held-out: 7 green / 5 flat / 0 red,
+>   per-game 12 faster / 0 slower.
+> GT rebaselined in all three modes for both decks. `MTG_ORDER_M1_FIRST` remains default-off
+> (measured neutral; flipping it churns 7 decks' digests = a full-suite rebaseline incl. a full
+> overnight — schedule deliberately). Still open: the Mirrorwing LAND two-position rule at d0;
+> the remaining decks' review gates.
+>
 > ## STATUS UPDATE 2026-08-18 (later): the MIRRORWING review gate was HELD.
 >
 > The USER reviewed and ruled the full Mirrorwing order (recorded verbatim in

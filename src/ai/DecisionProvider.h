@@ -300,11 +300,15 @@ public:
     // ShouldEmitRiskyAltPayload -- whether to EMIT a risky alt-cost payload (Reverent Silence: free, but its
     // destroy-all-enchantments wipes the caster's own Aria/Remedy) as a searched action.
     // The engine keeps the alt-cost preconditions (alt_lifegain_cost>0 + Forest control)
-    // and builds the Action; this is the wipe-vs-value gate. (The forthcoming antilife
-    // refinement -- only when lethal or a Plague Drone / 2nd Remedy survives the wipe --
-    // lands here.)
+    // and builds the Action; this is the wipe-vs-value gate.
+    // `at_cast_time` distinguishes the two callers, and the antilife (c) replacement term is
+    // scoped to it: EMISSION (false -- CollectActions deciding whether the GREEDY may take the
+    // line; search nodes bypass via search_risky_live) vs the CAST-TIME GUARD (true -- vetoing an
+    // already-committed cast at apply). A term open at emission hands the line to the greedy
+    // policy, which cannot judge the wipe (measured d0 red on held-out twice); open at cast time
+    // only, it lets a SEARCH-committed chain execute while the greedy never initiates one.
     virtual bool ShouldEmitRiskyAltPayload(const GameState& s, int controller,
-                                           const CardDefinition& def) const = 0;
+                                           const CardDefinition& def, bool at_cast_time) const = 0;
 
     // ShouldStageSpectacleDraw -- whether to enumerate spectacle-staging plan variants for a draw spell
     // (cast a cheap damage spell first to unlock its cheaper Spectacle cost). The engine

@@ -128,7 +128,7 @@ public:
     bool        ScryKeepOnTop(const GameState&, const Card&) const override;
     bool        CastEnablerFirst(const GameState&, const std::string&) const override;
     bool        DiscardLandsFirst(const GameState&) const override;
-    bool        ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const override;
+    bool        ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&, bool) const override;
     bool        ShouldStageSpectacleDraw(const GameState&, int, const CardDefinition&) const override;
     bool        ShouldCastDrawEngine(const GameState&, int, const CardDefinition&) const override;
     std::string PostDrawKeepLandName(const GameState&, int) const override;
@@ -160,7 +160,7 @@ public:
     // and last. Both gated on MTG_AL_ORDER (default off); see the definitions.
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
     std::optional<MainPhase> MainPhaseOverride(const GameState&, const CardDefinition&) const override;
-    bool ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const override;
+    bool ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&, bool) const override;
     // Tainted Remedy and Plague Drone are the SAME role (opponent lifegain -> loss) and you only
     // need one at a time, so holding one makes the other a redundant required piece rather than a
     // protected "last copy" (user 2026-08-07).

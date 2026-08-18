@@ -891,7 +891,7 @@ std::vector<int> DecisionProvider::OwnPumpTargetCandidates(
     return out;
 }
 
-bool GenericProvider::ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&) const
+bool GenericProvider::ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&, bool) const
 {
     return false;   // no risky alt-cost payloads in a generic deck.
 }
@@ -1832,7 +1832,11 @@ bool AntiLifegainProvider::CanAutoFireAltPayload(const GameState& s, int control
 //     ranking it at the rank-10 CREATURE tier casts it ahead of the deck's actual business.
 static bool AlOrderReviewEnabled()
 {
-    static const bool on = EnvOn("MTG_AL_ORDER");
+    // ADOPTED default-on (USER, 2026-08-18): the reviewed Anti-Lifegain order (Swords 21 after
+    // the pumps, Skyshroud Cutter 24 with the m2 group, Reverent Silence -> Main2). Measured with
+    // MTG_ORDER_RECHECK in the scoped arm: train green-or-flat, held-out 7 green / 5 flat /
+    // 0 red, per-game 12 faster / 0 slower. =0 reverts.
+    static const bool on = EnvOn("MTG_AL_ORDER", true);   // DEFAULT ON; =0 disables
     return on;
 }
 
@@ -1872,7 +1876,7 @@ AntiLifegainProvider::MainPhaseOverride(const GameState&, const CardDefinition& 
 }
 
 bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int controller,
-                                                     const CardDefinition& def) const
+                                                     const CardDefinition& def, bool at_cast_time) const
 {
     if (DecisionUnpruned(UnprunedGate::AltPayload)) { return true; }   // unpruned A/B: let the search judge the wipe.
     // GREEDY-ONLY gate (docs/design/card-dependency-map.md). Reverent Silence's destroy-all-
@@ -1905,15 +1909,54 @@ bool AntiLifegainProvider::ShouldEmitRiskyAltPayload(const GameState& s, int con
         if (d && d->params.lifegain_to_loss && p.card.IsCreature()) { return true; }
     }
 
-    // NOT (c) "a REPLACEMENT enabler is in hand" -- TRIED AND MEASURED WORSE, 2026-08-18. The
-    // USER's Remedy/Silence/Remedy/Silence line is real and the ORDERING objection in (a) above is
-    // now obsolete (ApplyEnablerWipeRecheck holds the replacement back and casts it AFTER the
-    // wipe). But opening THIS gate on it hands the line to the GREEDY consumer, and that is the
-    // failure (a) was written about: smoke antilife d0 4.9030 -> 4.9550 (+0.0520) while the
-    // searched d3 IMPROVED 4.1880 -> 4.1840. The split is the whole point of the gate -- the
-    // search bypasses it already (CollectActions' search_risky_live emission), so the recheck
-    // ordering plus the subset-level replacement test in SubsetHasUnbackedAltPayload deliver the
-    // line to the search without letting the greedy policy brick the combo for an immediate 6.
+    // (c) REPLACEMENT accounting -- the RUN-OUT guard (USER 2026-08-18, second review round:
+    // "we just need to allow it to not be cast when this will run us out without finishing the
+    // opponent"). Two prior arms teach what "run out" means here, and hand-replacement alone is
+    // NOT it: the bare "replacement in hand -> emit" arm measured d0 +0.0520 TWICE (the original
+    // (c) experiment and its re-run with the recheck active -- byte-for-byte the same aggregate),
+    // and the explain shows why: the greedy cashes the free 6 while BACKED PAYLOADS the enabler
+    // still owes are pending -- gi46 held Invigorate (its flipped +3 needs the Remedy the wipe
+    // kills), gi30 held Aria (its flipped ETB-10 next turn needs it). The wipe "runs us out" of
+    // the enabler those payloads cash through, replacement or no. So (c) fires only when the wipe
+    // STRANDS NOTHING:
+    //   * a replacement lifegain_to_loss card is in HAND (the recheck orders it after the wipe --
+    //     hence the OrderRecheckEnabled() condition; without it the replacement is cast
+    //     enabler-first and dies to its own wipe, the original brick), and
+    //   * no OTHER backed payload waits in hand (a gift alt-cost, a gift rider, a gift ETB --
+    //     param-derived: Invigorate / Skyshroud Cutter / Fiery Justice / Aria of Flame), and
+    //   * no own non-enabler enchantment is on the board (the wipe destroys a live Aria's verse
+    //     engine; only the enabler being re-armed may die).
+    // The chain still terminates itself: at the SECOND wipe's emission the hand holds no further
+    // enabler, so only lethality (b) can justify it -- the USER's rule exactly.
+    //
+    // SCOPED TO THE CAST-TIME GUARD ONLY (at_cast_time): even strand-guarded, opening this term
+    // at EMISSION hands the line to the greedy, and the held-out overnight read it red at d0
+    // (3/4 keys, 39:16 slower -- the residual class DRAWS INTO its Aria/Cutter a turn after a
+    // "clean-hand" wipe, which no cast-time hand test can see). At cast time only, the greedy
+    // never initiates the chain; a SEARCH-committed chain (search_risky_live emission, the
+    // search judged the whole line) is allowed to execute instead of being vetoed back to (a)/(b).
+    if (at_cast_time && OrderRecheckEnabled())
+    {
+        bool replacement = false, strandable = false;
+        for (const Card& c : s.players[controller].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d) { continue; }
+            const CardParams& p = d->params;
+            if (p.lifegain_to_loss) { replacement = true; continue; }
+            if ((p.alt_lifegain_cost > 0 && !p.destroy_all_enchantments)
+                || p.opponent_lifegain > 0 || p.etb_opponent_lifegain > 0)
+            { strandable = true; }
+        }
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != controller
+                || !p.card.HasType(CardType::Enchantment)) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && !d->params.lifegain_to_loss) { strandable = true; break; }
+        }
+        if (replacement && !strandable) { return true; }
+    }
     // (b) lethal in combination with this turn's attackers
     return s.players[1 - controller].life <= def.params.alt_lifegain_cost + ReadyAttackPower(s, controller)
                                              + VerseDamageFromCast(s, controller, def);
@@ -7309,7 +7352,11 @@ int MirrorwingProvider::LegendKeepIndex(const GameState& s, int controller,
 // default-on read with an off switch, as the other adopted per-deck rules are.
 static bool MirrorwingOrderedEnabled()
 {
-    static const bool on = EnvOn("MTG_MW_ORDERED");   // default OFF; =1 enables the reviewed order
+    // ADOPTED default-on (USER, 2026-08-18): the reviewed full Mirrorwing order. Evidence: train
+    // smoke d0 -0.0120 / d3 -0.0067, regression d0 -0.0110 / d3 -0.0100; held-out 11 green /
+    // 1 flat / 0 red, per-game 96 faster / 8 slower, both searched slower games budget-churn.
+    // =0 reverts to the pre-review order.
+    static const bool on = EnvOn("MTG_MW_ORDERED", true);   // DEFAULT ON; =0 disables
     return on;
 }
 

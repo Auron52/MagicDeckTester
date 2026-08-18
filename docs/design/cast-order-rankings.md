@@ -30,6 +30,18 @@ about to change. See the worked example in the design doc.
 
 ## Anti-Lifegain
 
+**SECOND REVIEW ROUND ADOPTED (USER, 2026-08-18): `MTG_AL_ORDER` + `MTG_ORDER_RECHECK` are
+DEFAULT ON (`=0` reverts).** The Reverent+Remedy+Reverent rebuild is delivered to the SEARCH:
+the recheck alternates enabler/wipe so the replacement backs the next wipe, and the risky-wipe
+gate's replacement term is scoped to the CAST-TIME guard only — the greedy never initiates the
+chain. The USER's rule, verbatim: "we just need to allow it to not be cast when this will run
+us out without finishing the opponent." Two measured lessons behind the scoping: the bare
+"replacement in hand" arm was d0 +0.0520 twice (the greedy cashes the free 6 while backed
+payloads are pending — gi46 held Invigorate, gi30 held Aria); the strand-guarded arm still read
+d0 red on held-out (the residual class DRAWS INTO its Aria a turn after a clean-hand wipe).
+Scoped-arm evidence: train green-or-flat, held-out 7 green / 5 flat / 0 red, per-game
+12 faster / 0 slower. GT rebaselined all three modes.
+
 ```
 # Cast order -- decks/Anti-Lifegain/Anti-Lifegain.cod
 # provider: AntiLifegain   ideal-order draw tier: off   cantrip max mv: 1
@@ -48,20 +60,24 @@ about to change. See the worked example in the design doc.
 # [10] CREATURE: before noncreature spells (prowess catches later casts)
   10     -   m2    4  1  Birds of Paradise
   10     -   m1    4  1  Ignoble Hierarch
-  10     -   m2    4  4  Skyshroud Cutter
 #
 # [19] CAST PAYOFF (verse): before the spells that feed it
   19     -   m1    4  3  Aria of Flame
 #
 # [20] other noncreature spell
   20     -   m1    1  1  Enlightened Tutor
-  20     -   m1    3  1  Swords to Plowshares
   20     -   m2    2  3  Fiery Justice
   20     -   m1    2  3  Idyllic Tutor
   20     -   m1    4  3  Invigorate
 #
+# [21] POWER-PAYOFF (Swords): after the pumps that raise the power it pays
+  21     -   m1    3  1  Swords to Plowshares
+#
+# [24] GIFT BODY: an alt-cost gift wearing a creature's clothes -- with the m2 group
+  24     -   m2    4  4  Skyshroud Cutter
+#
 # [30] LAST: on-cast self-damage / destroy-all-enchantments
-  30     -   m1    4  4  Reverent Silence
+  30     -   m2    4  4  Reverent Silence
 ```
 
 ## Auras
@@ -418,9 +434,10 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 
 ## Mirrorwing Dragon
 
-**REVIEW HELD (USER, 2026-08-18) — the reviewed order below is built behind `MTG_MW_ORDERED`
-(default off, one lever for the whole ruling; measurement pending, then default flip on
-approval).** The ruling, verbatim:
+**REVIEW HELD AND ADOPTED (USER, 2026-08-18) — `MTG_MW_ORDERED` is DEFAULT ON (`=0` reverts).**
+Evidence: train smoke d0 −0.0120 / d3 −0.0067, regression d0 −0.0110 / d3 −0.0100; held-out
+overnight 11 green / 1 flat / 0 red keys, per-game 96 faster / 8 slower, both searched slower
+games budget-churn. GT rebaselined all three modes. The ruling, verbatim:
 
 > Fists after other draw makes sense. Draw spells Anger, Expedite, Impolite and Fists should come
 > before other spells, Gold Rush is an exception, so it might be worth considering it before and
@@ -458,7 +475,7 @@ ruling (two positions: start of turn, after draw) is NOT yet encoded -- at depth
 already places the drop freely; the d0 start-of-turn-only placement is the gap, tracked as the
 open item below.
 
-**Ordered report (`MTG_MW_ORDERED=1`), both decks:**
+**Adopted report (default config), both decks:**
 
 ```
 # Cast order -- decks/Mirrorwing Dragon/Mirrorwing Dragon.cod
@@ -531,40 +548,6 @@ open item below.
   18     -   m1    4  1  Fortifying Draught
 ```
 
-**Baseline report (default config, what plays today):**
-
-```
-# Cast order -- decks/Mirrorwing Dragon/Mirrorwing Dragon.cod
-# provider: Mirrorwing   ideal-order draw tier: off   cantrip max mv: 1
-# deck flags: feeds_combat=yes uses_second_main=no enabler_pull=no castpayoff_pull=no
-# main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
-#
-# rank  range      main  n  mv  card
-#
-# [LAND] LAND DROP: this deck HAS a cantrip, so "draw before the land" is a live question
-  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
-#
-# [5] MANA ROCK: online for the rest of the line
-  5     -   m1    4  4  Zada, Hedron Grinder
-  5     -   m1    4  5  Mirrorwing Dragon
-#
-# [10] CREATURE: before noncreature spells (prowess catches later casts)
-  10     -   m2    4  1  Elvish Mystic
-  10     -   m1    4  1  Ignoble Hierarch
-  10     -   m1    4  2  Goblin Instigator
-#
-# [12] (unclassified)
-  12     [2..12]   m1    3  2  Twinflame   -- draw, but its cost IS the turn -> cost-efficient end
-#
-# [15] RITUAL: float online before the payoff
-  15     [2..15]   m1    4  2  Gold Rush   -- draw, but its cost IS the turn -> cost-efficient end
-#
-# [20] other noncreature spell
-  20     [2..20]   m1    4  1  Ancestral Anger   -- cantrip
-  20     [2..20]   m1    2  1  Expedite   -- cantrip
-  20     [2..20]   m1    4  2  Fists of Flame   -- draw, but its cost IS the turn -> cost-efficient end
-  20     [2..20]   m1    2  3  Scale the Heights   -- draw, but its cost IS the turn -> cost-efficient end
-```
 
 ## Mirrorwing Trick Suite
 
@@ -579,7 +562,7 @@ open item below.
 # [LAND] LAND DROP: this deck HAS a cantrip, so "draw before the land" is a live question
   land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
 #
-# [5] MANA ROCK: online for the rest of the line
+# [5] MAGNET: the copy target must exist before any trick
   5     -   m1    4  4  Zada, Hedron Grinder
   5     -   m1    4  5  Mirrorwing Dragon
 #
@@ -588,14 +571,20 @@ open item below.
   10     -   m1    4  1  Ignoble Hierarch
   10     -   m1    4  2  Goblin Instigator
 #
-# [15] RITUAL: float online before the payoff
-  15     [2..15]   m1    4  2  Gold Rush   -- draw, but its cost IS the turn -> cost-efficient end
+# [11] BODY-MAKER (Libation): its token is one more copy of everything after
+  11     -   m1    3  1  Luxurious Libation
 #
-# [20] other noncreature spell
-  20     [2..20]   m1    4  1  Fortifying Draught   -- cantrip
-  20     [2..20]   m1    4  1  Impolite Entrance   -- cantrip
-  20     [2..20]   m1    3  1  Luxurious Libation   -- cantrip
-  20     [2..20]   m1    4  2  Fists of Flame   -- draw, but its cost IS the turn -> cost-efficient end
+# [14] DRAW: after the bodies (each body is one more copy of the mass-draw)
+  14     -   m1    4  1  Impolite Entrance
+#
+# [15] GOLD RUSH: after the draws (post-draw bodies widen the fan-out); funding ladder walks it earlier
+  15     [6..15]   m1    4  2  Gold Rush   -- FUNDING ladder: prefers the late slot, walks earlier only while the line cannot pay (15->13->6)
+#
+# [16] PAYOFF (Fists): after every draw it counts
+  16     -   m1    4  2  Fists of Flame
+#
+# [18] DRAUGHT: last -- X counts the turn's prior lifegain
+  18     -   m1    4  1  Fortifying Draught
 ```
 
 ## StompySurprise

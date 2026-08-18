@@ -4345,7 +4345,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             const bool search_risky_live = g_search_candidate_enum
                 && def.params.destroy_all_enchantments
                 && RemedyActive(state, state.active_player_index);
-            if ((ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def)
+            if ((ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def, /*at_cast_time=*/false)
                  || DecisionUnpruned(UnprunedGate::AltPayload) || spec_search_burn || risky_in_hand
                  || search_risky_live)
                 && AltPayloadTargetLegal(state, def))
@@ -10288,7 +10288,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // survives the wipe and it isn't lethal, SKIP it -- keep the card and our own
         // enchantments rather than self-brick. Inert for decks without a destroy-all alt.
         if (alt_cost && def.params.destroy_all_enchantments
-            && !ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def))
+            && !ResolveProvider(state).ShouldEmitRiskyAltPayload(state, state.active_player_index, def, /*at_cast_time=*/true))
         {
             return;
         }

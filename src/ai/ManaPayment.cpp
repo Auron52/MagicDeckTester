@@ -733,7 +733,10 @@ static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& 
 
 bool OrderRecheckEnabled()
 {
-    static const bool on = EnvOn("MTG_ORDER_RECHECK");
+    // ADOPTED default-on (USER, 2026-08-18): the Remedy/Silence alternation that makes the
+    // Reverent+Remedy+Reverent rebuild executable. Scoped-arm evidence: train green-or-flat,
+    // held-out 7 green / 5 flat / 0 red, per-game 12 faster / 0 slower. =0 reverts.
+    static const bool on = EnvOn("MTG_ORDER_RECHECK", true);   // DEFAULT ON; =0 disables
     return on;
 }
 
