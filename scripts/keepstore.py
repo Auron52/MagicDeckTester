@@ -562,6 +562,10 @@ def main(argv=None):
     p_i.add_argument("--current-digest", action="append", default=[], metavar="NAME=HEX",
                      help="this engine's play digest for that arm's deck, measured at the arm's "
                           "GENERATION rollout config (fast => d2/b3). Asserts currency.")
+    p_i.add_argument("--synth-seed", type=lambda v: int(v, 0), default=0x5eed1234,
+                     help="RNG seed for --synth-r. Varying ONLY this and re-measuring is the "
+                          "apparatus null: the seed is not supposed to change the answer, so how "
+                          "much it does IS the floor.")
     p_i.add_argument("--synth-r", action="append", default=[], metavar="NAME=R",
                      help="restate that arm's cells as if sampled at R rollouts, so arms generated "
                           "at different R give their unique cells MATCHED precision")
@@ -602,7 +606,7 @@ def main(argv=None):
             if "=" not in spec:
                 ap.error(f"--synth-r expects NAME=R, got {spec!r}")
             nm, _, r = spec.partition("=")
-            n = downsample_arm(store, nm, int(r))
+            n = downsample_arm(store, nm, int(r), seed=a.synth_seed)
             print(f"downsampled arm {nm!r} to R={r}: {n:,} cell-sides restated")
         dump_json(store, a.out)
         print(stats(store))
