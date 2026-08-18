@@ -414,13 +414,33 @@ default-off levers, with what each one measured.
 it**, so the pre-combat Main2 filter never runs. Instruction 4 is therefore recorded but inert, and
 instruction 1 is the only thing that gives the phase column any effect on play at all.
 
-### Instruction 2 is correct and currently unreachable
+### Instruction 2 is correct, live, and MEASURED -- two of my claims about it were wrong
 
-The "Invigorate Swords play" needs Swords to target an OPPONENT creature (its controller gains life
-equal to power -> flipped to damage by a Remedy), pumped first. Two things block it here, neither
-of them the order: Invigorate is modelled `target_own_creature: true`, and the goldfish opponent has
-no creatures for this deck to pump or exile. The rank is right; the play cannot happen as modelled.
-Swords' own card note already says as much ("Inert without Remedy vs a passive opponent").
+**Correction (USER, 2026-08-18: "That's wrong on Swords. We do cast it on opponent's creatures").**
+I had written that the play was unreachable because the goldfish opponent has no creatures. That is
+false: the opponent does have creatures -- usually tokens (Orchard Spirits) -- and Swords is cast on
+them. `docs/design/antilifegain-swords-targeting.md` is the record.
+
+The play is not merely reachable, it is IMPLEMENTED, and by a route worth knowing:
+`TryPumpThenSwordsRedirect` (SpellEffects.h) pulls a free alt-cost Invigorate out of HAND during
+Swords' RESOLUTION and puts the +4/+4 on the Swords target, for `power + pump + alt_lifegain` of
+opponent life loss. That redirect is the only way Invigorate ever pumps an OPPONENT creature -- cast
+normally it is `target_own_creature`.
+
+**My second claim was also wrong, and the measurement is what says so.** I reasoned that since the
+redirect needs Invigorate still in hand, ranking Swords AFTER the pumps would defeat it, and that
+the instruction should be inverted. A/B on antilife smoke (`MTG_AL_SWORDS_RANK`):
+
+| Swords rank | antilife d0 | verdict |
+|---|---|---|
+| **21 -- after the pumps (as instructed)** | **4.9030 = GT**, churn at d0/d3/d5 | neutral, safe |
+| 17 -- before the pumps (my inversion) | 4.9160 (**+0.0130**) | worse |
+
+The instruction stands as given. The inversion loses because the safe alt payloads are auto-fired
+AFTER the casts rather than enumerated into the order (`FireSafeAltPayloads`), so ranking Swords
+late never consumes the Invigorate the redirect wants -- while ranking it early just casts the
+removal ahead of the deck's actual business. Reasoning about the redirect was right; reasoning
+about which rank served it was not, and only the A/B separated them.
 
 ### Instruction 5: the line is now EXPRESSIBLE, and it still is not worth delivering
 

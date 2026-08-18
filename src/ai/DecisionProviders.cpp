@@ -1817,7 +1817,18 @@ int AntiLifegainProvider::CastOrderRank(const GameState& s, const CardDefinition
     if (AlOrderReviewEnabled())
     {
         const CardParams& p = def.params;
-        if (p.controller_lifegain_equals_power) { return 21; }   // after the pumps (rank 20)
+        // WHICH SIDE of the pumps Swords belongs on is not obvious in THIS engine, so it is a
+        // measured constant rather than an assumed one. The USER's play is "Invigorate, then
+        // Swords" -- but the engine does not realise it that way: TryPumpThenSwordsRedirect
+        // (SpellEffects.h) pulls a free alt-cost Invigorate OUT OF HAND during Swords' RESOLUTION
+        // and puts the +4/+4 on the Swords target, which is the only way Invigorate ever pumps an
+        // OPPONENT creature (it is target_own_creature otherwise). That redirect needs Invigorate
+        // still in hand -- so a cast order that fires Invigorate FIRST defeats the very play the
+        // ordering was asked for. Mostly moot at d0 (safe alt payloads are auto-fired after the
+        // casts, not enumerated), live at search nodes where the speculative emission makes
+        // Invigorate a real cast. MTG_AL_SWORDS_RANK: 21 = after the pumps, < 20 = before them.
+        static const int s_swords_rank = EnvInt("MTG_AL_SWORDS_RANK", 21);
+        if (p.controller_lifegain_equals_power) { return s_swords_rank; }
         if (p.alt_lifegain_cost > 0 && def.card.IsCreature() && !p.lifegain_to_loss) { return 24; }
     }
     return GenericProvider::CastOrderRank(s, def);
