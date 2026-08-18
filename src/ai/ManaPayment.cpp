@@ -903,9 +903,14 @@ ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
 // ---- Colour-exact subset affordability (MTG_COLOR_EXACT) --------------------------------------
 // Rationale, soundness argument and the over-approximation policy: see ManaPayment.h.
 
+// ADOPTED 2026-08-18 -- default ON, off-switch MTG_COLOR_EXACT=0 for the standing A/B. Held out on
+// disjoint seeds three times over: smoke -0.0800 / 36 keys, regression -0.1353 / 60, overnight
+// -0.3699 / 144 with only three keys worse and none by more than +0.0015. Soundness is measured, not
+// argued: MTG_COLOR_EXACT_PROBE re-tests every rejection against the real payment path and found
+// zero false rejects in 37k+ rejections.
 static bool ColorExactEnabled()
 {
-    static const bool v = EnvOn("MTG_COLOR_EXACT");
+    static const bool v = EnvOn("MTG_COLOR_EXACT", true);
     return v;
 }
 

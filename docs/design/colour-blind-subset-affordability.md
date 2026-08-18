@@ -165,11 +165,53 @@ rejections too, which is what makes the zeros above evidence rather than silence
 |---|---|---|---|---|
 | smoke | 1001 | **-0.0800** / 36 keys | 10 | 2 (fivecolour d3 +0.0067, d5 +0.0133) |
 | regression | 2002 + 3003 | **-0.1353** / 60 keys | 16 | **0** |
+| overnight (HELD OUT) | 4004/5005/6006/7007/8008/10010 | **-0.3699** / 144 keys | 47 | 3, none over +0.0015 |
 
-Negative is better. Almost all of it is `creature_giving` d0 (-0.094 / -0.105); the other decks move
-a little or not at all, and 26 of 36 smoke keys are byte-identical, which is the check that the gate
-only bites boards that actually hold the phantom. With the lever OFF the suite is byte-identical to
-ground truth (36/36 pass, 0 configs changed), so nothing is on by default.
+Negative is better, and all three seed sets are disjoint. Almost all of it is `creature_giving` d0
+(-0.34 summed on the held-out tier); per deck on overnight: creature_giving -0.3395, fivecolour
+-0.0294, antilife -0.0020, knights -0.0005, hinata +0.0015, every other deck exactly 0. Twenty-six of
+36 smoke keys are byte-identical, which is the check that the gate only bites boards that actually
+hold the phantom.
+
+**Every searched-depth slowdown recovers with budget** — the test the skill prescribes before calling
+one real (re-run BOTH arms at `--budget-ms 0`; a large number is not unlimited, `<= 0` is):
+
+| game | at case budget | 4x | 16x | unlimited |
+|---|---|---|---|---|
+| fivecolour d3/d5 s1001 gi44 | 5 -> 6 | d3 recovers | d5 recovers | **5 = 5** |
+| creature_giving d3 s3003 gi221 (draws also diverge at T4) | 4 -> 5 | recovers | recovers | **4 = 4** |
+| antilife d5 s7007 gi194 | 7 -> 8 | — | — | **5 = 5** |
+| creature_giving d3 s7007 gi162 | 4 -> 5 | — | — | **4 = 4** |
+
+So no line is lost to the gate; the search simply spends a fixed budget differently. Note the antilife
+game is T5 on BOTH arms at unlimited budget, i.e. the recorded T7 baseline was itself budget-limited.
+
+Adopted 2026-08-18: default ON, off-switch `MTG_COLOR_EXACT=0`. The flip was verified play-identical
+to the env-driven arm before any ground truth was promoted — smoke (36 keys) and regression (60 keys)
+reproduced every fingerprint exactly.
+
+### Coverage is PARTIAL, and the shape of the gap is the point
+
+The gate stands down whenever it cannot model a source exactly, so how much of the phantom it removes
+depends entirely on what a deck's mana base is made of. `MTG_AFFORD_AUDIT`, 150 games per cell at
+seed 7007, colour-short drops OFF -> ON:
+
+| deck | d0 | d3 | why |
+|---|---|---|---|
+| creature_giving | 36 -> **0** | 15 -> **0** | plain duals/triomes/fetches — the model is exact |
+| antilife | 8 -> **0** | 4 -> **0** | same |
+| knights | 0 -> 0 | 0 -> 0 | no phantom in the sample |
+| fivecolour | 54 -> 46 | 62 -> 49 | Bloom Tender / Faeburrow Elder are `domain_mana`, opened to all five colours under `MTG_DOMAIN_WIDEN` |
+| hinata | 17 -> 17 | 26 -> 26 | **Cascade Bluffs (`is_filter`) + Izzet Signet (`ramp_filter`)** — an untapped conversion source switches the whole test off |
+
+So the entire measured gain comes from the decks whose sources the model covers exactly, and hinata —
+which has a real colour-short rate — gets **nothing**. That is by construction, not by accident: a
+conversion source is precisely the case where an over-approximation would false-reject, so standing
+down is the only sound move available to a per-source colour set.
+
+The follow-up this points at: `SubsetPayableWithFilters` already pays for real, and is already the
+authority on filter boards. Running it as the exact test when `usable == false` would close the hinata
+gap at the cost of a real payment per surviving subset — a perf question, not a soundness one.
 
 ### Not done
 
