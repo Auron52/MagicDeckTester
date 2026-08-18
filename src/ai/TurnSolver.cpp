@@ -707,32 +707,38 @@ static bool CostReframeEnabled()
     return on;
 }
 
+// Per-candidate half of the affinity credit below. Factored out so the SEQUENCED ritual walk can
+// price an individual accelerant exactly as the subset's combined cost is priced -- see the
+// soundness note on SequencedRitualCredit.
+static int SameTurnAffinityDiscountFor(const GameState& state, const std::vector<Action>& cands,
+                                       const std::vector<int>& sel, int j)
+{
+    const CardDefinition* dj = cands[j].def;
+    if (!dj || !dj->params.affinity_for_subtype || dj->params.subtypes_affected.empty()) { return 0; }
+    const int j_rank = ResolveProvider(state).CastOrderRank(state, *dj);
+    int same_turn = 0;
+    for (int k : sel)
+    {
+        if (k == j) { continue; }
+        const CardDefinition* dk = cands[k].def;
+        if (!dk || !dk->card.IsCreature()) { continue; }
+        if (ResolveProvider(state).CastOrderRank(state, *dk) >= j_rank) { continue; }  // cast after -> no credit
+        bool match = false;
+        for (const std::string& sub : dj->params.subtypes_affected)
+        {
+            for (const std::string& cs : dk->card.m_subtypes) { if (cs == sub) { match = true; break; } }
+            if (match) { break; }
+        }
+        if (match) { ++same_turn; }
+    }
+    return std::min(same_turn, cands[j].cost.generic);
+}
+
 static int SameTurnAffinityGenericCredit(const GameState& state, const std::vector<Action>& cands,
                                          const std::vector<int>& sel)
 {
     int credit = 0;
-    for (int j : sel)
-    {
-        const CardDefinition* dj = cands[j].def;
-        if (!dj || !dj->params.affinity_for_subtype || dj->params.subtypes_affected.empty()) { continue; }
-        const int j_rank = ResolveProvider(state).CastOrderRank(state, *dj);
-        int same_turn = 0;
-        for (int k : sel)
-        {
-            if (k == j) { continue; }
-            const CardDefinition* dk = cands[k].def;
-            if (!dk || !dk->card.IsCreature()) { continue; }
-            if (ResolveProvider(state).CastOrderRank(state, *dk) >= j_rank) { continue; }  // cast after -> no credit
-            bool match = false;
-            for (const std::string& sub : dj->params.subtypes_affected)
-            {
-                for (const std::string& cs : dk->card.m_subtypes) { if (cs == sub) { match = true; break; } }
-                if (match) { break; }
-            }
-            if (match) { ++same_turn; }
-        }
-        credit += std::min(same_turn, cands[j].cost.generic);
-    }
+    for (int j : sel) { credit += SameTurnAffinityDiscountFor(state, cands, sel, j); }
     return credit;
 }
 
@@ -751,53 +757,73 @@ static int SameTurnAffinityGenericCredit(const GameState& state, const std::vect
 // over-crediting never picks an unpayable line. Returns 0 unless the subset holds a reducer, so every
 // non-reducer deck/seed is byte-identical. Only Ruby Medallion sets reduces_spell_color today, so the
 // whole path is Dragonstorm-scoped.
-static int SameTurnReducerGenericCredit(const GameState& state, const std::vector<Action>& cands,
-                                        const std::vector<int>& sel)
+// Same-turn reducers present in a subset, counted once so the per-candidate discount below is O(1)
+// per spell rather than re-scanning `sel`.
+struct SameTurnReducerCounts
 {
-    (void)state;
-    // Count same-turn reducers per colour in the subset (only "R" exists today, but generalise).
     int red = 0, white = 0, blue = 0, black = 0, green = 0;
-    // Count same-turn SUBTYPE reducers (Goblin Warchief) per subtype string.
-    std::unordered_map<std::string, int> sub_reducers;
+    std::unordered_map<std::string, int> sub;    // subtype reducers (Goblin Warchief)
+    bool Any() const { return (red + white + blue + black + green) > 0 || !sub.empty(); }
+};
+
+static SameTurnReducerCounts CountSameTurnReducers(const std::vector<Action>& cands,
+                                                   const std::vector<int>& sel)
+{
+    SameTurnReducerCounts rc;
     for (int j : sel)
     {
         const CardDefinition* d = cands[j].def;
         if (!d) { continue; }
-        if (!d->params.reduces_spell_subtype.empty()) { ++sub_reducers[d->params.reduces_spell_subtype]; }
+        if (!d->params.reduces_spell_subtype.empty()) { ++rc.sub[d->params.reduces_spell_subtype]; }
         if (d->params.reduces_spell_color.empty()) { continue; }
-        const std::string& rc = d->params.reduces_spell_color;
-        if      (rc == "R") { ++red; }   else if (rc == "W") { ++white; }
-        else if (rc == "U") { ++blue; }  else if (rc == "B") { ++black; }
-        else if (rc == "G") { ++green; }
+        const std::string& c = d->params.reduces_spell_color;
+        if      (c == "R") { ++rc.red; }   else if (c == "W") { ++rc.white; }
+        else if (c == "U") { ++rc.blue; }  else if (c == "B") { ++rc.black; }
+        else if (c == "G") { ++rc.green; }
     }
-    if (red + white + blue + black + green == 0 && sub_reducers.empty()) { return 0; }
-    int credit = 0;
-    for (int j : sel)
+    return rc;
+}
+
+// Generic discount ONE candidate gets from the subset's same-turn reducers. Factored out of
+// SameTurnReducerGenericCredit so the SEQUENCED ritual walk can price an individual accelerant
+// exactly as the subset's combined cost is priced -- see the soundness note on
+// SequencedRitualCredit.
+static int SameTurnReducerDiscountFor(const SameTurnReducerCounts& rc,
+                                      const std::vector<Action>& cands, int j)
+{
+    const CardDefinition* dj = cands[j].def;
+    if (!dj || cands[j].cost.generic <= 0) { return 0; }   // nothing to discount
+    const ManaCost& mc = dj->card.m_mana_cost;             // printed pips (colour set by the card)
+    int reducers = 0;
+    if (mc.red   > 0) { reducers += rc.red; }
+    if (mc.white > 0) { reducers += rc.white; }
+    if (mc.blue  > 0) { reducers += rc.blue; }
+    if (mc.black > 0) { reducers += rc.black; }
+    if (mc.green > 0) { reducers += rc.green; }
+    // Subtype reducers (Warchief): a Goblin spell gets -1 per OTHER same-turn Warchief in the
+    // subset. Warchief is itself a Goblin, so exclude the spell's own reducer copy (a lone
+    // Warchief never discounts itself; two Warchiefs each discount the other).
+    for (const std::string& cs : dj->card.m_subtypes)
     {
-        const CardDefinition* dj = cands[j].def;
-        if (!dj || cands[j].cost.generic <= 0) { continue; }   // nothing to discount
-        const ManaCost& mc = dj->card.m_mana_cost;             // printed pips (colour set by the card)
-        int reducers = 0;
-        if (mc.red   > 0) { reducers += red; }
-        if (mc.white > 0) { reducers += white; }
-        if (mc.blue  > 0) { reducers += blue; }
-        if (mc.black > 0) { reducers += black; }
-        if (mc.green > 0) { reducers += green; }
-        // Subtype reducers (Warchief): a Goblin spell gets -1 per OTHER same-turn Warchief in the
-        // subset. Warchief is itself a Goblin, so exclude the spell's own reducer copy (a lone
-        // Warchief never discounts itself; two Warchiefs each discount the other).
-        for (const std::string& cs : dj->card.m_subtypes)
-        {
-            auto it = sub_reducers.find(cs);
-            if (it == sub_reducers.end()) { continue; }
-            int n = it->second;
-            if (dj->params.reduces_spell_subtype == cs) { --n; }   // exclude self
-            reducers += n;
-        }
-        // A colour reducer never discounts itself (a Ruby Medallion is {2}, colourless); Warchief's
-        // own subtype match is excluded above.
-        credit += std::min(reducers, cands[j].cost.generic);
+        auto it = rc.sub.find(cs);
+        if (it == rc.sub.end()) { continue; }
+        int n = it->second;
+        if (dj->params.reduces_spell_subtype == cs) { --n; }   // exclude self
+        reducers += n;
     }
+    // A colour reducer never discounts itself (a Ruby Medallion is {2}, colourless); Warchief's
+    // own subtype match is excluded above.
+    return std::min(reducers, cands[j].cost.generic);
+}
+
+static int SameTurnReducerGenericCredit(const GameState& state, const std::vector<Action>& cands,
+                                        const std::vector<int>& sel)
+{
+    (void)state;
+    const SameTurnReducerCounts rc = CountSameTurnReducers(cands, sel);
+    if (!rc.Any()) { return 0; }
+    int credit = 0;
+    for (int j : sel) { credit += SameTurnReducerDiscountFor(rc, cands, j); }
     return credit;
 }
 
@@ -6846,8 +6872,23 @@ static int SeqRitualCreditMode()
 // ones behind it. Sets are tiny (a handful of accelerants), so the extra passes are free.
 // `exclude` (a cands index, -1 = none) drops one accelerant from the set, so the surplus-ritual check
 // downstream can ask "what would this subset credit WITHOUT r?" under the same sequenced model.
+// SOUNDNESS INVARIANT (USER BAR, 2026-08-18): this credit feeds a PRUNE, so it must never be
+// SMALLER than the float genuinely realisable -- an under-estimate rejects a subset the board can
+// actually pay, and the search then never sees that line at all. Over-estimating is safe (the
+// simultaneous model over-estimates by construction, and an unpayable plan just rolls out badly and
+// is discarded). So every modelling gap here resolves in the GENEROUS direction, and tightening is
+// licensed only where the tighter answer is exact.
+//
+// `st_disc` (optional) supplies the same-turn cost REDUCER / AFFINITY discounts. Without it the walk
+// prices each accelerant at full printed cost while the subset's `combined` is priced with the
+// discounts applied -- an internal inconsistency that can only make the walk tighter than truth, and
+// exactly the over-tightness that made MTG_RITUAL_SEQ_CREDIT=2 delete reachable Dragonstorm lines
+// (21 hand-played references stopped replaying; see the mode note above). Passing it is a strict
+// LOOSENING: discounts only ever raise the credit, so it can remove false rejects and can never
+// create a new rejection.
 static int SequencedRitualCredit(const ManaPool& pool, const std::vector<Action>& cands,
-                                 const std::vector<int>& sel, int exclude = -1)
+                                 const std::vector<int>& sel, int exclude = -1,
+                                 const GameState* st_disc = nullptr)
 {
     // thread_local so the hot path never allocates.
     thread_local std::vector<int>  rit;
@@ -6855,10 +6896,27 @@ static int SequencedRitualCredit(const ManaPool& pool, const std::vector<Action>
     rit.clear();
     for (int j : sel) { if (j != exclude && cands[j].ritual_float > 0) { rit.push_back(j); } }
     if (rit.empty()) { return 0; }
+
+    // Same-turn discounts, computed once. Inert (and byte-identical) when the caller passes no
+    // state, when the cost-trick model is off, or when the subset holds no reducer/affinity spell.
+    const bool                   use_disc = (st_disc != nullptr) && CostTricksEnabled();
+    const SameTurnReducerCounts  rcounts  = use_disc ? CountSameTurnReducers(cands, sel)
+                                                     : SameTurnReducerCounts{};
+    auto eff_cost = [&](int j)
+    {
+        ManaCost c = cands[j].cost;
+        if (!use_disc || c.generic <= 0) { return c; }
+        int d = 0;
+        if (rcounts.Any()) { d += SameTurnReducerDiscountFor(rcounts, cands, j); }
+        d += SameTurnAffinityDiscountFor(*st_disc, cands, sel, j);
+        if (d > 0) { c.generic = std::max(0, c.generic - d); }
+        return c;
+    };
+
     if (rit.size() == 1)
     {
         // A single accelerant still has to be payable on its own -- that IS the self-funding case.
-        return pool.CanPay(cands[rit[0]].cost) ? cands[rit[0]].ritual_float : 0;
+        return pool.CanPay(eff_cost(rit[0])) ? cands[rit[0]].ritual_float : 0;
     }
     std::stable_sort(rit.begin(), rit.end(), [&](int x, int y)
     { return cands[x].cost.ManaValue() < cands[y].cost.ManaValue(); });
@@ -6870,7 +6928,7 @@ static int SequencedRitualCredit(const ManaPool& pool, const std::vector<Action>
     int sum_float = 0, sum_gy = 0;
     for (int j : rit)
     {
-        const ManaCost& c = cands[j].cost;
+        const ManaCost c = eff_cost(j);
         all.white += c.white; all.blue  += c.blue;  all.black += c.black;
         all.red   += c.red;   all.green += c.green;
         all.colorless += c.colorless;   all.generic += c.generic;
@@ -6892,7 +6950,7 @@ static int SequencedRitualCredit(const ManaPool& pool, const std::vector<Action>
         for (std::size_t i = 0; i < rit.size(); ++i)
         {
             if (credited_flag[i]) { continue; }
-            const ManaCost& c = cands[rit[i]].cost;
+            const ManaCost c = eff_cost(rit[i]);
             ManaCost trial = acc;
             trial.white += c.white; trial.blue  += c.blue;  trial.black += c.black;
             trial.red   += c.red;   trial.green += c.green;
@@ -6911,6 +6969,51 @@ static int SequencedRitualCredit(const ManaPool& pool, const std::vector<Action>
         if (!skipped) { break; }
     }
     return credit + ManaGateTriangular(gy);
+}
+
+// MTG_SEQ_PROBE -- the soundness instrument for the SEQUENCED ritual credit, mirroring
+// MTG_COLOR_EXACT_PROBE. The sequenced model feeds a PRUNE, so it may only ever reject a subset the
+// board GENUINELY cannot cast in ANY order; every rejection printed here is a candidate FALSE
+// REJECT to be checked by hand against the board dump. =1 prints rejections; =2 also prints a
+// per-turn tally of subsets the walk left alone, which is what tells a clean sweep apart from a
+// probe that never fired (the failure mode that once made an inert ladder look sound).
+static int SeqProbeLevel()
+{
+    static const int v = EnvOn("MTG_SEQ_PROBE") ? EnvInt("MTG_SEQ_PROBE", 1) : 0;
+    return v;
+}
+static bool SeqProbeOn() { return SeqProbeLevel() > 0; }
+
+static void ProbeSeqReject(const GameState& state, const std::vector<Action>& cands,
+                           const std::vector<int>& sel, const ManaPool& pool,
+                           int simul_credit, int seq_credit)
+{
+    std::string names;
+    for (int j : sel)
+    {
+        if (!names.empty()) { names += " + "; }
+        names += cands[j].card_name.str();
+        if (cands[j].ritual_float > 0)
+        {
+            names += "(cost " + std::to_string(cands[j].cost.ManaValue())
+                   + " float " + std::to_string(cands[j].ritual_float) + ")";
+        }
+    }
+    std::string srcs;
+    for (const Permanent& sp : state.battlefield)
+    {
+        if (sp.controller_index != state.active_player_index || sp.tapped) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(sp.card);
+        if (!sd) { continue; }
+        const bool is_src = (sd->tmpl == CardTemplate::BasicLand)
+                         || (sd->tmpl == CardTemplate::ManaDork) || sd->params.mana_rock;
+        if (is_src) { srcs += sp.card.m_name.str() + ","; }
+    }
+    std::fprintf(stderr,
+                 "[seq-probe] reject turn=%d pool{w%d u%d b%d r%d g%d c%d *%d} "
+                 "simul=%d seq=%d: %s   UNTAPPED{%s}\n",
+                 state.turn_number, pool.white, pool.blue, pool.black, pool.red, pool.green,
+                 pool.colorless, pool.wild, simul_credit, seq_credit, names.c_str(), srcs.c_str());
 }
 
 // `extra_credit` = same-turn mana the bound cannot derive from `cands` alone. Today that is only
@@ -13346,7 +13449,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         auto apply_seq = [&]()
         {
             if (seq_credit >= 0) { return; }
-            seq_credit = SequencedRitualCredit(pool, cands, sel);
+            // `&state` prices each accelerant with the SAME same-turn reducer/affinity discounts
+            // already applied to `combined` above. Without it the walk charges full price inside
+            // while the outer test charges the discounted price -- the inconsistency that made this
+            // model reject payable Dragonstorm chains (Medallion + rituals). Solve's leaf applies no
+            // reducer credit to `combined`, so it stays undiscounted and byte-identical there.
+            seq_credit = SequencedRitualCredit(pool, cands, sel, /*exclude=*/-1, &state);
             if (seq_credit >= simul_ritual_credit) { return; }
             const int back = simul_ritual_credit - seq_credit;
             eff.wild    -= back;
@@ -13355,7 +13463,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (seq_on && mana_ok)
         {
             apply_seq();
-            mana_ok = eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined);
+            const bool ok_after = eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined);
+            // The tightening turned an ACCEPTED subset into a rejected one -- the only place this
+            // model can REMOVE a line. Every such rejection must be genuinely uncastable in any
+            // order; MTG_SEQ_PROBE dumps them for exactly that audit.
+            if (!ok_after && SeqProbeOn())
+            {
+                ProbeSeqReject(state, cands, sel, pool, simul_ritual_credit, seq_credit);
+            }
+            mana_ok = ok_after;
         }
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
         bool mana_reject = !mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel));
