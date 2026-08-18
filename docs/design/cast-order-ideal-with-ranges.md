@@ -1,5 +1,41 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS: ON HOLD as of 2026-08-18 (paused, not abandoned; nothing is half-applied)
+>
+> **The tree is in a clean parked state.** All four levers are DEFAULT OFF and byte-identical off
+> (`MTG_IDEAL_ORDER`, `MTG_ORDER_RANGE`, `MTG_ORDER_OPAQUE`, `MTG_MW_CANTRIP_ORDER`), so the shipped
+> engine plays exactly as if this project did not exist. Nothing needs undoing to resume, and nothing
+> needs finishing to leave it parked.
+>
+> **What is measured.** Steps 1-3 below are built and measured on the TRAIN tiers. Best arm is
+> **G** = `MTG_ORDER_OPAQUE` + `MTG_ORDER_RANGE` + `MTG_MW_CANTRIP_ORDER`: **-0.00346 smoke /
+> -0.00312 regression**, additive across decks (dragonstorm -57.0, mirrorwing -20.0, hinata -6.0,
+> one deck +1.0). `MTG_ORDER_OPAQUE` alone is the confident part (-0.00246, almost all dragonstorm);
+> every arm includes it, because without it the rest has no domain.
+>
+> **What is NOT done, and why it is parked here rather than anywhere else:**
+> 1. **The held-out overnight was never run.** Train-tier numbers cannot carry an adoption claim --
+>    and on this repo's recent evidence they are actively misleading: a favourable mean has pointed
+>    at adoption three separate times while the configuration was wrong (see
+>    `colour-blind-subset-affordability.md`). Run `--overnight` and read the PER-DECK keys, not the
+>    aggregate.
+> 2. **The USER review gate has not been held.** Cast order, affordability range, and 1st-vs-2nd main
+>    are a PER-DECK judgement the user signs off; they are never adopted from a measurement alone.
+>    The proposal to review is `cast-order-rankings.md`, regenerated with
+>    `mtg <deck> --cast-order-report` (it reads each deck's real provider at the default config, so
+>    it cannot drift from play). **This review is the gate. Do not adopt without it.**
+> 3. Step 3's hoped-for effect -- breakpoint-fan rollout calls falling back toward the 1,625 baseline
+>    once the order is unambiguous -- was never measured.
+>
+> **Two traps recorded from the sweep that produced these numbers:** a lever that EARLY-OUTS looks
+> exactly like one that fires and finds nothing (count the times it fires, not just the delta); and
+> never run two suite runs of the same MODE concurrently -- they share `test/logs/<mode>/` and
+> `test/results/<mode>.env`, so the second clobbers the first.
+>
+> **Resume by:** rebuild, re-run the train tiers to confirm the numbers still reproduce on the
+> current engine (the mana-affordability work in `mana-affordability-arc-handoff.md` landed after
+> these were taken and touches cast order's neighbourhood), then the overnight, then the review.
+
 **USER design (2026-08-17, verbatim):**
 
 > A more complete design could be:
