@@ -4650,7 +4650,9 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
             { ti = i; break; }
         }
         if (ti < 0) { return false; }   // their creature is gone -> the spell fizzles (CR 608.2b)
-        ApplyTrickPayload(state, controller, def, ti);   // no fan-out: it is not our magnet
+        // No fan-out: it is not our magnet. chosen_x rides through exactly as the magnet path
+        // below does -- pump_per_x scales an X trick the same whoever it lands on.
+        ApplyTrickPayload(state, controller, def, ti, chosen_x);
         return true;
     }
     if (target_number != 0)
