@@ -8634,25 +8634,31 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
             // deck holds both suites -- the swap trades one set for the other); it matters only
             // for a pool/union arm. Placement WITHIN the new set is very observable, though, and
             // that is what the user set here.
+            //   * Oracle's Restoration sits "in the same area as Ancestral Anger" (user,
+            //     2026-08-19) -- it is the Anger slot's candidate replacement: same {1}-cantrip
+            //     role, and its per-copy life rider additionally ENABLES Fortifying Draught.
             const std::vector<int> libat = copies_of("Luxurious Libation");
             const std::vector<int> draug = copies_of("Fortifying Draught");
             const std::vector<int> entra = copies_of("Impolite Entrance");
+            const std::vector<int> orest = copies_of("Oracle's Restoration");
             for (int i : grs) { pumps.push_back(i); }
             if (!draug.empty()) { pumps.push_back(draug[0]); }    // 2nd-best spell (user)
             if (!tfs.empty())   { pumps.push_back(tfs[0]); }      // extras are dead (step 1)
             if (!libat.empty()) { pumps.push_back(libat[0]); }    // ditto -- bodies, one is enough
             if (!fists.empty()) { pumps.push_back(fists[0]); }
             if (!anger.empty()) { pumps.push_back(anger[0]); }
+            if (!orest.empty()) { pumps.push_back(orest[0]); }  // same area as Anger (user)
             if (!exped.empty()) { pumps.push_back(exped[0]); }
             if (!entra.empty()) { pumps.push_back(entra[0]); }    // beside its pal Expedite
             if (!scale.empty()) { pumps.push_back(scale[0]); }
-            std::size_t rounds = std::max({ draug.size(), fists.size(), anger.size(),
+            std::size_t rounds = std::max({ draug.size(), fists.size(), anger.size(), orest.size(),
                                             exped.size(), entra.size(), scale.size() });
             for (std::size_t r = 1; r < rounds; ++r)
             {
                 if (r < draug.size()) { pumps.push_back(draug[r]); }
                 if (r < fists.size()) { pumps.push_back(fists[r]); }
                 if (r < anger.size()) { pumps.push_back(anger[r]); }
+                if (r < orest.size()) { pumps.push_back(orest[r]); }
                 if (r < exped.size()) { pumps.push_back(exped[r]); }
                 if (r < entra.size()) { pumps.push_back(entra[r]); }
                 if (r < scale.size()) { pumps.push_back(scale[r]); }

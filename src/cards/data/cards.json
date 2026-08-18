@@ -4195,6 +4195,24 @@
    }
   },
   {
+   "name": "Oracle's Restoration",
+   "mana_cost": "{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Target creature you control gets +1/+1 until end of turn. You draw a card and gain 1 life. [solo_target_trick: a FLAT +1/+1 (power_bonus/tough_bonus -- no escalation term, unlike Ancestral Anger's graveyard count), plus a per-copy cantrip draw (cast_draw) and a per-copy +1 life (cast_lifegain, which feeds Player::life_gained_this_turn). Under a magnet its life rider is a Fortifying Draught ENABLER: N resolved instances bank N life BEFORE Draught is cast, so Draught's escalation starts at N+2 instead of 2. Its draw rider feeds Fists of Flame's cards_drawn_this_turn the same way Anger's does. PARTIAL: 'you control' is NOT modelled as a restriction -- the passive goldfish opponent controls no creatures, so 'target creature' (Ancestral Anger) and 'target creature you control' resolve over the IDENTICAL candidate set. This is the card's real drawback vs Anger (Anger can be cast at any creature purely to cantrip), and a screen against Anger CANNOT see it -- disclose in any comparison. Sorcery-vs-instant also unmodelled (casts resolve in MAIN_1).]",
+   "template": "custom",
+   "parameters": {
+    "solo_target_trick": true,
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "cast_draw": 1,
+    "cast_lifegain": 1
+   }
+  },
+  {
    "name": "Expedite",
    "mana_cost": "{R}",
    "types": [
