@@ -710,6 +710,13 @@ static bool CostReframeEnabled()
 // Per-candidate half of the affinity credit below. Factored out so the SEQUENCED ritual walk can
 // price an individual accelerant exactly as the subset's combined cost is priced -- see the
 // soundness note on SequencedRitualCredit.
+// MTG_LEAF_REDUCER_CREDIT (default OFF) -- see the re-test note at Solve::consider's credit block.
+static bool LeafReducerCreditEnabled()
+{
+    static const bool on = EnvOn("MTG_LEAF_REDUCER_CREDIT");
+    return on;
+}
+
 static int SameTurnAffinityDiscountFor(const GameState& state, const std::vector<Action>& cands,
                                        const std::vector<int>& sel, int j)
 {
@@ -8260,6 +8267,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // Same-turn affinity (Thrumming Hivepool). Inert unless an affinity card is castable this turn.
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
+    // Same-turn cost reducer (Ruby Medallion) among the candidates -- gates the OPT-IN leaf credit
+    // below (MTG_LEAF_REDUCER_CREDIT). Inert for every deck without one.
+    bool any_reducer = false;
+    for (const Action& ra : cands) { if (ra.def && !ra.def->params.reduces_spell_color.empty()) { any_reducer = true; break; } }
     // NOTE: the same-turn cost-reducer (Ruby Medallion) generic credit is applied ONLY in
     // EnumeratePlans (the search's / viewer's plan list), NOT here in Solve's greedy consider(). The
     // credit is an OPTIMISTIC affordability hint (it assumes the reducer resolves before the spells it
@@ -8504,8 +8515,31 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - acred);
             }
         }
-        // (No same-turn reducer credit here -- see the note at the any_affinity flag above; the
-        // Medallion credit is EnumeratePlans-only so Solve's greedy/leaf stays byte-identical.)
+        // Same-turn reducer credit at the LEAF -- OPT-IN (MTG_LEAF_REDUCER_CREDIT), DEFAULT OFF AND
+        // IT MUST STAY OFF. This was a RE-TEST of the rejection recorded at the any_affinity flag
+        // above, on the theory that the sequenced ritual credit (MTG_RITUAL_SEQ_CREDIT>=1, added at
+        // this site AFTER that rejection) would now guard the stranding that killed it. It does not.
+        // Smoke, 2026-08-18:
+        //     dragonstorm_smoke_d0  5.3990 -> 5.6140   (+0.2150; ELEVEN wins become losses)
+        //     dragonstorm_smoke_d3  4.5133 -> 4.5200   (+0.0067, one game)
+        //     dragonstorm_smoke_d5  4.4667 -> 4.4800   (+0.0133, one game)
+        // The original diagnosis reproduces verbatim: the d0 greedy commits a discounted line the
+        // executor then strands on. The ritual guard cannot help because this stranding is REDUCER
+        // optimism (the credit assumes the Medallion resolves before the spells it discounts), not
+        // ritual self-funding. Note where the damage lands -- almost entirely at d0, barely at d3/d5:
+        // that IS the architecture. Optimism is safe exactly where a rollout validates the line and
+        // fatal where nothing does, which is the same law that makes tightening the ENUMERATOR wrong
+        // (see the mode-2 note on SeqRitualCreditMode). Kept as a lever, default off, so the next
+        // agent can re-measure in one command instead of re-implementing it a fourth time.
+        if (any_reducer && LeafReducerCreditEnabled())
+        {
+            const int rcred = CostTricksEnabled() ? SameTurnReducerGenericCredit(state, cands, sel) : 0;
+            if (rcred > 0)
+            {
+                combined.generic             = std::max(0, combined.generic - rcred);
+                noncreature_combined.generic = std::max(0, noncreature_combined.generic - rcred);
+            }
+        }
         bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
                                  : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
         // SEQUENCED ritual credit, applied LAZILY. The sequenced credit is never LARGER than the
@@ -8522,7 +8556,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         auto apply_seq = [&]()
         {
             if (seq_credit >= 0) { return; }
-            seq_credit = SequencedRitualCredit(pool, cands, sel);
+            // Pass state only when the leaf's own `combined` carries the discounts, so inner and
+            // outer prices always agree (see the soundness note on SequencedRitualCredit).
+            seq_credit = SequencedRitualCredit(pool, cands, sel, /*exclude=*/-1,
+                                               LeafReducerCreditEnabled() ? &state : nullptr);
             if (seq_credit >= simul_ritual_credit) { return; }
             const int back = simul_ritual_credit - seq_credit;
             eff.wild    -= back;
@@ -8676,7 +8713,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                         const bool r_gy   = cands[r].def && cands[r].def->params.ritual_float_gy_self_bonus;
                         const int  gy_r   = gy - (r_gy ? 1 : 0);
                         const int  cred_r = seq_bit
-                                          ? SequencedRitualCredit(pool, cands, sel, r)
+                                          ? SequencedRitualCredit(pool, cands, sel, r,
+                                                LeafReducerCreditEnabled() ? &state : nullptr)
                                           : (flat_sum - cands[r].ritual_float) + gy_r * (gy_r - 1) / 2;
 
                         ManaPool ewr = eff, encwr = eff_nc;

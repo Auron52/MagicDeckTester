@@ -606,3 +606,43 @@ Medallion credit is deliberately EnumeratePlans-only). So the leaf misprices Dra
 Medallion turns in the tight direction. Making the leaf reducer-aware on BOTH sides is a
 SCORING-accuracy change at the site where accuracy is wanted, not a prune -- the right shape of
 follow-up. It changes default play, so it needs the full three-tier cycle and a USER call.
+
+### The mirror image: leaf reducer credit RE-TESTED and REJECTED (MTG_LEAF_REDUCER_CREDIT)
+
+The follow-up proposed above -- "make the leaf reducer-aware, because that is a SCORING-accuracy fix
+at the site where accuracy is wanted" -- turned out to be a THIRD documented rejection. The note at
+`Solve::consider`'s `any_affinity` flag already recorded it: crediting the Medallion at the leaf let
+the d0 greedy commit a discounted Apex line the executor stranded on (smoke gi523 8->loss).
+
+Re-testing was still legitimate, on a specific and stated ground: that rejection predates the
+sequenced ritual credit at this very site, and stranding is exactly what the sequenced credit
+guards. So the question was whether the guard had made the reducer credit safe. It has not.
+Smoke with `MTG_LEAF_REDUCER_CREDIT=1`:
+
+| key | GT | credit on | delta |
+|---|---|---|---|
+| dragonstorm d0 | 5.3990 | **5.6140** | **+0.2150** -- eleven wins become LOSSES |
+| dragonstorm d3 | 4.5133 | 4.5200 | +0.0067 (one game) |
+| dragonstorm d5 | 4.4667 | 4.4800 | +0.0133 (one game) |
+
+The ritual guard cannot help here because this stranding is REDUCER optimism -- the credit assumes
+the Medallion resolves before the spells it discounts -- not ritual self-funding. Lever kept,
+default OFF, so a fourth attempt costs one command instead of a re-implementation.
+
+### The law both results establish
+
+Note WHERE the damage lands: almost entirely at d0, barely at d3/d5. The rollout catches the
+optimistic line at depth and there is nothing to catch it at d0. Put beside the mode-2 result, the
+two experiments bracket the same law from opposite directions:
+
+| site | has a rollout downstream? | correct posture | what the wrong posture costs |
+|---|---|---|---|
+| `EnumeratePlans` (branching) | YES -- every plan is rollout-scored | **OPTIMISTIC** | tightening it (mode 2) loses dragonstorm 6/8 held-out keys, 0 green |
+| `Solve::consider` (scoring/d0) | NO -- the greedy commits | **HONEST** | crediting it loses 11 d0 wins outright |
+
+So "reflect what is correct as closely as possible" is not a single global setting: the correct
+model depends on whether anything downstream can reject a wrong answer. Optimism is free where a
+rollout validates and fatal where nothing does; honesty is right where you commit and harmful where
+it narrows what the search may consider. **The shipped configuration -- MTG_RITUAL_SEQ_CREDIT=1,
+leaf reducer credit off -- is exactly this split, and both halves are now measured in both
+directions.**
