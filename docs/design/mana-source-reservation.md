@@ -215,6 +215,32 @@ and Grove's drip, under a Tainted Remedy, IS the damage that wins on turn 4. So 
 them — however correct it is about combat — throws the win condition away. Two references have now
 been lost to exactly this mechanism; a third attempt should expect it.
 
+**A FIFTH, tested after the user restated the rule as an invariant** (2026-08-17: *"there is no
+reason to use a creature over a land that produces the same thing or is less flexible"*, and
+*"creatures would be ranked at worst after lands that produce the same colours"*). Encoded
+faithfully and in ISOLATION this time — lands left in battlefield order, only each creature's
+INSERTION POINT set by flexibility (after every land whose `ManaSourceRank` is <= its own, before
+the more flexible ones). This is what arm 3 above should have been; arm 3 confounded it with
+depletion→55 and with ranking the lands among themselves.
+
+| | smoke | regression | held-out | references |
+|---|---|---|---|---|
+| creature inserted by flexibility | −0.0420 | +0.0250 | +0.0270 | **1 play-drift** |
+
+Rejected: net +0.0100, worse on two of three sets, and it breaks the same reference again. The
+mechanism is now unmistakable — Grove of the Burnwillows makes {R}{G}{C} (rank 30, +1 for the drip
+= 31) and Ignoble Hierarch makes {B}{R}{G} (rank 30), so the invariant slots the Hierarch just
+AHEAD of Grove. Grove is spared, its drip never fires, and Anti-Lifegain loses its turn-4 kill.
+
+**The invariant itself is not wrong — the shipped rule already satisfies it** (creatures after ALL
+lands is a superset of creatures after the same-or-less-flexible lands). What the invariant
+additionally LICENSES is spending a creature ahead of a MORE flexible land, and that is the
+scarcity direction, which has now lost six independent times: flow-scarcity (+0.0140), pure
+`ManaSourceRank` (+0.0050), rank-as-secondary-key (+0.0303), arm 3 (+0.0470), `ShouldAttackWith`
+(+0.0180 regression), and this (+0.0100). Every variant that keeps creatures STRICTLY LAST wins;
+every variant that lets a creature go before any land loses and takes the Grove reference with it.
+Three separate projects have now lost `claude_s5_gi4.json` to that one mechanism.
+
 Two structural facts that bound the remaining space, both checked rather than assumed:
 
 * **No deck in the repo holds both a storage land and a mana creature** (Dragonstorm has Dwarven Hold
@@ -322,7 +348,35 @@ Requirements the user stated explicitly; treat as authoritative alongside the sc
   but the greedy taps mana dorks that should have attacked, so the win is unreachable. Validate the
   reservation branch recovers it.
 
-## Recommended plan (oracle-first)
+## Recommended plan (oracle-first) — BUILT AND ANSWERED (2026-08-17): branching LOSES
+
+The audit below was prescribed here from 2026-07 and is now built, as
+`UnprunedGate::TapReserve` (`MTG_UNPRUNE=tapreserve`, default OFF, byte-identical when off).
+It emits one extra plan variant per base plan that SPENDS the mana creatures instead of
+sparing them (`Plan::tapmode_choice`, pinned for the whole apply by `ScriptedTapMode` because
+every payment in a turn must see one mode), so the rollout scores hold-vs-tap per line rather
+than taking the static rule on faith. Emitted only when the board holds an untapped mana
+creature, so it costs nothing on boards where the modes pay identically.
+
+**Verdict on the smoke tier: 3.08x the search time (882 s → 2,713 s) for +0.1001 WORSE play**
+(8 of 9 moved cases worse; only fivecolour d5 improved, −0.0133). Per-case cost is a uniform
+~2.1–4.4x at the searched depths. This is budget DILUTION: at a fixed per-decision budget,
+doubling the plan set buys each plan a shallower search, which is the same effect the
+heuristic-optimization skill documents for unbounded-vs-budgeted gate audits.
+
+So the answer to "does searching the tap choice beat a heuristic" is **no, not at any budget we
+run** — which is also the USER's own position (2026-08-17: *"I don't think we can afford to
+branch on mana decisions like this one"*). The gate is kept as an INSTRUMENT so the question is
+re-askable cheaply — notably UNBOUNDED, which is the skill's real test for a gate and which this
+budgeted run cannot answer. Nothing depends on it while it is off.
+
+**What this means for the heuristic:** the static rule is the right SHAPE here, not a
+placeholder for a search. That is the opposite of the usual conclusion in this repo (see the
+searched-decisions work, where axis after axis beat its heuristic), and the reason is that a tap
+choice is not a rare high-stakes pick like a tutor target — it happens on essentially every
+payment, so the branch multiplies the whole tree instead of adding a handful of leaves.
+
+The rest of this section is the original 2026-07 plan, kept for context:
 
 Add hold-vs-tap **branches under `MTG_UNPRUNED`** — 2^k over the k≈0–3 special sources on
 board — as an audit, *before* writing any heuristic. That reveals, per deck, whether

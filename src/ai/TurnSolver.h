@@ -366,6 +366,18 @@ public:
         // the same property that makes the name axis additive.
         int tutor_choice = -1;
 
+        // HOLD-vs-TAP of this turn's mana creatures. 0 (default) == the shipped heuristic (reserve
+        // every mana creature for the whole turn, and sort them last in the tap backtracker);
+        // 1 == spend them like any other source. Pinned for the apply (ScriptedTapMode) and NOT
+        // consumed by its first reader -- every payment in the turn must see the same mode.
+        //
+        // This axis exists because the decision is irreducibly situational and every static
+        // encoding of it lost: whether a body is worth more untapped than the mana it makes depends
+        // on whether anything pumps it, whether it swings for damage, and how finite the
+        // alternative source is. Gated on UnprunedGate::TapReserve -- default off, so the shipped
+        // heuristic is unchanged and this costs nothing until the audit asks for it.
+        int tapmode_choice = 0;
+
         // Goblin Lackey put (combat_damage_puts_subtype_from_hand): which candidate of the
         // provider's ranked CombatCheatCandidates the trigger puts onto the battlefield. -1
         // (default) == the provider's top pick, byte-identical to no branch. Unlike scry_choice and

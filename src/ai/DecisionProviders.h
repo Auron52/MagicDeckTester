@@ -76,6 +76,12 @@ enum class UnprunedGate
                   // the modes are pruned by default; human play always keeps them)
     UACast,       // Unexpectedly Absent hand-cast re-enumerated in autonomous search (USER doctrine
                   // 2026-08-14: "just not cast for now" -- pruned by default; human play keeps it)
+    TapReserve,   // the mana-CREATURE hold opened as a searched branch instead of a default: the
+                  // enumeration emits a second variant of each plan that spends its dorks rather
+                  // than sparing them, so the search scores hold-vs-tap per line instead of taking
+                  // the static "spare the body" rule on faith (USER doctrine 2026-08-17: "general
+                  // rules themselves lose to situational awareness"; the oracle-first audit
+                  // docs/design/mana-source-reservation.md has prescribed since 2026-07)
     MainPhase,    // main-phase classification filter disabled: enumerate every cast in the
                   // pre-combat main instead of deferring Main2-classified casts to the post-combat
                   // main (USER design 2026-08-14, docs/design/main-phase-classification.md;
