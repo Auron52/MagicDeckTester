@@ -2494,10 +2494,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                      // deferred re-solve after these, so the executor must classify them the same
                      // way or the committed continuation replays at the wrong breakpoint.
                      || (AcqResolveEnabled()
-                         && (d->params.damage_equals_top_mv || d->params.tutor_to_hand))
-                     // MTG_ACQ_DIG: rollout arms a deferred re-solve after an ETB dig cast, so
-                     // the executor must classify it the same way (breakpoint-index lockstep).
-                     || (AcqDigEnabled() && d->params.etb_dig_count > 0));
+                         && (d->params.damage_equals_top_mv || d->params.tutor_to_hand)));
+                     // MTG_ACQ_DIG is deliberately ABSENT here: the lever is depth-0-only
+                     // (note_draw_engine above) -- the rollout never arms a dig breakpoint,
+                     // so classifying one here would desync full-depth replay. See the
+                     // rejected searched-depth arm at TurnSolver's PerformEtbDig site.
     };
 
     // SCRIPTED draw breakpoint for COMMIT-THE-LINE replay (MTG_FULL_DEPTH): cast the

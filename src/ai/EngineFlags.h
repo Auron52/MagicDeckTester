@@ -48,14 +48,19 @@ inline bool AcqResolveEnabled()
 // MTG_ACQ_RESOLVE acquisition family to the ETB library dig (etb_dig_count -- Acclaimed Contender,
 // the only such card today). The dig puts a same-phase-castable card into hand at resolution, but
 // the plan was enumerated before it existed: TurnSolver performs the dig inline and its own comment
-// records "the dug card is cast on a later turn, not re-solved this turn". Arm the deferred
-// post-cast re-solve so a dug Knight is castable with this turn's leftover mana -- the USER's
-// Knights-review intent ("we probably should encode this now and work toward making it part of the
-// calculation", 2026-08-19). Scope: the CAST path only; a VIAL-deployed digger stays un-armed on
-// BOTH sides (the executor's Vial loop has no draw-engine classification or full-depth replay
-// hook), which is lockstep-consistent -- recorded as the open edge if measurement wants it. Read by
-// the rollout apply (TurnSolver) and the executor's draw-engine classification (AIEngine) --
-// shared reader.
+// records "the dug card is cast on a later turn, not re-solved this turn". This lever gives the
+// DEPTH-0 EXECUTOR a post-cast second pass (AIEngine note_draw_engine) so a dug Knight is castable
+// with this turn's leftover mana -- the USER's Knights-review intent ("we probably should encode
+// this now and work toward making it part of the calculation", 2026-08-19).
+// SCOPE = d0 ONLY, a measured rejection, not an oversight: the first arm also armed the rollout's
+// deferred re-solve at searched depths, and held-out it went 6/8 searched keys RED
+// (+0.002..+0.006) against d0 4/4 green -- the arming re-biased plan selection toward digger
+// lines whose pruned greedy continuation misplayed the committed turn, plus dig-reorder variance.
+// Searched depths are byte-identical by construction (no rollout arming, no is_draw_engine
+// classification -- nothing to keep in breakpoint lockstep). CAST path only; a VIAL-deployed
+// digger has no second pass (the executor's Vial loop has no draw-engine classification) --
+// recorded open edge. Shared-reader placement kept for the lockstep comment trail even though
+// only the executor reads it today.
 inline bool AcqDigEnabled()
 {
     static const bool v = EnvOn("MTG_ACQ_DIG");

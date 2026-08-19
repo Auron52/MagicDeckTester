@@ -10801,18 +10801,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 PerformEtbDig(state, state.active_player_index, def.params,
                               &state.battlefield.back());
-                // MTG_ACQ_DIG (mid-phase acquisition family, EngineFlags.h): the "later turn"
-                // above is the hole -- the dug card competes for THIS turn's remaining mana
-                // exactly like a tutor fetch, so arm the same deferred post-cast re-solve
-                // (USER, Knights review 2026-08-19: make the dig "part of the calculation").
-                // Armed unconditionally on the param (not on whether the dig HIT): the
-                // executor's classification is name-based and cannot know, and the two worlds
-                // must classify the same casts as breakpoints or committed continuations
-                // replay at the wrong index. A whiffed dig's re-solve is a no-op.
-                // CAST path only -- a Vial deploy stays un-armed on both sides (see flag note).
-                if (AcqDigEnabled() && !s_human_play && sink_stack.empty())
-                { deferred_cantrip_resolve = true; deferred_cantrip_site = &def;
-                  deferred_hand_before = hand_at_cast; }
+                // MTG_ACQ_DIG is deliberately NOT armed here (rollout side): the first
+                // measurement (2026-08-19, train + held-out) had this arm and it turned 6/8
+                // held-out searched keys red (+0.002..+0.006) while d0 went 4/4 green -- the
+                // arming re-biases plan selection toward digger lines whose pruned greedy
+                // continuation then misplays the committed turn (gi236 class), and the dig's
+                // bottom-of-library reorder makes the rest variance. The lever is scoped to
+                // the DEPTH-0 EXECUTOR second pass only (AIEngine note_draw_engine); searched
+                // depths stay byte-identical by construction, so there is no breakpoint
+                // classification to keep in lockstep. Re-arming here is a recorded rejection:
+                // re-measure before proposing it again.
             }
 
             // Legend rule: a duplicate legendary just cast is put into the graveyard, so a
