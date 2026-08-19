@@ -9,7 +9,7 @@ It is NOT the route for adopting a combination as a deck (mulligan-profile + val
 decision heuristic (heuristic-optimization). A card the engine does not implement *is* in scope, but
 only through analyze-deck — see **The new-card route** below.
 
-## Rule 0a — NEVER BUILD A UNION DECK. This overrides everything below.
+## Rule 0a — "UNION DECK" IS A BANNED WORD. This overrides everything below.
 
 **Do not construct a superset/"union" DECKLIST containing every candidate card and generate a
 mulligan table for it. Not ever, for any deck, at any size, for any reason.** This is a standing
@@ -18,11 +18,25 @@ user directive, given twice:
 > *"What is this union deck nonsense. It seems like a waste of time and energy."* — 2026-08-18
 > *"I never want a union deck!" ... "Absolutely never."* — 2026-08-19
 
+### Vocabulary — say "union TABLE", never "union deck"
+
+The user has asked that **"union deck" be treated as a banned word** (2026-08-19), because the two
+things it gets used for are opposites:
+
+| term | meaning | status |
+|---|---|---|
+| ~~union deck~~ | a superset DECKLIST holding every candidate at once | **BANNED — never say it, never build it** |
+| **union table** | one keep table whose cells are the union of what several REAL 60-card decklists can hold | **the correct artifact** |
+
+Use "union table over the N combinations we are considering". If you catch yourself writing "union
+deck", you are almost certainly about to build the banned thing.
+
 **The distinction that matters — read this before concluding anything is forbidden.** The banned
 object is a *decklist nobody would play*. A **union TABLE whose coverage is the set of plausible
 60-card combinations under test is fine, and is the correct way to share an apparatus** (user,
 2026-08-19: *"A union table based on a number of different plausible combinations that we want to
-test is different."*). Concretely:
+test is different."*, and *"Let's do the union table with real cells from 60-deck combinations we
+are considering."*). Concretely:
 
 | | verdict |
 |---|---|
@@ -45,6 +59,26 @@ union is under test", built a 74-card / K=20 / **1,167,340-cell** table, and bur
 a saturated 32-core box before the user stopped it. The rationalisation is the failure mode: the
 user's one narrow carve-out — *"unioning the table between some number of decklists we want to
 test makes sense"* — does **not** license a superset over every candidate across every future test.
+
+### The mechanism: `MTG_KEEP_ARM_DECKS` (built 2026-08-19)
+
+```bash
+MTG_KEEP_ARM_DECKS=arm1.txt,arm2.txt,...   # <=64 REAL 60-card decklists
+```
+
+The generator takes the per-bucket **MAX** across arms as its envelope (never their sum), then
+**drops every composition no arm can hold** and stamps each surviving cell with a 64-bit **arm
+mask** (bit a = "arm a can hold this hand"). Unset => old single-deck behaviour, byte-identical.
+The decklist argument then only supplies the bucket space; the CELLS come from the arms. Measured:
+
+| shape | kept / envelope | dropped |
+|---|---|---|
+| ratio sweep, 4 arms (Twinflame/Libation) | 289,064 / 291,738 | 0.9% |
+| one 2-card slot, 4-way swap | 330,087 / 407,114 | **18.9%** |
+| all 60 plausible tournament arms | 529,868 / 574,405 | 7.8% |
+
+It also settles one-table-vs-append: ONE filtered table over all 60 arms is 529,868 cells against
+~1,240,000 for four per-test tables — **2.3x cheaper, serves every test, no append machinery**.
 
 **Do this instead.** Cover exactly the arms you will run — nothing more. Either generate a table
 per REAL 60-card decklist and pool them with **`scripts/keepstore.py`** (the cell-by-arm store the
