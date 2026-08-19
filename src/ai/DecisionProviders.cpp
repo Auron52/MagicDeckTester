@@ -6977,6 +6977,11 @@ int FiveColourProvider::CastOrderRank(const GameState& s, const CardDefinition& 
         // bodies cheapest-first -> walkers -> [dorks last otherwise].
         if (p.multicolor_cast_damage_per_color)      { return 4; }   // Cannons: before every multicolored cast
         if (p.mana_rock)                             { return 5; }   // Cornucopia
+        // A FREE sac-for-mana artifact (the Black Lotus copy Garth conjures -- no such card is
+        // in the decklist itself) is the arch-accelerant, so it joins the rock tier: cast first,
+        // it can fund everything after it. Only reachable through MTG_GARTH_ORDERED's copy-def
+        // ranking (OrderDefOf); inert otherwise. Disclosed as an encoding choice, not a ruling.
+        if (p.sac_for_mana_amount > 0)               { return 5; }   // Black Lotus (Garth copy)
         if (p.is_equipment && p.equip_grants_haste)  { return 6; }   // Greaves: unlock before the dorks/bodies
         if (p.modal_choose_n > 0)                    { return 7; }   // Unite
         if (def.card.IsCreature() && !p.produces.empty())

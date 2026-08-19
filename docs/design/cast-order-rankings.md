@@ -273,6 +273,24 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 
 ## FiveColour
 
+### Ability-timing rulings (USER, 2026-08-19 — the activation-doctrine axis)
+
+* **Jared Carthalion (loyalty): "activated right before attack phase (or after he is played)."**
+  VERIFIED ALREADY STRUCTURAL: `ActivateLoyalty` executes in the post-cast dispatch of both
+  worlds — after every main-1 cast, before combat — so the rule holds by construction; the
+  per-turn activate-or-not choice is the search's. Nothing was changed.
+* **Garth One-Eye (tap): "order his spells like the rest and he should tap at those times if we
+  choose that option ... Because he must cast them immediately"** (WotC ruling: the copy is cast
+  as the ability resolves — no holding). Encoded behind `MTG_GARTH_ORDERED` (DEFAULT OFF): the
+  activation joins the ordered cast sequence at the COPY's provider rank (`OrderDefOf`;
+  Shivan 160, Braingeyser/Regrowth/Terror 210, Black Lotus joins the accelerant tier at 5 — an
+  encoding choice, disclosed). MEASURED train: searched keys BYTE-IDENTICAL (executed searched
+  games never reach a Garth tap on these seeds), d0 1/1000 WORSE (gi922: ordered ahead of the
+  casts, the copy's payment competes for sources first instead of eating leftovers, and the
+  greedy d0 executor cannot re-plan — the parked whole-turn-allocation class). Kept default
+  OFF; revisit when a deck actually exercises the tap in play. An earlier "tap at the start of
+  the turn" form was superseded by the USER mid-review.
+
 **REVIEW HELD AND ADOPTED (USER, 2026-08-19) — `MTG_5C_ORDER` + `MTG_5C_PHASE` are DEFAULT ON
 (`=0` reverts each; the phase lever is the FIRST per-deck `ClassifiesMainPhases` opt-in).**
 Held-out evidence (overnight, 12 per-deck keys, with the Progenitus protection fix): order alone

@@ -586,10 +586,25 @@ int CastOrderKey(const GameState& state, const CardDefinition* def, int rank)
     return key + (mp == 0 ? 0 : (mp == 2 ? 1 : 2));
 }
 
+// The definition an action's ORDER derives from. Under MTG_GARTH_ORDERED a Garth activation IS
+// the cast of its conjured copy (WotC ruling: the copy is cast as the ability resolves -- there
+// is no choosing when; USER 2026-08-19: "order his spells like the rest and he should tap at
+// those times"), so it ranks, ladders and projects as the COPY, not as Garth's own card. Every
+// other action keeps the historical resolution -- lever off is byte-identical.
+static const CardDefinition* OrderDefOf(const Action& a)
+{
+    if (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate)
+    {
+        if (const CardDefinition* cd = CardDatabase::Instance().Lookup(a.tutor_target))
+        { return cd; }
+    }
+    return a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+}
+
 bool CastOrderLess(const GameState& state, const Action& a, const Action& b)
 {
-    const CardDefinition* da = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-    const CardDefinition* db = b.def ? b.def : CardDatabase::Instance().Lookup(b.card_name);
+    const CardDefinition* da = OrderDefOf(a);
+    const CardDefinition* db = OrderDefOf(b);
     const int ra = CastOrderKey(state, da, da ? ResolveProvider(state).CastOrderRank(state, *da) : 20);
     const int rb = CastOrderKey(state, db, db ? ResolveProvider(state).CastOrderRank(state, *db) : 20);
     return CastOrderLessRanked(state, a, ra, b, rb);
@@ -677,7 +692,7 @@ static bool LadderProjectable(const GameState& state, const std::vector<Action>&
         const Action& a = acts[i];
         if (a.alt_cost) { continue; }                       // pays no mana at all
         if (a.has_spectacle && !state.opponent_lost_life_this_turn) { return false; }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = OrderDefOf(a);   // Garth activation projects as its copy
         if (!d) { return false; }
         if (SoulfireOwnTargetDiscount(*d, state, active, a.soulfire_own_targets) > 0) { return false; }
         if (HinataGenericDiscount(*d, state, a.chosen_x) > 0) { return false; }
@@ -832,7 +847,7 @@ void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>
     for (int i : order)
     {
         const Action& a = acts[i];
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const CardDefinition* d = OrderDefOf(a);   // Garth activation ranks as its copy
         const std::vector<int> fb =
             d ? ResolveProvider(state).CastOrderFallbackRanks(state, *d) : std::vector<int>{};
         if (!fb.empty())

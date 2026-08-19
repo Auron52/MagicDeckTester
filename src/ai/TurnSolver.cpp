@@ -11661,6 +11661,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 return a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
                     && ResolveProvider(state).CastEnablerFirst(state, a.card_name);
             };
+            // MTG_GARTH_ORDERED: the activation IS the copy's cast (WotC ruling -- cast as the
+            // ability resolves, no holding), so it joins the ordered sequence at the copy's rank
+            // (OrderDefOf) instead of the trailing activation dispatch. Lever off -> neither
+            // collection includes it and the trailing dispatch applies it as before.
+            auto is_ordered_garth = [&](const Action& a)
+            { return GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate; };
+            auto apply_garth = [&](const Action& a)
+            {
+                if (TapForCostDirect(state, a.cost, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
+                { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x); }
+            };
             if (opaque)
             {
                 // Enablers apply in CastOrderRank order (stable; equal ranks keep plan order ->
@@ -11716,7 +11727,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i = 0; i < static_cast<int>(acts.size()); ++i)
                 {
                     const Action& a = acts[i];
-                    if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
+                    if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
+                        || is_ordered_garth(a))
                     { ord.push_back(i); }
                 }
                 if (OpaqueCastOrderActive(state))
@@ -11729,6 +11741,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i : ord)
                 {
                     const Action& a = acts[i];
+                    if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); fire_unlock();
                 }
             }
@@ -11741,7 +11754,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 std::vector<int> order;
                 for (int i = 0; i < static_cast<int>(acts.size()); ++i)
                 {
-                    if (acts[i].kind == Action::Kind::CastFromHand && !acts[i].sacrifice_land)
+                    if ((acts[i].kind == Action::Kind::CastFromHand && !acts[i].sacrifice_land)
+                        || is_ordered_garth(acts[i]))
                     { order.push_back(i); }
                 }
                 std::stable_sort(order.begin(), order.end(), [&](int x, int y)
@@ -11754,6 +11768,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i : order)
                 {
                     const Action& a = acts[i];
+                    if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     prep_free(a);
                     apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
                     fire_unlock();
@@ -12035,7 +12050,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         else if (a.kind == Action::Kind::GarthActivate)
         {
             // Garth One-Eye: pay the conjured copy's cost, then tap + choose + cast it.
-            if (TapForCostDirect(state, a.cost, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
+            // Under MTG_GARTH_ORDERED the activation already applied inside the ordered cast
+            // sequence at the copy's rank (see apply_plan_actions) -- skip the trailing slot.
+            if (!GarthOrderedEnabled()
+                && TapForCostDirect(state, a.cost, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
             { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x); }
         }
     }

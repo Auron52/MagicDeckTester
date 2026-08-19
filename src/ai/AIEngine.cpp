@@ -2960,6 +2960,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
     {
         const Action& a = plan.actions[i];
+        // MTG_GARTH_ORDERED: the activation IS the copy's cast, so it joins the ordered
+        // sequence at the copy's rank (mirrors ApplyPlanDirect -- lockstep).
+        if (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate)
+        { ord.push_back(i); continue; }
         if (a.kind != Action::Kind::CastFromHand) { continue; }
         if (!a.alt_cost && (a.sacrifice_land
                             || ResolveProvider(state).CastEnablerFirst(state, a.card_name)))
@@ -2976,7 +2980,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (int oi : ord)
     {
         const Action& a = plan.actions[oi];
-        if (a.kind == Action::Kind::CastFromHand && a.alt_cost)
+        if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
+        {
+            ManaPool avail = AvailableManaPool(state);
+            if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
+            { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x); }
+        }
+        else if (a.kind == Action::Kind::CastFromHand && a.alt_cost)
         {
             cast_alt(a.card_name, a.alt_lifegain); resolve_now();
         }
@@ -3018,7 +3028,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
     {
         const Action& a = plan.actions[i];
-        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land) { order.push_back(i); }
+        if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+            || (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate))
+        { order.push_back(i); }
     }
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
     { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
@@ -3030,6 +3042,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (int oi : order)
     {
         const Action& a = plan.actions[oi];
+        if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
+        {
+            ManaPool avail = AvailableManaPool(state);
+            if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
+            { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x); }
+            continue;
+        }
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
         cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
     }
@@ -3218,10 +3237,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         else if (a.kind == Action::Kind::GarthActivate)
         {
-            // Garth One-Eye (executor mirror).
-            ManaPool avail = AvailableManaPool(state);
-            if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
-            { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x); }
+            // Garth One-Eye (executor mirror). Under MTG_GARTH_ORDERED it already applied
+            // inside the ordered cast sequence at the copy's rank -- skip the trailing slot.
+            if (!GarthOrderedEnabled())
+            {
+                ManaPool avail = AvailableManaPool(state);
+                if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
+                { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x); }
+            }
         }
         else if (a.kind == Action::Kind::Channel)
         {

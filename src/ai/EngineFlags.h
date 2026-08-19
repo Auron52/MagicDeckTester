@@ -23,6 +23,28 @@ inline bool Main2DropEnabled()
     return v;
 }
 
+// MTG_GARTH_ORDERED=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
+// Garth One-Eye's tap IS the cast of its conjured copy (WotC ruling, already in the card model:
+// the copy is cast as the ability resolves -- no holding it). USER doctrine 2026-08-19: "order
+// his spells like the rest and he should tap at those times if we choose that option ...
+// Because he must cast them immediately." Under the lever the activation joins the ordered
+// main-phase cast sequence at the COPY's provider rank (OrderDefOf in ManaPayment.cpp) instead
+// of the fixed post-cast dispatch position it has today. Read by the comparator/ladder
+// (ManaPayment), the rollout apply (TurnSolver::ApplyPlanDirect) and the executor
+// (AIEngine::TakeTurn) -- shared reader per the lockstep rule.
+// MEASURED (train, fivecolour, 2026-08-19): searched keys BYTE-IDENTICAL (Garth taps do not
+// occur in executed searched games on these seeds -- he lands T4-5 and the games end first);
+// d0 1/1000 worse (gi922 7->8): ordered ahead of the casts, the copy's payment competes for
+// sources FIRST instead of eating leftovers, and the greedy d0 executor has no whole-turn
+// payment planning to compensate (the parked mana-affordability arc's allocation class).
+// Kept DEFAULT OFF: faithful to the doctrine, but inert where search decides and net-negative
+// at d0. Revisit if a longer-game deck actually exercises Garth's tap.
+inline bool GarthOrderedEnabled()
+{
+    static const bool v = EnvOn("MTG_GARTH_ORDERED");
+    return v;
+}
+
 // MTG_ACQ_RESOLVE=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
 // mid-phase ACQUISITION re-solve family. A cast that puts new castable resources in hand mid-plan
 // without drawing -- a tutor-to-hand fetch (Gamble) or a staged exile dig (Soulfire Eruption's
