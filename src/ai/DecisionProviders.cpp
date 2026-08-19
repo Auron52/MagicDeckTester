@@ -6913,6 +6913,47 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
     bool any_uncovered_want = false;
     for (int i = 0; i < NC; ++i) { if (want[i] > 0 && src_cnt[i] == 0) { any_uncovered_want = true; } }
 
+    // RULE 6 (user, 2026-08-18): "we probably should have a way to get triomes when we can
+    // determine there is no need for the land to enter untapped ... triomes make coverage very
+    // very easy as long as you can be confident that you don't need the colours [this turn]."
+    //
+    // The predicate is "can this land's mana actually be SPENT this turn": does ONE more mana of
+    // colour c let us cast something we cannot already cast? When nothing unlocks, entering
+    // untapped buys nothing, so the two untapped-preferring terms fall silent and `breadth`
+    // decides -- and a triome covers three colours to a dual's two, so the triome wins on its own
+    // merits rather than needing a rule of its own.
+    //
+    // Concretely this is what stops a T1 hand holding only Faeburrow Elder ({1}{G}{W}, MV 3) from
+    // taking an untapped green dual over a triome: enables_now fires on "green turns on an
+    // accelerant" without ever asking whether ONE mana can cast it. Birds of Paradise ({G}) still
+    // scores, because one green really does cast it -- which is the Part 1 behaviour we must keep.
+    std::array<bool, NC> accel_unlocks{};   // one more mana of colour c casts an ACCELERANT
+    std::array<bool, NC> any_unlocks{};     // one more mana of colour c casts ANYTHING
+    {
+        const ManaPool pool_now = AvailableManaPool(s);
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d || d->card.IsLand()) { continue; }
+            const ManaCost& mc = d->card.m_mana_cost;
+            // Already castable -> this land is not the marginal mana for it, so it says nothing
+            // about whether the land must enter untapped.
+            if (pool_now.CanPay(mc)) { continue; }
+            const bool accel = (d->tmpl == CardTemplate::ManaDork) || d->params.mana_rock;
+            for (int i = 0; i < NC; ++i)
+            {
+                if (any_unlocks[i] && (!accel || accel_unlocks[i])) { continue; }
+                ManaPool p = pool_now;
+                p.Add(static_cast<Color>(i));
+                if (p.CanPay(mc))
+                {
+                    any_unlocks[i] = true;
+                    if (accel) { accel_unlocks[i] = true; }
+                }
+            }
+        }
+    }
+
     struct Key
     {
         int enables_now = 0, accel_new = 0, spell_new = 0, breadth = 0;
@@ -6955,7 +6996,15 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
         // Only a land that can enter UNTAPPED can pay for something this turn. A shock pays 2 life
         // for the privilege, which the engine's own entry choice already weighs; here it is just a
         // tiebreak, and only while a wanted colour is still missing.
-        k.untapped = (any_uncovered_want && !d->params.enters_tapped) ? 1 : 0;
+        // RULE 6: and only while that mana can actually be SPENT this turn -- otherwise
+        // untapped is worth nothing and a tapped triome's extra colour should not be given away.
+        bool spendable = false;
+        for (Color col : d->params.produces)
+        {
+            const int i = static_cast<int>(col);
+            if (i >= 0 && i < NC && any_unlocks[i]) { spendable = true; break; }
+        }
+        k.untapped = (any_uncovered_want && !d->params.enters_tapped && spendable) ? 1 : 0;
         // ENABLES A PLAY THIS TURN (user doctrine 2026-08-18: "the priority is getting to 5 colours,
         // starting with Green T1 and prioritizing other colours we might need in our hand after
         // that ... White is a good bet for T2 if we have Faeburrow Elder in hand").
@@ -6973,6 +7022,10 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
             {
                 const int i = static_cast<int>(col);
                 if (i < 0 || i >= NC || src_cnt[i] != 0) { continue; }
+                // RULE 6: "turns on an accelerant" must mean one we can actually cast
+                // THIS TURN. Without this, a T1 hand holding only Faeburrow ({1}{G}{W}) scores a
+                // green dual as if it deployed a dork, and beats a triome for nothing.
+                if (!accel_unlocks[i]) { continue; }
                 k.enables_now = std::max(k.enables_now, accel_hits[i]);
             }
         }
@@ -7047,6 +7100,10 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
         for (int i = 0; i < NC; ++i) { if (land_cnt[i]) { std::cerr << kCol[i] << land_cnt[i]; } }
         std::cerr << " wantdeep=";
         for (int i = 0; i < NC; ++i) { if (want_deep[i]) { std::cerr << kCol[i] << want_deep[i]; } }
+        std::cerr << " unlock=";
+        for (int i = 0; i < NC; ++i) { if (any_unlocks[i]) { std::cerr << kCol[i]; } }
+        std::cerr << " aunlock=";
+        for (int i = 0; i < NC; ++i) { if (accel_unlocks[i]) { std::cerr << kCol[i]; } }
         std::cerr << "] ";
         for (const Key& k : keys)
         {

@@ -233,10 +233,71 @@ Status:
 | 3 | white on T2 for Faeburrow | **DONE** — falls out of `accel_hits` (no separate rule) |
 | 4a | green T1 > black T1 (Deathrite) | **DONE** — and now actually correct, see the hybrid fix |
 | 5 | dorks count then stop counting; 2 of each; multi-spell turns | **DONE** — `soft_new` + land-keyed `depth` + summed/horizon `want_deep` |
+| 6 | prefer a TRIOME when we can prove the land need not enter untapped | **DONE** — see Part 3 |
 | 4b | play a SHOCK FROM HAND on T1 if it makes green | **NOT DONE** — a different decision (which land to PLAY, not which to fetch); lives in the land-drop choice, not `FetchCandidates`. |
-| 6 | prefer a TRIOME when we can prove the land need not enter untapped | **NOT DONE** — user, 2026-08-18: "triomes make coverage very very easy as long as you can be confident that you don't need the colours [this turn]". Needs a "does this turn's plan spend mana that this land must supply" predicate; see below. |
-| 7 | let the ranking consult the CURRENT PLAN | **NOT DONE** — user, 2026-08-18: "the heuristic should take advantage of what we know about the current plan if possible". Subsumes 6, and would replace the `bf_sources + 2` horizon proxy with the plan's actual spend. |
+| 7 | let the ranking consult the CURRENT PLAN | **NOT DONE** — user, 2026-08-18: "the heuristic should take advantage of what we know about the current plan if possible". Would replace both the `bf_sources + 2` horizon proxy and Part 3's hand-based unlock proxy with the plan's actual spend. `PlanContext.h` already exposes exactly this (`CurrentPlanContext()`, `PlanContextRest()`). **Read that header's warning first:** making one input plan-accurate while the rest stayed calibrated to the old proxy measured WORSE on the tutor axis (+18 held-out, `MTG_TUTOR_AXIS_POSTLAND`) — the cluster has to move together. |
 
-Rules 6 and 7 are the same lever seen from two sides and should be built together: both need the
-fetch ranking to see what this turn's plan intends to cast, rather than inferring it from hand
-contents and a source count. Rule 4b remains a separate hook (the land-drop choice).
+Rule 4b remains a separate hook (the land-drop choice).
+
+---
+
+# Part 3 — triomes when the mana is not needed this turn (ADOPTED 2026-08-19, held-out −0.1114)
+
+> "We probably should have a way to get triomes when we can determine there is no need for the land
+> to enter untapped. That's a trickier rule, but likely worthwhile … because triomes make coverage
+> very very easy as long as you can be confident that you don't need the colours." (user, 2026-08-18)
+
+## The rule needs no triome term
+
+The doctrine already prefers a triome on raw coverage: a triome covers three colours to a dual's
+two, so it wins `breadth` outright. What was beating it was the pair of untapped-preferring terms —
+and **both fire without ever asking whether the mana could be spent this turn**:
+
+- `enables_now` (the TOP key) fires on "an untapped land makes a missing colour that an accelerant
+  in hand wants". On T1 holding only Faeburrow Elder (`{1}{G}{W}`, MV 3), a green dual scored as if
+  it deployed a dork — with one mana available, it deploys nothing.
+- `untapped` (a tiebreak) fires on "enters untapped while a wanted colour is missing", regardless
+  of whether that extra mana buys anything.
+
+So the rule is implemented as a *precondition on the existing terms*, not a new triome bonus:
+
+```
+unlocks[c] := some nonland card in hand is NOT castable from AvailableManaPool(s),
+              but IS castable from that pool plus one mana of colour c
+```
+
+computed once per fetch (hand x 6 colours, short-circuited), in two flavours — `accel_unlocks`
+(the accelerant question, gating `enables_now`) and `any_unlocks` (gating `untapped`). When nothing
+unlocks, both terms fall silent, `breadth` decides, and the triome wins on its own merits.
+
+Birds of Paradise (`{G}`) still scores `enables_now` on T1, because one green really does cast it —
+which is exactly the Part 1 behaviour that must not regress. Reference `claude_s7_gi6`, the game the
+`enables_now` key was built for, still matches the hand-played line.
+
+## Measured
+
+| arm | d0 train (60k games) | searched train (8.4k) | searched cells better |
+|---|---|---|---|
+| ENCAST only (gate `enables_now`) | −0.0061 | −0.0045 | 6 / 6 |
+| UNCAST only (gate `untapped`) | −0.0082 | −0.0026 | 5 / 6 |
+| **BOTH (adopted)** | **−0.0126** | −0.0039 | 5 / 6 |
+
+**HELD-OUT (overnight 4004–10010): cell-sum −0.1114, 9 better / 1 worse / 2 unchanged;
+games-weighted −0.0128 turns/game over 10,800 games** — which reproduces the d0 train estimate
+(−0.0126) to within 0.0002. All four held-out d0 cells improve. The one worse cell is +0.0025 on
+400 games: a single game, a single turn.
+
+## Two methodology notes worth keeping
+
+**The suite's cell-sum metric nearly reversed the decision.** Summing per-cell deltas weights a
+75-game cell the same as a 1000-game cell. On that metric the arms read smoke +0.0597 / regression
+−0.0370 — the two train tiers disagreeing in SIGN — because smoke's d3/d5 cells hold 150 and 75
+games, where ONE game moves the average by 0.0067 and 0.0133 respectively. Games-weighted, all
+three arms were improvements. **The smoke tier still gets worse under the adopted change** (d3
+5.0200→5.0467, d5 5.1600→5.2000) and that is expected: those two cells cannot resolve a 0.01 effect.
+Do not read them as a regression.
+
+**The fix was to buy resolution, not to guess.** d0 costs ~24 ms/game, so 60,000 train games across
+the three train seeds cost minutes and settled the sign outright: per-seed deltas of −0.0130 /
+−0.0123 / −0.0124, a spread of 0.0007 against an effect of 0.0126. The held-out run then reproduced
+that number independently. Held-out was used ONCE, on the arm train had already chosen.
