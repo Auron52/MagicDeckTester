@@ -82,10 +82,16 @@ Scoped-arm evidence: train green-or-flat, held-out 7 green / 5 flat / 0 red, per
 
 ## Auras
 
+**FLAG FIX (2026-08-19):** `feeds_combat` was a false negative for this deck — `DeckFeedsCombat`
+scanned `power_bonus`/`scales_per_matching` but auras pump via `aura_power_bonus`/`aura_scale_*`.
+Found in the 2026-08-18 review; play-inert (this deck reads `uses_second_main=no`, so the phase
+filter never runs — smoke 36/36 byte-identical after the fix), but the m1/m2 column below is now
+computed from the correct flag.
+
 ```
 # Cast order -- decks/Auras/Auras.cod
 # provider: Generic   ideal-order draw tier: off   cantrip max mv: 1
-# deck flags: feeds_combat=no uses_second_main=no enabler_pull=no castpayoff_pull=no
+# deck flags: feeds_combat=yes uses_second_main=no enabler_pull=no castpayoff_pull=no
 # main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
 #
 # rank  range      main  n  mv  card
@@ -100,20 +106,20 @@ Scoped-arm evidence: train green-or-flat, held-out 7 green / 5 flat / 0 red, per
   10     -   m2    4  2  Light-Paws, Emperor's Voice
 #
 # [20] other noncreature spell
-  20     -   m2    1  1  Audacity
-  20     -   m2    4  1  Ethereal Armor
-  20     -   m2    1  1  Gryff's Boon
-  20     -   m2    1  1  Hyena Umbra
-  20     -   m2    4  1  Rancor
-  20     -   m2    1  1  Spider Umbra
-  20     -   m2    1  1  Spirit Link
-  20     -   m2    1  2  All That Glitters
-  20     -   m2    1  2  Alpha Authority
-  20     -   m2    4  2  Daybreak Coronet
-  20     -   m2    1  2  Lion Umbra
-  20     -   m2    1  2  Spirit Mantle
-  20     -   m2    4  3  Ancestral Mask
-  20     -   m2    1  3  Armadillo Cloak
+  20     -   m1    1  1  Audacity
+  20     -   m1    4  1  Ethereal Armor
+  20     -   m1    1  1  Gryff's Boon
+  20     -   m1    1  1  Hyena Umbra
+  20     -   m1    4  1  Rancor
+  20     -   m1    1  1  Spider Umbra
+  20     -   m1    1  1  Spirit Link
+  20     -   m1    1  2  All That Glitters
+  20     -   m1    1  2  Alpha Authority
+  20     -   m1    4  2  Daybreak Coronet
+  20     -   m1    1  2  Lion Umbra
+  20     -   m1    1  2  Spirit Mantle
+  20     -   m1    4  3  Ancestral Mask
+  20     -   m1    1  3  Armadillo Cloak
 ```
 
 ## Creature Giving

@@ -134,6 +134,18 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
         if (p.power_bonus > 0 || p.tough_bonus > 0)                          { return true; }
         if (p.scales_per_matching || p.affects_all_creatures
             || p.domain_self_pump || p.power_equals_creature_count)          { return true; }
+        // AURA pumps live on their own params (aura_power_bonus / aura_scale_*), which this scan
+        // missed: the Auras/Bogles deck -- a deck that wins purely by pumped combat -- read
+        // feeds_combat=no (found in the 2026-08-18 cast-order review; inert in play only because
+        // that deck also reads uses_second_main=no, so the phase filter never runs). Same for the
+        // per-cast trick pumps (pump_per_*: Fists of Flame / Gold Rush / Fortifying Draught /
+        // Luxurious Libation) and a permanent +1/+1 counter -- all attack-feeding, all in the
+        // stated WIDE direction (a false positive only keeps casts pre-combat).
+        if (p.aura_power_bonus > 0 || p.aura_tough_bonus > 0
+            || p.aura_scale_power > 0 || p.aura_scale_tough > 0)             { return true; }
+        if (p.pump_per_cards_drawn_power > 0 || p.pump_per_treasure_power > 0
+            || p.pump_per_life_gained_power > 0 || p.pump_per_x_power > 0
+            || p.counters_on_target > 0)                                     { return true; }
     }
     return false;
 }
