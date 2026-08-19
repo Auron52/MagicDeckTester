@@ -903,3 +903,105 @@ abandon ceiling — see the gi=20 note above). And per the standing lesson, the 
 judged on avg turns alone: **verify the loop ROUND-TRIPS**, park then un-park, by turn. A park that
 never un-parks would barely move the mean while being a clear misplay — exactly the failure the
 "measure the BEHAVIOUR, not just the outcome" rule exists to catch.
+
+## The ordered-searched package — MEASURED (2026-08-19). Nothing moves; one lever is defective.
+
+ONE pooled batch, 13 jobs / 1,812 games, 23.8 of 24 cores busy start to finish. Six arms (control,
+`greedy`, `order`, `park`, `nagi`, all-three) x two disjoint seed blocks x 150 games, plus a 12-game
+identity cell. The levers ride the batch as per-job `flags` (`src/ai/HeuristicArm.h`) rather than
+process env, which is what let all six arms share one queue and one tail instead of six waves.
+
+**Apparatus checks passed before any arm was read.** A manifest with no `flags` block reproduces the
+known HEAD fingerprint exactly (d3 x100 seed 300001 -> avg 5.0300, digest `3e6ea44e9c15d572`); and
+each lever set per job gives the *same digest* as the same lever set as process env (12 games each:
+`MTG_KE_ORDER` `b6566d9ae30fb845`, `MTG_EQUIP_MINPOWER_LAST` `e64637d930194efc`, `MTG_KE_PARK` and
+`MTG_NO_SEARCH_SECOND_MAIN` both `a8343b3dae5fdeca`). That second check is the one that matters: a
+per-job override whose name does not match its `EnvOn()` call site would parse, set, and shadow
+nothing, so the arm would run the BASELINE while the report said the lever was on.
+`ValidateHeuristicArmNames()` now aborts at startup on exactly that mismatch.
+
+### The play result: every lever changes play, none changes the clock
+
+| arm | plays differ (train / hold) | games faster | games slower | delta avg win turn |
+|---|---|---|---|---|
+| `greedy` (force greedy m2) | 0 / 0 | 0 | 0 | +0.0000 |
+| `order` (`MTG_KE_ORDER`) | 32 / 33 | 0 | 0 | +0.0000 |
+| `nagi` (`MTG_EQUIP_MINPOWER_LAST`) | 9 / 5 | 0 | 0 | +0.0000 |
+| `park` (`MTG_KE_PARK`) | 4 / 0 | 0 | 0 | +0.0000 |
+| `pkg` (all three) | 41 / 37 | 0 | 0 | +0.0000 |
+
+Not "no significant difference" — **no difference**. The per-game win-turn column is byte-identical
+to control for every arm on both blocks, verified by diffing the `.wins` files directly, while the
+digest column differs in up to 41 of 150 games. The levers demonstrably change how this deck plays
+and demonstrably never change when it wins. Distribution (control, train): 4 games T3, 47 T4, 65 T5,
+25 T6, 5 T7, 1 T8, 3 unwon. The goldfish clock here is set by the mana and draw curve, and equipment
+ordering does not touch it.
+
+**This closes the re-verification owed for the LIVE flip.** `SearchesSecondMain()` is inert on play:
+0 games differ over 300, digest-identical on both blocks. Dropping the greedy post-combat solve for
+this deck costs nothing, as argued.
+
+### The cost result, in deterministic units (wall clock cannot answer this here)
+
+Job `ms` is WALL, and this box has measured the same workload at 16.5 s and 48.9 s depending on load,
+so the ~5-15% swings in per-job ms are noise. Work units are the search's own node counter: identical
+inputs give identical units at any load, so the paired per-game ratio below is exact.
+
+| arm | train ratio | hold ratio | reading |
+|---|---|---|---|
+| `greedy` | 0.9879 +/- 0.0014 (134 cheaper / 0 dearer) | 0.9897 +/- 0.0016 (130 / 1) | ~1.1% fewer nodes, near-unanimous |
+| `order` | 0.9945 +/- 0.0042 (69 / 59) | 0.9997 +/- 0.0008 (68 / 69) | wash, sign flips |
+| `park` | 0.9984 +/- 0.0015 | 0.9967 +/- 0.0013 | ~0.2-0.3%, mostly inert |
+| `nagi` | 1.0024 +/- 0.0014 (16 / 28) | 1.0033 +/- 0.0034 (24 / 30) | consistently ~0.3% DEARER |
+| `pkg` | 0.9954 +/- 0.0047 | 0.9996 +/- 0.0037 | wash |
+
+So the cast order buys no tractability either — which matters, because tractability was its stated
+purpose (*"the searched second main is not practical without the sorted pruning strategy"*). On this
+deck, at this depth, it is not needed: the searched second main is affordable without it.
+
+**CAVEAT on the `greedy` row, and it is not a small one.** Units count INTERIOR NODES, not CPU per
+node. `greedy` vs control is the one cross-STRATEGY comparison in the table -- a greedy solve and a
+searched second main do different work *inside* a node -- so the meter prices only part of the
+difference, and it under-counts precisely the greedy arm's own work. Read it as "the searched second
+main opens ~1.1% more nodes", NOT as "greedy is 1.1% cheaper". The earlier `perf` profile is the
+better guide to real cost: the second main is ~5% of runtime either way, and the deck's actual cost
+centre is the greedy MAIN-1 solve in rollout interiors (~34 of `SolveUncached`'s 38.85%).
+
+### `MTG_KE_PARK` is DEFECTIVE: the park half works, the un-park half never reaches the played line
+
+This is the finding the average could never have produced, and it is exactly the failure the USER
+predicted (*"it also will often mean that we need to re-equip a creature the next turn ... at least
+if there is a double striker on board"*).
+
+Replaying every game where the park fired and walking the board snapshots: **8 park events, 0
+round-trips.** Four had the game end that turn (no chance to close the loop); the other four were
+still sitting on Kemba at the next turn's pre-combat, and **in both of those games a Kor Duelist --
+a double-striker, the USER's stated condition -- was on the battlefield.**
+
+The park half is genuinely working, and pays: seed 300050 parks Bonesplitter + Lightning Greaves on
+Kemba in T5 main 2 and collects **2 Cat tokens** at the T6 upkeep. Then at T6 main 1 the board holds
+Puresteel Paladin and three artifacts (metalcraft ON, so equip {0}), and an un-sick Kor Duelist --
+every condition the un-park predicate requires -- and the turn's only action is playing a land.
+
+`MTG_KE_PARK_STATS` localises the loss but does not close it: in that game the predicate returned
+PARK 51,052 / UNPARK 27,049 and the walkers force-took PARK 36,521 / UNPARK 4,650. The un-park is
+recognised, and it *is* auto-selected inside the search -- it simply never survives into the plan the
+executor plays. So this is not a predicate bug and not a "the search declined it" story; the loss is
+downstream of the auto-take. **Not root-caused, and the lever must not be adopted until it is:** as
+shipped it implements the park without the un-park, which is the strictly-worse half.
+
+That it cost nothing measurable (0 games changed turn) is not a defence. A double-striker attacking
+without gear it should be carrying is a misplay whatever the clock says, and the reason it is
+invisible here is that both affected games were already won.
+
+### Verdicts
+
+| lever | verdict |
+|---|---|
+| `SearchesSecondMain()` (LIVE) | **re-verified, keep.** 0 of 300 games differ; digest-identical both blocks. |
+| `MTG_KE_ORDER` | **free, but buys nothing measurable** -- no play effect, no cost effect. Adoption is a doctrine call (the USER reviewed and endorsed the order), not a measurement one; the apparatus cannot distinguish it. |
+| `MTG_EQUIP_MINPOWER_LAST` | **no play effect, ~0.3% dearer in nodes on both blocks.** Nothing argues for default-on. |
+| `MTG_KE_PARK` | **DO NOT ADOPT.** Half the loop reaches the played line. Root-cause the un-park first. |
+
+Reproduce: `logs/kitty_ab/gen_manifest.py` (manifest), `compare.py` (paired win turn), `cost.py`
+(paired units), `park_roundtrip.py` (loop closure from game JSON).

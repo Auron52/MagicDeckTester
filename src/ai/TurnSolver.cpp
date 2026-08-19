@@ -631,7 +631,57 @@ static const CardDefinition* ControlledDefByNumber(const GameState& state, int n
     return nullptr;
 }
 
+// Diagnostic (MTG_KE_PARK_STATS) for the Kemba loop. It exists because the loop's two halves fail
+// SEPARATELY and the outcome metric cannot tell them apart: measured 2026-08-19, the park fired and
+// paid (2 Cat tokens at the next upkeep) while the un-park fired ZERO times in 8 park events, and
+// avg win turn was byte-identical either way. Counting the predicate's returns against what the
+// walkers actually force is what localises the loss -- "the search declined it" and "it was never
+// offered" look identical from outside.
+namespace keparkstats
+{
+    inline bool Enabled() { static const bool v = EnvOn("MTG_KE_PARK_STATS"); return v; }
+    inline std::atomic<uint64_t> g_park{0}, g_unpark{0}, g_take_park{0}, g_take_unpark{0};
+
+    inline void Probe(KembaLoop k)
+    {
+        if (!Enabled()) { return; }
+        if (k == KembaLoop::Park)   { g_park.fetch_add(1, std::memory_order_relaxed);   }
+        if (k == KembaLoop::Unpark) { g_unpark.fetch_add(1, std::memory_order_relaxed); }
+    }
+    inline void Take(KembaLoop k)
+    {
+        if (!Enabled()) { return; }
+        if (k == KembaLoop::Park)   { g_take_park.fetch_add(1, std::memory_order_relaxed);   }
+        if (k == KembaLoop::Unpark) { g_take_unpark.fetch_add(1, std::memory_order_relaxed); }
+    }
+
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            std::fprintf(stderr,
+                         "\n=== KEMBA LOOP: predicate PARK %llu / UNPARK %llu | forced PARK %llu /"
+                         " UNPARK %llu ===\n",
+                         static_cast<unsigned long long>(g_park.load()),
+                         static_cast<unsigned long long>(g_unpark.load()),
+                         static_cast<unsigned long long>(g_take_park.load()),
+                         static_cast<unsigned long long>(g_take_unpark.load()));
+        }
+    };
+    inline Dumper g_dumper;
+}
+
+static KembaLoop KembaLoopKindUncounted(const GameState& state, const Action& a, bool is_pre_combat);
+
 static KembaLoop KembaLoopKind(const GameState& state, const Action& a, bool is_pre_combat)
+{
+    const KembaLoop k = KembaLoopKindUncounted(state, a, is_pre_combat);
+    keparkstats::Probe(k);
+    return k;
+}
+
+static KembaLoop KembaLoopKindUncounted(const GameState& state, const Action& a, bool is_pre_combat)
 {
     if (!KittyParkEnabled())            { return KembaLoop::None; }
     if (a.kind != Action::Kind::Equip)  { return KembaLoop::None; }
@@ -9820,13 +9870,15 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 // "Greaves last" survives because the equips vector is sorted shroud-last and
                 // auto_sel is applied in candidate order).
                 int jloop = -1;
+                KembaLoop jloop_kind = KembaLoop::None;
                 for (int j : groups[g])
                 {
-                    if (KembaLoopKind(state, cands[j], is_pre_combat) != KembaLoop::None)
-                    { jloop = j; break; }
+                    const KembaLoop k = KembaLoopKind(state, cands[j], is_pre_combat);
+                    if (k != KembaLoop::None) { jloop = j; jloop_kind = k; break; }
                 }
                 if (jloop >= 0)
                 {
+                    keparkstats::Take(jloop_kind);
                     auto_sel.push_back(jloop);
                     groups.erase(groups.begin() + g);
                     group_hand_index.erase(group_hand_index.begin() + g);
@@ -14179,13 +14231,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // "Greaves last" survives because the equips vector is sorted shroud-last and
                 // auto_sel is applied in candidate order).
                 int jloop = -1;
+                KembaLoop jloop_kind = KembaLoop::None;
                 for (int j : groups[g])
                 {
-                    if (KembaLoopKind(state, cands[j], is_pre_combat) != KembaLoop::None)
-                    { jloop = j; break; }
+                    const KembaLoop k = KembaLoopKind(state, cands[j], is_pre_combat);
+                    if (k != KembaLoop::None) { jloop = j; jloop_kind = k; break; }
                 }
                 if (jloop >= 0)
                 {
+                    keparkstats::Take(jloop_kind);
                     auto_sel.push_back(jloop);
                     groups.erase(groups.begin() + g);
                     group_hand_index.erase(group_hand_index.begin() + g);
