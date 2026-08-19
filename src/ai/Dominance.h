@@ -349,10 +349,16 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // scripted_vial_charge is LIVE across the end-of-turn boundary by design (set during the
     // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
     // searched charge is future-determining and must fold exact-match like its sibling pins.
-    // (Classified here 2026-08-20 during the rebase that combined it with the m1_hand fields --
-    // the original commit added the field without a Dominance classification; it escaped the
-    // sizeof tripwire only because the int fit in struct padding.)
     fold(static_cast<std::uint64_t>(s.scripted_vial_charge));
+    // Post-combat productivity markers (GameState::hand_size_at_combat). Turn-scoped scratch: reset
+    // to -1 at turn start, stamped by SimulateCombat, and read ONLY by the post-combat main -- so at
+    // a clean END-OF-TURN boundary they carry no future value and could defensibly be ignored.
+    // Folded EXACT anyway, per this file's "there is no fourth category" discipline: the cost of
+    // exact-matching a dead field is lost prune REACH, and the cost of guessing wrong about which
+    // fields are dead is a deleted reachable line. Cheap to revisit if this file is ever adopted
+    // and the reach loss shows up in a census.
+    fold(static_cast<std::uint64_t>(s.hand_size_at_combat));
+    fold(static_cast<std::uint64_t>(s.battlefield_at_combat));
     // ZONE OBSERVABILITY (graveyard / exile). Conditional, exactly like the storm counter: on for
     // the cards, decks and models that can read the zone, IGNORED otherwise -- because most cards
     // cannot read either one (USER, 2026-08-15). And what matters is the TYPE of cards in the

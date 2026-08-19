@@ -27,6 +27,7 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include <map>
 #include <mutex>
 #include <cmath>
 #include <unordered_map>
@@ -544,18 +545,105 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
                                                    SearchBudget* budget, bool second_main,
                                                    TranspositionTable* tt);
 
+// Post-combat PRODUCTIVITY gate (DecisionProvider::SkipsUnproductiveSecondMain -- the full
+// argument and the measurement live on that hook). True = combat created nothing this turn, so the
+// in-search post-combat main has no candidate main 1 did not already see off the same mana, and
+// solving it is enumeration spent on options the search has already priced.
+//
+// Deliberately conservative in three ways: an unstamped state (-1, no combat simulated) is treated
+// as PRODUCTIVE; a hand or battlefield that GREW during combat is productive (mid-combat draw, a
+// put Equipment); and human play is exempt via the provider default, since the viewer must never be
+// narrowed. Cheap by construction: two int compares, no scan, no allocation.
+static bool SecondMainUnproductive(const GameState& state)
+{
+    static const bool s_kill  = EnvOn("MTG_NO_M2_PRODUCTIVE");
+    static const bool s_force = EnvOn("MTG_M2_PRODUCTIVE");
+    if (s_kill || HumanPlayActive()) { return false; }
+    if (!s_force && !ResolveProvider(state).SkipsUnproductiveSecondMain()) { return false; }
+    if (state.hand_size_at_combat < 0 || state.battlefield_at_combat < 0) { return false; }
+    if (static_cast<int>(state.ActivePlayer().hand.size()) > state.hand_size_at_combat)
+    { return false; }
+    if (static_cast<int>(state.battlefield.size()) > state.battlefield_at_combat)
+    { return false; }
+    return true;
+}
+
+// MTG_M2_YIELD_STATS -- what does the post-combat main actually PRODUCE? (diagnostic, inert by
+// default). The candidate-side picture (MTG_CONSIDER_STATS) says the second main is the single
+// biggest consumer of enumeration on an equipment deck; it cannot say whether that enumeration
+// ever yields an action worth taking. This counts the SOLVES and the ACTIONS they return, by kind,
+// so "limit the search to productive options and skip it for unproductive ones" (USER 2026-08-19)
+// can be aimed at the measured productive set rather than a guess. Dumped at exit.
+namespace m2yield
+{
+    inline bool Enabled() { static const bool v = EnvOn("MTG_M2_YIELD_STATS"); return v; }
+    inline std::atomic<uint64_t> g_solves{0}, g_empty{0}, g_actions{0};
+    inline std::mutex g_mtx;
+    inline std::map<std::string, uint64_t> g_by_kind;   // "<kind>:<card>" -> count
+
+    inline void Record(const TurnSolver::Plan& p)
+    {
+        if (!Enabled()) { return; }
+        g_solves.fetch_add(1, std::memory_order_relaxed);
+        if (p.actions.empty() && !p.land_decided)
+        { g_empty.fetch_add(1, std::memory_order_relaxed); return; }
+        g_actions.fetch_add(p.actions.size(), std::memory_order_relaxed);
+        std::lock_guard<std::mutex> lk(g_mtx);
+        if (p.land_decided) { ++g_by_kind["LandDrop"]; }
+        for (const Action& a : p.actions)
+        {
+            ++g_by_kind[std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name.str()];
+        }
+    }
+
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            const uint64_t s = g_solves.load(), e = g_empty.load();
+            std::fprintf(stderr,
+                         "\n=== M2 YIELD: %llu second-main solves, %llu EMPTY (%.1f%%), "
+                         "%llu actions returned ===\n",
+                         (unsigned long long)s, (unsigned long long)e,
+                         s ? 100.0 * static_cast<double>(e) / static_cast<double>(s) : 0.0,
+                         (unsigned long long)g_actions.load());
+            std::vector<std::pair<std::string, uint64_t>> v(g_by_kind.begin(), g_by_kind.end());
+            std::sort(v.begin(), v.end(),
+                      [](auto& a, auto& b) { return a.second > b.second; });
+            for (std::size_t i = 0; i < v.size() && i < 25; ++i)
+            {
+                std::fprintf(stderr, "    %-52s %llu\n", v[i].first.c_str(),
+                             (unsigned long long)v[i].second);
+            }
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int depth, int max_turns,
                                                 SearchBudget* budget, bool second_main,
                                                 TranspositionTable* tt)
 {
     struct M2Guard { M2Guard() { ++g_cs_m2solve_nest; } ~M2Guard() { --g_cs_m2solve_nest; } } _m2g;
+    // MTG_NO_M2_SOLVE=1 -- TEMPORARY MEASUREMENT LEVER (default off). Return an empty plan instead
+    // of solving the post-combat main at all. This is the UPPER BOUND for "skip the search where it
+    // is unproductive" (USER 2026-08-19): whatever this arm loses per game is the most any
+    // productivity gate could have to recover, and whatever it does NOT lose is free to prune.
+    static const bool s_no_m2_solve = EnvOn("MTG_NO_M2_SOLVE");
+    if (s_no_m2_solve) { return TurnSolver::Plan{}; }
+    if (SecondMainUnproductive(state)) { return TurnSolver::Plan{}; }
     // Two routes into the searched path: the global measurement lever (MTG_SEARCH_SECOND_MAIN),
     // or the provider's per-deck adoption (SearchedSecondMainInSearch -- see the hook note; a
     // phase-specified deck's interior m2 carries real decisions, everyone else keeps greedy).
     const bool searched = !GreedySecondMainEnabled()
                        || ResolveProvider(state).SearchedSecondMainInSearch();
-    if (depth <= 0 || !searched) { return TurnSolver::Solve(state, false); }
-    return SearchedSecondMainMemoized(state, depth, max_turns, budget, second_main, tt);
+    const TurnSolver::Plan p =
+        (depth <= 0 || !searched)
+            ? TurnSolver::Solve(state, false)
+            : SearchedSecondMainMemoized(state, depth, max_turns, budget, second_main, tt);
+    m2yield::Record(p);
+    return p
 }
 
 static void ComputeAvailableColors(const GameState& state, bool have[5])
@@ -12655,6 +12743,11 @@ static void SimulateCombat(GameState& state)
     if (FloatLeftoverManaEnabled()) { state.floating_mana = ManaPool{}; }
     int active  = state.active_player_index;
 
+    // Stamp the post-combat productivity markers BEFORE anything in combat can move a card
+    // (GameState.h). Two size reads, no allocation.
+    state.hand_size_at_combat   = static_cast<int>(state.ActivePlayer().hand.size());
+    state.battlefield_at_combat = static_cast<int>(state.battlefield.size());
+
     // Legend rule before declaring attackers (mirror GameEngine::CombatPhase): a duplicate
     // legendary lord cannot double-count its buff. No-op without legendaries.
     EnforceLegendRule(state, active);
@@ -12870,6 +12963,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.floating_mana            = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4)
     state.spells_cast_this_turn   = 0;             // STORM counter resets each turn (lockstep w/ GameEngine::UntapStep)
     state.casts_remaining_this_turn = -1;          // Irencrag "one more spell" budget clears each turn (see GameState)
+    state.hand_size_at_combat   = -1;              // post-combat productivity markers are per turn (see
+    state.battlefield_at_combat = -1;              // GameState); lockstep with GameEngine's turn start
     state.scripted_cheat_choice   = -1;            // searched Lackey put is per-turn (lockstep w/ GameEngine::UntapStep)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;

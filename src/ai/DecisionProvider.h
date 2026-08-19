@@ -783,6 +783,25 @@ public:
     // MTG_UNPRUNE=mainphase keep the full pre-combat set.
     virtual bool ClassifiesMainPhases() const { return false; }
 
+    // SkipsUnproductiveSecondMain -- opt IN to the post-combat PRODUCTIVITY gate
+    // (SolveSecondMainInSearch): inside the SEARCH, do not solve the post-combat main on a turn
+    // where combat created nothing (hand and battlefield both unchanged across combat, see
+    // GameState::hand_size_at_combat). USER 2026-08-19: "we need to limit the search to productive
+    // options and skip it for unproductive ones."
+    //
+    // The claim is a DOMINANCE one, not an equivalence: on a turn where combat created no resource,
+    // every m2 candidate was already enumerable pre-combat off the same mana, so main 1 -- which is
+    // SEARCHED, where this m2 is greedy -- has already considered and priced it. What is given up is
+    // the greedy second chance to spend leftover mana on a play main 1 declined.
+    //
+    // Measured on KittyEquipment before this hook existed (analysis-KittyEquipment.md): removing
+    // the in-search second main ENTIRELY changes exactly ONE game in 100 at d3 (gi=7, and that one
+    // diverges at T1 on rollout value, not on a lost line) while costing ~18% of runtime. This gate
+    // is a strict subset of that removal, so one game is its worst case by construction.
+    // Default false = byte-identical everywhere. MTG_M2_PRODUCTIVE=1 forces it on for A/B;
+    // MTG_NO_M2_PRODUCTIVE=1 kills it; human play never sees it (the gate is search-only).
+    virtual bool SkipsUnproductiveSecondMain() const { return false; }
+
     // MainPhaseOverride -- per-card doctrine consulted BEFORE the engine's template rules (deck
     // knowledge lives in the provider, like the discard doctrines). nullopt = defer to the base
     // template classifier (DirectDamage/spectacle -> Main2, Draw* -> Both, sick Vanilla/ManaDork

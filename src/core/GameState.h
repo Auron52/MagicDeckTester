@@ -201,6 +201,17 @@ struct GameState
     // spells_cast_this_turn. Read by nothing else and folded into NO state key -> byte-identical for every
     // deck without a max_casts_after card (stays -1, so the guard and update below are inert).
     int                      casts_remaining_this_turn = -1;
+    // POST-COMBAT PRODUCTIVITY markers (USER 2026-08-19: "limit the search to productive options
+    // and skip it for unproductive ones"). Stamped by SimulateCombat / the executor's combat phase
+    // with the active player's hand and battlefield sizes as combat BEGINS, so the post-combat main
+    // can ask the one question that decides whether it has anything to do that main 1 could not:
+    // did combat CREATE a resource? A card drawn mid-combat (Armored Skyhunter's put firing
+    // Puresteel Paladin) grows the hand; an Equipment put onto the battlefield mid-combat grows the
+    // battlefield. Two ints rather than a hand snapshot on purpose -- GameState is copied on every
+    // plan application (12.5% of one profile), so this must not allocate. -1 = not stamped (no
+    // combat yet this turn), which every consumer treats as "assume productive".
+    int                      hand_size_at_combat       = -1;
+    int                      battlefield_at_combat     = -1;
     uint64_t                 game_seed             = 0;   // seed used to set up this game; used for mulligan reshuffles
     uint64_t                 search_count          = 0;   // # library SEARCHES (fetch/tutor) this game; seeds the
                                                           // deterministic mid-game shuffle (ShuffleAfterSearch).

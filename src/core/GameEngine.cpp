@@ -194,6 +194,8 @@ void GameEngine::UntapStep(GameState& state)
     state.floating_mana = ManaPool{};   // reserve (ritual) mana empties each turn (CR 500.4); no-op for non-ritual decks
     state.spells_cast_this_turn = 0;    // STORM counter resets each turn (lockstep w/ SimulateEndAndStartNextTurn); no-op for non-storm decks
     state.casts_remaining_this_turn = -1; // Irencrag "one more spell" budget clears each turn (see GameState); no-op for non-restrictor decks
+    state.hand_size_at_combat   = -1;   // post-combat productivity markers are per turn (see GameState);
+    state.battlefield_at_combat = -1;   // -1 = no combat yet this turn = "assume productive"
     state.scripted_cheat_choice = -1;   // searched Lackey put is per-turn (lockstep w/ SimulateEndAndStartNextTurn)
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;

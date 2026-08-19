@@ -750,3 +750,80 @@ metalcraft enumeration pricing, (3) value-leaf generation. New datapoint for (3)
 (`--seed 300021 --game-index 20 --depth 5`) ran **over 80 minutes without finishing** at HEAD,
 both with and without the memo — a pathological game the 2026-08-14 tail-taming does not cover,
 and the reason a d5 battery needs an abandon ceiling before it is run again.
+
+## Road item (1) — second-main dominance: MEASURED, and the answer is NO (2026-08-19)
+
+USER direction for this pass: *"we need to limit the search to productive options and skip it for
+unproductive ones"* — and, on the searched second main, *"not practical without the sorted pruning
+strategy I have been working through with the other agent"*. So the question asked here was not
+"greedy or searched" but "is the post-combat main productive at all on this deck".
+
+**Nothing about the second main changes how this deck plays.** Four d3 arms, 100 games, seed
+300001 — control, `MTG_SEARCH_SECOND_MAIN=1`, `MTG_PHASE_CLASSIFY=1`, and both — all returned
+avg **5.0300** and play digest **3e6ea44e9c15d572**. Identical. Not greedy-vs-searched, not the
+pre-combat classification filter. (Classification being inert is expected: almost every card in
+this deck is `is_equipment` or a body, i.e. Main1 by the base rules.)
+
+**What the second main PRODUCES** (`MTG_M2_YIELD_STATS`, new diagnostic, d3 gi=16): 1,963,498
+second-main solves, **960,454 of them (48.9%) return an empty plan**, 1,297,615 actions returned in
+total. Of those actions ~70% are hand casts (Kor Duelist 325,907, Bonesplitter 266,248, Colossus
+Hammer 177,957) and ~30% equips (Bonesplitter equip 326,573 is the single largest). Zero land
+drops (the m2 drop lever is off).
+
+**Upper bound — delete the in-search second main entirely** (`MTG_NO_M2_SOLVE=1`, a measurement
+lever): **exactly ONE game of 100 changes** (gi=7, T5 -> T6); the other 99 are digest-identical.
+And gi=7 is not a lost line — the two arms diverge at **T1** (control holds Shadowspear, the arm
+casts it), i.e. a rollout-value shift, the "disposition flip" class already documented in
+`main-phase-classification.md`. The winning T4 main-2 Colossus Hammer cast in the control line
+happens three turns after the divergence.
+
+**The gate, built and measured** (`DecisionProvider::SkipsUnproductiveSecondMain`,
+`MTG_M2_PRODUCTIVE=1`, default OFF everywhere including EquipmentProvider): skip the in-search
+post-combat main on a turn where combat created no resource — hand and battlefield both unchanged
+across combat (`GameState::hand_size_at_combat` / `battlefield_at_combat`, stamped by
+SimulateCombat, reset at turn start, folded exact into `Dominance.h`'s comparator per its
+maintenance-hazard discipline).
+
+On this deck the gate is **exactly equivalent to deleting the second main** — per-game wins and
+digests identical to the `MTG_NO_M2_SOLVE` arm across all 100 games. Combat never creates a
+resource here: the Armored Skyhunter attack-dig-attach that makes this a `DeckUsesSecondMain` deck
+in the first place effectively never fires in these games.
+
+Cost, three alternating reps on a quiet box (minima): base **598,196 ms** vs gate **569,329 ms** =
+**1.051x**. **VERDICT: NOT ADOPTED.** 5% of runtime is not worth a real game, and it runs against
+the standing USER bar on lossy truncation. The machinery stays default-off with this verdict
+attached, because the gate is deck-agnostic and the decks where combat DOES create a resource
+(Goblins' Lackey put, burn's spectacle, Two-Headed Hellkite's attack draw) are exactly where it
+could pay — it has simply never been measured there.
+
+**Why the consideration counts pointed the wrong way — and the profile that settles it.** The
+`MTG_CONSIDER_STATS` table above makes the second main look like the whole problem: 55% of all
+action considerations, 50% even after the memo. It is worth **5% of wall time**. A per-call cost
+difference (m2 harvests average 7.3 candidates against main 1's 10.5, with no land axis and no
+breakpoint machinery) is the whole gap. This is `profile-before-optimizing` in one deck: a
+component-internal ratio is not a share of runtime.
+
+The actual profile (`perf record -e cpu-clock -F 999`, d3 gi=16, self time):
+
+| symbol | self |
+|---|---|
+| `TurnSolver::SolveUncached` | **38.85%** |
+| `EnumeratePlans` | 6.71% |
+| `CollectActions` (+ its lambda) | 6.72% |
+| `operator new` | 2.66% |
+| `BuildSimKey` | 2.23% |
+| `ComputeLordBonus` | 1.88% |
+| `SubsetHasStrandedEquip` | 1.33% |
+
+So greedy `Solve` really is the deck's cost centre at ~39% — but the second main is only ~5 points
+of it. **The remaining ~34 points are the greedy MAIN-1 solve in rollout interiors**
+(`solve.m1.fs3`: 631,338 calls / 6.66M considerations even with the memo on). That is where the
+"productive options" question should be aimed next on this deck, and it is the same greedy the
+no-greedy-in-the-search directive targets.
+
+**PROFILING TRAP (cost me one useless run):** `mtg` resolves `src/cards/data/cards.json` relative
+to the CWD and **silently proceeds with an EMPTY card database** if it is missing. Profiling from
+`/tmp` (because perf cannot write into the 9p-mounted `/workspaces`) produced a game that finished
+in 6,099 solve calls instead of 2.79M and looked like a successful run. Run from the repo root and
+send only perf's OUTPUT to /tmp (`-o /tmp/x.perf`). Also: perf hardware counters are `<not
+supported>` under WSL2, but the `cpu-clock` software event samples fine.
