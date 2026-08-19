@@ -542,6 +542,20 @@ public:
         if (a == DomAxis::AgeCounters) { return DomDir::MoreDominates; }
         return GenericProvider::DominanceAxisDirection(a);
     }
+
+    // The USER-reviewed cast order (2026-08-19, recorded verbatim in cast-order-rankings.md),
+    // gated on MTG_CG_ORDER (default off pending measurement): Crop Rotation right after the
+    // land (mana-neutral; land first for more sacrifice options), Sylvan Scrying early (its
+    // before-land ideal is the shared land-two-position open item), watchers before the givers
+    // (Suture Priest bills each gifted body entering), Hunted Phantasm after them, Enlightened
+    // Tutor after every same-turn shuffle (its to-top placement dies to one), Massacre Wurm
+    // LAST ("ensure that enemy creatures are created first" -- each fresh token dies for 2).
+    int CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    // "Sylvan Scrying is the one card that can go before the Land drop" (USER, 2026-08-19):
+    // defer the d0 drop when a hand-land tutor is payable from the mana already on board, so
+    // the fetched Orchard can be the drop. Gated with MTG_CG_ORDER.
+    bool LandDropAfterHandLandTutor(const GameState&, int) const override;
 };
 
 // FiveColour (5-colour domain/goodstuff): eleven fetchlands feeding six shocks, two triomes and

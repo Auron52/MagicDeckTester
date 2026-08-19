@@ -124,6 +124,75 @@ computed from the correct flag.
 
 ## Creature Giving
 
+**REVIEW HELD (USER, 2026-08-19) — built behind `MTG_CG_ORDER` (default off; measurement pending,
+then default flip on approval).** The ruling, verbatim (three messages, consolidated):
+
+> Crop Rotation should be first as it is mana neutral. Mostly the order doesn't matter, but
+> Suture Priest should go before Hunted Phantasm and Massacre Wurm should be last if played
+> manually to ensure that enemy creatures are created first. Sylvan Scrying should go before the
+> land drop if we can, since it can fetch another Forbidden Orchard. (but a land may be played
+> before if we cannot afford that order) Enlightened Tutor should be cast after all other tutors
+> to avoid the library shuffle impacting it.
+
+> Or rather Crop Rotation should be first or after a land. On T1 you should be able to play
+> land -> Crop Rotation -> Birds.
+
+> I think it's fine to always play land before crop rotation as that gives us more options for
+> sacrifice.
+
+Encoded: land -> Crop Rotation(5) -> Sylvan Scrying(6) -> watchers(8: Suture Priest / Wardens) ->
+creatures(10) -> Hunted Phantasm(12) -> other spells(20: Defense) -> Enlightened Tutor(22, after
+every same-turn shuffle) -> Massacre Wurm(28, last). Two recorded gaps from the same review:
+Sylvan Scrying's BEFORE-LAND ideal (fetch another Orchard, land-first fallback) is the shared
+land-two-position open item (same as Mirrorwing's land ruling — a cast rank cannot move the land
+drop); and the **Enlightened Tutor upkeep-instant window** (cast at upkeep so this turn's draw IS
+the tutored card) is a modeling hole, recorded as
+`docs/design/upkeep-instant-tutor-window.md`. This deck has no order-opaque cards, so the ranks
+are the whole delivery (the Anti-Lifegain shape, no opaque hook).
+
+**Reviewed report (`MTG_CG_ORDER=1`):**
+
+```
+# Cast order -- decks/Creature Giving/Creature Giving.cod
+# provider: CreatureGiving   ideal-order draw tier: off   cantrip max mv: 1
+# deck flags: feeds_combat=no uses_second_main=no enabler_pull=no castpayoff_pull=no
+# main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
+#
+# rank  range      main  n  mv  card
+#
+# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
+  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
+#
+# [5] CROP ROTATION: mana-neutral, right after the land (land first = more sacrifice options)
+  5     -   m2    4  1  Crop Rotation
+#
+# [6] SYLVAN SCRYING: early -- its before-land ideal (fetch another Orchard) is the land-two-position open item
+  6     -   m2    4  2  Sylvan Scrying
+#
+# [8] WATCHER: Suture Priest / Wardens before every giver (each gifted body billed on entry)
+  8     -   m2    4  1  Essence Warden
+  8     -   m2    3  1  Soul Warden
+  8     -   m2    4  2  Suture Priest
+#
+# [10] CREATURE: before noncreature spells (prowess catches later casts)
+  10     -   m2    4  1  Birds of Paradise
+  10     -   m2    4  2  Varchild's War-Riders
+#
+# [12] GIVER (Phantasm): after the watchers
+  12     -   m2    4  3  Hunted Phantasm
+#
+# [20] other noncreature spell
+  20     -   m2    4  4  Defense of the Heart
+#
+# [22] ENLIGHTENED TUTOR: after every same-turn shuffle (to-top placement dies to one)
+  22     -   m2    3  1  Enlightened Tutor
+#
+# [28] MASSACRE WURM: LAST -- enemy creatures are created first, then swept for 2 each
+  28     -   m2    3  6  Massacre Wurm
+```
+
+**Baseline report (default config, what plays today):**
+
 ```
 # Cast order -- decks/Creature Giving/Creature Giving.cod
 # provider: CreatureGiving   ideal-order draw tier: off   cantrip max mv: 1

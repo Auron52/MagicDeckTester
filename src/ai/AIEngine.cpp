@@ -1796,6 +1796,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         break;
                     }
                 }
+                // "Sylvan Scrying before the land drop" (USER, Creature Giving review
+                // 2026-08-19): the ONE cast allowed to precede the drop -- it fetches a land
+                // to hand (another Forbidden Orchard), so deferring lets the fetched land BE
+                // the drop, played right after this main's casts (NOT the second-main pass:
+                // a uses_second_main=no deck never runs one, and the first CG arm measured
+                // the drop simply LOST, d0 +0.32). Provider-gated (payable-from-board-mana
+                // fallback lives in the hook); default false -> byte-identical elsewhere.
+                if (!defer_land
+                    && ResolveProvider(state).LandDropAfterHandLandTutor(
+                           state, state.active_player_index))
+                { defer_land = true; m_tutor_deferred_drop = true; }
                 if (!defer_land) { TryPlayLand(state); }
             }
             else
@@ -2988,6 +2999,20 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (staged_break) { break; }
         if (a.kind == Action::Kind::CastFromGraveyard)
         { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(a.card_name); resolve_now(); }
+    }
+
+    // Deferred-for-tutor drop (LandDropAfterHandLandTutor, depth-0 only): the pre-combat land
+    // block held the drop so a hand-land tutor (Sylvan Scrying) could resolve first; play it now
+    // with the fetched land (Forbidden Orchard) in hand. In-main1, NOT the second-main pass -- a
+    // uses_second_main=no deck never runs one, and losing the drop outright measured d0 +0.32 on
+    // the first CG arm. Consume-and-clear so the flag never leaks across turns.
+    if (m_tutor_deferred_drop)
+    {
+        m_tutor_deferred_drop = false;
+        if (m_lookahead_depth == 0
+            && state.ActivePlayer().lands_played_this_turn
+                   < state.ActivePlayer().LandDropsAvailable())
+        { TryPlayLand(state); }
     }
 
     // Auto-fire safe alt payloads (Invigorate / Skyshroud) deterministically once a Remedy is

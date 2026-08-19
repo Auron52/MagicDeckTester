@@ -224,6 +224,10 @@ private:
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;
     int                      m_budget_ms         = 0;   // virtual-ms search budget (see SearchBudget)
+    // Depth-0 "Sylvan Scrying before the land drop" defer (LandDropAfterHandLandTutor): set when
+    // the pre-combat land block holds the drop for a hand-land tutor, consumed (and cleared) by
+    // the post-cast play in the same TakeTurn -- never carried across turns.
+    bool                     m_tutor_deferred_drop = false;
     int                      m_max_turns         = 20;  // rollout horizon; kept in sync by SetMaxTurns
     bool                     m_search_post_combat  = false;
     bool                     m_in_rollout          = false; // prevents recursive LE search in rollouts

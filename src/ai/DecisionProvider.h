@@ -447,6 +447,18 @@ public:
     // pass-through) whenever the filter is off -> byte-identical base behaviour.
     bool AttackWith(const GameState& s, const Permanent& attacker) const;
 
+    // LandDropAfterHandLandTutor -- depth-0 greedy: defer the turn's land drop until after a
+    // hand-land tutor resolves, so the fetched land can BE the drop (USER, Creature Giving
+    // review 2026-08-19: "Sylvan Scrying is the one card that can go before the Land drop" --
+    // it fetches another Forbidden Orchard; fallback "a land may be played before if we cannot
+    // afford that order" = the payability condition the provider checks). The deferred drop is
+    // played by the existing depth-0 second-main TryPlayLand, with the fetched land then in
+    // hand. Depth>0 is NOT covered: the searched land fold cannot name a card that is not in
+    // hand at enumeration, and the tutor opens no re-solve breakpoint -- recorded in
+    // cast-order-rankings.md as the depth-side gap. Default false.
+    virtual bool LandDropAfterHandLandTutor(const GameState& s, int controller) const
+    { (void)s; (void)controller; return false; }
+
     // PostDrawKeepLandName -- which land to play AFTER a deferred draw-engine (Treasure Hunt) resolves and
     // the draw is known. Returns the NAME of a card in hand to play as the deferred land drop:
     // the Treasure-Hunt provider returns a drawn no-max-hand-size land (Reliquary Tower) when the

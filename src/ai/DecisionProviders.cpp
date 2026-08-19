@@ -6562,6 +6562,81 @@ std::vector<int> CreatureGivingProvider::CleanupDiscardCandidates(
     return out;
 }
 
+// MTG_CG_ORDER -- the USER-reviewed Creature Giving cast order (2026-08-19, ruling recorded
+// verbatim in docs/design/cast-order-rankings.md). Default OFF pending measurement; on adoption
+// this becomes a default-on read with an off switch, as the other adopted per-deck rules are.
+// This deck has NO order-opaque cards (no draws/tricks), so like Anti-Lifegain its rank sort
+// governs every cast set -- these ranks are the whole delivery, no opaque hook needed.
+static bool CgOrderReviewEnabled()
+{
+    static const bool on = EnvOn("MTG_CG_ORDER");   // default OFF; =1 enables the reviewed order
+    return on;
+}
+
+int CreatureGivingProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (CgOrderReviewEnabled())
+    {
+        const CardParams& p = def.params;
+        // The USER's order (2026-08-19). Land drop is already before every cast at d0, which is
+        // the ruled "land first -- more options for sacrifice"; Crop Rotation follows at 5.
+        // Sylvan Scrying's BEFORE-LAND ideal ("it can fetch another Forbidden Orchard") cannot be
+        // expressed by a cast rank -- the land drop is not a cast -- and is recorded as the
+        // shared land-two-position open item (same gap as Mirrorwing's ruling).
+        if (p.tutor_land_to_battlefield)            { return 5;  }  // Crop Rotation: mana-neutral, first cast
+        if (p.tutor_to_hand)                        { return 6;  }  // Sylvan Scrying: early (land ideal, see above)
+        if (p.etb_opp_creates_tokens > 0)           { return 12; }  // Hunted Phantasm: after the watchers
+        if (p.etb_opp_creatures_debuff > 0)         { return 28; }  // Massacre Wurm: LAST -- gifts enter first, then die for 2 each
+        if (p.opp_creature_enters_life_loss > 0
+            || p.any_creature_enters_lifegain > 0)  { return 8;  }  // watchers: Suture Priest / the Wardens, before every giver
+        if (p.tutor_to_top)                         { return 22; }  // Enlightened Tutor: after every same-turn shuffle
+        return GenericProvider::CastOrderRank(s, def);
+    }
+    return GenericProvider::CastOrderRank(s, def);
+}
+
+bool CreatureGivingProvider::LandDropAfterHandLandTutor(const GameState& s, int controller) const
+{
+    // USER (2026-08-19): "Sylvan Scrying is the one card that can go before the Land drop" --
+    // Scrying fetches a land to HAND (Orchard-first via this provider's TutorCandidates), so a
+    // drop played AFTER it can be the fetched land. Fallback rule, verbatim: "a land may be
+    // played before if we cannot afford that order" -> the tutor must be payable from the mana
+    // already on board. AND the hand must hold NO land: with a land in hand the drop costs the
+    // defer a real mana this main (the plan solves one land short), measured d0 +0.0530 on the
+    // hand-presence version -- while with an empty land hand the defer costs NOTHING (no drop
+    // was possible) and the fetch PROVIDES the drop, the pure-win case the ruling names.
+    if (!CgOrderReviewEnabled()) { return false; }
+    bool tutor_payable = false;
+    const ManaPool avail = AvailableManaPool(s);
+    for (const Card& c : s.players[controller].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        if (d->card.IsLand()) { return false; }   // a hand land -> land-first (the fallback)
+        if (!d->params.tutor_to_hand) { continue; }
+        bool land_tutor = false;
+        for (const std::string& t : d->params.tutor_types)
+        { if (t == "Land") { land_tutor = true; break; } }
+        if (land_tutor && avail.CanPay(d->card.m_mana_cost)) { tutor_payable = true; }
+    }
+    return tutor_payable;
+}
+
+const char* CreatureGivingProvider::CastOrderTierName(int rank) const
+{
+    if (!CgOrderReviewEnabled()) { return nullptr; }
+    switch (rank)
+    {
+        case 5:  return "CROP ROTATION: mana-neutral, right after the land (land first = more sacrifice options)";
+        case 6:  return "SYLVAN SCRYING: early -- its before-land ideal (fetch another Orchard) is the land-two-position open item";
+        case 8:  return "WATCHER: Suture Priest / Wardens before every giver (each gifted body billed on entry)";
+        case 12: return "GIVER (Phantasm): after the watchers";
+        case 22: return "ENLIGHTENED TUTOR: after every same-turn shuffle (to-top placement dies to one)";
+        case 28: return "MASSACRE WURM: LAST -- enemy creatures are created first, then swept for 2 each";
+        default: return nullptr;
+    }
+}
+
 std::vector<std::string>
 CreatureGivingProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {
