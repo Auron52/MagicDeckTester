@@ -166,7 +166,13 @@ if [ "$ACCEPT" = 1 ]; then
     # shellcheck disable=SC2086
     set -- $spec; deck=$1; depth=$2; seed=$3
     key="${deck}_${MODE}_d${depth}_s${seed}"
-    if [ -f "$LOGDIR/wins/${key}.wins" ]; then
+    # Promote ONLY keys the accepted run actually measured (present in $RESULTS). The wins dir
+    # accumulates stale .wins from earlier per-deck runs of OTHER decks; an accept without the
+    # matching --deck filter used to promote those stale files over good committed GT (fired
+    # twice on 2026-08-19: 9 regression + 8 overnight logs from older binaries, caught only by
+    # the pre-commit git diff). The RESULTS env is the inspected artifact -- it defines exactly
+    # what "this run" covers, for both full and per-deck accepts.
+    if [ -f "$LOGDIR/wins/${key}.wins" ] && grep -q "^${key}=" "$RESULTS"; then
       cp "$LOGDIR/wins/${key}.wins" "test/gt_logs/${key}.wins"; promoted=$((promoted+1))
     fi
   done

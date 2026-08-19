@@ -2984,7 +2984,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             ManaPool avail = AvailableManaPool(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
-            { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x); }
+            {
+                ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
+                if (m_logger)
+                { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                       "conjure + cast " + a.tutor_target.str()
+                                       + (a.chosen_x > 0 ? " (X=" + std::to_string(a.chosen_x) + ")" : "")); }
+            }
         }
         else if (a.kind == Action::Kind::CastFromHand && a.alt_cost)
         {
@@ -3046,7 +3052,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             ManaPool avail = AvailableManaPool(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
-            { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x); }
+            {
+                ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
+                if (m_logger)
+                { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                       "conjure + cast " + a.tutor_target.str()
+                                       + (a.chosen_x > 0 ? " (X=" + std::to_string(a.chosen_x) + ")" : "")); }
+            }
             continue;
         }
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
@@ -3243,7 +3255,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 ManaPool avail = AvailableManaPool(state);
                 if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
-                { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x); }
+                {
+                    ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
+                    // Viewer visibility (USER 2026-08-19: "We should definitely have garth's
+                    // ability in the viewer") -- this was the only battlefield activation with
+                    // no LogAbility line, so Garth taps were invisible in every game log.
+                    if (m_logger)
+                    { m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id),
+                                           "conjure + cast " + a.tutor_target.str()
+                                           + (a.chosen_x > 0 ? " (X=" + std::to_string(a.chosen_x) + ")" : "")); }
+                }
             }
         }
         else if (a.kind == Action::Kind::Channel)
