@@ -273,11 +273,13 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 
 ## FiveColour
 
-**REVIEW HELD (USER, 2026-08-19) — encoded behind `MTG_5C_ORDER` (ranks) + `MTG_5C_PHASE`
-(per-deck opt-in to the pre-combat Main2 filter via `ClassifiesMainPhases`), both default OFF
-pending measurement.** The USER called it "honestly the trickiest order so far to encode ... many
-competing factors", and gave the order as an explicit prototype. The ruling, consolidated from
-the review messages (key quotes verbatim):
+**REVIEW HELD AND ADOPTED (USER, 2026-08-19) — `MTG_5C_ORDER` + `MTG_5C_PHASE` are DEFAULT ON
+(`=0` reverts each; the phase lever is the FIRST per-deck `ClassifiesMainPhases` opt-in).**
+Held-out evidence (overnight, 12 per-deck keys, with the Progenitus protection fix): order alone
+12/12 green; combined 12/12 green — d0 ~−0.036 all four seeds, d3 to −0.0925, d5 to −0.1133;
+GT rebaselined all three modes. The USER called it "honestly the trickiest order so far to
+encode ... many competing factors", and gave the order as an explicit prototype. The ruling,
+consolidated from the review messages (key quotes verbatim):
 
 > [Prototype list] Land → Mana Cannons → Ancient Cornucopia → Lightning Greaves → Unite the
 > Coalition → «if Lightning Greaves active or in plan» Birds of Paradise, Deathrite Shaman, «if

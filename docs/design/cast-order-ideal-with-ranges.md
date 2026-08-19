@@ -1,5 +1,22 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS UPDATE 2026-08-19 (adoption): FIVE COLOUR order + phase ADOPTED default-on; GT
+> rebaselined (fivecolour, 3 modes, incl. the Progenitus protection fix).
+>
+> `MTG_5C_ORDER` + `MTG_5C_PHASE` DEFAULT ON (`=0` reverts each; phase = the FIRST per-deck
+> `ClassifiesMainPhases` opt-in). Held-out 12/12 green both arms (combined: d0 ~−0.036 all
+> seeds, d3 to −0.0925, d5 to −0.1133); reference gate 0-drift; per-game audit 53 faster : 21
+> slower searched. PERF (measured pre-adoption, per USER): the ORDER lever is free (±4%); the
+> PHASE lever costs +38–74% searched wall on this deck — deferring casts to the second main
+> gives the m2 solve a real candidate set and budget is per-decision, so part of the quality is
+> bought with time. Suite budgets still fit. Search status Q&A (USER): ordering never consumed
+> rollouts here (no order-opaque cards — clean sets always canonically sorted); plan scoring at
+> d3/d5 still uses greedy horizon rollouts — the value sidecar's trust_depth 6 exceeds in-play
+> depths, so the leaf never replaces the rollout in play (a value-leaf regen on the
+> post-adoption frozen commit is the route if rollout replacement is wanted). Open follow-ups:
+> Cornucopia trigger timing (fire on the plan's most multicolored cast); rare
+> cumulative-completer in-between placement.
+>
 > ## STATUS UPDATE 2026-08-19 (latest): FIVE COLOUR review HELD — encoded, measurement in flight.
 >
 > The fifth review gate was held (the USER's prototype + refinements verbatim in

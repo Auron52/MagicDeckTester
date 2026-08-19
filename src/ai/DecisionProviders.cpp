@@ -6867,12 +6867,19 @@ bool FiveColourProvider::ShouldAttackWith(const GameState& s, const Permanent& p
 // rank sort is deterministic over the chosen set, plan order within a tier, no order branching.
 static bool Fc5OrderEnabled()
 {
-    static const bool on = EnvOn("MTG_5C_ORDER");
+    // ADOPTED default-on (USER, 2026-08-19). Held-out alone (with the Progenitus protection
+    // fix): 12/12 overnight keys green, d0 ~-0.036 all four seeds, searched -0.01..-0.025.
+    // =0 reverts.
+    static const bool on = EnvOn("MTG_5C_ORDER", true);   // DEFAULT ON; =0 disables
     return on;
 }
 static bool Fc5PhaseEnabled()
 {
-    static const bool on = EnvOn("MTG_5C_PHASE");
+    // ADOPTED default-on (USER, 2026-08-19) -- the FIRST per-deck ClassifiesMainPhases opt-in.
+    // Held-out combined with the order lever: 12/12 overnight keys green, d3 to -0.0925, d5 to
+    // -0.1133; d0 byte-identical to the order lever alone (the pre-combat filter is
+    // searched-depth machinery). =0 reverts.
+    static const bool on = EnvOn("MTG_5C_PHASE", true);   // DEFAULT ON; =0 disables
     return on;
 }
 
