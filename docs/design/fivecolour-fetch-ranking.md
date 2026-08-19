@@ -387,10 +387,53 @@ The right question is not "is a colour missing" but **"can we spend this mana"**
 `spendable` (Part 3's predicate) already answered. Two changes, both user-directed:
 
 1. **Gate on spendability, not on a missing colour.** `any_uncovered_want` is deleted entirely.
-2. **Rank `untapped` second, above `accel_new`** — "if there is a spell that requires the land we
-   should ALWAYS go for untapped". Ranking it above `enables_now` (first outright) was also
-   measured and is EXACTLY equivalent — `enables_now` is a strict subset of untapped-and-spendable,
-   so their relative order can never separate two candidates. `enables_now` stays first.
+2. **Rank `untapped` second, above `accel_new`.** Ranking it above `enables_now` (first outright)
+   was also measured and is EXACTLY equivalent — `enables_now` is a strict subset of
+   untapped-and-spendable, so their relative order can never separate two candidates.
+   `enables_now` stays first.
+
+### "Always go for untapped" is NOT the rule — read this before touching the order
+
+The user's clarification (2026-08-19), recorded verbatim because the shorthand above invites
+exactly the wrong generalisation:
+
+> "'always go for untapped' is not generically true. It is entirely a decision of whether we need
+> its mana this turn. If we do, we should get untapped, otherwise tapped and providing more colours
+> is actually a better option. Getting tapped when we don't need the extra mana is also really good
+> because it ensures we have more remaining that come into play untapped and pulls a come-into-play
+> tapped land out of the library so we don't draw it."
+
+So the rule is a two-sided conditional, and the tapped side is a POSITIVE, not a concession. The
+key ordering implements it structurally: `untapped` is 0 for every candidate when the mana cannot
+be spent, so the decision falls through to the coverage terms where a triome's third colour wins.
+Nothing needs to "prefer tapped" explicitly for this to work.
+
+Verified as a two-way conformance check over 8,420 executor fetches rather than assumed:
+
+| situation | intended | measured |
+|---|---|---|
+| mana IS needed, an untapped land available | take untapped | **100.0%** (4569/4570) |
+| mana NOT needed, a tapped triome available | take the triome | **94.7%** (2926/3091) |
+
+The 5.3% residual is 164 cases of `depth` beating `colours` — a dual giving a SECOND source of two
+colours (d2 c2) over a triome giving a second of one but covering three (d1 c3). That is a genuine
+collision between two of the user's own rules ("move toward 2 of each" vs "tapped with more colours
+is better when we don't need the mana"), and the thinning argument would break the tie toward the
+triome. A `thin` key was built to test it and **REJECTED on measurement** — it is slightly WORSE, and
+consistently so across all three train seeds (60,000 d0 games per arm):
+
+| arm | d0 mean | Δ |
+|---|---|---|
+| shipped (no thin key) | 5.8476 | — |
+| `thin` above depth | 5.8491 | +0.0015 |
+| `thin` above breadth | 5.8504 | +0.0028 |
+
+So the thinning benefit is real as reasoning but is already dominated by what the coverage terms
+buy: forcing the triome through costs more in colour redundancy than the removed CIPT land returns.
+The user had called the scope right before the run — "I don't think that's much of an issue, it
+probably is insignificant in scope … as long as it almost always chooses the triome the result
+seems good enough" — and at ~2% of fetches, with a negative sign, it stays out. The lever is
+removed; this paragraph is the record so it is not re-derived.
 
 Plus the gap Part 3 documented and this closes:
 
