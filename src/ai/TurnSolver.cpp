@@ -558,6 +558,128 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
                                                    SearchBudget* budget, bool second_main,
                                                    TranspositionTable* tt);
 
+// ---- KittyEquipment: the end-of-main-2 KEMBA PARK (USER doctrine, 2026-08-19) -------------------
+//
+// THE RULING, verbatim: "The Kemba park is another special case at the end of Main 2, and
+// technically you want to equip her with everything that is free to equip and doesn't have a
+// drawback like Grafted Wargear. Lightning Greaves should be last, because of shroud." And, on why
+// it is not a real choice: "in goldfish there is literally no drawback to doing this."
+//
+// Kemba's upkeep makes a 2/2 Cat PER EQUIPMENT ATTACHED TO HER, so parking N free equipment on her
+// at the end of the post-combat main is N extra Cats every upkeep. It costs nothing here because
+// (a) combat is already over, so the rider the equipment leaves behind buys nothing this turn, and
+// (b) moving it back in main 1 next turn is {0} again -- in this apparatus artifacts never leave,
+// so metalcraft, once on, stays on. That makes the park a DOMINANCE move, not a preference, which
+// is why it rides the auto-equip collapse (taken in every subset) rather than being powersetted.
+//
+// It is the ATTACHED exclusion in that collapse that this lifts, and ONLY in the post-combat main:
+// pre-combat a move genuinely does trade away a rider that is about to attack.
+//
+// Kept exclusions: Grafted Wargear (equip_sacrifices_prior_host -- the USER's named drawback: its
+// free equip kills the host it leaves) and anything not free RIGHT NOW. Legality is handled at
+// emission by rider_delta < 0, which is what stops O-Naginata parking on Kemba at all
+// (equip_min_power 3 against her power 2). Greaves is INCLUDED here even though the collapse
+// excludes shroud/haste granters generally: its haste is worthless once combat is over, and the
+// "Greaves last" half of the ruling comes free -- the equips vector is already sorted
+// shroud-granting last, candidate order follows it, and auto_sel is applied in candidate order.
+//
+// MTG_KE_PARK, DEFAULT OFF -> byte-identical. Human play / MTG_UNPRUNE keep every legal pair
+// enumerated, per the USER's "no reason to make it a searched choice long-run except in the viewer".
+static bool KittyParkEnabled()
+{
+    static const bool on = EnvOn("MTG_KE_PARK");
+    return on;
+}
+
+// THE PARK IS HALF A LOOP, AND FORCING ONLY THAT HALF WOULD BE A TRAP (USER, 2026-08-19: "it also
+// will often mean that we need to re-equip a creature the next turn ... at least if there is a
+// double striker on board"). The two halves are:
+//   main 2  PARK   -- free gear moves onto Kemba, so the upkeep counts it and makes Cats;
+//   main 1  UNPARK -- it moves back onto the best double-strike host, before combat.
+// Both are {0} under metalcraft, so the loop pays for itself every turn: Cats at upkeep AND full
+// damage in combat. But the park is only DOMINANT if the unpark is guaranteed -- a parked
+// Bonesplitter that never comes back is a double-striker attacking naked, i.e. strictly worse than
+// never parking. Today the unpark would be a SEARCHED move (the auto-equip collapse excludes
+// attached equipment precisely because a pre-combat move trades away a rider), so a breadth cap
+// could drop it, and it would add one move-group per equipment to every main-1 enumeration. So
+// BOTH halves are forced, on the same flag: the loop is flat in enumeration cost rather than N
+// groups wider, and the failure mode cannot occur.
+//
+// Kind() below returns which half applies, or None. ONE predicate, consulted by the emission
+// keep-list and by BOTH subset walkers' auto-take, so the three cannot drift (the drift between two
+// copies of a decision is how this codebase has lost lockstep before).
+enum class KembaLoop { None, Park, Unpark };
+
+static const CardDefinition* ControlledDefByNumber(const GameState& state, int number)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index && p.card.m_number == number)
+        { return CardDatabase::Instance().LookupCached(p.card); }
+    }
+    return nullptr;
+}
+
+static KembaLoop KembaLoopKind(const GameState& state, const Action& a, bool is_pre_combat)
+{
+    if (!KittyParkEnabled())            { return KembaLoop::None; }
+    if (a.kind != Action::Kind::Equip)  { return KembaLoop::None; }
+    if (a.cost.ManaValue() != 0)        { return KembaLoop::None; }   // free RIGHT NOW only
+    if (HumanPlayActive())              { return KembaLoop::None; }   // the viewer is never narrowed
+    const CardDefinition* ed = ControlledDefByNumber(state, a.sac_source_id);
+    if (!ed || !ed->params.is_equipment)        { return KembaLoop::None; }  // hand-side: co-select
+    if (ed->params.equip_sacrifices_prior_host) { return KembaLoop::None; }  // Wargear: the drawback
+    const CardDefinition* hd = ControlledDefByNumber(state, a.sac_victim_id);
+    if (!hd) { return KembaLoop::None; }
+    const bool to_kemba = hd->params.upkeep_tokens_per_equipment;
+    // PARK: post-combat, onto Kemba. UNPARK: pre-combat, OFF Kemba onto a double-strike host --
+    // "at least if there is a double striker on board" is the whole condition, because that is
+    // where the doubled rider is worth more than the Cat it gives up.
+    if (!is_pre_combat) { return to_kemba ? KembaLoop::Park : KembaLoop::None; }
+    if (to_kemba)       { return KembaLoop::None; }
+    const CardDefinition* cur = nullptr;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index
+            && p.card.m_number == a.sac_source_id && p.equipped_to != 0)
+        { cur = ControlledDefByNumber(state, p.equipped_to); break; }
+    }
+    if (!cur || !cur->params.upkeep_tokens_per_equipment) { return KembaLoop::None; }  // not parked
+    const bool ds_host = hd->card.HasKeyword(Keyword::DoubleStrike)
+                      || hd->params.double_strike_while_equipped
+                      || hd->params.double_strike_min_equipment > 0;
+    if (!ds_host) { return KembaLoop::None; }
+    // ... and only onto a host that can actually SWING this turn, carrying the gear. Un-parking
+    // onto a summoning-sick double-striker would surrender the Cats at the next upkeep to buy an
+    // attack that cannot happen -- the gear should wait on Kemba one more turn.
+    //
+    // BUT sickness is not the last word here (USER 2026-08-19: "it needs to be a creature that can
+    // attack with all of the equipment on it ... which might be any doublestriker if Lightning
+    // Greaves is out"). CanTapNow only sees a Greaves ALREADY attached, and under this very
+    // doctrine the Greaves spent the night parked on Kemba -- so a sick double-striker still counts
+    // when a free haste granter can move onto it THIS turn. That whole line is: everything else
+    // onto the double-striker first, Greaves LAST (its shroud would block the rest), swing.
+    const Permanent* host = nullptr;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index
+            && p.card.m_number == a.sac_victim_id) { host = &p; break; }
+    }
+    if (!host) { return KembaLoop::None; }
+    if (CanTapNow(*host, state.battlefield)) { return KembaLoop::Unpark; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        if (p.card.m_number == a.sac_victim_id)              { continue; }
+        const CardDefinition* gd = CardDatabase::Instance().LookupCached(p.card);
+        if (!gd || !gd->params.equip_grants_haste)           { continue; }
+        if (p.equipped_to == a.sac_victim_id)                { continue; }   // already there
+        if (EquipCostGenericNow(state, state.active_player_index, *gd) != 0) { continue; }
+        return KembaLoop::Unpark;   // a free haste granter can reach this host this turn
+    }
+    return KembaLoop::None;
+}
+
 // Post-combat PRODUCTIVITY gate (DecisionProvider::SkipsUnproductiveSecondMain -- the full
 // argument and the measurement live on that hook). True = combat created nothing this turn, so the
 // in-search post-combat main has no candidate main 1 did not already see off the same mana, and
@@ -5991,6 +6113,24 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             && ((kemba_id != 0 && h.id == kemba_id)
                                 || (stoneforge_id != 0 && h.id == stoneforge_id)))
                         { kept = true; }
+                        // KEMBA LOOP (see KembaLoopKind): both halves are always KEPT, whatever the
+                        // width rankings and the consolidation move rule say. In particular the
+                        // post-combat park must survive "never move an equipment OFF a
+                        // double-striking host" -- that rule is a PRE-combat rule (it protects a
+                        // rider that is about to attack), and after combat there is no rider left
+                        // to protect. Emission only; the auto-take below is what makes it forced.
+                        if (!kept && kemba_id != 0)
+                        {
+                            Action probe;
+                            probe.kind          = Action::Kind::Equip;
+                            probe.cost          = ManaCost{};
+                            probe.cost.generic  = EquipCostGenericNow(state,
+                                                      state.active_player_index, *ed);
+                            probe.sac_source_id = equips[e].second->m_number;
+                            probe.sac_victim_id = h.id;
+                            if (KembaLoopKind(state, probe, is_pre_combat) != KembaLoop::None)
+                            { kept = true; }
+                        }
                         for (const std::pair<int, int>& r : ranked)
                         { if (r.second == h.id) { kept = true; break; } }
                         if (!kept)
@@ -9623,6 +9763,25 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 {
                     if (p.controller_index == state.active_player_index
                         && p.card.m_number == eq_num) { eqp = &p; break; }
+                }
+                // KEMBA LOOP (KembaLoopKind): the one case where an ATTACHED equipment is still
+                // forced. Checked FIRST, because it is exactly the exclusions below that it
+                // overrides -- a park/unpark is a MOVE, and the park deliberately includes the
+                // shroud/haste granter (Greaves' haste is worthless once combat is over, and
+                // "Greaves last" survives because the equips vector is sorted shroud-last and
+                // auto_sel is applied in candidate order).
+                int jloop = -1;
+                for (int j : groups[g])
+                {
+                    if (KembaLoopKind(state, cands[j], is_pre_combat) != KembaLoop::None)
+                    { jloop = j; break; }
+                }
+                if (jloop >= 0)
+                {
+                    auto_sel.push_back(jloop);
+                    groups.erase(groups.begin() + g);
+                    group_hand_index.erase(group_hand_index.begin() + g);
+                    continue;
                 }
                 if (!eqp || eqp->equipped_to != 0) { continue; }   // hand-side or a MOVE: keep enumerated
                 const CardDefinition* ed = CardDatabase::Instance().LookupCached(eqp->card);
@@ -13963,6 +14122,25 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 {
                     if (p.controller_index == state.active_player_index
                         && p.card.m_number == eq_num) { eqp = &p; break; }
+                }
+                // KEMBA LOOP (KembaLoopKind): the one case where an ATTACHED equipment is still
+                // forced. Checked FIRST, because it is exactly the exclusions below that it
+                // overrides -- a park/unpark is a MOVE, and the park deliberately includes the
+                // shroud/haste granter (Greaves' haste is worthless once combat is over, and
+                // "Greaves last" survives because the equips vector is sorted shroud-last and
+                // auto_sel is applied in candidate order).
+                int jloop = -1;
+                for (int j : groups[g])
+                {
+                    if (KembaLoopKind(state, cands[j], is_pre_combat) != KembaLoop::None)
+                    { jloop = j; break; }
+                }
+                if (jloop >= 0)
+                {
+                    auto_sel.push_back(jloop);
+                    groups.erase(groups.begin() + g);
+                    group_hand_index.erase(group_hand_index.begin() + g);
+                    continue;
                 }
                 if (!eqp || eqp->equipped_to != 0) { continue; }   // hand-side or a MOVE: keep enumerated
                 const CardDefinition* ed = CardDatabase::Instance().LookupCached(eqp->card);
