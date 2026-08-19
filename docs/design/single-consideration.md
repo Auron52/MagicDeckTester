@@ -42,7 +42,7 @@ Same shape (solve.m2.fs3.m2solve 42k calls, **86% dup**), plus a collapse-specif
 erases everything, but `CollectActions` still pays the full harvest first (and even those empty
 harvests are 84% state-duplicates).
 
-## Collapse #1 — greedy-Solve memo (`MTG_SOLVE_MEMO`, built 2026-08-14, DEFAULT OFF)
+## Collapse #1 — greedy-Solve memo (`MTG_SOLVE_MEMO`, built 2026-08-14, **ADOPTED DEFAULT-ON 2026-08-19**)
 
 `TurnSolver::Solve` is a pure function of (state, phase): no draws, no budget, no cutoff
 dependence. The memo (TurnSolver.cpp `namespace solvememo`; `Solve` is now a thin wrapper over
@@ -66,6 +66,23 @@ forced on (36/36 digests identical to GT).** Battery (classify levers, 100 games
 **0 diverged games in every job**, pooled wall 1:34 -> 1:24 (−11%), battery-wide hit rate 64%
 (42M hits / 24M misses), RSS +235 MB. Adoption proposal: default-ON + `MTG_NO_SOLVE_MEMO`
 hatch, no GT rebaseline needed — awaiting the user's call.
+
+**ADOPTED 2026-08-19 — TRANSITIONALLY** (KittyEquipment cost work, `analysis-KittyEquipment.md`
+"Cost re-baseline at HEAD"). The USER's call, verbatim: *"not the end of the world to adopt
+temporarily, but the goal is to drop greedy entirely"* — everything this memo caches is a greedy
+Solve inside the search, i.e. precisely the path `main-phase-classification.md` exists to delete.
+It buys time on today's cost; it is **not** a reason to keep the greedy second main, and it gets
+deleted with the sites it serves. The off-switch is `MTG_SOLVE_MEMO=0` rather than a separate `MTG_NO_` name — the
+`EnvOn(key, true)` convention already gives every default-on flag its own kill switch. What
+settled it: on KittyEquipment the greedy second main is 55% of all action considerations with
+**86.5% duplicate calls**, VERIFY recomputed all 813,149 hits of one game with **0 mismatches**,
+and the suite is byte-identical at **1.111x** cheaper (per-case minima, two alternating smoke
+reps; hinata d3 1.79x). It also cannot move a budgeted search by construction: `SearchBudget`
+meters rollout turn-steps and greedy re-enumeration spends none — which is also why the work
+meter reports the change as costing exactly zero units. The `fivecolour-payment-query-fold.md`
+"worth ZERO at HEAD" kill stands for FiveColour's shipped d6/budget-20 config and is not in
+conflict: the memo pays at explicit depths and on greedy-m2-dominated decks. New lever
+`MTG_SOLVE_MEMO_CAP` (default 16384 unchanged; 64k/256k measured as pure memory cost).
 
 ## Collapse #1 residual (measured with the memo ON)
 

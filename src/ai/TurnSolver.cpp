@@ -8463,7 +8463,16 @@ static bool HoldSacLandBurn(const GameState& state, const std::vector<Action>& c
 // trap a Solve memo faces, and one shared key means one place to keep exact.
 static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool is_pre_combat);
 
-// --- Greedy-Solve memo (MTG_SOLVE_MEMO, DEFAULT OFF until the identity A/B is accepted) --------
+// --- Greedy-Solve memo (MTG_SOLVE_MEMO, DEFAULT-ON 2026-08-19; =0 restores the old path) --------
+//
+// TRANSITIONAL BY DESIGN -- READ THIS BEFORE BUILDING ON IT. Everything this memo caches is a
+// GREEDY Solve inside the search, and the greedy solve inside the search is being REMOVED (USER
+// directive 2026-08-14, main-phase-classification.md: "search should be truly search at every
+// level. Greedy is simply too unreliable to be part of it."). The USER's call on this adoption
+// (2026-08-19) was explicitly "not the end of the world to adopt temporarily, but the goal is to
+// drop greedy entirely". So: take the speedup, do NOT let it become a reason to keep the greedy
+// path, and DELETE this memo along with the sites it serves when SolveSecondMainInSearch's greedy
+// branch and the in-rollout Solve(state, false) calls go.
 //
 // Single-consideration collapse #1 (USER 2026-08-14: "figure out where we are considering spells
 // multiple times and ... consider them only once"). MTG_CONSIDER_STATS measured that the greedy
@@ -8486,9 +8495,26 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
 // MTG_SOLVE_MEMO_VERIFY=1: on every hit ALSO recompute uncached and compare the plans field by
 // field; mismatches are counted and the first few printed -- the honest test that the key is
 // complete before any adoption A/B.
+//
+// ADOPTION (2026-08-19, KittyEquipment cost work). The identity A/B the default-off note was
+// waiting on:
+//   * VERIFY on KittyEquipment d3 gi=16: 813,149 hits, ALL recomputed and compared, MISMATCHES=0.
+//   * KittyEquipment d3 battery (100 games, seed 300001): avg 5.0300 and play digest
+//     3e6ea44e9c15d572 in EVERY arm -- memo off/on, cap 16k/64k/256k, six repeat runs.
+//   * Suite smoke (36 cases): 36/36 pass, 0 configs changed, 0 play-changed.
+// It also cannot change a BUDGETED search by construction: SearchBudget meters rollout turn-steps
+// (GameWorkMeter units), and the work this memo removes is greedy-Solve RE-ENUMERATION, which
+// spends no units -- measured, the per-game unit totals are identical to the byte (40,303,111 over
+// the d3 battery in both arms). That same fact is why `units` cannot SEE this cost: a game whose
+// time is greedy-Solve-dominated looks cheap to the work meter and to the abandon ceiling.
+// Cost: KittyEquipment d3 1.28-1.30x cheaper (minima over six alternating runs; the box has
+// external contention that masks it -- under load 20+ every arm is scheduler-bound and the ratio
+// collapses to ~1.03x). Suite smoke 1.064x aggregate: hinata d3 1.27x, dragonstorm d3 1.36x,
+// mirrorwing 1.14-1.17x, fivecolour 1.02-1.09x, against small losses where the hit rate is low
+// (creature_giving d5 0.89x, antilife d5 0.93x, knights d5 0.95x).
 namespace solvememo
 {
-    inline bool Enabled()  { static const bool v = EnvOn("MTG_SOLVE_MEMO"); return v; }
+    inline bool Enabled()  { static const bool v = EnvOn("MTG_SOLVE_MEMO", true); return v; }
     inline bool VerifyOn() { static const bool v = EnvOn("MTG_SOLVE_MEMO_VERIFY"); return v; }
 
     struct Entry { uint64_t epoch = 0; TurnSolver::Plan plan; };
@@ -8496,7 +8522,21 @@ namespace solvememo
     // cannot grow it without bound (wholesale clear, same policy as the bp-enum memo).
     inline thread_local std::unordered_map<TranspositionTable::Key, Entry,
                                            TranspositionTable::KeyHash> t_cache;
-    constexpr std::size_t kCap = 16384;
+    // Entry cap before a wholesale clear. Tunable (MTG_SOLVE_MEMO_CAP) because the cap decides the
+    // HIT RATE on a deck whose decisions are big: KittyEquipment's d3 gi=16 clears the table 120
+    // times in one game at 16k. A clear only drops entries -- every dropped hit is recomputed to
+    // the same plan -- so the cap moves COST, never the answer (all three caps below produced the
+    // same digest).
+    // MEASURED (KittyEquipment d3 battery, peak RSS at 18 threads): 16k = 340 MB, 64k = 950 MB,
+    // 256k = 2.83 GB, and the extra memory buys NOTHING -- 256k was the SLOWEST memo arm of the
+    // three. 16384 stays the default; the lever exists so the next deck can re-measure rather than
+    // re-derive.
+    inline std::size_t Cap()
+    {
+        static const std::size_t v =
+            static_cast<std::size_t>(std::max(1, EnvInt("MTG_SOLVE_MEMO_CAP", 16384)));
+        return v;
+    }
 
     // SEARCHED second-main memo (SearchedSecondMainMemoized): same Entry/epoch discipline, its
     // own map because the key namespace differs (depth is folded in -- a searched plan's fidelity
@@ -8593,7 +8633,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 
     solvememo::g_misses.fetch_add(1, std::memory_order_relaxed);
     TurnSolver::Plan p = SolveUncached(state, is_pre_combat);
-    if (cache.size() >= solvememo::kCap)
+    if (cache.size() >= solvememo::Cap())
     {
         cache.clear();
         solvememo::g_clears.fetch_add(1, std::memory_order_relaxed);
@@ -21482,7 +21522,7 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
     TurnSolver::Plan p = TurnSolver::SolveWithLookahead(state, /*is_pre_combat=*/false, depth,
                                                         max_turns, budget,
                                                         /*enforce_budget=*/false, second_main, tt);
-    if (cache.size() >= solvememo::kCap)
+    if (cache.size() >= solvememo::Cap())
     {
         cache.clear();
         solvememo::g_m2_clears.fetch_add(1, std::memory_order_relaxed);

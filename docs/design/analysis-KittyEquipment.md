@@ -677,3 +677,76 @@ narrow its candidate set (each with its open switch), plus modeling assumptions.
   (SubsetHasShroudBlockedEquip, both subset walkers); shroud-granting equipment
   enumerates LAST so multi-equip plans linearize legally (doctrine 4d). Enforced even
   under open_all/human play. Off-hatch MTG_LEGACY_SHROUD=1.
+
+## Cost re-baseline at HEAD + the greedy-Solve memo (2026-08-19)
+
+Picking the "remaining heuristic road" back up five days later, step 0 was to re-measure the deck
+at HEAD rather than trust the numbers above — 299 engine commits had landed in between.
+
+**Play is unchanged; cost drifted +27%.** d3 battery (100 games, seed 300001), HEAD vs the last
+kitty commit `ce18c788` built in a worktree:
+
+| | avg | play digest | per-game wall sum | search units |
+|---|---|---|---|---|
+| ce18c788 (2026-08-14) | 5.0300 | 3e6ea44e9c15d572 | 631,894 ms | 31,658,412 |
+| HEAD (2026-08-19) | 5.0300 | 3e6ea44e9c15d572 | 815,566 ms | 40,303,111 |
+
+Byte-identical play across 299 commits — every verdict in this ledger still stands. The +27% is
+spread broadly and lands hardest on the tail (gi=86 1.77x, gi=72 1.60x, gi=4 1.73x); no single
+commit was bisected for it because the *level* turned out to be the actionable thing, not the
+drift. Two flags suspected up front were measured INERT here (`MTG_ACQ_RESOLVE=0` and
+`MTG_COLOR_EXACT=0` both reproduce the digest at the same cost). The equip prunes are alive and
+load-bearing: `MTG_EQUIP_ALL_HOSTS=1` costs **6.7x** on d3 gi=16 (76.5 s -> 512.6 s), while
+`MTG_NO_AUTO_EQUIP=1` is inert on that particular game.
+
+**Where the cost is (MTG_CONSIDER_STATS, d3 gi=16, one game):** 2,917,908 harvests /
+24,229,640 action considerations, and the leader is not main 1 —
+
+| site | calls | actions | distinct states | dup calls |
+|---|---|---|---|---|
+| `solve.m2.fs3.m2solve` | 1,848,874 | 13,382,396 (55%) | 249,476 | **1,599,398 (86.5%)** |
+| `solve.m1.fs3` | 769,288 | 8,290,293 (34%) | 59,404 | 709,884 |
+
+The **greedy second main inside the search** is the single biggest consumer on this deck, and
+86.5% of its calls re-solve a state a sibling line already solved in the same decision. Its
+per-card table is the deck's equipment being re-enumerated post-combat over and over (Bonesplitter
+4.24M considerations, Colossus Hammer 3.22M, Balan 1.81M).
+
+**ADOPTED TRANSITIONALLY — `MTG_SOLVE_MEMO` default-ON** (the collapse #1 memo built 2026-08-14
+and parked default-off in `single-consideration.md` "awaiting the user's call"; `=0` restores the
+old path). USER, 2026-08-19: *"not the end of the world to adopt temporarily, but the goal is to
+drop greedy entirely"* — every call this memo saves is a GREEDY solve inside the search, so it
+buys time on today's cost and dies with the path it serves. It is not evidence for keeping the
+greedy second main; the deck-level question that matters is the one below (can Kitty run on a
+SEARCHED second main at all):
+
+* Identity: VERIFY mode on d3 gi=16 recomputed **all 813,149 hits** uncached — **0 mismatches**.
+  The d3 battery reproduces avg 5.0300 / digest 3e6ea44e9c15d572 in every arm (off, on, cap
+  16k/64k/256k, six repeat runs). Suite smoke 36/36, 0 configs changed, 0 play-changed, twice.
+* It cannot move a BUDGETED search by construction: `SearchBudget` meters rollout turn-steps, and
+  greedy-Solve re-enumeration spends none. Measured — the per-game unit totals are identical to
+  the byte (40,303,111 in both arms).
+* Cost: KittyEquipment d3 **1.28-1.30x** cheaper (minima over six alternating runs). Suite smoke,
+  per-case minima over two alternating reps: **1.111x** aggregate — hinata d3 1.79x, hinata d5
+  1.26x, dragonstorm d3 1.26x, mirrorwing d5 1.14x, fivecolour d5 1.10x, against 0.91-0.95x on
+  th d3 / creature_giving d3 / auras d3.
+* Cap sweep (`MTG_SOLVE_MEMO_CAP`, new lever): 16k = 340 MB peak RSS, 64k = 950 MB, 256k =
+  2.83 GB — and the extra memory buys nothing (256k was the slowest memo arm). Default stays
+  16384.
+* This does NOT contradict `fivecolour-payment-query-fold.md`'s "worth ZERO at HEAD": that was
+  FiveColour at its shipped d6/budget-20 `value_play` config. At explicit search depths, and on a
+  deck whose greedy second main dominates, it pays.
+
+**TRAP recorded for the next agent — the work meter is blind to this cost.** `GameWorkMeter`
+units did not move at all across a change worth 1.3x of wall clock, because greedy Solve
+enumeration is unmetered. Anything that sizes, abandons, or condemns a game by units (the batch
+per-game ceiling, the depth matrix) will therefore under-price a greedy-Solve-dominated game.
+Wall clock is the only meter for this class — and on this box it is contended (the same battery
+measured 806 s and 1,528 s in the same session), so **alternate the arms and compare minima**.
+
+**Still open on the road:** (1) second-main dominance (the memo removes the *repeats*; the 249k
+distinct m2 states per decision are still enumerated over the whole hand), (2) the deferred
+metalcraft enumeration pricing, (3) value-leaf generation. New datapoint for (3): d5 gi=20
+(`--seed 300021 --game-index 20 --depth 5`) ran **over 80 minutes without finishing** at HEAD,
+both with and without the memo — a pathological game the 2026-08-14 tail-taming does not cover,
+and the reason a d5 battery needs an abandon ceiling before it is run again.
