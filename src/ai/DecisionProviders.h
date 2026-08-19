@@ -245,6 +245,13 @@ public:
     // very thing that let Goblins/Minotaur silently lose their Vial. The class stays so routing and
     // the batch [play] line still name the archetype.
     const char* Name() const override { return "Vial"; }
+    // MTG_KNIGHTS_ORDER (USER-reviewed Knights cast order, 2026-08-19): the cast-trigger
+    // watcher (Worthy Knight) before the tribe, the gated ETB digger (Acclaimed Contender)
+    // early when its board condition already holds and late otherwise. PARAM-derived tests
+    // only -- no sliver carries cast_trigger_* or etb_dig_* params, so the shared provider
+    // stays byte-identical for slivers_vial (verified against cards.json 2026-08-19).
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
 };
 
 

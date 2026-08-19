@@ -424,6 +424,58 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 
 ## Knights
 
+**REVIEW HELD (USER, 2026-08-19) — encoded behind `MTG_KNIGHTS_ORDER` (default OFF, pending
+measurement), plus `MTG_ACQ_DIG` (default OFF) for the dig acquisition.** The ruling, verbatim
+(two messages):
+
+> I don't agree with that order entirely. Acclaimed Contender should go before others if it is
+> played, except when you don't yet control a knight. Everything should be main 1. (we probably
+> should encode this now and work toward making it part of the calculation) Though if we wanted
+> to future-proof I would probably put things that don't impact combat this turn into main 2.
+> (that would be Dauntless, Venerable Knight and Aether Vial)
+
+> Fair enough on the Adeline point. I guess we can just stick with main 1 for now. If we want to
+> get really fancy we could look at whether she is on board, (and similarily at whether there are
+> creatures to pump with lords) but it's not super important at the moment. Mainly this is a
+> phase 2 optimization, since when playing against an opponent you want them to have as little
+> information as possible. [...] I think that could be a future way to handle the phases. Don't
+> hardcode, but have rules to decide when they should be out.
+
+Encoded (VialProvider, param-derived so slivers_vial is untouched — no sliver carries either
+param): land -> Worthy Knight(8, before the tribe: every later Knight cast is +1 Human token;
+kept ahead of the Contender because WK-first still mints a token off the Contender's own cast) ->
+Contender(9) **when the board already holds another Knight**, else creatures(10) -> Contender(12,
+so the turn's other Knights satisfy its gate first) -> Aether Vial(20, order-inert: charges at
+upkeep). Everything main 1 = today's behaviour (`uses_second_main=no`).
+
+`MTG_ACQ_DIG` is the "part of the calculation" half: the Contender's ETB dig puts a
+same-phase-castable Knight in hand, but the rollout performed the dig inline with no re-solve
+("the dug card is cast on a later turn"). The lever arms the same deferred post-cast re-solve as
+the `MTG_ACQ_RESOLVE` tutor family, CAST path only (a Vial-deployed digger stays un-armed on both
+sides — the executor's Vial loop has no draw-engine classification; open edge if measurement
+wants it).
+
+**DEFERRED (Phase 2, information-hiding vs a real opponent): rule-derived main-phase split.**
+Not a hardcoded card list — a rule deciding per cast, per board, whether it impacts combat THIS
+turn (Dauntless/Venerable/Vial usually don't — but a body pre-combat still pumps Adeline's
+count-based power if she attacks, and a lord only matters main-1 when there are bodies to pump).
+Cast in main 2 whatever doesn't, so the opponent learns as little as possible before blocks.
+
+Adopted-report table (regenerate with `MTG_KNIGHTS_ORDER=1 mtg decks/Knights/Knights.cod
+--cast-order-report`; rank 9/12 for the Contender is board-dependent, the empty-board report
+shows 12):
+
+```
+# [LAND] LAND DROP
+# [8]  CAST-TRIGGER WATCHER (Worthy Knight): before the tribe
+# [9]  GATED ETB DIGGER (Contender), gate already met on board: early (dig feeds MTG_ACQ_DIG)
+# [10] CREATURE tier (Dauntless, Venerable, lords, Adeline, Haytham)
+# [12] GATED ETB DIGGER (Contender), gate NOT met: after the other creatures
+# [20] Aether Vial (order-inert)
+```
+
+Pre-review baseline report (all creatures flat at 10):
+
 ```
 # Cast order -- decks/Knights/Knights.cod
 # provider: Vial   ideal-order draw tier: off   cantrip max mv: 1

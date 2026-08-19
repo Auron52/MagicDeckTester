@@ -3755,6 +3755,64 @@ bool TreasureHuntProvider::ArchetypeCardValue(const GameState& state, const Card
 
 // ---- VialProvider -----------------------------------------------------------
 
+// MTG_KNIGHTS_ORDER -- the USER-reviewed Knights cast order (2026-08-19, ruling recorded verbatim
+// in docs/design/cast-order-rankings.md). Default OFF pending measurement; on adoption this
+// becomes a default-on read with an off switch, as the other adopted per-deck rules are. Knights
+// has NO order-opaque cards, so the rank sort governs every cast set -- ranks are the whole
+// delivery. "Everything should be main 1" (USER) is today's behaviour (uses_second_main=no); the
+// future rule-derived main-phase split (does THIS cast affect combat THIS turn, given the board --
+// Adeline out, lords with bodies to pump) is a Phase 2 information-hiding item, recorded in the
+// rankings doc, deliberately NOT encoded here.
+static bool KnightsOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_KNIGHTS_ORDER");
+    return on;
+}
+
+int VialProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (KnightsOrderEnabled())
+    {
+        const CardParams& p = def.params;
+        // Worthy Knight: "whenever you cast a Knight spell, create a Human token" -- before the
+        // tribe, so every same-turn Knight cast is +1 body. Before the Contender too: WK-first
+        // still mints a token off the Contender's own cast, the reverse forfeits it.
+        if (p.cast_trigger_creates_tokens > 0 && !p.cast_trigger_subtype.empty()) { return 8; }
+        // Acclaimed Contender: ETB dig gated on controlling ANOTHER creature of the required
+        // subtype. USER: "before others if it is played, except when you don't yet control a
+        // knight." Board already satisfies the gate -> 9 (right after the watcher: the dig
+        // resolves early and MTG_ACQ_DIG can spend the turn's leftover mana on the dug card);
+        // gate not yet met -> 12, after the other creatures, so a same-turn Knight cast
+        // satisfies it before the Contender enters.
+        if (p.etb_dig_count > 0 && !p.etb_dig_requires_subtypes.empty())
+        {
+            for (const Permanent& perm : s.battlefield)
+            {
+                if (perm.controller_index != s.active_player_index) { continue; }
+                if (!perm.card.IsCreature())                        { continue; }
+                for (const std::string& want : p.etb_dig_requires_subtypes)
+                    for (const std::string& cs : perm.card.m_subtypes)
+                        if (cs == want) { return 9; }
+            }
+            return 12;
+        }
+        return GenericProvider::CastOrderRank(s, def);
+    }
+    return GenericProvider::CastOrderRank(s, def);
+}
+
+const char* VialProvider::CastOrderTierName(int rank) const
+{
+    if (!KnightsOrderEnabled()) { return nullptr; }
+    switch (rank)
+    {
+        case 8:  return "CAST-TRIGGER WATCHER (Worthy Knight): before the tribe -- every later Knight cast is +1 body";
+        case 9:  return "GATED ETB DIGGER (Contender), gate already met on board: early, so the dug card can be cast this turn";
+        case 12: return "GATED ETB DIGGER (Contender), gate NOT met: after the other creatures, so they satisfy it";
+        default: return nullptr;
+    }
+}
+
 // ---- BurnProvider -----------------------------------------------------------
 
 bool BurnProvider::PreferHoldLandDrop(const GameState& s, int controller) const

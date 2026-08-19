@@ -2458,7 +2458,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                   // Orchard as the deferred drop) waited a turn (found in the Creature Giving
                   // review, 2026-08-19).
                   || (AcqResolveEnabled()
-                      && (d->params.damage_equals_top_mv || d->params.tutor_to_hand))))
+                      && (d->params.damage_equals_top_mv || d->params.tutor_to_hand))
+                  // MTG_ACQ_DIG: an ETB dig (Acclaimed Contender) puts a same-phase-castable
+                  // card in hand at resolution, so the depth-0 executor gets the same second
+                  // pass the rollout's deferred re-solve arms. Cast path only (see flag note).
+                  || (AcqDigEnabled() && d->params.etb_dig_count > 0)))
         { cast_draw_engine = true; }
     };
 
@@ -2490,7 +2494,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                      // deferred re-solve after these, so the executor must classify them the same
                      // way or the committed continuation replays at the wrong breakpoint.
                      || (AcqResolveEnabled()
-                         && (d->params.damage_equals_top_mv || d->params.tutor_to_hand)));
+                         && (d->params.damage_equals_top_mv || d->params.tutor_to_hand))
+                     // MTG_ACQ_DIG: rollout arms a deferred re-solve after an ETB dig cast, so
+                     // the executor must classify it the same way (breakpoint-index lockstep).
+                     || (AcqDigEnabled() && d->params.etb_dig_count > 0));
     };
 
     // SCRIPTED draw breakpoint for COMMIT-THE-LINE replay (MTG_FULL_DEPTH): cast the

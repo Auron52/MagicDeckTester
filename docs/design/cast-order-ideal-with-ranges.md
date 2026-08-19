@@ -1,5 +1,20 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS UPDATE 2026-08-19 (later): KNIGHTS review HELD — encoded, measurement in flight.
+>
+> The fourth review gate was held (ruling verbatim in `cast-order-rankings.md` under "Knights").
+> Built behind two default-off levers:
+> * **`MTG_KNIGHTS_ORDER`** — Worthy Knight 8 (cast-trigger watcher before the tribe), Acclaimed
+>   Contender 9 when the board already holds another Knight / 12 otherwise (so the turn's other
+>   Knights satisfy its ETB gate first). Param-derived on the shared VialProvider — inert for
+>   slivers_vial (no sliver carries either param). Everything main 1 (today's behaviour).
+> * **`MTG_ACQ_DIG`** — the acquisition family extended to the ETB dig (`etb_dig_count`): the
+>   dug Knight becomes castable with the SAME turn's leftover mana via the deferred re-solve
+>   (cast path only; Vial-deploy digs stay un-armed on both sides — open edge).
+> DEFERRED (Phase 2): rule-derived main-phase split for information hiding vs a real opponent —
+> per-cast, per-board "does this impact combat this turn" (Adeline's count, lords with bodies),
+> never a hardcoded card list. Remaining review gates: Dragons, FiveColour.
+>
 > ## STATUS UPDATE 2026-08-19: CREATURE GIVING order + MTG_ACQ_RESOLVE ADOPTED default-on.
 >
 > The third review gate was held and adopted, with a companion global adoption:

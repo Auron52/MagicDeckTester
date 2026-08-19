@@ -44,6 +44,24 @@ inline bool AcqResolveEnabled()
     return v;
 }
 
+// MTG_ACQ_DIG=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted): extend the
+// MTG_ACQ_RESOLVE acquisition family to the ETB library dig (etb_dig_count -- Acclaimed Contender,
+// the only such card today). The dig puts a same-phase-castable card into hand at resolution, but
+// the plan was enumerated before it existed: TurnSolver performs the dig inline and its own comment
+// records "the dug card is cast on a later turn, not re-solved this turn". Arm the deferred
+// post-cast re-solve so a dug Knight is castable with this turn's leftover mana -- the USER's
+// Knights-review intent ("we probably should encode this now and work toward making it part of the
+// calculation", 2026-08-19). Scope: the CAST path only; a VIAL-deployed digger stays un-armed on
+// BOTH sides (the executor's Vial loop has no draw-engine classification or full-depth replay
+// hook), which is lockstep-consistent -- recorded as the open edge if measurement wants it. Read by
+// the rollout apply (TurnSolver) and the executor's draw-engine classification (AIEngine) --
+// shared reader.
+inline bool AcqDigEnabled()
+{
+    static const bool v = EnvOn("MTG_ACQ_DIG");
+    return v;
+}
+
 // MTG_LEGACY_STATIC_TAPPED=1: classify land tapped-ness from the STATIC enters_tapped flag in the
 // land-priority passes, as before the dynamic fix (byte-identical A/B hatch). See
 // AIEngine::TryPlayLand and TurnSolver's greedy_land_name -- the two implement the same passes

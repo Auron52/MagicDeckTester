@@ -10801,6 +10801,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 PerformEtbDig(state, state.active_player_index, def.params,
                               &state.battlefield.back());
+                // MTG_ACQ_DIG (mid-phase acquisition family, EngineFlags.h): the "later turn"
+                // above is the hole -- the dug card competes for THIS turn's remaining mana
+                // exactly like a tutor fetch, so arm the same deferred post-cast re-solve
+                // (USER, Knights review 2026-08-19: make the dig "part of the calculation").
+                // Armed unconditionally on the param (not on whether the dig HIT): the
+                // executor's classification is name-based and cannot know, and the two worlds
+                // must classify the same casts as breakpoints or committed continuations
+                // replay at the wrong index. A whiffed dig's re-solve is a no-op.
+                // CAST path only -- a Vial deploy stays un-armed on both sides (see flag note).
+                if (AcqDigEnabled() && !s_human_play && sink_stack.empty())
+                { deferred_cantrip_resolve = true; deferred_cantrip_site = &def;
+                  deferred_hand_before = hand_at_cast; }
             }
 
             // Legend rule: a duplicate legendary just cast is put into the graveyard, so a
