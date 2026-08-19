@@ -606,6 +606,18 @@ public:
     // a Food that does not exist yet). NOT active until ClassifiesMainPhases()/MTG_PHASE_CLASSIFY.
     std::optional<MainPhase> MainPhaseOverride(const GameState& s,
                                                const CardDefinition& def) const override;
+    // MTG_5C_ORDER (USER-reviewed Five Colour cast order, 2026-08-19 prototype): Cannons before
+    // every multicolored cast, Cornucopia/Greaves/Unite next, mana creatures EARLY iff Greaves
+    // is live (battlefield or hand -- one copy in deck, so hand ~= plan) with the scaling dorks
+    // (Bloom/Faeburrow) additionally gated on all five colors already on the field, LATE
+    // otherwise (the late slot self-corrects: the 5-color bodies resolve before it). Bodies:
+    // CHEAPEST FIRST (rank 10 + mv -- USER: cheap colorful bodies widen the domain the scaling
+    // dorks read); the middle order is otherwise not load-bearing and adds no search cost.
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    // MTG_5C_PHASE: per-deck opt-in to the pre-combat Main2 filter (this deck actually plays a
+    // second main), activating the override above with the USER's 2026-08-19 phase rules.
+    bool        ClassifiesMainPhases() const override;
     // Nicol Bolas +3 is "destroy target NONCREATURE permanent" -- it REQUIRES a target, and with a
     // land-less opponent the only legal ones are ours. Destroying our own land is a real cost, so
     // the search correctly declined the ability; but -9 is unreachable from loyalty 5 without two

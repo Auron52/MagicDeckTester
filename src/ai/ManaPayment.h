@@ -146,6 +146,13 @@ bool OrderRecheckEnabled();
 // once, and this header is the canonical declaration everything else includes.)
 ManaPool AvailableManaPool(const GameState& state, const Permanent* skip = nullptr);
 
+// AvailableManaPool minus every untapped ATTACK-CAPABLE creature source with effective power > 0
+// (lords/domain pump included) -- the "what can I pay WITHOUT costing an attack?" pool. Built for
+// the FiveColour Unite-the-Coalition phase rule (USER 2026-08-19: first main is ideal only when
+// it "won't tap a Faeburrow that could attack"); a 0-power Birds still counts as payable mana,
+// matching the dork-attack doctrine that a 0-power no-trigger creature never attacks anyway.
+ManaPool AvailableManaPoolNoAttackers(const GameState& state);
+
 // THE public payment entry (C1 unit 5). Mana-source RESERVATION ("leaving sources up"): FIRST try
 // to pay while HOLDING the special sources (dorks / {C}-manlands / depletion) untapped; only if the
 // cost cannot be met without them fall through to the normal payment. Slack-only, so it is weakly

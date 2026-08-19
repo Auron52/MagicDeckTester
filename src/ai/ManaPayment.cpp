@@ -951,6 +951,41 @@ ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
     return pool;
 }
 
+ManaPool AvailableManaPoolNoAttackers(const GameState& state)
+{
+    // Same accounting as AvailableManaPool above, minus creature sources whose tap would cost a
+    // real attack (CanAttackFull + effective power > 0, lord/domain bonus included). See the
+    // header note; keep the two loops in lockstep when either changes.
+    ManaPool pool;
+    int gy_fuel = -1;
+    const int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        auto def = CardDatabase::Instance().LookupCached(p.card);
+        if (!def) { continue; }
+        bool is_land = (def->tmpl == CardTemplate::BasicLand);
+        bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || def->params.mana_rock;
+        if (!is_land && !is_dork) { continue; }
+        if (def->card.IsCreature() && CanAttackFull(p, state.battlefield, active))
+        {
+            const int power = p.EffectivePower()
+                + ComputeLordBonus(p.card, state.battlefield, active,
+                                   /*all_creature_types=*/false, &p).first;
+            if (power > 0) { continue; }   // its tap costs an attack -> not in this pool
+        }
+        if (def->params.gy_land_exile_mana)
+        {
+            if (gy_fuel < 0) { gy_fuel = GraveyardLandFuel(state, active); }
+            if (gy_fuel <= 0) { continue; }
+            --gy_fuel;
+        }
+        AddSourceToPool(pool, state, *def, PermanentManaYield(p, *def));
+    }
+    if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
+    return pool;
+}
+
 // ---- Colour-exact subset affordability (MTG_COLOR_EXACT) --------------------------------------
 // Rationale, soundness argument and the over-approximation policy: see ManaPayment.h.
 

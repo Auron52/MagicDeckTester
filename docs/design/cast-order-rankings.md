@@ -273,6 +273,55 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 
 ## FiveColour
 
+**REVIEW HELD (USER, 2026-08-19) — encoded behind `MTG_5C_ORDER` (ranks) + `MTG_5C_PHASE`
+(per-deck opt-in to the pre-combat Main2 filter via `ClassifiesMainPhases`), both default OFF
+pending measurement.** The USER called it "honestly the trickiest order so far to encode ... many
+competing factors", and gave the order as an explicit prototype. The ruling, consolidated from
+the review messages (key quotes verbatim):
+
+> [Prototype list] Land → Mana Cannons → Ancient Cornucopia → Lightning Greaves → Unite the
+> Coalition → «if Lightning Greaves active or in plan» Birds of Paradise, Deathrite Shaman, «if
+> all five colours on the field» Bloom Tender, Faeburrow Elder «/if» «/if» → Two-Headed Hellkite,
+> Cosmic Spider-Man, Maelstrom Archangel, Oko, Jared Carthalion, Garth One-Eye, Nicol Bolas,
+> Progenitus → «if Lightning Greaves not active/in plan» Birds, Deathrite, Bloom Tender,
+> Faeburrow «/if»
+
+> "Free spell needs to be handled in a way that allows for reconsideration." [Already the
+> engine's shape: the Archangel charge banks at combat damage and the post-combat main runs a
+> fresh enumeration with free-cast variants — nothing pre-commits the freed spell.]
+
+> "Faeburrow Elder and Bloom Tender without all five colours and lightning greaves active should
+> be held preferably either until the 5 colours are available or, if that doesn't work, they can
+> be played later in the list." ... "What makes it even trickier is that Faeburrow Elder and
+> Bloom Tender can still be mana positive in that situation, so you might want them earlier.
+> It's almost a search problem." [USER chose PROTOTYPE-FIRST over a funding ladder / search
+> variants: encode the list verbatim, escalate only if measurement shows stranded-mana losses.]
+
+> "Second main vs first is similarly tricky ... Generally, you prefer second main for non-haste,
+> non-greaves, non-oko situations, since it ensures the maximum mana can be generated and allows
+> Faeburrow Elder to attack." On Unite: "Second main is ideal when it would cause a Faeburrow
+> Elder to tap to play it. First main is ideal when you need to draw a hasty threat and won't tap
+> a Faeburrow that could attack."
+
+> "Some of the creatures in the middle don't really care about order ... it's important that
+> irrelevant order doesn't add any extra search costs." ... "I prefer the cheaper ones first,
+> because they might enable a Faeburrow or Bloom Tender." On Hellkite: "technically Hellkite can
+> be ranked after the others in terms of cost, since it doesn't draw the cards immediately. How
+> to use them is a decision for second main."
+
+Encoded (`MTG_5C_ORDER`, provider-scoped): land → Cannons(4) → Cornucopia(5, generic rock tier)
+→ Greaves(6) → Unite(7) → plain dorks(8) iff Greaves live / scaling dorks(9) iff Greaves live
+AND 5 colors on field → bodies cheapest-first(10+mv, deterministic — no order branching, no
+search cost; Hellkite pinned 19 regardless of cost) → walkers/other noncreatures(20 generic) →
+dorks late(25) otherwise (the late slot self-corrects: 5-color bodies resolve before it).
+"Greaves active or in plan" is read as battlefield-or-hand (one copy in deck; the rank hook
+cannot see the chosen set — recorded approximation). `MTG_5C_PHASE`: Cannons → Main1 (the old
+"fires identically from either main" missed same-turn sequencing); Unite → Main1 iff payable
+from `AvailableManaPoolNoAttackers` (no attack-capable creature source tapped), else Main2;
+scaling dorks → Main2 unless Greaves live; Bolas Main2 and the 2026-08-16 Oko ruling unchanged.
+
+Pre-review baseline report:
+
 ```
 # Cast order -- decks/FiveColour/FiveColour.cod
 # provider: FiveColour   ideal-order draw tier: off   cantrip max mv: 1

@@ -6858,14 +6858,142 @@ bool FiveColourProvider::ShouldAttackWith(const GameState& s, const Permanent& p
     return true;   // nothing castable at all -> the tap buys nothing, take the chip damage
 }
 
-// Main-phase doctrine (see the .h note). Param-keyed where a param exists (robust to reprints),
-// name-keyed for the two walkers -- Jared is deliberately NOT listed (his -3 is a real pre-combat
-// pump, so the base Main1-by-doubt is the correct class for him).
+// MTG_5C_ORDER / MTG_5C_PHASE -- the USER-reviewed Five Colour cast order and phase rules
+// (2026-08-19 prototype, verbatim in docs/design/cast-order-rankings.md). Two levers for
+// attribution: ORDER is the rank sort (always live once the deck's canonical order runs), PHASE
+// opts this deck into the pre-combat Main2 filter (ClassifiesMainPhases -- default-off machinery,
+// per-deck adoption route; the global MTG_PHASE_CLASSIFY force remains rejected). Both DEFAULT
+// OFF pending measurement. USER constraint honoured: irrelevant order adds NO search cost -- a
+// rank sort is deterministic over the chosen set, plan order within a tier, no order branching.
+static bool Fc5OrderEnabled()
+{
+    static const bool on = EnvOn("MTG_5C_ORDER");
+    return on;
+}
+static bool Fc5PhaseEnabled()
+{
+    static const bool on = EnvOn("MTG_5C_PHASE");
+    return on;
+}
+
+// Lightning Greaves "active or in plan" (USER wording), read as: on our battlefield or in hand.
+// The rank hook cannot see the chosen cast set; with ONE copy in the deck (USER: "decisions
+// without it are much simpler") hand-presence is the plan to within a decline, and the decline
+// case costs only Cornucopia's once-per-turn trigger, where late is mildly better anyway.
+static bool Fc5GreavesLive(const GameState& s)
+{
+    const int active = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.is_equipment && d->params.equip_grants_haste) { return true; }
+    }
+    for (const Card& c : s.players[active].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && d->params.is_equipment && d->params.equip_grants_haste) { return true; }
+    }
+    return false;
+}
+
+int FiveColourProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (Fc5OrderEnabled())
+    {
+        const CardParams& p = def.params;
+        // The USER's prototype order (2026-08-19): land -> Cannons -> Cornucopia -> Greaves ->
+        // Unite -> [dorks early iff Greaves live; scaling dorks additionally iff 5 colors on
+        // field] -> bodies -> [dorks late otherwise]. Cornucopia needs no clause: the generic
+        // mana-rock tier (5) already slots it between Cannons (4) and Greaves (6).
+        if (p.multicolor_cast_damage_per_color)      { return 4; }   // Cannons: before every multicolored cast
+        if (p.is_equipment && p.equip_grants_haste)  { return 6; }   // Greaves: unlock before the dorks/bodies
+        if (p.modal_choose_n > 0)                    { return 7; }   // Unite
+        if (def.card.IsCreature() && !p.produces.empty())
+        {
+            if (p.domain_mana)
+            {
+                // Bloom Tender / Faeburrow: early only when the unlock AND the full domain are
+                // both already there; otherwise "later in the list" (USER completion) -- the
+                // late slot runs after the 5-color bodies that may complete the domain.
+                if (Fc5GreavesLive(s)
+                    && DomainColors(s, s.active_player_index).size() >= 5) { return 9; }
+                return 25;
+            }
+            // Birds / Deathrite: early iff the Greaves unlock makes their tap live this turn.
+            return Fc5GreavesLive(s) ? 8 : 25;
+        }
+        // Bodies: CHEAPEST FIRST within the tier (USER refinement: "I prefer the cheaper ones
+        // first, because they might enable a Faeburrow or Bloom Tender" -- each colorful body
+        // widens the domain the scaling dorks read). Encoded as rank 10 + mv: a full
+        // deterministic ordering, no order branching, no search cost (the USER's constraint).
+        // The middle order is otherwise not load-bearing (USER), so mv ties keep plan order.
+        // Hellkite (attack_draw_cards): AFTER the others regardless of cost (USER: it "doesn't
+        // draw the cards immediately" -- the attack trigger draws in combat, and how to use the
+        // drawn cards is a second-main decision, which the post-combat enumeration already is).
+        if (def.card.IsCreature() && p.attack_draw_cards > 0) { return 19; }
+        if (def.card.IsCreature())
+        { return 10 + std::min(def.card.m_mana_cost.ManaValue(), 9); }
+        return GenericProvider::CastOrderRank(s, def);
+    }
+    return GenericProvider::CastOrderRank(s, def);
+}
+
+const char* FiveColourProvider::CastOrderTierName(int rank) const
+{
+    if (!Fc5OrderEnabled()) { return nullptr; }
+    switch (rank)
+    {
+        case 4:  return "MANA CANNONS: before every multicolored cast (each pings its color count)";
+        case 6:  return "GREAVES: the haste/unlock enabler, before the dorks and bodies";
+        case 7:  return "UNITE: early within its main (phase decided by the MTG_5C_PHASE rule)";
+        case 8:  return "PLAIN DORK, Greaves live: early -- equip {0} unlocks the tap this turn";
+        case 9:  return "SCALING DORK, Greaves live + all 5 colors on field: early, taps for 5";
+        case 25: return "DORKS, no unlock (or domain incomplete): later in the list (USER ruling)";
+        default:
+            if (rank >= 10 && rank <= 19)
+            { return "BODY, cheapest first (rank = 10 + mv): each colorful body widens the domain"; }
+            return nullptr;
+    }
+}
+
+bool FiveColourProvider::ClassifiesMainPhases() const
+{
+    return Fc5PhaseEnabled();
+}
+
 std::optional<DecisionProvider::MainPhase>
 FiveColourProvider::MainPhaseOverride(const GameState& s, const CardDefinition& def) const
 {
-    (void)s;
     const CardParams& p = def.params;
+    if (Fc5PhaseEnabled())
+    {
+        // USER phase rules (2026-08-19): "generally prefer second main for non-haste,
+        // non-Greaves, non-Oko situations -- it ensures the maximum mana can be generated and
+        // allows Faeburrow Elder to attack."
+        // Mana Cannons: MAIN 1 -- the old "fires identically from either main" missed same-turn
+        // sequencing: cast in main 2 it misses every main-1 multicolored body of that turn.
+        if (p.multicolor_cast_damage_per_color) { return MainPhase::Main1; }
+        // Unite the Coalition: "second main is ideal when it would cause a Faeburrow Elder to
+        // tap to play it; first main is ideal when you need to draw a hasty threat and won't tap
+        // a Faeburrow that could attack." Encoded: main 1 iff payable WITHOUT tapping an
+        // attack-capable creature source (the draw upside then comes free), else main 2.
+        if (p.modal_choose_n > 0 && p.modal_damage_per_choice > 0)
+        {
+            return AvailableManaPoolNoAttackers(s).CanPay(def.card.m_mana_cost)
+                       ? MainPhase::Main1 : MainPhase::Main2;
+        }
+        if (def.card.m_name == "Nicol Bolas, Planeswalker") { return MainPhase::Main2; }
+        // Scaling dorks' own cast: main 2 (they cannot attack or tap the turn they land) unless
+        // the Greaves unlock is live -- then main 1 so the tap can fund the rest of the turn.
+        // Plain dorks already classify main 2 via the base rules.
+        if (def.card.IsCreature() && p.domain_mana)
+        { return Fc5GreavesLive(s) ? MainPhase::Main1 : MainPhase::Main2; }
+        // Oko stays on the generic loyalty pull (USER 2026-08-16 ruling unchanged).
+        return std::nullopt;
+    }
+    // Legacy (pre-review) classification -- inert in play without ClassifiesMainPhases, kept for
+    // the MTG_PHASE_CLASSIFY archaeology A/B.
     // Unite the Coalition: S x (2 face damage) + (N-S) x draw -- no split feeds the attack, and
     // combat first means a vigilant Faeburrow's mana is still available to pay for it.
     if (p.modal_choose_n > 0 && p.modal_damage_per_choice > 0) { return MainPhase::Main2; }

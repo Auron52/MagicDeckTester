@@ -1,5 +1,26 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS UPDATE 2026-08-19 (latest): FIVE COLOUR review HELD — encoded, measurement in flight.
+>
+> The fifth review gate was held (the USER's prototype + refinements verbatim in
+> `cast-order-rankings.md` under "FiveColour"; USER: "honestly the trickiest order so far").
+> Built behind TWO default-off levers for attribution:
+> * **`MTG_5C_ORDER`** — Cannons 4 / Cornucopia 5 / Greaves 6 / Unite 7; mana creatures early
+>   (8, scaling dorks 9 gated on 5 colors on field) iff Greaves is live (battlefield-or-hand
+>   approximation, one copy in deck), else late (25, after the 5-color bodies); bodies
+>   cheapest-first (10+mv, Hellkite pinned 19 — its draws are a second-main decision). No order
+>   branching anywhere (USER constraint: irrelevant order must add no search cost).
+> * **`MTG_5C_PHASE`** — per-deck opt-in to the pre-combat Main2 filter (`ClassifiesMainPhases`;
+>   the global PHASE_CLASSIFY force stays rejected): Cannons Main1; Unite Main1 iff payable
+>   without tapping an attack-capable creature (`AvailableManaPoolNoAttackers`, new in
+>   ManaPayment); scaling dorks Main2 unless Greaves live; Bolas/Oko rules unchanged.
+> USER chose PROTOTYPE-FIRST over funding-ladder / search-variants for the mana-positive
+> below-5-colors dork tension ("almost a search problem") — escalate only if measurement shows
+> stranded-mana losses. Train (fivecolour): order d0 −0.048 searched green/flat; phase d0
+> byte-identical, searched d3 −0.050/−0.040 d5 −0.010/−0.060; combined additive, 5/5 green.
+> Held-out overnight per-deck arms in flight. Free-cast reconsideration + Hellkite attack-draw
+> usage confirmed already delivered by the post-combat re-enumeration (no new machinery).
+>
 > ## STATUS UPDATE 2026-08-19 (later): KNIGHTS order + MTG_ACQ_DIG ADOPTED default-on.
 >
 > The fourth review gate was held and adopted (ruling verbatim in `cast-order-rankings.md` under
