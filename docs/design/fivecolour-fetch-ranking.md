@@ -87,26 +87,156 @@ Held-out is stronger than train, so this is not seed overfitting. FiveColour's 6
 `MTG_FETCHRANK=1` is kept as a diagnostic (prints the ordered candidate list with its keys); it is
 what located this and costs nothing when unset.
 
+---
+
+# Part 2 — the full doctrine (ADOPTED 2026-08-18, held-out −0.1575 on 12/12 cells)
+
+The rules above were the first pass. The user then stated the doctrine in full (rule 5 in the queue
+below), which decomposed into five separable claims. Each was built as an independent bit of a
+temporary `MTG_FC_FETCH2` bitmask — one binary, all arms — and measured singly and in combination.
+Four were adopted; the fifth was measured inert and deliberately NOT adopted.
+
+## What the diagnostic found first: the ranking was dead after turn 2
+
+`MTG_FETCHRANK=1` mid-game showed **every key at zero from about turn 3 onward**, so fetches were
+being decided by the alphabetical backstop:
+
+```
+[fetchrank T4 ... src=W6U5B7R6G6 land=W2U1B3R2G2 ...]
+  Breeding Pool(e0 a0 s0 b0 f0 u0 d0 c2) Overgrown Tomb(e0 a0 s0 b0 f0 u0 d0 c2) ...
+```
+
+`src_cnt` read 6–7 sources per colour while the deck held 1–3 LANDS of each. The cause is that a
+single Birds of Paradise adds +1 to all five colours, so once one dork is out every colour is
+"covered" and once two are out every colour is "doubled" — `breadth`, `accel_new`, `spell_new` and
+`depth` all die at once. Confirmed by instrument: `name` (alphabetical) was the **top decider at
+43.3%** of 3,452 executor picks.
+
+That is exactly what "counting dorks on board and eventually not counting them" fixes.
+
+## The four adopted terms
+
+| bit | term | the user's clause | what it does |
+|---|---|---|---|
+| SOFT | `soft_new`, land-keyed `depth` | "counting dorks on board and eventually not counting them" | a colour only a DORK covers is *soft*-covered: not breadth (it counts today), but a land for it outranks a second land for a colour the lands already make. Redundancy keys off `land_cnt`. |
+| SUM | `want_deep` sums pips | "Oko + a Five Colour spell"; "extra red for Mana Cannons" | the redundancy want SUMS pips across the hand (cap 2) instead of one card's max. Mana Cannons `{2}{R}` + a five-colour spell needs RR at 8 mana; Oko `{1}{G}{U}` + one needs GG/UU. No single cost shows this. |
+| HORIZON | `mv <= bf_sources + 2` | "seeing what we are likely to play from hand" | only plausibly-castable cards feed `want_deep`. Without it an uncastable Progenitus (`{W}{W}{U}{U}{B}{B}{R}{R}{G}{G}`) asks for two of every colour on turn 1 — a uniform ask, therefore no signal. |
+| HYBRID | second hybrid colour counts | (implicit in "Green is a good first bet") | `{B/G}` is stored as pure black (`ManaCost` bakes a hybrid pip into its FIRST colour), so **Deathrite Shaman was invisible to green**. Every mana-PAYMENT path decodes `hybrid_pair`; this ranking site was the one that read raw flat pips. |
+
+Note the HYBRID entry corrects Part 1's comment, which claimed green already counted Deathrite. It
+did not — the conclusion "green first" happened to survive on Birds/Bloom Tender/Faeburrow alone.
+
+## SUM is the reason single-lever screening is not enough
+
+SUM and HORIZON feed only `depth`, and `depth` was dead before SOFT. Measured alone they look bad;
+measured on top of SOFT they are most of the win:
+
+| mask | levers | smoke | regression | total | cells better/worse |
+|---|---|---|---|---|---|
+| 2 | SUM alone | +0.0201 | — | +0.0201 | 0 / 2 |
+| 8 | HORIZON alone | +0.0174 | — | +0.0174 | 0 / 2 |
+| 1 | SOFT | −0.0066 | −0.0140 | −0.0206 | 3 / 3 |
+| 16 | HYBRID | −0.0289 | −0.0050 | −0.0339 | 4 / 0 |
+| 17 | SOFT+HYBRID | −0.0356 | −0.0170 | −0.0526 | 5 / 1 |
+| 11 | SOFT+SUM+HORIZON | −0.0106 | −0.0740 | −0.0846 | 6 / 1 |
+| 19 | SOFT+SUM+HYBRID | −0.0280 | −0.0580 | −0.0860 | 5 / 1 |
+| **27** | **SOFT+SUM+HORIZON+HYBRID** | **−0.0616** | **−0.0680** | **−0.1296** | **7 / 0** |
+
+**SUM moves from +0.0201 alone to −0.0616 inside mask 27.** A one-lever-at-a-time sweep would have
+discarded the Mana Cannons clause on a measurement taken against a term that did not exist yet.
+
+## Held-out
+
+Mask 27 only was taken to held-out, so the holdout stayed a check rather than a second selection.
+
+| tier | seeds | cells | sum Δ |
+|---|---|---|---|
+| smoke (train) | 1001 | 3 | −0.0616 |
+| regression (train) | 2002, 3003 | 5 | −0.0680 |
+| **overnight (HELD-OUT)** | 4004–10010 | 12 | **−0.1575 — 12 better, 0 worse** |
+
+Held-out is stronger than train and every single cell improves. References stay at 0/6 shortfalls.
+The unconditional build was verified play-identical to the mask-27 arm (same avgs AND same play
+digests on all three smoke cells) before the GT was rebaselined.
+
+## Why `breadth` looks inert — and why it is still correct where it is
+
+Promoting `breadth` above `spell_new` was built and measured: **byte-identical on all 8 train
+cells**. That is not evidence the tiebreak is useless; it is evidence it is *masked*. Instrumented
+over 3,452 executor picks (`MTG_FETCHKEY=1` reports which key first separates the top two, and
+which keys differ at all):
+
+| key | differs between top-2 | actually decides | masked |
+|---|---|---|---|
+| `spell_new` | 12.1% | 7.3% | 168 |
+| **`breadth`** | **12.0%** | **0.9%** | **382** |
+| `untapped` | 11.6% | 2.1% | 328 |
+| `depth` | 19.9% | 10.5% | 322 |
+
+`breadth >= accel_new + spell_new` by construction, and in a five-colour deck the hand usually wants
+every colour — so "a colour we are missing" is nearly always *also* "a colour something in hand
+wants", and the higher rule fires first with the same answer. The 0.9% where breadth does decide is
+exactly the case the user described: picking a dual's SECOND colour once a higher rule fixed the
+first. Of those 31 picks, 5 have the hand naming both candidates equally (`Jetmir's Garden(b2 s1)`
+over `Blood Crypt(b1 s1)` — the Mana Cannons shape) and 26 have the hand naming neither (pure
+toward-5 coverage).
+
+So breadth stays a TIEBREAK below the hand-want rules, which is where the user placed it. The
+promotion variant is recorded here as measured-and-rejected so it is not re-derived.
+
+## What the adopted change did to the decision mix
+
+Same 3,452 picks, before → after:
+
+| decided by | mask 0 | mask 27 |
+|---|---|---|
+| `name` (alphabetical backstop) | **43.3%** | **29.3%** |
+| `depth` | 10.5% | **31.5%** |
+| `soft_new` | — (did not exist) | 7.8% |
+| `colours` | 27.0% | 11.6% |
+| `breadth` | 0.9% | 0.9% |
+
+The doctrine went from silent on nearly half of all fetches to silent on under a third. The residual
+29.3% is the headroom rules 6/7 (triomes, plan-awareness) would attack.
+
+`MTG_FETCHKEY=1` is kept alongside `MTG_FETCHRANK=1` as a permanent diagnostic — it is what turned
+"breadth does nothing" into "breadth is masked 92% of the time", which are different facts with
+different remedies.
+
 ## The doctrine, in full — and what is still open
 
 Recorded verbatim so it survives context loss; this is the queue for further fetch rules.
 
 > 1. "The priority is getting to 5 colours, starting with Green T1 and prioritizing other colours we
 >    might need in our hand after that."
-> 2. "When possible we should get 2 colours we are missing."
+> 2. "When possible we should get 2 colours we are missing." … later clarified (2026-08-18): "it is
+>    a tie-break for cases that tie in the other rules … not so much get 2 colours we are missing,
+>    but prioritize the other rules and break ties by filling in more colours we are missing or
+>    later are missing 2-of." … "Say you need Red for extra Mana Cannons, you can get a shockland
+>    that has Red and another colour. The choice of the second colour might be made by that rule."
 > 3. "White is a good bet for T2 if we have Faeburrow Elder in hand."
 > 4. "As usual, a good bet is to play a shock from hand T1 if it has green. T1 green land is a
 >    priority. If we can't play T1 green, we should play T1 black for Deathrite."
+> 5. (2026-08-18) "seeing what we are likely to play from hand and getting those colours and
+>    otherwise pulling any other colour we need to have all 5, counting dorks on board and
+>    eventually not counting them … Once we have all 5 in lands, we should move toward 2 of each
+>    while ensuring that we can play spells like Dorks, Mana Cannons, Oko + a Five Colour spell or
+>    Bolas with our extra mana." … "Sometimes you need the extra red for Mana Cannons … Mana
+>    Cannons + a five colour spell is pretty great" (at 8 mana).
 
 Status:
 
 | # | rule | status |
 |---|---|---|
 | 1 | 5 colours, green first on T1 | **DONE** — the `enables_now` key above |
+| 2 | tie-break by missing colours / missing-2nd | **DONE** — `breadth` then `soft_new` then `depth`, all below the hand-want rules exactly as the clarification asks. See "why breadth looks inert" below. |
 | 3 | white on T2 for Faeburrow | **DONE** — falls out of `accel_hits` (no separate rule) |
-| 4a | green T1 > black T1 (Deathrite) | **DONE** — falls out of `{B/G}` vs `{G}` in `accel_hits` |
-| 2 | prefer covering TWO missing colours | **PARTIAL** — `breadth` exists but sorts 4th, below `accel_new`/`spell_new`, so a land covering one wanted colour can still beat one covering two missing colours. Not yet measured as its own lever. |
+| 4a | green T1 > black T1 (Deathrite) | **DONE** — and now actually correct, see the hybrid fix |
+| 5 | dorks count then stop counting; 2 of each; multi-spell turns | **DONE** — `soft_new` + land-keyed `depth` + summed/horizon `want_deep` |
 | 4b | play a SHOCK FROM HAND on T1 if it makes green | **NOT DONE** — a different decision (which land to PLAY, not which to fetch); lives in the land-drop choice, not `FetchCandidates`. |
+| 6 | prefer a TRIOME when we can prove the land need not enter untapped | **NOT DONE** — user, 2026-08-18: "triomes make coverage very very easy as long as you can be confident that you don't need the colours [this turn]". Needs a "does this turn's plan spend mana that this land must supply" predicate; see below. |
+| 7 | let the ranking consult the CURRENT PLAN | **NOT DONE** — user, 2026-08-18: "the heuristic should take advantage of what we know about the current plan if possible". Subsumes 6, and would replace the `bf_sources + 2` horizon proxy with the plan's actual spend. |
 
-Rule 2 is the natural next lever on this function; rule 4b needs a different hook and should be
-scoped separately.
+Rules 6 and 7 are the same lever seen from two sides and should be built together: both need the
+fetch ranking to see what this turn's plan intends to cast, rather than inferring it from hand
+contents and a source count. Rule 4b remains a separate hook (the land-drop choice).

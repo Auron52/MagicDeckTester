@@ -6828,8 +6828,16 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
 
     constexpr int NC = 6;                    // W,U,B,R,G,C
     std::array<int, NC> src_cnt{};           // distinct sources that already make each colour
-    auto count = [&](const std::vector<Color>& prod)
-    { for (Color c : prod) { ++src_cnt[static_cast<int>(c)]; } };
+    std::array<int, NC> land_cnt{};          // ... of which are LANDS (a dork dies; a land does not)
+    int bf_sources = 0;                      // mana permanents we control, for the castability horizon
+    auto count = [&](const std::vector<Color>& prod, bool is_land)
+    {
+        for (Color c : prod)
+        {
+            ++src_cnt[static_cast<int>(c)];
+            if (is_land) { ++land_cnt[static_cast<int>(c)]; }
+        }
+    };
 
     // Sources we control. EffectiveProduces (not the static `produces` hint) so a domain source
     // contributes the colours it ACTUALLY makes right now, and Deathrite only counts while its
@@ -6841,7 +6849,8 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
         if (!d) { continue; }
         if (!(d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock)) { continue; }
         if (!GraveyardFuelLive(s, controller, *d)) { continue; }
-        count(EffectiveProduces(s, controller, *d));
+        ++bf_sources;
+        count(EffectiveProduces(s, controller, *d), d->card.IsLand());
     }
     // Plus non-fetch lands already in hand (a land we are about to play is a near-future source,
     // so fetching to re-cover a colour it already brings is wasted fixing).
@@ -6849,44 +6858,75 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
     for (const Card& c : ap.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-        if (d && d->card.IsLand() && d->params.fetch_land_types.empty()) { count(d->params.produces); }
+        if (d && d->card.IsLand() && d->params.fetch_land_types.empty()) { count(d->params.produces, true); }
     }
 
     // What the hand wants to cast, split into accelerants (mana dorks/rocks -- the compounding
     // early plays) and everything else. `want` counts PIPS, so a {W}{W} cost asks for two white
     // sources and feeds the depth term below.
     std::array<int, NC> want{}, accel_want{};
-    // How many DISTINCT accelerants in hand each colour would turn on. Deathrite Shaman is {B/G}, so
-    // GREEN casts both one-drop dorks (Birds {G} and Deathrite) while BLACK casts only Deathrite --
-    // which is exactly the user's T1 doctrine ("T1 green land is a priority. If we can't play T1
-    // green, we should play T1 black for Deathrite") falling out of the card costs instead of a
-    // hardcoded colour preference.
+    // `want_deep` is the SAME quantity for the redundancy (depth) term alone, so the SUM/HORIZON
+    // levers can move "how many sources of this colour do we want" without touching the coverage
+    // terms above it. With both levers off it is identical to `want`.
+    std::array<int, NC> want_deep{};
+    // How many DISTINCT accelerants in hand each colour would turn on. Every accelerant in this
+    // deck is green (Birds {G}, Bloom Tender {1}{G}, Faeburrow {1}{G}{W}, Deathrite {B/G}), so
+    // GREEN turns on the most one-drops and BLACK turns on exactly one -- which is the user's T1
+    // doctrine ("T1 green land is a priority. If we can't play T1 green, we should play T1 black
+    // for Deathrite") falling out of the card costs instead of a hardcoded colour preference.
     std::array<int, NC> accel_hits{};
+    // "Likely to play from hand": a card only asks for a SECOND source of its colours
+    // if we could plausibly cast it soon -- within this turn's land drop plus one more. Without
+    // this an uncastable Progenitus ({W}{W}{U}{U}{B}{B}{R}{R}{G}{G}) asks for two of every colour
+    // on turn 1, which is a uniform ask and therefore no signal at all.
+    const int horizon_mv = bf_sources + 2;
     for (const Card& c : ap.hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d || d->card.IsLand()) { continue; }
         const bool accel = (d->tmpl == CardTemplate::ManaDork) || d->params.mana_rock;
         const ManaCost& mc = d->card.m_mana_cost;
-        const int pips[NC] = { mc.white, mc.blue, mc.black, mc.red, mc.green, 0 };
+        int pips[NC] = { mc.white, mc.blue, mc.black, mc.red, mc.green, 0 };
+        // A hybrid pip is baked into its FIRST colour's flat int (see ManaCost), so {B/G} reads as
+        // pure black. For "which colour would let me cast this" both halves are true, so credit
+        // the second colour too -- without double-counting the cost. Every mana-PAYMENT path
+        // already decodes hybrid_pair (or enumerates ExpandHybrids); this ranking site was the one
+        // place that read the raw flat pips, which made Deathrite Shaman invisible to green.
+        for (int h = 0; h < mc.hybrid_count; ++h)
+        {
+            const int c2 = mc.hybrid_pair[h] & 0xF;
+            if (c2 >= 0 && c2 < NC) { pips[c2] = std::max(pips[c2], 1); }
+        }
+        const bool deep_ok = mc.ManaValue() <= horizon_mv;
         for (int i = 0; i < NC; ++i)
         {
             if (pips[i] <= 0) { continue; }
             want[i] = std::max(want[i], pips[i]);
+            // SUMMED (capped at 2), not max: the redundancy question is "can I cast two things off
+            // this colour", which no single card's cost answers. Mana Cannons {2}{R} plus a
+            // five-colour spell needs RR at eight mana; Oko {1}{G}{U} plus a five-colour spell
+            // needs GG and UU. Only the sum sees it.
+            if (deep_ok) { want_deep[i] = std::min(2, want_deep[i] + pips[i]); }
             if (accel) { accel_want[i] = std::max(accel_want[i], pips[i]); ++accel_hits[i]; }
         }
     }
     bool any_uncovered_want = false;
     for (int i = 0; i < NC; ++i) { if (want[i] > 0 && src_cnt[i] == 0) { any_uncovered_want = true; } }
 
-    struct Key { int enables_now, accel_new, spell_new, breadth, untapped, depth, colours; std::string name; };
+    struct Key
+    {
+        int enables_now = 0, accel_new = 0, spell_new = 0, breadth = 0;
+        int soft_new = 0, untapped = 0, depth = 0, colours = 0;
+        std::string name;
+    };
     std::vector<Key> keys;
     keys.reserve(all.size());
     for (const std::string& nm : all)
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
-        if (!d) { keys.push_back({ 0, 0, 0, 0, 0, 0, 0, nm }); continue; }
-        Key k{ 0, 0, 0, 0, 0, 0, 0, nm };
+        Key k;
+        k.name = nm;
+        if (!d) { keys.push_back(std::move(k)); continue; }
         for (Color col : d->params.produces)
         {
             const int i = static_cast<int>(col);
@@ -6898,9 +6938,18 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
                 if (accel_want[i] > 0) { ++k.accel_new; }
                 else if (want[i] > 0)  { ++k.spell_new; }
             }
-            else if (src_cnt[i] == 1)
+            else if (land_cnt[i] == 0)
             {
-                k.depth += (want[i] >= 2) ? 2 : 1;   // a second source, wanted twice over
+                // Covered ONLY by a dork or rock. It counts as covered today -- the user's
+                // "counting dorks on board" -- so it is not breadth; but a dork dies to any
+                // removal and cannot be replayed, so a LAND for that colour is worth more than a
+                // second land for a colour the lands already make. That is the "and eventually
+                // not counting them" half: as the game goes on, coverage has to migrate to lands.
+                ++k.soft_new;
+            }
+            else if (land_cnt[i] == 1)
+            {
+                k.depth += (want_deep[i] >= 2) ? 2 : 1;   // a second LAND, wanted twice over
             }
         }
         // Only a land that can enter UNTAPPED can pay for something this turn. A shock pays 2 life
@@ -6935,7 +6984,16 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
         if (a.enables_now != b.enables_now) { return a.enables_now > b.enables_now; }
         if (a.accel_new != b.accel_new) { return a.accel_new > b.accel_new; }
         if (a.spell_new != b.spell_new) { return a.spell_new > b.spell_new; }
+        // breadth is a TIEBREAK, deliberately BELOW the hand-want rules (user, 2026-08-18: "it is
+        // a tie-break for cases that tie in the other rules"). Its job is picking a dual's SECOND
+        // colour once a higher rule has fixed the first: wanting red for Mana Cannons does not say
+        // whether to take Steam Vents or Blood Crypt, and breadth answers with whichever other
+        // half we are missing. Promoting it above spell_new was built and measured -- byte-identical
+        // on all 8 train cells, because breadth >= accel_new + spell_new means the two agree
+        // whenever both differ. Measured: breadth differs between the top two 12.0% of picks but
+        // decides 0.9%; the other 92% are the ones where the hand already named that colour.
         if (a.breadth   != b.breadth)   { return a.breadth   > b.breadth;   }
+        if (a.soft_new  != b.soft_new)  { return a.soft_new  > b.soft_new;  }
         if (a.untapped  != b.untapped)  { return a.untapped  > b.untapped;  }
         if (a.depth     != b.depth)     { return a.depth     > b.depth;     }
         if (a.colours   != b.colours)   { return a.colours   > b.colours;   }
@@ -6945,16 +7003,56 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
     std::vector<std::string> out;
     out.reserve(keys.size());
     for (const Key& k : keys) { out.push_back(k.name); }
+    // TEMPORARY instrument (MTG_FETCHKEY): which key actually SETTLES the pick, i.e. the first
+    // one on which the top two candidates differ. "name" means every ranking term tied and the
+    // choice fell through to the alphabetical backstop -- i.e. the doctrine said nothing.
+    if (EnvOn("MTG_FETCHKEY") && keys.size() >= 2)
+    {
+        const Key& a = keys[0];
+        const Key& b = keys[1];
+        const char* who = "name";
+        if      (a.enables_now != b.enables_now) { who = "enables_now"; }
+        else if (a.accel_new   != b.accel_new)   { who = "accel_new";   }
+        else if (a.spell_new   != b.spell_new)   { who = "spell_new";   }
+        else if (a.breadth     != b.breadth)     { who = "breadth";     }
+        else if (a.soft_new    != b.soft_new)    { who = "soft_new";    }
+        else if (a.untapped    != b.untapped)    { who = "untapped";    }
+        else if (a.depth       != b.depth)       { who = "depth";       }
+        else if (a.colours     != b.colours)     { who = "colours";     }
+        // Also: which keys DIFFER between the top two at all. A key that often differs but rarely
+        // decides is MASKED by a correlated key above it -- a different fact from a key that never
+        // differs, which is structurally unable to say anything.
+        std::string diff;
+        diff += (a.enables_now != b.enables_now) ? 'e' : '.';
+        diff += (a.accel_new   != b.accel_new)   ? 'a' : '.';
+        diff += (a.spell_new   != b.spell_new)   ? 's' : '.';
+        diff += (a.breadth     != b.breadth)     ? 'b' : '.';
+        diff += (a.soft_new    != b.soft_new)    ? 'f' : '.';
+        diff += (a.untapped    != b.untapped)    ? 'u' : '.';
+        diff += (a.depth       != b.depth)       ? 'd' : '.';
+        diff += (a.colours     != b.colours)     ? 'c' : '.';
+        std::cerr << "[fetchkey] decide=" << who << " diff=" << diff
+                  << " top1=" << a.name << "(b" << a.breadth << " s" << a.spell_new << ")"
+                  << " top2=" << b.name << "(b" << b.breadth << " s" << b.spell_new << ")\n";
+    }
     // TEMPORARY diagnostic (MTG_FETCHRANK): print the ordered candidate list with its keys.
     if (EnvOn("MTG_FETCHRANK"))
     {
+        static const char* kCol = "WUBRGC";
         std::cerr << "[fetchrank T" << s.turn_number << " types=";
         for (const std::string& t : fetch_pp.fetch_land_types) { std::cerr << t << ","; }
+        std::cerr << " src=";
+        for (int i = 0; i < NC; ++i) { if (src_cnt[i]) { std::cerr << kCol[i] << src_cnt[i]; } }
+        std::cerr << " land=";
+        for (int i = 0; i < NC; ++i) { if (land_cnt[i]) { std::cerr << kCol[i] << land_cnt[i]; } }
+        std::cerr << " wantdeep=";
+        for (int i = 0; i < NC; ++i) { if (want_deep[i]) { std::cerr << kCol[i] << want_deep[i]; } }
         std::cerr << "] ";
         for (const Key& k : keys)
         {
-            std::cerr << k.name << "(a" << k.accel_new << " s" << k.spell_new << " b" << k.breadth
-                      << " u" << k.untapped << " d" << k.depth << " c" << k.colours << ") ";
+            std::cerr << k.name << "(e" << k.enables_now << " a" << k.accel_new << " s" << k.spell_new
+                      << " b" << k.breadth << " f" << k.soft_new << " u" << k.untapped
+                      << " d" << k.depth << " c" << k.colours << ") ";
         }
         std::cerr << "\n";
     }
