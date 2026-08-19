@@ -12,10 +12,14 @@
 # into the buckets they replace. It is fitted to the ORIGINAL list, so it tilts toward the
 # incumbent card -- and that tilt is what makes a cheap test usable, because it is one-sided:
 #
-#   challenger wins            -> ADOPT.      It won against the tilt. Conservative, conclusive.
-#   incumbent wins by > band   -> INCUMBENT.  The tilt cannot account for it. No generation needed.
-#   incumbent wins by <= band  -> FLAG.       Indistinguishable from the tilt. Generation needed.
-#   no significant separation  -> FLAG.
+#   challenger ahead, |t|>=2   -> ADOPT.      It won against the tilt. Conservative, conclusive.
+#   challenger ahead, weak     -> CONFIRM.    Still fighting the tilt, so the DIRECTION is already
+#                                             evidence; only reproducibility is missing, and
+#                                             held-out seeds buy that far cheaper than generation.
+#   incumbent wins by > band   -> INCUMBENT.  The tilt cannot account for it. Nothing more to buy.
+#   incumbent wins by <= band  -> GENERATE.   The ONLY apparatus-limited case: the tilt alone would
+#                                             produce exactly this, and more seeds cannot separate
+#                                             them because the tilt is systematic, not noise.
 #
 # `band` is not a guess: the bracket jobs run two decklists under the aliased table AND under no
 # table at all, in this same pooled queue, giving (a) what the table is worth on this deck and
@@ -83,8 +87,8 @@ BAND=${BAND:-0}
 
 say "report (one-sided, decision band = ${BAND}t)"
 python3 scripts/tourney_report.py --err "$OUT/run_alias/tourney.err" --games "$GAMES" \
-    --bias "$BAND" --tsv "$OUT/run_alias/tourney.tsv" > "$OUT/run_alias/REPORT.md" 2>&1
-grep -E '^\*\*(ADOPT|FLAG|INCUMBENT|MIXED)' "$OUT/run_alias/REPORT.md" || true
+    --bias "$BAND" --seed "$SEED" --tsv "$OUT/run_alias/tourney.tsv" > "$OUT/run_alias/REPORT.md" 2>&1
+grep -E '^\*\*(ADOPT|CONFIRM|INCUMBENT|GENERATE|MIXED)' "$OUT/run_alias/REPORT.md" || true
 
 ERRF="$OUT/run_alias/tourney.err"; CSEED="$SEED"; cases_for
 
