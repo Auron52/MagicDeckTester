@@ -1,4 +1,5 @@
 #include "../core/EnvFlags.h"
+#include "../core/GameSetup.h"
 #include "ExhaustiveKeep.h"
 #include "../deck/DeckLoader.h"
 
@@ -130,31 +131,47 @@ PoolFp ComputePoolFp(const Decklist& deck, const EquivReport& eq, int K)
 struct RolloutCfg
 {
     int depth = -1, budget_ms = -1, max_turns = -1;
+    // STARTING LIFE (core/GameSetup.h). A 20-life and a 30-life table are the SAME deck, buckets, K,
+    // equiv_seed, depth, budget and max_turns -- every fingerprint the carry/resume paths check --
+    // so without this a 2HG table and a normal one are indistinguishable, and a 30-life run would
+    // silently adopt a 20-life prior (or resume its journal). -1 means "the artifact predates this
+    // stamp", which reads as UNVERIFIABLE rather than as a mismatch, so nothing already generated
+    // is invalidated.
+    int start_life = -1;
     bool present() const { return depth >= 0 && budget_ms >= 0 && max_turns >= 0; }
     std::string str() const
     { return present() ? ("d" + std::to_string(depth) + "/b" + std::to_string(budget_ms)
-                          + "/t" + std::to_string(max_turns)) : std::string("<not recorded>"); }
+                          + "/t" + std::to_string(max_turns)
+                          + (start_life >= 0 ? "/L" + std::to_string(start_life) : std::string()))
+                       : std::string("<not recorded>"); }
 };
 
 enum class CfgVerdict { Match, Differs, Unverifiable };
 
 RolloutCfg RolloutCfgOf(const ExhaustiveKeepConfig& cfg)
-{ return { cfg.depth, cfg.budget_ms, cfg.max_turns }; }
+{ return { cfg.depth, cfg.budget_ms, cfg.max_turns, gamesetup::StartingLife() }; }
 
 RolloutCfg RolloutCfgFromMeta(const nlohmann::json& m)
-{ return { m.value("depth", -1), m.value("budget_ms", -1), m.value("max_turns", -1) }; }
+{ return { m.value("depth", -1), m.value("budget_ms", -1), m.value("max_turns", -1),
+           m.value("start_life", -1) }; }
 
 void StampRolloutCfg(nlohmann::json& meta, const RolloutCfg& rc)
 {
     if (!rc.present()) { return; }   // never stamp a partial config -- absent means "unknown", not "zero"
     meta["depth"] = rc.depth; meta["budget_ms"] = rc.budget_ms; meta["max_turns"] = rc.max_turns;
+    if (rc.start_life >= 0) { meta["start_life"] = rc.start_life; }
 }
 
 CfgVerdict CompareRolloutCfg(const RolloutCfg& a, const RolloutCfg& b)
 {
     if (!a.present() || !b.present()) { return CfgVerdict::Unverifiable; }
-    return (a.depth == b.depth && a.budget_ms == b.budget_ms && a.max_turns == b.max_turns)
-         ? CfgVerdict::Match : CfgVerdict::Differs;
+    if (a.depth != b.depth || a.budget_ms != b.budget_ms || a.max_turns != b.max_turns)
+    { return CfgVerdict::Differs; }
+    // Life is compared only when BOTH sides recorded it: an artifact predating the stamp must stay
+    // usable (Unverifiable -> warn and proceed), exactly as the other fields behave.
+    if (a.start_life >= 0 && b.start_life >= 0 && a.start_life != b.start_life)
+    { return CfgVerdict::Differs; }
+    return CfgVerdict::Match;
 }
 
 // One place to say it, so every consumer says it the same way. Returns false when the caller must
