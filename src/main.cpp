@@ -3933,6 +3933,7 @@ int main(int argc, char* argv[])
     ApplyHeuristicDefaults();
     // Warn on MTG_* env vars this binary does not read (typo / deleted flag = silent no-op).
     WarnUnknownMtgFlags();
+    ValidateHeuristicArmNames();
     if (argc >= 2 && std::string(argv[1]) == "--list-flags") { PrintFlagRegistry(std::cout); return 0; }
     // Arm the colored_creature_only legality audit's exit dump (MTG_CCO_AUDIT); no-op when unset.
     CcoAuditDumper();

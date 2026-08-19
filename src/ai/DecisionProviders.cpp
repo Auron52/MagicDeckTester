@@ -1,5 +1,6 @@
 #include <array>
 #include <map>
+#include "HeuristicArm.h"
 #include "ValueArm.h"
 #include "../core/EnvFlags.h"
 #include <iostream>
@@ -9139,7 +9140,7 @@ void FiveColourProvider::ModalSplitCandidates(const GameState& s, const CardDefi
 static bool KittyOrderEnabled()
 {
     static const bool on = EnvOn("MTG_KE_ORDER");
-    return on;
+    return heurarm::Flag(heurarm::KE_ORDER, on);
 }
 
 int EquipmentProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const

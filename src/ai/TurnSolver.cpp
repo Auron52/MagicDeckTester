@@ -1,3 +1,4 @@
+#include "HeuristicArm.h"
 #include "ValueArm.h"
 #include "../core/EnvFlags.h"
 #include "TurnSolver.h"
@@ -474,7 +475,8 @@ static bool HasteDorkCreditEnabled() { return !g_no_haste_dork_credit; }
 static const bool g_search_second_main = EnvOn("MTG_SEARCH_SECOND_MAIN");
 static bool GreedySecondMainEnabled()
 {
-    static const bool s_kill = EnvOn("MTG_NO_SEARCH_SECOND_MAIN");
+    static const bool s_kill_env = EnvOn("MTG_NO_SEARCH_SECOND_MAIN");
+    const bool s_kill = heurarm::Flag(heurarm::NO_SEARCH_SECOND_MAIN, s_kill_env);
     if (s_kill)               { return true;  }
     return !g_search_second_main;
 }
@@ -591,13 +593,13 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
 static bool EquipMinPowerLastEnabled()
 {
     static const bool on = EnvOn("MTG_EQUIP_MINPOWER_LAST");
-    return on;
+    return heurarm::Flag(heurarm::EQUIP_MINPOWER_LAST, on);
 }
 
 static bool KittyParkEnabled()
 {
     static const bool on = EnvOn("MTG_KE_PARK");
-    return on;
+    return heurarm::Flag(heurarm::KE_PARK, on);
 }
 
 // THE PARK IS HALF A LOOP, AND FORCING ONLY THAT HALF WOULD BE A TRAP (USER, 2026-08-19: "it also

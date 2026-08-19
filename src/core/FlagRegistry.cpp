@@ -1,4 +1,5 @@
 #include "FlagRegistry.h"
+#include "../ai/HeuristicArm.h"
 #include "flag_registry.h"   // generated: kKnownMtgFlags[], sorted
 
 #include <algorithm>
@@ -33,6 +34,23 @@ void WarnUnknownMtgFlags()
                      " set).\n",
                      name.c_str());
     }
+}
+
+void ValidateHeuristicArmNames()
+{
+    bool bad = false;
+    for (int i = 0; i < heurarm::COUNT; ++i)
+    {
+        const char* n = heurarm::Name(i);
+        if (n && KnownFlag(n)) { continue; }
+        std::fprintf(stderr,
+                     "[flags] FATAL: HeuristicArm slot %d names \"%s\", which no EnvOn() call site"
+                     " reads. A per-job override of it would shadow nothing and the arm would"
+                     " silently run the BASELINE.\n",
+                     i, n ? n : "(null)");
+        bad = true;
+    }
+    if (bad) { std::abort(); }
 }
 
 void PrintFlagRegistry(std::ostream& os)

@@ -16,3 +16,11 @@ void WarnUnknownMtgFlags();
 
 // Print every known MTG_* flag name, one per line (the registry the validator checks against).
 void PrintFlagRegistry(std::ostream& os);
+
+// Validate ai/HeuristicArm.h's slot->env-name table against the same registry, and ABORT on a
+// mismatch. Same hazard as above, one level nastier: a per-job flag override whose name does not
+// match the EnvOn() call site it is meant to shadow would parse fine, set fine, and shadow NOTHING
+// -- so an arm would run the BASELINE while its manifest, its logs, and the report all say the
+// lever was on. Fatal rather than a warning because, unlike a user's stale script, this can only
+// ever be a bug inside this binary.
+void ValidateHeuristicArmNames();

@@ -11,6 +11,7 @@
 #include "../ai/Profiler.h"
 #include "../ai/MulliganProfileIO.h"
 #include "../deck/DeckLoader.h"
+#include "../ai/HeuristicArm.h"
 #include "../ai/ValueArm.h"
 #include "../ai/DecisionProviders.h"   // SelectDecisionProvider + Name(): report which archetype a job runs under
 #include <algorithm>
@@ -113,6 +114,11 @@ struct Job
     // pooled queue and one tail. Sentinels mean "unset" => the env default => byte-identical for every
     // manifest that omits them.
     valuearm::Arm   arm;
+    // Per-job BOOLEAN HEURISTIC LEVERS (see ai/HeuristicArm.h). Same argument as the value arm one
+    // slot up: a lever read into a process-wide static forces one `mtg --batch` per arm, which is
+    // the per-arm wave pattern CLAUDE.md forbids. All-unset (the default) => the env default for
+    // every lever => byte-identical for any manifest without a "flags" block.
+    heurarm::Arm    flags               = heurarm::Unset();
     // Per-job deck numbering (see decknumbering in GoldFishRunner.h). Empty => none => the deck's
     // usual per-deck numbering. Held BY VALUE per job: a comparison's combinations each need their
     // own map, and a pointer into a shared cache would have to outlive the worker's job.
@@ -579,6 +585,25 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("esc_to_trust")) { j.arm.esc_to_trust = jspec["esc_to_trust"].get<bool>() ? 1 : 0; }
     if (jspec.contains("trust_slack"))  { j.arm.trust_slack  = jspec["trust_slack"].get<double>(); }
     j.arm.value_profile   = jspec.value("value_profile", std::string());
+    // "flags": {"MTG_KE_ORDER": true, ...} -- per-job boolean lever overrides (see ai/HeuristicArm.h).
+    // An UNKNOWN name throws rather than being ignored: a silently-dropped flag reads as "this arm was
+    // measured" while the job actually ran the baseline, which is exactly how an A/B gets corrupted.
+    if (jspec.contains("flags"))
+    {
+        if (!jspec["flags"].is_object())
+        { throw std::runtime_error("manifest job \"flags\": must be an object of ENV_NAME -> bool"); }
+        for (auto it = jspec["flags"].begin(); it != jspec["flags"].end(); ++it)
+        {
+            const int slot = heurarm::SlotOf(it.key().c_str());
+            if (slot >= heurarm::COUNT)
+            {
+                throw std::runtime_error("manifest job \"flags\": \"" + it.key() +
+                                         "\" is not a per-job overridable lever (see ai/HeuristicArm.h)");
+            }
+            j.flags[static_cast<std::size_t>(slot)] =
+                static_cast<std::int8_t>(it.value().get<bool>() ? 1 : 0);
+        }
+    }
     // "deck_numbering": path to {"Card Name": [n1, n2, ...]}. Throws on a bad path/parse -- a
     // mis-specified numbering must fail loudly, never silently fall back to per-deck numbering
     // (that would read as "comparison mode on" while measuring unpaired arms).
@@ -1463,6 +1488,9 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     // Same lifetime rule as the arm: set unconditionally so a previous job's
                     // starting life cannot leak into this one through the reused worker thread.
                     gamesetup::t_setup.starting_life = jobs[wi.job].starting_life;
+                    // Same lifetime rule, and it must also precede the engine build: a provider's
+                    // cast order is consulted from the first solve onward (see ai/HeuristicArm.h).
+                    heurarm::t_arm  = jobs[wi.job].flags;
                     // Same lifetime rule as the arm: set unconditionally (empty => nullptr => the env
                     // default) so a previous job's numbering cannot leak through the reused thread.
                     decknumbering::t_map =
