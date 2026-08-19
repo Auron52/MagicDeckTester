@@ -627,6 +627,10 @@ public:
     // real decisions -- the global-arm split is recorded at the base hook). Measurement lever,
     // default OFF pending the per-deck A/B.
     bool        SearchedSecondMainInSearch() const override;
+    // MTG_5C_CONDEMN: the order-condemnation post-combat filter (base hook note) -- main 2
+    // continues with main 1's condemnation list instead of re-litigating the whole hand.
+    // Measurement lever, default OFF pending the per-deck A/B.
+    bool        CondemnsPassedMainPhase() const override;
     // Nicol Bolas +3 is "destroy target NONCREATURE permanent" -- it REQUIRES a target, and with a
     // land-less opponent the only legal ones are ours. Destroying our own land is a real cost, so
     // the search correctly declined the ability; but -9 is unreachable from loyalty 5 without two

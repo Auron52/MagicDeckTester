@@ -7061,6 +7061,20 @@ bool FiveColourProvider::SearchedSecondMainInSearch() const
     return on && Fc5PhaseEnabled();
 }
 
+bool FiveColourProvider::CondemnsPassedMainPhase() const
+{
+    // REJECTED as measured (2026-08-19, train): d3 +0.040/+0.045, d5 +0.040/+0.050 vs shipping,
+    // essentially unchanged with MTG_5C_SSM added. The m2 re-offer the filter removes was doing
+    // REAL work: the m1 solve's enumeration is bounded (group caps, prunes, budget), so a card
+    // it never actually weighed is not "declined" -- the m2 pass was its recovery window, and
+    // condemning it deletes recoveries, not duplicates. A sound version must distinguish
+    // "declined by the search" from "dropped by a prune / never explored", which the hand
+    // snapshot alone cannot see. Lever kept for re-measurement if that distinction is built;
+    // do not flip on without it.
+    static const bool on = EnvOn("MTG_5C_CONDEMN");
+    return on && Fc5PhaseEnabled();
+}
+
 std::optional<DecisionProvider::MainPhase>
 FiveColourProvider::MainPhaseOverride(const GameState& s, const CardDefinition& def) const
 {

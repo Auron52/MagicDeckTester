@@ -245,6 +245,22 @@ struct GameState
     // classifier inactive for any state not built through SetupGame (conservative: a filter that
     // silently narrows nothing beats one that silently deletes casts).
     bool                     uses_second_main      = false;
+    // ORDER-CONDEMNATION snapshot (USER model, 2026-08-19: the search decides what to cast,
+    // "limited to what our order allows" -- a Main1-classified card the pre-combat decision
+    // passed on is CONDEMNED for the rest of the turn; "main 2 should not re-litigate the whole
+    // hand ... it should continue with the same condemnation list"; newly drawn/acquired cards
+    // exempt). Card numbers in hand at THIS turn's pre-combat main decision, stamped by BOTH
+    // worlds at the same logical point (AIEngine::TakeTurn pre-combat entry + ApplyPlanDirect
+    // pre-combat entry -- lockstep pair, TurnSolver::StampM1Hand). Consumed by the post-combat
+    // CollectActions condemnation filter (provider opt-in, CondemnsPassedMainPhase).
+    // m1_hand_turn guards staleness: a consumer only honours a snapshot stamped THIS turn, so no
+    // clearing pass is needed. POD array, not a vector: GameState deep-copy is a measured
+    // hotspot and this must stay allocation-free; a hand longer than the cap leaves the
+    // overflow un-condemnable (a missed prune -- the safe direction).
+    static constexpr int          kM1HandCap = 16;
+    std::array<int, kM1HandCap>   m1_hand{};
+    std::uint8_t                  m1_hand_n    = 0;
+    int                           m1_hand_turn = -1;
     // CARD-DEPENDENCY-MAP pulls (GoldFishRunner::DeriveDependencyPulls, stamped by SetupGame; see
     // docs/design/card-dependency-map.md). Closure over the deck's dependency edges: an ENABLER
     // (lifegain_to_loss) must be considerable in the phase of its opponent-lifegain payloads, and a

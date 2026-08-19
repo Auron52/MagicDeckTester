@@ -1450,6 +1450,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if (is_pre_combat_main)
     {
         ResolveEchoUpkeep(state);
+        // ORDER-CONDEMNATION stamp (executor half of the lockstep pair -- see
+        // GameState::m1_hand): after the staged merge, before any play, so the snapshot is the
+        // hand the m1 decision (and its search) actually sees. TurnSolver::ApplyPlanDirect
+        // stamps the same point for the projected worlds.
+        TurnSolver::StampM1Hand(state);
     }
 
     // Enumerate-all-earliest-wins dump (offline rule-miner; inert unless MTG_DUMP_EWINS).

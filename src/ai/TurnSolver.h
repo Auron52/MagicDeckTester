@@ -513,6 +513,11 @@ public:
     // small vector per armed breakpoint) and taken BEFORE the draw resolves.
     static std::vector<int> HandCardNumbers(const GameState& state);
 
+    // Stamp the ORDER-CONDEMNATION snapshot (GameState::m1_hand) from the active player's
+    // current hand. Called at the pre-combat main decision in BOTH worlds -- AIEngine::TakeTurn
+    // and ApplyPlanDirect's pre-combat entry -- the lockstep pair; see the field's note.
+    static void StampM1Hand(GameState& state);
+
     // Do either of the snapshot's consumers (MTG_CANTRIP_ORDER / MTG_BP_CLASSIFY) need it? False
     // in every ship config, so the capture is skipped entirely on the cast hot path.
     static bool BreakpointHandSnapshotWanted();

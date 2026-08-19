@@ -84,7 +84,7 @@ static_assert(sizeof(Permanent) == 256,
 static_assert(sizeof(Player) == 160,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
-static_assert(sizeof(GameState) == 592,
+static_assert(sizeof(GameState) == 664,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -386,6 +386,12 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // id decides nothing about an outcome -- two siblings that made different numbers of tokens
     // reach the same position with different counters. (Where an id DOES matter -- attachment
     // wiring -- the board fold below picks it up via card.m_number, and fails closed.)
+    // NOT folded, deliberately: m1_hand / m1_hand_n / m1_hand_turn (the order-condemnation
+    // snapshot). Per-turn SCRATCH: its only consumer (the post-combat CollectActions
+    // condemnation filter) guards on m1_hand_turn == turn_number, and the pre-combat entry of
+    // every turn re-stamps it before that guard can pass again -- so at any END-OF-TURN
+    // boundary the field is dead until overwritten and cannot distinguish two futures. Folding
+    // it would only split states whose play is provably identical (lost reach, no soundness).
 
     for (int pi = 0; pi < 2; ++pi)
     {

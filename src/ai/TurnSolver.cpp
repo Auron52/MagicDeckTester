@@ -3432,6 +3432,18 @@ int TurnSolver::ClassifyCastMainPhase(const GameState& state, const CardDefiniti
     return mp == MP::Main1 ? 0 : (mp == MP::Main2 ? 1 : 2);
 }
 
+void TurnSolver::StampM1Hand(GameState& state)
+{
+    const Player& ap = state.ActivePlayer();
+    state.m1_hand_n = 0;
+    for (const Card& c : ap.hand)
+    {
+        if (state.m1_hand_n >= GameState::kM1HandCap) { break; }   // overflow: un-condemnable (safe)
+        state.m1_hand[state.m1_hand_n++] = c.m_number;
+    }
+    state.m1_hand_turn = state.turn_number;
+}
+
 std::vector<int> TurnSolver::HandCardNumbers(const GameState& state)
 {
     std::vector<int> out;
@@ -6334,6 +6346,43 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                            == DecisionProvider::MainPhase::Main2;
                 }), actions.end());
         }
+    }
+
+    // ORDER CONDEMNATION -- the post-combat half (USER model 2026-08-19: the search decides
+    // what to cast, "limited to what our order allows", applying "at every phase and
+    // breakpoint we are evaluating"; "main 2 should not re-litigate the whole hand ... It
+    // should continue with the same condemnation list"). A Main1-classified card that was in
+    // hand at THIS turn's m1 decision (GameState::m1_hand) had its slot -- the m1 search saw
+    // it and passed -- so every post-combat harvest this turn (the real m2, the search's
+    // interior m2 projections, their continuations) drops it. A card NOT in the snapshot
+    // (drawn in combat -- Hellkite's attack draw -- or acquired since) is first-class and
+    // stays: "newly drawn cards may be exempt from order condemnation." Provider opt-in
+    // (CondemnsPassedMainPhase), gated on the same filter activation as the pre-combat half so
+    // the pair is symmetric, and on a THIS-turn stamp (m1_hand_turn) so a stale snapshot
+    // condemns nothing.
+    if (!is_pre_combat && !actions.empty() && MainPhaseFilterActive(state)
+        && state.m1_hand_turn == state.turn_number
+        && ResolveProvider(state).CondemnsPassedMainPhase())
+    {
+        const DecisionProvider& prov = ResolveProvider(state);
+        const bool haste_access      = HasteAccessThisTurn(state);
+        const bool scaling_attacker  = BoardHasScalingAttacker(state);
+        const Player& ap             = state.ActivePlayer();
+        auto in_m1_hand = [&](int num) {
+            for (int i = 0; i < state.m1_hand_n; ++i)
+            { if (state.m1_hand[i] == num) { return true; } }
+            return false;
+        };
+        actions.erase(std::remove_if(actions.begin(), actions.end(),
+            [&](const Action& a)
+            {
+                if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { return false; }
+                if (a.hand_index < 0
+                    || a.hand_index >= static_cast<int>(ap.hand.size())) { return false; }
+                if (!in_m1_hand(ap.hand[a.hand_index].m_number)) { return false; }   // new card: exempt
+                return ClassifyMainPhase(state, prov, a, haste_access, scaling_attacker)
+                       == DecisionProvider::MainPhase::Main1;
+            }), actions.end());
     }
 
     return actions;
@@ -9826,6 +9875,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     PROF_INC(applyplan_calls);
     Player& ap  = state.ActivePlayer();
     int opp_idx = 1 - state.active_player_index;
+
+    // ORDER-CONDEMNATION stamp (rollout/interior half of the lockstep pair -- see
+    // GameState::m1_hand): the pre-combat apply IS this projected turn's m1 decision point, so
+    // the hand right now is what that decision saw. Every descendant state (interior m2,
+    // future-turn continuations) inherits the snapshot by copy.
+    if (is_pre_combat) { TurnSolver::StampM1Hand(state); }
 
     // Pin this plan variant's searched ETB-dig pick (Plan::etbdig_choice) for the whole apply; the
     // first dig consumes it and any later dig falls back to the provider's ranked default. Scoped,

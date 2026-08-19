@@ -409,6 +409,15 @@ public:
     // dilutes the shared budget. Default false -> byte-identical.
     virtual bool SearchedSecondMainInSearch() const { return false; }
 
+    // CondemnsPassedMainPhase -- per-deck opt-in to the ORDER-CONDEMNATION post-combat filter
+    // (USER model, 2026-08-19): a Main1-classified card the pre-combat decision passed on is
+    // condemned for the rest of the turn -- no post-combat harvest (real m2, interior
+    // projections, continuations) re-offers it; newly drawn/acquired cards are exempt via the
+    // GameState::m1_hand snapshot. The complement of ClassifiesMainPhases: that filter stops
+    // main 1 from considering main-2 cards, this one stops main 2 from re-litigating main-1
+    // cards. Default false -> byte-identical.
+    virtual bool CondemnsPassedMainPhase() const { return false; }
+
     // CastOrderFallbackRanks -- the FUNDING ladder for a cast whose ideal position is LATE but
     // whose output (Treasures, ritual float) may be needed earlier to pay for the line. Returns
     // the ranks to try in preference order (first = preferred); the range ladder walks down the
