@@ -1,5 +1,6 @@
 #include "../core/EnvFlags.h"
 #include "ExhaustiveKeep.h"
+#include "../deck/DeckLoader.h"
 
 #include <algorithm>
 #include <array>
@@ -204,6 +205,15 @@ struct SizeTable
     // Execution-trace (MTG_KEEP_TRACE): per-cell UNION over its rollouts of the compact card indices
     // whose effect ran (sparse; empty unless tracing). Written per (cell,pd) task -> race-free like sum.
     std::vector<std::array<std::set<int>, 2>> touched;
+    // ARM REACHABILITY MASK (MTG_KEEP_ARM_DECKS), bit a = "arm a can actually hold this hand".
+    // Empty when no arm set was supplied => every cell generated, byte-identical to before.
+    //
+    // Why a mask rather than a bare filter (user, 2026-08-19: "we need to determine the decks for
+    // each that has a given cell ... so it's easy to determine"): a cell whose mask is 0 is
+    // unreachable by every arm and is never rolled; a cell reachable by only SOME arms is still
+    // needed, and the mask says by whom. On a later APPEND the mask answers "can the new arm reuse
+    // this cell, or is it genuinely new?" with a bit test instead of a re-derivation.
+    std::vector<std::uint64_t> arm_mask;
 };
 
 // Optimal keep policy from fully-populated V tables. A PURE function of (tables, deck bucket counts):
@@ -1610,6 +1620,44 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         if (rep[it->second].m_name.str().empty()) { rep[it->second] = c; }
     }
 
+    // ---- ARM SET (MTG_KEEP_ARM_DECKS): generate only cells some real decklist can reach ----------
+    // A comma-separated list of REAL 60-card decklists. The table then covers exactly the union of
+    // hands those decks can produce -- never a superset decklist's Cartesian product, which invents
+    // cells no arm can hold (see .claude/skills/deck-screening.md Rule 0a). Unset => single-deck caps,
+    // byte-identical to before.
+    std::vector<std::vector<int>> arm_counts;   // [arm][bucket]
+    std::vector<std::string>      arm_names;
+    if (const char* ad = std::getenv("MTG_KEEP_ARM_DECKS"); ad && *ad)
+    {
+        std::string spec = ad, cur;
+        std::vector<std::string> paths;
+        for (char ch : spec)
+        { if (ch == ',') { if (!cur.empty()) { paths.push_back(cur); } cur.clear(); } else { cur += ch; } }
+        if (!cur.empty()) { paths.push_back(cur); }
+        if (paths.size() > 64)
+        { throw std::runtime_error("MTG_KEEP_ARM_DECKS: at most 64 arms (the mask is 64-bit)"); }
+        for (const std::string& ph : paths)
+        {
+            const Decklist ad_deck = DeckLoader::LoadFromFile(ph);
+            std::vector<int> c(K, 0);
+            int unbucketed = 0;
+            for (const Card& c2 : ad_deck.mainboard)
+            {
+                auto it = bucket_of.find(c2.m_name.str());
+                if (it == bucket_of.end()) { ++unbucketed; continue; }
+                c[it->second]++;
+            }
+            if (unbucketed > 0)
+            {
+                throw std::runtime_error("MTG_KEEP_ARM_DECKS: " + ph + " has " +
+                    std::to_string(unbucketed) + " card(s) the bucketing does not cover -- the pool "
+                    "decklist must contain every card every arm plays");
+            }
+            arm_counts.push_back(std::move(c));
+            arm_names.push_back(ph);
+        }
+    }
+
     // Execution-trace (MTG_KEEP_TRACE): compact index of every distinct card NAME in the deck, and the
     // per-rollout "touched" recording it enables. Off => no out_hit passed => engine byte-identical.
     const bool trace_on = EnvOn("MTG_KEEP_TRACE");
@@ -1628,8 +1676,45 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     {
         SizeTable t;
         std::vector<int> cap(K), cur(K, 0);
-        for (int b = 0; b < K; ++b) { cap[b] = std::min(count[b], H); }
+        // Envelope cap: the deck's own counts, or (with an arm set) the per-bucket MAX across arms --
+        // never their sum, and never a superset decklist's counts.
+        for (int b = 0; b < K; ++b)
+        {
+            int c = count[b];
+            if (!arm_counts.empty())
+            { c = 0; for (const std::vector<int>& ac : arm_counts) { c = std::max(c, ac[b]); } }
+            cap[b] = std::min(c, H);
+        }
         EnumComps(0, H, cur, cap, t.comps);
+        // Keep only cells SOME arm can actually hold, and record which ones can. The envelope is a
+        // product of per-bucket caps, so it contains hands mixing candidates that no single arm
+        // plays (e.g. a 4-way swap of one 2-card slot admits hands holding all four candidates).
+        if (!arm_counts.empty())
+        {
+            const std::size_t before = t.comps.size();
+            std::vector<std::vector<int>> kept;
+            std::vector<std::uint64_t>    kept_mask;
+            kept.reserve(before); kept_mask.reserve(before);
+            for (const std::vector<int>& comp : t.comps)
+            {
+                std::uint64_t mask = 0;
+                for (std::size_t a = 0; a < arm_counts.size(); ++a)
+                {
+                    bool fits = true;
+                    for (int b = 0; b < K; ++b)
+                    { if (comp[b] > arm_counts[a][b]) { fits = false; break; } }
+                    if (fits) { mask |= (1ULL << a); }
+                }
+                if (mask) { kept.push_back(comp); kept_mask.push_back(mask); }
+            }
+            os << "[keepgen] size-" << H << ": " << kept.size() << " reachable cells of "
+               << before << " envelope (" << (before - kept.size()) << " dropped, "
+               << std::fixed << std::setprecision(1)
+               << (before ? 100.0 * static_cast<double>(before - kept.size()) / static_cast<double>(before) : 0.0)
+               << "% unreachable by any of " << arm_counts.size() << " arms)\n";
+            t.comps = std::move(kept);
+            t.arm_mask = std::move(kept_mask);
+        }
         for (int i = 0; i < static_cast<int>(t.comps.size()); ++i) { t.index[t.comps[i]] = i; }
         t.V.assign(t.comps.size(), { 0.0, 0.0 });
         t.se.assign(t.comps.size(), { 0.0, 0.0 });
