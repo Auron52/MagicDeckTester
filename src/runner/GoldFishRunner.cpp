@@ -1,4 +1,5 @@
 #include "../core/EnvFlags.h"
+#include "../core/GameSetup.h"
 #include "GoldFishRunner.h"
 #include "../core/GameEngine.h"
 #include "../core/GameLogger.h"
@@ -665,8 +666,12 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
 {
     GameState state;
 
-    state.players[0].life = 20;
-    state.players[1].life = 20;
+    // Starting life: per-job override -> MTG_START_LIFE -> 20 (see core/GameSetup.h). BOTH
+    // players, because 2HG starts both teams at 30; our own total is inert for a goldfish (the
+    // passive opponent never attacks) but there is no reason to model it unfaithfully.
+    const int start_life = gamesetup::StartingLife();
+    state.players[0].life = start_life;
+    state.players[1].life = start_life;
 
     // Shuffle-variance instrument (see GameState::shuffle_salt): an independent salt lets the SAME
     // game_seed be replayed with different shuffle realisations. Default 0 -> SaltSeed identity ->

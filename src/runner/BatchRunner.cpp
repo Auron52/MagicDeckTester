@@ -4,6 +4,7 @@
 #include "../ai/GameWorkMeter.h"
 #include "../core/GameLogger.h"
 #include "../core/EnvFlags.h"
+#include "../core/GameSetup.h"
 #include "../core/HardwareConcurrency.h"
 #include "../ai/AIEngine.h"
 #include "../ai/MulliganProfile.h"
@@ -99,6 +100,10 @@ struct Job
     // it governing on expensive ones, which is the only place it was ever meant to act.
     long long       abandon_floor_units = 0;
     int             max_turns           = 8;   // goldfish horizon (see main.cpp); per-job overridable
+    // Per-job STARTING LIFE (see core/GameSetup.h). -1 => unset => env => 20, so every existing
+    // manifest is byte-identical. 30 is the 2HG race; as a job field the 20- and 30-life arms of
+    // one comparison share ONE pooled queue instead of one batch each.
+    int             starting_life       = -1;
     bool            second_main         = false;  // precomputed DeckUsesSecondMain
     int             sched_weight        = 0;   // optional LPT scheduling priority (higher = run first);
                                                // overrides the depth/budget cost proxy for known-slow
@@ -553,6 +558,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     j.budget_ms           = jspec.value("budget_ms", 0);
     j.sched_weight        = jspec.value("weight", 0);      // LPT priority override (see Job::sched_weight)
     j.max_turns           = jspec.value("max_turns", 8);   // global goldfish horizon; per-job override
+    j.starting_life       = jspec.value("starting_life", -1);  // -1 => env => 20 (2HG uses 30)
     j.abandon_units       = jspec.value("abandon_units", 0LL);   // per-game ceiling; see Job::abandon_units
     j.abandon_k           = jspec.value("abandon_k", 0.0);       // ...or k x the cell's own median
     j.abandon_calib       = jspec.value("abandon_calib", 0);     //    over its first N games
@@ -1454,6 +1460,9 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     // Set unconditionally (an omitted block resets to "use env"), so a previous
                     // job's arm can never leak into this one through the reused worker thread.
                     valuearm::t_arm = jobs[wi.job].arm;
+                    // Same lifetime rule as the arm: set unconditionally so a previous job's
+                    // starting life cannot leak into this one through the reused worker thread.
+                    gamesetup::t_setup.starting_life = jobs[wi.job].starting_life;
                     // Same lifetime rule as the arm: set unconditionally (empty => nullptr => the env
                     // default) so a previous job's numbering cannot leak through the reused thread.
                     decknumbering::t_map =
