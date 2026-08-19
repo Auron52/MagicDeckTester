@@ -6597,14 +6597,16 @@ int CreatureGivingProvider::CastOrderRank(const GameState& s, const CardDefiniti
 
 bool CreatureGivingProvider::LandDropAfterHandLandTutor(const GameState& s, int controller) const
 {
-    // USER (2026-08-19): "Sylvan Scrying is the one card that can go before the Land drop" --
-    // Scrying fetches a land to HAND (Orchard-first via this provider's TutorCandidates), so a
-    // drop played AFTER it can be the fetched land. Fallback rule, verbatim: "a land may be
-    // played before if we cannot afford that order" -> the tutor must be payable from the mana
-    // already on board. AND the hand must hold NO land: with a land in hand the drop costs the
-    // defer a real mana this main (the plan solves one land short), measured d0 +0.0530 on the
-    // hand-presence version -- while with an empty land hand the defer costs NOTHING (no drop
-    // was possible) and the fetch PROVIDES the drop, the pure-win case the ruling names.
+    // USER (2026-08-19, final round): "If you can play it before the land drop, you should. The
+    // reason being that you want the fixing and creature creation of Forbidden Orchard, so doing
+    // this is never a negative." Exactly two exceptions, both the USER's: "The only time when
+    // you can just play the land first is if you had orchard already" (order then irrelevant --
+    // and clarified: Scrying-first is ALSO fine there; land-first is chosen as the simpler
+    // measured path, not a rule), "Or if you can't afford sylvan scrying without the land" (the
+    // payability fallback).
+    // The earlier no-hand-land narrowing is SUPERSEDED: its measured +0.0530 was this hook's own
+    // defect (the turn was PLANNED one land short), fixed by the MTG_ACQ_RESOLVE second pass
+    // re-solving after the tutor with the drop played -- not by narrowing the rule.
     if (!CgOrderReviewEnabled()) { return false; }
     bool tutor_payable = false;
     const ManaPool avail = AvailableManaPool(s);
@@ -6612,7 +6614,8 @@ bool CreatureGivingProvider::LandDropAfterHandLandTutor(const GameState& s, int 
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d) { continue; }
-        if (d->card.IsLand()) { return false; }   // a hand land -> land-first (the fallback)
+        // Orchard already in hand: the drop can simply BE the Orchard -- land-first, no defer.
+        if (d->card.IsLand() && d->params.taps_spawn_opp_token) { return false; }
         if (!d->params.tutor_to_hand) { continue; }
         bool land_tutor = false;
         for (const std::string& t : d->params.tutor_types)

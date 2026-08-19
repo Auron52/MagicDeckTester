@@ -2422,7 +2422,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                   // script covers it (TakeTurn returns false under full-depth regardless of this
                   // flag).
                   || (d->params.solo_target_trick
-                      && (d->params.cast_draw > 0 || d->params.creates_treasures > 0))))
+                      && (d->params.cast_draw > 0 || d->params.creates_treasures > 0))
+                  // MTG_ACQ_RESOLVE (mid-phase acquisition family): a tutor-to-hand fetch or a
+                  // staged-exile dig acquires same-phase-castable material, so the depth-0
+                  // executor gets the same second pass the rollout's deferred re-solve models.
+                  // This clause was MISSING while is_draw_engine below had it -- depth-0 never
+                  // re-solved after a tutor, so the fetched card (Sylvan Scrying -> Forbidden
+                  // Orchard as the deferred drop) waited a turn (found in the Creature Giving
+                  // review, 2026-08-19).
+                  || (AcqResolveEnabled()
+                      && (d->params.damage_equals_top_mv || d->params.tutor_to_hand))))
         { cast_draw_engine = true; }
     };
 
@@ -3006,13 +3015,20 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // with the fetched land (Forbidden Orchard) in hand. In-main1, NOT the second-main pass -- a
     // uses_second_main=no deck never runs one, and losing the drop outright measured d0 +0.32 on
     // the first CG arm. Consume-and-clear so the flag never leaks across turns.
+    // ALWAYS request the second pass after playing a held drop: this pass's plan was solved
+    // WITHOUT the land's mana, so a re-solve must pick up what it could not afford (gi40: a T2
+    // Enlightened Tutor silently dropped because the defer fired but Scrying was not in the
+    // plan, so no tutor second pass ever ran -- the pass-1-plans-short residual).
     if (m_tutor_deferred_drop)
     {
         m_tutor_deferred_drop = false;
         if (m_lookahead_depth == 0
             && state.ActivePlayer().lands_played_this_turn
                    < state.ActivePlayer().LandDropsAvailable())
-        { TryPlayLand(state); }
+        {
+            TryPlayLand(state);
+            cast_draw_engine = true;
+        }
     }
 
     // Auto-fire safe alt payloads (Invigorate / Skyshroud) deterministically once a Remedy is
