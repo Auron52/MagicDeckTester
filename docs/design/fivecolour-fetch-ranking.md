@@ -350,4 +350,85 @@ intends to attack, and would answer both without a proxy.
 genuinely unfavourable count in the whole measurement. It is also the smallest sample (225 searched
 games at d3+d5 combined), 8 of those 9 are physically different games, and both large-sample
 measurements point the other way (8,400 searched train games −0.0039; 10,800 held-out games
-−0.0128). Recorded here so it is not rediscovered as a regression.
+−0.0128). Recorded here so it is not rediscovered as a regression. (Part 4 later fixed the
+underlying `untapped` gate and the smoke searched cells improved too.)
+
+---
+
+# Part 4 — `untapped` was gated on the wrong question (ADOPTED 2026-08-19, held-out −0.205/game)
+
+**The largest single result on this function, by an order of magnitude.** Held-out cell-sum
+**−1.2921, 12 better / 0 worse**, games-weighted **−0.205 turns/game over 10,800 games**.
+
+## How it was found
+
+Part 3's rule made the engine take a triome when the mana could not be spent. Asked why it still
+lost some games, the pick distribution was measured — and it showed the engine fetching a TRIOME on
+**50.5% of all fetches**, in a deck the user built with 6 shocklands and 2 basics against **2**
+triomes:
+
+> "There is a reason why there are 6 shocklands, 2 basics and only 2 triomes. That is because you
+> usually take the shocklands." … "Triomes are strictly for times when you cannot use the mana."
+> (user, 2026-08-19)
+
+By turn, the mismatch was stark: **turn 2 took a triome 81% of the time**, turn 3 69% — precisely
+the turns a tapped land costs most. When a triome won, the key it won on was `soft_new` (1,488 of
+2,889), then `breadth` (780).
+
+## The defect
+
+`untapped` was gated on `any_uncovered_want` — "is some wanted colour MISSING". By turn 2 that is
+false for every colour, because **one Birds of Paradise covers all five**. So the untapped
+preference switched itself OFF at exactly the moment Part 2's `soft_new` began handing triomes a
+3-vs-2 win on dork-only colours. The two changes interacted badly and neither was visibly wrong on
+its own.
+
+The right question is not "is a colour missing" but **"can we spend this mana"** — which
+`spendable` (Part 3's predicate) already answered. Two changes, both user-directed:
+
+1. **Gate on spendability, not on a missing colour.** `any_uncovered_want` is deleted entirely.
+2. **Rank `untapped` second, above `accel_new`** — "if there is a spell that requires the land we
+   should ALWAYS go for untapped". Ranking it above `enables_now` (first outright) was also
+   measured and is EXACTLY equivalent — `enables_now` is a strict subset of untapped-and-spendable,
+   so their relative order can never separate two candidates. `enables_now` stays first.
+
+Plus the gap Part 3 documented and this closes:
+
+3. **The unlock predicate now sees a SECOND spell.** It was per-card ("already castable → this land
+   is not the marginal mana"), so it could not see that two 2-drops need four mana, not three. Now
+   it is the UNION of the per-card test (which catches a bigger spell coming online) and a
+   sequence test (greedy cheapest-first `CastableCount`, using a new `PayFrom` that mirrors
+   `ManaPool::CanPayFlat`'s model). Union only ever adds untapped preference — the asymmetry the
+   user asked for. It moved "nothing unlocks" from 51.5% to 45.6% of fetches.
+
+## Measured (d0 train, 60,000 games per arm — per-seed spread ~0.002)
+
+| arm | d0 mean | Δ | triome share |
+|---|---|---|---|
+| baseline (Part 3 shipped) | 6.1071 | — | 50.6% |
+| SEQ only | 6.1013 | −0.0058 | 50.4% |
+| SPEND gate only | 5.9653 | −0.1418 | 43.8% |
+| SEQ + SPEND | 5.9458 | −0.1613 | 41.8% |
+| SEQ + SPEND + HIGH (above breadth) | 5.8939 | −0.2132 | 38.3% |
+| **SEQ + SPEND + TOP (above accel_new) — ADOPTED** | **5.8476** | **−0.2595** | **35.3%** |
+| SEQ + SPEND + FIRST (above enables_now) | 5.8476 | −0.2595 | 35.3% |
+
+Searched train (8,400 games): **−0.0262, 6/6 cells better** — ~7x Part 3's searched effect.
+
+| tier | seeds | sum Δ | cells |
+|---|---|---|---|
+| smoke + regression (train) | 1001/2002/3003 | see above | 8/8 better or equal |
+| **overnight (HELD-OUT)** | 4004–10010 | **−1.2921** | **12 better, 0 worse** |
+
+Audit on adoption: d0 **faster=262 vs slower=25** (smoke) and **266 vs 37** (regression); searched
+13-vs-2 and 10-vs-3. References stay 0/6 short. Final fetch distribution puts Jetmir's Garden first
+but Breeding Pool second, with the two triomes no longer dominating.
+
+## The lesson
+
+Part 2 (`soft_new`) and the pre-existing `untapped` gate were each defensible alone and measured
+as improvements alone. Together they produced an 81%-triome turn 2 that neither measurement would
+ever surface, because the suite reports one average per cell — **the deck was fetching wrong and
+still getting faster**. What exposed it was the user's DECKBUILDING intent (6 shocks : 2 triomes)
+used as an external check on a distribution, not a win-rate. When a heuristic has a knowable
+intended *behaviour*, measure the behaviour, not just the outcome.

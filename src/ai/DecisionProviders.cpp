@@ -6819,6 +6819,67 @@ FiveColourProvider::MainPhaseOverride(const GameState& s, const CardDefinition& 
     return std::nullopt;
 }
 
+namespace
+{
+    // Deduct `cost` from `p`, following ManaPool::CanPayFlat's model exactly (specific colour pays
+    // its own pips first, `wild` covers any deficit, generic comes from whatever is left). Leaves
+    // `p` untouched and returns false when unpayable. Spends specific leftovers on generic BEFORE
+    // wild, so the most flexible mana survives for the next spell in the sequence.
+    bool PayFlatFrom(ManaPool& p, const ManaCost& cost)
+    {
+        ManaPool t = p;
+        int* col[6] = { &t.white, &t.blue, &t.black, &t.red, &t.green, &t.colorless };
+        const int need[6] = { cost.white, cost.blue, cost.black, cost.red, cost.green, cost.colorless };
+        for (int i = 0; i < 6; ++i)
+        {
+            int n = need[i] - std::min(need[i], *col[i]);
+            *col[i] -= std::min(need[i], *col[i]);
+            if (n > 0)
+            {
+                if (t.wild < n) { return false; }
+                t.wild -= n;
+            }
+        }
+        int gen = cost.generic;
+        for (int i = 0; i < 6 && gen > 0; ++i)
+        {
+            const int use = std::min(gen, *col[i]);
+            *col[i] -= use;
+            gen -= use;
+        }
+        if (gen > 0)
+        {
+            if (t.wild < gen) { return false; }
+            t.wild -= gen;
+        }
+        p = t;
+        return true;
+    }
+
+    // Same, honouring two-colour hybrid pips: take the first payable concrete assignment
+    // (2^hybrid_count <= 16), matching CanPay's expansion.
+    bool PayFrom(ManaPool& p, const ManaCost& cost)
+    {
+        if (cost.hybrid_count == 0) { return PayFlatFrom(p, cost); }
+        for (unsigned bits = 0; bits < (1u << cost.hybrid_count); ++bits)
+        {
+            ManaPool t = p;
+            if (PayFlatFrom(t, cost.ExpandHybrids(bits))) { p = t; return true; }
+        }
+        return false;
+    }
+
+    // How many of `costs` (pre-sorted cheapest-first) this pool can cast in sequence. Greedy
+    // cheapest-first, which is optimal for "most spells within a budget" in the colourless case
+    // and a good approximation with colours.
+    int CastableCount(ManaPool p, const std::vector<const ManaCost*>& costs)
+    {
+        int n = 0;
+        for (const ManaCost* mc : costs) { if (PayFrom(p, *mc)) { ++n; } }
+        return n;
+    }
+}
+
 std::vector<std::string>
 FiveColourProvider::FetchCandidates(const GameState& s, int controller,
                                     const CardParams& fetch_pp) const
@@ -6910,9 +6971,6 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
             if (accel) { accel_want[i] = std::max(accel_want[i], pips[i]); ++accel_hits[i]; }
         }
     }
-    bool any_uncovered_want = false;
-    for (int i = 0; i < NC; ++i) { if (want[i] > 0 && src_cnt[i] == 0) { any_uncovered_want = true; } }
-
     // RULE 6 (user, 2026-08-18): "we probably should have a way to get triomes when we can
     // determine there is no need for the land to enter untapped ... triomes make coverage very
     // very easy as long as you can be confident that you don't need the colours [this turn]."
@@ -6927,19 +6985,35 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
     // taking an untapped green dual over a triome: enables_now fires on "green turns on an
     // accelerant" without ever asking whether ONE mana can cast it. Birds of Paradise ({G}) still
     // scores, because one green really does cast it -- which is the Part 1 behaviour we must keep.
-    std::array<bool, NC> accel_unlocks{};   // one more mana of colour c casts an ACCELERANT
-    std::array<bool, NC> any_unlocks{};     // one more mana of colour c casts ANYTHING
+    // USER 2026-08-19: "if there is a spell that requires the land we should always go for
+    // untapped ... triomes are STRICTLY for times when you cannot use the mana." So the test is a
+    // UNION of two questions, and either one answering yes means untapped:
+    //
+    //   (a) SOLO  -- some single card is not castable now but IS with one more mana of colour c.
+    //               This is what catches a BIGGER spell coming online (a 5-drop at four lands).
+    //   (b) SEQUENCE -- one more mana of colour c lets us cast one MORE spell in sequence. This is
+    //               what the per-card test structurally could not see: with two 2-drops in hand and
+    //               three mana, each is individually castable, so (a) says nothing -- yet the extra
+    //               mana casts both. Measured before this fix: nothing unlocked on 51.5% of fetches,
+    //               and 11.7% of those had a second spell affordable with one more mana.
+    //
+    // The union only ever ADDS untapped preference, so triomes are taken strictly less often --
+    // which is the asymmetry the user asked for.
+    std::array<bool, NC> accel_unlocks{};   // one more mana of colour c deploys another ACCELERANT
+    std::array<bool, NC> any_unlocks{};     // one more mana of colour c casts anything more
     {
         const ManaPool pool_now = AvailableManaPool(s);
+        std::vector<const ManaCost*> all_costs, accel_costs;
         for (const Card& c : ap.hand)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (!d || d->card.IsLand()) { continue; }
             const ManaCost& mc = d->card.m_mana_cost;
-            // Already castable -> this land is not the marginal mana for it, so it says nothing
-            // about whether the land must enter untapped.
-            if (pool_now.CanPay(mc)) { continue; }
+            all_costs.push_back(&mc);
             const bool accel = (d->tmpl == CardTemplate::ManaDork) || d->params.mana_rock;
+            if (accel) { accel_costs.push_back(&mc); }
+            // (a) SOLO.
+            if (pool_now.CanPay(mc)) { continue; }
             for (int i = 0; i < NC; ++i)
             {
                 if (any_unlocks[i] && (!accel || accel_unlocks[i])) { continue; }
@@ -6951,6 +7025,24 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
                     if (accel) { accel_unlocks[i] = true; }
                 }
             }
+        }
+        // (b) SEQUENCE. Cheapest-first so the greedy casts as many as the pool allows; ties broken
+        // by mana value alone keeps this independent of hand order (stable_sort over a
+        // deterministic hand, so the result is deterministic either way).
+        auto by_mv = [](const ManaCost* a, const ManaCost* b) { return a->ManaValue() < b->ManaValue(); };
+        std::stable_sort(all_costs.begin(), all_costs.end(), by_mv);
+        std::stable_sort(accel_costs.begin(), accel_costs.end(), by_mv);
+        const int base_all   = CastableCount(pool_now, all_costs);
+        const int base_accel = CastableCount(pool_now, accel_costs);
+        for (int i = 0; i < NC; ++i)
+        {
+            const bool need_any   = !any_unlocks[i];
+            const bool need_accel = !accel_unlocks[i];
+            if (!need_any && !need_accel) { continue; }
+            ManaPool p = pool_now;
+            p.Add(static_cast<Color>(i));
+            if (need_any   && CastableCount(p, all_costs)   > base_all)   { any_unlocks[i]   = true; }
+            if (need_accel && CastableCount(p, accel_costs) > base_accel) { accel_unlocks[i] = true; }
         }
     }
 
@@ -7004,7 +7096,15 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
             const int i = static_cast<int>(col);
             if (i >= 0 && i < NC && any_unlocks[i]) { spendable = true; break; }
         }
-        k.untapped = (any_uncovered_want && !d->params.enters_tapped && spendable) ? 1 : 0;
+        // USER 2026-08-19: "if there is a spell that requires the land we should ALWAYS go for
+        // untapped ... triomes are STRICTLY for times when you cannot use the mana." This used to
+        // be gated on `any_uncovered_want` ("is some wanted colour MISSING"), which by turn 2 is
+        // false for every colour because one Birds of Paradise covers all five -- so the untapped
+        // preference switched itself off at exactly the point soft_new started handing triomes a
+        // 3-vs-2 win. Measured before the fix: turn-2 fetches took a triome 81% of the time, in a
+        // deck built with 6 shocklands and 2 basics against 2 triomes. The right question is not
+        // "is a colour missing" but "can we SPEND this mana", which `spendable` answers.
+        k.untapped = (!d->params.enters_tapped && spendable) ? 1 : 0;
         // ENABLES A PLAY THIS TURN (user doctrine 2026-08-18: "the priority is getting to 5 colours,
         // starting with Green T1 and prioritizing other colours we might need in our hand after
         // that ... White is a good bet for T2 if we have Faeburrow Elder in hand").
@@ -7032,24 +7132,27 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
         keys.push_back(std::move(k));
     }
 
-    std::stable_sort(keys.begin(), keys.end(), [](const Key& a, const Key& b)
+    // Key order as a vector so `untapped` can be re-positioned by the lever. With the lever off the
+    // sequence is exactly enables_now, accel_new, spell_new, breadth, soft_new, untapped, depth,
+    // colours -- byte-identical to the shipped ranking.
+    //
+    // breadth is a TIEBREAK, deliberately BELOW the hand-want rules (user, 2026-08-18: "it is a
+    // tie-break for cases that tie in the other rules"). Its job is picking a dual's SECOND colour
+    // once a higher rule has fixed the first: wanting red for Mana Cannons does not say whether to
+    // take Steam Vents or Blood Crypt, and breadth answers with whichever other half we are
+    // missing. Promoting it above spell_new was built and measured -- byte-identical on all 8 train
+    // cells, because breadth >= accel_new + spell_new means the two agree whenever both differ.
+    // Measured: breadth differs between the top two 12.0% of picks but decides 0.9%; the other 92%
+    // are the ones where the hand already named that colour.
+    auto rank_of = [](const Key& k)
     {
-        if (a.enables_now != b.enables_now) { return a.enables_now > b.enables_now; }
-        if (a.accel_new != b.accel_new) { return a.accel_new > b.accel_new; }
-        if (a.spell_new != b.spell_new) { return a.spell_new > b.spell_new; }
-        // breadth is a TIEBREAK, deliberately BELOW the hand-want rules (user, 2026-08-18: "it is
-        // a tie-break for cases that tie in the other rules"). Its job is picking a dual's SECOND
-        // colour once a higher rule has fixed the first: wanting red for Mana Cannons does not say
-        // whether to take Steam Vents or Blood Crypt, and breadth answers with whichever other
-        // half we are missing. Promoting it above spell_new was built and measured -- byte-identical
-        // on all 8 train cells, because breadth >= accel_new + spell_new means the two agree
-        // whenever both differ. Measured: breadth differs between the top two 12.0% of picks but
-        // decides 0.9%; the other 92% are the ones where the hand already named that colour.
-        if (a.breadth   != b.breadth)   { return a.breadth   > b.breadth;   }
-        if (a.soft_new  != b.soft_new)  { return a.soft_new  > b.soft_new;  }
-        if (a.untapped  != b.untapped)  { return a.untapped  > b.untapped;  }
-        if (a.depth     != b.depth)     { return a.depth     > b.depth;     }
-        if (a.colours   != b.colours)   { return a.colours   > b.colours;   }
+        return std::array<int, 8>{ k.enables_now, k.untapped, k.accel_new, k.spell_new,
+                                   k.breadth, k.soft_new, k.depth, k.colours };
+    };
+    std::stable_sort(keys.begin(), keys.end(), [&](const Key& a, const Key& b)
+    {
+        const std::array<int, 8> va = rank_of(a), vb = rank_of(b);
+        if (va != vb) { return va > vb; }
         return a.name < b.name;
     });
 
