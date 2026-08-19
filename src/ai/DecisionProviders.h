@@ -623,6 +623,10 @@ public:
     // MTG_5C_PHASE: per-deck opt-in to the pre-combat Main2 filter (this deck actually plays a
     // second main), activating the override above with the USER's 2026-08-19 phase rules.
     bool        ClassifiesMainPhases() const override;
+    // MTG_5C_SSM: search this deck's INTERIOR second mains (the phase spec above made them carry
+    // real decisions -- the global-arm split is recorded at the base hook). Measurement lever,
+    // default OFF pending the per-deck A/B.
+    bool        SearchedSecondMainInSearch() const override;
     // Nicol Bolas +3 is "destroy target NONCREATURE permanent" -- it REQUIRES a target, and with a
     // land-less opponent the only legal ones are ours. Destroying our own land is a real cost, so
     // the search correctly declined the ability; but -9 is unreachable from loyalty 5 without two

@@ -549,7 +549,12 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
                                                 TranspositionTable* tt)
 {
     struct M2Guard { M2Guard() { ++g_cs_m2solve_nest; } ~M2Guard() { --g_cs_m2solve_nest; } } _m2g;
-    if (depth <= 0 || GreedySecondMainEnabled()) { return TurnSolver::Solve(state, false); }
+    // Two routes into the searched path: the global measurement lever (MTG_SEARCH_SECOND_MAIN),
+    // or the provider's per-deck adoption (SearchedSecondMainInSearch -- see the hook note; a
+    // phase-specified deck's interior m2 carries real decisions, everyone else keeps greedy).
+    const bool searched = !GreedySecondMainEnabled()
+                       || ResolveProvider(state).SearchedSecondMainInSearch();
+    if (depth <= 0 || !searched) { return TurnSolver::Solve(state, false); }
     return SearchedSecondMainMemoized(state, depth, max_turns, budget, second_main, tt);
 }
 

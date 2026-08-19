@@ -397,6 +397,18 @@ public:
     // adopts. Default false -> byte-identical.
     virtual bool OrderOpaqueCastsByRank() const { return false; }
 
+    // SearchedSecondMainInSearch -- per-deck opt-in to the MTG_SEARCH_SECOND_MAIN behaviour:
+    // the search's INTERIOR second mains (SolveSecondMainInSearch, every full-search ply) run a
+    // real budgeted search instead of the greedy Solve. The global lever's recorded rejection
+    // (2026-08-09: antilife/hinata red, does not recover with budget -- truncation-shaped,
+    // classify-stack 2026-08-16) rested on "no suite deck's post-combat main carries a real
+    // decision"; a deck that adopts a main-phase specification (ClassifiesMainPhases) CREATES
+    // that deck, and the global arm re-measured 2026-08-19 shows exactly the split: fivecolour
+    // green, antilife/hinata still red. So the adoption is per-deck, like the rest of the
+    // cast-order arc: opt in where the m2 decision is real, keep greedy where searching it only
+    // dilutes the shared budget. Default false -> byte-identical.
+    virtual bool SearchedSecondMainInSearch() const { return false; }
+
     // CastOrderFallbackRanks -- the FUNDING ladder for a cast whose ideal position is LATE but
     // whose output (Treasures, ritual float) may be needed earlier to pay for the line. Returns
     // the ranks to try in preference order (first = preferred); the range ladder walks down the

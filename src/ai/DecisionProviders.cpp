@@ -7053,6 +7053,14 @@ bool FiveColourProvider::ClassifiesMainPhases() const
     return Fc5PhaseEnabled();
 }
 
+bool FiveColourProvider::SearchedSecondMainInSearch() const
+{
+    // Scoped to the phase spec being live: without it the interior m2 is near-empty and
+    // searching it is pure budget dilution (the global lever's recorded rejection).
+    static const bool on = EnvOn("MTG_5C_SSM");
+    return on && Fc5PhaseEnabled();
+}
+
 std::optional<DecisionProvider::MainPhase>
 FiveColourProvider::MainPhaseOverride(const GameState& s, const CardDefinition& def) const
 {
