@@ -1763,6 +1763,34 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     std::fprintf(stderr, "[win] job=%s gi=%d wt=%d\n",
                                  job.name.c_str(), global_gi, win_turns[wi.job][wi.game]);
                 }
+                // MTG_DUMP_CARDS -- the compact per-game card summary (see GameLogger::CardSummaryOn).
+                // Emitted as CARD NUMBERS, not names: numbers are short, and because every arm of a
+                // comparison inherits one numbering, a number identifies the same SLOT across arms,
+                // which is exactly what "did both arms see the swapped slot" has to ask. Names are
+                // recovered from the arm's numbering.json by the reader.
+                // Built as one string and written once: many workers share stderr, and a sub-PIPE_BUF
+                // single write is what keeps lines from interleaving into unparseable garbage.
+                if (GameLogger::CardSummaryOn())
+                {
+                    // Deduplicated: `seen` accumulates a hand snapshot per phase, so a card held
+                    // for six turns would otherwise appear ~18 times and the line would outgrow
+                    // the atomic-write size that keeps workers from interleaving.
+                    auto uniq = [](std::vector<int> v)
+                    {
+                        std::sort(v.begin(), v.end());
+                        v.erase(std::unique(v.begin(), v.end()), v.end());
+                        return v;
+                    };
+                    std::string ln = "[cards] job=" + job.name + " gi=" + std::to_string(global_gi)
+                                   + " seen=";
+                    const char* sep = "";
+                    for (int n : uniq(dlog.SeenNums())) { ln += sep; ln += std::to_string(n); sep = ","; }
+                    ln += " cast=";
+                    sep = "";
+                    for (int n : uniq(dlog.CastNums())) { ln += sep; ln += std::to_string(n); sep = ","; }
+                    ln += "\n";
+                    std::fwrite(ln.data(), 1, ln.size(), stderr);
+                }
                 engine->SetLogger(nullptr);
                 digests[wi.job][wi.game] = dlog.Digest();
                 if (trace)

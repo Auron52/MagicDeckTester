@@ -128,11 +128,117 @@ Related, and counter-intuitive: per game, **going off is CHEAP and failing to go
 (magnet-resolved games cost 0.40x no-magnet ones at 20 life). The worst state is never going off and
 then losing. A fan-out that does not end the game costs ~1.6x one that does.
 
-## State as of the compact (2026-08-19)
+## The measurement is a FACTORIAL, not four sequential A/Bs
 
-- 20-life union table GENERATING: pid 1260187, ~36 min in, 122 rollouts/s, phase=floor,
-  `logs/tourney/pool/gen.log`. ~7 h remaining. Nothing else running.
-- Arms: `logs/tourney/arms/*.txt` (60), envelope+sidecars `logs/tourney/pool/`.
-- Reporter: `scripts/tourney_report.py` (uncommitted at compact time).
-- NOT yet done: any tournament measurement. Test 1 spec drafted at
-  `logs/tourney/test1/spec.json` (needs repointing at the new table).
+The 60 arms are the full cross product of the three contested slots, so each of the four tests is a
+**marginal** of one run rather than a run of its own:
+
+```
+tf{3,2,1,0}lib{0,1,2,3}   x   a{4,2,0}o{0,2,4}   x   slot{scale,draught,entrance,oracle,anger}
+```
+
+| test | factor varied | contexts | paired games per comparison (N=10,000) |
+|---|---|---:|---:|
+| 1 Twinflame vs Libation | `tf` | 15 (ao x slot) | 150,000 |
+| 2 Anger vs Oracle | `ao` | 12 (tf x {scale,draught,entrance}) | 120,000 |
+| 3 the Scale slot | `slot` | 12 (tf x ao) | 120,000 |
+
+Three reasons this beats running the tests one after another:
+
+- **12-15x the paired games per comparison** for the same wall clock. That is what buys a
+  better/worse margin large enough to act on at the user's "more like 100" bar.
+- **No test conditions on an earlier test's winner.** Sequential elimination cannot re-examine a
+  card that was cut early in the light of what came later; the factorial measures every slot in
+  every context.
+- **One pooled queue, one tail** (CLAUDE.md's pooling rule). Four runs would be four tails.
+
+Test 2's contexts deliberately exclude the `oracle` and `anger` flex slots: those change the SAME
+two cards' counts, so including them would compare a level against itself.
+
+The per-context spread is printed for every comparison and the reporter prints a **MIXTURE
+WARNING** when contexts disagree in sign. That is not decoration -- reporting this deck's Draught
+slot as a pooled null once hid two large opposite effects.
+
+## Test 4 needs an APPEND pass -- the current table cannot answer it
+
+Test 4 asks whether Draught is worth "some number of copies, or all, of the draw+pump slot". Every
+arm here caps Fortifying Draught at **2** (it only ever occupies the Scale slot), so the envelope
+itself caps at 2 and every cell holding 3+ Draught was never enumerated. An arm playing 4 Draught
+would hit `present=false` and silently fall through to the generic heuristic keep.
+
+So Test 4 runs as the **append** the user asked for: widen the arm set with the Draught-heavy
+lists, regenerate with `MTG_KEEP_PRIOR_RAW` carrying the finished table, and only the genuinely new
+cells cost rollouts. This is also the natural place to re-admit the 3/1 and 1/3 Anger/Oracle splits
+that were trimmed to fit the 64-arm mask. Sequencing it after Tests 1-3 is right anyway: their
+winners decide which Draught-heavy lists are worth building.
+
+## The apparatus fixes found while building the run
+
+- **Two arm cards had no `card_scores` entry** in the pool profile: Luxurious Libation and Impolite
+  Entrance. `ComputeHandScore` SKIPS an unknown name, so an unscored card is scored as an *empty
+  slot*, and that penalty falls only on the arms that play it -- i.e. on one side of Test 1 and one
+  arm of Test 3. `tourney_run.py pool_scores` derives them with the same fixed recipe the shipped
+  scores came from and merges them in. The keep TABLE is unaffected: its keep/bottom decisions come
+  from measured cell values (`best_sub`), never from `card_scores`.
+- **Coverage is verified exactly, per arm, before any game runs** (`verify_coverage`): every size-7
+  composition each of the 60 decklists can draw must be present in the table. A missing cell does
+  not error -- it answers `present=false` and falls through to the generic heuristic on that arm
+  only, which is an apparatus that differs *between* arms, the one thing a paired comparison cannot
+  survive.
+- **The 30-life arms do NOT need their own value leaf.** The jobs run the leaf in ladder mode
+  (`value_model: false, ladder_value_leaf: true`), where the model only makes warm-up passes cheap
+  and the COMMITTED pass stays pure heuristic -- verified byte-identical under a deliberately wrong
+  model at unbounded budget, with residual budget coupling measured at 0.0008t. A 20-life-fitted
+  leaf therefore cannot decide a 30-life line. (This does not settle the 30-life KEEP TABLE
+  question, which is about mulligans and is still open above.)
+
+## MTG_DUMP_CARDS: why the run does not write traces
+
+The second reported number ("games where the card was available") and the case-log rule ("the card
+was cast, or played if it is a land") are both per-game facts about a handful of card numbers.
+Answering them from traces costs ~20 KB of JSON per game -- **24 GB and 1.2M files** for this run.
+
+`MTG_DUMP_CARDS=1` instead emits one ~120-byte line per game:
+
+```
+[cards] job=tf3lib0_a4o0_scale@L20 gi=1 seen=54,43,39,15,16,40,34,5,24,49,57,44 cast=15,34,43,5,24,16,39,49,54,44
+```
+
+Card NUMBERS, not names: every arm inherits one numbering from `tf3lib0_a4o0_scale`, so a number
+names the same *slot* in all 60 arms (50-52 = the Twinflame/Libation slot, 53-56 = Anger/Oracle,
+57-58 = the Scale slot) -- which is exactly what "did both arms see the swapped slot" has to ask.
+The whole 1.2M-game run reads back in ~20 MB of masks. Traces are then re-generated for only the
+few hundred games a report shows (`tourney_cases.py`), and each replay is **verified to reproduce
+the measured win turn** -- a case log of a different game than the one that was counted would be
+worse than none.
+
+Accumulation is gated on the flag and nothing is folded into the play digest; verified inert
+(identical digest with the flag on and off).
+
+## How to run it
+
+```
+python3 scripts/tourney_run.py plan  --games 10000        # cost arithmetic
+python3 scripts/tourney_run.py prep                       # numbering + unscored-card check
+python3 scripts/tourney_run.py run   --smoke --games 24    # plumbing only, table optional
+nohup bash scripts/tourney_overnight.sh <gen-pid> 10000 > logs/tourney/overnight.log 2>&1 &
+```
+
+`tourney_overnight.sh` waits for the generator PID to exit (not for the file to appear -- the
+profile is written last), rebuilds, gates on the regression smoke, runs the one pooled batch,
+writes `logs/tourney/run/REPORT.md`, then emits case logs for the headline comparison of each test
+at both life totals.
+
+Cost, from measured per-game thread-time (0.387 s at 20 life from
+`logs/overnight/batch/batch.out`; 3.33x that at 30 life from `logs/tourney/lifecost.*`):
+**~279 thread-hours = ~8.7 h wall on 32 cores at N=10,000.**
+
+## State as of 2026-08-19 (post-compact)
+
+- 20-life union table GENERATING: pid 1260187, `logs/tourney/pool/gen.log`, phase=floor,
+  ~113 rollouts/s, 512k of ~2.12M floor rollouts at 4,500 s -- ~4 h more for the floor, then
+  adaptive refinement to cap R=10.
+- Built and validated while waiting: `MTG_DUMP_CARDS` (engine), `scripts/tourney_run.py`,
+  `scripts/tourney_report.py`, `scripts/tourney_cases.py`, `scripts/tourney_overnight.sh`.
+- Numbering written for all 60 arms; slot alignment verified (50-52 / 53-56 / 57-58).
+- NOT yet done: any tournament measurement.

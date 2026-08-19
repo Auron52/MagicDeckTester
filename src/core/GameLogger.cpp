@@ -194,6 +194,7 @@ void GameLogger::LogOpeningHand(const std::vector<int>& card_nums,
                                  const std::vector<std::string>& card_names)
 {
     FoldStr("O"); for (int n : card_nums) { FoldInt(n); }
+    if (CardSummaryOn()) { m_seen_nums.insert(m_seen_nums.end(), card_nums.begin(), card_nums.end()); }
     if (m_digest_only) { return; }
     m_opening_hand_nums  = card_nums;
     m_opening_hand_names = card_names;
@@ -203,6 +204,7 @@ void GameLogger::LogPlayLand(int card_num, const std::string& card_name)
 {
     if (!m_in_phase) { return; }
     FoldStr("L"); FoldInt(card_num);
+    if (CardSummaryOn() && card_num) { m_cast_nums.push_back(card_num); }
     if (m_digest_only) { return; }
     Action a;
     a.type      = "PLAY_LAND";
@@ -222,6 +224,7 @@ void GameLogger::LogCastSpell(int card_num, const std::string& card_name,
     // GT number and reference digest stays byte-identical.
     FoldStr("C"); FoldInt(card_num); FoldStr(mana_paid); FoldInt(chosen_x > 0 ? chosen_x : -1);
     for (const TargetDesc& t : targets) { FoldStr(t.kind); FoldStr(t.who); FoldStr(t.card_name); }
+    if (CardSummaryOn() && card_num) { m_cast_nums.push_back(card_num); }
     if (m_digest_only) { return; }
     Action a;
     a.type      = "CAST_SPELL";
@@ -314,6 +317,12 @@ void GameLogger::LogAbility(int source_card_num, const std::string& source_card_
 
 void GameLogger::LogDraw(int card_num, const std::string& card_name)
 {
+    // ABOVE the phase guard, unlike the trace's DRAW action: the turn's draw-step draw happens
+    // before StartPhase("MAIN_1"), so a phase-gated record misses one card per turn -- which showed
+    // up immediately as games that CAST a card the summary said they had never seen (2,150 of 2,880
+    // on the plumbing run). Nothing here touches the digest, so the guard still stands for
+    // everything that does.
+    if (CardSummaryOn() && card_num) { m_seen_nums.push_back(card_num); }
     if (!m_in_phase) { return; }
     FoldStr("D"); FoldInt(card_num);
     if (m_digest_only) { return; }
@@ -356,6 +365,13 @@ void GameLogger::CommitPhase(int player_life, int opp_life,
                               const std::vector<int>& staged)
 {
     if (!m_in_phase) { return; }
+    // MTG_DUMP_CARDS availability, taken from the HAND SNAPSHOT rather than from draw events.
+    // Draw events are not enough: a card put into hand by a spell is logged only when the engine's
+    // draw-spell reconciliation recognises the source (`params.draw`/`etb_dig_count`), and Ancestral
+    // Anger's draw is not one of those -- so 90 of 120 probe games cast a card the draw-based
+    // summary said they had never seen. The end-of-phase hand is the ground truth and closes every
+    // such path at once, including any future card that moves a card to hand.
+    if (CardSummaryOn()) { m_seen_nums.insert(m_seen_nums.end(), hand.begin(), hand.end()); }
     // Board snapshots are derived state (fully determined by the decisions already folded), and
     // costly to hash -- so they are NOT part of the digest. Just close the phase.
     if (m_digest_only) { m_in_phase = false; return; }

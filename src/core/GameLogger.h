@@ -142,6 +142,31 @@ public:
     // sensitivity the coarse won/avg fingerprint lacks. Valid after EndGame.
     uint64_t Digest() const { return m_digest; }
 
+    // MTG_DUMP_CARDS -- a COMPACT per-game card summary, as an alternative to writing a full trace.
+    //
+    // Why it exists: the tournament's second reported number is "% change over the games where the
+    // swapped card was actually AVAILABLE", and its case logs must be games where the card was cast
+    // (or played, for a land). Both questions are per-game facts about a handful of card numbers.
+    // Answering them from traces means ~20 KB of JSON per game -- 24 GB and 1.2M files for a 60-arm
+    // two-life-total run, which is minutes of I/O per analysis pass and a directory no tool enjoys.
+    // These two vectors answer the same questions in ~120 bytes, so the measurement run stays cheap
+    // and traces are re-generated only for the few hundred games a report actually shows.
+    //
+    // Recorded even in digest_only mode (that is the batch path, where this is needed) but ONLY when
+    // the flag is on, so the default batch allocates nothing. Nothing here is folded into the digest
+    // -- it is a read of decisions already made, so play stays byte-identical either way.
+    static bool CardSummaryOn()
+    {
+        static const bool s_on = EnvOn("MTG_DUMP_CARDS");
+        return s_on;
+    }
+    // Card numbers that reached hand: the kept opening hand, then every draw. Bottomed cards are
+    // NOT here (LogOpeningHand runs post-bottom), which is what "available" should mean.
+    const std::vector<int>& SeenNums() const { return m_seen_nums; }
+    // Card numbers actually CAST, plus lands PLAYED -- the user's rule for a case log, verbatim:
+    // "It should be the case that the card was cast in these cases. (cast or played if it is a land)"
+    const std::vector<int>& CastNums() const { return m_cast_nums; }
+
 private:
     static constexpr uint64_t FNV_OFFSET = 1469598103934665603ULL;
     static constexpr uint64_t FNV_PRIME  = 1099511628211ULL;
@@ -207,6 +232,8 @@ private:
     int                                     m_win_turn    = -1;
     bool                                    m_digest_only = false;
     uint64_t                                m_digest      = FNV_OFFSET;
+    std::vector<int>                        m_seen_nums;   // MTG_DUMP_CARDS only; see CardSummaryOn
+    std::vector<int>                        m_cast_nums;   // MTG_DUMP_CARDS only
 };
 
 // Thread-local logger that captures scry/dig reveals during REAL resolution. It is set
