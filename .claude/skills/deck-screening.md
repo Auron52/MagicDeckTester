@@ -9,6 +9,57 @@ It is NOT the route for adopting a combination as a deck (mulligan-profile + val
 decision heuristic (heuristic-optimization). A card the engine does not implement *is* in scope, but
 only through analyze-deck — see **The new-card route** below.
 
+## Rule 0a — NEVER BUILD A UNION DECK. This overrides everything below.
+
+**Do not construct a superset/"union" DECKLIST containing every candidate card and generate a
+mulligan table for it. Not ever, for any deck, at any size, for any reason.** This is a standing
+user directive, given twice:
+
+> *"What is this union deck nonsense. It seems like a waste of time and energy."* — 2026-08-18
+> *"I never want a union deck!" ... "Absolutely never."* — 2026-08-19
+
+**The distinction that matters — read this before concluding anything is forbidden.** The banned
+object is a *decklist nobody would play*. A **union TABLE whose coverage is the set of plausible
+60-card combinations under test is fine, and is the correct way to share an apparatus** (user,
+2026-08-19: *"A union table based on a number of different plausible combinations that we want to
+test is different."*). Concretely:
+
+| | verdict |
+|---|---|
+| One table covering the arms `TF3/Lib0`, `TF2/Lib1`, `TF1/Lib2`, `TF0/Lib3` — every one a real 60-card deck we intend to measure | **ALLOWED** — this is a union of plausible combinations |
+| A 74-card decklist holding Twinflame 3 *and* Libation 4 *and* Anger 4 *and* Oracle 4 *and* Draught 4 *and* Scale 2 *and* Entrance 4 at once | **FORBIDDEN** — no arm plays that; its extra cells are unreachable |
+
+The test is not "does the table cover more than one decklist" (that is the point of a shared
+apparatus). The test is **"is every cell reachable by some decklist we are actually going to
+run?"** If yes, generate it. If the coverage only exists because you merged cards that never
+coexist in any arm, you have built the forbidden thing.
+
+**Why it is not merely wasteful but wrong.** Cells scale as `C(K+6,7)`, so each extra card bucket
+is superlinear. Worse, most of a superset's cells are **unreachable**: no arm ever holds a hand
+mixing cards that no single 60-card decklist plays. Measured once at **31.7% unreachable**. You
+spend hours producing apparatus nothing can ever query, and you raise K — which is the one thing
+to avoid, because K is what makes generation expensive.
+
+**What happened when this was ignored (2026-08-19).** An agent rationalised "but every card in the
+union is under test", built a 74-card / K=20 / **1,167,340-cell** table, and burned **5+ hours** of
+a saturated 32-core box before the user stopped it. The rationalisation is the failure mode: the
+user's one narrow carve-out — *"unioning the table between some number of decklists we want to
+test makes sense"* — does **not** license a superset over every candidate across every future test.
+
+**Do this instead.** Cover exactly the arms you will run — nothing more. Either generate a table
+per REAL 60-card decklist and pool them with **`scripts/keepstore.py`** (the cell-by-arm store the
+overnight campaign used, which shares cells wherever compositions coincide), or generate ONE table
+whose card counts are the per-card MAX across *only the arms in this test* — which for a ratio
+sweep like `TF3/Lib0 ... TF0/Lib3` is a legitimate union of plausible combinations. Always reuse
+existing per-deck tables first (base / trick / libonly already exist). What you must never do is
+widen the coverage to candidates that no arm in the current test plays, "so it will serve later
+tests too" — that is precisely the rationalisation that produced the 1,167,340-cell waste. Scope
+the table to the test in front of you; if a later test needs more, generate then, or ASK.
+
+This supersedes the "pool table" guidance in *Never run without a table* below, and
+`deck_compare.py`'s automatic pool-table path must be disabled (`"pool_table": false`) unless the
+user has explicitly approved that specific table.
+
 ## Rule 0 — one command, one apparatus, one pooled batch
 
 ```bash
@@ -126,7 +177,14 @@ one has no `card_scores`. And slivers' +0.0022 is for a *land*; a Lava Spike-siz
 exposed deck would move more hands. Treat the pooling as **cheap insurance, not a rescue** — and if
 a screen's headline turns on 0.002t, the apparatus floor already says it is unresolved.
 
-## Never run without a table — the pool table
+## Never run without a table — but NEVER a union deck (see Rule 0a)
+
+> **Superseded in part by Rule 0a.** The pool-table mechanism described in this section builds a
+> table over a UNION decklist, which is now PROHIBITED by standing user directive. Keep the
+> section's cost measurements (they are why a table matters at all), but get coverage by
+> generating per-decklist tables and pooling them with `scripts/keepstore.py`, not by unioning
+> the decks. `"pool_table": false` is the setting that disables the automatic union path.
+
 
 Dropping the table is symmetric, and symmetric is not cheap. It costs **~0.063t of play quality on
 both arms**, **~22x per-game wall** (slivers 9.8 → 254.8 ms/game), and it **regresses bottoming to

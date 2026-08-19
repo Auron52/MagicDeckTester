@@ -104,6 +104,19 @@ Then `hands ≈ C(K+6,7)`, and runtime ≈ `hands × 2(pd) × R / (~110 rollouts
 guide: K=10 → 7.8k hands (Slivers), K=15 → 114k, K=24 → ~1M, K=60 (all 1-ofs) → infeasible. If K is
 too large: lower R (keep tolerates it), or fall back to static/defaults for that deck.
 
+## NEVER generate a table for a union/superset deck
+
+Standing user directive (2026-08-18, restated absolutely 2026-08-19: *"I never want a union deck!"*,
+*"Absolutely never."*). The banned object is a DECKLIST nobody would play. A union TABLE covering
+the plausible 60-card combinations you are actually testing is fine and is the right way to share
+an apparatus — *"A union table based on a number of different plausible combinations that we want
+to test is different"* (user). Test: **is every cell reachable by an arm you will actually run?**
+Scope coverage to the arms of the CURRENT test, never widen it to serve hypothetical later tests.
+Pool per-arm tables with `scripts/keepstore.py` where they already exist. A superset raises K (cells go as `C(K+6,7)`) and most of its cells are
+unreachable by any arm — measured at 31.7% — so the hours buy apparatus nothing can query. One
+violation cost 5+ hours on a 74-card / K=20 / 1,167,340-cell table. If a comparison seems to need
+one, ASK. Full rationale: `.claude/skills/deck-screening.md` Rule 0a.
+
 ## Generating a profile
 
 ### The normal path — one flag (`--gen-mulligan`)
