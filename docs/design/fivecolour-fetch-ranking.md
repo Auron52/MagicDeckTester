@@ -301,3 +301,53 @@ Do not read them as a regression.
 the three train seeds cost minutes and settled the sign outright: per-seed deltas of −0.0130 /
 −0.0123 / −0.0124, a spread of 0.0007 against an effect of 0.0126. The held-out run then reproduced
 that number independently. Held-out was used ONCE, on the arm train had already chosen.
+
+## Why it is worse in some games (asked 2026-08-19)
+
+Three separate answers, in descending order of how much of the effect they explain.
+
+**1. Most "worse" games are not the same game.** Fetching SHUFFLES the library, so changing which
+land is fetched reorders every subsequent draw — and can change the mulligan decision too. Of the
+11 searched-depth slowdowns across both train tiers, the harness classifies **10 as physically
+different games** (5 "DRAWS DIVERGE", 3 "KEPT HANDS DIFFER" in smoke; 2 "DRAWS DIVERGE" in
+regression). Those games are individually meaningless in either direction — and there is an equal
+and opposite population of games that got faster for exactly the same reason. Only the aggregate
+over a large sample means anything, which is why the decision rests on the 60,000-game d0 run and
+the 10,800-game held-out run rather than on any per-game diff.
+
+**2. The one like-for-like loss shows a mechanism the predicate does not model.**
+`fivecolour_smoke_d3_s1001 gi98` (4→5, "kept hand + draws IDENTICAL"): same lands played every
+turn, but on T2 the old line ATTACKS and the new one does not.
+
+```
+T2  old: land Windswept Heath; Birds of Paradise; Deathrite Shaman; ATTACK   [opp 19]
+T2  new: land Windswept Heath; Birds of Paradise; Deathrite Shaman           [opp 20]
+```
+
+That is `FiveColourProvider::ShouldAttackWith`, which holds a live utility mana dork out of combat
+when its tap is worth more than its chip damage. A tapped land means Deathrite's mana is needed, so
+the dork stays home and the deck loses a point of chip damage. **The unlock predicate asks only
+"does this mana cast a card from HAND"; untapped mana also has the value of freeing a dork to
+attack instead of being held for mana.** n=1, so this is a named mechanism, not a measured
+magnitude — but it is a real coupling between two provider hooks.
+
+**3. A known, quantified gap: the predicate cannot see a SECOND spell.** `unlocks` skips any card
+that is already castable ("this land is not the marginal mana for it"), which by construction
+misses "I could cast a 2-drop AND a 3-drop with one more mana" — the same multi-spell blindness the
+SUM lever fixed for `want_deep`. Measured over 5,743 executor fetches (`MTG_FETCHKEY=1` reports
+`nounlock=` / `spare=`):
+
+| | count | share |
+|---|---|---|
+| fetches where nothing unlocks (rule 6 fires) | 2,960 | 51.5% |
+| ... of those, one more mana would have afforded a SECOND spell | 347 | 11.7% (6.0% of all fetches) |
+
+The second row is a colour-blind greedy upper bound, so the true gap is smaller. Both gaps 2 and 3
+are arguments for rule 7 (plan-awareness): the plan knows what it intends to cast and whether it
+intends to attack, and would answer both without a proxy.
+
+**Honest note on the smoke tier.** Its searched cells came out 9 slower vs 2 faster — the one
+genuinely unfavourable count in the whole measurement. It is also the smallest sample (225 searched
+games at d3+d5 combined), 8 of those 9 are physically different games, and both large-sample
+measurements point the other way (8,400 searched train games −0.0039; 10,800 held-out games
+−0.0128). Recorded here so it is not rediscovered as a regression.

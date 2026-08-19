@@ -7084,7 +7084,30 @@ FiveColourProvider::FetchCandidates(const GameState& s, int controller,
         diff += (a.untapped    != b.untapped)    ? 'u' : '.';
         diff += (a.depth       != b.depth)       ? 'd' : '.';
         diff += (a.colours     != b.colours)     ? 'c' : '.';
-        std::cerr << "[fetchkey] decide=" << who << " diff=" << diff
+        // Diagnostic for the KNOWN GAPS in the rule-6 unlock predicate (see the design doc):
+        //  nounlock : nothing at all unlocks, so both untapped terms are silent this fetch
+        //  spare    : ... yet we CAN already cast something -- so the extra mana might have paid
+        //             for a SECOND spell, which the per-card "already castable -> skip" test
+        //             cannot see. Colour-blind greedy count, an upper bound on the gap.
+        int nounlock = 1;
+        for (int i = 0; i < NC; ++i) { if (any_unlocks[i]) { nounlock = 0; } }
+        int spare = 0;
+        if (nounlock)
+        {
+            const ManaPool pool_now = AvailableManaPool(s);
+            std::vector<int> mvs;
+            for (const Card& c : ap.hand)
+            {
+                const CardDefinition* dd = CardDatabase::Instance().LookupCached(c);
+                if (dd && !dd->card.IsLand()) { mvs.push_back(dd->card.m_mana_cost.ManaValue()); }
+            }
+            std::sort(mvs.begin(), mvs.end());
+            auto fit = [&](int budget) { int n = 0; for (int v : mvs) { if (v > budget) { break; } budget -= v; ++n; } return n; };
+            const int m = pool_now.Total();
+            if (fit(m + 1) > fit(m)) { spare = 1; }
+        }
+        std::cerr << "[fetchkey] nounlock=" << nounlock << " spare=" << spare
+                  << " decide=" << who << " diff=" << diff
                   << " top1=" << a.name << "(b" << a.breadth << " s" << a.spell_new << ")"
                   << " top2=" << b.name << "(b" << b.breadth << " s" << b.spell_new << ")\n";
     }
