@@ -26,6 +26,16 @@
 > load-bearing; the recorded "prefer casting on ties" retry direction). Full train:
 > d3 **+0.005/−0.005**, d5 **−0.030/−0.010** (6 worse / 11 better; was +0.040..+0.050 at the
 > original rejection). Off arm byte-identical (smoke 36/36 + 600/600 train games).
+>
+> **CHURN CLASSIFICATION of the final worse set (USER ask, budget × depth matrix, both arms):**
+> gi8 and gi195 recover at 4× budget; gi62 and gi138 at 16×; no depth sensitivity anywhere
+> (d3/b160 ≈ d5/b320 ≈ d7/b320). So 4 of the 5 remaining losses are **budget churn** — the
+> winning lines exist inside the condemnation-constrained space, the lever just raises the
+> budget needed to find them at 10 ms — and only **gi187 is structural** (red at every config
+> through d7/32×). This evidence RETRACTED two further doctrine candidates (Bloom-scaling →
+> Both; hasty-body payable-without-attackers → Both): the games they targeted are churn, not
+> filtered lines — do not encode them without new evidence. Structural failure rate of the
+> lever on train: 1 game / 600.
 > NEXT (user-gated): held-out overnight keys, then the adoption call.
 >
 > ## STATUS UPDATE 2026-08-19 (condemn-dig): the ORDER-CONDEMNATION rejection re-diagnosed —
