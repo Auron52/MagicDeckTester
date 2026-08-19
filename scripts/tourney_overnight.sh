@@ -38,7 +38,7 @@ say "rebuilding (the tournament binary must be the one the smoke certifies)"
 ./build.sh || { say "ABORT: build failed"; exit 1; }
 
 say "regression smoke (byte-identity after the MTG_DUMP_CARDS change)"
-if ! bash test/regression.sh smoke > "$OUT/smoke_regression.log" 2>&1; then
+if ! bash test/regression.sh --smoke > "$OUT/smoke_regression.log" 2>&1; then
   say "ABORT: smoke regression FAILED -- see $OUT/smoke_regression.log"
   tail -40 "$OUT/smoke_regression.log"; exit 1
 fi
