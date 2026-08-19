@@ -38,6 +38,14 @@ TF   = ["tf3lib0", "tf2lib1", "tf1lib2", "tf0lib3"]
 AO   = ["a4o0", "a2o2", "a0o4"]
 SLOT = ["scale", "draught", "entrance", "oracle", "anger"]
 
+# The SHIPPED deck's card in each contested slot. The apparatus is the table fitted to that deck,
+# so it flatters these levels -- which is what makes the cheap test ONE-SIDED and therefore usable
+# (user, 2026-08-19: "Any that do better than the original with the same profile are expected to
+# win out"). A challenger that wins under an apparatus tilted against it has won conservatively;
+# an incumbent win, or a near-tie, is exactly what the apparatus would produce anyway and settles
+# nothing. Only the latter need an expensive generation test.
+INCUMBENT = {"tf": "tf3lib0", "ao": "a4o0", "slot": "scale"}
+
 LEVEL_NAME = {
     "tf3lib0": "3 Twinflame",       "tf2lib1": "2 Twinflame / 1 Libation",
     "tf1lib2": "1 Twinflame / 2 Libation", "tf0lib3": "3 Luxurious Libation",
@@ -183,19 +191,53 @@ def slot_bits(a, b):
     return sum(1 << k for k in set(na) | set(nb) if na.get(k) != nb.get(k))
 
 
-def test(data, games, title, factor, levels, contexts, name_of, maxt, note=""):
+def verdict(factor, la, lb, s, bias):
+    """The one-sided reading. -> (tag, sentence)."""
+    inc = INCUMBENT.get(factor)
+    if inc not in (la, lb):
+        return "MIXED", ("neither level is the shipped card, so both sides carry the same fit "
+                         "bias and it largely cancels -- read this row symmetrically.")
+    chal = lb if la == inc else la
+    # `md` is B-minus-A in win turns, so negative favours B.
+    chal_gain = -s["md"] if chal == lb else s["md"]
+    if abs(s["t"]) < 2.0:
+        return "FLAG", (f"no significant separation (|t|={abs(s['t']):.1f}); the cheap apparatus "
+                        f"cannot settle {chal} vs {inc}.")
+    if chal_gain > 0:
+        return "ADOPT", (f"{chal} beats the shipped {inc} by {chal_gain:.4f}t under an apparatus "
+                         f"fitted to {inc}. The bias opposed this result, so it is conservative.")
+    if not bias:
+        return "FLAG", (f"{inc} wins by {abs(chal_gain):.4f}t, but no apparatus bias has been "
+                        f"measured, so this cannot be told apart from the tilt. Run the bracket "
+                        f"(tourney_run.py --bracket) or generate.")
+    if abs(chal_gain) <= bias:
+        return "FLAG", (f"{inc} wins by {abs(chal_gain):.4f}t, inside the measured decision band "
+                        f"({bias:.4f}t = fit bias + 2se) -- consistent with the apparatus tilt "
+                        f"rather than the card. This is one that needs a generation test.")
+    return "INCUMBENT", (f"{inc} wins by {abs(chal_gain):.4f}t, clear of the {bias:.4f}t decision "
+                         f"band -- the tilt cannot account for it, so no generation needed.")
+
+
+def test(data, games, title, factor, levels, contexts, name_of, maxt, note="", bias=0.0):
     print(f"\n## {title}\n")
     if note:
         print(note + "\n")
-    print(f"pooled over {len(contexts)} contexts x {games:,} paired games "
-          f"= {len(contexts) * games:,} per comparison\n")
+    print(f"up to {len(contexts)} contexts x {games:,} paired games per comparison "
+          f"(each row states its own n)\n")
     print("`% change` is the change in mean win turn; **negative means the second card is better** "
           "(it wins sooner).\n")
     out = []
     for i, la in enumerate(levels):
         for lb in levels[i + 1:]:
-            aa = [name_of(la, c) for c in contexts]
-            bb = [name_of(lb, c) for c in contexts]
+            # Keep only contexts BOTH levels exist in. The aliased apparatus runs a 24-arm subset
+            # (the flex-slot and entrance arms overflow the shipped table's count caps), so a
+            # context list built from the full factorial would name arms this run never played --
+            # and a KeyError at 3am is a worse failure than a smaller, honest table.
+            ctxs = [c for c in contexts if name_of(la, c) in data and name_of(lb, c) in data]
+            if not ctxs:
+                continue
+            aa = [name_of(la, c) for c in ctxs]
+            bb = [name_of(lb, c) for c in ctxs]
             bits = slot_bits(aa[0], bb[0])
             print(f"\n### {LEVEL_NAME[la]}  ->  {LEVEL_NAME[lb]}\n")
             nm = numbering(aa[0])
@@ -210,6 +252,9 @@ def test(data, games, title, factor, levels, contexts, name_of, maxt, note=""):
             print(row("live: slot DRAWN", s_seen))
             s_cast = contrast(data, aa, bb, games, bits, "cast", maxt)
             print(row("live: slot CAST", s_cast))
+            tag, why = verdict(factor, la, lb, s_all, bias)
+            print(f"\n**{tag}** -- {why}\n")
+            print(f"pooled over {len(ctxs)} contexts")
             worst = sorted(s_all["per_ctx"], key=lambda r: r[2])
             ctx_of = lambda arm: "_".join(p for p in arm.split("_") if p not in (la, lb))
             print(f"\nper-context spread (mean turn delta, {len(worst)} contexts): "
@@ -231,6 +276,9 @@ def main():
     ap.add_argument("--max-turns", type=int, default=8)
     ap.add_argument("--lives", default="20,30")
     ap.add_argument("--tsv", default="")
+    ap.add_argument("--bias", type=float, default=0.0,
+                    help="measured apparatus bias in turns; sets the 'too close to call' band. "
+                         "0 = unknown, verdicts then say so rather than pretending a threshold.")
     a = ap.parse_args()
     lives = [int(x) for x in a.lives.split(",") if x.strip()]
     data = load(a.err, a.games, a.max_turns)
@@ -249,18 +297,18 @@ def main():
 
         rows += [(life, "T1", *r) for r in test(
             d, a.games, "Test 1 -- Twinflame vs Luxurious Libation", "tf", TF,
-            [(x, y) for x in AO for y in SLOT], lambda l, c: f"{l}_{c[0]}_{c[1]}", a.max_turns)]
+            [(x, y) for x in AO for y in SLOT], lambda l, c: f"{l}_{c[0]}_{c[1]}", a.max_turns, bias=a.bias)]
 
         rows += [(life, "T2", *r) for r in test(
             d, a.games, "Test 2 -- Ancestral Anger vs Oracle's Restoration", "ao", AO,
             [(x, y) for x in TF for y in ("scale", "draught", "entrance")],
-            lambda l, c: f"{c[0]}_{l}_{c[1]}", a.max_turns,
+            lambda l, c: f"{c[0]}_{l}_{c[1]}", a.max_turns, bias=a.bias,
             note="Contexts exclude the `oracle` and `anger` flex slots: those change the SAME two "
                  "cards' counts, so including them would compare a level against itself.")]
 
         rows += [(life, "T3", *r) for r in test(
             d, a.games, "Test 3 -- the Scale the Heights slot (four-way)", "slot", SLOT,
-            [(x, y) for x in TF for y in AO], lambda l, c: f"{c[0]}_{c[1]}_{l}", a.max_turns)]
+            [(x, y) for x in TF for y in AO], lambda l, c: f"{c[0]}_{c[1]}_{l}", a.max_turns, bias=a.bias)]
 
     if a.tsv:
         with open(a.tsv, "w") as fh:

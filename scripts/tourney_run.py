@@ -63,8 +63,26 @@ SLOT_CARD = {"scale": "Scale the Heights", "draught": "Fortifying Draught",
              "anger": "Ancestral Anger"}
 
 
+# The ALIASED apparatus: the SHIPPED Mirrorwing table (K=17, R=40) with the tournament's four new
+# names folded into the buckets they replace. Costs nothing to build, and 24 arms resolve fully
+# into it -- exactly the Test 1 x Test 2 factorial plus the Scale-vs-Draught half of Test 3.
+#
+# Why this is not merely the cheap option: the shipped table is R=40 against the pooled table's
+# R=10, and by the repo's own measurements the R penalty (0.032t for R=10 vs high-R) is an order of
+# magnitude LARGER than the own-vs-foreign fit bias aliasing introduces (~0.004t). A finer partition
+# measured noisily can be worse than a coarser one measured well. Which is right is exactly what the
+# pooled table, when it lands, is for -- run the same comparison on both and compare verdicts.
+#
+# The 36 excluded arms are blocked by COUNT CAPS on an existing bucket (Anger+Oracle 6 > 4,
+# Entrance 4 > Expedite 2), not by a missing bucket -- a cheap append, not a new table.
+ALIAS_ARMS = [f"{t}_{a}_{s}" for t in TF for a in AO for s in ("scale", "draught")]
+
+# Rebound by main() per apparatus.
+CFG = {"profile": PROFILE, "value": VALUE, "out": OUT, "arms": None}
+
+
 def arm_names():
-    return [f"{t}_{a}_{s}" for t in TF for a in AO for s in SLOT]
+    return CFG["arms"] or [f"{t}_{a}_{s}" for t in TF for a in AO for s in SLOT]
 
 
 def arm_path(arm):
@@ -105,7 +123,7 @@ def unscored_cards():
     that penalty falls only on the arms that play it -- i.e. exactly on one side of a comparison.
     (The keep TABLE is unaffected: its keep/bottom decisions come from measured cell values via
     best_sub, not from card_scores. This is a measurement-time correction only.)"""
-    have = set((json.load(open(PROFILE)).get("card_scores") or {}))
+    have = set((json.load(open(CFG["profile"])).get("card_scores") or {}))
     want = {n for arm in arm_names() for n in counts(arm_path(arm))}
     return sorted(want - have)
 
@@ -116,10 +134,10 @@ def pool_scores():
     if not missing:
         print("  card scores: every arm card already scored")
         return
-    bak = PROFILE + ".prescore"
+    bak = CFG["profile"] + ".prescore"
     if not os.path.exists(bak):
-        open(bak, "w").write(open(PROFILE).read())
-    log = os.path.join(POOL, "poolscores.log")
+        open(bak, "w").write(open(CFG["profile"]).read())
+    log = os.path.join(os.path.dirname(CFG["profile"]), "poolscores.log")
     print(f"  deriving card scores for {', '.join(missing)} (log {os.path.relpath(log, ROOT)})")
     with open(log, "w") as f:
         res = subprocess.run([os.path.join(ROOT, "build/Release/mtg-analyze"),
@@ -140,11 +158,12 @@ def pool_scores():
         merged[n] = scores[n]
         print(f"    {n:24s} {[round(x, 4) for x in merged[n]]}")
     prof["card_scores"] = merged
-    json.dump(prof, open(PROFILE, "w"), indent=1)
+    json.dump(prof, open(CFG["profile"], "w"), indent=1)
 
 
 def table_path():
-    for p in (TABLE + ".gz", TABLE):
+    stem = CFG["profile"].replace(".profile.json", ".keepmodel.exhaustive.profile.json")
+    for p in (stem + ".gz", stem):
         if os.path.exists(p):
             return p
     return None
@@ -160,9 +179,9 @@ def verify_coverage(tp):
     bottoming, silently, for the one arm whose hand it was. That is an apparatus that differs
     BETWEEN arms, which is the only thing a paired comparison cannot survive."""
     from deck_compare import table_meta, enum_cells
-    p, ek = table_meta(PROFILE)
+    p, ek = table_meta(CFG["profile"])
     if not ek:
-        raise SystemExit(f"no exhaustive_keep in the table beside {os.path.relpath(PROFILE, ROOT)}")
+        raise SystemExit(f"no exhaustive_keep in the table beside {os.path.relpath(CFG['profile'], ROOT)}")
     have = {tuple(e["comp"]) for e in (ek.get("entries") or [])}
     print(f"  table: {os.path.relpath(p, ROOT)}  K={len(ek['buckets'])}  "
           f"cells={len(have):,}  R={ek.get('effective_R')}  commit={ek.get('commit')}  "
@@ -177,13 +196,13 @@ def verify_coverage(tp):
     if worst:
         arm, n, tot, ex = worst[0]
         raise SystemExit(
-            f"REFUSING to measure: {len(worst)} of 60 arms can draw hands the table does not "
+            f"REFUSING to measure: {len(worst)} of {len(arm_names())} arms can draw hands the table does not "
             f"answer.\n  worst: {arm} -- {n:,} of {tot:,} of its cells absent, e.g. {ex}\n"
             "  Those hands fall through to the generic heuristic keep and lookahead bottoming on "
             "that arm ONLY,\n  so the arms would not share an apparatus and no comparison here "
             "would mean anything.")
     extra = len(have) - len(union)
-    print(f"  coverage: all 60 arms fully covered ({len(union):,} cells reachable by some arm"
+    print(f"  coverage: all {len(arm_names())} arms fully covered ({len(union):,} cells reachable by some arm"
           + (f"; {extra:,} table cells reachable by none -- weight 0, harmless)" if extra else ")"))
 
 
@@ -202,13 +221,48 @@ def jobs(games, seed, lives, numbering):
                 "deck_numbering": os.path.relpath(numbering[arm], ROOT),
                 "games": games, "seed": seed, "max_turns": 8,
                 "starting_life": life,
-                "profile": os.path.relpath(PROFILE, ROOT),
+                "profile": os.path.relpath(CFG["profile"], ROOT),
                 # Ladder mode: the leaf makes warm-up passes cheap while the COMMITTED pass stays
                 # pure heuristic (measured coupling 0.0008t). That is why ONE 20-life value model
                 # can serve the 30-life arms too -- the leaf never decides the played line.
-                "value_profile": os.path.relpath(VALUE, ROOT),
+                "value_profile": os.path.relpath(CFG["value"], ROOT),
                 "value_model": False, "ladder_value_leaf": True,
             })
+    return out
+
+
+# BRACKET: the same two decklists under the aliased table and under NO table. Two numbers come out
+# of it, and the second is the one the one-sided decision rule needs.
+#
+#   table worth = mean win turn (no table) - (aliased table), per decklist. How much the mulligan
+#                 apparatus is worth AT ALL for this deck -- the ceiling on anything apparatus can
+#                 explain. If it is tiny, every comparison in the report is conclusive regardless.
+#   fit bias    = (table worth for the INCUMBENT list) - (for the CHALLENGER list). The table is
+#                 fitted to the incumbent, so it should help the incumbent more; the difference IS
+#                 the tilt, measured on THIS deck rather than imported from another one.
+#
+# Both decks run under both apparatus in the SAME pooled batch on the same seeds, so the difference
+# of differences is paired twice over.
+BRACKET_DECKS = ["tf3lib0_a4o0_scale", "tf0lib3_a0o4_draught"]
+
+
+def bracket_jobs(games, seed, lives, numbering):
+    nt = os.path.join(ROOT, "logs", "tourney", "notable")
+    out = []
+    for life in lives:
+        for arm in BRACKET_DECKS:
+            for app, prof, val in (("tab", CFG["profile"], CFG["value"]),
+                                   ("not", os.path.join(nt, "notable.profile.json"),
+                                    os.path.join(nt, "notable.value.json"))):
+                out.append({
+                    "name": f"BRK_{arm}_{app}@L{life}",
+                    "deck": os.path.relpath(arm_path(arm), ROOT),
+                    "deck_numbering": os.path.relpath(numbering[arm], ROOT),
+                    "games": games, "seed": seed, "max_turns": 8, "starting_life": life,
+                    "profile": os.path.relpath(prof, ROOT),
+                    "value_profile": os.path.relpath(val, ROOT),
+                    "value_model": False, "ladder_value_leaf": True,
+                })
     return out
 
 
@@ -222,12 +276,21 @@ def plan(games, lives):
     print(f"  {len(arm_names())} arms x {len(lives)} life totals x {games:,} games "
           f"= {len(arm_names()) * len(lives) * games:,} games")
     print(f"  ~{tot / 3600:,.0f} thread-hours -> ~{tot / 3600 / cores:.1f} h wall on {cores} cores")
-    for name, ctx in (("T1 tf/lib", 15), ("T2 anger/oracle", 12), ("T3 scale slot", 12)):
-        print(f"    {name:18s} {ctx:2d} contexts -> {ctx * games:,} paired games per life total")
+    have = set(arm_names())
+    for name, ctxs in (("T1 tf/lib", [(a, s) for a in AO for s in SLOT]),
+                       ("T2 anger/oracle", [(t, s) for t in TF for s in ("scale", "draught",
+                                                                         "entrance")]),
+                       ("T3 scale slot", [(t, a) for t in TF for a in AO])):
+        key = {"T1 tf/lib": lambda l, c: f"{l}_{c[0]}_{c[1]}",
+               "T2 anger/oracle": lambda l, c: f"{c[0]}_{l}_{c[1]}",
+               "T3 scale slot": lambda l, c: f"{c[0]}_{c[1]}_{l}"}[name]
+        lv = {"T1 tf/lib": TF, "T2 anger/oracle": AO, "T3 scale slot": SLOT}[name]
+        n = sum(1 for c in ctxs if sum(key(l, c) in have for l in lv) >= 2)
+        print(f"    {name:18s} {n:2d} usable contexts -> {n * games:,} paired games per life total")
 
 
-def run(games, seed, lives, threads, wait, smoke=False):
-    outdir = os.path.join(ROOT, "logs", "tourney", "smoke") if smoke else OUT
+def run(games, seed, lives, threads, wait, smoke=False, bracket=0):
+    outdir = os.path.join(ROOT, "logs", "tourney", "smoke") if smoke else CFG["out"]
     os.makedirs(outdir, exist_ok=True)
     if wait:
         t0 = time.time()
@@ -255,7 +318,12 @@ def run(games, seed, lives, threads, wait, smoke=False):
         pool_scores()
         verify_coverage(tp)
     man = os.path.join(outdir, "tourney.manifest.json")
-    json.dump({"jobs": jobs(games, seed, lives, numbering)}, open(man, "w"), indent=1)
+    J = jobs(games, seed, lives, numbering)
+    if bracket:
+        J += bracket_jobs(bracket, seed, lives, numbering)
+        print(f"  + bracket: {len(BRACKET_DECKS)} decklists x table/no-table x {len(lives)} life "
+              f"totals x {bracket:,} games, in the SAME pooled queue")
+    json.dump({"jobs": J}, open(man, "w"), indent=1)
     err, out = os.path.join(outdir, "tourney.err"), os.path.join(outdir, "tourney.out")
     print(f"  manifest: {os.path.relpath(man, ROOT)}  ->  {os.path.relpath(err, ROOT)}")
     # stderr goes STRAIGHT to a file: this run emits one [win] and one [cards] line per game (2.4M
@@ -280,9 +348,22 @@ def main():
     ap.add_argument("--lives", default="20,30")
     ap.add_argument("--threads", type=int, default=os.cpu_count() or 32)
     ap.add_argument("--wait", action="store_true", help="block until the keep table lands")
+    ap.add_argument("--bracket", type=int, default=0,
+                    help="games per bracket job (0 = no bracket). Prices what the mulligan "
+                         "apparatus is worth at all, and its fit tilt, on THIS deck.")
     ap.add_argument("--smoke", action="store_true",
                     help="plumbing check: tiny, table optional, writes to logs/tourney/smoke")
+    ap.add_argument("--apparatus", choices=["pool", "alias"], default="pool",
+                    help="pool = the 28h K=20 R=10 table being generated; "
+                         "alias = the SHIPPED K=17 R=40 table with the new names folded into "
+                         "existing buckets (free, 24 arms)")
     a = ap.parse_args()
+    if a.apparatus == "alias":
+        d = os.path.join(ROOT, "logs", "tourney", "alias")
+        CFG.update(profile=os.path.join(d, "alias.profile.json"),
+                   value=os.path.join(d, "alias.value.json"),
+                   out=os.path.join(ROOT, "logs", "tourney", "run_alias"),
+                   arms=ALIAS_ARMS)
     lives = [int(x) for x in a.lives.split(",") if x.strip()]
     if a.cmd == "plan":
         plan(a.games, lives)
@@ -291,7 +372,7 @@ def main():
         print("  unscored:", ", ".join(unscored_cards()) or "(none)")
         plan(a.games, lives)
     else:
-        run(a.games, a.seed, lives, a.threads, a.wait, a.smoke)
+        run(a.games, a.seed, lives, a.threads, a.wait, a.smoke, a.bracket)
 
 
 if __name__ == "__main__":
