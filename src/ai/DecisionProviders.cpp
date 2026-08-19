@@ -3765,7 +3765,11 @@ bool TreasureHuntProvider::ArchetypeCardValue(const GameState& state, const Card
 // rankings doc, deliberately NOT encoded here.
 static bool KnightsOrderEnabled()
 {
-    static const bool on = EnvOn("MTG_KNIGHTS_ORDER");
+    // ADOPTED default-on (USER, 2026-08-19). Held-out alone: 8/12 overnight keys green, 4 flat,
+    // 0 red; combined with the d0-scoped MTG_ACQ_DIG: d0 -0.0035..-0.0075 on all four held-out
+    // seeds, searched never worse. slivers_vial byte-identical at every tier (no sliver carries
+    // either param). =0 reverts.
+    static const bool on = EnvOn("MTG_KNIGHTS_ORDER", true);   // DEFAULT ON; =0 disables
     return on;
 }
 

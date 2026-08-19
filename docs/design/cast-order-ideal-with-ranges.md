@@ -1,19 +1,24 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
-> ## STATUS UPDATE 2026-08-19 (later): KNIGHTS review HELD — encoded, measurement in flight.
+> ## STATUS UPDATE 2026-08-19 (later): KNIGHTS order + MTG_ACQ_DIG ADOPTED default-on.
 >
-> The fourth review gate was held (ruling verbatim in `cast-order-rankings.md` under "Knights").
-> Built behind two default-off levers:
-> * **`MTG_KNIGHTS_ORDER`** — Worthy Knight 8 (cast-trigger watcher before the tribe), Acclaimed
->   Contender 9 when the board already holds another Knight / 12 otherwise (so the turn's other
->   Knights satisfy its ETB gate first). Param-derived on the shared VialProvider — inert for
->   slivers_vial (no sliver carries either param). Everything main 1 (today's behaviour).
-> * **`MTG_ACQ_DIG`** — the acquisition family extended to the ETB dig (`etb_dig_count`): the
->   dug Knight becomes castable with the SAME turn's leftover mana via the deferred re-solve
->   (cast path only; Vial-deploy digs stay un-armed on both sides — open edge).
-> DEFERRED (Phase 2): rule-derived main-phase split for information hiding vs a real opponent —
-> per-cast, per-board "does this impact combat this turn" (Adeline's count, lords with bodies),
-> never a hardcoded card list. Remaining review gates: Dragons, FiveColour.
+> The fourth review gate was held and adopted (ruling verbatim in `cast-order-rankings.md` under
+> "Knights"):
+> * **`MTG_KNIGHTS_ORDER` DEFAULT ON** — Worthy Knight 8 (cast-trigger watcher before the
+>   tribe), Acclaimed Contender 9 when the board already holds another Knight / 12 otherwise (so
+>   the turn's other Knights satisfy its ETB gate first). Param-derived on the shared
+>   VialProvider — slivers_vial byte-identical at every tier. Everything main 1.
+> * **`MTG_ACQ_DIG` DEFAULT ON, d0-scoped** — the acquisition family extended to the ETB dig
+>   (`etb_dig_count`): the depth-0 executor gets a second pass so the dug Knight is cast with
+>   the same turn's leftover mana (gi154 class: T5 win → T4). The searched-depth rollout arm was
+>   MEASURED AND REJECTED (6/8 held-out searched keys red — plan-selection bias toward digger
+>   lines with a pruned greedy continuation, plus dig-reorder variance; rejection recorded at
+>   TurnSolver's PerformEtbDig site). Searched depths byte-identical by construction.
+> Combined held-out: 12 keys, 8 green / 4 flat / 0 red (d0 −0.0035..−0.0075 all four seeds). GT
+> rebaselined all three modes (overnight per-deck). Open edges: Vial-deploy digs un-armed on
+> both sides; DEFERRED (Phase 2): rule-derived main-phase split for information hiding — per
+> cast, per board "does this impact combat this turn" (Adeline's count, lords with bodies),
+> never a hardcoded card list. Remaining review gates: Dragons, FiveColour (in USER review).
 >
 > ## STATUS UPDATE 2026-08-19: CREATURE GIVING order + MTG_ACQ_RESOLVE ADOPTED default-on.
 >

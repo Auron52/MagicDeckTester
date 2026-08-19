@@ -63,7 +63,11 @@ inline bool AcqResolveEnabled()
 // only the executor reads it today.
 inline bool AcqDigEnabled()
 {
-    static const bool v = EnvOn("MTG_ACQ_DIG");
+    // ADOPTED default-on (USER, 2026-08-19) in the d0-only scope above. Held-out (with the
+    // Knights order): d0 4/4 keys green (-0.0035..-0.0075), searched byte-identical by
+    // construction. The gi154 class is the mechanism: Contender's dig puts a Knight in hand and
+    // the second pass casts it with the leftover mana (T5 win -> T4). =0 reverts.
+    static const bool v = EnvOn("MTG_ACQ_DIG", true);   // DEFAULT ON; =0 disables
     return v;
 }
 

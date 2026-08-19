@@ -424,8 +424,14 @@ _No implemented non-land cards -- nothing to review yet (see the analyze-deck wo
 
 ## Knights
 
-**REVIEW HELD (USER, 2026-08-19) — encoded behind `MTG_KNIGHTS_ORDER` (default OFF, pending
-measurement), plus `MTG_ACQ_DIG` (default OFF) for the dig acquisition.** The ruling, verbatim
+**REVIEW HELD AND ADOPTED (USER, 2026-08-19) — `MTG_KNIGHTS_ORDER` + `MTG_ACQ_DIG` are DEFAULT
+ON (`=0` reverts each).** Held-out evidence (12 overnight keys, combined arm): 8 green / 4 flat /
+0 red — d0 −0.0035..−0.0075 on all four seeds, searched never worse; slivers_vial byte-identical
+at every tier; GT rebaselined all three modes. `MTG_ACQ_DIG` is scoped to the DEPTH-0 executor
+second pass: the first arm also armed the rollout's deferred re-solve and went 6/8 held-out
+searched keys RED (plan selection biased toward digger lines whose pruned greedy continuation
+misplays the committed turn, plus dig-reorder variance) — rejection recorded at TurnSolver's
+PerformEtbDig site; searched depths are byte-identical by construction. The ruling, verbatim
 (two messages):
 
 > I don't agree with that order entirely. Acclaimed Contender should go before others if it is
