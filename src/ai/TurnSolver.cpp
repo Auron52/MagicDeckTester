@@ -585,6 +585,15 @@ static TurnSolver::Plan SearchedSecondMainMemoized(const GameState& state, int d
 //
 // MTG_KE_PARK, DEFAULT OFF -> byte-identical. Human play / MTG_UNPRUNE keep every legal pair
 // enumerated, per the USER's "no reason to make it a searched choice long-run except in the viewer".
+// O-Naginata ordering (USER 2026-08-19: "O-Naginata should be equipped before Lightning Greaves,
+// but last otherwise, so the power is okay"). Two coupled halves -- the equips-vector order class
+// and the emission-time min-power veto -- so ONE reader, consulted by both. Default OFF.
+static bool EquipMinPowerLastEnabled()
+{
+    static const bool on = EnvOn("MTG_EQUIP_MINPOWER_LAST");
+    return on;
+}
+
 static bool KittyParkEnabled()
 {
     static const bool on = EnvOn("MTG_KE_PARK");
@@ -5861,11 +5870,26 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 std::vector<std::pair<const CardDefinition*, const Card*>> eq2;
                 std::vector<int> at2;
                 eq2.reserve(equips.size()); at2.reserve(attached_to.size());
-                for (int pass = 0; pass < 2; ++pass)
+                // THREE classes now, not two (USER 2026-08-19: "O-Naginata should be equipped
+                // before Lightning Greaves, but last otherwise, so the power is okay"):
+                //   0  ordinary equipment      -- the power bonuses that make the gate passable
+                //   1  power-GATED equipment   -- O-Naginata (equip_min_power): after the bonuses
+                //   2  shroud granters         -- Greaves: after everything, its shroud blocks the rest
+                // Subset apply order == candidate order, so this linearization is what makes
+                // "Bonesplitter then O-Naginata onto a 1/1 Kor Duelist" legal in sequence.
+                // MTG_EQUIP_MINPOWER_LAST, default OFF -> the old two-class order, byte-identical.
+                auto order_class = [&](const CardDefinition* d) -> int
+                {
+                    if (d->params.equip_grants_shroud)  { return 2; }
+                    if (EquipMinPowerLastEnabled()
+                        && d->params.equip_min_power > 0) { return 1; }
+                    return 0;
+                };
+                for (int pass = 0; pass < 3; ++pass)
                 {
                     for (std::size_t i = 0; i < equips.size(); ++i)
                     {
-                        if ((equips[i].first->params.equip_grants_shroud ? 1 : 0) != pass) { continue; }
+                        if (order_class(equips[i].first) != pass) { continue; }
                         eq2.push_back(equips[i]); at2.push_back(attached_to[i]);
                     }
                 }
@@ -5903,10 +5927,33 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // Kor Duelist / Balan) plus small fixed credits for Kemba's upkeep Cats, Jitte's
             // charge engine, and lifelink. Returns -1 for an ILLEGAL host (equip_min_power,
             // O-Naginata -- a legality rule, not a prune); 0 for a genuine no-op pair.
+            // Power this turn's OTHER equipment can still add to a host, for the min-power gate
+            // below. Ordering O-Naginata last is only half the USER's fix -- the emission veto is
+            // the other half, and without it a 1/1 Kor Duelist is refused the pair outright and the
+            // late slot never gets used. Summed once per CollectActions (not per host x equipment),
+            // over battlefield equipment that is FREE right now and ordered BEFORE the gated one.
+            // OPTIMISTIC by design, and safe because it is: ApplyEquip re-checks equip_min_power at
+            // attach time (SpellEffects.h) and silently declines, so the worst case is a wasted
+            // no-op action, never an illegal attach. The legality RULE is not bypassed -- it is
+            // evaluated when it can actually be known, which is at apply.
+            int reachable_bonus = 0;
+            if (EquipMinPowerLastEnabled() && !s_legacy_shroud)
+            {
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index) { continue; }
+                    const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                    if (!pd || !pd->params.is_equipment)      { continue; }
+                    if (pd->params.equip_min_power > 0)       { continue; }   // same/later class
+                    if (pd->params.equip_grants_shroud)       { continue; }   // strictly later
+                    if (EquipCostGenericNow(state, state.active_player_index, *pd) != 0) { continue; }
+                    reachable_bonus += pd->params.equip_power_bonus;
+                }
+            }
             auto rider_delta = [&](const CardDefinition* ed2, int id) -> int {
                 const HostStats st = host_stats(id);
                 if (ed2->params.equip_min_power > 0
-                    && st.pw < ed2->params.equip_min_power) { return -1; }
+                    && st.pw + reachable_bonus < ed2->params.equip_min_power) { return -1; }
                 bool ds_after = st.ds;
                 if (st.def != nullptr)
                 {
