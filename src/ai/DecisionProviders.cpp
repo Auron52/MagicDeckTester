@@ -7063,25 +7063,24 @@ bool FiveColourProvider::SearchedSecondMainInSearch() const
 
 bool FiveColourProvider::CondemnsPassedMainPhase() const
 {
-    // STILL REJECTED after the condemn-dig fix round (2026-08-19, per-game train dig): the
-    // first measurement's d3 +0.040/+0.045, d5 +0.040/+0.050 turned out to be MOSTLY OUR BUGS,
-    // not the model -- three defects fixed (see StampM1Hand + the filter in TurnSolver.cpp):
-    //   1. Archangel FREE CASTS were condemned (the m1 world never had that action -- the bank
-    //      charges on combat damage; deleted the T4 free Progenitus in gi111/gi117/gi48/...).
-    //   2. Cards UNAFFORDABLE at m1 were condemned ("passed" is not "declined" for a card no
-    //      m1 line could pay).
-    //   3. The filter RE-CLASSIFIED at the m2 state (the USER said "the same condemnation
-    //      list" -- membership is now decided once, at the m1 state, so a state-dependent
-    //      classification flip can no longer condemn a card that was never offered).
-    // Fixed remeasure (suite-faithful config): d3 +0.015/+0.015, d5 +0.020/+0.030 -- reduced
-    // ~2/3 but STILL NET RED (20 worse / 9 better), and MTG_5C_SSM does not close it. The
-    // residual is real: the bounded m1 solve declines affordable Main1 casts on VALUE TIES
-    // (m2-recovery equivalent in the off world -- gi8's T3 Greaves, gi53's projected turns),
-    // and condemnation converts each tie into a lost cast, both in the real turn and inside
-    // projections (gi53 diverges at T1 with an EMPTY T1 condemnation list -- pure projection
-    // distortion). A sound version must make the m1 solve PREFER casting on such ties (or
-    // distinguish declined-by-valuation from tie/prune), not just tighten the list. Lever kept
-    // for re-measurement if that lands; do not flip on without it.
+    // TRAIN NEUTRAL-TO-GREEN after the condemn-dig rounds (2026-08-19); ADOPTION PENDING
+    // (held-out keys + USER call). The original rejection (+0.040..+0.050) decomposed into:
+    //   Round 1 -- three FILTER BUGS fixed (see StampM1Hand + the filter in TurnSolver.cpp):
+    //   free casts condemned (Archangel banks on combat damage; the m1 world never had the
+    //   action), unaffordable-at-m1 cards condemned, and re-classification at the m2 state
+    //   (the USER said "the same condemnation list" -- membership is now decided once, at m1).
+    //   Round 2 -- the FAEBURROW DOCTRINE (USER 2026-08-19): "casting spells in main 2 becomes
+    //   correct to allow Faeburrow Elder to attack" -- with a live vigilant mana scaler the
+    //   scaling pull answers Both, not Main1 (but own-haste bodies -- Spider-Man, Hellkite --
+    //   stay Main1, and capacity-one Greaves access is Both, protection-aware); Mana Cannons
+    //   gets the Unite-style payable-without-attackers conditional above. The winning lines
+    //   were exactly "vigilant Faeburrow attacks, then its mana funds the post-combat casts"
+    //   (gi53/gi82 m2 Archangel, gi56 m2 Garth, gi158 m2 Cannons+Cannons+Garth), and they were
+    //   being condemned -- escalation to d7/32x budget could not recover them (23/45 cells
+    //   red, 0 green), proving FILTERED, not underexplored; after the doctrine, 3/45 red cells
+    //   remain, all one game (gi187: Jared's m1-vs-m2 tie made load-bearing).
+    // Train after both rounds: d3 +0.005/-0.005, d5 -0.030/-0.010 (6 worse / 11 better).
+    // Off arm byte-identical throughout. Do not flip on without held-out + USER approval.
     static const bool on = EnvOn("MTG_5C_CONDEMN");
     return on && Fc5PhaseEnabled();
 }
@@ -7097,7 +7096,18 @@ FiveColourProvider::MainPhaseOverride(const GameState& s, const CardDefinition& 
         // allows Faeburrow Elder to attack."
         // Mana Cannons: MAIN 1 -- the old "fires identically from either main" missed same-turn
         // sequencing: cast in main 2 it misses every main-1 multicolored body of that turn.
-        if (p.multicolor_cast_damage_per_color) { return MainPhase::Main1; }
+        // CONDEMN-DIG REFINEMENT (2026-08-19): Main1 only when payable WITHOUT tapping an
+        // attack-capable mana creature (the same test as Unite below). When the mana is a
+        // vigilant Faeburrow's, the winning line attacks first and casts Cannons at the top of
+        // the post-combat window (gi158's T4: Cannons, Cannons, Garth -- the bodies follow it
+        // in the SAME main, so no trigger is missed) -> Both, the search decides. Both is
+        // shipped-inert (the pre-combat filter only drops Main2); the distinction matters to
+        // the condemnation stamp, which takes Main1 only.
+        if (p.multicolor_cast_damage_per_color)
+        {
+            return AvailableManaPoolNoAttackers(s).CanPay(def.card.m_mana_cost)
+                       ? MainPhase::Main1 : MainPhase::Both;
+        }
         // Unite the Coalition: "second main is ideal when it would cause a Faeburrow Elder to
         // tap to play it; first main is ideal when you need to draw a hasty threat and won't tap
         // a Faeburrow that could attack." Encoded: main 1 iff payable WITHOUT tapping an

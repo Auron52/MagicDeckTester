@@ -1,5 +1,33 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS UPDATE 2026-08-19 (condemn-dig round 2, FAEBURROW DOCTRINE): condemnation now
+> NEUTRAL-TO-GREEN on train; adoption pending held-out + USER.
+>
+> The USER's hypothesis on the round-1 residual was right: "casting spells in main 2 becomes
+> correct to allow Faeburrow Elder to attack" — every stubborn game's winning line was
+> *vigilant Faeburrow attacks, then its mana funds the post-combat casts* (gi53/gi82 m2
+> Archangel, gi56 m2 Garth, gi158 m2 Cannons+Cannons+Garth), and with Faeburrow on board the
+> `scaling_attacker` pull classified those casts Main1 → stamped → condemned. The
+> **infinite-budget test proved it structural**: at d7 / 32x budget the ON arm was red in
+> 23/45 cells with 0 green — the lines were FILTERED, not underexplored. Encoded rulings
+> (all shipped-inert; the pre-combat filter drops Main2 only, and `Both` never stamps):
+> * Own/lord-haste creatures (Cosmic Spider-Man, Two-Headed Hellkite — verified hasty in
+>   cards.json) stay **Main1**, checked before the scaling pull ("can attack for more than or
+>   the same as Faeburrow").
+> * With a live, attack-capable, vigilant mana scaler on board, the scaling pull answers
+>   **Both** (`BoardHasVigilantManaScalerAttacker`): the m1 cast pumps its attack but taps its
+>   mana — genuinely situational.
+> * Equipment-derived haste access answers **Both**, protection-aware ("1 creature can equip
+>   greaves") — which body wears it is the search's call, so no creature is condemned for not
+>   being the one.
+> * Mana Cannons: Main1 only when payable WITHOUT tapping a would-be attacker (Unite's test),
+>   else Both.
+> After: escalation red 23/45 → **3/45 cells, all one game** (gi187 — Jared's m1-vs-m2 tie made
+> load-bearing; the recorded "prefer casting on ties" retry direction). Full train:
+> d3 **+0.005/−0.005**, d5 **−0.030/−0.010** (6 worse / 11 better; was +0.040..+0.050 at the
+> original rejection). Off arm byte-identical (smoke 36/36 + 600/600 train games).
+> NEXT (user-gated): held-out overnight keys, then the adoption call.
+>
 > ## STATUS UPDATE 2026-08-19 (condemn-dig): the ORDER-CONDEMNATION rejection re-diagnosed —
 > ~2/3 of the red was three implementation defects, now fixed; the model is STILL net red.
 >

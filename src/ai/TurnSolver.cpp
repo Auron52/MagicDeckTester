@@ -3531,6 +3531,31 @@ static bool BoardHasScalingAttacker(const GameState& state)
     return false;
 }
 
+// A live VIGILANT MANA SCALER that could attack this turn (Faeburrow Elder: vigilance +
+// domain_mana + self-pump). USER doctrine (2026-08-19, condemn-dig): with one of these on the
+// board, an m1 cast pumps its attack but TAPS ITS MANA, while the winning lines let it attack
+// (vigilance keeps it untapped) and pay for the post-combat casts -- so the scaling pull to
+// Main1 is genuinely situational there, and the classifier answers Both instead. Requires the
+// body to actually threaten an attack NOW: tapped / summoning-sick / zero-power scalers forfeit
+// nothing, so the plain Main1 pull stands.
+static bool BoardHasVigilantManaScalerAttacker(const GameState& state)
+{
+    const int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !d->params.domain_mana) { continue; }
+        if (!d->card.HasKeyword(Keyword::Vigilance)) { continue; }
+        if (!CanAttackFull(p, state.battlefield, active)) { continue; }
+        const int power = p.EffectivePower()
+            + ComputeLordBonus(p.card, state.battlefield, active,
+                               /*all_creature_types=*/false, &p).first;
+        if (power > 0) { return true; }
+    }
+    return false;
+}
+
 // The filter's activation gate. Provider opt-in (only meaningful for second-main decks) or the
 // MTG_PHASE_CLASSIFY A/B lever; MTG_NO_PHASE_CLASSIFY kills; human play and
 // MTG_UNPRUNE=mainphase keep the full pre-combat set (the viewer is never narrowed).
@@ -3725,12 +3750,25 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
             // combat. Deferring it to m2 cost the exalted pump, held whole attack phases, and
             // flipped T1 land picks downstream (gi=76 win 4->5).
             if (def.card.HasKeyword(Keyword::Exalted)) { return MP::Main1; }
-            if (scaling_attacker) { return MP::Main1; }
-            const bool haste = def.card.HasKeyword(Keyword::Haste)
-                            || HasHasteFromLords(def.card, state.battlefield,
-                                                 state.active_player_index)
-                            || hand_haste_access;
-            return haste ? MP::Main1 : MP::Main2;
+            // OWN haste (or a haste lord's static) attacks from m1 unaided -- checked BEFORE
+            // the scaling pull (USER 2026-08-19: "Cosmic Spider-Man has haste and can attack
+            // for more than or the same as Faeburrow, so it should be Main 1, same with
+            // Hellkite").
+            if (def.card.HasKeyword(Keyword::Haste)
+                || HasHasteFromLords(def.card, state.battlefield,
+                                     state.active_player_index))
+            { return MP::Main1; }
+            // VIGILANT MANA SCALER exception (condemn-dig): the m1 pump costs the scaler's
+            // mana; the winning lines attack first and pay post-combat -> genuinely
+            // situational -> Both. Any other scaling attacker keeps the m1 pull.
+            if (scaling_attacker)
+            { return BoardHasVigilantManaScalerAttacker(state) ? MP::Both : MP::Main1; }
+            // EQUIPMENT-derived haste access is capacity-one (a single Greaves hastes a single
+            // body) and blocked by protection from everything -- WHICH creature wears it is
+            // the search's call, so the class answer is Both, not Main1 (USER: "1 creature can
+            // equip greaves, so that needs to be taken into account").
+            if (hand_haste_access && !p.protection_from_everything) { return MP::Both; }
+            return MP::Main2;
         }
         default:
             // When in doubt, keep pre-combat (wider, never wrong in the base world) -- EXCEPT
@@ -3749,12 +3787,16 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
             // doubt deferred it past combat and the kill slipped a turn (gi=42 5->6).
             if (def.card.IsCreature())
             {
-                if (scaling_attacker) { return MP::Main1; }
+                // Same three-tier logic as the vanilla/dork case above (condemn-dig): own/lord
+                // haste -> Main1; scaling pull softened to Both under a live vigilant mana
+                // scaler; capacity-one equip access -> Both (protection-aware).
                 if (def.card.HasKeyword(Keyword::Haste)
                     || HasHasteFromLords(def.card, state.battlefield,
-                                         state.active_player_index)
-                    || hand_haste_access)
+                                         state.active_player_index))
                 { return MP::Main1; }
+                if (scaling_attacker)
+                { return BoardHasVigilantManaScalerAttacker(state) ? MP::Both : MP::Main1; }
+                if (hand_haste_access && !p.protection_from_everything) { return MP::Both; }
             }
             if (s_doubt_main2) { return MP::Main2; }
             return state.deck_feeds_combat ? MP::Main1 : MP::Main2;
