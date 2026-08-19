@@ -124,8 +124,11 @@ computed from the correct flag.
 
 ## Creature Giving
 
-**REVIEW HELD (USER, 2026-08-19) — built behind `MTG_CG_ORDER` (default off; measurement pending,
-then default flip on approval).** The ruling, verbatim (three messages, consolidated):
+**REVIEW HELD AND ADOPTED (USER, 2026-08-19) — `MTG_CG_ORDER` is DEFAULT ON (`=0` reverts),
+adopted TOGETHER with `MTG_ACQ_RESOLVE` (see below).** Combined-arm evidence: held-out 12/12 keys
+green (d0 to −0.0150, d3 −0.019..−0.028, d5 −0.014..−0.022), per-game 487 faster / 292 slower;
+clean arms byte-identical; GT rebaselined all three modes. The ruling, verbatim (three messages,
+consolidated):
 
 > Crop Rotation should be first as it is mana neutral. Mostly the order doesn't matter, but
 > Suture Priest should go before Hunted Phantasm and Massacre Wurm should be last if played
@@ -142,15 +145,23 @@ then default flip on approval).** The ruling, verbatim (three messages, consolid
 
 Encoded: land -> Crop Rotation(5) -> Sylvan Scrying(6) -> watchers(8: Suture Priest / Wardens) ->
 creatures(10) -> Hunted Phantasm(12) -> other spells(20: Defense) -> Enlightened Tutor(22, after
-every same-turn shuffle) -> Massacre Wurm(28, last). Two recorded gaps from the same review:
-Sylvan Scrying's BEFORE-LAND ideal (fetch another Orchard, land-first fallback) is the shared
-land-two-position open item (same as Mirrorwing's land ruling — a cast rank cannot move the land
-drop); and the **Enlightened Tutor upkeep-instant window** (cast at upkeep so this turn's draw IS
-the tutored card) is a modeling hole, recorded as
-`docs/design/upkeep-instant-tutor-window.md`. This deck has no order-opaque cards, so the ranks
+every same-turn shuffle) -> Massacre Wurm(28, last). **Sylvan Scrying's before-land rule is DELIVERED, not parked** (USER final rounds: "If you can
+play it before the land drop, you should ... never a negative", exceptions = Orchard already in
+hand — where Scrying-first is ALSO fine, land-first kept as the simpler measured path — or
+Scrying unaffordable without the land). Mechanism: the d0 land block defers the drop
+(`LandDropAfterHandLandTutor`), the drop is played post-casts in main 1, and EVERY held-drop play
+requests a second-pass re-solve so the turn is never planned one land short (two measured
+false starts: the lost-drop defer d0 +0.32; the plans-short defer d0 +0.053). The depth side is
+`MTG_ACQ_RESOLVE` — the USER's own question "Is there no breakpoint after casting a tutor?"
+pointed at the 2026-08-14 acquisition-family lever, built default-off and never measured, whose
+depth-0 executor half was also missing; completed and ADOPTED default-on in the same pass
+(held-out: hinata 12/12 green, d5 to −0.087, per-game 551:82 — the recorded gi=22 Gamble class;
+goblins green; antilife net-green with two noise-scale d0 keys). The **Enlightened Tutor
+upkeep-instant window** (cast at upkeep so this turn's draw IS the tutored card) remains a
+modeling hole, recorded as `docs/design/upkeep-instant-tutor-window.md`. This deck has no order-opaque cards, so the ranks
 are the whole delivery (the Anti-Lifegain shape, no opaque hook).
 
-**Reviewed report (`MTG_CG_ORDER=1`):**
+**Adopted report (default config):**
 
 ```
 # Cast order -- decks/Creature Giving/Creature Giving.cod
@@ -191,34 +202,6 @@ are the whole delivery (the Anti-Lifegain shape, no opaque hook).
   28     -   m2    3  6  Massacre Wurm
 ```
 
-**Baseline report (default config, what plays today):**
-
-```
-# Cast order -- decks/Creature Giving/Creature Giving.cod
-# provider: CreatureGiving   ideal-order draw tier: off   cantrip max mv: 1
-# deck flags: feeds_combat=no uses_second_main=no enabler_pull=no castpayoff_pull=no
-# main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
-#
-# rank  range      main  n  mv  card
-#
-# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
-  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
-#
-# [10] CREATURE: before noncreature spells (prowess catches later casts)
-  10     -   m2    4  1  Birds of Paradise
-  10     -   m2    4  1  Essence Warden
-  10     -   m2    3  1  Soul Warden
-  10     -   m2    4  2  Suture Priest
-  10     -   m2    4  2  Varchild's War-Riders
-  10     -   m2    4  3  Hunted Phantasm
-  10     -   m2    3  6  Massacre Wurm
-#
-# [20] other noncreature spell
-  20     -   m2    4  1  Crop Rotation
-  20     -   m2    3  1  Enlightened Tutor
-  20     -   m2    4  2  Sylvan Scrying
-  20     -   m2    4  4  Defense of the Heart
-```
 
 ## Dragons
 

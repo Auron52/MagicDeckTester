@@ -1,5 +1,19 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS UPDATE 2026-08-19: CREATURE GIVING order + MTG_ACQ_RESOLVE ADOPTED default-on.
+>
+> The third review gate was held and adopted, with a companion global adoption:
+> * **`MTG_CG_ORDER` DEFAULT ON** — the reviewed Creature Giving order (Crop Rotation 5 after the
+>   land, Scrying 6 with the before-land defer, watchers 8, Phantasm 12, E-Tutor 22 after every
+>   shuffle, Wurm 28 last). Held-out 12/12 green, per-game 487:292.
+> * **`MTG_ACQ_RESOLVE` DEFAULT ON** — the tutor-to-hand / staged-dig deferred re-solve (the
+>   USER's "Is there no breakpoint after casting a tutor?"; built 2026-08-14, never measured,
+>   depth-0 half missing — completed). Held-out: hinata 12/12 green (d5 to −0.087, 551:82),
+>   creature_giving 12/12, goblins green, antilife net-green (two noise-scale d0 keys).
+> GT rebaselined: smoke + regression full, overnight per-deck for the four moved decks. The
+> Mirrorwing LAND two-position rule at d0 remains open (Scrying's defer is the CG-shaped half of
+> that family); remaining review gates: Knights, Dragons, FiveColour.
+>
 > ## STATUS UPDATE 2026-08-18 (latest): MIRRORWING and ANTI-LIFEGAIN orders ADOPTED default-on.
 >
 > Both review gates were held and both packages flipped the same day, each with the full

@@ -34,7 +34,13 @@ inline bool Main2DropEnabled()
 // (TurnSolver) and the executor's draw-engine classification (AIEngine) -- shared reader.
 inline bool AcqResolveEnabled()
 {
-    static const bool v = EnvOn("MTG_ACQ_RESOLVE");
+    // ADOPTED default-on (USER, 2026-08-19; measured during the Creature Giving order review --
+    // the USER's "Is there no breakpoint after casting a tutor?"). Held-out: hinata 12/12 keys
+    // green (d5 to -0.087, per-game 551:82 -- the recorded gi=22 Gamble class), creature_giving
+    // 12/12 green, goblins green, antilife net-green (two noise-scale d0 keys red). The depth-0
+    // executor half (note_draw_engine's tutor clause + the deferred-drop second pass) was
+    // completed in the same review. =0 reverts.
+    static const bool v = EnvOn("MTG_ACQ_RESOLVE", true);   // DEFAULT ON; =0 disables
     return v;
 }
 

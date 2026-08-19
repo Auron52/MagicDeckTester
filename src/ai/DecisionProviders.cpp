@@ -6569,7 +6569,11 @@ std::vector<int> CreatureGivingProvider::CleanupDiscardCandidates(
 // governs every cast set -- these ranks are the whole delivery, no opaque hook needed.
 static bool CgOrderReviewEnabled()
 {
-    static const bool on = EnvOn("MTG_CG_ORDER");   // default OFF; =1 enables the reviewed order
+    // ADOPTED default-on (USER, 2026-08-19): the reviewed Creature Giving order incl. the
+    // Scrying-before-land defer. Combined-arm evidence (with MTG_ACQ_RESOLVE): held-out 12/12
+    // keys green (d3 -0.019..-0.028, d5 -0.014..-0.022), per-game 487 faster / 292 slower.
+    // =0 reverts.
+    static const bool on = EnvOn("MTG_CG_ORDER", true);   // DEFAULT ON; =0 disables
     return on;
 }
 
