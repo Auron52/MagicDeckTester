@@ -796,6 +796,15 @@ attached, because the gate is deck-agnostic and the decks where combat DOES crea
 (Goblins' Lackey put, burn's spectacle, Two-Headed Hellkite's attack draw) are exactly where it
 could pay — it has simply never been measured there.
 
+> **SCOPE CORRECTION (2026-08-19, same day, after the USER's ability-order ruling below).**
+> Everything above is measured against the doctrine AS IT STOOD, in which the post-combat main has
+> essentially no job on this deck. The Kemba park ruling gives it a recurring one — park the free
+> gear on Kemba at the end of main 2, every turn she is out — and those are precisely the turns on
+> which combat created nothing. So `SkipsUnproductiveSecondMain` would skip exactly the turns the
+> park needs, and **it must not be adopted**; the "one game in 100" figure is a fact about the
+> pre-ruling doctrine, not a standing property of the deck. Re-measure it after the park lands if
+> anyone wants the number again.
+
 **Why the consideration counts pointed the wrong way — and the profile that settles it.** The
 `MTG_CONSIDER_STATS` table above makes the second main look like the whole problem: 55% of all
 action considerations, 50% even after the memo. It is worth **5% of wall time**. A per-call cost
@@ -827,3 +836,70 @@ to the CWD and **silently proceeds with an EMPTY card database** if it is missin
 in 6,099 solve calls instead of 2.79M and looked like a successful run. Run from the repo root and
 send only perf's OUTPUT to /tmp (`-o /tmp/x.perf`). Also: perf hardware counters are `<not
 supported>` under WSL2, but the `cpu-clock` software event samples fine.
+
+## The USER-reviewed ORDERED-SEARCHED package (review held 2026-08-19) — BUILT, NOT MEASURED
+
+Direction, verbatim: *"we drop the greedy solves entirely and follow the proper design for
+KittyEquipment"*, *"we need to limit the search to productive options and skip it for unproductive
+ones"*, and on the searched second main *"not practical without the sorted pruning strategy I have
+been working through with the other agent"*.
+
+**LIVE (default-on, changes play):** `EquipmentProvider::SearchesSecondMain()` — the greedy
+post-combat solve is dropped for this deck via a new per-deck hook, the adoption route the
+suite-wide `MTG_SEARCH_SECOND_MAIN` lever never earned. Free here: four d3 arms x 100 games
+(greedy / searched / classified / both) all return avg 5.0300 and digest 3e6ea44e9c15d572. Kill
+switch `MTG_NO_SEARCH_SECOND_MAIN=1`. **Its battery + smoke re-verification was cut short to free
+the box for another agent — argued and built, not re-verified.**
+
+**DEFAULT OFF, byte-identical off, NOT YET MEASURED:**
+
+| lever | what it turns on |
+|---|---|
+| `MTG_KE_ORDER` | the reviewed cast order (Paladin 6 -> Stoneforge 7 -> equipment 8 -> hosts 10 -> removal 30/m2) + `OrderOpaqueCastsByRank` |
+| `MTG_KE_PARK` | the Kemba loop: park free gear on Kemba in main 2, un-park it onto the double-striker in main 1 |
+| `MTG_EQUIP_MINPOWER_LAST` | O-Naginata equips last-but-before-Greaves, and the emission veto measures REACHABLE power |
+
+The cast-order half and the ruling behind it live in `cast-order-rankings.md` under
+KittyEquipment. The ability-order half is here:
+
+**Ability order (USER ruling).** *"For most equipping it can go just before the attack phase. Only
+Lightning Greaves has some special rules where it can be used to activate abilities. The Kemba park
+is another special case at the end of Main 2, and technically you want to equip her with everything
+that is free to equip and doesn't have a drawback like Grafted Wargear. Lightning Greaves should be
+last, because of shroud."* Three of the four already held and were verified rather than rebuilt:
+equips run in a trailing pass after every cast (so main-1 equips land immediately before combat with
+the final board and final metalcraft count known); the equips vector is sorted shroud-granting last;
+and `ApplyManaUnlockEquips` already fires a haste equip mid-casts when it unlocks a later action.
+
+**The park is half a LOOP, and forcing only that half would be a trap.** USER: *"it also will often
+mean that we need to re-equip a creature the next turn ... at least if there is a double striker on
+board"*, and *"in goldfish there is literally no drawback to doing this"*. Kemba's upkeep makes a Cat
+per Equipment attached, so: main 2 park (Cats at upkeep) -> main 1 un-park onto the double-striker
+(damage in combat), both {0} under metalcraft, and in this apparatus artifacts never leave so
+metalcraft once on stays on. A parked Bonesplitter that never returns is a double-striker attacking
+NAKED — strictly worse than never parking. The un-park would otherwise be a SEARCHED move (the
+auto-equip collapse excludes attached equipment, because a PRE-combat move trades away a rider about
+to attack), droppable by a breadth cap and adding one move-group per equipment to every main-1
+enumeration. So both halves are forced on one flag: enumeration stays flat, and the failure mode
+cannot occur. One predicate (`KembaLoopKind`) serves the emission keep-list and both subset walkers'
+auto-take, so the three cannot drift.
+
+**Un-park guard, both halves of the USER's condition** (*"a creature that can attack with all of the
+equipment on it ... which might be any doublestriker if Lightning Greaves is out"*): the target must
+be a double-striker AND able to swing. `CanTapNow` alone is WRONG here — it only sees a Greaves
+already attached, and under this very doctrine the Greaves spent the night parked on Kemba — so a
+summoning-sick double-striker still qualifies when a free haste granter can reach it this turn.
+
+**O-Naginata** (*"should be equipped before Lightning Greaves, but last otherwise, so the power is
+okay"*): needed TWO changes, because the ordering alone is a no-op. The equips vector gained a third
+class (ordinary -> power-gated -> shroud), AND the emission veto in `rider_delta` — which refused the
+pair outright against the host's CURRENT power, so the late slot could never be used — now measures
+against the power the host can still REACH this turn. That optimism is safe because `ApplyEquip`
+re-checks `equip_min_power` at attach time and silently declines: worst case a wasted no-op, never
+an illegal attach. The rule is not bypassed, it is evaluated where it can be known.
+
+**THE MEASUREMENT OWED.** One pooled battery over the four arms plus control, d3 (and d5 with an
+abandon ceiling — see the gi=20 note above). And per the standing lesson, the park arm CANNOT be
+judged on avg turns alone: **verify the loop ROUND-TRIPS**, park then un-park, by turn. A park that
+never un-parks would barely move the mean while being a clear misplay — exactly the failure the
+"measure the BEHAVIOUR, not just the outcome" rule exists to catch.
