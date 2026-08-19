@@ -5337,6 +5337,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (d->params.is_equipment) { equips.push_back({ d, &p.card }); attached_to.push_back(p.equipped_to); }
                 if (p.card.IsCreature() || p.is_animated)
                 {
+                    // Protection from everything (Progenitus): equip TARGETS (CR 702.6b), so a
+                    // protected creature is never a legal host -- excluding it here covers both
+                    // worlds (the executor only applies search-produced Equip actions).
+                    if (d->params.protection_from_everything) { continue; }
                     const bool src = (d->tmpl == CardTemplate::ManaDork) || d->params.mana_rock;
                     const int  sc  = p.EffectivePower() + (src ? PermanentManaYield(p, *d) : 0)
                                    + attack_payoff(*d);
@@ -5351,6 +5355,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (d->params.is_equipment) { equips.push_back({ d, &c }); attached_to.push_back(0); }
                 if (d->card.IsCreature())
                 {
+                    // Protection from everything: never a legal equip host (see battlefield loop).
+                    if (d->params.protection_from_everything) { continue; }
                     // A hand host only becomes a real host if the plan also CASTS it this turn, so
                     // ranking it on printed power alone lets an unaffordable fatty win the single
                     // Equip slot and strand it. FiveColour seed 4200000 gi119: Progenitus

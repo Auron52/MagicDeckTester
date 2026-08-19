@@ -3650,10 +3650,11 @@
    "keywords": [],
    "power": 10,
    "toughness": 10,
-   "oracle_text": "Protection from everything\nIf Progenitus would be put into a graveyard from anywhere, reveal Progenitus and shuffle it into its owner's library instead. [Protection from everything provably inert vs the passive goldfish opponent (nothing ever damages, targets, enchants, or blocks our creatures) -- same class as Hexproof/UmbraArmor; no Keyword::Protection exists or is needed. Graveyard replacement IS live (a 10-mana card realistically discards to cleanup hand-size): graveyard_replace_shuffle_library, wired at both cleanup-discard sites (executor + rollout). Legend rule modelled but inert (1 copy).]",
+   "oracle_text": "Protection from everything\nIf Progenitus would be put into a graveyard from anywhere, reveal Progenitus and shuffle it into its owner's library instead. [Protection from everything: MOSTLY inert vs the passive goldfish opponent (nothing of theirs damages, targets, enchants, or blocks) -- but NOT vs our OWN equipment: equip targets (CR 702.6b) and protection from everything blocks it, so Lightning Greaves can never attach (found in the Five Colour order review, 2026-08-19: the engine was granting an illegal haste attack). Modelled via protection_from_everything, excluded from equip host enumeration. Graveyard replacement IS live (a 10-mana card realistically discards to cleanup hand-size): graveyard_replace_shuffle_library, wired at both cleanup-discard sites (executor + rollout). Legend rule modelled but inert (1 copy).]",
    "template": "vanilla_creature",
    "parameters": {
-    "graveyard_replace_shuffle_library": true
+    "graveyard_replace_shuffle_library": true,
+    "protection_from_everything": true
    }
   },
   {

@@ -468,6 +468,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.colored_cast_lifegain = params.value("colored_cast_lifegain", false);
     p.attack_draw_cards = params.value("attack_draw_cards", 0);
     p.graveyard_replace_shuffle_library = params.value("graveyard_replace_shuffle_library", false);
+    p.protection_from_everything        = params.value("protection_from_everything", false);
     p.combat_damage_free_cast = params.value("combat_damage_free_cast", false);
     p.landfall_damage        = params.value("landfall_damage", 0);
     p.stages_cards           = params.value("stages_cards", false);

@@ -6897,46 +6897,124 @@ static bool Fc5GreavesLive(const GameState& s)
     return false;
 }
 
+// Rank scale note: under the lever this provider ranks EVERY card of the deck explicitly (no
+// generic fallthrough), on a WIDENED scale -- enablers 4..9, bodies 100 + 10*mv (Hellkite
+// pinned 195), the scaling-dork ideal slot 3 ABOVE its completer's rank, walkers/other
+// noncreatures 210, late dorks 250. Rank comparisons only ever happen within one deck's cast
+// set, so the scale is free to differ from the generic 0..30 tiers; the widening is what makes
+// "immediately after the completing cast" expressible between body cost-tiers.
+static int Fc5SpellRank(const CardDefinition& d)
+{
+    const CardParams& q = d.params;
+    if (d.card.IsCreature())
+    {
+        // Progenitus (protection_from_everything): VERY LAST (USER: "can safely be cast the
+        // very last in main 2 ... since it cannot wear mana greaves. (protection from
+        // everything includes equipment)"). Staying in hand longest also keeps it available as
+        // the common Maelstrom Archangel free-cast target (USER note); the HOLD decision
+        // itself stays with the search -- this is only the within-set position.
+        if (q.protection_from_everything) { return 220; }
+        // Bodies: CHEAPEST FIRST (USER: "I prefer the cheaper ones first, because they might
+        // enable a Faeburrow or Bloom Tender" -- each colorful body widens the domain). A full
+        // deterministic ordering, no order branching, no search cost (the USER's constraint);
+        // mv ties keep plan order (the middle order is otherwise not load-bearing, USER).
+        // Hellkite needs no pin: mv 6 already slots it after the mv-5 bodies and before
+        // nothing that matters (USER correction: "after 5 MV creatures, but not Progenitus").
+        return 100 + 10 * std::min(d.card.m_mana_cost.ManaValue(), 9);
+    }
+    return 210;   // walkers + any other noncreature
+}
+
+// The scaling dork's IDEAL slot below 5 colors (USER, 2026-08-19: "a previous spell getting us
+// up to 5 colours means that Bloom Tender and Faeburrow Elder will immediately be next"):
+// 3 above the rank of the cheapest-slotted PERMANENT spell in hand that would complete the
+// domain BY ITSELF -- an instant (Unite is WUBRG) adds no permanent colors and never counts.
+// No single completer in hand -> 200, after all bodies (covers "whether spells that add new
+// colours are available or not", and the USER's acknowledged approximation for the rare
+// multiple-1-2-color-adders case: cumulative completion is only caught positionally, after the
+// bodies. Searching the in-between placements for that rare case is a RECORDED FOLLOW-UP
+// (USER: "rare, so it might be worth considering" vs "might be ... disadvantageous
+// budget-wise") -- not built today.)
+static int Fc5ScalingIdealRank(const GameState& s)
+{
+    bool have[5] = {false, false, false, false, false};
+    for (Color c : DomainColors(s, s.active_player_index))
+    { if (c != Color::Colorless) { have[static_cast<int>(c)] = true; } }
+    int best = -1;
+    for (const Card& h : s.players[s.active_player_index].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (!d || d->card.IsLand()) { continue; }
+        const bool permanent = d->card.IsCreature()
+            || d->card.HasType(CardType::Artifact)
+            || d->card.HasType(CardType::Enchantment)
+            || d->card.HasType(CardType::Planeswalker);
+        if (!permanent) { continue; }
+        bool completes = true;
+        for (int ci = 0; ci < 5; ++ci)
+        { if (!have[ci] && !d->card.HasColor(static_cast<Color>(ci))) { completes = false; break; } }
+        if (!completes) { continue; }
+        const int r = Fc5SpellRank(*d);
+        if (best < 0 || r < best) { best = r; }
+    }
+    return best < 0 ? 200 : best + 3;
+}
+
 int FiveColourProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     if (Fc5OrderEnabled())
     {
         const CardParams& p = def.params;
         // The USER's prototype order (2026-08-19): land -> Cannons -> Cornucopia -> Greaves ->
-        // Unite -> [dorks early iff Greaves live; scaling dorks additionally iff 5 colors on
-        // field] -> bodies -> [dorks late otherwise]. Cornucopia needs no clause: the generic
-        // mana-rock tier (5) already slots it between Cannons (4) and Greaves (6).
+        // Unite -> [dorks early iff Greaves live; scaling dorks per the completer rule] ->
+        // bodies cheapest-first -> walkers -> [dorks last otherwise].
         if (p.multicolor_cast_damage_per_color)      { return 4; }   // Cannons: before every multicolored cast
+        if (p.mana_rock)                             { return 5; }   // Cornucopia
         if (p.is_equipment && p.equip_grants_haste)  { return 6; }   // Greaves: unlock before the dorks/bodies
         if (p.modal_choose_n > 0)                    { return 7; }   // Unite
         if (def.card.IsCreature() && !p.produces.empty())
         {
             if (p.domain_mana)
             {
-                // Bloom Tender / Faeburrow: early only when the unlock AND the full domain are
-                // both already there; otherwise "later in the list" (USER completion) -- the
-                // late slot runs after the 5-color bodies that may complete the domain.
-                if (Fc5GreavesLive(s)
-                    && DomainColors(s, s.active_player_index).size() >= 5) { return 9; }
-                return 25;
+                // Bloom Tender / Faeburrow. Greaves live:
+                //   domain already 5 -> 9 (front, taps for 5 immediately);
+                //   domain < 5      -> the IDEAL slot immediately after the domain-completing
+                //     cast (Fc5ScalingIdealRank), with FUNDING ladder rungs {ideal, 9}
+                //     (CastOrderFallbackRanks below): "try 2 options in this order: after all
+                //     spells that add a new colour ... and in front. Whether it works is a
+                //     matter of feasibility" -- the range ladder walks it to the front exactly
+                //     when FirstUnpayablePos says the line as ordered cannot pay. (No dork-tap
+                //     credit in FirstUnpayablePos: with two rungs the end positions are right
+                //     either way -- payable-at-ideal stays late, everything else fronts, where
+                //     the real payment machinery cashes the Greaves unlock.)
+                // No Greaves: last (250) -- "otherwise they can be played last."
+                if (Fc5GreavesLive(s))
+                {
+                    if (DomainColors(s, s.active_player_index).size() >= 5) { return 9; }
+                    return Fc5ScalingIdealRank(s);
+                }
+                return 250;
             }
             // Birds / Deathrite: early iff the Greaves unlock makes their tap live this turn.
-            return Fc5GreavesLive(s) ? 8 : 25;
+            return Fc5GreavesLive(s) ? 8 : 250;
         }
-        // Bodies: CHEAPEST FIRST within the tier (USER refinement: "I prefer the cheaper ones
-        // first, because they might enable a Faeburrow or Bloom Tender" -- each colorful body
-        // widens the domain the scaling dorks read). Encoded as rank 10 + mv: a full
-        // deterministic ordering, no order branching, no search cost (the USER's constraint).
-        // The middle order is otherwise not load-bearing (USER), so mv ties keep plan order.
-        // Hellkite (attack_draw_cards): AFTER the others regardless of cost (USER: it "doesn't
-        // draw the cards immediately" -- the attack trigger draws in combat, and how to use the
-        // drawn cards is a second-main decision, which the post-combat enumeration already is).
-        if (def.card.IsCreature() && p.attack_draw_cards > 0) { return 19; }
-        if (def.card.IsCreature())
-        { return 10 + std::min(def.card.m_mana_cost.ManaValue(), 9); }
-        return GenericProvider::CastOrderRank(s, def);
+        return Fc5SpellRank(def);
     }
     return GenericProvider::CastOrderRank(s, def);
+}
+
+std::vector<int> FiveColourProvider::CastOrderFallbackRanks(const GameState& s,
+                                                            const CardDefinition& def) const
+{
+    if (!Fc5OrderEnabled()) { return {}; }
+    const CardParams& p = def.params;
+    // The scaling dork's two USER-ruled options, preference order: the ideal completer-adjacent
+    // slot, then the front (9). Active exactly in the Greaves-live below-5-colors situation the
+    // rule is scoped to; everywhere else the rank above is a single fixed position.
+    if (def.card.IsCreature() && p.domain_mana && Fc5GreavesLive(s)
+        && DomainColors(s, s.active_player_index).size() < 5)
+    { return { Fc5ScalingIdealRank(s), 9 }; }
+    return {};
 }
 
 const char* FiveColourProvider::CastOrderTierName(int rank) const
@@ -6944,15 +7022,21 @@ const char* FiveColourProvider::CastOrderTierName(int rank) const
     if (!Fc5OrderEnabled()) { return nullptr; }
     switch (rank)
     {
-        case 4:  return "MANA CANNONS: before every multicolored cast (each pings its color count)";
-        case 6:  return "GREAVES: the haste/unlock enabler, before the dorks and bodies";
-        case 7:  return "UNITE: early within its main (phase decided by the MTG_5C_PHASE rule)";
-        case 8:  return "PLAIN DORK, Greaves live: early -- equip {0} unlocks the tap this turn";
-        case 9:  return "SCALING DORK, Greaves live + all 5 colors on field: early, taps for 5";
-        case 25: return "DORKS, no unlock (or domain incomplete): later in the list (USER ruling)";
+        case 4:   return "MANA CANNONS: before every multicolored cast (each pings its color count)";
+        case 5:   return "CORNUCOPIA / MANA ROCK: online for the rest of the line";
+        case 6:   return "GREAVES: the haste/unlock enabler, before the dorks and bodies";
+        case 7:   return "UNITE: early within its main (phase decided by the MTG_5C_PHASE rule)";
+        case 8:   return "PLAIN DORK, Greaves live: early -- equip {0} unlocks the tap this turn";
+        case 9:   return "SCALING DORK, Greaves live + all 5 colors on field: early, taps for 5";
+        case 200: return "SCALING DORK ideal, no single completer in hand: after all bodies (ladder may front it)";
+        case 210: return "WALKERS / other noncreatures";
+        case 220: return "PROGENITUS: very last -- cannot wear Greaves (protection), stays a free-cast target";
+        case 250: return "DORKS, no Greaves unlock: last (USER ruling)";
         default:
-            if (rank >= 10 && rank <= 19)
-            { return "BODY, cheapest first (rank = 10 + mv): each colorful body widens the domain"; }
+            if (rank >= 100 && rank <= 190 && rank % 10 == 0)
+            { return "BODY, cheapest first (rank = 100 + 10*mv): each colorful body widens the domain"; }
+            if (rank >= 103 && rank % 10 == 3)
+            { return "SCALING DORK ideal: immediately after the domain-completing cast (ladder may front it)"; }
             return nullptr;
     }
 }

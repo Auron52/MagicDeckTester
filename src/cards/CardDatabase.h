@@ -78,6 +78,13 @@ struct CardParams
     // this card in the current engine (it cannot die: no opponent damage/removal, no self-sac).
     bool graveyard_replace_shuffle_library = false;
 
+    // Progenitus: "Protection from everything." Vs the passive goldfish opponent this is inert
+    // for THEIR actions, but it also blocks our OWN equipment -- equip targets (CR 702.6b), so
+    // a protected creature can never be a host (Lightning Greaves haste was an illegal line,
+    // found 2026-08-19). Read by the equip host enumeration (TurnSolver); no general targeting
+    // sites need it today (nothing else of ours targets our creatures in this deck class).
+    bool protection_from_everything = false;
+
     // Maelstrom Archangel: "Whenever this creature deals combat damage to a player, you may cast
     // a spell from your hand without paying its mana cost." Modelled as BANKING (user-approved
     // 2026-08-06): connecting increments GameState::free_casts_available (Combat.cpp, shared

@@ -615,6 +615,11 @@ public:
     // dorks read); the middle order is otherwise not load-bearing and adds no search cost.
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     const char* CastOrderTierName(int rank) const override;
+    // The scaling dork's two USER-ruled positions in preference order (ideal
+    // completer-adjacent slot, then the front) -- the funding ladder walks between them on
+    // payability, exactly the Gold Rush machinery. Non-empty only in the Greaves-live
+    // below-5-colors situation.
+    std::vector<int> CastOrderFallbackRanks(const GameState&, const CardDefinition&) const override;
     // MTG_5C_PHASE: per-deck opt-in to the pre-combat Main2 filter (this deck actually plays a
     // second main), activating the override above with the USER's 2026-08-19 phase rules.
     bool        ClassifiesMainPhases() const override;

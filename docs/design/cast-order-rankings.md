@@ -309,16 +309,44 @@ the review messages (key quotes verbatim):
 > be ranked after the others in terms of cost, since it doesn't draw the cards immediately. How
 > to use them is a decision for second main."
 
-Encoded (`MTG_5C_ORDER`, provider-scoped): land → Cannons(4) → Cornucopia(5, generic rock tier)
-→ Greaves(6) → Unite(7) → plain dorks(8) iff Greaves live / scaling dorks(9) iff Greaves live
-AND 5 colors on field → bodies cheapest-first(10+mv, deterministic — no order branching, no
-search cost; Hellkite pinned 19 regardless of cost) → walkers/other noncreatures(20 generic) →
-dorks late(25) otherwise (the late slot self-corrects: 5-color bodies resolve before it).
+Encoded (`MTG_5C_ORDER`, provider-scoped, widened rank scale — every deck card ranked
+explicitly): land → Cannons(4) → Cornucopia(5) → Greaves(6) → Unite(7) → plain dorks(8) iff
+Greaves live → scaling dorks(9) iff Greaves live AND 5 colors already on field → bodies
+cheapest-first(100+10·mv — Hellkite needs no pin, mv 6 already slots it after the mv-5 bodies;
+USER correction: "after 5 MV creatures, but not Progenitus") → walkers/other noncreatures(210)
+→ Progenitus(220, "very last in main 2 ... it cannot wear mana greaves", and staying in hand
+keeps it the common Maelstrom Archangel free-cast target) → dorks last(250) without Greaves.
+
+**CORRECTNESS BUG FOUND BY THIS REVIEW (fixed default-on, not lever-gated): Progenitus was a
+legal Lightning Greaves host.** The card's bracket note claimed protection from everything
+"provably inert vs the passive goldfish", but equip TARGETS (CR 702.6b) and protection blocks
+our OWN equipment — the engine could grant an illegal haste attack (and the equip host ranking
+comment records Progenitus actually winning the host slot, gi119). Modelled as
+`protection_from_everything` on the card, excluded in the equip host enumeration (both worlds —
+the executor only applies search-produced Equip actions); bracket note corrected. **Scaling dorks below 5 colors with Greaves live get the USER's second-round
+RANGE rule ("try 2 options in this order: after all spells that add a new colour ... and in
+front. Whether it works is a matter of feasibility"):** ideal = 3 above the rank of the
+cheapest PERMANENT spell in hand that completes the domain by itself ("a previous spell getting
+us up to 5 colours means that Bloom Tender and Faeburrow Elder will immediately be next";
+instants like Unite add no permanent colors), or 200 (after all bodies) when no single
+completer is in hand; funding-ladder rungs {ideal, 9} walk it to the front exactly when
+`FirstUnpayablePos` says the ordered line cannot pay (the Gold Rush machinery, no new code
+paths). Acknowledged approximations (USER): the rare multiple-1-2-color-adders cumulative
+completion is caught only positionally; searching in-between placements for it is a recorded
+follow-up ("rare, so it might be worth considering" vs "disadvantageous budget-wise").
 "Greaves active or in plan" is read as battlefield-or-hand (one copy in deck; the rank hook
 cannot see the chosen set — recorded approximation). `MTG_5C_PHASE`: Cannons → Main1 (the old
 "fires identically from either main" missed same-turn sequencing); Unite → Main1 iff payable
 from `AvailableManaPoolNoAttackers` (no attack-capable creature source tapped), else Main2;
 scaling dorks → Main2 unless Greaves live; Bolas Main2 and the 2026-08-16 Oko ruling unchanged.
+
+**RECORDED FOLLOW-UP (USER, 2026-08-19, not in this measurement round): Cornucopia trigger
+timing** — "we probably should at least look in a plan to decide when to trigger it ... trigger
+on the most multi-color spell in the list." The once-per-turn "may" currently fires on the
+FIRST colored cast; the rule should decline until the plan's most-colored remaining cast (a
+deterministic plan-aware rule, no branching). Kept out of the order/phase arms because it is a
+trigger-timing change touching the shared executor/rollout trigger path (lockstep), not an
+ordering change.
 
 Pre-review baseline report:
 
