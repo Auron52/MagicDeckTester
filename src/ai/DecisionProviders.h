@@ -773,6 +773,24 @@ public:
     // rollout-leaf Solve walks ~1M subsets and a d5 game hit 40+ min on one seed (300003 gi=2)
     // once the rollout learned Puresteel draws (enter-cascade fix). Off-switch MTG_NO_LETHAL_CUT.
     bool UseLethalShortCircuit() const override { return true; }
+    // NO GREEDY SECOND MAIN on this deck (USER 2026-08-19: "we drop the greedy solves entirely and
+    // follow the proper design"). The evidence that it is free here: four d3 arms x 100 games --
+    // greedy, MTG_SEARCH_SECOND_MAIN, MTG_PHASE_CLASSIFY, and both -- all return avg 5.0300 and
+    // play digest 3e6ea44e9c15d572, so the searched path reaches the same decisions. Kill switch
+    // MTG_NO_SEARCH_SECOND_MAIN=1.
+    bool SearchedSecondMainInSearch() const override { return true; }
+    // The USER-reviewed cast order (review held 2026-08-19; see cast-order-rankings.md for the
+    // ruling verbatim). Gated on MTG_KE_ORDER, default OFF -> byte-identical.
+    int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    // "Order everything, not have search own the order" -- the same opaque-set adoption Mirrorwing
+    // took, on the same lever.
+    bool OrderOpaqueCastsByRank() const override;
+    // Swords / Unexpectedly Absent are "essentially unused in goldfish" (USER): last, and in the
+    // later phase.
+    std::optional<MainPhase> MainPhaseOverride(const GameState&, const CardDefinition&) const override;
+    // Review-artifact labels: this deck's reviewed tiers land on generic rank numbers whose
+    // generic names mean unrelated things.
+    const char* CastOrderTierName(int rank) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

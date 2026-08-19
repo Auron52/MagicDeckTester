@@ -499,8 +499,47 @@ Pre-review baseline report:
 
 ## KittyEquipment
 
+**REVIEW HELD (USER, 2026-08-19). Built behind `MTG_KE_ORDER` (default OFF, byte-identical off);
+NOT YET MEASURED — the adoption A/B is still owed.** The ruling, verbatim:
+
+> "Puresteel Paladin, Stoneforge Mystic and equipment should be in front I think for the card
+> draw/tutor effect. Swords and Unexpectedly are essentially unused in goldfish."
+
+What each tier buys, in card terms:
+
+* **Puresteel Paladin (6), first of the three.** `draw_on_equipment_etb` makes every Equipment
+  entering AFTER it draw a card, and `metalcraft_equip_zero_artifacts=3` makes every equip cost
+  {0} once three artifacts are out. Cast after the equipment, BOTH halves are wasted.
+* **Stoneforge Mystic (7).** Its ETB `tutor_to_hand`(Equipment) puts a card in HAND, so it cannot
+  draw off itself — it has to precede the equipment casts it feeds, and `MTG_ACQ_RESOLVE` re-solves
+  the phase at that acquisition so the tutored card is castable in the same line.
+* **Equipment (8) — AHEAD OF THE REMAINING CREATURES.** This is the part that differs from the
+  generic order (creatures 10, "other noncreature" 20). With a Paladin out a {1} Equipment IS this
+  deck's cantrip, so it belongs in front on the information-first argument. With no Paladin out the
+  move is a no-op — equips are applied after every cast either way, so cast order among triggerless
+  spells cannot change the board. That is why this is a FLAT rule rather than a board-conditional
+  promotion: there is nothing to gate, and a conditional rank only makes the report harder to review.
+* **Swords to Plowshares / Unexpectedly Absent (30, m2).** HONEST BRACKET: they are inert here only
+  because this goldfish has no blocking — in a real game Swords on a blocker is precisely an
+  attack-enabler, so this ranking is right for the current apparatus and wrong for the eventual
+  real-opponent phase. UA's hand-cast is additionally pruned from the autonomous search entirely
+  (`UnprunedGate::UACast`), so its rank is inert today whatever it says.
+* **Sol Ring (5) is untouched** — not an Equipment, so it falls through to the generic MANA ROCK
+  tier and stays ahead of all of this, which is what the ruling wants: its {C}{C} funds the very
+  casts being pulled forward, and it is itself artifact #N for metalcraft.
+* **Colossus Hammer is deliberately NOT special-cased.** Its equip {8} is unpayable without
+  metalcraft / Balan's attach-all / a Skyhunter put, but it is still a fine ARTIFACT to cast (it
+  advances metalcraft and Balan's two-equipment double-strike threshold), so it rides the equipment
+  tier with the rest.
+
+Companion change, same package: **`EquipmentProvider::SearchesSecondMain()` drops the GREEDY
+post-combat solve for this deck** (USER: "we drop the greedy solves entirely and follow the proper
+design"). Evidence it is free here — four d3 arms x 100 games (greedy / `MTG_SEARCH_SECOND_MAIN` /
+`MTG_PHASE_CLASSIFY` / both) all return avg 5.0300 and play digest 3e6ea44e9c15d572. Kill switch
+`MTG_NO_SEARCH_SECOND_MAIN=1`.
+
 ```
-# Cast order -- decks/KittyEquipment/KittyEquipment.cod
+# Cast order -- decks/KittyEquipment/KittyEquipment.cod   (MTG_KE_ORDER=1)
 # provider: Equipment   ideal-order draw tier: off   cantrip max mv: 1
 # deck flags: feeds_combat=yes uses_second_main=yes enabler_pull=no castpayoff_pull=no
 # main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
@@ -513,25 +552,31 @@ Pre-review baseline report:
 # [5] MANA ROCK: online for the rest of the line
   5     -   m1    1  1  Sol Ring
 #
+# [6] ENGINE (Puresteel): every Equipment after it DRAWS, and 3 artifacts make equip {0}
+  6     -   m1    4  2  Puresteel Paladin
+#
+# [7] TUTOR (Stoneforge): its ETB puts an Equipment in HAND, so it must precede the casts it feeds
+  7     -   m1    1  2  Stoneforge Mystic
+#
+# [8] EQUIPMENT: in front of the hosts -- with a Paladin out each one is a cantrip
+  8     -   m1    4  1  Bonesplitter
+  8     -   m1    4  1  Colossus Hammer
+  8     -   m1    1  1  O-Naginata
+  8     -   m1    2  1  Shadowspear
+  8     -   m1    1  2  Lightning Greaves
+  8     -   m1    2  2  Umezawa's Jitte
+  8     -   m1    1  3  Grafted Wargear
+  8     -   m1    1  3  Loxodon Warhammer
+#
 # [10] CREATURE: before noncreature spells (prowess catches later casts)
   10     -   m1    4  1  Kor Duelist
-  10     -   m1    4  2  Puresteel Paladin
-  10     -   m1    1  2  Stoneforge Mystic
   10     -   m1    2  3  Kemba, Kha Regent
   10     -   m1    4  4  Armored Skyhunter
   10     -   m1    2  4  Balan, Wandering Knight
 #
-# [20] other noncreature spell
-  20     -   m1    4  1  Bonesplitter
-  20     -   m1    4  1  Colossus Hammer
-  20     -   m1    1  1  O-Naginata
-  20     -   m1    2  1  Shadowspear
-  20     -   m1    1  1  Swords to Plowshares
-  20     -   m1    1  2  Lightning Greaves
-  20     -   m1    2  2  Umezawa's Jitte
-  20     -   m1    2  2  Unexpectedly Absent
-  20     -   m1    1  3  Grafted Wargear
-  20     -   m1    1  3  Loxodon Warhammer
+# [30] GOLDFISH-INERT REMOVAL: last, and m2 (no blocking in this apparatus)
+  30     -   m2    1  1  Swords to Plowshares
+  30     -   m2    2  2  Unexpectedly Absent
 ```
 
 ## Knights

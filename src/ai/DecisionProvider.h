@@ -407,6 +407,15 @@ public:
     // green, antilife/hinata still red. So the adoption is per-deck, like the rest of the
     // cast-order arc: opt in where the m2 decision is real, keep greedy where searching it only
     // dilutes the shared budget. Default false -> byte-identical.
+    //
+    // This is also the per-deck adoption route for the standing USER directive "search should be
+    // truly search at every level. Greedy is simply too unreliable to be part of it."
+    // (main-phase-classification.md). KittyEquipment opted in on the same evidence shape as
+    // fivecolour: four d3 arms x 100 games (greedy, MTG_SEARCH_SECOND_MAIN, MTG_PHASE_CLASSIFY,
+    // both) all returned avg 5.0300 and play digest 3e6ea44e9c15d572, so the searched path reaches
+    // the same decisions there for free. (Rebase 2026-08-20 collapsed a duplicate hook of mine,
+    // SearchesSecondMain, into this one -- two hooks with identical semantics is the drift this
+    // file warns about.)
     virtual bool SearchedSecondMainInSearch() const { return false; }
 
     // CondemnsPassedMainPhase -- per-deck opt-in to the ORDER-CONDEMNATION post-combat filter
@@ -782,6 +791,7 @@ public:
     // A/B measurement (same second-main caveat); MTG_NO_PHASE_CLASSIFY kills it; human play and
     // MTG_UNPRUNE=mainphase keep the full pre-combat set.
     virtual bool ClassifiesMainPhases() const { return false; }
+
 
     // SkipsUnproductiveSecondMain -- opt IN to the post-combat PRODUCTIVITY gate
     // (SolveSecondMainInSearch): inside the SEARCH, do not solve the post-combat main on a turn

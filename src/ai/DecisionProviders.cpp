@@ -9098,3 +9098,92 @@ void FiveColourProvider::ModalSplitCandidates(const GameState& s, const CardDefi
     // arm that deletes the finish from the lookahead (see above). Default ON.
     if (EnvOn("MTG_FIVEC_UNITE_ALLIN", true)) { out.push_back(N); }
 }
+
+// ---- KittyEquipment: the USER-reviewed cast order (review held 2026-08-19) -----------------------
+//
+// THE RULING, verbatim: "Puresteel Paladin, Stoneforge Mystic and equipment should be in front I
+// think for the card draw/tutor effect. Swords and Unexpectedly are essentially unused in
+// goldfish."
+//
+// What that buys, in card terms (params read from cards.json, not recalled):
+//   * Puresteel Paladin FIRST of the three. draw_on_equipment_etb makes every Equipment that
+//     enters AFTER it draw a card, and metalcraft_equip_zero_artifacts=3 makes every equip cost
+//     {0} once three artifacts are out. Cast it after the equipment and BOTH halves are wasted --
+//     the draws never happen and the equips are paid at printed cost.
+//   * Stoneforge Mystic second. Its ETB tutor_to_hand(Equipment) puts a card in HAND, so it cannot
+//     draw off itself -- it has to precede the equipment casts it feeds, and MTG_ACQ_RESOLVE
+//     re-solves the phase at that acquisition so the tutored card is castable in the same line.
+//   * Equipment third -- AHEAD OF THE REMAINING CREATURES, which is the part that differs from the
+//     generic order (creatures 10, "other noncreature" 20). With a Paladin out a {1} Equipment IS
+//     this deck's cantrip, so it belongs in front on the same information-first argument that puts
+//     draws early everywhere else. With no Paladin out the move is a no-op: the equips are applied
+//     after every cast either way, so cast order among triggerless spells cannot change the board.
+//     That is why this is a FLAT rule and not a board-conditional promotion -- there is nothing to
+//     gate, and a conditional rank would only make the report harder to review.
+//   * Swords to Plowshares / Unexpectedly Absent LAST, and Main2. HONEST BRACKET: they are inert
+//     here only because this goldfish has no blocking -- in a real game Swords on a blocker is
+//     precisely an attack-enabler, so this ranking is right for the current apparatus and wrong for
+//     the eventual real-opponent phase. UA's hand-cast is additionally pruned from the autonomous
+//     search altogether (UnprunedGate::UACast), so its rank is inert today whatever it says.
+//
+// Sol Ring is deliberately NOT listed: it is not an Equipment, so it falls through to the generic
+// MANA ROCK tier (5) and stays ahead of all of this -- which is what the ruling wants anyway, since
+// its {C}{C} funds the very casts being pulled forward, and it is itself artifact #N for metalcraft.
+// Colossus Hammer is deliberately NOT special-cased either: its equip {8} is unpayable without
+// metalcraft / Balan's attach-all / a Skyhunter put, but it is still a fine ARTIFACT to cast (it
+// advances metalcraft and Balan's two-equipment double-strike threshold), so it rides the
+// equipment tier with the rest.
+//
+// MTG_KE_ORDER, DEFAULT OFF -> byte-identical. On adoption this becomes a default-on read with an
+// off switch, like the other adopted per-deck orders.
+static bool KittyOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_KE_ORDER");
+    return on;
+}
+
+int EquipmentProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!KittyOrderEnabled()) { return GenericProvider::CastOrderRank(s, def); }
+    // Order within the ruling's own list. The three tests are disjoint on this deck: no card
+    // carries two of them (Paladin is the only metalcraft/equipment-ETB watcher, Stoneforge the
+    // only Equipment tutor, and neither is an Equipment).
+    if (def.params.draw_on_equipment_etb
+        || def.params.metalcraft_equip_zero_artifacts > 0)      { return 6; }
+    if (def.params.tap_put_from_hand_cost.has_value()
+        || (def.params.tutor_to_hand
+            && std::find(def.params.tutor_types.begin(), def.params.tutor_types.end(),
+                         std::string("Equipment")) != def.params.tutor_types.end())) { return 7; }
+    if (def.params.is_equipment)                                { return 8; }
+    if (def.tmpl == CardTemplate::Removal)                      { return 30; }
+    return GenericProvider::CastOrderRank(s, def);   // hosts (Duelist / Kemba / Balan / Skyhunter) = 10
+}
+
+bool EquipmentProvider::OrderOpaqueCastsByRank() const
+{
+    return KittyOrderEnabled();
+}
+
+std::optional<DecisionProvider::MainPhase>
+EquipmentProvider::MainPhaseOverride(const GameState&, const CardDefinition& def) const
+{
+    // "Swords and Unexpectedly are essentially unused in goldfish" (USER 2026-08-19). The base
+    // classifier reaches removal through the DOUBT default, which keeps it pre-combat; rank 30
+    // already puts it last within a phase, this puts it in the later phase too. See the honest
+    // bracket above -- this is an apparatus-scoped ruling, not an MTG-general one.
+    if (KittyOrderEnabled() && def.tmpl == CardTemplate::Removal) { return MainPhase::Main2; }
+    return std::nullopt;
+}
+
+const char* EquipmentProvider::CastOrderTierName(int rank) const
+{
+    if (!KittyOrderEnabled()) { return nullptr; }
+    switch (rank)
+    {
+        case 6:  return "ENGINE (Puresteel): every Equipment after it DRAWS, and 3 artifacts make equip {0}";
+        case 7:  return "TUTOR (Stoneforge): its ETB puts an Equipment in HAND, so it must precede the casts it feeds";
+        case 8:  return "EQUIPMENT: in front of the hosts -- with a Paladin out each one is a cantrip";
+        case 30: return "GOLDFISH-INERT REMOVAL: last, and m2 (no blocking in this apparatus)";
+        default: return nullptr;
+    }
+}

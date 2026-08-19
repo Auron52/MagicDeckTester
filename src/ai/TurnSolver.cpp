@@ -463,8 +463,21 @@ static bool HasteDorkCreditEnabled() { return !g_no_haste_dork_credit; }
 // classification rule, not a like-for-like slowdown.
 //
 // See docs/design/second-main-greedy.md for the full write-up and what to do next.
+// PER-DECK ADOPTION ROUTE (2026-08-19). The suite-wide verdict above stands -- this is still not
+// default-on for everyone. But "no greedy in the search" is a per-deck gate now, exactly like every
+// other prune here: DecisionProvider::SearchedSecondMainInSearch() lets a deck whose evidence is in drop
+// the greedy path on its own. KittyEquipment is the first: four d3 arms x 100 games (greedy,
+// searched, classified, both) return the SAME avg 5.0300 and the SAME play digest
+// 3e6ea44e9c15d572, so on that deck the greedy second main can be removed for free.
+// MTG_SEARCH_SECOND_MAIN=1 still forces searched suite-wide (the A/B lever);
+// MTG_NO_SEARCH_SECOND_MAIN=1 forces greedy everywhere (the kill switch for the per-deck opt-ins).
 static const bool g_search_second_main = EnvOn("MTG_SEARCH_SECOND_MAIN");
-static bool GreedySecondMainEnabled() { return !g_search_second_main; }
+static bool GreedySecondMainEnabled()
+{
+    static const bool s_kill = EnvOn("MTG_NO_SEARCH_SECOND_MAIN");
+    if (s_kill)               { return true;  }
+    return !g_search_second_main;
+}
 
 // Play a post-combat main INSIDE the search. ONE function for all three sites (the candidate loop,
 // the deferred-wave loop, and the rollout's future turns) so they cannot drift apart -- the drift
@@ -643,7 +656,7 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
             ? TurnSolver::Solve(state, false)
             : SearchedSecondMainMemoized(state, depth, max_turns, budget, second_main, tt);
     m2yield::Record(p);
-    return p
+    return p;
 }
 
 static void ComputeAvailableColors(const GameState& state, bool have[5])
