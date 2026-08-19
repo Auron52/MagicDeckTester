@@ -7103,10 +7103,40 @@ FiveColourProvider::MainPhaseOverride(const GameState& s, const CardDefinition& 
         // in the SAME main, so no trigger is missed) -> Both, the search decides. Both is
         // shipped-inert (the pre-combat filter only drops Main2); the distinction matters to
         // the condemnation stamp, which takes Main1 only.
+        //
+        // HASTY-PAYOFF EXCEPTION (USER 2026-08-19): "Mana Cannons can also be cast main1
+        // tapping Faeburrow if it has a hasty payoff. That would cause it to deal more damage
+        // than Faeburrow." The USER's meta-rule for this whole family: "most decisions here
+        // come down to 'how much damage does this deal' (compared to how much it leaves on the
+        // table)" -- so a doctrine rule may only ASSERT a phase where that ledger is one-sided
+        // BY CONSTRUCTION, and must answer Both (the search sums both sides exactly) where it
+        // is arithmetic. Here it IS one-sided when a hasty multicolored body is castable
+        // ALONGSIDE Cannons this turn AND its colour count >= the colours among our permanents
+        // (= Faeburrow's ceiling power): the m1 line's trigger damage alone (one per colour of
+        // the payoff -- 5 for Spider-Man/Hellkite) covers the forfeited Faeburrow attack, and
+        // the hasty body's own attack is pure surplus. Pair-affordability uses the PLAIN pool
+        // (Faeburrow's yield included, NO optimism), so the Main1 claim -- which the
+        // condemnation stamp trusts -- only fires when the line is really there.
         if (p.multicolor_cast_damage_per_color)
         {
-            return AvailableManaPoolNoAttackers(s).CanPay(def.card.m_mana_cost)
-                       ? MainPhase::Main1 : MainPhase::Both;
+            if (AvailableManaPoolNoAttackers(s).CanPay(def.card.m_mana_cost))
+            { return MainPhase::Main1; }
+            const int pool_total    = AvailableManaPool(s).Total();
+            const int board_colours = static_cast<int>(
+                DomainColors(s, s.active_player_index).size());
+            for (const Card& hc : s.ActivePlayer().hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (!hd || !hd->card.IsCreature()
+                    || !hd->card.HasKeyword(Keyword::Haste)) { continue; }
+                const ManaCost& mc = hd->card.m_mana_cost;
+                const int colours = (mc.white > 0) + (mc.blue > 0) + (mc.black > 0)
+                                  + (mc.red > 0) + (mc.green > 0);
+                if (colours < 2 || colours < board_colours) { continue; }
+                if (def.card.m_mana_cost.ManaValue() + mc.ManaValue() <= pool_total)
+                { return MainPhase::Main1; }
+            }
+            return MainPhase::Both;
         }
         // Unite the Coalition: "second main is ideal when it would cause a Faeburrow Elder to
         // tap to play it; first main is ideal when you need to draw a hasty threat and won't tap
