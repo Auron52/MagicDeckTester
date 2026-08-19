@@ -3432,17 +3432,7 @@ int TurnSolver::ClassifyCastMainPhase(const GameState& state, const CardDefiniti
     return mp == MP::Main1 ? 0 : (mp == MP::Main2 ? 1 : 2);
 }
 
-void TurnSolver::StampM1Hand(GameState& state)
-{
-    const Player& ap = state.ActivePlayer();
-    state.m1_hand_n = 0;
-    for (const Card& c : ap.hand)
-    {
-        if (state.m1_hand_n >= GameState::kM1HandCap) { break; }   // overflow: un-condemnable (safe)
-        state.m1_hand[state.m1_hand_n++] = c.m_number;
-    }
-    state.m1_hand_turn = state.turn_number;
-}
+// Defined after the classifier helpers it uses (HasteAccessThisTurn / BoardHasScalingAttacker).
 
 std::vector<int> TurnSolver::HandCardNumbers(const GameState& state)
 {
@@ -3566,6 +3556,53 @@ static bool MainPhaseFilterActive(const GameState& state)
 bool TurnSolver::CollapsedMainActive(const GameState& state)
 {
     return MainPhaseFilterActive(state);
+}
+
+static int OptimisticTurnMana(const GameState& state);   // defined below (mana-ceiling section)
+
+// ORDER-CONDEMNATION STAMP. The USER's spec is a LIST FIXED AT THE M1 DECISION ("main 2 should
+// not re-litigate the whole hand ... It should continue with the same condemnation list"), so
+// membership is decided HERE, at the m1 state, and the post-combat filter is a pure lookup.
+// Three findings from the per-game dig (condemn-dig 2026-08-19) shaped what stamps:
+//   * AFFORDABILITY: "passed" is only "declined" for a card the m1 search could actually have
+//     cast. A card above the turn's optimistic mana ceiling -- the SAME deliberately-generous
+//     bound the emission prune trusts -- was never a choice (T4 MV-10 Progenitus against a
+//     5-6 mana turn, gi111/gi117/gi48/gi143/gi187), so it does not stamp. At the ceiling's
+//     bail-out (INT_MAX) nothing exceeds it -- degrades to stamping, never worse.
+//   * CLASSIFY AT M1, NOT M2: classification is state-dependent (Unite's no-attackers pool
+//     grows when the m1 land drop resolves; haste/scaling change as bodies land), so a card
+//     re-classified at the m2 state can flip Main2->Main1 and be condemned WITHOUT EVER being
+//     offered pre-combat -- castable nowhere. Deciding membership at the m1 state makes the
+//     flip impossible by construction.
+//   * Only MAIN1-classified cards stamp: a Main2/Both card was DEFERRED by doctrine, not
+//     declined -- its m2 offer is the plan, not a re-litigation.
+// The snapshot's only consumer is the condemnation filter, so a non-condemning provider skips
+// the whole stamp (the default path is cheaper than a full-hand copy, not costlier).
+void TurnSolver::StampM1Hand(GameState& state)
+{
+    if (!ResolveProvider(state).CondemnsPassedMainPhase()) { return; }
+    const DecisionProvider& prov    = ResolveProvider(state);
+    const bool haste_access         = HasteAccessThisTurn(state);
+    const bool scaling_attacker     = BoardHasScalingAttacker(state);
+    const int  ceiling              = OptimisticTurnMana(state);
+    const Player& ap = state.ActivePlayer();
+    state.m1_hand_n = 0;
+    for (const Card& c : ap.hand)
+    {
+        if (state.m1_hand_n >= GameState::kM1HandCap) { break; }   // overflow: un-condemnable (safe)
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->card.IsLand()) { continue; }
+        if (d->card.m_mana_cost.ManaValue() > ceiling) { continue; }   // never castable at m1
+        Action a;
+        a.kind      = Action::Kind::CastFromHand;
+        a.def       = d;
+        a.card_name = d->card.m_name;
+        a.cost      = d->card.m_mana_cost;
+        if (ClassifyMainPhase(state, prov, a, haste_access, scaling_attacker)
+            != DecisionProvider::MainPhase::Main1) { continue; }       // deferred, not declined
+        state.m1_hand[state.m1_hand_n++] = c.m_number;
+    }
+    state.m1_hand_turn = state.turn_number;
 }
 
 // Base template rules; the provider's per-card doctrine (MainPhaseOverride) wins where set.
@@ -6351,23 +6388,21 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // ORDER CONDEMNATION -- the post-combat half (USER model 2026-08-19: the search decides
     // what to cast, "limited to what our order allows", applying "at every phase and
     // breakpoint we are evaluating"; "main 2 should not re-litigate the whole hand ... It
-    // should continue with the same condemnation list"). A Main1-classified card that was in
-    // hand at THIS turn's m1 decision (GameState::m1_hand) had its slot -- the m1 search saw
-    // it and passed -- so every post-combat harvest this turn (the real m2, the search's
-    // interior m2 projections, their continuations) drops it. A card NOT in the snapshot
-    // (drawn in combat -- Hellkite's attack draw -- or acquired since) is first-class and
-    // stays: "newly drawn cards may be exempt from order condemnation." Provider opt-in
-    // (CondemnsPassedMainPhase), gated on the same filter activation as the pre-combat half so
-    // the pair is symmetric, and on a THIS-turn stamp (m1_hand_turn) so a stale snapshot
-    // condemns nothing.
+    // should continue with the same condemnation list"). Membership in the list is decided AT
+    // THE M1 STATE by StampM1Hand (Main1-classified AND affordable there -- see its comment for
+    // the three condemn-dig findings), so this filter is a pure lookup: a snapshot card still
+    // in hand post-combat was seen and declined, and every post-combat harvest this turn (the
+    // real m2, the search's interior m2 projections, their continuations) drops it. A card NOT
+    // in the snapshot -- drawn in combat (Hellkite's attack draw), acquired since, deferred by
+    // doctrine, or unaffordable at m1 -- is first-class and stays: "newly drawn cards may be
+    // exempt from order condemnation." Provider opt-in (CondemnsPassedMainPhase), gated on the
+    // same filter activation as the pre-combat half so the pair is symmetric, and on a
+    // THIS-turn stamp (m1_hand_turn) so a stale snapshot condemns nothing.
     if (!is_pre_combat && !actions.empty() && MainPhaseFilterActive(state)
         && state.m1_hand_turn == state.turn_number
         && ResolveProvider(state).CondemnsPassedMainPhase())
     {
-        const DecisionProvider& prov = ResolveProvider(state);
-        const bool haste_access      = HasteAccessThisTurn(state);
-        const bool scaling_attacker  = BoardHasScalingAttacker(state);
-        const Player& ap             = state.ActivePlayer();
+        const Player& ap = state.ActivePlayer();
         auto in_m1_hand = [&](int num) {
             for (int i = 0; i < state.m1_hand_n; ++i)
             { if (state.m1_hand[i] == num) { return true; } }
@@ -6377,11 +6412,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             [&](const Action& a)
             {
                 if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { return false; }
+                // FREE CAST EXEMPT (condemn-dig 2026-08-19): the Archangel bank charges on
+                // COMBAT DAMAGE, so the m1 decision never had this action -- "the m1 search
+                // saw it and passed" is false for a free cast. Same defect the total-mana
+                // emission prune had with the same card (fivecolour d0 gi1, 53/1000 worse):
+                // a cost bypass is not expressible in a pay-for-it world, and condemning the
+                // free window deleted the T4 free Progenitus in gi111/gi117/gi48/gi143/gi187.
+                if (a.free_cast) { return false; }
                 if (a.hand_index < 0
                     || a.hand_index >= static_cast<int>(ap.hand.size())) { return false; }
-                if (!in_m1_hand(ap.hand[a.hand_index].m_number)) { return false; }   // new card: exempt
-                return ClassifyMainPhase(state, prov, a, haste_access, scaling_attacker)
-                       == DecisionProvider::MainPhase::Main1;
+                return in_m1_hand(ap.hand[a.hand_index].m_number);
             }), actions.end());
     }
 

@@ -7063,14 +7063,25 @@ bool FiveColourProvider::SearchedSecondMainInSearch() const
 
 bool FiveColourProvider::CondemnsPassedMainPhase() const
 {
-    // REJECTED as measured (2026-08-19, train): d3 +0.040/+0.045, d5 +0.040/+0.050 vs shipping,
-    // essentially unchanged with MTG_5C_SSM added. The m2 re-offer the filter removes was doing
-    // REAL work: the m1 solve's enumeration is bounded (group caps, prunes, budget), so a card
-    // it never actually weighed is not "declined" -- the m2 pass was its recovery window, and
-    // condemning it deletes recoveries, not duplicates. A sound version must distinguish
-    // "declined by the search" from "dropped by a prune / never explored", which the hand
-    // snapshot alone cannot see. Lever kept for re-measurement if that distinction is built;
-    // do not flip on without it.
+    // STILL REJECTED after the condemn-dig fix round (2026-08-19, per-game train dig): the
+    // first measurement's d3 +0.040/+0.045, d5 +0.040/+0.050 turned out to be MOSTLY OUR BUGS,
+    // not the model -- three defects fixed (see StampM1Hand + the filter in TurnSolver.cpp):
+    //   1. Archangel FREE CASTS were condemned (the m1 world never had that action -- the bank
+    //      charges on combat damage; deleted the T4 free Progenitus in gi111/gi117/gi48/...).
+    //   2. Cards UNAFFORDABLE at m1 were condemned ("passed" is not "declined" for a card no
+    //      m1 line could pay).
+    //   3. The filter RE-CLASSIFIED at the m2 state (the USER said "the same condemnation
+    //      list" -- membership is now decided once, at the m1 state, so a state-dependent
+    //      classification flip can no longer condemn a card that was never offered).
+    // Fixed remeasure (suite-faithful config): d3 +0.015/+0.015, d5 +0.020/+0.030 -- reduced
+    // ~2/3 but STILL NET RED (20 worse / 9 better), and MTG_5C_SSM does not close it. The
+    // residual is real: the bounded m1 solve declines affordable Main1 casts on VALUE TIES
+    // (m2-recovery equivalent in the off world -- gi8's T3 Greaves, gi53's projected turns),
+    // and condemnation converts each tie into a lost cast, both in the real turn and inside
+    // projections (gi53 diverges at T1 with an EMPTY T1 condemnation list -- pure projection
+    // distortion). A sound version must make the m1 solve PREFER casting on such ties (or
+    // distinguish declined-by-valuation from tie/prune), not just tighten the list. Lever kept
+    // for re-measurement if that lands; do not flip on without it.
     static const bool on = EnvOn("MTG_5C_CONDEMN");
     return on && Fc5PhaseEnabled();
 }

@@ -1,5 +1,29 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS UPDATE 2026-08-19 (condemn-dig): the ORDER-CONDEMNATION rejection re-diagnosed —
+> ~2/3 of the red was three implementation defects, now fixed; the model is STILL net red.
+>
+> Per-game dig over every diverging train game (46 traces, both arms). Defects found and fixed
+> (all inside the default-off `MTG_5C_CONDEMN` machinery; off arm re-verified byte-identical to
+> GT on all four train keys):
+> 1. **Free casts condemned.** Maelstrom Archangel's bank charges on COMBAT DAMAGE — the m1
+>    decision never had the action, yet the filter dropped it. Deleted the T4 free Progenitus
+>    in gi111/gi117/gi48/gi143/gi187 (same defect the total-mana emission prune once had with
+>    the same card). Fix: `a.free_cast` exempt.
+> 2. **Unaffordable-at-m1 cards condemned.** A card above `OptimisticTurnMana` was never a
+>    choice, so it no longer stamps ("passed" ≠ "declined" for a card no m1 line could pay).
+> 3. **Re-classification at the m2 state.** The USER spec is "the same condemnation list";
+>    membership is now decided ONCE at the m1 state (Main1-classified AND affordable there),
+>    killing the state-dependent flip that could condemn a never-offered card (Unite's
+>    no-attackers pool grows when the land drop resolves).
+> Remeasure (suite-faithful config): d3 +0.040/+0.045 → **+0.015/+0.015**, d5 → **+0.020/
+> +0.030**; 20 worse / 9 better. `MTG_5C_SSM` does not close the residual. Residual mechanism
+> (gi8, gi53): the bounded m1 solve declines affordable Main1 casts on VALUE TIES (m2 recovery
+> is equivalent in the off world), and condemnation converts each tie into a lost cast — gi53
+> diverges at T1 with an EMPTY T1 condemnation list, i.e. pure projection distortion. A sound
+> retry must make the m1 solve prefer casting on such ties (or distinguish declined-by-valuation
+> from tie/prune). Lever stays DEFAULT OFF.
+>
 > ## STATUS UPDATE 2026-08-19 (adoption): FIVE COLOUR order + phase ADOPTED default-on; GT
 > rebaselined (fivecolour, 3 modes, incl. the Progenitus protection fix).
 >
