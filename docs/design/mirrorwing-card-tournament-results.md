@@ -204,6 +204,35 @@ at the magnet fans haste onto the new Citizens. Twinflame's token copies already
 help is one-sided — it should push Test 1 toward Libation at Entrance 4. Entrance's per-copy
 `cast_draw` also feeds Fists of Flame.
 
+**High ceiling vs consistency — Twinflame against Libation.** From 300 verified case games per life
+total, pooled across both directions so the numbers are about the cards rather than about which side
+was selected:
+
+| | 20 life | | 30 life | |
+|---|---:|---:|---:|---:|
+| | 3 Twinflame | 3 Libation | 3 Twinflame | 3 Libation |
+| biggest attack, mean | 17.05 | 12.64 | 27.16 | 21.24 |
+| biggest attack, **max** | **205** | 39 | **125** | 91 |
+| creatures at that attack | 6.06 | 5.31 | 7.87 | 6.52 |
+| win turn (9 = unwon) | 6.65 | **6.27** | 6.59 | 6.52 |
+
+Twinflame copies the whole board, so its ceiling is enormous (a 205-damage swing) and its floor is
+whatever the board happened to be. Libation is flat: +X/+X for the mana paid, plus a Citizen. **At
+20 life the ceiling is wasted — you only ever needed 20 — so consistency wins. At 30 life the
+ceiling starts getting used.** That is the sign flip, and it is visible game by game in
+`logs/tourney/cases/tf_tf3lib0_vs_tf0lib3_L{20,30}/`.
+
+The same lens explains Anger vs Oracle. Without Draught at 20 life Oracle builds a marginally bigger
+board (5.91 creatures vs 5.18, ceiling 115 vs 80) and still **kills later** (6.26 vs 5.97) — a
+bigger board it cannot convert. With Draught at 30 life the ceiling is what matters and Oracle's
+reaches **321** against Anger's 185.
+
+### Case logs
+
+`logs/tourney/cases/` — five bundles, 300 games each, both arms replayed on the same seed with full
+traces, every replay verified to reproduce the measured win turn. `README.md` there explains the
+layout; open `tools/replay/index.html` and drag a trace onto it.
+
 ---
 
 ## 7. Corrections made along the way

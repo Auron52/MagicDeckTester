@@ -33,7 +33,9 @@ def load(p):
 
 def features(g):
     """Per-game mechanism features from one trace."""
-    f = {"win": (g.get("result") or {}).get("turn", -1), "casts": [], "attacks": [],
+    # result.turn is None (not -1) for an unwon game, so normalise here rather than at each use.
+    _w = (g.get("result") or {}).get("turn")
+    f = {"win": (_w if isinstance(_w, int) and _w > 0 else -1), "casts": [], "attacks": [],
          "lands": 0, "opening": len(g.get("openingHand") or []), "mulls": 0}
     f["mulls"] = max(0, len(g.get("mulliganSequence") or []) - 1)
     board_at = {}
@@ -131,6 +133,30 @@ def main():
         rows.append((c, fa, fb, k, sa, sb))
     if not rows:
         sys.exit("no traces could be read -- was the replay run?")
+
+    # BOTH DIRECTIONS POOLED. The per-direction blocks below are conditioned on which side won, so
+    # "the winner had a bigger attack / played fewer lands" is just the selection restated. Because
+    # the cases are picked in equal numbers from each direction, pooling them cancels most of that
+    # and leaves a comparison that is about the CARDS.
+    A_lbl, B_lbl = cmp_["A"], cmp_["B"]
+    print(f"\n## Both directions pooled ({len(rows)} cases, balanced by construction)\n")
+    print("| quantity | " + A_lbl + " | " + B_lbl + " |")
+    print("|---|---:|---:|")
+    for label, f in (("biggest attack, mean", lambda x: x["best_attack"]),
+                     ("biggest attack, max", None),
+                     ("creatures at that attack", lambda x: x["creatures_at_best"]),
+                     ("spells cast per game", lambda x: len(x["casts"])),
+                     ("lands played per game", lambda x: x["lands"]),
+                     ("win turn (9 = unwon)", lambda x: x["win"] if x["win"] > 0 else 9)):
+        if f is None:
+            print(f"| {label} | {max(r[1]['best_attack'] for r in rows)} | "
+                  f"{max(r[2]['best_attack'] for r in rows)} |")
+            continue
+        print(f"| {label} | {st.fmean(f(r[1]) for r in rows):.2f} | "
+              f"{st.fmean(f(r[2]) for r in rows):.2f} |")
+    print("\n_The per-direction blocks that follow are selection-conditioned; read them for the "
+          "divergence turn, the shortfall distribution and the individual traces, not for "
+          "side-vs-side aggregates._")
 
     for direction, sel in (("B wins sooner", lambda r: r[0]["delta"] < 0),
                            ("A wins sooner", lambda r: r[0]["delta"] > 0)):

@@ -33,6 +33,7 @@ from collections import defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ARMS = os.path.join(ROOT, "logs", "tourney", "arms")
+ARMS2 = os.path.join(ROOT, "logs", "tourney", "arms2")
 
 TF   = ["tf3lib0", "tf2lib1", "tf1lib2", "tf0lib3"]
 AO   = ["a4o0", "a2o2", "a0o4"]
@@ -60,7 +61,12 @@ LEVEL_NAME = {
 # ---------------------------------------------------------------- loading
 
 def numbering(arm):
-    d = json.load(open(os.path.join(ARMS, arm + ".numbering.json")))
+    """Arms live in two directories: the map-A set (logs/tourney/arms) and the map-B set
+    (logs/tourney/arms2). Resolve against whichever holds this arm."""
+    p = os.path.join(ARMS, arm + ".numbering.json")
+    if not os.path.exists(p):
+        p = os.path.join(ARMS2, arm + ".numbering.json")
+    d = json.load(open(p))
     return {n: name for name, ns in d.items() for n in ns}
 
 
