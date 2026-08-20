@@ -5763,15 +5763,22 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
 
-        // Garth One-Eye: one GarthActivate variant per un-chosen, goldfish-live name (Disenchant
-        // never -- structurally target-less, user-approved stub). The copy is cast as the ability
-        // resolves; its cost rides a.cost so the subset math reserves the mana. Braingeyser is
-        // the single max-X variant (X = pool total - {U}{U}; the goldfish-optimal X per the 5f
-        // precedent; disclosed).
+        // Garth One-Eye: one GarthActivate variant per un-chosen, goldfish-live name. Disenchant
+        // never (structurally target-less, user-approved stub); Terror never (USER 2026-08-19:
+        // "we don't really need to consider Terror for goldfishing" -- the opponent's spawns
+        // never attack or block, so the tap is always better spent). The copy is cast as the
+        // ability resolves; its cost rides a.cost so the subset math reserves the mana.
+        // Braingeyser: max-X by default (X = pool total - {U}{U}; the 5f precedent); under
+        // MTG_GARTH_ORDERED the USER's reserve policy applies (see below).
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-            if (!p.CanTap()) { continue; }   // summoning sickness (Garth is a creature)
+            // Haste lifts the summoning-sick {T} restriction too (CR 302.6) -- a Greaves-equipped
+            // fresh Garth may tap the turn he lands (USER 2026-08-19: "all of his taps should be
+            // possible to activate ... if we equip lightning greaves on him, he can do the
+            // plans", "even [the Lotus] can be activated on the first turn if he gains haste").
+            // Was p.CanTap(), which is sickness-only and silently denied the equipped tap.
+            if (!CanTapNow(p, state.battlefield)) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (!pd || !pd->params.garth_copy_ability) { continue; }
             const ManaPool garth_pool = BuildNonCreaturePool(state);
@@ -5782,6 +5789,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (p.garth_chosen_mask & (1u << gi)) { continue; }
                 const std::string name = kGarthNames[gi];
                 if (name == "Disenchant") { continue; }   // never castable here (approved stub)
+                if (name == "Terror")     { continue; }   // goldfish-inert (USER stub, 2026-08-19)
                 const CardDefinition* cd = CardDatabase::Instance().Lookup(name);
                 if (!cd) { continue; }
                 Action a;
@@ -5794,24 +5802,33 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.is_noncreature = true;
                 if (name == "Braingeyser")
                 {
-                    const int x = garth_pool.Total() - 2;   // {U}{U} reserved
+                    int x = garth_pool.Total() - 2;   // {U}{U} reserved
                     if (x < 1) { continue; }
+                    // RESERVED-X policy (USER 2026-08-19, under the ordered-Garth doctrine):
+                    // "I wouldn't max X willy-nilly. You should keep up at least 5-7 mana if you
+                    // can do that while holding X=5 or greater ... Otherwise you max it out.
+                    // Essentially, we want to encode a way to take advantage of the cards in
+                    // hand." Reserve enough for the most expensive nonland hand spell (capped at
+                    // 7 = Unite); if X >= 5 survives the reserve, the post-draw re-solve (armed
+                    // at the apply site) casts into the held-back mana. The before-attack /
+                    // after-combat choice stays the search's: both harvests offer the variant
+                    // and the ledger (Faeburrow's attack vs the earlier draws) prices it.
+                    if (GarthOrderedEnabled())
+                    {
+                        int reserve = 0;
+                        for (const Card& hc : state.ActivePlayer().hand)
+                        {
+                            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                            if (!hd || hd->card.IsLand()) { continue; }
+                            reserve = std::max(reserve,
+                                               std::min(7, hd->card.m_mana_cost.ManaValue()));
+                        }
+                        if (reserve > 0 && x - reserve >= 5) { x -= reserve; }
+                    }
                     a.chosen_x     = x;
                     a.cost.has_x   = false;                 // fold the chosen X into generic
                     a.cost.generic += x;
                     a.eval         = x * 40;
-                }
-                else if (name == "Terror")
-                {
-                    bool tgt = false;
-                    for (const Permanent& q : state.battlefield)
-                    {
-                        if (q.controller_index != state.active_player_index && q.card.IsCreature()
-                            && !q.card.HasType(CardType::Artifact)
-                            && !q.card.HasColor(Color::Black)) { tgt = true; break; }
-                    }
-                    if (!tgt) { continue; }
-                    a.eval = 1;   // opponent spawns never attack/block: near-zero payoff
                 }
                 else if (name == "Regrowth")
                 {
@@ -11669,8 +11686,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             { return GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate; };
             auto apply_garth = [&](const Action& a)
             {
+                const std::vector<int> hand_before = TurnSolver::HandCardNumbers(state);
                 if (TapForCostDirect(state, a.cost, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
-                { ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x); }
+                {
+                    ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
+                    // ACQUISITION RE-SOLVE (USER 2026-08-19: "we want to encode a way to take
+                    // advantage of the cards in hand ... Regrowth is a very similar story"):
+                    // Braingeyser's draws and Regrowth's returned card compete for this turn's
+                    // remaining (reserved) mana exactly like a cantrip's draw, so arm the same
+                    // deferred post-cast re-solve. Executor lockstep: depth 0 gets the
+                    // note_draw_engine second pass at its Garth sites; depth > 0 replays the
+                    // recorded breakpoint script this re-solve commits.
+                    if ((a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
+                        && !s_human_play && sink_stack.empty())
+                    {
+                        deferred_cantrip_resolve = true;
+                        deferred_cantrip_site    = CardDatabase::Instance().Lookup(a.tutor_target);
+                        deferred_hand_before     = hand_before;
+                    }
+                }
             };
             if (opaque)
             {

@@ -2986,6 +2986,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
             {
                 ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
+                // Acquisition second pass (d0; depth>0 replays the plan's recorded breakpoint
+                // script): Braingeyser's draws / Regrowth's return are same-turn castable.
+                if (a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
+                { cast_draw_engine = true; }
                 if (m_logger)
                 { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
                                        "conjure + cast " + a.tutor_target.str()
@@ -3054,6 +3058,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
             {
                 ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
+                // Acquisition second pass (d0; depth>0 replays the plan's recorded breakpoint
+                // script): Braingeyser's draws / Regrowth's return are same-turn castable.
+                if (a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
+                { cast_draw_engine = true; }
                 if (m_logger)
                 { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
                                        "conjure + cast " + a.tutor_target.str()
@@ -3257,6 +3265,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (TapForCost(state, a.cost, avail, /*for_creature=*/a.tutor_target == "Shivan Dragon"))
                 {
                     ApplyGarthActivate(state, state.active_player_index, a.sac_source_id, a.tutor_target, a.chosen_x);
+                    // Acquisition second pass (d0; depth>0 replays the plan's recorded breakpoint
+                    // script): Braingeyser's draws / Regrowth's return are same-turn castable.
+                    if (a.tutor_target == "Braingeyser" || a.tutor_target == "Regrowth")
+                    { cast_draw_engine = true; }
                     // Viewer visibility (USER 2026-08-19: "We should definitely have garth's
                     // ability in the viewer") -- this was the only battlefield activation with
                     // no LogAbility line, so Garth taps were invisible in every game log.

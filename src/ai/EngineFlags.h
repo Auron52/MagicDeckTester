@@ -32,16 +32,16 @@ inline bool Main2DropEnabled()
 // of the fixed post-cast dispatch position it has today. Read by the comparator/ladder
 // (ManaPayment), the rollout apply (TurnSolver::ApplyPlanDirect) and the executor
 // (AIEngine::TakeTurn) -- shared reader per the lockstep rule.
-// MEASURED (train, fivecolour, 2026-08-19): searched keys BYTE-IDENTICAL (Garth taps do not
-// occur in executed searched games on these seeds -- he lands T4-5 and the games end first);
-// d0 1/1000 worse (gi922 7->8): ordered ahead of the casts, the copy's payment competes for
-// sources FIRST instead of eating leftovers, and the greedy d0 executor has no whole-turn
-// payment planning to compensate (the parked mana-affordability arc's allocation class).
-// Kept DEFAULT OFF: faithful to the doctrine, but inert where search decides and net-negative
-// at d0. Revisit if a longer-game deck actually exercises Garth's tap.
+// ADOPTED DEFAULT ON (USER 2026-08-19/20: "it should be in our search order somewhere");
+// =0 reverts. The bare position move first measured searched-inert / d0 1-in-1000 worse
+// (gi922: the copy's payment competing ahead of the casts -- the parked whole-turn-allocation
+// class). The FULL doctrine round (reserved-X Braingeyser + Braingeyser/Regrowth acquisition
+// re-solves, this flag; haste-aware tap emission + the Terror stub are unconditional rules
+// fixes) measures GREEN: d0 -0.0030 (5 faster / 2 slower, gi922's class remains), searched
+// keys byte-identical. GT rebaselined (fivecolour, 3 modes).
 inline bool GarthOrderedEnabled()
 {
-    static const bool v = EnvOn("MTG_GARTH_ORDERED");
+    static const bool v = EnvOn("MTG_GARTH_ORDERED", true);   // DEFAULT ON; =0 reverts
     return v;
 }
 
