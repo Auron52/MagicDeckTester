@@ -464,6 +464,68 @@ never about the copies, it was about haste, and haste is purchasable elsewhere.
 
 ---
 
+## 5d. Results — run D: the space is closed
+
+42 jobs, 420,000 games, rc=0 in 1.91 h. With the 4-copy limit and the user's floors (Entrance ≥ 2,
+Draught ≥ 2) there are exactly nine legal shapes, and all nine are now measured at both life
+totals.
+
+**Aliasing control first.** `3 O + 3 D + 2 E` ran under map A *and* map B — same 60 cards, different
+bucketing, different missing cells. Pooled over three trick contexts and both life totals the
+difference is **+0.0038t (t=+1.5, n=60,000)**, with ~90% of games coming out identical. Not
+significant, and the same size as the fit tilt measured in section 3. The aliasing choice does not
+decide anything here.
+
+### Every legal list, best trick context per shape
+
+| shape | 20 life | 30 life |
+|---|---:|---:|
+| `2 O + 4 D + 2 E` | **5.0259** ← best | 5.4530 |
+| `3 O + 3 D + 2 E` | 5.0397 | 5.4471 |
+| `1 O + 4 D + 3 E` | 5.0437 | 5.4576 |
+| `4 O + 2 D + 2 E` | 5.0454 | 5.4408 |
+| `2 O + 3 D + 3 E` | 5.0458 | 5.4503 |
+| `2 O + 2 D + 4 E` | 5.0459 | **5.4275** ← best |
+| `1 O + 3 D + 4 E` | 5.0502 | 5.4463 |
+| `3 O + 2 D + 3 E` | 5.0503 | 5.4455 |
+| `0 O + 4 D + 4 E` | 5.0516 ← worst | 5.4600 ← worst |
+
+**The structure is clean and it inverts with life total.** At 20 life the top three shapes all have
+Draught at 4 or 3 and Entrance at 2; at 30 life the top three all have **Draught at 2**. So:
+
+- **20 life wants Draught maxed and Entrance minimal** — the user's prior, confirmed exactly.
+- **30 life wants Draught minimal and Entrance maxed** — the reverse.
+- **Oracle wants to be 2 in both.** `0 O + 4 D + 4 E` is *last at both life totals*, which is the
+  Oracle-depends-on-Draught finding running the other way: Draught also needs Oracle, because
+  Oracle's `cast_lifegain: 1` per copy is what starts Draught's escalation above 2.
+
+Trading Oracle for Entrance costs at 20 life and is free at 30, which is the same inversion seen
+from the other side:
+
+| trade | 20 life | 30 life |
+|---|---:|---:|
+| 4 D: Entrance 2 → 3 (Oracle 2→1) | +0.0151 (t=+4.0) | +0.0002 (t=+0.0) |
+| 4 D: Entrance 3 → 4 (Oracle 1→0) | +0.0085 (t=+2.8) | +0.0018 (t=+0.5) |
+| 3 D: Entrance 3 → 4 (Oracle 2→1) | +0.0053 (t=+1.3) | −0.0064 (t=−1.3) |
+
+### The three answers
+
+| if you are optimising for | list | mean |
+|---|---|---:|
+| **20 life** | 3 Libation · 2 Oracle · 4 Draught · 2 Entrance | 5.0259 |
+| **30 life** | 2 Twinflame / 1 Libation · 2 Oracle · 2 Draught · 4 Entrance | 5.4275 |
+| **both equally** | 2 Oracle · 2 Draught · 4 Entrance (trick free) | 10.4805 sum |
+
+`2 O + 2 D + 4 E` takes the top **four** places on the two-life-total sum, and across its four trick
+contexts the sum spans only 10.4805–10.4883 — so if one list must serve both, the trick slot is
+close to a free choice and the Entrance-heavy build is the compromise. The tie-break rule in 1b-0
+pushes the same way, since Entrance's trample is upside the engine cannot see.
+
+It does **not** rescue Entrance at 20 life, though: the gap from `2 O + 4 D + 2 E` to the nearest
+Entrance-3 list is 0.0151t at t=+4.0, far outside a tie.
+
+---
+
 ## 6. Mechanisms found
 
 **Fortifying Draught self-fuels, and that is most of its value.**
