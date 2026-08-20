@@ -7062,7 +7062,14 @@ bool FiveColourProvider::SearchedSecondMainInSearch() const
 {
     // Scoped to the phase spec being live: without it the interior m2 is near-empty and
     // searching it is pure budget dilution (the global lever's recorded rejection).
-    static const bool on = EnvOn("MTG_5C_SSM");
+    // ADOPTED default-on 2026-08-21 (USER: "change it to searched if we can do so without much
+    // additional cost"; =0 hatch). The enum memo (adopted the same day) absorbs the extra m2
+    // enumerations: the lever's pre-memo +9% wall on the heavy fivecolour game measured +0.7%
+    // (noise) post-memo on interleaved quiet-box pairs. Suite A/B vs GT: every changed key
+    // digest-only at an IDENTICAL average (30 games re-lined at the same per-game score), d0
+    // untouched. This removes the last greedy step from the interior second main -- the user's
+    // core bar (search primary; no greedy steps except attacks + mana allocation).
+    static const bool on = EnvOn("MTG_5C_SSM", true);
     return on && Fc5PhaseEnabled();
 }
 
