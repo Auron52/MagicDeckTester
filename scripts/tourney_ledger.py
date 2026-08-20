@@ -41,6 +41,17 @@ B_COMBO = [("a4s2", "4 Anger + 2 Scale"), ("a4o2", "4 Anger + 2 Oracle"),
            ("a2d2o2", "2 Anger + 2 Draught + 2 Oracle"), ("d4s2", "4 Draught + 2 Scale"),
            ("d4o2", "4 Draught + 2 Oracle")]
 
+# Every combination measured in EITHER run, under one roof. The bridge arm is identical game-for-game
+# across the two alias maps (section 2), which is what licenses ranking run-A arms against run-B arms
+# on the same seeds -- so this is a single standings table, not two tables side by side.
+ALL_COMBO = [("a4o0_scale", "4 Anger + 2 Scale"), ("a4o0_draught", "4 Anger + 2 Draught"),
+             ("a4o2", "4 Anger + 2 Oracle"),
+             ("a0o4_scale", "4 Oracle + 2 Scale"), ("a0o4_draught", "4 Oracle + 2 Draught"),
+             ("d4s2", "4 Draught + 2 Scale"), ("d4o2", "4 Draught + 2 Oracle"),
+             ("a2o2_scale", "2 Anger/2 Oracle + 2 Scale"),
+             ("a2o2_draught", "2 Anger/2 Oracle + 2 Draught"),
+             ("a2d2o2", "2 Anger/2 Draught/2 Oracle")]
+
 HDR = ("| option | life | games | mean turn | vs baseline | t | better | worse | margin | s |\n"
        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
 
@@ -105,6 +116,62 @@ def bridge_table(dA, dB, games):
     return "\n".join(out)
 
 
+def standings_table(D, games, lives=(20, 30)):
+    """Every combination ranked, each measured AGAINST THE LEADER rather than against the baseline.
+
+    Ranking on the mean alone would invite reading two arms as separated when the pair-difference
+    says otherwise, so the leader contrast is carried on the same row: an arm is only eliminated
+    when both its mean gap and its count margin put it behind, and neither is inside the
+    apparatus band from section 3."""
+    out = []
+    for life in lives:
+        ms = []
+        for k, lab in ALL_COMBO:
+            aa = [f"{t}_{k}@L{life}" for t in TF]
+            if any(x not in D for x in aa):
+                continue
+            ms.append((sum(sum(D[x][0]) for x in aa) / (games * len(TF)), k, lab))
+        if not ms:
+            continue
+        ms.sort()
+        lead_k, lead_lab = ms[0][1], ms[0][2]
+        out.append(f"\n**{life} life** — leader: **{lead_lab}**\n")
+        out.append("| # | combination | mean turn | behind leader | t | margin | s |")
+        out.append("|---:|---|---:|---:|---:|---:|---:|")
+        for i, (m, k, lab) in enumerate(ms, 1):
+            if k == lead_k:
+                out.append(f"| {i} | **{lab}** | {m:.4f} | — | — | — | — |")
+                continue
+            s = tr.contrast(D, [f"{t}_{lead_k}@L{life}" for t in TF],
+                            [f"{t}_{k}@L{life}" for t in TF], games)
+            out.append(f"| {i} | {lab} | {m:.4f} | {s['md']:+.4f} | {s['t']:+.1f} | "
+                       f"**{s['margin']:+,}** | {s['sigma']:+.1f} |")
+    return "\n".join(out)
+
+
+def scale_table(D, games, lives=(20, 30)):
+    """Scale the Heights against its replacement, in every context it was measured in."""
+    ctx = [("4 Anger", "a4o0_scale", "a4o0_draught", "2 Draught"),
+           ("4 Anger", "a4s2", "a4o2", "2 Oracle"),
+           ("2 Anger / 2 Oracle", "a2o2_scale", "a2o2_draught", "2 Draught"),
+           ("4 Oracle", "a0o4_scale", "a0o4_draught", "2 Draught"),
+           ("4 Draught", "d4s2", "d4o2", "2 Oracle")]
+    out = ["| context | 2 Scale becomes | life | turns | t | margin | s | Scale |",
+           "|---|---|---:|---:|---:|---:|---:|:--:|"]
+    for life in lives:
+        for name, ka, kb, repl in ctx:
+            aa = [f"{t}_{ka}@L{life}" for t in TF]
+            bb = [f"{t}_{kb}@L{life}" for t in TF]
+            if any(x not in D for x in aa + bb):
+                continue
+            s = tr.contrast(D, aa, bb, games)
+            # Scale only "wins" a context if BOTH numbers say so; one number alone settles nothing.
+            win = "**wins**" if (s["md"] > 0 and s["margin"] < 0) else "loses"
+            out.append(f"| {name} | {repl} | {life} | {s['md']:+.4f} | {s['t']:+.1f} | "
+                       f"**{s['margin']:+,}** | {s['sigma']:+.1f} | {win} |")
+    return "\n".join(out)
+
+
 def splice(text, name, body):
     a, b = f"<!-- AUTO:{name} -->", f"<!-- /AUTO:{name} -->"
     pat = re.compile(re.escape(a) + r".*?" + re.escape(b), re.S)
@@ -152,6 +219,11 @@ def main():
             dB, a.games, lambda k, t: f"{t}_{k[0]}", [(c[0],) for c in B_COMBO]))
     if dA and dB and a.only in ("", "bridge"):
         text = splice(text, "bridge", bridge_table(dA, dB, a.games))
+    if dA and dB and a.only in ("", "standings"):
+        D = dict(dA)
+        D.update(dB)
+        text = splice(text, "standings", standings_table(D, a.games))
+        text = splice(text, "scale", scale_table(D, a.games))
 
     open(DOC, "w").write(text)
     print(f"refreshed {os.path.relpath(DOC, ROOT)}"
