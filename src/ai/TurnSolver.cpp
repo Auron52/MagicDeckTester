@@ -9076,11 +9076,26 @@ namespace solvememo
     // 256k = 2.83 GB, and the extra memory buys NOTHING -- 256k was the SLOWEST memo arm of the
     // three. 16384 stays the default; the lever exists so the next deck can re-measure rather than
     // re-derive.
+    // RE-MEASURED 2026-08-20 on a DIFFERENT WORKLOAD -- the d5 TAIL game, where the table overflows
+    // rather than never filling. Seed 70001 gi=0, win turn 6 in every arm, deterministic meters
+    // (the wall column above was taken on a box a second container shared):
+    //   cap      misses   clears   enumeration calls        odometer positions      RSS (1 thread)
+    //   16,384    5.43M      331   6,670,204                2,854,061,099            41 MB
+    //   65,536    3.61M       54   4,841,680  (-27.4%)      2,168,478,713 (-24.0%)   82 MB
+    //  262,144    2.52M        9   3,752,026  (-43.8%)      1,765,887,715 (-38.1%)  207 MB
+    // 1,048,576   2.37M        2   3,604,240  (-46.0%)      1,697,322,410 (-40.5%)  683 MB
+    // 262,144 is the knee: 3.3x the memory past it buys another 2%. This does NOT contradict the
+    // d3-battery result above -- a battery of short games never fills the table, so there the extra
+    // capacity is pure allocator overhead. The lever is workload-shaped, which is why it stays a
+    // lever. MTG_BIG_SOLVE_MEMO selects 262,144; an explicit MTG_SOLVE_MEMO_CAP always wins.
     inline std::size_t Cap()
     {
+        static const bool explicit_env = (std::getenv("MTG_SOLVE_MEMO_CAP") != nullptr);
         static const std::size_t v =
             static_cast<std::size_t>(std::max(1, EnvInt("MTG_SOLVE_MEMO_CAP", 16384)));
-        return v;
+        if (explicit_env) { return v; }
+        static const bool env_big = EnvOn("MTG_BIG_SOLVE_MEMO");
+        return heurarm::Flag(heurarm::BIG_SOLVE_MEMO, env_big) ? std::size_t{262144} : v;
     }
 
     // SEARCHED second-main memo (SearchedSecondMainMemoized): same Entry/epoch discipline, its

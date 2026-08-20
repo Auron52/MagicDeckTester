@@ -39,6 +39,7 @@ enum Slot : int
     EQUIP_LOG_TRUTH,          // MTG_EQUIP_LOG_TRUTH       log an equip only if it actually attached
     METALCRAFT_CREDIT,        // MTG_METALCRAFT_CREDIT     same-turn metalcraft equip-{0} credit
     KE_GROUP_CAP,             // MTG_KE_GROUP_CAP          EquipmentProvider enumeration breadth 12 -> 4
+    BIG_SOLVE_MEMO,           // MTG_BIG_SOLVE_MEMO        solve-memo entry cap 16k -> 256k
     COUNT
 };
 
@@ -55,6 +56,7 @@ inline const char* Name(int slot)
         "MTG_EQUIP_LOG_TRUTH",
         "MTG_METALCRAFT_CREDIT",
         "MTG_KE_GROUP_CAP",
+        "MTG_BIG_SOLVE_MEMO",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

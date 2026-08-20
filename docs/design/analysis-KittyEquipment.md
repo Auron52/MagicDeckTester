@@ -1215,3 +1215,30 @@ right for nothing on a shared box.
 O(1) evaluator replacing `SimulateToEnd`. That is road item (3), which makes generation the fix for
 the tail rather than something to do after fixing it; what is needed BEFORE generation is only that
 one 20M-unit game cannot stall a cell (a per-game work ceiling), not a faster enumerator.
+
+### The one LOSSLESS lever found so far: solve-memo capacity (MTG_BIG_SOLVE_MEMO, default OFF)
+
+The memo is a pure cache — a wholesale clear only drops entries that get recomputed to the same
+plan — so raising its cap moves COST and cannot move the answer. Verified, not assumed: **610 games
+(train 150, held-out 150, five d5 games), every play digest identical between arms.**
+
+Deterministic meters on the tail game (seed 70001 gi=0), cap 16,384 → 262,144:
+
+| | 16k | 256k |
+|---|---|---|
+| memo misses | 5,432,226 | 2,521,578 |
+| wholesale clears | 331 | 9 |
+| enumeration calls | 6,670,204 | 3,752,026 (**−43.8%**) |
+| odometer positions | 2,854,061,099 | 1,765,887,715 (**−38.1%**) |
+| peak RSS, 1 thread | 41 MB | 207 MB |
+
+End-to-end it is much smaller than those numbers suggest: the tail game ran 404 s → 359 s (−11%) in
+a pooled batch, and the two d3 blocks disagreed in SIGN (train −24%, held-out +7%) — wall clock is
+still too noisy to call at this sample even with both arms paired inside one pool. That is
+consistent with the older d3-battery result recorded on `solvememo::Cap` ("the extra memory buys
+NOTHING") — a battery of short games never fills the table, so the capacity is pure allocator
+overhead there. The lever is workload-shaped: it pays only where the table overflows.
+
+**Verdict: real, lossless, and modest — not a tail fix.** Kept as a lever (default OFF, 5x memory);
+worth arming for a GENERATION run, which is exactly the long-game workload where it pays. The tail
+itself is 96.8% rollout and no enumeration-side lever addresses that.
