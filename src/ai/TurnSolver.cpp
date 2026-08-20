@@ -15948,9 +15948,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                 // continuation -- the top-2 truncation was tuned for the joint (land x casts)
                 // enumeration and silently deletes the colour line the deferred main needed
                 // (5c d3 s2002: cap 5.0150 vs no-cap 4.9250, BETTER than the 4.9550 base).
-                int cap = (DecisionUnpruned(UnprunedGate::Fetch) || MainPhaseFilterActive(state))
-                                             ? static_cast<int>(cands.size())
-                                             : kMaxFetchSearchTargets;
+                // ... EXCEPT when the provider caps at 1 (top-entry-only, a deliberate policy):
+                // the "no-cap better" measurement above PRE-DATES the reviewed fetch doctrine,
+                // and the 2026-08-21 decouple ensemble proved the widened fan's edge is 100%
+                // draw-order clairvoyance (see FiveColourProvider::FetchSearchCap) -- widening a
+                // cap-1 provider would re-open exactly the artifact the policy removes. The
+                // unpruned audit still opens the full list.
+                const bool widen = DecisionUnpruned(UnprunedGate::Fetch)
+                                || (MainPhaseFilterActive(state) && kMaxFetchSearchTargets > 1);
+                int cap = widen ? static_cast<int>(cands.size()) : kMaxFetchSearchTargets;
                 // MTG_FETCH_FAN_CAP=<n> (default 0 = off, byte-identical): measurement hatch capping
                 // the fetch-target fan BELOW the provider cap and below the unpruned/collapsed-main
                 // overrides -- sibling of MTG_LAND_FAN_CAP above (FiveColour gen-labeller sizing).

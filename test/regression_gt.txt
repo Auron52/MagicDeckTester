@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 552a76b  date 2026-08-20
+# Regression ground truth -- commit a530f44  date 2026-08-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -38,8 +38,8 @@ mirrorwing_smoke_d0_s1001=6.0570/506df4f8aa241490
 mirrorwing_smoke_d3_s1001=5.0267/dee3a51fa58c1b99
 mirrorwing_smoke_d5_s1001=5.1200/242398274f5f3863
 fivecolour_smoke_d0_s1001=5.8110/626454ea16361d18
-fivecolour_smoke_d3_s1001=4.9533/f3498e072f6df2ed
-fivecolour_smoke_d5_s1001=5.0800/6b08665e03d701f2
+fivecolour_smoke_d3_s1001=5.0000/9acc9684fed6b9ac
+fivecolour_smoke_d5_s1001=5.1733/eab66f20e098b97a
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/4ec30ea41e344477
@@ -98,10 +98,10 @@ mirrorwing_regression_d3_s3003=4.9350/6370c93b56bd0027
 mirrorwing_regression_d5_s2002=4.7900/fabe57ab3739f295
 mirrorwing_regression_d5_s3003=4.9000/2c36d12eef342499
 fivecolour_regression_d0_s2002=5.8490/15a69185977d88cf
-fivecolour_regression_d3_s2002=4.8650/5ab3d447eb860312
-fivecolour_regression_d3_s3003=4.9550/f3327db7792c20f3
-fivecolour_regression_d5_s2002=4.8200/f358a1394d1e7149
-fivecolour_regression_d5_s3003=4.9000/483d58d6240ab396
+fivecolour_regression_d3_s2002=4.8850/f2b2c49ad0ea4ba8
+fivecolour_regression_d3_s3003=4.9650/40e5bddb5994d6a0
+fivecolour_regression_d5_s2002=4.8400/5aece6a1fa721654
+fivecolour_regression_d5_s3003=4.9200/f72d390488609c03
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/fe364b007bbfaa56
@@ -216,14 +216,14 @@ creature_giving_overnight_d0_s4004=5.5910/39b72aace62d7451
 creature_giving_overnight_d0_s6006=5.5965/14143f907c3973b5
 creature_giving_overnight_d0_s8008=5.6015/5e748065d9661731
 creature_giving_overnight_d0_s10010=5.6020/4291aa966e9963be
-creature_giving_overnight_d3_s4004=4.6550/1bd7ca0a11aa35d1
-creature_giving_overnight_d3_s5005=4.6370/d29013541ca25a9f
-creature_giving_overnight_d3_s6006=4.6520/0eebbd7bdfc5b8d7
-creature_giving_overnight_d3_s7007=4.6570/effb1db822768736
-creature_giving_overnight_d5_s4004=4.6360/c8c1e3a85ffdffc4
-creature_giving_overnight_d5_s5005=4.6280/37c1aca1dd16ffd3
-creature_giving_overnight_d5_s6006=4.6660/878b5b539dec657e
-creature_giving_overnight_d5_s7007=4.6400/091ca872ccb72aa4
+creature_giving_overnight_d3_s4004=4.6570/80fb37a13005ddf7
+creature_giving_overnight_d3_s5005=4.6340/30271a6dc81f3a84
+creature_giving_overnight_d3_s6006=4.6610/a3621142f1e98043
+creature_giving_overnight_d3_s7007=4.6580/c53364f5b9b49155
+creature_giving_overnight_d5_s4004=4.6440/c7a08d8fc5621a14
+creature_giving_overnight_d5_s5005=4.6280/2b774f5fa3e96fae
+creature_giving_overnight_d5_s6006=4.6760/a77a4db5188c7a4e
+creature_giving_overnight_d5_s7007=4.6420/37f2f0aed47891fe
 mirrorwing_overnight_d0_s4004=6.0610/7986467a7cc8773f
 mirrorwing_overnight_d0_s6006=6.0640/5ddc959161d9fdcc
 mirrorwing_overnight_d0_s8008=6.0605/3bc0b5308a40238c
@@ -240,11 +240,11 @@ fivecolour_overnight_d0_s4004=5.7785/d901d03e3531e47d
 fivecolour_overnight_d0_s6006=5.8180/7e75d0d5c8d99fc0
 fivecolour_overnight_d0_s8008=5.7900/de511b9ba80029f9
 fivecolour_overnight_d0_s10010=5.7860/05644d291fa6a61e
-fivecolour_overnight_d3_s4004=4.9050/830bfbbd768cfe0a
-fivecolour_overnight_d3_s5005=4.9200/39597d23b5c902e9
-fivecolour_overnight_d3_s6006=4.9200/6ca738eb5589e6f6
-fivecolour_overnight_d3_s7007=4.9075/3a9fea9fb504e5ed
-fivecolour_overnight_d5_s4004=4.8767/5466a05c2e77dd77
-fivecolour_overnight_d5_s5005=4.9133/13194452fa346a08
-fivecolour_overnight_d5_s6006=4.9000/edc3acd66f8278a1
-fivecolour_overnight_d5_s7007=4.8500/6389afb1595e63b5
+fivecolour_overnight_d3_s4004=4.9325/a11831a13fae9212
+fivecolour_overnight_d3_s5005=4.9400/e76a73bfa0a2e449
+fivecolour_overnight_d3_s6006=4.9725/105d44bde407f85c
+fivecolour_overnight_d3_s7007=4.9350/7fa6690f62f9690b
+fivecolour_overnight_d5_s4004=4.8933/dfebfc172ddc4bc8
+fivecolour_overnight_d5_s5005=4.9367/8940e6e969525355
+fivecolour_overnight_d5_s6006=4.9633/1d979f9c7de81d61
+fivecolour_overnight_d5_s7007=4.8967/35a4e316304391fe
