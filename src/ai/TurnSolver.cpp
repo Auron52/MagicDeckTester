@@ -9067,6 +9067,16 @@ namespace solvememo
     // cannot grow it without bound (wholesale clear, same policy as the bp-enum memo).
     inline thread_local std::unordered_map<TranspositionTable::Key, Entry,
                                            TranspositionTable::KeyHash> t_cache;
+    // WHY THE WHOLESALE CLEAR IS NOT WORTH REFINING (measured 2026-08-20, do not re-derive).
+    // g_decision_epoch only increments and a hit demands an exact match, so every entry from an
+    // earlier decision is permanently unreachable -- which makes "evict the corpses at the epoch
+    // boundary instead of wiping the whole table" look like a free win. It is a NO-OP: on the d5
+    // tail game (seed 70001 gi=0) it moved clears 331 -> 327, misses 5,432,226 -> 5,434,492 and
+    // enumeration calls 6,670,204 -> 6,672,482, i.e. nothing, in the wrong direction.
+    // The corpses were never the problem: a SINGLE decision's working set on this deck already
+    // exceeds 16k entries, so those clears are mid-decision wipes of LIVE entries. That is also why
+    // 262,144 helps (9 clears) -- it takes ~16x the capacity before one decision fits. The lever is
+    // capacity, not eviction policy.
     // Entry cap before a wholesale clear. Tunable (MTG_SOLVE_MEMO_CAP) because the cap decides the
     // HIT RATE on a deck whose decisions are big: KittyEquipment's d3 gi=16 clears the table 120
     // times in one game at 16k. A clear only drops entries -- every dropped hit is recomputed to
