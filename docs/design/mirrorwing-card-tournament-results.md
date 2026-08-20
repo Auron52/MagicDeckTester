@@ -120,6 +120,35 @@ rotations are already measured. **The Entrance question is free after all** — 
 The general rule, worth carrying to the next deck: *cutting a card does not just shorten the arm
 list, it returns that card's bucket capacity to the pool.* Elimination buys reachability.
 
+### 2d. What the caps decide for you — the target list, enumerated
+
+The list the user is converging on (2026-08-20) is **8 cards from {Oracle, Draught, Entrance} plus
+3 from {Twinflame, Libation}**, with Entrance at 2 as a floor. That is exactly the 11 flexible
+slots, so the caps above enumerate the whole space:
+
+- **The 3 trick cards are free.** They all sit in bucket 2 (cap 3), so *any* Twinflame/Libation
+  split — 3/0, 2/1, 1/2, 0/3 — is reachable, and all four are already measured under Entrance = 2.
+- **The 8 draw/pump cards have only three legal splits.** Each card takes one bucket, and the
+  available capacities are 4, 2, 2 — so the counts must be a permutation of **(4, 2, 2)**:
+
+  | split | run | verdict |
+  |---|---|---|
+  | 4 Oracle + 2 Draught + 2 Entrance | A (`a0o4_draught`) | leader at 30 life |
+  | 4 Draught + 2 Oracle + 2 Entrance | B (`d4o2`) | leader at 20 life |
+  | **4 Entrance + 2 Oracle + 2 Draught** | **C** | in flight |
+
+- **Two things in that frame are structurally unreachable**, and no alias map can fake either:
+  - a **3-count** of any draw/pump card (3+3+2, 4+3+1 …) — the only cap-3 bucket is the trick slot;
+  - **Entrance at 0** — 8 cards from Oracle and Draught alone is 4+4, which needs two cap-4 buckets.
+
+  So "Entrance ≥ 2" is not just a judgement here, it is the only thing the apparatus can express:
+  every reachable list has Entrance at **2 or 4**, and run C is the entire remaining question.
+
+Once run C lands, all 12 reachable lists (4 trick splits × 3 draw/pump splits) will have been
+measured at both life totals, and the target list is a lookup rather than a search. Anything
+outside those 12 costs a generation pass — which is then a deliberate, priced decision rather than
+an accident.
+
 ---
 
 ## 3. What the mulligan apparatus is worth (the bracket)
