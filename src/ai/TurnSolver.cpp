@@ -640,7 +640,11 @@ static const CardDefinition* ControlledDefByNumber(const GameState& state, int n
 namespace keparkstats
 {
     inline bool Enabled() { static const bool v = EnvOn("MTG_KE_PARK_STATS"); return v; }
-    inline std::atomic<uint64_t> g_park{0}, g_unpark{0}, g_take_park{0}, g_take_unpark{0};
+    inline std::atomic<uint64_t> g_park{0}, g_unpark{0};
+    // Force counts are split by SITE, because the two sites answer different questions: the greedy
+    // SolveUncached runs in rollout interiors (it cannot put anything into the played line at d>0),
+    // while EnumeratePlans is what builds the candidate plans the search actually chooses among.
+    inline std::atomic<uint64_t> g_take_park[2]{}, g_take_unpark[2]{};
 
     inline void Probe(KembaLoop k)
     {
@@ -648,11 +652,12 @@ namespace keparkstats
         if (k == KembaLoop::Park)   { g_park.fetch_add(1, std::memory_order_relaxed);   }
         if (k == KembaLoop::Unpark) { g_unpark.fetch_add(1, std::memory_order_relaxed); }
     }
-    inline void Take(KembaLoop k)
+    // site 0 = SolveUncached (greedy), site 1 = EnumeratePlans (the search's candidates).
+    inline void Take(KembaLoop k, int site)
     {
         if (!Enabled()) { return; }
-        if (k == KembaLoop::Park)   { g_take_park.fetch_add(1, std::memory_order_relaxed);   }
-        if (k == KembaLoop::Unpark) { g_take_unpark.fetch_add(1, std::memory_order_relaxed); }
+        if (k == KembaLoop::Park)   { g_take_park[site].fetch_add(1, std::memory_order_relaxed);   }
+        if (k == KembaLoop::Unpark) { g_take_unpark[site].fetch_add(1, std::memory_order_relaxed); }
     }
 
     struct Dumper
@@ -661,12 +666,15 @@ namespace keparkstats
         {
             if (!Enabled()) { return; }
             std::fprintf(stderr,
-                         "\n=== KEMBA LOOP: predicate PARK %llu / UNPARK %llu | forced PARK %llu /"
-                         " UNPARK %llu ===\n",
+                         "\n=== KEMBA LOOP: predicate PARK %llu / UNPARK %llu"
+                         " | forced greedy PARK %llu / UNPARK %llu"
+                         " | forced ENUM PARK %llu / UNPARK %llu ===\n",
                          static_cast<unsigned long long>(g_park.load()),
                          static_cast<unsigned long long>(g_unpark.load()),
-                         static_cast<unsigned long long>(g_take_park.load()),
-                         static_cast<unsigned long long>(g_take_unpark.load()));
+                         static_cast<unsigned long long>(g_take_park[0].load()),
+                         static_cast<unsigned long long>(g_take_unpark[0].load()),
+                         static_cast<unsigned long long>(g_take_park[1].load()),
+                         static_cast<unsigned long long>(g_take_unpark[1].load()));
         }
     };
     inline Dumper g_dumper;
@@ -9878,7 +9886,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 }
                 if (jloop >= 0)
                 {
-                    keparkstats::Take(jloop_kind);
+                    keparkstats::Take(jloop_kind, 0);   // greedy SolveUncached
                     auto_sel.push_back(jloop);
                     groups.erase(groups.begin() + g);
                     group_hand_index.erase(group_hand_index.begin() + g);
@@ -14239,7 +14247,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 }
                 if (jloop >= 0)
                 {
-                    keparkstats::Take(jloop_kind);
+                    keparkstats::Take(jloop_kind, 1);   // EnumeratePlans (search candidates)
                     auto_sel.push_back(jloop);
                     groups.erase(groups.begin() + g);
                     group_hand_index.erase(group_hand_index.begin() + g);

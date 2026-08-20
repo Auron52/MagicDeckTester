@@ -967,32 +967,55 @@ main opens ~1.1% more nodes", NOT as "greedy is 1.1% cheaper". The earlier `perf
 better guide to real cost: the second main is ~5% of runtime either way, and the deck's actual cost
 centre is the greedy MAIN-1 solve in rollout interiors (~34 of `SolveUncached`'s 38.85%).
 
-### `MTG_KE_PARK` is DEFECTIVE: the park half works, the un-park half never reaches the played line
+### `MTG_KE_PARK`: CORRECTED — the loop is RIGHT, it just almost never gets a turn
 
-This is the finding the average could never have produced, and it is exactly the failure the USER
-predicted (*"it also will often mean that we need to re-equip a creature the next turn ... at least
-if there is a double striker on board"*).
+**This supersedes the "DEFECTIVE" verdict committed in e6897884, which was wrong.** That call rested
+on 4 replayed games: 8 park events, 0 round-trips, and a Kor Duelist on board in both games where
+gear was still on Kemba the next turn. What it did not check is whether those events had any
+RUNWAY — and none did. In all 8 the following turn was either the turn the game was won or did not
+exist. A loop cannot close on a turn that does not happen, and closing it on a turn already won
+changes nothing, so those 8 events were evidence about neither half of the loop.
 
-Replaying every game where the park fired and walking the board snapshots: **8 park events, 0
-round-trips.** Four had the game end that turn (no chance to close the loop); the other four were
-still sitting on Kemba at the next turn's pre-combat, and **in both of those games a Kor Duelist --
-a double-striker, the USER's stated condition -- was on the battlefield.**
+Re-measured on a sample big enough to contain runway — 600 games, seed block 500001, d3, every game
+logged and its board snapshots walked:
 
-The park half is genuinely working, and pays: seed 300050 parks Bonesplitter + Lightning Greaves on
-Kemba in T5 main 2 and collects **2 Cat tokens** at the T6 upkeep. Then at T6 main 1 the board holds
-Puresteel Paladin and three artifacts (metalcraft ON, so equip {0}), and an un-sick Kor Duelist --
-every condition the un-park predicate requires -- and the turn's only action is playing a land.
+| | park events |
+|---|---|
+| total | 212 (in 66 of 600 games) |
+| **no runway** (next turn is the win, or absent) | **190 (90%)** |
+| with runway | 22 |
 
-`MTG_KE_PARK_STATS` localises the loss but does not close it: in that game the predicate returned
-PARK 51,052 / UNPARK 27,049 and the walkers force-took PARK 36,521 / UNPARK 4,650. The un-park is
-recognised, and it *is* auto-selected inside the search -- it simply never survives into the plan the
-executor plays. So this is not a predicate bug and not a "the search declined it" story; the loss is
-downstream of the auto-take. **Not root-caused, and the lever must not be adopted until it is:** as
-shipped it implements the park without the un-park, which is the strictly-worse half.
+And of the 22 with runway, cross-tabulated against whether a double-striker was on board — the
+USER's stated condition (*"at least if there is a double striker on board"*):
 
-That it cost nothing measurable (0 games changed turn) is not a defence. A double-striker attacking
-without gear it should be carrying is a misplay whatever the clock says, and the reason it is
-invisible here is that both affected games were already won.
+| | double-striker out | none out |
+|---|---|---|
+| round-tripped | 4 | 4 |
+| stayed parked | **0** | 14 |
+
+**The misplay category is empty.** Every time a double-strike host was available the gear came back;
+every time it stayed on Kemba there was nothing to return it to, which is the correct play — the
+Cats are free and no rider is being starved. The un-park half fires, and the guard discriminates on
+exactly the condition it was built to discriminate on.
+
+So the lever is doctrinally correct and it is also nearly pointless HERE, for a structural reason
+worth recording: parks land on T4-T6 (53/90/53 of 212) and the deck wins on T4-T6, so 90% of the
+time the game ends before the loop can close. The Kemba park needs a game that lasts at least one
+turn past the park, and this deck usually does not provide one.
+
+The park half is genuinely working where it does fire, and pays: seed 300050 parks Bonesplitter +
+Lightning Greaves on Kemba in T5 main 2 and collects **2 Cat tokens** at the T6 upkeep.
+
+`MTG_KE_PARK_STATS` (kept) reports the predicate and both walkers separately, which is what showed
+the mechanism was live before the runway question was settled: on seed 300050, predicate PARK 51,052
+/ UNPARK 27,049, forced greedy PARK 35,188 / UNPARK 3,663, forced ENUM PARK 1,333 / UNPARK 987. The
+un-park is recognised and force-selected in both the greedy solver and the search's candidate plans.
+
+**Method note, because this cost a wrong verdict.** "0 of 8 round-trips" and "0 of 8 round-trips
+where the loop could possibly have closed" are different claims, and only the second is a finding.
+Any loop-closure instrument must report the denominator it is entitled to use FIRST; the analyzer in
+`test/tools/kitty_ab/park_roundtrip.py` now excludes no-runway events from the rate and prints them
+as their own line.
 
 ### Verdicts
 
@@ -1001,7 +1024,7 @@ invisible here is that both affected games were already won.
 | `SearchesSecondMain()` (LIVE) | **re-verified, keep.** 0 of 300 games differ; digest-identical both blocks. |
 | `MTG_KE_ORDER` | **free, but buys nothing measurable** -- no play effect, no cost effect. Adoption is a doctrine call (the USER reviewed and endorsed the order), not a measurement one; the apparatus cannot distinguish it. |
 | `MTG_EQUIP_MINPOWER_LAST` | **no play effect, ~0.3% dearer in nodes on both blocks.** Nothing argues for default-on. |
-| `MTG_KE_PARK` | **DO NOT ADOPT.** Half the loop reaches the played line. Root-cause the un-park first. |
+| `MTG_KE_PARK` | **CORRECT but worthless here.** Loop verified: 0 misplays in 22 runway events, gear returns whenever a double-striker is out. But 90% of parks have no runway and it changes 0 of 300 games. Adopt only as doctrine, not for value. |
 
 Reproduce: `logs/kitty_ab/gen_manifest.py` (manifest), `compare.py` (paired win turn), `cost.py`
 (paired units), `park_roundtrip.py` (loop closure from game JSON).
