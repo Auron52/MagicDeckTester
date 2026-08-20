@@ -16581,7 +16581,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
 // MTG_ENUM_MEMO_VERIFY=1: on every hit recompute uncached and compare plan-by-plan.
 namespace enummemo
 {
-    inline bool Enabled()  { static const bool v = EnvOn("MTG_ENUM_MEMO"); return v; }
+    // ADOPTED default-on 2026-08-21 (MTG_ENUM_MEMO=0 hatch) under the user's standing no-regression
+    // adoption directive: byte-identical at suite scale with the COMPLETED key (four verify-found
+    // holes fixed; 604,817 hits / 0 mismatches on the heavy fivecolour game; smoke 36/36 + regression
+    // 60/60 memo-on with 0 configs changed and the reference gate clean), -9.0% wall on the heavy
+    // game (interleaved quiet-box pairs, arm variance ~0.3%), memory bounded by the epoch-clear.
+    // Evidence: docs/design/fivecolour-search-waste.md STATUS 2026-08-20b.
+    inline bool Enabled()  { static const bool v = EnvOn("MTG_ENUM_MEMO", true); return v; }
     inline bool VerifyOn() { static const bool v = EnvOn("MTG_ENUM_MEMO_VERIFY"); return v; }
 
     struct Entry
