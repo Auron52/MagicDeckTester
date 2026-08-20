@@ -98,7 +98,7 @@ the control, order and park arms.
    | | avg win turn | games changed | search work |
    |---|---|---|---|
    | pay guard | **+0.0000 in all 4 cells** (0 faster, 0 slower of 700) | 8 of 700 | KE **+0.51% / +0.35%**, FC +0.000% |
-   | log truth | identical digests to the pay guard in **every** cell | 8 of 700 | (see below) |
+   | log truth | identical digests to the pay guard in **every** cell | 8 of 700 | **+0.000% in all 4 cells, 0 games** |
 
    **The two produce the SAME play digest everywhere** — `fc.train 4cd11d95186a1b3b`,
    `fc.hold a0131f8dd2afcdca`, `ke.hold b36bc8d668a8649d`, and `ke.train` unchanged from control in
