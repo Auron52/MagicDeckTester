@@ -41,6 +41,43 @@ better-minus-worse game counts and `s` is that margin in its own noise units
 | **4 Impolite Entrance** | **not measured** | **open — and now REACHABLE for free** | Hypothesis with card-data support: Entrance grants haste, Libation's Citizens arrive summoning-sick, so Entrance→Libation is a one-sided enabler (Twinflame's tokens already have haste). Cutting Scale frees a bucket; Entrance can take the cap-4 bucket with the other tricks at 2. See 2c — the 9,293-cell price no longer applies to the form that matters. |
 | Expedite | not tried here | n/a | The shipped deck's card; every tournament arm plays Impolite Entrance in its place. It survives only as the bucket Entrance is aliased into. |
 
+### 1b-0. Decision rule: unmodelled upside breaks ties toward Impolite Entrance
+
+**User directive, 2026-08-20:** *"if Impolite Entrance is very close to others we might keep more
+copies of it because of the incidental trample that is not modelled."*
+
+The rule is sound because the asymmetry is one-sided, and an audit of every card still in
+contention confirms Entrance is the only one with upside the engine cannot see:
+
+| card | unmodelled aspect | does it bias the comparison? |
+|---|---|---|
+| **Impolite Entrance** | **`gains trample` — not modelled** | **yes, understates Entrance** |
+| Impolite Entrance | sorcery-vs-instant not modelled | no — makes it parameter-identical to Expedite |
+| Luxurious Libation | token colour | no — nothing in the deck reads colour |
+| Oracle's Restoration | `you control` not enforced | no — the goldfish controls no creatures |
+| Draught, Twinflame, Gold Rush, Expedite, Zada, Mirrorwing | none noted | — |
+
+So: **a tie or a near-tie involving Entrance should be resolved toward more Entrance**, and only a
+loss clearly outside the apparatus band argues against it. What the engine measured in run C is
+strictly "4 cheap haste cantrips beat 2" — Entrance is parameter-identical to Expedite here, so
+the screen cannot distinguish the two cards, and the real Entrance can only be better than what
+was measured.
+
+**How much better is bounded, though, and by the deck's own contents.** Fists of Flame — 4 copies,
+fixed in every arm — *also* grants trample, and it is a `solo_target_trick`, so on a magnet fan-out
+it gives trample to the whole board. Entrance's trample is therefore redundant on any turn a Fists
+is cast. Measured over run C's won games:
+
+| life | won games that cast Fists at least once |
+|---|---:|
+| 20 | 57.0–57.3% |
+| 30 | 61.5–61.8% |
+
+So the unmodelled upside is real but partial: it can only be worth anything in the ~40% of wins
+with no Fists, and less than that, since "cast during the game" over-counts "granted trample on
+the lethal turn". Treat it as a tie-breaker, which is exactly how the user framed it — not as a
+thumb heavy enough to overturn a measured 0.016t gap.
+
 ### 1b. Standing caveats on the results above
 
 - Every Test 1 and Test 2 result is measured with **Impolite Entrance fixed at 2**. The Entrance
@@ -372,6 +409,45 @@ Both open calls are **life-total splits, not measurement gaps**: more games will
 because the two life totals genuinely want different cards. The 4-slot flips (Draught at 20,
 Oracle/Anger at 30) for the same reason the trick slot flips — see the ceiling-vs-consistency
 mechanism in section 6.
+
+---
+
+## 5c. Results — run C (alias map C): Impolite Entrance at 4
+
+Bridge verified first: the ship arm came out **10,000/10,000 identical** under maps B and C at both
+life totals, so map C chains to the rest.
+
+`2 O + 2 D + 4 E` against the two splits it replaces (negative = the Entrance-heavy list is faster):
+
+| baseline | 20 life | 30 life |
+|---|---:|---:|
+| `4 O + 2 D + 2 E` (run A) | +0.0024 (t=+0.9) | **−0.0184 (t=−5.6, +385, 5.3σ)** |
+| `4 D + 2 O + 2 E` (run B) | +0.0160 (t=+4.6) | **−0.0277 (t=−6.5, +809, 7.8σ)** |
+
+**At 30 life the four Entrance-4 arms take ranks 1–4 outright**, ahead of the previous leader. At
+20 life Entrance-4 is 5th: it *ties* `4 O + 2 D` (t=+0.9 — and by the tie-break rule in 1b-0 that
+tie goes to Entrance) but loses clearly to `4 D + 2 O`.
+
+| | best list | mean turn |
+|---|---|---:|
+| 20 life | `4 D + 2 O + 2 E` + 3 Libation | 5.0259 |
+| 30 life | `2 O + 2 D + 4 E` + 2 Twinflame / 1 Libation | 5.4275 |
+
+### The haste interaction, confirmed
+
+The user predicted (2026-08-20) that if Twinflame is held *as a haste source*, its value should
+fall as Entrance rises, because Entrance supplies the same thing. It does, monotonically:
+
+| context | Twinflame's edge at 30 life |
+|---|---:|
+| Entrance 2, with 4 Oracle | +0.0187t (t=+3.7) |
+| Entrance 2, with 4 Draught | +0.0130t (t=+2.7) |
+| **Entrance 4** | **+0.0058t (t=+1.2 — no longer significant)** |
+
+At 4 Entrance the trick slot almost stops mattering at 30 life: the whole Twinflame→Libation range
+is 5.4275–5.4346. This is the first *predicted-in-advance* interaction the tournament has
+confirmed, and it is the mechanism behind the trick slot's life-total flip: Twinflame's edge was
+never about the copies, it was about haste, and haste is purchasable elsewhere.
 
 ---
 
