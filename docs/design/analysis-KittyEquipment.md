@@ -1088,3 +1088,50 @@ it was co-selected against runs anyway, pays, and no-ops. `MTG_AFFORD_AUDIT` on 
 4,006 executed casts (0.82%) are dropped, every one COLOUR-short and none total-short**, so no cast
 order can fix them. The audit's existing STRANDED detector covers stranded ACCELERANTS (0 here,
 correctly) and does not cover a stranded equip host — extending it is the cheap next step.
+
+## Road item (2) — metalcraft enumeration pricing: FIXED, and the ledger's diagnosis was half of it (2026-08-20)
+
+The deferred item read *"price equips at post-subset artifact count"*, against the measured
+claude-play gap (2 of 16 games, ~1 turn each: cast 2–3 artifacts to flip metalcraft ON, then equip
+Colossus Hammer for `{0}`). That pricing fix is now built — and **on its own it changes nothing at
+all**: 300 paired d3 games came back digest-identical, 0 of 300 differing in any decision.
+
+The reason is a second mechanism the ledger did not name. `ManaPruneBound` — the odometer's scalar
+mana ceiling — skips a subset position whose summed `cost.ManaValue()` exceeds the turn's mana
+BEFORE `consider()` prices anything, and that sum charges the Hammer its printed `{8}`. The line was
+never mispriced at the gate; **it never reached the gate.** The funnel, on reproducer seed 70014
+(`MTG_METALCRAFT_STATS`):
+
+| | with pricing only | with both halves |
+|---|---|---|
+| enumerations offering a Colossus Hammer equip | 4,092 / 4,092 | 614 / 614 |
+| ...its group surviving the breadth cap | 4,092 | 614 |
+| subsets `consider()` built holding one | **0** of 89,492 | 32,506 of 109,612 |
+| ...surviving the legality rejections | 0 | 6,665 |
+| ...passing the affordability gate | 0 | 1,302 |
+| win turn | 5 | **4** |
+
+`ManaPruneBound` documents this hazard on itself (*"any FUTURE cost reducer that is credited
+per-subset in `consider()` rather than baked into `a.cost`"*) and the haste-dork unlock already
+carries the matching `extra_credit` addend — so the fix is two lines, and was already written down
+as an obligation by the function that needed it.
+
+**Both claude-play reproducer games (seeds 70014 / 70015, d5) now win on T4 instead of T5** — the
+pilot's own result — on verbatim the human's line (`Colossus Hammer + Shadowspear + EQUIP Colossus
+Hammer`). Paired d3, 150 games per block:
+
+| block | control | arm | delta | se | t | faster | slower | plays differ |
+|---|---|---|---|---|---|---|---|---|
+| train (300001) | 4.9667 | 4.8533 | **−0.1133** | 0.0260 | −4.36 | 17 | **0** | 51 |
+| hold (900001) | 4.9600 | 4.8200 | **−0.1400** | 0.0300 | −4.67 | 22 | 1 | 58 |
+
+The held-out block improves MORE than train, which is what a real effect looks like rather than a
+selection artifact. `MTG_METALCRAFT_CREDIT`, default OFF pending the adoption call; only Puresteel
+Paladin carries the param and only this deck plays it, and this deck is not in the regression tiers,
+so **no suite ground truth can move**. Full write-up: `docs/design/metalcraft-enumeration-credit.md`.
+
+**Method note worth keeping.** When the price half measured *exactly* zero — not small, zero — the
+useful question was not "is the credit worth anything" but "are the subsets it rescues ever built at
+all". The answer was 0 of 89,492, and it pointed straight at the prune. A lever that fires
+constantly (320,672 credited subsets per 20 games) can still be rescuing only the shape that does
+not matter — here `Sol Ring{1} + EQUIP Bonesplitter{1}`, never the Hammer.
