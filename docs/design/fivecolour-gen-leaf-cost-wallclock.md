@@ -76,10 +76,34 @@
 > the suite while recovering ~half the play-side phase cost and ALL of the gen cost. The
 > in-play "cap worse" number that justified the collapsed-main uncap (5.0150 vs 4.9250,
 > d3 s2002) PRE-DATES the fetch doctrine; under the reviewed ranking it no longer holds.
-> RECOMMENDATION: adopt cap=2 as provider policy for play AND gen (concretely: drop the
-> MainPhaseFilterActive uncap override, keep the DecisionUnpruned exemption), held-out
-> confirmation on overnight seeds before accept. cap=1 remains available at a measured
-> +0.017 train cost if the top-entry-only design intent outweighs it. USER's call.
+>
+> ## RESOLUTION 2026-08-21b: the fan's edge is 100% CLAIRVOYANCE — **TOP-ENTRY-ONLY ADOPTED
+> at 0a59457** (USER design intent; GT rebaselined WORSE on purpose)
+>
+> USER: "I meant for our heuristic to be used with just the top entry, not split and search
+> there ... or to discard the 'improvements' as clairvoyance (if that is what they are)."
+> Held-out first said the fan is real (+0.034 coupled, 8/8 overnight keys). Then the
+> MTG_SHUFFLE_SALT_SEARCH decouple ensemble (the always-shuffle protocol; salts 1–4 × the 4
+> suite searched cells = 2,400 games/arm) answered the conditional:
+>
+> | arm | COUPLED (held-out, vs GT) | DECOUPLED ensemble avg |
+> |---|---|---|
+> | uncapped fan (was shipped) | best (GT) | **5.0558 — WORST, 4/4 salts** |
+> | cap=2 | ~neutral (net +2/2800) | 5.0237 (best) |
+> | cap=1 top-entry-only | +0.034 (8/8 keys) | 5.0317 (−58 vs uncap, better 4/4 salts) |
+>
+> The wide fan only "won" by pre-seeing the deterministic post-fetch shuffle — the exact
+> artifact the always-shuffle keep resolution retired. Blind, it actively misleads the
+> search. cap=2's residual edge over cap=1 decoupled is +19/2400 (~0.008, 3/4 salts) —
+> borderline noise, and the USER's design is top-entry-only. ADOPTED:
+> FiveColourProvider::FetchSearchCap()=1; the collapsed-main widening respects a cap-1
+> provider; MTG_UNPRUNED audit unchanged; byte-identical to the measured env arm
+> (digest-exact on all 4 cells). GT rebaselined deliberately WORSE (karoo precedent):
+> regression +0.01..0.02 ×4 keys, smoke d3 +0.047 / d5 +0.093, overnight ×8 keys — this is
+> the clairvoyance leaving the measurement, not play getting worse. Gen labeller cost:
+> 25,181 → **5,481 units/rollout** (4.6x cheaper than pre-fix, 2x cheaper than the
+> pre-phase era) — the secondary box's gen throughput is more than restored, no gen-scoped
+> arm needed (the policy is the play policy).
 
 2026-08-18. **Self-contained protocol for an IDLE machine** — read this and you can run it cold.
 Context lives in `fivecolour-mullgen-labeller-sweep.md`; none of it is required to execute.
