@@ -1,5 +1,37 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS UPDATE 2026-08-20 (condemnation HELD-OUT + PERF): metric-NEUTRAL on held-out with a
+> persistent structural class; perf saving is LARGE (−34% searched wall). ADOPTION = USER CALL.
+>
+> Full held-out (overnight fivecolour, 12 keys) + train refresh at f9a92e6 (post-Garth GT),
+> per-game vs committed gt_logs; OFF arm re-verified byte-identical (train 5/5 PASS).
+> * **Aggregate:** train net −4.0 turns/600 games; held-out net **−2.0 turns/2800 searched games
+>   (≈ −0.0007/game = NEUTRAL)**, d0 4/4 byte-identical. Key-level held-out: 4 green / 1 flat /
+>   3 red (reds +0.0033..+0.0100/game: d3_s6006, d3_s7007, d5_s6006).
+> * **Worse games (38 instances):** budget-escalation matrix (4×/16× both arms) → 18 churn —
+>   including the scariest case, gi315 d3_s4004's win→LOSS, which recovers at 4× — and 20
+>   persistent; d7/32× confirms **10 structural** (s5005 gi63/gi320; s6006 gi10/41/93/255/341;
+>   s7007 gi66/113/237). Train structural is still only gi187. Held-out structural rate
+>   ~10/2800 = 0.36% of searched games, each costing +1 turn.
+> * **The structural mechanism (traces, same draws both arms): TWO-MAIN CAST-SPLITTING.** The
+>   winning turn casts X in m1 AND Y in m2 (gi237: Faeburrow m1 + Oko m2 → T4 win; gi66:
+>   Deathrite m1 + Faeburrow m2; gi113: Deathrite m1 + Cannons+Jared m2 for lethal). The turn's
+>   whole-pool affords both only split across mains (dorks/phase rules force one to m2), and the
+>   m1 solve can never afford BOTH at m1 — so one is necessarily "passed", stamped, condemned.
+>   This is the recorded "passed ≠ declined" defect in its purest form: no amount of budget fixes
+>   it because the line is FILTERED, not underexplored. Secondary class: rollout-valuation flips
+>   (condemnation inside rollouts shifts plan scores → a T1–T3 land/fetch pick flips → shuffle →
+>   draws diverge; gi63, gi10, gi254, gi341, gi255 — outcome then part draw-luck, still
+>   budget-immune).
+> * **PERF (the lever's original point): −34% searched wall on fivecolour** (same box, same
+>   commit, back-to-back solo per-deck train runs, summed case ms: ON 1651s vs OFF 2496s;
+>   per key −26..−43%). That fully claws back the phase lever's +35% cost.
+> * **The trade for adoption:** buy back the phase lever's cost at the price of a 0.2–0.4%
+>   structural per-game failure rate (metric-neutral in aggregate because budget freed elsewhere
+>   wins as many games as the filter loses). Sound retry that would remove the trade: make the
+>   stamp record declined-BY-VALUATION only (distinguish from pruned/tie/mana-infeasible-at-m1),
+>   or exempt cards whose m1-affordability was consumed by another cast (the split-turn test).
+>
 > ## STATUS UPDATE 2026-08-19 (condemn-dig round 2, FAEBURROW DOCTRINE): condemnation now
 > NEUTRAL-TO-GREEN on train; adoption pending held-out + USER.
 >
