@@ -6803,6 +6803,37 @@ namespace groupwave
     }
 }
 
+// --- Enumeration time share (MTG_ENUM_TIME, off by default = zero cost) -----------------------
+// Sizes the harvest-memo opportunity: accumulates wall ns spent inside the FSLine machinery's
+// EnumeratePlans(WithLand)+MoveOrderPlans calls (the memoizable product), dumped at exit next to
+// the game wall. Measurement only; ratio is contention-tolerant (both sides inflate together).
+static std::atomic<unsigned long long> g_enum_time_ns{0};
+static std::atomic<unsigned long long> g_enum_time_calls{0};
+inline bool EnumTimeOn() { static const bool v = EnvOn("MTG_ENUM_TIME"); return v; }
+struct EnumTimeScope
+{
+    bool on;
+    std::chrono::steady_clock::time_point t0;
+    EnumTimeScope() : on(EnumTimeOn())
+    { if (on) { t0 = std::chrono::steady_clock::now(); } }
+    ~EnumTimeScope()
+    {
+        if (!on) { return; }
+        g_enum_time_ns.fetch_add(static_cast<unsigned long long>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - t0).count()),
+            std::memory_order_relaxed);
+        g_enum_time_calls.fetch_add(1, std::memory_order_relaxed);
+    }
+};
+namespace { struct EnumTimeDumper { ~EnumTimeDumper()
+{
+    if (!EnumTimeOn()) { return; }
+    std::fprintf(stderr, "[enumtime] fsline enumeration: %llu calls, %.3f s total\n",
+                 (unsigned long long)g_enum_time_calls.load(),
+                 g_enum_time_ns.load() / 1e9);
+} }; EnumTimeDumper g_enum_time_dumper; }
+
 // --- Consideration diagnostics (MTG_CONSIDER_STATS, off by default = zero cost) ---------------
 // The single-consideration map (USER 2026-08-14: "figure out where we are considering spells
 // multiple times"): attributes every CollectActions harvest to its CALL-SITE CONTEXT, built from
@@ -16566,7 +16597,12 @@ namespace enummemo
     };
     inline thread_local std::unordered_map<TranspositionTable::Key, Entry,
                                            TranspositionTable::KeyHash> t_cache;
-    constexpr std::size_t kCap = 8192;         // plan vectors are heavier than single Plans
+    // Cap env-ized 2026-08-20: the 8192 default clear-on-full THRASHED on the heavy fivecolour
+    // d6 game (today's census: ~130k distinct fs6 states/game, within-decision dup 71-88%) --
+    // 51 clears -> 1% hit rate was the CAP's failure, not state diversity. MTG_ENUM_MEMO_CAP
+    // for the re-measure.
+    inline std::size_t Cap()
+    { static const std::size_t v = static_cast<std::size_t>(EnvInt("MTG_ENUM_MEMO_CAP", 8192)); return v; }
 
     inline std::atomic<uint64_t> g_hits{0}, g_misses{0}, g_clears{0};
     inline std::atomic<uint64_t> g_verified{0}, g_mismatches{0};
@@ -16665,7 +16701,82 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     else
     {
         // First visit: store only the cheap marker (epoch + key); no plan copy.
-        if (cache.size() >= enummemo::kCap)
+        if (cache.size() >= enummemo::Cap())
+        {
+            cache.clear();
+            enummemo::g_clears.fetch_add(1, std::memory_order_relaxed);
+        }
+        cache[k] = enummemo::Entry{ g_decision_epoch, own_md, false, {} };
+    }
+    return plans;
+}
+
+// M2 twin of the memoized host above (COVERAGE FIX 2026-08-20): FSLineTail's second-main
+// enumeration calls EnumeratePlans DIRECTLY when the m2 land drop is off -- the shipped
+// configuration -- so the sites today's census ranks hottest (enum.m2.fs5/fs6, ~1.1M calls with
+// 78-88% within-decision duplication on the heavy fivecolour game) bypassed the 2026-08-14 memo
+// entirely; its measured wash was COVERAGE (41k of 1.28M enumeration calls), not hit rate (38%)
+// and not the cap. Same gates, same cache/promotion policy, key at is_pre_combat=false (which
+// now folds the live condemnation stamp -- the filter changes this harvest).
+static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& state)
+{
+    const bool memo_ok = enummemo::Enabled() && !HumanPlayActive()
+                      && !g_bp_root_enum
+                      && g_bp_enum_depth == 0
+                      && groupwave::g_state.tranche_rank < 0
+                      && g_search_candidate_enum
+                      && g_cantrip_order_site == nullptr
+                      && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
+    if (!memo_ok) { return EnumeratePlans(state, false); }
+
+    const TranspositionTable::Key k = BuildBreakpointKey(state, false);
+    auto& cache = enummemo::t_cache;
+    auto it = cache.find(k);
+    if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans)
+    {
+        enummemo::g_hits.fetch_add(1, std::memory_order_relaxed);
+        if (enummemo::VerifyOn())
+        {
+            const int saved_md = groupwave::g_state.max_dropped;
+            groupwave::g_state.max_dropped = 0;
+            const std::vector<TurnSolver::Plan> fresh = EnumeratePlans(state, false);
+            const int fresh_md = groupwave::g_state.max_dropped;
+            groupwave::g_state.max_dropped = saved_md;
+            enummemo::g_verified.fetch_add(1, std::memory_order_relaxed);
+            if (!enummemo::SamePlans(fresh, it->second.plans)
+                || fresh_md != it->second.max_dropped)
+            {
+                const uint64_t n = enummemo::g_mismatches.fetch_add(1, std::memory_order_relaxed);
+                if (n < 5)
+                {
+                    std::fprintf(stderr,
+                                 "[enum-memo] MISMATCH t%d m2: cached %zu plans md=%d vs fresh %zu md=%d\n",
+                                 state.turn_number, it->second.plans.size(),
+                                 it->second.max_dropped, fresh.size(), fresh_md);
+                }
+            }
+        }
+        groupwave::g_state.max_dropped =
+            std::max(groupwave::g_state.max_dropped, it->second.max_dropped);
+        return it->second.plans;
+    }
+
+    enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
+    const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
+    const int saved_md = groupwave::g_state.max_dropped;
+    groupwave::g_state.max_dropped = 0;
+    std::vector<TurnSolver::Plan> plans = EnumeratePlans(state, false);
+    const int own_md = groupwave::g_state.max_dropped;
+    groupwave::g_state.max_dropped = std::max(saved_md, own_md);
+    if (second_visit)
+    {
+        it->second.has_plans   = true;
+        it->second.max_dropped = own_md;
+        it->second.plans       = plans;
+    }
+    else
+    {
+        if (cache.size() >= enummemo::Cap())
         {
             cache.clear();
             enummemo::g_clears.fetch_add(1, std::memory_order_relaxed);
@@ -16838,6 +16949,23 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         }
         Fold(k, static_cast<uint64_t>(p.library.size()));
         if (!p.library.empty()) { Fold(k, p.library.front().m_name_hash); }
+        // Live-library ORDERED digest (added 2026-08-20, enum-memo verify find #3): the
+        // "size => content" clairvoyance argument survives suppressed shuffles but NOT fetch
+        // REMOVALS (two sibling lines that fetched different duals leave same-size, same-front
+        // libraries with different content, the spent fetchland sitting in a graveyard this key
+        // only folds when retrace is live) and NOT reorders past the front card (a scry-bottom
+        // moves a card without changing the multiset, flipping the fetch-target scan order and
+        // every future draw) -- such states shared FSLineCache/TT entries while enumerating
+        // different fetch targets and drawing different futures. One polynomial pass over the
+        // live window, a single Fold: order-exact at the same cost a multiset sum would have
+        // been (a multiset digest was tried first and left the reorder class colliding). The
+        // incremental-key revisit can move this into Library if it ever prices too high.
+        {
+            std::uint64_t ldig = 1469598103934665603ull;
+            for (const Card& c : p.library)
+            { ldig = ldig * 1099511628211ull + c.m_name_hash; }
+            Fold(k, ldig);
+        }
         // Full ordered library when shuffle can reorder it (see above). Skipped when OFF.
         if (shuffle_keys) { for (const Card& c : p.library) { Fold(k, c.m_name_hash); } }
 
@@ -16965,6 +17093,19 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // never sets them keeps the EXACT prior key (byte-identical).
         if (perm.temp_haste)   { Fold(tk, 0x7A57E); }
         if (perm.exile_at_end) { Fold(tk, 0xE71E); }
+        // Planeswalker loyalty + once-per-turn activation flag (found 2026-08-20 by the enum
+        // memo's verify harness): loyalty is a DEDICATED field, not a Counter, and an
+        // auto-resolved -3 with no targets changes nothing else this key folds -- so
+        // "L5, unused" and "L2, used" Jared states collided, poisoning any same-key memo
+        // (FSLineCache / rollout TT included). Same latent class as the storage-battery hole
+        // above; Dominance.h has folded BOTH fields all along. Folded ONLY for walkers
+        // (nonzero loyalty or flag set), so walker-less boards keep the EXACT prior key.
+        if (perm.loyalty != 0 || perm.loyalty_activated_this_turn)
+        {
+            Fold(tk, 0x10A17);
+            Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.loyalty)));
+            Fold(tk, perm.loyalty_activated_this_turn ? 1u : 0u);
+        }
         Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.damage)));
         for (const Counter& ctr : perm.counters)
         {
@@ -17737,9 +17878,12 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // search-side half of the rules fix (the executor's greedy main-2 land play was suppressed
         // at depth>0 PRECISELY because this path could not model a land, AIEngine::TakeTurn
         // gi=141 note). Off => the historical cast-only enumeration, byte-identical.
-        std::vector<TurnSolver::Plan> post = Main2DropEnabled()
-            ? EnumeratePlansWithLand(state, false)
-            : EnumeratePlans(state, false);
+        std::vector<TurnSolver::Plan> post;
+        {
+            EnumTimeScope _ets;
+            post = Main2DropEnabled() ? EnumeratePlansWithLand(state, false)
+                                      : EnumeratePlansM2Memoized(state);
+        }
         // Always allow casting nothing in the second main and just advancing the
         // turn. EnumeratePlans returns an empty vector when no post-combat play is
         // castable (e.g. the pre-combat main tapped out), so without this the loop
@@ -18043,12 +18187,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     g_bp_root_enum = bp_root;
     groupwave::g_state.max_dropped = 0;   // reset; capture right after (nested scoring-time
                                           // enumerations would otherwise leak into it)
-    std::vector<TurnSolver::Plan> pre = EnumeratePlansWithLand(state, true);
-    g_bp_root_enum = false;
+    std::vector<TurnSolver::Plan> pre;
+    {
+        EnumTimeScope _ets;
+        pre = EnumeratePlansWithLand(state, true);
+        g_bp_root_enum = false;
+        MoveOrderPlans(pre);   // lethal-looking / higher-value plans first -> earlier B&B cutoff
+    }
     // Groups the breadth cap dropped from THIS node's enumeration (max over the per-land inner
     // calls) -- the group-wave phase below walks one tranche per dropped group.
     const int gw_dropped = groupwave::g_state.max_dropped;
-    MoveOrderPlans(pre);   // lethal-looking / higher-value plans first -> earlier B&B cutoff
 
     // VALUE-RANKED BEAM: reorder `pre` by the PROBE's recorded value-win-turns for this node, so the beam-cap
     // below keeps the top-W lines the VALUE pass rated best (not the static MoveOrderPlans order). The probe
@@ -21046,6 +21194,42 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     Fold(k, static_cast<uint64_t>(f.wild));
     Fold(k, static_cast<uint64_t>(state.spells_cast_this_turn));
     Fold(k, static_cast<uint64_t>(state.casts_remaining_this_turn + 1));   // -1 == unset
+    // ACTIVE SCRIPTED PINS (2026-08-20, enum-memo verify find #4): an outer candidate's
+    // ApplyPlanDirect holds consumable thread-local pins (top/etbdig/tutor/reorder/tapmode)
+    // across its nested enumerations and solves, and a live pin steers the next resolution
+    // (a pinned tutor pick flips the fetch-target enumeration; tapmode=1 flips dork-reserve
+    // emission) -- so the SAME state enumerates differently under different pin sets. Folded
+    // only when some pin is live; pin-free calls keep the exact prior key.
+    if (g_scripted_top_choice >= 0 || g_scripted_etbdig_choice >= 0
+        || g_scripted_tutor_choice >= 0 || g_scripted_reorder_choice >= 0
+        || g_scripted_tapmode != 0)
+    {
+        Fold(k, 0x5C21);
+        Fold(k, static_cast<uint64_t>(g_scripted_top_choice + 1));
+        Fold(k, static_cast<uint64_t>(g_scripted_etbdig_choice + 1));
+        Fold(k, static_cast<uint64_t>(g_scripted_tutor_choice + 1));
+        Fold(k, static_cast<uint64_t>(g_scripted_reorder_choice + 1));
+        Fold(k, static_cast<uint64_t>(g_scripted_tapmode));
+    }
+    // Archangel free-cast bank (added 2026-08-20, caught by MTG_ENUM_MEMO_VERIFY: cached 9
+    // plans vs fresh 4 at t8 m2 = the free-variant emission): a this-turn post-combat counter,
+    // so two same-board same-life states can carry different banks (damage split across turns
+    // differs) and enumerate DIFFERENT free-cast variants. Folded only when non-zero, so every
+    // bank-less state keeps the exact prior key.
+    if (state.free_casts_available > 0)
+    { Fold(k, 0xF5EE); Fold(k, static_cast<uint64_t>(state.free_casts_available)); }
+    // LIVE ORDER-CONDEMNATION stamp (added 2026-08-20, when the m2-facing enum memo gained
+    // coverage): a live stamp FILTERS the post-combat harvest, so two same-board states with
+    // different stamp lists enumerate differently -- exactly the "same-turn m2 memo must fold
+    // m1_hand" case BuildSimKey's note anticipates. Folded only when live; stale/empty stamps
+    // keep the exact prior key.
+    if (state.m1_hand_n > 0 && state.m1_hand_turn == state.turn_number)
+    {
+        Fold(k, 0x515A);
+        Fold(k, static_cast<uint64_t>(state.m1_hand_n));
+        for (int i = 0; i < state.m1_hand_n; ++i)
+        { Fold(k, static_cast<uint64_t>(state.m1_hand[i])); }
+    }
     return k;
 }
 

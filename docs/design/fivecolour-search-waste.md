@@ -1,5 +1,43 @@
 # FiveColour search-waste census + the free-cast candidate prune
 
+> ## STATUS 2026-08-20 (items 1+5 dig: THREE REAL KEY HOLES found via MTG_ENUM_MEMO_VERIFY;
+> memo re-opened but blocked on ONE residual verify class)
+>
+> USER direction: pursue (1) the fs-nest duplication and (5) the slow-game tail. They are ONE
+> problem: the tail is fivecolour d5/d6 (15 SLOW-GAMEs in the post-adopt overnight, all
+> fivecolour, 30-107s CONTENDED = ~37s quiet; census of the worst: 1.87M harvests, 71% dup,
+> fs5/fs6 78-88%). MTG_ENUM_TIME (new instrument, committed): 36% of that game's wall is
+> FSLine enumeration+MoveOrder (1.28M calls, ~28us each).
+>
+> KEY HISTORY CORRECTION: the 2026-08-14 MTG_ENUM_MEMO rejection ("1% hit rate at d5") was
+> mis-attributed. Real causes, measured today: (a) the 8192 clear-on-full cap thrashed
+> (env-ized: MTG_ENUM_MEMO_CAP; at 256k, 0 clears); (b) COVERAGE -- the memo wrapped only
+> EnumeratePlansWithLand, and FSLineTail's m2 enumeration (the hottest sites, ~1.1M calls)
+> calls EnumeratePlans directly when Main2Drop is off (the shipped config). M2 twin added
+> (EnumeratePlansM2Memoized): hits 15.7k -> 609.7k (47%), wall 37.2 -> 33.3s (**-10.4%**) on
+> the heavy game. STILL DEFAULT OFF: adoption blocked on the residual verify class below.
+>
+> THREE REAL KEY HOLES the verify harness caught (all LIVE for FSLineCache/TT before today,
+> independent of the memo; all fixed in BuildSimKey/BuildBreakpointKey):
+> 1. **Planeswalker loyalty + once-per-turn flag** (dedicated fields, never folded; Dominance.h
+>    folded both all along). Jared's auto-resolved -3 with no targets changes nothing else the
+>    key sees -> "L5 unused" and "L2 used" collided. Killed 297 of 311 mismatches.
+> 2. **Live-library ordered digest**: fetch REMOVALS and scry-bottom REORDERS break the
+>    "size => content" clairvoyance argument (spent fetchland sits in a graveyard folded only
+>    when retrace is live). One polynomial pass, one Fold.
+> 3. **Archangel free-cast bank** (this-turn counter, same-life states can differ) + **live
+>    condemnation stamp** in BuildBreakpointKey (the m2 filter changes the harvest) + **active
+>    scripted pins** (top/etbdig/tutor/reorder/tapmode -- a live pin steers nested resolution).
+>
+> OPEN: 14/609k verify mismatches remain, ALL one shape -- t6 m1, equal plan counts, plans
+> differ only in fetch_target (Jetmir's Garden vs Blood Crypt) on the same Scalding Tarn drop.
+> ELIMINATED by direct fold-and-retest: loyalty, free-cast bank, library content (multiset),
+> library ORDER (polynomial), scripted pins. The differing input is something else that steers
+> fetch-target resolution at the same (state, key). NEXT PROBE: dump the fetch-target
+> enumeration's inputs at the colliding site (GameState::scripted_cheat_choice and the
+> provider's fetch-rank path are the remaining suspects). Until it is found and folded, the
+> memo stays a measurement lever; the KEY FIXES ship regardless (they are correctness).
+
 USER direction (2026-08-20): "analyze to make sure we aren't doing more work than absolutely
 necessary in the search. Cases where we re-search for a particular card should be flagged as
 potential waste. It might also make sense to prune what we consider in the Maelstrom Archangel
