@@ -6457,12 +6457,40 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     {
         const int slots = state.free_casts_available;
         const std::size_t base_n = actions.size();
+        // MTG_FREECAST_PRUNE (measurement lever, DEFAULT OFF): emit free variants only for the
+        // top (slots + 2) candidates by mana value, ties kept. USER direction 2026-08-20: "cheap
+        // cards seem like they should be at a disadvantage" -- inside any subset that casts both,
+        // giving the free slot to the dearer card weakly dominates (same board, >= leftover
+        // mana), and the +2 margin keeps alternatives for the colour-tight cases where the MV
+        // swap is not payable (paying the cheap card's coloured pips can be harder than its MV
+        // suggests). Never narrows human play (the viewer shows every legal option).
+        static const bool s_fc_prune = EnvOn("MTG_FREECAST_PRUNE");
+        int mv_floor = -1;
+        if (s_fc_prune && !HumanPlayActive())
+        {
+            std::vector<int> mvs;
+            mvs.reserve(base_n);
+            for (std::size_t i = 0; i < base_n; ++i)
+            {
+                if (actions[i].kind != Action::Kind::CastFromHand || actions[i].alt_cost)
+                { continue; }
+                mvs.push_back(actions[i].card_mv);
+            }
+            const int keep = slots + 2;
+            if (static_cast<int>(mvs.size()) > keep)
+            {
+                std::nth_element(mvs.begin(), mvs.begin() + (keep - 1), mvs.end(),
+                                 std::greater<int>());
+                mv_floor = mvs[keep - 1];
+            }
+        }
         for (int slot = 0; slot < slots; ++slot)
         {
             for (std::size_t i = 0; i < base_n; ++i)
             {
                 if (actions[i].kind != Action::Kind::CastFromHand) { continue; }
                 if (actions[i].alt_cost) { continue; }        // alt-cost casts are already free
+                if (mv_floor >= 0 && actions[i].card_mv < mv_floor) { continue; }
                 Action f = actions[i];
                 f.cost          = ManaCost{};                 // cast without paying its mana cost
                 if (f.card_mv > 0 && f.def && f.def->card.m_mana_cost.has_x)
