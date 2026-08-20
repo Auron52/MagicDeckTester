@@ -602,6 +602,14 @@ static bool KittyParkEnabled()
     return heurarm::Flag(heurarm::KE_PARK, on);
 }
 
+// MTG_METALCRAFT_CREDIT -- same-turn metalcraft equip-{0} credit at the ENUMERATION affordability
+// gate (see SameTurnMetalcraftEquipCredit). DEFAULT OFF -> byte-identical until the A/B is accepted.
+static bool MetalcraftCreditEnabled()
+{
+    static const bool on = EnvOn("MTG_METALCRAFT_CREDIT");
+    return heurarm::Flag(heurarm::METALCRAFT_CREDIT, on);
+}
+
 // THE PARK IS HALF A LOOP, AND FORCING ONLY THAT HALF WOULD BE A TRAP (USER, 2026-08-19: "it also
 // will often mean that we need to re-equip a creature the next turn ... at least if there is a
 // double striker on board"). The two halves are:
@@ -675,6 +683,133 @@ namespace keparkstats
                          static_cast<unsigned long long>(g_take_unpark[0].load()),
                          static_cast<unsigned long long>(g_take_park[1].load()),
                          static_cast<unsigned long long>(g_take_unpark[1].load()));
+        }
+    };
+    inline Dumper g_dumper;
+}
+
+// MTG_METALCRAFT_STATS -- did the metalcraft credit ever FIRE, and did firing ever change the
+// gate's verdict? The distinction is the whole diagnosis: a credit that is computed millions of
+// times but never RESCUES a subset is inert, and an inert lever reads as "measured, no effect"
+// when it was never actually exercised (this repo's dead-arm failure mode).
+namespace mcstats
+{
+    inline bool Enabled() { static const bool v = EnvOn("MTG_METALCRAFT_STATS"); return v; }
+    inline std::atomic<uint64_t> g_scan_on{0}, g_credited{0}, g_rescued{0}, g_big{0}, g_big_ok{0};
+
+    inline void ScanOn()   { if (Enabled()) { g_scan_on.fetch_add(1, std::memory_order_relaxed); } }
+    inline void Credited() { if (Enabled()) { g_credited.fetch_add(1, std::memory_order_relaxed); } }
+
+    // A COUNT cannot tell a real "cast artifact #3 -> free Hammer" rescue from a trivial one, and
+    // that distinction is the diagnosis when the arms come back digest-identical. Print the first
+    // few rescued subsets by name (single-threaded runs only -- interleaving is acceptable noise).
+    inline void Rescued(const std::vector<Action>& cands, const std::vector<int>& sel, int credit)
+    {
+        if (!Enabled()) { return; }
+        const uint64_t n = g_rescued.fetch_add(1, std::memory_order_relaxed);
+        if (n >= 20) { return; }
+        std::string names;
+        for (int j : sel)
+        {
+            if (!names.empty()) { names += " + "; }
+            if (cands[j].kind == Action::Kind::Equip) { names += "EQUIP "; }
+            names += cands[j].card_name.str();
+            names += "{" + std::to_string(cands[j].cost.ManaValue()) + "}";
+        }
+        std::fprintf(stderr, "[metalcraft-rescue] credit=%d  %s\n", credit, names.c_str());
+    }
+
+    // The three columns below track the EXPENSIVE case separately from the cheap one: an equip whose
+    // printed cost is >= {3} (Colossus Hammer {8}, Loxodon Warhammer {3}) is the claude-play games'
+    // actual line, while the {1} Bonesplitter rescues are the common shape that changes nothing.
+    // Together they localise WHERE the line dies -- emitted / in the odometer / built into a subset /
+    // legal / affordable -- which a single total cannot.
+
+    // Was an expensive equip EMITTED as a candidate at all?
+    inline std::atomic<uint64_t> g_big_cand{0};
+    inline void BigCandidate(const std::string& name)
+    {
+        const uint64_t n = g_big_cand.fetch_add(1, std::memory_order_relaxed);
+        if (n < 5) { std::fprintf(stderr, "[metalcraft-cand] expensive equip candidate: %s\n",
+                                  name.c_str()); }
+    }
+
+    // Does the expensive equip's GROUP survive the breadth cap into the odometer? This is the link
+    // between "offered as a candidate in every enumeration" and "never present in any subset".
+    inline std::atomic<uint64_t> g_cap_before{0}, g_cap_after{0};
+    inline void CapSurvival(const std::vector<Action>& cands,
+                            const std::vector<std::vector<int>>& groups,
+                            const std::vector<int>& independent, bool before)
+    {
+        bool present = false;
+        auto has_big = [&](int j)
+        { return cands[j].kind == Action::Kind::Equip && cands[j].cost.generic >= 3; };
+        for (const std::vector<int>& g : groups)
+        { for (int j : g) { if (has_big(j)) { present = true; break; } } if (present) { break; } }
+        if (!present) { for (int j : independent) { if (has_big(j)) { present = true; break; } } }
+        if (!present) { return; }
+        (before ? g_cap_before : g_cap_after).fetch_add(1, std::memory_order_relaxed);
+    }
+
+    // Subsets the ODOMETER built holding an expensive equip, counted BEFORE the per-subset
+    // legality rejections. Big() counts the survivors, so BigEnter - Big is what those reject.
+    inline std::atomic<uint64_t> g_big_enter{0}, g_consider{0}, g_any_equip{0};
+    inline void BigEnter(const std::vector<Action>& cands, const std::vector<int>& sel)
+    {
+        g_consider.fetch_add(1, std::memory_order_relaxed);
+        bool any_eq = false;
+        for (int j : sel)
+        {
+            if (cands[j].kind != Action::Kind::Equip) { continue; }
+            any_eq = true;
+            if (cands[j].cost.generic >= 3)
+            { g_big_enter.fetch_add(1, std::memory_order_relaxed); break; }
+        }
+        if (any_eq) { g_any_equip.fetch_add(1, std::memory_order_relaxed); }
+    }
+
+    // ... and the survivors of the per-subset legality rejections, with `ok` = passed the
+    // affordability gate once the credit was applied.
+    inline void Big(const std::vector<Action>& cands, const std::vector<int>& sel, bool ok)
+    {
+        if (!Enabled()) { return; }
+        const uint64_t n = g_big.fetch_add(1, std::memory_order_relaxed);
+        if (ok) { g_big_ok.fetch_add(1, std::memory_order_relaxed); }
+        if (n >= 10) { return; }
+        std::string names;
+        for (int j : sel)
+        {
+            if (!names.empty()) { names += " + "; }
+            if (cands[j].kind == Action::Kind::Equip) { names += "EQUIP "; }
+            names += cands[j].card_name.str();
+            names += "{" + std::to_string(cands[j].cost.ManaValue()) + "}";
+        }
+        std::fprintf(stderr, "[metalcraft-big] gate=%s  %s\n", ok ? "PASS" : "reject", names.c_str());
+    }
+
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            std::fprintf(stderr,
+                         "\n=== METALCRAFT CREDIT: enumerations with the scan ON %llu"
+                         " | subsets credited %llu | subsets RESCUED (gate flipped) %llu"
+                         " | enumerations OFFERING an equip >= {3}: %llu"
+                         " | in the odometer before/after the group cap: %llu/%llu"
+                         " | subsets considered %llu (holding ANY equip %llu) | holding one: %llu"
+                         " | surviving legality: %llu (gate PASS %llu) ===\n",
+                         static_cast<unsigned long long>(g_scan_on.load()),
+                         static_cast<unsigned long long>(g_credited.load()),
+                         static_cast<unsigned long long>(g_rescued.load()),
+                         static_cast<unsigned long long>(g_big_cand.load()),
+                         static_cast<unsigned long long>(g_cap_before.load()),
+                         static_cast<unsigned long long>(g_cap_after.load()),
+                         static_cast<unsigned long long>(g_consider.load()),
+                         static_cast<unsigned long long>(g_any_equip.load()),
+                         static_cast<unsigned long long>(g_big_enter.load()),
+                         static_cast<unsigned long long>(g_big.load()),
+                         static_cast<unsigned long long>(g_big_ok.load()));
         }
     };
     inline Dumper g_dumper;
@@ -1128,6 +1263,68 @@ static int SameTurnReducerGenericCredit(const GameState& state, const std::vecto
     if (!rc.Any()) { return 0; }
     int credit = 0;
     for (int j : sel) { credit += SameTurnReducerDiscountFor(rc, cands, j); }
+    return credit;
+}
+
+// Same-turn METALCRAFT credit (Puresteel Paladin) -- the Ruby Medallion precedent applied to the
+// EQUIP cost. The Equip candidate block bakes EquipCostGenericNow(state) into Action::cost, i.e.
+// the artifact count as it stands at ENUMERATION. So a subset that casts artifact #3 and then
+// equips is priced at the PRINTED cost (Colossus Hammer {8}) and rejected by the affordability
+// gate -- even though the equip pass runs after the casts and every payment site recomputes and
+// would charge {0}. The line is legal, payable and never offered.
+//
+// That conservatism is MEASURED, not hypothetical: it is the only systematic gap the claude-play
+// sweep found between the search and an informed human on KittyEquipment -- 2 of 16 games, ~1 turn
+// each, both of them "cast 2-3 artifacts, flip metalcraft ON, then stack Colossus Hammers for {0}"
+// (ledger stage 5d; disclosed at 6a as a known conservative bound).
+//
+// Returns the generic the selected Equips would NOT pay once the subset's own artifact casts flip
+// metalcraft on. Two soundness points:
+//   * ORDER. Casts are applied before the trailing equip/outlet pass in BOTH worlds (the executor's
+//     cast loop precedes its ability loop; ApplyPlanDirect the same), so an artifact cast in this
+//     subset is on the battlefield when the equip is paid. The credit is not assuming a sequence
+//     the apply cannot realise -- unlike the reducer credit, which is why THAT one strands at d0.
+//   * OPTIMISM. Over-crediting is safe here for the standard reason (GameLogger.h): a line the
+//     executor cannot pay drops the cast, the equip's own recompute then charges full price, and
+//     the equip is skipped -- it does not attach for free. EnumeratePlans ONLY, never the d0 leaf,
+//     per the LeafReducerCreditEnabled law: optimism is sound exactly where a rollout validates.
+static int SameTurnMetalcraftEquipCredit(const GameState& state, const std::vector<Action>& cands,
+                                         const std::vector<int>& sel)
+{
+    const int controller = state.active_player_index;
+    // Lowest artifact threshold among the metalcraft reducers that will be on the battlefield when
+    // the equips are paid: already there, or CAST BY THIS SUBSET (casts resolve first, above).
+    int threshold = 0;
+    auto note_threshold = [&threshold](int t)
+    { if (t > 0 && (threshold == 0 || t < threshold)) { threshold = t; } };
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d) { note_threshold(d->params.metalcraft_equip_zero_artifacts); }
+    }
+    for (int j : sel)
+    {
+        if (cands[j].kind != Action::Kind::CastFromHand) { continue; }
+        if (cands[j].def) { note_threshold(cands[j].def->params.metalcraft_equip_zero_artifacts); }
+    }
+    if (threshold <= 0) { return 0; }
+    // Artifacts on the battlefield once the subset's casts have resolved. Equipment ARE artifacts,
+    // so a cast Bonesplitter counts itself toward the threshold that makes the NEXT equip free.
+    int artifacts = CountControlledArtifacts(state, controller);
+    for (int j : sel)
+    {
+        if (cands[j].kind != Action::Kind::CastFromHand) { continue; }
+        if (cands[j].def && cands[j].def->card.HasType(CardType::Artifact)) { ++artifacts; }
+    }
+    if (artifacts < threshold) { return 0; }
+    // Metalcraft will be ON: every selected equip costs {0}, so its baked generic is the credit.
+    // (An equip already priced {0} at enumeration contributes nothing -- self-consistent.)
+    int credit = 0;
+    for (int j : sel)
+    {
+        if (cands[j].kind == Action::Kind::Equip) { credit += cands[j].cost.generic; }
+    }
     return credit;
 }
 
@@ -14061,6 +14258,51 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // (mirrors Solve). Inert unless a reducer is a candidate -> every non-reducer deck byte-identical.
     bool any_reducer = false;
     for (const Action& ra : cands) { if (ra.def && !ra.def->params.reduces_spell_color.empty()) { any_reducer = true; break; } }
+    // Same-turn METALCRAFT scan (EnumeratePlans ONLY -- see the credit below). True only when BOTH
+    // a metalcraft reducer is present-or-castable AND some Equip candidate is still priced above
+    // {0}; so a deck without Puresteel, and this deck once metalcraft is already on, skip the
+    // per-subset credit entirely and stay byte-identical.
+    bool any_metalcraft = false;
+    if (MetalcraftCreditEnabled() && CostTricksEnabled())   // same family as the reducer/affinity
+    {                                                       // credits -> same MTG_NO_COST_TRICKS hatch
+        bool reducer = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.metalcraft_equip_zero_artifacts > 0) { reducer = true; break; }
+        }
+        if (!reducer)
+        {
+            for (const Action& ra : cands)
+            {
+                if (ra.kind == Action::Kind::CastFromHand && ra.def
+                    && ra.def->params.metalcraft_equip_zero_artifacts > 0) { reducer = true; break; }
+            }
+        }
+        if (reducer)
+        {
+            for (const Action& ra : cands)
+            {
+                if (ra.kind == Action::Kind::Equip && ra.cost.generic > 0)
+                { any_metalcraft = true; break; }
+            }
+        }
+        if (any_metalcraft)
+        {
+            mcstats::ScanOn();
+            // Is the EXPENSIVE equip even a candidate here? (see mcstats::Big -- one step further
+            // upstream: emitted at all, vs reaching the affordability gate inside a subset.)
+            if (mcstats::Enabled())
+            {
+                for (const Action& ra : cands)
+                {
+                    if (ra.kind == Action::Kind::Equip && ra.cost.generic >= 3)
+                    { mcstats::BigCandidate(ra.card_name.str()); break; }
+                }
+            }
+        }
+    }
     // Any splice-onto-Arcane base? Gates the over-splice odometer skip (mirrors Solve); non-splice decks
     // pay nothing and stay byte-identical.
     bool any_splice = false;
@@ -14280,8 +14522,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // (a group-wave host re-enumerating; groupwave::g_state.tranche_rank >= 0) the cap instead
     // keeps ranks [0..R] and flags the rank-R group as REQUIRED; a call with no rank-R group
     // contributes nothing (its plan space was fully covered by wave 0 / earlier tranches).
+    if (any_metalcraft && mcstats::Enabled())
+    { mcstats::CapSurvival(cands, groups, independent, /*before=*/true); }
     CapGroupsBySituationalRank(state, cands, groups, group_hand_index,
                                static_cast<int>(independent.size()));
+    if (any_metalcraft && mcstats::Enabled())
+    { mcstats::CapSurvival(cands, groups, independent, /*before=*/false); }
     if (groupwave::g_state.tranche_rank >= 0 && !groupwave::g_state.call_active)
     { return {}; }   // no plans exist yet -- the odometer + Plan-B below are the only producers
 
@@ -14310,6 +14556,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // tranche's required (rank-R) group was already emitted by wave 0 or an earlier tranche
         // -- the highest-ranked-used group assigns every plan to exactly one tranche, which is
         // what makes the partition exact (no dedup needed). Inert in normal mode.
+        if (any_metalcraft && mcstats::Enabled()) { mcstats::BigEnter(cands, sel); }
         if (groupwave::g_state.tranche_rank >= 0 && !groupwave::SelTouchesRequired(sel)) { return; }
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
@@ -14552,6 +14799,41 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             {
                 combined.generic             = std::max(0, combined.generic - rcred);
                 noncreature_combined.generic = std::max(0, noncreature_combined.generic - rcred);
+            }
+        }
+        // Same-turn METALCRAFT (Puresteel Paladin): this subset's own artifact casts can flip the
+        // equip cost to {0} before the trailing equip pass pays it, so credit the equips' baked
+        // generic. See SameTurnMetalcraftEquipCredit for the order + optimism soundness argument.
+        if (any_metalcraft)
+        {
+            const int mcred = SameTurnMetalcraftEquipCredit(state, cands, sel);
+            if (mcred > 0)
+            {
+                if (mcstats::Enabled())
+                {
+                    mcstats::Credited();
+                    const bool was_ok = credited
+                        ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
+                        : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
+                    if (!was_ok) { mcstats::Rescued(cands, sel, mcred); }
+                }
+                combined.generic             = std::max(0, combined.generic - mcred);
+                noncreature_combined.generic = std::max(0, noncreature_combined.generic - mcred);
+            }
+            if (mcstats::Enabled())
+            {
+                bool big = false;
+                for (int j : sel)
+                {
+                    if (cands[j].kind == Action::Kind::Equip && cands[j].cost.generic >= 3)
+                    { big = true; break; }
+                }
+                if (big)
+                {
+                    mcstats::Big(cands, sel, credited
+                        ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
+                        : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined)));
+                }
             }
         }
         bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
@@ -14850,7 +15132,25 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // 5-mana board), so the two must move together. 0 for every plan without an unlocking equip.
     int haste_unlock_bound = 0;
     for (const ManaPool& u : haste_unlock) { haste_unlock_bound += u.Total(); }
-    const int mana_bound = ManaPruneBound(pool, cands, haste_unlock_bound);
+    // ... and the same addend for the same-turn METALCRAFT credit, for exactly the reason above and
+    // under ManaPruneBound's own maintenance breadcrumb ("any FUTURE cost reducer credited per-subset
+    // in consider() rather than baked into a.cost"). MEASURED, not anticipated: with the credit on but
+    // this addend missing, a Colossus Hammer equip was a candidate in 4,092 of 4,092 enumerations,
+    // survived the group cap in all of them, and appeared in ZERO of the 89,492 subsets consider()
+    // ever saw -- the scalar bound charges the equip its printed {8} and skips the odometer position
+    // before the credit can forgive it. Pricing the equip correctly (SameTurnMetalcraftEquipCredit) is
+    // necessary but NOT sufficient; the position has to survive to be priced.
+    //
+    // The addend is the total generic of every Equip candidate: an UPPER bound on what the credit can
+    // forgive, which is the safe direction (this is a ceiling on the turn's mana, so raising it only
+    // ever prunes LESS). Zero unless the metalcraft scan armed -> every other deck byte-identical.
+    int metalcraft_bound = 0;
+    if (any_metalcraft)
+    {
+        for (const Action& a : cands)
+        { if (a.kind == Action::Kind::Equip) { metalcraft_bound += a.cost.generic; } }
+    }
+    const int mana_bound = ManaPruneBound(pool, cands, haste_unlock_bound + metalcraft_bound);
     // Both indices are allocated ONLY when the deck actually uses them. Solve is the rollout leaf --
     // called once per node -- so even default-constructing their (empty) vectors on every call cost a
     // measurable ~1% on decks that use neither (Hinata/TH/burn A/B, 2026-07-29). A null pointer plus a
