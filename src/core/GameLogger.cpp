@@ -84,6 +84,12 @@ std::mutex g_drop_mutex;
 struct DropStat { long total_short = 0; long colour_short = 0; bool accelerant = false; };
 std::map<std::string, DropStat> g_drop_counts;   // card name -> why it was dropped
 
+// STRANDED-EQUIP detector (see GameLogger.h). Per-thread because a plan is applied on one thread and
+// the "was this host's cast dropped?" question is scoped to that plan; the tally is process-wide
+// like every other audit counter.
+thread_local std::vector<int> t_dropped_cast_numbers;
+std::map<std::string, long>   g_stranded_equips;   // "<equipment> -> <host>" -> count
+
 struct AffordAuditDump
 {
     ~AffordAuditDump()
@@ -109,6 +115,13 @@ struct AffordAuditDump
                              kv.first.c_str(), kv.second.total_short, kv.second.colour_short,
                              kv.second.accelerant ? "   <-- accelerant" : "");
             }
+            long stranded_eq = 0;
+            for (const auto& kv : g_stranded_equips) { stranded_eq += kv.second; }
+            std::fprintf(stderr,
+                "AFFORD_AUDIT  real drops: STRANDED equips=%ld   (an Equip whose co-selected HOST"
+                " cast was dropped: it still PAID and then no-opped)\n", stranded_eq);
+            for (const auto& kv : g_stranded_equips)
+            { std::fprintf(stderr, "AFFORD_AUDIT    %-40s x%ld\n", kv.first.c_str(), kv.second); }
         }
     }
 };
@@ -136,6 +149,25 @@ void NoteDroppedCast(const std::string& name, bool is_accelerant, bool colour_sh
     DropStat& e = g_drop_counts[name];
     ++(colour_short ? e.colour_short : e.total_short);
     e.accelerant = is_accelerant;
+}
+
+void ResetDroppedCastNumbers() { t_dropped_cast_numbers.clear(); }
+
+void NoteDroppedCastNumber(int card_number)
+{
+    if (card_number > 0) { t_dropped_cast_numbers.push_back(card_number); }
+}
+
+bool WasCastDroppedThisPlan(int card_number)
+{
+    for (int n : t_dropped_cast_numbers) { if (n == card_number) { return true; } }
+    return false;
+}
+
+void NoteStrandedEquip(const std::string& equipment, const std::string& host)
+{
+    std::lock_guard<std::mutex> lk(g_drop_mutex);
+    ++g_stranded_equips[equipment + " -> " + host];
 }
 
 void GameLogger::StartGame(const std::string& run_id, int game_number,

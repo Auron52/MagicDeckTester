@@ -880,6 +880,25 @@ void NoteIllegalBundleTap(const std::string& source, int chosen_color, int amoun
 extern std::atomic<long> g_illegal_bundle_taps;
 void NoteDroppedCast(const std::string& name, bool is_accelerant, bool colour_short);
 
+// STRANDED-EQUIP extension of the same detector (2026-08-20). The note above names ONE drop as
+// "not benign" -- a same-turn accelerant, whose loss strands the payoff it was cast to fund. A
+// dropped CREATURE cast is the same kind of exception whenever a later Equip in the SAME plan was
+// co-selected against it as its host: the equip still runs, TapForCost still PAYS, and ApplyEquip
+// then finds no host and returns, so the cost buys nothing and the game log claims an attach the
+// board does not show. Measured on KittyEquipment: 2 of 1,270 equips, 2 games in 600 -- invisible
+// to the accelerant counter, which correctly reports 0 for that deck.
+//
+// Recorded the same way and for the same reason as the accelerant flag: so ANY deck can be checked
+// with one env var instead of sweeping 600 game logs for `equip -> #<number>`.
+//     MTG_AFFORD_AUDIT=1 ./build/Release/mtg <deck> ... 2>&1 | grep STRANDED
+// Card NUMBERS (not names) because that is what an Equip action carries in sac_victim_id, and a
+// deck holds several copies of a card. Reset per plan application; all three are no-ops unless the
+// audit is on, so game logic and every digest are byte-identical either way.
+void ResetDroppedCastNumbers();
+void NoteDroppedCastNumber(int card_number);
+bool WasCastDroppedThisPlan(int card_number);
+void NoteStrandedEquip(const std::string& equipment, const std::string& host);
+
 // RAII: suppress human-play (and, in a claude-play session, unpruned) semantics for the current
 // scope. Placed at the top of RolloutWinTurn so the engine's clairvoyant playouts match the
 // autonomous game. Restores on exit so nested scopes compose.

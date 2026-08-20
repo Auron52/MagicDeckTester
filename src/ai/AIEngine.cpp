@@ -2827,6 +2827,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                      seq.empty() ? "(none)" : seq.c_str());
     }
 
+    // Audit-only: a fresh per-plan dropped-cast list, so the stranded-equip detector below cannot
+    // see a drop from an earlier plan on this worker thread. No-op unless the audit is on.
+    if (AffordAuditOn()) { ResetDroppedCastNumbers(); }
+
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
@@ -3246,6 +3250,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 && EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id))
             { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
                                    "equip -> " + bf_name(a.sac_victim_id)); }
+            // STRANDED EQUIP (audit-only, see GameLogger.h): the host this equip was co-selected
+            // against was dropped as unpayable earlier in this same plan, so TapForCost below is
+            // about to pay for an attach ApplyEquip will refuse. Counted, NOT prevented -- the fix
+            // moves the play digest and is a separate, measured decision.
+            if (AffordAuditOn() && WasCastDroppedThisPlan(a.sac_victim_id))
+            { NoteStrandedEquip(a.card_name.str(), bf_name(a.sac_victim_id)); }
             ManaPool avail = AvailableManaPool(state);
             if (!EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
                 && TapForCost(state,
@@ -3855,6 +3865,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                                 IsManaRitual(*def)
                                     || (def->params.mana_rock && !def->card.IsCreature()),
                                 colour_short);
+                // ...and its NUMBER, so a later Equip in this same plan can tell that the host it
+                // was co-selected against never arrived (see the stranded-equip note in
+                // GameLogger.h). Audit-only, like every other line in this block.
+                NoteDroppedCastNumber(hand_card.m_number);
                 if (AffordAuditLevel() >= 2)
                 {
                     const ManaPool rem = AvailableManaPool(state);

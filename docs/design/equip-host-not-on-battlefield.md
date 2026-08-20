@@ -59,11 +59,22 @@ the control, order and park arms.
 
 ## What to do, in the order that pays
 
-1. **Extend the STRANDED detector to equips (measurement only, byte-identical, no rebaseline).**
-   The audit already records each dropped cast by name and classifies accelerants; add "was this
-   dropped card the `sac_victim_id` of an Equip later in the same plan?". That turns a defect class
-   that currently needs a 600-game log sweep to notice into one env var on any deck — which is
-   exactly the argument the accelerant detector was built on. This is the cheap, safe step.
+1. ~~Extend the STRANDED detector to equips.~~ **DONE** (measurement only, byte-identical, no
+   rebaseline). `MTG_AFFORD_AUDIT=1` now prints a second STRANDED line beside the accelerant one:
+
+   ```
+   AFFORD_AUDIT  real drops: STRANDED equips=1   (an Equip whose co-selected HOST cast was
+                                                  dropped: it still PAID and then no-opped)
+   AFFORD_AUDIT    Bonesplitter -> #48                      x1
+   ```
+
+   That is the reproducer above, caught with one env var instead of a 600-game log sweep, on any
+   deck. Implemented as a per-thread list of dropped card NUMBERS (an Equip carries
+   `sac_victim_id`, and a deck holds several copies of a card), reset per plan application and
+   consulted at the Equip branch BEFORE `TapForCost` pays. Every call site is behind
+   `AffordAuditOn()`, so with the audit off nothing is computed: verified byte-identical
+   (`base.train 123c0bdaaf6ffe5d`, `park.train 6a558d4d77e2241f`), smoke 36/36 and regression 60/60
+   green.
 2. Only then consider the apply-side guard: require the host on the battlefield BEFORE `TapForCost`,
    and log only after a successful attach. **Both halves move the play digest** — `LogAbility` folds
    into it (`FoldStr("A")` runs before the `m_digest_only` early-out), so even the log-only half
