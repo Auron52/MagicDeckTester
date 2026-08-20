@@ -13,6 +13,12 @@ Prose outside those blocks is hand-written and the script leaves it alone. Compa
 `mirrorwing-card-tournament.md` (the plan and apparatus), `mirrorwing-trick-suite-result.md` (the
 earlier screening this supersedes).
 
+**Provenance.** Runs A–E were all measured on ONE engine state: `src` tree `514e2539ddc9`, with the shipped Mirrorwing keep table (commit `a1be8ffc`, K=17, R=40) aliased but never
+regenerated. Every number below is comparable to every other because of that, and to nothing
+outside it — a later engine change does not invalidate the *comparisons* here, but it does
+mean re-running would not reproduce these absolute means. Re-measure before mixing these
+figures with numbers from a different engine state.
+
 Metric throughout is **mean turn-to-kill; negative = better/faster**. `margin` is
 better-minus-worse game counts and `s` is that margin in its own noise units
 (margin / sqrt(divergent)) — a count bar means different things at different N, so both are given.
