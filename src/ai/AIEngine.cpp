@@ -3295,6 +3295,32 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             { ApplyGraveyardExileAbility(state, state.active_player_index, a.sac_source_id, a.gy_exile_mode); }
         }
+        else if (a.kind == Action::Kind::ActivateRevealTop)
+        {
+            // Call of the Wild (executor mirror): pay K x cost, K sequential reveal-deploys.
+            ManaPool avail = AvailableManaPool(state);
+            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            {
+                for (int k = 0; k < std::max(1, a.chosen_x); ++k)
+                { if (!ApplyRevealTopDeploy(state, state.active_player_index)) { break; } }
+            }
+        }
+        else if (a.kind == Action::Kind::UntapCreature)
+        {
+            // Wirewood Lodge (executor mirror): precondition-check first, then pay + untap.
+            const CardDefinition* ud = CardDatabase::Instance().Lookup(a.card_name);
+            if (ud != nullptr
+                && CanApplyUntapCreature(state, state.active_player_index, a.sac_source_id,
+                                         ud->params.untap_creature_subtype))
+            {
+                ManaPool avail = AvailableManaPool(state);
+                if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+                {
+                    ApplyUntapCreature(state, state.active_player_index, a.sac_source_id,
+                                       ud->params.untap_creature_subtype);
+                }
+            }
+        }
         else if (a.kind == Action::Kind::AttachAllEquipment)
         {
             // Balan attach-all (executor mirror -- same shared ApplyAttachAllEquipment).
@@ -3520,7 +3546,7 @@ bool AIEngine::TryPlaySpecificLand(GameState& state, const std::string& name,
         if (it->m_name != name) { continue; }
         if (it->m_impulse_no_land) { continue; }   // Apex-exiled land: castable only as a SPELL, never played
         auto d = CardDatabase::Instance().Lookup(it->m_name);
-        if (!d || !d->card.IsLand()) { continue; }
+        if (!PlayableAsLand(d)) { continue; }      // land, or spell//land back face
         if (pick == ap.hand.end()) { pick = it; }
         if (it->m_is_staged) { pick = it; break; }
     }
@@ -4081,6 +4107,16 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             ap.graveyard.push_back(state.battlefield[idx].card);
             state.battlefield.erase(state.battlefield.begin() + idx);
         }
+    }
+
+    // Natural Order: "sacrifice a green creature" additional cost, paid at cast (CR 601.2h) --
+    // the searched victim rides own_targets (the soulfire int, reused as a card m_number here);
+    // its dies-triggers (Worldspine tokens + shuffle-back, Vaultborn copy) resolve before the
+    // spell does. Lockstep with the rollout's apply_one branch.
+    if (!def->params.sac_additional_creature_color.empty())
+    {
+        PerformSacrificeCreatureCost(state, hand_card.m_name.str(),
+                                     def->params.sac_additional_creature_color, own_targets);
     }
 
     ap.hand.erase(std::find_if(ap.hand.begin(), ap.hand.end(),

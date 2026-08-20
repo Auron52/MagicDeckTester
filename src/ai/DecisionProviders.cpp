@@ -227,6 +227,7 @@ GenericProvider::TutorCandidates(const GameState& s, int controller, const CardP
         bool type_ok = pp.tutor_types.empty();
         for (const std::string& t : pp.tutor_types)
         { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+        if (!CardHasColorNamed(card, pp.tutor_color)) { type_ok = false; }   // Natural Order: green only
         if (type_ok && seen.insert(lc.m_name).second) { all.push_back(lc.m_name); }
     }
     return all;
@@ -8103,6 +8104,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
     bool goblin = false, gift = false, fivec = false, mirrorwing = false, equipment = false;
+    bool stompy = false;   // StompySurprise (elf ramp) -- routes to Generic BEFORE the anti check
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -8166,6 +8168,19 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             equipment = true;
         }
 
+        // StompySurprise (mono-green elf ramp): any of its gated params marks the deck. Its
+        // Worldly Tutor carries tutor_to_top, which would otherwise trip the anti-lifegain
+        // signature below and misroute the whole deck to AntiLifegainProvider (the Goblin-Matron
+        // misroute class -- its tutor heuristic hunts lifegain_to_loss enablers this deck does
+        // not run). Routes to GenericProvider (no archetype hooks yet; pure search).
+        if (p.etb_team_pump_per_creature || p.activated_reveal_top_cost.has_value()
+            || !p.sac_additional_creature_color.empty()
+            || !p.mana_requires_land_subtype.empty()
+            || (def->card.IsCreature() && !p.mana_per_creature_subtype.empty()))
+        {
+            stompy = true;
+        }
+
         if (p.lifegain_to_loss || p.verse_damage || p.alt_lifegain_cost > 0
             || p.tutor_to_hand || p.tutor_to_top || !p.fetch_land_types.empty())
         {
@@ -8214,6 +8229,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Matron tutor width (12, -0.0620 held-out). It derives from GenericProvider and overrides only
     // those, so every other decision still resolves through exactly the code this deck used before.
     if (goblin) { return g_goblins; }
+    // StompySurprise: GenericProvider (pure search; no archetype hooks yet). Must WIN OVER anti --
+    // Worldly Tutor's tutor_to_top would misroute it to AntiLifegainProvider.
+    if (stompy) { return g_generic; }
     // Equipment aggro; must WIN OVER anti (Stoneforge Mystic's tutor_to_hand sets that signature
     // on its own -- see the equipment detection note above). No other deck carries the equipment
     // gated params, so exclusivity is preserved.

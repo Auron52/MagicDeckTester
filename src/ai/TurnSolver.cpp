@@ -409,11 +409,11 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
             // Only the unrestricted "{T}: Add {C}" mode is legal for a noncreature spell. Book it as
             // colourless (pays generic pips, never a coloured one) instead of as wild. Yield
             // resolution mirrors AddSourceToPool's own yield_override handling.
-            const int yield = PermanentManaYield(p, *def);
+            const int yield = PermanentManaYield(state, p, *def);
             pool.Add(Color::Colorless, yield >= 0 ? yield : ManaProducedPerTap(*def));
             continue;
         }
-        AddSourceToPool(pool, state, *def, PermanentManaYield(p, *def));
+        AddSourceToPool(pool, state, *def, PermanentManaYield(state, p, *def));
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }  // see AvailableManaPool
     return pool;
@@ -1584,7 +1584,7 @@ static std::vector<AttackingManaSource> CollectAttackingManaSources(const GameSt
             }
         }
 
-        const int y = PermanentManaYield(p, *def);
+        const int y = PermanentManaYield(state, p, *def);
         out.push_back({ power, y >= 0 ? y : ManaProducedPerTap(*def) });
     }
     std::sort(out.begin(), out.end(),
@@ -2408,7 +2408,7 @@ static void HasteUnlockedManaOf(const GameState& state, int host_id, ManaPool& o
     // copies the pool already credited, so it is deliberately not credited here (conservative).
     if (d->params.gy_land_exile_mana) { return; }
     ManaPool add;
-    AddSourceToPool(add, state, *d, perm ? PermanentManaYield(*perm, *d) : -1);
+    AddSourceToPool(add, state, *d, perm ? PermanentManaYield(state, *perm, *d) : -1);
     if (add.Total() <= 0) { return; }
     out.AddPool(add);
     if (!d->params.creature_mana_only) { out_nc.AddPool(add); }
@@ -5663,8 +5663,29 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // Narrowing to the few cards that matter keeps the search's branching factor small --
         // the general "heuristic narrows, search decides the rest" pattern.
         if (def.params.tutor_to_hand || def.params.tutor_to_top
-            || def.params.tutor_land_to_battlefield)
+            || def.params.tutor_land_to_battlefield || def.params.tutor_to_battlefield_single
+            || def.params.look_top_put_creature_count > 0)
         {
+            // Natural Order: "sacrifice a green creature" additional cost -- uncastable without a
+            // matching creature; otherwise emit one variant per DISTINCT victim NAME (most-
+            // expendable copy of each; same-name victims are fungible for the sacrifice), the
+            // victim's card m_number riding soulfire_own_targets (int reuse, the Twinflame
+            // precedent). Victim variants multiply the tutor-target axis below.
+            std::vector<int> sac_victims;   // card m_numbers; {0} = no additional cost
+            if (!def.params.sac_additional_creature_color.empty())
+            {
+                std::vector<int> cand_idx = SacCreatureCandidateIndices(
+                    state, state.active_player_index, def.params.sac_additional_creature_color);
+                std::unordered_set<std::string> seen_names;
+                for (int bi : cand_idx)
+                {
+                    const Permanent& v = state.battlefield[bi];
+                    if (seen_names.insert(v.card.m_name.str()).second)
+                    { sac_victims.push_back(v.card.m_number); }
+                }
+                if (sac_victims.empty()) { continue; }   // no legal victim -> not castable
+            }
+            else { sac_victims.push_back(0); }
             // Crop Rotation's "sacrifice a land" ADDITIONAL COST makes the cast illegal with no
             // land on the battlefield (a {G} off a mana dork alone cannot legally cast it) --
             // skip emission entirely in that state. Inert for every existing tutor (none carries
@@ -5685,18 +5706,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // both wrong and wasted work. One cast action, empty target; the fan-out in
             // EnumeratePlansWithLand adds Plan::tutor_choice variants. Human play keeps the name
             // path: the human picks among named variants, exactly as before.
-            if (TutorAxisResolveMode() && !HumanPlayActive() && TutorAxisEnabled())
+            if (TutorAxisResolveMode() && !HumanPlayActive() && TutorAxisEnabled()
+                && def.params.look_top_put_creature_count <= 0)   // Turntimber: named variants (below)
             {
-                Action a;
-                a.kind           = Action::Kind::CastFromHand;
-                a.card_name      = ap.hand[i].m_name;
-                a.hand_index     = i;
-                a.cost           = EffectiveCost(def, state);
-                a.eval           = EvalCard(def, state);
-                a.is_noncreature = !def.card.IsCreature();
-                a.card_mv        = def.card.m_mana_cost.ManaValue();
-                a.sacrifice_land = def.params.sacrifice_land;   // Crop Rotation's additional cost
-                actions.push_back(std::move(a));
+                for (int victim : sac_victims)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::CastFromHand;
+                    a.card_name      = ap.hand[i].m_name;
+                    a.hand_index     = i;
+                    a.cost           = EffectiveCost(def, state);
+                    a.eval           = EvalCard(def, state);
+                    a.is_noncreature = !def.card.IsCreature();
+                    a.card_mv        = def.card.m_mana_cost.ManaValue();
+                    a.sacrifice_land = def.params.sacrifice_land;   // Crop Rotation's additional cost
+                    a.soulfire_own_targets = victim;                // Natural Order sac victim (0 = none)
+                    actions.push_back(std::move(a));
+                }
                 continue;
             }
             // NO PlanContext here, and it is structural rather than an oversight: this runs during
@@ -5704,7 +5730,30 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // without knowing what else the turn will do. Only the post-dedup axis in
             // EnumeratePlansWithLand can supply one (see PlanContext.h). Anything that wants the
             // base pick to be plan-aware has to move this decision after plan assembly.
-            std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index, def.params);
+            std::vector<std::string> cands;
+            if (def.params.look_top_put_creature_count > 0)
+            {
+                // Turntimber Symbiosis: candidates = the distinct creature names among the CURRENT
+                // top N (clairvoyant), plus the explicit decline. Named variants survive the
+                // autonomous dedup via the #T signature term (core invariant: every legal put is a
+                // distinct plan the search scores).
+                const int lookn = std::min(def.params.look_top_put_creature_count,
+                                           static_cast<int>(ap.library.size()));
+                std::unordered_set<std::string> seen_tt;
+                for (int li = 0; li < lookn; ++li)
+                {
+                    const Card& lc = ap.library[li];
+                    const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+                    const Card& lcc = ld ? ld->card : lc;
+                    if (lcc.IsCreature() && seen_tt.insert(lc.m_name.str()).second)
+                    { cands.push_back(lc.m_name.str()); }
+                }
+                cands.push_back("TURNTIMBER_NONE");   // "you MAY put" -- declining is legal
+            }
+            else
+            {
+                cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index, def.params);
+            }
             if (cands.empty()) { cands.push_back(std::string{}); }  // whiff: castable, fetches nothing
             // Emit ONE target here (the provider's best) and search the rest as a post-dedup AXIS
             // (see the tutor fan-out in EnumeratePlansWithLand). Emitting them all was almost pure
@@ -5720,20 +5769,25 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // -0.0015. See docs/design/searched-action-subdecisions.md.
             // Human play keeps every variant: there the signature DOES include the target (the human
             // is the decision-maker and must see all of them), so nothing is discarded downstream.
-            if (!HumanPlayActive() && TutorAxisEnabled() && cands.size() > 1) { cands.resize(1); }
+            if (!HumanPlayActive() && TutorAxisEnabled() && cands.size() > 1
+                && def.params.look_top_put_creature_count <= 0) { cands.resize(1); }
             for (const std::string& tgt : cands)
             {
-                Action a;
-                a.kind           = Action::Kind::CastFromHand;
-                a.card_name      = ap.hand[i].m_name;
-                a.hand_index     = i;
-                a.cost           = EffectiveCost(def, state);
-                a.eval           = EvalCard(def, state);
-                a.is_noncreature = !def.card.IsCreature();
-                a.card_mv        = def.card.m_mana_cost.ManaValue();
-                a.tutor_target   = tgt;
-                a.sacrifice_land = def.params.sacrifice_land;   // Crop Rotation's additional cost
-                actions.push_back(std::move(a));
+                for (int victim : sac_victims)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::CastFromHand;
+                    a.card_name      = ap.hand[i].m_name;
+                    a.hand_index     = i;
+                    a.cost           = EffectiveCost(def, state);
+                    a.eval           = EvalCard(def, state);
+                    a.is_noncreature = !def.card.IsCreature();
+                    a.card_mv        = def.card.m_mana_cost.ManaValue();
+                    a.tutor_target   = tgt;
+                    a.sacrifice_land = def.params.sacrifice_land;   // Crop Rotation's additional cost
+                    a.soulfire_own_targets = victim;                // Natural Order sac victim (0 = none)
+                    actions.push_back(std::move(a));
+                }
             }
             continue;
         }
@@ -6666,7 +6720,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // worlds (the executor only applies search-produced Equip actions).
                     if (d->params.protection_from_everything) { continue; }
                     const bool src = (d->tmpl == CardTemplate::ManaDork) || d->params.mana_rock;
-                    const int  sc  = p.EffectivePower() + (src ? PermanentManaYield(p, *d) : 0)
+                    const int  sc  = p.EffectivePower() + (src ? PermanentManaYield(state, p, *d) : 0)
                                    + attack_payoff(*d);
                     hosts.push_back({ p.card.m_number, p.entered_this_turn,
                                       p.card.HasKeyword(Keyword::Haste), sc, /*in_hand=*/false });
@@ -7472,6 +7526,77 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.sac_source_id  = p.card.m_number;
                 a.gy_exile_mode  = 2;                 // gain-2-life mode
                 a.eval           = 1;                 // own life never under pressure here
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
+            }
+        }
+
+        // Call of the Wild "{2}{G}{G}: reveal top; creature -> battlefield, else graveyard"
+        // (repeatable) + Wirewood Lodge "{G}, {T}: Untap target Elf". StompySurprise battlefield
+        // abilities; param-gated -> no other deck emits them.
+        for (const Permanent& src : state.battlefield)
+        {
+            if (src.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+            if (!sd) { continue; }
+            if (sd->params.activated_reveal_top_cost.has_value())
+            {
+                // K activations as mutually-exclusive variants (shared sac_source_id); K bounded by
+                // the board's total mana over the per-activation cost -- the affordability filter
+                // (Solve's pool check on a.cost) prunes the rest. chosen_x carries K; the cost is
+                // pre-scaled so the subset enumerator prices the line correctly.
+                const ManaCost per = sd->params.activated_reveal_top_cost.value();
+                const int per_mv   = per.ManaValue();
+                int kmax = per_mv > 0 ? AvailableManaPool(state).Total() / per_mv : 1;
+                if (kmax > 3) { kmax = 3; }   // bounded branching; >3 activations/turn is fringe
+                for (int k = 1; k <= kmax; ++k)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::ActivateRevealTop;
+                    a.card_name      = src.card.m_name;
+                    a.hand_index     = -1;
+                    a.sac_source_id  = src.card.m_number;
+                    a.chosen_x       = k;
+                    ManaCost c = per;
+                    c.generic *= k; c.white *= k; c.blue *= k; c.black *= k;
+                    c.red *= k; c.green *= k; c.colorless *= k;
+                    a.cost           = c;
+                    a.eval           = 2 * k;         // rollout scores the real outcome
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
+            if (sd->params.untap_creature_cost.has_value()
+                && !sd->params.untap_creature_subtype.empty())
+            {
+                // The source must be UNTAPPED ({T} is part of the cost): a tapped Lodge's action
+                // is a guaranteed no-op, and in human play the phantom option kept the segment
+                // re-prompt loop alive forever (5d sweep flag, s9101 gi2/gi3 -- confirmed).
+                if (src.tapped) { continue; }
+                // One action; the trailing apply no-ops (cost unpaid) unless a matching creature
+                // is tapped by then -- the rollout scores whether the untap earned its cost.
+                // HUMAN PLAY: only offer it when it can apply RIGHT NOW (a matching creature is
+                // already tapped) -- a plan menu must never contain a silent no-op option; the
+                // mid-phase re-prompt re-enumerates after each committed segment, so the option
+                // (re)appears the moment an Elf is actually tapped. The autonomous search keeps
+                // the looser exists-gate (its trailing apply runs after the plan's casts tap
+                // the elves, which enumeration cannot see yet).
+                bool any_match = false;
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index == state.active_player_index && q.card.IsCreature()
+                        && CardHasSubtype(q.card, sd->params.untap_creature_subtype)
+                        && (!HumanPlayActive() || q.tapped))
+                    { any_match = true; break; }
+                }
+                if (!any_match) { continue; }
+                Action a;
+                a.kind           = Action::Kind::UntapCreature;
+                a.card_name      = src.card.m_name;
+                a.hand_index     = -1;
+                a.sac_source_id  = src.card.m_number;
+                a.cost           = sd->params.untap_creature_cost.value();
+                a.eval           = 1;
                 a.is_noncreature = true;
                 actions.push_back(std::move(a));
             }
@@ -12625,7 +12750,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // ETB burn, Matron tutor (search target = tutor_target), Muxus reveal. No-op for every
             // non-Goblin creature -> other decks byte-identical.
             OnGoblinEnters(state, state.active_player_index,
-                           static_cast<int>(state.battlefield.size()) - 1, tutor_target);
+                           static_cast<int>(state.battlefield.size()) - 1, tutor_target, chosen_x);
 
             // ETB library dig (Acclaimed Contender): performed inline so the clairvoyant
             // rollout sees the dug card in hand for later turns. The real game does the
@@ -13043,6 +13168,28 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // The trailing generic is_sacrifice block skips this spell (already paid here).
             if (is_sacrifice) { PerformSacrificeLandCost(state, name); }
             PerformLandTutorToBattlefield(state, state.active_player_index, def.params, tutor_target);
+        }
+        else if (def.params.look_top_put_creature_count > 0)
+        {
+            // Turntimber Symbiosis front (rollout side, lockstep with EffectHandler).
+            PerformLookTopPutCreature(state, state.active_player_index, def.params, tutor_target);
+        }
+        else if (def.params.tutor_to_battlefield_single)
+        {
+            // Natural Order (rollout side, lockstep with CastSpellFromHand + EffectHandler): pay
+            // the "sacrifice a green creature" additional cost FIRST (CR 601.2h; the victim rides
+            // own_targets as a card m_number) -- its dies-triggers (Worldspine tokens +
+            // shuffle-back, Vaultborn copy) resolve before the search -- then put ONE matching
+            // creature onto the battlefield (tutor_target / scripted pin / provider front).
+            if (!def.params.sac_additional_creature_color.empty())
+            {
+                PerformSacrificeCreatureCost(state, name,
+                                             def.params.sac_additional_creature_color, own_targets);
+            }
+            std::vector<std::string> pref;
+            if (!tutor_target.empty()) { pref.push_back(tutor_target); }
+            PerformTutorToBattlefield(state, state.active_player_index, def.params,
+                                      /*max_puts=*/1, pref, def.card.m_name.str());
         }
         else if (def.params.tutor_to_battlefield)
         {
@@ -13785,6 +13932,29 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             { ApplyChannel(state, state.active_player_index, a.hand_index, a.card_name, a.direct_damage); }
         }
+        else if (a.kind == Action::Kind::ActivateRevealTop)
+        {
+            // Call of the Wild: pay K x cost, then K sequential reveals (each deploy fires its own
+            // ETB cascade). Stranded (cost unpayable) -> full no-op, both worlds.
+            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            {
+                for (int k = 0; k < std::max(1, a.chosen_x); ++k)
+                { if (!ApplyRevealTopDeploy(state, state.active_player_index)) { break; } }
+            }
+        }
+        else if (a.kind == Action::Kind::UntapCreature)
+        {
+            // Wirewood Lodge: precondition-check FIRST so a stranded untap never pays its {G}.
+            const CardDefinition* ud = CardDatabase::Instance().Lookup(a.card_name);
+            if (ud != nullptr
+                && CanApplyUntapCreature(state, state.active_player_index, a.sac_source_id,
+                                         ud->params.untap_creature_subtype)
+                && TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            {
+                ApplyUntapCreature(state, state.active_player_index, a.sac_source_id,
+                                   ud->params.untap_creature_subtype);
+            }
+        }
         else if (a.kind == Action::Kind::GraveyardExileAbility)
         {
             // Deathrite abilities 2/3: pay the colored cost, then tap+exile+effect (no-op if the
@@ -14430,6 +14600,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // (lockstep); param-gated -> byte-identical for every other deck.
     PerformUpkeepCumulativeGifts(state);
     PerformUpkeepSacTutor(state);
+    // Mirri's Guile: arrange the top 3 at upkeep (before the draw). Lockstep in both worlds.
+    PerformUpkeepReorder(state);
 
     // Echo (Mogg War Marshal {1}{R}, Stingscourger {3}{R}): "At the beginning of your upkeep, if this
     // came under your control since your last upkeep, sacrifice it unless you pay its echo cost."
@@ -14518,7 +14690,7 @@ static bool PlayLandByName(GameState& state, const std::string& name,
         if (it->m_name != name) { continue; }
         if (it->m_impulse_no_land) { continue; }                   // Apex-exiled land: castable as a SPELL only, never played
         auto d = CardDatabase::Instance().LookupCached(*it);
-        if (!d || !d->card.IsLand()) { continue; }
+        if (!PlayableAsLand(d)) { continue; }                      // land, or spell//land back face
         if (pick == ap.hand.end()) { pick = it; }                  // first match (fallback)
         if (it->m_is_staged) { pick = it; break; }                 // prefer the expiring staged copy
     }
@@ -14563,8 +14735,9 @@ static std::string SimulateLandPlay(GameState& state)
         for (const Card& c : ap.hand)
         {
             if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: never played
-            auto def = CardDatabase::Instance().LookupCached(c);
-            if (!def || !def->card.IsLand()) { continue; }
+            auto front = CardDatabase::Instance().LookupCached(c);
+            const CardDefinition* def = LandFaceDefOf(front);   // spell//land plays its back face
+            if (!def) { continue; }
 
             // A Karoo bounce land with no other land in play must return ITSELF (the bounce is
             // mandatory) -- net no land in play and a wasted drop. Never the greedy choice; play a
@@ -16343,7 +16516,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                                         : act.card_name + "#" + act.chosen_float_color)
                         + (act.free_cast ? "#FREE" : "")
                         + ((act.def && act.def->params.modal_choose_n > 0)
-                           ? ("#S" + std::to_string(act.chosen_x)) : "")); break;
+                           ? ("#S" + std::to_string(act.chosen_x)) : "")
+                        // Natural Order: distinct sacrifice victims are DISTINCT plans (core
+                        // invariant); gated on the param so no existing deck's signature moves.
+                        + ((act.def && !act.def->params.sac_additional_creature_color.empty())
+                           ? ("#V" + std::to_string(act.soulfire_own_targets)) : "")
+                        // Turntimber Symbiosis: distinct put-choices are DISTINCT plans.
+                        + ((act.def && act.def->params.look_top_put_creature_count > 0)
+                           ? ("#T" + act.tutor_target) : "")); break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
@@ -16399,6 +16579,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     msf.push_back("JITTE#" + std::to_string(act.sac_source_id)
                                   + "m" + std::to_string(act.gy_exile_mode)
                                   + ">" + std::to_string(act.sac_victim_id)); break;
+                // Call of the Wild: distinct activation COUNTS are distinct plans.
+                case Action::Kind::ActivateRevealTop:
+                    msf.push_back("CWILD#" + std::to_string(act.sac_source_id)
+                                  + "x" + std::to_string(act.chosen_x)); break;
+                // Wirewood Lodge untap: which source (one per Lodge).
+                case Action::Kind::UntapCreature:
+                    msf.push_back("WWL#" + std::to_string(act.sac_source_id)); break;
             }
         }
         std::sort(v.begin(), v.end());
@@ -17381,10 +17568,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         for (const Card& c : ap.hand)
         {
             if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: castable as a SPELL only, not enumerable as a land play
-            const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
-            if (!def || !def->card.IsLand()) { continue; }
+            const CardDefinition* front = CardDatabase::Instance().LookupCached(c);
+            const CardDefinition* def = LandFaceDefOf(front);   // spell//land enumerable via its back
+            if (!def) { continue; }
             if (karoo_self_bounce(def)) { continue; }
-            const std::string key = s_human_play_lands ? c.m_name : land_sig(def->params);
+            const std::string key = s_human_play_lands ? c.m_name
+                                  : land_sig((front && front->card.IsLand() ? def : front)->params);
             if (seen_key.insert(key).second) { land_names.push_back(c.m_name); }
         }
     }
@@ -17401,10 +17590,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         for (const Card& c : ap.hand)
         {
             if (c.m_impulse_no_land) { continue; }
-            const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
-            if (!def || !def->card.IsLand()) { continue; }
+            const CardDefinition* front = CardDatabase::Instance().LookupCached(c);
+            const CardDefinition* def = LandFaceDefOf(front);   // spell//land enumerable via its back
+            if (!def) { continue; }
             if (karoo_self_bounce(def)) { continue; }
-            const std::string sg = land_sig(def->params);
+            // Signature: a real land keys on its own params; a spell//land keys on the FRONT's
+            // (which carries the mdfc_back fields -> a distinct group from every real land).
+            const std::string sg = land_sig((front && front->card.IsLand() ? def : front)->params);
             auto it = slot.find(sg);
             if (it == slot.end())
             {
@@ -17579,7 +17771,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             // Modal double-faced land (Pathway): emit BOTH faces as distinct land-play options
             // (front colour vs back colour). The search picks the face that pays the turn; human
             // play surfaces a "which face?" choose grid (CheckLine 'face' sub). Never a fetchland.
-            add_for_land(ln, "", "front");
+            // A SPELL//land front (Turntimber Symbiosis) has one land face -- the back only.
+            if (ld->card.IsLand()) { add_for_land(ln, "", "front"); }
             add_for_land(ln, "", "back");
             continue;
         }
@@ -17883,7 +18076,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                 if (act.kind != Action::Kind::CastFromHand) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
                 if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top
-                                      || d->params.tutor_land_to_battlefield)) { continue; }
+                                      || d->params.tutor_land_to_battlefield
+                                      || d->params.tutor_to_battlefield_single)) { continue; }
                 auto it = size_cache.find(act.card_name);
                 if (it == size_cache.end())
                 {
@@ -17989,7 +18183,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                 if (act.kind != Action::Kind::CastFromHand || act.tutor_target.empty()) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
                 if (d == nullptr || !(d->params.tutor_to_hand || d->params.tutor_to_top
-                                      || d->params.tutor_land_to_battlefield)) { continue; }
+                                      || d->params.tutor_land_to_battlefield
+                                      || d->params.tutor_to_battlefield_single)) { continue; }
                 // The plan this candidate list is FOR -- see PlanContext.h. Providers that ignore it
                 // (all of them today) are byte-identical; the point is that the state mismatch above
                 // is only half the missing information, and the other half is "what else does this

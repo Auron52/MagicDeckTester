@@ -265,7 +265,7 @@ extern thread_local bool g_le_pitch_ranking;
 struct GameState;
 struct Permanent;
 struct Card;
-enum class LookKind { Scry, Reorder, Surveil };
+enum class LookKind { Scry, Reorder, Surveil, ReorderNoShuffle };  // ReorderNoShuffle: Mirri's Guile (arrange top N, no shuffle option)
 
 // The player's chosen disposition of the looked-at top cards. `top_order` lists indices into
 // the looked-at vector (look order) to place back on top, FIRST = nearest the top (drawn

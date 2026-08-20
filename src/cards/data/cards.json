@@ -4675,6 +4675,348 @@
     "enters_tapped": true,
     "etb_bounce_land": true
    }
+  },
+  {
+   "name": "Llanowar Elves",
+   "mana_cost": "{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elf",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{T}: Add {G}.",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "G"
+    ]
+   }
+  },
+  {
+   "name": "Elvish Archdruid",
+   "mana_cost": "{1}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elf",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Other Elf creatures you control get +1/+1.\n{T}: Add {G} for each Elf you control. [Dual-role: a mana_dork whose scaled tap yields the live count of Elves YOU CONTROL (mana_per_creature_subtype, feeder 0, own side -- vs Priest's battlefield-wide count) AND a lord (+1/+1 other Elves, lord_excludes_self) via the widened IsLordPermanent gate.]",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "G"
+    ],
+    "mana_per_creature_subtype": "Elf",
+    "subtypes_affected": [
+     "Elf"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Priest of Titania",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elf",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{T}: Add {G} for each Elf on the battlefield. [Scaled mana dork: one tap yields the live count of Elves on the battlefield -- BOTH players' (mana_per_creature_count_all; the passive opponent never has Elves in this sim, so it equals the own-side count in practice, kept faithful).]",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "G"
+    ],
+    "mana_per_creature_subtype": "Elf",
+    "mana_per_creature_count_all": true
+   }
+  },
+  {
+   "name": "Arbor Elf",
+   "mana_cost": "{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elf",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{T}: Untap target Forest. [Modelled as a {G} dork LIVE only while a controlled Forest exists (mana_requires_land_subtype): in a single-main goldfish each Arbor untap lets one Forest tap once more, so N Arbor Elves + >=1 Forest = +N G -- exactly the conditional-dork model. WHICH Forest is untapped is outcome-identical (all Forests are identical producers) -- inert collapse, disclosed.]",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "G"
+    ],
+    "mana_requires_land_subtype": "Forest"
+   }
+  },
+  {
+   "name": "Wirewood Lodge",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{G}, {T}: Untap target Elf. [Untap ability modelled as a searched main-phase action (Action::Kind::UntapCreature) applied AFTER the main casts: taps the Lodge, pays {G}, untaps the highest-yield TAPPED Elf (weakly dominant auto-target, disclosed) -- the untapped Elf can attack or fund trailing activations (Call of the Wild). KNOWN CONSERVATIVE LIMIT: the mid-payment double-tap (untap Priest between two casts inside one payment) is not modelled, so the Lodge's mana ceiling is slightly under-rated.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "untap_creature_cost": "{G}",
+    "untap_creature_subtype": "Elf"
+   }
+  },
+  {
+   "name": "Worldly Tutor",
+   "mana_cost": "{G}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for a creature card, reveal it, then shuffle and put the card on top. [tutor_to_top, searched target (GenericProvider returns every legal creature; the tutor axis scores them). Instant speed collapsed to the main phase (no benefit vs a passive opponent -- there is no opposing turn worth responding on); 'reveal' is inert (nothing reads reveals).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_top": true,
+    "tutor_types": [
+     "Creature"
+    ]
+   }
+  },
+  {
+   "name": "Mirri's Guile",
+   "mana_cost": "{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "At the beginning of your upkeep, you may look at the top three cards of your library, then put them back in any order. [upkeep_reorder 3: arrange the top three at upkeep, wanted-first provider ordering (NO bottoming, NO shuffle -- the Ponder family, not scry). 'May' always taken (free information; the wanted-first order is weakly dominant). Human play surfaces the reorder decision (LookKind::ReorderNoShuffle).]",
+   "template": "custom",
+   "parameters": {
+    "upkeep_reorder": 3
+   }
+  },
+  {
+   "name": "Call of the Wild",
+   "mana_cost": "{2}{G}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{2}{G}{G}: Reveal the top card of your library. If it's a creature card, put it onto the battlefield. Otherwise, put it into your graveyard. [Searched activation (Action::Kind::ActivateRevealTop), K = 1..3 activations per turn as mutually-exclusive variants, applied after the main casts (pre-combat); the clairvoyant search knows the top card. The put creature enters through the full ETB cascade.]",
+   "template": "custom",
+   "parameters": {
+    "activated_reveal_top_cost": "{2}{G}{G}"
+   }
+  },
+  {
+   "name": "Hornet Queen",
+   "mana_cost": "{4}{G}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Insect"
+   ],
+   "keywords": [
+    "Deathtouch",
+    "Flying"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Flying, deathtouch\nWhen this creature enters, create four 1/1 green Insect creature tokens with flying and deathtouch. [etb_self_creates_tokens 4 x 1/1 green Insect (created_token_color G -> legal Natural Order fodder). Token flying/deathtouch NOT modelled -- provably inert: the passive opponent never blocks or attacks, so evasion and combat-kill keywords never change an outcome; same for the Queen's own flying/deathtouch.]",
+   "template": "custom",
+   "parameters": {
+    "etb_self_creates_tokens": 4,
+    "etb_created_token_power": 1,
+    "etb_created_token_toughness": 1,
+    "etb_created_token_subtypes": [
+     "Insect"
+    ],
+    "created_token_color": "G"
+   }
+  },
+  {
+   "name": "Terastodon",
+   "mana_cost": "{6}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elephant"
+   ],
+   "keywords": [],
+   "power": 9,
+   "toughness": 9,
+   "oracle_text": "When this creature enters, you may destroy up to three target noncreature permanents. For each permanent put into a graveyard this way, its controller creates a 3/3 green Elephant creature token. [The passive opponent controls no noncreature permanents in this sim, so the live mode destroys OUR OWN: searched K = 0..3 (chosen_x cast variants), candidates narrowed to own FORESTS, tapped first (fungible; provider-style narrowing, disclosed) -- each destroyed Forest makes US a 3/3 green Elephant. A Terastodon put onto the battlefield by Natural Order / Call of the Wild / Turntimber resolves with K=0 (no searched axis on the put path -- conservative, disclosed).]",
+   "template": "custom",
+   "parameters": {
+    "etb_destroy_own_noncreature_max": 3,
+    "etb_created_token_power": 3,
+    "etb_created_token_toughness": 3,
+    "etb_created_token_subtypes": [
+     "Elephant"
+    ],
+    "created_token_color": "G"
+   }
+  },
+  {
+   "name": "Elderscale Wurm",
+   "mana_cost": "{4}{G}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Wurm"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 7,
+   "toughness": 7,
+   "oracle_text": "Trample\nWhen this creature enters, if your life total is less than 7, your life total becomes 7.\nAs long as you have 7 or more life, damage that would reduce your life total to less than 7 reduces it to 7 instead. [ETB life floor modelled (etb_life_floor 7). The ONGOING damage-floor replacement is NOT modelled -- provably inert in this sim: no damage-to-us source exists (passive opponent; no self-damage cards in deck), and the only life loss is Turntimber's pay-3 (max 4 x 3 = 12 -> life >= 8 > 7, and a pay-life cost is not damage anyway). Trample inert (no blockers).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_life_floor": 7
+   }
+  },
+  {
+   "name": "Craterhoof Behemoth",
+   "mana_cost": "{5}{G}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Beast"
+   ],
+   "keywords": [
+    "Haste"
+   ],
+   "power": 5,
+   "toughness": 5,
+   "oracle_text": "Haste\nWhen this creature enters, creatures you control gain trample and get +X/+X until end of turn, where X is the number of creatures you control. [etb_team_pump_per_creature: +X/+X (temp, until EOT) to every own creature at resolution, X counted AFTER it enters (includes itself); creatures entering later this turn correctly get nothing (CR 611.2c). The trample grant is NOT modelled -- provably inert: the passive opponent never blocks, so excess-damage-through-blockers never occurs.]",
+   "template": "custom",
+   "parameters": {
+    "etb_team_pump_per_creature": true
+   }
+  },
+  {
+   "name": "Worldspine Wurm",
+   "mana_cost": "{8}{G}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Wurm"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 15,
+   "toughness": 15,
+   "oracle_text": "Trample\nWhen this creature dies, create three 5/5 green Wurm creature tokens with trample.\nWhen Worldspine Wurm is put into a graveyard from anywhere, shuffle it into its owner's library. [Death trigger: dies_watch_includes_self + 3 x 5/5 green Wurm (created_token_color G; token trample inert -- no blockers). Shuffle-back is a TRIGGER, not a replacement -- it hits the graveyard first, so BOTH triggers fire on a death (Natural Order sac: 3 Wurms + the Wurm shuffled in BEFORE the search resolves -> it is a legal fetch target). graveyard_replace_shuffle_library also covers the cleanup-discard path (Progenitus wiring). Reachable death path in this sim: Natural Order's sacrifice.]",
+   "template": "custom",
+   "parameters": {
+    "dies_watch_includes_self": true,
+    "dies_trigger_creates_tokens": 3,
+    "dies_token_power": 5,
+    "dies_token_toughness": 5,
+    "dies_token_subtypes": [
+     "Wurm"
+    ],
+    "created_token_color": "G",
+    "graveyard_replace_shuffle_library": true
+   }
+  },
+  {
+   "name": "Vaultborn Tyrant",
+   "mana_cost": "{5}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Dinosaur"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Trample\nWhenever this creature or another creature you control with power 4 or greater enters, you gain 3 life and draw a card.\nWhen this creature dies, if it's not a token, create a token that's a copy of it, except it's an artifact in addition to its other types. [Enters-watcher: own_creature_enters_lifegain 3 + draw 1, min-power filter 4 (effective power incl. counters/lords -- a Turntimber-put 1-drop with three +1/+1 counters correctly triggers), self-inclusive. Dies (nontoken) -> token copy of itself (dies_trigger_copy_self_token); the copy's own enter fires the watcher, and being a token it never re-copies. 'Artifact in addition' cosmetic here (nothing reads a creature token's artifact-ness in this deck). Trample inert (no blockers). Reachable death path: Natural Order's sacrifice.]",
+   "template": "custom",
+   "parameters": {
+    "own_creature_enters_lifegain": 3,
+    "own_creature_enters_draw": 1,
+    "creature_enters_min_power": 4,
+    "creature_enters_includes_self": true,
+    "dies_watch_includes_self": true,
+    "dies_trigger_copy_self_token": true
+   }
+  },
+  {
+   "name": "Natural Order",
+   "mana_cost": "{2}{G}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "As an additional cost to cast this spell, sacrifice a green creature.\nSearch your library for a green creature card, put it onto the battlefield, then shuffle. [Additional cost paid at cast (CR 601.2h): searched victim variants (one per distinct own green creature name; same-name copies fungible -- most-expendable copy sacrificed, tokens first). The victim's dies-triggers resolve before the search (a sacrificed Worldspine Wurm shuffles in and is a legal fetch target). Fetch: tutor_to_battlefield_single + tutor_types Creature + tutor_color G, searched via the tutor axis; the put creature's ETB fires (Craterhoof pump, Hornet tokens).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_battlefield_single": true,
+    "tutor_types": [
+     "Creature"
+    ],
+    "tutor_color": "G",
+    "tutor_shuffle_after": true,
+    "sac_additional_creature_color": "G"
+   }
+  },
+  {
+   "name": "Turntimber Symbiosis",
+   "mana_cost": "{4}{G}{G}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Look at the top seven cards of your library. You may put a creature card from among them onto the battlefield. If that card has mana value 3 or less, it enters with three additional +1/+1 counters on it. Put the rest on the bottom of your library in a random order. // Turntimber, Serpentine Wood -- Land. As this land enters, you may pay 3 life. If you don't, it enters tapped. {T}: Add {G}. [Modal double-faced SPELL//LAND: the back face is synthesized (mdfc_back_* + mdfc_back_pay_life 3, shock-land semantics) and offered by land enumeration as the only land face; the card counts as a land for keep evaluation. Front: look_top_put_creature_count 7 -- the put choice is a searched named axis (every distinct top-7 creature + decline as distinct plan variants); rest to the bottom in DETERMINISTIC order (the printed 'random order' is unobservable in goldfishing -- Muxus precedent). +3 counters ride the permanent (mv <= 3).]",
+   "template": "custom",
+   "parameters": {
+    "mdfc_back_name": "Turntimber, Serpentine Wood",
+    "mdfc_back_produces": [
+     "G"
+    ],
+    "mdfc_back_pay_life": 3,
+    "look_top_put_creature_count": 7,
+    "look_put_counter_bonus": 3,
+    "look_put_counter_bonus_max_mv": 3
+   }
   }
  ]
 }

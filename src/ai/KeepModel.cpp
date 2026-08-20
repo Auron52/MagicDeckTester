@@ -109,8 +109,14 @@ std::vector<int> ComputeKeepFeatures(const std::vector<Card>& hand, int mulligan
 
     for (const Card& c : hand)
     {
-        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
-        const bool is_land = def ? def->card.IsLand() : c.IsLand();
+        const CardDefinition* front = CardDatabase::Instance().LookupCached(c);
+        // Spell//land MDFC (Turntimber Symbiosis): counts as a LAND for keep purposes -- its back
+        // face is a real land drop -- read through the back-face definition (produces [G], pay-3-
+        // or-tapped). Identity for every real land / pure spell (LandFaceDefOf). `def` stays the
+        // face def inside the land branch; the nonland tail keeps reading the card's own front.
+        const CardDefinition* lface = LandFaceDefOf(front);
+        const CardDefinition* def = lface ? lface : front;
+        const bool is_land = lface ? true : c.IsLand();
         if (is_land)
         {
             ++land;

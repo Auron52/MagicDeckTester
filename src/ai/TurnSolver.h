@@ -93,6 +93,17 @@ struct Action
                              // toughness-1 spawn via the SBA) or mode 2 = "you gain 2 life".
                              // cost = {0} (the cost is the counter). The +2/+2 pump mode is NOT
                              // this action -- it is spent inside combat (JitteDamageMath).
+        ActivateRevealTop,   // Call of the Wild "{2}{G}{G}: Reveal the top card of your library. If
+                             // it's a creature card, put it onto the battlefield. Otherwise, put it
+                             // into your graveyard." sac_source_id = the enchantment; chosen_x = the
+                             // searched activation COUNT K (cost pre-scaled to K x the printed
+                             // activation cost). Applied in the trailing pass (after main casts,
+                             // pre-combat), K sequential reveals per action (clairvoyant top).
+        UntapCreature,       // Wirewood Lodge "{G}, {T}: Untap target Elf." sac_source_id = the
+                             // land; cost = untap_creature_cost. Applied in the trailing pass:
+                             // taps the source and untaps the highest-yield TAPPED matching
+                             // creature (disclosed weakly-dominant auto-target); a no-op (cost
+                             // unpaid) when the source is tapped or no matching creature is tapped.
     };
 
     // The three name fields are InternedName, not std::string (2026-08-12): an Action is copied,

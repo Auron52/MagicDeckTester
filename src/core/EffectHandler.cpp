@@ -36,7 +36,7 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // every non-Goblin permanent (early param return). entry.tutor_target carries a search/human
     // Goblin Matron fetch target (empty -> the provider's pick).
     OnGoblinEnters(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1,
-                   entry.tutor_target);
+                   entry.tutor_target, entry.chosen_x.value_or(-1));
 }
 
 void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
@@ -221,7 +221,27 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 // spell's cast (CastSpellFromHand, before it went on the stack), so it already counts
                 // Dragonstorm itself -> it equals (prior spells cast this turn) + 1 = storm copies +
                 // the original = the number of Dragons to put. Lockstep with TurnSolver::apply_one.
-                if (def.params.tutor_to_battlefield)
+                // Turntimber Symbiosis front: look at the top 7, put <= 1 creature from among
+                // them onto the battlefield (+3 counters if mv <= 3), rest to the bottom.
+                // entry.tutor_target = the searched/human pick ("TURNTIMBER_NONE" = put nothing).
+                if (def.params.look_top_put_creature_count > 0)
+                {
+                    PerformLookTopPutCreature(state, entry.controller_index, def.params,
+                                              entry.tutor_target);
+                }
+                if (def.params.tutor_to_battlefield_single)
+                {
+                    // Natural Order: search ONE matching (type + colour) creature and put it onto
+                    // the battlefield. The additional-cost sacrifice was paid at cast time
+                    // (CastSpellFromHand / ApplyPlan) -- costs precede resolution (CR 601.2h).
+                    // entry.tutor_target carries the searched/human pick; empty -> the scripted
+                    // tutor pin or the provider's front (inside PerformTutorToBattlefield).
+                    std::vector<std::string> pref;
+                    if (!entry.tutor_target.empty()) { pref.push_back(entry.tutor_target); }
+                    PerformTutorToBattlefield(state, entry.controller_index, def.params,
+                                              /*max_puts=*/1, pref, def.card.m_name.str());
+                }
+                else if (def.params.tutor_to_battlefield)
                 {
                     // preferred = {} (empty): put in the provider's TutorCandidates order. Both this
                     // executor and the rollout (apply_one) pass empty, so they put the identical

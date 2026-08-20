@@ -508,11 +508,16 @@ inline int SelectCleanupDiscardIndex(const GameState& state,
 }
 
 // Forward declaration: CreateToken is defined further down but used by FireOnCastTriggers.
-inline void CreateToken(GameState&, int, int, int, const std::vector<std::string>&);
+inline void CreateToken(GameState&, int, int, int, const std::vector<std::string>&,
+                        const std::string& = std::string());
 // Forward declaration: the Dragonstorm-engine cascade (Scourge ping + Lathliss token) is
 // mutually recursive with CreateToken (a Lathliss 5/5 token entering re-fires the cascade).
 // Defined after CreateToken; called from CreateToken so EVERY token dragon enter also pings.
 inline void OnDragonEnters(GameState&, int controller, int entered_index);
+inline void OnGoblinEnters(GameState&, int controller, int entered_index,
+                           const std::string& chosen_tutor, int etb_kx);
+extern thread_local int g_scripted_tutor_choice;   // defined below (ScriptedTutor)
+inline int PermanentManaYield(const GameState&, const Permanent&, const CardDefinition&);   // defined below
 // Forward declaration: the reusable chosen-colour float (defined in the ritual section below) is
 // called by ApplySacForMana (Lotus Bloom), which is defined above that section.
 inline void AddChosenColorFloat(GameState& state, const std::string& col, int amt);
@@ -710,6 +715,23 @@ inline bool ControlsSubtype(const GameState& state, int controller_index,
     return false;
 }
 
+inline bool CardHasColorNamed(const Card& c, const std::string& col);   // defined below (tutor helpers)
+
+// Spell//land MDFC (Turntimber Symbiosis // Turntimber, Serpentine Wood). A hand card is
+// PLAYABLE AS A LAND when it is a real land OR a nonland front with a synthesized MDFC land
+// back face. LandFaceDefOf returns the definition every LAND decision (enters-tapped, produces,
+// multi-colour ranking) must read: the card's own def for a real land, the BACK-face def for a
+// spell//land. nullptr = not playable as a land. Identity for every existing card.
+inline const CardDefinition* LandFaceDefOf(const CardDefinition* def)
+{
+    if (def == nullptr) { return nullptr; }
+    if (def->card.IsLand()) { return def; }
+    if (!def->params.mdfc_back_name.empty())
+    { return CardDatabase::Instance().Lookup(def->params.mdfc_back_name); }
+    return nullptr;
+}
+inline bool PlayableAsLand(const CardDefinition* def) { return LandFaceDefOf(def) != nullptr; }
+
 // True if `card`'s card-type set includes the named type ("Enchantment"/"Artifact"/
 // "Creature"/"Land"/"Instant"/"Sorcery"). Used by tutor type filters.
 inline bool CardMatchesTypeName(const Card& card, const std::string& type_name)
@@ -760,6 +782,7 @@ inline std::vector<std::string> TutorCandidates(const GameState& state, int cont
             bool type_ok = false;
             for (const std::string& t : pp.tutor_types)
             { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+            if (!CardHasColorNamed(card, pp.tutor_color)) { type_ok = false; }   // colour filter
             if (type_ok && seen.insert(lc.m_name).second) { all.push_back(lc.m_name); }
         }
         return all;
@@ -941,6 +964,24 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
 // LOCKSTEP: called IDENTICALLY from EffectHandler (executor) and TurnSolver::apply_one (rollout);
 // both read the same pre-put library + spells_cast_this_turn, so they put the same Dragons in the
 // same order and reshuffle with the same seed. No-op for any card without tutor_to_battlefield.
+
+// Colour filter for tutors ("search for a GREEN creature card" -- Natural Order). `col` is a
+// single letter ("G"); empty = no restriction. Reads the DB card's colour mask (tokens are never
+// in the library, so the def is authoritative).
+inline bool CardHasColorNamed(const Card& c, const std::string& col)
+{
+    if (col.empty()) { return true; }
+    switch (col[0])
+    {
+        case 'W': return c.HasColor(Color::White);
+        case 'U': return c.HasColor(Color::Blue);
+        case 'B': return c.HasColor(Color::Black);
+        case 'R': return c.HasColor(Color::Red);
+        case 'G': return c.HasColor(Color::Green);
+        default:  return true;
+    }
+}
+
 inline void PerformTutorToBattlefield(GameState& state, int controller, const CardParams& pp,
                                       int max_puts,
                                       const std::vector<std::string>& preferred = {},
@@ -952,6 +993,7 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     auto matches_types = [&](const Card& c) -> bool {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         const Card& card = d ? d->card : c;
+        if (!CardHasColorNamed(card, pp.tutor_color)) { return false; }   // Natural Order: green only
         for (const std::string& t : pp.tutor_types)
         { if (CardMatchesTypeName(card, t)) { return true; } }
         return false;
@@ -966,6 +1008,21 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     {
         put_pref = ResolveProvider(state).TutorToBattlefieldPutOrder(state, controller, pp, max_puts);
     }
+    // SINGLE-target put (Natural Order / Turntimber-class): consume the searched tutor pin
+    // (Plan::tutor_choice via ScriptedTutor) exactly as PerformTutor does -- index into the
+    // provider's deduped candidate list at the TRUE resolution state, clamped (duplicate, never
+    // a whiff). Consumed only by a single-put card so the Dragonstorm multi-put path is untouched.
+    if (pp.tutor_to_battlefield_single && put_pref.empty() && g_scripted_tutor_choice >= 0)
+    {
+        const int pick = g_scripted_tutor_choice;
+        g_scripted_tutor_choice = -1;
+        std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, controller, pp);
+        std::vector<std::string> uniq;
+        for (const std::string& c : cands)
+        { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+        if (!uniq.empty())
+        { put_pref.push_back(uniq[std::min<std::size_t>(static_cast<std::size_t>(pick), uniq.size() - 1)]); }
+    }
 
     // Human-play override: let the player pick WHICH library Dragons enter (the engine keeps the rule's
     // play ORDER). Fires only on the REAL resolution -- g_play_dragon_chooser is nulled by RevealLogPause
@@ -973,7 +1030,12 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     // byte-identical. See GameLogger.h DragonChooser. `human_override` then SKIPS the TutorCandidates
     // fill pass below, so a human who deselects Dragons puts fewer than max_puts (never topped back up).
     bool human_override = false;
-    if (g_play_dragon_chooser && max_puts > 0)
+    // Single-target put whose target already rode the chosen PLAN VARIANT (Natural Order /
+    // Turntimber human play, preferred non-empty): the pick was made in the main_phase menu, so
+    // the multi-pick dialog would DOUBLE-ASK (and its multi-int reply desynced the choices
+    // stream -- 5d sweep flag, s9104 gi3). The dialog stays for Dragonstorm (preferred always
+    // empty) and as a fallback for a preferred-less single put.
+    if (g_play_dragon_chooser && max_puts > 0 && put_pref.empty())
     {
         // Role rank = the provider's fixed play ORDER (Lathliss, Scourges, Utvara, Karrthus, Kolaghan);
         // the same classification DragonstormProvider::TutorToBattlefieldPutOrder uses. Duplicated here
@@ -1099,6 +1161,11 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         // #1 wiring requirement: route the put Dragon through the SAME cascade the hard-cast enter
         // uses (Scourge ping -> opponent life loss; Lathliss 5/5 token; token-first ordering baked in).
         OnDragonEnters(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+        // ...and the generic param-ETB cascade (Craterhoof team pump, Hornet Queen tokens,
+        // Muxus-class reveals) so a Natural-Order-put creature's ETB fires exactly like a cast one.
+        // No-op for every Dragon (no such params) -> Dragonstorm byte-identical.
+        OnGoblinEnters(state, controller, static_cast<int>(state.battlefield.size()) - 1,
+                       std::string(), -1);
     }
 
     // "then shuffle your library" (KEPT per user): deterministic CRN reshuffle like a fetch, so
@@ -1779,6 +1846,21 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 // (controller + LordEffect), and the per-creature logic below (self-exclusion by address, subtype
 // matching, scales_per_matching count) is applied unchanged, so no lord is double-counted and an
 // "other"-lord still skips itself. nullptr => scan the whole battlefield (original behaviour).
+// Is this definition a battlefield LORD (grants a continuous P/T bonus to matching creatures)?
+// The LordEffect template, plus the dual-role case: a CREATURE of another template carrying lord
+// params (Elvish Archdruid = mana_dork + "Other Elf creatures you control get +1/+1"). Gated on a
+// non-zero bonus AND a match scope, so vanilla creatures with subtypes_affected-only params
+// (haste granters like Cloudshredder Sliver) do not become P/T lords. Byte-identical for every
+// existing deck: the only non-lord-template card with a power_bonus is a sorcery (never a
+// battlefield permanent).
+inline bool IsLordPermanent(const CardDefinition& def)
+{
+    if (def.tmpl == CardTemplate::LordEffect) { return true; }
+    return def.card.IsCreature()
+        && (def.params.power_bonus != 0 || def.params.tough_bonus != 0)
+        && (!def.params.subtypes_affected.empty() || def.params.affects_all_creatures);
+}
+
 inline std::pair<int,int> ComputeLordBonus(
     const Card&                    creature,
     const std::vector<Permanent>&  battlefield,
@@ -1820,7 +1902,7 @@ inline std::pair<int,int> ComputeLordBonus(
     {
         if (lord.controller_index != controller_index) { return; }
         const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
-        if (!ldef || ldef->tmpl != CardTemplate::LordEffect) { return; }
+        if (!ldef || !IsLordPermanent(*ldef)) { return; }
 
         // "Other ..." lords do not buff themselves (CR layer 7c): skip when the lord IS
         // the creature being evaluated. Identity by address within this same battlefield.
@@ -2153,6 +2235,38 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         v.emplace_back(nm, 1);
     };
 
+    // Entered creature's effective power (base + counters + temp + lords), computed lazily --
+    // only a min-power-filtered watcher (Vaultborn Tyrant's "power 4 or greater") reads it.
+    int entered_power = -1;
+    auto entered_power_now = [&]() -> int
+    {
+        if (entered_power < 0)
+        {
+            const Permanent& e = state.battlefield[entered_index];
+            entered_power = e.EffectivePower()
+                + ComputeLordBonus(e.card, state.battlefield, e.controller_index,
+                                   e.is_animated, &e).first;
+        }
+        return entered_power;
+    };
+    // Vaultborn Tyrant's draw rider ("... and draw a card"), shared by the another-creature loop
+    // and the self-include tail below.
+    auto watcher_draw = [&](int who, int n_draw)
+    {
+        Player& wp_player = state.players[who];
+        for (int k = 0; k < n_draw && !wp_player.library.empty(); ++k)
+        {
+            std::size_t before = wp_player.hand.size();
+            wp_player.library.DrawN(1, wp_player.hand);
+            wp_player.cards_drawn_this_turn += static_cast<int>(wp_player.hand.size() - before);
+            if (g_play_draw_sink && !g_tap_speculating)
+            {
+                for (std::size_t hi = before; hi < wp_player.hand.size(); ++hi)
+                { g_play_draw_sink->push_back({ state.turn_number, wp_player.hand[hi].m_name.str() }); }
+            }
+        }
+    };
+
     const int n = static_cast<int>(state.battlefield.size());
     for (int i = 0; i < n; ++i)
     {
@@ -2168,11 +2282,16 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             state.players[w.controller_index].life_gained_this_turn += wp.any_creature_enters_lifegain;
             if (log) { note(w.controller_index, w.card.m_name.str()); }
         }
-        // "Whenever another creature you control enters, you [may] gain N" (Suture Priest cl. 1).
-        if (wp.own_creature_enters_lifegain > 0 && w.controller_index == entered_controller)
+        // "Whenever another creature you control enters, you [may] gain N" (Suture Priest cl. 1;
+        // Vaultborn Tyrant adds a minimum-power filter on the ENTERING creature + a draw rider).
+        if (wp.own_creature_enters_lifegain > 0 && w.controller_index == entered_controller
+            && (wp.creature_enters_min_power <= 0
+                || entered_power_now() >= wp.creature_enters_min_power))
         {
             state.players[w.controller_index].life += wp.own_creature_enters_lifegain;
             state.players[w.controller_index].life_gained_this_turn += wp.own_creature_enters_lifegain;
+            if (wp.own_creature_enters_draw > 0)
+            { watcher_draw(w.controller_index, wp.own_creature_enters_draw); }
             if (log) { note(w.controller_index, w.card.m_name.str()); }
         }
         // "Whenever a creature an opponent controls enters, that player loses N" (Suture Priest
@@ -2183,6 +2302,25 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             if (entered_controller != state.active_player_index)
             { state.opponent_lost_life_this_turn = true; }
             if (log) { note(entered_controller, w.card.m_name.str()); }
+        }
+    }
+
+    // Self-inclusive watcher (Vaultborn Tyrant: "Whenever THIS creature or another creature you
+    // control with power 4 or greater enters ..."): the entering permanent's OWN params fire for
+    // its own enter. Gated on creature_enters_includes_self -> byte-identical elsewhere.
+    {
+        const Permanent& e = state.battlefield[entered_index];
+        const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
+        if (ed && ed->params.creature_enters_includes_self
+            && ed->params.own_creature_enters_lifegain > 0
+            && (ed->params.creature_enters_min_power <= 0
+                || entered_power_now() >= ed->params.creature_enters_min_power))
+        {
+            state.players[e.controller_index].life += ed->params.own_creature_enters_lifegain;
+            state.players[e.controller_index].life_gained_this_turn += ed->params.own_creature_enters_lifegain;
+            if (ed->params.own_creature_enters_draw > 0)
+            { watcher_draw(e.controller_index, ed->params.own_creature_enters_draw); }
+            if (log) { note(e.controller_index, e.card.m_name.str()); }
         }
     }
 
@@ -2240,9 +2378,25 @@ inline void CreateToken(
     int                              controller_index,
     int                              power,
     int                              toughness,
-    const std::vector<std::string>&  subtypes)
+    const std::vector<std::string>&  subtypes,
+    const std::string&               color)   // default given at the forward declaration above
 {
     Permanent token;
+    // Token colour (StompySurprise: green Insect/Wurm/Elephant tokens are legal "sacrifice a
+    // green creature" fodder for Natural Order). Empty = the historical colourless token --
+    // byte-identical for every existing call site (nothing else reads token colour).
+    if (!color.empty())
+    {
+        switch (color[0])
+        {
+            case 'W': token.card.AddColor(Color::White); break;
+            case 'U': token.card.AddColor(Color::Blue);  break;
+            case 'B': token.card.AddColor(Color::Black); break;
+            case 'R': token.card.AddColor(Color::Red);   break;
+            case 'G': token.card.AddColor(Color::Green); break;
+            default: break;
+        }
+    }
     std::string token_name = std::to_string(power) + "/" + std::to_string(toughness);
     if (!subtypes.empty()) { token_name += " " + subtypes[0]; }
     token_name            += " Token";
@@ -2263,6 +2417,24 @@ inline void CreateToken(
     // Lathliss (nontoken gate). No-op for every non-Dragon token (early subtype return) -> all
     // existing token-making decks (Adeline, Forbidden Orchard, Sliver Hive) are byte-identical.
     OnDragonEnters(state, controller_index, static_cast<int>(state.battlefield.size()) - 1);
+}
+
+// Token that is a COPY of a real card (Vaultborn Tyrant's "create a token that's a copy of it").
+// Copies the card wholesale (name, P/T, subtypes, keywords), so LookupCached resolves the REAL
+// definition and the copy's own abilities stay live (its enter fires the watchers; is_token gates
+// it out of "not a token" death triggers). Enters through the universal cascade like any token.
+inline void CreateTokenCopyOfCard(GameState& state, int controller, const Card& src)
+{
+    Permanent token;
+    token.card              = src;
+    token.card.m_def        = nullptr;                       // re-resolve by name (same def)
+    token.card.m_number     = state.next_token_number++;     // fresh per-copy id
+    token.controller_index  = controller;
+    token.owner_index       = controller;
+    token.entered_this_turn = true;
+    token.is_token          = true;
+    state.battlefield.push_back(token);
+    OnDragonEnters(state, controller, static_cast<int>(state.battlefield.size()) - 1);
 }
 
 // ---- Dragonstorm kill-engine shared helpers (Scourge / Lathliss / Utvara) -----------
@@ -2414,7 +2586,7 @@ inline void OnDragonEnters(GameState& state, int controller, int entered_index)
 // search/human-chosen Goblin Matron fetch target (empty -> the provider's TutorCandidates pick).
 void PerformMuxusReveal(GameState& state, int controller, const CardParams& pp);   // body in SpellEffects.cpp
 inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
-                           const std::string& chosen_tutor = "")
+                           const std::string& chosen_tutor = "", int etb_kx = -1)
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
     const CardDefinition* def =
@@ -2422,12 +2594,72 @@ inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
     if (!def) { return; }
     const CardParams& p = def->params;
 
+    // --- StompySurprise ETB effects (all param-gated; byte-identical elsewhere) ---
+
+    // Elderscale Wurm: "When this creature enters, if your life total is less than N, your life
+    // total becomes N."
+    if (p.etb_life_floor > 0 && state.players[controller].life < p.etb_life_floor)
+    {
+        state.players[controller].life = p.etb_life_floor;
+    }
+
+    // Craterhoof Behemoth: "creatures you control ... get +X/+X until end of turn, where X is the
+    // number of creatures you control" (counted AFTER it enters -> includes itself). Temp bonuses
+    // (cleared at cleanup); creatures entering later this turn correctly get nothing (CR 611.2c).
+    // The trample grant is inert vs the passive opponent (never blocks) -- disclosed.
+    if (p.etb_team_pump_per_creature)
+    {
+        int x = 0;
+        for (const Permanent& q : state.battlefield)
+        { if (q.controller_index == controller && (q.card.IsCreature() || q.is_animated)) { ++x; } }
+        if (x > 0)
+        {
+            for (Permanent& q : state.battlefield)
+            {
+                if (q.controller_index == controller && (q.card.IsCreature() || q.is_animated))
+                { q.temp_power_bonus += x; q.temp_tough_bonus += x; }
+            }
+        }
+    }
+
+    // Terastodon: "destroy up to three target noncreature permanents; for each ... its controller
+    // creates a 3/3 green Elephant token." The passive opponent controls no noncreature
+    // permanents, so the live mode destroys the caster's OWN -- candidates narrowed to own
+    // FORESTS, tapped first (fungible; provider-style narrowing, disclosed). K = the searched
+    // chosen_x carried on the cast (etb_kx; -1/0 = destroy nothing).
+    if (p.etb_destroy_own_noncreature_max > 0 && etb_kx > 0)
+    {
+        int k = std::min(etb_kx, p.etb_destroy_own_noncreature_max);
+        int made = 0;
+        for (int pass = 0; pass < 2 && k > 0; ++pass)
+        {
+            const bool want_tapped = (pass == 0);
+            for (std::size_t i = state.battlefield.size(); i-- > 0 && k > 0; )
+            {
+                Permanent& q = state.battlefield[i];
+                if (q.controller_index != controller || q.tapped != want_tapped) { continue; }
+                if (!q.card.IsLand() || q.is_animated) { continue; }
+                if (!CardHasSubtype(q.card, "Forest")) { continue; }
+                state.players[q.owner_index].graveyard.push_back(q.card);
+                state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+                --k; ++made;
+            }
+        }
+        for (int t = 0; t < made; ++t)
+        {
+            CreateToken(state, controller, p.etb_created_token_power,
+                        p.etb_created_token_toughness, p.etb_created_token_subtypes,
+                        p.created_token_color);
+        }
+    }
+
     // (1) ETB fixed-token creation ("create N 1/1 red Goblin tokens" -- Mogg War Marshal 1,
     //     Siege-Gang Commander 3). Uses the shared etb_created_token_* spec.
     for (int k = 0; k < p.etb_self_creates_tokens; ++k)
     {
         CreateToken(state, controller, p.etb_created_token_power,
-                    p.etb_created_token_toughness, p.etb_created_token_subtypes);
+                    p.etb_created_token_toughness, p.etb_created_token_subtypes,
+                    p.created_token_color);
     }
 
     // (1b) ETB OPPONENT-token gift (Hunted Phantasm: "target opponent creates five 1/1 red Goblin
@@ -2527,7 +2759,8 @@ inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
 // pass) resolves each against the survivors, so a watcher that dies alongside another watched
 // creature does not see that co-death. This is essentially unreachable in goldfishing (our creatures
 // die one-at-a-time via sacrifice outlets, never in combat vs the passive opponent).
-inline void OnCreatureDies(GameState& state, int dead_controller, const Card& dead_card)
+inline void OnCreatureDies(GameState& state, int dead_controller, const Card& dead_card,
+                           bool dead_was_token = false)
 {
     std::vector<CardParams> reactions;
     // Other watchers still in play under the same controller: "another <subtype> you control dies".
@@ -2551,6 +2784,32 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
             if (self_ok) { reactions.push_back(dp); }
         }
     }
+    // Worldspine Wurm: "When ~ is put into a graveyard from anywhere, shuffle it into its owner's
+    // library." A TRIGGER (not a replacement -- it does hit the graveyard, so its dies-triggers
+    // below still fire; Progenitus' cleanup-discard REPLACEMENT wiring stays separate). The death
+    // site pushed the card into the graveyard before calling here; pull the newest matching copy
+    // back and shuffle it in. Runs regardless of `reactions` (before the early-out). A token copy
+    // ceases to exist instead (CR 111.7) -- gated on !dead_was_token.
+    if (!dead_was_token)
+    {
+        const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead_card);
+        if (dd && dd->params.graveyard_replace_shuffle_library)
+        {
+            std::vector<Card>& gy = state.players[dead_controller].graveyard;
+            for (std::size_t g = gy.size(); g-- > 0; )
+            {
+                if (gy[g].m_name == dead_card.m_name)
+                {
+                    Card back = gy[g];
+                    gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(g));
+                    state.players[dead_controller].library.push_back(std::move(back));
+                    ShuffleAfterSearch(state, dead_controller);
+                    break;
+                }
+            }
+        }
+    }
+
     if (reactions.empty()) { return; }
 
     const int opp = 1 - dead_controller;
@@ -2565,7 +2824,15 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
         for (int k = 0; k < wp.dies_trigger_creates_tokens; ++k)
         {
             CreateToken(state, dead_controller, wp.dies_token_power,
-                        wp.dies_token_toughness, wp.dies_token_subtypes);
+                        wp.dies_token_toughness, wp.dies_token_subtypes,
+                        wp.created_token_color);
+        }
+        // Vaultborn Tyrant: "When this creature dies, if it's not a token, create a token that's
+        // a copy of it." Only ever in `reactions` via the dead card's OWN self-watcher, so the
+        // copy is of dead_card itself. The copy's enter fires the watchers (gain 3 / draw 1).
+        if (wp.dies_trigger_copy_self_token && !dead_was_token)
+        {
+            CreateTokenCopyOfCard(state, dead_controller, dead_card);
         }
         if (wp.dies_trigger_impulse_exile && !ap.library.empty())
         {
@@ -3303,10 +3570,181 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
 inline void SacrificePermanentAt(GameState& state, int controller, int idx)
 {
     if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return; }
-    const Card dead = state.battlefield[idx].card;
+    const Card dead     = state.battlefield[idx].card;
+    const bool was_tok  = state.battlefield[idx].is_token;
     state.players[controller].graveyard.push_back(dead);
     state.battlefield.erase(state.battlefield.begin() + idx);
-    OnCreatureDies(state, controller, dead);
+    OnCreatureDies(state, controller, dead, was_tok);
+}
+
+// Call of the Wild -- ONE activation: "Reveal the top card of your library. If it's a creature
+// card, put it onto the battlefield. Otherwise, put it into your graveyard." The put creature
+// enters through the full cascade (its own ETB fires; watchers fire). Cost paid by the caller
+// (trailing-pass TapForCost, both worlds -> lockstep). Returns false when the library is empty.
+inline bool ApplyRevealTopDeploy(GameState& state, int controller)
+{
+    Player& ap = state.players[controller];
+    if (ap.library.empty()) { return false; }
+    Card top = ap.library.DrawTop();
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(top);
+    const bool is_creature = d ? d->card.IsCreature() : top.IsCreature();
+    if (RevealVisible())
+    {
+        EmitReveal(state.turn_number, "Call of the Wild (reveal)",
+                   { top.m_number }, { top.m_name.str() },
+                   is_creature ? std::vector<int>{ top.m_number } : std::vector<int>{},
+                   is_creature ? std::vector<int>{} : std::vector<int>{ top.m_number },
+                   { is_creature ? "\xE2\x86\x92 battlefield" : "\xE2\x86\x92 graveyard" });
+    }
+    if (is_creature)
+    {
+        Permanent perm;
+        perm.card              = d ? d->card : top;
+        perm.card.m_number     = top.m_number;
+        perm.controller_index  = controller;
+        perm.owner_index       = controller;
+        perm.entered_this_turn = true;
+        state.battlefield.push_back(perm);
+        const int slot = static_cast<int>(state.battlefield.size()) - 1;
+        OnDragonEnters(state, controller, slot);
+        OnGoblinEnters(state, controller, slot, std::string(), -1);
+    }
+    else
+    {
+        ap.graveyard.push_back(std::move(top));
+    }
+    return true;
+}
+
+// Turntimber Symbiosis front face: "Look at the top N cards of your library. You may put a
+// creature card from among them onto the battlefield. If that card has mana value <= max_mv, it
+// enters with +bonus +1/+1 counters. Put the rest on the bottom of your library in a random
+// order" (deterministic bottom order -- unobservable in goldfish; Muxus precedent). WHICH
+// creature = `chosen_name` (the searched tutor_target variant; every legal choice is a distinct
+// plan variant, autonomous + human). Empty -> the provider-free default: highest-MV creature
+// among the looked cards (disclosed); "TURNTIMBER_NONE" -> deliberately put nothing.
+inline void PerformLookTopPutCreature(GameState& state, int controller, const CardParams& pp,
+                                      const std::string& chosen_name)
+{
+    Player& ap = state.players[controller];
+    const int look = std::min(pp.look_top_put_creature_count,
+                              static_cast<int>(ap.library.size()));
+    if (look <= 0) { return; }
+    std::vector<Card> looked;
+    ap.library.DrawN(look, looked);
+
+    int pick = -1;
+    const bool decline = (chosen_name == "TURNTIMBER_NONE");
+    if (!decline)
+    {
+        if (!chosen_name.empty())
+        {
+            for (int i = 0; i < look; ++i)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(looked[i]);
+                const Card& c = d ? d->card : looked[i];
+                if (c.IsCreature() && looked[i].m_name == chosen_name) { pick = i; break; }
+            }
+        }
+        if (pick < 0)   // empty choice OR a named pick the post-shuffle top no longer holds
+        {
+            int best_mv = -1;
+            for (int i = 0; i < look; ++i)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(looked[i]);
+                const Card& c = d ? d->card : looked[i];
+                if (!c.IsCreature()) { continue; }
+                const int mv = c.m_mana_cost.ManaValue();
+                if (mv > best_mv) { best_mv = mv; pick = i; }
+            }
+        }
+    }
+
+    if (RevealVisible())
+    {
+        std::vector<int> nums; std::vector<std::string> names; std::vector<std::string> labels;
+        std::vector<int> kept, bottomed;
+        for (int i = 0; i < look; ++i)
+        {
+            nums.push_back(looked[i].m_number); names.push_back(looked[i].m_name.str());
+            if (i == pick) { kept.push_back(looked[i].m_number); labels.push_back("â battlefield"); }
+            else           { bottomed.push_back(looked[i].m_number); labels.push_back("â bottom of library"); }
+        }
+        EmitReveal(state.turn_number, "Turntimber Symbiosis (look)", nums, names, kept, bottomed, labels);
+    }
+
+    for (int i = 0; i < look; ++i)
+    {
+        if (i == pick)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(looked[i]);
+            Permanent perm;
+            perm.card              = d ? d->card : looked[i];
+            perm.card.m_number     = looked[i].m_number;
+            perm.controller_index  = controller;
+            perm.owner_index       = controller;
+            perm.entered_this_turn = true;
+            // "+1/+1 counters if mana value <= max_mv" -- counters ride the permanent (EffectivePower).
+            const int mv = perm.card.m_mana_cost.ManaValue();
+            if (pp.look_put_counter_bonus > 0 && mv <= pp.look_put_counter_bonus_max_mv)
+            { perm.counters.push_back(Counter{ Counter::Type::PlusOnePlusOne, pp.look_put_counter_bonus }); }
+            state.battlefield.push_back(perm);
+            const int slot = static_cast<int>(state.battlefield.size()) - 1;
+            OnDragonEnters(state, controller, slot);
+            OnGoblinEnters(state, controller, slot, std::string(), -1);
+        }
+        else
+        {
+            ap.library.push_back(std::move(looked[i]));   // bottom, deterministic order
+        }
+    }
+}
+
+// Wirewood Lodge "{cost}, {T}: Untap target <subtype>". Preconditions (checked here so a
+// stranded action is a FULL no-op -- cost unpaid by the caller when this returns false):
+// the source exists, is controlled and untapped, and a TAPPED matching creature exists.
+// Auto-target = the highest-yield tapped matching creature (mana-wise weakly dominant;
+// disclosed). Taps the source, untaps the target. Lockstep both worlds.
+inline bool CanApplyUntapCreature(const GameState& state, int controller, int source_id,
+                                  const std::string& subtype)
+{
+    bool src_ok = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_number == source_id && !p.tapped)
+        { src_ok = true; break; }
+    }
+    if (!src_ok) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.tapped && p.card.IsCreature()
+            && CardHasSubtype(p.card, subtype)) { return true; }
+    }
+    return false;
+}
+inline void ApplyUntapCreature(GameState& state, int controller, int source_id,
+                               const std::string& subtype)
+{
+    int src = -1, best = -1, best_yield = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != controller) { continue; }
+        if (p.card.m_number == source_id && !p.tapped) { src = i; continue; }
+        if (!p.tapped || !p.card.IsCreature() || !CardHasSubtype(p.card, subtype)) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        const int y = d ? PermanentManaYield(state, p, *d) : 0;
+        if (y > best_yield) { best_yield = y; best = i; }
+    }
+    if (src < 0 || best < 0) { return; }
+    state.battlefield[src].tapped  = true;
+    state.battlefield[best].tapped = false;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      state.battlefield[src].card.m_name.str() + ": untapped "
+                      + state.battlefield[best].card.m_name.str());
+    }
 }
 
 // HUMAN-PLAY victim override for a creature-sac outlet (viewer issue #4). Autonomously the victim is
@@ -3366,10 +3804,11 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     const int hidx = ChooseSacOutletVictimIndex(state, controller, source_id,
                                                 op->sac_creature_requires_subtype, victim_id, src_name);
     // Find + remove the chosen victim (a controlled creature of the required subtype; self-inclusive).
-    Card victim; bool found = false;
+    Card victim; bool found = false; bool victim_tok = false;
     if (hidx >= 0)
     {
         victim = state.battlefield[hidx].card; found = true;
+        victim_tok = state.battlefield[hidx].is_token;
         state.players[controller].graveyard.push_back(victim);
         state.battlefield.erase(state.battlefield.begin() + hidx);
     }
@@ -3396,7 +3835,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
             if (q.card.m_number != victim_id) { continue; }
             if (!op->sac_creature_requires_subtype.empty()
                 && !CardHasSubtype(q.card, op->sac_creature_requires_subtype)) { continue; }
-            victim = q.card; found = true;
+            victim = q.card; found = true; victim_tok = q.is_token;
             state.players[controller].graveyard.push_back(q.card);
             state.battlefield.erase(state.battlefield.begin() + i);
             break;
@@ -3416,7 +3855,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     if (!mana_color.empty()) { AddChosenColorFloat(state, mana_color, mana_amt); }
     if (dmg > 0) { state.players[1 - controller].life -= dmg; state.opponent_lost_life_this_turn = true; }
     for (int k = 0; k < ntok; ++k) { CreateToken(state, controller, tp, tt, tsub); }
-    OnCreatureDies(state, controller, victim);   // Pashalik ping / Rundvelt impulse / Mogg death token
+    OnCreatureDies(state, controller, victim, victim_tok);   // Pashalik ping / Rundvelt impulse / Mogg death token
 }
 
 // Multi-sac BURST: sacrifice up to `count` canonical victims to a damage sac-outlet in ONE activation
@@ -5051,9 +5490,49 @@ inline bool ExileGraveyardLandForMana(GameState& state, int controller)
 // accounting site (BuildPool / BuildAvailableMana / greedy tap / backtracker) so the executor,
 // rollout, and planner all see the same variable burst. For non-storage sources this equals
 // ManaProducedPerTap(def), so passing it everywhere is byte-identical for every non-storage deck.
-inline int PermanentManaYield(const Permanent& perm, const CardDefinition& def)
+inline bool CardHasSubtype(const Card& c, const std::string& sub);   // defined below (Dragonstorm helpers)
+
+// Scaled mana DORK (Priest of Titania / Elvish Archdruid): a CREATURE whose "{T}: Add {G} for
+// each <subtype>" yield is the live subtype count. Distinct from IsScaledManaLand (Three Tree
+// City), which requires a positive feeder cost -- a dork's scaled tap has no feeder, so the two
+// gates can never both match one card.
+inline bool IsScaledManaDork(const CardDefinition& def)
+{
+    return def.card.IsCreature()
+        && !def.params.mana_per_creature_subtype.empty()
+        && def.params.mana_per_creature_feeder_generic == 0;
+}
+
+// Live yield of one scaled-dork tap: creatures matching the subtype, own side only by default,
+// both sides with mana_per_creature_count_all (Priest's "each Elf on the battlefield").
+inline int ScaledDorkCount(const GameState& state, int controller, const CardDefinition& def)
+{
+    const std::string& sub = def.params.mana_per_creature_subtype;
+    int n = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (!def.params.mana_per_creature_count_all && q.controller_index != controller) { continue; }
+        if (q.card.IsCreature() && CardHasSubtype(q.card, sub)) { ++n; }
+    }
+    return n;
+}
+
+// Arbor Elf gate: a source with mana_requires_land_subtype is live only while the controller
+// controls a permanent with that subtype (only Forests carry subtype "Forest"). True for every
+// card without the param -> byte-identical elsewhere.
+inline bool ManaSubtypeGateLive(const GameState& state, int controller, const CardDefinition& def)
+{
+    if (def.params.mana_requires_land_subtype.empty()) { return true; }
+    return ControlsSubtype(state, controller, def.params.mana_requires_land_subtype);
+}
+
+inline int PermanentManaYield(const GameState& state, const Permanent& perm, const CardDefinition& def)
 {
     if (def.params.storage_land) { return perm.storage_counters; }
+    // Priest of Titania / Elvish Archdruid: yield = live Elf count (state-dependent).
+    if (IsScaledManaDork(def))   { return ScaledDorkCount(state, perm.controller_index, def); }
+    // Arbor Elf: no controlled Forest -> not a live source (yield 0; pool adds nothing).
+    if (!ManaSubtypeGateLive(state, perm.controller_index, def)) { return 0; }
     return ManaProducedPerTap(def);
 }
 
@@ -5108,7 +5587,7 @@ inline int ScaledManaFeederMana(const GameState& state)
             if (gy_fuel <= 0) { continue; }
             --gy_fuel;
         }
-        total += PermanentManaYield(p, *d);
+        total += PermanentManaYield(state, p, *d);
     }
     return total;
 }
@@ -6367,7 +6846,7 @@ inline int SpareUntappedMana(const GameState& state, int controller)
             if (gy_fuel <= 0) { continue; }
             --gy_fuel;
         }
-        AddSourceToPool(pool, state, *d, PermanentManaYield(p, *d));
+        AddSourceToPool(pool, state, *d, PermanentManaYield(state, p, *d));
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     return pool.Total();
@@ -6683,8 +7162,8 @@ inline void ApplyTopDisposition(GameState& state, std::vector<Card>& looked,
     for (int idx : disp.top_order)
     { if (idx >= 0 && idx < m && !on_top[idx]) { on_top[idx] = 1; top_seq.push_back(idx); } }
     // Ponder cannot bottom/bin: any looked card the player didn't explicitly order still stays
-    // on top (below the ordered ones, in look order).
-    if (kind == LookKind::Reorder)
+    // on top (below the ordered ones, in look order). Same for Mirri's Guile (ReorderNoShuffle).
+    if (kind == LookKind::Reorder || kind == LookKind::ReorderNoShuffle)
     { for (int i = 0; i < m; ++i) { if (!on_top[i]) { on_top[i] = 1; top_seq.push_back(i); } } }
     // Place the on-top sequence so top_seq[0] ends up at the very top (drawn first).
     for (std::vector<int>::reverse_iterator it = top_seq.rbegin(); it != top_seq.rend(); ++it)
@@ -6706,10 +7185,12 @@ inline TopDisposition HeuristicTopDisposition(const GameState& state, const std:
 {
     const int m = static_cast<int>(looked.size());
     TopDisposition disp;
-    if (kind == LookKind::Reorder)
+    if (kind == LookKind::Reorder || kind == LookKind::ReorderNoShuffle)
     {
-        const bool do_shuffle = (keep_decision == 0)
-                             || (keep_decision == -1 && !ResolveProvider(state).KeepReorderTop(state, looked));
+        // Mirri's Guile (ReorderNoShuffle) has no shuffle mode -- order wanted-first regardless.
+        const bool do_shuffle = kind == LookKind::Reorder
+                             && ((keep_decision == 0)
+                                 || (keep_decision == -1 && !ResolveProvider(state).KeepReorderTop(state, looked)));
         if (do_shuffle) { disp.shuffle = true; return disp; }
         // Wanted (ScryKeepOnTop) first, ordered most-wanted-first (stable); then the rest in
         // look order. Nothing is bottomed -- everything stays on top (the real Ponder drawback).
@@ -6866,7 +7347,7 @@ inline std::vector<TopOption> EnumerateTopDispositions(LookKind kind, const std:
     auto name = [&](int i) { return looked[i].m_name.str(); };
     const char* away = (kind == LookKind::Surveil) ? "graveyard"
                      : (kind == LookKind::Scry)     ? "bottom" : "below";
-    if (kind == LookKind::Reorder)
+    if (kind == LookKind::Reorder || kind == LookKind::ReorderNoShuffle)
     {
         std::vector<int> perm(m);
         for (int i = 0; i < m; ++i) { perm[i] = i; }
@@ -6877,8 +7358,12 @@ inline std::vector<TopOption> EnumerateTopDispositions(LookKind kind, const std:
             o.label = lbl;
             opts.push_back(std::move(o));
         } while (std::next_permutation(perm.begin(), perm.end()));
-        TopOption sh; sh.disp.shuffle = true; sh.label = "Shuffle them away";
-        opts.push_back(std::move(sh));
+        // "You may shuffle" exists only for the Ponder family; Mirri's Guile cannot shuffle.
+        if (kind == LookKind::Reorder)
+        {
+            TopOption sh; sh.disp.shuffle = true; sh.label = "Shuffle them away";
+            opts.push_back(std::move(sh));
+        }
         return opts;
     }
     // Scry / Surveil: ordered subsets kept on top.
@@ -7078,6 +7563,57 @@ inline void ReorderTopOrShuffle(GameState& state, int n, const std::string& sour
     ApplyTopDisposition(state, looked, disp, LookKind::Reorder);
 }
 
+// Mirri's Guile: "At the beginning of your upkeep, you may look at the top three cards of your
+// library, then put them back in any order." NO shuffle, NO bottoming (LookKind::ReorderNoShuffle).
+// "May" always taken (free information + ordering is weakly dominant with the wanted-first
+// heuristic). Human play routes through the same top chooser as scry/reorder; the scripted search
+// pin is deliberately NOT consulted (this fires at the turn transition, outside plan applies).
+inline void ReorderTopNoShuffle(GameState& state, int n, const std::string& source)
+{
+    Player& ap = state.ActivePlayer();
+    const int look = std::min(n, static_cast<int>(ap.library.size()));
+    if (look <= 1) { return; }
+    std::vector<Card> looked(ap.library.begin(), ap.library.begin() + look);
+
+    TopDisposition disp;
+    if (g_play_top_chooser)
+    { disp = (*g_play_top_chooser)(state, source, looked, LookKind::ReorderNoShuffle); }
+    else
+    { disp = HeuristicTopDisposition(state, looked, LookKind::ReorderNoShuffle); }
+    disp.shuffle = false;   // no shuffle mode exists on this card
+
+    if (RevealVisible())
+    {
+        std::vector<int> seen_nums; std::vector<std::string> seen_names;
+        for (const Card& c : looked) { seen_nums.push_back(c.m_number); seen_names.push_back(c.m_name); }
+        std::vector<int> kept_nums; std::vector<char> placed(look, 0);
+        for (int idx : disp.top_order)
+        { if (idx >= 0 && idx < look && !placed[idx]) { placed[idx] = 1; kept_nums.push_back(looked[idx].m_number); } }
+        for (int i = 0; i < look; ++i) { if (!placed[i]) { kept_nums.push_back(looked[i].m_number); } }
+        EmitReveal(state.turn_number, source, seen_nums, seen_names, kept_nums,
+                   /*bottomed*/ std::vector<int>{});
+    }
+
+    for (int _e = 0; _e < look; ++_e) { ap.library.erase(ap.library.begin()); }
+    ApplyTopDisposition(state, looked, disp, LookKind::ReorderNoShuffle);
+}
+
+// Upkeep-reorder trigger sweep (Mirri's Guile). One reorder per permanent carrying the param
+// (a second copy's reorder is a heuristic no-op but stays faithful). Called from BOTH upkeep
+// sites (GameEngine::UpkeepStep + the rollout's turn transition) -- lockstep.
+inline void PerformUpkeepReorder(GameState& state)
+{
+    const int active = state.active_player_index;
+    // Collect first: the reorder itself never changes the battlefield, but keep the scan cheap.
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->params.upkeep_reorder <= 0) { continue; }
+        ReorderTopNoShuffle(state, d->params.upkeep_reorder, p.card.m_name.str());
+    }
+}
+
 // ResolveExpressiveIteration -- body in SpellEffects.cpp (see the header note above).
 void ResolveExpressiveIteration(GameState& state);
 
@@ -7237,6 +7773,68 @@ inline void PerformSacrificeLandCost(GameState& state, const std::string& spell_
         ap.graveyard.push_back(state.battlefield[idx].card);
         state.battlefield.erase(state.battlefield.begin() + idx);
     }
+}
+
+// Battlefield indices of the controller's creatures legal for a "sacrifice a <color> creature"
+// additional cost (Natural Order: green), most-expendable-first: tokens before real cards, then
+// lowest effective power, then battlefield order. Colour read off the live card (a token copy /
+// coloured token carries its colour; plain tokens are colourless and only match an empty filter).
+inline std::vector<int> SacCreatureCandidateIndices(const GameState& state, int controller,
+                                                    const std::string& color)
+{
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
+        if (!CardHasColorNamed(p.card, color)) { continue; }
+        out.push_back(i);
+    }
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b)
+    {
+        const Permanent& pa = state.battlefield[a];
+        const Permanent& pb = state.battlefield[b];
+        if (pa.is_token != pb.is_token) { return pa.is_token; }
+        return pa.EffectivePower() < pb.EffectivePower();
+    });
+    return out;
+}
+
+// "As an additional cost to cast this spell, sacrifice a <color> creature" (Natural Order). Paid
+// at CAST time (CR 601.2h) in both worlds, BEFORE resolution -- so a sacrificed Worldspine Wurm's
+// dies-triggers (3 Wurm tokens + shuffle-into-library) resolve before the search, making the Wurm
+// itself a legal fetch target. `victim_id` is the searched plan variant (card m_number); <= 0 or
+// stale falls back to the most-expendable candidate. Fires the full death cascade.
+inline void PerformSacrificeCreatureCost(GameState& state, const std::string& spell_name,
+                                         const std::string& color, int victim_id)
+{
+    const int active = state.active_player_index;
+    int idx = -1;
+    if (victim_id > 0)
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index == active && p.card.m_number == victim_id
+                && p.card.IsCreature() && CardHasColorNamed(p.card, color)) { idx = i; break; }
+        }
+    }
+    if (idx < 0)
+    {
+        std::vector<int> cands = SacCreatureCandidateIndices(state, active, color);
+        if (!cands.empty()) { idx = cands.front(); }
+    }
+    if (idx < 0) { return; }   // no legal victim (enumeration should have gated the cast)
+    const Card dead    = state.battlefield[idx].card;
+    const bool was_tok = state.battlefield[idx].is_token;
+    state.players[state.battlefield[idx].owner_index].graveyard.push_back(dead);
+    state.battlefield.erase(state.battlefield.begin() + idx);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "sacrifice",
+                      "\xF0\x9F\x94\xAA " + spell_name + " -- sacrificed " + dead.m_name.str());
+    }
+    OnCreatureDies(state, active, dead, was_tok);
 }
 
 // Crop Rotation resolution (CardParams::tutor_land_to_battlefield): "Search your library for a

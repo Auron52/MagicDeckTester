@@ -119,6 +119,24 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             back.params.produces = def.params.mdfc_back_produces;
             back.params.mdfc_back_name.clear();             // the back face has no further face
             back.params.mdfc_back_produces.clear();
+            // Spell//land MDFC (Turntimber Symbiosis // Turntimber, Serpentine Wood): the front is
+            // a NONLAND card, so the back cannot inherit its types/cost/params -- synthesize a clean
+            // Land face instead: {T}: Add <back_produces>, entering tapped unless mdfc_back_pay_life
+            // is paid (shock-land semantics via etb_pay_life_to_untap). A land front (Pathway) keeps
+            // the legacy copy above, byte-identical.
+            if (!def.card.IsLand())
+            {
+                Card land;
+                land.m_name = bn;
+                land.RehashName();
+                land.AddType(CardType::Land);
+                back.card = std::move(land);
+                back.tmpl = CardTemplate::BasicLand;
+                CardParams bp;
+                bp.produces             = def.params.mdfc_back_produces;
+                bp.etb_pay_life_to_untap = def.params.mdfc_back_pay_life;
+                back.params = std::move(bp);
+            }
             m_def_hash[bn] = CardDefHash(entry) ^ std::hash<std::string>{}(bn);
             m_cards[bn] = std::move(back);
         }
@@ -792,6 +810,31 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_lifegain                = params.value("etb_lifegain", 0);
     for (const std::string& s : params.value("checkland_subtypes", json::array()))
         p.checkland_subtypes.push_back(s);
+
+    // --- StompySurprise (mono-green elf ramp) ---
+    p.etb_life_floor               = params.value("etb_life_floor", 0);
+    p.mana_per_creature_count_all  = params.value("mana_per_creature_count_all", false);
+    p.mana_requires_land_subtype   = params.value("mana_requires_land_subtype", std::string{});
+    p.etb_team_pump_per_creature   = params.value("etb_team_pump_per_creature", false);
+    p.upkeep_reorder               = params.value("upkeep_reorder", 0);
+    p.creature_enters_min_power     = params.value("creature_enters_min_power", 0);
+    p.own_creature_enters_draw      = params.value("own_creature_enters_draw", 0);
+    p.creature_enters_includes_self = params.value("creature_enters_includes_self", false);
+    p.dies_trigger_copy_self_token  = params.value("dies_trigger_copy_self_token", false);
+    p.tutor_color                   = params.value("tutor_color", std::string{});
+    p.sac_additional_creature_color = params.value("sac_additional_creature_color", std::string{});
+    p.tutor_to_battlefield_single   = params.value("tutor_to_battlefield_single", false);
+    if (params.contains("activated_reveal_top_cost"))
+        p.activated_reveal_top_cost = ManaCostFromString(params["activated_reveal_top_cost"].get<std::string>());
+    if (params.contains("untap_creature_cost"))
+        p.untap_creature_cost = ManaCostFromString(params["untap_creature_cost"].get<std::string>());
+    p.untap_creature_subtype        = params.value("untap_creature_subtype", std::string{});
+    p.etb_destroy_own_noncreature_max = params.value("etb_destroy_own_noncreature_max", 0);
+    p.mdfc_back_pay_life            = params.value("mdfc_back_pay_life", 0);
+    p.look_top_put_creature_count   = params.value("look_top_put_creature_count", 0);
+    p.look_put_counter_bonus        = params.value("look_put_counter_bonus", 0);
+    p.look_put_counter_bonus_max_mv = params.value("look_put_counter_bonus_max_mv", 0);
+    p.created_token_color           = params.value("created_token_color", std::string{});
 
     return p;
 }

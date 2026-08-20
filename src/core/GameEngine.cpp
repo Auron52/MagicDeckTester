@@ -349,6 +349,8 @@ void GameEngine::UpkeepTail(GameState& state)
     // TurnSolver::SimulateEndAndStartNextTurn (lockstep); param-gated -> byte-identical elsewhere.
     PerformUpkeepCumulativeGifts(state);
     PerformUpkeepSacTutor(state);
+    // Mirri's Guile: arrange the top 3 at upkeep (before the draw). Lockstep in both worlds.
+    PerformUpkeepReorder(state);
 
     // Echo (CR 702.29) at TRUE upkeep timing -- BEFORE the draw step, after the other upkeep
     // triggers, mirroring the rollout's position in SimulateEndAndStartNextTurn (lockstep). See

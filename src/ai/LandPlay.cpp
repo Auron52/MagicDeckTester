@@ -34,28 +34,36 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     // colour, which every mana site reads live off the permanent's name. The faces share all OTHER
     // characteristics, so the tapped / ETB logic below reads the front `def` unchanged.
     const CardDefinition* face_def = &def;
-    if (opts.land_face == "back" && !def.params.mdfc_back_name.empty())
+    // A spell//land MDFC (nonland front, e.g. Turntimber Symbiosis) has exactly ONE land face --
+    // the back -- so a land play of it ALWAYS resolves as the back, whatever face the caller
+    // passed. A land//land Pathway keeps the explicit face choice.
+    if ((opts.land_face == "back" || !def.card.IsLand()) && !def.params.mdfc_back_name.empty())
     {
         const CardDefinition* bd = CardDatabase::Instance().Lookup(def.params.mdfc_back_name);
         if (bd) { face_def = bd; }
     }
+    // Every "as this land enters" decision below reads the FACE definition. For a land//land
+    // Pathway the faces share these params (back synthesized from the front), so `fdef` == the
+    // old front read -- byte-identical; for a spell//land only the back carries land semantics
+    // (Turntimber: pay 3 life or enter tapped).
+    const CardDefinition& fdef = *face_def;
 
     // Resolve "as this land enters" choices (shock life payment, reveal-untap) while the card is
     // still in hand; this also tells us whether it enters tapped.
     bool tapped;
-    if (opts.honor_entry_chooser && g_play_land_entry_chooser && LandEntryHasChoice(state, def))
+    if (opts.honor_entry_chooser && g_play_land_entry_chooser && LandEntryHasChoice(state, fdef))
     {
-        bool heur_untapped = !LandWouldEnterTapped(state, def, opts.allow_shock_pay);
+        bool heur_untapped = !LandWouldEnterTapped(state, fdef, opts.allow_shock_pay);
         bool untapped = (*g_play_land_entry_chooser)(
-            state, state.active_player_index, def.card.m_name.str(),
-            def.params.etb_pay_life_to_untap,
-            def.params.etb_untap_reveal_subtypes, heur_untapped);
-        if (untapped) { ApplyLandUntapPayment(state, def); }
+            state, state.active_player_index, fdef.card.m_name.str(),
+            fdef.params.etb_pay_life_to_untap,
+            fdef.params.etb_untap_reveal_subtypes, heur_untapped);
+        if (untapped) { ApplyLandUntapPayment(state, fdef); }
         tapped = !untapped;
     }
     else
     {
-        tapped = LandEntersTapped(state, def, opts.allow_shock_pay);
+        tapped = LandEntersTapped(state, fdef, opts.allow_shock_pay);
     }
 
     Permanent perm;
@@ -68,11 +76,11 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     perm.owner_index       = state.active_player_index;
     perm.entered_this_turn = true;
     perm.tapped            = tapped;
-    if (def.params.enters_tapped_with_depletion > 0)
+    if (fdef.params.enters_tapped_with_depletion > 0)
     {
         Counter dep;
         dep.type  = Counter::Type::Depletion;
-        dep.count = def.params.enters_tapped_with_depletion;
+        dep.count = fdef.params.enters_tapped_with_depletion;
         perm.counters.push_back(dep);
     }
     state.battlefield.push_back(perm);
@@ -80,32 +88,32 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     ap.hand.erase(it);
     ++ap.lands_played_this_turn;
 
-    // ETB effects, after the land is on the battlefield.
-    if (def.params.etb_scry > 0)
+    // ETB effects, after the land is on the battlefield (face definition; see fdef above).
+    if (fdef.params.etb_scry > 0)
     {
-        if (opts.label_look_source) { ScryTop(state, def.params.etb_scry, def.card.m_name); }
-        else                        { ScryTop(state, def.params.etb_scry); }
+        if (opts.label_look_source) { ScryTop(state, fdef.params.etb_scry, fdef.card.m_name); }
+        else                        { ScryTop(state, fdef.params.etb_scry); }
     }
-    if (def.params.etb_surveil > 0)
+    if (fdef.params.etb_surveil > 0)
     {
-        if (opts.label_look_source) { SurveilTop(state, def.params.etb_surveil, def.card.m_name); }
-        else                        { SurveilTop(state, def.params.etb_surveil); }
+        if (opts.label_look_source) { SurveilTop(state, fdef.params.etb_surveil, fdef.card.m_name); }
+        else                        { SurveilTop(state, fdef.params.etb_surveil); }
     }
-    if (def.params.etb_bounce_land)
+    if (fdef.params.etb_bounce_land)
     {
         BounceKarooLand(state, state.active_player_index,
                         static_cast<int>(state.battlefield.size()) - 1);
     }
     // "When this land enters, you gain N life" (Kazandu Refuge). Plain controller lifegain --
     // no gain-reversal enabler interaction (OpponentGainsLife is for the OPPONENT's gain).
-    if (def.params.etb_lifegain > 0)
+    if (fdef.params.etb_lifegain > 0)
     {
-        ap.life += def.params.etb_lifegain;
-        ap.life_gained_this_turn += def.params.etb_lifegain;   // Kazandu Refuge feeds Fortifying Draught's X
+        ap.life += fdef.params.etb_lifegain;
+        ap.life_gained_this_turn += fdef.params.etb_lifegain;   // Kazandu Refuge feeds Fortifying Draught's X
     }
     // Forbidden Orchard played this turn: it is tapped for mana this turn too, so spawn the
     // opponent's Spirit now (the turn-start spawn only covers copies already in play).
-    if (opts.spawn_orchard_spirit && IsForbiddenOrchard(&def)) { SpawnOpponentSpirit(state); }
+    if (opts.spawn_orchard_spirit && IsForbiddenOrchard(&fdef)) { SpawnOpponentSpirit(state); }
     return true;
 }
 
@@ -163,8 +171,9 @@ int GreedyLandChoiceIndex(const GameState& state)
         for (int i = 0; i < n; ++i)
         {
             if (ap.hand[i].m_impulse_no_land) { continue; }
-            const CardDefinition* def = CardDatabase::Instance().LookupCached(ap.hand[i]);
-            if (!def || !def->card.IsLand()) { continue; }
+            const CardDefinition* front = CardDatabase::Instance().LookupCached(ap.hand[i]);
+            const CardDefinition* def   = LandFaceDefOf(front);   // spell//land plays its back face
+            if (!def) { continue; }
             if (def->params.etb_bounce_land && !has_other_land) { continue; }
             if (LandClosingWindowEnabled())
             {

@@ -1198,6 +1198,106 @@ struct CardParams
     // subtypes (the fastland precedent: the shared predicate keeps enumeration pricing and the real
     // drop in lockstep). enters_tapped stays false on the entry (the static flag would double-tap).
     std::vector<std::string> checkland_subtypes;
+
+    // ================= StompySurprise (mono-green elf ramp) =================
+    // Every field below is gated (0/false/empty = inert) so other decks stay byte-identical.
+    // See docs/design/analysis-stompysurprise.md for the per-card mapping.
+
+    // Elderscale Wurm ETB: "if your life total is less than N, your life total becomes N."
+    // (The ongoing damage-floor REPLACEMENT is not modelled -- provably inert: no damage-to-us
+    // source exists in this sim; disclosed on the card entry.) 0 = no floor.
+    int etb_life_floor = 0;
+
+    // Priest of Titania: "{T}: Add {G} for each Elf ON THE BATTLEFIELD" -- with
+    // mana_per_creature_subtype set and feeder 0 on a CREATURE, the dork's per-tap yield is the
+    // live subtype count (see IsScaledManaDork / ScaledDorkCount). This flag widens the count to
+    // BOTH players' creatures (Priest); false = own side only (Elvish Archdruid).
+    bool mana_per_creature_count_all = false;
+
+    // Arbor Elf: "{T}: Untap target Forest." Modelled as a G dork that is LIVE only while the
+    // controller controls a land with this subtype -- equivalent in a single-main goldfish
+    // (each Arbor untap lets one Forest tap once more: N Arbors + >=1 Forest = +N G).
+    std::string mana_requires_land_subtype;
+
+    // Craterhoof Behemoth ETB: "creatures you control gain trample and get +X/+X until end of
+    // turn, where X is the number of creatures you control" (X counted AFTER it enters, so it
+    // includes itself). Applied as temp_power/tough bonuses to every own creature on the
+    // battlefield at resolution (later arrivals correctly excluded, CR 611.2c). The trample
+    // grant is inert (passive opponent never blocks) and not modelled -- disclosed.
+    bool etb_team_pump_per_creature = false;
+
+    // Mirri's Guile: "At the beginning of your upkeep, you may look at the top three cards of
+    // your library, then put them back in any order." N = 3. NO bottoming, NO shuffle (the
+    // Ponder family, not scry). Provider-ordered wanted-first; human reorder chooser fires in
+    // the viewer. 0 = no upkeep reorder.
+    int upkeep_reorder = 0;
+
+    // Vaultborn Tyrant: "Whenever this creature or another creature you control with power 4 or
+    // greater enters, you gain 3 life and draw a card." Extends the own_creature_enters_lifegain
+    // watcher with a minimum-power filter (effective power incl. counters/lords), a draw rider,
+    // and self-inclusion (the watcher fires for its OWN enter too).
+    int  creature_enters_min_power     = 0;
+    int  own_creature_enters_draw      = 0;
+    bool creature_enters_includes_self = false;
+
+    // Vaultborn Tyrant: "When this creature dies, if it's not a token, create a token that's a
+    // copy of it ..." -> a token copy of the card (same name -> the copy's own params stay live:
+    // its enter fires the watcher above; being is_token it never re-copies itself).
+    // "except it's an artifact in addition" is cosmetic here (nothing reads artifact-ness of a
+    // creature token in this deck) -- disclosed.
+    bool dies_trigger_copy_self_token = false;
+
+    // Natural Order: tutor target must ALSO have this color ("G" = green creature card).
+    // Applied on top of tutor_types in every tutor path. Empty = no color filter.
+    std::string tutor_color;
+    // Natural Order: "As an additional cost to cast this spell, sacrifice a creature" of this
+    // color ("G"). The searched victim rides Action/StackEntry::sac_victim_id (one cast variant
+    // per own matching creature); the sacrifice is paid at cast time (before resolution) and
+    // fires the death cascade (dies-watchers, shuffle-back). Empty = no such cost.
+    std::string sac_additional_creature_color;
+    // Natural Order / Turntimber front: tutor_to_battlefield puts exactly ONE card (the searched
+    // tutor_target). Distinguishes the single-target shape from Dragonstorm's storm-count put.
+    bool tutor_to_battlefield_single = false;
+
+    // Call of the Wild: "{cost}: Reveal the top card of your library. If it's a creature card,
+    // put it onto the battlefield. Otherwise, put it into your graveyard." Repeatable; the
+    // search chooses how many activations (clairvoyant top). nullopt = no such ability.
+    std::optional<ManaCost> activated_reveal_top_cost;
+
+    // Wirewood Lodge: "{cost}, {T}: Untap target <subtype>." An activated ability action; the
+    // untap target is auto-resolved to the highest-yield tapped matching creature (weakly
+    // dominant for mana purposes -- disclosed). nullopt/empty = no such ability.
+    std::optional<ManaCost> untap_creature_cost;
+    std::string             untap_creature_subtype;
+
+    // Terastodon ETB: "destroy up to three target noncreature permanents; for each, its
+    // controller creates a 3/3 green Elephant token." The passive opponent controls no
+    // noncreature permanents, so the live mode is destroying OUR OWN -- candidates narrowed to
+    // own Forests (tapped first; provider-style narrowing, disclosed). K = 0..this rides
+    // Action/StackEntry::chosen_x; the 3/3 Elephant spec reuses etb_created_token_*. 0 = off.
+    int etb_destroy_own_noncreature_max = 0;
+
+    // Turntimber Symbiosis back face ("Turntimber, Serpentine Wood"): "As this land enters, you
+    // may pay 3 life. If you don't, it enters tapped." Placed on the SYNTHESIZED back face as
+    // etb_pay_life_to_untap (shock-land semantics). Also marks the FRONT (a nonland) as having
+    // a playable MDFC land back -> land enumeration offers it. 0 = no life-or-tapped choice.
+    int mdfc_back_pay_life = 0;
+
+    // Turntimber Symbiosis front: "Look at the top N cards of your library. You may put a
+    // creature card from among them onto the battlefield. If that card has mana value
+    // <= look_put_counter_bonus_max_mv, it enters with look_put_counter_bonus additional +1/+1
+    // counters. Put the rest on the bottom in a random order" (deterministic order --
+    // unobservable in goldfish, Muxus precedent). WHICH creature (or none) is the searched
+    // tutor_target axis. 0 = not this mechanic.
+    int look_top_put_creature_count = 0;
+    int look_put_counter_bonus        = 0;
+    int look_put_counter_bonus_max_mv = 0;
+
+    // Colour of the creature tokens this card creates ("G" for Hornet Queen's Insects /
+    // Worldspine's Wurms / Terastodon's Elephants). Read by the etb_self / dies_trigger /
+    // Terastodon token sites so a green token is legal "sacrifice a green creature" fodder
+    // (Natural Order). Empty = colourless token (the historical default; byte-identical).
+    std::string created_token_color;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.

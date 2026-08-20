@@ -1110,6 +1110,20 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         if (def->params.creature_mana_only && !for_creature) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }
+        if (!ManaSubtypeGateLive(state, active, *def)) { continue; }   // Arbor Elf: no Forest = dead
+        // SCALED MANA DORK (Priest of Titania / Elvish Archdruid): one tap bursts the live Elf
+        // count into its ONE produces colour ({G}) -- per-permanent yield like a storage land.
+        if (IsScaledManaDork(*def))
+        {
+            std::uint8_t ebits = 0;
+            for (Color c : def->params.produces)
+            { ebits |= static_cast<std::uint8_t>(1u << static_cast<int>(c)); }
+            if (ebits == 0) { continue; }
+            const int eburst = ScaledDorkCount(state, active, *def);
+            if (eburst <= 0) { continue; }
+            srcs.push_back({ ebits, eburst, eburst, i });
+            continue;
+        }
         // SCALED MANA LAND (Three Tree City) is bounded by a SAFE CAP rather than bailed -- the user's
         // own second option, 2026-08-16: "it's okay to bail on three tree city or to bound it to some
         // safe cap. Goblins doesn't have huge issues with performance." Bounding is strictly better
@@ -1156,7 +1170,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             for (Color c : def->params.produces)
             { sbits |= static_cast<std::uint8_t>(1u << static_cast<int>(c)); }
             if (sbits == 0) { continue; }
-            const int burst = PermanentManaYield(state.battlefield[i], *def);
+            const int burst = PermanentManaYield(state, state.battlefield[i], *def);
             if (burst <= 0) { continue; }
             srcs.push_back({ sbits, burst, burst, i });   // one colour takes the whole burst
             continue;
@@ -1436,6 +1450,11 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         int b = SourceMaxNet(pp, dd);
         if (IsScaledManaLand(dd))
         { b = std::max(b, ScaledManaCreatureCount(state) - dd.params.mana_per_creature_feeder_generic); }
+        // Scaled mana DORK (Priest of Titania / Elvish Archdruid): the static bound reads 1; the
+        // real one-tap yield is the live Elf count -- an under-count here would be a LOSSY prune
+        // (the domain lesson). Over-counting is safe (B&B gate wants an upper bound).
+        if (IsScaledManaDork(dd))
+        { b = std::max(b, ScaledDorkCount(state, pp.controller_index, dd)); }
         // Domain source (Faeburrow / Bloom Tender): one tap yields |domain| mana (2-5), but the
         // static bound reads ManaProducedPerTap = 1 -- the under-count made this LOSSY: the gate
         // pruned payable WUBRG costs and the executor silently dropped legal casts the search had
@@ -1765,6 +1784,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 if (d->params.creature_mana_only && !for_creature) { continue; }
                 if (!StorageSourceLive(p, *d)) { continue; }   // uncharged storage land makes no mana
                 if (!GraveyardFuelLive(state, active, *d)) { continue; }   // Deathrite: no gy land
+                if (!ManaSubtypeGateLive(state, active, *d)) { continue; } // Arbor Elf: no Forest
                 untapped_max += source_max_net(p, *d);
             }
         }
@@ -1884,6 +1904,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         if (def->params.creature_mana_only && !for_creature) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }   // uncharged storage: no mana
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land = no mana
+        if (!ManaSubtypeGateLive(state, active, *def)) { continue; }   // Arbor Elf: no Forest = no mana
 
         // Identical-sibling collapse (see the s_dup_of_buf block above): an untapped chain member was
         // explored earlier at this node -- with the exact same def, permanent state and filters -- and
@@ -2061,7 +2082,10 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 }
                 continue;
             }
-            const int amt = def->params.storage_land ? storage_burn : ManaProducedPerTap(*def);
+            const int amt = def->params.storage_land ? storage_burn
+                          // Priest of Titania / Elvish Archdruid: one tap bursts the live Elf count.
+                          : IsScaledManaDork(*def) ? ScaledDorkCount(state, active, *def)
+                          : ManaProducedPerTap(*def);
             if (produces.empty())
             {
                 // Empty colours: a {C}-only source taps for colourless. A reflecting source with

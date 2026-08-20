@@ -53,6 +53,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         if (def.params.creature_mana_only && !for_creature) { return false; }
         if (!StorageSourceLive(p, def)) { return false; }   // uncharged storage land makes no mana
         if (!GraveyardFuelLive(state, active, def)) { return false; }   // Deathrite: no gy land = no mana
+        if (!ManaSubtypeGateLive(state, active, def)) { return false; } // Arbor Elf: no Forest = no mana
         return true;
     };
 
@@ -101,6 +102,11 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         {
             // Faeburrow / Bloom Tender: one mana of EACH colour among controlled permanents.
             amt = consumed = static_cast<int>(EffectiveProduces(state, active, def).size());
+        }
+        else if (IsScaledManaDork(def))
+        {
+            // Priest of Titania / Elvish Archdruid: one tap bursts the LIVE Elf count of {G}.
+            amt = consumed = ScaledDorkCount(state, active, def);
         }
         else { amt = consumed = ManaProducedPerTap(def); }
         const std::vector<Color>& prod = EffectiveProduces(state, active, def);
@@ -982,7 +988,7 @@ ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
             if (gy_fuel <= 0) { continue; }
             --gy_fuel;
         }
-        AddSourceToPool(pool, state, *def, PermanentManaYield(p, *def));
+        AddSourceToPool(pool, state, *def, PermanentManaYield(state, p, *def));
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     return pool;
@@ -1017,7 +1023,7 @@ ManaPool AvailableManaPoolNoAttackers(const GameState& state)
             if (gy_fuel <= 0) { continue; }
             --gy_fuel;
         }
-        AddSourceToPool(pool, state, *def, PermanentManaYield(p, *def));
+        AddSourceToPool(pool, state, *def, PermanentManaYield(state, p, *def));
     }
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     return pool;
@@ -1083,6 +1089,10 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
         if (p.controller_index != active || p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && IsScaledManaLand(*d)) { return f; }
+        // Scaled mana DORK (Priest of Titania / Elvish Archdruid): its yield grows as elves cast
+        // EARLIER IN THE SAME PLAN resolve, so the build-time credit can under-count supply -- the
+        // one error that turns into a false reject. Same stand-down as the scaled land.
+        if (d && IsScaledManaDork(*d)) { return f; }
     }
 
     const bool widen = EnvOn("MTG_DOMAIN_WIDEN", true);   // mirrors TurnSolver's DomainWidenEnabled
@@ -1175,7 +1185,7 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
             }
             continue;
         }
-        int amt = PermanentManaYield(p, *def);
+        int amt = PermanentManaYield(state, p, *def);
         if (amt < 0) { amt = ManaProducedPerTap(*def); }
         const std::vector<Color>& prod = EffectiveProduces(state, active, *def);
         int mask = 0;

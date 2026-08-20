@@ -97,6 +97,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Arbor Elf": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "{T}: Untap target Forest.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf Druid"
+  },
   "Aria of Flame": {
     "cmc": 3.0,
     "keywords": [],
@@ -273,6 +282,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Call of the Wild": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}{G}",
+    "oracle_text": "{2}{G}{G}: Reveal the top card of your library. If it's a creature card, put it onto the battlefield. Otherwise, put it into your graveyard.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Cascade Bluffs": {
     "cmc": 0.0,
     "keywords": [],
@@ -343,6 +361,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Craterhoof Behemoth": {
+    "cmc": 8.0,
+    "keywords": [
+      "Haste"
+    ],
+    "mana_cost": "{5}{G}{G}{G}",
+    "oracle_text": "Haste\nWhen this creature enters, creatures you control gain trample and get +X/+X until end of turn, where X is the number of creatures you control.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Creature — Beast"
   },
   "Crop Rotation": {
     "cmc": 1.0,
@@ -469,6 +498,26 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Enchantment Creature — Spirit"
+  },
+  "Elderscale Wurm": {
+    "cmc": 7.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{4}{G}{G}{G}",
+    "oracle_text": "Trample\nWhen this creature enters, if your life total is less than 7, your life total becomes 7.\nAs long as you have 7 or more life, damage that would reduce your life total to less than 7 reduces it to 7 instead.",
+    "power": "7",
+    "toughness": "7",
+    "type_line": "Creature — Wurm"
+  },
+  "Elvish Archdruid": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}{G}",
+    "oracle_text": "Other Elf creatures you control get +1/+1.\n{T}: Add {G} for each Elf you control.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Elf Druid"
   },
   "Elvish Mystic": {
     "cmc": 1.0,
@@ -859,6 +908,18 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Hornet Queen": {
+    "cmc": 7.0,
+    "keywords": [
+      "Deathtouch",
+      "Flying"
+    ],
+    "mana_cost": "{4}{G}{G}{G}",
+    "oracle_text": "Flying, deathtouch\nWhen this creature enters, create four 1/1 green Insect creature tokens with flying and deathtouch.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Insect"
+  },
   "Hunted Phantasm": {
     "cmc": 3.0,
     "keywords": [],
@@ -1154,6 +1215,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Llanowar Elves": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "{T}: Add {G}.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf Druid"
+  },
   "Lonely Sandbar": {
     "cmc": 0.0,
     "keywords": [
@@ -1272,6 +1342,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Mirri's Guile": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "At the beginning of your upkeep, you may look at the top three cards of your library, then put them back in any order.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Mirrorwing Dragon": {
     "cmc": 5.0,
     "keywords": [
@@ -1359,6 +1438,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Natural Order": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}{G}",
+    "oracle_text": "As an additional cost to cast this spell, sacrifice a green creature.\nSearch your library for a green creature card, put it onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Nicol Bolas, Planeswalker": {
     "cmc": 8.0,
@@ -1487,6 +1575,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Priest of Titania": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "{T}: Add {G} for each Elf on the battlefield.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf Druid"
   },
   "Progenitus": {
     "cmc": 10.0,
@@ -1985,6 +2082,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Terastodon": {
+    "cmc": 8.0,
+    "keywords": [],
+    "mana_cost": "{6}{G}{G}",
+    "oracle_text": "When this creature enters, you may destroy up to three target noncreature permanents. For each permanent put into a graveyard this way, its controller creates a 3/3 green Elephant creature token.",
+    "power": "9",
+    "toughness": "9",
+    "type_line": "Creature — Elephant"
+  },
   "Terror": {
     "cmc": 2.0,
     "keywords": [],
@@ -2063,6 +2169,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact Land"
+  },
+  "Turntimber Symbiosis": {
+    "cmc": 7.0,
+    "keywords": [],
+    "mana_cost": "{4}{G}{G}{G}",
+    "oracle_text": "Look at the top seven cards of your library. You may put a creature card from among them onto the battlefield. If that card has mana value 3 or less, it enters with three additional +1/+1 counters on it. Put the rest on the bottom of your library in a random order.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery // Land"
   },
   "Twinflame": {
     "cmc": 2.0,
@@ -2162,6 +2277,17 @@
     "toughness": "4",
     "type_line": "Creature — Human Warrior"
   },
+  "Vaultborn Tyrant": {
+    "cmc": 7.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{5}{G}{G}",
+    "oracle_text": "Trample\nWhenever this creature or another creature you control with power 4 or greater enters, you gain 3 life and draw a card.\nWhen this creature dies, if it's not a token, create a token that's a copy of it, except it's an artifact in addition to its other types.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Dinosaur"
+  },
   "Venerable Knight": {
     "cmc": 1.0,
     "keywords": [],
@@ -2189,6 +2315,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Wirewood Lodge": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{G}, {T}: Untap target Elf.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Wooded Foothills": {
     "cmc": 0.0,
     "keywords": [],
@@ -2197,6 +2332,26 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Worldly Tutor": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "Search your library for a creature card, reveal it, then shuffle and put the card on top.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Worldspine Wurm": {
+    "cmc": 11.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{8}{G}{G}{G}",
+    "oracle_text": "Trample\nWhen this creature dies, create three 5/5 green Wurm creature tokens with trample.\nWhen Worldspine Wurm is put into a graveyard from anywhere, shuffle it into its owner's library.",
+    "power": "15",
+    "toughness": "15",
+    "type_line": "Creature — Wurm"
   },
   "Worthy Knight": {
     "cmc": 2.0,

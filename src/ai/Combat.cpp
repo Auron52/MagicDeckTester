@@ -42,7 +42,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         if (q.controller_index != active) { continue; }
         const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
         if (!qd) { continue; }
-        if (qd->tmpl == CardTemplate::LordEffect) { lord_idx.push_back(i); }
+        if (IsLordPermanent(*qd)) { lord_idx.push_back(i); }   // template lords + dual-role (Archdruid)
         if (qd->params.grants_double_strike)      { ds_idx.push_back(i); }
     }
 

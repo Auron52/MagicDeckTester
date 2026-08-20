@@ -727,14 +727,46 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         return n <= 0 ? std::numeric_limits<size_t>::max() : static_cast<size_t>(n);
     }();
     const size_t n_emit = std::min(plans.size(), kMaxEmittedPlans);
+    // DIVERSITY-AWARE display cap. With variant-heavy enumerations (tutor-target cross products)
+    // the FIRST n_emit plans can all be variants of one cast set, hiding whole SPELLS from the
+    // player (StompySurprise T3, 5d sweep: 480 Arbor+2xTutor combos capped at 200 starved Natural
+    // Order out of the visible list entirely). When the cap truncates, emit one representative per
+    // distinct (land, face, cast-name multiset) FIRST (in plan order), then fill the remaining
+    // slots in plan order. Each emitted plan keeps its TRUE index, so replies are unchanged;
+    // an uncapped list emits identically to before (byte-identical for every small menu).
+    std::vector<size_t> emit_order;
+    emit_order.reserve(n_emit);
+    if (plans.size() > kMaxEmittedPlans)
+    {
+        std::unordered_set<std::string> seen_sets;
+        std::vector<char> taken(plans.size(), 0);
+        for (size_t i = 0; i < plans.size() && emit_order.size() < n_emit; ++i)
+        {
+            std::string key = plans[i].land_to_play + "|" + plans[i].land_face + "#";
+            std::vector<std::string> nm;
+            nm.reserve(plans[i].actions.size());
+            for (const Action& a : plans[i].actions) { nm.push_back(a.card_name); }
+            std::sort(nm.begin(), nm.end());
+            for (const std::string& n : nm) { key += n; key += ';'; }
+            if (seen_sets.insert(key).second) { emit_order.push_back(i); taken[i] = 1; }
+        }
+        for (size_t i = 0; i < plans.size() && emit_order.size() < n_emit; ++i)
+        { if (!taken[i]) { emit_order.push_back(i); } }
+        std::sort(emit_order.begin(), emit_order.end());
+    }
+    else
+    {
+        for (size_t i = 0; i < n_emit; ++i) { emit_order.push_back(i); }
+    }
     // When the caller already KNOWS the resolved choice (the --log-dir trace path), the chosen
     // plan is emitted even when it sits beyond the display cap: a saved reference must contain
     // the record of its own pick, or the protocol checker can never content-anchor that pick
     // again (Mirrorwing s7_gi6 picked a validated hand-assembled line at engine index 223 of
     // 412 -- the capped save kept 0..199 and the reference read as internally inconsistent).
     const bool emit_chosen_extra = chosen_index >= 0
-        && static_cast<size_t>(chosen_index) >= n_emit
-        && static_cast<size_t>(chosen_index) < plans.size();
+        && static_cast<size_t>(chosen_index) < plans.size()
+        && std::find(emit_order.begin(), emit_order.end(),
+                     static_cast<size_t>(chosen_index)) == emit_order.end();
     os << "  \"plans\": [\n";
     auto emit_plan = [&](size_t i, bool last)
     {
@@ -855,8 +887,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         os << "]";
         os << (last ? " }\n" : " },\n");
     };
-    for (size_t i = 0; i < n_emit; ++i)
-    { emit_plan(i, !emit_chosen_extra && i + 1 == n_emit); }
+    for (size_t k = 0; k < emit_order.size(); ++k)
+    { emit_plan(emit_order[k], !emit_chosen_extra && k + 1 == emit_order.size()); }
     if (emit_chosen_extra) { emit_plan(static_cast<size_t>(chosen_index), true); }
     os << "  ],\n";
     if (plans.size() > n_emit) { os << "  \"plans_total\": " << plans.size() << ",\n"; }
@@ -1042,7 +1074,8 @@ static void WriteTopDecisionJson(std::ostream& os, const GameState& s, const std
             for (int i = 0; i < m; ++i)
             {
                 if (on_top[i]) { continue; }
-                if (kind == LookKind::Reorder) { top.push_back(looked[i].m_name.str()); }  // Ponder keeps all on top
+                if (kind == LookKind::Reorder || kind == LookKind::ReorderNoShuffle)
+                { top.push_back(looked[i].m_name.str()); }  // Ponder/Mirri keep all on top
                 else                           { away.push_back(looked[i].m_name.str()); }
             }
         }
@@ -1056,6 +1089,7 @@ static void WriteTopDecisionJson(std::ostream& os, const GameState& s, const std
     os << "  \"note\": \"reply an option index. "
        << (kind == LookKind::Scry    ? "Kept cards stay on top (listed order); the rest go to the bottom."
          : kind == LookKind::Surveil ? "Kept cards stay on top; the rest go to the graveyard."
+         : kind == LookKind::ReorderNoShuffle ? "Order all cards on top (no shuffle option)."
          :                             "Order all cards on top, or shuffle them away.")
        << "\"\n";
     os << "}\n";
