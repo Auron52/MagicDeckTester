@@ -75,6 +75,17 @@ the control, order and park arms.
    `AffordAuditOn()`, so with the audit off nothing is computed: verified byte-identical
    (`base.train 123c0bdaaf6ffe5d`, `park.train 6a558d4d77e2241f`), smoke 36/36 and regression 60/60
    green.
+   **It found a live instance on another deck immediately.** FiveColour + Dragons, 150 games each
+   at each deck's own play policy: `STRANDED equips=1`, `Lightning Greaves -> #4`. So this is not a
+   KittyEquipment quirk — it is a property of the shared executor path, confirmed on a second deck
+   the first time the instrument was pointed at one.
+
+   Two things worth noticing in that same run, neither chased here: 90 of 4,300 executed casts
+   (2.1%) were dropped, and unlike KittyEquipment **10 of them are TOTAL-short** (Birds of Paradise
+   5, Lightning Greaves 5) rather than colour-short. Total-short is precisely the class the audit
+   note says a cast ORDER can strand or save — the Dragonstorm defect — so FiveColour has live
+   instances of the order-fixable class worth a look on its own terms.
+
 2. Only then consider the apply-side guard: require the host on the battlefield BEFORE `TapForCost`,
    and log only after a successful attach. **Both halves move the play digest** — `LogAbility` folds
    into it (`FoldStr("A")` runs before the `m_digest_only` early-out), so even the log-only half
