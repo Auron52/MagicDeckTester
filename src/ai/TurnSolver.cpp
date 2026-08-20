@@ -17393,6 +17393,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
     return plans;
 }
 
+// Per-GAME reset of the thread_local plan memos (see TurnSolver.h for why this exists). Defined
+// here because it must follow both memo namespaces. Cheap: an unordered_map::clear on maps whose
+// live content is one decision's worth of entries.
+void TurnSolver::ClearPerGameCaches()
+{
+    solvememo::t_cache.clear();
+    solvememo::t_m2cache.clear();
+    enummemo::t_cache.clear();
+}
+
+
 // ---- Transposition key over the future-determining state ------------------
 //
 // Folds every game-state field the rollout reads into a 128-bit key, plus the

@@ -1,8 +1,11 @@
-# Work units are not bit-reproducible across batch contexts (small; channel CONFIRMED, structure open)
+# Work units were not bit-reproducible across batch contexts — ROOT-CAUSED AND FIXED
 
-**Status:** open, deferred. Found 2026-08-20 while validating a KittyEquipment lever battery.
-**Channel:** per-thread state surviving a game boundary — CONFIRMED 2026-08-20 (see below). Which
-structure is still open.
+**Status:** CLOSED 2026-08-20. Found while validating a KittyEquipment lever battery, root-caused to
+the SEARCHED-SECOND-MAIN memo, fixed by clearing the thread_local plan memos at game start
+(`TurnSolver::ClearPerGameCaches`, called from `AIEngine::HandleMulligan` beside the existing
+`m_leaf_cache` clear).
+**Play was never affected** — every digest was identical across thread counts throughout. The
+casualty was the work METER's determinism.
 **Impact measured:** ~0.005% of a game's units. Nothing in that battery's conclusions is affected.
 **Why it is written down anyway:** it contradicts an invariant `ai/GameWorkMeter.h` documents as
 load-bearing, and the contradiction is cheap to re-find and expensive to rediscover the hard way.
@@ -72,34 +75,52 @@ Two conclusions, both firm:
   cap-clear fire earlier and therefore cost more work). Whatever the structure is, a game is
   reusing work computed by an earlier game on the same thread.
 
-## What is still open
+## Root cause: the m2 memo's EVICTION SCHEDULE, not its hits
 
-Which structure. All the candidates share one shape — per-thread state that survives a game boundary,
-so a game's cost depends on which games preceded it on its worker:
+Bisected by disabling each memo and comparing the two deterministic contexts (game 54, d3):
 
-* the three plan memos (`solvememo::t_cache`, `solvememo::t_m2cache`, `enummemo::t_cache`), which are
-  cleared ONLY on exceeding their cap, never at a game boundary;
-* the ~dozen other `static thread_local` scratch buffers in `TurnSolver.cpp`.
+| config | isolated | `--threads 1` |
+|---|---|---|
+| both memos on | 2,127,508 | 2,127,270 — differ |
+| m2 memo off (`MTG_NO_M2_SEARCH_MEMO=1`), solve memo on | 2,144,680 | 2,144,680 — identical |
+| both off | 2,144,680 | 2,144,680 — identical |
 
-The memos remain the obvious suspects and remain hard to blame: `g_decision_epoch` is `thread_local`,
-starts at 0 and only ever increments, so a previous game's entries carry strictly lower epochs and
-cannot be hit. Something per-thread is surviving the game boundary and being REUSED (the monotonicity
-above rules out the "residue only shifts when the cap-clear fires" story, which predicts the opposite
-sign).
+So the SEARCHED-SECOND-MAIN memo (`solvememo::t_m2cache`) is the sole channel, and the greedy solve
+memo moves unit counts not at all (it memoises a path that consumes no budget units).
 
-The bisect is now cheap and well-posed: clear one candidate at game start, then re-run the
-`--threads 1` vs isolated pair from the table above. They must converge on the isolated value when
-the right structure is cleared.
+The mechanism is NOT stale hits — that really is impossible, exactly as reasoned above:
+`g_decision_epoch` is thread_local, starts at 0 and only increments, so a previous game's entries
+carry strictly lower epochs and the `epoch ==` test rejects them. **They are dead weight, and that
+is the problem.** They still occupy the shared `Cap()`, so how much residue a worker carries decides
+WHEN `cache.clear()` fires, which decides which of the CURRENT game's live entries get evicted —
+a different hit pattern, a different node count. More residue happened to produce a *more* favourable
+eviction schedule here, which is why the earlier "residue should cost more work" prediction had the
+sign backwards.
 
-## Practical guidance until it is closed
+## The fix
+
+`TurnSolver::ClearPerGameCaches()` drops all three plan memos and is called from
+`AIEngine::HandleMulligan`, beside the `m_leaf_cache` clear that already existed for precisely this
+reason ("so a reused batch worker's AIEngine does not accumulate/cross-hit across games").
+
+Verified: game 54 now reads **2,127,508 in all three contexts** (isolated, `--threads 1`,
+`--threads 24`), the full 60-game units file is bit-identical between `--threads 1` and
+`--threads 24`, and play is untouched (`base.train 123c0bdaaf6ffe5d`, `park.train
+6a558d4d77e2241f`, both unchanged; smoke 36/36 and regression 60/60 ALL PASS with no play changes
+and no slowdowns).
+
+Note the direction: the batch numbers moved UP to meet the isolated one. The residue had been
+buying a small accidental saving, so the fix costs a little work per game in exchange for the
+determinism `GameWorkMeter.h` promises.
+
+## Practical guidance
 
 * **Units remain the right cost instrument** — they are load-INVARIANT, which wall time emphatically
   is not (the same smoke suite measured an 81 s and a 204 s makespan on this box hours apart, a
   uniform ~2.5x across every deck including ones the change could not touch). The defect here is
   ~0.005%; the wall-clock alternative is off by 150%.
-* **Do not treat a units diff as a byte-identity check.** Use the play DIGEST for identity. A
-  handful of games differing in the 5th significant figure is this effect, not a regression.
-* **Be careful with an abandon ceiling set near a cell's median.** A game within ~0.01% of the
-  ceiling can be abandoned in one run and not the next, which makes the skip list run-dependent —
-  exactly what the ceiling was designed to avoid. Ceilings set at a multiple of the median (the
-  documented practice) are far enough from the edge for this not to bite.
+* **Use the play DIGEST for byte-identity, not units.** Still true, and cheaper.
+* **Artifacts generated before this fix carry the effect.** Any units file, abandon calibration or
+  skip list produced before 2026-08-20 has up to ~0.01% of per-game thread-schedule noise baked in.
+  That is far below any sane ceiling multiple, so nothing needs regenerating — but it is why an old
+  file will not reproduce bit-exactly against a new run.

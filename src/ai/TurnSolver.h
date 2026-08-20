@@ -559,6 +559,24 @@ public:
     // per-site gate would make the leaf estimate mis-order relative to the line it is scoring.
     static void SetSearchedPlay(bool enable);
 
+    // Drop every per-THREAD plan memo at the start of a game. Called from AIEngine::HandleMulligan
+    // beside the m_leaf_cache clear, and for the same stated reason: "so a reused batch worker's
+    // AIEngine does not accumulate/cross-hit across games".
+    //
+    // These memos are scoped to ONE decision by g_decision_epoch, which is thread_local and only
+    // ever increments -- so a previous game's entries can never be HIT. They are pure dead weight,
+    // and that is exactly the problem: they occupy the shared Cap(), so how much residue a worker
+    // carries decides WHEN cache.clear() fires, which decides which of the CURRENT game's entries
+    // survive. That made a game's work-unit count depend on which games happened to share its
+    // worker thread -- measured on KittyEquipment game 54: 2,127,508 run alone, 2,127,270 with 53
+    // games ahead of it on the same thread, and varying run-to-run at --threads 24.
+    //
+    // PLAY was never affected (a memo hit returns what recomputation returns, and every digest was
+    // identical across thread counts); the casualty was ai/GameWorkMeter.h's invariant that units
+    // are "a deterministic function of (deck, seed, depth, arm, limit) and identical everywhere",
+    // on which the abandon ceiling and cross-machine skip lists rest.
+    static void ClearPerGameCaches();
+
     // --- External-controller hooks (Claude-play / human-play prototype) ---------
     // Expose the same candidate enumeration and plan application the solver uses, so
     // an external decision provider can be offered the legal main-phase plans and have

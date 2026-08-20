@@ -420,6 +420,13 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // worker's AIEngine does not accumulate/cross-hit across games. See m_leaf_cache.
     if (m_leaf_cache_enabled) { m_leaf_cache.Clear(); }
 
+    // New game: same rule, same reason, for the thread_local PLAN memos (see
+    // TurnSolver::ClearPerGameCaches). Their entries are epoch-scoped to one decision and so can
+    // never be hit across a game boundary -- but they still occupy the shared cap, which made the
+    // eviction schedule (and therefore a game's work-unit count) depend on which games shared the
+    // worker thread. Play was never affected; the work METER's determinism was.
+    TurnSolver::ClearPerGameCaches();
+
     m_last_bottomed_numbers.clear();
     int mulligan_count = 0;
     while (true)
