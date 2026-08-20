@@ -16594,9 +16594,22 @@ namespace enummemo
                                                // (battery-measured raw hit rate is 24%, so storing
                                                // on first visit paid 12M vector copies for nothing)
         std::vector<TurnSolver::Plan> plans;
+        std::string dbg;                       // VERIFY builds only: un-keyed-input fingerprint of
+                                               // the state whose plans were stored, diffed at a
+                                               // mismatch to name the input the key fails to fold
     };
+
+    // Fingerprint of the enumeration inputs the key does NOT (or conditionally does not) fold --
+    // the residual-mismatch suspects. If a mismatch shows stored==fresh here, the differing input
+    // is a mutable global, not GameState.
+    std::string Fingerprint(const GameState& state);
     inline thread_local std::unordered_map<TranspositionTable::Key, Entry,
                                            TranspositionTable::KeyHash> t_cache;
+    // Entries are valid for ONE decision (the epoch check on every hit), so cross-epoch entries
+    // are unreachable garbage that would otherwise accumulate promoted plan vectors for a whole
+    // game (cap x threads of dead storage). Clear on epoch change: memory is bounded by one
+    // decision's states and the cap becomes a same-decision backstop only.
+    inline thread_local uint64_t t_epoch_seen = 0;
     // Cap env-ized 2026-08-20: the 8192 default clear-on-full THRASHED on the heavy fivecolour
     // d6 game (today's census: ~130k distinct fs6 states/game, within-decision dup 71-88%) --
     // 51 clears -> 1% hit rate was the CAP's failure, not state diversity. MTG_ENUM_MEMO_CAP
@@ -16638,6 +16651,28 @@ namespace enummemo
     inline Dumper g_dumper;
 }
 
+std::string enummemo::Fingerprint(const GameState& state)
+{
+    std::string s;
+    char buf[96];
+    for (int pi = 0; pi < 2; ++pi)
+    {
+        s += "gy"; s += char('0' + pi); s += '=';
+        for (const Card& c : state.players[pi].graveyard) { s += c.m_name; s += ','; }
+        s += ';';
+    }
+    s += "ex=";
+    for (const Card& c : state.exile) { s += c.m_name; s += ','; }
+    s += ';';
+    const ManaPool mp = AvailableManaPool(state);
+    std::snprintf(buf, sizeof buf, "pool=%d.%d.%d.%d.%d.%d.%d;cheat=%d;sc=%llu;",
+                  mp.white, mp.blue, mp.black, mp.red, mp.green, mp.colorless, mp.wild,
+                  state.scripted_cheat_choice,
+                  (unsigned long long)state.search_count);
+    s += buf;
+    return s;
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
                                                             bool is_pre_combat)
 {
@@ -16650,8 +16685,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                       && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
     if (!memo_ok) { return EnumeratePlansWithLandUncached(state, is_pre_combat); }
 
-    const TranspositionTable::Key k = BuildBreakpointKey(state, is_pre_combat);
     auto& cache = enummemo::t_cache;
+    if (enummemo::t_epoch_seen != g_decision_epoch)
+    { cache.clear(); enummemo::t_epoch_seen = g_decision_epoch; }
+    const TranspositionTable::Key k = BuildBreakpointKey(state, is_pre_combat);
     auto it = cache.find(k);
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans)
     {
@@ -16676,6 +16713,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
                                  state.turn_number, is_pre_combat ? "m1" : "m2",
                                  it->second.plans.size(), it->second.max_dropped,
                                  fresh.size(), fresh_md);
+                    const std::string now = enummemo::Fingerprint(state);
+                    std::fprintf(stderr, "    stored: %s\n    fresh : %s\n    %s\n",
+                                 it->second.dbg.c_str(), now.c_str(),
+                                 (it->second.dbg == now) ? "FP-EQUAL (global, not state)"
+                                                         : "FP-DIFF (un-keyed state input)");
                 }
             }
         }
@@ -16697,6 +16739,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         it->second.has_plans   = true;
         it->second.max_dropped = own_md;
         it->second.plans       = plans;
+        if (enummemo::VerifyOn()) { it->second.dbg = enummemo::Fingerprint(state); }
     }
     else
     {
@@ -16729,8 +16772,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
                       && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
     if (!memo_ok) { return EnumeratePlans(state, false); }
 
-    const TranspositionTable::Key k = BuildBreakpointKey(state, false);
     auto& cache = enummemo::t_cache;
+    if (enummemo::t_epoch_seen != g_decision_epoch)
+    { cache.clear(); enummemo::t_epoch_seen = g_decision_epoch; }
+    const TranspositionTable::Key k = BuildBreakpointKey(state, false);
     auto it = cache.find(k);
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans)
     {
@@ -16753,6 +16798,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
                                  "[enum-memo] MISMATCH t%d m2: cached %zu plans md=%d vs fresh %zu md=%d\n",
                                  state.turn_number, it->second.plans.size(),
                                  it->second.max_dropped, fresh.size(), fresh_md);
+                    const std::string now = enummemo::Fingerprint(state);
+                    std::fprintf(stderr, "    stored: %s\n    fresh : %s\n    %s\n",
+                                 it->second.dbg.c_str(), now.c_str(),
+                                 (it->second.dbg == now) ? "FP-EQUAL (global, not state)"
+                                                         : "FP-DIFF (un-keyed state input)");
                 }
             }
         }
@@ -16773,6 +16823,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         it->second.has_plans   = true;
         it->second.max_dropped = own_md;
         it->second.plans       = plans;
+        if (enummemo::VerifyOn()) { it->second.dbg = enummemo::Fingerprint(state); }
     }
     else
     {
@@ -17021,17 +17072,51 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         {
             uint64_t gy_acc       = 0;
             bool     gy_retraceable = false;
+            int      gy_lands       = 0;
             for (const Card& c : p.graveyard)
             {
                 gy_acc += c.m_name_hash;  // cached std::hash(m_name)
                 const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
                 if (cdef && cdef->params.retrace) { gy_retraceable = true; }
+                if (ZoneCard(c).IsLand()) { ++gy_lands; }   // same test as GraveyardLandFuel
             }
             if (gy_retraceable)
             {
                 Fold(k, 0x6748 + static_cast<uint64_t>(pi)); // sub-section: graveyard (retrace live)
                 Fold(k, static_cast<uint64_t>(p.graveyard.size()));
                 Fold(k, gy_acc);
+            }
+            // Deathrite graveyard-land fuel (added 2026-08-20, enum-memo verify find #4): a land in
+            // the OWN graveyard is +1 live mana source for a gy_land_exile_mana permanent
+            // (AvailableManaPool / EffectiveProduces credit it), so two states identical in every
+            // keyed zone but differing in a spent fetchland in the graveyard solve differently --
+            // the extra wild flipped FetchCandidates' untapped/spendable ranking (triome vs shock)
+            // while sharing an FSLineCache/TT/memo entry. Fold the fuel COUNT (colours never
+            // matter; consumption is count-driven), gated on the fuel actually being readable: a
+            // land in this player's graveyard AND a gy_land_exile_mana card of theirs on the
+            // battlefield or in hand. Decks without such a card keep the EXACT prior key.
+            if (gy_lands > 0)
+            {
+                bool fuel_reader = false;
+                for (const Permanent& perm : state.battlefield)
+                {
+                    if (perm.controller_index != pi) { continue; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(perm.card);
+                    if (d && d->params.gy_land_exile_mana) { fuel_reader = true; break; }
+                }
+                if (!fuel_reader)
+                {
+                    for (const Card& c : p.hand)
+                    {
+                        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                        if (d && d->params.gy_land_exile_mana) { fuel_reader = true; break; }
+                    }
+                }
+                if (fuel_reader)
+                {
+                    Fold(k, 0xD47E + static_cast<uint64_t>(pi)); // sub-section: gy land fuel
+                    Fold(k, static_cast<uint64_t>(gy_lands));
+                }
             }
         }
     }

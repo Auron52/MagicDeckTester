@@ -1,5 +1,27 @@
 # FiveColour search-waste census + the free-cast candidate prune
 
+> ## STATUS 2026-08-20b (verify class SOLVED = find #4; memo through its FULL adoption gate,
+> awaiting USER call)
+>
+> All four key holes closed; the enum memo's key is now COMPLETE under verification. Gate
+> evidence, all on the epoch-clear build unless noted:
+> * Verify: **604,817 hits / 0 MISMATCHES** on the heavy fivecolour game (slow44), clears=0
+>   at cap 262144; digest + avg unchanged vs baseline.
+> * Identity: smoke 36/36 levers-off (fuel fold byte-inert) AND smoke 36/36 with memo ON;
+>   **regression mode 60/60 with memo ON, 0 configs changed, reference gate clean** (132 ok /
+>   76 repaired / 0 play-drift / 0 contract-fail). The memo is byte-identical at suite scale.
+> * Perf (interleaved off/on pairs, quiet box, slow44): pre-epoch-clear 37.81 -> 34.50
+>   (**-8.7%**); with epoch-clear 38.76/38.76 -> 35.35/35.12 (**-9.0%**). Arm variance ~0.3%.
+> * Epoch-clear added: cross-epoch entries were unreachable garbage (hits require epoch
+>   equality) retaining promoted plan vectors; the cache now clears on decision change, so
+>   memory is bounded by ONE decision and the cap is a same-decision backstop. At the 8192
+>   default cap the heavy game shows 45 clears yet only -5% hits and wall within ~1% of the
+>   262144 config -- the cap barely matters post-epoch-clear.
+> * DEFAULT still OFF (MTG_ENUM_MEMO). Adoption = USER call. If adopted: flip default on,
+>   keep =0 hatch; cap default can stay 8192 (or 65536 for margin) -- both configs measured.
+> * MTG_5C_SSM financing: the -9% covers SSM's +9% on the same deck if the user wants the
+>   greedy-free interior m2.
+
 > ## STATUS 2026-08-20 (items 1+5 dig: THREE REAL KEY HOLES found via MTG_ENUM_MEMO_VERIFY;
 > memo re-opened but blocked on ONE residual verify class)
 >
@@ -29,14 +51,19 @@
 >    condemnation stamp** in BuildBreakpointKey (the m2 filter changes the harvest) + **active
 >    scripted pins** (top/etbdig/tutor/reorder/tapmode -- a live pin steers nested resolution).
 >
-> OPEN: 14/609k verify mismatches remain, ALL one shape -- t6 m1, equal plan counts, plans
-> differ only in fetch_target (Jetmir's Garden vs Blood Crypt) on the same Scalding Tarn drop.
-> ELIMINATED by direct fold-and-retest: loyalty, free-cast bank, library content (multiset),
-> library ORDER (polynomial), scripted pins. The differing input is something else that steers
-> fetch-target resolution at the same (state, key). NEXT PROBE: dump the fetch-target
-> enumeration's inputs at the colliding site (GameState::scripted_cheat_choice and the
-> provider's fetch-rank path are the remaining suspects). Until it is found and folded, the
-> memo stays a measurement lever; the KEY FIXES ship regardless (they are correctness).
+> ~~OPEN: 14/609k verify mismatches remain~~ **SOLVED 2026-08-20 (find #4): Deathrite
+> graveyard-land FUEL.** A stored-vs-fresh fingerprint of the un-keyed inputs at the mismatch
+> site named it directly: stored `gy0=Misty Rainforest` / pool wild=7 vs fresh `gy0=` /
+> wild=6 -- same battlefield, hand, and library. A land in the OWN graveyard is +1 live mana
+> source for a gy_land_exile_mana permanent (Deathrite), and that extra wild flips
+> FetchCandidates' untapped/spendable ranking (triome vs shock order) -- but the graveyard is
+> folded only when RETRACE is live, so the two states shared a key. Fixed in BuildSimKey: fold
+> the graveyard LAND COUNT (colours never matter; consumption is count-driven), gated on a land
+> being there AND a gy_land_exile_mana card of that player on battlefield or in hand -- every
+> deck without such a card keeps the exact prior key. Like finds #1-#3 this hole was LIVE for
+> FSLineCache/TT before the memo existed. Method note for the next residual class: the
+> fingerprint (store a string of the un-keyed suspects at memo promotion, diff at verify
+> mismatch) beat five rounds of fold-and-guess in one run.
 
 USER direction (2026-08-20): "analyze to make sure we aren't doing more work than absolutely
 necessary in the search. Cases where we re-search for a particular card should be flagged as
