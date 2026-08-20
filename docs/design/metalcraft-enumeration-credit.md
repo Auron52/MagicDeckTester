@@ -73,7 +73,48 @@ subsets rescued per 20 games) but only on the cheap shape `Sol Ring{1} + EQUIP B
 which never changed a decision. That is the honest reading of the price half on its own: live,
 correct, and worth nothing without the bound.
 
-<!-- FULL A/B (train + held-out + the 16-game d5 repro block) WITH BOTH HALVES: see the ledger. -->
+With both halves, paired d3, 150 games per block:
+
+| block | control | arm | delta | se | t | faster | slower | plays differ |
+|---|---|---|---|---|---|---|---|---|
+| train (300001) | 4.9667 | 4.8533 | **-0.1133** | 0.0260 | -4.36 | 17 | **0** | 51 |
+| hold (900001) | 4.9600 | 4.8200 | **-0.1400** | 0.0300 | -4.67 | 22 | 1 | 58 |
+
+## Where the effect comes from, and where the one regression comes from
+
+Every held-out game was logged in both arms and bucketed by WHAT changed — the final mulligan
+decision (attempt kept + bottomed pair), the main-phase action stream, or nothing:
+
+| bucket | games | turns saved | per game | faster | slower |
+|---|---|---|---|---|---|
+| main-phase PLAY changed | 56 | 22 | **+0.1467** | **22** | **0** |
+| MULLIGAN decision changed | 2 | -1 | -0.0067 | 0 | 1 |
+| identical | 92 | 0 | 0 | 0 | 0 |
+
+**The entire win is play, 22 faster and 0 slower.** The only regression in 300 games is a bottoming
+side-effect: held-out gi=105 (seed 900106), where both arms face the same 7 after two mulligans and
+must bottom 2 —
+
+| | bottomed | keeps | result |
+|---|---|---|---|
+| control | Puresteel Paladin x2 | Sol Ring, Balan, Jitte, 2 Plains | T1 Sol Ring + Jitte -> **T4** |
+| credit on | **Balan + Sol Ring** | Paladin x2, Jitte, 2 Plains | nothing castable T1 -> **T5** |
+
+With metalcraft lines visible, the bottoming rollouts value the enabler highly enough to bottom Sol
+Ring, the deck's best card by `card_scores` (+0.59). Main-phase play never diverges in that game;
+the turn is lost at the bottoming choice, and extra depth does not rescue it (d5 also T5), which
+fits a value shift rather than a budget artifact. The other mulligan flip (gi=35) is turn-neutral.
+
+**Why this is bounded, not a lurking hazard.** `mana_bound` is used ONLY as a skip test before
+`consider()` (checked at every use site), so loosening it can only admit positions the real
+affordability model then judges — it cannot admit an unpayable plan and cannot distort a score. And
+at T1 of gi=105 there are no creatures on the battlefield and none castable off one Plains, so there
+are no equip candidates and the scan cannot even arm: the T1 plan space is identical in both arms,
+and the divergence is purely in what the rollouts project for later turns.
+
+Gating the credit OFF inside the mulligan/bottoming rollouts would buy back that -0.0067, and is
+deliberately NOT done: two hands is not evidence, and a mulligan model that deliberately mis-models
+the play it is choosing for is the worse failure.
 
 ## Instrument
 

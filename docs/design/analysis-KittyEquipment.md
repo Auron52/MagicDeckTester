@@ -1135,3 +1135,15 @@ useful question was not "is the credit worth anything" but "are the subsets it r
 all". The answer was 0 of 89,492, and it pointed straight at the prune. A lever that fires
 constantly (320,672 credited subsets per 20 games) can still be rescuing only the shape that does
 not matter — here `Sol Ring{1} + EQUIP Bonesplitter{1}`, never the Hammer.
+
+**Where the -0.1400 comes from (held-out, every game logged in both arms and bucketed):**
+
+| bucket | games | turns saved | per game | faster | slower |
+|---|---|---|---|---|---|
+| main-phase PLAY changed | 56 | 22 | **+0.1467** | **22** | **0** |
+| MULLIGAN decision changed | 2 | −1 | −0.0067 | 0 | 1 |
+| identical | 92 | 0 | 0 | 0 | 0 |
+
+The whole effect is play, 22 faster and 0 slower. The single regression in 300 games is a bottoming
+side-effect (gi=105: with metalcraft lines visible the bottoming rollouts bottom Sol Ring, the deck's
+best card, to keep two Paladins) — see `docs/design/metalcraft-enumeration-credit.md`.
