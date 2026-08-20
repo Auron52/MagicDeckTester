@@ -1075,8 +1075,16 @@ after Greaves, in either arm.**
 
 The lever also removed the single O-Naginata phantom equip present in the control (1 -> 0).
 
-### Side finding: the executor pays for an equip whose host is not on the battlefield
+### Side finding: a dropped cast can strand a co-selected equip
 
 Not a lever issue — identical in control, order arm and park arm — but found by the same sweep and
 written up in `docs/design/equip-host-not-on-battlefield.md`. 2 of 1,270 equips (0.16%), 2 games in
-600. The signature in a game log is an ability string `equip -> #<number>` instead of a host name.
+600; signature in a game log is an ability string `equip -> #<number>` instead of a host name.
+
+The first diagnosis (a missing guard) was wrong: `SubsetHasStrandedEquip` already covers this and
+passed correctly, because the subset DID contain the host's cast. What happens is that the cast is
+then dropped at apply time as unpayable — which is deliberate, documented behaviour — and the equip
+it was co-selected against runs anyway, pays, and no-ops. `MTG_AFFORD_AUDIT` on this deck: **33 of
+4,006 executed casts (0.82%) are dropped, every one COLOUR-short and none total-short**, so no cast
+order can fix them. The audit's existing STRANDED detector covers stranded ACCELERANTS (0 here,
+correctly) and does not cover a stranded equip host — extending it is the cheap next step.
