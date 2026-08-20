@@ -1,5 +1,76 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS UPDATE 2026-08-20 (CONDEMNED TRANCHE -- the lossless build): all 5 residual cells
+> RECOVER byte-identical to OFF with condemnation FULLY ON. The mechanism chain that got here:
+>
+> 1. MTG_CONDEMN_HONEST_PROBE (filter suppressed in the hybrid's VALUE PROBE only): recovered
+>    all 5 cells -- proof the losses flow through the probe's filtered m2 projections -- but
+>    perf measured +5% vs OFF (C 120/121s, H 126/129s makespan): the probe is ALSO where the
+>    whole -22% lived (full condemn C 117/117 vs F 91/90). Savings and losses are the same pass.
+> 2. The sound shape is the WIDTH-CAP WAVE PRECEDENT: the first-verified-win shortcut is sound
+>    only if "the previous pass was a COMPLETE refutation" (TurnSolver ~15190), and the filter's
+>    DELETE breaks that premise exactly as the width cap did. Cure: CONDEMNED TRANCHE in
+>    FSLineTail's second-main block (MTG_CONDEMN_TRANCHE, default ON): wave 0 enumerates
+>    FILTERED (the savings); on a NO-WIN result only, a tranche of second mains casting >=1
+>    condemned card (enumerated under CondemnSuppressGuard, non-condemned plans removed) runs
+>    strictly-better-only. A verified in-horizon win skips the tranche SOUNDLY: condemned space
+>    can only TIE at the pass edge. So the tranche is free exactly where the filter saves
+>    (winning nodes -- 8,900 of gi66's 10,826 drops) and restores completeness exactly where a
+>    filtered no-win would lie. Infinite budget reaches the whole space: the no-lossy-truncation
+>    bar holds STRUCTURALLY. Root-turn authority means the filter (and tranche) fire only at the
+>    root turn's m2 nodes -- deeper subtrees are unfiltered and the FSLine cache stays clean.
+> 3. Also measured this session: MTG_SOLVE_MEMO re-test in the fcprune world = WASH (C 114/123
+>    vs M 120/114, within +/-4% run noise; now byte-identical 5/5 vs the old +12% -- but no win).
+>    SolveWithLookahead-level escalation beam: built, correct, but UNREACHABLE for FiveColour
+>    (the deck's committed decisions run FullSearchLineHybrid/FSLineWin -- trace-proven).
+>
+> MEASURED (interleaved C/T/C/T, quiet box): the tranche is LOSSLESS (all 5 cells byte-identical
+> to OFF; train avgs identical, 0 slower/0 faster, 14 equal-score swaps) but costs **+11% vs OFF**
+> (C 114/120s, T 130/134s makespan) -- worse than honest-probe's +5%.
+>
+> ## CONCLUSION (the lossless-condemnation question is ANSWERED, negatively):
+> condemnation's savings ARE incomplete refutations. The search's wall time lives in
+> no-win/refutation subtrees; a refutation is only sound when complete, and every lossless
+> repair measured pays the savings back: EXEC-ONLY ~0% (the filter never binds execution -- 49
+> stamps/100 games, 0 executed drops), HONEST-PROBE +5%, CONDEMNED TRANCHE +11%. Full
+> condemnation (-22%, 3 structural losses) is irreducibly the forbidden lossy-truncation shape.
+> RECOMMENDATION: do not adopt MTG_5C_CONDEMN; the levers stay default-OFF as measurement
+> instruments (every control run today was 5/5 byte-identical with them inert). One unexplored
+> optimization if this is ever revisited: the tranche currently pays a SECOND full unfiltered
+> enumeration at every armed no-win m2 node; a direct "require >=1 condemned cast" odometer
+> (groupwave tranche_rank precedent) could reclaim the double-enum share of the +11% -- but the
+> re-added condemned-plan EXPLORATION is structural and bounds any variant at >= the exploration
+> cost. The 5C perf road forward is fcprune (ADOPTED, -7%-class, lossless) and, if wanted,
+> harvest-level dedup (the census's 58-84% duplication; MTG_SOLVE_MEMO re-test was a WASH, but a
+> cheaper-key harvest memo remains unbuilt).
+
+> ## STATUS UPDATE 2026-08-20 (LOSSLESS DIRECTIVE + EXEC-ONLY ELIMINATION): the USER directed a
+> lossless condemnation ("figure out a lossless approach for sure"). Findings this session:
+>
+> * **The channel is the VALUE TIEBREAK, by code fact:** the EOT dominance frontier
+>   (MTG_DOM_CENSUS/MTG_DOM_PRUNE) is DEFAULT OFF in both arms, so the only surviving suspect
+>   from the elimination table is pass-heavy siblings' filtered m2 values deflating their
+>   `plan.value` at the root pick (trajectory probe: committed_win=9 both arms -> tiebreak rules).
+> * **MTG_CONDEMN_SEARCH=0 (EXEC-ONLY, new scoping flag at the ApplyPlanDirect stamp): proven
+>   lossless, proven near-USELESS.** All 5 residual cells (gi66/gi113 x d3/d5, gi10 d5)
+>   byte-identical to OFF; full train 5/5 byte-identical to GT. But a 100-game census
+>   (MTG_CONDEMN_TRACE + _ROLLOUT) shows why: 49 executor stamps, **ZERO executed-m2 drops** --
+>   the condemnation constraint NEVER BINDS real execution. Exec-only is a no-op with stamps.
+> * **Corollary: ALL of full condemnation's savings AND all 3 losses live in the same place** --
+>   in-search filtering of root candidates' interior m2 projections. There is no free split.
+> * **Doctrine check:** budget x32 does not recover the 3 games, so full condemnation FAILS the
+>   infinite-budget test -- it is the forbidden lossy-truncation shape (docs: no-lossy-truncation
+>   bar). The blessed shape is the ESCALATION BEAM: filtered enumeration ORDERS candidates
+>   (optimistic/cheap where you branch), an unfiltered evaluation of the top-K DECIDES (honest
+>   where you score). Losses only if the true winner ranks below K under filtered values;
+>   per-game measurable. Design open; K small (2-3); skip escalation when an in-horizon win
+>   exists (committed_win < 9 -> tiebreak never rules).
+> * **Perf caveat discovered:** a 3-arm sequential measurement (exec-only/full/control) produced
+>   a bogus -15% for exec-only -- environmental drift; control measured 15% slower than the same
+>   config that morning. Full condemnation's marginal saving must be RE-MEASURED in the
+>   fcprune-adopted world (MTG_FREECAST_PRUNE default-on since 333480a targets the same fs-nests;
+>   overlap may have shrunk the -16.3%). Interleaved C/F/C/F quiet-box pairs are the method.
+>
 > ## STATUS UPDATE 2026-08-20 (ROOT-TURN AUTHORITY): perf 9% -> 16.3% at byte-identical ON
 > behaviour; the 3 residuals fully characterized by elimination -- next probe recorded.
 >

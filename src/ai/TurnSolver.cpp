@@ -2593,6 +2593,22 @@ struct CondemnRootTurnGuard
     ~CondemnRootTurnGuard() { if (owner) { g_condemn_root_turn = -1; } }
 };
 
+// CONDEMNATION ESCALATION plumbing (the lossless beam -- see the root loop's escalation block).
+// g_condemn_drops counts every action the post-combat condemnation filter deletes on this thread;
+// the root loop reads it around each candidate's evaluation to know whether that candidate's
+// subtree was filter-touched. g_condemn_suppress turns the filter off wholesale for the honest
+// re-evaluation of the finalists (RAII CondemnSuppressGuard); stamps keep running -- only the
+// deletion is suppressed, so the re-run scores the UNfiltered plan space.
+static thread_local unsigned long long g_condemn_drops = 0;
+static thread_local bool g_condemn_suppress = false;
+struct CondemnSuppressGuard   // save/restore, so nested guards cannot clear an outer suppression
+{
+    bool prev;
+    explicit CondemnSuppressGuard(bool on = true) : prev(g_condemn_suppress)
+    { g_condemn_suppress = prev || on; }
+    ~CondemnSuppressGuard() { g_condemn_suppress = prev; }
+};
+
 // Forward decl: ApplyPlanDirect's SEARCHED breakpoint continuation (Plan::bp_choice) picks its
 // candidate from the same land-folded plan set the outer search ranks. Defined later.
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
@@ -6571,7 +6587,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // exempt from order condemnation." Provider opt-in (CondemnsPassedMainPhase), gated on the
     // same filter activation as the pre-combat half so the pair is symmetric, and on a
     // THIS-turn stamp (m1_hand_turn) so a stale snapshot condemns nothing.
-    if (!is_pre_combat && !actions.empty() && MainPhaseFilterActive(state)
+    if (!is_pre_combat && !actions.empty() && !g_condemn_suppress && MainPhaseFilterActive(state)
         && state.m1_hand_turn == state.turn_number
         && ResolveProvider(state).CondemnsPassedMainPhase())
     {
@@ -6596,10 +6612,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     || a.hand_index >= static_cast<int>(ap.hand.size())) { return false; }
                 const bool drop = in_m1_hand(ap.hand[a.hand_index].m_number);
                 static const bool s_trace_drop = EnvOn("MTG_CONDEMN_TRACE_ROLLOUT");
-                if (drop && s_trace_drop)
+                if (drop)
                 {
-                    std::cerr << "[condemn] DROP T" << state.turn_number << " "
-                              << a.card_name.str() << "\n";
+                    ++g_condemn_drops;   // escalation: this subtree is filter-touched
+                    if (s_trace_drop)
+                    {
+                        std::cerr << "[condemn] DROP T" << state.turn_number << " "
+                                  << a.card_name.str() << "\n";
+                    }
                 }
                 return drop;
             }), actions.end());
@@ -10131,7 +10151,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // decisions. MTG_CONDEMN_ALL_TURNS=1 restores stamp-everywhere for the A/B.
     static const bool s_all_turns = EnvOn("MTG_CONDEMN_ALL_TURNS");
     static const bool s_trace_all = EnvOn("MTG_CONDEMN_TRACE_ROLLOUT");   // diagnostic: floods
-    if (is_pre_combat && bp_resume == nullptr
+    // MTG_CONDEMN_SEARCH=0 (EXEC-ONLY scoping): suppress this in-search stamp entirely, leaving
+    // only the executor's post-plan stamp (AIEngine). The executor stamp still filters the WHOLE
+    // post-combat m2 solve (descendant states inherit the snapshot), so the deep fs-nest savings
+    // survive; what exec-only gives up is filtering inside the m1 solve's sibling projections --
+    // the channel that deflates pass-heavy siblings' values (the 3 held-out residuals, all fixed
+    // by this scoping in the 2026-08-20 elimination table). Default ON = current full behaviour.
+    static const bool s_search_stamps = EnvOn("MTG_CONDEMN_SEARCH", true);
+    if (s_search_stamps && is_pre_combat && bp_resume == nullptr
         && (s_all_turns || g_condemn_root_turn < 0
             || state.turn_number == g_condemn_root_turn))
     { TurnSolver::StampM1Hand(state, &plan.actions, s_trace_all); }
@@ -17665,6 +17692,33 @@ static void ExpireStagedCards(GameState& state)
 // `depth` further complete turns. The returned line is prefixed with the chosen
 // second-main phase (when second_main) and continues with the recursed turns.
 // `cutoff` is the incumbent best (a line that cannot win by it is abandoned).
+// CONDEMNED-TRANCHE helpers (lossless condemnation; see the tranche block in FSLineTail).
+// CondemnFilterArmed mirrors the CollectActions condemnation-filter gate exactly: when true, the
+// second-main enumeration this node just ran was FILTERED, so a no-win from it is not a complete
+// refutation. PlanHasCondemnedCast mirrors the filter's drop predicate at the plan level: does
+// this plan cast (non-free) a card the m1 snapshot condemned?
+static bool CondemnFilterArmed(const GameState& state)
+{
+    return state.m1_hand_n > 0
+        && state.m1_hand_turn == state.turn_number
+        && MainPhaseFilterActive(state)
+        && ResolveProvider(state).CondemnsPassedMainPhase();
+}
+static bool PlanHasCondemnedCast(const GameState& state, const TurnSolver::Plan& plan)
+{
+    const Player& ap = state.ActivePlayer();
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+        if (a.free_cast) { continue; }
+        if (a.hand_index < 0 || a.hand_index >= static_cast<int>(ap.hand.size())) { continue; }
+        const int num = ap.hand[a.hand_index].m_number;
+        for (int i = 0; i < state.m1_hand_n; ++i)
+        { if (state.m1_hand[i] == num) { return true; } }
+    }
+    return false;
+}
+
 // `dom_arch` is the CALLER's end-of-turn sibling frontier (FSLineWin's `pre` loop). The EOT
 // transition for a pre-combat sibling happens one frame down, in here, so the archive has to be
 // threaded rather than owned locally -- see the dominance section above. nullptr (every other
@@ -17788,6 +17842,85 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 if (sub.win_turn <= state.turn_number + depth)
                 {
                     return best;
+                }
+            }
+        }
+
+        // ---- CONDEMNED TRANCHE (lossless condemnation; MTG_CONDEMN_TRANCHE, default ON) --------
+        // The enumeration above ran through the condemnation filter, so when stamps are live it
+        // never built a second main casting a condemned card -- that shrink is the lever's whole
+        // saving, but a NO-WIN from the filtered space alone breaks the first-verified-win
+        // shortcut's premise ("the previous pass was a COMPLETE refutation"), exactly the defect
+        // the width cap had before the deferred waves. Same cure: before answering no-win, walk
+        // the tranche the filter deleted (second mains casting >=1 condemned card), enumerated
+        // unfiltered, strictly-better-only. A verified in-horizon win above already RETURNED --
+        // condemned space could only TIE at the pass edge, never beat it -- so this tranche costs
+        // nothing exactly where the filter saves (winning nodes), and restores completeness
+        // exactly where a filtered no-win would lie (the 3 held-out residuals' regime). Under an
+        // unlimited budget the full plan space is reachable: the no-lossy-truncation bar holds.
+        {
+            static const bool s_condemn_tranche = EnvOn("MTG_CONDEMN_TRANCHE", true);
+            if (s_condemn_tranche && best.win_turn > state.turn_number + depth
+                && CondemnFilterArmed(state))
+            {
+                std::vector<TurnSolver::Plan> tranche;
+                {
+                    CondemnSuppressGuard _cs;   // unfiltered enumeration
+                    tranche = Main2DropEnabled() ? EnumeratePlansWithLand(state, false)
+                                                 : EnumeratePlans(state, false);
+                }
+                tranche.erase(std::remove_if(tranche.begin(), tranche.end(),
+                                  [&](const TurnSolver::Plan& q)
+                                  { return !PlanHasCondemnedCast(state, q); }),
+                              tranche.end());
+                MoveOrderPlans(tranche);
+                // Same body as the wave-0 loop above (kept verbatim so wave 0 stays untouched);
+                // no beam here -- the tranche is already the narrow remainder.
+                for (const TurnSolver::Plan& q : tranche)
+                {
+                    if (budget) { budget->Consume(1); }
+                    LoadPlanState(s2_buf, state, reuse_s2);
+                    GameState& s2 = s2_buf;
+                    std::vector<Action> bp;
+                    ApplyPlanDirect(s2, q, false, &bp);
+                    if (s2.ActivePlayer().life <= 0) { continue; }
+                    if (s2.Opponent().life <= 0)
+                    {
+                        TurnSolver::Plan q_rec = q;
+                        q_rec.breakpoint_actions = std::move(bp);
+                        return { state.turn_number, { { false, std::move(q_rec) } } };
+                    }
+                    if (!SimulateEndAndStartNextTurn(s2)) { continue; }
+                    ExpireStagedCards(s2);
+                    domin::Probe dprobe;
+                    if (DomActive() && dom_arch)
+                    {
+                        dprobe = domin::Check(*dom_arch, s2);
+                        if (dprobe.prune) { continue; }
+                    }
+                    TurnSolver::SearchLine sub =
+                        FSLineWin(s2, depth, max_turns, std::min(cutoff, best.win_turn),
+                                  second_main, tt, lc, budget);
+                    if (m2t_here)
+                    {
+                        std::fprintf(stderr, "[m2t] T%d d%d TRANCHE q=%s sub=%d best=%d cutoff=%d\n",
+                                     state.turn_number, depth, m2t_sum(q).c_str(), sub.win_turn,
+                                     best.win_turn, cutoff);
+                    }
+                    if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, sub.win_turn); }
+                    if (sub.win_turn < best.win_turn)
+                    {
+                        best.win_turn = sub.win_turn;
+                        best.phases.clear();
+                        TurnSolver::Plan q_rec = q;
+                        q_rec.breakpoint_actions = std::move(bp);
+                        best.phases.push_back({ false, std::move(q_rec) });
+                        best.phases.insert(best.phases.end(), sub.phases.begin(), sub.phases.end());
+                        if (sub.win_turn <= state.turn_number + depth)
+                        {
+                            return best;
+                        }
+                    }
                 }
             }
         }
@@ -19140,6 +19273,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     {
         TrustPathGuard _tpg(trust_push ? value_min_depth : 0,
                             trust_push ? ((escalation_r > 0.0) ? escalation_r : 120.0) : 0.0);
+        // MTG_CONDEMN_HONEST_PROBE (measurement lever, DEFAULT OFF): run the hybrid's PROBE with
+        // the condemnation filter suppressed. The LAW: OPTIMISTIC where you BRANCH (the heuristic
+        // escalation keeps the filter and its savings), HONEST where you SCORE (the probe whose
+        // line/values decide no-win turns sees the unfiltered plan space). Probes whether the 3
+        // held-out condemnation residuals flow through the probe's filtered projections.
+        static const bool s_condemn_honest_probe = EnvOn("MTG_CONDEMN_HONEST_PROBE");
+        CondemnSuppressGuard _hp(s_condemn_honest_probe);
         line = FullSearchLine(state, depth, max_turns, second_main, tt, probe_budget, &committed);
     }
     g_probe_recording = false;
@@ -20267,7 +20407,16 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // leaf evaluation keeps the cheap greedy continuation.
     g_bp_root_enum = enforce_budget;
     groupwave::g_state.max_dropped = 0;   // reset; capture right after (see the FSLineWin twin)
-    std::vector<Plan> candidates = EnumeratePlansWithLand(state, is_pre_combat);
+    std::vector<Plan> candidates;
+    {
+        // CONDEMNATION: the ENFORCING root's own candidate set is never filtered -- a root
+        // candidate the condemnation filter deletes has no escalation path back (the beam below
+        // can only re-score plans that were enumerated). Interior solves (enforce_budget=false)
+        // stay filtered; that is where the savings live. The 100-game census never saw an
+        // executed-m2 root drop, so this is insurance for the tail, not a behaviour change.
+        CondemnSuppressGuard _csg_root(enforce_budget);
+        candidates = EnumeratePlansWithLand(state, is_pre_combat);
+    }
     g_bp_root_enum = false;
     const int gw_dropped = groupwave::g_state.max_dropped;
 
@@ -20318,6 +20467,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     //      a GameState copy, so a pass only touches pass-local state.
     Plan best_plan = candidates.front();
 
+    // CONDEMNATION ESCALATION finalist pool: the committed pass's fully-evaluated candidates,
+    // as indexes into `candidates` (value-sorted, so pool order IS the value-tiebreak order),
+    // each with its FILTERED win turn and whether the condemnation filter deleted anything
+    // inside its subtree. Filled per pass, promoted on pass commit, consumed after the loop.
+    struct EscEntry { int idx; int win; bool touched; };
+    std::vector<EscEntry> committed_esc_pool;
+
     // Group-wave tranche plan lists, built lazily by the first pass that runs the phase and
     // rescored by every later pass at ITS sub_depth -- exactly as `candidates` is rescored.
     // The enumeration is deterministic per node, so building once is byte-identical to
@@ -20354,6 +20510,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         bool      pass_has_best    = false;
         bool      pass_aborted     = false;
         long long candidates_done  = 0;
+        std::vector<EscEntry> esc_pool;   // this pass's evaluated candidates (escalation)
 
         // Trace T1 top-level decisions (enforce_budget=true) AND T2 rollout decisions
         // where depth==3 (fired from the sub_depth=3 pass inside SimulateToEnd).
@@ -20415,6 +20572,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // main); the remaining turns are counted inside SimulateToEnd.
             if (budget) { budget->Consume(1); }
 
+            const unsigned long long esc_drops_before = g_condemn_drops;   // escalation window
             PROF_INC(gamestate_copies);
             GameState copy = state;
             if (is_pre_combat)
@@ -20501,6 +20659,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 pass_best     = plan;
                 pass_has_best = true;
             }
+            esc_pool.push_back(EscEntry{static_cast<int>(&plan - candidates.data()), win_turn,
+                                        g_condemn_drops != esc_drops_before});
             ++candidates_done;
         }
 
@@ -20729,6 +20889,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             best_plan           = pass_best;
             committed_win       = pass_best_win;
             committed_sub_depth = sub_depth;
+            committed_esc_pool  = std::move(esc_pool);   // escalation reads the COMMITTED pass
             if (trace_this)
             {
                 std::cerr << "  -> T" << state.turn_number << " COMMITTED sub_depth=" << sub_depth
@@ -20744,6 +20905,93 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             have_prev2 = have_prev;
             c_prev     = budget->Used() - used_before;
             have_prev  = true;
+        }
+    }
+
+    // ---- CONDEMNATION ESCALATION (the lossless beam; MTG_CONDEMN_ESCALATE, default ON) --------
+    // The condemnation filter inside the candidates' interior m2 projections is a lossy
+    // truncation on its own: budget x32 never recovered its 3 held-out losses, which fails the
+    // no-lossy-truncation bar. Under the beam the FILTERED scores only ORDER the candidates --
+    // they never DECIDE. The top-K finalists by filtered (win turn, value order), plus the
+    // filtered winner itself, are re-scored HONESTLY: filter suppressed, fresh transposition
+    // table (filtered memos must not leak into the honest re-run -- BuildSimKey does not fold
+    // m1_hand), at the committed fidelity. Honest scores pick the plan. Runs only at the
+    // enforcing decision and only when the committed pass's filter actually deleted something,
+    // so it is byte-identical whenever condemnation is off or never fired.
+    {
+        static const bool s_condemn_escalate = EnvOn("MTG_CONDEMN_ESCALATE", true);
+        bool any_touched = false;
+        for (const EscEntry& e : committed_esc_pool) { if (e.touched) { any_touched = true; break; } }
+        if (s_condemn_escalate && enforce_budget && any_touched
+            && MainPhaseFilterActive(state) && ResolveProvider(state).CondemnsPassedMainPhase())
+        {
+            static const int s_esc_k = std::max(1, EnvInt("MTG_CONDEMN_ESC_K", 3));
+            std::vector<int> order(committed_esc_pool.size());
+            for (std::size_t i = 0; i < order.size(); ++i) { order[i] = static_cast<int>(i); }
+            std::stable_sort(order.begin(), order.end(),
+                             [&](int a, int b)
+                             { return committed_esc_pool[a].win < committed_esc_pool[b].win; });
+            if (static_cast<int>(order.size()) > s_esc_k) { order.resize(s_esc_k); }
+
+            TranspositionTable esc_tt;        // honest table, never shared with the filtered pass
+            CondemnSuppressGuard _esc_sup;    // the whole re-evaluation is unfiltered
+            int esc_best_win = max_turns + 1;
+            auto esc_eval = [&](const Plan& plan) -> int
+            {
+                if (budget) { budget->Consume(1); }
+                PROF_INC(gamestate_copies);
+                GameState copy = state;
+                if (is_pre_combat)
+                {
+                    ApplyPlanDirect(copy, plan, true);
+                    AnimateLandsShared(copy, nullptr);
+                    ActivateTapTokensShared(copy, nullptr);
+                    SimulateCombat(copy);
+                    if (copy.Opponent().life <= 0) { return state.turn_number; }
+                    if (second_main)
+                    {
+                        Plan post = SolveSecondMainInSearch(copy, committed_sub_depth, max_turns,
+                                                            budget, second_main, &esc_tt);
+                        ApplyPlanDirect(copy, post, false);
+                        if (copy.Opponent().life <= 0) { return state.turn_number; }
+                    }
+                }
+                else
+                {
+                    ApplyPlanDirect(copy, plan, false);
+                    if (copy.Opponent().life <= 0) { return state.turn_number; }
+                }
+                if (!SimulateEndAndStartNextTurn(copy)) { return max_turns + 1; }
+                return SimulateToEnd(std::move(copy), committed_sub_depth, max_turns, budget,
+                                     esc_best_win, second_main, tt == nullptr ? nullptr : &esc_tt);
+            };
+            // The committed winner is always a finalist (it may have come from a wave/tranche
+            // and not sit in the pool); scored first, so it holds every tie.
+            static const bool s_esc_trace = EnvOn("MTG_CONDEMN_ESC_TRACE");
+            const int filtered_win = committed_win;
+            esc_best_win = esc_eval(best_plan);
+            if (s_esc_trace)
+            {
+                std::cerr << "[esc] T" << state.turn_number << (is_pre_combat ? " m1" : " m2")
+                          << " pool=" << committed_esc_pool.size()
+                          << " finalists=" << order.size()
+                          << " winner filtered=" << filtered_win
+                          << " honest=" << esc_best_win << "\n";
+            }
+            for (int oi : order)
+            {
+                const Plan& p = candidates[committed_esc_pool[oi].idx];
+                const int   w = esc_eval(p);
+                if (s_esc_trace)
+                {
+                    std::cerr << "[esc]   cand#" << committed_esc_pool[oi].idx
+                              << " filtered=" << committed_esc_pool[oi].win
+                              << " honest=" << w
+                              << (w < esc_best_win ? "  TAKES OVER" : "") << "\n";
+                }
+                if (w < esc_best_win) { esc_best_win = w; best_plan = p; }
+            }
+            committed_win = esc_best_win;
         }
     }
 
