@@ -142,19 +142,33 @@ RUN_C = {
 # the two agree, the aliasing choice provably did not decide the answer. No bridge arm is needed
 # because each map's arm compares to THAT map's own run on the same table and the same seeds.
 #
-# So it measures the WHOLE Oracle/Draught axis, not just the midpoint. With Entrance held at the
-# user's floor of 2, the other 6 cards split seven ways, and the hand-weighted miss rate never
-# exceeds 0.1%:
+# SCOPE, corrected 2026-08-20. I first wrote this as an Oracle/Draught "ladder" running 6/0, 5/1,
+# 4/2, 3/3, 2/4, 1/5, 0/6 -- four of which are not legal Magic decks. Deck construction allows at
+# most four copies of a card, so with Entrance at the user's floor of 2 the six remaining slots
+# split exactly three ways (4/2, 3/3, 2/4) and two of those are already measured. `write_arm` now
+# refuses anything over four copies, because a reachable cell is not the same thing as a playable
+# deck.
 #
-#     6 O + 0 D   0.002%   5 O + 1 D   0.000%   4 O + 2 D   covered   3 O + 3 D   0.102%
-#     2 O + 4 D   covered  1 O + 5 D   0.000%   0 O + 6 D   0.002%
+# What is actually left is the rest of the LEGAL space. With every count <= 4 and Entrance >= 2,
+# the 8 draw/pump cards admit twelve shapes; runs A, B and C hold three of them, so run D takes the
+# other nine and the enumeration is finished:
 #
-# The cap-4 bucket goes to whichever card has the larger count, which fixes the map per arm; only
-# the symmetric 3+3 has a choice, and it is run BOTH ways as the control. 4 O + 2 D and 2 O + 4 D
-# are re-measured here even though runs A and B already have them -- same deck, same table, same
-# seeds, so they must come out game-identical, which makes them a free bridge for the ladder.
-def _o_d(t, o, d):
-    s = {**TF_SPLITS[t], ENTR: 2}
+#     Entrance 2:  3 O + 3 D                                    (4/2 = run A, 2/4 = run B)
+#     Entrance 3:  4 O + 1 D,  3 O + 2 D,  2 O + 3 D,  1 O + 4 D
+#     Entrance 4:  4 O + 0 D,  3 O + 1 D,  1 O + 3 D,  0 O + 4 D (2 O + 2 D = run C)
+#
+# The cap-4 bucket goes to the largest count, which forces the map per arm. Only 3 O + 3 D is
+# symmetric, and it runs both ways as the aliasing control. Hand-weighted miss rates are 0.102% for
+# any shape holding a 3-of outside the cap-4 bucket and 0.388% for the two double-4 shapes;
+# `verify` prints each one.
+_LEGAL = [(o, d, e) for e in (2, 3, 4) for o in range(5) for d in range(5)
+          if o + d + e == 8 and o <= 4 and d <= 4]
+_DONE = {(4, 2, 2), (2, 4, 2), (2, 2, 4)}          # runs A, B, C
+_TRICKS = ("tf3lib0", "tf0lib3")
+
+
+def _ode(t, o, d, e):
+    s = {**TF_SPLITS[t], ENTR: e}
     if o:
         s[ORACLE] = o
     if d:
@@ -162,15 +176,20 @@ def _o_d(t, o, d):
     return s
 
 
-_LADDER = [(6, 0), (5, 1), (4, 2), (3, 3), (2, 4), (1, 5), (0, 6)]
-_TRICKS = ("tf3lib0", "tf0lib3")
+def _map_for(o, d, e):
+    """The card with the largest count must take the cap-4 bucket; that fixes the map. A tie is a
+    free choice, so the symmetric 3/3 runs both ways and everything else takes the first match."""
+    top = max(o, d, e)
+    ms = [m for m, c in (("A", o), ("B", d), ("C", e)) if c == top]
+    return ms if (o == d == 3) else ms[:1]
+
 
 RUN_D = {
     "map": "A",
-    "arms": {f"{t}_o{o}d{d}": _o_d(t, o, d) for t in _TRICKS for o, d in _LADDER},
-    # Per-arm map: the bigger count must sit in the cap-4 bucket. A -> Oracle there, B -> Draught.
-    "arm_maps": {f"{t}_o{o}d{d}": (["A"] if o > d else ["B"] if d > o else ["A", "B"])
-                 for t in _TRICKS for o, d in _LADDER},
+    "arms": {f"{t}_o{o}d{d}e{e}": _ode(t, o, d, e)
+             for t in _TRICKS for (o, d, e) in _LEGAL if (o, d, e) not in _DONE},
+    "arm_maps": {f"{t}_o{o}d{d}e{e}": _map_for(o, d, e)
+                 for t in _TRICKS for (o, d, e) in _LEGAL if (o, d, e) not in _DONE},
     "bracket": [],
 }
 
@@ -258,11 +277,25 @@ def fixed_cards():
     return [(c, n) for c, n in deck if n not in flex]
 
 
+# Deck construction: at most FOUR copies of any card except basic lands (CR 100.2a). The apparatus
+# work is all about which bucket a count lands in, and it is entirely possible to write down a
+# "reachable" 5- or 6-of that the table happens to cover -- I did exactly that, and the user caught
+# it. There is no point measuring a deck that cannot be played, so this refuses at construction
+# time rather than leaving legality to whoever writes the run spec.
+BASICS = {"Forest", "Mountain", "Island", "Swamp", "Plains", "Wastes"}
+MAX_COPIES = 4
+
+
 def write_arm(armdir, name, slots):
     """Decklist + inherited numbering for one arm. File order is FIXED then flexible, always."""
     total = sum(c for c, _ in fixed_cards()) + sum(slots.values())
     if total != 60:
         raise SystemExit(f"{name}: {total} cards, not 60 -- {slots}")
+    illegal = {n: c for n, c in slots.items() if c > MAX_COPIES and n not in BASICS}
+    if illegal:
+        raise SystemExit(f"{name}: ILLEGAL decklist -- "
+                         + ", ".join(f"{c} {n}" for n, c in sorted(illegal.items()))
+                         + f" (limit {MAX_COPIES} per card outside basic lands)")
     path = os.path.join(armdir, name + ".txt")
     with open(path, "w") as f:
         for c, n in fixed_cards():
