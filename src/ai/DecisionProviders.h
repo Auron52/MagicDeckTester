@@ -791,6 +791,9 @@ public:
     // Review-artifact labels: this deck's reviewed tiers land on generic rank numbers whose
     // generic names mean unrelated things.
     const char* CastOrderTierName(int rank) const override;
+    // Enumeration breadth (Mirrorwing's lever on this deck's shape) -- MTG_KE_GROUP_CAP, default
+    // OFF -> the generic 12. See the definition for the measured cost/quality dial.
+    int EnumGroupCap() const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

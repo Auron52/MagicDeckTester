@@ -9165,6 +9165,42 @@ bool EquipmentProvider::OrderOpaqueCastsByRank() const
     return KittyOrderEnabled();
 }
 
+// Enumeration breadth for this deck -- the Mirrorwing lever (its EnumGroupCap 8) applied to the
+// shape UseLethalShortCircuit's comment already names: Kemba cats + creatures + 5-8 equipment, whose
+// {0} equips the mana bound cannot prune. MEASURED on the d5 tail game (seed 70001 gi=0), win turn 6
+// in every arm: cap 12 (generic default) 2.854B odometer positions / 268 s; cap 8 2.305B / 267 s;
+// cap 6 1.580B / 200 s; cap 4 1.146B / 146 s.
+//
+// The cap partly fights itself here: dropped groups come back as group-wave TRANCHES, so enumeration
+// CALLS rise 47% as positions fall 2.5x. That machinery is load-bearing, not overhead -- cap 6 with
+// MTG_GROUP_WAVES=0 cuts positions 7.3x but loses a turn on this same game (wt 6 -> 7).
+//
+// >>> MEASURED AND REJECTED as a tail fix (2026-08-20). DEFAULT OFF, and the reason is worth reading
+// before anyone re-proposes it. The wall-clock reading above ("1.8x at cap 4") was taken on a box a
+// second container had ~90% of, and it does not survive a deterministic meter:
+//
+//   d3 QUALITY (150 games/block, paired): train +0.0000, held-out +0.0000, 0 faster / 0 slower --
+//     free, though it changes play in 44/150 and 53/150 games. So quality is not the objection.
+//   d5 COST in work UNITS (seed-70001 block): TOTAL 21.04M -> 20.44M, a mere -2.9%, and game gi=4
+//     goes 40,745 -> 404,865 units -- 9.9x WORSE at a BYTE-IDENTICAL play digest.
+//
+// The two meters disagree because each is blind to half of it: GameWorkMeter does not meter greedy
+// Solve enumeration (the documented trap on this deck), so units cannot see the positions the cap
+// removes; and the cap converts positions into more enumeration CALLS, which units DO count. A lever
+// that trades one unmetered cost for a metered one, with a 9.9x regression on a game it does not
+// otherwise change, is not a tail fix -- taming a tail is exactly the job that cannot tolerate a 10x
+// outlier. The honest deterministic meter for enumeration work is the ODOMETER POSITION count
+// (MTG_ENUM_STATS), not units and certainly not wall clock.
+//
+// The tail is rollout-bound anyway: 4.02M rollout calls and 6.91M simulated turn-steps against
+// 231k interior nodes (96.8% rollout), with SolveUncached 30.4% of runtime. The lever for that
+// shape is the VALUE LEAF, not enumeration breadth. See docs/design/analysis-KittyEquipment.md.
+int EquipmentProvider::EnumGroupCap() const
+{
+    static const bool on = EnvOn("MTG_KE_GROUP_CAP");
+    return heurarm::Flag(heurarm::KE_GROUP_CAP, on) ? 4 : GenericProvider::EnumGroupCap();
+}
+
 std::optional<DecisionProvider::MainPhase>
 EquipmentProvider::MainPhaseOverride(const GameState&, const CardDefinition& def) const
 {

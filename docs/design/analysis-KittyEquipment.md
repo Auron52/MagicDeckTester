@@ -1166,3 +1166,52 @@ the tail is real independently of load:
 gi=0 is **128x** the next-heaviest game in its own block, and gi=2 is heavier still. So the ceiling
 requirement stands — and now it stands on the meter the ceiling actually uses, rather than on a
 wall-clock reading taken against someone else's workload.
+
+## The d5 tail: PROFILED, and the enumeration-breadth lever is REJECTED (2026-08-20)
+
+Reproducible tail game: `--seed 70001 --games 1 --depth 5` (gi=0 of that block), 20.7M units.
+
+**Where the work is.** `MTG_ROLLOUT_STATS`: **4,021,780 rollout calls**, **6,908,140 simulated
+turn-steps**, **231,284 interior nodes** — i.e. **96.8% of the work is rollouts and 3.2% is the
+actual search tree**. `perf` agrees on the shape: `TurnSolver::SolveUncached` **30.4%** (the greedy
+per-turn policy *inside* rollouts), `EnumeratePlans` **16.7%**, `CollectActions` 5.3%, `BuildSimKey`
+5.5%. `MTG_ENUM_STATS`: **6,670,204 enumeration calls / 2,854,061,099 odometer positions** in ONE
+game.
+
+**The breadth lever, swept** (`MTG_SOLVE_GROUP_CAP`; this deck inherits the generic 12, Mirrorwing
+lowered its own to 8 for this same blowup). Win turn 6 in every arm:
+
+| cap | enum calls | odometer positions | wall (contended) |
+|---|---|---|---|
+| 12 (default) | 6.67M | 2.854B | 268 s |
+| 8 | 7.73M | 2.305B | 267 s |
+| 6 | 8.84M | 1.580B | 200 s |
+| 4 | 9.79M | 1.146B | 146 s |
+
+Positions fall 2.5x while CALLS rise 47%: dropped groups return as group-wave tranches. Those
+tranches are load-bearing — cap 6 with `MTG_GROUP_WAVES=0` cuts positions 7.3x but loses a turn on
+this same game (wt 6 → 7). At cap 12 the waves are inert (the cap barely binds).
+
+**Then it was A/B'd properly, and it is NOT a tail fix** (`MTG_KE_GROUP_CAP`, default OFF):
+
+| | cap 12 | cap 4 | |
+|---|---|---|---|
+| d3 train, 150 games | 4.9667 | 4.9667 | **+0.0000**, 0 faster / 0 slower (44 games change play) |
+| d3 held-out, 150 games | 4.9600 | 4.9600 | **+0.0000**, 0 faster / 0 slower (53 change play) |
+| d5 units, seed-70001 block | 21.04M | 20.44M | **−2.9%** |
+| ...game gi=4 alone | 40,745 | 404,865 | **9.9x WORSE at a byte-identical play digest** |
+
+Quality is free; the cost is the problem. The "1.8x" in the wall column above was measured while a
+second container held ~90% of the box and does not survive a deterministic meter.
+
+**Why the two meters disagree, which is the reusable lesson.** `GameWorkMeter` does not meter greedy
+Solve enumeration (the trap already recorded in this ledger), so **units cannot see the positions the
+cap removes** — while the extra enumeration CALLS the cap creates *are* metered. The lever converts
+an unmetered cost into a metered one. For enumeration work the honest deterministic meter is the
+**odometer position count** (`MTG_ENUM_STATS`); units are right for search work and wall clock is
+right for nothing on a shared box.
+
+**What the tail actually needs.** A 96.8%-rollout profile is the value leaf's exact use case — an
+O(1) evaluator replacing `SimulateToEnd`. That is road item (3), which makes generation the fix for
+the tail rather than something to do after fixing it; what is needed BEFORE generation is only that
+one 20M-unit game cannot stall a cell (a per-game work ceiling), not a faster enumerator.

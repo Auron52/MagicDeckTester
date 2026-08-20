@@ -38,6 +38,7 @@ enum Slot : int
     EQUIP_PAY_GUARD,          // MTG_EQUIP_PAY_GUARD       don't pay an equip ApplyEquip will refuse
     EQUIP_LOG_TRUTH,          // MTG_EQUIP_LOG_TRUTH       log an equip only if it actually attached
     METALCRAFT_CREDIT,        // MTG_METALCRAFT_CREDIT     same-turn metalcraft equip-{0} credit
+    KE_GROUP_CAP,             // MTG_KE_GROUP_CAP          EquipmentProvider enumeration breadth 12 -> 4
     COUNT
 };
 
@@ -53,6 +54,7 @@ inline const char* Name(int slot)
         "MTG_EQUIP_PAY_GUARD",
         "MTG_EQUIP_LOG_TRUTH",
         "MTG_METALCRAFT_CREDIT",
+        "MTG_KE_GROUP_CAP",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }
