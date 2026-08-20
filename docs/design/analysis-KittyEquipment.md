@@ -1262,6 +1262,19 @@ rest of main 1 — it can only be cast post-combat (this deck's second main IS s
 so a drawn Colossus Hammer cannot be cast-and-equipped before the attack that turn. The count is a
 LOWER bound: it counts equipment CASTS only, and a Stoneforge/Skyhunter put triggers the same draw.
 
+**It is a BUG, not a prune (confirmed 2026-08-20).** Three independent checks:
+* the draw fires and is fully implemented (`SpellEffects.h`, one card per watcher per Equipment ETB);
+* `MTG_BP_PROBE` is silent, so no breakpoint of any class arms;
+* **empirically decisive: in 150 logged held-out games, a card was cast in main 1 that was not
+  already in hand at the start of that turn ZERO times** (the turn's natural draw is excluded via
+  the logged DRAW-phase action). So the ~109 main-1 equipment-ETB draws are never usable in the main
+  phase that produced them.
+
+And it was never a decision: `git log -S draw_on_equipment_etb` over `AIEngine.cpp`/`TurnSolver.cpp`
+returns NOTHING (the param was never added to either file), and no commit message discusses an
+equipment-draw breakpoint. Every other draw engine in the codebase arms one; this card was
+implemented during a later deck onboarding and simply never joined the classifier.
+
 **Why the FiveColour design fits it exactly.** `CondemnsPassedMainPhase` condemns a Main1-classified
 card that the pre-combat decision passed on, for the rest of the turn — and exempts newly
 drawn/acquired cards via the `GameState::m1_hand` snapshot. That exemption is precisely what makes a
