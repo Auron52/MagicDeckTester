@@ -30,14 +30,34 @@
 > fetch-heavy seed blocks. The intended claw-back (condemnation −34%) proved UNSOUND; sound
 > condemnation is perf-neutral, so the phase cost stands unoffset.
 >
-> CONSEQUENCE FOR THIS DOC: the anchor table and the "fidelity half is already settled" claim
-> below both predate the phase/condemn/SSM engine — the reference policy MOVED. A 3-arm
-> re-battery is running on the primary box (REF d6/b20 vs H21 vs H21+MTG_FETCH_FAN_CAP=2,
-> same 200-hand/R=30 apparatus, results → `fivecolour-mullgen-labeller-sweep.md`): if
-> H21+fancap2 holds fidelity under the CURRENT engine, gen recovers the ~1.7x via a scoped
-> label-rollout arm (caveat: cap=1 was already REJECTED on fidelity in the sweep, rho 0.9567 —
-> cap=2 is the open question; and any arm must be scoped to LABEL rollouts only, discovery
-> stays on shipped play). Decision = USER's.
+> RE-BATTERY RESULT (2026-08-21, same 200-hand/R=30 apparatus, current engine, primary box):
+>
+> | arm | units/rollout | vs pre-phase H21 (10,804) | rho play | shift | sd | pair-agree |
+> |---|---|---|---|---|---|---|
+> | REF hybrid d6/b20 | 126,584 | (old REF 92,610 → 1.37x) | 1 | 0 | 0 | — |
+> | H21 d2/b1 | 25,181 | **2.33x** — the phase cost in units | 0.9906 | +0.054 | 0.093 | **100.0%** (11,412) |
+> | **H21 + MTG_FETCH_FAN_CAP=2** | **9,441** | **0.87x — cheaper than pre-phase H21** | 0.9867 | +0.085 | 0.105 | **100.0%** (11,412) |
+>
+> Three conclusions:
+> 1. The units currency confirms the secondary box exactly: H21 costs 2.33x what it did when
+>    adopted. The wall ratios above and this number are the same fact.
+> 2. **H21 itself RE-VALIDATES under the current engine** (rho 0.9906 — better than its
+>    original 0.9891 — and 100% pairwise agreement): the labeller's fidelity claim is
+>    refreshed, no longer stale.
+> 3. **H21+fancap2 is fidelity-equal by this sweep's own standards** — 100.0% pairwise
+>    agreement on all 11,412 separated pairs (the bar cap=1 FAILED at 99.1%/rho 0.9567), rho
+>    within a hair of the H21/CUR band, dispersion 0.105 in the same class — at **2.67x less
+>    work than current H21** and 13% below even the pre-phase cost. The uncapped fan's extra
+>    lines change which play the search finds (in-play quality, the reason the override
+>    exists) but do NOT change how hands RANK at gen depth.
+>
+> ADOPTION (USER call, they were asleep when this ran): a fan-capped GEN arm recovers the
+> whole regression. Scoping caveat stands: cap the fan for LABEL ROLLOUTS only — discovery
+> keeps shipped play. If the gen driver runs labelling as its own process/phase, env
+> MTG_FETCH_FAN_CAP=2 on that phase suffices; otherwise it wants a sidecar-scoped field
+> (mull_gen_fetch_fan_cap beside mull_gen_depth). Side observation for gen cost: the REF arm
+> showed 18,643 enum-memo cap clears at the 8192 default — MTG_ENUM_MEMO_CAP=262144 is worth
+> setting on shipped-depth gen/discovery work.
 
 2026-08-18. **Self-contained protocol for an IDLE machine** — read this and you can run it cold.
 Context lives in `fivecolour-mullgen-labeller-sweep.md`; none of it is required to execute.
