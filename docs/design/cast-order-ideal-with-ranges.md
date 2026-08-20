@@ -1,5 +1,16 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS 2026-08-21: MTG_5C_SSM **ADOPTED DEFAULT-ON** at 5efeb1d (USER: "change it to
+> searched if we can do so without much additional cost"; =0 hatch). The enum memo (adopted
+> 763bb22, see fivecolour-search-waste.md STATUS 2026-08-20b) absorbs the searched interior
+> m2's extra enumerations: pre-memo +9% on the heavy fivecolour game measured **+0.7%**
+> (interleaved quiet-box pairs) post-memo. Quality: suite A/B all changed keys digest-only at
+> IDENTICAL averages (30 same-score line changes, d0 untouched); smoke d3_s1001 IMPROVED
+> 4.9600 -> 4.9533. The strategy note below ("greedy-free interior m2 window is NET-FREE if
+> both adopt") is now REALITY, financed by the memo instead of condemnation. The last greedy
+> step inside the search window is gone; the remaining greedy is the horizon playout tail
+> (value-leaf regen territory).
+
 > ## STATUS 2026-08-20 (FINAL): MTG_5C_CONDEMN **ADOPTED DEFAULT-ON** (USER; =0 hatch) as the
 > SOUND semantics lever. The missing piece was ROOT-TURN AUTHORITY ON THE COMMIT-THE-LINE PATH:
 > the guard was owned by SolveWithLookahead, which FiveColour's hybrid never enters, so the

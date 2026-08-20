@@ -23,8 +23,15 @@
 >   the flipped binary with pure defaults: smoke 36/36 + regression 60/60, 0 changed,
 >   reference gate clean. Cap default stays 8192 (post-epoch-clear ~1% wall vs 262144 on the
 >   heaviest game; MTG_ENUM_MEMO_CAP to raise).
-> * MTG_5C_SSM financing: the -9% covers SSM's +9% on the same deck if the user wants the
->   greedy-free interior m2.
+> * MTG_5C_SSM financing: DELIVERED. **SSM ADOPTED default-on at 5efeb1d** (USER 2026-08-21:
+>   "change it to searched if we can do so without much additional cost"; =0 hatch). Post-memo
+>   the lever's cost on the heavy game is +0.7% (interleaved quiet-box pairs, was +9% pre-memo)
+>   -- the memo caches the extra m2 enumerations. Suite A/B: 4 regression keys digest-only at
+>   IDENTICAL averages (30 games re-lined at the same per-game score, d0 untouched); smoke
+>   d3_s1001 IMPROVED 4.9600 -> 4.9533 (one game a turn faster). GT accepted from the inspected
+>   runs; final gate smoke 36/36 + regression 60/60 on the flipped binary. The interior second
+>   main is now searched -- the last greedy step inside the search window is gone (user core
+>   bar). Overnight keys rebaseline on the next overnight run.
 
 > ## STATUS 2026-08-20 (items 1+5 dig: THREE REAL KEY HOLES found via MTG_ENUM_MEMO_VERIFY;
 > memo re-opened but blocked on ONE residual verify class)
@@ -122,7 +129,8 @@ Pending before adoption (USER call): held-out overnight keys; on adoption flip d
 * MTG_5C_CONDEMN (root-turn authority build): **-16.3%**, searched keys byte-identical to the
   measured fix arm; 3 known +1-turn residuals / 2800. Pending USER adoption.
 * MTG_FREECAST_PRUNE: **~-7%**, searched byte-identical (above). Pending held-out + USER.
-* MTG_5C_SSM: +9% (greedy-free interior m2) -- pending USER; fits inside the two savings.
+* MTG_5C_SSM: +9% (greedy-free interior m2) -- ADOPTED 2026-08-21 at 5efeb1d, +0.7% post-memo
+  (see the 2026-08-20b STATUS above).
 * MTG_ROLLOUT_HORIZON=K (leaf-capped rollout tail): **REJECTED** K=2 (-4.5% for +0.065..+0.175
   red) and K=4 (-9% for +0.010..+0.020 red) -- the greedy tail does real work the leaf cannot
   replace on this deck.
