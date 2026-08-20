@@ -101,6 +101,15 @@ diagnosis that survived two commits.
 * **Colour-exact coverage is PARTIAL**: hinata gets nothing from it (Cascade Bluffs / Izzet Signet
   stand the gate down), fivecolour only partially (`domain_mana`). `SubsetPayableWithFilters` as the
   exact test on filter boards is the obvious next step.
+* **REOPEN TRIGGER added 2026-08-20 (condemnation arc):** the m1 plan pricing does not credit
+  WITHIN-PHASE domain growth (cast Deathrite {B/G} -> Bloom Tender's yield grows {G} -> {B}{G} ->
+  Faeburrow payable IN THE SAME MAIN; verified real-MTG-legal on fivecolour gi66 T3). The engine
+  expresses such lines as an m1/m2 SPLIT because the m2 re-solve reprices off the real board --
+  which is exactly why this family measures metric-inert: the same state is reached a phase later.
+  ORDER-CONDEMNATION constrains that m2 re-offer route, so its split-turn exemption ("stamp only
+  if payable alongside the plan") exists purely to protect this workaround. If a growth-aware
+  (sequenced) m1 pricing is ever adopted, the split lines collapse into single-main casts, the
+  exemption's class mostly evaporates, and condemnation can be strictly tighter.
 * **One unexplained game** from the Karoo per-game audit: hinata gi1197 (win -> loss), believed
   collateral of correct pruning plus the open allocation defect above.
 

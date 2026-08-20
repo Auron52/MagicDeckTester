@@ -18675,6 +18675,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                                                   int* out_committed_depth)
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
+    // ORDER-CONDEMNATION root-turn authority on the COMMIT-THE-LINE path. The guard was
+    // originally owned only by SolveWithLookahead, so the FSLine machinery ran with
+    // g_condemn_root_turn == -1, whose fallback stamps at EVERY projected turn -- a
+    // budget-starved d1 tail's m1 "pass" of Mana Cannons condemned the T4 m2 Cannons+Unite
+    // win inside gi66's Faeburrow subtree (the 3 held-out residuals' true mechanism; the
+    // [m2t] T3 sub=4-vs-5 trace pinned it). First-entry-wins: the executor's decision turn
+    // owns the marker; deeper per-turn FSLineWin recursions and rollout re-entries no-op.
+    CondemnRootTurnGuard _crt(state.turn_number);
     // Memoize the greedy tail rollouts across the whole branch-and-bound tree. The
     // deep search revisits identical leaf states many times; without a table each
     // is a fresh full rollout. When the caller hands no table (the common non-
@@ -19174,6 +19182,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     //                     escalation is dropped, keeping the value-leaf line, instead of committing a partial).
     // See docs/design/escalation-and-rollout-cost.md + hinata-escalation-budget-restore memory.
     ++g_decision_epoch;   // committed-decision driver (scopes per-decision caches)
+    // ORDER-CONDEMNATION root-turn authority (see FullSearchLine's guard note): the hybrid's
+    // single-pass escalation invokes FSLineWin DIRECTLY, bypassing FullSearchLine, so the
+    // decision-level guard must live here too. First-entry-wins; the nested FullSearchLine
+    // guard then no-ops.
+    CondemnRootTurnGuard _crt(state.turn_number);
     static const double s_esc_split   = []{ const char* e = std::getenv("MTG_ESC_SPLIT");
                                             return (e && *e) ? std::atof(e) : -1.0; }();
     SearchBudget  probe_cap_budget;
