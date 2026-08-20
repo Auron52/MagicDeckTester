@@ -3590,10 +3590,8 @@ static int OptimisticTurnMana(const GameState& state);   // defined below (mana-
 // membership is decided HERE, at the m1 state, and the post-combat filter is a pure lookup.
 // Three findings from the per-game dig (condemn-dig 2026-08-19) shaped what stamps:
 //   * AFFORDABILITY: "passed" is only "declined" for a card the m1 search could actually have
-//     cast. A card above the turn's optimistic mana ceiling -- the SAME deliberately-generous
-//     bound the emission prune trusts -- was never a choice (T4 MV-10 Progenitus against a
-//     5-6 mana turn, gi111/gi117/gi48/gi143/gi187), so it does not stamp. At the ceiling's
-//     bail-out (INT_MAX) nothing exceeds it -- degrades to stamping, never worse.
+//     cast (T4 MV-10 Progenitus against a 5-6 mana turn was never a choice --
+//     gi111/gi117/gi48/gi143/gi187). Superseded by the stricter SPLIT-TURN test below.
 //   * CLASSIFY AT M1, NOT M2: classification is state-dependent (Unite's no-attackers pool
 //     grows when the m1 land drop resolves; haste/scaling change as bodies land), so a card
 //     re-classified at the m2 state can flip Main2->Main1 and be condemned WITHOUT EVER being
@@ -3601,15 +3599,34 @@ static int OptimisticTurnMana(const GameState& state);   // defined below (mana-
 //     flip impossible by construction.
 //   * Only MAIN1-classified cards stamp: a Main2/Both card was DEFERRED by doctrine, not
 //     declined -- its m2 offer is the plan, not a re-litigation.
+//   * SPLIT-TURN AFFORDABILITY (held-out dig 2026-08-20, all 10 structural games): "passed" is
+//     only "declined" when the m1 pool could have paid the card IN ADDITION TO the casts the
+//     chosen plan made. FiveColour's core line grows its own pool mid-turn (a multicolor body
+//     lands -> Bloom Tender / Faeburrow yield one more color each), so the winning turn casts
+//     X at m1 and Y at m2 off the growth (gi237: Faeburrow m1 + Oko m2, pair cost 6 vs pool 4).
+//     No m1 plan can ever pay the pair -- the pass is POOL-FORCED, and the old optimistic
+//     ceiling (which deliberately credits growth) stamped it anyway. The test is
+//     pool.CanPay(plan_costs + candidate) on the PLAIN pre-cast pool: what the growth funds is
+//     exempt, what the solve really declined still condemns. This also fixes the CRAM BIAS
+//     (gi320/gi66): rollout playouts stamp the same way, so hold-for-m2 lines stop being
+//     scored as if their held cards die. Costs are summed FLAT (hybrids stay first-colour) and
+//     producer outputs are NOT credited -- both err toward exempting, never toward a false
+//     condemnation.
 // The snapshot's only consumer is the condemnation filter, so a non-condemning provider skips
 // the whole stamp (the default path is cheaper than a full-hand copy, not costlier).
-void TurnSolver::StampM1Hand(GameState& state)
+void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_casts,
+                             bool trace_stamp)
 {
     if (!ResolveProvider(state).CondemnsPassedMainPhase()) { return; }
     const DecisionProvider& prov    = ResolveProvider(state);
     const bool haste_access         = HasteAccessThisTurn(state);
     const bool scaling_attacker     = BoardHasScalingAttacker(state);
-    const int  ceiling              = OptimisticTurnMana(state);
+    // Split-turn test inputs, computed LAZILY on the first Main1-classified candidate (a stamp
+    // runs at EVERY rollout pre-combat apply; most hands stamp nothing, and the pool walk is
+    // the expensive part).
+    bool     pool_ready = false;
+    ManaPool pool;
+    ManaCost planned;
     const Player& ap = state.ActivePlayer();
     state.m1_hand_n = 0;
     for (const Card& c : ap.hand)
@@ -3617,7 +3634,6 @@ void TurnSolver::StampM1Hand(GameState& state)
         if (state.m1_hand_n >= GameState::kM1HandCap) { break; }   // overflow: un-condemnable (safe)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d || d->card.IsLand()) { continue; }
-        if (d->card.m_mana_cost.ManaValue() > ceiling) { continue; }   // never castable at m1
         Action a;
         a.kind      = Action::Kind::CastFromHand;
         a.def       = d;
@@ -3625,7 +3641,53 @@ void TurnSolver::StampM1Hand(GameState& state)
         a.cost      = d->card.m_mana_cost;
         if (ClassifyMainPhase(state, prov, a, haste_access, scaling_attacker)
             != DecisionProvider::MainPhase::Main1) { continue; }       // deferred, not declined
+        if (!pool_ready)
+        {
+            pool_ready = true;
+            pool       = AvailableManaPool(state);
+            // The chosen plan's paid m1 cast costs, summed flat (the BatchPrepayMainCasts
+            // idiom). Free and alternative-cost casts pay no mana; a chosen X pays x_pips
+            // times as generic; the ordered Garth tap's a.cost is fixed at emission (X
+            // already folded).
+            if (m1_casts != nullptr)
+            {
+                for (const Action& pa : *m1_casts)
+                {
+                    const bool is_cast = pa.kind == Action::Kind::CastFromHand
+                                      || pa.kind == Action::Kind::CastFromGraveyard;
+                    if (!is_cast && pa.kind != Action::Kind::GarthActivate) { continue; }
+                    ManaCost ec = pa.cost;
+                    if (is_cast)
+                    {
+                        if (pa.free_cast || pa.alt_cost || pa.sacrifice_land) { continue; }
+                        const CardDefinition* pd =
+                            pa.def ? pa.def : CardDatabase::Instance().Lookup(pa.card_name);
+                        if (pd != nullptr) { ec = EffectiveCost(*pd, state); }
+                        if (ec.has_x && pa.chosen_x > 0)
+                        { ec.generic += pa.chosen_x * std::max(1, static_cast<int>(ec.x_pips)); }
+                    }
+                    planned.generic += ec.generic; planned.white += ec.white;
+                    planned.blue += ec.blue; planned.black += ec.black;
+                    planned.red += ec.red; planned.green += ec.green;
+                    planned.colorless += ec.colorless;
+                }
+            }
+        }
+        // SPLIT-TURN test: joint = this card ON TOP OF the plan's casts, against the plain
+        // pre-cast pool. Unpayable joint => the pass was pool-forced, not declined => exempt.
+        ManaCost joint = EffectiveCost(*d, state);
+        joint.generic += planned.generic; joint.white += planned.white;
+        joint.blue += planned.blue; joint.black += planned.black;
+        joint.red += planned.red; joint.green += planned.green;
+        joint.colorless += planned.colorless;
+        if (!pool.CanPay(joint)) { continue; }
         state.m1_hand[state.m1_hand_n++] = c.m_number;
+        if (trace_stamp)
+        {
+            std::cerr << "[condemn] stamp T" << state.turn_number << " " << d->card.m_name
+                      << " (pool " << pool.Total() << " planned "
+                      << planned.ManaValue() << ")\n";
+        }
     }
     state.m1_hand_turn = state.turn_number;
 }
@@ -9999,9 +10061,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
 
     // ORDER-CONDEMNATION stamp (rollout/interior half of the lockstep pair -- see
     // GameState::m1_hand): the pre-combat apply IS this projected turn's m1 decision point, so
-    // the hand right now is what that decision saw. Every descendant state (interior m2,
-    // future-turn continuations) inherits the snapshot by copy.
-    if (is_pre_combat) { TurnSolver::StampM1Hand(state); }
+    // the hand right now is what that decision saw, and `plan.actions` is what it chose (the
+    // split-turn affordability test needs both). Every descendant state (interior m2,
+    // future-turn continuations) inherits the snapshot by copy. NOT under bp_resume: the
+    // snapshot state already carries the m1 decision's stamp, and re-stamping from a mid-plan
+    // hand would shrink the list (the resumed tail must match the full apply byte-for-byte).
+    if (is_pre_combat && bp_resume == nullptr) { TurnSolver::StampM1Hand(state, &plan.actions); }
 
     // Pin this plan variant's searched ETB-dig pick (Plan::etbdig_choice) for the whole apply; the
     // first dig consumes it and any later dig falls back to the provider's ranked default. Scoped,

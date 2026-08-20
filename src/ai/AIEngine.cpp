@@ -1450,11 +1450,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     if (is_pre_combat_main)
     {
         ResolveEchoUpkeep(state);
-        // ORDER-CONDEMNATION stamp (executor half of the lockstep pair -- see
-        // GameState::m1_hand): after the staged merge, before any play, so the snapshot is the
-        // hand the m1 decision (and its search) actually sees. TurnSolver::ApplyPlanDirect
-        // stamps the same point for the projected worlds.
-        TurnSolver::StampM1Hand(state);
+        // The ORDER-CONDEMNATION stamp used to sit here (pre-solve); it moved to after the
+        // plan is chosen -- pre-land, pre-cast -- because the split-turn affordability test
+        // needs the chosen plan's cast costs. See the stamp call below fold_land's block and
+        // TurnSolver::StampM1Hand.
     }
 
     // Enumerate-all-earliest-wins dump (offline rule-miner; inert unless MTG_DUMP_EWINS).
@@ -2203,6 +2202,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
                 os << "\n";
                 std::cerr << os.str();
+            }
+
+            // ORDER-CONDEMNATION stamp (executor half of the lockstep pair -- see
+            // GameState::m1_hand): the plan is chosen, nothing has executed -- the same
+            // post-plan / pre-land / pre-cast point ApplyPlanDirect stamps, so the split-turn
+            // affordability test sees the same pool and the same plan costs in both worlds.
+            if (is_pre_combat_main)
+            {
+                static const bool s_condemn_trace = EnvOn("MTG_CONDEMN_TRACE");
+                TurnSolver::StampM1Hand(state, &plan.actions,
+                                        s_condemn_trace && !m_in_rollout);
             }
 
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())

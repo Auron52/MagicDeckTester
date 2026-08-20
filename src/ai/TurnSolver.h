@@ -515,8 +515,16 @@ public:
 
     // Stamp the ORDER-CONDEMNATION snapshot (GameState::m1_hand) from the active player's
     // current hand. Called at the pre-combat main decision in BOTH worlds -- AIEngine::TakeTurn
-    // and ApplyPlanDirect's pre-combat entry -- the lockstep pair; see the field's note.
-    static void StampM1Hand(GameState& state);
+    // (after the plan is chosen, before its land/casts execute) and ApplyPlanDirect's pre-combat
+    // entry -- the lockstep pair; see the field's note. `m1_casts` is the chosen plan's action
+    // list: a passed card only stamps when the m1 pool could have paid it IN ADDITION to those
+    // casts (the split-turn test; held-out dig 2026-08-20). Both callers must pass the same
+    // plan the m1 decision committed, at the same pre-land point, or the worlds stamp
+    // different sets.
+    // trace_stamp: MTG_CONDEMN_TRACE diagnostic (executor-side only -- the rollout worlds
+    // would flood stderr); prints each stamped card with the pool/planned totals.
+    static void StampM1Hand(GameState& state, const std::vector<Action>* m1_casts,
+                            bool trace_stamp = false);
 
     // Do either of the snapshot's consumers (MTG_CANTRIP_ORDER / MTG_BP_CLASSIFY) need it? False
     // in every ship config, so the capture is skipped entirely on the cast hot path.

@@ -1,5 +1,49 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS UPDATE 2026-08-20 (SPLIT-TURN AFFORDABILITY FIX): structural 10+1 -> 3; train 0 red
+> keys; held-out 7/8 green-or-flat; perf saving 34% -> 9%. ADOPTION = USER CALL on the new trade.
+>
+> The USER directed a dig-and-fix of the structural class. ROOT CAUSE (traces, pool accounting):
+> FiveColour's core line GROWS ITS OWN POOL mid-turn -- a multicolor body lands and Bloom
+> Tender / Faeburrow yield one more color each -- so the winning turn casts X at m1 and Y at m2
+> off the growth (gi237: Faeburrow m1 + Oko m2, pair cost 6 vs pool 4; gi66: Deathrite m1 grows
+> Tender {G}->{G,B} to pay Faeburrow m2). NO m1 plan can pay the pair, so the pass is
+> POOL-FORCED -- but the stamp's OptimisticTurnMana ceiling (which deliberately credits growth)
+> stamped it as "declined". The same defect drove a CRAM BIAS through the valuation channel:
+> rollout playouts stamped held cards the same way, so hold-for-m2 lines scored as if those
+> cards die, and the search preferred emptying the hand at m1 (gi320's Cornucopia-now over
+> Faeburrow-m2) even where the real filter never fired.
+>
+> THE FIX (StampM1Hand, both worlds): stamp a passed card only if the m1 pool could pay it IN
+> ADDITION to the chosen plan's casts -- pool.CanPay(plan_costs + candidate) on the PLAIN
+> pre-cast pool at the post-plan / pre-land / pre-cast point (the executor stamp moved from
+> pre-solve to post-plan-selection; ApplyPlanDirect passes its plan and no longer re-stamps on
+> bp_resume). Costs sum flat (hybrids stay first-colour), producer outputs are not credited,
+> X folds x_pips times -- every approximation errs toward EXEMPTING, never toward a false
+> condemnation. MTG_CONDEMN_TRACE=1 prints executor-side stamps (diagnostic).
+>
+> MEASURED (train + held-out, per-game; OFF arm smoke 36/36 + train 5/5 byte-identical):
+> * Train: d3 FLAT at GT both seeds (was +0.005 red), d5 -0.020/-0.010; ONE worse game/600
+>   (gi138, churn at 4x). gi187 -- the Jared tie that survived the Faeburrow doctrine -- RECOVERED.
+> * Held-out: net -12.0 turns/2800 searched (was -2.0), keys 7 green-or-flat / 1 red at +0.0025
+>   (d3_s7007); worse games 28 -> 11, of which 8 are churn (4x/16x) and **3 remain structural:
+>   gi66 + gi113 (s7007, both depths) and gi10 (s6006 d5)**.
+> * The residual class is PROJECTION DISTORTION, proven by MTG_CONDEMN_TRACE: gi66/gi113 have
+>   ZERO executor stamps all game -- the real filter never deletes anything. The bias lives in
+>   the search's rollout playouts, whose future GREEDY m1 turns pass jointly-affordable cards
+>   (greedy misjudgment, not a searched decline) and get them condemned in projection --
+>   deflating hold/split lines whose payoff sits in future fuller-handed turns. Recorded next
+>   scoping if the USER wants those 3: stamp only SEARCHED-decision turns (real executor turn +
+>   the current turn's interior m2), leaving future-turn greedy playouts unfiltered -- at
+>   further perf cost, since the rollout filter is where the savings live.
+> * PERF: the exemptions un-prune m2 re-enumeration -- saving drops 34% -> **9.0%** searched
+>   wall (same-box back-to-back per-deck train pairs; a lazy-pool reorder was verified
+>   behavior-identical and recovered nothing, so the give-back is coverage, not stamp cost).
+>
+> THE NEW TRADE for adoption: ~9% searched-wall saving + slightly-green metric, against a
+> 3-game/2800 (~0.1%) +1-turn structural residue in one named, understood class. Lever stays
+> DEFAULT OFF pending the USER call.
+>
 > ## STATUS UPDATE 2026-08-20 (condemnation HELD-OUT + PERF): metric-NEUTRAL on held-out with a
 > persistent structural class; perf saving is LARGE (−34% searched wall). ADOPTION = USER CALL.
 >
