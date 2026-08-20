@@ -137,17 +137,35 @@ slots, so the caps above enumerate the whole space:
   | 4 Draught + 2 Oracle + 2 Entrance | B (`d4o2`) | leader at 20 life |
   | **4 Entrance + 2 Oracle + 2 Draught** | **C** | in flight |
 
-- **Two things in that frame are structurally unreachable**, and no alias map can fake either:
-  - a **3-count** of any draw/pump card (3+3+2, 4+3+1 …) — the only cap-3 bucket is the trick slot;
-  - **Entrance at 0** — 8 cards from Oracle and Draught alone is 4+4, which needs two cap-4 buckets.
+- **Everything else is measurable too — this was my error, corrected 2026-08-20.** I first wrote
+  that a 3-count of a draw/pump card, or Entrance at 0, was "structurally unreachable without
+  generation". That confused *cells* with *hands*. Over-filling a bucket does not error: the policy
+  answers `present=false` and those hands fall through to the heuristic keep. What matters is how
+  often, and the missing cells are always the **rarest** ones — all copies of a small-count card in
+  the opening seven:
 
-  So "Entrance ≥ 2" is not just a judgement here, it is the only thing the apparatus can express:
-  every reachable list has Entrance at **2 or 4**, and run C is the entire remaining question.
+  | 8-card split (Entrance at 2 unless shown) | cap-4 bucket | cells short | **share of hands** |
+  |---|---|---:|---:|
+  | 4 O + 2 D, 2 O + 4 D, 2 O + 2 D + 4 E | either | 0 | fully covered |
+  | 5 O + 1 D *(or 1 O + 5 D)* | the 5 | 134 | 0.0004% — 1 in 260,072 |
+  | 6 O + 0 D *(or 0 O + 6 D)* | the 6 | 134 | 0.0022% — 1 in 44,700 |
+  | 3 O + 3 D | either | 3,689 | 0.102% — 1 in 978 |
+  | 4 O + 4 D + 0 E | either | 3,571 | 0.388% — 1 in 258 |
 
-Once run C lands, all 12 reachable lists (4 trick splits × 3 draw/pump splits) will have been
-measured at both life totals, and the target list is a lookup rather than a search. Anything
-outside those 12 costs a generation pass — which is then a deliberate, priced decision rather than
-an accident.
+  Against effects of 0.010–0.014t, a 0.1% fallback bounds the bias at roughly **0.0002t**. So the
+  *whole* space is measurable now; only the two 0.388% shapes are worth a second thought. The
+  driver reports the hand-weighted rate per arm and refuses above 1% (`tourney_alias.verify`),
+  rather than refusing on a single absent cell.
+
+- If a miss rate ever *is* material, the fix is the user's suggestion (2026-08-20): **bucket by card
+  number instead of name**, so copies 44–45 of a card sit in one bucket and 46 in another. That
+  pins the deck's bucket sizes at (3,4,2,2) for any composition, making everything exactly
+  reachable at zero generation, at the cost of a blurrier policy — the same hand *content* then
+  maps to different cells depending on which physical copies were drawn. It needs a small engine
+  change: `ExhaustiveKeepPolicy::Decide` takes names today, though the call site already has
+  `m_number` in hand.
+
+So the target list is a lookup, not a search, and generation stays unspent.
 
 ---
 
@@ -455,6 +473,18 @@ Recorded because each one changed a conclusion or cost real time.
   claim and not merely "is 4 Entrance good". Run C needs its own alias map (Entrance in bucket 9),
   so it must carry its own bridge arm and re-measure `d4`/`o4` under that map rather than chaining
   to runs A/B — which doubles as a third independent check on the fit tilt.
+- **Run D — the Oracle/Draught dose response.** Two points cannot show curvature, and the whole
+  reason `4 D + 2 O` and `4 O + 2 D` swap leadership with life total is that we only have the two
+  ends. Run D holds Entrance at 2 and walks the other six: **6/0, 5/1, 4/2, 3/3, 2/4, 1/5, 0/6**,
+  at both trick ends. Max miss rate across the ladder is 0.102%.
+  - The cap-4 bucket goes to whichever card has the larger count, so the map is forced per arm;
+    only the symmetric 3/3 has a choice, and it runs **both ways** as the aliasing control.
+  - `4 O + 2 D` and `2 O + 4 D` are re-measured despite already being in runs A and B — same deck,
+    same table, same seeds, so they must come out game-identical. A free bridge.
+  - This is the direct test of the user's prior (2026-08-20): *"we'll probably lean toward maxing
+    Draught and playing fewer Oracle."* If 3/3 is worse than 4 D + 2 O, the response is not
+    concave and the indicated direction is **further** toward Draught — which the ladder then
+    measures rather than extrapolates.
 - Mixes are eliminated (5b), so run C spends no arms on them: 3 rotations × 2 tricks × 2 life
   totals = 12 jobs.
 - Whether 30 life needs its own keep table, or whether the 20-life one transfers. The bracket says

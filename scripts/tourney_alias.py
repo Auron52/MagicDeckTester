@@ -23,9 +23,22 @@ flexible part of this deck is four buckets:
     bucket 15 cap 2   Expedite             <- a 2-of
 
 3 + 4 + 2 + 2 = 11 = exactly the flexible slots, so any list of shape `3 A + 4 B + 2 C + 2 D` is
-reachable and every such arm has the identical bucket-count signature (3,4,2,2). Coverage is
-therefore all-or-nothing across arms. What is NOT reachable is two 4-ofs, or a 3-of outside
-bucket 2 -- that needs generation, and no alias map can fake it.
+reachable with the identical bucket-count signature (3,4,2,2), and coverage is all-or-nothing
+across those arms.
+
+A list that does NOT fit that shape -- two 4-ofs, or a 3-of outside bucket 2 -- over-fills a bucket,
+and the hands that over-fill it have no cell. Those hands are NOT an error: the policy answers
+present=false and that one arm falls through to the heuristic keep. So the real question is never
+"is it reachable" but HOW OFTEN it misses, and `miss_rate` answers that in hands rather than cells.
+The two differ by more than an order of magnitude -- `3 Oracle + 3 Draught` lacks 1.8% of its cells
+but only 0.10% of its hands -- so a cell count is the wrong thing to decide on.
+
+(The general fix, if a miss rate ever IS material, is the user's 2026-08-20 suggestion: bucket by
+card NUMBER rather than name, so copies 44-45 of a card sit in one bucket and 46 in another. That
+holds the deck's bucket sizes at (3,4,2,2) for ANY composition, making the whole space reachable
+with zero generation, at the cost of a blurrier policy -- the same hand content maps to different
+cells depending on which physical copies were drawn. It needs a small engine change:
+ExhaustiveKeepPolicy::Decide takes names today, though the call site already has m_number.)
 
 WHY THERE IS MORE THAN ONE MAP
 Only one card can be the 4-of, so `4 Oracle + 2 Draught` and `4 Draught + 2 Oracle` cannot share a
@@ -34,7 +47,7 @@ and is therefore identical under every map. If the bridge is not game-for-game i
 do not chain and nothing may be compared across them -- so `run` puts the bridge in the same pooled
 batch under both maps rather than trusting the construction.
 """
-import argparse, json, os, re, shutil, subprocess, sys, time
+import argparse, json, math, os, re, shutil, subprocess, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -105,7 +118,83 @@ RUN_C = {
     "bridge_against": "B",
     "bracket": ["tf0lib3_e4", "tf3lib0_ship"],
 }
-RUNS = {"C": RUN_C}
+
+# RUN D -- is the Oracle/Draught response CONCAVE? The one question the (4,2,2) caps hide.
+#
+# 4 Draught + 2 Oracle leads at 20 life and 4 Oracle + 2 Draught leads at 30, which invites the
+# reading that the balanced 3+3 is best on average. Two points cannot show curvature, so this
+# measures the midpoint. If a LINEAR response held, 3+3 would land at 5.0428 / 5.4537 -- between the
+# endpoints and 0.0021t behind 4D+2O on the two-life-total sum, i.e. not a winner. It wins only if
+# Oracle's `cast_lifegain: 1` feeding Draught's `pump_per_life_gained_power` makes the pair
+# genuinely superadditive, which is the one synergy no eliminated mix had.
+#
+# It is ALSO the test of the user's prior (2026-08-20, "we'll probably lean toward maxing Draught
+# and playing fewer Oracle"): if 3+3 is worse than 4D+2O, the response is not concave and pushing
+# FURTHER toward Draught is the indicated direction rather than balancing.
+#
+# 3 + 3 + 2 over-fills a cap-2 bucket, so 0.10% of this arm's hands (1 in 978 -- all three copies of
+# a 3-of in the opening seven) miss the table and fall through to the heuristic keep. That is
+# reported by `verify`, not assumed away, and it bounds the bias at ~0.0002t against a 0.0136t
+# effect. Generation would buy 3,689 cells to close it; it is not worth it at this rate.
+#
+# Run under BOTH maps as its own control: under A the Oracle sits in the cap-4 bucket and Draught
+# overflows, under B the reverse -- same decklist, different bucketing, different missing cells. If
+# the two agree, the aliasing choice provably did not decide the answer. No bridge arm is needed
+# because each map's arm compares to THAT map's own run on the same table and the same seeds.
+#
+# So it measures the WHOLE Oracle/Draught axis, not just the midpoint. With Entrance held at the
+# user's floor of 2, the other 6 cards split seven ways, and the hand-weighted miss rate never
+# exceeds 0.1%:
+#
+#     6 O + 0 D   0.002%   5 O + 1 D   0.000%   4 O + 2 D   covered   3 O + 3 D   0.102%
+#     2 O + 4 D   covered  1 O + 5 D   0.000%   0 O + 6 D   0.002%
+#
+# The cap-4 bucket goes to whichever card has the larger count, which fixes the map per arm; only
+# the symmetric 3+3 has a choice, and it is run BOTH ways as the control. 4 O + 2 D and 2 O + 4 D
+# are re-measured here even though runs A and B already have them -- same deck, same table, same
+# seeds, so they must come out game-identical, which makes them a free bridge for the ladder.
+def _o_d(t, o, d):
+    s = {**TF_SPLITS[t], ENTR: 2}
+    if o:
+        s[ORACLE] = o
+    if d:
+        s[DRAUGHT] = d
+    return s
+
+
+_LADDER = [(6, 0), (5, 1), (4, 2), (3, 3), (2, 4), (1, 5), (0, 6)]
+_TRICKS = ("tf3lib0", "tf0lib3")
+
+RUN_D = {
+    "map": "A",
+    "arms": {f"{t}_o{o}d{d}": _o_d(t, o, d) for t in _TRICKS for o, d in _LADDER},
+    # Per-arm map: the bigger count must sit in the cap-4 bucket. A -> Oracle there, B -> Draught.
+    "arm_maps": {f"{t}_o{o}d{d}": (["A"] if o > d else ["B"] if d > o else ["A", "B"])
+                 for t in _TRICKS for o, d in _LADDER},
+    "bracket": [],
+}
+
+RUNS = {"C": RUN_C, "D": RUN_D}
+
+
+def arm_maps(spec, name):
+    """Which alias map(s) this arm runs under. An arm whose biggest count exceeds a cap-2 bucket
+    MUST take the cap-4 bucket, so the map is forced; only a symmetric arm has a free choice, and
+    running it both ways turns that choice into a control."""
+    return spec.get("arm_maps", {}).get(name, [spec["map"]])
+
+
+def maps_of(spec):
+    """map letter -> the arm names measured under it (bridge arms included)."""
+    out = {}
+    for n in spec["arms"]:
+        for m in arm_maps(spec, n):
+            out.setdefault(m, set()).add(n)
+    for n in spec.get("bridge", {}):
+        for m in (spec["map"], spec.get("bridge_against")):
+            if m:
+                out.setdefault(m, set()).add(n)
+    return out
 
 
 def apparatus(m):
@@ -197,19 +286,47 @@ def write_arm(armdir, name, slots):
     return path
 
 
-def verify(m, armdir, names):
-    """Every hand every arm can draw must land on a cell the table holds. Exact, not sampled.
+def miss_rate(buckets, have, counts):
+    """-> (cells, missing cells, share of OPENING HANDS that miss the table).
 
-    A missing-but-reachable cell does not error: ExhaustiveKeepPolicy answers present=false and that
-    ONE arm silently falls through to the generic heuristic keep and lookahead bottoming. That is an
-    apparatus which differs between arms, which is the one thing a paired comparison cannot survive.
-    """
+    Counting cells overstates the problem badly, and I got this wrong once: for `3 Oracle + 3
+    Draught` the table lacks 1.8% of the arm's cells, but every missing cell is "all three copies of
+    a 3-of in the opening seven", which is 0.10% of hands -- 1 in 978. The cell count is a property
+    of the composition lattice; what a measurement actually feels is the HAND-WEIGHTED rate, so
+    that is what gets reported and what any threshold is applied to.
+
+    Weight of a cell = product over buckets of C(copies in deck, copies in hand), over C(60,7)."""
+    bsz = [sum(counts.get(n, 0) for n in b) for b in buckets]
+    cells = set(enum_cells(buckets, counts))
+    miss = cells - have
+    tot = math.comb(sum(counts.values()), 7)
+    w = 0
+    for c in miss:
+        k = 1
+        for i, x in enumerate(c):
+            k *= math.comb(bsz[i], x)
+        w += k
+    return cells, miss, w / tot
+
+
+def verify(m, armdir, names, max_miss=0.01):
+    """Every hand every arm can draw should land on a cell the table holds. Exact, not sampled.
+
+    A missing-but-reachable cell does not error: ExhaustiveKeepPolicy answers present=false
+    (ExhaustiveKeepPolicy.h) and that ONE arm silently falls through to the generic heuristic keep
+    and lookahead bottoming. That is an apparatus which differs between arms, which is the one thing
+    a paired comparison cannot survive -- so it is REPORTED for every arm rather than assumed away.
+
+    It is a threshold, not an absolute, because the alternative is worse. Refusing on a single
+    missing cell reads "this comparison is impossible" when the honest statement is "0.1% of this
+    arm's hands use a different keep policy, which bounds the bias at ~0.0002t against effects of
+    0.01t". Anything above `max_miss` of hands is a real apparatus split and still refuses."""
     ap = apparatus(m)
     p, ek = table_meta(ap["profile"])
     have = {tuple(e["comp"]) for e in ek["entries"]}
     scored = set(json.load(open(ap["profile"]))["card_scores"])
     bucket_of = {n: i for i, b in enumerate(ek["buckets"]) for n in b}
-    bad = []
+    bad, noted = [], []
     for name in names:
         counts = {n: c for c, n in read_decklist(os.path.join(armdir, name + ".txt"))}
         unscored = sorted(set(counts) - scored)
@@ -219,17 +336,22 @@ def verify(m, armdir, names):
         unbucketed = sorted(n for n in counts if n not in bucket_of)
         if unbucketed:
             raise SystemExit(f"{name} plays unbucketed {unbucketed} under map {m}")
-        cells = set(enum_cells(ek["buckets"], counts))
-        miss = cells - have
-        if miss:
-            bad.append((name, len(miss), len(cells), sorted(miss)[:2]))
+        cells, miss, rate = miss_rate(ek["buckets"], have, counts)
+        if rate > max_miss:
+            bad.append((name, len(miss), len(cells), rate))
+        elif miss:
+            noted.append((name, len(miss), len(cells), rate))
     if bad:
-        n, k, tot, ex = bad[0]
-        raise SystemExit(f"REFUSING to measure: {len(bad)} of {len(names)} arms can draw hands the "
-                         f"table does not answer.\n  worst: {n} -- {k:,} of {tot:,} cells absent, "
-                         f"e.g. {ex}")
-    print(f"  coverage: all {len(names)} arms fully covered against "
-          f"{os.path.relpath(p, ROOT)} ({len(have):,} cells)")
+        n, k, tot, r = bad[0]
+        raise SystemExit(f"REFUSING to measure: {len(bad)} of {len(names)} arms miss the table on "
+                         f"more than {100*max_miss:.1f}% of hands.\n  worst: {n} -- {k:,} of "
+                         f"{tot:,} cells absent, {100*r:.3f}% of opening hands")
+    print(f"  coverage: {len(names)} arms against {os.path.relpath(p, ROOT)} ({len(have):,} cells)")
+    for n, k, tot, r in noted:
+        print(f"    NOTE {n}: {k:,} of {tot:,} cells absent -> {100*r:.4f}% of hands "
+              f"(1 in {1/r:,.0f}) fall through to the heuristic keep")
+    if not noted:
+        print("    every arm fully covered")
 
 
 def job(name, armdir, ap, games, seed, life, label=None):
@@ -253,7 +375,8 @@ def prepare(tag):
     for name, slots in allarms.items():
         write_arm(armdir, name, slots)
     print(f"  arms: {len(allarms)} written to {os.path.relpath(armdir, ROOT)}")
-    verify(spec["map"], armdir, list(allarms))
+    for m, names in maps_of(spec).items():
+        verify(m, armdir, sorted(names))
     if spec.get("bridge_against"):
         verify(spec["bridge_against"], armdir, list(spec["bridge"]))
     return spec, armdir, allarms
@@ -262,7 +385,15 @@ def prepare(tag):
 def manifest(tag, games, seed, lives, bracket):
     spec, armdir, _ = prepare(tag)
     ap = apparatus(spec["map"])
-    J = [job(n, armdir, ap, games, seed, life) for life in lives for n in spec["arms"]]
+    # Suffix the map only when the run uses more than one, so a single-map run's stderr keeps
+    # reading the same way after this code changes.
+    multi = len(maps_of(spec)) > 1
+    J = []
+    for life in lives:
+        for n in spec["arms"]:
+            for m in arm_maps(spec, n):
+                J.append(job(n, armdir, apparatus(m), games, seed, life,
+                             label=f"{n}_{m}" if multi else n))
     for life in lives:
         for n in spec.get("bridge", {}):
             J.append(job(n, armdir, ap, games, seed, life, label=f"BRG_{n}_{spec['map']}"))
