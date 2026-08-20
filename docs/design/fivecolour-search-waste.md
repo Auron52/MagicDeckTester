@@ -30,7 +30,7 @@ may differ at the right site with a cheaper key. A revisit should memo the HARVE
 product), key it on something cheaper than full BuildSimKey, and hold the same bar: quiet-box
 perf pair + byte-identity. Open item, deliberately unbuilt.
 
-## The free-cast prune (MTG_FREECAST_PRUNE, DEFAULT OFF -- built + train-measured 2026-08-20)
+## The free-cast prune (MTG_FREECAST_PRUNE, **ADOPTED DEFAULT-ON 2026-08-20**, =0 hatch)
 
 With N banked Archangel charges, every CastFromHand candidate used to gain one free variant per
 slot -- the candidate set doubles at exactly the states the census says are hottest. The lever

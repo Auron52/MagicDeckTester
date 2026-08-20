@@ -6457,14 +6457,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     {
         const int slots = state.free_casts_available;
         const std::size_t base_n = actions.size();
-        // MTG_FREECAST_PRUNE (measurement lever, DEFAULT OFF): emit free variants only for the
-        // top (slots + 2) candidates by mana value, ties kept. USER direction 2026-08-20: "cheap
-        // cards seem like they should be at a disadvantage" -- inside any subset that casts both,
-        // giving the free slot to the dearer card weakly dominates (same board, >= leftover
+        // MTG_FREECAST_PRUNE (DEFAULT ON, =0 hatch; adopted 2026-08-20): emit free variants only
+        // for the top (slots + 2) candidates by mana value, ties kept. USER direction 2026-08-20:
+        // "cheap cards seem like they should be at a disadvantage" -- inside any subset that casts
+        // both, giving the free slot to the dearer card weakly dominates (same board, >= leftover
         // mana), and the +2 margin keeps alternatives for the colour-tight cases where the MV
         // swap is not payable (paying the cheap card's coloured pips can be harder than its MV
         // suggests). Never narrows human play (the viewer shows every legal option).
-        static const bool s_fc_prune = EnvOn("MTG_FREECAST_PRUNE");
+        // Measured (fivecolour, train + held-out overnight): ~-7% searched wall, zero score
+        // changes across 4400 searched games (4 equal-score line swaps), d0 net one game faster.
+        static const bool s_fc_prune = EnvOn("MTG_FREECAST_PRUNE", true);
         int mv_floor = -1;
         if (s_fc_prune && !HumanPlayActive())
         {
