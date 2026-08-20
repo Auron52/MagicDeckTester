@@ -64,6 +64,28 @@ REMOVES branches — forbidden. If every line is still reachable given budget, t
    budget on every deck that carries it (docs/design/post-breakpoint-search.md). A "beam"
    that never escalates is a cap — the forbidden shape above. Do not confuse the two.
 
+## Rule 0c — a heuristic returns ONE option by default; no silent top-n (USER BAR, 2026-08-21)
+
+A provider hook that feeds the search returns a list of **varying size** and the engine fans
+over exactly what comes back — no engine-side cap, no `top N` constant. The **default size is
+ONE** (the heuristic's pick): *"if I don't specify, the assumption should be that the heuristic
+picks only one option to return"* — the silent widths this replaced were *"a major performance
+headache and I don't even know it is happening."* Widening is a USER-review gate (*"the AI will
+need to convince me it is necessary"*), and when granted it should be **confidence-conditional
+per state**, not a per-deck constant: *"sometimes you are 100% confident in the decision and
+other times need to search multiple. This design allows that"* — return 1 when the doctrine is
+sure, the genuinely-ambiguous set when it is not.
+
+Why this is consistent with Rule 0b: a provider-owned candidate set is the sanctioned prune
+shape (the return IS the candidate set, auditable under MTG_UNPRUNED); an engine-side width cap
+is the forbidden one. The origin case: the fetch-target fan's engine cap + collapsed-main
+uncap. Its widened candidates measured BETTER coupled (+0.034 held-out, 8/8 keys) yet the
+MTG_SHUFFLE_SALT_SEARCH decouple ensemble proved the entire edge was draw-order clairvoyance
+(worst arm in all 4 salts once the search could not pre-see the post-fetch shuffle) — so a
+coupled measurement alone can NEVER justify widening a fetch/tutor-class decision; the decouple
+ensemble is part of the convincing. Engine-side bypasses that legitimately see the full list:
+MTG_UNPRUNED (audit) and HumanPlayActive (the viewer keeps every legal option).
+
 ## Why AI owns this
 
 The alternative to AI optimizing these heuristics is a **human inventing every

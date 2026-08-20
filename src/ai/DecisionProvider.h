@@ -791,11 +791,30 @@ public:
                                                        const CardDefinition& def) const
     { (void)s; (void)def; return std::nullopt; }
 
-    // FetchSearchCap -- fetch BREADTH policy: how many of FetchCandidates' ordered targets the search
-    // branches on (the list is best-first; lower ranks are strictly worse colour, a basic ranks
-    // last). Provider-OWNED (audit A2) instead of a hardcoded solver constant. Default 2 = the prior
-    // generic value (byte-identical). MTG_UNPRUNED still opens the full list engine-side.
-    virtual int FetchSearchCap() const { return 2; }
+    // FetchSearchCandidates -- the fetch targets the SEARCH actually branches on. The provider
+    // returns a list of VARYING SIZE and the engine fans over exactly what comes back -- no
+    // engine-side cap (USER design 2026-08-21: "the return IS the candidate set", the doctrine
+    // every heuristic prune follows). `ranked` is the full FetchCandidates list already computed
+    // at the call site (best-first for ranking providers), so overrides select from it instead of
+    // re-running an expensive ranking.
+    //
+    // DEFAULT = ONE option, the top pick (USER standing rule 2026-08-21: "if I don't specify, the
+    // assumption should be that the heuristic picks only one option to return" -- the silent
+    // top-n widths this replaces were "a major performance headache and I don't even know it is
+    // happening"). Widening is a USER-REVIEW gate ("the AI will need to convince me it is
+    // necessary"), and when granted it should be CONFIDENCE-CONDITIONAL, per STATE, not a
+    // per-deck constant: "sometimes you are 100% confident in the decision and other times need
+    // to search multiple. This design allows that" -- return 1 when the doctrine is sure, the
+    // genuinely-ambiguous set when it is not. Engine-side, MTG_UNPRUNED and HUMAN PLAY bypass
+    // this entirely (the audit must see every target; the viewer keeps every legal option).
+    virtual std::vector<std::string>
+    FetchSearchCandidates(const GameState& s, int controller, const CardParams& fetch_pp,
+                          const std::vector<std::string>& ranked) const
+    {
+        (void)s; (void)controller; (void)fetch_pp;
+        if (ranked.size() <= 1) { return ranked; }
+        return { ranked.front() };
+    }
 
     // TutorSearchWidth -- tutor BREADTH policy: how many of TutorCandidates' ordered targets the
     // post-dedup tutor axis actually scores, INCLUDING the provider's best (so 1 == the old

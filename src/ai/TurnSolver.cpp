@@ -15914,14 +15914,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         }
     };
 
-    // Pass 2 of the real-fetch model: a fetchland whose FetchCandidates returns MORE THAN
-    // ONE legal target is a genuine search choice (which colours to commit to). Emit one
-    // land-variant per candidate so the rollout picks the best, capped at the heuristic's
-    // top few (it orders best-first; lower-ranked targets are strictly worse on colour and
-    // a basic always ranks last, so the cap drops only clearly-inferior fetches). A single
-    // candidate (or none) plays the heuristic top pick with no extra branching (Pass 1).
-    // The cap is provider-owned policy (DecisionProvider::FetchSearchCap, audit A2).
-    const int kMaxFetchSearchTargets = ResolveProvider(state).FetchSearchCap();
+    // Pass 2 of the real-fetch model: a fetchland with more than one legal target is an inline
+    // sub-decision. The SEARCHED set is provider-owned and provider-SIZED
+    // (DecisionProvider::FetchSearchCandidates -- "the return IS the candidate set"; the default
+    // is the heuristic's TOP PICK ONLY, per the USER's 2026-08-21 standing rule that a heuristic
+    // returns one option unless a reviewed doctrine explicitly widens it. The old engine-side
+    // top-2 cap and the collapsed-main uncap override are GONE: the widened fan's edge was proven
+    // 100% draw-order clairvoyance by the decouple ensemble -- see
+    // docs/design/fivecolour-gen-leaf-cost-wallclock.md RESOLUTION 2026-08-21b). Two engine-side
+    // bypasses see the FULL legal list: the unpruned audit (a costly fetch heuristic must be
+    // detectable) and HUMAN PLAY (the viewer keeps every legal option -- same exemption as the
+    // free-cast prune). A single candidate (or none) stays Pass 1: empty fetch_target, the
+    // executor resolves the top pick at PerformFetch.
     for (const std::string& ln : land_names)
     {
         const CardDefinition* ld = CardDatabase::Instance().Lookup(ln);
@@ -15940,33 +15944,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                 ResolveProvider(state).FetchCandidates(state, state.active_player_index, ld->params);
             if (cands.size() > 1)
             {
-                // Unpruned audit: search EVERY fetch candidate (no cap), so a costly
-                // fetch-target heuristic can be detected. See DecisionUnpruned.
-                // Collapsed main (MainPhaseFilterActive): ALSO no cap. With the casts deferred
-                // past combat, the pre-combat plans are (land x EMPTY), so the fetch target is
-                // the ONLY decision this phase and its value shows purely through the m2
-                // continuation -- the top-2 truncation was tuned for the joint (land x casts)
-                // enumeration and silently deletes the colour line the deferred main needed
-                // (5c d3 s2002: cap 5.0150 vs no-cap 4.9250, BETTER than the 4.9550 base).
-                // ... EXCEPT when the provider caps at 1 (top-entry-only, a deliberate policy):
-                // the "no-cap better" measurement above PRE-DATES the reviewed fetch doctrine,
-                // and the 2026-08-21 decouple ensemble proved the widened fan's edge is 100%
-                // draw-order clairvoyance (see FiveColourProvider::FetchSearchCap) -- widening a
-                // cap-1 provider would re-open exactly the artifact the policy removes. The
-                // unpruned audit still opens the full list.
-                const bool widen = DecisionUnpruned(UnprunedGate::Fetch)
-                                || (MainPhaseFilterActive(state) && kMaxFetchSearchTargets > 1);
-                int cap = widen ? static_cast<int>(cands.size()) : kMaxFetchSearchTargets;
-                // MTG_FETCH_FAN_CAP=<n> (default 0 = off, byte-identical): measurement hatch capping
-                // the fetch-target fan BELOW the provider cap and below the unpruned/collapsed-main
-                // overrides -- sibling of MTG_LAND_FAN_CAP above (FiveColour gen-labeller sizing).
-                // NOTE the collapsed-main override exists because the cap measured WORSE for 5c play
-                // (d3 s2002: 5.0150 capped vs 4.9250 uncapped) -- any adoption of this hatch is a
-                // labeller-fidelity question, not a free win.
+                if (!DecisionUnpruned(UnprunedGate::Fetch) && !HumanPlayActive())
+                {
+                    cands = ResolveProvider(state).FetchSearchCandidates(
+                        state, state.active_player_index, ld->params, cands);
+                }
+                // MTG_FETCH_FAN_CAP=<n> (default 0 = off, byte-identical): measurement hatch
+                // capping the fan below whatever the provider returned (this arc's attribution
+                // instrument; also caps the audit/viewer bypasses for measurement symmetry).
                 static const int s_fetch_fan_cap = EnvInt("MTG_FETCH_FAN_CAP", 0);
-                if (s_fetch_fan_cap > 0) { cap = std::min(cap, s_fetch_fan_cap); }
-                int n = std::min(static_cast<int>(cands.size()), cap);
-                for (int i = 0; i < n; ++i) { add_for_land(ln, cands[i]); }
+                if (s_fetch_fan_cap > 0 && static_cast<int>(cands.size()) > s_fetch_fan_cap)
+                { cands.resize(static_cast<std::size_t>(s_fetch_fan_cap)); }
+                for (const std::string& c : cands) { add_for_land(ln, c); }
                 continue;
             }
         }

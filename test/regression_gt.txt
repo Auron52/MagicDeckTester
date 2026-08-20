@@ -1,4 +1,4 @@
-# Regression ground truth -- commit a530f44  date 2026-08-20
+# Regression ground truth -- commit ba46eed  date 2026-08-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -32,8 +32,8 @@ goblins_smoke_d0_s1001=4.0680/c44fd55c9a58f4ce
 goblins_smoke_d3_s1001=3.6467/50602e8107354743
 goblins_smoke_d5_s1001=3.5867/dbe15f21f0cca5d2
 creature_giving_smoke_d0_s1001=5.5160/e741e16a2502a6ab
-creature_giving_smoke_d3_s1001=4.7267/b8c73010e9a860d1
-creature_giving_smoke_d5_s1001=4.6800/e99370964959710c
+creature_giving_smoke_d3_s1001=4.7200/a3aee91968337ea8
+creature_giving_smoke_d5_s1001=4.6667/b9a698007674b6d9
 mirrorwing_smoke_d0_s1001=6.0570/506df4f8aa241490
 mirrorwing_smoke_d3_s1001=5.0267/dee3a51fa58c1b99
 mirrorwing_smoke_d5_s1001=5.1200/242398274f5f3863
@@ -88,10 +88,10 @@ goblins_regression_d3_s3003=3.8400/b1899e50731f5466
 goblins_regression_d5_s2002=3.8440/2c1e8600791111d7
 goblins_regression_d5_s3003=3.8160/9911b525b19490e5
 creature_giving_regression_d0_s2002=5.5870/0572778d16cc9df5
-creature_giving_regression_d3_s2002=4.6567/1b73969f7ae95287
-creature_giving_regression_d3_s3003=4.6867/49489e41433a0be1
-creature_giving_regression_d5_s2002=4.6320/e648cd9c53e17579
-creature_giving_regression_d5_s3003=4.6640/17e3e495631fcef6
+creature_giving_regression_d3_s2002=4.6533/72441b48fa711031
+creature_giving_regression_d3_s3003=4.6767/c4cc37c511474eed
+creature_giving_regression_d5_s2002=4.6280/4810b049b252854e
+creature_giving_regression_d5_s3003=4.6720/6d36d6c2bdc6723f
 mirrorwing_regression_d0_s2002=6.0540/55b8581ef6c61c77
 mirrorwing_regression_d3_s2002=4.8050/23e1c430db76ac27
 mirrorwing_regression_d3_s3003=4.9350/6370c93b56bd0027

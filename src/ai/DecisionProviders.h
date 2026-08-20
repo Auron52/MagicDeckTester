@@ -591,16 +591,12 @@ class FiveColourProvider : public GenericProvider
 public:
     const char* Name() const override { return "FiveColour"; }
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
-    // TOP ENTRY ONLY (USER design 2026-08-21 + clairvoyance attribution): the reviewed fetch
-    // doctrine's #1 pick is played; the search does not branch on alternatives. The uncapped fan's
+    // Fetch search breadth: the base-class DEFAULT (top entry only) is exactly this deck's
+    // reviewed policy -- no override needed. Evidence that top-1 is right here: the wide fan's
     // coupled-metric edge (+0.034 held-out 8/8 keys) was proven 100% CLAIRVOYANCE by the
-    // MTG_SHUFFLE_SALT_SEARCH decouple ensemble (salts 1-4, 2,400 games): stripped of the ability
-    // to pre-see the deterministic post-fetch shuffle, the wide fan flips from best to WORST in
-    // every salt (uncap 5.0558 vs cap1 5.0317 vs cap2 5.0237) -- the extra targets only "won" by
-    // reading the exact future draws, which a real player cannot do. Same doctrine as the
-    // always-shuffle keep resolution: pick the rule by the clairvoyance-STRIPPED metric.
-    // MTG_UNPRUNED still opens the full list engine-side (audit unchanged).
-    int FetchSearchCap() const override { return 1; }
+    // MTG_SHUFFLE_SALT_SEARCH decouple ensemble (salts 1-4, 2,400 games: uncap 5.0558 WORST in
+    // every salt vs top-1 5.0317) -- the extra targets only "won" by pre-seeing the deterministic
+    // post-fetch shuffle. See docs/design/fivecolour-gen-leaf-cost-wallclock.md RESOLUTION.
     void ModalSplitCandidates(const GameState&, const CardDefinition&,
                               std::vector<int>&) const override;
     // Hold a live UTILITY mana dork (Deathrite Shaman / Bloom Tender / Birds) out of combat when
