@@ -222,7 +222,29 @@ RUN_D = {
     "bracket": [],
 }
 
-RUNS = {"C": RUN_C, "D": RUN_D}
+# RUN E -- fill the one hole in the grid.
+#
+# Runs A, B and C each carried all four trick splits; run D carried only three (3 Lib, 2 Lib / 1
+# Twin, 3 Twin), so 2 Twin / 1 Lib is missing from all six of its shapes. That left the final
+# document extrapolating one cell -- and the user asked for it measured instead ("maybe just to be
+# safe let's measure it"). Run E adds exactly that trick split for exactly those shapes, on the
+# same seeds and the same per-arm maps, completing a 4 x 9 x 2 grid with no holes.
+#
+# It matters most at Entrance 3, where the run-D reading was that 3 Entrance is DOMINATED -- worse
+# than both 2 and 4 on the two-life-total sum. That conclusion rested on the un-measured cell being
+# no better than its neighbours, which is exactly the kind of assumption worth spending an hour to
+# retire.
+RUN_E = {
+    "map": "A",
+    "arms": {f"tf2lib1_{k.split('_', 1)[1]}": _ode("tf2lib1", o, d, e)
+             for (o, d, e) in _LEGAL if (o, d, e) not in _DONE
+             for k in [f"x_o{o}d{d}e{e}"]},
+    "arm_maps": {f"tf2lib1_o{o}d{d}e{e}": _map_for(o, d, e)
+                 for (o, d, e) in _LEGAL if (o, d, e) not in _DONE},
+    "bracket": [],
+}
+
+RUNS = {"C": RUN_C, "D": RUN_D, "E": RUN_E}
 
 
 def arm_maps(spec, name):
