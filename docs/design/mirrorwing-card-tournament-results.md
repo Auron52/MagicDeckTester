@@ -54,7 +54,7 @@ contention confirms Entrance is the only one with upside the engine cannot see:
 | **Impolite Entrance** | **`gains trample` — not modelled** | **yes, understates Entrance** |
 | Impolite Entrance | sorcery-vs-instant not modelled | no — makes it parameter-identical to Expedite |
 | Luxurious Libation | token colour | no — nothing in the deck reads colour |
-| Oracle's Restoration | `you control` not enforced | no — the goldfish controls no creatures |
+| Oracle's Restoration | ~~`you control` not enforced~~ — **the note was wrong; see below** | no |
 | Draught, Twinflame, Gold Rush, Expedite, Zada, Mirrorwing | none noted | — |
 
 So: **a tie or a near-tie involving Entrance should be resolved toward more Entrance**, and only a
@@ -62,6 +62,19 @@ loss clearly outside the apparatus band argues against it. What the engine measu
 strictly "4 cheap haste cantrips beat 2" — Entrance is parameter-identical to Expedite here, so
 the screen cannot distinguish the two cards, and the real Entrance can only be better than what
 was measured.
+
+**Correction, same day, prompted by the user:** *"Oracle's Restoration does matter. There are
+games with opponent's creatures, so we must not target them."* The `cards.json` note claiming
+`you control` was unmodelled is **wrong**, and it pointed the deviation the wrong way.
+`ResolveSoloTargetTrick` filters `p.controller_index == controller` before anything resolves
+([SpellEffects.h](../../src/core/SpellEffects.h)), so **no solo-target trick can ever be pointed at
+an opponent's creature** — Oracle's restriction is enforced in play. If anything the engine is
+*over*-restrictive: Ancestral Anger, Impolite Entrance, Fists of Flame and Gold Rush all read
+"target creature" (any creature) and are confined to own creatures too. That is harmless for play
+strength and does not bias an Oracle-vs-Anger screen, since both sides are confined identically —
+but the old note would have had a reader discount Oracle for a drawback it does not have. Opponent
+creatures are not hypothetical in this engine (`etb_opp_creates_tokens` gifts them, Massacre Wurm
+sweeps them); they are merely absent from the goldfish *this* deck is measured against.
 
 **How much better is bounded, though, and by the deck's own contents.** Fists of Flame — 4 copies,
 fixed in every arm — *also* grants trample, and it is a `solo_target_trick`, so on a magnet fan-out
