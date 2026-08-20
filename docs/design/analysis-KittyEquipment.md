@@ -1028,3 +1028,55 @@ as their own line.
 
 Reproduce: `logs/kitty_ab/gen_manifest.py` (manifest), `compare.py` (paired win turn), `cost.py`
 (paired units), `park_roundtrip.py` (loop closure from game JSON).
+
+## Do the levers DO what was ruled? (behavioural check, 2026-08-20)
+
+The value question is settled — nothing moves the clock — so the only question left for the two
+order levers is whether they implement the USER's rulings. That is a behavioural question, and the
+park taught the lesson that "changes play" is not an answer to it. 600 games per arm, seed block
+500001, d3, every game logged; `test/tools/kitty_ab/order_behaviour.py`.
+
+### Cast order (`MTG_KE_ORDER`): fully enforced
+
+Counting adjacent cast pairs within a turn+phase and asking whether a later-ranked card was ever
+cast before an earlier-ranked one:
+
+| | control | arm |
+|---|---|---|
+| adjacent cast pairs | 575 | 573 |
+| order INVERSIONS | 114 | **0** |
+| inversion rate | 19.83% | **0.00%** |
+
+The reviewed order is strict, exactly as the ruling asks (*"isn't the point that it should be a
+strict ordering"*). One in five adjacent casts was previously out of the reviewed order; now none is.
+
+### O-Naginata (`MTG_EQUIP_MINPOWER_LAST`): the ruling's INTENT is fully met
+
+Grouped per host per turn, since the ruling is about the order gear lands on ONE creature:
+
+| | control | arm |
+|---|---|---|
+| host-turns equipping O-Naginata | 73 | 85 |
+| ...after the ordinary gear (WANT) | 9 | **41** |
+| ...before it | 13 | **4** |
+| ...before Lightning Greaves (WANT) | 5 | 7 |
+| ...after Greaves (violates) | **0** | **0** |
+
+It is also equipped MORE often (73 -> 85 host-turns), which is the reachable-power veto relaxation
+doing its job: slots that the old CURRENT-power veto refused are now usable.
+
+**The 4 residual "violations" were inspected individually and are cosmetic.** In every one the host
+already carried gear from an earlier turn (e.g. game_597: Bonesplitter went on the 2-power Puresteel
+Paladin on T3, so by T4 its power was 4), so O-Naginata going on first still satisfies the ruling's
+stated reason — *"so the power is okay"*. This is guaranteed, not just observed: `ApplyEquip`
+no-ops below `equip_min_power`, so an attachment that shows up in the board snapshot is legal by
+construction. Net: **0 cases where O-Naginata landed on a host under power 3, and 0 where it landed
+after Greaves, in either arm.**
+
+The lever also removed the single O-Naginata phantom equip present in the control (1 -> 0).
+
+### Side finding: the executor pays for an equip whose host is not on the battlefield
+
+Not a lever issue — identical in control, order arm and park arm — but found by the same sweep and
+written up in `docs/design/equip-host-not-on-battlefield.md`. 2 of 1,270 equips (0.16%), 2 games in
+600. The signature in a game log is an ability string `equip -> #<number>` instead of a host name.
