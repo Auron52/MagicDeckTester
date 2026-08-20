@@ -84,7 +84,7 @@ static_assert(sizeof(Permanent) == 256,
 static_assert(sizeof(Player) == 160,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
-static_assert(sizeof(GameState) == 664,
+static_assert(sizeof(GameState) == 672,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -346,6 +346,13 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     fold(static_cast<std::uint64_t>(s.free_casts_available));
     fold(static_cast<std::uint64_t>(s.scripted_cheat_choice));
     fold(static_cast<std::uint64_t>(s.scripted_discard_choice));
+    // scripted_vial_charge is LIVE across the end-of-turn boundary by design (set during the
+    // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
+    // searched charge is future-determining and must fold exact-match like its sibling pins.
+    // (Classified here 2026-08-20 during the rebase that combined it with the m1_hand fields --
+    // the original commit added the field without a Dominance classification; it escaped the
+    // sizeof tripwire only because the int fit in struct padding.)
+    fold(static_cast<std::uint64_t>(s.scripted_vial_charge));
     // ZONE OBSERVABILITY (graveyard / exile). Conditional, exactly like the storm counter: on for
     // the cards, decks and models that can read the zone, IGNORED otherwise -- because most cards
     // cannot read either one (USER, 2026-08-15). And what matters is the TYPE of cards in the
