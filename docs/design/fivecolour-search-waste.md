@@ -17,8 +17,12 @@
 >   memory is bounded by ONE decision and the cap is a same-decision backstop. At the 8192
 >   default cap the heavy game shows 45 clears yet only -5% hits and wall within ~1% of the
 >   262144 config -- the cap barely matters post-epoch-clear.
-> * DEFAULT still OFF (MTG_ENUM_MEMO). Adoption = USER call. If adopted: flip default on,
->   keep =0 hatch; cap default can stay 8192 (or 65536 for margin) -- both configs measured.
+> * **ADOPTED default-on at 763bb22** (=0 hatch) under the user's standing no-regression
+>   adoption directive (2026-08-20) -- the memo is a pure caching layer with zero behavior
+>   delta, so it is not one of the user-reviewed judgment classes. Pre-push gates re-run on
+>   the flipped binary with pure defaults: smoke 36/36 + regression 60/60, 0 changed,
+>   reference gate clean. Cap default stays 8192 (post-epoch-clear ~1% wall vs 262144 on the
+>   heaviest game; MTG_ENUM_MEMO_CAP to raise).
 > * MTG_5C_SSM financing: the -9% covers SSM's +9% on the same deck if the user wants the
 >   greedy-free interior m2.
 
