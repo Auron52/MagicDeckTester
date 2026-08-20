@@ -70,7 +70,11 @@ def main():
         se = lambda v: st.stdev(v) / len(v) ** .5 if len(v) > 1 else 0.0
         mi, mc, md = st.fmean(wi), st.fmean(wc), st.fmean(dd)
         s = se(dd)
-        band = md + 2 * s
+        # |bias| + 2se, not bias + 2se: the band is a CONSERVATIVE bound on how far the apparatus
+        # could move a comparison, and that is a magnitude question. Signing it made the band shrink
+        # when the tilt came out negative -- i.e. loosest exactly where the assumed direction had
+        # just been contradicted.
+        band = abs(md) + 2 * s
         print(f"## {life} life   ({len(gis):,} paired games)\n")
         print(f"| quantity | turns | se | reading |")
         print(f"|---|---:|---:|---|")
@@ -81,10 +85,16 @@ def main():
         print(f"| **fit bias** (incumbent - challenger) | **{md:+.4f}** | {s:.4f} | "
               f"{'tilts to the incumbent, as assumed' if md > 0 else 'TILTS THE OTHER WAY'} |")
         print(f"\ndecision band for the one-sided rule: **{max(band, 0.0):.4f}t** (bias + 2se)\n")
-        if md <= 0:
-            print("> The tilt does NOT favour the incumbent here. The \"incumbent wins by a lot ->\n"
-                  "> skip generation\" branch is not justified at this life total; an incumbent win\n"
-                  "> cannot be discounted as apparatus tilt, but neither is it inflated by it.\n")
+        if abs(md) < 2 * s:
+            print(f"> The fit tilt is NOT measurably different from zero ({md:+.4f} +/- {s:.4f}, "
+                  f"{abs(md)/s if s else 0:.1f} se).\n"
+                  "> The one-sided reading is therefore unsupported in EITHER direction: neither a\n"
+                  "> challenger win nor an incumbent win can be credited to the apparatus. Read the\n"
+                  "> report symmetrically, and treat the band above as the ambiguity zone for both.\n")
+        elif md < 0:
+            print("> The tilt runs toward the CHALLENGER, not the incumbent -- the opposite of what\n"
+                  "> the one-sided rule assumes. An INCUMBENT win is then the conservative one, and\n"
+                  "> a challenger win inside the band is the case needing a generation test.\n")
         out[life] = max(band, 0.0)
     if out:
         print("\nPass to the report as the too-close-to-call band:")

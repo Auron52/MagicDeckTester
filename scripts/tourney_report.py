@@ -92,7 +92,10 @@ def load(err, games, maxt):
             if line.startswith("[win] "):
                 _, j, g, w = line.split()
                 job, gi, wt = j[4:], int(g[3:]), int(w[3:])
-                if gi >= games:
+                # BRK_ jobs are the apparatus bracket, not arms: they run their own (smaller) game
+                # count and are read by tourney_bracket.py. Counting them here made the
+                # under-filled-arm guard fire on a batch that had in fact completed.
+                if job.startswith("BRK_") or gi >= games:
                     continue
                 slot(job)
                 W[job][gi] = maxt + 1 if (wt < 0 or wt > maxt) else wt
@@ -100,7 +103,7 @@ def load(err, games, maxt):
             elif line.startswith("[cards] "):
                 _, j, g, se, ca = line.split()
                 job, gi = j[4:], int(g[3:])
-                if gi >= games:
+                if job.startswith("BRK_") or gi >= games:
                     continue
                 slot(job)
                 S[job][gi] = bits(se[5:])
@@ -191,55 +194,44 @@ def slot_bits(a, b):
     return sum(1 << k for k in set(na) | set(nb) if na.get(k) != nb.get(k))
 
 
-def verdict(factor, la, lb, s, bias, seed=0):
-    """The one-sided reading. -> (tag, sentence).
+def verdict(factor, la, lb, s, band, seed=0):
+    """Verdict for one comparison. -> (tag, sentence).
 
-    The apparatus is fitted to the incumbent, so the tilt runs one way, and that asymmetry decides
-    what a weak result MEANS and therefore what the cheap follow-up is:
+    Read SYMMETRICALLY, because the bracket measured the fit tilt at -0.0088 +/- 0.0103 (20 life)
+    and -0.0187 +/- 0.0120 (30 life) -- under 2se in both cases, and if anything pointing at the
+    CHALLENGER rather than the incumbent. The one-sided rule this file originally implemented
+    assumed a tilt toward the incumbent; that assumption is not supported, so neither side gets to
+    claim it won "against the bias".
 
-      challenger ahead, significant   ADOPT    won against the tilt; conservative and conclusive
-      challenger ahead, weak          CONFIRM  still fighting the tilt, so the direction is already
-                                               evidence -- what is missing is reproducibility, and
-                                               held-out SEEDS buy that far cheaper than generation
-                                               (user, 2026-08-19: "if it wins by a little toward the
-                                               new option rather than the incumbent that is probably
-                                               also a sign that it is a win, assuming it can be
-                                               reproduced with a greater breadth of seeds. Since it
-                                               would be fighting against any bias.")
-      incumbent ahead, beyond band    INCUMBENT the tilt cannot account for it; nothing more to buy
-      incumbent ahead, inside band    GENERATE  the ONLY case the apparatus actually limits: the
-                                               tilt alone would produce exactly this, and more seeds
-                                               cannot separate them because the tilt is systematic,
-                                               not noise.
+    What the bracket DID establish is a magnitude: the apparatus can move a comparison by at most
+    about `band` turns. So:
+
+      |t| < 2                       CONFIRM   sampling-limited. Held-out seeds, cheap.
+      |t| >= 2 and effect > band    CONCLUSIVE apparatus cannot account for it.
+      |t| >= 2 and effect <= band   GENERATE  real and reproducible, but small enough that a
+                                              different keep table could plausibly flip it. This is
+                                              the only case worth an expensive generation.
     """
     inc = INCUMBENT.get(factor)
-    if inc not in (la, lb):
-        return "MIXED", ("neither level is the shipped card, so both sides carry the same fit "
-                         "bias and it largely cancels -- read this row symmetrically.")
-    chal = lb if la == inc else la
-    # `md` is B-minus-A in win turns, so negative favours B.
-    chal_gain = -s["md"] if chal == lb else s["md"]
-    sig = abs(s["t"]) >= 2.0
-    if chal_gain > 0:
-        if sig:
-            return "ADOPT", (f"{chal} beats the shipped {inc} by {chal_gain:.4f}t (t={s['t']:+.1f}) "
-                             f"under an apparatus fitted to {inc}. The tilt opposed this result, so "
-                             f"it is conservative -- the true margin is at least this.")
-        return "CONFIRM", (f"{chal} leads {inc} by {chal_gain:.4f}t but only t={s['t']:+.1f}. It is "
-                           f"leaning the right way AGAINST the tilt, so the direction is already "
-                           f"evidence; what is unproven is reproducibility. Re-run on held-out "
-                           f"seeds (--seed {seed + 500000}), not a generation.")
-    if not bias:
-        return "GENERATE", (f"{inc} wins by {abs(chal_gain):.4f}t, but no apparatus bias has been "
-                            f"measured, so this cannot be told apart from the tilt. Run the bracket "
-                            f"(tourney_run.py --bracket) before spending anything on generation.")
-    if abs(chal_gain) <= bias:
-        return "GENERATE", (f"{inc} wins by {abs(chal_gain):.4f}t, inside the measured decision band "
-                            f"({bias:.4f}t = fit bias + 2se). The tilt alone would produce this, and "
-                            f"more seeds cannot help -- the tilt is systematic. This is the one case "
-                            f"that needs a real keep table.")
-    return "INCUMBENT", (f"{inc} wins by {abs(chal_gain):.4f}t, clear of the {bias:.4f}t decision "
-                         f"band -- the tilt cannot account for it, so no generation needed.")
+    sym = inc not in (la, lb)
+    chal = None if sym else (lb if la == inc else la)
+    chal_gain = 0.0 if sym else (-s["md"] if chal == lb else s["md"])
+    eff = abs(s["md"])
+    who = (f"{lb if s['md'] < 0 else la}") if sym else (chal if chal_gain > 0 else inc)
+    if abs(s["t"]) < 2.0:
+        lean = f"{who} leads by {eff:.4f}t" if eff else "dead level"
+        return "CONFIRM", (f"{lean} but only t={s['t']:+.1f} -- sampling-limited, not "
+                           f"apparatus-limited. Re-run on held-out seeds (--seed {seed + 500000}); "
+                           f"a keep table would not help.")
+    if band and eff <= band:
+        return "GENERATE", (f"{who} wins by {eff:.4f}t (t={s['t']:+.1f}) -- real and reproducible, "
+                            f"but inside the {band:.4f}t the apparatus itself can move a comparison. "
+                            f"A different keep table could plausibly flip it; this one is worth "
+                            f"generating for.")
+    tag = "MIXED" if sym else ("ADOPT" if chal_gain > 0 else "INCUMBENT")
+    extra = "" if band else " (no apparatus band measured -- provisional)"
+    return tag, (f"{who} wins by {eff:.4f}t (t={s['t']:+.1f}), clear of the {band:.4f}t apparatus "
+                 f"band{extra}. Settled without generating anything.")
 
 
 def test(data, games, title, factor, levels, contexts, name_of, maxt, note="", bias=0.0,
@@ -303,11 +295,15 @@ def main():
     ap.add_argument("--tsv", default="")
     ap.add_argument("--seed", type=int, default=1200000,
                     help="the run's seed, so CONFIRM rows can print a held-out one")
-    ap.add_argument("--bias", type=float, default=0.0,
+    ap.add_argument("--bias", default="0",
+                    help="apparatus band per life total, comma-separated to match --lives")
+    ap.add_argument("--bias-unused", type=float, default=0.0,
                     help="measured apparatus bias in turns; sets the 'too close to call' band. "
                          "0 = unknown, verdicts then say so rather than pretending a threshold.")
     a = ap.parse_args()
     lives = [int(x) for x in a.lives.split(",") if x.strip()]
+    bands = [float(x) for x in str(a.bias).split(",") if x.strip()]
+    band_of = {l: (bands[i] if i < len(bands) else bands[-1]) for i, l in enumerate(lives)}
     data = load(a.err, a.games, a.max_turns)
 
     rows = []
@@ -324,18 +320,18 @@ def main():
 
         rows += [(life, "T1", *r) for r in test(
             d, a.games, "Test 1 -- Twinflame vs Luxurious Libation", "tf", TF,
-            [(x, y) for x in AO for y in SLOT], lambda l, c: f"{l}_{c[0]}_{c[1]}", a.max_turns, bias=a.bias, seed=a.seed)]
+            [(x, y) for x in AO for y in SLOT], lambda l, c: f"{l}_{c[0]}_{c[1]}", a.max_turns, bias=band_of[life], seed=a.seed)]
 
         rows += [(life, "T2", *r) for r in test(
             d, a.games, "Test 2 -- Ancestral Anger vs Oracle's Restoration", "ao", AO,
             [(x, y) for x in TF for y in ("scale", "draught", "entrance")],
-            lambda l, c: f"{c[0]}_{l}_{c[1]}", a.max_turns, bias=a.bias, seed=a.seed,
+            lambda l, c: f"{c[0]}_{l}_{c[1]}", a.max_turns, bias=band_of[life], seed=a.seed,
             note="Contexts exclude the `oracle` and `anger` flex slots: those change the SAME two "
                  "cards' counts, so including them would compare a level against itself.")]
 
         rows += [(life, "T3", *r) for r in test(
             d, a.games, "Test 3 -- the Scale the Heights slot (four-way)", "slot", SLOT,
-            [(x, y) for x in TF for y in AO], lambda l, c: f"{c[0]}_{c[1]}_{l}", a.max_turns, bias=a.bias, seed=a.seed)]
+            [(x, y) for x in TF for y in AO], lambda l, c: f"{c[0]}_{c[1]}_{l}", a.max_turns, bias=band_of[life], seed=a.seed)]
 
     if a.tsv:
         with open(a.tsv, "w") as fh:
