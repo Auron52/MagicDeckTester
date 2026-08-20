@@ -1242,3 +1242,29 @@ overhead there. The lever is workload-shaped: it pays only where the table overf
 **Verdict: real, lossless, and modest — not a tail fix.** Kept as a lever (default OFF, 5x memory);
 worth arming for a GENERATION run, which is exactly the long-game workload where it pays. The tail
 itself is 96.8% rollout and no enumeration-side lever addresses that.
+
+## Breakpoints: this deck has NONE, and its draw engine is why (2026-08-20)
+
+`MTG_BP_PROBE` — the "how much of the tree is greedy" census — prints **nothing** on this deck, at
+d3 (20 games) and on the d5 tail game alike. KittyEquipment touches none of the six breakpoint
+classes (stages/EI, DrawUntilNonland, impulse_exile, plain cantrip, dig-through-lands, trick
+payload), so every greedy solve here is the **d0 horizon**, not a continuation.
+
+That is not because the deck has no mid-plan draws. It is because its ONLY draw engine is invisible
+to the classifier: `AIEngine::note_draw_engine` recognises `DrawUntilNonland`, `cascade_max_mv`,
+`stages_cards`, `impulse_exile` and `solo_target_trick`, but **not `draw_on_equipment_etb`** —
+Puresteel Paladin. The draw itself is fully implemented (`SpellEffects.h`, one card per watcher per
+Equipment ETB); it simply never arms a re-solve.
+
+**Frequency, from the 150 logged held-out games:** an estimated **109 main-1 equipment-ETB draws
+across 78 main-1 turns, in 56 of 150 games (37%)**. Every one of those cards is unavailable for the
+rest of main 1 — it can only be cast post-combat (this deck's second main IS searched) or next turn,
+so a drawn Colossus Hammer cannot be cast-and-equipped before the attack that turn. The count is a
+LOWER bound: it counts equipment CASTS only, and a Stoneforge/Skyhunter put triggers the same draw.
+
+**Why the FiveColour design fits it exactly.** `CondemnsPassedMainPhase` condemns a Main1-classified
+card that the pre-combat decision passed on, for the rest of the turn — and exempts newly
+drawn/acquired cards via the `GameState::m1_hand` snapshot. That exemption is precisely what makes a
+SEARCHED continuation cheap here: the harvest at a Puresteel draw is the new card(s) and nothing
+else, because everything the main-1 decision already declined is condemned. The ordered cast
+doctrine removes the second half of the cost by fixing the order rather than searching it.
