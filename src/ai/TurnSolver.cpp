@@ -16051,6 +16051,28 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             const CardDefinition* w = CardDatabase::Instance().LookupCached(perm.card);
             if (w && w->params.draw_on_equipment_etb) { watcher = true; break; }
         }
+        // "We'll always draw if they are in the same plan" (USER, 2026-08-20) -- so this clause is
+        // EXACT, not merely conservative, and it must not be narrowed to "watcher already on the
+        // battlefield". The cast order decides it, and both live orders rank the watcher strictly
+        // ahead of Equipment: the reviewed KittyEquipment order puts Puresteel at 6 and Equipment at
+        // 8, and the GENERIC order (which is what runs while MTG_KE_ORDER is unadopted) puts
+        // creatures at 10 ahead of other noncreature spells at 20. The deck's cast set holds no
+        // OrderingOpaque card, so it takes the clean CastOrderLess sort in both worlds rather than
+        // plan order. A plan holding both therefore always resolves the Paladin first, the draw
+        // always fires, and every plan this clause marks really does arm a breakpoint mid-apply.
+        //
+        // Two consequences worth writing down. It is not an over-fire, so it is NOT a place to look
+        // for the class's cost -- that is intrinsic (site 6 fires on nearly every plan the deck has
+        // and W=2 triples the candidate set). And narrowing it would be a QUALITY prune, not a cost
+        // one: the wave walker reads this same predicate, so Paladin-deploy turns would become
+        // unreachable at any budget.
+        //
+        // The one case that could still order Equipment first is an explicit searched_order plan.
+        // That does not need handling here: it can only make this predicate conservative (a marked
+        // plan whose variants collapse into duplicates of their base plan -- wasted nodes, never a
+        // wrong answer), which is the safe direction. Predicting the realised order here INSTEAD
+        // would be the lockstep hazard, since a prediction that disagreed with apply_plan_actions
+        // would silently prune a turn that does arm.
         if (!watcher)
         {
             for (const Action& a : p.actions)
