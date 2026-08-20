@@ -7085,8 +7085,14 @@ bool FiveColourProvider::CondemnsPassedMainPhase() const
     //   red, 0 green), proving FILTERED, not underexplored; after the doctrine, 3/45 red cells
     //   remain, all one game (gi187: Jared's m1-vs-m2 tie made load-bearing).
     // Train after both rounds: d3 +0.005/-0.005, d5 -0.030/-0.010 (6 worse / 11 better).
-    // Off arm byte-identical throughout. Do not flip on without held-out + USER approval.
-    static const bool on = EnvOn("MTG_5C_CONDEMN");
+    // Off arm byte-identical throughout.
+    // ADOPTED DEFAULT-ON (USER, 2026-08-20; =0 hatch) as the SOUND lever: root-turn authority
+    // on the commit-the-line path + condemned tranche (MTG_CONDEMN_TRANCHE) closed all 3
+    // residuals byte-identically. Final state: train 5/5 BYTE-IDENTICAL (x3 runs), held-out
+    // 2800 searched games zero slower/zero faster (4 equal-score line swaps, 3 digest-only
+    // keys), perf neutral within noise (sums +0.7%, makespan <= +3%). Semantics lever, not a
+    // perf lever: the historical -22% was entirely the unsound projection-turn stamping.
+    static const bool on = EnvOn("MTG_5C_CONDEMN", true);
     return on && Fc5PhaseEnabled();
 }
 

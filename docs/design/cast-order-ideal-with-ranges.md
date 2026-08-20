@@ -1,5 +1,22 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS 2026-08-20 (FINAL): MTG_5C_CONDEMN **ADOPTED DEFAULT-ON** (USER; =0 hatch) as the
+> SOUND semantics lever. The missing piece was ROOT-TURN AUTHORITY ON THE COMMIT-THE-LINE PATH:
+> the guard was owned by SolveWithLookahead, which FiveColour's hybrid never enters, so the
+> FSLine machinery stamped at every projected turn -- a budget-starved d1 tail's "pass" of Mana
+> Cannons condemned the T4 Cannons+Unite win inside gi66's Faeburrow subtree. Guards at
+> FullSearchLine + FullSearchLineHybrid entries recovered ALL 3 residuals byte-identically with
+> condemnation fully on; the condemned tranche (default ON) is load-bearing for exactness even
+> at root-only stamps (tranche-off moves one d3 digest).
+> ADOPTION EVIDENCE: train 5/5 byte-identical (x3 interleaved runs); held-out 2800 searched
+> games ZERO slower/faster, 4 equal-score line swaps (3 digest-only keys, accepted); full smoke
+> 36/36 under the flipped default; perf neutral within noise (searched sums +0.7%, makespan
+> <=+3%, controls drifting +/-7%). The historical -22% is fully attributed to the UNSOUND
+> projection-turn stamping -- sound condemnation is a semantics lever, not a perf lever. The
+> class rules that made it sound: free-cast exemption, pool-forced-pass exemption (an engine
+> m1-pricing artifact -- see mana-affordability-arc-handoff.md's 2026-08-20 reopen trigger),
+> root-turn authority, tranche completeness (infinite-budget bar holds structurally).
+
 > ## STATUS UPDATE 2026-08-20 (CONDEMNED TRANCHE -- the lossless build): all 5 residual cells
 > RECOVER byte-identical to OFF with condemnation FULLY ON. The mechanism chain that got here:
 >
