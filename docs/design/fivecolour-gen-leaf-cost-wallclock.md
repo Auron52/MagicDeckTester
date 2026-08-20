@@ -1,5 +1,44 @@
 # Wall-clock test: does the value leaf still pay in the FiveColour gen labeller at d2/b1?
 
+> ## STATUS 2026-08-21: ALL ANCHOR NUMBERS BELOW ARE STALE — the "2x slower on HEAD" report is
+> REAL, VERIFIED, and ATTRIBUTED to the MTG_5C_PHASE adoption (b7f308a, 2026-08-19)
+>
+> The secondary machine reported FiveColour ~2x slower on HEAD vs 9188509 (this doc's commit).
+> Verified on the primary box, idle, interleaved worktree-vs-HEAD pairs, the protocol's own
+> run command:
+>
+> | config | 9188509 | HEAD | ratio | HEAD avg vs OLD avg |
+> |---|---|---|---|---|
+> | d2/b1 s1001 | 21.1 s | 20.8 s | 1.0x | 5.1750 = 5.1750 |
+> | d2/b1 s2001 | 24.7 s | 63.9 s | **2.6x** | 4.8250 < 4.9000 |
+> | d2/b1 s3001 | 32.0 s | 73.9 s | **2.3x** | 4.9667 < 5.0833 |
+> | d2/b1 s4001 | 55.1 s | 72.7 s | 1.3x | 4.8833 < 4.9583 |
+> | d3/b3 s1001 | 31.7 s | 51.1 s | 1.6x | 5.0417 < 5.1750 |
+> | d5/b20 s1001 (30g) | 32.2 s | 43.3 s | 1.35x | 5.1000 < 5.2000 |
+>
+> Pooled d2/b1 over the four seed blocks: **1.74x** — "about 2x" confirmed. HEAD plays BETTER
+> on every block (the cost buys quality). Seed 1001 (the protocol's primary seed) happens to
+> dodge the cost almost entirely — do not calibrate from it alone.
+>
+> CAUSE, isolated by hatch sweep + commit bisection (midpoint a85ccf6 ≈ OLD speed):
+> **MTG_5C_PHASE=0 recovers it** (d3/b3: 51→34.6 s; d2/b1 s2001: 64→29.1 s), and within phase
+> the dominant term is the COLLAPSED-MAIN UNCAPPED FETCH FAN (`MTG_FETCH_FAN_CAP=2` recovers
+> below even phase-off: d3/b3 51→27.0 s, s2001 d2/b1 64→21.1 s). MTG_5C_ORDER=0 is inert.
+> Small contributors on top: colour-exact (~10%), SSM (~4%), each quality-bearing. The 1.35x
+> at play depths was KNOWN AND ACCEPTED at the phase adoption (held-out 12/12 green, d5
+> −0.113); what was not known is that the fan multiplier hits shallow gen searches 2-3x on
+> fetch-heavy seed blocks. The intended claw-back (condemnation −34%) proved UNSOUND; sound
+> condemnation is perf-neutral, so the phase cost stands unoffset.
+>
+> CONSEQUENCE FOR THIS DOC: the anchor table and the "fidelity half is already settled" claim
+> below both predate the phase/condemn/SSM engine — the reference policy MOVED. A 3-arm
+> re-battery is running on the primary box (REF d6/b20 vs H21 vs H21+MTG_FETCH_FAN_CAP=2,
+> same 200-hand/R=30 apparatus, results → `fivecolour-mullgen-labeller-sweep.md`): if
+> H21+fancap2 holds fidelity under the CURRENT engine, gen recovers the ~1.7x via a scoped
+> label-rollout arm (caveat: cap=1 was already REJECTED on fidelity in the sweep, rho 0.9567 —
+> cap=2 is the open question; and any arm must be scoped to LABEL rollouts only, discovery
+> stays on shipped play). Decision = USER's.
+
 2026-08-18. **Self-contained protocol for an IDLE machine** — read this and you can run it cold.
 Context lives in `fivecolour-mullgen-labeller-sweep.md`; none of it is required to execute.
 
