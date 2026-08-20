@@ -25,20 +25,20 @@ better-minus-worse game counts and `s` is that margin in its own noise units
 
 | option | status | verdict | why |
 |---|---|---|---|
-| **3 Twinflame** (incumbent) | measured | **keep at 30 life, cut at 20** | Loses to Libation at 20 life (−0.0145t, +472 margin, 6.0σ) and beats it at 30 (+0.0138t, −1,067, 11.8σ). Sign flip is consistent across both trick contexts, so it is a life-total effect, not an interaction. **Conditional on Entrance = 2** — see 1b. |
+| **3 Twinflame** (incumbent) | measured | **cut at 20; at 30 only if Entrance is 2** | Loses to Libation at 20 life (−0.0145t, +472 margin, 6.0σ) and beats it at 30 (+0.0138t, −1,067, 11.8σ). Sign flip is consistent across both trick contexts, so it is a life-total effect, not an interaction. **Conditional on Entrance = 2** — see 1b. |
 | **3 Luxurious Libation** | measured | **take at 20 life** | Mirror of the above. Makes a 1/1 Citizen per resolved copy, so it grows the board rather than the turn's damage — which is why it fades when 30 damage is needed on one swing. |
-| 2/1 and 1/2 Twinflame/Libation mixes | measured | **ELIMINATED** | Dose response is monotone in both directions (≈0.005t per copy at 20 life, ≈0.005t the other way at 30), so a mix always lands strictly between the two pure options. |
+| 2/1 and 1/2 Twinflame/Libation mixes | measured | **UN-ELIMINATED (2026-08-20)** | Eliminated earlier on a monotone dose response, which is an interpolation argument. It does not survive: at **2 Entrance**, `1 Twin / 2 Lib` wins the two-life-total sum at *every* shape, because the two life totals pull in opposite directions and a mix is the hedge. The user's mechanism reason — 1 Twinflame for haste Libation's summoning-sick Citizens lack — is what the ladder argument missed. See 5e. |
 | **4 Ancestral Anger** (incumbent) | measured | **ELIMINATED at 20 life; alive at 30** | 6σ+ behind the leader at 20 life in both 2-slots. At 30 life *4 Anger + 2 Oracle* ties for first (+0.0019t, t=+0.7, margin −19). Flat +X/+0 off graveyard copies — raw damage, no synergy tail, worth most when the damage requirement is largest. See 5b. |
 | **4 Oracle's Restoration** | measured | **take at 30 life; 2-slot at 20** | Leader at 30 as *4 Oracle + 2 Draught*. At 20 life it is 0.0136t behind 4 Draught (t=+5.2). Its `cast_lifegain: 1` per copy is Draught fuel, not a rate upgrade — which is why it wants to be the small half of the pair at 20. |
 | 2 Anger / 2 Oracle mix | measured | **ELIMINATED** | Dead last at 20 life (+0.0329t behind the leader, −1,037, 11.5σ). See the escalation argument in 5b. |
 | 2 Anger / 2 Draught / 2 Oracle mix | measured | **ELIMINATED** | Behind at both life totals on both numbers (+0.0132t / 6.8σ at 20; +0.0071t / 3.5σ at 30). |
 | **2 Scale the Heights** (incumbent) | measured | **ELIMINATED (2026-08-20)** | Loses to its replacement in 9 of 10 measured contexts, by up to −0.0191t / +769 (11.5σ). The one exception has its two numbers disagreeing inside the apparatus band. Full table in 5b. |
 | **4 Fortifying Draught** | measured | **take at 20 life** | Leader at 20 as *4 Draught + 2 Oracle* (−0.0248t vs the old incumbent, +938, 10.4σ). At 30 life it drops to 6th — it self-fuels into a *consistent* board rather than a big single swing. |
-| **4 Oracle + 2 Draught** | measured | **leader at 30 life** | −0.0110t / +575 (6.8σ) vs the old incumbent. Beaten at 20 life by the reversed split. |
-| **4 Draught + 2 Oracle** | measured | **leader at 20 life** | Beats *4 Oracle + 2 Draught* by −0.0136t (t=−5.2, +195 margin) at 20 and loses to it by +0.0094t (t=+2.9, −536) at 30. Another life-total sign flip. |
+| **4 Oracle + 2 Draught** | measured | **superseded at 30 life** | Led 30 life until run C; `2 O + 2 D + 4 E` beats it by −0.0184t (t=−5.6). Still 2nd at 30. |
+| **4 Draught + 2 Oracle** | measured | **FINAL leader at 20 life** | Best list measured anywhere at 20 life (5.0259 with 3 Libation). Survived the full grid in 5e. Beaten at 30 life, where Draught wants to be at its minimum of 2. |
 | 4 Draught + 2 Scale | measured | superseded by the Scale cut | Isolated Draught count with no Oracle fuel: 2nd at 20 (+0.0027t behind), 9th at 30. Draught's own value does not need Oracle, but the 2-slot is worth more as Oracle than as Scale. |
 | 4 Anger + 2 Oracle | measured | **the 30-life contender** | Tied for first at 30 (+0.0019t, t=+0.7). 6th at 20. |
-| **4 Impolite Entrance** | **not measured** | **open — and now REACHABLE for free** | Hypothesis with card-data support: Entrance grants haste, Libation's Citizens arrive summoning-sick, so Entrance→Libation is a one-sided enabler (Twinflame's tokens already have haste). Cutting Scale frees a bucket; Entrance can take the cap-4 bucket with the other tricks at 2. See 2c — the 9,293-cell price no longer applies to the form that matters. |
+| **4 Impolite Entrance** | measured (run C) | **take at 30 life, and for a both-totals list** | Sweeps ranks 1–4 at 30 life (−0.0184t vs the old leader, t=−5.6) and takes the top four on the two-life-total sum. At 20 life it loses to 4 Draught by 0.0160t. Its haste substitutes for Twinflame's, which the trick-slot dose curve confirms. Reachable for free once Scale was cut (2c). |
 | Expedite | not tried here | n/a | The shipped deck's card; every tournament arm plays Impolite Entrance in its place. It survives only as the bucket Entrance is aliased into. |
 
 ### 1b-0. Decision rule: unmodelled upside breaks ties toward Impolite Entrance
@@ -526,6 +526,75 @@ Entrance-3 list is 0.0151t at t=+4.0, far outside a tie.
 
 ---
 
+## 5e. THE FINAL GRID — every legal list, no holes
+
+Nine draw/pump shapes x four trick splits x two life totals, all measured. Runs A/B/C carried all
+four trick splits; run D carried three and **run E filled the missing `2 Twin / 1 Lib` column**, so
+nothing below is extrapolated.
+
+<!-- AUTO:grid -->
+
+**20 life** — mean turn to kill, lower is better. Bold = best in the whole grid.
+
+| shape | 3 Twin | 2 Twin / 1 Lib | 1 Twin / 2 Lib | 3 Libation | best |
+|---|---:|---:|---:|---:|---:|
+| `4 O + 2 D + 2 E` | 5.0551 | 5.0503 | 5.0475 | 5.0454 | 5.0454 |
+| `3 O + 3 D + 2 E` | 5.0525 | 5.0452 | 5.0423 | 5.0397 | 5.0397 |
+| `2 O + 4 D + 2 E` | 5.0480 | 5.0383 | 5.0316 | **5.0259** | 5.0259 |
+| `3 O + 2 D + 3 E` | 5.0642 | 5.0580 | 5.0537 | 5.0503 | 5.0503 |
+| `2 O + 3 D + 3 E` | 5.0619 | 5.0536 | 5.0479 | 5.0458 | 5.0458 |
+| `1 O + 4 D + 3 E` | 5.0603 | 5.0525 | 5.0469 | 5.0437 | 5.0437 |
+| `2 O + 2 D + 4 E` | 5.0595 | 5.0530 | 5.0495 | 5.0459 | 5.0459 |
+| `1 O + 3 D + 4 E` | 5.0659 | 5.0585 | 5.0554 | 5.0502 | 5.0502 |
+| `0 O + 4 D + 4 E` | 5.0690 | 5.0604 | 5.0558 | 5.0516 | 5.0516 |
+
+**30 life** — mean turn to kill, lower is better. Bold = best in the whole grid.
+
+| shape | 3 Twin | 2 Twin / 1 Lib | 1 Twin / 2 Lib | 3 Libation | best |
+|---|---:|---:|---:|---:|---:|
+| `4 O + 2 D + 2 E` | 5.4408 | 5.4446 | 5.4513 | 5.4595 | 5.4408 |
+| `3 O + 3 D + 2 E` | 5.4471 | 5.4499 | 5.4539 | 5.4625 | 5.4471 |
+| `2 O + 4 D + 2 E` | 5.4530 | 5.4563 | 5.4584 | 5.4660 | 5.4530 |
+| `3 O + 2 D + 3 E` | 5.4455 | 5.4476 | 5.4480 | 5.4532 | 5.4455 |
+| `2 O + 3 D + 3 E` | 5.4503 | 5.4495 | 5.4547 | 5.4602 | 5.4495 |
+| `1 O + 4 D + 3 E` | 5.4576 | 5.4562 | 5.4577 | 5.4627 | 5.4562 |
+| `2 O + 2 D + 4 E` | 5.4288 | **5.4275** | 5.4319 | 5.4346 | 5.4275 |
+| `1 O + 3 D + 4 E` | 5.4463 | 5.4440 | 5.4479 | 5.4517 | 5.4440 |
+| `0 O + 4 D + 4 E` | 5.4617 | 5.4609 | 5.4600 | 5.4618 | 5.4600 |
+<!-- /AUTO:grid -->
+
+### The Entrance response is U-shaped — play 2 or 4, never 3
+
+<!-- AUTO:entrance -->
+| Entrance | best at 20 life | best at 30 life | best two-total sum |
+|---:|---|---|---|
+| **2** | 5.0259 `2 O + 4 D + 2 E` 3 Libation | 5.4408 `4 O + 2 D + 2 E` 3 Twin | 10.4900 `2 O + 4 D + 2 E` 1 Twin / 2 Lib |
+| **3** | 5.0437 `1 O + 4 D + 3 E` 3 Libation | 5.4455 `3 O + 2 D + 3 E` 3 Twin | 10.5017 `3 O + 2 D + 3 E` 1 Twin / 2 Lib |
+| **4** | 5.0459 `2 O + 2 D + 4 E` 3 Libation | 5.4275 `2 O + 2 D + 4 E` 2 Twin / 1 Lib | 10.4805 `2 O + 2 D + 4 E` 3 Libation |
+<!-- /AUTO:entrance -->
+
+Three Entrance is a strict middle: it cannot hold Draught at 4 (which 20 life wants) and it does
+not buy enough haste to free the trick slot (which 30 life wants). At 20 life the response is
+simply monotone — every Entrance past 2 costs.
+
+### Libation count, as a function of Entrance
+
+The Twinflame/Libation choice is not a fixed answer; **how much it matters is set by the Entrance
+count**, which is the haste-substitution mechanism measured as a dose curve. Penalty for playing
+3 Libation instead of 3 Twinflame at 30 life:
+
+| Entrance | penalty | t |
+|---:|---:|---:|
+| 2 | +0.0157t | +5.6 |
+| 3 | +0.0076t | +2.7 |
+| 4 | +0.0038t | +1.4 |
+
+It roughly halves per Entrance added. At 20 life the answer is **3 Libation at every Entrance
+count**, monotone and significant at every step. At 30 life it is 3 Twinflame at 2 Entrance,
+decaying to a free choice at 4.
+
+---
+
 ## 6. Mechanisms found
 
 **Fortifying Draught self-fuels, and that is most of its value.**
@@ -605,63 +674,52 @@ Recorded because each one changed a conclusion or cost real time.
 
 ---
 
-## 8. Open
+## 8. Conclusions, and what is still open
 
-- ~~Run B: does `4 Draught + 2 Oracle` beat `4 Oracle + 2 Draught`?~~ **Answered:** yes at 20 life
-  (−0.0136t, t=−5.2), no at 30 (+0.0094t, t=+2.9). A life-total split like the trick slot.
-- **Entrance at 4** and its interaction with Libation — **run C**, and it is free (section 2c). The
-  design rotates which of {Draught, Oracle, Entrance} takes the cap-4 bucket while the other two sit
-  at 2, crossed with Twinflame vs Libation at 3:
+### The three answers
 
-  | arm | 3-of | 4-of | 2-of | 2-of | status |
-  |---|---|---|---|---|---|
-  | `d4` | TF or Lib | Draught | Oracle | Entrance | measured (run B `d4o2`) |
-  | `o4` | TF or Lib | Oracle | Draught | Entrance | measured (run A `a0o4_draught`) |
-  | `e4` | TF or Lib | **Entrance** | Draught | Oracle | **new, zero generation** |
+Every legal list in the frame has been measured (5e). Nothing below is extrapolated.
 
-  The Entrance→Libation interaction is then `(e4 − d4)` under Libation minus the same under
-  Twinflame — a difference-in-differences on the same seeds, which is exactly the one-sided-enabler
-  claim and not merely "is 4 Entrance good". Run C needs its own alias map (Entrance in bucket 9),
-  so it must carry its own bridge arm and re-measure `d4`/`o4` under that map rather than chaining
-  to runs A/B — which doubles as a third independent check on the fit tilt.
-- **Run D — the rest of the legal space.** Three constraints, all the user's (2026-08-20), close
-  the frame completely: **at most 4 copies** of a card (deck construction), **Entrance ≥ 2**, and
-  **Draught ≥ 2** — *"so there are only 4 spots remaining to fill."* Those 4 free spots distribute
-  over the three cards nine ways, and nine is the entire space:
+| optimising for | decklist (flexible 11) | mean |
+|---|---|---:|
+| **20 life** | 3 Libation · 2 Oracle · **4 Draught** · 2 Entrance | **5.0259** |
+| **30 life** | 2 Twinflame / 1 Libation · 2 Oracle · 2 Draught · **4 Entrance** | **5.4275** |
+| **both equally** | 2 Oracle · 2 Draught · **4 Entrance**, trick free (3 Lib or 2 Twin/1 Lib tie at 10.4805) | 10.4805 sum |
 
-  | free spots (O/D/E) | O | D | E | where |
-  |---|---:|---:|---:|---|
-  | 4 / 0 / 0 | 4 | 2 | 2 | run A |
-  | 3 / 1 / 0 | 3 | 3 | 2 | **run D** |
-  | 3 / 0 / 1 | 3 | 2 | 3 | **run D** |
-  | 2 / 2 / 0 | 2 | 4 | 2 | run B |
-  | 2 / 1 / 1 | 2 | 3 | 3 | **run D** |
-  | 2 / 0 / 2 | 2 | 2 | 4 | run C |
-  | 1 / 2 / 1 | 1 | 4 | 3 | **run D** |
-  | 1 / 1 / 2 | 1 | 3 | 4 | **run D** |
-  | 0 / 2 / 2 | 0 | 4 | 4 | **run D** |
+Plus the fixed 49: 4 Mirrorwing Dragon, 4 Zada, 4 Goblin Instigator, 4 Ignoble Hierarch,
+4 Elvish Mystic, 4 Gold Rush, 4 Fists of Flame, 3 Sandstone Needle, 9 Forest, 4 Mountain,
+2 Gruul Turf, 2 Rootbound Crag, 1 Kazandu Refuge.
 
-  - **The Draught floor is measured, not stylistic.** Oracle is dependent on Draught — without it,
-    Oracle is the *worst* option at 20 life (+0.0080t vs Anger), because its `cast_lifegain: 1` per
-    copy is Draught fuel rather than a rate upgrade. A Draught-light arm does not merely lose
-    Draught, it stops the Oracle beside it working, so that corner is doubly unpromising.
-  - **Trick contexts are weighted toward Libation** — 3 Lib, 2 Lib / 1 Twin, and 3 Twin as the
-    30-life reference. An O/D/E optimum found only under 3 Twinflame is an optimum for a list we
-    may not build.
-  - **1 Twinflame is back as a candidate, on mechanism rather than interpolation.** Section 5b
-    eliminated mixes on a monotone dose response; the user's reason for keeping one is different
-    — *"1 Twinflame to mitigate the haste loss."* Twinflame's token copies have haste; Libation's
-    Citizens arrive summoning-sick and need Entrance to attack the turn they land. One Twinflame is
-    haste that does not compete for the Entrance slots. That also predicts an **interaction**: if
-    Twinflame is being held as a haste source, its value should *fall* as Entrance rises, since
-    Entrance supplies the same thing. Run D crosses Entrance 2/3/4 with all three trick contexts,
-    so the prediction is directly readable.
-  - The cap-4 bucket goes to the largest count, which forces each arm's map; only the symmetric
-    3 O + 3 D has a choice, and it runs **both ways** as the aliasing control.
-  - 42 jobs, 420,000 games, ~3.1 h. Miss rates 0.102% for a 3-of outside the cap-4 bucket and
-    0.388% for 0 O + 4 D + 4 E, printed per arm.
-- Mixes are eliminated (5b), so run C spends no arms on them: 3 rotations × 2 tricks × 2 life
-  totals = 12 jobs.
-- Whether 30 life needs its own keep table, or whether the 20-life one transfers. The bracket says
-  the table is worth 0.135t at 30 life, so the question is live but the *fit* tilt is small.
-- Creature-creation count is held at 3 throughout and has not been contested.
+### What the tournament established
+
+1. **Scale the Heights and Ancestral Anger are out** (5b) — Scale loses in 9 of 10 contexts, Anger
+   only survives at 30 life and is superseded there by 4 Entrance.
+2. **The life total, not the card pool, is the real decision.** Draught wants to be at 4 for 20 life
+   and at 2 for 30; Entrance is the mirror image. No list is best at both.
+3. **The Entrance response is U-shaped — play 2 or 4, never 3.** Three Entrance is dominated at
+   30 life and on the two-total sum; it can neither hold Draught at 4 nor buy enough haste.
+4. **Twinflame's value was always haste, and haste is purchasable.** The penalty for playing
+   3 Libation at 30 life halves with each Entrance added (+0.0157t → +0.0076t → +0.0038t). This was
+   *predicted before measurement* from the card text and confirmed on three points.
+5. **Oracle and Draught are mutually dependent.** Oracle without Draught is the worst option at
+   20 life; `0 Oracle + 4 Draught + 4 Entrance` is last at *both* life totals. Each is the other's
+   fuel — keep both at 2 or more.
+6. **Escalating payoffs punish split slots**, which is why every mix lost in the 4-slot. The one
+   exception is the *trick* slot, where a mix is a hedge across life totals rather than a diluted
+   escalation curve — a distinction the original elimination missed.
+7. **The apparatus did not decide anything.** Bridge arms are game-identical across all three alias
+   maps, the fit tilt is under 2 se, and the same decklist under two different bucketings differs by
+   +0.0038t (t=+1.5). All of it was free — no keep table was ever generated for this tournament.
+
+### Still open
+
+- **Which life total to build for.** The simulator cannot answer this; it is a format question.
+- **Whether 30 life needs its own keep table.** The bracket says the table is worth 0.135t at
+  30 life, so the question is live, though the *fit* tilt is small.
+- **Impolite Entrance vs Expedite is undecidable here.** They are parameter-identical under this
+  engine (trample inert against a non-blocking goldfish, sorcery-vs-instant unmodelled). Every
+  "Entrance" result is really a result about the cheap haste cantrip slot; the tie-break in 1b-0
+  says prefer Entrance, but the screen cannot show it.
+- **Creature-creation count is held at 3 throughout** and has never been contested.
+- **The trample benefit is unquantified.** Bounded above by the ~40% of wins that cast no Fists of
+  Flame (1b-0), but never measured, because a blocking opponent is out of scope for a goldfish.

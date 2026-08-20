@@ -52,6 +52,10 @@ ALL_COMBO = [("a4o0_scale", "4 Anger + 2 Scale"), ("a4o0_draught", "4 Anger + 2 
              ("a2o2_draught", "2 Anger/2 Oracle + 2 Draught"),
              ("a2d2o2", "2 Anger/2 Draught/2 Oracle")]
 
+TRICKS = ["tf3lib0", "tf2lib1", "tf1lib2", "tf0lib3"]
+TRICK_LABEL = {"tf3lib0": "3 Twin", "tf2lib1": "2 Twin / 1 Lib",
+               "tf1lib2": "1 Twin / 2 Lib", "tf0lib3": "3 Libation"}
+
 HDR = ("| option | life | games | mean turn | vs baseline | t | better | worse | margin | s |\n"
        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
 
@@ -172,6 +176,80 @@ def scale_table(D, games, lives=(20, 30)):
     return "\n".join(out)
 
 
+# ---------------------------------------------------------------------------------------------
+# THE FINAL GRID. Every legal list, once the 4-copy limit and the user's floors (Entrance >= 2,
+# Draught >= 2) are applied: 9 draw/pump shapes x 4 trick splits x 2 life totals, no holes.
+#
+# Arm keys differ per run because runs A and B were hand-built and runs D/E carry a map suffix
+# (they measure the same decklist under more than one alias map). The mapping is spelled out here
+# ONCE so nothing downstream has to know which run a cell came from -- the bridge arms are verified
+# game-identical across maps, which is what licenses treating them as one table.
+SHAPES = [
+    ("4 O + 2 D + 2 E", {"tf3lib0": "a0o4_draught", "tf2lib1": "a0o4_draught",
+                         "tf1lib2": "a0o4_draught", "tf0lib3": "a0o4_draught"}),
+    ("3 O + 3 D + 2 E", {t: "o3d3e2_A" for t in TRICKS}),
+    ("2 O + 4 D + 2 E", {t: "d4o2" for t in TRICKS}),
+    ("3 O + 2 D + 3 E", {t: "o3d2e3_A" for t in TRICKS}),
+    ("2 O + 3 D + 3 E", {t: "o2d3e3_B" for t in TRICKS}),
+    ("1 O + 4 D + 3 E", {t: "o1d4e3_B" for t in TRICKS}),
+    ("2 O + 2 D + 4 E", {t: "e4" for t in TRICKS}),
+    ("1 O + 3 D + 4 E", {t: "o1d3e4_C" for t in TRICKS}),
+    ("0 O + 4 D + 4 E", {t: "o0d4e4_B" for t in TRICKS}),
+]
+
+
+def cell(D, trick, pat, life, games):
+    k = f"{trick}_{pat}@L{life}"
+    return sum(D[k][0]) / games if k in D else None
+
+
+def grid_table(D, games):
+    """The whole space, one row per shape, one column per trick split, per life total."""
+    out = []
+    for life in (20, 30):
+        best = min((c for _, m in SHAPES for t in TRICKS
+                    for c in [cell(D, t, m[t], life, games)] if c is not None), default=None)
+        out.append(f"\n**{life} life** — mean turn to kill, lower is better. "
+                   f"Bold = best in the whole grid.\n")
+        out.append("| shape | " + " | ".join(TRICK_LABEL[t] for t in TRICKS) + " | best |")
+        out.append("|---|" + "---:|" * (len(TRICKS) + 1))
+        for lab, m in SHAPES:
+            cs = [cell(D, t, m[t], life, games) for t in TRICKS]
+            txt = []
+            for c in cs:
+                if c is None:
+                    txt.append("—")
+                elif best is not None and abs(c - best) < 1e-9:
+                    txt.append(f"**{c:.4f}**")
+                else:
+                    txt.append(f"{c:.4f}")
+            ok = [c for c in cs if c is not None]
+            out.append(f"| `{lab}` | " + " | ".join(txt) + " | "
+                       + (f"{min(ok):.4f}" if ok else "—") + " |")
+    return "\n".join(out)
+
+
+def entrance_table(D, games):
+    """Best list at each Entrance count -- the shape of the Entrance response."""
+    out = ["| Entrance | best at 20 life | best at 30 life | best two-total sum |",
+           "|---:|---|---|---|"]
+    for e in (2, 3, 4):
+        rows = [(lab, m) for lab, m in SHAPES if lab.endswith(f"{e} E")]
+        picks = {}
+        for life in (20, 30):
+            cand = [(cell(D, t, m[t], life, games), lab, t)
+                    for lab, m in rows for t in TRICKS if cell(D, t, m[t], life, games) is not None]
+            picks[life] = min(cand) if cand else None
+        sums = [(a + b, lab, t) for lab, m in rows for t in TRICKS
+                for a in [cell(D, t, m[t], 20, games)] for b in [cell(D, t, m[t], 30, games)]
+                if a is not None and b is not None]
+        bs = min(sums) if sums else None
+        def f(p, fmt="{:.4f}"):
+            return "—" if p is None else f"{fmt.format(p[0])} `{p[1]}` {TRICK_LABEL[p[2]]}"
+        out.append(f"| **{e}** | {f(picks[20])} | {f(picks[30])} | {f(bs)} |")
+    return "\n".join(out)
+
+
 def splice(text, name, body):
     a, b = f"<!-- AUTO:{name} -->", f"<!-- /AUTO:{name} -->"
     pat = re.compile(re.escape(a) + r".*?" + re.escape(b), re.S)
@@ -204,6 +282,12 @@ def main():
 
     dA = load(RUN_A, "run A")
     dB = load(RUN_B, "run B")
+    dC = load(os.path.join(ROOT, "logs", "tourney", "run_C", "tourney.err"), "run C")
+    dD = load(os.path.join(ROOT, "logs", "tourney", "run_D", "tourney.err"), "run D")
+    dE = load(os.path.join(ROOT, "logs", "tourney", "run_E", "tourney.err"), "run E")
+    ALL = {}
+    for d in (dA, dB, dC, dD, dE):
+        ALL.update(d)
 
     if dA and a.only in ("", "runA"):
         text = splice(text, "runA", combo_table(
@@ -224,6 +308,10 @@ def main():
         D.update(dB)
         text = splice(text, "standings", standings_table(D, a.games))
         text = splice(text, "scale", scale_table(D, a.games))
+
+    if ALL and a.only in ("", "grid"):
+        text = splice(text, "grid", grid_table(ALL, a.games))
+        text = splice(text, "entrance", entrance_table(ALL, a.games))
 
     open(DOC, "w").write(text)
     print(f"refreshed {os.path.relpath(DOC, ROOT)}"
