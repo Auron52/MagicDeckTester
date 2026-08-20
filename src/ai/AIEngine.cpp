@@ -2484,7 +2484,20 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                   // MTG_ACQ_DIG: an ETB dig (Acclaimed Contender) puts a same-phase-castable
                   // card in hand at resolution, so the depth-0 executor gets the same second
                   // pass the rollout's deferred re-solve arms. Cast path only (see flag note).
-                  || (AcqDigEnabled() && d->params.etb_dig_count > 0)))
+                  || (AcqDigEnabled() && d->params.etb_dig_count > 0)
+                  // BREAKPOINT SITE 6 -- an Equipment entering under a Puresteel Paladin draws,
+                  // and until this clause existed the drawn card could not be cast in the phase
+                  // that drew it (0 of 150 games ever did). Depth 0 gets the second pass here;
+                  // depth > 0 replays the committed continuation through the post-loop catch-all
+                  // (`fd_plan_committed && !bp_replayed` below), which is the same point in the
+                  // turn the rollout's deferred re-solve runs at -- after the trailing Equip /
+                  // Stoneforge / Balan passes. Deliberately NOT added to is_draw_engine: that hook
+                  // fires INLINE at the cast, i.e. BEFORE those passes, and equip costs move with
+                  // metalcraft, so the two worlds would price the continuation differently.
+                  // State-keyed, unlike every other clause here, because the draw is the WATCHER's
+                  // -- see TurnSolver::EquipmentDrawBreakpoint. Evaluated pre-resolution, which is
+                  // right: the Paladin has to be out ALREADY for its trigger to see this enter.
+                  || TurnSolver::EquipmentDrawBreakpoint(state, *d)))
         { cast_draw_engine = true; }
     };
 

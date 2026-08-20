@@ -1281,3 +1281,34 @@ drawn/acquired cards via the `GameState::m1_hand` snapshot. That exemption is pr
 SEARCHED continuation cheap here: the harvest at a Puresteel draw is the new card(s) and nothing
 else, because everything the main-1 decision already declined is condemned. The ordered cast
 doctrine removes the second half of the cost by fixing the order rather than searching it.
+
+## ...and the fix, measured (2026-08-20) — site 6, `MTG_EQUIP_DRAW_BP`
+
+Built, measured over 2764 games in two pooled batches, **default OFF pending the user's adoption
+call**. Full write-up: `docs/design/equipment-etb-draw-breakpoint.md`. The short version:
+
+* **It works and it never loses.** Held-out (900001, d3, 150) **-0.0267 turns**, t=-2.02, 4 faster /
+  0 slower; train (300001, d3, 150) **-0.0200**, t=-1.74, 3 faster / 0 slower. On top of the pending
+  metalcraft credit it adds a further -0.0133 (2 faster / 0 slower). `MTG_FD_ORACLE` reported **zero
+  `[fd-diverge]`** lines across every arm, so the committed lines the search proves are the ones the
+  executor realises. Smoke 36/36 and regression 60/60 with 0 configs changed (every other deck is
+  untouched: the class test is `is_equipment` + a `draw_on_equipment_etb` watcher on the board).
+* **It is expensive on this deck.** Mean per-game work-unit ratio **1.85-1.91**; totals +78.97%
+  (hold) and +248.38% (train). The cause is structural rather than a defect: site 6 fires on nearly
+  every plan this deck has, so wave 0's `W=2` fan-out roughly triples the candidate set at every
+  node. Every other class fires on the handful of plans holding one particular card.
+* **The one sanctioned cost lever is REFUTED.** `MTG_EQUIP_DRAW_BP_DEFER` (drop site 6 from wave 0 —
+  a visit-ORDER change, not a prune, since `BpWaveWalker` re-opens every dropped plan at rank 0) is
+  quality-IDENTICAL (149/150 games byte-identical) and **costs more** (+89.1% / +318.4%). Re-ordering
+  cannot fix a multiplier that applies to nearly every plan.
+* **Open lead, and why -0.025 is probably a floor.** The direct effect the class exists for — casting
+  the drawn card in the phase that drew it — is realised **1 time in 29** mid-main draws. The
+  continuations are not empty: `MTG_BP_CANDS_PROBE` over 57,793 site-6 breakpoints reports **mean
+  9.47 continuations, max 146, 74.1% capped at W=2 and 80.1% rank-unreachable**. So most of the
+  measured win is the ROLLOUT modelling the turn better, not the executor spending the card. Prime
+  suspect: the `fd_plan_committed` gate, which realises no deferred-class continuation on a
+  non-committed depth>0 turn (pre-existing, shared with sites 3 and 5).
+* **Also fixed, un-levered:** `GameEngine::ResolveStack`'s draw reporter had the identical
+  param-keyed blind spot, so a Puresteel draw put a card in hand with **no `DRAW` action ever
+  logged** — invisible to the play viewer and to any log-based census. That fix is not part of the
+  adoption call (a draw that happened must be reported) and is inert for every deck in the tiers.

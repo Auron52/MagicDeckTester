@@ -3483,6 +3483,7 @@ static int BpSearchDepth()
 //   0 stages/EI (Light Up the Stage, Expressive Iteration)   1 DrawUntilNonland (Treasure Hunt)
 //   2 impulse_exile (Apex of Power)                          3 plain cantrip (Ponder / Preordain)
 //   4 dig-through-lands (cycle / sacrifice)                  5 trick payload (Gold Rush / Expedite)
+//   6 equipment-ETB draw (Puresteel Paladin)
 //
 // This mask is the SEARCHABILITY of a class and therefore also its NUMBERING: it decides which
 // breakpoints `bp_at` counts, in the apply (ApplyPlanDirect) and in the executor's replay
@@ -3513,13 +3514,20 @@ static int BpSearchDepth()
 //
 // MTG_BP_SITES=31 turns it on and is the benchmark this prune must eventually justify itself
 // against. See docs/design/post-breakpoint-search.md.
+//
+// Site 6 (equipment-ETB draw) is searchable by default for the same reason site 5 is: it is a NEW
+// class, so "default on" costs nothing that was ever measured, and the class only exists at all on
+// a board holding a draw_on_equipment_etb watcher (TurnSolver::EquipmentDrawBreakpoint). Its own
+// bit, again for site 5's reason -- chaining a new class to the pruned plain-cantrip bit is what
+// made the Gold Rush continuation permanently greedy. The CLASS is additionally gated on
+// MTG_EQUIP_DRAW_BP while it is measured, so this default bit is inert until that lever is adopted.
 static int BpSiteMask()
 {
     static const int m = []() -> int
     {
         const char* v = std::getenv("MTG_BP_SITES");
-        if (v == nullptr || *v == '\0') { return 0x37; }
-        return std::atoi(v) & 0x3F;
+        if (v == nullptr || *v == '\0') { return 0x77; }
+        return std::atoi(v) & 0x7F;
     }();
     return m;
 }
@@ -3552,6 +3560,39 @@ static int BpWave0SiteMask()
         if (v == nullptr || *v == '\0') { return BpSiteMask(); }
         return std::atoi(v) & BpSiteMask();
     }();
+    // MTG_EQUIP_DRAW_BP_DEFER -- the site-6 form of exactly that knob, as a per-JOB flag so both
+    // arms sweep in ONE pooled batch (a `static const bool` would force one batch per arm).
+    //
+    // WHY THE SITE NEEDS ONE. Site 6 fires on almost every plan this deck has (nearly every plan
+    // casts an Equipment, and a Paladin is usually out), so wave 0's W=2 fan-out roughly TRIPLES
+    // the candidate set at every node -- measured +79% total search work on held-out, +248% on
+    // train, mean per-game ratio 1.85-1.91. Every other class fires on the handful of plans holding
+    // one particular card; this one is closer to universal, which is what makes the eager fan-out
+    // disproportionate rather than merely costly.
+    //
+    // AND WHY IT IS NOT A PRUNE. USER rule (2026-08-19): "the re-ordering of when we visit nodes
+    // can be workable, but skipping them entirely without being certain they don't hold an earliest
+    // win is not." Dropping a class from wave 0 does not skip a single continuation -- the deferred
+    // wave phase (BpWaveWalker, built off the FULL BpSiteMask) picks these plans up at rank 0 with
+    // whatever budget wave 0 left. It changes only the ORDER in which the search reaches them,
+    // which is the sanctioned move.
+    //
+    // MEASURED AND REFUTED (2026-08-20), kept as the record rather than deleted. Paired, 150 games
+    // per cell, same pooled batch as the class itself (logs/kitty_edbp2):
+    //     quality  IDENTICAL -- hold -0.0267 / train -0.0200, the same 4 and 3 games faster, 0
+    //              slower, and 149 of 150 games byte-identical to the eager arm;
+    //     cost     WORSE -- hold +89.1% vs +79.0%, train +318.4% vs +248.4% (mean per-game ratio
+    //              1.99 vs 1.91 and 1.95 vs 1.85).
+    // The reason is the mechanism working as designed: the deferred wave phase picks these plans
+    // straight back up at rank 0, so the same continuations get scored either way and the deferral
+    // buys only extra bookkeeping. The lesson generalises to any FUTURE cost attempt on this site:
+    // the expense is not WHEN wave 0 fans out, it is that site 6 fires on nearly every plan the deck
+    // has, so W=2 roughly triples the candidate set at every node. Re-ordering cannot fix a
+    // multiplier that applies everywhere; only a cheaper class test or a narrower W could, and W is
+    // the axis the continuation-length probe says is already reaching just 20% of the list
+    // (mean 9.47 continuations, 74.1% capped).
+    static const bool defer_env = EnvOn("MTG_EQUIP_DRAW_BP_DEFER");
+    if (heurarm::Flag(heurarm::EQUIP_DRAW_BP_DEFER, defer_env)) { return m & ~(1 << 6); }
     return m;
 }
 
@@ -3990,6 +4031,57 @@ TurnSolver::CantripOrderScope::~CantripOrderScope()
 bool TurnSolver::BreakpointHandSnapshotWanted()
 {
     return CantripOrderEnabled() || BpClassifyEnabled();
+}
+
+// ---- Breakpoint site 6: the equipment-ETB draw (Puresteel Paladin) ----------------------------
+//
+// THE BUG THIS CLOSES. Puresteel Paladin's "whenever an Equipment you control enters, draw a card"
+// is fully implemented (OnDragonEnters, the universal enter cascade, so it fires for a CAST
+// Equipment and for one PUT onto the battlefield alike) and it fires in both worlds. What never
+// existed was the DECISION that follows it: no breakpoint armed, so the drawn card could not be
+// cast in the phase that drew it. Measured over 150 logged held-out games: ~109 main-1 equipment
+// draws in 56 of them, and a card that was not already in hand at the start of the turn was cast in
+// main 1 exactly ZERO times. `git log -S draw_on_equipment_etb` over AIEngine.cpp / TurnSolver.cpp
+// returns nothing, so it was never an admitted prune like the plain-cantrip class -- the card was
+// implemented in a later deck onboarding and simply never joined the classifier.
+//
+// WHY IT WAS STRUCTURALLY UNREACHABLE, and hence why this predicate is shaped differently from
+// every other class: the draw belongs to the WATCHER, not to the cast. `is_draw_engine`,
+// `note_draw_engine`, `OrderingOpaque` and `PlanOpensBreakpoint` all classify by CARD PARAM (or by
+// name), and no param on Bone Saw says "this draws" -- it draws only while a Paladin is out. So the
+// classification has to read the battlefield, which is what this does.
+//
+// ONE reader for both worlds, deliberately: the rollout arms the deferred re-solve from the enter
+// cascade in ApplyPlanDirect and the executor arms its second pass from note_draw_engine, and if
+// the two could answer differently the executor would replay a committed continuation the search
+// never scored (the lockstep failure BpSiteMask's comment describes).
+bool TurnSolver::EquipmentDrawBreakpointEnabled()
+{
+    static const bool on = EnvOn("MTG_EQUIP_DRAW_BP");
+    return heurarm::Flag(heurarm::EQUIP_DRAW_BP, on);
+}
+
+bool TurnSolver::EquipmentEtbDrawFires(const GameState& state, const CardDefinition& def)
+{
+    // Cheapest test first: is_equipment is false for all but a handful of cards in one deck, so
+    // every other deck pays one bool load per cast and never scans the battlefield.
+    if (!def.params.is_equipment) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* w = CardDatabase::Instance().LookupCached(p.card);
+        if (w && w->params.draw_on_equipment_etb) { return true; }
+    }
+    return false;
+}
+
+bool TurnSolver::EquipmentDrawBreakpoint(const GameState& state, const CardDefinition& def)
+{
+    // Lever check second, not first: the un-gated question is the cheap one (a bool on the cast),
+    // and every deck without Equipment leaves here before reading anything else.
+    if (!def.params.is_equipment) { return false; }
+    if (!EquipmentDrawBreakpointEnabled()) { return false; }
+    return EquipmentEtbDrawFires(state, def);
 }
 
 // Defined below (the classifier the m1/m2 filter uses); forward-declared so the report wrapper can
@@ -10344,7 +10436,7 @@ static std::string ForcedLandForTurn(int turn)
 // See docs/design/post-breakpoint-search.md.
 namespace
 {
-    constexpr int kBpSites = 6;
+    constexpr int kBpSites = 7;
     const char* const kBpSiteName[kBpSites] = {
         "stages_cards/EI  (Light Up the Stage, Expressive Iteration)",
         "DrawUntilNonland (Treasure Hunt)",
@@ -10352,6 +10444,7 @@ namespace
         "deferred_cantrip (Ponder / Preordain)",
         "dig_through_lands(sac/cycle dig)",
         "trick_payload    (Gold Rush / Expedite deferred)",
+        "equipment_etb_dr (Puresteel Paladin deferred)",
     };
     struct BpProbe
     {
@@ -10861,7 +10954,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
 // ONCE per (base, at) at the deferred re-solve, plus the little apply context that must resume
 // with it, and every later rank re-enters ApplyPlanDirect in resume mode: prefix skipped, state
 // seeded from the snapshot, tail (continuation + dig loop + Land's Edge/drip/depletion) unchanged.
-// Deferred site only (site 3/5): a slot whose varied breakpoint fires mid-cast-loop never
+// Deferred site only (site 3/5/6): a slot whose varied breakpoint fires mid-cast-loop never
 // captures and takes the full apply as before. Byte-identity is the bar: the resumed tail must
 // produce exactly the state a full apply would (validated on wave counters + suite digests).
 // MTG_NO_BP_PREFIX_CACHE=1 restores the uncached walk.
@@ -10872,6 +10965,9 @@ struct BpPrefixSnap
     std::vector<Action> sink;        // *out_breakpoint content at the snapshot
     int  bp_seen      = 0;           // enabled-class breakpoints the prefix walked past
     bool trick_armed  = false;       // deferred_trick_armed (site 5 vs 3)
+    bool equip_armed  = false;       // deferred_equip_armed (site 6) -- same role, same reason:
+                                     // the resumed tail must re-solve at the SAME site index the
+                                     // full apply did, or its ranks index a different list
     bool cascade_free = false;       // one-shot free-cast marker, captured for exactness
     int  pin_top = -1, pin_etbdig = -1, pin_tutor = -1, pin_reorder = -1;   // scripted-pin state
     const CardDefinition* deferred_site = nullptr;   // MTG_CANTRIP_ORDER watermark (registry-stable)
@@ -10986,6 +11082,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // (deterministic, and the searchable class must win or the trick continuation is unreachable
     // again). No deck currently holds both, but the rule must not be implicit ordering.
     bool deferred_trick_armed = false;
+    // The equipment-ETB draw class (site 6, TurnSolver::EquipmentDrawBreakpoint). Same precedence
+    // rule and the same reason for it: a searchable class must never be numbered as the pruned
+    // plain-cantrip site. Ordered AFTER the trick class only to keep that rule a fixed total order
+    // rather than an implicit one -- no deck holds both, and KittyEquipment holds neither of the
+    // other two.
+    bool deferred_equip_armed = false;
+    // The one place the precedence lives, so the dispatch below and the prefix-resume capture that
+    // has to agree with it cannot drift apart.
+    auto deferred_site_index = [&]() -> int
+    { return deferred_trick_armed ? 5 : (deferred_equip_armed ? 6 : 3); };
 
     // Karoo bounce-land play-at-end timing. A Karoo (Izzet Boilerworks: etb_bounce_land,
     // enters tapped) returns one of our lands to hand on ETB. Played land-FIRST it bounces a
@@ -12512,6 +12618,35 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     { OnDragonEnters(state, state.active_player_index, bi); break; }
                 }
             }
+            // ...and that draw is a DECISION POINT (breakpoint site 6): the card it put in hand is
+            // castable with the mana this turn's plan has left, and until this existed it never
+            // could be -- see TurnSolver::EquipmentDrawBreakpoint for the measurement.
+            //
+            // DEFERRED, not inline, and for the same two reasons site 5 is. (a) The deck casts
+            // SEVERAL Equipment in one main phase, each drawing; deferring gives one breakpoint per
+            // phase with every drawn card in hand and the remaining mana known, instead of N nested
+            // re-solves of which only the first is searchable. (b) A nested greedy re-solve
+            // mid-continuation taps mana the plan's own later casts need -- the mirrorwing gi52
+            // defect the trick class was explicitly moved off the inline path to avoid.
+            //
+            // It also lands the two worlds at the SAME point in the turn, which the inline path
+            // would not: the rollout's deferred re-solve runs after the trailing Equip/Stoneforge/
+            // Balan passes, and so does the executor's catch-all committed replay (AIEngine, "replay
+            // any recorded dig the draw-engine breakpoint did not already replay"). Equip costs move
+            // with metalcraft, so a continuation that ran BEFORE those passes on one side and after
+            // on the other would price them differently.
+            //
+            // Inside a continuation (sink_stack non-empty) nothing is armed: that is the Gold Rush
+            // Treasure precedent -- the extra card simply waits for the next decision rather than
+            // buying a nested greedy re-solve. Human play is exempt (the chooser re-fires).
+            if (!s_human_play && s_defer_cantrip && sink_stack.empty()
+                && TurnSolver::EquipmentDrawBreakpoint(state, def))
+            {
+                deferred_cantrip_resolve = true;
+                deferred_cantrip_site    = &def;
+                deferred_hand_before     = hand_at_cast;
+                deferred_equip_armed     = true;   // site 6, not the plain-cantrip site 3
+            }
             // Legend rule (CR 704.5j, a state-based action) for a legendary NON-creature permanent
             // too, so this branch matches both the creature branch above and the executor's single
             // post-dispatch site (EffectHandler::Resolve). No legendary non-creature permanent
@@ -12911,6 +13046,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         deferred_cantrip_site    = bp_resume->deferred_site;
         deferred_hand_before     = bp_resume->deferred_hand;
         deferred_trick_armed     = bp_resume->trick_armed;
+        deferred_equip_armed     = bp_resume->equip_armed;
         cascade_free             = bp_resume->cascade_free;
         g_bp_seen_last           = bp_resume->bp_seen;    // as a full apply would have left it
         g_scripted_top_choice    = bp_resume->pin_top;    // pins as the prefix left them (a
@@ -13051,13 +13187,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // main cast applied, Karoo played, pre-continuation -- is the shared prefix of every rank
         // of this (base, at) slot. Snapshot it once; the wave loop resumes the later ranks from it.
         if (bp_capture != nullptr && plan.bp_choice >= 0 && bp_seen == plan.bp_at
-            && ((BpSiteMask() >> (deferred_trick_armed ? 5 : 3)) & 1) != 0)
+            && ((BpSiteMask() >> deferred_site_index()) & 1) != 0)
         {
             bp_capture->valid        = true;
             bp_capture->state        = state;
             bp_capture->sink         = out_breakpoint ? *out_breakpoint : std::vector<Action>{};
             bp_capture->bp_seen      = bp_seen;
             bp_capture->trick_armed  = deferred_trick_armed;
+            bp_capture->equip_armed  = deferred_equip_armed;
             bp_capture->cascade_free = cascade_free;
             bp_capture->pin_top      = g_scripted_top_choice;
             bp_capture->pin_etbdig   = g_scripted_etbdig_choice;
@@ -13075,10 +13212,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         deferred_cantrip_site = nullptr;
         if (out_breakpoint) { sink_stack.push_back(out_breakpoint); }
         TurnSolver::Plan extra;
-        // Trick-armed (Gold Rush / draw-payload trick) => site 5 (searchable); plain cantrip =>
-        // site 3 (pruned). The trick class owns the breakpoint when both armed -- see the
-        // deferred_trick_armed declaration.
-        if (!bp_searched_plan(deferred_trick_armed ? 5 : 3, extra))
+        // Trick-armed (Gold Rush / draw-payload trick) => site 5 (searchable); equipment-ETB draw
+        // (Puresteel) => site 6 (searchable); plain cantrip => site 3 (pruned). See
+        // deferred_site_index, where the precedence lives.
+        if (!bp_searched_plan(deferred_site_index(), extra))
         {
             play_breakpoint_land(out_breakpoint);
             extra = TurnSolver::Solve(state, is_pre_combat);
@@ -15895,9 +16032,35 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
 // NEW castables, so ApplyPlanDirect re-decides the rest of the turn)? Mirrors the ApplyPlanDirect
 // branches that call TurnSolver::Solve: DrawUntilNonland (Treasure Hunt), staged exile / EI / plain
 // cantrip (DrawSpell), and impulse_exile (Apex of Power). Only those plans get bp_choice variants.
-static int PlanOpensBreakpoint(const TurnSolver::Plan& p)
+//
+// Site 6 (equipment-ETB draw) is the one clause that needs the STATE: an Equipment cast opens a
+// breakpoint only while a draw_on_equipment_etb watcher is out, and the watcher may be one this
+// same plan casts -- the deck's own reviewed order puts Puresteel Paladin ahead of the equipment
+// precisely so its draws happen. Missing that second case would leave the deck's best turns
+// (Paladin + two Equipment) permanently greedy while fanning out the lesser ones.
+static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p)
 {
     int mask = 0;
+    // Watcher on the battlefield already? (The plan-cast case is picked up in the loop below.)
+    bool watcher = false;
+    if (TurnSolver::EquipmentDrawBreakpointEnabled())
+    {
+        for (const Permanent& perm : state.battlefield)
+        {
+            if (perm.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* w = CardDatabase::Instance().LookupCached(perm.card);
+            if (w && w->params.draw_on_equipment_etb) { watcher = true; break; }
+        }
+        if (!watcher)
+        {
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (d && d->params.draw_on_equipment_etb) { watcher = true; break; }
+            }
+        }
+    }
     for (const Action& a : p.actions)
     {
         if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
@@ -15922,6 +16085,9 @@ static int PlanOpensBreakpoint(const TurnSolver::Plan& p)
         // damage). Nested casts still re-solve inline at site 0, like a nested cantrip.
         if (d->params.solo_target_trick
             && (d->params.cast_draw > 0 || d->params.creates_treasures > 0)) { mask |= 1 << 5; }
+        // Equipment cast under a watcher -> the deferred site-6 re-solve (see the header note).
+        if (watcher && d->params.is_equipment && a.kind == Action::Kind::CastFromHand)
+        { mask |= 1 << 6; }
     }
     return mask;
 }
@@ -15983,7 +16149,7 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
     int fanned = 0;
     for (TurnSolver::Plan& p : plans)
     {
-        if (!dig_bp && (PlanOpensBreakpoint(p) & sites) == 0) { continue; }
+        if (!dig_bp && (PlanOpensBreakpoint(state, p) & sites) == 0) { continue; }
         if (s_max_base > 0 && fanned++ >= s_max_base) { break; }
         p.bp_wave0 = true;   // covered by wave 0; the wave phase starts this plan at rank W, not 0
         for (int at = 0; at < BpSearchDepth(); ++at)
@@ -16219,7 +16385,7 @@ public:
         {
             const TurnSolver::Plan& p = plans[i];
             if (p.bp_choice >= 0) { continue; }                                  // a wave-0 variant
-            if (!dig_bp && (PlanOpensBreakpoint(p) & sites) == 0) { continue; }
+            if (!dig_bp && (PlanOpensBreakpoint(state, p) & sites) == 0) { continue; }
             m_bases.push_back(i);
             AddSlots(plans, m_bases.size() - 1, BpSearchDepth());
         }

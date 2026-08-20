@@ -40,6 +40,8 @@ enum Slot : int
     METALCRAFT_CREDIT,        // MTG_METALCRAFT_CREDIT     same-turn metalcraft equip-{0} credit
     KE_GROUP_CAP,             // MTG_KE_GROUP_CAP          EquipmentProvider enumeration breadth 12 -> 4
     BIG_SOLVE_MEMO,           // MTG_BIG_SOLVE_MEMO        solve-memo entry cap 16k -> 256k
+    EQUIP_DRAW_BP,            // MTG_EQUIP_DRAW_BP         equipment-ETB draw = breakpoint site 6
+    EQUIP_DRAW_BP_DEFER,      // MTG_EQUIP_DRAW_BP_DEFER   ...and keep it out of wave 0 (cost only)
     COUNT
 };
 
@@ -57,6 +59,8 @@ inline const char* Name(int slot)
         "MTG_METALCRAFT_CREDIT",
         "MTG_KE_GROUP_CAP",
         "MTG_BIG_SOLVE_MEMO",
+        "MTG_EQUIP_DRAW_BP",
+        "MTG_EQUIP_DRAW_BP_DEFER",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

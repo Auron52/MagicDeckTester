@@ -530,6 +530,33 @@ public:
     // in every ship config, so the capture is skipped entirely on the cast hot path.
     static bool BreakpointHandSnapshotWanted();
 
+    // BREAKPOINT SITE 6 -- the equipment-ETB draw (Puresteel Paladin). True when resolving `def`
+    // puts an Equipment onto the battlefield while the active player controls a
+    // draw_on_equipment_etb watcher, i.e. the enter cascade is about to DRAW and the rest of the
+    // phase must therefore re-solve with the drawn card in hand.
+    //
+    // Unlike every other breakpoint class this one is STATE-keyed, not name-keyed: the draw belongs
+    // to the WATCHER, not to the equipment, so no card param on the cast can classify it and
+    // is_draw_engine/OrderingOpaque (both name-only) structurally cannot express it. That is why
+    // the class was missing -- see docs/design/analysis-KittyEquipment.md. Both worlds call this
+    // one predicate (rollout: ApplyPlanDirect's enter cascade; executor: AIEngine's
+    // note_draw_engine) so the two cannot disagree about whether a breakpoint exists.
+    //
+    // No library-emptiness test on purpose: the executor evaluates it after the draw already
+    // happened and the rollout before, so a size-1 library would make the two sides disagree. An
+    // empty library just yields a continuation that re-solves with no new card -- identically on
+    // both sides, and unreachable in a goldfish that ends far short of decking.
+    static bool EquipmentDrawBreakpoint(const GameState& state, const CardDefinition& def);
+    // The lever, one shared reader for both worlds (MTG_EQUIP_DRAW_BP, default OFF -> the whole
+    // class is absent and every deck is byte-identical). Both sides MUST read this, not the env,
+    // or a batch job's per-arm override would arm one world and not the other.
+    static bool EquipmentDrawBreakpointEnabled();
+    // The same question WITHOUT the lever: does resolving `def` draw off an equipment-ETB watcher?
+    // The draw happens whether or not the search is allowed to plan around it, so anything
+    // REPORTING the draw (the game log's draw reporter) must ask this one, not the gated one --
+    // otherwise an A/B arm would silently also change what the log says happened.
+    static bool EquipmentEtbDrawFires(const GameState& state, const CardDefinition& def);
+
     // Enable per-pass per-candidate trace output for top-level T1 decisions.
     static void SetTraceSolve(bool enable);
     static bool GetTraceSolve();

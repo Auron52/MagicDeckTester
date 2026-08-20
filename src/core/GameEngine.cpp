@@ -3,6 +3,7 @@
 #include "SpellEffects.h"
 #include "../ai/AIEngine.h"
 #include "../ai/Combat.h"
+#include "../ai/TurnSolver.h"   // EquipmentEtbDrawFires (the log's draw reporter, below)
 #include "../ai/GameWorkMeter.h"
 #include "../cards/CardDatabase.h"
 #include <algorithm>
@@ -675,9 +676,20 @@ void GameEngine::ResolveStack(GameState& state)
 
         // For draw spells, capture hand snapshot before resolution so we can log new cards.
         // ETB-dig creatures (Acclaimed Contender) also add a card to hand on resolution.
+        //
+        // ...and an Equipment entering under a Puresteel Paladin, which is the SAME blind spot that
+        // kept this draw out of the search (see TurnSolver::EquipmentDrawBreakpoint): every test
+        // here reads a param of the RESOLVING card, and no param on Bone Saw says "this draws" --
+        // the draw belongs to the watcher. Consequence before this line: the card appeared in hand
+        // with no DRAW action ever logged, so the play viewer could not show where it came from and
+        // a log-based census could only find it indirectly. Un-levered on purpose: the draw happens
+        // whichever way MTG_EQUIP_DRAW_BP is set, and a diagnostic that moved with an A/B arm would
+        // be reporting the arm rather than the game. The snapshot diff below already handles the
+        // multi-watcher case (two Paladins draw two cards).
         bool is_draw_spell = (def->tmpl == CardTemplate::DrawUntilNonland
                               || def->params.draw > 0
-                              || def->params.etb_dig_count > 0);
+                              || def->params.etb_dig_count > 0
+                              || TurnSolver::EquipmentEtbDrawFires(state, *def));
         std::vector<int> hand_before_nums;
         if (m_logger && is_draw_spell)
         {
