@@ -2571,6 +2571,28 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             BpPrefixSnap* bp_capture = nullptr,
                             const BpPrefixSnap* bp_resume = nullptr);
 
+// ORDER-CONDEMNATION root-turn authority. A condemnation is the record of a FULL-BUDGET searched
+// decline, and only ONE decision per search has that authority: the root turn the outermost solve
+// was asked about. Every deeper m1 -- a committed-line walk's T+1/T+2 nodes, a continuation
+// turn's inner solve, the greedy playout tail -- is budget-starved, and its passes are exactly
+// the unreliable kind the m2 re-offer exists to rescue. Stamping them condemned projected
+// hold-for-m2 futures and steered the root toward hand-emptying plans (gi66/gi113 s7007, gi10
+// s6006: red with ZERO real-turn stamps; the greedy-tail-only and continuation-only scopings
+// were both digest-inert, and the executor-only probe restored all three -- the distortion came
+// from FUTURE-TURN stamps inside the line machinery). The outermost SolveWithLookahead owns the
+// marker (RAII, first-entry wins, thread-local like the scripted pins); ApplyPlanDirect stamps
+// only at that turn. Unset (an apply outside any solve, e.g. offline tools) stamps as before.
+static thread_local int g_condemn_root_turn = -1;
+struct CondemnRootTurnGuard
+{
+    bool owner = false;
+    explicit CondemnRootTurnGuard(int turn)
+    {
+        if (g_condemn_root_turn < 0) { g_condemn_root_turn = turn; owner = true; }
+    }
+    ~CondemnRootTurnGuard() { if (owner) { g_condemn_root_turn = -1; } }
+};
+
 // Forward decl: ApplyPlanDirect's SEARCHED breakpoint continuation (Plan::bp_choice) picks its
 // candidate from the same land-folded plan set the outer search ranks. Defined later.
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
@@ -6542,7 +6564,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (a.free_cast) { return false; }
                 if (a.hand_index < 0
                     || a.hand_index >= static_cast<int>(ap.hand.size())) { return false; }
-                return in_m1_hand(ap.hand[a.hand_index].m_number);
+                const bool drop = in_m1_hand(ap.hand[a.hand_index].m_number);
+                static const bool s_trace_drop = EnvOn("MTG_CONDEMN_TRACE_ROLLOUT");
+                if (drop && s_trace_drop)
+                {
+                    std::cerr << "[condemn] DROP T" << state.turn_number << " "
+                              << a.card_name.str() << "\n";
+                }
+                return drop;
             }), actions.end());
     }
 
@@ -10066,7 +10095,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // future-turn continuations) inherits the snapshot by copy. NOT under bp_resume: the
     // snapshot state already carries the m1 decision's stamp, and re-stamping from a mid-plan
     // hand would shrink the list (the resumed tail must match the full apply byte-for-byte).
-    if (is_pre_combat && bp_resume == nullptr) { TurnSolver::StampM1Hand(state, &plan.actions); }
+    //
+    // ROOT-TURN AUTHORITY (see CondemnRootTurnGuard's note): only the search's root turn may
+    // stamp -- a future-turn m1 inside the projection is budget-starved and its passes are not
+    // decisions. MTG_CONDEMN_ALL_TURNS=1 restores stamp-everywhere for the A/B.
+    static const bool s_all_turns = EnvOn("MTG_CONDEMN_ALL_TURNS");
+    static const bool s_trace_all = EnvOn("MTG_CONDEMN_TRACE_ROLLOUT");   // diagnostic: floods
+    if (is_pre_combat && bp_resume == nullptr
+        && (s_all_turns || g_condemn_root_turn < 0
+            || state.turn_number == g_condemn_root_turn))
+    { TurnSolver::StampM1Hand(state, &plan.actions, s_trace_all); }
 
     // Pin this plan variant's searched ETB-dig pick (Plan::etbdig_choice) for the whole apply; the
     // first dig consumes it and any later dig falls back to the provider's ranked default. Scoped,
@@ -16685,6 +16723,12 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
               ^ (static_cast<uint64_t>(fm.green) << 16) ^ (static_cast<uint64_t>(fm.colorless) << 8)
               ^  static_cast<uint64_t>(fm.wild));
     }
+    // NOT folded: m1_hand (the order-condemnation stamp). Tested 2026-08-20 against the gi66
+    // class and byte-inert -- no same-turn live-stamp state reaches a memo today (the rollout
+    // memo keys turn-boundary states, where stamps are stale and filter nothing, so sharing is
+    // sound). If a SAME-TURN memo is ever added (an m2-solve memo would be one), a live
+    // non-empty stamp is future-determining and must join the key -- see Dominance.h's m1_hand
+    // note for the matching analysis.
 
     // With search-shuffle ON the library order is NO LONGER a deterministic function of
     // its size (a fetch/tutor reshuffles it), so the cheap (size + front) library digest
@@ -16982,7 +17026,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                 state, true, depth, max_turns, budget, false, second_main, tt);
         }
         int life_before_pl = state.Opponent().life;
-        ApplyPlanDirect(state, pre_plan, true);
+        ApplyPlanDirect(state, pre_plan, true);   // future turn: no stamp (root-turn authority)
         AnimateLandsShared(state, nullptr);
         ActivateTapTokensShared(state, nullptr);
 
@@ -20150,6 +20194,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                   int* out_committed_sub_depth)
 {
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
+    // ORDER-CONDEMNATION root-turn authority: the OUTERMOST solve entry owns the marker (inner
+    // recursive solves -- line walks, continuation turns -- see it already set and do not
+    // re-own), so only applies at THIS turn stamp. See CondemnRootTurnGuard.
+    CondemnRootTurnGuard _crt(state.turn_number);
     // Report the committed pass's (win turn, sub_depth) to the caller's optional
     // out-params. Used by the non-convergence detector; every return path calls it.
     auto report = [&](int win, int sub_depth)

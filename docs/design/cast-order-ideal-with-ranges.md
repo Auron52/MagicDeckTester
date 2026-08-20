@@ -1,5 +1,42 @@
 # Cast order: an ideal order with affordability RANGES, searched only to stay castable
 
+> ## STATUS UPDATE 2026-08-20 (ROOT-TURN AUTHORITY): perf 9% -> 16.3% at byte-identical ON
+> behaviour; the 3 residuals fully characterized by elimination -- next probe recorded.
+>
+> The USER asked to pull performance back and ideally the 3 games. Two results:
+>
+> **PERF RECOVERED (9.0% -> 16.3% saved, train pair 1682s vs 2009s).** Stamps now carry
+> ROOT-TURN AUTHORITY (CondemnRootTurnGuard, thread-local RAII owned by the outermost
+> SolveWithLookahead): only the turn the search was asked about may stamp -- a future-turn m1
+> inside the projection (committed-line walk nodes, continuation turns, the greedy playout
+> tail) is budget-starved and its passes are not decisions. This is also what the USER's spec
+> said all along ("the same condemnation list" = THIS turn's). Measured BYTE-IDENTICAL ON
+> behaviour (train digests exact-match the fix arm; the full 44 worse-game set identical), so
+> the whole gain is deleted stamp overhead (classification x hand at every rollout pre-combat
+> apply). All fix-arm metric results carry over exactly: train 0 red keys, held-out net
+> -12.0/2800, 7/8 keys green-or-flat, 3 structural residuals. Smoke OFF 36/36.
+> MTG_CONDEMN_ALL_TURNS=1 restores stamp-everywhere for the A/B.
+>
+> **THE 3 RESIDUALS (gi66+gi113 s7007, gi10 s6006) -- everything ELIMINATED except one channel.**
+> Their red digests are bit-stable against: budget x32, depth d7, executor stamps only
+> (fixes them), future-turn stamp removal (inert), TT-key folding of the stamp (inert -- no
+> same-turn live-stamp state reaches a memo today), and MTG_5C_SSM (inert -- searched interior
+> m2 does not move them, so the greedy-vs-searched m2 solver is NOT the channel). Trajectory
+> probe: committed_win=9 in BOTH arms at the diverging turn -- no in-horizon win, so the choice
+> rides on the value tiebreak. Drop trace: the winning candidate's own subtree is CLEAN (its
+> stamps exempt everything it needs); the drops happen in PASS-heavy sibling candidates' interior
+> m2 projections (T3: Cornucopia x1012, Deathrite x871). The remaining suspect is therefore how
+> those siblings' filtered values/states enter the root choice -- the EOT dominance frontier or
+> the value-tiebreak propagation. NEXT PROBE (recorded, not run): trace dominance drops at the
+> diverging turn's root enumeration, both arms.
+>
+> **Strategy note (USER constraints: no 5C slowdowns -- profile gen ahead; ditch greedy solves
+> in the search window):** condemnation at -16% pays for MTG_5C_SSM's +9% with room to spare --
+> the greedy-free interior m2 window is NET-FREE if both adopt. SSM is measurement-proven
+> non-interacting with the residuals. The larger perf + greedy-elimination lever remains the 5C
+> value-leaf regen on the post-push frozen commit (replaces the greedy playout tail outright;
+> the current sidecar's trust_depth 6 keeps the leaf inert in play).
+>
 > ## STATUS UPDATE 2026-08-20 (SPLIT-TURN AFFORDABILITY FIX): structural 10+1 -> 3; train 0 red
 > keys; held-out 7/8 green-or-flat; perf saving 34% -> 9%. ADOPTION = USER CALL on the new trade.
 >
