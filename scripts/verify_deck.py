@@ -220,14 +220,18 @@ def _parse_decisions_registry():
         cells = [c.strip() for c in ln.strip().strip("|").split("|")]
         if len(cells) < 5 or cells[0] in ("`type`", "type", "---") or set(cells[0]) <= {"-", " "}:
             continue
-        tkey = cells[0].strip("` ")
-        if not re.fullmatch(r"[a-z_]+", tkey):
+        # A row may cover SEVERAL types sharing one wiring ("`scry` / `surveil` / `reorder`"):
+        # register each token separately (they share emitter + GUI symbols).
+        tkeys = [t.strip("` ") for t in cells[0].split("/")]
+        tkeys = [t for t in tkeys if re.fullmatch(r"[a-z_]+", t)]
+        if not tkeys:
             continue
 
         def sym(cell):
             m = re.search(r"`([A-Za-z_][A-Za-z0-9_]*)`", cell)
             return m.group(1) if m else None
-        reg[tkey] = (sym(cells[3]), sym(cells[4]))   # emitter (main.cpp), GUI (index.html)
+        for tkey in tkeys:
+            reg[tkey] = (sym(cells[3]), sym(cells[4]))   # emitter (main.cpp), GUI (index.html)
     return reg
 
 

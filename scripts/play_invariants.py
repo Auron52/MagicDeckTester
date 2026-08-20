@@ -10,7 +10,8 @@ invariants the autonomous smoke can't -- WITHOUT needing Claude to play well:
     - determinism   : same (deck, seed, gi, CSV) -> byte-identical decision block
                       (the property analyze-deck Stage 5d and the Workflow sweep rely on)
     - integrity     : every emitted block is valid JSON with a KNOWN `type`; main_phase
-                      plan indices are contiguous 0..n-1; exit codes are exactly 70 (a
+                      plan indices are contiguous 0..n-1 (strictly increasing when the menu is
+                      truncated -- plans_total > emitted, a diversity-sampled subset); exit 70 (a
                       decision) until a single exit-0 `<<<CLAUDE_RESULT>>>`; no crash
     - progress      : decision_index strictly increases, turn is non-decreasing, and the
                       game reaches a RESULT within a decision cap (no infinite exit-70 loop)
@@ -133,6 +134,12 @@ def cast_availability_advisory(dec):
     me = dec.get("me", {})
     hand = {c.get("name") for c in me.get("hand", [])}
     yard = set(me.get("retrace_gy", []))
+    # Battlefield-permanent ABILITY activations (sac outlets, Call of the Wild's reveal-top,
+    # Wirewood Lodge's untap) ride the casts list under the SOURCE permanent's name -- visible on
+    # the battlefield, never in hand. Same rationale as the Token skip below: activation noise,
+    # not a hand-desync signal.
+    bf = {c.get("name") for c in dec.get("battlefield", me.get("battlefield", []))
+          if isinstance(c, dict)}
     notes = []
     for p in dec.get("plans", []):
         for c in p.get("casts", []):
@@ -140,6 +147,8 @@ def cast_availability_advisory(dec):
             # name a battlefield PERMANENT; a token source ("Treasure Token") is never hand-castable
             # by definition, so it is noise for this advisory, not a hand-desync signal.
             if c.endswith(" Token"):
+                continue
+            if c in bf:
                 continue
             if c not in hand and c not in yard:
                 notes.append(f"turn {dec.get('turn')} plan {p.get('index')}: casts '{c}' "
@@ -191,11 +200,20 @@ def drive_game(deck, profile, seed, gi, max_turns, reveal, determinism_samples=3
         last_turn = turn if isinstance(turn, int) else last_turn
         if t == "main_phase":
             plans = obj.get("plans", [])
+            # A TRUNCATED menu (plans_total > emitted) is a diversity-sampled SUBSET of the full
+            # plan list -- one representative per distinct cast set first -- so its indices are
+            # strictly increasing but legitimately non-contiguous. An untruncated menu must still
+            # be exactly 0..n-1.
+            truncated = isinstance(obj.get("plans_total"), int) and obj["plans_total"] > len(plans)
+            prev_idx = -1
             for i, p in enumerate(plans):
-                if p.get("index") != i:
-                    flags.append(f"plan indices not contiguous at turn {obj.get('turn')}: "
-                                 f"index {p.get('index')} at position {i}")
+                idx = p.get("index")
+                bad = (not isinstance(idx, int)) or (truncated and idx <= prev_idx)                       or (not truncated and idx != i)
+                if bad:
+                    flags.append(f"plan indices not {'increasing' if truncated else 'contiguous'} "
+                                 f"at turn {obj.get('turn')}: index {idx} at position {i}")
                     break
+                prev_idx = idx if isinstance(idx, int) else prev_idx
             advisories += cast_availability_advisory(obj)
 
         transcript.append((tuple(choices), raw))

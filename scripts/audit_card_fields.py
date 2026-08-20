@@ -120,14 +120,20 @@ def do_update(cards, throttle):
         if "_error" in sf:
             errors.append((name, sf["_error"]))
             continue
+        # Multi-faced card (modal DFC, e.g. Turntimber Symbiosis // Turntimber, Serpentine Wood):
+        # the top-level object has no mana_cost/oracle_text -- they live on the faces. The local
+        # entry models the FRONT face (the back is synthesized from mdfc_back_* params), so
+        # snapshot the front face's fields; type_line keeps the combined "A // B" form only when
+        # the top level provides nothing face-specific.
+        face = (sf.get("card_faces") or [{}])[0]
         ref[name] = {
-            "mana_cost": sf.get("mana_cost", ""),
+            "mana_cost": sf.get("mana_cost") or face.get("mana_cost", ""),
             "cmc": sf.get("cmc"),
-            "power": sf.get("power"),
-            "toughness": sf.get("toughness"),
+            "power": sf.get("power") or face.get("power"),
+            "toughness": sf.get("toughness") or face.get("toughness"),
             "type_line": sf.get("type_line", ""),
             "keywords": sorted(sf.get("keywords", [])),
-            "oracle_text": sf.get("oracle_text", ""),
+            "oracle_text": sf.get("oracle_text") or face.get("oracle_text", ""),
         }
         print(f"  [{i + 1}/{len(cards)}] {name}", file=sys.stderr)
         time.sleep(throttle)

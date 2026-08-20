@@ -126,6 +126,23 @@ MANIFEST = {
     # its own `free_cast` type (WriteFreeCastDecisionJson / freeCastPanelHtml + g_play_free_cast_chooser),
     # asked once at the top of the post-combat main -- same shape as the Lackey put above.
     "combat_damage_free_cast": ("free_cast", truthy),
+    # --- StompySurprise (mono-green elf ramp) ---
+    # Natural Order: fetch target + sacrifice victim are plan-variant sub-decisions (one
+    # main_phase variant per victim x target; Action::soulfire_own_targets reused for the victim).
+    "tutor_to_battlefield_single": ("main_phase",     truthy),
+    "sac_additional_creature_color": ("main_phase",   truthy),
+    # Turntimber Symbiosis front: WHICH creature to put (or decline) = named plan variants.
+    "look_top_put_creature_count": ("main_phase",     positive),
+    # Turntimber back face: pay-3-life-or-tapped rides the shared land_entry chooser.
+    "mdfc_back_pay_life":     ("land_entry",          positive),
+    # Call of the Wild: activation count K = plan variants (Action::Kind::ActivateRevealTop).
+    "activated_reveal_top_cost": ("main_phase",       truthy),
+    # Wirewood Lodge: the untap action is a plan variant (target auto-resolved -- disclosed).
+    "untap_creature_cost":    ("main_phase",          truthy),
+    # Mirri's Guile: upkeep arrange-top-3 fires the shared reorder decision (ReorderNoShuffle).
+    "upkeep_reorder":         ("reorder",             positive),
+    # Terastodon: destroy-count K = chosen_x plan variants (WHICH Forest is fungible -- disclosed).
+    "etb_destroy_own_noncreature_max": ("main_phase", positive),
     # Echo (Mogg War Marshal {1}{R}, Stingscourger {3}{R}): at upkeep, pay the echo cost OR sacrifice --
     # a real human choice -> its own `echo` type (WriteEchoDecisionJson / echoPanelHtml), an upkeep
     # chooser (g_play_echo_chooser in AIEngine echo resolution, mirroring vial_charge). Default = pay
@@ -343,6 +360,20 @@ INERT_PARAMS = {
     "equip_grants_haste": "static grant detail (rides is_equipment)",
     "equip_grants_shroud": "static grant detail (goldfish-inert; rides is_equipment)",
     "graveyard_replace_shuffle_library": "automatic replacement effect (Progenitus shuffle-in), no choice",
+    # --- StompySurprise (mono-green elf ramp) ---
+    "etb_life_floor": "automatic ETB life set (Elderscale Wurm), no choice",
+    "mana_per_creature_count_all": "scaled-dork count scope detail (rides mana_per_creature_subtype)",
+    "mana_requires_land_subtype": "conditional mana gate (Arbor Elf); WHICH Forest untapped is fungible -- disclosed",
+    "etb_team_pump_per_creature": "automatic ETB team pump (Craterhoof), no choice",
+    "creature_enters_min_power": "enter-watcher power filter detail (Vaultborn)",
+    "own_creature_enters_draw": "automatic enter-trigger draw rider (may-always-taken)",
+    "creature_enters_includes_self": "enter-watcher self-inclusion detail",
+    "dies_trigger_copy_self_token": "automatic death trigger (Vaultborn copy), no choice",
+    "created_token_color": "token colour detail",
+    "look_put_counter_bonus": "counter-bonus detail (rides look_top_put_creature_count)",
+    "look_put_counter_bonus_max_mv": "counter-bonus threshold detail",
+    "untap_creature_subtype": "untap-target subtype detail (rides untap_creature_cost)",
+    "tutor_color": "tutor colour filter detail (rides the tutor target axis)",
     "loyalty_start": "starting loyalty stat, no choice",
     "modal_damage_per_choice": "modal payload detail (rides modal_choose_n)",
     "modal_draw_per_choice": "modal payload detail (rides modal_choose_n)",
@@ -531,8 +562,14 @@ def modeled_tokens(card):
     if p.get("damage_divided"):                                           t.add("divide")
     if p.get("etb_bounce_land"):                                          t.add("bounce")
     if p.get("retrace") or p.get("discard_land_damage"):                  t.add("discard")
-    if p.get("tutor_to_hand") or p.get("tutor_to_top") or p.get("fetch_land_types"):
+    if p.get("tutor_to_hand") or p.get("tutor_to_top") or p.get("fetch_land_types") \
+            or p.get("tutor_to_battlefield_single") or p.get("tutor_land_to_battlefield") \
+            or p.get("look_top_put_creature_count", 0) > 0:
         t.add("search")
+    # Natural Order's "sacrifice a green creature" additional cost is a modeled plan-variant
+    # choice (sac victim variants), so its "sacrifice a/an" phrase is covered.
+    if p.get("sac_additional_creature_color"):
+        t.add("sacrifice")
     return t
 
 

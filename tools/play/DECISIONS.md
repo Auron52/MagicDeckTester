@@ -51,6 +51,7 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `mulligan` | — (mulligan path) | KeepHand path | `WriteMulliganDecisionJson` | `mulliganPanelHtml` | modal |
 | `bottom` | — (mulligan path) | bottoming path | `WriteBottomDecisionJson` | `bottomPanelHtml` | modal |
 | `scry` / `surveil` / `reorder` | `g_play_top_chooser` (`TopChooser`) | `SpellEffects.h` look-at-top | `WriteTopDecisionJson` | `lookPanelHtml` | modal |
+| `reorder` (no-shuffle variant) | same chooser, `LookKind::ReorderNoShuffle` (Mirri's Guile upkeep: arrange top 3, NO shuffle option offered) | `SpellEffects.h` `ReorderTopNoShuffle` | `WriteTopDecisionJson` | `lookPanelHtml` | modal |
 | `target` | `g_play_target_chooser` (`TargetChooser`) | `EffectHandler` damage/removal | `WriteTargetDecisionJson` | `promptPanelHtml` | board |
 | `divide` | (target/divide path) | `EffectHandler` divided damage | `WriteDivideDecisionJson` | `promptPanelHtml` | board |
 | `bounce` | `g_play_bounce_chooser` (`BounceChooser`) | `SpellEffects.h` ETB bounce | `WriteBounceDecisionJson` | `promptPanelHtml` | board |
