@@ -1147,3 +1147,22 @@ not matter — here `Sol Ring{1} + EQUIP Bonesplitter{1}`, never the Hammer.
 The whole effect is play, 22 faster and 0 slower. The single regression in 300 games is a bottoming
 side-effect (gi=105: with metalcraft lines visible the bottoming rollouts bottom Sol Ring, the deck's
 best card, to keep two Paladins) — see `docs/design/metalcraft-enumeration-credit.md`.
+
+**The d5 tail, re-measured in UNITS (2026-08-20).** The standing "d5 needs an abandon ceiling" note
+rested on wall clock (a game running 80+ minutes), which on this box is worthless — a load average
+of 17–23 on 24 cores was observed with *nothing of this container's* running, i.e. a second agent's
+container had ~90% of the machine. Re-measured with `MTG_DUMP_UNITS` on the seed-70001 block at d5,
+the tail is real independently of load:
+
+| game | units |
+|---|---|
+| gi=1 | 9,051 |
+| gi=4 | 40,745 |
+| gi=5 | 153,073 |
+| gi=3 | 161,466 |
+| **gi=0** | **20,678,877** |
+| gi=2 | > 20.7M (did not finish; probe stopped) |
+
+gi=0 is **128x** the next-heaviest game in its own block, and gi=2 is heavier still. So the ceiling
+requirement stands — and now it stands on the meter the ceiling actually uses, rather than on a
+wall-clock reading taken against someone else's workload.
