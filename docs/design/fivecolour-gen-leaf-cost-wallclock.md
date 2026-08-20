@@ -58,6 +58,28 @@
 > (mull_gen_fetch_fan_cap beside mull_gen_depth). Side observation for gen cost: the REF arm
 > showed 18,643 enum-memo cap clears at the 8192 default — MTG_ENUM_MEMO_CAP=262144 is worth
 > setting on shipped-depth gen/discovery work.
+>
+> FOLLOW-UP (2026-08-21, USER: "I meant for our heuristic to be used with just the top entry,
+> not split and search there. Can we try that?") — cap=1 TRIED, full measurement, plus cap=2
+> through the SUITE for the complete trade table (train seeds, 4 fivecolour searched keys,
+> GT = shipped uncapped fan):
+>
+> | arm | suite quality vs GT | play wall (d3/b3 probe) | gen fidelity | gen units/rollout |
+> |---|---|---|---|---|
+> | uncapped (shipped) | baseline | 51.1 s | 0.9906 / 100.0% | 25,181 |
+> | **cap=2** | **net −0.020: 3 keys BETTER, 1 worse (±0.010 each)** | 27.0 s | 0.9867 / **100.0%** | 9,441 |
+> | cap=1 (top entry only) | **+0.017 avg, 4/4 keys WORSE** (+0.010..0.020) | 16.0 s | 0.9753 / 99.9% (15/11,412 flip) | 5,481 |
+>
+> Reading: the doctrine's TOP PICK alone is close (99.9% gen agreement — pre-doctrine cap=1
+> was 99.1%) but the searched #2 target still wins real games (~10 net turns / 600 on train,
+> every key red). The 3rd..6th targets win NOTHING — cap=2 is quality-NEUTRAL-TO-BETTER on
+> the suite while recovering ~half the play-side phase cost and ALL of the gen cost. The
+> in-play "cap worse" number that justified the collapsed-main uncap (5.0150 vs 4.9250,
+> d3 s2002) PRE-DATES the fetch doctrine; under the reviewed ranking it no longer holds.
+> RECOMMENDATION: adopt cap=2 as provider policy for play AND gen (concretely: drop the
+> MainPhaseFilterActive uncap override, keep the DecisionUnpruned exemption), held-out
+> confirmation on overnight seeds before accept. cap=1 remains available at a measured
+> +0.017 train cost if the top-entry-only design intent outweighs it. USER's call.
 
 2026-08-18. **Self-contained protocol for an IDLE machine** — read this and you can run it cold.
 Context lives in `fivecolour-mullgen-labeller-sweep.md`; none of it is required to execute.
