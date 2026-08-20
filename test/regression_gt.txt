@@ -1,4 +1,4 @@
-# Regression ground truth -- commit dc70e1d  date 2026-08-20
+# Regression ground truth -- commit 5981150  date 2026-08-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -37,8 +37,8 @@ creature_giving_smoke_d5_s1001=4.6800/e99370964959710c
 mirrorwing_smoke_d0_s1001=6.0570/506df4f8aa241490
 mirrorwing_smoke_d3_s1001=5.0267/dee3a51fa58c1b99
 mirrorwing_smoke_d5_s1001=5.1200/242398274f5f3863
-fivecolour_smoke_d0_s1001=6.1350/1fbc5f2f901387ea
-fivecolour_smoke_d3_s1001=5.0400/ae22a58fd8122d98
+fivecolour_smoke_d0_s1001=6.1350/ae7812f3f6060235
+fivecolour_smoke_d3_s1001=5.0400/92781fdc757c7de1
 fivecolour_smoke_d5_s1001=5.1600/947348d44e06065a
 
 # --- regression ---
@@ -97,9 +97,9 @@ mirrorwing_regression_d3_s2002=4.8050/23e1c430db76ac27
 mirrorwing_regression_d3_s3003=4.9350/6370c93b56bd0027
 mirrorwing_regression_d5_s2002=4.7900/fabe57ab3739f295
 mirrorwing_regression_d5_s3003=4.9000/2c36d12eef342499
-fivecolour_regression_d0_s2002=6.1230/5eb9541611231ce9
+fivecolour_regression_d0_s2002=6.1240/11c92e70290cab40
 fivecolour_regression_d3_s2002=4.8850/507e00c4a06b53a4
-fivecolour_regression_d3_s3003=5.0150/8c8edbe211038ad0
+fivecolour_regression_d3_s3003=5.0150/1c7d7af668007ff1
 fivecolour_regression_d5_s2002=4.8400/170866703fb69b92
 fivecolour_regression_d5_s3003=4.9500/f515f7e119ebbbf9
 
@@ -236,15 +236,15 @@ mirrorwing_overnight_d5_s4004=4.8767/8f96ff49a46c20fd
 mirrorwing_overnight_d5_s5005=4.8633/385a921abc0f7582
 mirrorwing_overnight_d5_s6006=4.8900/5b4bed2ba24496e0
 mirrorwing_overnight_d5_s7007=4.8967/33adba18475e09cb
-fivecolour_overnight_d0_s4004=6.1310/9aebf08452fae810
-fivecolour_overnight_d0_s6006=6.1075/072f6843fda1bae8
-fivecolour_overnight_d0_s8008=6.1225/3e7d5aa98f4f1c67
-fivecolour_overnight_d0_s10010=6.1425/423395d21ab7b52f
+fivecolour_overnight_d0_s4004=6.1325/60c0a92ba2012a86
+fivecolour_overnight_d0_s6006=6.1070/de46ab4eeaf36fb7
+fivecolour_overnight_d0_s8008=6.1235/a1648a929e34c4b2
+fivecolour_overnight_d0_s10010=6.1435/4719f4c3d08a090f
 fivecolour_overnight_d3_s4004=4.9625/ffba503c309a1e28
-fivecolour_overnight_d3_s5005=4.9375/b306f838a8b349ee
-fivecolour_overnight_d3_s6006=4.9475/e839bcef885a16ee
-fivecolour_overnight_d3_s7007=4.9825/f301f34bc4192a79
+fivecolour_overnight_d3_s5005=4.9375/c09f08b94cfd3b01
+fivecolour_overnight_d3_s6006=4.9500/bdf0fba5dc6d431c
+fivecolour_overnight_d3_s7007=4.9800/9b640c49ebefa28d
 fivecolour_overnight_d5_s4004=4.9200/3873c452ff0b13b5
-fivecolour_overnight_d5_s5005=4.9367/f5bda4ede1b7a6ee
+fivecolour_overnight_d5_s5005=4.9367/e0cb76839b76e64d
 fivecolour_overnight_d5_s6006=4.9300/cc3a9e6aca066b43
-fivecolour_overnight_d5_s7007=4.9433/e88117007cee9994
+fivecolour_overnight_d5_s7007=4.9400/521182ddfbba2772

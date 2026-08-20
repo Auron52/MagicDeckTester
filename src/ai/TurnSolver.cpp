@@ -9704,6 +9704,28 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     bool all_creatures = true;
     for (const Action& a : acts)
     {
+        // Ordered Garth tap (MTG_GARTH_ORDERED): the copy's cast pays INSIDE the ordered cast
+        // sequence, so its cost must join the whole-turn joint solve -- leaving it out let the
+        // tap strand the colours of the casts sorted after it (slow-game class A, 2026-08-20:
+        // gi922/gi1820/gi559/gi1145/gi344 -- Shivan's {4}{R}{R} or Regrowth's {1}{G} paid first
+        // and the following dork was silently dropped; the trailing-dispatch world paid it from
+        // leftovers and never had the problem). The cost is FIXED at emission (Braingeyser's
+        // chosen X already folded into generic), so the fixed-upfront-combined premise holds.
+        // Folded as noncreature for the mixed split (conservative: all_creatures stays false).
+        if (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate)
+        {
+            combined.generic += a.cost.generic; combined.white += a.cost.white;
+            combined.blue += a.cost.blue; combined.black += a.cost.black;
+            combined.red += a.cost.red; combined.green += a.cost.green;
+            combined.colorless += a.cost.colorless;
+            c_nonc.generic += a.cost.generic; c_nonc.white += a.cost.white;
+            c_nonc.blue += a.cost.blue; c_nonc.black += a.cost.black;
+            c_nonc.red += a.cost.red; c_nonc.green += a.cost.green;
+            c_nonc.colorless += a.cost.colorless;
+            all_creatures = false;
+            ++eligible;
+            continue;
+        }
         if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
         // MTG_PREPAY_PRODUCER (default off; =1 enables): fold a producer cast's COST into the
         // combined solve WITHOUT crediting its output. Conservative by construction: a plan that
