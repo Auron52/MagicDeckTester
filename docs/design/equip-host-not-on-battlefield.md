@@ -86,7 +86,41 @@ the control, order and park arms.
    note says a cast ORDER can strand or save — the Dragonstorm defect — so FiveColour has live
    instances of the order-fixable class worth a look on its own terms.
 
-2. Only then consider the apply-side guard: require the host on the battlefield BEFORE `TapForCost`,
+2. **MEASURED 2026-08-20, and the answer splits the fix in two.** Both halves are built, behind
+   per-job flags so they A/B in one pooled batch: `MTG_EQUIP_PAY_GUARD` (don't pay for an attach
+   `ApplyEquip` will refuse, via the new shared `CanAttachEquip` predicate, applied in BOTH the
+   executor and `ApplyPlanDirect` so they stay in lockstep) and `MTG_EQUIP_LOG_TRUTH` (executor
+   only: emit the ability line on the path that ATTACHED, not the path that PAID).
+
+   700 games per arm across KittyEquipment (d3, seeds 300001/900001) and FiveColour (its own play
+   policy, seeds 2002/3003):
+
+   | | avg win turn | games changed | search work |
+   |---|---|---|---|
+   | pay guard | **+0.0000 in all 4 cells** (0 faster, 0 slower of 700) | 8 of 700 | KE **+0.51% / +0.35%**, FC +0.000% |
+   | log truth | identical digests to the pay guard in **every** cell | 8 of 700 | (see below) |
+
+   **The two produce the SAME play digest everywhere** — `fc.train 4cd11d95186a1b3b`,
+   `fc.hold a0131f8dd2afcdca`, `ke.hold b36bc8d668a8649d`, and `ke.train` unchanged from control in
+   both arms. So the payment half's entire observable effect IS the log line: no mana saving ever
+   manifested as a different decision. On FiveColour that is obvious in hindsight (its equips are
+   already `{0}` under metalcraft/Greaves, so declining to pay saves nothing).
+
+   And the payment half is not free. It also runs inside the ROLLOUT, where dropped casts are
+   common (1.3M of 175M rollout casts), so keeping the mana makes more projected actions affordable
+   and the search opens more nodes: **+0.51% train / +0.35% hold on KittyEquipment, 62 and 75 games
+   doing different work** — while KittyEquipment's *played* line did not change at all on train.
+
+   **Recommendation: adopt the LOG half, leave the payment half off.** They buy the identical
+   observable correction; one costs ~0.4% of the search and the other costs nothing. This is the
+   same shape as the three mana-accuracy fixes this repo has already measured as losses — a more
+   accurate projection that the outcome metric cannot cash in.
+
+3. Whichever is adopted, it is digest-moving (`LogAbility` folds into the play digest by design) and
+   needs a three-tier GT rebaseline across the equipment decks — KittyEquipment, FiveColour,
+   Dragons. That is the only reason both ship default-OFF.
+
+4. The original apply-side note, for the record: require the host on the battlefield BEFORE `TapForCost`,
    and log only after a successful attach. **Both halves move the play digest** — `LogAbility` folds
    into it (`FoldStr("A")` runs before the `m_digest_only` early-out), so even the log-only half
    rebaselines every equipment-carrying deck (KittyEquipment, FiveColour, Mirrorwing) for a defect

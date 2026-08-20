@@ -3044,6 +3044,37 @@ inline int EquipGatePowerOf(const Permanent& host, const GameState& state)
 
 inline void SacrificePermanentAt(GameState& state, int controller, int idx);  // defined below
 
+// Will ApplyEquip below actually ATTACH, or silently no-op? One predicate, so a caller that must
+// decide BEFORE paying an equip cost cannot drift from what the apply really does.
+//
+// It exists because the executor and the rollout both paid FIRST and applied second: TapForCost
+// runs, then ApplyEquip finds no legal host and returns, so the cost buys nothing and (in the
+// executor) a log line claims an attach the board does not show. Measured on KittyEquipment: a plan
+// co-selecting {cast Puresteel Paladin, equip Bonesplitter -> Paladin} whose CAST was dropped as
+// unpayable still paid the equip. See docs/design/equip-host-not-on-battlefield.md.
+inline bool CanAttachEquip(const GameState& state, int controller, int equip_id, int creature_id)
+{
+    const Permanent* eq   = nullptr;
+    const Permanent* host = nullptr;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (p.card.m_number == equip_id)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.is_equipment) { eq = &p; }
+        }
+        if (p.card.m_number == creature_id && (p.card.IsCreature() || p.is_animated)) { host = &p; }
+    }
+    if (!eq || !host) { return false; }
+    // O-Naginata's "power 3 or greater" gate, evaluated exactly where ApplyEquip evaluates it
+    // (the host's power counts already-attached equipment, not the one being placed).
+    const CardDefinition* eqd = CardDatabase::Instance().LookupCached(eq->card);
+    if (eqd && eqd->params.equip_min_power > 0
+        && EquipGatePowerOf(*host, state) < eqd->params.equip_min_power) { return false; }
+    return true;
+}
+
 inline void ApplyEquip(GameState& state, int controller, int equip_id, int creature_id)
 {
     Permanent* eq = nullptr;

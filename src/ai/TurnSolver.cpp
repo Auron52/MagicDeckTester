@@ -12776,7 +12776,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Skip one the mana-unlock hoist already fired mid-casts -- it is attached to this exact
             // host already, so re-firing would pay the equip cost a second time. Cost recomputed at
             // payment (metalcraft can flip mid-plan -- see EquipActionCostNow).
-            if (!EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
+            // Do not pay for an attach ApplyEquip will refuse (MTG_EQUIP_PAY_GUARD; lockstep twin
+            // in AIEngine's Equip branch -- one shared reader, because fixing one side alone would
+            // make the search project a mana cost the real game does not pay).
+            if ((!EquipPayGuardEnabled()
+                 || CanAttachEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id))
+                && !EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
                 && TapForCostDirect(state,
                                     EquipActionCostNow(state, state.active_player_index,
                                                        a.sac_source_id, a.cost),

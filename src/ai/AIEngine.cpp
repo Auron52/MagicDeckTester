@@ -3264,14 +3264,26 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (AffordAuditOn() && WasCastDroppedThisPlan(a.sac_victim_id))
             { NoteStrandedEquip(a.card_name.str(), bf_name(a.sac_victim_id)); }
             ManaPool avail = AvailableManaPool(state);
-            if (!EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
+            // Do not pay for an attach ApplyEquip will refuse (MTG_EQUIP_PAY_GUARD; lockstep twin
+            // in ApplyPlanDirect). Skipping the branch also removes the phantom log line, since the
+            // log only fires on the path that actually attaches.
+            const bool equip_payable =
+                !EquipPayGuardEnabled()
+                || CanAttachEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id);
+            if (equip_payable
+                && !EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
                 && TapForCost(state,
                               EquipActionCostNow(state, state.active_player_index,
                                                  a.sac_source_id, a.cost),
                               avail, /*for_creature=*/false))
             {
+                // Under MTG_EQUIP_LOG_TRUTH, decide BEFORE the apply whether it will attach, so the
+                // log describes what happened rather than what was paid for (see EngineFlags.h).
+                const bool will_attach =
+                    !EquipLogTruthEnabled()
+                    || CanAttachEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id);
                 ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id);
-                if (m_logger)
+                if (m_logger && will_attach)
                 { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
                                        "equip -> " + bf_name(a.sac_victim_id)); }
             }

@@ -35,6 +35,8 @@ enum Slot : int
     KE_PARK,                  // MTG_KE_PARK                Kemba park/un-park loop
     EQUIP_MINPOWER_LAST,      // MTG_EQUIP_MINPOWER_LAST    O-Naginata orders last-but-one
     NO_SEARCH_SECOND_MAIN,    // MTG_NO_SEARCH_SECOND_MAIN  force greedy m2 (per-deck opt-in killer)
+    EQUIP_PAY_GUARD,          // MTG_EQUIP_PAY_GUARD       don't pay an equip ApplyEquip will refuse
+    EQUIP_LOG_TRUTH,          // MTG_EQUIP_LOG_TRUTH       log an equip only if it actually attached
     COUNT
 };
 
@@ -47,6 +49,8 @@ inline const char* Name(int slot)
         "MTG_KE_PARK",
         "MTG_EQUIP_MINPOWER_LAST",
         "MTG_NO_SEARCH_SECOND_MAIN",
+        "MTG_EQUIP_PAY_GUARD",
+        "MTG_EQUIP_LOG_TRUTH",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

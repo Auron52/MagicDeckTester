@@ -5,6 +5,7 @@
 // failure mode in miniature. One reader per flag; the function-local static means the
 // environment is read once per process, same as before.
 #include "../core/EnvFlags.h"
+#include "HeuristicArm.h"
 #include <cstdlib>
 #include <string>
 
@@ -192,4 +193,36 @@ inline bool VialAxisEnabled()
 {
     static const bool v = EnvOn("MTG_VIAL_AXIS", true);
     return v;
+}
+
+// MTG_EQUIP_PAY_GUARD=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
+// do not PAY an equip cost that ApplyEquip is going to refuse. Both apply paths currently pay
+// first and apply second, so a plan whose co-selected host cast was dropped as unpayable still
+// taps for the equip and then attaches nothing -- and the executor logs the attach anyway.
+// See docs/design/equip-host-not-on-battlefield.md for the measurement and the reproducer.
+//
+// Read by BOTH the executor (AIEngine's Equip branch) and the rollout (ApplyPlanDirect's) --
+// shared reader per the lockstep rule, because fixing one alone would make the search project a
+// mana cost the game does not pay. On adoption this flips to default-ON with an off-hatch and a
+// GT rebaseline (it changes play wherever it fires: the mana is kept).
+inline bool EquipPayGuardEnabled()
+{
+    static const bool v = EnvOn("MTG_EQUIP_PAY_GUARD");
+    return heurarm::Flag(heurarm::EQUIP_PAY_GUARD, v);
+}
+
+// MTG_EQUIP_LOG_TRUTH=1 -- the LOG half of the equip defect, separable from the payment half above
+// and much cheaper. The executor emits its "equip -> host" ability line on the path that PAID, not
+// on the path that ATTACHED, so when ApplyEquip refuses (no host on the battlefield) the game log
+// claims an attach the very next board snapshot contradicts. That misleads the play viewer, whose
+// whole job is surfacing engine bugs, and any reference JSON saved from it.
+//
+// Executor-only (the rollout has no logger), and it changes NO play -- only whether a line is
+// emitted in the handful of games where the attach did not happen. It is still digest-moving,
+// because LogAbility folds into the play digest by design (the same "deliberate fingerprint
+// improvement" that made equip destinations visible to the digest in the first place).
+inline bool EquipLogTruthEnabled()
+{
+    static const bool v = EnvOn("MTG_EQUIP_LOG_TRUTH");
+    return heurarm::Flag(heurarm::EQUIP_LOG_TRUTH, v);
 }
