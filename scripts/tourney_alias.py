@@ -161,10 +161,39 @@ RUN_C = {
 # symmetric, and it runs both ways as the aliasing control. Hand-weighted miss rates are 0.102% for
 # any shape holding a 3-of outside the cap-4 bucket and 0.388% for the two double-4 shapes;
 # `verify` prints each one.
+# Both floors are the user's (2026-08-20): Entrance >= 2, and "I wouldn't bother with Draught
+# configurations less than 2 -- but more likely we'll be going for 3 or 4". Draught at 0 or 1 is
+# therefore not measured, which drops 4 O + 1 D + 3 E, 4 O + 0 D + 4 E and 3 O + 1 D + 4 E. That is
+# a deliberate narrowing with measured backing, not an oversight. Draught is the 20-life leader's
+# 4-of and the largest single effect in the tournament, AND Oracle is dependent on it: without
+# Draught, Oracle is the WORST option at 20 life (+0.0080t vs Ancestral Anger), because its
+# `cast_lifegain: 1` per copy is Draught fuel rather than a rate upgrade. So a Draught-light arm does
+# not merely lose Draught, it stops the Oracle beside it from working -- the corner is doubly
+# unpromising. Everything at Draught >= 2 is measured, the 2 anchor included, so a response that
+# falls off toward MORE Draught would still show up.
 _LEGAL = [(o, d, e) for e in (2, 3, 4) for o in range(5) for d in range(5)
-          if o + d + e == 8 and o <= 4 and d <= 4]
+          if o + d + e == 8 and o <= 4 and d >= 2]
 _DONE = {(4, 2, 2), (2, 4, 2), (2, 2, 4)}          # runs A, B, C
-_TRICKS = ("tf3lib0", "tf0lib3")
+# Trick contexts, weighted toward Libation (user, 2026-08-20: "we should also use Libation at 3 or 2
+# for most cases of Run D"). Libation is the 20-life winner and therefore the likely ship, so the
+# draw/pump split wants measuring in the context it will actually be played in -- an O/D/E optimum
+# found only under 3 Twinflame is an optimum for a list we may not build. 3 Twinflame is kept as the
+# reference because it is still the 30-life leader, so the shape most likely to matter there is not
+# left unmeasured either.
+#
+# 1 Twinflame / 2 Libation is a MIX, eliminated as a candidate in section 5b of the results doc on a
+# monotone dose response. It is back, and on better grounds than "the ladder needs a middle" -- the
+# user's reason (2026-08-20): "the shipping config will have 1 Twinflame to mitigate the haste
+# loss". That is a MECHANISM claim, not a ladder-interpolation one, and the two are eliminated by
+# different evidence. Twinflame's token copies have haste; Libation's Citizens arrive summoning-sick
+# and need Impolite Entrance to attack the turn they land. One Twinflame is haste that does not
+# compete for the Entrance slots.
+#
+# It also predicts an INTERACTION that this run can settle: if Twinflame is being held as a haste
+# source, its value should FALL as Entrance rises, because Entrance supplies the same thing. So the
+# trick contrast should shrink from Entrance 2 to 3 to 4 -- and run D crosses all three Entrance
+# counts with all three trick contexts, so the prediction is directly readable rather than inferred.
+_TRICKS = ("tf0lib3", "tf1lib2", "tf3lib0")
 
 
 def _ode(t, o, d, e):

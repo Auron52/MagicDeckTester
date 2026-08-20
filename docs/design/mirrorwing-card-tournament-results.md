@@ -473,18 +473,42 @@ Recorded because each one changed a conclusion or cost real time.
   claim and not merely "is 4 Entrance good". Run C needs its own alias map (Entrance in bucket 9),
   so it must carry its own bridge arm and re-measure `d4`/`o4` under that map rather than chaining
   to runs A/B — which doubles as a third independent check on the fit tilt.
-- **Run D — the Oracle/Draught dose response.** Two points cannot show curvature, and the whole
-  reason `4 D + 2 O` and `4 O + 2 D` swap leadership with life total is that we only have the two
-  ends. Run D holds Entrance at 2 and walks the other six: **6/0, 5/1, 4/2, 3/3, 2/4, 1/5, 0/6**,
-  at both trick ends. Max miss rate across the ladder is 0.102%.
-  - The cap-4 bucket goes to whichever card has the larger count, so the map is forced per arm;
-    only the symmetric 3/3 has a choice, and it runs **both ways** as the aliasing control.
-  - `4 O + 2 D` and `2 O + 4 D` are re-measured despite already being in runs A and B — same deck,
-    same table, same seeds, so they must come out game-identical. A free bridge.
-  - This is the direct test of the user's prior (2026-08-20): *"we'll probably lean toward maxing
-    Draught and playing fewer Oracle."* If 3/3 is worse than 4 D + 2 O, the response is not
-    concave and the indicated direction is **further** toward Draught — which the ladder then
-    measures rather than extrapolates.
+- **Run D — the rest of the legal space.** Three constraints, all the user's (2026-08-20), close
+  the frame completely: **at most 4 copies** of a card (deck construction), **Entrance ≥ 2**, and
+  **Draught ≥ 2** — *"so there are only 4 spots remaining to fill."* Those 4 free spots distribute
+  over the three cards nine ways, and nine is the entire space:
+
+  | free spots (O/D/E) | O | D | E | where |
+  |---|---:|---:|---:|---|
+  | 4 / 0 / 0 | 4 | 2 | 2 | run A |
+  | 3 / 1 / 0 | 3 | 3 | 2 | **run D** |
+  | 3 / 0 / 1 | 3 | 2 | 3 | **run D** |
+  | 2 / 2 / 0 | 2 | 4 | 2 | run B |
+  | 2 / 1 / 1 | 2 | 3 | 3 | **run D** |
+  | 2 / 0 / 2 | 2 | 2 | 4 | run C |
+  | 1 / 2 / 1 | 1 | 4 | 3 | **run D** |
+  | 1 / 1 / 2 | 1 | 3 | 4 | **run D** |
+  | 0 / 2 / 2 | 0 | 4 | 4 | **run D** |
+
+  - **The Draught floor is measured, not stylistic.** Oracle is dependent on Draught — without it,
+    Oracle is the *worst* option at 20 life (+0.0080t vs Anger), because its `cast_lifegain: 1` per
+    copy is Draught fuel rather than a rate upgrade. A Draught-light arm does not merely lose
+    Draught, it stops the Oracle beside it working, so that corner is doubly unpromising.
+  - **Trick contexts are weighted toward Libation** — 3 Lib, 2 Lib / 1 Twin, and 3 Twin as the
+    30-life reference. An O/D/E optimum found only under 3 Twinflame is an optimum for a list we
+    may not build.
+  - **1 Twinflame is back as a candidate, on mechanism rather than interpolation.** Section 5b
+    eliminated mixes on a monotone dose response; the user's reason for keeping one is different
+    — *"1 Twinflame to mitigate the haste loss."* Twinflame's token copies have haste; Libation's
+    Citizens arrive summoning-sick and need Entrance to attack the turn they land. One Twinflame is
+    haste that does not compete for the Entrance slots. That also predicts an **interaction**: if
+    Twinflame is being held as a haste source, its value should *fall* as Entrance rises, since
+    Entrance supplies the same thing. Run D crosses Entrance 2/3/4 with all three trick contexts,
+    so the prediction is directly readable.
+  - The cap-4 bucket goes to the largest count, which forces each arm's map; only the symmetric
+    3 O + 3 D has a choice, and it runs **both ways** as the aliasing control.
+  - 42 jobs, 420,000 games, ~3.1 h. Miss rates 0.102% for a 3-of outside the cap-4 bucket and
+    0.388% for 0 O + 4 D + 4 E, printed per arm.
 - Mixes are eliminated (5b), so run C spends no arms on them: 3 rotations × 2 tricks × 2 life
   totals = 12 jobs.
 - Whether 30 life needs its own keep table, or whether the 20-life one transfers. The bracket says
