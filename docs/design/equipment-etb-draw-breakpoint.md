@@ -315,6 +315,27 @@ could have cast BEFORE the draw and passed over"**, not "cards this section did 
 truncation on top of today's condemnation rule without that change would silently delete most of the
 turn.
 
+### The Puresteel shape is the harder one -- MANY spells revalued at once (USER, 2026-08-21)
+
+> "Something like this puresteel example where many spells are implicated is possibly more
+> troublesome, but we don't have an example that breaks this at the moment."
+
+Right on both halves, and the distinction from the Guttersnipe case is structural rather than a
+matter of degree:
+
+* **Guttersnipe**: the enabler and the revalued cards are DIFFERENT card types, so ranking the
+  payoff ahead of the cantrips fixes the sequence and the hazard dissolves.
+* **Puresteel**: the equipment are BOTH the revalued cards AND the things that trigger the draws, so
+  no cast order can put a drawn second Paladin ahead of the equipment whose ETB drew it. And one
+  such draw revalues the WHOLE remaining hand of equipment at once, not a single card.
+
+**Measured: no example, and a loose bound rather than an impossibility.** Across the 96 census games
+there were ~58 mid-main draws and **zero** drew a Puresteel Paladin, so the hazard state (an enabler
+drawn while equipment still sits in hand) never arose. But the deck is 4 Puresteel Paladin and 16
+equipment in 60, so a mid-main draw hits a Paladin at roughly 5% -- about three expected across 58,
+and none seen. Rare, luckier than the mean, and structurally reachable. Treat 0/58 as "no live
+example to design against", NOT as "cannot happen".
+
 **The general fix, for the deck that does need it: condemnation INVALIDATION.** When a continuation
 casts something that changes another card's value, un-condemn the class it enables. That needs a
 representation of "X enables Y" that is param-derived rather than a name list — and note that this is
