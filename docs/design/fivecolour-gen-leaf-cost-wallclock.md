@@ -59,6 +59,18 @@
 > showed 18,643 enum-memo cap clears at the 8192 default — MTG_ENUM_MEMO_CAP=262144 is worth
 > setting on shipped-depth gen/discovery work.
 >
+> **MEMO-CAP RECOMMENDATION REFUTED (2026-08-21, measured on 0a59457's successor 2fd017b).**
+> The line above is stale: its evidence (18,643 clears) was collected under shipped play =
+> UNCAPPED fetch fan. On the current binary (fetch top-entry-only adopted) the same scorer
+> config (fivecolour d6/b20, R=30, 40 hands, alternating pairs ×2, `logs/memo_cap_ab/`):
+> default-cap 755 clears / 12.8% hits / 66.8s / 635 MB vs cap=262144 0 clears / 14.2% hits /
+> 66.9s / 921 MB — outputs byte-identical (md5-equal all four arms), wall DEAD EVEN, +45% RSS.
+> The fan cut shrank the per-decision state space enough that clear-on-full no longer costs
+> measurable wall at the budgeted gen tier; do NOT set MTG_ENUM_MEMO_CAP on gen/scorer work.
+> Still open (unmeasured, expensive): UNBOUNDED deep cells (value-leaf phase C monsters — the
+> census game hit ~130k distinct fs6 states/decision at 1% hit rate under the default cap on
+> the OLD play; whether that survives the fan cut needs a monster-cell A/B, not a scorer one).
+>
 > FOLLOW-UP (2026-08-21, USER: "I meant for our heuristic to be used with just the top entry,
 > not split and search there. Can we try that?") — cap=1 TRIED, full measurement, plus cap=2
 > through the SUITE for the complete trade table (train seeds, 4 fivecolour searched keys,

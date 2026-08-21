@@ -16729,7 +16729,10 @@ namespace enummemo
     // Cap env-ized 2026-08-20: the 8192 default clear-on-full THRASHED on the heavy fivecolour
     // d6 game (today's census: ~130k distinct fs6 states/game, within-decision dup 71-88%) --
     // 51 clears -> 1% hit rate was the CAP's failure, not state diversity. MTG_ENUM_MEMO_CAP
-    // for the re-measure.
+    // for the re-measure. RE-MEASURED 2026-08-21 post fetch-top-entry-only: at the budgeted gen
+    // tier (fivecolour d6/b20 scorer) 262144 is wall-NEUTRAL for +45% RSS -- the fan cut removed
+    // the thrash, so 8192 STANDS (docs/design/fivecolour-gen-leaf-cost-wallclock.md). Unbounded
+    // monster cells remain unmeasured under the new play.
     inline std::size_t Cap()
     { static const std::size_t v = static_cast<std::size_t>(EnvInt("MTG_ENUM_MEMO_CAP", 8192)); return v; }
 
