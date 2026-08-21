@@ -9195,6 +9195,29 @@ bool EquipmentProvider::OrderOpaqueCastsByRank() const
 // The tail is rollout-bound anyway: 4.02M rollout calls and 6.91M simulated turn-steps against
 // 231k interior nodes (96.8% rollout), with SolveUncached 30.4% of runtime. The lever for that
 // shape is the VALUE LEAF, not enumeration breadth. See docs/design/analysis-KittyEquipment.md.
+// MTG_KE_TUTOR_ALL -- MEASURED AND REJECTED 2026-08-21, kept as the record.
+//
+// The gap is real: 8 distinct Equipment names against a default width of 6, so two legal targets go
+// unscored and which two is decided by library order. But it does not MATTER. Paired, 150 games per
+// cell (logs/kitty_tutor): the wider axis changes the decision stream in exactly ONE game of 150 on
+// each of train and held-out, moves the win turn in ZERO, and costs +12.3% / +13.5% search work
+// (each extra target is a full rollout, and 26 tutor triggers per 96 games is enough to show up).
+//
+// The reason it cannot matter much is worth keeping: with Puresteel out every equip is {0}, so the
+// fetched card's identity barely changes the turn -- and when no Puresteel is out, the cheap
+// equipment the width-6 window already contains is what gets cast anyway. Do not re-widen this
+// without a NEW argument; the coverage argument alone is measured empty.
+static bool KittyTutorAllEnabled()
+{
+    static const bool on = EnvOn("MTG_KE_TUTOR_ALL");
+    return heurarm::Flag(heurarm::KE_TUTOR_ALL, on);
+}
+
+int EquipmentProvider::TutorSearchWidth() const
+{
+    return KittyTutorAllEnabled() ? 8 : GenericProvider::TutorSearchWidth();
+}
+
 int EquipmentProvider::EnumGroupCap() const
 {
     static const bool on = EnvOn("MTG_KE_GROUP_CAP");

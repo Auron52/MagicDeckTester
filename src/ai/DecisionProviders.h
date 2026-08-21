@@ -775,6 +775,19 @@ public:
     // same -0.1533/-0.1200 delta and the same 24/18 games faster, 1/0 slower (1800-game sweep,
     // logs/kitty_shape). Inert until MTG_EQUIP_DRAW_BP arms the class at all.
     bool CondemnsConsideredAtBreakpoint() const override { return true; }
+    // Tutor breadth: score EVERY distinct Equipment, not the generic 6.
+    //
+    // This is a COVERAGE fix, not a heuristic. GenericProvider::TutorCandidates deliberately
+    // encodes no ranking ("no deck-agnostic tutor heuristic worth encoding") and returns targets in
+    // LIBRARY ORDER, and the deck has EIGHT distinct Equipment names against a default width of 6 --
+    // so two legal Stoneforge targets go unscored every time, and WHICH two is decided by shuffle
+    // order rather than by merit. Widening to 8 makes the decision fully searched and deletes the
+    // shuffle dependence; there is nothing left to rank.
+    //
+    // Affordable precisely because the decision is RARE: measured 26 tutor triggers across 96 logged
+    // games (0.27/game), and the tutor axis is ADDITIVE (one rollout per extra target, see the base
+    // hook) rather than multiplicative, so the whole cost is ~2 extra rollouts on a quarter of games.
+    int TutorSearchWidth() const override;
     // Board-lethal search short-circuit (the Goblins-proven wide-board cut): when attack-all
     // damage already kills this turn, skip the cast-subset odometer and just attack. Win-turn-
     // invariant. This deck's late boards are exactly the pathological shape -- Kemba cats +

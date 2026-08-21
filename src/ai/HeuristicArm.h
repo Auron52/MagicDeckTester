@@ -44,6 +44,7 @@ enum Slot : int
     EQUIP_DRAW_BP_DEFER,      // MTG_EQUIP_DRAW_BP_DEFER   ...and keep it out of wave 0 (cost only)
     EQUIP_DRAW_BP_INLINE,     // MTG_EQUIP_DRAW_BP_INLINE  ...inline AT the draw + truncate the plan
     BP_CLASSIFY,              // MTG_BP_CLASSIFY           condemn already-considered casts at a bp
+    KE_TUTOR_ALL,             // MTG_KE_TUTOR_ALL          score EVERY Equipment on the tutor axis
     COUNT
 };
 
@@ -65,6 +66,7 @@ inline const char* Name(int slot)
         "MTG_EQUIP_DRAW_BP_DEFER",
         "MTG_EQUIP_DRAW_BP_INLINE",
         "MTG_BP_CLASSIFY",
+        "MTG_KE_TUTOR_ALL",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }
