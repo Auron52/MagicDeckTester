@@ -47,6 +47,7 @@ enum Slot : int
     KE_TUTOR_ALL,             // MTG_KE_TUTOR_ALL          score EVERY Equipment on the tutor axis
     KE_TUTOR_RANK,            // MTG_KE_TUTOR_RANK         reasoned fetch ranking + width 2
     KE_TUTOR_ONE,             // MTG_KE_TUTOR_ONE          ...and width 1 (heuristic only)
+    SHED_WORST,               // MTG_SHED_WORST            rollout cleanup sheds the WORST-ranked card
     COUNT
 };
 
@@ -71,6 +72,7 @@ inline const char* Name(int slot)
         "MTG_KE_TUTOR_ALL",
         "MTG_KE_TUTOR_RANK",
         "MTG_KE_TUTOR_ONE",
+        "MTG_SHED_WORST",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

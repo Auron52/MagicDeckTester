@@ -144,6 +144,46 @@ inline DiscardProtectScope EffectiveDiscardProtectScope(const GameState& state)
     if (const char* ov = DiscardProtectScopeOverride()) { return DiscardProtectScopeFromString(ov); }
     return state.m_discard_protect;
 }
+
+// MTG_SHED_STATS (off by default = zero cost): how often the cleanup shed is actually REACHED,
+// split by the two callers. This exists because a REAL-PLAY census answers the wrong question: a
+// deck whose keep table mulligans away its land-light hands sheds ~never in play, yet the search
+// still sheds constantly inside its rollouts (every line that declines the land drop, and every
+// keep the MULLIGAN GENERATOR plays out rather than mulligans). Index 0 of the ranking decides
+// every one of those with no search above it, so `real == 0` does NOT mean the rule is inert.
+// `low_land` counts sheds taken with < 4 lands on the battlefield -- the screwed-and-flooding
+// shape, where the ranking picks between cards the player cannot yet cast.
+namespace ShedStats
+{
+    inline bool Enabled() { static const bool v = EnvOn("MTG_SHED_STATS"); return v; }
+    inline std::atomic<std::uint64_t> g_real{0};
+    inline std::atomic<std::uint64_t> g_rollout{0};
+    inline std::atomic<std::uint64_t> g_rollout_lowland{0};
+    inline void Count(const GameState& state, bool is_rollout)
+    {
+        if (!Enabled()) { return; }
+        if (!is_rollout) { g_real.fetch_add(1, std::memory_order_relaxed); return; }
+        g_rollout.fetch_add(1, std::memory_order_relaxed);
+        int lands = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == state.active_player_index && p.card.IsLand()) { ++lands; }
+        }
+        if (lands < 4) { g_rollout_lowland.fetch_add(1, std::memory_order_relaxed); }
+    }
+    struct Dumper {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            std::fprintf(stderr,
+                         "\n=== SHED STATS: real=%llu  rollout=%llu (low-land=%llu) ===\n",
+                         (unsigned long long)g_real.load(),
+                         (unsigned long long)g_rollout.load(),
+                         (unsigned long long)g_rollout_lowland.load());
+        }
+    };
+    inline Dumper g_dumper;
+}
 // ---- Cleanup discard: the full RANKING, not one answer ---------------------------------------
 // CR 514.1. The engine used to compute a single index here. It is a ranked LIST now because the
 // pick is consumed in two places that both need more than the winner:

@@ -9,16 +9,66 @@ Denominators first, from the 96 logged games in `logs/kitty_census/*` — this r
 session optimizing a decision that barely fires, and a rate without its denominator has flipped a
 verdict here before.
 
-## 1. Cleanup discard — INERT, do not build
+## 1. Cleanup discard — INERT, do not build (verdict UNCHANGED; the ARGUMENT below was wrong)
 
-**0 DISCARD actions in 96 games.** The deck never reaches a cleanup discard: it empties its hand on
-cheap equipment and its games end around turn 5, so hand size never exceeds the limit at cleanup —
-even with four Puresteel Paladins drawing.
+**0 DISCARD actions in 96 games.** The deck never reaches a cleanup discard *in real play*: it
+empties its hand on cheap equipment and its games end around turn 5, so hand size never exceeds the
+limit at cleanup — even with four Puresteel Paladins drawing.
+
+### CORRECTION (USER, 2026-08-21): a real-play census is the WRONG DENOMINATOR
+
+> "The discard rule might still be important when we are generating the mulligan profile, since you
+> cannot guarantee you have lands to play in that case. In addition, what if we don't play a land T1
+> on the play in a branch, doesn't that lead us into the discard decision? Or do we know for sure
+> that a land will always be played."
+
+Both mechanisms are real, and the second is the load-bearing one. **A land is not guaranteed to be
+played:** the land drop is folded into the plan and the enumeration emits "every (land choice x spell
+subset) **plus a defer option**" (`TurnSolver.cpp`, `EnumeratePlansWithLand`), with `land_to_play`
+empty meaning "a deliberate defer" (`Plan::land_to_play`, TurnSolver.h). There is even a tempo bonus
+(`NcLandDropTempoBonus`) that exists *because* the search would otherwise defer too readily. So
+lines that decline the drop, draw, and flood are enumerated every turn — and each of them reaches the
+shed.
+
+`SpellEffects.h` says so directly and was not consulted the first time: *"the rollout's own cleanup
+(SimulateEndAndStartNextTurn) has no search at all and takes index 0, so a bad ranking biases every
+line the search scores."*
+
+`MTG_SHED_STATS` (added for this, off by default) counts both callers. KittyEquipment, 50 games, d3:
+
+| run | real sheds | rollout sheds | of those, < 4 lands out |
+|---|---|---|---|
+| normal play | **0** | **145,888** (~2,900/game) | 74,181 (51%) |
+| every opener force-kept (`--force-mulligan "0:"`) | **0** | 142,962 | 71,967 (50%) |
+
+So the original census measured the right number and drew a conclusion it could not support: the
+decision fires constantly, just never where the log looks. (The mulligan-generation half does NOT
+bite on THIS deck — real sheds stay 0 even when every opener is kept, because 23 lands and nothing
+above 4 MV means the hand empties before it can flood. On a deck with a real curve it would, and the
+counter now exists to check rather than assume.)
+
+### The verdict survives, now as a BOUND rather than a census
+
+Firing often is not the same as mattering. `MTG_SHED_WORST` is a deliberate anti-heuristic in the
+`MTG_LACKEY_RANK=low` tradition — the rollout sheds the **last**-ranked candidate instead of index 0,
+bracketing the axis between the shipped rule and the worst rule available. That inversion is not
+cosmetic on this deck: the base ranking is highest-MV-first, which sheds Balan (4), Armored Skyhunter
+(4) and Loxodon Warhammer (3) while keeping Plains (MV 0) **last**, so `worst` is roughly "shed the
+excess lands instead of the threats" — the rule one would actually author here. Paired, 150 games per
+cell (`logs/kitty_shed`):
+
+| cell | delta | faster | slower | plays-differ |
+|---|---|---|---|---|
+| hold | **+0.0000** | 0 | 0 | **0 of 150** |
+| train | **+0.0000** | 0 | 0 | **1 of 150** |
+
+**Inverting the rule to its worst available setting changes play in 1 game of 300 and moves the win
+turn in none.** No ranking can be worth more than that gap, so there is nothing to author — and this
+is now bounded by measurement rather than inferred from a log with the wrong denominator.
 
 This matches the base hook's own note (`CleanupDiscardSearchWidth`): "five of nine suite decks never
-reach a cleanup discard at all". KittyEquipment is a sixth. There is no decision to make, so a
-bucket-discard policy for this deck would be dead code with a maintenance cost and no measurement
-able to move.
+reach a cleanup discard at all". KittyEquipment is a sixth *in play*. A bucket-discard policy for it
+would be dead code with a maintenance cost and no measurement able to move.
 
 ## 2. Armored Skyhunter's attack dig — ALREADY OPTIMAL
 

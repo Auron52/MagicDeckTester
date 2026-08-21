@@ -4179,6 +4179,7 @@ Card* AIEngine::ChooseDiscard(GameState& state)
     {
         throw std::runtime_error("ChooseDiscard called with empty hand");
     }
+    ShedStats::Count(state, /*is_rollout=*/false);   // MTG_SHED_STATS; off by default
 
     // Heuristic victim (land-outlet ammo, required-piece protection, highest-MV, staged-last): the
     // SHARED SelectCleanupDiscardIndex, so the search rollout's cleanup (TurnSolver) sheds the same

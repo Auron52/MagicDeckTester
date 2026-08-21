@@ -613,6 +613,21 @@ static bool KittyParkEnabled()
     return heurarm::Flag(heurarm::KE_PARK, on);
 }
 
+// MTG_SHED_WORST -- DELIBERATE ANTI-HEURISTIC, exactly like MTG_LACKEY_RANK=low: the ROLLOUT's
+// cleanup shed takes the LAST-ranked candidate instead of index 0. It exists to BOUND the headroom
+// of the cleanup-shed axis before anyone authors a deck-aware ranking for it. If the best and the
+// worst shed rule play the same, no ranking can be worth much, whatever it ranks.
+//
+// Rollout ONLY (not AIEngine::ChooseDiscard) on purpose: the question is whether the rule biases the
+// lines the SEARCH scores. A real-play census answers a different question and can read 0 on a deck
+// whose keep table mulligans away its flooding hands -- KittyEquipment sheds 0 times in real play
+// (even with every opener force-kept) while its rollouts shed ~2900 times per game.
+static bool ShedWorstEnabled()
+{
+    static const bool on = EnvOn("MTG_SHED_WORST");
+    return heurarm::Flag(heurarm::SHED_WORST, on);
+}
+
 // MTG_METALCRAFT_CREDIT -- same-turn metalcraft equip-{0} credit at the ENUMERATION affordability
 // gate (see SameTurnMetalcraftEquipCredit).
 //
@@ -13634,6 +13649,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     };
     while (!unlimited_hand && hand_count() > 7)
     {
+        ShedStats::Count(state, /*is_rollout=*/true);   // MTG_SHED_STATS; off by default
         // Default (commit-the-line): use the SHARED selector so the rollout sheds exactly the
         // card the real engine's ChooseDiscard would -- required-piece protection + land-outlet
         // ammo, reading the deck's pieces from state.m_required_pieces. Without this the rollout
@@ -13658,6 +13674,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
                 pick = std::min(static_cast<std::size_t>(state.scripted_discard_choice),
                                 cd.size() - 1);
             }
+            else if (ShedWorstEnabled()) { pick = cd.size() - 1; }   // headroom bound; see above
             state.scripted_discard_choice = -1;
             victim = ap.hand.begin() + cd[pick];
         }
