@@ -19709,6 +19709,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         TurnSolver::SearchLine best;
         best.win_turn = max_turns + 1;
         int _beam_i = 0;
+        bool w0_trunc = false;   // wave 0 left plans unexplored (beam) -- a rescue-trace feature
         const bool beam_here = (g_esc_beam_width > 0 && depth <= g_esc_beam_leafdepth);
         // DIG INSTRUMENT (MTG_M2T_TRACE, default off): dump this m2 branch's plans + tail win
         // turns for turn MTG_M2T_TURN. The doubt-dig method's second step (after the per-game
@@ -19740,7 +19741,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
-            if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; break; }   // value-guided beam (near-leaf only)
+            if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; w0_trunc = true; break; }   // value-guided beam (near-leaf only)
             if (budget) { budget->Consume(1); }   // one interior node (plan applied)
             LoadPlanState(s2_buf, state, reuse_s2);
             GameState& s2 = s2_buf;
@@ -19832,6 +19833,54 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     return best;
                 }
                 tranchestats::g_walks.fetch_add(1, std::memory_order_relaxed);
+                // RESCUE TRACE (MTG_TRANCHE_TRACE, default off): one self-contained stderr line
+                // per rescue, carrying the features that separate the candidate losslessness-gap
+                // regimes for the lossless-by-RULE program (antilife-main-phase-split.md
+                // 2026-08-21f): w0trunc/bud -> wave 0 was beam-truncated / under budget pressure
+                // (regime a), d vs the job's root depth -> interior projection under shallower
+                // information (regime b), acq -> cards acquired since the m1 stamp (regimes c/d),
+                // cond/plan -> WHICH condemned card the filtered space wrongly deleted.
+                // seed=game_seed attributes the line to a game for single-game repro. Membership
+                // is by card NUMBER (m1_hand semantics), so a post-m1 second copy of a condemned
+                // card reads as condemned -- same approximation the filter itself makes.
+                static const bool s_tr_trace = EnvOn("MTG_TRANCHE_TRACE");
+                auto tr_cond_names = [&](const TurnSolver::Plan& q)
+                {
+                    std::string s;
+                    const Player& ap = state.ActivePlayer();
+                    for (const Action& a : q.actions)
+                    {
+                        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr || a.free_cast) { continue; }
+                        if (a.hand_index < 0 || a.hand_index >= static_cast<int>(ap.hand.size())) { continue; }
+                        const int num = ap.hand[a.hand_index].m_number;
+                        for (int i = 0; i < state.m1_hand_n; ++i)
+                        { if (state.m1_hand[i] == num) { s += a.card_name; s += ","; break; } }
+                    }
+                    return s.empty() ? std::string("-") : s;
+                };
+                auto tr_acq_names = [&]()
+                {
+                    std::string s;
+                    for (const Card& c : state.ActivePlayer().hand)
+                    {
+                        bool in_m1 = false;
+                        for (int i = 0; i < state.m1_hand_n; ++i)
+                        { if (state.m1_hand[i] == c.m_number) { in_m1 = true; break; } }
+                        if (!in_m1) { s += c.m_name.str(); s += ","; }
+                    }
+                    return s.empty() ? std::string("-") : s;
+                };
+                std::size_t tranche_n = 0;   // filled after the tranche is built
+                auto tr_emit = [&](const TurnSolver::Plan& q, bool imm, int filt_wt, int resc_wt)
+                {
+                    std::fprintf(stderr,
+                        "[tranche-rescue] seed=%llu T%d d%d cut=%d imm=%d filt=%d resc=%d "
+                        "nfilt=%zu ntr=%zu w0trunc=%d bud=%lld/%lld cond=%s acq=%s plan=%s\n",
+                        (unsigned long long)state.game_seed, state.turn_number, depth, cutoff,
+                        imm ? 1 : 0, filt_wt, resc_wt, post.size(), tranche_n, w0_trunc ? 1 : 0,
+                        budget ? budget->Used() : -1, budget ? budget->Limit() : -1,
+                        tr_cond_names(q).c_str(), tr_acq_names().c_str(), m2t_sum(q).c_str());
+                };
                 std::vector<TurnSolver::Plan> tranche;
                 {
                     CondemnSuppressGuard _cs;   // unfiltered enumeration
@@ -19842,6 +19891,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                                   [&](const TurnSolver::Plan& q)
                                   { return !PlanHasCondemnedCast(state, q); }),
                               tranche.end());
+                tranche_n = tranche.size();
                 MoveOrderPlans(tranche);
                 // Same body as the wave-0 loop above (kept verbatim so wave 0 stays untouched);
                 // no beam here -- the tranche is already the narrow remainder.
@@ -19856,6 +19906,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     if (s2.Opponent().life <= 0)
                     {
                         tranchestats::g_rescues.fetch_add(1, std::memory_order_relaxed);
+                        if (s_tr_trace) { tr_emit(q, true, best.win_turn, state.turn_number); }
                         TurnSolver::Plan q_rec = q;
                         q_rec.breakpoint_actions = std::move(bp);
                         return { state.turn_number, { { false, std::move(q_rec) } } };
@@ -19883,6 +19934,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                         // A strict improvement from the CONDEMNED space = the filtered answer was
                         // wrong = a losslessness counterexample (see tranchestats).
                         tranchestats::g_rescues.fetch_add(1, std::memory_order_relaxed);
+                        if (s_tr_trace) { tr_emit(q, false, best.win_turn, sub.win_turn); }
                         best.win_turn = sub.win_turn;
                         best.phases.clear();
                         TurnSolver::Plan q_rec = q;

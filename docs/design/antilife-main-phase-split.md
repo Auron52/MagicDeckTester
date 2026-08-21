@@ -277,3 +277,62 @@ demotes to an audit assertion when rescues hit zero on held-out + overnight.
 
 NEXT (deferred): a rescue TRACE (condemned card + node context per rescue, sampled) to classify
 the 13k/23k counterexamples -- the classes, not the count, decide which rule changes to propose.
+
+## 2026-08-21g: RESCUE TRACE CLASSIFICATION -- the rescues are SIBLING-REDUNDANT, the rule is
+## already answer-lossless, and the tranche is (slightly harmful) insurance. PROPOSAL -> USER:
+## flip MTG_CONDEMN_TRANCHE default OFF (= the user's "condemned paths never run" design)
+
+**Instrument** (`MTG_TRANCHE_TRACE`, default off, this commit): one stderr line per rescue --
+`[tranche-rescue] seed T d cut imm filt resc nfilt ntr w0trunc bud cond acq plan` -- game seed for
+repro, depth, filtered-vs-rescued win turns, filtered/tranche plan-set sizes, wave-0 beam
+truncation, budget used/limit, WHICH condemned card(s) the plan casts, cards in hand missing from
+the m1 stamp, and the plan summary. (Caveat: `acq` counts everything unstamped -- lands,
+unaffordable and deferred cards too, not just true acquisitions -- read it loosely.)
+
+**The traced population** (same probes as 21f, one pooled batch: AL 300g PHASE+CONDEMN d3/b10
+s5005, 5C 150g production d3/b10 s1001): 36,397 rescues, AL 13,109 / 5C 23,288, in 287/300 and
+127/150 games. Shape: 93-98% at d=0 (leaf projections), 87-95% gain exactly 1 turn, plan is
+usually the condemned card ALONE (a cheap permanent: Hierarch/Birds/Remedy/Drone; Faeburrow/
+Cannons/Greaves/Oko), and in AL 96% of rescues fire where the filtered m2 offered NOTHING but
+pass. 5C only: 39% fire at >=90% budget used. w0trunc=0 for every rescue on both decks.
+
+**The classification collapses to ONE class: SIBLING-REDUNDANT.** Reading the stamp
+(StampM1Hand) closed it: a card is only condemned if it was Main1-classified AND jointly
+affordable ON TOP of the branch's chosen m1 casts (plain pre-cast pool), and the INITIAL m1
+enumeration is deliberately unfiltered -- so for every rescue "branch q declined affordable X,
+m2 wants X", the sibling branch q+X EXISTS in the same m1 pass and reaches an equivalent state.
+The rescue merely re-derives that line inside branch q, raising q to a TIE; first-strictly-better
+then keeps whichever branch move-order visited first. Effect: digest churn, no answer change.
+The 21f candidate regimes dissolve: affordability edges and combat-treasure mana are exempted BY
+THE STAMP (that is what its joint-affordability test is); shallow-info/budget declines are
+covered by the same-pass sibling; no rescue whose value NO m1 sibling could reach (the
+combat-timing nonequivalence class, m2-cast strictly better while m1-affordable) was observed.
+
+**The decisive A/B (MTG_CONDEMN_TRANCHE=0 vs on, same probes), coupled + decoupled salts 1,2 --
+1350 games:** FOUR per-game diffs total, none salt-robust (pure tie-flips):
+* coupled: AL identical scores (digest-only churn); 5C gi124 OFF WINS T7 vs ON T8 (dug: a d0/d1
+  rescue at bud=72/9000 re-valued a branch 7->6, tying the sibling; first-verified-win kept the
+  earlier-ordered branch; realized play worse -- NOT budget starvation).
+* salt1: 5C identical; AL gi100 OFF worse (6->7).
+* salt2: 5C identical; AL gi171 ON LOSES the game (wt=-1 -> 9) where OFF wins T8; gi204 OFF
+  better (8->7).
+Net: OFF better 3, ON better 1. Perf (sequential, no trace): tranche costs ~12% AL / ~9% 5C wall
+on these probes. So the tranche never rescued an outcome, flipped one game INTO a loss, and
+burns the compute 21e attributed to "the price of the backstop".
+
+**Revised reading of 21f:** "rescue rate 15.5%/12.5%" counted BRANCH-LOCAL re-derivations, not
+membership-rule errors. The ordered-condemnation rule as built (Main1-classified + jointly
+affordable + declined, stamped per candidate branch, m1 enumeration unfiltered) is ALREADY
+answer-lossless on both pilot decks -- lossless-by-RULE, the user's design target, with the
+losslessness argument being sibling coverage: (1) stamp exempts anything not jointly affordable
+at m1, (2) the unfiltered m1 pass contains q+X for every condemned X, (3) casting X at m1 is
+never worse than at m2 for these decks' condemnable cards. (3) is the deck-dependent leg: a deck
+with a card whose value is strictly HIGHER post-combat while already affordable pre-combat would
+break it -- the audit instrument (=1 + trace + off/on diff) is the per-deck check when wiring
+condemnation into a new provider.
+
+**PROPOSAL (USER decision, not adopted):** flip MTG_CONDEMN_TRANCHE default OFF; keep the
+tranche + counters + trace as the opt-in audit instrument. This IS the stated design ("my
+ordered design is actually intended never to run any condemned paths"), now with the data and
+the argument. Pre-adoption gate if approved: full suite (the flip touches adopted 5C
+production), expect digest-level churn only; GT rebaseline where digests move.
