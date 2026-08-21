@@ -689,3 +689,39 @@ Decouple ensemble (logs/ssm_sweep/al_fix/decouple.json, 8000 games x salts 1,2),
   AL adoption is NOT unblocked by this. The surviving salt-robust residual is the KILL-TURN class
   the census already named: al_d3_s7007 gi852 (ctl 4 / bun 5), gi469 (4/5), gi666 (5/6), all
   unchanged by tapping. Those digs remain the blocker.
+
+### 21l precision: the rung works by COHERENCE, not by FindBestOwnAttacker being right
+
+USER: "So FindBestOwnAttacker solves the issue?" -- worth stating exactly, because "agree by
+construction" above overstates it.
+
+In gi8 FindBestOwnAttacker has NO insight: both dorks are 0 power at prepay time, so its rank
+(EffectivePower descending via OwnPumpTargetCandidates, stable) is a pure battlefield-order tie
+break -- Hierarch at index 1 over Birds at index 3. It could have picked either.
+
+What fixes the game is that the RESERVATION and the PUMP consult the IDENTICAL code path (the rung
+holds FindBestOwnAttacker's pick; the own-creature pump targets FindBestOwnAttacker's pick), so the
+body held untapped is exactly the body that will be pumped. Either consistent pick wins here:
+CountExalted has no tapped filter at its definition or any call site (and by CR, Exalted triggers
+on the attack; the granting permanent need not be untapped), so pumping the BIRDS and tapping the
+HIERARCH also swings 0 + 4 (Invigorate) + 1 (exalted) = 5 = lethal. There were multiple winning
+assignments and the engine found none, because the two sides disagreed about which body mattered.
+The fix is coherence between them, not a better ranking. (The exalted claim is a CODE READ, not a
+measured run -- the measured fact is the log below.)
+
+VERIFIED in the executed game (bundle + rung, coupled, gi8 -> logs/tap_rung/g8_bun_rung/):
+  T3 MAIN_1: Bloodstained Mire; Tainted Remedy {2}{B}; Invigorate -> Ignoble Hierarch;
+             Swords to Plowshares {W} -> 6/6; Skyshroud Cutter (alt)   [opp 5]
+             board: Ignoble Hierarch UNTAPPED, Birds of Paradise tapped
+  T3 COMBAT: attack -> opp 0, WIN T3
+Note what this means for the condemnation argument: the bundle now wins by casting Swords AT M1 --
+the very sibling whose combat-0 made sibling coverage fail. The rung does not dodge the
+condemnation rule, it RESTORES the rule's premise for this game.
+
+KNOWN LIMITATION (not a defect, worth recording): the two FindBestOwnAttacker calls are separated
+in time -- prepay runs before the turn's casts resolve. If the board changes between them (a hasty
+creature cast this turn becoming the best attacker), the hold protects a body the pump will not
+use. That is WASTED, never harmful: the rung is a first-try hold with the unrestricted solve behind
+it, so the payment is unaffected. Where FindBestOwnAttacker's ranking QUALITY does real work is a
+board whose bodies differ in power (a 3/3 dork beside a 0/1) -- there holding the bigger body is a
+substantive, and sensible, call.
