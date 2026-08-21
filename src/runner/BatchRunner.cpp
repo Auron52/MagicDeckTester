@@ -186,18 +186,10 @@ struct CondemnRule
     // by something DETERMINISTIC. See the in-flight hook, rule (1).
     // 0 / absent => the in-flight rule is off.
     double max_game_sec        = 0.0;
-    // Path the DRIVER may write row names into, one per line, to condemn them mid-run. The pool
-    // re-reads it on every heartbeat tick.
+    // (A driver-written CONTROL FILE used to live here, the channel for the one verdict the engine
+    // could not reach itself: quality -- "does depth d buy anything over d-1?". Removed with the rule
+    // it served, 2026-08-21; see scripts/attic/valueleaf_depth_matrix.py for why the rule went.)
     //
-    // This exists for the one verdict the engine cannot reach on its own: QUALITY. "Does depth d buy
-    // anything over d-1?" is a paired comparison against games this process may never have seen --
-    // on a resume the earlier ones live only in the driver's state file -- so the driver owns the
-    // test and needs a way to say so before the run ends. Without a channel the rule could only fire
-    // at the NEXT resume, which for a single long phase-C invocation means never, i.e. it would save
-    // nothing on the run that is actually paying for the dead rung.
-    //
-    // Empty => no polling, no file, byte-identical.
-    std::string control_file;
     // How many games of a single NOT-YET-JUDGED condemnable cell may be in flight at once. This is
     // what stops LPT from putting the whole box on work that is about to be thrown away: the cell is
     // metered in at this rate and refilled on each uncondemned completion, while protected cells use
@@ -719,11 +711,9 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         condemn.reference_games     = c.value("reference_games", 0);
         condemn.never_condemn_depth = c.value("never_condemn_depth", 0);
         condemn.max_game_sec        = c.value("max_game_sec", 0.0);
-        condemn.control_file        = c.value("control_file", std::string());
         condemn.drip                = std::max(1, c.value("drip", 1));
         condemn.enabled             = (condemn.median_sec_per_game > 0.0 && condemn.reference_games > 0)
-                                   || condemn.max_game_sec > 0.0
-                                   || !condemn.control_file.empty();
+                                   || condemn.max_game_sec > 0.0;
     }
 
     // Dense cell indices, so the per-game hot path indexes a vector instead of hashing a string.
@@ -1264,39 +1254,14 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     fb ? "this cell" : "every cell of this row");
             };
 
-            // (0) DRIVER-SUPPLIED verdicts (see CondemnRule::control_file). One row name per line.
-            //
-            // These deliberately IGNORE never_condemn_depth, and that is the whole point of keeping
-            // them on a separate path. The d<=5 floor protects the crossover rungs from the COST
-            // guards, which are wall-clock and can fire because the box was busy -- an accident that
-            // would leave a hole in the answer. A driver verdict is not an accident: it arrives only
-            // after a paired equivalence test has MEASURED that the extra depth buys nothing, on a
-            // sample large enough to bound the difference, and the rung keeps the games that proved
-            // it. Capping there removes cost, not answer. Applied to H4->H5 -- dead on every deck
-            // measured -- it is the only place the rule could ever pay off, and the floor would
-            // otherwise make it unreachable.
-            if (!condemn.control_file.empty())
-            {
-                std::ifstream cf(condemn.control_file);
-                std::string   line;
-                while (std::getline(cf, line))
-                {
-                    while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
-                    { line.pop_back(); }
-                    if (line.empty()) { continue; }
-                    for (int rid = 0; rid < n_rows; ++rid)
-                    {
-                        if (row_name[static_cast<std::size_t>(rid)] != line) { continue; }
-                        if (row_condemned[rid].exchange(1, std::memory_order_relaxed) != 0) { break; }
-                        std::fprintf(stderr,
-                            "[goldfish] CONDEMNED row=%s on the DRIVER's verdict (extra depth "
-                            "measured equivalent); remaining games of every cell of this row are "
-                            "skipped\n", line.c_str());
-                        std::fflush(stderr);
-                        break;
-                    }
-                }
-            }
+            // (0) A DRIVER-SUPPLIED verdict channel used to sit here: the driver wrote row names into
+            // a control file to condemn a rung its own paired equivalence test had ruled dead, and
+            // those verdicts deliberately ignored never_condemn_depth. REMOVED with that rule (user,
+            // 2026-08-21). Its stated payoff was capping H4->H5, and with H6 dropped and the ladder
+            // capped at H5/V8 there is no expensive top rung left for it to cap -- what remained was
+            // a rule that stopped collecting at a sample calibrated to ITS OWN 0.0075-turn threshold
+            // while phase D needed 0.0020 from the same games. See the note at the top of
+            // scripts/attic/valueleaf_depth_matrix.py for the measured cost of keeping it.
 
             // (1) Single pathological game, judged while it runs -- a LIVENESS backstop, and only
             // where nothing else is guarding the game.

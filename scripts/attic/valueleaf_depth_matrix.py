@@ -238,64 +238,17 @@ def _per_game(c):
     return out
 
 
-def dead_rung(cells, deck, arm, depth, thresh, min_pairs, coverage):
-    """Has depth `depth` stopped buying anything over `depth-1`? -> (verdict, detail).
-
-    CONDEMN A RUNG ON QUALITY, NOT ONLY ON COST. A rung whose extra depth changes no decision is
-    pure expense: the table already knows what it says, and every further game of it is spent
-    confirming a number that is equal to the one below. Across 8 decks the rung deltas are bimodal
-    with a real gap -- nothing lands between 0.0044 and 0.0078 -- so 0.0075 separates 'dead' from
-    'live' with margin on both sides.
-
-    AN EQUIVALENCE TEST, NOT A POINT ESTIMATE. "the delta is below the threshold" condemns live
-    rungs on noise: with enough variance any true effect measures small often enough. The correct
-    statement is that the effect is bounded -- the one-sided upper confidence bound on the
-    improvement sits below the threshold -- which needs the sample to be large enough to make that
-    claim rather than merely small enough to look flat.
-
-    PAIRED, on the games both rungs actually hold. The deltas at stake (0.003) are an order of
-    magnitude under the between-GAME spread, so an unpaired comparison would be measuring which
-    hands each rung happened to draw."""
-    deep    = [c for c in cells if c["deck"]==deck and c["arm"]==arm and c["depth"]==depth]
-    shallow = [c for c in cells if c["deck"]==deck and c["arm"]==arm and c["depth"]==depth-1]
-    if not deep or not shallow: return False, None
-    diffs = []
-    n_deep = n_shal = 0
-    for dc in deep:
-        sc = next((s for s in shallow if s["seed"]==dc["seed"]), None)
-        if sc is None: continue
-        dg, sg = _per_game(dc), _per_game(sc)
-        n_deep += len(dg); n_shal += len(sg)
-        # improvement = shallower minus deeper, so POSITIVE means the extra depth helped
-        # (lower loss-penalized score is better).
-        for o in set(dg) & set(sg): diffs.append(sg[o] - dg[o])
-    n = len(diffs)
-    if n < min_pairs: return False, None
-    # Not enough of the two rungs' games overlap to call this a like-for-like comparison -- a fluke
-    # early sample must not be able to condemn a live rung.
-    if n < coverage * max(1, min(n_deep, n_shal)): return False, None
-    mean = sum(diffs)/n
-    var  = sum((d-mean)**2 for d in diffs)/(n-1) if n > 1 else 0.0
-    se   = (var/n) ** 0.5
-    # RESOLUTION FLOOR. A sample in which the two rungs agreed on EVERY game has se == 0, so the
-    # bound is 0 and the rung is certified dead against any threshold from any sample size -- which
-    # is exactly what happened on burn (2026-08-15): all nine rungs condemned at the 201-pair
-    # minimum, every one reporting "improvement +0.0000, se 0.0000". Zero observed variance is not
-    # zero uncertainty. With k=0 differing games in n pairs the rule of three bounds the rate of a
-    # differing game at 3/n, and a game that does differ moves this score by at least one whole turn
-    # (win turns are integers, a loss scores max_turns+1), so the effect cannot honestly be bounded
-    # below 3*step/n however flat the sample looks -- at n=201 that is 0.0149 turns, twice the
-    # threshold the sample was claiming to clear.
-    #
-    # Applied at EVERY k rather than only at 0, because the normal bound understates a
-    # handful-of-events sample too (k=1 gives ~2.6/n where the Poisson bound is ~4.7/n). Its
-    # practical effect is to make a near-degenerate rung wait for ~400 paired games before it can be
-    # condemned, which is the sample a 0.0075-turn claim actually needs; a rung with real variance
-    # is unaffected (FiveColour's H4->H5 floor at n=1600 is 0.0019).
-    step  = min((abs(d) for d in diffs if d), default=1.0)
-    upper = max(mean + 1.645*se, 3.0*step/n)          # one-sided 95%, floored at the resolution
-    return (upper < thresh), {"n":n, "improvement":mean, "se":se, "upper":upper}
-
+# QUALITY-BASED RUNG CONDEMNATION: REMOVED (user, 2026-08-21). It condemned a rung once a paired
+# equivalence test bounded the extra depth below 0.0075 turns, and its one justification was
+# capping the expensive top rung (the C++ side: "applied to H4->H5 ... it is the only place the
+# rule could ever pay off"). With H6 dropped and the ladder capped at H5/V8 that payoff is gone,
+# and what remained was pure harm: on KittyEquipment it stopped V6/V7 at 120 games/seed against a
+# 390 target on a PERFECTLY FLAT sample (V5->V6 improvement +0.0000, se 0.0000, certified via the
+# 3/n floor at the 421-pair minimum). Phase D pairs every row over one global intersection, so
+# those 120-game rows capped the sample for rows holding 1560 games each, leaving trust UNSET:
+# resolution 3/488 = 0.00615 against tol 0.0020. It bought ~9 core-h (~23 min wall) of a run that
+# finished in 2h18m against an overnight budget -- i.e. it traded the deliverable for a saving
+# nobody needed. Cost-based condemnation (--intractable-median-sec-per-game) is untouched.
 
 def cell_mean(c): return c["lp_mean"]
 
@@ -647,8 +600,7 @@ def emit_table(cells, args, skipped=None):
                 lp=sum(cell_mean(c) for c in cs)/len(cs)
                 ms=sum(c["ms"]/max(c["games"],1)*1000 for c in cs)/len(cs)
                 g=min(c["games"] for c in cs)
-                tag=("*" if any(c["intractable"] for c in cs)
-                     else "=" if any(c["qdead"] for c in cs) else "")
+                tag=("*" if any(c["intractable"] for c in cs) else "")
                 parts.append("%s%d=%.4f[%.1fms]%s"%(arm,d,lp,ms,tag)); ann.append("%s%d:%dg"%(arm,d,g))
             if parts:
                 L.append("  %s %s"%(label,"   ".join(parts)))
@@ -663,7 +615,7 @@ def emit_table(cells, args, skipped=None):
         # 21 games H4 had abandoned and H3 still carried, i.e. exactly the hardest ones.
         for seed in sorted({c["seed"] for c in dc if c["batches"]>0}):
             comp=[c for c in dc if c["seed"]==seed and c["batches"]>0
-                  and not c["intractable"] and not c["qdead"]
+                  and not c["intractable"]
                   and any(x.get("g") for x in c["chunks"])]
             sets={frozenset(_per_game(c)) for c in comp}
             if len(sets)>1:
@@ -705,7 +657,7 @@ def run_incremental(args):
             for d in args.hdepths: cells.append(dict(deck=dname,arm="H",depth=d,seed=seed))
             for d in args.vdepths: cells.append(dict(deck=dname,arm="V",depth=d,seed=seed))
     for c in cells:
-        c.update(chunks=[], intractable=False, qdead=False, running=False, first_wall=None, ceil=0); _refresh(c)
+        c.update(chunks=[], intractable=False, running=False, first_wall=None, ceil=0); _refresh(c)
     state_path=args.out+".cells.json"
     src_now=_src_fingerprint()
     if os.path.exists(state_path):                       # resume: skip already-committed chunks
@@ -722,7 +674,7 @@ def run_incremental(args):
             for c in cells:
                 s=saved.get(_cell_key(c))
                 if not s: continue
-                c["intractable"]=s["intractable"]; c["qdead"]=s.get("qdead",False); c["first_wall"]=s.get("first_wall")
+                c["intractable"]=s["intractable"]; c["first_wall"]=s.get("first_wall")
                 # The frozen per-game ceiling, carried across resumes. It CANNOT be recomputed here:
                 # its calibration games are below this resume's starting offset, so a fresh
                 # calibration would use a different sample, produce a different ceiling and abandon a
@@ -773,14 +725,6 @@ def run_incremental(args):
     except (OSError, ValueError):
         pass
 
-    # Rows ruled QUALITY-DEAD (see check_quality below) and the file the pool reads them from.
-    # Declared HERE, above target(), because target() closes over it and runs during the resume
-    # path long before check_quality is ever called.
-    quality_dead = set()
-    control_path = args.out + ".control"
-    try: os.remove(control_path)
-    except OSError: pass
-
     def skiplist(c): return skipped.get((c["deck"], c["seed"]), ())
 
     # ---------------------------------------------------------------- GRACEFUL DEGRADATION
@@ -802,10 +746,6 @@ def run_incremental(args):
 
     def target(c):
         if c["intractable"]: return min(args.reference_target, args.target)
-        # A rung ruled QUALITY-DEAD keeps exactly the games that proved it equivalent and stops
-        # there. Unlike an intractable cell this is not a cost verdict, so it does not fall back to
-        # --reference-target: the sample it already holds is the evidence.
-        if (c["deck"], c["arm"], c["depth"]) in quality_dead: return c["games"]
         return args.target + len(skiplist(c))
 
     # A play change since these results were written is absorbed here, at chunk granularity: the
@@ -952,41 +892,10 @@ def run_incremental(args):
             ch["w"] = (2-z)*100_000_000 + lvl + min(int(est_spg(c)*10), 9_999)
         return q
 
-    # ------------------------------------------------- QUALITY CONDEMNATION (see dead_rung)
-    # Rows already ruled dead, and the file the POOL reads them from. The engine cannot reach this
-    # verdict itself: on a resume, half the sample lives in the state file and never enters the
-    # manifest, so only the driver can pair the two rungs. Writing it out mid-run is what lets the
-    # rule pay off on the run that is currently spending on the dead rung -- deferring it to the next
-    # resume means never, for a single long phase-C invocation.
-    def check_quality(log=print):
-        if args.quality_threshold <= 0: return
-        fresh = []
-        for c in cells:
-            key = (c["deck"], c["arm"], c["depth"])
-            if key in quality_dead or c["depth"] <= 1: continue
-            dead, d = dead_rung(cells, c["deck"], c["arm"], c["depth"],
-                                args.quality_threshold, args.quality_min_pairs,
-                                args.quality_coverage)
-            if not dead: continue
-            quality_dead.add(key); fresh.append((key, d))
-        if not fresh: return
-        # Append-only, and the pool re-reads the whole file each tick, so a partial write is
-        # harmless: the row is simply picked up on the following tick.
-        with open(control_path, "a") as fh:
-            for (dname, arm, depth), _ in fresh: fh.write("%s_%s%d\n" % (dname, arm, depth))
-        for (dname, arm, depth), d in fresh:
-            # 5 decimals on the BOUND, not 4: the resolution floor (3*step/n) puts a flat rung's
-            # verdict right at the threshold, and at 4 decimals the line printed "0.0075 < 0.0075",
-            # which reads as a broken comparison rather than 0.00748 < 0.0075.
-            log("  QUALITY-DEAD %s %s%d: %s%d->%s%d improvement %+.4f turns, se %.4f, one-sided 95%% "
-                "upper bound %.5f < %.4f on %d paired games -- capping the rung"
-                % (dname, arm, depth, arm, depth-1, arm, depth,
-                   d["improvement"], d["se"], d["upper"], args.quality_threshold, d["n"]))
-
     def write_state():
         tmp=state_path+".tmp"
         json.dump([{k:c[k] for k in ("deck","arm","depth","seed","games","lp_sum","lp_mean","batches",
-                                     "ms","intractable","qdead","first_wall","chunks","ceil")} for c in cells], open(tmp,"w"))
+                                     "ms","intractable","first_wall","chunks","ceil")} for c in cells], open(tmp,"w"))
         os.replace(tmp,state_path)
         if skipped:
             tmp2=skip_path+".tmp"
@@ -1099,9 +1008,7 @@ def run_incremental(args):
                  "reference_games":args.reference_target,
                  "never_condemn_depth":args.never_condemn_at_or_below,
                  "max_game_sec":args.max_game_sec,
-                 "drip":args.drip,
-                 # Rows the driver rules QUALITY-DEAD mid-run (see check_quality).
-                 "control_file":control_path}
+                 "drip":args.drip}
         json.dump({"condemn":condemn, "jobs":jobs}, open(man,"w"))
         env=dict(os.environ)
         # The arm is on the JOB now, so a stray arm variable in the caller's environment would apply
@@ -1161,18 +1068,14 @@ def run_incremental(args):
                     # the row rule, whose mean verdicts arrived as cell= lines.
                     if "CONDEMNED" in l:
                         print(l.rstrip(), flush=True)
-                        # A DRIVER verdict is a QUALITY one -- the rung was measured equivalent to
-                        # the one below and keeps the sample that proved it. Flagging it
-                        # "intractable" would be wrong twice over: it is not a cost verdict, and an
-                        # intractable cell is excluded from the table's paired comparison basis,
-                        # which is precisely the cell that most needs to be in it.
-                        qual = "DRIVER" in l
+                        # Every row condemnation reaching here is now a COST verdict: the driver's
+                        # quality channel is gone (see the note at the top of this file), so there is
+                        # no longer a second kind to tell apart.
                         m=re.search(r"row=(\S+)", l)
                         if m:
                             for c in cells:
                                 if "%s_%s%d" % (c["deck"],c["arm"],c["depth"]) == m.group(1):
-                                    if qual: c["qdead"]=True
-                                    else:    c["intractable"]=True
+                                    c["intractable"]=True
                         m=re.search(r"cell=(\S+)", l)
                         if m:
                             for c in cells:
@@ -1296,7 +1199,6 @@ def run_incremental(args):
             if c["first_wall"] is None: c["first_wall"]=wall
             done+=1
             write_state()
-            check_quality()
             if done % 10 == 0:
                 tot=sum(x["games"] for x in cells)
                 print("... %d chunks, %d games total" % (done, tot), flush=True)
@@ -1422,23 +1324,6 @@ def main():
                          "set stays a deterministic function of (deck, arm, depth, seed, k, calib) rather "
                          "than of thread interleave. The frozen ceiling is reported by the pool, stored per "
                          "cell, and handed back on every resume. 0 = off.")
-    ap.add_argument("--quality-threshold",type=float,default=0.0075,
-                    help="condemn a RUNG (depth d of an arm) once the extra depth is measured to buy less "
-                         "than this many turns over d-1 -- a QUALITY verdict, not a cost one. Across 8 decks "
-                         "the rung deltas are bimodal with a real gap (nothing between 0.0044 and 0.0078), so "
-                         "0.0075 sits above every dead rung and below every live one, and is certifiable early "
-                         "enough to save the run that is paying for the dead rung (~667 games/arm; a 0.005 "
-                         "threshold would need 2.5x a FULL run and could never fire in time). The test is an "
-                         "EQUIVALENCE test -- the one-sided 95%% upper bound on the paired improvement must "
-                         "fall below it -- not a point estimate, which would condemn live rungs on noise. "
-                         "0 disables.")
-    ap.add_argument("--quality-min-pairs",type=int,default=200,
-                    help="minimum paired games before --quality-threshold may fire. A floor against a "
-                         "small-sample fluke; the equivalence test's own standard error does the real work "
-                         "(too few games -> wide bound -> no verdict).")
-    ap.add_argument("--quality-coverage",type=float,default=0.90,
-                    help="the paired intersection must cover this fraction of the smaller rung's games before "
-                         "a quality verdict is allowed, so a rung is never condemned off a biased subset.")
     ap.add_argument("--max-skip-frac",type=float,default=0.10,
                     help="stop abandoning once a (deck,seed) has skipped more than this fraction of --target. "
                          "Past that rate the games being dropped are not a tail but the distribution, and "
