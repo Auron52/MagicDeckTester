@@ -30,6 +30,7 @@ declare -A DECK_FILE=(
   [creature_giving]="decks/Creature Giving/Creature Giving.cod"
   [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.cod"
   [fivecolour]=decks/FiveColour/FiveColour.cod
+  [stompy]=decks/StompySurprise/StompySurprise.cod
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
@@ -44,6 +45,7 @@ declare -A DECK_PROF=(
   [creature_giving]="decks/Creature Giving/Creature Giving.profile.json"
   [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"
   [fivecolour]=decks/FiveColour/FiveColour.profile.json
+  [stompy]=decks/StompySurprise/StompySurprise.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -121,6 +123,15 @@ SMOKE_CASES=(
   "fivecolour 0 1001 1000 0"
   "fivecolour 3 1001  150 10"
   "fivecolour 5 1001   75 20"
+  # stompy: StompySurprise elf ramp (wins ~T4.9; StompyProvider -- discard buckets + tutor
+  # lethality gate). Dragonstorm-class cost (probed 2026-08-21 single-thread at gate budgets:
+  # d0 ~0 ms/game, d3 b10 ~0.28 s/game, d5 b20 ~0.63 s/game; no heavy tail, worst game
+  # budget-bound). th/dragonstorm smoke sizing (~90 s ST added). Covers engine paths no other
+  # deck exercises: scaled elf mana + growth credit, Lodge untap burst, MDFC spell//land,
+  # sac-cost tutor (Natural Order), Terastodon K projection, Call of the Wild reveal chain.
+  "stompy  0 1001 1000 0"
+  "stompy  3 1001  150 10"
+  "stompy  5 1001   75 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -198,6 +209,12 @@ REGRESSION_CASES=(
   "fivecolour 3 3003  200 10"
   "fivecolour 5 2002  100 20"
   "fivecolour 5 3003  100 20"
+  # stompy: dragonstorm-style two-seed sweep (~8 min ST added at probed per-game costs).
+  "stompy  0 2002 1000 0"
+  "stompy  3 2002  300 10"
+  "stompy  3 3003  300 10"
+  "stompy  5 2002  250 20"
+  "stompy  5 3003  250 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -393,4 +410,19 @@ OVERNIGHT_CASES=(
   "fivecolour 5 5005  300 20"
   "fivecolour 5 6006  300 20"
   "fivecolour 5 7007  300 20"
+  # stompy: creature_giving-style generosity (d3 b20 / d5 b40, ~2x the gate budgets) --
+  # ~70 min ST added (d3 ~0.45 s/game, d5 b40 ~1.2 s/game est. from the gate-budget probe).
+  # d0 on the 2002-spaced bases per the SEED SPACING rule above.
+  "stompy  0 4004 2000 0"
+  "stompy  0  6006 2000 0"
+  "stompy  0  8008 2000 0"
+  "stompy  0 10010 2000 0"
+  "stompy  3 4004 1000 20"
+  "stompy  3 5005 1000 20"
+  "stompy  3 6006 1000 20"
+  "stompy  3 7007 1000 20"
+  "stompy  5 4004  500 40"
+  "stompy  5 5005  500 40"
+  "stompy  5 6006  500 40"
+  "stompy  5 7007  500 40"
 )

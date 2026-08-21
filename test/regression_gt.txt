@@ -40,6 +40,9 @@ mirrorwing_smoke_d5_s1001=5.1200/242398274f5f3863
 fivecolour_smoke_d0_s1001=5.8100/ccc230b2c4dbd646
 fivecolour_smoke_d3_s1001=5.0067/62c30f14ee44b88e
 fivecolour_smoke_d5_s1001=5.1867/1cbde848625aea9c
+stompy_smoke_d0_s1001=5.9620/26753ff431d25c5b
+stompy_smoke_d3_s1001=4.8733/3cf1c041f095e96f
+stompy_smoke_d5_s1001=4.8267/67fc92a8687cb84e
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/4ec30ea41e344477
@@ -102,6 +105,11 @@ fivecolour_regression_d3_s2002=4.8900/e393b6b658d6b289
 fivecolour_regression_d3_s3003=4.9750/f2705c6a695af279
 fivecolour_regression_d5_s2002=4.8300/c8ef9f59f6219de0
 fivecolour_regression_d5_s3003=4.9100/9aac4a006a07b816
+stompy_regression_d0_s2002=5.9240/e19443b2571d09a0
+stompy_regression_d3_s2002=4.9067/45afe3b81cde639a
+stompy_regression_d3_s3003=4.9933/9afd4832e7f41d4f
+stompy_regression_d5_s2002=4.9440/c86977863aa36ad1
+stompy_regression_d5_s3003=5.0000/b255f8176234c9bb
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/fe364b007bbfaa56
