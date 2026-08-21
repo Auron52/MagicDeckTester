@@ -3207,6 +3207,22 @@ struct CondemnRootTurnGuard
 // deletion is suppressed, so the re-run scores the UNfiltered plan space.
 // MTG_CONDEMN_M1_BP_PROBE reachability counters -- see the probe at the condemnation filter. Atomic
 // (not thread_local) so a threaded batch aggregates, and dumped once at exit.
+inline std::array<std::atomic<unsigned long long>, 7> g_sac_fan_width{};
+struct SacFanWidthDumper
+{
+    ~SacFanWidthDumper()
+    {
+        if (!EnvOn("MTG_SAC_COLOR_TRACE")) { return; }
+        std::fprintf(stderr, "[sac-fan] emissions by candidate-colour width:");
+        for (std::size_t i = 0; i < g_sac_fan_width.size(); ++i)
+        {
+            const unsigned long long n = g_sac_fan_width[i].load();
+            if (n) { std::fprintf(stderr, "  w%zu=%llu", i, n); }
+        }
+        std::fprintf(stderr, "\n");
+    }
+};
+inline SacFanWidthDumper g_sac_fan_width_dumper;
 inline std::atomic<unsigned long long> g_m1bp_entries{0};
 inline std::atomic<unsigned long long> g_m1bp_drops{0};
 inline std::atomic<unsigned long long> g_m1bp_pre{0};
@@ -6364,6 +6380,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // So Treasures (amount 1) keep the fan; Lotus / Lotus Bloom (amount 3) fold.
                 // NOTE this inverts the doc's original expectation that treasures were the safe half.
                 const bool fold = SacColorFoldEnabled() && pd->params.sac_for_mana_amount >= 2;
+                // FAN-WIDTH census (MTG_SAC_COLOR_TRACE): how wide is the fan the fold collapses?
+                // The fold can only save enumeration where width > 1; a provider that already
+                // collapses the candidate set (Dragonstorm's RestrictSacColorsToHasteAndRed) leaves
+                // nothing to fold. Atomic so a threaded batch aggregates; dumped at exit.
+                static const bool s_fan_census = EnvOn("MTG_SAC_COLOR_TRACE");
+                if (s_fan_census)
+                {
+                    const std::size_t w = std::min<std::size_t>(colors.size(), 6);
+                    g_sac_fan_width[w].fetch_add(1, std::memory_order_relaxed);
+                }
                 for (const std::string& col : colors)
                 {
                     Action a;

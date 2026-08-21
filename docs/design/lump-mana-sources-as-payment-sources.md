@@ -707,3 +707,36 @@ max the fan approximated, at none of the fan's enumeration cost. Retire this gre
 Diagnostic kept: `MTG_SAC_COLOR_TRACE=1` prints each resolution as
 `[sac] T<n> <card> amt=<n> -> <colour>  demand W.. U.. B.. R.. G..  (FOLDED|pinned)`.
 It is what found this, and it is the tool for the next deck that folds a lump.
+
+### Why the fold saves nothing on Dragonstorm despite FOUR Lotus Blooms (measured 2026-08-21)
+
+USER: *"it has 4 lotus blooms. I'm surprised it doesn't save much, but I guess they almost always
+produced red..."* — exactly right, and the census confirms it. Emissions by candidate-colour width
+(`MTG_SAC_COLOR_TRACE=1`, the `[sac-fan]` line):
+
+| deck / config | width distribution |
+|---|---|
+| **Dragonstorm** (shipped) | **w1 = 129,343 (74.6%)**, w2 = 17,856 (10.3%), w3 = 26,094 (15.1%) |
+| Dragonstorm, `MTG_UNPRUNED=saccolor` (provider collapse OFF) | w1 = 449, w2 = 811, **w3 = 149,605 (99.2%)** |
+| **FiveColour** | **w5 = 7,700 (100%)** |
+
+The fold can only save enumeration where the fan is **wider than 1**. On Dragonstorm three quarters
+of all emissions are ALREADY width 1, because `RestrictSacColorsToHasteAndRed` has collapsed the
+candidate set to red — that hook is doing the very job the fold exists to do, and it does it
+BEFORE the fold sees the list (the middle row proves it: turn the hook off and 99.2% of emissions
+would be width 3). So the fold arrives at an already-collapsed fan and folds 1 into 1.
+
+FiveColour is the mirror image: **every** emission is width 5 and no hook applies, so the fold
+takes 5 → 1 every single time. That is the whole explanation for the split result — 1.18x on
+FiveColour, and on Dragonstorm rollout calls within 0.8% and turn_steps within 0.6% in BOTH
+directions across d3/d5, i.e. no work saved at all and the wall deltas are noise.
+
+It also explains why the rejected `colors.size() > 1` guard did not fix the losses: it would have
+made the fold inert on the 74.6% that are width 1, but the damage lived entirely in the remaining
+**43,950 emissions at width >= 2** — which is precisely where a colour actually had to be chosen,
+and where scoring demand instead of scarcity picked wrong.
+
+**Generalisation for §2a:** the fold's value is a function of fan width, so it pays only on decks
+with genuinely live multi-colour demand and no provider collapse. A payment SOURCE has no such
+dependency — it never enumerates a fan at all — which is another reason §2a supersedes rather than
+extends this.
