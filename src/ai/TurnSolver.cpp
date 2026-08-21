@@ -4037,10 +4037,21 @@ std::string TurnSolver::SacFloatColorFor(const GameState& state, const std::vect
     // So charge the demand against what is already available and rank by the SHORTFALL. This is the
     // same scarcity-first doctrine ManaSourceRank already applies to tap order ("SPEND the least
     // flexible first so the flexible sources stay available"), applied to the lump's colour.
-    const ManaPool avail = AvailableManaPool(state);
-    const int supply[5] = { avail.white, avail.blue, avail.black, avail.red, avail.green };
-    int remaining[5];
-    for (int i = 0; i < 5; ++i) { remaining[i] = std::max(0, demand[i] - supply[i]); }
+    // COST: AvailableManaPool walks the battlefield, and this function runs once per sac action per
+    // plan application. Two guards keep that off the hot path:
+    //   * zero total demand -> every colour scores 0 and the pick is the "R" fallback no matter what
+    //     the supply is, so the walk cannot change the answer. Provably identical, and it is the
+    //     common case (a plan with no coloured pips left to pay).
+    //   * MTG_SAC_COLOR_SCARCITY=0 -> the old raw-demand scoring, kept as the A/B hatch for the
+    //     held-out result this fix came from.
+    static const bool s_scarcity = EnvOn("MTG_SAC_COLOR_SCARCITY", true);
+    int remaining[5] = { demand[0], demand[1], demand[2], demand[3], demand[4] };
+    if (s_scarcity && (demand[0] | demand[1] | demand[2] | demand[3] | demand[4]) != 0)
+    {
+        const ManaPool avail = AvailableManaPool(state);
+        const int supply[5] = { avail.white, avail.blue, avail.black, avail.red, avail.green };
+        for (int i = 0; i < 5; ++i) { remaining[i] = std::max(0, demand[i] - supply[i]); }
+    }
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::SacForMana) { continue; }

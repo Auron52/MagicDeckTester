@@ -682,7 +682,9 @@ Result: all three Dragonstorm games back to T5 with the fold ON. Overnight searc
 and all three survivors are benign (two `churn`, one with divergent kept hands = different physical
 games). **Zero same-draws regressions remain.** FiveColour is byte-identical at smoke — Garth
 supplies all five colours, so shortfall-ranking and demand-ranking coincide there — and keeps its
-speed win (1.18x, vs 1.24x before the added `AvailableManaPool` walk).
+speed win (1.18x; an earlier claim that the added `AvailableManaPool` walk had cut this from 1.24x
+was WRONG -- see the controlled A/B in §12, where the fix costs FiveColour 12 rollout calls out of
+169,788. The 1.24-vs-1.18 gap was wall noise between two uncontrolled runs).
 
 ### Two candidate fixes that were built, measured, and DROPPED
 
@@ -740,3 +742,39 @@ and where scoring demand instead of scarcity picked wrong.
 with genuinely live multi-colour demand and no provider collapse. A payment SOURCE has no such
 dependency — it never enumerates a fan at all — which is another reason §2a supersedes rather than
 extends this.
+
+
+## 12. Does the scarcity fix cost anything? Controlled A/B says no (2026-08-21)
+
+USER: *"does that then mean that this new approach is a little slower?"* -- a fair worry, since §11
+adds an `AvailableManaPool` walk per resolution. Measured with `MTG_SAC_COLOR_SCARCITY=0` as the
+hatch, so the two arms differ ONLY in the scoring rule (the fold is ON in both), 3 reps each:
+
+| deck | arm | avg | calls | turn_steps |
+|---|---|---|---|---|
+| Dragonstorm d3 | **scarcity** | **4.3260** | **369,160** | **750,809** |
+| Dragonstorm d3 | raw demand | 4.3280 | 370,094 | 753,435 |
+| FiveColour d2 | **scarcity** | 5.1333 | **169,776** | **320,907** |
+| FiveColour d2 | raw demand | 5.1333 | 169,788 | 320,919 |
+
+**It is faster, not slower.** Dragonstorm does 0.25% fewer rollout calls and 0.35% fewer turn-steps
+AND wins sooner. The mechanism is the point: picking the USEFUL colour shortens the playouts --
+better play wins earlier, so each rollout simulates fewer turns -- and that saves more than the walk
+costs. On FiveColour the fix is within 12 calls of 169,788 (0.007%), i.e. inert, which is the same
+thing smoke says byte-identically.
+
+Two things make the walk cheap enough to disappear:
+
+* **Zero-demand guard.** With no coloured demand left, every colour scores 0 and the answer is the
+  `"R"` fallback whatever the supply is, so the walk is skipped. Provably identical, and it is the
+  common case. Smoke 36/0 confirms.
+* It only runs for FOLDED actions -- an unfolded action returns at the pinned-colour check above.
+
+### Read the counters, not the clock
+
+The same table is the cleanest available demonstration of why this doc quotes `calls`/`turn_steps`
+and not wall. Within the IDENTICAL scarcity arm, Dragonstorm wall ran 21,218 -> 22,476 -> 22,562 ms
+-- a ~6% spread across runs that did **byte-identically the same work**. That noise band is wider
+than every wall delta reported anywhere in this document, which is exactly how the "1.24x -> 1.18x
+regression" mirage got into §11 in the first place. `calls` and `turn_steps` are deterministic:
+same seed and budget give the same counts on any core count under any load.
