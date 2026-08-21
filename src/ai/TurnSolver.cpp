@@ -2115,7 +2115,7 @@ static int PoolWithoutBestAttacker(const GameState& state, int best_attacker)
         const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                           || d->params.mana_rock;
         if (!is_land && !is_dork) { continue; }
-        const int y = PermanentManaYield(p, *d);
+        const int y = PermanentManaYield(state, p, *d);
         pool += (y >= 0 ? y : ManaProducedPerTap(*d));
     }
     if (FloatLeftoverManaEnabled()) { pool += state.floating_mana.Total(); }
