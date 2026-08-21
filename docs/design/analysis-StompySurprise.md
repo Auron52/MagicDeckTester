@@ -18,14 +18,18 @@ Deferred (user-initiated later stages, per pipeline-ordering policy): 5g heurist
 (overnight), mulligan-profile generation, value-leaf.
 
 Known conservative limits (v1, to re-check in Stage 5):
-- Scaled elf mana (Priest/Archdruid): plan-level pools credit the TURN-START elf count;
+- ~~Scaled elf mana (Priest/Archdruid): plan-level pools credit the TURN-START elf count;
   mid-plan growth (cast two elves, then tap Priest) is realized at apply time but may be
-  under-projected by the enumerator → the search can miss the widest line (never overpredicts;
-  fd-safe direction).
-- Wirewood Lodge: untap applied AFTER main casts (elf can attack / fund trailing
-  activations); the mid-payment double-tap is not modelled.
-- Terastodon put onto the battlefield (not cast) resolves with K=0 (no searched axis on the
-  put path).
+  under-projected by the enumerator~~ **CLOSED 2026-08-20** — see the growth/burst addendum
+  at the bottom (`MTG_DORK_GROWTH`, fixture `test/scenarios/stompy_dork_growth.json`).
+- ~~Wirewood Lodge: the mid-payment double-tap is not modelled.~~ **CLOSED 2026-08-20** —
+  the untap BURST is modelled through the whole payment stack (`MTG_UNTAP_BURST`, fixture
+  `test/scenarios/stompy_lodge_burst.json`); the post-cast searched untap action remains
+  for the attack / trailing-activation uses.
+- ~~Terastodon put onto the battlefield (not cast) resolves with K=0 (no searched axis on the
+  put path).~~ **CLOSED 2026-08-20** — the put path picks K by the resolution-time lethality
+  heuristic and the CAST path emits the searched K-set (which v1 never actually emitted); see
+  the Terastodon addendum (`MTG_TERA_K`, fixture `test/scenarios/stompy_terastodon_k.json`).
 - Turntimber put-choice candidates sized from the ENUMERATION-time top 7; a same-turn shuffle
   (Natural Order) can invalidate the named pick → falls back to the best-MV heuristic.
 
@@ -146,3 +150,332 @@ Known conservative limits (v1, to re-check in Stage 5):
 - **Recommended next (user-initiated)**: 5g `mine_heuristics.sh` overnight run
   (GAMES=300–500, ≥2 seeds) to ground any provider ordering rules; then the
   mulligan-profile + value-leaf stages per the pipeline-ordering policy.
+
+## Addendum 2026-08-20 — scaled-dork growth + Wirewood Lodge burst (USER follow-ups)
+
+USER (2026-08-20): *"We should play every elf we can from the list without tapping scaling
+dorks or Wirewood Lodge. Then we should play every elf remaining with scaled mana and see if
+there are any remaining untapped"*; *"Lodge should tap for colourless when no elf taps for GG
+or more and also allow for tapping an existing untapped elf as needed in order to generate
+mana and using the Lodge to untap it"*; *"we need to be a bit careful ... allow using it for
+colourless early if there are no scaling sources at 2+ elves. Otherwise the colourless could
+be stranded"*; *"There is no haste, so scaling sources already on the board are what matters."*
+
+Both v1 conservative limits above are now closed. This is the count-scaling generalisation
+`scaling-source-widening.md` anticipated in its "Scope beyond domain_mana" section.
+
+### MTG_DORK_GROWTH (default ON; =0 restores the v1 gap)
+
+A live scaled dork's one-tap yield grows by 1 per matching creature cast before it taps.
+Three coordinated pieces (shared reader in `EngineFlags.h`):
+- **EnumeratePlans credit** (`TurnSolver.cpp`): per subset, each live scaled dork earns
+  live × (matching creature casts the un-grown pool can stage) — all of them under the rock
+  rule (`pool.CanPay(summed feeder costs)`), else the longest *selection-order* scalar
+  prefix, which is exactly the order the executor's stable within-tier sort realises.
+  EnumeratePlans only, never Solve (Medallion precedent). The scalar `ManaPruneBound` gets
+  the same addend (the haste-unlock lesson: bound and credit move together), and the
+  selection-exact gate bails when growth is live.
+- **Cast order** (`GenericProvider::CastOrderRank` tier 9): creatures feeding a live scaled
+  dork cast just before other creatures (the fatty no longer taps the Priest first).
+- **Tap order** (`GenericProvider::ManaSourceRank` 61): scaled dorks tap LAST among sources
+  (fixed Llanowar before Priest once the reservation releases dorks).
+
+### MTG_UNTAP_BURST (default ON; =0 restores the v1 gap)
+
+The Lodge's untap modelled as a mana BURST through the whole payment stack, via the
+net-cancellation identity: feed pip ({G}) and target output ({G}) share a colour, so
+"tap Elf for N, pay {G} + tap Lodge, untap, re-tap for N" ≡ one Lodge tap worth (N−1) {G}
+with the Elf's tapped state unchanged (legal as a pre-float at main-phase priority; CR 605.3
+only restricts activations inside one payment window). Sites, all through the shared helpers
+`UntapBurstFeedColor/UntapBurstBestYield/UntapLandBurstNet` (SpellEffects.h):
+- pool credit (`AddSourceToPool`: replaces the 1 {C} when net ≥ 1 — never both),
+- flow oracle ({C}+{G} colset, sound over-credit), backtracker branch (requires the target
+  TAPPED at the node; taps stay monotone so memo/undo are untouched), greedy kind-4,
+- `ManaSourceRank` 63: reserved past even the scaled dorks while a 2+ scaled Elf is live —
+  its net reads the count at fire time — else plain {C}-land rank (the USER's stranding
+  guard), and `BuildColorFeasibility`/`ComputeAvailableColors` stand-downs.
+- The burst credit reads the SNAPSHOT count (same-turn growth is not compounded into it) —
+  conservative, disclosed.
+
+### Measured (one binary, profile held fixed across arms, d3 b20)
+
+| arm | s8001 (200g) | s8002 (200g) | s7001 (60g) | s7002 (60g) | d5 s8001 (100g) |
+|---|---|---|---|---|---|
+| both OFF | 5.3350 | 5.3350 | 5.2500 | 5.2500 | 5.3600 |
+| growth only | 5.3100 | 5.3050 | — | — | — |
+| burst only | 5.3300 | 5.3300 | — | — | — |
+| **both ON (shipped)** | **5.3000** | **5.2950** | **5.2000** | **5.2000** | **5.3400** |
+
+Every configuration improves; growth carries most of it and the two compose slightly
+super-additively (burst rides grown counts). No arm regressed anywhere. With the profile
+then regenerated on the final engine, the shipping configuration reads d3 s8001 5.2950 /
+s8002 5.2900 (200g each), d5 s8001 5.3400 (100g).
+
+### Verification
+
+- Smoke 36/36 byte-identical, 0 play-changed (all sites param-gated).
+- Fixtures: `stompy_dork_growth.json` + `stompy_lodge_burst.json` — both `validate_line`
+  **accept**, both flip to `illegal` with their lever =0, each independent of the other's
+  lever; `fivecolour_domain_widen` + `fivecolour_haste_dork_mana` still pass.
+- Executor realisation (not just validate): growth board plays land → Llanowar → Mystic →
+  Archdruid on T4 (Archdruid paid by the grown Priest); Lodge board casts Worldspine Wurm
+  T6 via the burst with a Llanowar left untapped and the land drop unused.
+- Mismatch harnesses re-run on the new engine: zero `[nonconv]` / `[fd-diverge]`, seeds
+  7001+7002 × 60 games, d3 b20 and d5 b20 (threads 1, lookahead-bottoming).
+- verify_deck GATE PASS on the new engine; profile regenerated on the final engine after
+  measurement (arms above shared the pre-regen profile for fairness).
+
+### Deferred / open
+
+- Terastodon: USER flagged "we might want to tweak Terastodon slightly" — no spec yet;
+  the v1 put-path K=0 and Forests-only-victim narrowings still stand.
+- Lodge burst growth compounding (snapshot-count credit) — conservative, likely negligible.
+
+## Addendum 2026-08-20 (2) — Terastodon destroy-K heuristic (USER follow-up)
+
+USER: *"a heuristic to narrow and to widen the choice to all valid targets, but only if we run
+out of forests. The only valid possibilities are no elephants so we can afford other threats,
+(should be done only if we can drop a real threat) a number that kills them next turn and a
+number that kills them the turn after next. Note that Worldly Tutor into Call of the Wild
+activation is a real move for this deck"*; *"I suppose there is an argument for allowing more
+elephants if we can also drop Craterhoof this turn, but that is a bit more rare."*
+
+**Implementing this exposed a v1 defect:** the destroy-K axis was wired through
+`chosen_x` → cast → `OnGoblinEnters(etb_kx)` in both worlds, but **no K > 0 cast variant was
+ever emitted** — the "searched K = 0..3" disclosure was the wiring, not the search. Reproduced:
+lone Terastodon off 8 Forests vs 20 life won T8 with zero Elephants ever made (K=1 wins T7).
+Now a fixture: `test/scenarios/stompy_terastodon_k.json` (expect_win_turn 7; fails at 8 with
+the lever off).
+
+One lever, `MTG_TERA_K` (default ON; =0 restores v1 = Forests-only pool, no K emission):
+
+- **Projected K, decided at RESOLUTION for both entry paths** (`ProjectEtbDestroyK`,
+  SpellEffects.h): ONE pick, no searched fan — USER 2026-08-21: "I don't want to roll them all
+  out. That's too expensive. It would be better to make a projection"; and "all we need to do
+  is avoid a case where we miscalculate the turn we can win on ... then figure out what is
+  required in terms of elephants to end the game on that turn." The autonomous CAST now rides
+  the same `kEtbKxHeuristic` sentinel as the puts (AIEngine's stack entry passes the sentinel
+  through), so K is projected mid-plan — the battlefield already holds the plan's earlier
+  casts and the REMAINING pool prices what the plan can still do today, which is the practical
+  form of "we might be able to see it in the current turn plan? ... the easiest". Earliest
+  winnable horizon, then the required (smallest) K for it:
+  1. **h=0** — a Craterhoof still lands today (in hand / live Call of the Wild off the
+     clairvoyant top / Worldly Tutor + Call / Natural Order fetch, route within the remaining
+     pool): smallest K whose swing is lethal THIS turn ("maybe playing maximum elephants is
+     not necessary ... what is crucial is taking Craterhoof plays into account"). Sick
+     Elephants/Terastodon only feed the Hoof's X; skipped when a Hoof already resolved (its X
+     is locked).
+  2. **h=1** — smallest K with a lethal plain next-turn swing; an AFFORDABLE power-4+ hand
+     threat's power folds in, so "keep the permanents and develop" falls out as K=0.
+  3. **h=1′** — only when h=1 fails: a Craterhoof dropped NEXT turn ("ensuring we have the
+     mana is trickier": next-turn mana = all board sources' yields regardless of tapped-ness,
+     minus the K eaten, plus a land drop).
+  4. **h=2** — smallest K lethal over two swings; else **cap** ("go for broke").
+  Projections use EffectivePower net of until-EOT bonuses for future horizons, no lord bonuses
+  (under-counting only asks for MORE elephants); every pick is inside a rollout-scored plan.
+  `MTG_UNPRUNED`/`terak` and human play keep the explicit 0..cap fan (positive K flows as
+  before). Measured: the emission-time projection was identical to the
+  transient searched fan on every config (d3 5.0600/5.0550, d5 5.1100) at equal cost, and the
+  final resolution-time form edges BOTH out (d3 5.0550/5.0500, d5 5.1100) — its census is MORE
+  accurate than any emission-time guess (it sees the real post-payment attacker set: the
+  Terastodon+Craterhoof probe kills T5 with the minimal Elephant count, elves tapped for mana
+  correctly excluded from the swing).
+- **Widened victim pool** (`EtbDestroyVictimClass`, shared by emission cap and resolution):
+  Forests (v1 order preserved) → other lands → mana rocks (Sol Ring) → other noncreatures →
+  Call of the Wild LAST (the Worldly-Tutor-into-Call engine is the most valuable victim).
+  Verified: with only 2 Forests up, K=3 ate both plus Sol Ring and won T6 instead of T7; with
+  3 Forests available it ate Forests only and spared the Ring.
+- **Put-path K** (`HeuristicEtbDestroyK` + the `kEtbKxHeuristic` sentinel): Natural Order /
+  Call of the Wild / Turntimber puts now pick K at resolution by the lethality windows alone
+  (no cap fallback — no per-K rollout branch exists there, so stay conservative; the plan
+  containing the put is still scored with the pick). Sentinel is -2, NOT -1: the executor's
+  stack entry records chosen_x only when positive, so a searched K=0 hard-cast arrives as -1 —
+  overloading it would have the executor heuristic-override a searched K=0 the rollout kept
+  (a divergence by construction). Verified both directions: at 20 life with 11 power the put
+  correctly took K=0 (already two-swing lethal; kept the Forests); at 26 life it took K=1 and
+  won a turn.
+
+The v1 ledger line "Terastodon put onto the battlefield resolves with K=0" is superseded by
+this addendum.
+
+### Measured (one binary, MTG_TERA_K=0 vs on, d3 b20; baseline == the growth/burst shipping
+numbers exactly, confirming no other change leaked)
+
+| config | off | on | delta |
+|---|---|---|---|
+| d3 s8001 (200g) | 5.2950 | **5.0550** | −0.240 |
+| d3 s8002 (200g) | 5.2900 | **5.0500** | −0.240 |
+| d5 s8001 (100g) | 5.3400 | **5.1100** | −0.230 |
+
+~5x the growth+burst gain — consistent with the v1 defect (no Elephant was ever made) and the
+put path being the deck's most common Terastodon entry (Natural Order x16 in the 40-game
+census). Verification: smoke 36/36 byte-identical + 15/15 scenarios on the final binary;
+mismatch harnesses clean (0 nonconv / fd-diverge, seeds 7001+7002, d3 b20 + d5 b20); the
+`stompy_terastodon_k` fixture accepts at T7 and reverts to T8 under MTG_TERA_K=0; viewer +
+card-field audits green. Profile regenerated on this final engine after the A/B
+(COST_NEUTRAL / STATUS_QUO_OK again; all three fixtures re-pass), landing the shipping
+configuration at d3 s8001 5.0600 / s8002 5.0550 (200g each), d5 s8001 5.1100 (100g) —
+verify_deck GATE PASS on the regenerated profile.
+
+## Addendum (2026-08-21): provider misroute fix, cleanup-discard buckets, tutor ranking
+
+### The deck was silently running under GoblinsProvider
+
+Hornet Queen's `etb_self_creates_tokens` trips the Goblins detection signature, and the goblin
+return sat above the stompy one in `DetectDecisionProvider` — the exact Mirrorwing/Instigator
+misroute class the detection comments warn about. Every measurement above therefore ran under
+GoblinsProvider's hooks. The live ones for this deck: `TutorCandidates` (a goblin-tuned
+power ranking ordered Worldly Tutor / Natural Order targets) and `UseLethalShortCircuit`;
+`ForcedEarlyLandName` is hard-coded "Mountain" (never fired), sac-outlet/echo hooks inert.
+Fixed by routing to a new `StompyProvider` (Generic + the hooks below) detected BEFORE goblin.
+Attribution proof: the fixed binary pinned back via `MTG_PROVIDER_DECK=decks/Goblins/Goblins.cod`
+reproduces the shipped 5.0550 (d3 s8001) exactly.
+
+### StompyProvider hooks (all three are the whole provider)
+
+- **Cleanup-discard bucket policy** (USER-AUTHORED 2026-08-21; `MTG_STOMPY_BUCKET_DISCARD=0` →
+  generic base): buckets `<mana> <threats> <enablers>`, shed in that order. Excess mana beyond a
+  6-source board guarantee first (plain Forests before the Lodge/Sol Ring 1-ofs; dorks are
+  bodies and keep to the tail); then hand THREATS — "many threats are not played from hand...
+  you can fetch to top of deck with Worldly Tutor and drop it off the top", so a hand fatty is a
+  spare (same-name-in-library first, biggest MV first) — EXCEPT the last hoof-role copy
+  anywhere (Craterhoof, a 1-of): pitching it kills every fetch route including the h=0
+  projection lines; then enabler redundancy (board-covered Call/Guile copies are dead up front;
+  copies beyond one, beyond two for the one-shot Worldly Tutor). The list names the full hand
+  (the Mirrorwing gi295 lesson). Fixture `stompy_bucket_discard.json` (depth 0 ON PURPOSE — at
+  d>0 the searched cleanup pass rescues the hoof in both arms): bucket keeps the hoof and kills
+  T5; `=0` sheds it (generic highest-MV) and cannot win. Measured at searched depth: ON vs OFF
+  byte-identical on all three configs — a real cleanup discard occurs ~once per 200 games (the
+  deck dumps its hand), so the policy is correctness insurance for flood hands, not throughput.
+- **Tutor target ranking** (`TutorCandidates`; honors `MTG_UNPRUNE=tutor`): Generic returns
+  candidates in LIBRARY (shuffle) order and the width-6 axis then scores a random six of this
+  deck's eleven creature names — the closers fall out of the window. Authored order: hoof-role
+  first, then power + ETB-token count descending (Hornet Queen's four bodies count), elves at
+  the tail. This is a window, not a pick — the search still scores the six.
+- **UseLethalShortCircuit true**: wide elf/token/hoof boards are the shape it exists for, and
+  Goblins had it on — dropping to Generic would have silently removed it.
+
+### Measured (one binary per row where noted; d3 b20 200g s8001/s8002, d5 b20 100g s8001)
+
+| build | d3 s8001 | d3 s8002 | d5 s8001 |
+|---|---|---|---|
+| shipped (Goblins-routed, above) | 5.0550 | 5.0500 | 5.1100 |
+| routing fix only (Stompy, generic tutor order) | 5.0850 | 5.0800 | 5.1100 |
+| + authored tutor ranking (FINAL) | **5.0250** | **5.0250** | **5.0300** |
+
+The accidental goblin ranking was worth −0.03 at d3 over shuffle-order; the deck-aware ranking
+beats it on every config, with the largest gain at d5 (−0.08 vs shipped): depth exploits a
+window that reliably contains Craterhoof and the real closers. Verification on the final build:
+smoke 36/36 byte-identical + 16/16 scenarios (new fixture included); provider line reads
+`provider=Stompy`; mismatch harnesses re-run clean (see below).
+
+NOTE: the deck's profile/keep-table artifacts were generated under the Goblins routing; a regen
+on this engine is recommended before the next artifact-bound stage (value leaf / mulligan gen).
+
+## Addendum (2026-08-21): branching-factor audit + profiling
+
+Question: which situations drive this deck's search branching, and is any of it pathological?
+Instruments: MTG_BRANCH_STATS (odometer by driver card, 60g d3+d5), MTG_DUMP_UNITS (per-game
+work across the 500-game 3-config suite), callgrind on the heaviest game (build/Profile; perf
+cannot write samples in this container).
+
+- **Worldly Tutor never appears as an odometer driver -- but that was an INSTRUMENT BLIND
+  SPOT, not an absence (user caught this).** Tutor targets are an additive post-dedup axis: the
+  fan in EnumeratePlansWithLand appends full Plan variants AFTER the odometer is recorded, and
+  every one is scored like a base plan. branchstats now has a third table (RecordAxis, one call
+  site at the enumerator's return) counting plans-returned-for-scoring per axis. Measured (d3
+  60g): **1.38M tutor-variant plans vs 2.32M base -- 37% of ALL plans scored** (avg 27 per fan,
+  max 1255 in one enumeration): the tutor axis is the deck's single biggest scored-plans
+  multiplier. Priced by collapse (MTG_TUTOR_WIDTH=1): -29% total units and ~half the d3 wall
+  clock, but +0.105/+0.105/+0.130 avg win turn -- expensive AND clearly worth it. Width sweep
+  with the authored ranking: W3 = 5.0300/5.0300/5.0300 (-13% units, +0.005 d3), W4 noise-equal
+  to W3, W6 best (5.0250/5.0250/5.0300). Differences are one-game noise; outcome is the king
+  metric, so the width-6 default STANDS and no narrowing is adopted.
+- **Turntimber Symbiosis is the #1 driver** (sum_odo 6.2M/8.2M at d3/d5, avg 117-133x per call,
+  max 6144x; two castable copies multiply together, avg 623x). Its named put variants are
+  deliberately exempt from the axis collapse and the signature dedup, and they fan in
+  EnumeratePlans AND every rollout-leaf Solve. Natural Order is #2 (sac-victim variants,
+  max 1536x). The rest is the plain 2^N cast-subset odometer (elf swarm), bounded by the lethal
+  short-circuit and mana prune.
+- **The tail is budget-bound, not runtime-bound.** b20 = 18k units/decision; median game 48k
+  units, p90 ~350k, worst (game-seed 8029, gi28@s8001) 1.156M == ~64 fully saturated decisions,
+  IDENTICAL at d3 and d5 -- the budget, not depth, binds. No SLOW-GAME (>30s) in 500 games.
+  Callgrind on that game is flat: SolveUncached + subset lambda ~10%, memo-key hashing ~6.7%,
+  Action copies ~3%, lord-bonus scans ~3% -- search doing search, no micro-hotspot.
+- **MTG_TT_PUT_WIDTH (new lever, default 0 = historical, byte-identical -- smoke 36/36):** cap
+  the Turntimber put fan to the top W by EvalCard + decline (human play exempt). Swept W in
+  {2,3,4} on the 3-config suite: W=3/4 outcome-identical to baseline; W=2 improved exactly ONE
+  distinct game (seed 8033: T5->T4, -0.005/-0.010 train) with total units flat (saturation
+  absorbs the cap -- the freed budget re-spends elsewhere). Held-out (s9001/s9002 d3 200g x2,
+  s9001 d5 100g): ZERO -- identical avgs both arms; mismatch harnesses under W=2 clean (0
+  nonconv / 0 fd-diverge, 8 runs). **NOT ADOPTED** (train gain was one game and did not
+  generalize); the lever stays as a measured diagnostic for future budget-tuning work.
+
+Conclusion: the deck's branching is healthy at b20 -- the Turntimber odometer is architecturally
+ugly but the deterministic budget converts it into (measured-negligible) search-quality dilution
+rather than wall-clock, and play quality is insensitive to narrowing it. If a future budget CUT
+(b5/b10) or a Turntimber-heavier list revisits this, re-measure W=2 first -- the one train game
+it won is exactly the dilution shape.
+
+## Addendum (2026-08-21): USER-AUTHORED tutor lethality heuristic + uncertainty-gated truncation (ADOPTED)
+
+`StompyProvider::TutorCandidates` ranks Worldly Tutor / Natural Order targets by the user's
+lethality calculation ("it depends on when we can deploy it and how low the opponent is"):
+threat pool = team pump + power-6+ bodies, per-candidate deploy turn (a live Call / hand
+Turntimber flips the top for ITS cost regardless of the threat's MV; hard-cast waits for the
+draw + mana at a conservative +1 source/turn), haste-aware wake turn, swing vs the opponent's
+CURRENT life; Natural Order identical with deployment free (t=0, sacrifice docked, "doesn't
+require any calculation"). Swept as MTG_STOMPY_TUTOR_HEUR V1/V2/V3; V3 (this design) won every
+config train AND held-out (largest single heuristic gain measured on this deck); scaffold
+deleted per the skill.
+
+**Truncation is the CANDIDATE LIST, not a width** (user: "I hate the width idea in general...
+return a list of serious contenders... branch only when we are absolutely uncertain"). A fixed
+TutorSearchWidth=3 was briefly shipped and REPLACED by the uncertainty gate:
+  * a LETHAL pick exists -> the calculation has decided: emit it alone (+exact ties);
+  * NO lethal computable -> genuinely uncertain (the right fetch couples with the whole plan,
+    down to the turn-1 land face in traced games): emit the top-3 threats PLUS the scaled
+    dorks (a threats-only list here truncated the tutor->Archdruid engine line out of one game
+    entirely -- T7 win became UNWON -- ramp-vs-threat IS the uncertain choice);
+  * starving (<=2 sources, Worldly Tutor only) puts the cheapest scaled dork in front.
+W1 ("just take the top entry") was tested honestly and is real-refuted: 26/29 diverged games
+lose EVEN AT UNBOUNDED BUDGET -- no static front covers what the searched contenders decide.
+A permanent-board-stats tie-break for the non-lethal case was tried and reverted (d0, the
+purest front read, measured it 0.032 worse than the swing tie-break).
+
+**METHOD CORRECTION recorded:** the first unbounded-budget classifications used a BROKEN repro
+(`--seed base --game-index gi` replays the seed-`base` game every time -- in a goldfish
+game-index only drives opponent spawns; the correct repro is `--seed base+gi --game-index gi`,
+exactly what SLOW-GAME lines print). Every unbounded claim was re-run on corrected repros; the
+W3-era "regressions are churn" verdict happened to survive, the constant-5.0000 tables did not.
+See memory batch-game-repro-seed; ALWAYS validate a repro against the batch .wins at the
+original budget first.
+
+| arm (train 8001/8002 / held-out 9001/9002) | d0 1000g | d3 200g x2 | d5 100g |
+|---|---|---|---|
+| static ranking, full window (pre-heuristic) | 6.1040 / 6.0490 | 5.0250 / 5.0150 | 5.0300 / 4.9400 |
+| lethality ranking, full window              | 6.0040 / 5.9480 | 4.9850 / 4.9300+4.9250 | 4.9800 / 4.8500 |
+| lethality ranking + uncertainty gate (**SHIPPED**) | 6.0040 / 5.9480 | 4.9850 / 4.9200+4.9150 | 4.9700 / 4.8400 |
+
+Gate vs full window per-game: train 2-up/2-down at d3 (both downs vanish unbounded = churn),
+1-up d5; held-out 4-up/2-down per d3 seed, 2-up/1-down d5 -- and the one down that survived the
+unbounded test (seed 9133, a Worldly Tutor + Natural Order -> Craterhoof T5 the gate declined)
+is a CLAIRVOYANCE ARTIFACT (user's call): under MTG_SHUFFLE_SALT_SEARCH decoupling (salts 1 and
+2) the full window's T5 collapses to the gate's own T6 -- the kill existed only because the
+search foresaw the exact post-Tutor/NO reshuffle order. The gate therefore has ZERO honest
+removed lines on everything measured. Axis cost: tutor-variant plans 1.38M -> 0.55M (-60%;
+19% of scored plans, was 37%). Escape hatches: MTG_UNPRUNE=tutor (full list), MTG_TUTOR_WIDTH.
+Verification: smoke 36/36 + 16/16 scenarios; mismatch harnesses 0/0 across 8 runs; d0
+byte-identical to the ungated ranking (753c0bbc...).
+Net from the session morning baseline: d3 5.0550 -> 4.9850 (held-out 4.9200/4.9150), d5
+5.1100 -> 4.9700 (held-out 4.8400).
+
+**Deferred (user idea, 2026-08-21, not yet built or measured):** `!(lethal computable) &&
+!starved -> HOLD Worldly Tutor` — when the calculation can neither name a kill nor is the board
+mana-starved, the tutor's shuffle-then-top may be worth more later (cast it the turn a lethal
+becomes computable, or the turn before an outlet goes live) than spent on a speculative
+board-building top now. Would live beside the gate in StompyProvider (a cast-gate hook, not a
+target-ranking change — the same shape as TreasureHunt's ShouldCastDrawEngine defer). Measure
+against the shipped gate before adopting; note the deck's 1-mana tutor often has spare mana, so
+the hold's cost is mostly the information delay, and clairvoyant seeds will flatter EITHER arm
+— use the NC-style read if the clairvoyant delta is suspicious.
