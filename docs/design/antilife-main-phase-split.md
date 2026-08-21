@@ -189,3 +189,32 @@ Repair options (USER decision -- cast-order/emission tie-breaks are user-reviewe
 the auto-fire hold at emission time; (b) a reviewed tie-break among horizon-tied plans (prefer
 attack-preserving / fewer cards spent) -- touches the first-verified-win shortcut, perf-relevant;
 (c) accept the residual (+0.003/game decoupled) and adopt/decline the split on doctrine.
+
+## 2026-08-21d: PUMP-WASTE TIE-BREAK ADOPTED DEFAULT ON (USER: "we already have a solution for
+## this, we should ensure it is always on") -- prune form measured-rejected, tie-break form green
+
+The USER directed that the auto-fire hold's judgement always apply. Both wirings were built and
+measured; the measurement chose the form:
+
+* **PRUNE form (subset-validity delete) -- MEASURED REJECTION.** Deleting must-tap-attacker pump
+  subsets cost a clear decoupled regression on BOTH arms, salt-consistent (CTL +47/+52,
+  PHASE +80/+82 per 8000; split gap widened to ~+58): the drip alone (3 free damage) is often
+  genuinely worth the card -- e.g. gi139's winning line pumps Skyshroud CUTTER, not the tapped
+  dork -- and only the search can price card-vs-damage. The heuristic is wrong as a delete.
+* **TIE-BREAK form (ordering only) -- ADOPTED DEFAULT ON (`MTG_PUMP_WASTE_GATE=0` reverts).**
+  `SubsetPumpWasted` (no ready attacker, or subset cost unpayable without tapping
+  FindBestOwnAttacker's pick -- NOT BuildNonCreaturePool, which counts dorks; NOT printed power,
+  Hierarch is modelled 0-power+exalted) sets `Plan::pump_waste`; `MoveOrderPlans` sorts flagged
+  plans below siblings, beneath `wins_this_turn` (lethal bursts never demote). Because
+  first-verified-win commits the FIRST tied horizon-edge winner, ordering IS the tie-break: the
+  hold's preference decides exactly where the search has no signal and costs nothing where it
+  does. Measured: decoupled CTL **-5/-1** per 8000 (6 faster, 0 slower -- improves the default
+  engine), PHASE -7/-4, split gap +23->+21 / +31->+28; coupled suite scores IDENTICAL all
+  modes, 0 slower / 0 faster, digest-only (GT rebaselined). g602: PHASE 8->7 (CTL 6; the
+  remaining turn is the same game's non-pump residue).
+
+**Residual after 21c+21d (~+21/+28 per 8000 decoupled):** the non-pump dump shapes -- tutor-now
+(g5005_275) and Remedy-alone-now (g4004_113) tapping the attacker at a horizon tie. Same
+tie-break architecture could carry an attack-forfeit preference for those (a plan whose payment
+must tap the best attacker sorts after equals), but that is a NEW judgement, not an existing
+adopted heuristic -- propose-and-measure before any default.
