@@ -389,9 +389,16 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     };
     if (greedy()) { commit_leftover(floating); return true; }
     // Greedy failed: try the backtracking solver from a clean board.
+    // OPPONENT life is part of the rollback (2026-08-21): a Grove-class drip land tapped by the
+    // failed greedy arrangement has already paid the opponent's gain/loss, and without restoring
+    // it the backtracker's own tap pays it AGAIN -- the opponent took Grove's drip twice for one
+    // cast (found by the USER's off-by-one audit of a T3 "12-damage" main that legally totals 11).
+    // The total-failure restore below always had these two lines; the mid-path restores missed them.
     state.battlefield        = bf_pre;
     state.players[active].life = life_pre;
     state.players[active].graveyard = gy_pre;
+    state.players[1 - active].life     = opp_pre;
+    state.opponent_lost_life_this_turn = oll_pre;
     ManaPool bt_leftover;
     if (tapstats::Enabled()) { tapstats::g_site_percast.fetch_add(1, std::memory_order_relaxed); }
     if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover,
@@ -410,6 +417,8 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         state.battlefield          = bf_pre;
         state.players[active].life  = life_pre;
         state.players[active].graveyard = gy_pre;
+        state.players[1 - active].life     = opp_pre;   // same drip rollback as above
+        state.opponent_lost_life_this_turn = oll_pre;
         ManaPool bt2_leftover;
         if (tapstats::Enabled()) { tapstats::g_site_percast_filter.fetch_add(1, std::memory_order_relaxed); }
         if (TapForCostBacktrack(state, cost_in, for_creature, reserve_pre, nullptr, nullptr,
