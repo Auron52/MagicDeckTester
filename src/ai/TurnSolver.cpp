@@ -227,6 +227,12 @@ static void MoveOrderPlans(std::vector<TurnSolver::Plan>& plans)
         [](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
             if (a.wins_this_turn != b.wins_this_turn) { return a.wins_this_turn; }
+            // Pump-waste tie-break (SubsetPumpWasted): a plan whose pump payload cannot be
+            // used sorts after its siblings, so among horizon-tied wins first-verified-win
+            // commits the line the tuned auto-fire hold would pick. Below wins_this_turn on
+            // purpose (lethal bursts are why the wide emission exists); ordering-only, so a
+            // strictly better flagged line still wins its pass.
+            if (a.pump_waste != b.pump_waste) { return b.pump_waste; }
             return a.value > b.value;
         });
 }
@@ -2050,6 +2056,73 @@ static bool SubsetHasUnbackedGiftDamage(const GameState& state,
 // the spot (wiping the combo is moot once the game is won; conservative: payload damage alone,
 // no attacker credit). Bails under a live Remedy (base emissions) and the AltPayload unpruned
 // A/B (the search judges there) -> byte-identical for every existing configuration.
+// ---- PUMP-WASTE TIE-BREAK detection (USER 2026-08-21: "we already have a solution -- ensure it
+// is always on"; DEFAULT ON, MTG_PUMP_WASTE_GATE=0 reverts). The tuned auto-fire hold
+// (CanAutoFireAltPayload: a target_own_creature pump payload with no usable attacker is a wasted
+// card) governs every path EXCEPT the search-side speculative emission (spec_search_burn /
+// collapse_in_hand), which hands the same cast to the search raw -- and at a horizon TIE the
+// search has no signal to reject it, so move-order + first-verified-win committed the dump
+// (g602-class: Remedy+Invigorate whose payment taps Ignoble Hierarch, forfeiting the attack AND
+// the pump). This helper detects that shape; the consequence is ORDERING ONLY (Plan::pump_waste
+// -> MoveOrderPlans sorts flagged plans after their siblings), never a prune: the same test
+// wired as a subset-validity delete measured a clear DECOUPLED regression on BOTH arms (salts
+// 1-2: CTL +47/+52, PHASE +80/+82 per 8000) -- the drip alone is often genuinely worth the card,
+// and only the search can price that. As a tie-break it costs nothing where the search has an
+// opinion and decides exactly where it does not (the first-verified-win commit among tied
+// horizon-edge wins IS the move order). wins_this_turn outranks the flag in the sort, so lethal
+// burst plans -- the reason the wide emission exists -- are never demoted.
+// True when the subset casts a pump-type alt payload whose pump cannot be used: no ready
+// attacker at all, or the subset's own cost cannot be paid without tapping the pump's target.
+static bool SubsetPumpWasted(const GameState& state,
+                             const std::vector<Action>& cands,
+                             const std::vector<int>& sel)
+{
+    static const bool s_pump_waste_gate = EnvOn("MTG_PUMP_WASTE_GATE", true);
+    if (!s_pump_waste_gate) { return false; }
+    bool pump_alt = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.alt_cost && a.def && a.def->params.target_own_creature) { pump_alt = true; break; }
+    }
+    if (!pump_alt) { return false; }
+
+    const int best_attacker = FindBestOwnAttacker(state, state.active_player_index);
+    if (best_attacker < 0) { return true; }   // no attacker anywhere -> the pump is pure drip
+
+    int total_mv = 0;
+    for (int j : sel)
+    { if (!cands[j].alt_cost) { total_mv += cands[j].cost.ManaValue(); } }
+    if (total_mv == 0) { return false; }      // free subset -> nothing taps the attacker
+
+    // Mana payable WITHOUT tapping the creature the pump would use. NOT BuildNonCreaturePool --
+    // that pool's "non-creature" means Ziggurat-class creature-ONLY sources and it still counts
+    // mana dorks, which are exactly the taps this test is about. Only the BEST attacker
+    // (FindBestOwnAttacker, the pump's own target rule) is excluded: printed power is NOT the
+    // test (Ignoble Hierarch is modelled 0-power + exalted, so a power filter read it as a
+    // harmless tap), and other ready dorks (Birds) may be tapped freely -- the payment scarcity
+    // order can spare the target whenever this pool suffices. Colour shortfalls and
+    // subset-granted sources (rituals/rocks/treasures) are not modelled; both directions of that
+    // imprecision only mis-order a tie, never delete a line.
+    int pool_wo_attacker = 0;
+    for (int pi = 0; pi < static_cast<int>(state.battlefield.size()); ++pi)
+    {
+        if (pi == best_attacker) { continue; }   // its tap forfeits the pumped attack
+        const Permanent& p = state.battlefield[pi];
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        auto d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->params.creature_mana_only) { continue; }
+        const bool is_land = (d->tmpl == CardTemplate::BasicLand);
+        const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                          || d->params.mana_rock;
+        if (!is_land && !is_dork) { continue; }
+        const int y = PermanentManaYield(p, *d);
+        pool_wo_attacker += (y >= 0 ? y : ManaProducedPerTap(*d));
+    }
+    if (FloatLeftoverManaEnabled()) { pool_wo_attacker += state.floating_mana.Total(); }
+    return total_mv > pool_wo_attacker;
+}
+
 static bool SubsetHasUnbackedAltPayload(const GameState& state,
                                         const std::vector<Action>& cands,
                                         const std::vector<int>& sel)
@@ -15796,6 +15869,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         TurnSolver::Plan plan;
         plan.value          = total_eval;
         plan.wins_this_turn = wins;
+        plan.pump_waste     = SubsetPumpWasted(state, cands, sel);   // ordering-only tie-break flag
         for (int j : sel) { plan.actions.push_back(j == fill_j ? fill_action : cands[j]); }
         ApplyCantripFirstOrder(plan.actions);   // no-op unless MTG_CANTRIP_FIRST
         // A sequenced restricted aura (Coronet/Lion Umbra on a not-yet-legal creature) must resolve AFTER

@@ -294,6 +294,15 @@ public:
         int  value          = -1;   // -1 = nothing castable
         bool wins_this_turn = false;
 
+        // Pump-waste tie-break flag (SubsetPumpWasted): this plan casts a target_own_creature
+        // alt payload (Invigorate) whose pump cannot be used -- no ready attacker, or the
+        // plan's own payment must tap the pump's target. Consequence is ORDERING ONLY:
+        // MoveOrderPlans sorts flagged plans after their siblings (below wins_this_turn,
+        // above value), so among horizon-TIED wins the first-verified-win commit prefers the
+        // line the tuned auto-fire hold would pick; a strictly better flagged line still
+        // wins its pass. Derived deterministically from (state, actions) at enumeration.
+        bool pump_waste     = false;
+
         // Cast-ordering search (C): when true, ApplyPlanDirect executes the non-sacrifice
         // hand casts in `actions` VECTOR ORDER instead of the canonical enabler-first
         // bucketing -- so the search can explore orderings the canonical heuristic batches
