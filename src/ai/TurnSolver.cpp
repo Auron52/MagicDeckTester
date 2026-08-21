@@ -1040,10 +1040,20 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     // phase-specified deck's interior m2 carries real decisions, everyone else keeps greedy).
     const bool searched = !GreedySecondMainEnabled()
                        || ResolveProvider(state).SearchedSecondMainInSearch();
+    // MTG_M2_SEARCH_DEPTH=<n>: cap the interior m2 solve's depth (value-carrying; unset/<=0 = no
+    // cap = full sub_depth, the 5C-adopted behaviour). n=1 is the "lean form" second-main-greedy.md
+    // item 2 recorded: enumerate the m2 candidate set and score each with ONE playout, instead of
+    // recursively deepening -- still searched (no greedy pick), but the interior stops compounding
+    // with the iterative-deepening pass depth. Measurement lever for the antilife budget-dilution
+    // question (all 7 diverging train games were budget churn: the searched m2's spend starves the
+    // outer candidate loop at the gate budget). The cap changes SCORING fidelity of the interior
+    // m2 only; the real (executor) second main is a full-depth top-level decision either way.
+    static const int s_m2_depth_cap = EnvInt("MTG_M2_SEARCH_DEPTH", 0);
+    const int m2_depth = (s_m2_depth_cap > 0 && s_m2_depth_cap < depth) ? s_m2_depth_cap : depth;
     const TurnSolver::Plan p =
         (depth <= 0 || !searched)
             ? TurnSolver::Solve(state, false)
-            : SearchedSecondMainMemoized(state, depth, max_turns, budget, second_main, tt);
+            : SearchedSecondMainMemoized(state, m2_depth, max_turns, budget, second_main, tt);
     m2yield::Record(p);
     return p;
 }
@@ -4535,6 +4545,14 @@ static bool MainPhaseFilterActive(const GameState& state)
     // leaves d0 configs at base behaviour by construction.
     if (!SearchedPlayActive()) { return false; }
     if (!s_force && !ResolveProvider(state).ClassifiesMainPhases()) { return false; }
+    // ROOT-TURN AUTHORITY (per-deck opt-in, PhaseFilterRootTurnOnly -- the condemnation arc's
+    // CondemnRootTurnGuard applied to the phase split): inside a search, a state at a FUTURE
+    // projected turn keeps the full pre-combat set, so the greedy playout tail is not asked to
+    // play deferred casts it plays badly (the measured Anti-Lifegain hold-line deflation class).
+    // g_condemn_root_turn < 0 = no solver frame = real executor play -> always filtered.
+    if (ResolveProvider(state).PhaseFilterRootTurnOnly()
+        && g_condemn_root_turn >= 0 && state.turn_number != g_condemn_root_turn)
+    { return false; }
     return !DecisionUnpruned(UnprunedGate::MainPhase);
 }
 

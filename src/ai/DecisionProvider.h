@@ -418,6 +418,18 @@ public:
     // file warns about.)
     virtual bool SearchedSecondMainInSearch() const { return false; }
 
+    // PhaseFilterRootTurnOnly -- per-deck ROOT-TURN AUTHORITY for the pre-combat Main2 filter
+    // (the condemnation arc's lesson applied to the phase split, 2026-08-21): the filter fires
+    // at REAL decision turns (executor play + the search's root turn, incl. its interior m2 and
+    // breakpoint re-solves) but NOT at projected future turns inside rollouts. Rationale: a
+    // rollout's future turns are played by the GREEDY tail, and a filtered greedy future plays
+    // the deferred casts badly -- deflating hold-lines in projection (measured on Anti-Lifegain:
+    // 38 budget/depth/SSM-immune +1-turn held-out games, all early-dump-over-hold flips, zero
+    // nonconvergence). An UNfiltered greedy future is the closer approximation of the filtered
+    // SEARCHED decisions those turns get in real play. Default false -> filter-everywhere (the
+    // FiveColour-adopted behaviour, byte-identical).
+    virtual bool PhaseFilterRootTurnOnly() const { return false; }
+
     // CondemnsPassedMainPhase -- per-deck opt-in to the ORDER-CONDEMNATION post-combat filter
     // (USER model, 2026-08-19): a Main1-classified card the pre-combat decision passed on is
     // condemned for the rest of the turn -- no post-combat harvest (real m2, interior

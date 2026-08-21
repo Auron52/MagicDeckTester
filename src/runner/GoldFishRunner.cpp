@@ -55,7 +55,14 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         if (def->params.spectacle_cost.has_value()) { return true; }
-        if (def->params.lifegain_to_loss)           { return true; }
+        // MTG_AL_SINGLE_MAIN=1: measurement lever (2026-08-21, USER: "skipping main 2 is not
+        // terrible as long as it doesn't cause anything to regress") -- drop the lifegain_to_loss
+        // trigger so the deck plays a single main, the A/B arm against the enforced m1/m2 split
+        // (MTG_AL_PHASE). The measured reason this trigger exists is the header comment above
+        // (post-combat payload lethals; single-main measured d5 4.77 -> 4.92 when added), so this
+        // arm's bar is per-game NO-REGRESSION on the re-measure, not aggregate.
+        static const bool s_al_single_main = EnvOn("MTG_AL_SINGLE_MAIN");   // DEFAULT OFF
+        if (def->params.lifegain_to_loss && !s_al_single_main) { return true; }
 
         //   * HINATA CRACKLE COMBO (Hinata, Dawn-Crowned): faithful Crackle with
         //     Power kills its declared discount targets (including Hinata herself),

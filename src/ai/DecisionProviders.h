@@ -160,6 +160,13 @@ public:
     // and last. Both gated on MTG_AL_ORDER (default off); see the definitions.
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
     std::optional<MainPhase> MainPhaseOverride(const GameState&, const CardDefinition&) const override;
+    // The REAL m1/m2 split (USER ruling 2026-08-21: "There should be a real split between the
+    // two, not a re-evaluation") -- opt this deck into the pre-combat Main2 filter, and scope the
+    // searched interior second main to the split being live, exactly the FiveColour package.
+    // Both gated default-OFF pending measurement + the user's classification review.
+    bool ClassifiesMainPhases() const override;
+    bool SearchedSecondMainInSearch() const override;
+    bool PhaseFilterRootTurnOnly() const override;
     bool ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&, bool) const override;
     // Tainted Remedy and Plague Drone are the SAME role (opponent lifegain -> loss) and you only
     // need one at a time, so holding one makes the other a redundant required piece rather than a

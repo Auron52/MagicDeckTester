@@ -1878,6 +1878,47 @@ int AntiLifegainProvider::CastOrderRank(const GameState& s, const CardDefinition
     return GenericProvider::CastOrderRank(s, def);
 }
 
+// MTG_AL_PHASE / MTG_AL_SSM -- the REAL m1/m2 split for Anti-Lifegain (USER ruling 2026-08-21:
+// "There should be a real split between the two, not a re-evaluation"). Until now this deck's
+// m2 labels were classification-only: the pre-combat Main2 filter never ran (no
+// ClassifiesMainPhases opt-in), so every cast was enumerated m1 and the second main merely
+// re-offered leftovers. PHASE enforces the labels (Birds/Fiery Justice/Skyshroud Cutter by the
+// base rules, Reverent Silence by the 2026-08-18 override below); SSM makes the search's
+// interior second main SEARCHED, scoped to the split being live -- without the split the
+// interior m2 is leftovers-only and searching it measured as pure budget churn (train
+// d3 +0.0133/+0.0133, all 7 diverging games recover at 4-16x budget; 2026-08-21). Same
+// two-lever attribution shape as the FiveColour adoption (Fc5PhaseEnabled / MTG_5C_SSM).
+static bool AlPhaseEnabled()
+{
+    static const bool on = EnvOn("MTG_AL_PHASE");   // DEFAULT OFF pending measurement + review
+    return on;
+}
+
+bool AntiLifegainProvider::ClassifiesMainPhases() const
+{
+    return AlPhaseEnabled();
+}
+
+bool AntiLifegainProvider::SearchedSecondMainInSearch() const
+{
+    // Scoped to the phase split being live, exactly as FiveColour's hook is: a real split hands
+    // the interior m2 real deferred decisions; without it the searched interior m2 is dilution.
+    static const bool on = EnvOn("MTG_AL_SSM");     // DEFAULT OFF pending measurement
+    return on && AlPhaseEnabled();
+}
+
+bool AntiLifegainProvider::PhaseFilterRootTurnOnly() const
+{
+    // ROOT-TURN AUTHORITY for the split -- MEASURED AND REJECTED (2026-08-21): it recovers 39 of
+    // the filter-everywhere arm's 53 held-out worse games (the projection-distortion class) but
+    // CREATES ~60 new ones elsewhere (held-out 82 worse : 2 faster vs filter-everywhere's 53:29)
+    // -- filtered root candidates scored by unfiltered future projections is mixed semantics the
+    // rankings can't survive. NOT cache poisoning (memos-off battery identical). Kept as a
+    // measurement instrument only; MTG_AL_PHASE_ROOT=1 arms it.
+    static const bool on = EnvOn("MTG_AL_PHASE_ROOT");   // DEFAULT OFF (measured rejection)
+    return on && AlPhaseEnabled();
+}
+
 // "Reverent Silence should be cast last, so it should be m2." (USER 2026-08-18.) The generic
 // classifier reaches it through the DOUBT default, which keeps a card pre-combat -- but this one
 // is not in doubt: it destroys the deck's own enchantments, so nothing it enables can be spent
@@ -1888,6 +1929,16 @@ AntiLifegainProvider::MainPhaseOverride(const GameState&, const CardDefinition& 
 {
     if (AlOrderReviewEnabled() && def.params.destroy_all_enchantments)
     { return MainPhase::Main2; }
+    // MANA DORKS stay Main1 under the enforced split (MTG_AL_DORK_M1, measurement lever for the
+    // 2026-08-21 held-out dig): the base classifier's sick-body rule sends Birds to Main2, but a
+    // dork is this deck's DEVELOPMENT cast -- deleting it from the pre-combat candidate set
+    // consistently flipped hold-lines into early dumps (38 budget-immune +1-turn games on the
+    // PHASE held-out, e.g. s6006 gi8: T2 "Remedy+Invigorate now" over "Birds, hold for the T3
+    // Remedy+Invigorate+Cutter kill"). Casting a sick dork pre-combat is combat-neutral, so
+    // Main1 costs the filter nothing it exists to buy.
+    if (AlPhaseEnabled() && def.tmpl == CardTemplate::ManaDork
+        && EnvOn("MTG_AL_DORK_M1", true))   // DEFAULT ON within the split; =0 for the A/B
+    { return MainPhase::Main1; }
     return std::nullopt;
 }
 
