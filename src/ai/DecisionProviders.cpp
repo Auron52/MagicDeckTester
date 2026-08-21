@@ -9213,8 +9213,73 @@ static bool KittyTutorAllEnabled()
     return heurarm::Flag(heurarm::KE_TUTOR_ALL, on);
 }
 
+static bool KittyTutorRankEnabled()
+{
+    static const bool on = EnvOn("MTG_KE_TUTOR_RANK");
+    return heurarm::Flag(heurarm::KE_TUTOR_RANK, on);
+}
+static bool KittyTutorOneEnabled()
+{
+    static const bool on = EnvOn("MTG_KE_TUTOR_ONE");
+    return heurarm::Flag(heurarm::KE_TUTOR_ONE, on);
+}
+
+// ---- Stoneforge Mystic's fetch: the REASONED ranking -------------------------------------------
+//
+// USER 2026-08-21: "We should be able to narrow the list to a small number and potentially only
+// choose one most to all of the time in a heuristic."
+//
+// What motivates narrowing rather than widening: scoring all 8 targets instead of 6 changed the
+// decision stream in ONE game of 150 per cell and moved ZERO win turns, at +12-13% search work. The
+// targets past the top are not carrying anything, and each one costs a full rollout.
+//
+// THE ARGUMENT, which is what makes this doctrine-class rather than a blind cap. The fetched card is
+// going to be equipped, so its value is decided by the EQUIP cost, not by the card:
+//   * With a Puresteel Paladin out, metalcraft makes EVERY equip {0} -- this deck reaches three
+//     artifacts almost immediately -- so the fetch is simply the biggest bonus there is. Colossus
+//     Hammer's +10/+10 beats every other Equipment here by a factor of three, and its {8} equip, the
+//     one thing that ever made it a bad fetch, is exactly what the Paladin cancels.
+//   * With no Paladin out the {8} is real and the Hammer is a brick, so the fetch is the best body
+//     whose equip we can actually pay. Grafted Wargear equips for {0} UNCONDITIONALLY at +3/+2 (its
+//     sacrifice-on-unattach drawback is inert in a goldfish, where nothing unattaches it), strictly
+//     beating Bonesplitter's +2 for {1}; Bonesplitter is the fallback once the 1-of Wargear is gone.
+// The rest are dominated ON THIS DECK: Loxodon Warhammer and Shadowspear pay more for trample and
+// lifelink a blockerless goldfish cannot use, O-Naginata's +3 adds a power-2 gate over the Wargear
+// for no more bonus, Lightning Greaves' haste and shroud buy nothing on a board already attacking,
+// and Umezawa's Jitte is +0 now for counters later in a race we are trying to end.
+//
+// Losslessness is MEASURED per game, never argued -- see docs/design/kitty-tutor-and-discard-
+// heuristics.md. Both levers off -> the generic library-order list, byte-identical.
+std::vector<std::string>
+EquipmentProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
+    if (!KittyTutorRankEnabled() && !KittyTutorOneEnabled()) { return all; }
+
+    bool paladin = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.draw_on_equipment_etb) { paladin = true; break; }
+    }
+    auto tier = [&](const std::string& n) -> int
+    {
+        if (paladin && n == "Colossus Hammer") { return 0; }
+        if (n == "Grafted Wargear")            { return 1; }
+        if (n == "Bonesplitter")               { return 2; }
+        if (n == "Colossus Hammer")            { return 3; }   // no Paladin: the {8} is real
+        return 4;
+    };
+    std::stable_sort(all.begin(), all.end(),
+                     [&](const std::string& a, const std::string& b) { return tier(a) < tier(b); });
+    return all;
+}
+
 int EquipmentProvider::TutorSearchWidth() const
 {
+    if (KittyTutorOneEnabled())  { return 1; }   // the heuristic alone
+    if (KittyTutorRankEnabled()) { return 2; }   // heuristic + one searched alternative
     return KittyTutorAllEnabled() ? 8 : GenericProvider::TutorSearchWidth();
 }
 

@@ -70,3 +70,34 @@ would need a new one.
 Nothing to adopt. The honest summary is that this deck's remaining judgment calls are either forced
 (discard), already right (dig), or already searched (put, tutor-within-window). The open items are
 elsewhere: site 6's adoption call, and `MTG_EQUIP_LOG_TRUTH` / `MTG_BIG_SOLVE_MEMO`.
+
+## NARROWING the tutor (USER 2026-08-21) — biggest cost win on the deck, but NOT lossless yet
+
+> "We should be able to narrow the list to a small number and potentially only choose one most to
+> all of the time in a heuristic."
+
+The right instinct, and the opposite of the widening above. If the extra targets carry nothing, most
+of the default 6 carry nothing either — and each one is a full rollout.
+
+Built as a reasoned ranking (`EquipmentProvider::TutorCandidates`, argument in the code: the fetched
+card's value is decided by the EQUIP cost, so Colossus Hammer when a Paladin makes every equip {0},
+Grafted Wargear's unconditional {0} equip otherwise, Bonesplitter as the fallback) plus two narrow
+widths. Paired, 150 games per cell (`logs/kitty_tutor2`), zero `[fd-diverge]`:
+
+| arm | hold delta | train delta | hold cost | train cost |
+|---|---|---|---|---|
+| `rank2` (ranking + width 2) | +0.0200, 0 faster / **3 slower** | +0.0067, 0 / **1** | **-12.9%** | **-29.8%** |
+| `rank1` (ranking only, width 1) | +0.0200, 0 / **3** | +0.0067, 0 / **1** | **-26.5%** | **-38.0%** |
+
+**The cost win is the largest measured on this deck** — up to -38%. But it is NOT adopted, because it
+is not lossless: 4 games of 300 got slower and none got faster, and Rule 0b is explicit that a small
+measured quality loss does not make a truncation acceptable.
+
+**The diagnostic that matters is that `rank1` and `rank2` lose the SAME games.** A second searched
+slot rescues nothing, so the loss is not the WIDTH — it is the RANKING: in those 4 games the correct
+fetch is not in the top two of the tier list at all. Widening back is therefore the wrong response;
+the next step is to identify what those four games fetched under the width-6 window and why, and fix
+the tier list, then re-measure for per-game losslessness.
+
+Both levers stay default OFF (`MTG_KE_TUTOR_RANK`, `MTG_KE_TUTOR_ONE`); gates clean (smoke 36/36,
+regression 60/60, 0 configs changed).

@@ -788,6 +788,10 @@ public:
     // games (0.27/game), and the tutor axis is ADDITIVE (one rollout per extra target, see the base
     // hook) rather than multiplicative, so the whole cost is ~2 extra rollouts on a quarter of games.
     int TutorSearchWidth() const override;
+    // The reasoned fetch ranking the NARROW widths rest on (USER 2026-08-21: "narrow the list to a
+    // small number and potentially only choose one most to all of the time in a heuristic").
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller,
+                                             const CardParams& pp) const override;
     // Board-lethal search short-circuit (the Goblins-proven wide-board cut): when attack-all
     // damage already kills this turn, skip the cast-subset odometer and just attack. Win-turn-
     // invariant. This deck's late boards are exactly the pathological shape -- Kemba cats +

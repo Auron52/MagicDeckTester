@@ -45,6 +45,8 @@ enum Slot : int
     EQUIP_DRAW_BP_INLINE,     // MTG_EQUIP_DRAW_BP_INLINE  ...inline AT the draw + truncate the plan
     BP_CLASSIFY,              // MTG_BP_CLASSIFY           condemn already-considered casts at a bp
     KE_TUTOR_ALL,             // MTG_KE_TUTOR_ALL          score EVERY Equipment on the tutor axis
+    KE_TUTOR_RANK,            // MTG_KE_TUTOR_RANK         reasoned fetch ranking + width 2
+    KE_TUTOR_ONE,             // MTG_KE_TUTOR_ONE          ...and width 1 (heuristic only)
     COUNT
 };
 
@@ -67,6 +69,8 @@ inline const char* Name(int slot)
         "MTG_EQUIP_DRAW_BP_INLINE",
         "MTG_BP_CLASSIFY",
         "MTG_KE_TUTOR_ALL",
+        "MTG_KE_TUTOR_RANK",
+        "MTG_KE_TUTOR_ONE",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }
