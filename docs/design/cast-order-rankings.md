@@ -862,22 +862,124 @@ open item below.
 
 ## StompySurprise
 
+**PROPOSED (USER, 2026-08-21) — implemented behind `MTG_STOMPY_ORDER` (default OFF), measured,
+awaiting the USER's adoption call.** `StompyProvider::CastOrderRank` + `CastOrderTierName` deliver
+the tiers; adopt → default-on read with an off switch, per the adopted per-deck rules.
+
+Measured 2026-08-21 on the 8-cell StompySurprise grid (train s8001/s8002, held-out s9001/s9002;
+avg win turn deltas vs baseline, negative = better). The full bundle
+`MTG_STOMPY_ORDER=1 MTG_TOP_RESOLVE=1 MTG_TAP_BIG_DORKS_FIRST=1` is better-or-equal on ALL 8
+cells: train net −0.175 (d0 −.035, d3 −.050/−.050, d5 −.040), held-out net −0.045 (d0 −.025,
+d3 −.010/−.010, d5 .000). The three prior regression games (d0 gi106/gi445 census myopia → fixed
+by NO-late; d5 gi47 compose break → fixed by TT rank 15) all measure at baseline-or-better.
+`MTG_SAC_SPARE_ATTACKERS` measured ~zero on this grid (rarely-differing victims) — correct by the
+USER's ruling, no measurable cost or gain.
+
+**The USER's proposal, verbatim** (their numbering; engine rank in parentheses):
+
+> I just realized one problem with tutors like Worldly tutor. They search, but don't nicely draw
+> the card. Instead they change the library. Arguably this ordering could be handled a different
+> way. We could put the search cards above and trigger something like a breakpoint that re-enables
+> cards that interact with the top of the library.
+>
+> 1. 1-mana elves (Sol Ring can't fund these, but they can be funded by scaling elves if they are
+>    played early) — Arbor Elf, Elvish Mystic, Llanowar Elves (rank 3)
+> 2. Sol Ring (successfully funds almost everything else) (rank 5)
+> 3-4. Scaling elves (more elves can still be discounted and the cheapest is easiest to do this
+>    with) — Priest of Titania (6), Elvish Archdruid (7)
+> 5. Call of the Wild (rank 8)
+> 6. Call of the Wild Activation(s) (OPEN ITEM — see below)
+> 7. Turntimber Symbiosis (rank 12)
+> 8. Natural Order (rank 13 — EARLY copy, see the 2026-08-21 update below)
+> 9. Worldly Tutor (resets Call of the Wild Activations and Turntimber when cast) (rank 14 when a
+>    live top-consumer follows; the "reset" is the `MTG_TOP_RESOLVE` do-while loop)
+> 10. Drawing creature — Vaultborn Tyrant (rank 16)
+> 11. Normal creatures, order doesn't matter — Elderscale Wurm, Hornet Queen, Terastodon,
+>    Worldspine Wurm (rank 18)
+> 12. Natural Order (rank 19 — LATE copy, the new DEFAULT)
+> 13. Worldly tutor loop one time (if searching for Craterhoof) (OPEN ITEM — rank cannot see the
+>    tutor's target)
+> 14. Craterhoof wants to be last for maximum pump — Craterhoof Behemoth (rank 20)
+>    \<Drop Craterhoof last block\>
+> 15. Mirri's Guile (irrelevant for this turn) (rank 22)
+> 14. Worldly Tutor (for next turn draw + upkeep) (can choose to cast either location) (rank 24)
+
+**Turntimber Symbiosis's dual position (2026-08-21, from the gi47 root cause).** Rank 12 consumes
+the CURRENT top — correct when the top was intentionally stacked this turn (`top_stacked_turn ==
+turn`: upkeep Guile, an earlier pass's tutor). But with an UNCAST `tutor_to_top` in hand and an
+unstacked top, a plan pairing {Worldly Tutor, Turntimber} executed 12-before-14 spends Turntimber
+on seven blanks and leaves the tutor's stack with no consumer — with one Turntimber copy the
+compose is dead. This was d5 gi47's whole residual: the hold line realized T4 under reset-only
+(searched vector order = tutor first) and T5 under the order flag. Per the USER's ruling ("they
+will almost certainly be better if Worldly Tutor was just cast"), Turntimber ranks **15** (after
+the mid tutor) exactly when a tutor is held and the top is unstacked, else 12. Known edge: two
+Turntimbers + a tutor share rank 15, losing "spend #1 on the unknown top first" — the
+`MTG_TOP_RESOLVE` loop, not the rank, is the route for that line.
+
+**Natural Order's dual position (USER update, 2026-08-21).** The USER, verbatim: "The only reason
+I stuck Natural order in its current spot is to avoid random shuffles before effects that deal
+with the top of the library, but it probably should actually go just before Craterhoof is in the
+list. That would avoid us sacrificing creatures early and would allow us to drop a powerful
+Craterhoof with it. The slightly messy part is that it could even be the case that you want to
+worldly tutor for craterhoof. In that case, it would actually be better to do it around the same
+spot." Encoded as a state test mirroring Worldly Tutor's: **rank 19 (late) by default** — after
+the fatties, before Craterhoof, so the resolution-time sac-victim/fetch census sees the finished
+board (this is exactly the measured d0 regression mechanism: gi106 27→17 and gi445 30→10 came
+from NO-before-fatty census starvation) — and **rank 13 (early) only when a mid-turn tutor stack
+is live** (a `tutor_to_top` in hand AND a top-consumer per the rank-14 census): the shuffle must
+land before that stack, since every cast after the tutor still precedes the trailing consumers. A
+rank-24 (last-cast) tutor needs no protection — NO at 19 already precedes it. The tier-13
+"Worldly tutor loop one time (if searching for Craterhoof)" placement — tutor AFTER the late NO —
+is inexpressible statically (the rank cannot see the tutor's chosen target); the `MTG_TOP_RESOLVE`
+re-solve is the route that composes that line. Known over-trigger: an UNCAST hand tutor still
+forces NO early (the rank sees the hand, not the chosen plan).
+
+Follow-up rulings, same session: "Note that Call of the Wild Activation in Upkeep is a real play
+that we may need to model." / "If you have just the mana to cast Worldly Tutor at the end of turn
+this can be important." / "Since you often don't want to draw the card, but dump it into play for
+4. (if you searched for it anyway)" / "If you didn't stack the top I don't think it's as important
+to enable this, so we potentially could just allow it in those cases."
+
+**Worldly Tutor's dual position** is a state test: rank 14 (mid, the USER's [9]) when a
+top-consumer can still fire after it this turn — a Call of the Wild on the battlefield or in hand
+(activations dispatch after every cast), or an enters-draw engine (Vaultborn, board or hand) —
+else rank 24 (last; the tutored card becomes next turn's upkeep-Call dump or draw).
+
+**Open items** (rank cannot express these; see
+`docs/design/stompy-top-of-library-consumers.md`):
+* **[6] activation position** — the executor dispatches every activation AFTER every cast. Right
+  for the tutor → activation compose; inexpressible for "activate on the unknown top BEFORE the
+  tutor stacks it" multi-activation lines.
+* **[9] the tutor-as-breakpoint "reset"** — a Worldly Tutor mid-line should re-enable the
+  top-consumers (a second Call activation round, a second Turntimber copy). Needs a
+  breakpoint-style re-solve, not an order. Same mechanism would close the autonomous composition
+  gap (Turntimber's clairvoyant candidates are collected pre-tutor).
+* **Upkeep Call of the Wild activation** — a pre-draw window so a late tutor's target is put into
+  play for 4 instead of being drawn. Gate per the USER: only worth modelling when the top was
+  STACKED (a tutor-to-top / Mirri's Guile arrangement) — an unstacked upkeep activation is the
+  same blind gamble as the main-phase one and needs no new window.
+
 ```
-# Cast order -- decks/StompySurprise/StompySurprise.cod
-# provider: Generic   ideal-order draw tier: off   cantrip max mv: 1
-# deck flags: feeds_combat=no uses_second_main=no enabler_pull=no castpayoff_pull=no
-# main = BASELINE: board-dependent pulls (haste from a lord in play, hand haste access, a scaling attacker) can move a creature m2 -> m1 in an actual game.
+# Cast order -- decks/StompySurprise/StompySurprise.cod   (MTG_STOMPY_ORDER=1)
+# provider: Stompy   ideal-order draw tier: off   cantrip max mv: 1
+# deck flags: feeds_combat=yes uses_second_main=no enabler_pull=no castpayoff_pull=no
 #
-# rank  range      main  n  mv  card
-#
-# [LAND] LAND DROP: no cantrip in the deck, so nothing wants to precede it -> FIRST
-  land    -   m1    -  -   (the turn's land drop)   -- before every cast at depth 0; SEARCHED (folded into the plan) at depth > 0
-#
-# [5] MANA ROCK: online for the rest of the line
-  5     -   m2    1  1  Sol Ring
-#
-# [10] CREATURE: before noncreature spells (prowess catches later casts)
-  10     -   m2    4  1  Elvish Mystic
+# [LAND] land drop first
+# [3]  1-MANA ELF        Arbor Elf, Elvish Mystic, Llanowar Elves
+# [5]  SOL RING
+# [6]  SCALING ELF       Priest of Titania (cheapest scaler first)
+# [7]  SCALING ELF       Elvish Archdruid
+# [8]  CALL OF THE WILD  (cast; activations dispatch after all casts)
+# [12] TURNTIMBER SYMBIOSIS (top stacked this turn, or no tutor held: consume the current top)
+# [13] NATURAL ORDER (early -- only when a live mid-tutor stack must outlive the shuffle)
+# [14] WORLDLY TUTOR (mid -- live top-consumer follows)
+# [15] TURNTIMBER SYMBIOSIS (post-tutor -- a held tutor stacks first, then this consumes it)
+# [16] VAULTBORN TYRANT  (drawing creature: the draw IS the tutored card)
+# [18] FATTY             Elderscale Wurm, Hornet Queen, Terastodon, Worldspine Wurm
+# [19] NATURAL ORDER (late -- DEFAULT: full census, don't sac early, fetch can be the hoof)
+# [20] CRATERHOOF BEHEMOTH (last for maximum pump)
+# [22] MIRRI'S GUILE
+# [24] WORLDLY TUTOR (late -- set next turn's upkeep/draw)
 ```
 
 ## Unpredictable Cyclone

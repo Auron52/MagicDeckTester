@@ -137,6 +137,26 @@ inline bool AcqDigEnabled()
     return v;
 }
 
+// MTG_TOP_RESOLVE=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted): the
+// USER's tutor-to-TOP reset (StompySurprise cast-order review, 2026-08-21: "We need to build the
+// reset for my combo to be workable ... Cast worldly tutor -> now activations and Turntimber can
+// be cast"). A tutor_to_top spell (Worldly Tutor) is a LIBRARY WRITE, not a draw: its resolution
+// re-arms every top-of-library consumer -- a Call of the Wild activation or a Turntimber cast
+// fired after it takes the KNOWN stacked creature instead of gambling on an unknown top ("they
+// will almost certainly be better if Worldly Tutor was just cast"). So the cast arms the same
+// deferred post-cast re-solve as the ACQ family: the continuation enumerates on the post-tutor
+// state, where Turntimber's candidate collection sees the stacked card and activations re-score
+// against it. Consumers stay independently castable on their own ("we should be able to cast
+// Turntimber or consider activations on their own") -- the reset only ADDS the post-tutor round.
+// With enough mana the search can loop it across copies (tutor {G} + activation {2}{G}{G} per
+// fatty). Read by the rollout apply (TurnSolver arming) and the executor's draw-engine
+// classification (AIEngine note_draw_engine + is_draw_engine) -- shared reader, lockstep pair.
+inline bool TopResolveEnabled()
+{
+    static const bool v = EnvOn("MTG_TOP_RESOLVE");   // default OFF; =1 enables (A/B lever)
+    return v;
+}
+
 // MTG_LEGACY_STATIC_TAPPED=1: classify land tapped-ness from the STATIC enters_tapped flag in the
 // land-priority passes, as before the dynamic fix (byte-identical A/B hatch). See
 // AIEngine::TryPlayLand and TurnSolver's greedy_land_name -- the two implement the same passes

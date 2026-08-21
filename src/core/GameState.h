@@ -173,6 +173,16 @@ struct GameState
     int                      turn_number                  = 0;
     bool                     player_lost_on_draw          = false;
     bool                     opponent_lost_life_this_turn = false;
+    // Turn the active player last STACKED the top of their library with a tutor-to-top
+    // (Worldly Tutor). -1 = never. The USER's intentionality gate for top-consumer models
+    // (MTG_TOP_RESOLVE, 2026-08-21): a consumer decision may read the top ONLY when the stack
+    // was deliberate ("I'm not particularly interested in having it take advantage of
+    // clairvoyance ... when it was not put there intentionally"). Turn-stamped rather than a
+    // cleared bool so no draw/shuffle site needs bookkeeping -- readers verify the top card
+    // still matches what they need, so a consumed/buried stack self-invalidates. Written
+    // unconditionally at PerformTutor's to-top placement; every reader is lever-gated, so the
+    // field is inert (byte-identical) with the lever off.
+    int                      top_stacked_turn             = -1;
     // Turn-scoped RESERVE mana: mana produced by a ritual (Reality Spasm untap-retap, Irencrag
     // Feat) that has not yet been spent. Payment (TapForCost / TapForCostDirect) drains this
     // BEFORE tapping any permanent, so a ritual cast earlier in a turn funds a bigger X-spell

@@ -2489,6 +2489,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                   // review, 2026-08-19).
                   || (AcqResolveEnabled()
                       && (d->params.damage_equals_top_mv || d->params.tutor_to_hand))
+                  // MTG_TOP_RESOLVE: a tutor-to-top (Worldly Tutor) re-arms the top-of-library
+                  // consumers, so the depth-0 executor gets the same second pass the rollout's
+                  // deferred re-solve arms -- the USER's "cast Worldly Tutor -> now activations
+                  // and Turntimber can be cast", always taken at d0 when affordable.
+                  || (TopResolveEnabled() && d->params.tutor_to_top)
                   // MTG_ACQ_DIG: an ETB dig (Acclaimed Contender) puts a same-phase-castable
                   // card in hand at resolution, so the depth-0 executor gets the same second
                   // pass the rollout's deferred re-solve arms. Cast path only (see flag note).
@@ -2538,6 +2543,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                      // way or the committed continuation replays at the wrong breakpoint.
                      || (AcqResolveEnabled()
                          && (d->params.damage_equals_top_mv || d->params.tutor_to_hand))
+                     // MTG_TOP_RESOLVE: the tutor-to-top reset arms the rollout's deferred
+                     // re-solve (TurnSolver twin), so full-depth replay must classify it the
+                     // same way or the committed continuation replays at the wrong breakpoint.
+                     || (TopResolveEnabled() && d->params.tutor_to_top)
                      // MTG_ACQ_DIG is deliberately ABSENT here: the lever is depth-0-only
                      // (note_draw_engine above) -- the rollout never arms a dig breakpoint,
                      // so classifying one here would desync full-depth replay. See the

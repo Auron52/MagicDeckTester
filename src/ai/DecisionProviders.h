@@ -873,6 +873,20 @@ public:
     // definition for the full bucket rules. MTG_STOMPY_BUCKET_DISCARD=0 -> generic base (A/B).
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
+    // Cast order: USER-PROPOSED tiers (2026-08-21) -- 1-mana elves, Sol Ring, scaling elves
+    // cheapest-first, Call of the Wild, cheat-outs (Turntimber, Natural Order), a dual-position
+    // Worldly Tutor (mid when a top-consumer follows, else last), Vaultborn as the drawing
+    // creature, fatties, Craterhoof last for maximum pump, Mirri's Guile. Gated on
+    // MTG_STOMPY_ORDER (default OFF pending measurement); see the definition + the verbatim
+    // ruling and open items in docs/design/cast-order-rankings.md.
+    int         CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
+    // Tutor-top combo lethality (the d0 half of the MTG_TOP_RESOLVE reset): project the tutored
+    // Craterhoof arriving through a still-affordable top-consumer (Call activation / spare
+    // Turntimber) into the greedy's plan-lethality check, so depth 0 holds the consumer and takes
+    // the combo line the deferred continuation then realises. Gated on TopResolveEnabled().
+    bool HasExtraLethalModel() const override;
+    int  ExtraLethalDamage(const GameState&, const std::vector<const CardDefinition*>&) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

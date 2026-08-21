@@ -157,7 +157,13 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // (opt-OUT is MTG_NO_SEARCH_SHUFFLE).
     ShuffleAfterSearch(state, controller_index);
     if (pp.tutor_to_hand)     { ap.hand.push_back(std::move(c)); }
-    else if (pp.tutor_to_top) { ap.library.insert(ap.library.begin(), std::move(c)); }
+    else if (pp.tutor_to_top)
+    {
+        ap.library.insert(ap.library.begin(), std::move(c));
+        // Intentional top-stack marker (see GameState::top_stacked_turn): the USER's gate for
+        // every top-consumer model -- deliberate stacks only, never a coincidental known top.
+        state.top_stacked_turn = state.turn_number;
+    }
 
     // Record WHAT was searched up so the replay viewer shows it (real play only -- the reveal
     // logger is null during search/rollout, so this is byte-identical to the suite). Modelled as
@@ -1658,6 +1664,43 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         std::stable_partition(s_src_cands_buf.begin(), s_src_cands_buf.end(),
             [](const std::pair<int, const CardDefinition*>& c)
             { return c.second->tmpl != CardTemplate::ManaDork; });
+        // MTG_TAP_SCALED_LAST (A/B lever, default OFF): within the dork block, spend the SMALLEST
+        // producer first -- plain 1-yield dorks, then scaled dorks ascending, biggest engine last.
+        // The USER's ruling (2026-08-21, replacing a rejected big-first experiment): "playing more
+        // elves increases the mana, so you want to ... tap them last." Operationally: whatever is
+        // untapped AFTER the batch payment funds the trailing work (Call activations, the tutor-
+        // loop continuation, next pass), and by then the turn's elves have landed -- an untapped
+        // Priest is worth its grown yield where an untapped Llanowar is worth 1, so the engine is
+        // the LAST thing a payment should reach for. Deterministic ascending-yield replaces the
+        // battlefield-slot-order walk (which tapped whatever happened to sit first). The over-tap
+        // this ordering still commits on margin-1 attack turns (tapping small dorks AND the scaler
+        // the payment ends on) is what MTG_TAP_TRIM releases afterwards -- the pair, not this sort
+        // alone, is the measured unit.
+        static const bool s_scaled_last = EnvOn("MTG_TAP_SCALED_LAST");
+        if (s_scaled_last)
+        {
+            auto dorks_begin = std::partition_point(s_src_cands_buf.begin(), s_src_cands_buf.end(),
+                [](const std::pair<int, const CardDefinition*>& c)
+                { return c.second->tmpl != CardTemplate::ManaDork; });
+            std::stable_sort(dorks_begin, s_src_cands_buf.end(),
+                [&state](const std::pair<int, const CardDefinition*>& a,
+                         const std::pair<int, const CardDefinition*>& b)
+            {
+                auto yield = [&state](const std::pair<int, const CardDefinition*>& c) -> int
+                {
+                    if (IsScaledManaDork(*c.second))
+                    {
+                        const int ctl = (c.first >= 0
+                                         && c.first < static_cast<int>(state.battlefield.size()))
+                                      ? state.battlefield[c.first].controller_index
+                                      : state.active_player_index;
+                        return ScaledDorkCount(state, ctl, *c.second);
+                    }
+                    return 1;
+                };
+                return yield(a) < yield(b);
+            });
+        }
     }
     const std::vector<std::pair<int, const CardDefinition*>>& cands = *src_cands;
 
@@ -2737,6 +2780,27 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
           if (p.storage_counters > 0) { mc_storage_pre.push_back({ i, p.storage_counters }); } }
     }
 
+    // MTG_TAP_TRIM pre-solve snapshot: the battlefield indices of the active player's currently-
+    // UNTAPPED mana-dork creatures. The board is invariant during a payment (no permanent enters
+    // or leaves -- the dup-collapse chain's own precondition), so post-solve these indices name
+    // the same permanents and "tapped now" means "tapped by THIS solve".
+    static const bool s_tap_trim = EnvOn("MTG_TAP_TRIM");
+    static thread_local std::vector<int> s_trim_pre_untapped;
+    const bool trim_live = s_tap_trim && (out_leftover != nullptr || out_full_pool != nullptr)
+                           && rp_colors == nullptr
+                           && untapped_max < 0 && g_scripted_tapmode != 1;
+    if (trim_live)
+    {
+        s_trim_pre_untapped.clear();
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->tmpl == CardTemplate::ManaDork) { s_trim_pre_untapped.push_back(i); }
+        }
+    }
+
     // ---- Run the real solve (preserving the MTG_TAP_STATS outcome accounting) ----
     bool ok;
     if (!tapstats::Enabled())
@@ -2760,6 +2824,79 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         // everything here is either a miss (cacheable, not yet memoised) or a shape the cache skips.
         (mc_active ? tapstats::g_mc_nodes_miss : tapstats::g_mc_nodes_skip)
             .fetch_add(dn, std::memory_order_relaxed);
+    }
+
+    // MTG_TAP_TRIM (A/B lever, default OFF): release any creature this solve tapped whose WHOLE
+    // contribution still sits unspent in the leftover pool -- the payment provably did not need
+    // it. This is the real fix for the first-solution prefix walk's over-tap: it taps candidates
+    // in list order while need remains, so a 1-yield elf tapped just before the scaler that
+    // finishes the payment is a body lost for nothing (measured: paying 16 for a 15 cost cost one
+    // pumped attacker and the T4 kill on StompySurprise d0 gi106 -- 27 vs 19 damage on battlefield
+    // permutation alone; same family as gi47/gi445). Releasing ONLY provably-unneeded taps keeps
+    // the payment's pip coverage intact by construction, is slot-order-invariant, and -- unlike
+    // the rejected big-dorks-first experiment -- never changes WHICH sources a payment prefers
+    // (the USER's elves ruling: engines tap last, and body preservation only matters when slack
+    // exists, exactly when this fires). Eligibility is conservative: plain single-colour dorks and
+    // scaled dorks only -- no Deathrite (its tap exiled a graveyard land we cannot restore), no
+    // Arbor Elf (its yield rides a Forest, not itself), no domain/storage/filter shapes. Runs
+    // BEFORE the mana-cache store so a cached entry replays the trimmed tap-set + leftover
+    // identically to the live solve (hit/miss lockstep). Smallest yield first = most bodies
+    // released per point of slack.
+    if (trim_live && ok)
+    {
+        struct TrimCand { int idx; int yld; Color col; };
+        static thread_local std::vector<TrimCand> s_trim_cands;
+        s_trim_cands.clear();
+        for (int i : s_trim_pre_untapped)
+        {
+            Permanent& p = state.battlefield[i];
+            if (!p.tapped) { continue; }                       // not spent by this solve
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d || d->tmpl != CardTemplate::ManaDork) { continue; }
+            const CardParams& dp = d->params;
+            if (dp.gy_land_exile_mana || dp.domain_mana || dp.storage_land || dp.is_filter
+                || dp.ramp_filter || !dp.mana_requires_land_subtype.empty()) { continue; }
+            const std::vector<Color>& prod = EffectiveProduces(state, state.active_player_index, *d);
+            if (prod.size() != 1) { continue; }                // wild contributions are not traceable
+            const int y = PermanentManaYield(state, p, *d);
+            if (y <= 0) { continue; }
+            s_trim_cands.push_back({ i, y, prod[0] });
+        }
+        std::stable_sort(s_trim_cands.begin(), s_trim_cands.end(),
+                         [](const TrimCand& a, const TrimCand& b) { return a.yld < b.yld; });
+        auto pool_slot = [](ManaPool& mp, Color c) -> int*
+        {
+            switch (c)
+            {
+                case Color::White:     return &mp.white;
+                case Color::Blue:      return &mp.blue;
+                case Color::Black:     return &mp.black;
+                case Color::Red:       return &mp.red;
+                case Color::Green:     return &mp.green;
+                case Color::Colorless: return &mp.colorless;
+            }
+            return nullptr;
+        };
+        for (const TrimCand& c : s_trim_cands)
+        {
+            // Release test, on whichever accounting this caller asked for (both when both):
+            //  * leftover mode -- the dork's whole contribution must still sit unspent in its
+            //    colour's leftover slot (exact: the payment provably never consumed it);
+            //  * full-pool mode (the batch prepay's shape) -- subtracting the contribution from
+            //    the produced pool must leave a pool that still CanPay(cost) (the same aggregate
+            //    pool-level bar the prepay itself applies to its solves).
+            int* left = out_leftover ? pool_slot(*out_leftover, c.col) : nullptr;
+            if (out_leftover && (left == nullptr || *left < c.yld)) { continue; }
+            int* full = out_full_pool ? pool_slot(*out_full_pool, c.col) : nullptr;
+            if (out_full_pool)
+            {
+                if (full == nullptr || *full < c.yld) { continue; }
+                *full -= c.yld;
+                if (!out_full_pool->CanPay(cost)) { *full += c.yld; continue; }
+            }
+            if (left != nullptr) { *left -= c.yld; }
+            state.battlefield[c.idx].tapped = false;
+        }
     }
 
     // ---- Store (negatives always; a positive records its tap-set + the two order-dependent deltas) --

@@ -1350,13 +1350,19 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
            << ", \"name\": "; JsonStr(os, examined[i].m_name.str()); os << " }";
     });
     // The shared dig chooser serves two destinations: ETB digs put the pick INTO HAND
-    // (Acclaimed Contender), the Skyhunter attack-dig puts it ONTO THE BATTLEFIELD (and the
-    // attach follows as its own attach_host decision). Say the right one -- the 5d sweep
-    // flagged the fixed into-hand wording as contradicting Skyhunter's oracle text.
+    // (Acclaimed Contender), the Skyhunter attack-dig and the Turntimber "(put)" look put it
+    // ONTO THE BATTLEFIELD (Skyhunter's attach follows as its own attach_host decision). Say
+    // the right one -- the 5d sweep flagged the fixed into-hand wording as contradicting
+    // Skyhunter's oracle text.
     if (source.find("(attack dig)") != std::string::npos)
     {
         d.Note("reply an examined index to put that card onto the battlefield (attaching is the "
                "next decision), or -1 to take nothing. Default = the AI's pick.");
+    }
+    else if (source.find("(put)") != std::string::npos)
+    {
+        d.Note("reply an examined index to put that card onto the battlefield, or -1 to put "
+               "nothing; the rest go to the bottom. Default = the AI's pick.");
     }
     else
     {
@@ -3635,6 +3641,16 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     try { in >> j; }
     catch (const std::exception& e) { std::cerr << "scenario: bad JSON: " << e.what() << "\n"; return 2; }
 
+    // Optional per-fixture env ("env": {"MTG_X": "1"}), applied FIRST -- before any EnvOn read
+    // caches its static -- so a fixture can pin the lever it guards (each scenarios.sh fixture
+    // runs in its own process, so this cannot leak across fixtures). A fixture whose lever ships
+    // default-off stays runnable in the sanity gate without a wrapper script.
+    if (j.contains("env"))
+    {
+        for (const auto& [k, v] : j.at("env").items())
+        { setenv(k.c_str(), v.get<std::string>().c_str(), 1); }
+    }
+
     const std::string cards_json = j.value("cards_json", std::string("src/cards/data/cards.json"));
     if (std::filesystem::exists(cards_json)) { CardDatabase::Instance().LoadFromJson(cards_json); }
     else { std::cerr << "scenario: cards.json not found at " << cards_json << "\n"; return 2; }
@@ -3724,6 +3740,13 @@ static int RunScenario(const std::filesystem::path& scenario_path)
         const std::string filler = j.value("library_filler", std::string("Forest"));
         const int lib = j.value("library_size", 40);
         for (int i = 0; i < lib; ++i) { state.players[0].library.push_back(make_card(filler)); }
+        // Optional named library cards ("library": [names...]), appended AFTER the filler -- i.e.
+        // at the BOTTOM, below any top-N look window -- so a fixture can stage a card that is
+        // reachable by a full-library search (a tutor) but NOT by a top-of-library peek. (The
+        // tutor-top reset fixture needs exactly that: Craterhoof findable by Worldly Tutor, absent
+        // from Turntimber's blind top-7.)
+        for (const auto& lc : j.value("library", json::array()))
+        { state.players[0].library.push_back(make_card(lc.get<std::string>())); }
     }
     catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 2; }
 

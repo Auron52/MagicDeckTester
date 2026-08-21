@@ -333,20 +333,47 @@ reproduces the shipped 5.0550 (d3 s8001) exactly.
 
 ### StompyProvider hooks (all three are the whole provider)
 
-- **Cleanup-discard bucket policy** (USER-AUTHORED 2026-08-21; `MTG_STOMPY_BUCKET_DISCARD=0` →
-  generic base): buckets `<mana> <threats> <enablers>`, shed in that order. Excess mana beyond a
-  6-source board guarantee first (plain Forests before the Lodge/Sol Ring 1-ofs; dorks are
-  bodies and keep to the tail); then hand THREATS — "many threats are not played from hand...
-  you can fetch to top of deck with Worldly Tutor and drop it off the top", so a hand fatty is a
-  spare (same-name-in-library first, biggest MV first) — EXCEPT the last hoof-role copy
-  anywhere (Craterhoof, a 1-of): pitching it kills every fetch route including the h=0
-  projection lines; then enabler redundancy (board-covered Call/Guile copies are dead up front;
-  copies beyond one, beyond two for the one-shot Worldly Tutor). The list names the full hand
-  (the Mirrorwing gi295 lesson). Fixture `stompy_bucket_discard.json` (depth 0 ON PURPOSE — at
-  d>0 the searched cleanup pass rescues the hoof in both arms): bucket keeps the hoof and kills
-  T5; `=0` sheds it (generic highest-MV) and cannot win. Measured at searched depth: ON vs OFF
-  byte-identical on all three configs — a real cleanup discard occurs ~once per 200 games (the
-  deck dumps its hand), so the policy is correctness insurance for flood hands, not throughput.
+- **Cleanup-discard role-bucket policy** (USER-AUTHORED 2026-08-21, iterated to a worst-case
+  ALLOCATION the same day on user review; `MTG_STOMPY_BUCKET_DISCARD=0` → generic base): the
+  hand divides into `<mana> <threats> <enablers>` role buckets and the worst case (a deep
+  flood discarding to 7) keeps the tight breakdown **4 mana / 2 threats / 1 enabler**;
+  buckets the board already covers shrink, and unneeded slots refill with threats or
+  additional scaling mana (user). Dead copies (a hand Call/Guile with one on board) belong
+  to no bucket and shed first. MANA: EFFECTIVE yield everywhere — every own permanent counts
+  (lands/rocks by produces_amount, a scaling Priest/Archdruid by its live Elf count), hand
+  cards by prospective yield; greedy keep up to a target (floor 6, raised to 7 when the
+  cheapest live route or cheapest kept hardcast needs 7+) but never more than 4 slots, under
+  a COMPOSITION preference (user): lean 1 land + 3 accelerators ("you might draw another
+  land in the next two turns") but "you always want at least a land for next turn if you
+  can" — best land first, then accelerators, backfilling from whichever side remains when
+  the other runs short. Within accelerators: Sol Ring first when available ("a generically
+  insane card"; an unpicked Ring also never sheds as early excess — slack zone only, last
+  of the slack mana), then one 1-mana dork if neither hand nor battlefield has one, then
+  the rest by yield (measured byte-identical at every train/held-out cell and 39/39
+  smoke — it only reorders slot membership at these seeds). THREATS: spares (same-name in library, or a hand duplicate) never take
+  a slot; a route-covered last copy unplayable from hand (mv > reach) sheds early; slot
+  preference 7-8-drops, an 11-drop "only very very rarely" (only when nothing cheaper can);
+  the hoof-role last copy always takes a slot (pitching it kills every fetch route and the
+  h=0 projection). Routes: Call on board 3 / in hand 4, Natural Order + green fodder 4,
+  Turntimber front 7, judged against reach = board + all hand yield. ENABLER: one slot
+  (zero with Call on board), priority Call > NO > Tutor > Guile. The list names the full
+  hand (the Mirrorwing gi295 lesson) and is a CHOICE, not a search
+  (`CleanupDiscardSearchWidth()` stays at the base 1 — the ranking's front item IS the
+  shed). **Shed-order subtlety that cost a real turn (game-seed 8095):** loose mana the
+  greedy WANTED but the 4-slot cap truncated is not "excess" — a draft shed a 3rd Forest on
+  an empty board ahead of a spare Worldspine (the baseline pitched the Worldspine, whose
+  shuffle-from-anywhere trigger the clairvoyant rollouts then exploited into a T6; either
+  way the Forest shed is wrong on its face, T6→T7 at d3 AND d5). Cap-truncated mana now
+  sheds in the SLACK zone (after spares/dead lasts/surplus enablers, before slack dorks and
+  slack threats), so it never survives the worst case but a 1-2-card discard takes real
+  junk first. Final measurement: outcome-identical at every cell — train d0/d3×2/d5 =
+  6.0040/4.9850/4.9850/4.9700 (searched digests byte-identical to the shipped baseline) and
+  held-out 5.9480/4.9200/4.9150/4.8400; the only GT delta across the whole restructure is
+  the play digest of one UNWON greedy game (smoke d0 gi253), re-accepted. Fixture
+  `stompy_bucket_discard.json` (depth 0 ON PURPOSE) still proves the ranking: bucket keeps
+  the hoof and kills T5; `=0` (generic highest-MV) sheds it and cannot win. A real cleanup
+  discard occurs ~once per 200 games — correctness insurance for flood hands, not
+  throughput.
 - **Tutor target ranking** (`TutorCandidates`; honors `MTG_UNPRUNE=tutor`): Generic returns
   candidates in LIBRARY (shuffle) order and the width-6 axis then scores a random six of this
   deck's eleven creature names — the closers fall out of the window. Authored order: hoof-role

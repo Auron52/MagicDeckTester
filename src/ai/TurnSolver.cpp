@@ -5767,7 +5767,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // EnumeratePlansWithLand can supply one (see PlanContext.h). Anything that wants the
             // base pick to be plan-aware has to move this decision after plan assembly.
             std::vector<std::string> cands;
-            if (def.params.look_top_put_creature_count > 0)
+            if (def.params.look_top_put_creature_count > 0 && HumanPlayActive())
+            {
+                // HUMAN PLAY: ONE empty-target cast; the put is decided at RESOLUTION off the
+                // REAL look (shared dig chooser in PerformLookTopPutCreature). The named
+                // plan-time variants below are wrong for a human twice over: they leak the
+                // top-7 into a deliberately no-reveal game, and they are built BEFORE any
+                // same-line library reorder resolves -- a Worldly Tutor cast first shuffles
+                // and puts the searched creature on top, so the put the human actually wanted
+                // (the tutored card; seed 1 T4) was never offered and any stale name whiffs
+                // at resolution. Autonomous play keeps the clairvoyant searched axis.
+                cands.push_back(std::string{});
+            }
+            else if (def.params.look_top_put_creature_count > 0)
             {
                 // Turntimber Symbiosis: candidates = the distinct creature names among the CURRENT
                 // top N (clairvoyant), plus the explicit decline. Named variants survive the
@@ -5793,8 +5805,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // Under a saturated budget that width is paid in search QUALITY, not wall-clock.
                 // The cap keeps the top W by EvalCard (the same estimate that prices every other
                 // candidate at collection) + the explicit decline; the search still scores the
-                // survivors as full plan variants. Human play is exempt (the human must see
-                // every legal put).
+                // survivors as full plan variants. (Human play never reaches this branch --
+                // it takes the empty-target resolution-time route above.)
                 static const int s_tt_width = EnvInt("MTG_TT_PUT_WIDTH", 0);
                 if (!HumanPlayActive() && s_tt_width > 0
                     && static_cast<int>(cands.size()) > s_tt_width)
@@ -7647,6 +7659,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     Action a;
                     a.kind           = Action::Kind::ActivateRevealTop;
                     a.card_name      = src.card.m_name;
+                    a.def            = sd;   // memo (lets subset models see the activation -- ExtraLethalDamage's stacked-top consumer case)
                     a.hand_index     = -1;
                     a.sac_source_id  = src.card.m_number;
                     a.chosen_x       = k;
@@ -11635,11 +11648,33 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // exist only when BOTH classes are non-empty, so a deck with no dork (or no depletion land) makes
     // the same single held attempt as before -- byte-identical, no extra solve. Creatures outrank a
     // depletion counter: a counter is mana either way, a creature is an attacker / trick target.
-    std::uint64_t rungs[3];
+    std::uint64_t rungs[10];
     int n_rungs = 0;
     if (reserved) { rungs[n_rungs++] = reserved; }
     if (reserved_depl && reserved_crea && DorkReserveEnabled())
     { rungs[n_rungs++] = reserved_crea; rungs[n_rungs++] = reserved_depl; }
+    // PARTIAL CREATURE HOLD (MTG_DORK_HOLD_PARTIAL, default OFF pending measurement -- the USER's
+    // margin-1 combo games, 2026-08-21). When even the creatures-only hold is unaffordable, the
+    // all-or-nothing release above taps EVERY dork -- losing attackers the lethality projection
+    // counted (StompySurprise gi47: the 17-vs-16 Craterhoof-combo kill needs exactly one Llanowar
+    // left untapped, and the free solve tapped it). Extend the ladder: release held creatures one
+    // at a time, WEAKEST EffectivePower first (tie: lower battlefield index -- deterministic), each
+    // rung keeping the remaining stronger attackers (and every depletion land) held; the first
+    // payable subset wins. Costs extra solve attempts only after the full holds already failed.
+    static const bool s_partial_hold = EnvOn("MTG_DORK_HOLD_PARTIAL");
+    if (s_partial_hold && reserved_crea && DorkReserveEnabled() && g_scripted_tapmode != 1)
+    {
+        std::vector<int> crea;
+        for (int i = 0; i < n; ++i) { if (reserved_crea & (1ull << i)) { crea.push_back(i); } }
+        std::stable_sort(crea.begin(), crea.end(), [&](int a, int b)
+        { return state.battlefield[a].EffectivePower() < state.battlefield[b].EffectivePower(); });
+        std::uint64_t hold = reserved_crea;
+        for (std::size_t k = 0; k + 1 < crea.size() && n_rungs < 9; ++k)
+        {
+            hold &= ~(1ull << crea[k]);          // release the weakest still-held creature
+            rungs[n_rungs++] = hold | reserved_depl;
+        }
+    }
     ManaPool produced;
     bool ok = false;
     for (int r = 0; r < n_rungs && !ok; ++r)
@@ -11882,6 +11917,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // (the old inline behaviour) for the A/B. Inert for decks without plain cantrips.
     static const bool s_defer_cantrip = !EnvOn("MTG_NO_DEFER_CANTRIP");
     bool deferred_cantrip_resolve = false;
+    // Set ONLY by the tutor-to-top arming (TopResolveEnabled, flag-gated) -- the ONE armer whose
+    // re-arm may open ANOTHER pass of the deferred-re-solve loop below. The historical `if` ran
+    // exactly one pass and IGNORED any re-arm that happened during it; in scoring mode
+    // (out_breakpoint null) the sink stack stays empty, so a plain cantrip cast inside the
+    // continuation re-arms deferred_cantrip_resolve -- gating the loop's continuation on THIS
+    // flag instead keeps that historical single-pass behaviour byte-identical for every cantrip
+    // deck (a `while` on deferred_cantrip_resolve alone measurably changed flag-OFF Mirrorwing/
+    // Hinata smoke digests -- caught 2026-08-21 against the HEAD binary).
+    bool deferred_top_rearm = false;
     // The cast that armed the deferred re-solve (registry-stable pointer; nullptr when unarmed).
     // Carried so the continuation can bind the MTG_CANTRIP_ORDER watermark to its site; with
     // several arming casts in one plan the LAST one wins, which matches whose continuation the
@@ -13252,6 +13296,25 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 && sink_stack.empty())
             { deferred_cantrip_resolve = true; deferred_cantrip_site = &def;
               deferred_hand_before = hand_at_cast; }
+            // Tutor-to-TOP reset (TopResolveEnabled / MTG_TOP_RESOLVE, EngineFlags.h -- the
+            // USER's combo, 2026-08-21): the tutor is a LIBRARY WRITE that re-arms every
+            // top-of-library consumer, so arm the same deferred re-solve -- the continuation
+            // enumerates on the post-tutor state, where Turntimber's candidates include the
+            // stacked creature and Call activations score against a KNOWN top. Human play is
+            // excluded (the segment re-prompt loop + resolution-time put modal already give the
+            // human the reset). Executor lockstep via the classification twins in AIEngine.
+            // deferred_hand_before stays EMPTY (the documented safe value: every card reads as
+            // new and the snapshot consumers stand down) -- deliberately NOT hand_at_cast: the
+            // cards this continuation exists for are OLD hand cards (the held Turntimber, whose
+            // value the tutor just changed), and a snapshot would read "the plan declined this
+            // card" and stand the continuation down on exactly them.
+            // NO sink-depth gate, unlike the cantrip/acquisition armings: a tutor cast INSIDE a
+            // continuation must re-arm the loop (USER: "a do-while loop. That continues as long
+            // as we cast Tutors") -- and it must do so in BOTH recording and scoring modes, or
+            // the committed script and the scored line diverge on multi-tutor chains.
+            if (TopResolveEnabled() && def.params.tutor_to_top && !s_human_play)
+            { deferred_cantrip_resolve = true; deferred_top_rearm = true;
+              deferred_cantrip_site = &def; deferred_hand_before.clear(); }
         }
         else if (def.params.tutor_land_to_battlefield)
         {
@@ -13265,7 +13328,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         else if (def.params.look_top_put_creature_count > 0)
         {
             // Turntimber Symbiosis front (rollout side, lockstep with EffectHandler).
-            PerformLookTopPutCreature(state, state.active_player_index, def.params, tutor_target);
+            PerformLookTopPutCreature(state, state.active_player_index, def.params, tutor_target,
+                                      def.card.m_name.str());
         }
         else if (def.params.tutor_to_battlefield_single)
         {
@@ -14121,13 +14185,28 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     }
     }   // end of the bp_resume prefix skip
 
-    // Deferred plain-cantrip re-solve: run ONCE, after every main-plan cast, using only the
-    // mana those casts left — the executor's post-loop breakpoint replay does exactly this,
-    // so recording it into out_breakpoint (the committed breakpoint_actions) keeps the two in
+    // Deferred plain-cantrip re-solve: run after every main-plan cast, using only the mana
+    // those casts left — the executor's post-loop breakpoint replay does exactly this, so
+    // recording it into out_breakpoint (the committed breakpoint_actions) keeps the two in
     // lockstep. A cantrip cast within this re-solve has sink_stack non-empty and so re-solves
     // inline, recording into its own nested breakpoint (replayed recursively by the executor).
-    if (deferred_cantrip_resolve)
+    // DO-WHILE for the tutor-top reset (USER 2026-08-21: "a do-while loop. That continues as
+    // long as we cast Tutors"): a continuation that casts another tutor-to-top re-arms the
+    // flag (its arming ignores sink depth, see the arming site), so each tutor opens the next
+    // pass with the top-consumers re-enabled. Every pass that casts no tutor leaves the flag
+    // unarmed and the loop exits after it -- the historical single-pass behaviour for every
+    // cantrip/acquisition arming is unchanged (they arm only at sink depth 0, before the
+    // first pass runs). Guard 4 = the deck's max castable tutor copies, a runaway backstop.
+    // Pass 1 runs for ANY armer (the historical single pass); pass N+1 runs ONLY when pass N's
+    // continuation cast a tutor-to-top (deferred_top_rearm, flag-gated) -- a cantrip re-arm in
+    // scoring mode must NOT loop (see the deferred_top_rearm declaration).
+    int  top_reset_passes = 0;
+    bool top_first_pass   = true;
+    while (deferred_cantrip_resolve && (top_first_pass || deferred_top_rearm)
+           && top_reset_passes++ <= 4)
     {
+        top_first_pass    = false;
+        deferred_top_rearm = false;
         // PREFIX-RESUME capture: this apply's varied breakpoint is the deferred one (the running
         // bp_seen equals plan.bp_at and the class is enabled), so the state RIGHT HERE -- every
         // main cast applied, Karoo played, pre-continuation -- is the shared prefix of every rank

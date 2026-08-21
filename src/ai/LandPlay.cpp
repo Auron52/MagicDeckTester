@@ -156,6 +156,43 @@ int GreedyLandChoiceIndex(const GameState& state)
         { has_other_land = true; break; }
     }
 
+    // Tutor-top combo hold (TopResolveEnabled -- the USER's reset, 2026-08-21). A spell//land
+    // top-consumer (Turntimber Symbiosis) in hand is the combo's consumer half: tutor_to_top
+    // stacks a creature, the consumer puts it onto the battlefield. The greedy drop runs BEFORE
+    // subset scoring at depth 0, so playing the consumer as the LAND burns the piece before
+    // Solve/ExtraLethalDamage can ever value the line (the isolated fixture measured exactly
+    // this). When the line is live -- a tutor_to_top in hand, a team-pump threat still in the
+    // library, and the pre-drop pool already affording tutor + consumer -- skip look-top cards
+    // in the scan: another land plays instead, or no land at all (the combo outvalues the drop).
+    // Gated on the reset lever + both params in hand -> every other deck/state byte-identical.
+    bool hold_top_consumer = false;
+    if (TopResolveEnabled())
+    {
+        int wt_mv = -1, tt_mv = -1;
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d) { continue; }
+            if (d->params.tutor_to_top) { wt_mv = d->card.m_mana_cost.ManaValue(); }
+            if (d->params.look_top_put_creature_count > 0)
+            {
+                const int mv = d->card.m_mana_cost.ManaValue();
+                if (tt_mv < 0 || mv < tt_mv) { tt_mv = mv; }
+            }
+        }
+        if (wt_mv >= 0 && tt_mv >= 0)
+        {
+            bool hoof_in_lib = false;
+            for (const Card& c : ap.library)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->params.etb_team_pump_per_creature) { hoof_in_lib = true; break; }
+            }
+            if (hoof_in_lib && AvailableManaPool(state, nullptr).Total() >= wt_mv + tt_mv)
+            { hold_top_consumer = true; }
+        }
+    }
+
     // Four-pass priority: 0 = untapped+multi, 1 = untapped+any, 2 = tapped+multi, 3 = tapped+any.
     for (int pass = 0; pass < 4; ++pass)
     {
@@ -174,6 +211,8 @@ int GreedyLandChoiceIndex(const GameState& state)
             const CardDefinition* front = CardDatabase::Instance().LookupCached(ap.hand[i]);
             const CardDefinition* def   = LandFaceDefOf(front);   // spell//land plays its back face
             if (!def) { continue; }
+            if (hold_top_consumer && front != nullptr
+                && front->params.look_top_put_creature_count > 0) { continue; }   // combo piece, not the drop
             if (def->params.etb_bounce_land && !has_other_land) { continue; }
             if (LandClosingWindowEnabled())
             {

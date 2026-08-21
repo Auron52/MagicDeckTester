@@ -1387,18 +1387,23 @@ function applyAccepted(planIndex, label) {
   // {n, auto}: n = ints this decision contributed; auto = it was committed WITHOUT a user rest
   // (dead-opponent / commit-turn auto-pass / auto-resolve), so undo rolls it back together with the
   // preceding user step rather than landing mid-auto-sequence (issue #2).
-  // #10 cast-order: if the human queued the accepted plan's non-sac casts in a NON-canonical order, pin
-  // that order via the main-ordinal-keyed side-channel (S.castOrder). The engine emits each plan's
-  // cast_order_canonical (>=2 casts) + the decision's main_ordinal; we send --cast-order ONLY when the
-  // human's queued sequence differs from canonical (same multiset, different order) -> references that
-  // aren't reordered stay byte-identical. Keyed step marker `co` so undo drops the side-channel entry.
+  // #10 cast-order: ALWAYS pin the human's queued order for a multi-cast commit (USER 2026-08-21:
+  // "the user's order in the viewer should be respected regardless of the deck order"). The old
+  // send-only-when-it-differs-from-canonical filter was a false proxy: under MTG_UNPRUNED (human
+  // play) the enumerator emits ordering-searched plans whose EXECUTION order is their vector order,
+  // not canonical -- so "human == canonical" could still execute a DIFFERENT order than queued
+  // (seed 1 T2: the matched plan ran Priest before Sol Ring and dropped the Ring as unpayable while
+  // canonical said Ring-first). Pinning unconditionally routes every multi-cast commit through
+  // ReorderPlanCasts/searched_order, which executes the queued sequence verbatim. Old references
+  // carry no --cast-order and replay exactly as before. Keyed step marker `co` so undo drops the
+  // side-channel entry.
   let coKey = null;
   const dec0 = S.decision, plan0 = dec0 && dec0.plans && dec0.plans[planIndex];
   const canon = plan0 && plan0.cast_order_canonical;
   if (canon && canon.length >= 2 && dec0.main_ordinal != null) {
     const human = (S.plan||[]).map(p=>p.name).filter(n => canon.includes(n));
     const ms = a => a.slice().sort().join('');
-    if (ms(human) === ms(canon) && human.some((n,i)=>n!==canon[i])) {   // same casts, different order
+    if (ms(human) === ms(canon)) {   // same cast multiset -> the queued order is authoritative
       coKey = String(dec0.main_ordinal);
       (S.castOrder=S.castOrder||{})[coKey] = human;
     }
@@ -1664,8 +1669,11 @@ function lookPanelHtml(d, dec){
 // dimmed/non-takeable, and a "Take nothing" option declines. The AI's pick is tagged. After a card
 // enters hand the engine re-enumerates (the library shrank), so a dug card is playable THIS turn.
 function digPanelHtml(d){
+  // Destination-aware wording: the shared dig chooser serves into-hand ETB digs (Acclaimed
+  // Contender) AND onto-the-battlefield puts (Skyhunter "(attack dig)", Turntimber "(put)").
+  const toBf = /\((attack dig|put)\)/.test(d.source||'');
   let h=`<h3>Dig — ${esc(d.source||'')}</h3>`;
-  h+=`<div class="sub">Look at the top ${ (d.examined||[]).length } cards — put one highlighted card into your hand (it becomes playable this turn), or take nothing. The rest go to the bottom.</div>`;
+  h+=`<div class="sub">Look at the top ${ (d.examined||[]).length } cards — put one highlighted card ${toBf?'onto the battlefield':'into your hand (it becomes playable this turn)'}, or take nothing. The rest go to the bottom.</div>`;
   h+=`<div class="tutgrid">`;
   (d.examined||[]).forEach(c=>{
     const def=c.index===d.heuristic_default;

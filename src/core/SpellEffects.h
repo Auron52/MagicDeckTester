@@ -3697,7 +3697,8 @@ inline bool ApplyRevealTopDeploy(GameState& state, int controller)
 // plan variant, autonomous + human). Empty -> the provider-free default: highest-MV creature
 // among the looked cards (disclosed); "TURNTIMBER_NONE" -> deliberately put nothing.
 inline void PerformLookTopPutCreature(GameState& state, int controller, const CardParams& pp,
-                                      const std::string& chosen_name)
+                                      const std::string& chosen_name,
+                                      const std::string& source_name)
 {
     Player& ap = state.players[controller];
     const int look = std::min(pp.look_top_put_creature_count,
@@ -3729,6 +3730,30 @@ inline void PerformLookTopPutCreature(GameState& state, int controller, const Ca
                 if (!c.IsCreature()) { continue; }
                 const int mv = c.m_mana_cost.ManaValue();
                 if (mv > best_mv) { best_mv = mv; pick = i; }
+            }
+        }
+        // Human-play put chooser (shared dig chooser; the Skyhunter attack-dig reuse precedent).
+        // Human plans enumerate ONE empty-target cast for this spell (no clairvoyant named
+        // variants -- see the collection site), so the human decides HERE, off the REAL look:
+        // legal = every creature among the looked cards, reply = a looked index to put onto the
+        // battlefield or -1 to put nothing; the heuristic default is the highest-MV pick above.
+        // RevealLogPause nulls the chooser in every search/rollout/enumeration scope, so it
+        // fires only on real resolution; autonomous play (named or empty target) is unchanged.
+        if (g_play_dig_chooser && chosen_name.empty())
+        {
+            std::vector<int> legal;
+            for (int i = 0; i < look; ++i)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(looked[i]);
+                const Card& c = d ? d->card : looked[i];
+                if (c.IsCreature()) { legal.push_back(i); }
+            }
+            if (!legal.empty())
+            {
+                const int c = (*g_play_dig_chooser)(state, controller, source_name + " (put)",
+                                                    looked, legal, pick);
+                pick = -1;
+                for (int li : legal) { if (li == c) { pick = c; break; } }
             }
         }
     }
@@ -8169,10 +8194,36 @@ inline std::vector<int> SacCreatureCandidateIndices(const GameState& state, int 
         if (!CardHasColorNamed(p.card, color)) { continue; }
         out.push_back(i);
     }
+    // MTG_SAC_SPARE_ATTACKERS (A/B lever, default OFF): rank victims by what this turn's ATTACK
+    // actually loses, not by printed size. USER (2026-08-21): "We should sac summoning sick
+    // worldspine wurms ... That's a good choice to get more critters." A summoning-sick token
+    // SPAWNER (dies_trigger_creates_tokens > 0) is the best victim of all: it contributes zero to
+    // this attack (Craterhoof's pump grants no team haste) and its death is a net BODY GAIN --
+    // Worldspine out, three 5/5s in, each one more count for a pump's X. Next, prefer any victim
+    // that CANNOT attack right now (tapped for the turn's already-made payments, or sick) over one
+    // that can -- by Natural Order's cast the batch prepay has run, so a mana-tapped elf is free
+    // where an untapped one is a pumped attacker (measured: one 1/1 at hoof-pump X=7 is the whole
+    // 27-vs-19 margin on d0 gi106). Default order unchanged: tokens, then lowest power.
+    static const bool spare_attackers = EnvOn("MTG_SAC_SPARE_ATTACKERS");
     std::stable_sort(out.begin(), out.end(), [&](int a, int b)
     {
         const Permanent& pa = state.battlefield[a];
         const Permanent& pb = state.battlefield[b];
+        if (spare_attackers)
+        {
+            auto tier = [&](const Permanent& p) -> int
+            {
+                const bool atk = CanAttackFull(p, state.battlefield, p.controller_index);
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (!atk && d && d->params.dies_trigger_creates_tokens > 0) { return 0; }
+                if (p.is_token)                                             { return 1; }
+                if (!atk)                                                   { return 2; }
+                return 3;
+            };
+            const int ta = tier(pa), tb = tier(pb);
+            if (ta != tb) { return ta < tb; }
+            return pa.EffectivePower() < pb.EffectivePower();
+        }
         if (pa.is_token != pb.is_token) { return pa.is_token; }
         return pa.EffectivePower() < pb.EffectivePower();
     });

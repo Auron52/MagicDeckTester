@@ -227,7 +227,7 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 if (def.params.look_top_put_creature_count > 0)
                 {
                     PerformLookTopPutCreature(state, entry.controller_index, def.params,
-                                              entry.tutor_target);
+                                              entry.tutor_target, def.card.m_name.str());
                 }
                 if (def.params.tutor_to_battlefield_single)
                 {

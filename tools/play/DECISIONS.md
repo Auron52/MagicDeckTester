@@ -74,7 +74,15 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 
 KittyEquipment reuse notes (2026-08-13): the Armored Skyhunter attack-dig's *put* pick reuses the
 `dig` type (`FireAttackDigAttach` → `g_play_dig_chooser`, source = the Skyhunter); only the attach
-host needed the new `attach_host` type above. Unexpectedly Absent's target reuses `target` (the
+host needed the new `attach_host` type above.
+
+Turntimber Symbiosis reuse note (2026-08-21): the `look_top_put_creature_count` put also reuses the
+`dig` type (`PerformLookTopPutCreature` → `g_play_dig_chooser`, source = `"<card> (put)"` — the
+marker keys the onto-the-battlefield wording in both the emitter note and `digPanelHtml`). Under
+human play the plan menu enumerates ONE empty-target cast (no clairvoyant named variants — they
+leaked the top-7 into a no-reveal game and went stale the moment a same-line Worldly Tutor
+reordered the library); the human picks at resolution off the REAL look, or -1 to put nothing.
+Autonomous play keeps the searched named-variant axis unchanged. Unexpectedly Absent's target reuses `target` (the
 tuck branch consults `g_play_target_chooser` with every nonland permanent legal, own side included).
 Balan's attach-all, Stoneforge's put, and the Jitte -1/-1 / lifegain modes are `main_phase` plan
 lines (`attachall=` / `sfput=` / `jittemode=` LineSpec verbs).
