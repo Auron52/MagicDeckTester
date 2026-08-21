@@ -138,3 +138,54 @@ rules per the USER's static-is-flawed direction, derived from further per-game d
 the coupled-GT churn and adopt on doctrine. New instruments landed: `library_top` scenario key,
 `MTG_FSW_LINE` (tail line dump), `MTG_TRACE_SOLVE_TURN`, `MTG_LIFE_TRACE` (permanent),
 `test/scenarios/al_hold_kill_turn.json` (greedy kill-turn guard).
+
+## 2026-08-21c: TWO REAL BUGS UNDER THE GAP (USER: "clairvoyant artifacts can be put aside, but
+## if there are other issues we'll need to address them") -- both FIXED; gap re-measured
+
+The decoupled gap was re-attributed per-game: 38 of the (job,gi) cells red under salt 1 are red
+under salt 2 WITH THE SAME turn slip (24 distinct games; only 3 games flip direction between
+salts). A salt-robust slip cannot be stream luck, so the ~+0.004/game was NOT clairvoyance -- it
+decomposed into two mechanisms, one of which was a pair of real bugs:
+
+**BUG 1 -- the `--scenario` harness never stamped deck traits (FIXED).** `RunScenario` built its
+GameState without `uses_second_main` / `deck_feeds_combat` / dependency pulls / shuffle salts, so
+`MainPhaseFilterActive` (gated on `state.uses_second_main`) was FALSE in every fixture: every
+"PHASE arm" scenario probe this arc ran was silently unfiltered, and the 2026-08-21b "machinery
+proven complete via pinned scenarios" claim was VACUOUS for the filtered arm. Fix: the stamp block
+was extracted to `GoldFishRunner::StampDeckTraits` and is now called by SetupGame, RunScenario and
+RunCastOrderReport. Runner byte-identity verified (digest-identical repro game + full smoke).
+
+**BUG 2 -- `ApplyEnablerWipeRecheck`'s `order.size() < 4` fast-out blocked the 3-cast backed
+re-arm (FIXED).** The USER-adopted Remedy/Silence alternation (MTG_ORDER_RECHECK, 2026-08-18)
+never ran for the subset {Silence, Silence, Remedy} with a Remedy ALREADY live -- exactly the
+POST-COMBAT kill shape the enforced split forces (Invigorate is m1, so the m2 interleave is 3
+casts). Canonical enabler-first order cast Remedy2 first; the first Silence's wipe killed BOTH
+Remedies; the second Silence GIFTED 6 -- so the m2-route T3 kill was inexpressible and the split
+arm's hold-lines were undervalued at any budget (g6006_285, g7007_780: PHASE 4->3 after the fix,
+now matching CTL). The fix lowers the fast-out to 2 and exits early on wipe-free sets (Reverent
+Silence is the only `destroy_all_enchantments` card, so every other deck pays one def-pointer
+pass). This also improves the CTL arm's END STATES on GT games (the size-2 backed case [Silence,
+Remedy2] now keeps the fresh Remedy out of the wipe): smoke antilife scores IDENTICAL
+(4.9010/4.1840/4.1733), 7 play-digests/tier changed with the fix's exact signature
+(Remedy;Silence -> Silence;Remedy). Guard: `test/scenarios/al_interleave_kill.json` (depth 1,
+passes BOTH arms; d0 cannot assemble the interleave -- a pre-existing greedy limitation in both
+arms, noted, not chased).
+
+**Post-fix decoupled gap:** salt1 +23/8000 (+0.0029), salt2 +31/8000 (+0.0039) -- from +29/+36.
+CTL under decouple moved 0-1 games. The remaining class has ONE named mechanism:
+
+**The residual (g602-class): dump-plan tie-break, not clairvoyance (salt-robust).** At the T2
+root every plan TIES at the projection horizon (e.g. tail=5 for all), the first-verified-win
+shortcut commits the FIRST in-horizon winner, and MoveOrderPlans ranks by immediate value -- so
+the arm that ENUMERATES a dump plan casts it. Under the split, the collapse_in_hand speculative
+emission (built for this arc) offers Invigorate-as-burn with Remedy still in hand, creating
+`Remedy+Invigorate` dump plans whose payment taps Ignoble Hierarch -- forfeiting the attack and
+wasting the pump, costs that are real but invisible at a tied horizon. CTL never enumerates that
+plan (its Invigorate is auto-fire-only, and the TUNED auto-fire hold -- no ready attacker -> no
+fire, SpellEffects.h CanAutoFireAltPayload -- refuses exactly this line). I.e. the split's wide
+emission bypasses the adopted auto-fire doctrine, and ties then break toward the dump.
+Repair options (USER decision -- cast-order/emission tie-breaks are user-reviewed):
+(a) narrow the speculative emission of TARGETED pump payloads (target_own_creature) to mirror
+the auto-fire hold at emission time; (b) a reviewed tie-break among horizon-tied plans (prefer
+attack-preserving / fewer cards spent) -- touches the first-verified-win shortcut, perf-relevant;
+(c) accept the residual (+0.003/game decoupled) and adopt/decline the split on doctrine.

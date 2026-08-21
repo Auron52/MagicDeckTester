@@ -767,7 +767,30 @@ bool OrderRecheckEnabled()
 void ApplyEnablerWipeRecheck(const GameState& state, const std::vector<Action>& acts,
                              std::vector<int>& order)
 {
-    if (!OrderRecheckEnabled() || order.size() < 4) { return; }   // 2 enablers + 2 wipes minimum
+    // Size gate is 2, not 4: with an enabler ALREADY live the smallest recheck case is
+    // [wipe, enabler] -- "[Remedy already out] Silence, Remedy" keeps the fresh Remedy off the
+    // board until after the wipe, and the 3-cast "[backed] Silence, Remedy, Silence" is the
+    // POST-COMBAT kill shape under the enforced main split (the pre-combat 4-cast form was the
+    // only one the old `< 4` fast-out let through; the m2 route's {Silence,Silence,Remedy}
+    // subset was canonical-ordered Remedy-first, its wipe killed BOTH Remedies, and the second
+    // Silence gifted the opponent 6 -- a T3 kill the search then could not see; g6006_285).
+    if (!OrderRecheckEnabled() || order.size() < 2) { return; }
+
+    std::vector<int> enablers, wipes;   // positions WITHIN `order`
+    for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
+    {
+        const Action& a = acts[order[pos]];
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (!d) { continue; }
+        if (d->params.lifegain_to_loss && d->card.IsCreature()) { return; }   // survives the wipe -> plain order is right
+        if (d->params.lifegain_to_loss)          { enablers.push_back(pos); }
+        if (d->params.destroy_all_enchantments)  { wipes.push_back(pos); }
+    }
+    // No wipe in the ordered set -> nothing to re-check. This is the hot-path exit for every
+    // deck but Anti-Lifegain (Reverent Silence is the only destroy_all_enchantments card), and
+    // it runs BEFORE the battlefield scans so lowering the size gate costs other decks only
+    // this one pass over the plan's defs.
+    if (wipes.empty()) { return; }
 
     // A CREATURE enabler survives the wipe (Plague Drone is not an enchantment), so with one of
     // those around every wipe is already backed and the plain order is right -- do nothing.
@@ -791,16 +814,6 @@ void ApplyEnablerWipeRecheck(const GameState& state, const std::vector<Action>& 
         if (d && d->params.lifegain_to_loss) { backed_now = true; break; }
     }
 
-    std::vector<int> enablers, wipes;   // positions WITHIN `order`
-    for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
-    {
-        const Action& a = acts[order[pos]];
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-        if (!d) { continue; }
-        if (d->params.lifegain_to_loss && d->card.IsCreature()) { return; }   // as above, in-plan
-        if (d->params.lifegain_to_loss)          { enablers.push_back(pos); }
-        if (d->params.destroy_all_enchantments)  { wipes.push_back(pos); }
-    }
     if (wipes.size() < 2 && !(backed_now && wipes.size() >= 1 && !enablers.empty())) { return; }
     if (enablers.empty()) { return; }
 

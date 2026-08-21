@@ -1,0 +1,27 @@
+{
+ "_comment": "g6006_285-class guard (2026-08-21): the Silence-Remedy-Silence re-arm interleave. Board: Remedy live, unsick Hierarch, Temple Garden + Godless Shrine untapped. Hand: Invigorate + 2x Reverent Silence + redundant Remedy + Windswept Heath. Opp 20. Kill (exact 20): Heath->shock, Invigorate alt (drip 3 + pump), attack 5, then Silence (-6, wipes Remedy1), RECAST Remedy2 ({2}{B} off the 3 lands), Silence2 (-6). Order is everything: canonical enabler-first casts Remedy2 BEFORE the Silences, the first wipe kills BOTH Remedies and the second Silence GIFTS 6. ApplyEnablerWipeRecheck produces the re-arm order; its old `order.size() < 4` fast-out skipped this 3-cast backed form, which is the post-combat kill shape under the enforced main split -- so the split arm could not see this T3 kill at any budget. Depth 1 (the greedy d0 solver cannot assemble the interleave -- a separate, pre-existing limitation in BOTH arms).",
+ "deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "max_turns": 4,
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  {"name": "Temple Garden", "controller": 0, "tapped": false},
+  {"name": "Godless Shrine", "controller": 0, "tapped": false},
+  {"name": "Ignoble Hierarch", "controller": 0, "tapped": false, "sick": false},
+  {"name": "Tainted Remedy", "controller": 0, "tapped": false}
+ ],
+ "hand": [
+  "Invigorate",
+  "Reverent Silence",
+  "Reverent Silence",
+  "Tainted Remedy",
+  "Windswept Heath"
+ ],
+ "library_filler": "Forest",
+ "library_size": 20,
+ "depth": 1,
+ "budget_ms": 0,
+ "expect_win_turn": 3
+}
