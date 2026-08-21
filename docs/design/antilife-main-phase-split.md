@@ -725,3 +725,64 @@ use. That is WASTED, never harmful: the rung is a first-try hold with the unrest
 it, so the payment is unaffected. Where FindBestOwnAttacker's ranking QUALITY does real work is a
 board whose bodies differ in power (a 3/3 dork beside a 0/1) -- there holding the bigger body is a
 substantive, and sensible, call.
+
+## 2026-08-21n: RESIDUAL RE-CENSUS UNDER THE RUNG -- 19/23 reproduce COUPLED; PHASE (not
+## condemnation) is the bigger cause; gi852 ROOT-CAUSED as a classification/combat mana collision
+
+Re-ran the residual with MTG_TAP_ATTACKER_RUNG=1 on both arms (23 salt-robust worse rows = 15
+distinct games; artifacts logs/al_resid2/, manifest /tmp/al_resid_rung.json).
+
+* SHAPE: every one of the 23 is EXACTLY +1 turn -- no losses, no multi-turn slides. 8 games lose at
+  BOTH d3 and d5, so this is systematic behaviour, not a depth artifact.
+* COUPLED (no salt) repro: **19 of 23 reproduce**, 4 go away, 0 flip better. So the bulk is
+  production-domain, NOT a decouple-ensemble artifact. (Running the coupled isolation FIRST is now
+  the standing method -- it is what corrected the g8 story.)
+* SINGLE-LEVER attribution (coupled, rung on): **PHASE 12 rows / 6 distinct games**, CONDEMN 7 rows
+  / 5 distinct, DORK **0**. The phase split ITSELF is the bigger cause -- the earlier framing that
+  condemnation was the main culprit is wrong.
+
+### gi852 (al_d3_s7007, USER's flagged game) -- FULLY ROOT-CAUSED
+
+Board at T4: Temple Garden(G/W), Stomping Ground(R/G), Overgrown Tomb(B/G), Blood Crypt(B/R),
+Ignoble Hierarch(B/R/G), Birds of Paradise(any) = **exactly 6 sources**; hand holds 2x Fiery
+Justice ({R}{G}{W}, 5 damage + "opponent gains 5" which Tainted Remedy INVERTS = 10 each).
+Opponent at 20. Two Justices = 20 = exactly lethal, and they need all 6 sources with ZERO colour
+slack (Temple Garden and Birds are the ONLY two white sources).
+
+* CONTROL commits `T4 pre:spells[Fiery Justice,Fiery Justice]` -> opp 0, **win T4**.
+* SPLIT commits `T4 pre:<pass> | 2nd:spells[Fiery Justice]`: Fiery Justice is classified MAIN-2, so
+  the split's m1 candidate set does not contain it; m1 passes; the greedy attack swings the
+  Hierarch alone for 1 (0 power + exalted); that taps the 6th source; m2 now has 5 of the 6 mana
+  and can afford ONE Justice. 10 damage instead of 20 -> **win T5**. The turn TRADED 1 DAMAGE FOR 10.
+* MTG_UNPRUNED=1 restores the m1 candidate set (Fiery Justice appears 1694x at T4 m1 vs **0**
+  pruned) and the split then commits `pre:spells[Fiery Justice,Fiery Justice]` -> **win T4**.
+* USER's hypothesis ("we should be able to cast multiples with this design, so 4 is confused") is
+  CORRECT about the design and the block is NOT expressibility: PlanGroupKey returns the HAND INDEX,
+  so two copies are two independent groups, and the m2 enumerator demonstrably emits same-card pairs
+  (`Ignoble Hierarch,Ignoble Hierarch` appears in the T4 m2 trace). The pair is absent only because
+  after the attack it is genuinely UNAFFORDABLE. Neither MTG_MAIN2_DROP=1 (m2 uses the m1
+  enumerator) nor MTG_ENUM_MEMO=0 nor MTG_COLOR_EXACT=0 changes the result; only MTG_UNPRUNED does.
+* CLASS: same shape as g8 -- an m1 -> m2 deferral that the intervening COMBAT invalidates by
+  consuming a mana source the deferred cast needs. g8 was the payment tapping the attacker; this is
+  the attack tapping the payment. Both say the same thing: **main-1 vs main-2 placement cannot be
+  decided without modelling what combat does to the mana pool.**
+
+### OPEN THREAD (do not guess -- measure): the dork search prefers HOLD and is overridden
+
+MTG_DORK_ATK_SEARCH fires at T4 (122 contested nodes) and prefers hold: `[dork-atk] T4 d1 hold=5
+rel=6`. Yet the executed PD game still ATTACKS at T4 (and still wins T5). Two unexplained facts:
+(1) the preference is not reaching the executor on a turn REPLAYED from the T3-committed line;
+(2) hold projects 5, not 4 -- if holding truly leaves all 6 sources up, the m2 pair is affordable
+and the branch should see the T4 kill. Every [dork-atk] node at T4 is d1 (one at d2); the
+TOP-LEVEL T4 decision never runs one. Next step is to instrument the hold branch's m2 pool
+directly rather than infer it.
+
+### The MTG_UNPRUNED equality across all 23 -- and why it is WEAK evidence
+
+At equal pruning (MTG_UNPRUNED=1 on BOTH arms) bundle == control on all 23 jobs, 0 worse, 0 better.
+That is consistent with "the whole residual is prune deletions", but it is close to TAUTOLOGICAL and
+must not be quoted as proof: UNPRUNED restores main-2 cards to the m1 set, which is exactly what the
+classification prune removes, so it largely DISABLES the levers under test. (It also costs the
+control arm real quality -- 14 of 23 jobs get WORSE unpruned, budget dilution from widening -- so
+`bun_unpruned` vs `ctl` is not a valid comparison either.) The load-bearing evidence is the
+per-game structural dig above, not the aggregate equality.
