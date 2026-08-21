@@ -39,6 +39,26 @@ stage.
    dormant at width 1). Blind global widths are refuted (budget dilution — see the
    searched-discard doc); a per-deck, analysis-justified width is the sanctioned form.
 
+## The bucket doctrine (user, 2026-08-21)
+
+The rulings above say WHO authors the rule and HOW it is tested; a later session fixed the
+SHAPE. The authoritative write-up lives in the analyze-deck skill (§5i, "Discard analysis —
+the BUCKET policy"); the one-paragraph version: partition the hand into role BUCKETS (mana —
+sub-divided lands-for-drops vs dorks-for-acceleration; threats — the catch-all, "extra
+spells are always threats"; enablers — behind a threat floor; per-piece 1-item buckets +
+a dig bucket for combo decks), build the keep set QUOTA-FIRST with every permanent quota
+netted against the board, sub-quotas fungible upward within their parent, and shed only
+overflow, ordered by DISTANCE-TO-PLAYABLE rather than raw size. The AI authors its best
+shot and reports; the user amends and approves. The provider returns ONE index (the
+one-option standing rule; it also skips the executor's trial fan), routed through
+`CleanupDiscardRankingWithOrder` so staged/required-piece protection stays engine-enforced,
+behind a default-on `MTG_<DECK>_BUCKET_DISCARD` flag. Validation adds a testing-only FAN
+lever (return the full order so the trace can grade the pick — a single-entry return skips
+it) and demands zero regret vs the searched labels plus non-inferiority through the suite.
+`FiveColourProvider::CleanupDiscardCandidates` (adopted 2026-08-21) is the reference: quota
+build, distance classes, state promotions (free-cast engine online; lethal-next finisher),
+threat floor before Mana Cannons, Bolas last as goldfish-dead.
+
 ## The stage, step by step
 
 1. **Evidence** (`_RunBatch`, 1 job, `--threads 1` so trace blocks don't interleave):

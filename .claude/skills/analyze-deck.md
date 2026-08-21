@@ -668,43 +668,84 @@ Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
 
 Only a deck that satisfies all of these is "analyzed." Report (Stage 6) must state which checks were run and their outcomes.
 
-### 5i. Discard analysis (search-informed per-deck discard policy)
+### 5i. Discard analysis — the BUCKET policy (search-informed, per deck)
 
-`scripts/analyze_deck.py <deck> --discard-analysis` (also stage 8 of the full script run)
-derives the deck's cleanup-discard policy empirically instead of inheriting any global rule
-(user ruling 2026-08-07: no general discard heuristic; every deck gets an AI-authored,
-measured one). **The preferred SHAPE is BUCKETS (user ruling 2026-08-21: the generic max-MV
-rule is "too arbitrary"; "the best approach is almost always bucketing — typical buckets are
-mana, threats, and some decks have enablers or even multiple 1-item buckets for combo
-pieces").** Author the policy as a hand partition with per-bucket keep quotas that net board
-coverage first (the shipped AntiLifegain/Mirrorwing rules are the reference shape); a flat
-name order is the degenerate case for decks whose sheds have no state dependence, and the
-generic MV rule is only the fallback while no authored rule exists. Two structural rules
-(user, 2026-08-21): **filling every bucket's quota comes FIRST** — only overflow beyond
-quotas is sheddable; and **within an over-full bucket, shed by distance-to-playable**
-(colour/mana coverage vs the card's cost across board+hand), not raw size — a payoff that is
-nowhere near castable sheds before a castable one ("dropping a Progenitus may still make
-sense... if it is nowhere near playable"). Buckets also SUB-DIVIDE by role where the deck
-warrants it (user, 2026-08-21): the mana bucket splits into lands vs dorks with a quota for
-EACH ("you will probably keep some of each, so you have acceleration and land drops" — TH's
-broken-up mana bucket is the precedent), and a combo-shaped deck gets one bucket per piece
-plus a dedicated dig/cantrip bucket (the Hinata shape). Sub-quotas are FUNGIBLE upward —
-the parent bucket's total quota binds, so a hand with no dorks keeps more lands — and every
-permanent-based quota (mana sources, permanent combo pieces) is counted NET OF BOARD: copies
-on the battlefield fill the quota first and the hand owes only the remainder. It re-enables the retired discard probe OFFLINE as a label generator
-(`MTG_DISCARD_NODE=0 MTG_DISCARD_TRACE=1`: every real cleanup shed emits a searched trial
-table), scores candidate visible-info rules against those labels (status quo, spare-copy
-band as a label-only hypothesis, a derived shed-order), then paired-seed A/Bs a surviving
-order via the testing-only `MTG_DISCARD_ORDER` env lever. **Report only** — on the user's
-approval the rule is implemented as the deck provider's `CleanupDiscardCandidates`
-override (ALL discard rules are provider-owned; simple case = a static order deferring to
-the shared ranking, see HinataProvider; state-dependent case = buckets, see
-AntiLifegainProvider), validated rule-vs-searched at unbounded budget (d3–d4,
-apples-to-apples; probe-better games classified — only churn/clairvoyance acceptable),
-then re-gated. A deck whose provider owns its ranking (TreasureHunt) reports
-`DISCARD_INERT`; `NO_RULE_CONSIDER_SEARCH` flags a candidate for another authoring
-attempt, then a small labelled model, then the searched-width escalation. See
-`docs/design/per-deck-discard-analysis-phase.md`.
+Every deck gets an AI-authored, measured cleanup-discard policy (user ruling 2026-08-07: no
+general discard heuristic). **The AI gives it its BEST SHOT and reports to the user** (user,
+2026-08-21): author the complete policy yourself from the deck's cards plus the evidence
+below — do not ask the user to design the buckets — then present it with your rationale and
+any doubts flagged; the user amends and approves before anything ships. The generic max-MV
+tier is only the fallback while no authored rule exists ("too arbitrary" — it embeds "most
+expensive = most expendable", which is backwards for payoff decks: it ranked Creature
+Giving's engine first to pitch, and shed FiveColour's Progenitus for a measured 1-turn cost).
+
+#### The shape: buckets (USER doctrine, 2026-08-21)
+
+"The best approach is almost always bucketing." Partition the hand into ROLES, give each a
+keep QUOTA, and build the keep set quota-first; only overflow beyond quotas is sheddable,
+and the shed is the overall-lowest-priority card.
+
+| bucket | notes |
+|---|---|
+| **Mana** | Sub-divides by role: LANDS (land drops — one beyond colour coverage, two early) vs DORKS/rocks (acceleration, kept while board sources are below the deck's curve top). "You will probably keep some of each, so you have acceleration and land drops" (TH's broken-up mana bucket is the precedent). Colour coverage comes first: the minimal set that, with the board, covers the deck's colours. |
+| **Threats** | The CATCH-ALL: "extra spells should always be threats." Ordered by a deck-specific value rank the user reviews, with STATE PROMOTIONS where the deck warrants them (FiveColour: an online free-cast engine lifts its biggest payoffs; a lethal-next finisher jumps to the front). |
+| **Enablers** | Kept AFTER a threat floor ("deprioritize Mana Cannons to ensure there are at least 2 threats; if there is space after, it can be included"). |
+| **Combo pieces** | A combo-shaped deck gets ONE bucket PER PIECE (often 1-item), plus a dedicated dig/cantrip bucket (the Hinata shape). |
+
+Structural rules, all USER-ruled 2026-08-21:
+
+1. **Quota-first.** Filling every bucket's quota comes before any shed; only overflow is
+   sheddable.
+2. **Net of board.** Every permanent-based quota (mana sources, permanent combo pieces)
+   counts battlefield copies first; the hand owes only the remainder ("we also count the
+   number of such cards on board to determine whether we need to keep them").
+3. **Sub-quotas are fungible upward.** The parent bucket's total binds — a hand with no
+   dorks keeps more lands; sub-roles only express preference within the parent.
+4. **Distance-to-playable orders the shed inside an over-full bucket** — colour/mana
+   coverage across board+hand vs the card's cost, not raw size. A payoff that is nowhere
+   near castable sheds before a castable one ("dropping a Progenitus may still make
+   sense... if it is nowhere near playable"), and a promotion that erases the cost (a
+   free-cast engine online) erases the distance too.
+5. **Return ONE index.** The rule IS the decision (the heuristic-returns-one-option
+   standing rule; a single-entry return also skips the executor's trial-rollout fan —
+   `AIEngine::ChooseDiscard`). Route your order through `CleanupDiscardRankingWithOrder`
+   so the staged-card and required-piece protections stay engine-enforced.
+
+Reference implementations, simplest to fullest: `HinataProvider` (static rank order + dig
+bucket), `TreasureHuntProvider` (keep-set rule, single-index, broken-up mana bucket),
+`AntiLifegainProvider` / `MirrorwingProvider` (state-dependent buckets, board netted first),
+`FiveColourProvider` (quota-first build + distance-to-playable + state promotions + threat
+floor — the fullest expression of this doctrine, 2026-08-21).
+
+#### The loop: evidence → author → report → validate → gate
+
+`scripts/analyze_deck.py <deck> --discard-analysis` (also stage 8 of the full flow) runs the
+EVIDENCE pass: the retired discard probe re-enabled offline as a label generator
+(`MTG_DISCARD_NODE=0 MTG_DISCARD_TRACE=1` — every real cleanup shed emits a searched trial
+table), scored against simple visible-info rules, plus a paired-seed A/B of a derived flat
+order via the testing-only `MTG_DISCARD_ORDER` lever. Read it for: how often the deck
+actually sheds, how often the sheds are ties (the stakes), and which picks the searched
+labels refute. A `STATUS_QUO_OK` verdict does NOT end the job — it grades flat orders, not
+buckets; author the bucket policy anyway and hold it to non-inferiority.
+
+Then: author the bucket policy from the decklist (read the deck's cards from
+`src/cards/data/cards.json` first — never from memory), REPORT it to the user, and on
+approval implement it as the provider's `CleanupDiscardCandidates` override behind a
+default-on `MTG_<DECK>_BUCKET_DISCARD` flag (=0 restores the generic ranking). Validate:
+
+* **Rule-vs-searched labels:** re-run the evidence config with a testing-only FAN lever
+  that returns the full shed order (a single-entry return skips the trace —
+  FiveColour's `MTG_5C_DISCARD_FAN=1` is the pattern), and demand zero regret; any
+  rule-worse decision must classify as churn/clairvoyance, never a visible-info miss.
+* **Suite gates:** smoke + regression through the accept flow (slower searched games
+  classified — `test/classify_turn_later.sh`; draws-diverge = variance), overnight tier
+  to finish. The bar is NON-INFERIORITY: sheds are rare at shipped play on most decks and
+  the searched executor already catches gross misses, so the value is doctrine quality
+  plus rollout/gen fidelity (the rollout always sheds heuristically).
+
+A deck whose provider owns its ranking reports `DISCARD_INERT`; `NO_RULE_CONSIDER_SEARCH`
+flags a candidate for another authoring attempt, then a small labelled model, then the
+searched-width escalation. History and rulings: `docs/design/per-deck-discard-analysis-phase.md`.
 
 ---
 
