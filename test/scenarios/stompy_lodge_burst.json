@@ -1,0 +1,60 @@
+{
+  "deck": "decks/StompySurprise/StompySurprise.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "max_turns": 6,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Priest of Titania",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Llanowar Elves",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Llanowar Elves",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Llanowar Elves",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Wirewood Lodge",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Worldspine Wurm"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "validate_line": "cast=Worldspine Wurm",
+  "expect_verdict": "accept",
+  "log_out": "logs/play/stompy_lodge_burst.json",
+  "_comment": "Wirewood Lodge untap BURST (MTG_UNTAP_BURST=0 restores the gap). Four Elves (Priest + 3 Llanowar) -> Priest taps for 4. Flat mana with the Lodge as a plain {C} land: 2 Forests + 3 Llanowar + Priest(4) + {C} = 10 -- one short of Worldspine Wurm's {8}{G}{G}{G} = 11. The burst line pays it: tap out for 9 {G}, then {G} + tap Lodge -> untap Priest -> tap it again for {G}{G}{G}{G}, netting 12. Modelled everywhere as the net-cancellation form (one Lodge tap = best tapped scaled Elf's yield minus the {G} feed, Elf's tapped state unchanged) -- pool credit in AddSourceToPool, flow oracle, backtracker burst branch, greedy kind-4. USER 2026-08-20: 'also allow for tapping an existing untapped elf as needed in order to generate mana and using the Lodge to untap it.'"
+}

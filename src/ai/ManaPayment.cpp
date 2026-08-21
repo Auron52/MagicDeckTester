@@ -162,6 +162,26 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 else if (def->params.ramp_filter) { continue; }
                 else
                 {
+                    // Untap-land burst (Wirewood Lodge): with a TAPPED 2+ scaled Elf up and a feed
+                    // mana ({G}) already floating, one Lodge tap is worth the Elf's full yield for
+                    // one floating feed -- net (yield - 1), the net-cancellation model of "pay {G},
+                    // untap it, tap it again" (UntapBurstBestYield). Offered for the feed colour or
+                    // a generic pip; a strict {C} pip keeps the plain mode (G cannot pay it). The
+                    // backtracker fallback completes the orderings the greedy cannot stage here
+                    // (no feed floating yet, target not tapped yet).
+                    if (def->params.untap_creature_cost.has_value()
+                        && (any || needed != Color::Colorless))
+                    {
+                        const std::optional<Color> feed = UntapBurstFeedColor(*def);
+                        if (feed.has_value() && (any || needed == *feed)
+                            && UntapBurstBestYield(state, active, *def, /*require_tapped=*/true) >= 2)
+                        {
+                            ManaPool pr = floating;
+                            if (ConsumeFloating(pr, *feed)) { kind = 4; }
+                        }
+                    }
+                    if (kind == 0)
+                    {
                     // Payment-legal produces (see pay_produces above): a colored_creature_only land
                     // is NOT selected for a coloured pip on a non-creature spell (but still pays a
                     // generic pip as {C}).
@@ -171,6 +191,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     else { for (Color c : prod) { if (c == needed) { makes = true; break; } } }
                     if (!makes) { continue; }
                     kind = 1;
+                    }
                 }
                 const int rank = ResolveProvider(state).ManaSourceRank(state, *def);
                 if (rank < best_rank) { best_rank = rank; best_i = i; best_kind = kind; }
@@ -195,6 +216,20 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     if (available->colorless > 0)  { --available->colorless; }
                     else if (available->wild > 0)  { --available->wild; }
                 }
+                return true;
+            }
+            if (best_kind == 4)
+            {
+                // Untap-land burst: tap the Lodge, spend one floating feed mana, credit the best
+                // tapped scaled Elf's full yield (the Elf's tapped state is unchanged -- see the
+                // selection comment above). `available` was credited the NET (UntapLandBurstNet in
+                // AddSourceToPool), so consume the net here to stay in lockstep with the pool.
+                const std::optional<Color> feed = UntapBurstFeedColor(*bdef);
+                const int by = UntapBurstBestYield(state, active, *bdef, /*require_tapped=*/true);
+                bp.tapped = true;
+                ConsumeFloating(floating, *feed);
+                floating.Add(*feed, by);
+                if (available) { available->Add(*feed, -(by - 1)); }
                 return true;
             }
             // kind 2: filter coloured mode -- feed one of its colours (least-flexible feeder), yield 2.
@@ -1093,6 +1128,11 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
         // EARLIER IN THE SAME PLAN resolve, so the build-time credit can under-count supply -- the
         // one error that turns into a false reject. Same stand-down as the scaled land.
         if (d && IsScaledManaDork(*d)) { return f; }
+        // Untap-land with a live burst (Wirewood Lodge + a 2+ scaled Elf, incl. a TAPPED one this
+        // loop's untapped-only walk would miss): converts {C}-class supply into feed-colour supply
+        // this model does not track -- same stand-down as the scaled shapes.
+        if (d && d->params.untap_creature_cost.has_value()
+            && UntapLandBurstNet(state, active, *d) > 0) { return f; }
     }
 
     const bool widen = EnvOn("MTG_DOMAIN_WIDEN", true);   // mirrors TurnSolver's DomainWidenEnabled

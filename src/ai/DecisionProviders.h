@@ -86,6 +86,11 @@ enum class UnprunedGate
                   // pre-combat main instead of deferring Main2-classified casts to the post-combat
                   // main (USER design 2026-08-14, docs/design/main-phase-classification.md;
                   // human play always keeps the full pre-combat set)
+    TeraK,        // Terastodon ETB destroy-K narrowing opened: enumerate the full K = 0..cap fan
+                  // instead of the USER's lethality-window K-set (2026-08-20: K=0 only when a real
+                  // threat can drop, the K that kills next turn, the K that kills the turn after,
+                  // K=max when a team-pump haste finisher (Craterhoof) is also in hand; human play
+                  // always keeps the full fan)
     _Count
 };
 
@@ -833,6 +838,41 @@ public:
     // Enumeration breadth (Mirrorwing's lever on this deck's shape) -- MTG_KE_GROUP_CAP, default
     // OFF -> the generic 12. See the definition for the measured cost/quality dial.
     int EnumGroupCap() const override;
+};
+
+// StompySurprise (mono-green elf ramp). Detection keys on the deck's gated params (see the
+// stompy flag in DetectDecisionProvider); every hook except the one below stays Generic, so
+// routing this deck here instead of g_generic changes nothing but the cleanup-discard ranking.
+class StompyProvider : public GenericProvider
+{
+public:
+    const char* Name() const override { return "Stompy"; }
+    // Board-lethal search short-circuit (win-turn-invariant; see EquipmentProvider's note). This
+    // deck's late boards are the pathological wide shape it exists for -- elf swarm + Hornet
+    // tokens + a hoof pump that makes everything lethal at once. Also NOT a behaviour change:
+    // until the 2026-08-21 routing fix this deck silently ran under GoblinsProvider, which has
+    // the short-circuit on -- dropping to Generic would have silently removed it.
+    bool UseLethalShortCircuit() const override { return true; }
+    // Tutor target ordering (Worldly Tutor / Natural Order). Generic returns candidates in
+    // LIBRARY (shuffle) order, and the width-6 axis window then scores a RANDOM six of this
+    // deck's eleven distinct creature names -- the closers themselves fall out of the window.
+    // That cost a measured +0.03 avg win turn at d3 when the misroute fix moved the deck off
+    // GoblinsProvider's power-ranked list (5.0550 -> 5.0850, both seeds; d5 unmoved). See the
+    // definition for the authored order. Honors MTG_UNPRUNE=tutor as the escape hatch.
+    std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
+    // No TutorSearchWidth override: the CANDIDATE LIST is the branching control (user 2026-08-21,
+    // "I hate the width idea in general") -- TutorCandidates emits the decided pick alone when
+    // the lethality calculation is certain and the serious contenders when it is not, so a fixed
+    // width would be either inert or a second, arbitrary cap. MTG_TUTOR_WIDTH still overrides
+    // the axis for A/Bs; MTG_UNPRUNE=tutor restores the full untruncated list.
+    // Cleanup discard: USER-AUTHORED bucket policy (2026-08-21) -- <mana> <threats> <enablers>,
+    // shed in that order. Hand THREATS are spares in this deck ("many threats are not played
+    // from hand... you can fetch to top of deck with Worldly Tutor and drop it off the top"),
+    // so the library-deploy ENABLERS are the precious hand cards -- the exact inverse of the
+    // generic highest-MV rule, which pitches the fatties' neighbours and keeps flood. See the
+    // definition for the full bucket rules. MTG_STOMPY_BUCKET_DISCARD=0 -> generic base (A/B).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
 };
 
 // Process-lifetime default provider (stateless, shared across threads). Used as the

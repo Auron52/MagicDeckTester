@@ -1095,6 +1095,23 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
                 default: break;
             }
         }
+        // Untap-land burst (Wirewood Lodge): with a live 2+ scaled Elf -- including a TAPPED one,
+        // which contributes no colour of its own to this walk -- the Lodge tap delivers the FEED
+        // colour ({G}), not just its printed {C}. Without this a mid-turn subset needing {G} that
+        // only the burst can pay is rejected as "no source produces it". Net 0 -> no-op.
+        if (def->params.untap_creature_cost.has_value()
+            && UntapLandBurstNet(state, active, *def) > 0)
+        {
+            switch (*UntapBurstFeedColor(*def))
+            {
+                case Color::White: have[0] = true; break;
+                case Color::Blue:  have[1] = true; break;
+                case Color::Black: have[2] = true; break;
+                case Color::Red:   have[3] = true; break;
+                case Color::Green: have[4] = true; break;
+                default: break;
+            }
+        }
         // Three Tree City scaled ability yields a SEARCH-CHOSEN colour (any of W/U/B/R/G), so when it
         // can fire (a feeder pays the {2} and its net beats the basic {C}) every colour is producible.
         // Empty subtype on every board without the land -> byte-identical.
@@ -5139,6 +5156,25 @@ static int OptimisticTurnMana(const GameState& state)
         const int have = static_cast<int>(DomainColors(state, state.active_player_index).size());
         m += live_dorks * std::max(0, 5 - have);
     }
+    // SCALED MANA DORKS (Priest of Titania / Elvish Archdruid): each live one grows by 1 per
+    // matching creature cast before it taps, so the ceiling must cover the fully-grown burst or it
+    // would drop the very line the growth credit enumerates (the widen credit's own caution, from
+    // the other direction). Credited at the maximum: every matching hand creature landing first.
+    // Sound over-credit; 0 for every deck without a live scaled dork. (The untap-land burst needs
+    // no term here: AvailableManaPool above already credits its net via AddSourceToPool, and the
+    // growth it rides is covered by the same per-creature term.)
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !IsScaledManaDork(*d) || !CanTapNow(p, state.battlefield)) { continue; }
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+            if (hd && hd->card.IsCreature()
+                && CardHasSubtype(hd->card, d->params.mana_per_creature_subtype)) { ++m; }
+        }
+    }
     return m;
 }
 
@@ -5748,6 +5784,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (lcc.IsCreature() && seen_tt.insert(lc.m_name.str()).second)
                     { cands.push_back(lc.m_name.str()); }
                 }
+                // PUT-WIDTH cap (MTG_TT_PUT_WIDTH; 0 = every distinct name, the historical
+                // behaviour). Unlike the tutors above, these named variants are exempt from both
+                // the axis collapse and the signature dedup, so each one is a MULTIPLICATIVE
+                // odometer group in EnumeratePlans AND in every rollout-leaf Solve -- branch
+                // stats measured Turntimber as this deck's #1 driver (sum_odo 6.2M/8.2M at
+                // d3/d5, avg 117-133x, max 6144x, and two castable copies multiply TOGETHER).
+                // Under a saturated budget that width is paid in search QUALITY, not wall-clock.
+                // The cap keeps the top W by EvalCard (the same estimate that prices every other
+                // candidate at collection) + the explicit decline; the search still scores the
+                // survivors as full plan variants. Human play is exempt (the human must see
+                // every legal put).
+                static const int s_tt_width = EnvInt("MTG_TT_PUT_WIDTH", 0);
+                if (!HumanPlayActive() && s_tt_width > 0
+                    && static_cast<int>(cands.size()) > s_tt_width)
+                {
+                    std::stable_sort(cands.begin(), cands.end(),
+                                     [&](const std::string& a, const std::string& b)
+                    {
+                        const CardDefinition* da = CardDatabase::Instance().Lookup(a);
+                        const CardDefinition* db = CardDatabase::Instance().Lookup(b);
+                        const int ea = da ? EvalCard(*da, state) : 0;
+                        const int eb = db ? EvalCard(*db, state) : 0;
+                        return ea > eb;
+                    });
+                    cands.resize(static_cast<std::size_t>(s_tt_width));
+                }
                 cands.push_back("TURNTIMBER_NONE");   // "you MAY put" -- declining is legal
             }
             else
@@ -6338,6 +6400,37 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // subset off it. Creatures (mana dorks) are excluded -- they are summoning-sick this turn.
         if (RockRampEnumEnabled() && def.params.mana_rock && !def.card.IsCreature())
         { AddSourceToPool(a.rock_mana, state, def); }
+        // Terastodon: the ETB destroy-K rides chosen_x on the cast. The v1 engine wired K through
+        // the apply/executor path but never EMITTED K > 0, so no Elephant was ever made. The
+        // autonomous search emits ONE variant carrying the kEtbKxHeuristic sentinel: K is decided
+        // at RESOLUTION by the shared ProjectEtbDestroyK (SpellEffects.h) -- mid-plan, where the
+        // battlefield and remaining pool already reflect what the plan has done (USER 2026-08-21:
+        // no searched fan, "make a projection"; "we might be able to see it in the current turn
+        // plan? ... That would make things the easiest"). Only human play / MTG_UNPRUNED(terak)
+        // fan the explicit 0..cap so the person (or the audit) still sees every count; the cap is
+        // the WIDENED victim-pool count (EtbDestroyVictimClass), the same predicate resolution
+        // destroys by, so an offered K always resolves in full.
+        if (def.params.etb_destroy_own_noncreature_max > 0 && TeraKHeuristicEnabled())
+        {
+            if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::TeraK))
+            {
+                const int kcap = std::min(def.params.etb_destroy_own_noncreature_max,
+                                          CountEtbDestroyTargets(state, state.active_player_index));
+                for (int k = 0; k <= kcap; ++k)
+                {
+                    Action v   = a;
+                    v.chosen_x = k;
+                    if (k > 0) { v.eval += 2 * k; }
+                    actions.push_back(std::move(v));
+                }
+            }
+            else
+            {
+                a.chosen_x = kEtbKxHeuristic;   // resolution-time projection (plan-aware)
+                actions.push_back(std::move(a));
+            }
+            continue;
+        }
         // Ponder (cast_reorder): keep-vs-shuffle. This was the #1 branching source (MTG_BRANCH_STATS:
         // ~47% of all enumeration) because searching BOTH futures emits two variants that multiply
         // every plan where Ponder is castable. By default we now DECIDE it with the heuristic
@@ -14918,7 +15011,23 @@ namespace branchstats
     inline std::mutex                          g_mtx;
     inline std::map<std::string, Bucket>       g_by_driver;   // keyed by biggest-group card name
     inline std::map<std::string, Bucket>       g_by_situ;     // keyed by coarse situation label
+    inline std::map<std::string, Bucket>       g_by_axis;     // post-dedup axis variants (see below)
     inline Bucket                              g_total;
+
+    // The POST-DEDUP AXES (tutor / scry / etb-dig / ponder / lackey / cleanup-discard) append
+    // full Plan variants in EnumeratePlansWithLand AFTER the odometer above has been recorded,
+    // and every one of them is scored by the caller like any base plan -- work the odometer
+    // tables are structurally blind to (2026-08-21 audit finding: the Worldly Tutor axis was
+    // invisible here). Counted separately so the axis totals cannot pollute the odometer sums;
+    // in this table `sum_odo`/`sum_final` both mean "plans returned for scoring".
+    inline void RecordAxis(const char* key, std::size_t n)
+    {
+        if (n == 0) { return; }
+        std::lock_guard<std::mutex> lk(g_mtx);
+        Bucket& b = g_by_axis[key];
+        ++b.calls; b.odo += static_cast<double>(n); b.final_plans += static_cast<double>(n);
+        if (n > b.max_odo) { b.max_odo = n; }
+    }
 
     inline void Record(const std::string& driver, const std::string& situ,
                        double odo, uint64_t raw, uint64_t final_plans)
@@ -14952,6 +15061,7 @@ namespace branchstats
                 (unsigned long long)g_total.calls, g_total.odo, g_total.final_plans, g_total.raw_plans);
             dump("by driver card (biggest option-group)", g_by_driver);
             dump("by situation", g_by_situ);
+            dump("by post-dedup axis (columns = plans returned for scoring)", g_by_axis);
         }
     };
     inline Dumper g_dumper;
@@ -15274,6 +15384,34 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // selection. Zero live scaling sources -> every other deck/state is byte-identical.
     int domain_mask = 0, live_scaling = 0;
     if (DomainWidenEnabled()) { ScalingWidenScan(state, domain_mask, live_scaling); }
+    // Same-turn SCALED-DORK GROWTH scan (EnumeratePlans ONLY -- see the credit below). A live
+    // scaled mana dork (Priest of Titania / Elvish Archdruid) taps for the CURRENT count of its
+    // subtype, so every matching creature this subset casts BEFORE it taps raises the burst by one
+    // per dork -- the count-scaling sibling of the colour-scaling widen credit above, anticipated
+    // by docs/design/scaling-source-widening.md ("Scope beyond domain_mana"). State-only half here,
+    // grouped by (subtype, colour) -- realistically one group. Empty -> the per-subset path never
+    // runs -> every deck without a live scaled dork is byte-identical.
+    struct DorkGrowth { const std::string* sub; Color col; int live; };
+    std::vector<DorkGrowth> dork_growth;
+    if (DorkGrowthEnabled())
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d || !IsScaledManaDork(*d)) { continue; }
+            if (!CanTapNow(p, state.battlefield)) { continue; }   // summoning-sick: taps no earlier than next turn
+            if (d->params.produces.size() != 1) { continue; }     // the credit is single-colour by construction
+            bool found = false;
+            for (DorkGrowth& g : dork_growth)
+            {
+                if (*g.sub == d->params.mana_per_creature_subtype && g.col == d->params.produces[0])
+                { ++g.live; found = true; break; }
+            }
+            if (!found)
+            { dork_growth.push_back({ &d->params.mana_per_creature_subtype, d->params.produces[0], 1 }); }
+        }
+    }
     // Same-turn affinity scan (mirrors Solve). Inert without an affinity card (Thrumming Hivepool).
     bool any_affinity = false;
     for (const Action& ra : cands) { if (ra.def && ra.def->params.affinity_for_subtype) { any_affinity = true; break; } }
@@ -15803,6 +15941,49 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 eff.AddPool(widen); eff_nc.AddPool(widen); credited = true;
             }
         }
+        // Same-turn SCALED-DORK GROWTH credit. Every creature of a live scaled dork's subtype this
+        // subset casts raises that dork's eventual one-tap burst by 1 -- provided the dork taps
+        // AFTER those casts, which is exactly the order the executor takes (growth cast tier 9 in
+        // CastOrderRank + ManaSourceRank 61; USER 2026-08-20: "play every elf we can [without]
+        // tapping scaling dorks or Wirewood Lodge. Then we should play every elf remaining with
+        // scaled mana"). Credit = live x (matching casts the un-grown pool can stage): ALL of them
+        // when the pool pays their summed cost (the rock rule -- the growth never funds its own
+        // feeders), else the longest prefix IN SELECTION ORDER whose scalar total fits the pool --
+        // the same order the executor's stable within-tier sort realises, so the credit never
+        // promises a sequencing the apply will not take. EnumeratePlans only, never Solve (the
+        // Medallion precedent: an optimistic hint is sound only where a rollout validates it).
+        if (!dork_growth.empty())
+        {
+            for (const DorkGrowth& dg : dork_growth)
+            {
+                static thread_local std::vector<int> s_growth_mvs;
+                s_growth_mvs.clear();
+                ManaCost feeder_costs;
+                for (int j : sel)
+                {
+                    const Action& c = cands[j];
+                    if (c.kind != Action::Kind::CastFromHand || !c.def) { continue; }
+                    if (!c.def->card.IsCreature()) { continue; }
+                    if (!CardHasSubtype(c.def->card, *dg.sub)) { continue; }
+                    s_growth_mvs.push_back(c.cost.ManaValue());
+                    AddCostCarryingHybrids(feeder_costs, c.cost);
+                }
+                if (s_growth_mvs.empty()) { continue; }
+                int units = 0;
+                if (pool.CanPay(feeder_costs)) { units = static_cast<int>(s_growth_mvs.size()); }
+                else
+                {
+                    int avail = pool.Total();   // scalar prefix: partial chains still earn partial credit
+                    for (int mv : s_growth_mvs) { if (avail < mv) { break; } avail -= mv; ++units; }
+                }
+                if (units <= 0) { continue; }
+                ManaPool grow;
+                grow.Add(dg.col, dg.live * units);
+                // A scaled dork is a creature but its mana is unrestricted (no creature_mana_only
+                // card scales), so the credit belongs to BOTH pools -- same split as the widen credit.
+                eff.AddPool(grow); eff_nc.AddPool(grow); credited = true;
+            }
+        }
         // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
         if (any_affinity)
         {
@@ -16175,7 +16356,26 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         for (const Action& a : cands)
         { if (a.kind == Action::Kind::Equip) { metalcraft_bound += a.cost.generic; } }
     }
-    const int mana_bound = ManaPruneBound(pool, cands, haste_unlock_bound + metalcraft_bound);
+    // Same-turn scaled-dork GROWTH the per-subset credit below can grant (the haste-unlock lesson:
+    // the credit and the scalar bound must move together, or the bound rejects the very subset the
+    // credit exists to rescue BEFORE consider() ever sees it). Upper bound: every matching creature
+    // candidate landing before every live dork taps. 0 for every deck without a live scaled dork.
+    int growth_bound = 0;
+    for (const DorkGrowth& dg : dork_growth)
+    {
+        int matches = 0;
+        for (const Action& a : cands)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.def && a.def->card.IsCreature()
+                && CardHasSubtype(a.def->card, *dg.sub)) { ++matches; }
+        }
+        growth_bound += dg.live * matches;
+    }
+    // Both addends are UPPER bounds on what their credit can forgive and both are 0 for a deck
+    // without the mechanic, so they compose: a metalcraft deck sees growth_bound 0, an elf deck
+    // sees metalcraft_bound 0, and a deck with neither is byte-identical to the un-addended bound.
+    const int mana_bound = ManaPruneBound(pool, cands,
+                                          haste_unlock_bound + metalcraft_bound + growth_bound);
     // Both indices are allocated ONLY when the deck actually uses them. Solve is the rollout leaf --
     // called once per node -- so even default-constructing their (empty) vectors on every call cost a
     // measurable ~1% on decks that use neither (Hinata/TH/burn A/B, 2026-07-29). A null pointer plus a
@@ -16185,7 +16385,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // unlock -- bail to the (now unlock-aware) scalar bound when one exists, the same way
     // ManaPruneBound bails on affinity / a same-turn reducer. DEFAULT-OFF gate, so this is inert
     // today; it exists so turning MTG_SEL_MANA_GATE=1 on cannot silently re-introduce the bug.
-    if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork)
+    // The selection-exact gate models ritual/rock float only, so it also cannot see the scaled-dork
+    // growth credit -- bail to the (growth-aware) scalar bound when one is live, exactly like the
+    // haste-dork unlock above.
+    if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork && growth_bound == 0)
     {
         auto idx = std::make_unique<ManaGateIndex>();
         if (BuildManaGateIndex(pool, cands, independent, *idx)) { gate_owned = std::move(idx); }
@@ -16523,7 +16726,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                            ? ("#V" + std::to_string(act.soulfire_own_targets)) : "")
                         // Turntimber Symbiosis: distinct put-choices are DISTINCT plans.
                         + ((act.def && act.def->params.look_top_put_creature_count > 0)
-                           ? ("#T" + act.tutor_target) : "")); break;
+                           ? ("#T" + act.tutor_target) : "")
+                        // Terastodon: distinct ETB destroy-K counts are DISTINCT plans (core
+                        // invariant); gated on the param so no existing deck's signature moves.
+                        + ((act.def && act.def->params.etb_destroy_own_noncreature_max > 0)
+                           ? ("#K" + std::to_string(act.chosen_x)) : "")); break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
@@ -18496,6 +18703,29 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
           state.turn_number, all.size(), land_names.size(), ap.hand.size());
     PROF_ADD(plans_generated, all.size());
+    // Axis-variant attribution (MTG_BRANCH_STATS; see branchstats::RecordAxis). Classified by
+    // the choice tag -- the fans above set exactly one per variant ("one axis at a time").
+    if (branchstats::Enabled())
+    {
+        std::size_t base = 0, scry = 0, tut = 0, dig = 0, lack = 0, pond = 0, disc = 0;
+        for (const TurnSolver::Plan& p : all)
+        {
+            if      (p.scry_choice    >= 0) { ++scry; }
+            else if (p.tutor_choice   >= 0) { ++tut;  }
+            else if (p.etbdig_choice  >= 0) { ++dig;  }
+            else if (p.lackey_choice  >= 0) { ++lack; }
+            else if (p.ponder_choice  >= 0) { ++pond; }
+            else if (p.discard_choice >= 0) { ++disc; }
+            else                            { ++base; }
+        }
+        branchstats::RecordAxis("(base plans)", base);
+        branchstats::RecordAxis("axis: tutor target", tut);
+        branchstats::RecordAxis("axis: scry", scry);
+        branchstats::RecordAxis("axis: etb-dig", dig);
+        branchstats::RecordAxis("axis: lackey", lack);
+        branchstats::RecordAxis("axis: ponder", pond);
+        branchstats::RecordAxis("axis: cleanup-discard", disc);
+    }
     return all;
 }
 

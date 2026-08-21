@@ -3779,7 +3779,12 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // {X} spell: carry the chosen X so the effect (ResolveDirectDamage) scales by it. CR 202.3:
     // X is 0 except on the stack, where it is the chosen value -- so it is NOT in the card's
     // mana value, only here on the stack entry.
-    if (chosen_x > 0) { entry.chosen_x = chosen_x; }
+    // Positive X only -- EXCEPT the Terastodon destroy-K sentinel (kEtbKxHeuristic = "project K
+    // at resolution"), which must survive to OnGoblinEnters or the executor would silently
+    // resolve K as -1 (destroy nothing) while the rollout (which passes the int directly)
+    // projected -- an executor/rollout divergence by construction. chosen_x defaults to 0 for
+    // every other cast, so no other deck's entries move.
+    if (chosen_x > 0 || chosen_x == kEtbKxHeuristic) { entry.chosen_x = chosen_x; }
     // Soulfire Eruption: carry the searched own-creature target count so EffectHandler's dig
     // exiles the same N cards and kills the same own creatures as the rollout (lockstep).
     if (own_targets > 0) { entry.soulfire_own_targets = own_targets; }

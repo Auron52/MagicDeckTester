@@ -1,0 +1,44 @@
+{
+  "deck": "decks/StompySurprise/StompySurprise.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "max_turns": 5,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Llanowar Elves",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Forest",
+    "Forest",
+    "Forest",
+    "Llanowar Elves",
+    "Elvish Mystic",
+    "Arbor Elf",
+    "Craterhoof Behemoth",
+    "Worldspine Wurm",
+    "Worldspine Wurm",
+    "Terastodon",
+    "Vaultborn Tyrant",
+    "Worldly Tutor",
+    "Worldly Tutor",
+    "Mirri's Guile"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 0,
+  "expect_win_turn": 5,
+  "log_out": "logs/play/stompy_bucket_discard.json",
+  "_comment": "Cleanup-discard BUCKET policy (StompyProvider; MTG_STOMPY_BUCKET_DISCARD=0 restores the generic highest-MV base and fails this fixture). Turn 3 ends with 11 cards after the elf casts, so cleanup sheds FOUR. The generic MV rule sheds Worldspine, Worldspine, Terastodon -- and then Craterhoof, the deck's only copy, with an all-Forest library offering no reprint: the T5 hoof kill dies in the discard. The bucket policy sheds the three excess Forests (board is already at 6+ sources) and one spare threat instead, keeping the hoof for the turn-5 hard cast (9 sources by T5, 4 elf bodies -> lethal swing). Depth 0 ON PURPOSE: at d>0 the searched cleanup pass rescues the hoof in BOTH arms (a trial rollout sees the lost win inside the horizon), so only greedy exposes the ranking itself -- which is exactly what rollout-internal cleanups and beyond-horizon ties consume. USER 2026-08-21: buckets <mana> <threats> <enablers>; threats in hand are spares ('you can fetch to top of deck with Worldly Tutor and drop it off the top') but the LAST hoof-role copy anywhere is kept -- pitching it kills every fetch route to it."
+}

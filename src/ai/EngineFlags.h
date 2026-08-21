@@ -24,6 +24,22 @@ inline bool Main2DropEnabled()
     return v;
 }
 
+// MTG_DORK_GROWTH -- same-turn SCALED-MANA-DORK growth (Priest of Titania / Elvish Archdruid):
+// a dork whose one-tap yield is the live count of its subtype grows with every matching creature
+// cast this turn, so (a) EnumeratePlans credits a subset's matching casts into each live dork's
+// burst, (b) such creatures cast in their own early tier (CastOrderRank 7, cheapest first) and
+// (c) scaled dorks tap LAST among sources (ManaSourceRank 61) -- the executor half that realises
+// the credit (USER 2026-08-20: "play every elf we can [without] tapping scaling dorks or Wirewood
+// Lodge. Then ... every elf remaining with scaled mana"). Read by the search (TurnSolver credit),
+// the shared cast-order comparator (ManaPayment) and the provider ranks (DecisionProviders), all
+// of which both the executor and the rollout consult -- shared reader per the lockstep rule.
+// Param-gated on a live scaled dork at every site -> byte-identical for every deck without one.
+inline bool DorkGrowthEnabled()
+{
+    static const bool v = EnvOn("MTG_DORK_GROWTH", true);   // DEFAULT ON; =0 restores the un-modelled gap
+    return v;
+}
+
 // MTG_GARTH_ORDERED=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
 // Garth One-Eye's tap IS the cast of its conjured copy (WotC ruling, already in the card model:
 // the copy is cast as the ability resolves -- no holding it). USER doctrine 2026-08-19: "order

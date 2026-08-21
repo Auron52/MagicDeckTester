@@ -72,6 +72,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"uacast",     UnprunedGate::UACast},
     {"tapreserve", UnprunedGate::TapReserve},
     {"mainphase",  UnprunedGate::MainPhase},
+    {"terak",      UnprunedGate::TeraK},
 };
 
 const char* GateName(UnprunedGate g)
@@ -1356,6 +1357,16 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
     // same-turn Goblin it discounts is enumerated after the reducer is online. Gated on the param,
     // so every non-reducer deck keeps creatures at 10 (byte-identical).
     if (!def.params.reduces_spell_subtype.empty()) { return 8; }
+    // GROWTH tier: a creature that feeds a live scaled mana dork's count (an Elf while an untapped
+    // Priest of Titania / Elvish Archdruid can tap) casts just before the other creatures, so by
+    // the time a payment must tap the dork every such body is already down -- the executor half of
+    // the EnumeratePlans dork-growth credit (USER 2026-08-20: "play every elf we can [without]
+    // tapping scaling dorks ... then play every elf remaining with scaled mana"). Within the tier
+    // the stable sort keeps plan order, which is exactly the order the credit's sequential model
+    // walks. Gated on a live scaled dork existing -> byte-identical for every other deck. (Rank 9
+    // is also VialProvider's want-subtype tier; the two can never be live in the same deck, and no
+    // comparator keys on the number alone.)
+    if (DorkGrowthEnabled() && def.card.IsCreature() && FeedsLiveScaledDork(s, def)) { return 9; }
     if (def.card.IsCreature())                 { return 10; }
     return 20;
 }
@@ -1420,6 +1431,21 @@ int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& de
     // it after every basic/depletion source makes that shortfall MINIMAL, conserving the battery and
     // banking the rest. (The reserve already holds it entirely when the cost is payable without it.)
     if (def.params.storage_land) { return 62; }
+    // A SCALED mana dork (Priest of Titania / Elvish Archdruid) grows with every creature of its
+    // subtype cast this turn, so among sources it taps LAST: every payment that lands another Elf
+    // first makes its eventual burst bigger. (Reservation already holds attack-capable dorks back;
+    // this rank decides the order once dorks must pay, so a fixed Llanowar Elves taps before the
+    // Priest.) Param-gated -> byte-identical for every deck without one. MTG_DORK_GROWTH=0 restores
+    // the plain mono-colour rank.
+    if (DorkGrowthEnabled() && IsScaledManaDork(def)) { return 61; }
+    // An untap-land with a LIVE burst (Wirewood Lodge + a 2+ scaled Elf, see UntapBurstBestYield)
+    // is reserved past even the scaled dorks: its burst yield reads the best Elf's count AT FIRE
+    // TIME, so firing it absolutely last maximises the net. With no live burst it falls through to
+    // the normal {C}-land rank below and its colourless is spent early -- USER 2026-08-20: "allow
+    // using it for colourless early if there are no scaling sources at 2+ elves. Otherwise the
+    // colourless could be stranded." (MTG_UNTAP_BURST=0 zeroes the net -> plain rank everywhere.)
+    if (def.params.untap_creature_cost.has_value()
+        && UntapLandBurstNet(s, active, def) > 0) { return 63; }
     // Depletion lands (Saprazzan Skerry, Sandstone Needle) are deliberately NOT reserved: they are
     // RAMP you normally want to spend, so blanket-conserving them via the ordering would misfire far
     // more often than the rare "wasted a counter" case helps. They rank by colour like any land.
@@ -8091,6 +8117,7 @@ namespace
     const FiveColourProvider     g_fivecolour;
     const MirrorwingProvider     g_mirrorwing;
     const EquipmentProvider      g_equipment;
+    const StompyProvider         g_stompy;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -8172,7 +8199,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // Worldly Tutor carries tutor_to_top, which would otherwise trip the anti-lifegain
         // signature below and misroute the whole deck to AntiLifegainProvider (the Goblin-Matron
         // misroute class -- its tutor heuristic hunts lifegain_to_loss enablers this deck does
-        // not run). Routes to GenericProvider (no archetype hooks yet; pure search).
+        // not run). Routes to StompyProvider (Generic + the cleanup-discard bucket policy).
         if (p.etb_team_pump_per_creature || p.activated_reveal_top_cost.has_value()
             || !p.sac_additional_creature_color.empty()
             || !p.mana_requires_land_subtype.empty()
@@ -8228,10 +8255,13 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Was g_generic until GoblinsProvider had MEASURED hooks to hold: the sac-outlet deferral and the
     // Matron tutor width (12, -0.0620 held-out). It derives from GenericProvider and overrides only
     // those, so every other decision still resolves through exactly the code this deck used before.
+    // StompySurprise: StompyProvider (Generic + the user's cleanup-discard bucket policy; every
+    // other hook inherits Generic). Must WIN OVER goblin -- Hornet Queen's etb_self_creates_tokens
+    // sets that signature on its own (the exact Mirrorwing/Instigator misroute class: until
+    // 2026-08-21 this deck silently ran under GoblinsProvider) -- and over anti (Worldly Tutor's
+    // tutor_to_top).
+    if (stompy) { return g_stompy; }
     if (goblin) { return g_goblins; }
-    // StompySurprise: GenericProvider (pure search; no archetype hooks yet). Must WIN OVER anti --
-    // Worldly Tutor's tutor_to_top would misroute it to AntiLifegainProvider.
-    if (stompy) { return g_generic; }
     // Equipment aggro; must WIN OVER anti (Stoneforge Mystic's tutor_to_hand sets that signature
     // on its own -- see the equipment detection note above). No other deck carries the equipment
     // gated params, so exclusivity is preserved.
@@ -9183,6 +9213,335 @@ std::vector<int> MirrorwingProvider::CleanupDiscardCandidates(
         for (int i : magnets) { put(i); }   // any magnet the group protection released
     }
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
+// ---- StompyProvider::CleanupDiscardCandidates -------------------------------
+//
+// Cleanup discard: the USER-AUTHORED bucket policy (2026-08-21). Three buckets --
+// <mana> <threats> <enablers> -- shed in that order:
+//   1. MANA beyond a 6-source board guarantee (Worldly Tutor {G} + a Call of the Wild
+//      activation {2}{G} in one turn is 5; +1 slack toward the 7-8 hardcasts. The census counts
+//      sources FLAT, so a scaled Priest/Archdruid under-counts its real yield -- the guarantee
+//      errs toward keeping mana, the safe direction). Only lands and rocks shed here, plain
+//      Forests before the utility 1-ofs (Lodge, Sol Ring); dorks are also bodies (Craterhoof
+//      count, Priest fuel, Natural Order fodder) and are kept to the tail.
+//   2. THREATS: not hand cards in this deck (user 2026-08-21) -- "many threats are not played
+//      from hand... you can fetch to top of deck with Worldly Tutor and drop it off the top",
+//      plus Call of the Wild / Turntimber off the top and Natural Order directly. A hand fatty
+//      is a spare while the library still serves those routes: shed same-name-still-in-library
+//      copies first (biggest hardcast MV first), then last copies. EXCEPT the team-pump kill
+//      piece (Craterhoof, a 1-of): pitching its last copy removes it from EVERY fetch route and
+//      with it the resolution-time this-turn-kill projection, so it is kept to the absolute end.
+//   3. ENABLER redundancy: hand copies of a persisting enabler already on board (Call, Mirri's
+//      Guile) are dead and shed with the dead tier up front; otherwise copies beyond one
+//      (beyond TWO for Worldly Tutor -- each is one-shot, so copies stay live across turns).
+//      Turntimber Symbiosis is never shed early: its back face is a land drop.
+// The list names EVERY hand card (the Mirrorwing gi295 lesson: an under-covering list hands the
+// decision to the shared ranking's highest-MV fallback -- which here sheds exactly backwards,
+// pitching Craterhoof and the engine while keeping flood). Classification is by card params,
+// not names, so a screening arm that swaps a card keeps the right bucket.
+// MTG_STOMPY_BUCKET_DISCARD=0 -> generic base ranking (A/B).
+std::vector<int> StompyProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    static const bool s_bucket = EnvOn("MTG_STOMPY_BUCKET_DISCARD", true);
+    if (!s_bucket) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    const Player& ap = s.players[s.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto is_dork = [&](const Card& c)
+    { const CardDefinition* d = def_of(c); return d && d->tmpl == CardTemplate::ManaDork; };
+    auto is_land = [&](const Card& c)
+    { const CardDefinition* d = def_of(c); return d ? d->card.IsLand() : c.IsLand(); };
+    auto is_rock = [&](const Card& c)
+    { const CardDefinition* d = def_of(c); return d && d->params.mana_rock; };
+    auto is_hoof_role = [&](const Card& c)
+    { const CardDefinition* d = def_of(c); return d && d->params.etb_team_pump_per_creature; };
+
+    // Board census the buckets key on: flat source count + which persisting enablers are down.
+    int  board_sources = 0;
+    bool call_board = false, guile_board = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        if (is_land(p.card) || is_dork(p.card) || is_rock(p.card)) { ++board_sources; }
+        const CardDefinition* d = def_of(p.card);
+        if (d && d->params.activated_reveal_top_cost.has_value()) { call_board  = true; }
+        if (d && d->params.upkeep_reorder > 0)                    { guile_board = true; }
+    }
+
+    // Hand census (staged cards are in exile -- never bucketed). Enablers split by param so
+    // each redundancy rule can address its own kind.
+    std::vector<int> loose_mana, dorks, threats, calls, tutors, orders, guiles, turntimbers;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[i];
+        if (c.m_is_staged) { continue; }
+        if (is_dork(c)) { dorks.push_back(i); continue; }
+        const CardDefinition* d = def_of(c);
+        const CardParams* p = d ? &d->params : nullptr;
+        if (p && p->look_top_put_creature_count > 0)      { turntimbers.push_back(i); continue; }
+        if (p && p->activated_reveal_top_cost.has_value()){ calls.push_back(i);       continue; }
+        if (p && p->tutor_to_top)                         { tutors.push_back(i);      continue; }
+        if (p && p->tutor_to_battlefield_single)          { orders.push_back(i);      continue; }
+        if (p && p->upkeep_reorder > 0)                   { guiles.push_back(i);      continue; }
+        if (is_land(c) || is_rock(c))                     { loose_mana.push_back(i);  continue; }
+        if (d && d->card.IsCreature())                    { threats.push_back(i); }
+    }
+    // Sheddable mana, shed-soonest-first: plain colored lands (Forest -- 14 copies, fungible),
+    // then the colourless utility land (Lodge -- the untap burst), then the rock (Sol Ring).
+    auto mana_shed_rank = [&](int i)
+    {
+        const Card& c = ap.hand[i];
+        if (is_rock(c)) { return 2; }
+        const CardDefinition* d = def_of(c);
+        bool colored = false;
+        if (d) { for (Color col : d->params.produces) { if (col != Color::Colorless) { colored = true; } } }
+        return colored ? 0 : 1;
+    };
+    std::stable_sort(loose_mana.begin(), loose_mana.end(),
+                     [&](int a, int b) { return mana_shed_rank(a) < mana_shed_rank(b); });
+
+    std::vector<int> shed;
+    std::vector<char> listed(static_cast<std::size_t>(n), 0);
+    auto put = [&](int i)
+    { if (i >= 0 && i < n && !listed[static_cast<std::size_t>(i)]
+          && !ap.hand[i].m_is_staged) { listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i); } };
+
+    // S0 -- dead cards: hand copies of a persisting enabler already on board.
+    if (call_board)  { for (int i : calls)  { put(i); } }
+    if (guile_board) { for (int i : guiles) { put(i); } }
+
+    // S1 -- excess mana beyond the 6-source guarantee. Dorks and Turntimbers count as covering
+    // sources (they are kept regardless: bodies / a land drop), so only the loose lands+rock
+    // beyond the remainder shed.
+    {
+        const int covered = board_sources + static_cast<int>(dorks.size())
+                          + static_cast<int>(turntimbers.size());
+        const int keep    = std::max(0, 6 - covered);
+        const int excess  = static_cast<int>(loose_mana.size()) - keep;
+        for (int k = 0; k < excess; ++k) { put(loose_mana[static_cast<std::size_t>(k)]); }
+    }
+
+    // S2 -- hand threats: spares (a same-name copy still in library) biggest-MV-first, then
+    // last copies -- except the hoof-role last copy, which is kept to the absolute end.
+    {
+        auto lib_copies = [&](const Card& c)
+        {
+            int k = 0;
+            for (const Card& l : ap.library) { if (l.m_name == c.m_name) { ++k; } }
+            return k;
+        };
+        std::vector<int> spares, lasts;
+        for (int i : threats)
+        {
+            if (lib_copies(ap.hand[i]) > 0)            { spares.push_back(i); }
+            else if (!is_hoof_role(ap.hand[i]))        { lasts.push_back(i); }
+        }
+        auto mv_desc = [&](std::vector<int>& v)
+        {
+            std::stable_sort(v.begin(), v.end(), [&](int a, int b)
+            { return CleanupDiscardManaValue(ap.hand[a]) > CleanupDiscardManaValue(ap.hand[b]); });
+        };
+        mv_desc(spares); mv_desc(lasts);
+        for (int i : spares) { put(i); }
+        for (int i : lasts)  { put(i); }
+    }
+
+    // S3 -- enabler copies beyond one (beyond two for the one-shot Worldly Tutor).
+    for (std::size_t k = 1; k < calls.size();  ++k) { put(calls[k]);  }
+    for (std::size_t k = 1; k < guiles.size(); ++k) { put(guiles[k]); }
+    for (std::size_t k = 1; k < orders.size(); ++k) { put(orders[k]); }
+    for (std::size_t k = 2; k < tutors.size(); ++k) { put(tutors[k]); }
+
+    // S4 -- the tail names everything remaining, least wanted first, so the MV fallback never
+    // decides: spare dorks, the kept mana (same shed rank), then the kept engine (weakest role
+    // first -- Guile arranges, Natural Order needs fodder, Call needs mana, Tutor finds the
+    // kill; extra Tutor before the first), Turntimber (a land drop too), hoof-role dead last.
+    for (int i : dorks)                                  { put(i); }
+    for (int i : loose_mana)                             { put(i); }
+    for (int i : guiles)                                 { put(i); }
+    for (int i : orders)                                 { put(i); }
+    for (int i : calls)                                  { put(i); }
+    for (std::size_t k = tutors.size(); k-- > 0; )       { put(tutors[k]); }
+    for (int i : turntimbers)                            { put(i); }
+    for (int i : threats)                                { put(i); }   // the hoof-role keep
+
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
+// Tutor target ordering (Worldly Tutor creature-to-top / Natural Order green-creature-to-play).
+// ADOPTED (USER-AUTHORED lethality calculation, 2026-08-21; swept as MTG_STOMPY_TUTOR_HEUR V3 and
+// validated held-out -- see docs/design/analysis-StompySurprise.md for the table; the static V0
+// and early-ramp V1 variants it beat are recorded there, scaffolding deleted per the
+// heuristic-optimization skill). "It depends on when we can deploy it and how low the opponent
+// is":
+//   * THREAT POOL = the team pump + power-6+ bodies (Worldspine / Terastodon / Elderscale /
+//     Vaultborn), ranked by EARLIEST LETHAL: per candidate, deploy turn (a live Call of the Wild
+//     or a hand Turntimber flips the tutored top for ITS cost regardless of the threat's MV --
+//     the whole point of the cheat-out; hard-cast waits for the draw plus mana growth at a
+//     conservative +1 source/turn), plus a wake turn unless it is the hasted team pump, then
+//     "does that swing close the opponent's CURRENT life". No lethal in reach -> the arrival
+//     term rules ("maybe a 7 drop like Vaultborn Tyrant if we need it -- i.e. we can't play an
+//     8+ drop reasonably"), and an open cheat-out equalises arrivals so the swing tie-break
+//     hands the slot back to the fatties.
+//   * "Titania when we are really low on mana": Worldly Tutor with <=2 board sources promotes
+//     the scaled dorks, cheapest first (Priest over Archdruid).
+//   * Natural Order runs the SAME ranking with deployment free ("happens more naturally, and
+//     doesn\'t require any calculation"): t_dep 0 for every size, the sacrifice docked from the
+//     census, and no starving tier (its slot is a threat decision).
+// Census idiom matches ProjectEtbDestroyK (EffectivePower net of until-EOT bonuses, no lord
+// credit -- under-counting is the safe direction). Ordering-only over the full candidate list;
+// the width the axis searches is TutorSearchWidth() as usual. Honors MTG_UNPRUNE=tutor.
+std::vector<std::string>
+StompyProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> cands = GenericProvider::TutorCandidates(s, controller, pp);
+    if (DecisionUnpruned(UnprunedGate::Tutor) || cands.size() <= 1) { return cands; }
+
+    if (pp.tutor_to_top || pp.tutor_to_battlefield_single)
+    {
+        const bool is_no = pp.tutor_to_battlefield_single;
+        const Player& ap = s.players[controller];
+        const int opp_life = s.players[1 - controller].life;
+        int n_cre = 0, base_power = 0, board_sources = 0;
+        bool call_live = false;
+        for (const Permanent& q : s.battlefield)
+        {
+            if (q.controller_index != controller) { continue; }
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (qd != nullptr)
+            {
+                if (qd->params.activated_reveal_top_cost.has_value() && !q.tapped)
+                { call_live = true; }
+                if (qd->card.IsLand() || qd->tmpl == CardTemplate::ManaDork
+                    || qd->params.mana_rock) { ++board_sources; }
+            }
+            if (!(q.card.IsCreature() || q.is_animated)) { continue; }
+            ++n_cre;
+            base_power += std::max(0, q.EffectivePower() - q.temp_power_bonus);
+        }
+        if (is_no) { n_cre = std::max(0, n_cre - 1); base_power = std::max(0, base_power - 1); }
+        int outlet_t = 1000;   // turns until a cheat-out can flip the tutored top into play
+        if (is_no) { outlet_t = 0; }
+        else
+        {
+            if (call_live) { outlet_t = std::max(0, 5 - board_sources); }   // tutor {G} + {2}{G}
+            for (const Card& hc : ap.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd && hd->params.look_top_put_creature_count > 0)
+                { outlet_t = std::min(outlet_t, std::max(0, 1 + hd->card.m_mana_cost.ManaValue()
+                                                                - board_sources)); }
+            }
+        }
+        struct Rank { int kill; int tie; };
+        auto rank_threat = [&](const CardDefinition& d) -> Rank
+        {
+            const bool  pump  = d.params.etb_team_pump_per_creature;
+            const int   mv    = d.card.m_mana_cost.ManaValue();
+            const int   t_dep = is_no ? 0
+                              : std::min(outlet_t, std::max(1, mv - board_sources));
+            const int   t_sw  = t_dep + (pump ? 0 : 1);   // only the team pump has haste
+            const int   swing = pump ? base_power + n_cre * n_cre + n_cre + 5
+                                     : base_power + d.card.m_power.value_or(0);
+            // (A permanent-board-stats tie-break was tried for the non-lethal case and REVERTED:
+            // d0 -- the purest front-quality read, no axis exists there -- measured it 0.032
+            // WORSE than the swing tie-break, and it recovered none of the searched-depth gap.)
+            return { swing >= opp_life ? t_sw : 1000 + t_sw, swing };
+        };
+        auto is_threat = [&](const CardDefinition* d)
+        { return d != nullptr && d->card.IsCreature()
+              && (d->params.etb_team_pump_per_creature || d->card.m_power.value_or(0) >= 6); };
+        auto is_scaled = [&](const CardDefinition* d)
+        { return d != nullptr && d->card.IsCreature()
+              && !d->params.mana_per_creature_subtype.empty(); };
+        const bool starving = !is_no && board_sources <= 2;
+
+        // UNCERTAINTY-GATED CONTENDER LIST (user design 2026-08-21: "return a list of serious
+        // contenders for the search to look over, not always take 3... in the absolute worst
+        // case branch only when we are absolutely uncertain"). The calculation itself supplies
+        // the certainty signal:
+        //   * a LETHAL pick exists (kill class < 1000): the answer is computed -- emit the
+        //     earliest-lethal pick alone (plus exact ties, which are genuinely undecided);
+        //   * NO lethal in reach: the projection cannot rank board-building lines (the searched
+        //     axis out-decided every static tie-break we measured here -- swing AND permanent
+        //     board stats -- because the right fetch couples with the whole plan, down to the
+        //     turn-1 land face in the traced games): genuinely uncertain -- emit the top three
+        //     threats as the contenders.
+        // Starving prepends the cheapest scaled dork. This TRUNCATES (user-authorized): the
+        // un-emitted names are unreachable, the emitted LIST is the branching -- there is no
+        // fixed width anywhere.
+        std::vector<std::string> threats;
+        for (const std::string& c : cands)
+        { if (is_threat(CardDatabase::Instance().Lookup(c))) { threats.push_back(c); } }
+        if (!threats.empty())
+        {
+            std::stable_sort(threats.begin(), threats.end(),
+                             [&](const std::string& a, const std::string& b)
+            {
+                const Rank ra = rank_threat(*CardDatabase::Instance().Lookup(a));
+                const Rank rb = rank_threat(*CardDatabase::Instance().Lookup(b));
+                if (ra.kill != rb.kill) { return ra.kill < rb.kill; }
+                return ra.tie > rb.tie;
+            });
+            const Rank best = rank_threat(*CardDatabase::Instance().Lookup(threats.front()));
+            std::vector<std::string> out;
+            if (starving)
+            {
+                const std::string* dork = nullptr;
+                int dork_mv = 0;
+                for (const std::string& c : cands)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().Lookup(c);
+                    if (!is_scaled(d)) { continue; }
+                    const int mv = d->card.m_mana_cost.ManaValue();
+                    if (dork == nullptr || mv < dork_mv) { dork = &c; dork_mv = mv; }
+                }
+                if (dork != nullptr) { out.push_back(*dork); }
+            }
+            if (best.kill < 1000)
+            {
+                for (const std::string& c : threats)
+                {
+                    const Rank r = rank_threat(*CardDatabase::Instance().Lookup(c));
+                    if (r.kill == best.kill && r.tie == best.tie) { out.push_back(c); }
+                }
+            }
+            else
+            {
+                // No lethal computable: ramp-vs-threat is exactly the uncertain choice (traced
+                // 2026-08-21: a threats-only list here truncated the tutor->Archdruid engine
+                // line out of a game entirely -- T7 win became UNWON). Contenders = the top
+                // three threats plus the scaled dorks; starving already put a dork in front.
+                for (std::size_t k = 0; k < threats.size() && k < 3; ++k)
+                { out.push_back(threats[k]); }
+                for (const std::string& c : cands)
+                {
+                    if (!is_scaled(CardDatabase::Instance().Lookup(c))) { continue; }
+                    if (std::find(out.begin(), out.end(), c) == out.end()) { out.push_back(c); }
+                }
+            }
+            if (!out.empty()) { return out; }
+        }
+        // No threat left in the library (or nothing emitted): fall through to the static order
+        // over whatever remains.
+    }
+
+    // Any other tutor kind this deck might gain: the static closer order (team pump first, then
+    // power + ETB token count).
+    auto score = [](const std::string& name) -> int
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+        if (d == nullptr) { return 0; }
+        int sc = d->card.m_power.value_or(0) + d->params.etb_self_creates_tokens;
+        if (d->params.etb_team_pump_per_creature) { sc += 1000; }
+        return sc;
+    };
+    std::stable_sort(cands.begin(), cands.end(),
+                     [&](const std::string& a, const std::string& b) { return score(a) > score(b); });
+    return cands;
 }
 
 // ---- FiveColourProvider::ModalSplitCandidates -------------------------------

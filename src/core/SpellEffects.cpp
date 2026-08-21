@@ -1124,6 +1124,24 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             srcs.push_back({ ebits, eburst, eburst, i });
             continue;
         }
+        // UNTAP-LAND BURST (Wirewood Lodge): one Lodge tap is worth up to (best scaled-Elf
+        // yield - 1) of the feed colour via the net-cancellation model (UntapBurstBestYield), or
+        // 1 {C} in its plain mode. Credit the larger into a {C} + feed-colour set -- a sound
+        // over-credit (this oracle only ever claims INFEASIBLE). The target may be tapped or
+        // untapped at snapshot time: an untapped one taps normally first (its own credit here)
+        // and the burst reverses that tap during the real payment.
+        if (def->params.untap_creature_cost.has_value())
+        {
+            const int unet = UntapLandBurstNet(state, active, *def);
+            if (unet > 0)
+            {
+                std::uint8_t ub = static_cast<std::uint8_t>(1u << static_cast<int>(Color::Colorless));
+                ub |= static_cast<std::uint8_t>(1u << static_cast<int>(*UntapBurstFeedColor(*def)));
+                srcs.push_back({ ub, unet, unet, i });
+                continue;
+            }
+            // burst dead -> fall through: the plain "{T}: Add {C}" source path below is exact
+        }
         // SCALED MANA LAND (Three Tree City) is bounded by a SAFE CAP rather than bailed -- the user's
         // own second option, 2026-08-16: "it's okay to bail on three tree city or to bound it to some
         // safe cap. Goblins doesn't have huge issues with performance." Bounding is strictly better
@@ -1455,6 +1473,10 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // (the domain lesson). Over-counting is safe (B&B gate wants an upper bound).
         if (IsScaledManaDork(dd))
         { b = std::max(b, ScaledDorkCount(state, pp.controller_index, dd)); }
+        // Untap-land (Wirewood Lodge): the static bound reads 1 ({C}); the burst nets
+        // (best scaled-Elf yield - 1). Under-counting would be a LOSSY prune, over is safe.
+        if (dd.params.untap_creature_cost.has_value())
+        { b = std::max(b, UntapLandBurstNet(state, pp.controller_index, dd)); }
         // Domain source (Faeburrow / Bloom Tender): one tap yields |domain| mana (2-5), but the
         // static bound reads ManaProducedPerTap = 1 -- the under-count made this LOSSY: the gate
         // pruned payable WUBRG costs and the executor silently dropped legal casts the search had
@@ -2096,6 +2118,29 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             }
             else
             {
+                // UNTAP-LAND BURST (Wirewood Lodge) -- tried FIRST (it strictly dominates the plain
+                // {C} tap when live): consume one floating feed-colour mana ({G}), tap the Lodge,
+                // and credit the best TAPPED scaled Elf's full yield -- the net-cancellation model
+                // of "pay {G}, untap it, tap it again" (see UntapBurstBestYield). The Elf's tapped
+                // state is unchanged, so the memo/undo machinery sees only THIS source's tap, like
+                // any other; taps stay monotone, so termination and the failure memo are untouched.
+                // Requires the target tapped AT THIS NODE: DFS orderings that tap the Elf earlier
+                // reach here with it tapped and are explored like any other ordering. Falls through
+                // to the plain modes below when dead (also the {C}-pip case, which G cannot pay).
+                if (def->params.untap_creature_cost.has_value())
+                {
+                    const int by = UntapBurstBestYield(state, active, *def, /*require_tapped=*/true);
+                    const std::optional<Color> feed = UntapBurstFeedColor(*def);
+                    if (by >= 2 && feed.has_value())
+                    {
+                        ManaPool f = floating;
+                        if (ConsumeFloating(f, *feed))
+                        {
+                            f.Add(*feed, by);
+                            if (activate(f)) { return true; }
+                        }
+                    }
+                }
                 // Grove-style drip land: try the painless "{T}: Add {C}" mode FIRST (no drip) so a
                 // GENERIC pip never pays the opponent life. A coloured pip falls through to the
                 // {R}/{G} branches below (which drip -- the real cost of that colour). When the gift is

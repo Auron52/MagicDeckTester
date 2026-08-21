@@ -1,0 +1,39 @@
+{
+  "deck": "decks/StompySurprise/StompySurprise.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "max_turns": 4,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Priest of Titania",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Llanowar Elves",
+    "Elvish Mystic",
+    "Elvish Archdruid"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "validate_line": "cast=Llanowar Elves;cast=Elvish Mystic;cast=Elvish Archdruid",
+  "expect_verdict": "accept",
+  "log_out": "logs/play/stompy_dork_growth.json",
+  "_comment": "Scaled-dork GROWTH -- the count-scaling sibling of fivecolour_domain_widen (MTG_DORK_GROWTH=0 restores the gap). Priest of Titania alone (Elf count 1) + two Forests = 3 flat mana, but the three hand casts total 5 ({G} + {G} + {1}{G}{G}). The line is payable ONLY sequentially: Forest -> Llanowar, Forest -> Mystic, and Priest -- now at THREE Elves -- taps for {G}{G}{G} to pay the Archdruid. The flat pool credits Priest at its current count, so without the EnumeratePlans growth credit the subset dies on !mana_ok before anything can offer it. Asserted via validate_line at turn == max_turns (a creature landed on the final turn wins nothing, so no win-turn assertion can see this). Executor realises the order via the growth cast tier (CastOrderRank 9) + scaled dorks tapping last (ManaSourceRank 61). USER 2026-08-20: 'play every elf we can from the list without tapping scaling dorks or Wirewood Lodge. Then we should play every elf remaining with scaled mana.'"
+}

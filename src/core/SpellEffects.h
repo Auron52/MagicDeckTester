@@ -516,6 +516,9 @@ inline void CreateToken(GameState&, int, int, int, const std::vector<std::string
 inline void OnDragonEnters(GameState&, int controller, int entered_index);
 inline void OnGoblinEnters(GameState&, int controller, int entered_index,
                            const std::string& chosen_tutor, int etb_kx);
+// etb_kx sentinel: "PUT entry with no searched destroy-K axis -- pick heuristically at
+// resolution" (full rationale at kEtbKxHeuristic's consumers near HeuristicEtbDestroyK).
+constexpr int kEtbKxHeuristic = -2;
 extern thread_local int g_scripted_tutor_choice;   // defined below (ScriptedTutor)
 inline int PermanentManaYield(const GameState&, const Permanent&, const CardDefinition&);   // defined below
 // Forward declaration: the reusable chosen-colour float (defined in the ritual section below) is
@@ -1164,8 +1167,10 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         // ...and the generic param-ETB cascade (Craterhoof team pump, Hornet Queen tokens,
         // Muxus-class reveals) so a Natural-Order-put creature's ETB fires exactly like a cast one.
         // No-op for every Dragon (no such params) -> Dragonstorm byte-identical.
+        // kEtbKxHeuristic: a put Terastodon's destroy-K is picked by the resolution-time
+        // lethality heuristic (no searched axis on this path); inert for every other creature.
         OnGoblinEnters(state, controller, static_cast<int>(state.battlefield.size()) - 1,
-                       std::string(), -1);
+                       std::string(), kEtbKxHeuristic);
     }
 
     // "then shuffle your library" (KEPT per user): deterministic CRN reshuffle like a fetch, so
@@ -2585,6 +2590,64 @@ inline void OnDragonEnters(GameState& state, int controller, int entered_index)
 // `entered_index` is the just-entered permanent's battlefield slot; `chosen_tutor` (optional) is a
 // search/human-chosen Goblin Matron fetch target (empty -> the provider's TutorCandidates pick).
 void PerformMuxusReveal(GameState& state, int controller, const CardParams& pp);   // body in SpellEffects.cpp
+
+// ---- Terastodon ETB-destroy heuristic (USER 2026-08-20) ---------------------------------------
+// One lever for the whole tweak (K-set narrowing at emission + the widened victim pool at
+// resolution): MTG_TERA_K, DEFAULT ON; =0 restores the v1 shape (full K fan over Forests only).
+inline bool TeraKHeuristicEnabled()
+{
+    static const bool v = EnvOn("MTG_TERA_K", true);
+    return v;
+}
+
+// Victim ordering class for the ETB self-destroy (lower = eaten first), or -1 = not a valid
+// victim. USER: "widen the choice to all valid targets, but only if we run out of forests."
+//   0  Forests -- the fungible resource the deck floods (the v1 pool, order preserved)
+//   1  other lands (Turntimber back face, Wirewood Lodge)
+//   2  mana rocks (Sol Ring)
+//   3  other noncreature permanents (Mirri's Guile)
+//   4  the reveal engine (Call of the Wild) LAST -- "Worldly Tutor into Call of the Wild
+//      activation is a real move for this deck" (USER), so it dies only when nothing else remains.
+// Within a class the destroy loop takes tapped before untapped. The widening past class 0 is
+// lever-gated; the resolution loop and the emission's target count share THIS predicate so the
+// searched K can never exceed what resolution will actually destroy (lockstep by construction).
+inline int EtbDestroyVictimClass(const GameState& state, int controller, const Permanent& q)
+{
+    if (q.controller_index != controller || q.is_animated || q.card.IsCreature()) { return -1; }
+    if (q.card.IsLand() && CardHasSubtype(q.card, "Forest")) { return 0; }
+    if (!TeraKHeuristicEnabled()) { return -1; }
+    if (q.card.IsLand()) { return 1; }
+    const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+    if (!qd) { return -1; }
+    if (qd->params.activated_reveal_top_cost.has_value()) { return 4; }
+    if (qd->params.mana_rock) { return 2; }
+    return 3;
+}
+
+// How many victims the widened pool holds right now -- the emission's cap on searched K.
+inline int CountEtbDestroyTargets(const GameState& state, int controller)
+{
+    int n = 0;
+    for (const Permanent& q : state.battlefield)
+    { if (EtbDestroyVictimClass(state, controller, q) >= 0) { ++n; } }
+    return n;
+}
+
+// kEtbKxHeuristic (declared with the OnGoblinEnters fwd decl above): the PUT paths (Natural
+// Order / Call of the Wild / Turntimber) pass it to mean "no searched K rode this entry -- pick
+// one heuristically at resolution". Distinct from -1 ("no K specified, destroy nothing") because
+// the EXECUTOR's stack entry only records a cast's chosen_x when it is POSITIVE (AIEngine), so a
+// searched K=0 hard-cast also arrives as -1 -- overloading -1 would make the executor
+// heuristic-override a searched K=0 while the rollout (which passes the int directly) kept it:
+// an executor/rollout divergence by construction.
+
+// The ONE Terastodon destroy-K projection, shared by BOTH entry paths (the cast now rides the
+// same kEtbKxHeuristic sentinel as the puts, so K is decided HERE at resolution -- mid-plan,
+// where the battlefield and the remaining pool already reflect what this plan has done; USER
+// 2026-08-21: "we might be able to see it in the current turn plan? ... That would make things
+// the easiest"). Defined after AvailableManaPool's declaration; full doctrine at the definition.
+inline int ProjectEtbDestroyK(const GameState& state, int controller, const CardDefinition& def);
+
 inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
                            const std::string& chosen_tutor = "", int etb_kx = -1)
 {
@@ -2626,23 +2689,31 @@ inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
     // creates a 3/3 green Elephant token." The passive opponent controls no noncreature
     // permanents, so the live mode destroys the caster's OWN -- candidates narrowed to own
     // FORESTS, tapped first (fungible; provider-style narrowing, disclosed). K = the searched
-    // chosen_x carried on the cast (etb_kx; -1/0 = destroy nothing).
+    // chosen_x carried on the cast (etb_kx; -1/0 = destroy nothing; kEtbKxHeuristic = "project K
+    // here at resolution" -- BOTH the autonomous cast and every put path send it; only human
+    // play's explicit fan carries a positive K). Victim order and pool: EtbDestroyVictimClass
+    // above (Forests first; the pool widens past them only under MTG_TERA_K).
+    if (p.etb_destroy_own_noncreature_max > 0 && etb_kx == kEtbKxHeuristic
+        && TeraKHeuristicEnabled())
+    { etb_kx = ProjectEtbDestroyK(state, controller, *def); }
     if (p.etb_destroy_own_noncreature_max > 0 && etb_kx > 0)
     {
         int k = std::min(etb_kx, p.etb_destroy_own_noncreature_max);
         int made = 0;
-        for (int pass = 0; pass < 2 && k > 0; ++pass)
+        for (int cls = 0; cls <= 4 && k > 0; ++cls)
         {
-            const bool want_tapped = (pass == 0);
-            for (std::size_t i = state.battlefield.size(); i-- > 0 && k > 0; )
+            for (int pass = 0; pass < 2 && k > 0; ++pass)
             {
-                Permanent& q = state.battlefield[i];
-                if (q.controller_index != controller || q.tapped != want_tapped) { continue; }
-                if (!q.card.IsLand() || q.is_animated) { continue; }
-                if (!CardHasSubtype(q.card, "Forest")) { continue; }
-                state.players[q.owner_index].graveyard.push_back(q.card);
-                state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
-                --k; ++made;
+                const bool want_tapped = (pass == 0);
+                for (std::size_t i = state.battlefield.size(); i-- > 0 && k > 0; )
+                {
+                    Permanent& q = state.battlefield[i];
+                    if (q.tapped != want_tapped) { continue; }
+                    if (EtbDestroyVictimClass(state, controller, q) != cls) { continue; }
+                    state.players[q.owner_index].graveyard.push_back(q.card);
+                    state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+                    --k; ++made;
+                }
             }
         }
         for (int t = 0; t < made; ++t)
@@ -3607,7 +3678,9 @@ inline bool ApplyRevealTopDeploy(GameState& state, int controller)
         state.battlefield.push_back(perm);
         const int slot = static_cast<int>(state.battlefield.size()) - 1;
         OnDragonEnters(state, controller, slot);
-        OnGoblinEnters(state, controller, slot, std::string(), -1);
+        // kEtbKxHeuristic: a PUT Terastodon has no searched destroy-K axis -- the resolution-time
+        // lethality heuristic picks one (HeuristicEtbDestroyK); inert for every other creature.
+        OnGoblinEnters(state, controller, slot, std::string(), kEtbKxHeuristic);
     }
     else
     {
@@ -3691,7 +3764,9 @@ inline void PerformLookTopPutCreature(GameState& state, int controller, const Ca
             state.battlefield.push_back(perm);
             const int slot = static_cast<int>(state.battlefield.size()) - 1;
             OnDragonEnters(state, controller, slot);
-            OnGoblinEnters(state, controller, slot, std::string(), -1);
+            // kEtbKxHeuristic: a PUT Terastodon has no searched destroy-K axis -- the
+            // resolution-time lethality heuristic picks one; inert for every other creature.
+            OnGoblinEnters(state, controller, slot, std::string(), kEtbKxHeuristic);
         }
         else
         {
@@ -4066,6 +4141,203 @@ inline void EnforceLegendRule(GameState& state, int controller_index);
 // Used solely by the MTG_LACKEY_PREF diagnostic below, never by game logic. MUST match the real
 // signature in ManaPayment.h, default argument included, or every call site becomes ambiguous.
 ManaPool AvailableManaPool(const GameState& state, const Permanent* skip);
+
+// fwd decl (defined further down; used by ProjectEtbDestroyK's Natural Order route check)
+inline std::vector<int> SacCreatureCandidateIndices(const GameState& state, int controller,
+                                                    const std::string& color);
+
+// ---- Terastodon destroy-K projection (USER doctrine 2026-08-20/21) -----------------------------
+// ONE projected K -- no searched fan ("I don't want to roll them all out. That's too expensive.
+// It would be better to make a projection") -- decided at RESOLUTION for BOTH entry paths: the
+// autonomous cast rides the same kEtbKxHeuristic sentinel as the puts. Resolving mid-plan is the
+// practical form of "we might be able to see it in the current turn plan? ... That would make
+// things the easiest": casts resolved before Terastodon are already on the battlefield, and the
+// REMAINING pool prices what the plan can still do today, so the this-turn Craterhoof case needs
+// only a route-in-reach test plus the lethality check ("we would need to calculate for the
+// current turn that the Craterhoof play is lethal, but nothing else").
+//
+// The principle (USER): "all we need to do is avoid a case where we miscalculate the turn we can
+// win on. If we don't mess that up then we could just figure out what is required in terms of
+// elephants to end the game on that turn." Earliest winnable horizon, then the required K:
+//   h=0  -- a Craterhoof can still land TODAY (in hand; a live Call of the Wild flipping it off
+//           the clairvoyant top, or after a Worldly Tutor; a Natural Order fetch -- USER: "all
+//           valid ways") with the remaining pool covering the route: smallest K whose swing is
+//           lethal this turn ("maybe playing maximum elephants is not necessary"). The fresh
+//           Elephants and Terastodon are summoning-sick and only feed the Hoof's X. Skipped when
+//           a Hoof is ALREADY down (its X is locked; new Elephants no longer pump anything).
+//   h=1  -- smallest K whose plain next-turn swing is lethal (everything untaps; an AFFORDABLE
+//           power-4+ hand threat's power folds in, which is how "keep the permanents and
+//           develop" falls out as K=0 automatically).
+//   h=1' -- ONLY when h=1 fails ("only for the next if our projection would go to the turn after
+//           otherwise"): a Craterhoof dropped NEXT turn -- the trickier mana check: every board
+//           source's yield regardless of tapped-ness, minus the K eaten sources, plus a land
+//           drop if a land is in hand.
+//   h=2  -- smallest K lethal over two swings.
+//   none -- cap: the Elephants are the only clock ("go for broke").
+// Projections use EffectivePower -- net of until-EOT bonuses for the future horizons (a resolved
+// pump must not inflate next turn's swing) -- and no lord bonuses (under-counting only ever asks
+// for MORE elephants). The plan carrying the pick is still scored by its rollout, and human play
+// / MTG_UNPRUNED(terak) keep the explicit 0..cap fan at the cast site.
+inline int ProjectEtbDestroyK(const GameState& state, int controller, const CardDefinition& def)
+{
+    const int kcap = std::min(def.params.etb_destroy_own_noncreature_max,
+                              CountEtbDestroyTargets(state, controller));
+    if (kcap <= 0) { return 0; }
+    const Player& ap     = state.players[controller];
+    const int opp_life   = state.players[1 - controller].life;
+    const int pool_total = AvailableManaPool(state, nullptr).Total();   // remaining, mid-plan
+    const int per        = std::max(1, def.params.etb_created_token_power);   // 3/3 Elephants
+
+    // Board census (the entered Terastodon is already on the battlefield and counts itself):
+    // creatures (X fodder), this-turn attackers, and next-turn power net of until-EOT bonuses.
+    int n_cre = 0, n_att = 0, att_power = 0, base_power = 0;
+    bool hoof_down = false;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd && qd->params.etb_team_pump_per_creature) { hoof_down = true; }
+        if (!(q.card.IsCreature() || q.is_animated)) { continue; }
+        ++n_cre;
+        base_power += std::max(0, q.EffectivePower() - q.temp_power_bonus);
+        if (CanAttackFull(q, state.battlefield, controller))
+        { ++n_att; att_power += std::max(0, q.EffectivePower()); }
+    }
+
+    // Hoof routes still in reach: cheapest extra mana to land a team-pump haste finisher this
+    // turn (`route`, priced against the REMAINING pool) / next turn (`nroute`, priced against
+    // next turn's full untap below). A Natural Order route docks one creature for its sacrifice.
+    const CardDefinition* hoof = nullptr;  int route = -1;  bool route_no = false;
+    const CardDefinition* nhoof = nullptr; int nroute = -1; bool nroute_no = false;
+    {
+        auto consider = [&](const CardDefinition* h, int cost, bool is_no, bool this_turn_too)
+        {
+            if (this_turn_too && (route < 0 || cost < route))
+            { hoof = h; route = cost; route_no = is_no; }
+            if (nroute < 0 || cost < nroute) { nhoof = h; nroute = cost; nroute_no = is_no; }
+        };
+        const CardDefinition* hand_hoof = nullptr;
+        for (const Card& hc : ap.hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+            if (hd && hd->params.etb_team_pump_per_creature) { hand_hoof = hd; break; }
+        }
+        if (hand_hoof != nullptr)
+        { consider(hand_hoof, hand_hoof->card.m_mana_cost.ManaValue(), false, true); }
+        else
+        {
+            const CardDefinition* lib_hoof = nullptr;
+            for (const Card& lc : ap.library)
+            {
+                const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+                if (ld && ld->params.etb_team_pump_per_creature) { lib_hoof = ld; break; }
+            }
+            if (lib_hoof != nullptr)
+            {
+                for (const Permanent& q : state.battlefield)   // a live Call of the Wild
+                {
+                    if (q.controller_index != controller || q.tapped) { continue; }
+                    const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                    if (!qd || !qd->params.activated_reveal_top_cost.has_value()) { continue; }
+                    const int cotw = qd->params.activated_reveal_top_cost->ManaValue();
+                    if (!ap.library.empty())
+                    {
+                        const CardDefinition* td =
+                            CardDatabase::Instance().LookupCached(ap.library[0]);
+                        // Top already the Hoof: flip alone -- THIS turn only (next turn's draw
+                        // moves the top out from under the projection).
+                        if (td && td->params.etb_team_pump_per_creature)
+                        { consider(lib_hoof, cotw, false, true); }
+                    }
+                    for (const Card& hc : ap.hand)
+                    {
+                        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                        if (hd && hd->params.tutor_to_top)
+                        { consider(lib_hoof, cotw + hd->card.m_mana_cost.ManaValue(), false, true); }
+                    }
+                    break;   // one Call of the Wild is enough for the route census
+                }
+                for (const Card& hc : ap.hand)   // Natural Order fetching it straight in
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (!hd || hd->params.sac_additional_creature_color.empty()
+                        || !hd->params.tutor_to_battlefield_single) { continue; }
+                    if (SacCreatureCandidateIndices(state, controller,
+                            hd->params.sac_additional_creature_color).empty()) { continue; }
+                    consider(lib_hoof, hd->card.m_mana_cost.ManaValue(), true, true);
+                    break;
+                }
+            }
+        }
+    }
+
+    // h=0: a Hoof still lands today -> smallest K whose swing is lethal THIS turn.
+    if (!hoof_down && hoof != nullptr && route >= 0 && pool_total >= route)
+    {
+        int xa = n_att, xp = att_power, xc = n_cre;
+        if (route_no) { xc -= 1; if (xa > 0) { --xa; xp = std::max(0, xp - 1); } }
+        const int hoofp = hoof->card.m_power.value_or(0);
+        for (int k = 0; k <= kcap; ++k)
+        {
+            const int x      = xc + k + 1;                       // + Elephants + the Hoof itself
+            const int attack = xp + hoofp + (xa + 1) * x;
+            if (attack >= opp_life) { return k; }
+        }
+    }
+
+    // The best AFFORDABLE additional threat's power, folded into the plain h=1/h=2 swings
+    // ("no elephants so we can afford other threats" now falls out of the arithmetic).
+    int extra_p = 0;
+    for (const Card& hc : ap.hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd && hd->card.IsCreature() && hd->card.m_power.value_or(0) >= 4
+            && pool_total >= hd->card.m_mana_cost.ManaValue())
+        { extra_p = std::max(extra_p, hd->card.m_power.value_or(0)); }
+    }
+
+    // h=1: smallest K whose plain next-turn swing is lethal.
+    for (int k = 0; k <= kcap; ++k)
+    { if (base_power + extra_p + per * k >= opp_life) { return k; } }
+
+    // h=1': a Hoof dropped NEXT turn. Next-turn mana = every board source's yield regardless of
+    // tapped-ness (everything untaps; a dork cast this turn is no longer sick), minus the K eaten
+    // sources (approximated at one mana each -- the pool eats Forests first), plus a land drop.
+    if (nhoof != nullptr && nroute >= 0)
+    {
+        int full_sources = 0;
+        bool land_in_hand = false;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller) { continue; }
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (!qd) { continue; }
+            if (qd->tmpl != CardTemplate::BasicLand && qd->tmpl != CardTemplate::ManaDork
+                && !qd->params.mana_rock) { continue; }
+            full_sources += std::max(0, PermanentManaYield(state, q, *qd));
+        }
+        for (const Card& hc : ap.hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+            if ((hd ? hd->card.IsLand() : hc.IsLand())) { land_in_hand = true; break; }
+        }
+        for (int k = 0; k <= kcap; ++k)
+        {
+            if (full_sources - k + (land_in_hand ? 1 : 0) < nroute) { continue; }
+            int xc = n_cre, bp = base_power;
+            if (nroute_no) { xc -= 1; bp = std::max(0, bp - 1); }
+            const int cnt    = xc + k + 1;   // everyone attacks next turn, plus the Hoof
+            const int attack = bp + per * k + nhoof->card.m_power.value_or(0) + cnt * cnt;
+            if (attack >= opp_life) { return k; }
+        }
+    }
+
+    // h=2: smallest K lethal over two swings.
+    for (int k = 0; k <= kcap; ++k)
+    { if (2 * (base_power + extra_p + per * k) >= opp_life) { return k; } }
+    // No reachable window: the Elephants are the only clock ("go for broke").
+    return kcap;
+}
 
 inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
                                           const std::vector<int>& damaging_attacker_indices)
@@ -5526,6 +5798,88 @@ inline bool ManaSubtypeGateLive(const GameState& state, int controller, const Ca
     return ControlsSubtype(state, controller, def.params.mana_requires_land_subtype);
 }
 
+// ---- Untap-land burst (Wirewood Lodge: "{T}: Add {C}. / {G}, {T}: Untap target Elf") -----------
+// The untap ability is NOT a mana ability, but the line it enables is pure mana and fully legal at
+// main-phase priority: tap a scaled Elf for N, activate the Lodge ({G} from that N + tap the
+// Lodge), untap the Elf, tap it again for N -- CR 605.3 only restricts what can be activated
+// INSIDE one payment window, and the engine's pay-as-you-go payment is a faithful shortcut of
+// pre-floating this sequence before the cast. Because the feed pip ({G}) and the target's output
+// ({G}) are the SAME colour, the whole sequence nets exactly (yield - 1) extra {G} from ONE Lodge
+// tap with the Elf's tapped state unchanged -- which is how every accounting site models it (pool
+// credit in AddSourceToPool, the flow oracle, the backtracker's burst branch, ManaSourceRank's
+// reserve tier). Net > 0 needs yield >= 2, i.e. a SCALED dork (Priest of Titania / Elvish
+// Archdruid) at 2+ Elves; below that the plain "{T}: Add {C}" mode dominates and nothing here
+// fires, so the {C} is spent like any land's. USER 2026-08-20: "Lodge should tap for colourless
+// when no elf taps for GG or more and also allow for tapping an existing untapped elf as needed
+// ... and using the Lodge to untap it"; "allow using it for colourless early if there are no
+// scaling sources at 2+ elves. Otherwise the colourless could be stranded."
+// MTG_UNTAP_BURST=0 disables the whole model (the single reader lives in UntapBurstBestYield;
+// every accounting site goes through these helpers). Param-gated on untap_creature_cost ->
+// byte-identical for every deck without such a land.
+
+// The single coloured pip the untap ability costs, or nullopt when the cost is not exactly one
+// coloured pip -- the net-cancellation model above then does not hold, so the burst stays off.
+inline std::optional<Color> UntapBurstFeedColor(const CardDefinition& def)
+{
+    if (!def.params.untap_creature_cost.has_value()
+        || def.params.untap_creature_subtype.empty()) { return std::nullopt; }
+    const ManaCost& c = *def.params.untap_creature_cost;
+    if (c.generic != 0 || c.colorless != 0 || c.hybrid_count != 0 || c.has_x) { return std::nullopt; }
+    if (c.white + c.blue + c.black + c.red + c.green != 1) { return std::nullopt; }
+    if (c.white) { return Color::White; }
+    if (c.blue)  { return Color::Blue; }
+    if (c.black) { return Color::Black; }
+    if (c.red)   { return Color::Red; }
+    return Color::Green;
+}
+
+// Best current one-tap yield among the controller's burst-legal targets: creatures of the untap
+// ability's subtype that are mana dorks producing exactly the feed colour, not summoning-sick (a
+// sick Elf can neither have tapped nor re-tap, CR 302.6), and -- when `require_tapped` -- tapped
+// NOW (the payment-layer form: the burst's untap must reverse a real tap at that node). The
+// planner form (require_tapped=false) also counts an untapped, tappable target: it taps once
+// normally first (its own credit) and the burst reverses that tap; ManaSourceRank's reserve tier
+// makes the executor realise exactly that order. 0 when the model is off or nothing qualifies.
+inline int UntapBurstBestYield(const GameState& state, int controller,
+                               const CardDefinition& lodge_def, bool require_tapped)
+{
+    static const bool s_on = EnvOn("MTG_UNTAP_BURST", true);   // DEFAULT ON; =0 restores plain-{C}-only
+    if (!s_on) { return 0; }
+    const std::optional<Color> feed = UntapBurstFeedColor(lodge_def);
+    if (!feed.has_value()) { return 0; }
+    int best = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
+        if (require_tapped && !q.tapped) { continue; }
+        if (!CanTapNow(q, state.battlefield)) { continue; }   // summoning-sick -> no tap to reverse
+        if (!CardHasSubtype(q.card, lodge_def.params.untap_creature_subtype)) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (!qd || qd->tmpl != CardTemplate::ManaDork) { continue; }
+        if (qd->params.produces.size() != 1 || qd->params.produces[0] != *feed) { continue; }
+        if (!ManaSubtypeGateLive(state, controller, *qd)) { continue; }
+        const int y = PermanentManaYield(state, q, *qd);
+        if (y > best) { best = y; }
+    }
+    return best;
+}
+
+// Net extra mana one Lodge tap adds via the burst OVER its own plain "{T}: Add {C}" tap:
+// (best yield - 1) when the target taps for 2+, else 0. This is the PLANNER form (an untapped
+// target counts -- see UntapBurstBestYield); the payment layer re-tests with require_tapped.
+inline int UntapLandBurstNet(const GameState& state, int controller, const CardDefinition& def)
+{
+    const int y = UntapBurstBestYield(state, controller, def, /*require_tapped=*/false);
+    return y >= 2 ? y - 1 : 0;
+}
+
+// Does casting this creature raise a live scaled mana dork's count (an Elf while an untapped,
+// tappable Priest of Titania / Elvish Archdruid is up)? The executor half of the EnumeratePlans
+// dork-growth credit keys on this: such creatures cast in their own early tier (CastOrderRank 7,
+// cheapest first) so every later payment taps the dork at the higher count. False the moment no
+// live scaled dork exists -> byte-identical for every other deck.
+inline bool FeedsLiveScaledDork(const GameState& state, const CardDefinition& def);   // below
+
 inline int PermanentManaYield(const GameState& state, const Permanent& perm, const CardDefinition& def)
 {
     if (def.params.storage_land) { return perm.storage_counters; }
@@ -5534,6 +5888,21 @@ inline int PermanentManaYield(const GameState& state, const Permanent& perm, con
     // Arbor Elf: no controlled Forest -> not a live source (yield 0; pool adds nothing).
     if (!ManaSubtypeGateLive(state, perm.controller_index, def)) { return 0; }
     return ManaProducedPerTap(def);
+}
+
+inline bool FeedsLiveScaledDork(const GameState& state, const CardDefinition& def)
+{
+    if (!def.card.IsCreature()) { return false; }
+    const int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !IsScaledManaDork(*d)) { continue; }
+        if (!CanTapNow(p, state.battlefield)) { continue; }
+        if (CardHasSubtype(def.card, d->params.mana_per_creature_subtype)) { return true; }
+    }
+    return false;
 }
 
 // --- Three Tree City scaled mana ability ------------------------------------------------------
@@ -6810,6 +7179,16 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
     if (IsScaledManaLand(def))
     {
         if (int net = ScaledManaNetYield(state, def)) { pool.wild += net; return; }
+    }
+    // Untap-land burst (Wirewood Lodge): one tap is worth (best scaled-Elf yield - 1) of the feed
+    // colour when a live 2+ target exists (see UntapBurstBestYield's net-cancellation model). That
+    // strictly dominates the plain "{T}: Add {C}" credit (same count at yield 2, but coloured), so
+    // it REPLACES the {C} -- crediting both would promise a mana the one tap cannot make. Falls
+    // through to the plain credit when the burst is dead (no target, yield < 2, or the flag off).
+    if (def.params.untap_creature_cost.has_value())
+    {
+        if (int net = UntapLandBurstNet(state, state.active_player_index, def))
+        { pool.Add(*UntapBurstFeedColor(def), net); return; }
     }
     int amt = (yield_override >= 0) ? yield_override : ManaProducedPerTap(def);
     // Reflecting Pool: its colours are the union of the controller's other lands (empty -> adds
