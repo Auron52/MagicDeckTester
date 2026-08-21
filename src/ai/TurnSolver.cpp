@@ -19625,6 +19625,30 @@ static bool CondemnFilterArmed(const GameState& state)
         && MainPhaseFilterActive(state)
         && ResolveProvider(state).CondemnsPassedMainPhase();
 }
+
+// Tranche audit counters (USER 2026-08-21: the ordered design intends condemned paths to NEVER
+// run, so every tranche RESCUE -- a win the filtered space missed -- is a named COUNTEREXAMPLE
+// to the membership rule's losslessness, to be dug and fixed, not silently absorbed. The
+// tranche is the counterexample generator for that program; when rescues measure zero across
+// held-out + overnight, it can demote to an audit-mode assertion). Printed at exit whenever the
+// tranche was armed at least once, [condemn-tranche] walks/vacuous/rescues.
+namespace tranchestats
+{
+    inline std::atomic<uint64_t> g_walks{0};     // tranche bodies actually enumerated+searched
+    inline std::atomic<uint64_t> g_vacuous{0};   // skipped: no condemned card in hand (provably empty)
+    inline std::atomic<uint64_t> g_rescues{0};   // tranche IMPROVED best -> membership counterexample
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            const uint64_t w = g_walks.load(), v = g_vacuous.load(), r = g_rescues.load();
+            if (w + v + r == 0) { return; }
+            std::fprintf(stderr, "[condemn-tranche] walks=%llu vacuous_skips=%llu rescues=%llu\n",
+                         (unsigned long long)w, (unsigned long long)v, (unsigned long long)r);
+        }
+    };
+    inline Dumper g_dumper;
+}
 static bool PlanHasCondemnedCast(const GameState& state, const TurnSolver::Plan& plan)
 {
     const Player& ap = state.ActivePlayer();
@@ -19787,6 +19811,27 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             if (s_condemn_tranche && best.win_turn > state.turn_number + depth
                 && CondemnFilterArmed(state))
             {
+                // VACUOUS SKIP (MTG_TRANCHE_VACSKIP=0 restores the unconditional walk): when NO
+                // card in the current hand is on the condemned list, the filtered and unfiltered
+                // enumerations are IDENTICAL, so the erase below would delete every tranche plan
+                // -- the walk is provably empty and the whole unfiltered enumeration was waste.
+                // This is where a low-condemnation deck's cost concentrated (AL: the tranche was
+                // ALL of order-condemnation's +15% compute; 5C's big filtered sets amortise it).
+                // Behaviour-identical by construction; verified byte-identical on the suite.
+                static const bool s_vacskip = EnvOn("MTG_TRANCHE_VACSKIP", true);
+                bool any_condemned_in_hand = false;
+                for (const Card& c : state.ActivePlayer().hand)
+                {
+                    for (int i = 0; i < state.m1_hand_n; ++i)
+                    { if (state.m1_hand[i] == c.m_number) { any_condemned_in_hand = true; break; } }
+                    if (any_condemned_in_hand) { break; }
+                }
+                if (s_vacskip && !any_condemned_in_hand)
+                {
+                    tranchestats::g_vacuous.fetch_add(1, std::memory_order_relaxed);
+                    return best;
+                }
+                tranchestats::g_walks.fetch_add(1, std::memory_order_relaxed);
                 std::vector<TurnSolver::Plan> tranche;
                 {
                     CondemnSuppressGuard _cs;   // unfiltered enumeration
@@ -19810,6 +19855,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     if (s2.ActivePlayer().life <= 0) { continue; }
                     if (s2.Opponent().life <= 0)
                     {
+                        tranchestats::g_rescues.fetch_add(1, std::memory_order_relaxed);
                         TurnSolver::Plan q_rec = q;
                         q_rec.breakpoint_actions = std::move(bp);
                         return { state.turn_number, { { false, std::move(q_rec) } } };
@@ -19834,6 +19880,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, sub.win_turn); }
                     if (sub.win_turn < best.win_turn)
                     {
+                        // A strict improvement from the CONDEMNED space = the filtered answer was
+                        // wrong = a losslessness counterexample (see tranchestats).
+                        tranchestats::g_rescues.fetch_add(1, std::memory_order_relaxed);
                         best.win_turn = sub.win_turn;
                         best.phases.clear();
                         TurnSolver::Plan q_rec = q;

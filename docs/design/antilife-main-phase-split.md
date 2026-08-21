@@ -249,3 +249,31 @@ Conclusion: the doctrine is SOUND but has nothing to do on this deck -- AL's m2 
 was never driving outcomes, so uniform condemnation buys semantics at +15% compute. NOT adopted;
 both levers kept as instruments. The doctrine roll-out should continue with decks whose m2/
 breakpoint surfaces are load-bearing (the 144d4c2d gap note: 5C's own POST-COMBAT breakpoints).
+
+## 2026-08-21f: THE TRANCHE IS HOT -- rescue-rate audit REVISES the "inert" story; the lossless
+## program has its counterexample generator (USER: condemned paths should NEVER run; order+rules
+## must MAKE the prune lossless; test and re-evaluate until they do)
+
+Instrumentation landed (`[condemn-tranche] walks/vacuous_skips/rescues`, printed at exit like
+enum-memo) plus a PROVABLY-neutral vacuous skip (MTG_TRANCHE_VACSKIP default ON, =0 restores:
+when no hand card is on the condemned list, filtered == unfiltered and the tranche walk is empty
+by construction -- digest-identical verified, suite byte-identical).
+
+**The numbers (single-job probes, searched d3):**
+* AL (PHASE+CONDEMN, 300 games): walks 86,560, vacuous 19,086 (18%), **rescues 13,449 (15.5% of
+  walks)**.
+* 5C (production config, 150 games): walks 185,873, vacuous 34,051, **rescues 23,288 (12.5%)**.
+
+REVISION of 21e's reading: "condemnation changed zero AL outcomes" was NOT "nothing to condemn"
+-- the membership rule (declined-at-m1) is wrong at ~1-in-7 armed no-win nodes on BOTH decks, and
+the tranche corrects every one inside the projections, which is exactly where the compute went.
+The doctrine as shipped is lossless-by-backstop, not lossless-by-rule. The USER's design target
+is lossless-BY-RULE (condemned paths never run, not even counterfactually); the rescue counter is
+the counterexample generator for that program: characterize the rescue classes (candidate
+regimes: budget-truncated declines; interior-projection declines made under shallower
+information than the re-ask; value-changed-by-acquisition, the Dragonstorm shape; affordability
+edges), refine order/membership per class with USER review + measurement, and the tranche
+demotes to an audit assertion when rescues hit zero on held-out + overnight.
+
+NEXT (deferred): a rescue TRACE (condemned card + node context per rescue, sampled) to classify
+the 13k/23k counterexamples -- the classes, not the count, decide which rule changes to propose.
