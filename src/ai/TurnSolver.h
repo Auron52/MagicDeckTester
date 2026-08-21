@@ -314,6 +314,14 @@ public:
         // pending measurement + user review.
         bool atk_forfeit    = false;
 
+        // Searched dork attack/hold choice (MTG_DORK_ATK_SEARCH): -1 = not contested at this
+        // node (natural heuristic combat, the default); 0 = contested, search chose the
+        // natural HOLD; 1 = contested, search chose RELEASE (held dorks attack). Carried on
+        // the committed line's m1 plan and pinned into the executor's DeclareAttackers
+        // (AIEngine m_atk_release_pin -- the discard-pin pattern), so the realised combat is
+        // the one the scored line simulated.
+        int  atk_dork_release = -1;
+
         // Cast-ordering search (C): when true, ApplyPlanDirect executes the non-sacrifice
         // hand casts in `actions` VECTOR ORDER instead of the canonical enabler-first
         // bucketing -- so the search can explore orderings the canonical heuristic batches

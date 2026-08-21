@@ -46,6 +46,33 @@ inline bool GarthOrderedEnabled()
     return v;
 }
 
+// MTG_DORK_ATK_SEARCH -- searched dork attack/hold (USER design 2026-08-21: "a full-turn plan
+// or a lookahead to decide whether attacking with dorks is correct"; "limit it as much as
+// possible with heuristics and search the rest"). The collapsed-main mana hold
+// (HoldManaSourceForCollapsedMain) is a greedy answer to a question greedy cannot decide --
+// its six exception clauses are per-game patches and it still forfeits winning swings
+// (gi113: held the lone exalted Hierarch for a Remedy the line never cast). Under this flag,
+// where the hold's verdict is CONTESTED -- a held dork whose released swing would actually
+// deal damage (effective power >= 1 incl. lone-exalted; 0-power dorks stay greedily held, the
+// obvious case and most dorks) -- the search evaluates BOTH combat variants and the committed
+// line carries the choice (Plan::atk_dork_release -> AIEngine pin, discard-pin pattern).
+// Heuristics close every obvious case (0-power hold, vigilance attack, no-m2-need attack via
+// the hold's own trigger), so the branch fires rarely and costs one extra combat+tail only
+// there. Read by the search branch site (TurnSolver FSLineWin), the hold (DecisionProviders),
+// and the executor pin (AIEngine) -- shared reader per the lockstep rule. DEFAULT OFF pending
+// measurement + user review.
+inline bool DorkAtkSearchEnabled()
+{
+    static const bool v = EnvOn("MTG_DORK_ATK_SEARCH");
+    return v;
+}
+
+// Per-thread combat-variant override for the searched dork attack/hold. -1 = natural (the
+// heuristic hold decides); 1 = RELEASE (held dorks attack). Set ONLY (a) by the FSLineWin
+// branch around the alternate SimulateCombat, and (b) by the executor's DeclareAttackers when
+// the committed line pinned a release -- never ambient, so every other combat is byte-identical.
+inline thread_local int g_dork_atk_override = -1;
+
 // MTG_ACQ_RESOLVE=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
 // mid-phase ACQUISITION re-solve family. A cast that puts new castable resources in hand mid-plan
 // without drawing -- a tutor-to-hand fetch (Gamble) or a staged exile dig (Soulfire Eruption's

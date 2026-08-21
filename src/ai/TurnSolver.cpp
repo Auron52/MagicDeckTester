@@ -20273,10 +20273,29 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         if (s.ActivePlayer().life <= 0) { if (rec_vals) { node_vals.push_back(max_turns + 1); } continue; }
         AnimateLandsShared(s, nullptr);
         ActivateTapTokensShared(s, nullptr);
+        // SEARCHED DORK ATTACK/HOLD (MTG_DORK_ATK_SEARCH, EngineFlags.h; USER design
+        // 2026-08-21): where the collapsed-main mana hold's verdict is CONTESTED (a held dork
+        // whose released swing would deal damage -- DorkAtkContested), evaluate BOTH combat
+        // variants and let the tails decide; every obvious case (0-power hold, vigilance,
+        // no-m2-need) was already closed heuristically inside the test, so this branch is the
+        // narrow searched remainder and costs one extra combat+tail only where it fires. The
+        // chosen variant rides the committed line (Plan::atk_dork_release -> executor pin).
+        const bool dork_contested = DorkAtkContested(s);
+        // DIG TRACE (MTG_DORK_ATK_TRACE, default off): per-node contested verdict + variant
+        // tails, the branch's own [fsw]-style instrument.
+        static const bool s_dat = EnvOn("MTG_DORK_ATK_TRACE");
+        if (s_dat)
+        {
+            std::fprintf(stderr, "[dork-atk] T%d d%d contested=%d\n",
+                         state.turn_number, depth, dork_contested ? 1 : 0);
+        }
+        GameState s_rel;
+        if (dork_contested) { s_rel = s; }   // pre-combat snapshot for the release variant
         SimulateCombat(s);
         if (s.Opponent().life <= 0)  // win this turn -> floor
         {
             TurnSolver::Plan p_rec = p;
+            if (dork_contested) { p_rec.atk_dork_release = 0; }
             p_rec.breakpoint_actions = std::move(bp);
             TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
             // A this-turn win is the earliest possible from here, so it is the final
@@ -20285,9 +20304,43 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             return win;
         }
 
+        int chose_release = -1;   // -1 not contested / 0 hold / 1 release (recorded on commit)
         TurnSolver::SearchLine tail =
             FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget,
                        &dom_arch);
+        if (dork_contested)
+        {
+            chose_release = 0;
+            g_dork_atk_override = 1;
+            SimulateCombat(s_rel);
+            g_dork_atk_override = -1;
+            if (s_rel.Opponent().life <= 0)   // released swing IS lethal -> earliest possible
+            {
+                TurnSolver::Plan p_rec = p;
+                p_rec.atk_dork_release = 1;
+                p_rec.breakpoint_actions = std::move(bp);
+                TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
+                FSLineStoreWin(lc, key, win, state);
+                return win;
+            }
+            TurnSolver::SearchLine tail_rel =
+                FSLineTail(s_rel, depth - 1, max_turns,
+                           std::min(cutoff, std::min(best.win_turn, tail.win_turn)),
+                           second_main, tt, lc, budget, &dom_arch);
+            // RELEASE WINS TIES (<=, not <): the hold's only possible payoff is within THIS
+            // turn -- every source untaps next turn (the hold rule's own premise) -- so a tail
+            // tie means the held mana demonstrably bought nothing the search could see, while
+            // the released swing is damage banked PAST the horizon. Weak dominance, not a
+            // judgment call (gi113: the tails tie at the edge and the forgone T2 chip is
+            // exactly the point the T4 kill later misses).
+            if (s_dat)
+            {
+                std::fprintf(stderr, "[dork-atk] T%d d%d hold=%d rel=%d\n",
+                             state.turn_number, depth, tail.win_turn, tail_rel.win_turn);
+            }
+            if (tail_rel.win_turn <= tail.win_turn)
+            { tail = std::move(tail_rel); chose_release = 1; }
+        }
         // DIG INSTRUMENT (MTG_FSW_TRACE, default off): dump this node's plans + tail win turns
         // for turn MTG_FSW_TURN -- the m1-side companion of MTG_M2T_TRACE above.
         {
@@ -20328,6 +20381,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             best.win_turn = tail.win_turn;
             best.phases.clear();
             TurnSolver::Plan p_rec = p;
+            p_rec.atk_dork_release = chose_release;   // searched combat variant -> executor pin
             p_rec.breakpoint_actions = std::move(bp);
             best.phases.push_back({ true, std::move(p_rec) });
             best.phases.insert(best.phases.end(), tail.phases.begin(), tail.phases.end());

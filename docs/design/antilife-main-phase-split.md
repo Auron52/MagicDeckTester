@@ -406,3 +406,44 @@ space empty), i.e. the dork-at-m2 development line that m1 siblings SHOULD cover
 evidently do not (why the sibling is missing there is the next dig). Class A's 31 dump-tie games
 remain open (the recorded candidate repairs: playout-tail value treatment, per-card m2-table
 shrink). AL bundle adoption is still the USER's call at ~+0.0015/game avg.
+
+## 2026-08-21j: SEARCHED DORK ATTACK/HOLD (MTG_DORK_ATK_SEARCH) -- the greedy islands' intersection
+## gets a search branch; AL bundle reaches ~PARITY with control. ADOPTION -> USER
+
+**USER design (this session):** the dork question sits at the intersection of the two
+allowed-greedy islands (attacks + mana allocation) -- "the greedy solution really cannot
+effectively answer whether we need the dorks or not"; "limit it as much as possible with (safe)
+heuristics and search the rest"; 0-effective-power dorks (incl. exalted/pumps) never attack and
+just stay (most dorks -- lone-attacker exception aside); vigilance -> freely attack; "freely
+attack if there is nothing we could need them for in main 2" (vacuity); dedup identical dorks.
+The root-caused motivator: HoldManaSourceForCollapsedMain is a SIX-clause greedy tower (gi=839/
+215/174/76/530/230/9) that still forfeited gi113's winning chip -- each clause a per-game patch.
+
+**Built (default OFF):** DorkAtkContested (the heuristics close every obvious case; the hold's
+own needs_creature_mana trigger IS the vacuity rule; vigilant dorks exempted inside the hold);
+FSLineWin wave-0 evaluates BOTH combat variants at contested nodes only; RELEASE WINS TIES by
+weak dominance (the hold's payoff expires at end of turn -- the hold rule's own premise -- while
+the chip is banked past the horizon; gi113's tails tie at the edge and the forgone chip is
+exactly the missing point); Plan::atk_dork_release -> m_atk_release_pin -> DeclareAttackers
+(discard-pin pattern) keeps executor combat lockstep with the scored line. Bug found on the way:
+the choice was recorded on win-returns but NOT in the best-update block -- the pin never reached
+the executor until that line was added. [dork-atk] trace (MTG_DORK_ATK_TRACE) is the branch's
+instrument. v2 (NOT built): the HOLD direction for >=1-printed-power dorks (Deathrite/Bloom
+Tender class, today unconditionally attacked) -- touches adopted 5C production, own proposal.
+
+**Verified:** gi113 recovers T4 under BOTH salts; flag-off byte-identical (suite smoke ALL PASS,
+0 changed); class-B exemplars unaffected (T3).
+
+**Ensemble (bundle = PHASE+CONDEMN+stamp-fixes +DORK_ATK, salts 1/2):** bundle-CTL
+**+17 -> +5 (salt1), +7 -> -4 (salt2)** per 8000 -- ~PARITY with control (salt2 now better);
+improved 26/26 games per salt vs 13/14 worse; salt-robust: 24 better vs 4 worse (6:1). The
+day's arc total: salt-robust bundle-worse-than-CTL games 57 -> 25. Perf: +7.7% over the
+stamp-fixed bundle, ~+3.7% net vs CTL.
+
+**ADOPTION (USER):** the full AL doctrine bundle (MTG_AL_PHASE + MTG_AL_CONDEMN + this branch
+default-on) now measures ~neutral on quality (+5/-4 per 8000) at ~+4% compute, with the
+doctrine goals met: searched interior m2, one condemnation across the turn (lossless by rule +
+sibling coverage), searched dork combat, no greedy interior main. Remaining salt-robust
+residual: 25 games (dump-tie class A remainder + un-repaired class B). Options: adopt the
+bundle default-on for AL (GT rebaseline expected: AL keys churn); keep measuring; or continue
+the classify->refine loop on the remaining 25 first.

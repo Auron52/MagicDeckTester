@@ -413,6 +413,7 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     m_committed_line.clear();
     m_discard_choice_pin = -1;
     m_vial_choice_pin    = -1;
+    m_atk_release_pin    = -1;
     m_fd_best_win  = max_turns + 1;
     m_fd_best_turn = 0;
 
@@ -1093,6 +1094,8 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
     m_discard_choice_pin = -1;
     const int saved_vial_pin = m_vial_choice_pin;
     m_vial_choice_pin = -1;
+    const int saved_atk_pin = m_atk_release_pin;
+    m_atk_release_pin = -1;
     GameEngine engine(*this);
     int win_turn = engine.PlayOutFrom(trial, max_turns, from);
     if (lands_out)
@@ -1105,6 +1108,7 @@ int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
     m_committed_line = std::move(saved_line);
     m_discard_choice_pin = saved_discard_pin;
     m_vial_choice_pin    = saved_vial_pin;
+    m_atk_release_pin    = saved_atk_pin;
     m_in_rollout = false;
     m_logger     = saved;
     return win_turn > 0 ? win_turn : max_turns + 1;
@@ -2095,6 +2099,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // Vial-charge lockstep: same write-when->=0 rule, but consumed at NEXT turn's upkeep
             // (DecideVialCharge) rather than this turn's cleanup -- the pin rides across the boundary.
             if (plan.vial_charge_choice >= 0) { m_vial_choice_pin = plan.vial_charge_choice; }
+            // Searched dork attack/hold lockstep (MTG_DORK_ATK_SEARCH): the committed m1 plan's
+            // combat-variant choice pins this turn's DeclareAttackers, so the realised combat is
+            // the one the scored line simulated. Write-when->=0; m2 plans never carry the field.
+            if (plan.atk_dork_release >= 0) { m_atk_release_pin = plan.atk_dork_release; }
 
             // Divergence log (MTG_DIVERGENCE_LOG): on the search-driven path, compare the search's
             // committed plan to what greedy d0 would do at this SAME untouched state (diagnosis only;
@@ -4172,9 +4180,17 @@ std::vector<Permanent*> AIEngine::DeclareAttackers(GameState& state)
 {
     // Selection is shared with the rollout (DeclareAttackerIndices, Combat.cpp); this wrapper only
     // maps the indices back to the pointer list GameEngine's signature expects.
+    // Searched dork attack/hold lockstep (MTG_DORK_ATK_SEARCH, m_atk_release_pin): consume the
+    // committed line's combat-variant choice for exactly this declaration. pin==1 forces the
+    // collapsed-main mana hold open (the scored line attacked the held dorks); pin==0/none is
+    // the natural heuristic. Never inside a rollout (its combats decide naturally).
+    int pin = -1;
+    if (!m_in_rollout && m_atk_release_pin >= 0) { pin = m_atk_release_pin; m_atk_release_pin = -1; }
+    if (pin == 1) { g_dork_atk_override = 1; }
     std::vector<Permanent*> attackers;
     for (int idx : DeclareAttackerIndices(state))
     { attackers.push_back(&state.battlefield[idx]); }
+    if (pin == 1) { g_dork_atk_override = -1; }
     return attackers;
 }
 

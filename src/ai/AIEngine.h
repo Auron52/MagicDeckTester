@@ -304,6 +304,14 @@ private:
     // alongside m_committed_line so a probe/keep playout cannot eat the real game's pin.
     int m_vial_choice_pin = -1;
 
+    // Searched DORK ATTACK/HOLD (Plan::atk_dork_release, MTG_DORK_ATK_SEARCH): 1 = the
+    // committed line chose RELEASE (held dorks attack this combat), 0 = explicit hold
+    // (natural behaviour -- pin still consumed for symmetry), -1 = no pin. Same shape and
+    // lifetime rules as m_discard_choice_pin: written when the plan commits, consumed by this
+    // turn's DeclareAttackers, saved/restored around shared-engine rollouts alongside
+    // m_committed_line so a probe/keep playout cannot eat the real game's pin.
+    int m_atk_release_pin = -1;
+
     // Oracle (MTG_FD_ORACLE): earliest searched win predicted this game and the turn
     // it was predicted, to flag when a later recompute degrades below it (divergence).
     int m_fd_best_win  = 21;

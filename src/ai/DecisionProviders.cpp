@@ -979,7 +979,15 @@ static int FreePayloadKillCeiling(const GameState& s, int controller)
 
 static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& p)
 {
+    // Searched-branch override (MTG_DORK_ATK_SEARCH, EngineFlags.h): the FSLineWin branch and
+    // the executor's committed-line pin force RELEASE here so the search -- not this heuristic
+    // tower -- decides the contested hold. Never set outside those two scopes.
+    if (DorkAtkSearchEnabled() && g_dork_atk_override == 1)  { return false; }
     if (p.tapped || !p.card.IsCreature())                   { return false; }
+    // A vigilant dork does not tap to attack, so its mana survives combat and the hold buys
+    // nothing (USER 2026-08-21: vigilance -> freely attack). Gated with the feature so the
+    // default path stays byte-identical.
+    if (DorkAtkSearchEnabled() && p.card.HasKeyword(Keyword::Vigilance)) { return false; }
     if (p.EffectivePower() > 0)                             { return false; }
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
     if (!d || d->tmpl != CardTemplate::ManaDork)            { return false; }
@@ -1112,6 +1120,50 @@ bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker)
 {
     if (HoldManaSourceForCollapsedMain(s, attacker)) { return false; }
     return ShouldAttackWith(s, attacker);
+}
+
+// Searched dork attack/hold -- the CONTESTED test (MTG_DORK_ATK_SEARCH, EngineFlags.h; USER
+// design 2026-08-21). True when this pre-combat state has >=1 dork the collapsed-main mana
+// hold pins whose RELEASED swing would actually deal damage -- i.e. the hold's verdict is a
+// judgment call the search should price, not an obvious case a heuristic may close:
+//   * 0-effective-power swings are NOT contested (the release adds nothing; greedy hold
+//     stands -- "a lot of dorks are 0 power, these rules will help a lot").
+//   * effective power counts the lone-exalted bonus (the recorded Hierarch trap: printed
+//     power is not the test) -- released ALONE, a 0/1 Hierarch swings for CountExalted.
+//   * vigilant dorks never reach here (exempted inside the hold: attacking costs no mana).
+//   * no-m2-need states never reach here (the hold's own trigger already released them --
+//     the USER's vacuity rule, "freely attack if there is nothing we could need them for
+//     in main 2", is the hold's needs_creature_mana test).
+// Called by the FSLineWin branch site on the post-cast pre-combat state; one battlefield scan.
+bool DorkAtkContested(const GameState& s)
+{
+    if (!DorkAtkSearchEnabled())            { return false; }
+    if (!TurnSolver::CollapsedMainActive(s)) { return false; }
+    const DecisionProvider& prov = ResolveProvider(s);
+    const int active = s.active_player_index;
+    int  natural_attackers = 0;
+    int  held_power        = 0;   // released swing power of the held dorks (printed/effective)
+    int  held_n            = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != active)              { continue; }
+        if (!CanAttackFull(p, s.battlefield, active))  { continue; }
+        if (prov.AttackWith(s, p)) { ++natural_attackers; continue; }
+        // Not attacking naturally: held by the mana hold, or declined by ShouldAttackWith.
+        // Only the mana hold's victims are contested -- a ShouldAttackWith decline (0-power
+        // dork NOT wanted even with mana free) stays greedy.
+        if (!HoldManaSourceForCollapsedMain(s, p))     { continue; }
+        if (!prov.ShouldAttackWith(s, p))              { continue; }
+        ++held_n;
+        held_power += p.EffectivePower();
+    }
+    if (held_n == 0) { return false; }
+    // Released swing damage: the held dorks join (or become) the attack. Lone-exalted bonus
+    // applies when the release yields exactly ONE total attacker.
+    int released_dmg = held_power;
+    if (natural_attackers == 0 && held_n == 1)
+    { released_dmg += CountExalted(s.battlefield, active); }
+    return released_dmg >= 1;
 }
 
 // Does this card resolve into INFORMATION -- i.e. is it a "draw" for ordering purposes? Shared by

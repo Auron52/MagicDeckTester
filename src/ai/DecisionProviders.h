@@ -887,3 +887,8 @@ inline const DecisionProvider& ResolveProvider(const GameState& s)
 {
     return s.m_provider ? *s.m_provider : DefaultProvider();
 }
+
+// Searched dork attack/hold contested test (MTG_DORK_ATK_SEARCH; DecisionProviders.cpp).
+// True when the collapsed-main mana hold pins a dork whose released swing would deal damage --
+// the FSLineWin branch then evaluates both combat variants. False whenever the flag is off.
+bool DorkAtkContested(const GameState& s);
