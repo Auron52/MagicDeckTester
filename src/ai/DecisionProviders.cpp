@@ -984,6 +984,23 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
     // Searched-branch override (MTG_DORK_ATK_SEARCH, EngineFlags.h): the FSLineWin branch and
     // the executor's committed-line pin force RELEASE here so the search -- not this heuristic
     // tower -- decides the contested hold. Never set outside those two scopes.
+    // DIAGNOSTIC (MTG_DORK_FORCE_HOLD_TURN, default inert): override 0 = FORCE the hold, the
+    // direction the searched branch cannot currently express. Measurement only -- nothing sets
+    // override to 0 except the diagnostic in DeclareAttackers.
+    // DIAGNOSTIC (MTG_DORK_FORCE_HOLD_TURN=<turn>, default 0 = INERT): force every mana dork to
+    // HOLD on that turn -- the direction the searched branch cannot currently express (see
+    // DorkAtkContested: a dork the greedy WANTS to attack with is never contested). Applied
+    // EVERYWHERE (search rollouts included), so
+    // the committed line itself is built under the hold. Executor-only forcing is not a valid
+    // test: the m2 plan is replayed from a line that assumed combat happened.
+    {
+        static const int s_fh = EnvInt("MTG_DORK_FORCE_HOLD_TURN", 0);
+        if (s_fh > 0 && s.turn_number == s_fh && p.card.IsCreature() && !p.tapped)
+        {
+            const CardDefinition* fd = CardDatabase::Instance().LookupCached(p.card);
+            if (fd && fd->tmpl == CardTemplate::ManaDork) { return true; }
+        }
+    }
     if (DorkAtkSearchEnabled() && g_dork_atk_override == 1)  { return false; }
     if (p.tapped || !p.card.IsCreature())                   { return false; }
     // A vigilant dork does not tap to attack, so its mana survives combat and the hold buys

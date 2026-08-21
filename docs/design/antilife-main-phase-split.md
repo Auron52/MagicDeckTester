@@ -786,3 +786,47 @@ classification prune removes, so it largely DISABLES the levers under test. (It 
 control arm real quality -- 14 of 23 jobs get WORSE unpruned, budget dilution from widening -- so
 `bun_unpruned` vs `ctl` is not a valid comparison either.) The load-bearing evidence is the
 per-game structural dig above, not the aggregate equality.
+
+## 2026-08-21o: THE DORK SEARCH IS ONE-DIRECTIONAL -- it can only turn a HOLD into an ATTACK,
+## never an ATTACK into a HOLD. gi852 needs the direction that does not exist.
+
+USER: "I thought we already implemented attacker searching? In that case it should know to hold
+here?" We did, and it does not -- the trigger is gated on the greedy's PRIOR verdict.
+
+TWO CODE GAPS, both release-only:
+1. `DorkAtkContested` (DecisionProviders.cpp): `if (prov.AttackWith(s, p)) { ++natural_attackers;
+   continue; }` -- a dork the greedy WANTS to attack with is counted as a natural attacker and can
+   never be contested (held_n stays 0 -> early `return false`). The branch only ever asks "the mana
+   hold is holding this dork; should it swing?" In gi852 the greedy attacks the Hierarch (0 power
+   but 1 damage via lone-exalted), so held_n == 0 and the search is SILENT.
+2. `AIEngine::DeclareAttackers`: only `pin == 1` does anything -- its own comment says "pin==0/none
+   is the natural heuristic". So even if the search CHOSE hold, the executor cannot express it.
+   Benign while (1) holds (hold == natural), but it means the mechanism has no hold direction at all.
+
+PROOF (not inference -- an executor-only force was NOT enough, see below):
+* New DIAGNOSTIC `MTG_DORK_FORCE_HOLD_TURN=<turn>` (default 0 = INERT, one site in
+  HoldManaSourceForCollapsedMain, applied in search rollouts AND the executor): forces every mana
+  dork to hold on that turn. Smoke with it unset: **36/36 PASS, 0 configs changed** (byte-identical).
+* gi852 with `MTG_DORK_FORCE_HOLD_TURN=4`: the committed line becomes
+  `T4 pre:<pass> | 2nd:spells[Fiery Justice,Fiery Justice]` -> opp 20 -> 0, **win T4**. So:
+  - the hold is worth the whole turn, and
+  - **the m2 enumerator has NO duplicate-cast gap** -- it emits the same-card pair the moment the
+    mana is there. 21n's "affordability, not expressibility" reading is CONFIRMED with direct
+    positive evidence (the earlier m2t trace showing 0 pairs was a node-coverage artifact).
+* METHOD TRAP worth keeping: forcing the hold in the EXECUTOR ONLY (`!m_in_rollout`) left the game
+  at T5 and looked like an enumeration gap -- because the m2 plan was REPLAYED from a committed
+  line built on the assumption that combat happened. A combat-side intervention must be applied
+  inside the SEARCH too, or the committed line silently overrides it.
+
+VALUE OF THE MISSING DIRECTION (coupled, 23 residual jobs, force at T4 / T5):
+* recovers **8 of 19** coupled-worse rows = 4 distinct games (gi852, gi469, gi666, gi963, each at
+  d3 and d5) -- i.e. 4 of the 6 PHASE-attributed games. gi592 and gi554 are NOT hold cases.
+* collateral on this subset: **0 of 23 hurt** by the blanket force. NOTE this is a biased subset
+  (already selected as bundle-worse); a blanket force on a full run would certainly have collateral,
+  so this bounds the DIRECTION's value, not a shippable policy.
+
+PROPOSAL -> USER (not adopted; this is a WIDENING, which Rule 0c makes a user-review gate):
+make `DorkAtkContested` symmetric -- also contest a dork the greedy WANTS to attack with when main
+2 has a use for its mana (the vacuity test the hold tower already computes), and give the executor
+pin a real `pin == 0` hold branch. The perf worry USER raised ("to avoid this becoming much
+slower") is the reason to gate it on the m2-need test rather than on every attacking dork.
