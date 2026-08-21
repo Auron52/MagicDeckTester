@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 331a880  date 2026-08-21
+# Regression ground truth -- commit d585226  date 2026-08-21
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -236,15 +236,15 @@ mirrorwing_overnight_d5_s4004=4.8767/8f96ff49a46c20fd
 mirrorwing_overnight_d5_s5005=4.8633/385a921abc0f7582
 mirrorwing_overnight_d5_s6006=4.8900/5b4bed2ba24496e0
 mirrorwing_overnight_d5_s7007=4.8967/33adba18475e09cb
-fivecolour_overnight_d0_s4004=5.7785/d901d03e3531e47d
-fivecolour_overnight_d0_s6006=5.8180/7e75d0d5c8d99fc0
-fivecolour_overnight_d0_s8008=5.7900/de511b9ba80029f9
-fivecolour_overnight_d0_s10010=5.7860/05644d291fa6a61e
-fivecolour_overnight_d3_s4004=4.9325/a11831a13fae9212
-fivecolour_overnight_d3_s5005=4.9400/e76a73bfa0a2e449
-fivecolour_overnight_d3_s6006=4.9725/105d44bde407f85c
-fivecolour_overnight_d3_s7007=4.9350/7fa6690f62f9690b
-fivecolour_overnight_d5_s4004=4.8933/dfebfc172ddc4bc8
-fivecolour_overnight_d5_s5005=4.9367/8940e6e969525355
-fivecolour_overnight_d5_s6006=4.9633/1d979f9c7de81d61
-fivecolour_overnight_d5_s7007=4.8967/35a4e316304391fe
+fivecolour_overnight_d0_s4004=5.7755/10d0423329b0b0a6
+fivecolour_overnight_d0_s6006=5.8175/6897e3a63e8c2b18
+fivecolour_overnight_d0_s8008=5.7885/24be78fd33bcf892
+fivecolour_overnight_d0_s10010=5.7835/b366b1788aa6509f
+fivecolour_overnight_d3_s4004=4.9300/1f442a3805cc239a
+fivecolour_overnight_d3_s5005=4.9400/d98d26f6323007a5
+fivecolour_overnight_d3_s6006=4.9625/2eff9bdff535b5f7
+fivecolour_overnight_d3_s7007=4.9350/8ee107b6130809e5
+fivecolour_overnight_d5_s4004=4.8933/2096dcea7da2d150
+fivecolour_overnight_d5_s5005=4.9367/0a71120015564014
+fivecolour_overnight_d5_s6006=4.9600/f3928bfe404ac78b
+fivecolour_overnight_d5_s7007=4.8967/e56fa8dc99555f28
