@@ -204,7 +204,26 @@ Note the 12.65x hand is a **non-Garth opener** — Garth is drawn mid-rollout, s
 
 ## 4. Status
 
-**AGREED SCOPE (USER, 2026-08-21), to build after the overnight rebaseline:**
+**AGREED SCOPE (USER, 2026-08-21) — STILL UNBUILT, handed off:**
+
+> **START HERE if you are picking this up.** Nothing in §2a or §9 is implemented. Verify in ten
+> seconds: `grep -c sac_for_mana_amount src/ai/ManaPayment.cpp` returns **0** (the payment solver
+> has never heard of sac sources), `Treasure Token` / `Black Lotus` / `Lotus Bloom` all still carry
+> `produces = None`, and the per-colour `SacForMana` fan is still emitted in `CollectActions`.
+> The two `docs(treasures):` commits are DESIGN ONLY.
+>
+> **What DOES ship today is a different thing** — the action-level colour FOLD
+> (`MTG_SAC_COLOR_FOLD`, §7/§8) plus its scarcity fix (§11/§12). Those make the existing
+> enumeration cheaper and smarter; §2a REPLACES that enumeration and should retire both, along
+> with `RestrictSacColorsToHasteAndRed`.
+>
+> **MIRRORWING IS THE TARGET DECK, NOT FIVECOLOUR.** FiveColour's blowup is already solved by the
+> fold (width 5 -> 1, measured 1.18x). Mirrorwing still enumerates `3^9 = 19,683` odometer states
+> on a 9-Treasure board because Treasures are `amount 1`, so they get no fold and no provider
+> collapse. That is where §2a pays.
+>
+> **USER RULE: on everywhere or off everywhere.** A per-deck hook (`FoldsSacColorVariants()`) was
+> built during this work and rejected — it would have hidden a real defect behind a config.
 
 | item | decision |
 |---|---|
