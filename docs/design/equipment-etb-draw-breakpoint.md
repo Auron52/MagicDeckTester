@@ -278,6 +278,43 @@ Why it is largely inert on THIS deck, and the mechanical reason as well as the s
   continuation decision rather than a condemned one. The same ordering argument answers the tutor
   variant the user raises ("we would just list that spell first").
 
+### The sharper case, and why a RANGE turns out not to be needed (USER, 2026-08-21)
+
+> "cards that deal damage based on instant/sorceries cast and cantrips. The cantrips can be used to
+> cast the spell or to help it go off, which means you may want to cast one cantrip before and one
+> after. I guess that just means we need a range." — then: "maybe that is fine as-is, because you
+> find guttersnipe and then prioritize casting it before other spells ... The cantrips can both find
+> and enable a card like Guttersnipe."
+
+The second reading is the right one, and three things already in the tree carry it:
+
+* **`BpPlanCasts` never condemns a name the plan CASTS.** So "one cantrip before, one after" already
+  survives for the same cantrip: casting one Ponder keeps Ponder considerable at every later
+  breakpoint. The residual gap is only ACROSS names (cast Ponder, decline Preordain, then want
+  Preordain after the payoff).
+* **Ordering dissolves most of that residue.** The payoff ranks ahead of the cantrips, and the
+  cantrips are themselves the breakpoints, so "before and after" falls out of the SEQUENCE OF
+  SECTIONS rather than needing a range inside one section. Dig with cantrips until the payoff is
+  found; the payoff is new (and so first-class) at the breakpoint that drew it; cantrips cast after
+  it are later sections.
+* **The card class does not exist yet, and the hook is already sited.** `MayPrecedeCantrip` names
+  Guttersnipe explicitly and records that the payoff polarity is "currently EMPTY, not mis-modelled"
+  — the pool's only cast-trigger cards are Eidolon (punisher polarity, damages the caster), Worthy
+  Knight, Aria of Flame and Mana Cannons. When a payoff-polarity card is implemented it needs a
+  param, and that check goes there.
+
+### IMPLEMENTATION TRAP: truncation redefines "declined"
+
+Today a card in hand the plan does not cast is treated as declined, and condemned. That is only
+sound because the plan spans the WHOLE turn. Once the plan stops at the first draw, most of the hand
+is not declined — it was never reached. Condemning it would be exactly the over-prune this design is
+trying to avoid.
+
+So the two mechanisms must be co-designed: the condemned set has to become **"cards this section
+could have cast BEFORE the draw and passed over"**, not "cards this section did not cast". Shipping
+truncation on top of today's condemnation rule without that change would silently delete most of the
+turn.
+
 **The general fix, for the deck that does need it: condemnation INVALIDATION.** When a continuation
 casts something that changes another card's value, un-condemn the class it enables. That needs a
 representation of "X enables Y" that is param-derived rather than a name list — and note that this is
