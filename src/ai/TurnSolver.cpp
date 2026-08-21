@@ -11589,7 +11589,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // (ApplyPlanDirect) and executor (AIEngine::TakeTurn) reach this through the same function, so the
     // held set stays in lockstep. Cheap prescan: no untapped depletion land -> reserved=0 (every
     // non-depletion deck skips the held attempt entirely -> byte-identical + no extra solve).
-    std::uint64_t reserved = 0, reserved_depl = 0, reserved_crea = 0;
+    std::uint64_t reserved = 0, reserved_depl = 0, reserved_crea = 0, reserved_atk = 0;
     const int n = static_cast<int>(state.battlefield.size());
     if (DepletionReserveEnabled() && n <= 64)
     {
@@ -11615,7 +11615,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
             const bool mana_src = bd && !bp.tapped
                 && ((bd->tmpl == CardTemplate::ManaDork && CanTapNow(bp, state.battlefield)) || bd->params.mana_rock);
-            if (mana_src) { reserved_crea |= (1ull << best); }
+            if (mana_src) { reserved_crea |= (1ull << best); reserved_atk = (1ull << best); }
         }
     }
     // Every untapped mana CREATURE (the "hold your beater" rule generalised -- see
@@ -11648,11 +11648,19 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // exist only when BOTH classes are non-empty, so a deck with no dork (or no depletion land) makes
     // the same single held attempt as before -- byte-identical, no extra solve. Creatures outrank a
     // depletion counter: a counter is mana either way, a creature is an attacker / trick target.
+    //
+    // The SAME competition exists one level in -- dork vs dork -- and had no rung: when the turn
+    // needs exactly one body's mana, "hold every dork" is infeasible and the fallback holds NOTHING,
+    // so the joint solve may spend the ONE body the turn needs (the attacker / pump target) on a pip
+    // a SPARE dork covers identically. The attacker-only rung (MTG_TAP_ATTACKER_RUNG, default off)
+    // is that missing step; see TapAttackerRungEnabled for the AL gi8 case and its verification.
     std::uint64_t rungs[10];
     int n_rungs = 0;
     if (reserved) { rungs[n_rungs++] = reserved; }
     if (reserved_depl && reserved_crea && DorkReserveEnabled())
     { rungs[n_rungs++] = reserved_crea; rungs[n_rungs++] = reserved_depl; }
+    if (TapAttackerRungEnabled() && reserved_atk && reserved_atk != reserved)
+    { rungs[n_rungs++] = reserved_atk; }
     // PARTIAL CREATURE HOLD (MTG_DORK_HOLD_PARTIAL, default OFF pending measurement -- the USER's
     // margin-1 combo games, 2026-08-21). When even the creatures-only hold is unaffordable, the
     // all-or-nothing release above taps EVERY dork -- losing attackers the lethality projection

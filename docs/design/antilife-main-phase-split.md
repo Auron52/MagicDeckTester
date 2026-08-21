@@ -580,3 +580,59 @@ reaches 5 pre-combat, lower than the winning line's 6). It loses at the PAYMENT:
   heuristic-optimization item; (b) the 21l stamp exemptions for combat-interacting casts --
   still correct in principle (m1-cast is not universally >= m2-cast: blocker info, pre/post-
   combat riders), but no longer the only route for g8.
+
+### 21l correction 2: it is the PREPAY RESERVATION LADDER, not ManaSourceRank
+### (the addendum's scarcity-order story was reasoned, not measured -- probes refute it)
+
+USER: "We should check power when tapping. For some reason I thought we did that already." The
+second half is right: THREE creature-sparing layers already exist (AttackerReserveEnabled = hold
+your greatest-power attacker; DorkReserveEnabled = hold EVERY untapped mana creature;
+TapSpareCreaturesEnabled = sort mana creatures to the back of the backtracker's candidate list),
+plus ManaSourceRank's rank-60 hold for colourless manlands. What none of them read is POWER of a
+specific PERMANENT -- and, as it turns out, that is not what g8 needed either.
+
+SINGLE-LAYER PROBE (bundle = PHASE+CONDEMN, coupled, gi8; wt=4 is the loss, wt=3 the fix):
+  baseline 4 | MTG_NO_DORK_RESERVE=1 -> 3 | MTG_NO_BATCH_PAY=1 -> 3
+  MTG_NO_TAP_SPARE_CREATURES=1 -> 4 | MTG_TAP_LEGACY=1 -> 4 | MTG_NO_ATTACKER_RESERVE=1 -> 4
+MTG_TAP_LEGACY=1 leaving the loss in place FALSIFIES the addendum's ManaSourceRank story. The
+cause is BatchPrepayMainCasts' reservation ladder:
+1. Cast order puts the free alt-cast Invigorate after the prepay, so at PREPAY time both dorks are
+   0 power (proven below), and the combined m1 cost is Remedy {2}{B} + Swords {W} = 4 vs 3 lands
+   -- exactly one body must tap.
+2. reserved_crea = attacker bit OR every-dork bit; with no depletion land the ladder is ONE rung:
+   hold everything. 3 lands cannot pay 4 -> the rung fails -> fall to the UNRESTRICTED solve,
+   which holds NOTHING and is free to assign W<-Birds and the generic pip<-Hierarch.
+3. The joint solve taps the HIERARCH. Invigorate then pumps FindBestOwnAttacker -- the tapped
+   Hierarch is no longer a legal attacker, so the pump lands wherever it lands and combat deals 0.
+   The identical cost is payable as W<-Temple Garden, B<-Tomb, generic<-Stomping+Birds, leaving
+   the Hierarch up for 5 (4 pump + 1 exalted) = the T3 kill.
+4. WHY per-cast payment does NOT lose it (MTG_NO_BATCH_PAY=1 -> wt=3): paying Remedy first
+   consumes the three lands, and Swords' {W} then has only ONE legal source -- Birds (rainbow);
+   the Hierarch makes B/R/G and cannot pay white. The greedy is forced into the right assignment
+   by COLOUR. Only the whole-turn joint solve has the freedom to get it wrong.
+This is the SAME failure the ladder was built to fix (Mirrorwing s24 T4, dork vs depletion), one
+level in: dork vs dork, where no rung existed.
+
+BUILT (both default OFF, for A/B):
+* MTG_TAP_ATTACKER_RUNG (TurnSolver.cpp BatchPrepayMainCasts + SpellEffects.h): track the
+  AttackerReserve bit SEPARATELY (DorkReserve currently swallows it into the all-dorks mask) and
+  add it as a final ladder rung -- hold JUST the greatest-power attacker when holding every body
+  is unaffordable. Lossless by the ladder's own leave-out-if-you-can argument (one extra first
+  try; the unrestricted solve still runs). **Recovers gi8's T3 win WITH condemnation on.**
+  Robustness note: the rung holds FindBestOwnAttacker's pick and the own-creature pump TARGETS
+  FindBestOwnAttacker's pick, so held body and pump target agree BY CONSTRUCTION, not by luck.
+* MTG_TAP_POWER_ORDER (SpellEffects.cpp backtracker candidate sort): within the mana-creature back
+  group, order by EffectivePower ASCENDING so the DFS spends the cheapest body first. The literal
+  "check power when tapping". Permutation-only (Rule 0b safe).
+  **INERT on gi8** -- and that is the proof for step 1 above: if the pump had already landed
+  before payment, the Hierarch would be a 4/4 next to a 0/1 Birds and this sort would have fixed
+  it. It did not, so both bodies are 0 power at prepay time. Power-awareness cannot help where the
+  bodies are indistinguishable by power; the ATTACKER identity is the load-bearing information.
+  (It also cannot reach the scarcity `produce` path at all: ManaSourceRank takes a CardDefinition,
+  not a Permanent, so it cannot see counters/temp pump/animation. Widening that signature is the
+  prerequisite for power-aware scarcity ordering, deferred.)
+* USER's alternative -- "we could pump the birds instead" -- is the third fix point and a real
+  one: OwnPumpTargetCandidates is PROVIDER-OWNED, so the pump could prefer the body the payment
+  will not need (and Birds even flies). Not built: it requires predicting the payment from the
+  pump site, whereas the rung fixes it at the payment site with the information already in hand.
+  Worth revisiting if a case appears where the held attacker is the WRONG body to keep.

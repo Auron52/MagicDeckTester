@@ -7105,6 +7105,53 @@ inline bool DorkReserveEnabled()
     return v;
 }
 
+// ATTACKER-ONLY RUNG on the prepay reservation ladder (MTG_TAP_ATTACKER_RUNG, default off).
+// The ladder above is all-or-nothing per class: hold EVERYTHING reservable, and if that is
+// unaffordable fall straight to the unrestricted solve. When the turn needs exactly one body's
+// mana, "hold every dork" is infeasible and the fallback holds NOTHING -- so the joint solve is
+// free to spend the ONE creature whose body the turn needs (the attacker / pump target) and pay
+// the same cost that a different, equally legal assignment would have covered off a spare dork.
+// This rung inserts the missing middle step: hold JUST the greatest-power attacker (the bit
+// AttackerReserveEnabled computes, which DorkReserve currently swallows into the all-dorks mask).
+//
+// LOSSLESS by the same "leave out if you can" argument as every other rung: it is one extra FIRST
+// TRY that declines to pre-tap; if it fails, the unrestricted solve still runs, so no payment and
+// no line becomes unreachable (Rule 0b infinite-budget test). Cost is at most one extra
+// TapForCostBacktrack per prepay that already failed its full hold.
+//
+// Origin: Anti-Lifegain gi8 (docs/design/antilife-main-phase-split.md 21l). Board = 3 lands +
+// Ignoble Hierarch + Birds of Paradise; the turn's combined m1 cost is 4, so one dork must tap.
+// Hold-all fails (3 lands = 3 mana), the plain solve taps the HIERARCH -- the lone attacker and
+// the Invigorate target -- and the turn's 5 combat damage (and the game's T3 kill) vanishes, while
+// assigning W<-Temple Garden and the generic pip to Birds pays the identical cost with the
+// attacker left up. Verified: MTG_NO_DORK_RESERVE=1 (which narrows the mask to exactly this rung's
+// attacker bit) recovers the T3 win.
+inline bool TapAttackerRungEnabled()
+{
+    static const bool v = EnvOn("MTG_TAP_ATTACKER_RUNG");
+    return v;
+}
+
+// POWER-AWARE body ordering for the payments the reservation does NOT own (MTG_TAP_POWER_ORDER,
+// default off). TapSpareCreaturesEnabled below sorts mana creatures to the BACK of the
+// backtracker's candidate list, but WITHIN that group the order is raw battlefield order -- so
+// which body burns is decided by which dork happened to enter first, not by what it is worth. A
+// 4/4 pumped attacker and an untouched 0/1 Birds are interchangeable to that sort, and the
+// first-solution-wins DFS spends whichever sits earlier. Ordering the group by EFFECTIVE POWER
+// ASCENDING makes the DFS reach for the CHEAPEST body first, so a pumped/large creature is tapped
+// only when the payment genuinely needs it. (This is per-PERMANENT state, which is why it cannot
+// live in ManaSourceRank -- that hook takes a CardDefinition and cannot see counters, temp pump,
+// or animation. Extending the scarcity path the same way needs that signature widened.)
+//
+// LOSSLESS: this PERMUTES the DFS candidate list, it never caps it -- the backtracker still
+// descends into a big body when nothing else pays (Rule 0b). Same shape and placement constraint
+// as the spare-creatures partition it refines (must precede the dup-collapse chain build).
+inline bool TapPowerOrderEnabled()
+{
+    static const bool v = EnvOn("MTG_TAP_POWER_ORDER");
+    return v;
+}
+
 // The same "a creature is worth more than its mana" rule, one layer down, for the payments the
 // reservation above does NOT own. TapForCostBacktrackWorker walks its candidate sources in raw
 // BATTLEFIELD ORDER and is first-solution-wins -- it taps cands[0] and recurses, so cands[0] is

@@ -1661,7 +1661,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     if (top_level && !g_flow_order_live && s_src_cands_buf.size() > 1 && TapSpareCreaturesEnabled()
         && g_scripted_tapmode != 1)   // 1 == the searched "spend the dorks" branch (TapReserve)
     {
-        std::stable_partition(s_src_cands_buf.begin(), s_src_cands_buf.end(),
+        auto first_body = std::stable_partition(s_src_cands_buf.begin(), s_src_cands_buf.end(),
             [](const std::pair<int, const CardDefinition*>& c)
             { return c.second->tmpl != CardTemplate::ManaDork; });
         // MTG_TAP_SCALED_LAST (A/B lever, default OFF): within the dork block, spend the SMALLEST
@@ -1700,6 +1700,24 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 };
                 return yield(a) < yield(b);
             });
+        }
+        // ...and WITHIN the body group, reach for the CHEAPEST body first (see
+        // TapPowerOrderEnabled). Battlefield order alone makes the burned body a function of which
+        // dork entered first, so a pumped attacker is spent in preference to an identical untouched
+        // one. Stable, so battlefield order still breaks power ties (the historical pick).
+        if (TapPowerOrderEnabled() && first_body != s_src_cands_buf.end())
+        {
+            const int bfn = static_cast<int>(state.battlefield.size());
+            std::stable_sort(first_body, s_src_cands_buf.end(),
+                [&state, bfn](const std::pair<int, const CardDefinition*>& a,
+                              const std::pair<int, const CardDefinition*>& b)
+                {
+                    const int pa = (a.first >= 0 && a.first < bfn)
+                                 ? state.battlefield[a.first].EffectivePower() : 0;
+                    const int pb = (b.first >= 0 && b.first < bfn)
+                                 ? state.battlefield[b.first].EffectivePower() : 0;
+                    return pa < pb;
+                });
         }
     }
     const std::vector<std::pair<int, const CardDefinition*>>& cands = *src_cands;
