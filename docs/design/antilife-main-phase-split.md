@@ -503,3 +503,48 @@ state -- sac-fold contributed digest churn only there, and the flip's net-zero v
 bucketed (5 luck / 6 dump-tie / 4 kill-turn incl. g852+g8 named digs / g648 reveal oddity
 unexamined in depth); adoption HELD by USER pending the kill-turn digs; NO implementation until
 after compaction (USER).
+
+## 2026-08-21l: g8 ROOT CAUSE CORRECTED -- coupled repro proves an IN-SEARCH condemnation
+## expressibility gap; the 21k "stale line + salt" story was the measurement context, not the cause
+
+USER pressed on 21k ("doesn't that mean g8 was exposing a separate mismatch bug?"), which forced
+the coupled (no-salt) repro that 21k never ran. Result: **g8 is a REAL production-domain loss,
+not a salt artifact, and the true mechanism is simpler and worse than 21k recorded.**
+
+* COUPLED SINGLE-LEVER ISOLATION (all on /tmp/al8.json = seed 6014 gi8 d3 b10, no salt):
+  - control                       wt=3
+  - MTG_AL_PHASE alone            wt=3
+  - MTG_AL_PHASE + MTG_DORK_ATK  wt=3
+  - MTG_AL_PHASE + MTG_AL_CONDEMN wt=4   <- condemnation ALONE loses the turn, coupled.
+* MTG_FD_TRACE, control and phase-only arms: the T1 solve COMMITS THE WHOLE WINNING LINE --
+  `T3 pre:[Tainted Remedy(,Invigorate)]{land=Bloodstained Mire} | 2nd:[Swords to Plowshares]`,
+  win=3 VERIFIED at T1, replayed straight through. No staleness, no missing draw: the coupled
+  search sees the Cutter and the m2 kill three turns out. The phase split handles this game
+  perfectly ON ITS OWN.
+* Condemn arm, same trace: that line is UNREPRESENTABLE. Declining affordable Swords at the
+  projected T3 m1 condemns it, so FSLineTail cannot cast it at m2 -- every no-Swords-at-m1 plan
+  tails 4. The T2 re-solve commits `T3 pre:[Remedy,Invigorate] 2nd:<pass> / T4 [Swords,Drone]`
+  (fd-pred: T3 post-combat opp_life=6, Swords in hand, 6/6 on board -- the kill is RIGHT THERE
+  and the filter forbids it).
+* WHY SIBLING COVERAGE FAILS (the soundness argument's counterexample): the m1-cast sibling
+  `T3 pre:[Swords,Remedy,Invigorate]` projects opp_life=5 pre-combat but COMBAT DEALS 0
+  (fd-pred T3 pre=5 -> 2nd=5) and tails 4. Casting Swords PRE-combat is not combat-equivalent
+  to POST-combat: the extra cast changes tap state (a 4th mana source -- plausibly the pumped
+  Ignoble Hierarch itself -- gets tapped, muting the attack) and/or removes the 6/6 the greedy
+  attack logic reads. Micro-cause (tap-order vs board-read) NOT yet pinned; the macro-fact is
+  measured: m1-cast != declined-then-m2-cast whenever the cast interacts with combat.
+* RELATION TO 21k: the salted run's staleness (T3 replaying a T2 line whose projection lacked
+  the Cutter) is real but SECONDARY -- it is why the salted tails tied at 4, i.e. why the loss
+  showed up in the ensemble. The coupled repro shows condemnation deletes the winning line even
+  with perfect projection. 21k's rule-gap statement (stale-line declines) remains a valid
+  observation but is NOT g8's root cause and would NOT fix g8 coupled.
+* RULE-GAP (CORRECTED): "affordable-but-declined at m1 => condemned for m2" is unsound for any
+  card whose resolution interacts with combat (removal of opponent creatures under Remedy = the
+  deck's WIN CONDITION; also anything whose cast changes attacker tap state). Same family as the
+  re-arm pair exemption: the decline is a POSITIVE sequencing choice, not a pass. Candidate
+  fixes (USER review, post-compaction): exempt removal-class targets-opponent-permanents cards
+  from the stamp; or exempt cards whose cast would change the combat simulation's input state;
+  or stamp only cards whose m1-cast sibling achieves an equal-or-better tail (direct coverage
+  check, cost unknown).
+* Repro artifacts: logs/al_residual/g8c_{ctl,bun}/ (coupled game logs),
+  logs/al_residual/g8_coupled_fsw*.txt (T3 plan/tail traces, memo on+off).
