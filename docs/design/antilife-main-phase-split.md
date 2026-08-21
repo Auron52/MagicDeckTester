@@ -218,3 +218,34 @@ measured; the measurement chose the form:
 tie-break architecture could carry an attack-forfeit preference for those (a plan whose payment
 must tap the best attacker sorts after equals), but that is a NEW judgement, not an existing
 adopted heuristic -- propose-and-measure before any default.
+
+## 2026-08-21e: THE FIVECOLOUR CONDEMNATION DOCTRINE ON AL -- measured INERT-AT-COST, not adopted
+
+USER direction (post-pull of the c6adf22b decision-space arc): "within a turn all breakpoints and
+phases should use the same condemnation" -- extend 5C's doctrine deck by deck, AL first. Two
+levers built (both scoped to the split, both default OFF, off-state byte-identical):
+`MTG_AL_CONDEMN` (CondemnsPassedMainPhase -- m2 continues m1's condemnation list) and
+`MTG_AL_BP_CONDEMN` (CondemnsConsideredAtBreakpoint -- AL's only mid-phase breakpoint is the
+Idyllic Tutor acquisition, per USER).
+
+**Verdict (decouple ensemble, salts 1-2, 8000 games/salt, rebased engine):**
+| arm | quality vs CTL | compute vs CTL |
+|---|---|---|
+| PHASE | +21 / +28 | +14-17% |
+| PHASE+CONDEMN | +21 / +31 (condemn effect: 0w/0b and 2w/0b) | +31-33% |
+| PHASE+CONDEMN+BP | +23 / +30 (bp effect: 3 games total) | +32-34% |
+| PHASE+CONDEMN+SSM (full doctrine) | +36 / +39 | +36-40% |
+
+Order-condemnation BINDS hard (126k searched-space drops per 300 games, `MTG_ROLLOUT_STATS`,
+greedy=0 -- the adopted decision-space shape) yet changed ZERO outcomes on salt 1: everything it
+deletes is a line AL's search never preferred. Unlike 5C it is not perf-neutral (+14-16% -- the
+per-rollout StampM1Hand pool walks outweigh the m2-shrink savings on AL's small m2 sets). The
+breakpoint half is inert both ways (the tutor breakpoint is too rare for its predicted
+value-changing-acquisition hazard OR any benefit to register). NOTE: the old "m2 re-offer
+recovers prune losses" order-condemnation rejection no longer reproduces on the fixed engine --
+the re-offer simply no longer matters either way for AL.
+
+Conclusion: the doctrine is SOUND but has nothing to do on this deck -- AL's m2 re-litigation
+was never driving outcomes, so uniform condemnation buys semantics at +15% compute. NOT adopted;
+both levers kept as instruments. The doctrine roll-out should continue with decks whose m2/
+breakpoint surfaces are load-bearing (the 144d4c2d gap note: 5C's own POST-COMBAT breakpoints).

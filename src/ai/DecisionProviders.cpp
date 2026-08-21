@@ -1954,10 +1954,14 @@ bool AntiLifegainProvider::CondemnsPassedMainPhase() const
     // Main 2 continues with main 1's condemnation list instead of re-litigating the hand;
     // membership decided once, at m1 (the base-hook contract). Every consumption site gates on
     // MainPhaseFilterActive, so this binds only with the split live -- the && here just makes
-    // the scoping explicit, mirroring MTG_AL_SSM. NOTE the prior "m2 re-offer recovers prune
-    // losses" rejection predates the condemn-dig bug fixes and the decision-space adoption
-    // (c6adf22b) that made 5C's version adoptable -- this lever re-asks that question on the
-    // fixed machinery. DEFAULT OFF pending measurement (decouple ensemble + suite).
+    // the scoping explicit, mirroring MTG_AL_SSM.
+    // MEASURED INERT-AT-COST (2026-08-21, decouple ensemble salts 1-2, 8000 games/salt over
+    // PHASE): quality +0 (0w/0b) / +3 (2w/0b) -- the lever BINDS (126k searched drops per 300
+    // games, MTG_ROLLOUT_STATS) but everything it deletes is a line AL's search never preferred
+    // -- at +14-16% compute (the per-rollout StampM1Hand pool walks outweigh the m2-shrink
+    // savings on AL's small m2 sets; 5C's was perf-neutral). The OLD "m2 re-offer recovers
+    // prune losses" rejection no longer reproduces post-fixes; the re-offer just no longer
+    // matters either way. Kept as an instrument; NOT adopted (inert semantics don't pay 15%).
     static const bool on = EnvOn("MTG_AL_CONDEMN");
     return on && AlPhaseEnabled();
 }
@@ -1968,8 +1972,10 @@ bool AntiLifegainProvider::CondemnsConsideredAtBreakpoint() const
     // is the Idyllic Tutor acquisition (USER 2026-08-21) -- which is exactly the
     // value-changing-acquisition shape the base hook warns about (a declined Silence becomes
     // live once the tutor fetches a Remedy), i.e. the Dragonstorm-measured hazard, so the
-    // PREDICTION is unsafe here. Offered as a separate lever anyway so the doctrine can be
-    // measured whole vs phases-only. DEFAULT OFF pending measurement.
+    // PREDICTION was unsafe here.
+    // MEASURED INERT (2026-08-21, decouple ensemble salts 1-2 over PHASE+CONDEMN): +2 (2w/0b) /
+    // -1 (0w/1b) per 8000 -- the breakpoint is too rare on AL for either the hazard or any
+    // benefit to register. Kept as an instrument; NOT adopted.
     static const bool on = EnvOn("MTG_AL_BP_CONDEMN");
     return on && AlPhaseEnabled();
 }
