@@ -94,3 +94,47 @@ arrangement fired AGAIN under the backtracker — one cast, two drips.
 Single-game repro needs BOTH `seed = base+gi` AND `game_index = gi` in the batch manifest —
 the opponent-spawn schedule keys on `gi % 10`; a wrong game_index reproduces a different game
 silently. Arm runs + escalation batteries + traces under `logs/ssm_sweep/` (gitignored).
+
+## 2026-08-21b: THE WHY DIG (USER: "lossless option with ordering, condemnation and 0 greedy --
+## make it work") -- causal chains named per-game; both repair levers measured-rejected by decouple
+
+USER rulings this session: the design stands absent a "really strong reason"; fully STATIC m1/m2
+labels are likely flawed (conditional rules expected, as 5C's are).
+
+**The full causal chain of the flagship game (overnight d3_s5005 gi244), five layers deep:**
+1. T1 near-tie land order (Heath vs Flats) flips under filtered projection values.
+2. The T2 fetch pick decides the game: Stomping Ground (the deck's only R among fetchables,
+   needed by held Aria of Flame) vs Temple Garden. The fetch rank counts battlefield dork
+   colours as coverage, so Hierarch "covers" R -- but spending its R forfeits the attack+pump
+   kill (an attack-forfeit-ledger instance inside the fetch rank).
+3. Hold-vs-dump at T2 rides on the tail's post-fetch SHUFFLED draw stream -- fetch-decision
+   clairvoyance, the decouple-arc class: each plan prefix shuffles differently, so hold lines
+   are valued against different projected draws per arm. Scenario fixtures (new `library_top`
+   support) prove BOTH arms find the hold-kill from pinned T2/T3 states at b0 -- the machinery
+   is complete; the in-game miss is projection draw-luck plus the rank flaw above.
+4. The greedy tail executes the kill turn CORRECTLY when an R land is on board (scenario
+   `al_hold_kill_turn.json` PASSes stock) and cannot without one -- the earlier "greedy can't
+   execute" reading was the R-starved variant.
+5. The Aria "off-by-one" was the card working as printed (verse damage is IMMEDIATE per cast --
+   Scryfall-verified 5-life gift); the only true accounting bug found was the payment-rollback
+   opponent-life leak (fixed a16074a).
+
+**Repair levers built and measured (decouple ensemble, salts 1-4 x 8 keys x 1000 games):**
+* `MTG_AL_FETCH_ATK` (sole-attacker dork colours are not fetch coverage): fixes gi244's pick,
+  but +0.0008..+0.0018/game WORSE than stock on every salt -- REJECTED (instrument only).
+* `MTG_AL_RED_ENABLER` (redundant live-enabler copy demoted below payoffs): digit-identical
+  aggregate on every salt -- INERT (fires too rarely).
+* Reference decoupled costs: PHASE+DORK_M1 vs stock = +0.0034..+0.0048/game (all salts);
+  PHASE+both-repairs = +0.0050..+0.0071 (worse). Root-turn authority: see above (rejected).
+
+**Where the lossless mandate stands:** every named mechanism is now either fixed (payment leak),
+rejected-by-measurement (fetch-atk, red-enabler, root authority, single-main), or identified as
+fetch-shuffle projection clairvoyance -- which the COUPLED metric scores but a decoupled one
+discounts, and which affects the two arms asymmetrically only because their prefixes shuffle
+differently. The split's decoupled cost (~+0.004/game) is the honest open gap. Candidate next
+moves (unfunded): (a) decouple-aware projection for fetch-class decisions inside the tail (score
+hold/dump under a salted ensemble rather than the real stream -- heavy); (b) conditional m1/m2
+rules per the USER's static-is-flawed direction, derived from further per-game digs; (c) accept
+the coupled-GT churn and adopt on doctrine. New instruments landed: `library_top` scenario key,
+`MTG_FSW_LINE` (tail line dump), `MTG_TRACE_SOLVE_TURN`, `MTG_LIFE_TRACE` (permanent),
+`test/scenarios/al_hold_kill_turn.json` (greedy kill-turn guard).

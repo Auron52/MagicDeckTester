@@ -565,6 +565,22 @@ inline void OpponentGainsLife(GameState& state, int controller_index, int amount
     if (amount <= 0) { return; }
     int opp = 1 - controller_index;
     const bool remedied = RemedyActive(state, controller_index);
+    // MTG_LIFE_TRACE=1 (diagnosis only): per-event ledger of every opponent gain/flip with source
+    // + speculation state. Earned permanence by finding the payment-fallback double-drip (the
+    // gi72 off-by-one, fixed 2026-08-21) -- the by-hand life count this flip confuses is exactly
+    // what it prints. In a search run the stream floods; the TAIL is the real executor's events
+    // (each decision's search precedes its apply).
+    {
+        static const bool s_life_trace = EnvOn("MTG_LIFE_TRACE");
+        if (s_life_trace)
+        {
+            std::fprintf(stderr, "[life] t%d %s amt=%d opp_life=%d->%d spec=%d src=%s\n",
+                         state.turn_number, remedied ? "FLIP" : "gain", amount,
+                         state.players[opp].life,
+                         state.players[opp].life + (remedied ? -amount : amount),
+                         g_tap_speculating ? 1 : 0, source.empty() ? "?" : source.c_str());
+        }
+    }
     if (remedied)
     {
         state.players[opp].life -= amount;

@@ -1,0 +1,43 @@
+{
+ "_comment": "gi244-class unit repro (2026-08-21): the greedy playout tail's T4 kill turn. Board: Remedy live, unsick Hierarch, Tomb+Stomping untapped. Hand: Aria+Invigorate+redundant Remedy+Forest. Opp 18. The kill: Forest, Aria (ETB 10 flip), Invigorate alt (3 flip + pump + verse 1), attack pumped-exalted 5 = 19 >= 18. The greedy tail could not execute this (redundant Remedy over Aria / attacker tapped), so every hold-line projection undervalued by a turn.",
+ "deck": "decks/Anti-Lifegain/Anti-Lifegain.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 4,
+ "active_life": 20,
+ "opponent_life": 18,
+ "battlefield": [
+  {
+   "name": "Overgrown Tomb",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Stomping Ground",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Ignoble Hierarch",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  },
+  {
+   "name": "Tainted Remedy",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Aria of Flame",
+  "Invigorate",
+  "Tainted Remedy",
+  "Forest"
+ ],
+ "library_filler": "Forest",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "expect_win_turn": 4
+}

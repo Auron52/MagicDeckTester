@@ -20040,6 +20040,24 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 std::fprintf(stderr, "[fsw] T%d d%d p=%s tail=%d best=%d cutoff=%d\n",
                              state.turn_number, depth, sum.empty() ? "(pass)" : sum.c_str(),
                              tail.win_turn, best.win_turn, cutoff);
+                // MTG_FSW_LINE=1: also print the tail's projected WINNING line (its phase plans),
+                // so a mis-projection can be compared against the realized game cast-for-cast
+                // (diagnosis only, same gate as the trace).
+                static const bool s_fsw_line = EnvOn("MTG_FSW_LINE");
+                if (s_fsw_line && tail.win_turn <= max_turns)
+                {
+                    std::string ln;
+                    for (const auto& ph : tail.phases)
+                    {
+                        ln += ph.is_pre_combat ? " | m1:" : " | m2:";
+                        if (ph.plan.land_decided && !ph.plan.land_to_play.empty())
+                        { ln += "land=" + ph.plan.land_to_play + ";"; }
+                        for (const Action& a : ph.plan.actions) { ln += a.card_name + ","; }
+                    }
+                    std::fprintf(stderr, "[fsw-line] T%d d%d p=%s tail=%d%s\n",
+                                 state.turn_number, depth, sum.empty() ? "(pass)" : sum.c_str(),
+                                 tail.win_turn, ln.c_str());
+                }
             }
         }
         if (rec_vals) { node_vals.push_back(tail.win_turn); }   // value-rank for the beam reorder
@@ -22385,7 +22403,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                               && state.turn_number == 1 && is_pre_combat;
         const bool trace_t2 = s_trace_solve && !enforce_budget
                               && state.turn_number == 2 && depth == 3 && is_pre_combat;
-        const bool trace_this = trace_t1 || trace_t2;
+        // MTG_TRACE_SOLVE_TURN=<n> (with --trace-solve / s_trace_solve armed): trace the
+        // TOP-LEVEL decision of turn n -- the movable aim the fixed T1/T2 hooks lack
+        // (diagnosis only; unset = 0 = off, byte-identical).
+        static const int s_trace_turn = EnvInt("MTG_TRACE_SOLVE_TURN", 0);
+        const bool trace_tn = s_trace_solve && enforce_budget && s_trace_turn > 0
+                              && state.turn_number == s_trace_turn && is_pre_combat;
+        const bool trace_this = trace_t1 || trace_t2 || trace_tn;
         if (trace_this)
         {
             std::cerr << "[trace] T" << state.turn_number

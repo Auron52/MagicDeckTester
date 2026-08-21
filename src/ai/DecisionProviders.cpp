@@ -1469,12 +1469,37 @@ AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_ind
             if (c == Color::White) { ++n_white_src; }
         }
     };
+    // ATTACK-CRITICAL DORK EXCLUSION (MTG_AL_FETCH_ATK, measurement lever 2026-08-21): a mana
+    // dork that is our SOLE attack-capable creature is not a free source -- tapping it for a
+    // colour forfeits the attack, the Exalted bonus, and the Invigorate-pump line that is this
+    // deck's kill. Counting it as coverage is how the fetch rank passed over Stomping Ground
+    // (the deck's only R among fetchables) while holding Aria of Flame {2}{R}: "R covered" was
+    // Hierarch's tap, whose R can never be spent on a turn that also attacks (the gi244 class:
+    // the T4 Aria+Invigorate+attack kill dies at the T2 fetch pick, +1 turn, both filter arms).
+    // With other attackers on board the dork's mana IS free and everything counts as before.
+    // ^-- MEASURED REJECTION (decouple ensemble, salts 1-4, 8000 games/salt, 2026-08-21): the
+    // exclusion fixes the narrative game's pick (Stomping Ground for the held Aria) but measures
+    // +0.0008..+0.0018/game WORSE than stock on EVERY salt -- the dork's colours are genuine
+    // coverage more often than they are attack forfeits. Kept as an instrument only.
+    static const bool s_fetch_atk = EnvOn("MTG_AL_FETCH_ATK");   // DEFAULT OFF (measured rejection)
+    int n_attack_capable = 0;
+    if (s_fetch_atk)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller_index) { continue; }
+            if (p.card.IsCreature()) { ++n_attack_capable; }
+        }
+    }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller_index) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         if (!(d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock)) { continue; }
+        if (s_fetch_atk && d->tmpl == CardTemplate::ManaDork && p.card.IsCreature()
+            && n_attack_capable == 1)
+        { continue; }   // sole attacker: its tap is an attack forfeit, not coverage
         add_colors(have, d->params.produces);
         count_src(d->params.produces);
     }
@@ -1874,6 +1899,21 @@ int AntiLifegainProvider::CastOrderRank(const GameState& s, const CardDefinition
         static const int s_swords_rank = EnvInt("MTG_AL_SWORDS_RANK", 21);
         if (p.controller_lifegain_equals_power) { return s_swords_rank; }
         if (p.alt_lifegain_cost > 0 && def.card.IsCreature() && !p.lifegain_to_loss) { return 24; }
+        // REDUNDANT ENABLER demotion (MTG_AL_RED_ENABLER, measurement lever 2026-08-21): with a
+        // lifegain->loss effect ALREADY LIVE, a second copy is a near-dead card (the USER's
+        // 2026-08-07 interchangeable-required ruling: "you only need one at a time" -- encoded
+        // for discard, but the greedy's enabler-tier rank 0 never learned it). On a 4-mana turn
+        // the greedy tail cast the redundant second Remedy AHEAD of Aria of Flame, so every
+        // projected kill turn fizzled and hold-lines read one turn worse than reality (the
+        // gi244 class). A STATE-CONDITIONAL rank, not a static one (USER 2026-08-21: fully
+        // static labels are likely flawed): first copy keeps the enabler tier, a copy cast
+        // under a live effect drops behind the payoffs.
+        // ^-- MEASURED INERT (decouple ensemble, salts 1-4, 2026-08-21): aggregate digit-identical
+        // to stock on every salt -- the firing state (2nd copy in hand, 1st live, both castable
+        // same turn) is too rare to move the metric. Kept default-off.
+        static const bool s_red_enabler = EnvOn("MTG_AL_RED_ENABLER");   // DEFAULT OFF (measured inert)
+        if (s_red_enabler && p.lifegain_to_loss
+            && ::RemedyActive(s, s.active_player_index)) { return 25; }
     }
     return GenericProvider::CastOrderRank(s, def);
 }

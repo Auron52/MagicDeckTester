@@ -3672,6 +3672,14 @@ static int RunScenario(const std::filesystem::path& scenario_path)
         for (const auto& hc : j.value("hand", json::array()))
         { state.players[0].hand.push_back(make_card(hc.get<std::string>())); }
 
+        // Optional exact top-of-library ("library_top": ["A","B",...] -- index 0 drawn first), so a
+        // fixture can pin the draw sequence the interaction under test depends on (a kill turn that
+        // needs a land on exactly turn N). Filler follows below it.
+        if (j.contains("library_top"))
+        {
+            for (const auto& tc : j["library_top"])
+            { state.players[0].library.push_back(make_card(tc.get<std::string>())); }
+        }
         // Filler library so the draw step and lookahead rollouts have cards to draw. Lands by default
         // => the drawn cards are inert and don't perturb the interaction under test.
         const std::string filler = j.value("library_filler", std::string("Forest"));
