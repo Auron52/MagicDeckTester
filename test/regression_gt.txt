@@ -1,4 +1,4 @@
-# Regression ground truth -- commit fa06f0a7  date 2026-08-21
+# Regression ground truth -- commit 5c7f31ae  date 2026-08-21
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -152,18 +152,18 @@ knights_overnight_d5_s4004=4.3260/19f6425d3182db1c
 knights_overnight_d5_s5005=4.3560/3aa8ce6f4cb15e15
 knights_overnight_d5_s6006=4.3420/227895f32c48a702
 knights_overnight_d5_s7007=4.3390/fc0bac53f9d78eac
-antilife_overnight_d0_s4004=4.9270/c3506f6bf031474d
-antilife_overnight_d0_s6006=4.9385/0e6a11f250d5dcd1
-antilife_overnight_d0_s8008=4.9365/1a3b0e46e891db5a
-antilife_overnight_d0_s10010=4.8570/4af48319ada52f51
-antilife_overnight_d3_s4004=4.2210/84bfde791653613c
-antilife_overnight_d3_s5005=4.2510/5d7228b8cd255e5e
-antilife_overnight_d3_s6006=4.2130/d87ecacf9a33ded3
-antilife_overnight_d3_s7007=4.1820/7cc1b54e46ecb1ee
-antilife_overnight_d5_s4004=4.2190/48c74a0b4b9f8364
-antilife_overnight_d5_s5005=4.2550/912a31914d01b52d
-antilife_overnight_d5_s6006=4.2130/63923dc2ef658229
-antilife_overnight_d5_s7007=4.1800/f2e13bb9e4858c44
+antilife_overnight_d0_s4004=4.9265/111f766198bd7c24
+antilife_overnight_d0_s6006=4.9385/de56d7042aac1cd8
+antilife_overnight_d0_s8008=4.9365/6839f3598a3711df
+antilife_overnight_d0_s10010=4.8570/6d64b7cca1ff5b74
+antilife_overnight_d3_s4004=4.2210/ee08ec20a2bdc727
+antilife_overnight_d3_s5005=4.2510/df2eba1236e0fe0d
+antilife_overnight_d3_s6006=4.2130/bb37bfac04f22fd6
+antilife_overnight_d3_s7007=4.1820/d368490cec2e37d9
+antilife_overnight_d5_s4004=4.2190/4459cc6fb90cd50f
+antilife_overnight_d5_s5005=4.2550/b9a99c03a34a5ff7
+antilife_overnight_d5_s6006=4.2120/929737d9ca5b2584
+antilife_overnight_d5_s7007=4.1800/6fe4a426910e3d16
 hinata_overnight_d0_s4004=7.0405/a17faa68d7e7aad1
 hinata_overnight_d0_s6006=7.0005/d421332e74b47d83
 hinata_overnight_d0_s8008=7.0310/281b307a5af8cf46
@@ -240,11 +240,11 @@ fivecolour_overnight_d0_s4004=5.7760/7fca344dbbf45d85
 fivecolour_overnight_d0_s6006=5.8180/289e70cc95bb81c0
 fivecolour_overnight_d0_s8008=5.7885/6eda04dba9f87fcd
 fivecolour_overnight_d0_s10010=5.7840/0b2d4dfca0b62ded
-fivecolour_overnight_d3_s4004=4.9325/af81699c6e846f3a
-fivecolour_overnight_d3_s5005=4.9400/6d4ad976f377820d
-fivecolour_overnight_d3_s6006=4.9625/42e392140dc53027
-fivecolour_overnight_d3_s7007=4.9375/4d80c8728612de6a
-fivecolour_overnight_d5_s4004=4.8933/bf2660870891f34a
-fivecolour_overnight_d5_s5005=4.9367/447d64e5cc29de80
-fivecolour_overnight_d5_s6006=4.9600/afba86b316edaceb
-fivecolour_overnight_d5_s7007=4.8967/a774d6274ed30d73
+fivecolour_overnight_d3_s4004=4.9350/9e11b3290f88f15f
+fivecolour_overnight_d3_s5005=4.9400/1d2d1b9376f70e8e
+fivecolour_overnight_d3_s6006=4.9575/6546d76711c207be
+fivecolour_overnight_d3_s7007=4.9450/c6251168ecf666da
+fivecolour_overnight_d5_s4004=4.8900/b21921c6448e885f
+fivecolour_overnight_d5_s5005=4.9300/5a4eb2176356a6c2
+fivecolour_overnight_d5_s6006=4.9600/af6eeb23ee91278a
+fivecolour_overnight_d5_s7007=4.9033/426d32f3733b96f1
