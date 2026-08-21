@@ -684,7 +684,14 @@ generic MV rule is only the fallback while no authored rule exists. Two structur
 quotas is sheddable; and **within an over-full bucket, shed by distance-to-playable**
 (colour/mana coverage vs the card's cost across board+hand), not raw size — a payoff that is
 nowhere near castable sheds before a castable one ("dropping a Progenitus may still make
-sense... if it is nowhere near playable"). It re-enables the retired discard probe OFFLINE as a label generator
+sense... if it is nowhere near playable"). Buckets also SUB-DIVIDE by role where the deck
+warrants it (user, 2026-08-21): the mana bucket splits into lands vs dorks with a quota for
+EACH ("you will probably keep some of each, so you have acceleration and land drops" — TH's
+broken-up mana bucket is the precedent), and a combo-shaped deck gets one bucket per piece
+plus a dedicated dig/cantrip bucket (the Hinata shape). Sub-quotas are FUNGIBLE upward —
+the parent bucket's total quota binds, so a hand with no dorks keeps more lands — and every
+permanent-based quota (mana sources, permanent combo pieces) is counted NET OF BOARD: copies
+on the battlefield fill the quota first and the hand owes only the remainder. It re-enables the retired discard probe OFFLINE as a label generator
 (`MTG_DISCARD_NODE=0 MTG_DISCARD_TRACE=1`: every real cleanup shed emits a searched trial
 table), scores candidate visible-info rules against those labels (status quo, spare-copy
 band as a label-only hypothesis, a derived shed-order), then paired-seed A/Bs a surviving
