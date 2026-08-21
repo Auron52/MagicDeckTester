@@ -215,3 +215,72 @@ viewer could not show where it came from, and a log-based census could only find
 is why the census above had to be phrased as "cast a card that was not in hand at the start of the
 turn". Fixed with the **un-levered** predicate: the draw happens whichever way `MTG_EQUIP_DRAW_BP` is
 set, and a diagnostic that moved with an A/B arm would be reporting the arm rather than the game.
+
+## The target design: breakpoints PARTITION the turn (USER, 2026-08-20/21)
+
+> "Essentially, we should only be considering spells that have not been considered already at every
+> point, making the breakpoints fully distinct from each other." — "And the only way to do this is
+> through a mix of condemnation and only planning your section of the turn."
+
+The invariant: main 1 plans **up to the first draw**; that draw's continuation plans up to the next
+draw; each decision point considers only spells no earlier point has considered. Breakpoints then
+carve the turn into disjoint sections, and there are no permutation duplicates to burn nodes on.
+
+Two mechanisms, and **neither works alone**:
+
+* **Condemnation** enforces "not already considered". `MTG_BP_CLASSIFY` + the pre-draw hand snapshot
+  (`g_bp_hand_before`, bound at the arming site) drop a card the plan already declined, while keeping
+  anything genuinely new — a drawn card is a duplicate of nothing.
+* **Plan truncation** enforces "your section only". The base plan must stop at the first drawing
+  cast instead of committing the whole turn past information it does not have yet.
+
+### What the shipped class gets wrong, measured
+
+Site 6 as committed is **deferred** (the re-solve runs after every main cast), so the base plan plans
+straight through two or three Puresteel draws. That is the opposite of truncation, and the numbers
+show it. Same 8 games, seed 900001, d3:
+
+| | continuations / breakpoint | max | rank-unreachable | site-6 reaches |
+|---|---|---|---|---|
+| condemnation OFF (as committed) | 9.47 | 146 | 80.1% | 1,049,685 |
+| condemnation ON | **4.56** | **38** | 59.5% | **734,707** (-30%) |
+
+Condemnation halves the breadth and cuts the worst case 4x — but 4.56 is nowhere near the ~1-2 the
+invariant implies, because the continuation is still facing a whole hand rather than owning a
+section. It also explains the realisation gap reported above (the drawn card is spent in the phase
+that drew it just 1 time in 29): with the whole turn already committed and the trailing equip passes
+already run, there is usually nothing left to spend.
+
+**Implementation consequence**: site 6 has to move from deferred to INLINE AT THE FIRST DRAW, with
+the base plan truncated there. The constraint that originally pushed it to deferred is real and must
+be handled rather than rediscovered — the rollout's deferred re-solve runs *after* the trailing
+Equip/Stoneforge/Balan passes and so does the executor's committed replay, whereas an inline
+continuation runs *before* them, and equip costs move with metalcraft. Sites 0 and 1 are already
+inline and carry an executor hook (`is_draw_engine`), so there is a pattern to copy.
+
+### OPEN HAZARD: a drawn ENABLER revalues condemned cards (USER, 2026-08-21)
+
+> "if you drew a puresteel paladin mid-turn there might be some advantage to considering equipment
+> that has been condemned ... There are decks that have aspects of this idea, though, that may
+> require some extra thinking."
+
+Condemnation assumes a declined card **stays** declined — that more information can only confirm the
+pass. Drawing an *enabler* breaks that monotonicity: it retroactively raises the value of cards
+already passed on. The sharp case here is drawing a SECOND Puresteel off an equipment ETB, after
+which every equipment condemned earlier that turn is worth more, because each later ETB now draws
+two.
+
+Why it is largely inert on THIS deck, and the mechanical reason as well as the structural one:
+* the deck's only mid-main draw source IS an equipment ETB, so there is no independent draw step that
+  could hand us an enabler out of nowhere; and
+* **cast order defuses the rest**: Puresteel ranks ahead of Equipment (6 vs 8 reviewed, creature 10
+  vs noncreature 20 generic), so a drawn Paladin is cast FIRST and the equipment following it is a
+  continuation decision rather than a condemned one. The same ordering argument answers the tutor
+  variant the user raises ("we would just list that spell first").
+
+**The general fix, for the deck that does need it: condemnation INVALIDATION.** When a continuation
+casts something that changes another card's value, un-condemn the class it enables. That needs a
+representation of "X enables Y" that is param-derived rather than a name list — and note that this is
+the same blind spot recorded at the top of this document, since the enabling is owned by the
+PERMANENT, not by the card being re-considered. Deliberately unbuilt: no current deck exercises it,
+and building it against a hypothetical would fix the wrong shape.
