@@ -1,4 +1,4 @@
-# Regression ground truth -- commit d585226  date 2026-08-21
+# Regression ground truth -- commit b8081772  date 2026-08-21
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -22,9 +22,9 @@ antilife_smoke_d5_s1001=4.1733/797a1c5f7f5ecc98
 hinata_smoke_d0_s1001=6.9620/c5ca1d4e00f8ae1f
 hinata_smoke_d3_s1001=5.6733/c613cf92a5c3dd82
 hinata_smoke_d5_s1001=5.8533/900d0b7c0385dea0
-dragonstorm_smoke_d0_s1001=5.3990/5a580c8f85c8986b
-dragonstorm_smoke_d3_s1001=4.5133/c4271ca08cadc4e2
-dragonstorm_smoke_d5_s1001=4.4667/8cf792208eab7cc6
+dragonstorm_smoke_d0_s1001=5.3950/861cdb4b08225002
+dragonstorm_smoke_d3_s1001=4.5133/e36dffe212480861
+dragonstorm_smoke_d5_s1001=4.4667/93e14bb2b92e34e1
 auras_smoke_d0_s1001=4.3760/d0a56ce8cb114f9d
 auras_smoke_d3_s1001=4.1400/de66d9efc3f9e6d7
 auras_smoke_d5_s1001=4.1320/6fac32fc45b724b1
@@ -37,9 +37,9 @@ creature_giving_smoke_d5_s1001=4.6667/b9a698007674b6d9
 mirrorwing_smoke_d0_s1001=6.0570/506df4f8aa241490
 mirrorwing_smoke_d3_s1001=5.0267/dee3a51fa58c1b99
 mirrorwing_smoke_d5_s1001=5.1200/242398274f5f3863
-fivecolour_smoke_d0_s1001=5.8100/f7e4387ac3c2eaf4
-fivecolour_smoke_d3_s1001=5.0133/41f9429d028e0e5c
-fivecolour_smoke_d5_s1001=5.1733/3a0542102269b01f
+fivecolour_smoke_d0_s1001=5.8100/ccc230b2c4dbd646
+fivecolour_smoke_d3_s1001=5.0133/84f20d2f48d410b6
+fivecolour_smoke_d5_s1001=5.1733/7b0e54e6ef75d75d
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/4ec30ea41e344477
@@ -72,10 +72,10 @@ hinata_regression_d3_s2002=5.6600/73affbdd16f35161
 hinata_regression_d3_s3003=5.6800/a50d5b8f3bdf2630
 hinata_regression_d5_s2002=5.6600/1afc8fb693e73dfd
 hinata_regression_d5_s3003=5.6800/1a68acc347ec2526
-dragonstorm_regression_d0_s2002=5.4370/91a66065e112b7de
-dragonstorm_regression_d3_s2002=4.3367/24618f8756c50232
+dragonstorm_regression_d0_s2002=5.4340/976bbc466e124b4a
+dragonstorm_regression_d3_s2002=4.3367/e107abcac677d34e
 dragonstorm_regression_d3_s3003=4.4767/2c75ca10ec7b81d1
-dragonstorm_regression_d5_s2002=4.3000/1ef6ace05f76fcac
+dragonstorm_regression_d5_s2002=4.3000/39bc1df3c78efb0e
 dragonstorm_regression_d5_s3003=4.4760/99b6d1ebd3c0d281
 auras_regression_d0_s2002=4.3610/c7fa315cfa428bac
 auras_regression_d3_s2002=4.1080/17175aeea335db68
@@ -97,9 +97,9 @@ mirrorwing_regression_d3_s2002=4.8050/23e1c430db76ac27
 mirrorwing_regression_d3_s3003=4.9350/6370c93b56bd0027
 mirrorwing_regression_d5_s2002=4.7900/fabe57ab3739f295
 mirrorwing_regression_d5_s3003=4.9000/2c36d12eef342499
-fivecolour_regression_d0_s2002=5.8470/1ae229be91945749
-fivecolour_regression_d3_s2002=4.8850/f2b2c49ad0ea4ba8
-fivecolour_regression_d3_s3003=4.9650/dcf330ddc51acc34
+fivecolour_regression_d0_s2002=5.8460/1887d77d47d8ebdc
+fivecolour_regression_d3_s2002=4.8850/059f5493d0c1ecfc
+fivecolour_regression_d3_s3003=4.9700/721a3b6daca7ce05
 fivecolour_regression_d5_s2002=4.8400/c5245e8b0b2ff704
 fivecolour_regression_d5_s3003=4.9100/a1d69262e31308e6
 

@@ -648,6 +648,41 @@ public:
     // so the two stay in lockstep. Off-switch: MTG_NO_BATCH_PAY.
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts);
 
+    // SAC-COLOUR FOLD (MTG_SAC_COLOR_FOLD, default OFF -- see docs/design/
+    // lump-mana-sources-as-payment-sources.md). With the fold ON, a SacForMana source emits ONE
+    // colour-AGNOSTIC action (empty `chosen_float_color`) instead of one action per candidate colour,
+    // and the colour is resolved HERE, at apply, from the plan's own remaining coloured demand.
+    //
+    // Why this is sound: the subset math credits a sac source's output as `ritual_float` WILD
+    // regardless of which colour variant was selected, so the per-colour variants are indistinguishable
+    // to the very test that decides them (for a Treasure, amount 1, `wild` is exactly correct). The
+    // colour only ever became real at apply -- which is precisely where this resolves it, now informed
+    // by what the plan actually needs rather than guessed by the enumerator across N branches.
+    //
+    // `self.chosen_float_color` non-empty -> returned unchanged, so every legacy (unfolded) action and
+    // every recorded/replayed plan is BYTE-IDENTICAL. Called by BOTH the executor (AIEngine) and the
+    // rollout (ApplyPlanDirect / continuation pre-casts) so the two stay in lockstep by construction --
+    // the same discipline ApplySacForMana's own shared-helper note describes.
+    static std::string SacFloatColorFor(const GameState& state, const std::vector<Action>& acts,
+                                        const Action& self);
+
+    // "We are resolving a BREAKPOINT CONTINUATION" marker, for MTG_CONDEMN_M1_BP.
+    // g_bp_enum_depth is NOT the right signal: it only covers EnumerateBreakpointPlans, i.e. the
+    // SEARCHED continuation (Plan::bp_choice >= 0). A deck whose breakpoints all resolve greedily
+    // -- FiveColour is 1457/1457 greedy at the deferred_cantrip site -- falls back to a plain
+    // TurnSolver::Solve and never increments it, so a gate on it never opens (measured: entries=0).
+    // This scope wraps the WHOLE deferred re-solve (searched list, greedy fallback, and the
+    // continuation's own application) in the rollout, and the twin region in the executor's
+    // resolve_draw_breakpoint -- the same lockstep-pair discipline as CantripOrderScope.
+    struct BpContinuationScope
+    {
+        BpContinuationScope();
+        ~BpContinuationScope();
+        BpContinuationScope(const BpContinuationScope&) = delete;
+        BpContinuationScope& operator=(const BpContinuationScope&) = delete;
+    };
+    static bool InBpContinuation();
+
     // Fire every planned Equip that UNLOCKS MANA -- a haste-granting Equipment onto a mana dork
     // that cannot tap yet (CR 302.6: haste lifts the {T} restriction too) -- as soon as both of its
     // pieces are on the battlefield, rather than in the trailing equip pass that runs after the

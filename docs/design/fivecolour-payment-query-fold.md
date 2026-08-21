@@ -279,3 +279,112 @@ which is a quality trade needing both seed sets) or accept the rate and size K/R
   odometer digits. The enumerator's own `two-stage gating potential` line prices the fix at only
   **1.24x fewer visits**, and it applies to just the 79,489 of 2,090,441 calls that have a mana
   side — so this is a few percent at best, not the 23x.
+
+## 2026-08-20 — lead 3 (the 92.6% decline) is CLOSED, and the tail names a different digit
+
+Measured at HEAD `552a76b5` after the FAST gen run was stopped at 7.9 h (see
+`fivecolour-gen-leaf-cost-wallclock.md` for the 2.03x cost rise that prompted it). Harness:
+`MTG_KEEP_REPLAY` on 14 **matched** mid-tier slow hands from the run's own `.slow.log` — 8 containing
+Garth One-Eye, 6 not, all 65–130 s in the capture, all dork/fixing-heavy. Scripts and raw logs in
+`logs/fc_garth/`.
+
+### Why this deck's tail was re-opened at all
+
+The stopped run's slow corpus (1,137 rollouts ≥30 s, **28.4 of 95 core-hours = 30% of all compute**,
+worst 20.5 min) ranks **Garth One-Eye first: 74.7% of slow hands, 77.5% of slow seconds** — ahead of
+Bloom Tender (70.8% / 75.9%). The 2026-08-16 corpus had Bloom Tender at 78.4% / 84.4% and **Garth
+nowhere on the list**. Garth arrived with the ordered-tap doctrine arc (`b794c3d2`, `d6aa772f`,
+`81766d68`).
+
+**The obvious inference — "the Garth doctrine caused it" — is REFUTED, and hard.** Replaying a Garth
+slow hand with `MTG_GARTH_ORDERED=0` ran **>14x SLOWER** (>200 s vs 14.3 s; killed, not completed).
+The doctrine is load-bearing *for cost*: folding the copy's cast into the whole-turn joint solve is
+what stops the per-cast fallback exploding on these boards. Do not propose reverting it. (Fourth time
+a confident causal story about this deck has been refuted by a short measurement — the pattern in
+§"STEP 0" holds.)
+
+### Lead 3 CLOSED: the prepay decline is cheap
+
+§"Where to go next" item 3 flagged the 92.2% prepay decline rate as *"worth understanding why before
+anything else"*. Understood, and it is a dead end.
+
+`MTG_PREPAY_PROBE` on a Garth slow hand — 4,439,489 invocations in ONE rollout:
+
+```
+PREPAID (no per-cast search)          326,784  ( 7.4%)
+declined: <2 casts (single-cast turn) 3,801,932 (85.6%)   <- the whole decline rate
+declined: float non-empty              134,089  ( 3.0%)
+declined: producer (ritual/rock)        98,576  ( 2.2%)
+declined: combined UNPAYABLE            78,108  ( 1.8%)
+```
+
+85.6% are **single-cast turns** — nothing to batch. They reached the `eligible < 2` test only after
+two full passes over `acts`, each doing a string-keyed `CardDatabase::Lookup` per cast plus
+`EffectiveCost` and the Soulfire/Hinata discount probes, all discarded. So the obvious fix was built:
+`MTG_PREPAY_FASTDECLINE` (default ON, `=0` reverts) hoists a pure-kind upper bound on `eligible` —
+no lookups — above the drawsafe/float/producer blocks. Byte-identical by construction (every path it
+skips also returns false; only `MTG_PREPAY_PROBE`'s attribution moves).
+
+**Measured on the 14 matched hands, 2 passes, per-hand minima:**
+
+| | |
+|---|---|
+| win_turn mismatches | **0 / 14** (byte-identity holds, as constructed) |
+| aggregate | **1.008x (+0.8%)** |
+| per-hand ratio | median 1.002x, range 0.971–1.046x |
+| hands where ON is faster | **7 / 14** |
+
+**That is noise.** 3.8M declines/rollout cost ~1% because each one is already cheap. Lead 3 is
+closed: the decline RATE is high and the decline COST is not. The hatch is a measured loser and
+should be deleted per coding-conventions rule 5 once this record is signed off.
+
+### The live lead: Garth adds odometer DIGITS, and it re-prices lead 2
+
+Same 14 hands, `MTG_ENUM_STATS_MIN=0` (deterministic, load-immune):
+
+| | Garth (n=8) | non-Garth (n=6) | ratio |
+|---|---|---|---|
+| enumeration **calls** | 3.33 M | 3.43 M | **0.97x** |
+| **odometer positions** | **199.1 M** | **88.3 M** | **2.26x** |
+| odometer positions / call | **56.2** | **25.5** | **2.20x** |
+| payment entries, total tap nodes | 259,752 / 7.64 M | 253,287 / 7.61 M | 1.03x / 1.00x |
+| wall | 14.05 s | 10.69 s | 1.31x |
+
+**Garth costs nothing per call and nothing in payment — it multiplies what each call WALKS.** The
+mechanism is in the enumerator: Garth emits one `GarthActivate` variant per un-chosen name
+(Braingeyser, Shivan Dragon, Regrowth, Black Lotus — Disenchant and Terror are stubbed), so an
+untapped Garth adds up to four odometer DIGITS, and the odometer is multiplicative. Payment counters
+are flat because these digits mostly die at selection, after being walked.
+
+This is precisely §"Still un-taken" item 2 — *"the mana gate prunes SELECTIONS, not DIGITS
+(TurnSolver.cpp ~3420), so uncastable cards still become odometer digits"* — which that section
+prices at **1.24x fewer visits, "a few percent at best, not the 23x"**.
+
+**That sizing does not transfer to the tail.** It was derived on a workload of 29.6 M odometer
+positions; these Garth hands run at 199 M median and 316 M worst — **6.7x to 10.7x** the baseline it
+was measured on. And the tail is where the gen's money is: 30% of all compute sits in ≥30 s rollouts
+and 77.5% of that sits in Garth hands. Re-size digit-gating ON THE TAIL CLASS before believing the
+few-percent number — the same "measure, don't extrapolate" failure that the leaf-edge trend
+prediction already made twice on this deck.
+
+Caveat that must be settled first, and it is the reason the gate prunes selections today: Black Lotus
+is `{0}` and Garth's own Lotus copy ADDS mana mid-sequence, so "provably uncastable digit" is not a
+static property of the hand. A digit gate that is not exact is a quality prune, not a free win, and
+would need the full A/B ladder rather than a byte-identity check.
+
+### 2026-08-21: the odometer lead RESOLVED to a specific card, and a design
+
+The Garth odometer finding above traced to a single mechanism: **the Lotus Garth conjures**, whose
+per-colour `SacForMana` fan is a 6-option odometer group on a five-colour deck. `MTG_BRANCH_STATS`
+attribution on a Garth slow hand: **Black Lotus is 12.6% of total odometer from 0.7% of calls**
+(avg_odo 322 — the highest of any card driver; max_odo 30,720 — the largest single group), while
+**Garth One-Eye's own name-fan is only 1.3%**. Garth is not the problem; the Lotus he makes is.
+
+Measured ceiling for removing that group: **1.60x on Garth hands / 1.44x overall, with two tail hands
+collapsing 41.5x and 12.7x, and win_turn unchanged on all 14**. Cost is superlinear in group size, so
+the tail collapses far harder than the mean — the Dragonstorm shape.
+
+Design (USER) + full numbers: **`lump-mana-sources-as-payment-sources.md`**. It also supersedes
+§"Still un-taken" item 2's framing: the fix is not a general odometer digit-gate (which that section
+correctly prices at ~1.24x), it is moving ONE class of source — one-shot lumps — out of the enumerator
+and into the payment solver where every land already lives.

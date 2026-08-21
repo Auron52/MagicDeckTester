@@ -70,6 +70,23 @@ static std::atomic<long long> g_rollout_steps{0};
 // save on the escalation. See docs/design/escalation-interior-reuse.md.
 static std::atomic<long long> g_interior_nodes{0};
 static std::atomic<long long> g_interior_nodes_esc{0};   // interior nodes done under the heuristic escalation
+// CONDEMNATION COST/BENEFIT telemetry (same MTG_ROLLOUT_STATS gate). interior_nodes above counts
+// only FullSearchLine's applications, so it is blind to the rollout's OWN candidate loop -- which
+// is where the bulk of the plan applications live, and therefore where condemnation's savings (or
+// their absence) actually show. cand_scored counts every candidate SolveWithLookahead scores;
+// condemn_drops counts every action the filter deletes anywhere. Condemnation is supposed to move
+// the first DOWN by deleting actions; if drops rise while cand_scored does not fall, the filter is
+// firing somewhere that has no plan space to prune. See the 2026-08-21 bisect.
+static std::atomic<long long> g_cand_scored{0};
+static std::atomic<long long> g_condemn_drops_total{0};
+// ...and SPLIT by which action collector was running. SolveUncached is the GREEDY path ("d0
+// decision + every rollout leaf"); EnumeratePlans is the SEARCHED path. A drop in the searched
+// path removes a plan-space branch (a real saving); a drop in the greedy path removes the only
+// line the playout was going to take (a pure quality loss, nothing to prune). The split is the
+// whole diagnosis of the 2026-08-21 inversion -- see
+// docs/design/condemnation-decision-space.md. The discriminator is g_search_candidate_enum,
+// which is already false for exactly that collect.
+static std::atomic<long long> g_condemn_drops_greedy{0};
 // Per-plan state REUSE (DEFAULT ON; MTG_NO_STATE_REUSE=1 restores per-plan construction).
 // Every plan loop applies its plan to a COPY of the SAME parent state. Copy-CONSTRUCTING that copy
 // inside the loop frees the previous plan's buffers and mallocs new ones of nearly identical size,
@@ -121,6 +138,11 @@ namespace
             std::cerr << "[rollout-stats] interior_esc=" << ine
                       << " esc_share=" << (in ? static_cast<double>(ine) / in : 0.0)
                       << " (interior nodes re-traversed by the heuristic escalation)\n";
+            const long long dt = g_condemn_drops_total.load(), dg = g_condemn_drops_greedy.load();
+            std::cerr << "[rollout-stats] cand_scored=" << g_cand_scored.load()
+                      << " condemn_drops=" << dt
+                      << " (greedy=" << dg << " searched=" << (dt - dg)
+                      << " greedy_frac=" << (dt ? static_cast<double>(dg) / dt : 0.0) << ")\n";
         }
     };
     RolloutStatsReporter g_rollout_stats_reporter;
@@ -3183,6 +3205,36 @@ struct CondemnRootTurnGuard
 // subtree was filter-touched. g_condemn_suppress turns the filter off wholesale for the honest
 // re-evaluation of the finalists (RAII CondemnSuppressGuard); stamps keep running -- only the
 // deletion is suppressed, so the re-run scores the UNfiltered plan space.
+// MTG_CONDEMN_M1_BP_PROBE reachability counters -- see the probe at the condemnation filter. Atomic
+// (not thread_local) so a threaded batch aggregates, and dumped once at exit.
+inline std::atomic<unsigned long long> g_m1bp_entries{0};
+inline std::atomic<unsigned long long> g_m1bp_drops{0};
+inline std::atomic<unsigned long long> g_m1bp_pre{0};
+inline std::atomic<unsigned long long> g_m1bp_post{0};
+inline std::atomic<unsigned long long> g_m1bp_stamped{0};
+inline std::atomic<unsigned long long> g_m1bp_filter{0};
+inline std::atomic<unsigned long long> g_m1bp_stamps{0};
+inline bool CondemnM1BpProbeOn()
+{
+    static const bool v = EnvOn("MTG_CONDEMN_M1_BP_PROBE");
+    return v;
+}
+struct CondemnM1BpProbeDumper
+{
+    ~CondemnM1BpProbeDumper()
+    {
+        if (!CondemnM1BpProbeOn()) { return; }
+        std::fprintf(stderr,
+            "[m1bp-probe] stamps=%llu | continuations: pre-combat=%llu post-combat=%llu | +stamped=%llu"
+            " +filter-active=%llu +condemns=%llu | drops=%llu\n",
+            (unsigned long long)g_m1bp_stamps.load(),
+            (unsigned long long)g_m1bp_pre.load(), (unsigned long long)g_m1bp_post.load(),
+            (unsigned long long)g_m1bp_stamped.load(), (unsigned long long)g_m1bp_filter.load(),
+            (unsigned long long)g_m1bp_entries.load(), (unsigned long long)g_m1bp_drops.load());
+    }
+};
+inline CondemnM1BpProbeDumper g_m1bp_probe_dumper;
+
 static thread_local unsigned long long g_condemn_drops = 0;
 static thread_local bool g_condemn_suppress = false;
 struct CondemnSuppressGuard   // save/restore, so nested guards cannot clear an outer suppression
@@ -3642,6 +3694,13 @@ static int BpWave0SiteMask()
 // would be pure duplicates burning nodes. Thread-local -- the search is single-threaded per game.
 static thread_local int g_bp_enum_depth = 0;
 
+// Breakpoint-continuation marker for MTG_CONDEMN_M1_BP -- see TurnSolver::BpContinuationScope in the
+// header for why g_bp_enum_depth cannot serve this purpose (it misses every GREEDY continuation).
+static thread_local int g_bp_continuation_depth = 0;
+TurnSolver::BpContinuationScope::BpContinuationScope()  { ++g_bp_continuation_depth; }
+TurnSolver::BpContinuationScope::~BpContinuationScope() { --g_bp_continuation_depth; }
+bool TurnSolver::InBpContinuation() { return g_bp_continuation_depth > 0; }
+
 // ---- How many continuations does this breakpoint actually HAVE? ------------------------------
 // bp_choice = k indexes cands[k] of a HEURISTICALLY RANKED list, so a continuation ranked >= W is
 // unreachable at ANY depth and ANY budget -- the width cap is a QUALITY prune, not a cost prune
@@ -3873,8 +3932,117 @@ static std::vector<std::string> ChosenFloatColorCandidates(const GameState& stat
     std::vector<std::string> colors;
     for (int c : idx) { colors.push_back(kColorLetters[c]); }
     if (colors.empty()) { colors.push_back("R"); }
+    // MTG_SAC_COLOR_CAP: SIZING INSTRUMENT ONLY (value-carrying int; 0/unset = off = byte-identical).
+    // Truncates the float-colour fan to the N highest-DEMAND colours. This is NOT a proposed adoption
+    // -- it is a quality prune (it denies real colour choices), and its only purpose is to price the
+    // CEILING of removing the Lotus's odometer group before that work is committed to. On FiveColour
+    // every colour has library pips, so the fan is all five and one in-play Lotus is a 6-option
+    // odometer group; cap=1 leaves a 2-option group, so it slightly UNDER-states the ceiling of
+    // modelling the Lotus as a payment SOURCE (which would leave no group at all). Delete once
+    // docs/design/fivecolour-payment-query-fold.md records the number.
+    const int cap = EnvInt("MTG_SAC_COLOR_CAP", 0);
+    if (cap > 0 && static_cast<int>(colors.size()) > cap) { colors.resize(static_cast<std::size_t>(cap)); }
     return colors;
 }
+
+// MTG_SAC_COLOR_FOLD -- DEFAULT ON (adopted 2026-08-21); =0 reverts to the per-colour fan. Read once
+// here and shared with the executor through TurnSolver::SacFloatColorFor, so there is no second per-TU
+// copy to drift. Adoption evidence: metric-inert on the 120-game d2/b1 proxy (avg 5.1250 both arms) and
+// win_turn-identical on all 14 matched slow hands, at 1.59x on Garth slow hands / 38.7x on the worst
+// (17.8s -> 0.5s). See docs/design/lump-mana-sources-as-payment-sources.md §7.
+bool SacColorFoldEnabled()
+{
+    static const bool v = EnvOn("MTG_SAC_COLOR_FOLD", true);
+    return v;
+}
+
+// Resolve a folded (colour-agnostic) SacForMana action's float colour from the plan's own demand.
+// Full rationale + the byte-identity contract live at the declaration in TurnSolver.h.
+std::string TurnSolver::SacFloatColorFor(const GameState& state, const std::vector<Action>& acts,
+                                         const Action& self)
+{
+    // Unfolded actions carry their colour from the enumerator -> returned untouched. This is what makes
+    // the flag byte-identical when OFF, and keeps every RECORDED plan (viewer replays, committed-line
+    // resumes) replaying exactly as captured even if the flag is later turned on.
+    if (!self.chosen_float_color.str().empty()) { return self.chosen_float_color.str(); }
+
+    // Coloured demand across the plan's payable casts. GarthActivate carries its copy's cost on
+    // `a.cost` under the ordered-Garth doctrine, so one scan covers casts and Garth copies alike.
+    // free_cast / alt_cost actions pay no mana and cannot want a colour.
+    int demand[5] = { 0, 0, 0, 0, 0 };
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
+            && a.kind != Action::Kind::GarthActivate) { continue; }
+        if (a.free_cast || a.alt_cost) { continue; }
+        demand[0] += a.cost.white; demand[1] += a.cost.blue;  demand[2] += a.cost.black;
+        demand[3] += a.cost.red;   demand[4] += a.cost.green;
+    }
+
+    // DO NOT call ChosenFloatColorCandidates here. It scans hand + LIBRARY + graveyard + battlefield
+    // for pips -- an O(library) walk -- and this function runs once per SacForMana action per PLAN
+    // APPLICATION, which is thousands of times per game. Measured 2026-08-21: doing so made a Garth
+    // slow hand run >166 s against a 12.5 s baseline (>13x SLOWER), turning the fold's win into a large
+    // loss. Intersecting with that candidate set is also unnecessary: `demand[c] > 0` means some cast in
+    // THIS plan has a `c` pip and is being cast from hand/graveyard, so `c` is in the AP's zones and
+    // therefore in the candidate set BY CONSTRUCTION. The intersection could never remove anything.
+    static const char* kColorLetters[5] = { "W", "U", "B", "R", "G" };
+
+    // SEQUENTIAL ASSIGNMENT across every sac source in the plan -- NOT one independent argmax each.
+    // Resolving each source against the SAME undiminished demand makes them all pick the same colour:
+    // two Treasures against a {U}{R} cost both choose U and the R goes unpaid, where the unfolded fan
+    // could split them. Measured 2026-08-21 (smoke): that defect cost mirrorwing -- the multi-Treasure
+    // deck -- +0.0266 at d3 and +0.0533 at d5, while every single-source deck was neutral-or-better.
+    // So walk the plan's sac actions IN ORDER, charging each one's pick against the remaining demand,
+    // and return the pick belonging to `self`. Deterministic (plan order is fixed) and O(sacs * 5).
+    //
+    // `self` is an element of `acts` at every call site (all five iterate the vector they pass), so
+    // pointer identity is the reliable way to find "which sac am I" -- indices would break on the
+    // continuation/extra-action paths and card_name is not unique across fungible tokens.
+    int remaining[5] = { demand[0], demand[1], demand[2], demand[3], demand[4] };
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::SacForMana) { continue; }
+        // An unfolded sibling still carries its enumerated colour: charge THAT against the demand so a
+        // mixed plan (some folded, some not) still sees what its siblings consumed.
+        const int amt = std::max(1, a.ritual_float);
+        int pick = -1;
+        const std::string fixed = a.chosen_float_color.str();
+        if (!fixed.empty())
+        {
+            for (int i = 0; i < 5; ++i) { if (fixed == kColorLetters[i]) { pick = i; break; } }
+        }
+        else
+        {
+            // A lump of N mana all of one colour is worth min(remaining[c], N) as COLOURED payment;
+            // anything beyond that colour's remaining demand pays generic, which every colour does
+            // equally. So the surplus does not discriminate and the argmax is over the capped demand.
+            // Ties keep W,U,B,R,G order -> stable.
+            int best_score = 0;
+            for (int i = 0; i < 5; ++i)
+            {
+                const int score = std::min(remaining[i], amt);
+                if (score > best_score) { best_score = score; pick = i; }
+            }
+        }
+        if (&a == &self)
+        {
+            // No coloured demand left for this source -> its float can only pay GENERIC, and every
+            // colour pays generic identically, so the choice is arbitrary. "R" matches the fallback
+            // ChosenFloatColorCandidates uses when its candidate list is empty, keeping the two agreed.
+            return pick >= 0 ? kColorLetters[pick] : "R";
+        }
+        if (pick >= 0) { remaining[pick] = std::max(0, remaining[pick] - amt); }
+    }
+    return "R";   // `self` not found in `acts` (defensive; no call site does this)
+}
+
+// This also drops the provider float-colour collapse from the FOLDED path, deliberately.
+// RestrictSacColorsToHasteAndRed exists to answer "is an off-colour worth a sac THIS turn?" by scanning
+// for a haste creature that demands one -- a proxy for demand. The fold reads the plan's ACTUAL demand,
+// so it reaches the same answer directly: red whenever red is what the plan needs, an off-colour only
+// when a cast in the plan genuinely wants it. Strictly better-informed than the proxy, and cheaper.
+// (The hook still governs the UNFOLDED enumerator path, which is what Dragonstorm runs today.)
 
 // ---- Cantrip-first ordering (docs/design/cantrip-first-collapse.md) --------------------------
 // Casting a cantrip EARLIER is strictly more information for every decision that follows it this
@@ -4421,6 +4589,7 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
         }
     }
     state.m1_hand_turn = state.turn_number;
+    if (CondemnM1BpProbeOn()) { g_m1bp_stamps.fetch_add(1, std::memory_order_relaxed); }
 }
 
 // Base template rules; the provider's per-card doctrine (MainPhaseOverride) wins where set.
@@ -6141,6 +6310,26 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     else if (it->second >= dup_cap) { continue; }   // fungible with one already emitted
                     else { ++it->second; }
                 }
+                // SAC-COLOUR FOLD (MTG_SAC_COLOR_FOLD, default OFF): emit ONE colour-agnostic action
+                // instead of |colors| of them, and let TurnSolver::SacFloatColorFor pick the colour at
+                // apply from the plan's own demand. The subset math credits this action's output as
+                // ritual_float WILD either way, so the fan's variants are indistinguishable to the test
+                // that decides them -- they only ever differed at apply, which is where the fold resolves
+                // them. Each source is its own odometer GROUP, so this collapses (1+|colors|) options to
+                // 2 per source: on FiveColour a Lotus goes 6 -> 2, and the documented 9-Treasure
+                // Mirrorwing board goes 3^9 = 19,683 -> 2^9 = 512.
+                // See docs/design/lump-mana-sources-as-payment-sources.md.
+                // SCOPED TO MULTI-MANA LUMPS (amount >= 2) BY MEASUREMENT, 2026-08-21. The fold was
+                // first built for every sac source; the regression suite rejected that on TREASURES.
+                // Mirrorwing stacks up to 9 Treasure tokens, and resolving each one's colour by a
+                // sequential demand-greedy cannot match what the enumerated fan finds across many
+                // one-mana sources: 4/4 mirrorwing searched keys worse over two independent seeds
+                // (d3 +0.0150/+0.0150, d5 +0.0300/+0.0500; searched slower=17 vs faster=3), while
+                // FiveColour and Dragonstorm were neutral-to-better. A single 3-mana Lotus has no such
+                // combinatorial partner to coordinate with, which is exactly where the greedy is sound.
+                // So Treasures (amount 1) keep the fan; Lotus / Lotus Bloom (amount 3) fold.
+                // NOTE this inverts the doc's original expectation that treasures were the safe half.
+                const bool fold = SacColorFoldEnabled() && pd->params.sac_for_mana_amount >= 2;
                 for (const std::string& col : colors)
                 {
                     Action a;
@@ -6149,11 +6338,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.hand_index        = -1;                       // battlefield-sourced (independent)
                     a.cost              = ManaCost{};               // {0}: the cost is tap + sacrifice
                     a.ritual_float      = pd->params.sac_for_mana_amount;   // credited as wild (Solve)
-                    a.chosen_float_color= col;                      // floated as this real colour at apply
+                    // folded: left EMPTY -> resolved at apply. unfolded: this real colour at apply.
+                    if (!fold) { a.chosen_float_color = col; }
                     a.sac_source_id     = p.card.m_number;          // per-instance id (mutual exclusion)
                     a.eval              = 0;
                     a.is_noncreature    = true;
                     actions.push_back(std::move(a));
+                    if (fold) { break; }                            // ONE action, not one per colour
                 }
             }
         }
@@ -7339,7 +7530,81 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // exempt from order condemnation." Provider opt-in (CondemnsPassedMainPhase), gated on the
     // same filter activation as the pre-combat half so the pair is symmetric, and on a
     // THIS-turn stamp (m1_hand_turn) so a stale snapshot condemns nothing.
-    if (!is_pre_combat && !actions.empty() && !g_condemn_suppress && MainPhaseFilterActive(state)
+    // MTG_CONDEMN_M1_BP -- DEFAULT OFF; =1 extends the condemnation list to FIRST-MAIN BREAKPOINTS.
+    // The USER model quoted above says "at every phase AND BREAKPOINT we are evaluating", but the
+    // filter has only ever run post-combat (`!is_pre_combat`), so a main-1 cantrip that opens a
+    // breakpoint re-litigates the whole hand mid-main-1 -- including cards the same main phase already
+    // saw and declined. `g_bp_enum_depth > 0` is the exact, unconditional "we are enumerating a
+    // breakpoint continuation" signal (set by EnumerateBreakpointPlans, which BOTH the rollout and the
+    // executor's resolve_draw_breakpoint go through -> lockstep by construction). Gating on it is what
+    // keeps the INITIAL m1 enumeration unfiltered: filtering there would delete the very cards the
+    // stamp just recorded. The stamp itself needs no change -- ApplyPlanDirect already snapshots at the
+    // top of the pre-combat apply and the continuation inherits it by copy, which is why the existing
+    // `m1_hand_turn == turn_number` guard is already correct here.
+    // NOTE this is NOT MTG_BP_CLASSIFY: that filters on "the PLAN declines the card", this filters on
+    // the M1 SNAPSHOT (Main1-classified and affordable at m1). Broader, and a different question.
+    // DEFAULT ON (2026-08-21), `=0` hatch. This is the USER's model stated in full -- "at every
+    // phase AND BREAKPOINT we are evaluating" -- so the site ships filtered. On FiveColour (the
+    // PILOT deck for the condemnation design, not the last one to carry it) it is currently
+    // byte-identical: all 1,457 of its breakpoint continuations are rollout-leaf EVALUATORS,
+    // which the decision-space gate below correctly excludes, and none is a committed decision.
+    // Being free today is not a reason to withhold it -- it binds the moment a deck reaches a
+    // breakpoint in committed play or through the searched-breakpoint fan-out.
+    static const bool s_condemn_m1_bp = EnvOn("MTG_CONDEMN_M1_BP", true);
+    const bool m1_bp_site = is_pre_combat && s_condemn_m1_bp && g_bp_continuation_depth > 0;
+    const bool phase_ok = !is_pre_combat || m1_bp_site;
+    // REACHABILITY PROBE (MTG_CONDEMN_M1_BP_PROBE, default off, counters only). A null A/B cannot
+    // tell "the filter fires and changes nothing" from "the filter never fires" -- and only the
+    // second is a wiring bug. Counts m1-breakpoint ENTRIES (the site was reached with a live
+    // this-turn stamp) and DROPS (actions actually deleted there); dumped at exit.
+    if (CondemnM1BpProbeOn() && TurnSolver::InBpContinuation())
+    {
+        // Staged counters: which gate actually closes? s_pre/s_post split the continuation by phase
+        // (if every continuation is POST-combat, the existing filter already covers them and the
+        // m1 gap is unreachable on this deck), then the remaining gates in order.
+        if (is_pre_combat) { g_m1bp_pre.fetch_add(1, std::memory_order_relaxed); }
+        else               { g_m1bp_post.fetch_add(1, std::memory_order_relaxed); }
+        if (is_pre_combat && state.m1_hand_turn == state.turn_number)
+        {
+            g_m1bp_stamped.fetch_add(1, std::memory_order_relaxed);
+            if (MainPhaseFilterActive(state))
+            {
+                g_m1bp_filter.fetch_add(1, std::memory_order_relaxed);
+                if (ResolveProvider(state).CondemnsPassedMainPhase())
+                { g_m1bp_entries.fetch_add(1, std::memory_order_relaxed); }
+            }
+        }
+    }
+    // SEARCHED-PASS GATE (MTG_CONDEMN_SEARCHED_ONLY, default OFF -- byte-identical unset).
+    // Condemnation's premise is "the m1 SEARCH saw this card and passed, so m2 must not
+    // re-litigate it". That premise holds only where an m1 pass actually ranked a plan space.
+    // The greedy collector (SolveUncached: "d0 decision + every rollout leaf") does not -- its
+    // m1 is a single heuristic pick, and the m2 re-offer is exactly what exists to rescue such a
+    // pass. Measured 2026-08-21: stamping every projected turn (MTG_CONDEMN_ALL_TURNS) lands
+    // 205,110 of 212,367 drops (96.6%) in that greedy pass, and buys turn_steps +4.0% /
+    // rollout calls +4.4% for a 0.2% candidate reduction -- condemnation running BACKWARDS.
+    // THE RULE: condemn only in the DECISION SPACE. Two readers qualify --
+    //   * a SEARCHED collect (g_search_candidate_enum): a drop deletes a branch the ranker would
+    //     have expanded, which is real pruning;
+    //   * the EXECUTOR (g_condemn_root_turn < 0 == outside any solve): committed play, including
+    //     a first-main breakpoint continuation it resolves greedily. That one IS the decision the
+    //     condemnation list exists to bind, so the greedy exclusion must not swallow it.
+    // The rollout LEAF is neither: it is not deciding, it is ESTIMATING. Restricting an estimator
+    // cannot improve the decision -- it only makes the value pessimistic, which is precisely the
+    // measured effect (turn_steps +4.0%, rollout calls +4.4%, candidates -0.2%).
+    // Keying on the READER, not on which pass stamped: the producer variant was built and
+    // measured and is exactly inert (it admits the same 7,114 drops), so it is not carried.
+    // The executor clause contributes ZERO drops on FiveColour today -- all 1,457 of its
+    // first-main breakpoint continuations occur inside the search's rollouts, never in committed
+    // play. It is kept because it is the correct boundary for ANY condemning deck, not because
+    // it is measured to pay on the pilot one.
+    // DEFAULT ON (2026-08-21), `=0` hatch. NOTE the hatch is the BROKEN arm, not a neutral one:
+    // with stamp-everywhere on (below) and this off, condemnation runs backwards. `=0` exists to
+    // reproduce that finding, not as a supported configuration.
+    static const bool s_searched_only = EnvOn("MTG_CONDEMN_SEARCHED_ONLY", true);
+    const bool decision_space = g_search_candidate_enum || g_condemn_root_turn < 0;
+    if (phase_ok && !actions.empty() && !g_condemn_suppress && MainPhaseFilterActive(state)
+        && (!s_searched_only || decision_space)
         && state.m1_hand_turn == state.turn_number
         && ResolveProvider(state).CondemnsPassedMainPhase())
     {
@@ -7367,6 +7632,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (drop)
                 {
                     ++g_condemn_drops;   // escalation: this subtree is filter-touched
+                    if (s_rollout_stats)
+                    {
+                        g_condemn_drops_total.fetch_add(1, std::memory_order_relaxed);
+                        if (!g_search_candidate_enum)
+                        { g_condemn_drops_greedy.fetch_add(1, std::memory_order_relaxed); }
+                    }
+                    if (m1_bp_site) { g_m1bp_drops.fetch_add(1, std::memory_order_relaxed); }
                     if (s_trace_drop)
                     {
                         std::cerr << "[condemn] DROP T" << state.turn_number << " "
@@ -10694,6 +10966,35 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         { if (!ok && tapstats::Enabled())
           { tapstats::g_prepay_declined.fetch_add(1, std::memory_order_relaxed); } }
     } _decl;
+    // FAST DECLINE on single-cast turns (MTG_PREPAY_FASTDECLINE, default ON; =0 reverts).
+    // Measured 2026-08-20 on the FiveColour gen tail: 85.6% of 4.44M invocations per rollout decline
+    // at the `eligible < 2` test far below -- but only AFTER two full passes over `acts`, each doing a
+    // string-keyed CardDatabase lookup per cast, plus EffectiveCost and the Soulfire/Hinata discount
+    // probes. All of that work is discarded. `eligible` can ONLY be incremented by an ordered
+    // GarthActivate or a plain CastFromHand (`sacrifice_land`/`alt_cost` are skipped before the
+    // increment), so an UPPER BOUND on it is a pure-kind scan needing no lookups at all: fewer than
+    // two possibly-eligible actions guarantees the function reaches `eligible < 2` and declines.
+    //
+    // BYTE-IDENTICAL by construction, not by measurement: every path this skips -- dig, flood,
+    // non-empty float, producer, no-def, X-spell, Soulfire, Hinata -- also `return Pp(...)`, i.e.
+    // false. The return value is therefore unchanged for every input; all of them are declines. The
+    // one observable difference is PROBE ATTRIBUTION: a single-cast turn that used to be counted as
+    // dig/flood/float/producer is now counted PP_FEW_CASTS. That shifts MTG_PREPAY_PROBE's histogram
+    // (an instrument), never play.
+    static const bool s_fast_decline = EnvOn("MTG_PREPAY_FASTDECLINE", true);
+    if (s_fast_decline)
+    {
+        const bool garth_ordered = GarthOrderedEnabled();
+        int possible = 0;
+        for (const Action& a : acts)
+        {
+            if (garth_ordered && a.kind == Action::Kind::GarthActivate) { ++possible; }
+            else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost)
+            { ++possible; }
+            if (possible >= 2) { break; }
+        }
+        if (possible < 2) { return Pp(PP_FEW_CASTS); }
+    }
     // DRAW-SAFE: decline the whole-turn prepay on a FLOOD-ENGINE turn. The prepay assumes `acts` IS
     // the turn's cast set. That is FALSE after a dig: Treasure Hunt DRAWS the cards cast later the
     // same turn at a post-draw breakpoint (recorded in Action::breakpoint_casts). Prepaying only the
@@ -11048,10 +11349,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // snapshot state already carries the m1 decision's stamp, and re-stamping from a mid-plan
     // hand would shrink the list (the resumed tail must match the full apply byte-for-byte).
     //
-    // ROOT-TURN AUTHORITY (see CondemnRootTurnGuard's note): only the search's root turn may
-    // stamp -- a future-turn m1 inside the projection is budget-starved and its passes are not
-    // decisions. MTG_CONDEMN_ALL_TURNS=1 restores stamp-everywhere for the A/B.
-    static const bool s_all_turns = EnvOn("MTG_CONDEMN_ALL_TURNS");
+    // DECISION-SPACE AUTHORITY (2026-08-21; supersedes ROOT-TURN AUTHORITY as the DEFAULT --
+    // `MTG_CONDEMN_ALL_TURNS=0` is the hatch back). Every projected turn stamps its own m1 pass,
+    // which is the USER's line-local model: condemnation never crosses turns (the
+    // `m1_hand_turn == turn_number` guard in the filter enforces that), so a projection is
+    // entitled to be bound by the pass it just made.
+    //
+    // Root-turn authority existed because stamping every projected turn was measurably harmful.
+    // That was true, but the stamp was never the problem -- the DROP was. 96.6% of the added
+    // drops landed in the greedy rollout LEAF, an evaluator with no plan space to prune, where
+    // condemnation can only make the estimate pessimistic. The filter's decision-space gate
+    // (MTG_CONDEMN_SEARCHED_ONLY) fixes that at the consuming end, which is why stamping can now
+    // be universal: 10.3x more condemnation than root-turn authority AND less total work.
+    // CondemnRootTurnGuard is still live -- `g_condemn_root_turn < 0` is how the filter
+    // recognises the executor. See docs/design/condemnation-decision-space.md.
+    static const bool s_all_turns = EnvOn("MTG_CONDEMN_ALL_TURNS", true);
     static const bool s_trace_all = EnvOn("MTG_CONDEMN_TRACE_ROLLOUT");   // diagnostic: floods
     // MTG_CONDEMN_SEARCH=0 (EXEC-ONLY scoping): suppress this in-search stamp entirely, leaving
     // only the executor's post-plan stamp (AIEngine). The executor stamp still filters the WHOLE
@@ -11485,7 +11797,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::SacForMana)
             {
                 ApplySacForMana(state, state.active_player_index, a.sac_source_id,
-                                a.chosen_float_color, a.ritual_float, a.sac_victim_id);
+                                TurnSolver::SacFloatColorFor(state, sp.actions, a),
+                                a.ritual_float, a.sac_victim_id);
                 if (out_breakpoint && !sink_stack.empty()) { sink_stack.back()->push_back(a); }
             }
             else if (a.kind == Action::Kind::Suspend)
@@ -13188,7 +13501,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::SacForMana)
-        { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float, a.sac_victim_id); }
+        { ApplySacForMana(state, state.active_player_index, a.sac_source_id,
+                          TurnSolver::SacFloatColorFor(state, plan.actions, a), a.ritual_float, a.sac_victim_id); }
         else if (a.kind == Action::Kind::Suspend)
         { ApplySuspend(state, state.active_player_index, a.card_name); }
     }
@@ -13337,6 +13651,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // executor's twin binding is in AIEngine::resolve_draw_breakpoint -- lockstep pair.
         TurnSolver::CantripOrderScope _cos(deferred_cantrip_site, &deferred_hand_before,
                                            &plan_cast_names, BpClassifyActive(state));
+        // Mark the continuation for the condemnation filter (MTG_CONDEMN_M1_BP). Same extent as
+        // _cos: the searched list, the greedy Solve fallback, and the continuation's application.
+        TurnSolver::BpContinuationScope _cbs;
         deferred_cantrip_site = nullptr;
         if (out_breakpoint) { sink_stack.push_back(out_breakpoint); }
         TurnSolver::Plan extra;
@@ -22035,6 +22352,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
 
             const unsigned long long esc_drops_before = g_condemn_drops;   // escalation window
             PROF_INC(gamestate_copies);
+            if (s_rollout_stats) { g_cand_scored.fetch_add(1, std::memory_order_relaxed); }
             GameState copy = state;
             if (is_pre_combat)
             {

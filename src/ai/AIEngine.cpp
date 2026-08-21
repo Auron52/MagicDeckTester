@@ -2589,7 +2589,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
             else if (a.kind == Action::Kind::SacForMana)
-            { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float, a.sac_victim_id); }
+            { ApplySacForMana(state, state.active_player_index, a.sac_source_id,
+                              TurnSolver::SacFloatColorFor(state, plan.actions, a), a.ritual_float, a.sac_victim_id); }
             else if (a.kind == Action::Kind::Suspend)
             { ApplySuspend(state, state.active_player_index, a.card_name); }
             else if (a.kind == Action::Kind::DigDraw)
@@ -2637,6 +2638,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
         TurnSolver::CantripOrderScope _cos(rdb_site, &rdb_hand, &rdb_plan_casts,
                                            ResolveProvider(state).CondemnsConsideredAtBreakpoint());
+        // Executor twin of the rollout's marker (MTG_CONDEMN_M1_BP) -- the lockstep pair. Without
+        // it the executor would re-offer at a breakpoint what the rollout condemned there.
+        TurnSolver::BpContinuationScope _cbs;
         Player& rp = state.ActivePlayer();
         std::vector<StagedCard> snap = rp.staged_cards;
         rp.staged_cards.clear();
@@ -2686,7 +2690,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (const Action& a : extra.actions)
         {
             if (a.kind == Action::Kind::SacForMana)
-            { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float, a.sac_victim_id); }
+            { ApplySacForMana(state, state.active_player_index, a.sac_source_id,
+                              TurnSolver::SacFloatColorFor(state, extra.actions, a), a.ritual_float, a.sac_victim_id); }
             else if (a.kind == Action::Kind::Suspend)
             { ApplySuspend(state, state.active_player_index, a.card_name); }
         }
@@ -2885,7 +2890,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (const Action& a : plan.actions)
     {
         if (a.kind == Action::Kind::SacForMana)
-        { ApplySacForMana(state, state.active_player_index, a.sac_source_id, a.chosen_float_color, a.ritual_float, a.sac_victim_id); }
+        { ApplySacForMana(state, state.active_player_index, a.sac_source_id,
+                          TurnSolver::SacFloatColorFor(state, plan.actions, a), a.ritual_float, a.sac_victim_id); }
         else if (a.kind == Action::Kind::Suspend)
         { ApplySuspend(state, state.active_player_index, a.card_name); }
     }

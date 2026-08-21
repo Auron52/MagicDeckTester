@@ -333,3 +333,63 @@ arms share a leaf configuration. Across leaf families it is biased in a known di
 (understates horizon-rollout cost ~2.7x at d3/b3). If this bites again, the fix is a meter that
 charges leaves by actual simulation steps — but that changes SearchBudget accounting (= play
 behaviour at any binding budget), so it is a measured change, not a cleanup.
+
+## RE-MEASUREMENT at HEAD `552a76b5` (2026-08-20), before the FAST gen launch
+
+The engine took **60 src commits** since the sweep-era measurement above (`MTG_5C_SSM` default-on,
+`MTG_ENUM_MEMO`, condemnation, freecast prune, the whole fetch/order doctrine arc), so the leaf
+question was re-run cold before committing a multi-week generation to the H21 setting. Same box
+class as the "idle secondary" above (12 cores, load 0.16 at start), same protocol, harness
+`logs/fc_leafcost_head/run.sh`, raw in `measure.log`.
+
+The deterministic avg constants have MOVED (the engine plays better): seed 1001 hybrid is now
+**5.0333** (was 5.1750), leaf-off **5.0333** (was 5.1833), seed 2001 hybrid **4.8250** (was 4.9000).
+Leaf-off is no longer even distinguishable from hybrid on the metric at d2/b1 — it was +0.0083 before.
+
+| arm | seed 1001 min / med / max | seed 2001 min / med / max | avg |
+|---|---|---|---|
+| CAL hybrid d3/b3 | 55.78 s (n=1) | — | 5.0417 |
+| CAL leaf-off d3/b3 | 56.48 s (n=1) | — | 5.0333 |
+| **H21 hybrid d2/b1** | **43.65 / 43.81 / 45.53 s** (n=8) | **75.23 / 75.24 / 75.39 s** (n=3) | 5.0333 / 4.8250 |
+| N21 leaf-off d2/b1 | 46.22 / 46.32 / 47.42 s (n=5) | 89.67 / 89.83 / 90.05 s (n=3) | 5.0333 / 4.8250 |
+| V21 pure-V d2/b1 | 7.12 / 7.16 / 7.22 s (n=3) | — | 5.2500 |
+| H21 with `MTG_5C_SSM=0` | 41.99 / 42.03 / 42.16 s (n=3) | — | 5.0417 |
+
+### The leaf edge has COLLAPSED — but the verdict is unchanged
+
+| config | leaf edge at `91885099` | leaf edge at `552a76b5` |
+|---|---|---|
+| d3/b3 | 1.72x | **1.01x** (56.48 / 55.78 — not separated, n=1 each) |
+| d2/b1 seed 1001 | 1.57x | **1.06x** (separated: hybrid max 45.53 < leaf-off min 46.22) |
+| d2/b1 seed 2001 | 2.20x | **1.19x** (separated by 14.3 s) |
+
+Decision rule 1 still fires on seed 2001 (≥10%, separated) and the hybrid is faster in every block,
+so **keep the hybrid H21 labeller** — but the margin is now 1.06–1.19x, not 1.6–2.2x. The
+operational case for a no-sidecar gen (decoupling keep artifacts from value-leaf regeneration) is
+much cheaper than it was; it is now a ~6–19% wall premium rather than "days". It still needs the
+`valuearm`/`RolloutCfg` mechanism work described in the decision rules above, so nothing changes for
+this run, but the door the 2026-08-18 result closed is no longer bolted shut.
+
+The seed-dependence lesson from §"The trend prediction was WRONG" repeats: the edge is 1.06x on one
+seed block and 1.19x on the other. The leaf's value still tracks how horizon-rollout-heavy the hands
+are — the engine's other prunes (enum memo, condemnation, freecast) have absorbed most of the work
+the leaf used to save.
+
+### Cost at HEAD is ~2x the sweep-era cost — and `MTG_5C_SSM` is NOT the cause
+
+Hybrid d2/b1 seed 1001: **43.65 s** at HEAD vs **21.55 s** at `91885099` on this box class = **2.03x**
+per rollout. d3/b3: 55.78 s vs 33.78 s = 1.65x. This is the single most important number for the
+FiveColour gen: the sweep's "FAST ~132 h on 23 cores" projection was priced at the old cost.
+
+The obvious suspect was `MTG_5C_SSM` (searched interior second main, adopted default-on in `5efeb1d`
+— strictly more search). **Measured: it is not.** `MTG_5C_SSM=0` runs 41.99 s vs 42.16 s hybrid's
+43.65 s — a **1.04x** saving, and it plays *worse* (avg 5.0417 vs 5.0333). There is no cheap gen-only
+switch here; the 2x is spread across the arc, and SSM is paying for itself. Do not reach for
+`MTG_5C_SSM=0` as a gen lever.
+
+### V21 re-confirmed, bias re-confirmed
+
+V21's wall ratio is now **6.10x** (43.65 / 7.16 s), up from 5.80x — it benefits from the leaf edge
+collapsing, since V21 *is* pure leaf. Its play-quality gap is unchanged and still visible in the
+metric: **5.2500 vs 5.0333** (the gap widened from +0.19 to +0.22 turns as the hybrid improved). The
+dork-hand bias documented in `fivecolour-mullgen-labeller-sweep.md` §2 remains the argument against.
