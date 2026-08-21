@@ -342,3 +342,48 @@ representation of "X enables Y" that is param-derived rather than a name list �
 the same blind spot recorded at the top of this document, since the enabling is owned by the
 PERMANENT, not by the card being re-considered. Deliberately unbuilt: no current deck exercises it,
 and building it against a hypothetical would fix the wrong shape.
+
+## SHAPE VERDICT (2026-08-21): deferred + condemnation wins; the PARTITION is refuted
+
+Six arms, one pooled queue, 1800 games (`gen_equipdraw_shape_manifest.py`, `logs/kitty_shape`),
+paired per game. `mc` on everywhere but the references, since the credit acts on the same turns.
+
+| arm | train delta | train cost | hold delta | hold cost |
+|---|---|---|---|---|
+| `def` (as committed, deferred) | -0.1200, 18/0 | +217.4% | -0.1533, 24/1 | +32.9% |
+| **`def_cl` (deferred + condemnation)** | **-0.1200, 18/0** | **+83.9%** | **-0.1533, 24/1** | **+18.3%** |
+| `inl` (partition) | — | — | -0.1533, 24/1 | +119.8% |
+| `inl_cl` (partition + condemnation) | -0.1200, 18/0 | +101.3% | -0.1533, 24/1 | +67.9% |
+
+Two findings, both clean:
+
+* **Every shape plays IDENTICALLY** — the same delta, the same 18 / 24 games faster, the same one
+  slower. The partition buys nothing in play and costs 3.7x the overhead of deferred+condemnation on
+  held-out. **REFUTED.** It also fits the realisation gap recorded above: the value of this class is
+  the ROLLOUT knowing the draw happens, which changes which plan it commits, not the continuation's
+  choice of what to spend — so all four shapes converge on the same committed lines.
+* **Condemnation removes 44-61% of the class's overhead for exactly identical play** (hold
+  32.9% -> 18.3%, train 217% -> 84%). That is the piece worth keeping.
+
+Zero `[fd-diverge]` across every arm, both worlds in lockstep in all four shapes.
+
+### ...but MTG_BP_CLASSIFY is NOT safe to flip globally
+
+Measured immediately after, and this is why the saving cannot just be switched on: smoke with
+`MTG_BP_CLASSIFY=1` at otherwise-default settings goes **27/36, with 30 searched games SLOWER and
+120 play-changed — including Dragonstorm gi11 and gi146 turning 6 -> loss.**
+
+Condemnation is a real quality prune for decks whose breakpoints are cantrip/staging chains, where a
+card the plan "declined" is genuinely worth reconsidering after a dig. It is harmless on
+KittyEquipment only because that deck has no other breakpoint class at all (it hit ZERO before site
+6 existed), so the filter can only ever touch site-6 continuations there.
+
+**Next step, and the shape it has to take**: a per-deck opt-in, exactly like
+`CondemnsPassedMainPhase` (FiveColour-only) — a `DecisionProvider` hook overridden by
+`EquipmentProvider`, with `BpClassifyEnabled()` becoming state-aware so the filter consults the
+provider. Note the plumbing detail that decides how invasive it is: `BpClassifyEnabled()` and
+`BreakpointHandSnapshotWanted()` are both state-free today, and the snapshot capture in `apply_one`
+(the hot path this gating exists to protect) does have the state, so it can take a state-aware
+overload while `CantripOrderScope` keeps binding pointers unconditionally — an empty snapshot is
+already documented as the SAFE value, since every card then reads as new and both consumers stand
+down.
