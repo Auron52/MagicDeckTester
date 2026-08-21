@@ -636,3 +636,40 @@ BUILT (both default OFF, for A/B):
   will not need (and Birds even flies). Not built: it requires predicting the payment from the
   pump site, whereas the rung fixes it at the payment site with the information already in hand.
   Worth revisiting if a case appears where the held attacker is the WRONG body to keep.
+
+### 21l measurement: MTG_TAP_ATTACKER_RUNG passes both tiers clean; MTG_TAP_POWER_ORDER REJECTED
+
+Gate 0 (conventions): flags-off smoke byte-identical, 36/36 PASS, 0 configs changed.
+
+Suite A/B (GT = levers-off control). "searched" = d3/d5 keys, the ones that decide; d0 is the
+greedy runner's lighter bar. Only the three dork decks move; every other deck is untouched.
+
+| arm | tier | configs changed | searched slower/faster | d0 slower/faster |
+|---|---|---|---|---|
+| RUNG  | smoke (s1001)      | 8  | **0 / 5** | 2 / 13 |
+| RUNG  | regression (s2002,3003) | 15 | **0 / 1** (39 same-score) | 1 / 12 |
+| POWER | smoke              | 5  | 0 / 2 | 1 / 10 |
+| POWER | regression         | 10 | **1 / 0** (48 same-score) | 3 / 8 |
+| BOTH  | smoke              | 8  | 0 / 5 | 3 / 17 |
+
+* **MTG_TAP_ATTACKER_RUNG -> ADOPT CANDIDATE.** Zero searched-depth slowdowns across 96
+  config-runs (3 decks x 3 seeds x 3 depths, two tiers), 6 searched-depth improvements, and it
+  recovers the gi8 T3 kill WITH condemnation on. Mirrorwing gains at every smoke depth
+  (d0 6.0570->6.0480, d3 5.0267->5.0133, d5 5.1200->5.0933) -- expected, since the ladder's
+  origin case (s24 T4, dork vs depletion) is this bug's sibling. Anti-Lifegain gains d0+d3.
+  Only fivecolour d0 moves the wrong way, by +0.001 on the lighter bar.
+* **MTG_TAP_POWER_ORDER -> REJECTED (recorded rejection; do not re-propose without new
+  information).** Net NEGATIVE at searched depth on the bigger tier: mirrorwing_regression_d5_s3003
+  4.9000 -> 4.9100, with no searched-depth improvement to offset it, plus 3 d0 slowdowns. It adds
+  nothing on top of the rung (BOTH = the same 5 smoke improvements as RUNG alone, with a worse d0).
+  This is the empirical answer to "check power when tapping": the layer CAN be made power-aware and
+  the measurement says power is the wrong signal here -- bodies that compete for a tap are usually
+  power-IDENTICAL at payment time (the pump has not resolved yet), so the sort mostly reshuffles
+  ties, and where it does bite it is as likely to spend the wrong body as the right one. WHICH BODY
+  THE TURN NEEDS (attacker identity) is the load-bearing information, not how big it currently is.
+  Lever kept as the rejection record per the conventions skill; delete on user sign-off.
+
+REMAINING GATES before the rung can be adopted default-on: (1) held-out validation on the
+overnight seeds; (2) re-measure the AL bundle (PHASE+CONDEMN+DORK) vs control WITH the rung on
+both sides -- the rung removes a whole loss class the bundle was being charged for, so the held
+~parity verdict (+5/-4 per 8000) may move.
