@@ -336,3 +336,29 @@ tranche + counters + trace as the opt-in audit instrument. This IS the stated de
 ordered design is actually intended never to run any condemned paths"), now with the data and
 the argument. Pre-adoption gate if approved: full suite (the flip touches adopted 5C
 production), expect digest-level churn only; GT rebaseline where digests move.
+
+## 2026-08-21h: TRANCHE DEFAULT OFF ADOPTED (USER); AL-bundle numbers refreshed under the flip
+
+**Adopted** (41b957e7): MTG_CONDEMN_TRANCHE default OFF, `=1` re-arms as the audit instrument.
+GT rebaselined smoke + regression (overnight running); all churn confined to 5C keys. Every
+slower game classified before accept: smoke d5 gi0 = churn (recovers at 16x); regression gi104 =
+fetch-shuffle variance (draws diverge T3); regression d3_s3003 gi57 (same-draws, persists at
+16x) DUG: under decoupled salts 1 and 2 the two arms are BYTE-IDENTICAL (both T7) -- the
+tranche-on T6 was coupled-stream tie-flip luck, clairvoyance-class, not a coverage gap. The
+per-deck wiring check for future condemning providers is documented at the flag site
+(TurnSolver) and in 21g: probe MTG_CONDEMN_TRANCHE=1 + MTG_TRANCHE_TRACE=1 vs default, diff
+per-game wins under decoupled salts; only a salt-ROBUST on-better game is a real gap, and it is
+a membership/order rule bug to fix, not a tranche to ship.
+
+**AL bundle re-measured on the flipped binary** (PHASE+CONDEMN, tranche off; 8-job decouple
+manifest, salts 1/2; CTL re-run byte-identical to yesterday's, confirming the flip inert
+off-deck):
+* Quality: BUNDLE - CTL = +26 / +12 per 8000 (salt1/salt2) -- same band as PHASE alone
+  (+21/+28): the residual is still the non-pump dump tie-break class (21d), and condemnation
+  adds nothing measurable either way (vs tranche-on bundle: +5/-19, direction flips by salt =
+  noise).
+* Compute: the old objection is GONE -- bundle wall vs CTL (sequential, same box): d5 jobs ~12%
+  FASTER (the m2-shrink now nets its savings without paying the tranche), d3 ~+4%, net ~-6%.
+**Open (USER):** AL adoption still gated ONLY by the ~+0.002/game split residual; options are
+adopt-on-doctrine, or first build the attack-forfeit tie-break (same architecture as the adopted
+pump-waste tie-break) and re-measure.
