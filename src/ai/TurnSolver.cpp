@@ -605,10 +605,25 @@ static bool KittyParkEnabled()
 }
 
 // MTG_METALCRAFT_CREDIT -- same-turn metalcraft equip-{0} credit at the ENUMERATION affordability
-// gate (see SameTurnMetalcraftEquipCredit). DEFAULT OFF -> byte-identical until the A/B is accepted.
+// gate (see SameTurnMetalcraftEquipCredit).
+//
+// ADOPTED DEFAULT-ON 2026-08-21 (=0 hatch), on the USER's call ("the metalcraft change makes sense
+// to turn on and start testing"). The evidence, paired per game and reproduced in three independent
+// pooled batches on the same seeds:
+//     held-out (900001, d3, 150)  -0.1400 turns  t=-4.67  22 faster / 1 slower
+//     train    (300001, d3, 150)  -0.1133 turns  t=-4.36  17 faster / 0 slower
+//     d5 repro (70001, 16)        -0.2500 turns           4 faster / 0 slower
+// and it is CHEAPER, not just better: -15.2% held-out / -7.8% train search work, because winning a
+// turn sooner is a turn less to search. Bucketed, the win is ALL PLAY (56 games, 22 faster / 0
+// slower); the single regression is a mulligan bottoming flip (gi=105 bottoms a Sol Ring to keep two
+// Paladins), not a play decision.
+//
+// No suite ground truth can move: Puresteel Paladin is the only card carrying the param, only
+// KittyEquipment plays it, and that deck is not in the regression tiers -- so the gates confirm
+// inertness rather than the effect. See docs/design/metalcraft-enumeration-credit.md.
 static bool MetalcraftCreditEnabled()
 {
-    static const bool on = EnvOn("MTG_METALCRAFT_CREDIT");
+    static const bool on = EnvOn("MTG_METALCRAFT_CREDIT", true);
     return heurarm::Flag(heurarm::METALCRAFT_CREDIT, on);
 }
 

@@ -1,4 +1,18 @@
-# Metalcraft enumeration credit — the pricing fix was necessary but NOT sufficient
+# Metalcraft enumeration credit
+
+> **ADOPTED DEFAULT-ON 2026-08-21** (`MTG_METALCRAFT_CREDIT`, `=0` hatch), on the USER's call: "the
+> metalcraft change makes sense to turn on and start testing." Held-out -0.1400 turns (t=-4.67,
+> 22 faster / 1 slower), train -0.1133 (t=-4.36, 17/0), d5 repro -0.2500 (4/0), reproduced on the
+> same seeds in three independent pooled batches. It is also CHEAPER -- -15.2% held-out / -7.8%
+> train search work, since a turn won sooner is a turn less to search.
+>
+> Adoption verified rather than assumed, because a flipped default that silently reads as "no
+> effect" is this repo's classic failure: at pure defaults the deck now reproduces the measured
+> credit arm's 150-game `.wins` BYTE-FOR-BYTE, and `MTG_METALCRAFT_CREDIT=0` reproduces the
+> pre-adoption baseline byte-for-byte. Gates on the flipped binary: smoke 36/36, regression 60/60,
+> 0 configs changed, reference gate clean -- which confirm INERTNESS elsewhere rather than the
+> effect, since Puresteel Paladin is the only card carrying the param, only KittyEquipment plays it,
+> and that deck is not in the tiers.
 
 **Status:** built behind `MTG_METALCRAFT_CREDIT` (default OFF), measured 2026-08-20.
 **Deck:** KittyEquipment only — `metalcraft_equip_zero_artifacts` is carried by exactly one card in
