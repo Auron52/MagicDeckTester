@@ -2529,11 +2529,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                      // deferred re-solve after these, so the executor must classify them the same
                      // way or the committed continuation replays at the wrong breakpoint.
                      || (AcqResolveEnabled()
-                         && (d->params.damage_equals_top_mv || d->params.tutor_to_hand)));
+                         && (d->params.damage_equals_top_mv || d->params.tutor_to_hand))
                      // MTG_ACQ_DIG is deliberately ABSENT here: the lever is depth-0-only
                      // (note_draw_engine above) -- the rollout never arms a dig breakpoint,
                      // so classifying one here would desync full-depth replay. See the
                      // rejected searched-depth arm at TurnSolver's PerformEtbDig site.
+                     // SITE 6 is present only in the INLINE (partition) mode, and for exactly the
+                     // reason the ACQ_DIG note gives: in that mode the rollout DOES arm at the cast,
+                     // so the executor must classify it the same way or the committed continuation
+                     // replays at the wrong breakpoint. In the deferred mode the rollout arms after
+                     // every main cast instead, and the end-of-turn catch-all is the matching hook.
+                     || (TurnSolver::EquipmentDrawBreakpointInline()
+                         && TurnSolver::EquipmentDrawBreakpoint(state, *d)));
     };
 
     // SCRIPTED draw breakpoint for COMMIT-THE-LINE replay (MTG_FULL_DEPTH): cast the
@@ -2810,6 +2817,22 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // real game executes the same draw-breakpoint line the rollout searches.
     bool staged_break = false;
     bool bp_replayed  = false;  // commit-the-line: recorded breakpoint replayed once
+    // PARTITION truncation (MTG_EQUIP_DRAW_BP_INLINE) -- executor twin of ApplyPlanDirect's
+    // bp_truncate. Once a site-6 continuation has run at the cast that drew, the rest of this
+    // plan's casts belong to that continuation's section and the rollout did NOT apply them here;
+    // executing them anyway would realise a turn the search never scored. Separate from
+    // staged_break on purpose: that flag also suppresses the alt-payload auto-fire and the
+    // end-of-turn catch-all replay, and borrowing it would silently change those too.
+    bool bp_trunc_exec = false;
+    // Does casting `nm` end our section? Same predicate the rollout arms on, so the two worlds
+    // truncate at exactly the same cast. Evaluated post-resolution, where the Equipment and the
+    // watcher are both on the battlefield.
+    auto equip_bp_truncates = [&](const std::string& nm) -> bool
+    {
+        if (!TurnSolver::EquipmentDrawBreakpointInline()) { return false; }
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        return d != nullptr && TurnSolver::EquipmentDrawBreakpoint(state, *d);
+    };
 
     // Order trace (MTG_ORDER_TRACE, inert by default): print the committed hand-cast
     // sequence per pre-combat main, tagged with searched_order, so a heuristic-vs-search
@@ -2916,6 +2939,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
             }
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
+            // PARTITION truncation: the continuation just decided the rest of this phase, so the
+            // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
+            if (equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
         }
     }
     else
@@ -3058,6 +3084,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 }
             }
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
+            // PARTITION truncation: the continuation just decided the rest of this phase, so the
+            // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
+            if (equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
         }
     }
     }
@@ -3105,12 +3134,44 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
         cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
+        // SITE 6 (MTG_EQUIP_DRAW_BP_INLINE) is the first breakpoint class that can appear in a
+        // CLEAN set: the branch comment above ("No draw engine here, so no breakpoint handling is
+        // needed") held only because every other class carries an OrderingOpaque param and an
+        // Equipment cast carries none -- the draw belongs to the watcher. Without this the rollout
+        // would search a continuation the executor never plays. Inert in every other config.
+        //
+        // Gated on equip_bp_truncates (site 6 + inline mode) and NOT on is_draw_engine, which was
+        // measured: is_draw_engine also covers the MTG_ACQ_RESOLVE tutor family, and tutor_to_hand
+        // is NOT one of OrderingOpaque's params -- so a tutor set reaches this CLEAN branch, and
+        // hooking the broad predicate here armed breakpoints those decks never had (smoke went
+        // 26/36 with 2 searched slower and 26 play-changed). Site 6 is the only class that both
+        // lands in a clean set and has a rollout twin arming at the cast.
+        if (s_full_depth && equip_bp_truncates(a.card_name))
+        {
+            if (fd_plan_committed)
+            { if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; } }
+            else
+            {
+                rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                if (TurnSolver::BreakpointHandSnapshotWanted())
+                {
+                    rdb_plan_casts.clear();
+                    for (const Action& pa : plan.actions)
+                    {
+                        if (pa.kind != Action::Kind::CastFromHand) { continue; }
+                        rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
+                    }
+                }
+                resolve_draw_breakpoint(0);
+            }
+        }
+        if (equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
     }
     }
     }
     for (size_t ai = 0; ai < plan.actions.size(); ++ai)
     {
-        if (staged_break) { break; }
+        if (staged_break || bp_trunc_exec) { break; }
         if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
@@ -3118,7 +3179,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     }
     for (const Action& a : plan.actions)
     {
-        if (staged_break) { break; }
+        if (staged_break || bp_trunc_exec) { break; }
         if (a.kind == Action::Kind::CastFromGraveyard)
         { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(a.card_name); resolve_now(); }
     }

@@ -42,6 +42,8 @@ enum Slot : int
     BIG_SOLVE_MEMO,           // MTG_BIG_SOLVE_MEMO        solve-memo entry cap 16k -> 256k
     EQUIP_DRAW_BP,            // MTG_EQUIP_DRAW_BP         equipment-ETB draw = breakpoint site 6
     EQUIP_DRAW_BP_DEFER,      // MTG_EQUIP_DRAW_BP_DEFER   ...and keep it out of wave 0 (cost only)
+    EQUIP_DRAW_BP_INLINE,     // MTG_EQUIP_DRAW_BP_INLINE  ...inline AT the draw + truncate the plan
+    BP_CLASSIFY,              // MTG_BP_CLASSIFY           condemn already-considered casts at a bp
     COUNT
 };
 
@@ -61,6 +63,8 @@ inline const char* Name(int slot)
         "MTG_BIG_SOLVE_MEMO",
         "MTG_EQUIP_DRAW_BP",
         "MTG_EQUIP_DRAW_BP_DEFER",
+        "MTG_EQUIP_DRAW_BP_INLINE",
+        "MTG_BP_CLASSIFY",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

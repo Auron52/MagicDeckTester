@@ -546,8 +546,10 @@ static bool BpCardWasInHandBefore(int card_number)
 // and main 2 we should do for breakpoints"). Default OFF => byte-identical.
 static bool BpClassifyEnabled()
 {
+    // Per-JOB overridable (heurarm) so the breakpoint-shape arms -- deferred vs inline, with and
+    // without condemnation -- sweep in ONE pooled batch instead of one batch per arm.
     static const bool on = EnvOn("MTG_BP_CLASSIFY");
-    return on;
+    return heurarm::Flag(heurarm::BP_CLASSIFY, on);
 }
 
 // Memoized SEARCHED second main (defined after BuildBreakpointKey, far below): under
@@ -4059,6 +4061,12 @@ bool TurnSolver::EquipmentDrawBreakpointEnabled()
 {
     static const bool on = EnvOn("MTG_EQUIP_DRAW_BP");
     return heurarm::Flag(heurarm::EQUIP_DRAW_BP, on);
+}
+
+bool TurnSolver::EquipmentDrawBreakpointInline()
+{
+    static const bool on = EnvOn("MTG_EQUIP_DRAW_BP_INLINE");
+    return heurarm::Flag(heurarm::EQUIP_DRAW_BP_INLINE, on);
 }
 
 bool TurnSolver::EquipmentEtbDrawFires(const GameState& state, const CardDefinition& def)
@@ -11093,6 +11101,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     auto deferred_site_index = [&]() -> int
     { return deferred_trick_armed ? 5 : (deferred_equip_armed ? 6 : 3); };
 
+    // PARTITION TRUNCATION (MTG_EQUIP_DRAW_BP_INLINE). USER 2026-08-20/21: "we should only be
+    // considering spells that have not been considered already at every point, making the
+    // breakpoints fully distinct from each other" -- "the only way to do this is through a mix of
+    // condemnation and only planning your section of the turn."
+    //
+    // Set by apply_one the moment a site-6 continuation has run INLINE. Everything still unapplied
+    // in this plan belongs to the CONTINUATION's section, not to this one, so it must not be cast
+    // here: the continuation already decided the rest of the phase with the drawn card in hand.
+    // Enforced in apply_one itself rather than in each of the seven cast loops below, so a loop
+    // added later cannot forget it.
+    //
+    // Saved/restored around every apply_plan_actions call: a nested continuation truncates its OWN
+    // section (the partition recurses) without ending the section that invoked it. Termination is
+    // by the hand emptying -- each continuation cast consumes a card -- the same argument the
+    // executor's kMaxDrawBreakpointDepth makes explicit on its side.
+    bool bp_truncate = false;
+
     // Karoo bounce-land play-at-end timing. A Karoo (Izzet Boilerworks: etb_bounce_land,
     // enters tapped) returns one of our lands to hand on ETB. Played land-FIRST it bounces a
     // still-UNTAPPED land we then need, losing that land's mana this turn. A Karoo enters
@@ -11439,6 +11464,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     int own_targets, int ponder_keep, int crackle_targets, int splice_count,
                     const std::string& chosen_float_color, int enchant_target)
     {
+        // PARTITION TRUNCATION (see bp_truncate): this plan's section ended at its first draw and
+        // the continuation has already decided everything after it, so every remaining cast of this
+        // plan is not ours to make. One guard here rather than in each of the seven cast loops.
+        // Never set unless MTG_EQUIP_DRAW_BP_INLINE is on -> byte-identical otherwise.
+        if (bp_truncate) { return; }
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
         // ~200k/game). Byte-identical: it->m_name == name so LookupCached(*it) == Lookup(name),
@@ -12639,13 +12669,49 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Inside a continuation (sink_stack non-empty) nothing is armed: that is the Gold Rush
             // Treasure precedent -- the extra card simply waits for the next decision rather than
             // buying a nested greedy re-solve. Human play is exempt (the chooser re-fires).
-            if (!s_human_play && s_defer_cantrip && sink_stack.empty()
-                && TurnSolver::EquipmentDrawBreakpoint(state, def))
+            if (!s_human_play && TurnSolver::EquipmentDrawBreakpoint(state, def))
             {
-                deferred_cantrip_resolve = true;
-                deferred_cantrip_site    = &def;
-                deferred_hand_before     = hand_at_cast;
-                deferred_equip_armed     = true;   // site 6, not the plain-cantrip site 3
+                if (TurnSolver::EquipmentDrawBreakpointInline())
+                {
+                    // THE PARTITION SHAPE. This cast ended our section; the continuation owns the
+                    // rest of the phase, so resolve it HERE, with the drawn card in hand and this
+                    // turn's remaining mana still unspent, and then truncate.
+                    //
+                    // The scope is what makes condemnation work, and it is the whole point rather
+                    // than a detail: the PRE-DRAW hand marks the drawn card as new (a duplicate of
+                    // nothing, so first-class) and everything already in hand as considered, while
+                    // plan_cast_names keeps a card THIS PLAN casts from being read as declined. The
+                    // deferred path binds the same scope at its own re-solve; binding it here is
+                    // what the inline sites 0/1 never needed and this one does.
+                    //
+                    // No sink_stack guard, unlike the deferred arm: a continuation that casts
+                    // another Equipment under the watcher SHOULD open its own section. That is the
+                    // partition recursing, not the nested-greedy re-solve the trick class avoids --
+                    // this continuation is searched (bp_searched_plan) rather than greedy.
+                    if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
+                    {
+                        TurnSolver::CantripOrderScope _cos(&def, &hand_at_cast, &plan_cast_names);
+                        TurnSolver::Plan extra;
+                        if (!bp_searched_plan(6, extra))
+                        {
+                            play_breakpoint_land(my_bp_sink);
+                            extra = TurnSolver::Solve(state, is_pre_combat);
+                        }
+                        bp_play_searched_land(extra, my_bp_sink);
+                        apply_continuation_precasts(extra);
+                        apply_plan_actions(extra.actions, extra.searched_order);
+                    }
+                    if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
+                    // Set AFTER the continuation's own apply, so its section runs in full.
+                    bp_truncate = true;
+                }
+                else if (s_defer_cantrip && sink_stack.empty())
+                {
+                    deferred_cantrip_resolve = true;
+                    deferred_cantrip_site    = &def;
+                    deferred_hand_before     = hand_at_cast;
+                    deferred_equip_armed     = true;   // site 6, not the plain-cantrip site 3
+                }
             }
             // Legend rule (CR 704.5j, a state-based action) for a legendary NON-creature permanent
             // too, so this branch matches both the creature branch above and the executor's single
@@ -12690,6 +12756,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // don't reorder its casts.
     apply_plan_actions = [&](const std::vector<Action>& acts, bool explicit_order)
     {
+        // PARTITION TRUNCATION scope (see bp_truncate): each apply_plan_actions call is ONE section
+        // of the turn, so it starts un-truncated and hands the caller's state back on the way out.
+        // Without the restore a nested continuation's truncation would end the section that invoked
+        // it; without the clear, an outer truncation would stop a continuation before its first
+        // cast. Struct rather than a bare pair of statements so an early return cannot skip it.
+        struct TruncScope
+        {
+            bool& flag; const bool saved;
+            explicit TruncScope(bool& f) : flag(f), saved(f) { f = false; }
+            ~TruncScope() { flag = saved; }
+        } _trunc(bp_truncate);
         // Indices of sac-land casts already applied by the Spectacle hoist (opaque branch); the
         // trailing sac loop skips them so they are not double-cast. Empty for every plan without a
         // hoisted Spectacle enabler.

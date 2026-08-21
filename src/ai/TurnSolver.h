@@ -551,6 +551,12 @@ public:
     // class is absent and every deck is byte-identical). Both sides MUST read this, not the env,
     // or a batch job's per-arm override would arm one world and not the other.
     static bool EquipmentDrawBreakpointEnabled();
+    // MTG_EQUIP_DRAW_BP_INLINE -- the PARTITION shape (USER 2026-08-20/21): resolve the continuation
+    // INLINE at the draw and TRUNCATE the base plan there, instead of deferring it to after every
+    // main cast. "We should only be considering spells that have not been considered already at
+    // every point, making the breakpoints fully distinct from each other." A sub-mode of the class
+    // rather than a replacement so one pooled batch can measure it against the deferred shape.
+    static bool EquipmentDrawBreakpointInline();
     // The same question WITHOUT the lever: does resolving `def` draw off an equipment-ETB watcher?
     // The draw happens whether or not the search is allowed to plan around it, so anything
     // REPORTING the draw (the game log's draw reporter) must ask this one, not the gated one --
