@@ -673,3 +673,19 @@ REMAINING GATES before the rung can be adopted default-on: (1) held-out validati
 overnight seeds; (2) re-measure the AL bundle (PHASE+CONDEMN+DORK) vs control WITH the rung on
 both sides -- the rung removes a whole loss class the bundle was being charged for, so the held
 ~parity verdict (+5/-4 per 8000) may move.
+
+### 21l: rung at AL scale -- gi8 class ELIMINATED, but the bundle verdict does NOT move
+
+Decouple ensemble (logs/ssm_sweep/al_fix/decouple.json, 8000 games x salts 1,2), loss-penalized
+(unwon = 9), rung ON BOTH ARMS -> logs/tap_rung/al/.
+
+* RUNG ALONE on the CONTROL arm (vs the pre-rung cond_CTL_s{1,2} runs, same manifest/binary
+  modulo default-off flags): salt1 **0 worse / 1 better**, salt2 **0 worse / 2 better**
+  (delta -0.0001 / -0.0003). Strictly non-harmful at 16000 games. Narrow but free.
+* gi8 (al_d3_s6006 gi=8) is FIXED: bundle now ties control at wt=3 under BOTH salts.
+* BUNDLE vs CONTROL, both with the rung: salt1 41 worse / 35 better (+0.0003), salt2 38 worse /
+  39 better (-0.0005), SALT-ROBUST **23 worse : 9 better** (pre-rung: 24 : 4). So the rung removed
+  a loss class and more than doubled the salt-robust wins, but the bundle stays at PARITY -- the
+  AL adoption is NOT unblocked by this. The surviving salt-robust residual is the KILL-TURN class
+  the census already named: al_d3_s7007 gi852 (ctl 4 / bun 5), gi469 (4/5), gi666 (5/6), all
+  unchanged by tapping. Those digs remain the blocker.
