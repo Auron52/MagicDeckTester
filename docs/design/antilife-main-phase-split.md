@@ -459,3 +459,47 @@ MTG_CONDEMN_TRANCHE=1 env test + c6adf22b worktree binary; small; self-corrected
 upstream commit), but the story in that commit message was over-generous to the drift. Every
 fivecolour overnight game on the merged binary is per-game identical to the inspected morning
 state -- sac-fold contributed digest churn only there, and the flip's net-zero verdict stands.
+
+## 2026-08-21k: FULL RESIDUAL CENSUS (all 25/16 looked through) + g8 ROOT CAUSE -- pre-compaction record
+
+**Census of the 25 salt-robust bundle-worse key-games (16 distinct):** tranche-recovery and
+4x-budget arms run on ALL of them. NONE recover with budget (all systematic). Buckets:
+* EARLY LAND-ORDER STREAM TIES (5): g194/g491/g592/g863/g963 -- first divergence is a T1-T3
+  land choice/timing tie; fetches reshuffle; the physical game diverges. The recorded
+  fetch-clairvoyance class: salt-robustness does NOT clear it (the real stream is seed-fixed
+  under both salts); the matching lottery winners sit in the 24-better set. Luck, not capability.
+* DUMP / TUTOR-NOW TIES (6): g14/g147/g554/g838/g860/g408 -- bundle casts sooner at a tie
+  (Remedy+Invigorate T3 dumps, Idyllic-Tutor-now). Known class-A residual; attack-forfeit lever
+  already measured-rejected against it.
+* KILL-TURN SELECTION (4): g469/g666/g852/g648. g852 DUG: ctl casts BOTH Fiery Justices at T4
+  m1 (20 dmg, kill); bundle (Justice deferred to m2 by doctrine) casts ONE Justice per m2 across
+  T4/T5. USER: "we should be able to cast multiples with this design" -- whether this is an m2
+  duplicate-cast expressibility gap or the attack tapping a needed source is THE FIRST
+  POST-COMPACTION DIG (test: MTG_M2T_TRACE=1 MTG_M2T_TURN=4 on al_d3_s7007 gi852 seed 7859 --
+  does [Justice, Justice] appear in the m2 plan set, and what is the post-combat pool?).
+* g8 -- ROOT-CAUSED (two stacked mechanisms, NOT a simple condemnation deletion):
+  1. FACTS: both arms identical thru T3 combat (opp 6, two spawns, one power-6). Ctl kills with
+     m2 Swords to Plowshares (exile spawn, controller-gains-power rider -> 6 damage under live
+     Remedy). Bundle passes m2, kills T4. Tranche-on recovers T3; the rescue trace names
+     cond=Swords, plan=[Swords] alone, imm=1.
+  2. The T3 turn REPLAYED A LINE COMMITTED AT T2 (MTG_FSW_TURN=3 shows ZERO top-level d3 nodes
+     -- no re-solve). In the T2 solve's salted projections the kill does not exist (the REAL T3
+     draw, free Skyshroud Cutter, plus StP's 6 is what makes T3 lethal; projected tails tie at
+     4 with or without Swords -- 903 trace lines, no Cutter+Swords plan, no tail=3), so the
+     projected m1 "declined" Swords legitimately UNDER PROJECTED INFO. The stamp then condemned
+     it, and the filtered m2 could not re-offer it when the real state made it lethal.
+  3. CONTROL survives the same staleness because its GREEDY m2 re-litigates every turn -- the
+     safety net the split removed by design. The split's searched m2 sees only what the
+     committed line saw.
+  RULE-GAP STATEMENT: "declined at m1" is only a sound condemnation basis when the decline was
+  made AT THE EXECUTED STATE with the card a live option; a decline inherited from a stale
+  committed line (pre-dating the draw that makes the card lethal) must not condemn. The
+  newly-drawn exemption covers the drawn card itself but not cards made newly-LETHAL by the
+  draw. Candidate fixes (USER review, post-compaction): exempt the whole stamp on line-replayed
+  turns (a replayed m1 is not a decision), or trigger a line re-solve when the real draw
+  diverges from the committed line's projection at a turn boundary.
+
+**Standing state at compaction:** bundle at parity (+5/-4 per 8000), 25-game residual fully
+bucketed (5 luck / 6 dump-tie / 4 kill-turn incl. g852+g8 named digs / g648 reveal oddity
+unexamined in depth); adoption HELD by USER pending the kill-turn digs; NO implementation until
+after compaction (USER).
