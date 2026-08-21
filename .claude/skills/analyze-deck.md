@@ -673,7 +673,18 @@ Only a deck that satisfies all of these is "analyzed." Report (Stage 6) must sta
 `scripts/analyze_deck.py <deck> --discard-analysis` (also stage 8 of the full script run)
 derives the deck's cleanup-discard policy empirically instead of inheriting any global rule
 (user ruling 2026-08-07: no general discard heuristic; every deck gets an AI-authored,
-measured one). It re-enables the retired discard probe OFFLINE as a label generator
+measured one). **The preferred SHAPE is BUCKETS (user ruling 2026-08-21: the generic max-MV
+rule is "too arbitrary"; "the best approach is almost always bucketing — typical buckets are
+mana, threats, and some decks have enablers or even multiple 1-item buckets for combo
+pieces").** Author the policy as a hand partition with per-bucket keep quotas that net board
+coverage first (the shipped AntiLifegain/Mirrorwing rules are the reference shape); a flat
+name order is the degenerate case for decks whose sheds have no state dependence, and the
+generic MV rule is only the fallback while no authored rule exists. Two structural rules
+(user, 2026-08-21): **filling every bucket's quota comes FIRST** — only overflow beyond
+quotas is sheddable; and **within an over-full bucket, shed by distance-to-playable**
+(colour/mana coverage vs the card's cost across board+hand), not raw size — a payoff that is
+nowhere near castable sheds before a castable one ("dropping a Progenitus may still make
+sense... if it is nowhere near playable"). It re-enables the retired discard probe OFFLINE as a label generator
 (`MTG_DISCARD_NODE=0 MTG_DISCARD_TRACE=1`: every real cleanup shed emits a searched trial
 table), scores candidate visible-info rules against those labels (status quo, spare-copy
 band as a label-only hypothesis, a derived shed-order), then paired-seed A/Bs a surviving
