@@ -447,3 +447,15 @@ sibling coverage), searched dork combat, no greedy interior main. Remaining salt
 residual: 25 games (dump-tie class A remainder + un-repaired class B). Options: adopt the
 bundle default-on for AL (GT rebaseline expected: AL keys churn); keep measuring; or continue
 the classify->refine loop on the remaining 25 first.
+
+### 2026-08-21 GT-audit addendum (correction of c341c60b's attribution)
+Post-rebase per-game audit of ALL 144 overnight gt_logs vs the morning accept: 141 identical;
+the only 4 changed games are Dragonstorm gi118 (d3+d5, 6->5) and gi148 (6->5) -- the three
+"same-draws persistent slowdowns" the morning accept attributed to c6adf22b as adopted-lever
+cost -- now REVERSED by upstream's sac-fold commit, plus gi188 (churn-classified) flipping 7->8.
+CORRECTION: those three games were a real c6adf22b regression that upstream later fixed, not a
+deliberate adopted-lever cost. The accept itself was procedurally sound (proven not ours via the
+MTG_CONDEMN_TRANCHE=1 env test + c6adf22b worktree binary; small; self-corrected by the next
+upstream commit), but the story in that commit message was over-generous to the drift. Every
+fivecolour overnight game on the merged binary is per-game identical to the inspected morning
+state -- sac-fold contributed digest churn only there, and the flip's net-zero verdict stands.
