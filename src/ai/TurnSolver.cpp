@@ -3964,7 +3964,16 @@ std::string TurnSolver::SacFloatColorFor(const GameState& state, const std::vect
     // Unfolded actions carry their colour from the enumerator -> returned untouched. This is what makes
     // the flag byte-identical when OFF, and keeps every RECORDED plan (viewer replays, committed-line
     // resumes) replaying exactly as captured even if the flag is later turned on.
-    if (!self.chosen_float_color.str().empty()) { return self.chosen_float_color.str(); }
+    if (!self.chosen_float_color.str().empty())
+    {
+        static const bool s_tr = EnvOn("MTG_SAC_COLOR_TRACE");   // diagnostic; default off
+        if (s_tr)
+        {
+            std::fprintf(stderr, "[sac] T%d %s -> %s  (pinned)\n", state.turn_number,
+                         self.card_name.str().c_str(), self.chosen_float_color.str().c_str());
+        }
+        return self.chosen_float_color.str();
+    }
 
     // Coloured demand across the plan's payable casts. GarthActivate carries its copy's cost on
     // `a.cost` under the ordered-Garth doctrine, so one scan covers casts and Garth copies alike.
@@ -3999,7 +4008,23 @@ std::string TurnSolver::SacFloatColorFor(const GameState& state, const std::vect
     // `self` is an element of `acts` at every call site (all five iterate the vector they pass), so
     // pointer identity is the reliable way to find "which sac am I" -- indices would break on the
     // continuation/extra-action paths and card_name is not unique across fungible tokens.
-    int remaining[5] = { demand[0], demand[1], demand[2], demand[3], demand[4] };
+    // SCARCITY, NOT RAW DEMAND (held-out fix, 2026-08-21). Scoring a colour by how much of the
+    // plan's demand it covers is wrong whenever the REST of the board already covers that colour.
+    // Dragonstorm is the case that exposed it: red is abundant there (Mountain, Unclaimed Territory
+    // and three rituals that each float RED by design), so a raw-demand argmax piles the Lotus onto
+    // red -- the one colour that was already paid for -- instead of the off-colour {B}/{G} dragon
+    // pip that NOTHING else can supply. The lump then buys nothing, every Lotus line is valued
+    // below what the unfolded fan achieved (the fan let the search take a MAX over colours; the
+    // fold takes one greedy pick), and the search steers away from those lines entirely. That cost
+    // three held-out games, all decided in PROJECTION -- the Lotus is never sacrificed in the
+    // committed line of any of them.
+    // So charge the demand against what is already available and rank by the SHORTFALL. This is the
+    // same scarcity-first doctrine ManaSourceRank already applies to tap order ("SPEND the least
+    // flexible first so the flexible sources stay available"), applied to the lump's colour.
+    const ManaPool avail = AvailableManaPool(state);
+    const int supply[5] = { avail.white, avail.blue, avail.black, avail.red, avail.green };
+    int remaining[5];
+    for (int i = 0; i < 5; ++i) { remaining[i] = std::max(0, demand[i] - supply[i]); }
     for (const Action& a : acts)
     {
         if (a.kind != Action::Kind::SacForMana) { continue; }
@@ -4030,7 +4055,16 @@ std::string TurnSolver::SacFloatColorFor(const GameState& state, const std::vect
             // No coloured demand left for this source -> its float can only pay GENERIC, and every
             // colour pays generic identically, so the choice is arbitrary. "R" matches the fallback
             // ChosenFloatColorCandidates uses when its candidate list is empty, keeping the two agreed.
-            return pick >= 0 ? kColorLetters[pick] : "R";
+            const char* out = pick >= 0 ? kColorLetters[pick] : "R";
+            static const bool s_trace = EnvOn("MTG_SAC_COLOR_TRACE");   // diagnostic; default off
+            if (s_trace)
+            {
+                std::fprintf(stderr, "[sac] T%d %s amt=%d -> %s  demand W%d U%d B%d R%d G%d%s\n",
+                             state.turn_number, self.card_name.str().c_str(), amt, out,
+                             demand[0], demand[1], demand[2], demand[3], demand[4],
+                             fixed.empty() ? "  (FOLDED)" : "  (pinned)");
+            }
+            return out;
         }
         if (pick >= 0) { remaining[pick] = std::max(0, remaining[pick] - amt); }
     }

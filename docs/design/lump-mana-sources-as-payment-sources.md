@@ -629,3 +629,81 @@ The colour-fixing case is the one with no card-parameter tell: it is a board que
 this Treasure for generic strand a coloured pip I still need?"), and is exactly the question the
 payment solver is positioned to answer once §2a lands — another reason the Treasure half belongs in the
 source model rather than the action fold.
+
+## 11. The fold's colour greedy scored DEMAND when it should have scored SCARCITY (2026-08-21)
+
+§8 adopted `MTG_SAC_COLOR_FOLD` on train seeds (smoke 32/4, regression 56/4, *"nothing worse
+anywhere"*). **Held-out overnight then caught three reproducible Dragonstorm losses** — s6006
+gi118 and gi148, T5 → T6, at BOTH d3 and d5, with identical kept hands and draws, and
+`MTG_SAC_COLOR_FOLD=0` restored T5 on all three. This is the value of held-out seeds stated as
+plainly as it gets: smoke and regression were both clean.
+
+### The defect
+
+`SacFloatColorFor` ranked the lump's colour by how much of the plan's demand it covers:
+
+```cpp
+const int score = std::min(remaining[i], amt);   // RAW demand
+```
+
+That is wrong whenever the rest of the board already covers that colour. Dragonstorm is exactly
+that case: red is abundant there — Mountain, Unclaimed Territory, and three rituals that each
+float RED **by design** (`ritual_float_color: "R"`, chosen precisely so red cannot pay the
+off-colour {B}/{G} dragon pips). So the argmax piled Lotus Bloom onto red, the one colour already
+paid for, instead of the off-colour pip nothing else could supply. Trace on the failing game:
+**4940 red picks vs 437 black**.
+
+### Why it cost whole turns
+
+The unfolded fan emits one action per colour, so the search scores each and takes a **max over
+colours**. The fold replaces that max with a single greedy pick. When the greedy picks the useless
+colour, every Lotus line is valued below what the fan achieved and the search **steers away from
+those lines entirely**. That is why the diff appears at T2 with **no Lotus anywhere in either
+line** — the Lotus is never sacrificed in the committed line of any of the three games. The damage
+was entirely in PROJECTION values.
+
+### The fix — scarcity, not demand
+
+Charge the demand against what is already available and rank by the SHORTFALL:
+
+```cpp
+const ManaPool avail = AvailableManaPool(state);
+remaining[i] = std::max(0, demand[i] - supply[i]);
+```
+
+Same scarcity-first doctrine `ManaSourceRank` already applies to tap order (*"SPEND the least
+flexible first so the flexible sources stay available"*), applied to the lump's colour. **Global —
+no per-deck hook.** A `FoldsSacColorVariants()` provider hook was built first and REJECTED by the
+user: *"I don't want to be fiddling with this on a deck to deck basis. It should be on everywhere
+or off everywhere."* That was the right call — the deck-scoped version would have hidden a real
+defect behind a config.
+
+Result: all three Dragonstorm games back to T5 with the fold ON. Overnight searched-slower **6 → 3**,
+and all three survivors are benign (two `churn`, one with divergent kept hands = different physical
+games). **Zero same-draws regressions remain.** FiveColour is byte-identical at smoke — Garth
+supplies all five colours, so shortfall-ranking and demand-ranking coincide there — and keeps its
+speed win (1.18x, vs 1.24x before the added `AvailableManaPool` walk).
+
+### Two candidate fixes that were built, measured, and DROPPED
+
+* **`colors.size() > 1` guard** ("only fold where there is a fan to collapse"). Theory: Lotus Bloom
+  is single-variant, so folding changed semantics for no gain. **Did not fix it** — Dragonstorm's
+  fan is genuinely multi-colour. Reverted.
+* **Projection lockstep in `FirstUnpayablePos`.** A folded action carries no pinned colour and
+  Lotus/Lotus Bloom set no `ritual_float_color`, so `col` lands empty and `AddColorToPool` credits
+  the lump as **WILD** — modelling three INDEPENDENT any-colour mana when a Lotus adds three of ONE
+  colour. That is genuinely unsound in the optimistic direction, and it is **still latent**. But
+  resolving it through `SacFloatColorFor` did NOT restore the games and costs an O(acts²) call in a
+  projection loop, so it was reverted rather than shipped unmeasured. **Recorded here as a known
+  latent unsoundness**; §2a removes it for free, since a payment source is credited as it pays.
+
+### What this says about §2a
+
+The root cause is structural: a fold must commit the colour BEFORE seeing how the line pays, so any
+heuristic is guessing where the fan searched. The scarcity rule is a much better guess, not a
+solution. §2a ends the guessing — a payment SOURCE assigns colour per pip AS it pays, which is the
+max the fan approximated, at none of the fan's enumeration cost. Retire this greedy when §2a lands.
+
+Diagnostic kept: `MTG_SAC_COLOR_TRACE=1` prints each resolution as
+`[sac] T<n> <card> amt=<n> -> <colour>  demand W.. U.. B.. R.. G..  (FOLDED|pinned)`.
+It is what found this, and it is the tool for the next deck that folds a lump.
