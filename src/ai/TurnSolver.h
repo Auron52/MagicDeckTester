@@ -303,6 +303,17 @@ public:
         // wins its pass. Derived deterministically from (state, actions) at enumeration.
         bool pump_waste     = false;
 
+        // Attack-forfeit tie-break flag (SubsetAttackForfeit): this plan's paid casts cannot
+        // be covered without tapping the best own attacker, so committing it forfeits this
+        // turn's attack. Same architecture and same ORDERING-ONLY consequence as pump_waste
+        // (sorted after it in MoveOrderPlans): among horizon-tied plans, prefer the line that
+        // keeps the attack live; a strictly better flagged line still wins its pass. Built for
+        // the AL split's non-pump dump residual (antilife-main-phase-split.md, gi113 class:
+        // "Remedy now, tapping Hierarch, combat passes" tied with "attack now, Remedy next
+        // turn" and move-order committed the forfeit). MTG_ATK_FORFEIT_GATE, default OFF
+        // pending measurement + user review.
+        bool atk_forfeit    = false;
+
         // Cast-ordering search (C): when true, ApplyPlanDirect executes the non-sacrifice
         // hand casts in `actions` VECTOR ORDER instead of the canonical enabler-first
         // bucketing -- so the search can explore orderings the canonical heuristic batches

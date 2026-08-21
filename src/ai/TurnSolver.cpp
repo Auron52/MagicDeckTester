@@ -233,6 +233,10 @@ static void MoveOrderPlans(std::vector<TurnSolver::Plan>& plans)
             // purpose (lethal bursts are why the wide emission exists); ordering-only, so a
             // strictly better flagged line still wins its pass.
             if (a.pump_waste != b.pump_waste) { return b.pump_waste; }
+            // Attack-forfeit tie-break (SubsetAttackForfeit, MTG_ATK_FORFEIT_GATE default
+            // OFF): same shape one tier down -- a plan whose payment must tap the best own
+            // attacker sorts after siblings that keep the attack live.
+            if (a.atk_forfeit != b.atk_forfeit) { return b.atk_forfeit; }
             return a.value > b.value;
         });
 }
@@ -2071,6 +2075,36 @@ static bool SubsetHasUnbackedGiftDamage(const GameState& state,
 // opinion and decides exactly where it does not (the first-verified-win commit among tied
 // horizon-edge wins IS the move order). wins_this_turn outranks the flag in the sort, so lethal
 // burst plans -- the reason the wide emission exists -- are never demoted.
+// Mana payable WITHOUT tapping the given battlefield index (the best own attacker). NOT
+// BuildNonCreaturePool -- that pool's "non-creature" means Ziggurat-class creature-ONLY sources
+// and it still counts mana dorks, which are exactly the taps this test is about. Only the BEST
+// attacker (FindBestOwnAttacker) is excluded: printed power is NOT the test (Ignoble Hierarch
+// is modelled 0-power + exalted, so a power filter read it as a harmless tap), and other ready
+// dorks (Birds) may be tapped freely -- the payment scarcity order can spare the attacker
+// whenever this pool suffices. Colour shortfalls and subset-granted sources (rituals/rocks/
+// treasures) are not modelled; both directions of that imprecision only mis-order a tie, never
+// delete a line. Shared by SubsetPumpWasted and SubsetAttackForfeit.
+static int PoolWithoutBestAttacker(const GameState& state, int best_attacker)
+{
+    int pool = 0;
+    for (int pi = 0; pi < static_cast<int>(state.battlefield.size()); ++pi)
+    {
+        if (pi == best_attacker) { continue; }   // its tap forfeits the attack
+        const Permanent& p = state.battlefield[pi];
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        auto d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->params.creature_mana_only) { continue; }
+        const bool is_land = (d->tmpl == CardTemplate::BasicLand);
+        const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                          || d->params.mana_rock;
+        if (!is_land && !is_dork) { continue; }
+        const int y = PermanentManaYield(p, *d);
+        pool += (y >= 0 ? y : ManaProducedPerTap(*d));
+    }
+    if (FloatLeftoverManaEnabled()) { pool += state.floating_mana.Total(); }
+    return pool;
+}
+
 // True when the subset casts a pump-type alt payload whose pump cannot be used: no ready
 // attacker at all, or the subset's own cost cannot be paid without tapping the pump's target.
 static bool SubsetPumpWasted(const GameState& state,
@@ -2095,32 +2129,33 @@ static bool SubsetPumpWasted(const GameState& state,
     { if (!cands[j].alt_cost) { total_mv += cands[j].cost.ManaValue(); } }
     if (total_mv == 0) { return false; }      // free subset -> nothing taps the attacker
 
-    // Mana payable WITHOUT tapping the creature the pump would use. NOT BuildNonCreaturePool --
-    // that pool's "non-creature" means Ziggurat-class creature-ONLY sources and it still counts
-    // mana dorks, which are exactly the taps this test is about. Only the BEST attacker
-    // (FindBestOwnAttacker, the pump's own target rule) is excluded: printed power is NOT the
-    // test (Ignoble Hierarch is modelled 0-power + exalted, so a power filter read it as a
-    // harmless tap), and other ready dorks (Birds) may be tapped freely -- the payment scarcity
-    // order can spare the target whenever this pool suffices. Colour shortfalls and
-    // subset-granted sources (rituals/rocks/treasures) are not modelled; both directions of that
-    // imprecision only mis-order a tie, never delete a line.
-    int pool_wo_attacker = 0;
-    for (int pi = 0; pi < static_cast<int>(state.battlefield.size()); ++pi)
-    {
-        if (pi == best_attacker) { continue; }   // its tap forfeits the pumped attack
-        const Permanent& p = state.battlefield[pi];
-        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-        auto d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d || d->params.creature_mana_only) { continue; }
-        const bool is_land = (d->tmpl == CardTemplate::BasicLand);
-        const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
-                          || d->params.mana_rock;
-        if (!is_land && !is_dork) { continue; }
-        const int y = PermanentManaYield(p, *d);
-        pool_wo_attacker += (y >= 0 ? y : ManaProducedPerTap(*d));
-    }
-    if (FloatLeftoverManaEnabled()) { pool_wo_attacker += state.floating_mana.Total(); }
-    return total_mv > pool_wo_attacker;
+    return total_mv > PoolWithoutBestAttacker(state, best_attacker);
+}
+
+// Attack-forfeit tie-break (SubsetAttackForfeit; MTG_ATK_FORFEIT_GATE, DEFAULT OFF pending
+// measurement + user review). The pump-waste flag covers only plans casting a pump payload; the
+// AL split's remaining salt-robust residual (gi113/gi275 class) is the SAME forfeit with no pump
+// involved: at a horizon TIE, move-order + first-verified-win committed "cast Tainted Remedy
+// now, tapping Ignoble Hierarch -- combat passes" over "attack now, Remedy next turn", losing a
+// turn of chip damage (and shifting fetch timing). This flag generalises the second clause of
+// the pump test: any plan whose PAID casts cannot be covered without tapping the best own
+// attacker forfeits the attack. ORDERING ONLY, sorted after pump_waste and below
+// wins_this_turn in MoveOrderPlans -- the same measured lesson applies (the cast is often
+// genuinely worth the attack, and only the search can price that; a tie-break decides exactly
+// where the search has no opinion). Same imprecision notes as PoolWithoutBestAttacker.
+static bool SubsetAttackForfeit(const GameState& state,
+                                const std::vector<Action>& cands,
+                                const std::vector<int>& sel)
+{
+    static const bool s_atk_forfeit_gate = EnvOn("MTG_ATK_FORFEIT_GATE");
+    if (!s_atk_forfeit_gate || sel.empty()) { return false; }
+    int total_mv = 0;
+    for (int j : sel)
+    { if (!cands[j].alt_cost) { total_mv += cands[j].cost.ManaValue(); } }
+    if (total_mv == 0) { return false; }      // free subset -> nothing taps the attacker
+    const int best_attacker = FindBestOwnAttacker(state, state.active_player_index);
+    if (best_attacker < 0) { return false; }  // no attack to forfeit
+    return total_mv > PoolWithoutBestAttacker(state, best_attacker);
 }
 
 static bool SubsetHasUnbackedAltPayload(const GameState& state,
@@ -4679,12 +4714,56 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
     ManaPool pool;
     ManaCost planned;
     const Player& ap = state.ActivePlayer();
+    // Card NUMBERS the chosen plan itself CASTS from hand (free/alt casts included -- a cast is
+    // not a decline whatever it paid). Membership is by NUMBER, so stamping a cast card
+    // condemned every remaining COPY of it at m2: on Anti-Lifegain (4x combo pieces), casting
+    // Tainted Remedy at m1 deleted the m2 re-arm's second Remedy -- the salt-robust class-B
+    // counterexamples (gi285/gi780 family) that the condemned tranche had been silently
+    // rescuing (antilife-main-phase-split.md 2026-08-21i). Excluding the plan's cast numbers
+    // restores "condemned == seen AND DECLINED"; the duplicate-copy ambiguity (cast one copy,
+    // decline another) errs toward exempting, the safe direction for a hard filter.
+    int  cast_nums[GameState::kM1HandCap];
+    int  cast_nums_n = 0;
+    if (m1_casts != nullptr)
+    {
+        for (const Action& pa : *m1_casts)
+        {
+            if (pa.kind != Action::Kind::CastFromHand) { continue; }
+            if (pa.hand_index < 0 || pa.hand_index >= static_cast<int>(ap.hand.size())) { continue; }
+            if (cast_nums_n >= GameState::kM1HandCap) { break; }
+            cast_nums[cast_nums_n++] = ap.hand[pa.hand_index].m_number;
+        }
+    }
+    // RE-ARM PAIR EXEMPTION: condemnation's premise is that a decline at m1 transfers to m2 --
+    // which assumes the card's value is ORDER-INDEPENDENT within the turn. An enchantment
+    // lifegain-to-loss enabler alongside a destroy-all-enchantments wipe in the SAME hand
+    // breaks that: the m2 interleave kill [Silence, Remedy, Silence] needs the enabler cast
+    // BETWEEN the wipes (Silence's +6 gift converts to loss only under a LIVE Remedy, and the
+    // first wipe kills any earlier copy), so "cast it at m1 instead" reaches a strictly
+    // different state and NO m1 sibling covers the line (the salt-robust class-B
+    // counterexamples gi285/gi780, antilife-main-phase-split.md 2026-08-21i -- the condemned
+    // tranche had been silently rescuing exactly this). Exempt both halves of the pair from
+    // the stamp; widening the exemption only re-admits candidates, never deletes a line.
+    bool hand_has_wipe = false, hand_has_ench_enabler = false;
+    for (const Card& hc : ap.hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (!hd) { continue; }
+        if (hd->params.destroy_all_enchantments)                    { hand_has_wipe = true; }
+        if (hd->params.lifegain_to_loss && !hd->card.IsCreature())  { hand_has_ench_enabler = true; }
+    }
     state.m1_hand_n = 0;
     for (const Card& c : ap.hand)
     {
         if (state.m1_hand_n >= GameState::kM1HandCap) { break; }   // overflow: un-condemnable (safe)
+        bool plan_casts_it = false;
+        for (int ci = 0; ci < cast_nums_n; ++ci)
+        { if (cast_nums[ci] == c.m_number) { plan_casts_it = true; break; } }
+        if (plan_casts_it) { continue; }   // cast, not declined (and spares same-number copies)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (!d || d->card.IsLand()) { continue; }
+        if (hand_has_wipe && d->params.lifegain_to_loss && !d->card.IsCreature()) { continue; }
+        if (hand_has_ench_enabler && d->params.destroy_all_enchantments)          { continue; }
         Action a;
         a.kind      = Action::Kind::CastFromHand;
         a.def       = d;
@@ -15870,6 +15949,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         plan.value          = total_eval;
         plan.wins_this_turn = wins;
         plan.pump_waste     = SubsetPumpWasted(state, cands, sel);   // ordering-only tie-break flag
+        plan.atk_forfeit    = SubsetAttackForfeit(state, cands, sel);   // ordering-only (gated OFF)
         for (int j : sel) { plan.actions.push_back(j == fill_j ? fill_action : cands[j]); }
         ApplyCantripFirstOrder(plan.actions);   // no-op unless MTG_CANTRIP_FIRST
         // A sequenced restricted aura (Coronet/Lion Umbra on a not-yet-legal creature) must resolve AFTER

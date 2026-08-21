@@ -362,3 +362,47 @@ off-deck):
 **Open (USER):** AL adoption still gated ONLY by the ~+0.002/game split residual; options are
 adopt-on-doctrine, or first build the attack-forfeit tie-break (same architecture as the adopted
 pump-waste tie-break) and re-measure.
+
+## 2026-08-21i: AL RESIDUAL DECOMPOSED (class A dump-ties + class B condemnation deletions);
+## attack-forfeit tie-break MEASURED-REJECTED; TWO STAMP RULE FIXES land (re-arm pair + cast!=declined)
+
+**Decomposition** (fresh decoupled ensemble, salts 1/2, bundle = PHASE+CONDEMN tranche-off):
+bundle-vs-CTL salt-robust worse = 57 key-games. Splitting by "tranche-on recovers it" (PC vs
+PCnt per game, robust): **class B = 28** (condemnation deleted a line no m1 sibling covers; the
+tranche had been silently rescuing these -- the AL-scale counterexamples 21g's probes were too
+small to see) and **class A = 31** (the split's own dump tie-break residual, gi113/gi275 family,
+condemnation-independent).
+
+**Class A attempt -- attack-forfeit tie-break: REJECTED.** Built Plan::atk_forfeit
+(SubsetAttackForfeit: paid casts uncoverable without tapping FindBestOwnAttacker's pick;
+ordering-only, below pump_waste; MTG_ATK_FORFEIT_GATE default OFF). gi113 dug first: the T2 tie
+commits "Remedy now, tap Hierarch, combat passes" over "attack now, Remedy next turn" -- but
+with the gate on the game STILL loses (the committed line passes the attack even without the
+cast: the forfeit is in the line choice, not just the mana). Ensemble: PHASE+F-CTL = +34/+38 vs
+PHASE-alone +21/+28 (repaired 5/3, broke 17/12; CTL+F +5). The "keep the attack at ties"
+judgment loses to value-order more often than it wins -- pump_waste works because it flags a
+provably-DEAD card; this flags a judgment call. Lever kept default-OFF as the rejection record.
+
+**Class B root-caused via MTG_TRANCHE_TRACE on gi285/gi780:** the load-bearing rescue is the m2
+interleave kill [Silence, Remedy, Silence] with **Tainted Remedy condemned**. The losslessness
+argument's equivalence leg fails exactly here: Remedy-at-m1 is NOT Remedy-between-the-wipes
+(the first Silence wipes any earlier copy; the +6 gift converts only under a live Remedy), so no
+m1 sibling covers the line. TWO rule fixes to StampM1Hand:
+1. **Re-arm pair exemption**: an enchantment lifegain_to_loss enabler is un-condemnable while
+   the hand holds a destroy_all_enchantments wipe (and vice versa) -- order-dependent value is
+   precisely what a decline-transfer rule cannot judge. gi285/gi780 recover T3 with the tranche
+   OFF, byte-identical digests to the tranche-on rescues.
+2. **cast != declined**: the stamp recorded the chosen plan's own cast cards (membership is by
+   NUMBER, so casting Remedy1 condemned every other copy at m2). Excluded; errs toward exempt.
+
+**Ensemble after the fixes** (PCfix arms): bundle-CTL **+26 -> +17 (salt1), +12 -> +7 (salt2)**
+per 8000; class B repaired 7/28 per salt; vs old bundle improved 9/7 games, 1 worse. The fixed
+bundle now BEATS PHASE-alone -- a sound condemnation is net positive for the split arm. Suite
+smoke 36/36, **0 changed configs** (fixes inert on 5C production seeds).
+
+**Remaining (the classify -> refine loop continues):** ~21 class-B key-games un-repaired --
+trace shape is the T2 "condemned DORK cast alone at m2" rescue (cond=Ignoble Hierarch, filtered
+space empty), i.e. the dork-at-m2 development line that m1 siblings SHOULD cover but on AL
+evidently do not (why the sibling is missing there is the next dig). Class A's 31 dump-tie games
+remain open (the recorded candidate repairs: playout-tail value treatment, per-card m2-table
+shrink). AL bundle adoption is still the USER's call at ~+0.0015/game avg.
