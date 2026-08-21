@@ -20792,14 +20792,22 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // no-m2-need) was already closed heuristically inside the test, so this branch is the
         // narrow searched remainder and costs one extra combat+tail only where it fires. The
         // chosen variant rides the committed line (Plan::atk_dork_release -> executor pin).
-        const bool dork_contested = DorkAtkContested(s);
+        // 0 = not contested; 1 = greedy holds -> search the RELEASE; 2 = greedy attacks with a
+        // mana dork the deferred main would spend -> search the HOLD (MTG_DORK_ATK_HOLD_DIR).
+        const int  dork_kind      = DorkAtkContestedKind(s);
+        const bool dork_contested = (dork_kind != 0);
+        // The variant to simulate, and what the COMMITTED plan records so the executor replays it:
+        // 0 = natural (no override -- what the default branch below simulated), 1 = forced release,
+        // 2 = forced hold. The default branch is always the natural one, hence def_rec == 0.
+        const int  alt_override   = (dork_kind == 2) ? 0 : 1;
+        const int  alt_rec        = (dork_kind == 2) ? 2 : 1;
         // DIG TRACE (MTG_DORK_ATK_TRACE, default off): per-node contested verdict + variant
         // tails, the branch's own [fsw]-style instrument.
         static const bool s_dat = EnvOn("MTG_DORK_ATK_TRACE");
         if (s_dat)
         {
-            std::fprintf(stderr, "[dork-atk] T%d d%d contested=%d\n",
-                         state.turn_number, depth, dork_contested ? 1 : 0);
+            std::fprintf(stderr, "[dork-atk] T%d d%d contested=%d kind=%d\n",
+                         state.turn_number, depth, dork_contested ? 1 : 0, dork_kind);
         }
         GameState s_rel;
         if (dork_contested) { s_rel = s; }   // pre-combat snapshot for the release variant
@@ -20816,20 +20824,20 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             return win;
         }
 
-        int chose_release = -1;   // -1 not contested / 0 hold / 1 release (recorded on commit)
+        int chose_release = -1;   // -1 not contested / 0 natural / 1 release / 2 hold
         TurnSolver::SearchLine tail =
             FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget,
                        &dom_arch);
         if (dork_contested)
         {
             chose_release = 0;
-            g_dork_atk_override = 1;
+            g_dork_atk_override = alt_override;
             SimulateCombat(s_rel);
             g_dork_atk_override = -1;
             if (s_rel.Opponent().life <= 0)   // released swing IS lethal -> earliest possible
             {
                 TurnSolver::Plan p_rec = p;
-                p_rec.atk_dork_release = 1;
+                p_rec.atk_dork_release = alt_rec;
                 p_rec.breakpoint_actions = std::move(bp);
                 TurnSolver::SearchLine win = { state.turn_number, { { true, std::move(p_rec) } } };
                 FSLineStoreWin(lc, key, win, state);
@@ -20847,11 +20855,23 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // exactly the point the T4 kill later misses).
             if (s_dat)
             {
-                std::fprintf(stderr, "[dork-atk] T%d d%d hold=%d rel=%d\n",
-                             state.turn_number, depth, tail.win_turn, tail_rel.win_turn);
+                // `tail` is always the DEFAULT (natural) branch and `tail_rel` the ALTERNATIVE,
+                // so the labels flip with the direction: kind 1 default=hold/alt=release,
+                // kind 2 default=attack/alt=hold.
+                std::fprintf(stderr, "[dork-atk] T%d d%d kind=%d default(%s)=%d alt(%s)=%d\n",
+                             state.turn_number, depth, dork_kind,
+                             dork_kind == 2 ? "attack" : "hold", tail.win_turn,
+                             dork_kind == 2 ? "hold" : "release", tail_rel.win_turn);
             }
-            if (tail_rel.win_turn <= tail.win_turn)
-            { tail = std::move(tail_rel); chose_release = 1; }
+            // RELEASE WINS TIES in BOTH directions -- the same weak-dominance argument, applied
+            // consistently: the hold's only possible payoff is within THIS turn (every source
+            // untaps next turn), while a released swing is damage banked past the horizon. So when
+            // the alternative IS the release (kind 1) it takes ties (<=), and when the alternative
+            // is the HOLD (kind 2) it must be STRICTLY better (<) to displace the attack.
+            const bool alt_wins = (dork_kind == 2) ? (tail_rel.win_turn <  tail.win_turn)
+                                                   : (tail_rel.win_turn <= tail.win_turn);
+            if (alt_wins)
+            { tail = std::move(tail_rel); chose_release = alt_rec; }
         }
         // DIG INSTRUMENT (MTG_FSW_TRACE, default off): dump this node's plans + tail win turns
         // for turn MTG_FSW_TURN -- the m1-side companion of MTG_M2T_TRACE above.

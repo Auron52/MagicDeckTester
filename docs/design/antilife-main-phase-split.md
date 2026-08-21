@@ -830,3 +830,52 @@ make `DorkAtkContested` symmetric -- also contest a dork the greedy WANTS to att
 2 has a use for its mana (the vacuity test the hold tower already computes), and give the executor
 pin a real `pin == 0` hold branch. The perf worry USER raised ("to avoid this becoming much
 slower") is the reason to gate it on the m2-need test rather than on every attacking dork.
+
+## 2026-08-21p: SYMMETRIC DORK CONTEST BUILT (USER-approved) -- MTG_DORK_ATK_HOLD_DIR
+
+USER: "Yes, we should contest the dork when main 2 has a use for the mana." + "vigilance dorks like
+Faeburrow Elder are exempt ... they can and should freely attack."
+
+BUILT (default ON inside MTG_DORK_ATK_SEARCH, which is itself still default OFF; MTG_DORK_ATK_HOLD_DIR=0
+reverts for A/B):
+* `DorkAtkContested` -> `DorkAtkContestedKind`: 0 none / 1 greedy HOLDS -> search the RELEASE
+  (pre-existing, checked FIRST so its verdict is unchanged wherever it fires) / 2 greedy ATTACKS
+  with a non-vigilance mana dork whose mana the deferred main would spend -> search the HOLD.
+  **VIGILANCE EXEMPT** on this side too: a vigilant dork does not tap to attack, so its mana
+  survives combat and there is nothing to contest -- Faeburrow Elder swings for free.
+* `Main2SpendsCreatureMana` -- the "main 2 has a use for the mana" gate, and the reason this does
+  not contest every attacking dork (USER's standing perf bar). It GENERALISES the hold tower's
+  `needs_creature_mana`, which asks only whether ONE hand card is affordable with the dorks and not
+  without -- the test gi852 slips through, since each Fiery Justice (3) is affordable off 4 lands
+  and only the PAIR needs the dork. It accumulates the cheapest eligible casts up to what the board
+  can pay and asks whether that spend exceeds the non-creature sources. Deliberately optimistic: a
+  TRIGGER for the search, not a decision.
+* `M2ManaCandidate` -- the tower's three measured hand-card exclusions (free-alt gi=531, unbacked
+  gift-damage gi=839, unbacked gift-ETB gi=215/...) extracted to ONE reader now that two scans use
+  them, per the repo's no-twin-copies rule.
+* Tie rule: **RELEASE WINS TIES IN BOTH DIRECTIONS**, the same weak-dominance argument applied
+  consistently -- the hold's payoff expires at EOT, a swing is banked past the horizon. So the
+  alternative takes ties when it IS the release (<=) and must be STRICTLY better when it is the
+  hold (<).
+* Executor pin gains a real hold branch: plan value 2 = forced hold (override 0); 1 = forced
+  release; 0/none = natural. Previously `pin == 0` was a no-op, so "hold" was inexpressible.
+
+GATES:
+* `MTG_DORK_ATK_HOLD_DIR=0` reproduces the pre-change dork search EXACTLY on all 23 residual jobs
+  -- the tower/trigger refactor is behaviour-preserving.
+* Clean-env smoke: 36/36 PASS, 0 configs changed (byte-identical).
+
+MEASURED (AL decouple ensemble, 8000 games x 2 salts, rung on everywhere):
+* vs release-only: salt1 6 worse / 5 better, salt2 2 worse / 7 better, **SALT-ROBUST 0 worse : 4
+  better**. Strictly non-harmful, small gain.
+* vs CONTROL: **salt-robust residual 23 -> 18 worse** (better unchanged at 9); salt1 +0.0005,
+  salt2 -0.0011. gi852 and gi963 now match control at both depths.
+
+STRUCTURAL LIMIT worth recording (why the blunt force recovered 8 rows and the real trigger 4):
+`MTG_DORK_FORCE_HOLD_TURN` also fixed gi469 and gi666, but NOT via the combat choice for a given
+plan -- it changes the projections from T1 on, so a DIFFERENT m1 plan gets committed. gi469's real
+fix is not casting Birds of Paradise at T4 m1 (which spends the mana the deferred Fiery Justice
+needs); the trace confirms no T4 node ever reaches `alt(hold)=4`, so the kill is unreachable given
+the m1 plans explored. The branch decides COMBAT AFTER the m1 plan is fixed and cannot re-choose
+it. Making the combat variant part of plan enumeration would reach these, at a multiplied plan
+space -- NOT proposed; recorded as the boundary of this lever.

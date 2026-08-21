@@ -979,20 +979,52 @@ static int FreePayloadKillCeiling(const GameState& s, int controller)
     return total;
 }
 
+// Is this hand card a real claimant on the deferred main's mana? Shared by the hold tower's
+// needs_creature_mana scan and Main2SpendsCreatureMana below -- ONE reader so the two cannot drift.
+// The three exclusions are the measured ones from the antilife stack-vs-base digs:
+//  * FREE-ALT (gi=531): a card whose alt cost is payable RIGHT NOW ("rather than pay this spell's
+//    mana cost, an opponent gains N", with the required subtype on board) is affordable with ZERO
+//    mana, so its printed mana value says nothing about what the deferred main needs. Pricing
+//    Reverent Silence at {3}{G} held BOTH dorks on T2 and T3 for a spell ultimately cast free,
+//    forfeiting two exalted swings; the turn ended exactly 2 damage short (4 -> 5). A statement
+//    about AFFORDABILITY only -- the payload's own gates still decide whether firing it is wise.
+//  * UNBACKED GIFT-DAMAGE (gi=839): a damage spell whose rider gifts life (Fiery Justice: 5 damage,
+//    opponent gains 5 -> net ZERO unbacked) will be refused by the plan-validity gate, so holding a
+//    dork to keep it affordable holds for a cast that provably will not happen.
+//  * UNBACKED GIFT-ETB (gi=215/839/8/550/798): a card that HANDS the opponent life and deals no
+//    damage is a pure gift with no enabler live; the provider's own EtbGiftValue scores it negative.
+static bool M2ManaCandidate(const GameState& s, int active, const CardDefinition* hd)
+{
+    if (!hd || hd->card.IsLand()) { return false; }
+    if (hd->params.alt_lifegain_cost > 0
+        && ControlsSubtype(s, active, hd->params.alt_cost_requires_subtype))
+    { return false; }
+    if (hd->params.opponent_lifegain > 0
+        && hd->params.damage - hd->params.opponent_lifegain <= 0
+        && !RemedyActive(s, active))
+    { return false; }
+    if (hd->params.etb_opponent_lifegain > 0 && hd->params.damage <= 0
+        && !RemedyActive(s, active))
+    { return false; }
+    return true;
+}
+
 static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& p)
 {
-    // Searched-branch override (MTG_DORK_ATK_SEARCH, EngineFlags.h): the FSLineWin branch and
-    // the executor's committed-line pin force RELEASE here so the search -- not this heuristic
-    // tower -- decides the contested hold. Never set outside those two scopes.
-    // DIAGNOSTIC (MTG_DORK_FORCE_HOLD_TURN, default inert): override 0 = FORCE the hold, the
-    // direction the searched branch cannot currently express. Measurement only -- nothing sets
-    // override to 0 except the diagnostic in DeclareAttackers.
+    // Searched-branch overrides (MTG_DORK_ATK_SEARCH, EngineFlags.h). The FSLineWin branch and the
+    // executor's committed-line pin force this heuristic tower's verdict so the SEARCH decides a
+    // contested dork: override 1 = force RELEASE (the release direction), override 0 = force HOLD
+    // (the hold direction, MTG_DORK_ATK_HOLD_DIR). Never set outside those two scopes.
+    if (DorkAtkSearchEnabled() && g_dork_atk_override == 0)
+    {
+        if (p.tapped || !p.card.IsCreature()) { return false; }
+        const CardDefinition* fd = CardDatabase::Instance().LookupCached(p.card);
+        return fd && fd->tmpl == CardTemplate::ManaDork && CanTapNow(p, s.battlefield);
+    }
     // DIAGNOSTIC (MTG_DORK_FORCE_HOLD_TURN=<turn>, default 0 = INERT): force every mana dork to
-    // HOLD on that turn -- the direction the searched branch cannot currently express (see
-    // DorkAtkContested: a dork the greedy WANTS to attack with is never contested). Applied
-    // EVERYWHERE (search rollouts included), so
-    // the committed line itself is built under the hold. Executor-only forcing is not a valid
-    // test: the m2 plan is replayed from a line that assumed combat happened.
+    // hold on that turn, in rollouts AND the executor. Kept as the instrument that PROVED the hold
+    // direction was worth a turn on gi852. NB an executor-only force is not a valid test -- the m2
+    // plan is replayed from a committed line built assuming combat happened.
     {
         static const int s_fh = EnvInt("MTG_DORK_FORCE_HOLD_TURN", 0);
         if (s_fh > 0 && s.turn_number == s_fh && p.card.IsCreature() && !p.tapped)
@@ -1036,7 +1068,7 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
     for (const Card& c : s.players[active].hand)
     {
         const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
-        if (!hd || hd->card.IsLand()) { continue; }
+        if (!M2ManaCandidate(s, active, hd)) { continue; }
         // FREE-ALT EXCLUSION (antilife stack-vs-base dig 2026-08-16, gi=531): a card whose
         // alternative cost is payable RIGHT NOW ("rather than pay this spell's mana cost, an
         // opponent gains N" with the required Forest on board) is affordable with ZERO mana, so
@@ -1047,18 +1079,11 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
         // This is a statement about AFFORDABILITY, not about whether firing the alt is wise:
         // the payload's own gates (CanAutoFireAltPayload / ShouldEmitRiskyAltPayload) still
         // decide that. Inert for every deck without an alt-cost card.
-        if (hd->params.alt_lifegain_cost > 0
-            && ControlsSubtype(s, active, hd->params.alt_cost_requires_subtype))
-        { continue; }
         // ... and the same for a damage spell whose RIDER gifts life (Fiery Justice: 5 damage,
         // opponent gains 5 -> net ZERO swing unbacked). SubsetHasUnbackedGiftDamage now refuses to
         // cast it in that state, so holding a dork to keep it affordable is holding for a cast that
         // provably will not happen (gi=839: the lone Hierarch pinned on T2 for a Fiery Justice the
         // plan-validity gate rejects; base swung for 1 and its T3 was exactly lethal, 3 -> 4).
-        if (hd->params.opponent_lifegain > 0
-            && hd->params.damage - hd->params.opponent_lifegain <= 0
-            && !RemedyActive(s, active))
-        { continue; }
         // UNBACKED-GIFT EXCLUSION (antilife cs-vs-base dig 2026-08-16, gi=215/839/8/550/798 --
         // the 10-vs-0 one-sided 3 -> 4 bucket): a card whose resolution HANDS the opponent life
         // and deals no damage of its own is, with no lifegain->loss enabler live, a pure gift the
@@ -1069,9 +1094,6 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
         // it for 1 exalted and its T3 was EXACTLY lethal, while the held line finished the same
         // T3 on 1 life and needed a fourth turn. Keyed on params, so it generalises to any
         // enabler deck; inert wherever nothing gifts life.
-        if (hd->params.etb_opponent_lifegain > 0 && hd->params.damage <= 0
-            && !RemedyActive(s, active))
-        { continue; }
         const int mv = hd->card.m_mana_cost.ManaValue();
         if (mv <= noncreature || mv > total) { continue; }
         needs_creature_mana = true;
@@ -1154,20 +1176,74 @@ bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker)
 //     the USER's vacuity rule, "freely attack if there is nothing we could need them for
 //     in main 2", is the hold's needs_creature_mana test).
 // Called by the FSLineWin branch site on the post-cast pre-combat state; one battlefield scan.
-bool DorkAtkContested(const GameState& s)
+// Would the DEFERRED MAIN actually SPEND creature mana? The hold tower's needs_creature_mana asks
+// only whether ONE hand card is affordable WITH the dorks and not without -- which misses the case
+// where every copy is individually cheap but the SET is not. AL gi852: two Fiery Justice at 3 each
+// against 4 lands, so each copy clears the single-card test while the PAIR needs the dork; the
+// forgone 6th source cost 10 damage and the game a turn. This accumulates the cheapest eligible
+// casts up to what the board can pay and asks whether that spend exceeds the NON-creature sources.
+// Deliberately optimistic -- it does not re-check colours or whether each cast is wise, because it
+// is a TRIGGER for the search, not a decision: the branch that follows measures both variants and
+// the tie rule keeps the attack. Cheap (one hand scan + a sort of a handful of ints).
+static bool Main2SpendsCreatureMana(const GameState& s, int active)
 {
-    if (!DorkAtkSearchEnabled())            { return false; }
-    if (!TurnSolver::CollapsedMainActive(s)) { return false; }
+    int total = 0, creature_src = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != active || q.tapped) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (!qd) { continue; }
+        if (qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, s.battlefield))
+        { ++creature_src; ++total; continue; }
+        if (q.card.IsLand() || qd->params.mana_rock) { ++total; }
+    }
+    if (creature_src <= 0) { return false; }
+    const int noncreature = total - creature_src;
+    std::vector<int> mvs;
+    for (const Card& c : s.players[active].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+        if (!M2ManaCandidate(s, active, hd)) { continue; }
+        const int mv = hd->card.m_mana_cost.ManaValue();
+        if (mv > 0) { mvs.push_back(mv); }
+    }
+    std::sort(mvs.begin(), mvs.end());
+    int spend = 0;
+    for (int mv : mvs) { if (spend + mv > total) { break; } spend += mv; }
+    return spend > noncreature;
+}
+
+int DorkAtkContestedKind(const GameState& s)
+{
+    if (!DorkAtkSearchEnabled())             { return 0; }
+    if (!TurnSolver::CollapsedMainActive(s)) { return 0; }
     const DecisionProvider& prov = ResolveProvider(s);
     const int active = s.active_player_index;
     int  natural_attackers = 0;
     int  held_power        = 0;   // released swing power of the held dorks (printed/effective)
     int  held_n            = 0;
+    int  atk_dorks         = 0;   // mana dorks the greedy WANTS to swing (the hold direction)
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != active)              { continue; }
         if (!CanAttackFull(p, s.battlefield, active))  { continue; }
-        if (prov.AttackWith(s, p)) { ++natural_attackers; continue; }
+        if (prov.AttackWith(s, p))
+        {
+            ++natural_attackers;
+            // HOLD DIRECTION (USER 2026-08-21: "we should contest the dork when main 2 has a use
+            // for the mana"). An attacking mana dork TAPS for its swing, so the deferred main
+            // loses that source -- the mirror of the release case below.
+            // VIGILANCE IS EXEMPT (USER: "vigilance dorks like Faeburrow Elder ... can and should
+            // freely attack"): a vigilant dork does not tap to attack, so its mana survives combat
+            // and there is nothing to contest. Same exemption the tower applies on the release side.
+            if (DorkAtkHoldDirEnabled() && !p.card.HasKeyword(Keyword::Vigilance)
+                && CanTapNow(p, s.battlefield))
+            {
+                const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                if (pd && pd->tmpl == CardTemplate::ManaDork) { ++atk_dorks; }
+            }
+            continue;
+        }
         // Not attacking naturally: held by the mana hold, or declined by ShouldAttackWith.
         // Only the mana hold's victims are contested -- a ShouldAttackWith decline (0-power
         // dork NOT wanted even with mana free) stays greedy.
@@ -1176,13 +1252,21 @@ bool DorkAtkContested(const GameState& s)
         ++held_n;
         held_power += p.EffectivePower();
     }
-    if (held_n == 0) { return false; }
-    // Released swing damage: the held dorks join (or become) the attack. Lone-exalted bonus
-    // applies when the release yields exactly ONE total attacker.
-    int released_dmg = held_power;
-    if (natural_attackers == 0 && held_n == 1)
-    { released_dmg += CountExalted(s.battlefield, active); }
-    return released_dmg >= 1;
+    // RELEASE DIRECTION (checked first, so the pre-existing verdict is unchanged wherever it
+    // fires): the held dorks join (or become) the attack. Lone-exalted bonus applies when the
+    // release yields exactly ONE total attacker.
+    if (held_n > 0)
+    {
+        int released_dmg = held_power;
+        if (natural_attackers == 0 && held_n == 1)
+        { released_dmg += CountExalted(s.battlefield, active); }
+        if (released_dmg >= 1) { return 1; }
+    }
+    // HOLD DIRECTION: only worth a branch when the deferred main can actually spend the mana the
+    // swing would consume -- that gate is what keeps this from contesting every attacking dork
+    // (USER's standing perf bar: "to avoid this becoming much slower").
+    if (atk_dorks > 0 && Main2SpendsCreatureMana(s, active)) { return 2; }
+    return 0;
 }
 
 // Does this card resolve into INFORMATION -- i.e. is it a "draw" for ordering purposes? Shared by

@@ -4236,11 +4236,15 @@ std::vector<Permanent*> AIEngine::DeclareAttackers(GameState& state)
     // the natural heuristic. Never inside a rollout (its combats decide naturally).
     int pin = -1;
     if (!m_in_rollout && m_atk_release_pin >= 0) { pin = m_atk_release_pin; m_atk_release_pin = -1; }
+    // pin 1 = forced RELEASE (the scored line swung the held dorks); pin 2 = forced HOLD (the
+    // scored line kept an attacking dork's mana for the deferred main); pin 0/none = the natural
+    // heuristic, which is what the default branch simulated.
     if (pin == 1) { g_dork_atk_override = 1; }
+    else if (pin == 2) { g_dork_atk_override = 0; }
     std::vector<Permanent*> attackers;
     for (int idx : DeclareAttackerIndices(state))
     { attackers.push_back(&state.battlefield[idx]); }
-    if (pin == 1) { g_dork_atk_override = -1; }
+    if (pin == 1 || pin == 2) { g_dork_atk_override = -1; }
     return attackers;
 }
 

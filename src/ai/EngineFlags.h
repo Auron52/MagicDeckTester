@@ -89,6 +89,19 @@ inline bool DorkAtkSearchEnabled()
 // the committed line pinned a release -- never ambient, so every other combat is byte-identical.
 inline thread_local int g_dork_atk_override = -1;
 
+// HOLD DIRECTION of the searched dork attack/hold (default ON inside MTG_DORK_ATK_SEARCH; =0
+// reverts to the release-only branch for an A/B). Without it DorkAtkContested is one-directional:
+// it can turn a greedy HOLD into an ATTACK but never an ATTACK into a HOLD, because a dork the
+// greedy wants to swing is counted as a natural attacker and never contested. USER 2026-08-21:
+// "we should contest the dork when main 2 has a use for the mana." Origin: AL gi852 -- the lone
+// Hierarch swings for 1 (lone exalted) and taps the 6th of exactly 6 sources, so the deferred main
+// affords ONE Fiery Justice (10 damage) instead of two (20 = exactly lethal). Trading 1 for 10.
+inline bool DorkAtkHoldDirEnabled()
+{
+    static const bool v = EnvOn("MTG_DORK_ATK_HOLD_DIR", true);
+    return v;
+}
+
 // MTG_ACQ_RESOLVE=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted):
 // mid-phase ACQUISITION re-solve family. A cast that puts new castable resources in hand mid-plan
 // without drawing -- a tutor-to-hand fetch (Gamble) or a staged exile dig (Soulfire Eruption's

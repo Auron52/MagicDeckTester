@@ -945,4 +945,7 @@ inline const DecisionProvider& ResolveProvider(const GameState& s)
 // Searched dork attack/hold contested test (MTG_DORK_ATK_SEARCH; DecisionProviders.cpp).
 // True when the collapsed-main mana hold pins a dork whose released swing would deal damage --
 // the FSLineWin branch then evaluates both combat variants. False whenever the flag is off.
-bool DorkAtkContested(const GameState& s);
+// Searched dork attack/hold trigger. 0 = not contested; 1 = the greedy HOLDS a dork whose release
+// would deal damage (search the RELEASE); 2 = the greedy ATTACKS with a non-vigilance mana dork
+// whose mana the deferred main would spend (search the HOLD). See EngineFlags.h.
+int DorkAtkContestedKind(const GameState& s);
