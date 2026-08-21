@@ -387,3 +387,32 @@ provider. Note the plumbing detail that decides how invasive it is: `BpClassifyE
 overload while `CantripOrderScope` keeps binding pointers unconditionally — an empty snapshot is
 already documented as the SAFE value, since every card then reads as new and both consumers stand
 down.
+
+## How the two condemnation filters relate (correction, 2026-08-21)
+
+USER: "Wait, so Five Colour does not condemn at breakpoints?" It does -- in one half of the turn --
+and the precise boundary is the reason the breakpoint hook had to exist at all.
+
+`CondemnsPassedMainPhase` is gated on **`!is_pre_combat`**, and its own comment is explicit that it
+reaches continuations: "every post-combat harvest this turn (the real m2, the search's interior m2
+projections, their continuations) drops it." So for FiveColour:
+
+* **post-combat breakpoints: condemned** -- a continuation of main 2 drops anything that was in hand
+  at the main-1 decision;
+* **pre-combat (main 1) breakpoints: NOT condemned** -- the filter cannot fire there at all.
+
+The two filters also key on different questions, which is why neither substitutes for the other:
+
+| filter | condemns a card because | fires |
+|---|---|---|
+| `CondemnsPassedMainPhase` (`GameState::m1_hand`) | it was in hand at the **main-1 decision** | post-combat only |
+| breakpoint filter (`g_bp_hand_before`) | it was in hand at **this breakpoint's cast** | any breakpoint |
+
+KittyEquipment's site 6 is a MAIN-1 breakpoint -- the Puresteel draw happens pre-combat -- so
+`CondemnsPassedMainPhase` could never have touched it however the provider was configured.
+
+**The general observation, which outlives this deck**: pre-combat breakpoint continuations are
+un-condemned EVERYWHERE, FiveColour included, so its main-1 cantrip/staging continuations re-litigate
+the whole hand today. Whether FiveColour should opt into `CondemnsConsideredAtBreakpoint` is
+UNTESTED and should not be assumed -- the global `MTG_BP_CLASSIFY` probe failed on Dragonstorm and
+was never broken down per deck. That belongs with the across-the-board condemnation work, not here.
