@@ -177,13 +177,63 @@ shedding B?") unless the rule actually chooses between them — that scores a fo
 never happens. This produced a phantom "3 decisive cases, 0 counterexamples" signal for a Karoo
 rule; in all three the rule kept BOTH cards and shed a dead card, optimally.
 
+## The labeller is blind to the ROLLOUT's shed (USER, 2026-08-21) — `DISCARD_UNLABELLED`
+
+> "How on earth does this kind of discard end up in there? Don't we have a proper path in the
+> Analyzer relating to how it should be created?"
+
+Asked of KittyEquipment, whose shed rule is the shared root ranking (highest-MV-first): on a deck
+of 23 lands and a 1–2 MV curve that sheds Balan (4), Armored Skyhunter (4) and Loxodon Warhammer (3)
+while keeping Plains **last**. The deck has no `CleanupDiscardCandidates` override — and this stage,
+run on it, would have derived nothing, for a structural reason worth stating plainly:
+
+**The evidence pass labels REAL sheds only.** `[discard_trace]` is emitted inside
+`AIEngine::ChooseDiscard`. The SEARCH's own cleanup (`TurnSolver::SimulateEndAndStartNextTurn`)
+sheds as well, takes index 0 of the same ranking with no search above it, and never reaches the
+trace. A deck can shed **0** times in play and hundreds of thousands of times inside the rollouts
+that choose its plans — KittyEquipment is `real=0 / rollout=145,888` per 50 games at d3 (51% of them
+with under 4 lands out), and Treasure Hunt is `real=41 / rollout=773,314` per 20 games. The old
+zero-label verdict (`DISCARD_INERT`, "no policy to derive") therefore claimed more than it knew.
+
+**Fixed:** on zero labels the stage now runs a `MTG_SHED_STATS` census over both callers and
+returns `DISCARD_INERT` only when *neither* caller sheds. Otherwise it returns **`DISCARD_UNLABELLED`**
+with the rollout denominator and the instruction to BOUND the axis rather than assume it:
+
+    MTG_SHED_WORST=1   # the ROLLOUT sheds the LAST-ranked candidate instead of index 0
+
+That is a deliberate anti-heuristic in the `MTG_LACKEY_RANK=low` tradition — paired against the
+default it brackets the whole axis, because no ranking can be worth more than best-vs-worst. Manifest
+generator: `test/tools/kitty_ab/gen_shed_suite_manifest.py`.
+
+**Suite-wide result (60 games/deck/arm, d3, `ignore_play_profile`, `logs/shed_suite`):** inverting
+the ranking to its worst available setting moves the metric on **one deck of twelve**.
+
+| deck | delta | faster | slower | plays-differ |
+|---|---|---|---|---|
+| dragonstorm | **+0.0333** (se 0.0234, t=1.42) | 0 | 2 | 2 |
+| the other 11 | +0.0000 | 0 | 0 | 0 (antilife 1) |
+
+So the blind spot is real but has cost almost nothing: on 11 of 12 decks the shed cannot pay,
+including Treasure Hunt, where the lever had ~2.3M opportunities in the job and changed play in zero
+games. Dragonstorm is the one to look at — a weak signal, but it is already the deck known to be
+discard-sensitive (its per-deck protect SCOPE in `DiscardPolicy.h` exists because protecting every
+copy cost it three overnight games).
+
+**Caveat on reading a zero — FiveColour's is an ARTIFACT.** `FiveColourProvider` ends with
+`if (!s_fan && ranked.size() > 1) { ranked.resize(1); }`, so `cd.size() == 1` and the last-ranked
+candidate IS the first: the lever cannot fire and its 0.0000 is structural, not evidence. Any
+provider returning one index is immune to this bound; use `MTG_5C_DISCARD_FAN=1`-style fan levers to
+measure those. (KittyEquipment's own bound, on the full ranking, was measured separately at 150
+games/cell: 0 faster / 0 slower of 300 — see `kitty-tutor-and-discard-heuristics.md` §1.)
+
 ## Known limits / follow-ups
 
 - Evidence only covers CLEANUP sheds (the probe site); pitch-site labels (Land's Edge,
   retrace) would need the same trace at those call sites.
 - Discard decisions are rare (~0.5–1% of games at d3), so evidence runs need thousands
   of games; `DISCARD_INERT` on a low-decision deck means "not enough signal", not
-  "proven fine".
+  "proven fine" — and if the ROLLOUT sheds, the verdict is now `DISCARD_UNLABELLED`
+  instead, with the bound to run (see the section above).
 - The derived `discard_order` is a static name ranking; state-dependent orders (ds
   ritual-value: shed Pyretic before Seething — splice/net-mana logic) stay provider work.
 - **User preference order (2026-08-07).** The purpose of this flow is to MINIMIZE USER

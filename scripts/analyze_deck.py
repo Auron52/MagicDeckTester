@@ -540,6 +540,27 @@ def _RunBatch(manifest: dict, log_dir: Path, threads: int, extra_env: dict) -> s
     return result.stderr
 
 
+_SHED_STATS_RE = re.compile(
+    r"=== SHED STATS: real=(\d+)\s+rollout=(\d+) \(low-land=(\d+)\) ===")
+
+
+def _ShedCensus(deck_path: Path, profile_path: Path, scratch: Path,
+                games: int = 40) -> tuple[int, int, int]:
+    """(real, rollout, low_land) cleanup sheds -- the denominator the label trace cannot see.
+
+    Short by design: this only has to separate "never reached" from "reached constantly, just not
+    where the labeller looks", and the two are orders of magnitude apart.
+    """
+    manifest = {"jobs": [{
+        "name": f"{deck_path.stem}_shedcensus", "deck": str(deck_path),
+        "profile": str(profile_path), "games": games, "seed": 930000, "depth": 3,
+        "ignore_play_profile": True, "weight": 0}]}
+    text = _RunBatch(manifest, scratch / "shed_census", threads=0,
+                     extra_env={"MTG_SHED_STATS": "1"})
+    m = _SHED_STATS_RE.search(text)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else (0, 0, 0)
+
+
 def _ParseWins(path: Path) -> dict[int, int]:
     """Parse a harness-format .wins file (gi wt digest); losses (wt=-1) -> LOSS_TURN."""
     out: dict[int, int] = {}
@@ -645,9 +666,32 @@ def DiscardAnalysis(deck_path: Path, evidence_games: int, ab_games: int,
     decisions = _ParseTraceDecisions(stderr_text)
     out["evidence"] = {"games": evidence_games, "decisions": len(decisions)}
     if not decisions:
-        out["verdict"] = "DISCARD_INERT"
-        out["detail"] = ("no cleanup-discard decisions reached (or the provider owns its "
-                         "ranking and returns a single candidate); no policy to derive.")
+        # ZERO LABELS IS NOT THE SAME AS ZERO DECISIONS. The labeller above parses
+        # [discard_trace], emitted inside AIEngine::ChooseDiscard -- the REAL cleanup only. The
+        # search's own cleanup (TurnSolver::SimulateEndAndStartNextTurn) sheds too, takes index 0
+        # of the same ranking with NO search above it, and is invisible here. A deck can therefore
+        # shed zero times in play and hundreds of thousands of times inside the rollouts that pick
+        # its plans: KittyEquipment is real=0 / rollout=145,888 per 50 games, and reporting that as
+        # DISCARD_INERT once cost a session the wrong conclusion (see
+        # docs/design/kitty-tutor-and-discard-heuristics.md §1). Count both callers before deciding
+        # there is nothing here.
+        real, rollout, lowland = _ShedCensus(deck_path, profile_path, scratch)
+        out["evidence"]["shed_census"] = {"real": real, "rollout": rollout, "low_land": lowland}
+        if rollout == 0:
+            out["verdict"] = "DISCARD_INERT"
+            out["detail"] = ("no cleanup shed is reached by EITHER caller (real or rollout); "
+                             "no policy to derive.")
+            return out
+        out["verdict"] = "DISCARD_UNLABELLED"
+        out["detail"] = (
+            f"no LABELS (the trace covers real sheds only, and this deck sheds {real} times in "
+            f"play) -- but the rollout sheds {rollout} times, {lowland} of them with under 4 lands "
+            f"out, each taking index 0 of the ranking with no search above it. The stage cannot "
+            f"author a rule without labels; BOUND the axis instead before assuming it is inert: "
+            f"pair `MTG_SHED_WORST=1` (rollout sheds the LAST-ranked candidate) against the "
+            f"default over >=150 games/cell -- see test/tools/kitty_ab/gen_shed_suite_manifest.py. "
+            f"A zero delta there means no ranking can pay; a non-zero one means this deck needs a "
+            f"policy the labeller structurally cannot see.")
         return out
 
     # Hand-size buckets: =8 is the easy shed-1-of-8 cleanup; bigger hands (and any future
