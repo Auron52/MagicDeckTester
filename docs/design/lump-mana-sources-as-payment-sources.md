@@ -204,6 +204,23 @@ Note the 12.65x hand is a **non-Garth opener** — Garth is drawn mid-rollout, s
 
 ## 4. Status
 
+**AGREED SCOPE (USER, 2026-08-21), to build after the overnight rebaseline:**
+
+| item | decision |
+|---|---|
+| §9 — Treasures spent before creatures | **BUILD**, and unconditionally (the "almost" and the override are both gone) |
+| §2a — model the lump as a payment SOURCE, solved in the mana evaluation instead of enumerated as branching `SacForMana` actions | **BUILD** — this is what gets Treasures out of the odometer |
+| §10 — treasure-reserve override hook (Gold Rush) | **REJECTED, do not build** — see the ⛔ block in §10 |
+
+Audit of the shipped engine, 2026-08-21 (all three confirmed by reading the code, not the doc):
+Treasures are **still a branching decision** (one `SacForMana` action per candidate colour per
+source, each its own odometer group — the emitter's own comment prices a 9-Treasure Mirrorwing board
+at `3^9 = 19,683` states); there is **no treasure-vs-creature spend ordering** anywhere
+(`ManaSourceRank` only ranks TAPPED sources, and a Treasure never reaches it); and there is **no
+treasure reserve** (`FungibleSacSourceCap` names Gold Rush only to justify DROPPING duplicates).
+What is already right: `FirstUnpayablePos` credits `creates_treasures` as wild, base count only — a
+deliberate under-credit in the safe direction.
+
 * `MTG_SAC_COLOR_CAP` is a **temporary sizing instrument** and should be deleted once this record is
   signed off (coding-conventions rule 5). It is default-off and byte-identical.
 * The source model + lump reservation is **not built**. Order of work if taken: (a) the one-colour-lump
@@ -428,11 +445,17 @@ overnight run and need accepting then.
   "reserve the one-shot hardest" unconditionally; it is weighed against the creature's NON-MANA value,
   which is deck-shaped. Record this before implementing §2b's ordering.
 
-## 9. Reserve doctrine, refined: TREASURES BEFORE CREATURES, with a heuristic override (USER, 2026-08-21)
+## 9. Reserve doctrine, refined: TREASURES BEFORE CREATURES (USER, 2026-08-21)
 
 USER: *"I think it's okay if treasures go before creatures almost in general, but we should have a
 heuristic way to override that."* This supersedes §2b's flat "reserve the one-shot hardest" for the
 treasure/creature pair.
+
+> **UPDATE, later the same day — the "almost" is gone and so is the override.** The user rejected
+> the override class outright (see the ⛔ block in §10): reserving Treasures means tapping the mana
+> creatures, and in Mirrorwing those are the pump's own recipients, so the reserve disarms the body
+> it is preserving the pump for. **Treasures are spent before creatures unconditionally.** This is
+> the rule to implement — a flat ordering, no trigger scan, no per-deck hook.
 
 ### The ordering principle is EXACTNESS, not one-shot-ness (USER, 2026-08-21)
 
@@ -481,6 +504,31 @@ one-shot-ness, and one-shot-ness does not decay, so it does not outrank a creatu
 
 Note this INVERTS §2b's ordering for this pair, and §2b should be read as governing the Lotus /
 Storage / Depletion lumps, not as a blanket one-shot rule.
+
+> ## ⛔ SUPERSEDED (USER, 2026-08-21): THE GOLD RUSH OVERRIDE IS REJECTED — DO NOT BUILD IT
+>
+> Everything from here to the end of §10 described a treasure-RESERVE override. The user rejected
+> the whole class on a board argument this doc had missed, and the argument is decisive:
+>
+> *"I'm not really worried about a Gold Rush override as I wouldn't generally do that anyway. 2x
+> Gold Rush is difficult not to win with in the first place, so tapping dorks (which receive the
+> pumps) to do this is a bad idea in my opinion."*
+>
+> **The override is self-defeating.** Reserving Treasures for the count means paying with the mana
+> CREATURES instead — and in Mirrorwing those creatures are the pump's own RECIPIENTS. A tapped
+> creature cannot attack, so the preserved +2/+2 is bought by disarming the body it was preserved
+> for. The reserve buys pump and spends the thing the pump exists to enable.
+>
+> The second premise was wrong too: a turn with two Gold Rushes is already overwhelmingly winning,
+> so it is not a turn whose margin needs defending — optimising it is optimising a game that is
+> already over.
+>
+> **Consequence:** §9's base rule stands UNCONDITIONALLY. Treasures are spent before creatures,
+> full stop; there is no override hook, no `pump_per_treasure_power` scan, no per-deck reserve
+> hook. §9 gets *simpler* than it was written, not more complex, and §2a no longer has a
+> precondition to clear before it can fold Treasures.
+>
+> Kept below unedited as the record of what was considered and why it lost.
 
 ### The override trigger, and it is narrow
 

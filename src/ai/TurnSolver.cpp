@@ -6310,7 +6310,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     else if (it->second >= dup_cap) { continue; }   // fungible with one already emitted
                     else { ++it->second; }
                 }
-                // SAC-COLOUR FOLD (MTG_SAC_COLOR_FOLD, default OFF): emit ONE colour-agnostic action
+                // SAC-COLOUR FOLD (MTG_SAC_COLOR_FOLD, DEFAULT ON, `=0` hatch): emit ONE colour-agnostic action
                 // instead of |colors| of them, and let TurnSolver::SacFloatColorFor pick the colour at
                 // apply from the plan's own demand. The subset math credits this action's output as
                 // ritual_float WILD either way, so the fan's variants are indistinguishable to the test
