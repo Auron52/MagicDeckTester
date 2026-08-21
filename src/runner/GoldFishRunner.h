@@ -80,6 +80,14 @@ public:
     // Shared by the runner and the analyzer.
     static GameState SetupGame(const Decklist& deck, uint64_t seed);
 
+    // Stamp the deck-derived trait fields (uses_second_main, deck_feeds_combat, dependency
+    // pulls, graveyard readers) and the env shuffle salts onto a GameState. SetupGame calls
+    // this; every OTHER path that hand-builds a GameState (--scenario, --cast-order-report)
+    // MUST call it too, or deck-gated machinery silently reads defaults -- the --scenario
+    // harness missed uses_second_main for months, so the main-phase filter never fired in any
+    // scenario fixture and a "both arms find the kill" proof was vacuous for the filtered arm.
+    static void StampDeckTraits(GameState& state, const Decklist& deck);
+
     // Adds the opponent's blocker pattern for this game index (10-game cycle).
     // Exposed so diagnostics can reproduce the runner's per-game setup exactly.
     static void PopulateOpponentSpawns(GameState& state, int game_index);

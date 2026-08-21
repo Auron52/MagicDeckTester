@@ -669,17 +669,8 @@ const std::map<std::string, std::vector<int>>* DeckNumbering()
 }
 }   // namespace
 
-GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
+void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
 {
-    GameState state;
-
-    // Starting life: per-job override -> MTG_START_LIFE -> 20 (see core/GameSetup.h). BOTH
-    // players, because 2HG starts both teams at 30; our own total is inert for a goldfish (the
-    // passive opponent never attacks) but there is no reason to model it unfaithfully.
-    const int start_life = gamesetup::StartingLife();
-    state.players[0].life = start_life;
-    state.players[1].life = start_life;
-
     // Shuffle-variance instrument (see GameState::shuffle_salt): an independent salt lets the SAME
     // game_seed be replayed with different shuffle realisations. Default 0 -> SaltSeed identity ->
     // byte-identical. shuffle_salt salts mid-game shuffles only (fixed opening); the _OPENING salt
@@ -706,6 +697,20 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
     state.dep_enabler_main1    = dep_pulls.enabler_main1;
     state.dep_castpayoff_main1 = dep_pulls.castpayoff_main1;
     state.deck_gy_readers      = DeckGraveyardReaders(deck); // EOT dominance's graveyard projection
+}
+
+GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed)
+{
+    GameState state;
+
+    // Starting life: per-job override -> MTG_START_LIFE -> 20 (see core/GameSetup.h). BOTH
+    // players, because 2HG starts both teams at 30; our own total is inert for a goldfish (the
+    // passive opponent never attacks) but there is no reason to model it unfaithfully.
+    const int start_life = gamesetup::StartingLife();
+    state.players[0].life = start_life;
+    state.players[1].life = start_life;
+
+    StampDeckTraits(state, deck);
 
     state.players[0].library.assign(deck.mainboard.begin(), deck.mainboard.end());
 

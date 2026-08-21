@@ -3645,6 +3645,11 @@ static int RunScenario(const std::filesystem::path& scenario_path)
 
     GameState state;
     state.m_provider            = &SelectDecisionProvider(deck);
+    // Deck traits + shuffle salts (uses_second_main, dependency pulls, ...). Without this every
+    // deck-gated mechanism reads its default inside a fixture: the main-phase filter keys on
+    // state.uses_second_main and so NEVER fired in a scenario, silently testing the unfiltered
+    // engine no matter what MTG_AL_PHASE/MTG_PHASE_CLASSIFY said.
+    GoldFishRunner::StampDeckTraits(state, deck);
     state.players[0].life       = j.value("active_life", 20);
     state.players[1].life       = j.value("opponent_life", 20);
     state.active_player_index   = 0;
@@ -3797,11 +3802,7 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
     // and its Aria of Flame cast-payoff would NOT show the Main1 pull the real game gives them).
     // The per-STATE inputs -- haste from lords in play, hand haste access, a scaling attacker --
     // are board facts with no static answer; the column is the BASELINE, and the header says so.
-    state.deck_feeds_combat = GoldFishRunner::DeckFeedsCombat(deck);
-    state.uses_second_main  = GoldFishRunner::DeckUsesSecondMain(deck);
-    const GoldFishRunner::DependencyPulls pulls = GoldFishRunner::DeriveDependencyPulls(deck);
-    state.dep_enabler_main1    = pulls.enabler_main1;
-    state.dep_castpayoff_main1 = pulls.castpayoff_main1;
+    GoldFishRunner::StampDeckTraits(state, deck);
 
     struct Row { std::string name; int rank; int key; int ideal; int mv; int count;
                  std::string note; const char* mp; };
