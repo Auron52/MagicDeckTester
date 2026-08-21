@@ -7500,6 +7500,11 @@ bool FiveColourProvider::CondemnsPassedMainPhase() const
     // 2800 searched games zero slower/zero faster (4 equal-score line swaps, 3 digest-only
     // keys), perf neutral within noise (sums +0.7%, makespan <= +3%). Semantics lever, not a
     // perf lever: the historical -22% was entirely the unsound projection-turn stamping.
+    // 2026-08-21 UPDATE: the tranche is now DEFAULT OFF (USER; rescue-trace classification,
+    // antilife-main-phase-split.md 2026-08-21g) -- its rescues were sibling-redundant tie-flips,
+    // and condemnation's losslessness rests on the stamp's joint-affordability exemption + the
+    // unfiltered m1 enumeration, not on the backstop. The old "closed the residuals" role is
+    // covered by the same sibling argument; MTG_CONDEMN_TRANCHE=1 re-arms it as an audit.
     static const bool on = EnvOn("MTG_5C_CONDEMN", true);
     return on && Fc5PhaseEnabled();
 }

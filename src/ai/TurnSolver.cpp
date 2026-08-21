@@ -19795,20 +19795,26 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             }
         }
 
-        // ---- CONDEMNED TRANCHE (lossless condemnation; MTG_CONDEMN_TRANCHE, default ON) --------
+        // ---- CONDEMNED TRANCHE (AUDIT instrument; MTG_CONDEMN_TRANCHE, default OFF) ------------
         // The enumeration above ran through the condemnation filter, so when stamps are live it
-        // never built a second main casting a condemned card -- that shrink is the lever's whole
-        // saving, but a NO-WIN from the filtered space alone breaks the first-verified-win
-        // shortcut's premise ("the previous pass was a COMPLETE refutation"), exactly the defect
-        // the width cap had before the deferred waves. Same cure: before answering no-win, walk
-        // the tranche the filter deleted (second mains casting >=1 condemned card), enumerated
-        // unfiltered, strictly-better-only. A verified in-horizon win above already RETURNED --
-        // condemned space could only TIE at the pass edge, never beat it -- so this tranche costs
-        // nothing exactly where the filter saves (winning nodes), and restores completeness
-        // exactly where a filtered no-win would lie (the 3 held-out residuals' regime). Under an
-        // unlimited budget the full plan space is reachable: the no-lossy-truncation bar holds.
+        // never built a second main casting a condemned card. This block re-walks that deleted
+        // tranche (second mains casting >=1 condemned card, enumerated unfiltered,
+        // strictly-better-only) -- originally shipped default ON as a losslessness backstop.
+        // DEFAULT OFF (USER 2026-08-21, `=1` re-arms): the rescue-trace classification
+        // (antilife-main-phase-split.md 2026-08-21g) showed every rescue is SIBLING-REDUNDANT --
+        // the stamp only condemns cards jointly affordable atop the branch's m1 casts, and the
+        // INITIAL m1 enumeration is unfiltered, so branch q+X always exists and covers the same
+        // line. Rescues only flipped first-verified-win TIES toward earlier-ordered branches
+        // (measured across coupled + 2 decoupled salts, 1350 games: 4 diffs, none salt-robust,
+        // tranche-ON worse 3:1 incl. one win turned into a loss) at ~9-12% wall. Ordered
+        // condemnation is lossless BY RULE via sibling coverage; condemned paths never run.
+        // The deck-dependent leg of that argument is m1-cast >= m2-cast value equivalence: WHEN
+        // WIRING CONDEMNATION INTO A NEW PROVIDER, run its probe with MTG_CONDEMN_TRANCHE=1
+        // MTG_TRANCHE_TRACE=1 vs default and diff per-game wins under decoupled salts -- any
+        // salt-robust ON-better game is a real coverage gap (a card strictly better cast
+        // post-combat while affordable pre-combat) and a rule bug to fix, not a tranche to ship.
         {
-            static const bool s_condemn_tranche = EnvOn("MTG_CONDEMN_TRANCHE", true);
+            static const bool s_condemn_tranche = EnvOn("MTG_CONDEMN_TRANCHE");
             if (s_condemn_tranche && best.win_turn > state.turn_number + depth
                 && CondemnFilterArmed(state))
             {
