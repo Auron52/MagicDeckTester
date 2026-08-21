@@ -167,6 +167,12 @@ public:
     bool ClassifiesMainPhases() const override;
     bool SearchedSecondMainInSearch() const override;
     bool PhaseFilterRootTurnOnly() const override;
+    // The FiveColour condemnation doctrine, AL arm (USER 2026-08-21: one condemnation across a
+    // turn's phases and breakpoints; AL first). MTG_AL_CONDEMN / MTG_AL_BP_CONDEMN, both
+    // default OFF pending measurement, both scoped to the split (see the .cpp notes -- the
+    // breakpoint half is PREDICTED unsafe: Idyllic Tutor is a value-changing acquisition).
+    bool CondemnsPassedMainPhase() const override;
+    bool CondemnsConsideredAtBreakpoint() const override;
     bool ShouldEmitRiskyAltPayload(const GameState&, int, const CardDefinition&, bool) const override;
     // Tainted Remedy and Plague Drone are the SAME role (opponent lifegain -> loss) and you only
     // need one at a time, so holding one makes the other a redundant required piece rather than a

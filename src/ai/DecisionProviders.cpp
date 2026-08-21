@@ -1947,6 +1947,33 @@ bool AntiLifegainProvider::SearchedSecondMainInSearch() const
     return on && AlPhaseEnabled();
 }
 
+bool AntiLifegainProvider::CondemnsPassedMainPhase() const
+{
+    // ORDER CONDEMNATION for the split (USER 2026-08-21: "within a turn all breakpoints and
+    // phases should use the same condemnation" -- extend the FiveColour doctrine, AL first).
+    // Main 2 continues with main 1's condemnation list instead of re-litigating the hand;
+    // membership decided once, at m1 (the base-hook contract). Every consumption site gates on
+    // MainPhaseFilterActive, so this binds only with the split live -- the && here just makes
+    // the scoping explicit, mirroring MTG_AL_SSM. NOTE the prior "m2 re-offer recovers prune
+    // losses" rejection predates the condemn-dig bug fixes and the decision-space adoption
+    // (c6adf22b) that made 5C's version adoptable -- this lever re-asks that question on the
+    // fixed machinery. DEFAULT OFF pending measurement (decouple ensemble + suite).
+    static const bool on = EnvOn("MTG_AL_CONDEMN");
+    return on && AlPhaseEnabled();
+}
+
+bool AntiLifegainProvider::CondemnsConsideredAtBreakpoint() const
+{
+    // BREAKPOINT CONDEMNATION (the doctrine's other half). AL's only mid-phase breakpoint class
+    // is the Idyllic Tutor acquisition (USER 2026-08-21) -- which is exactly the
+    // value-changing-acquisition shape the base hook warns about (a declined Silence becomes
+    // live once the tutor fetches a Remedy), i.e. the Dragonstorm-measured hazard, so the
+    // PREDICTION is unsafe here. Offered as a separate lever anyway so the doctrine can be
+    // measured whole vs phases-only. DEFAULT OFF pending measurement.
+    static const bool on = EnvOn("MTG_AL_BP_CONDEMN");
+    return on && AlPhaseEnabled();
+}
+
 bool AntiLifegainProvider::PhaseFilterRootTurnOnly() const
 {
     // ROOT-TURN AUTHORITY for the split -- MEASURED AND REJECTED (2026-08-21): it recovers 39 of
