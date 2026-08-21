@@ -212,6 +212,43 @@ Note the 12.65x hand is a **non-Garth opener** — Garth is drawn mid-rollout, s
 | §2a — model the lump as a payment SOURCE, solved in the mana evaluation instead of enumerated as branching `SacForMana` actions | **BUILD** — this is what gets Treasures out of the odometer |
 | §10 — treasure-reserve override hook (Gold Rush) | **REJECTED, do not build** — see the ⛔ block in §10 |
 
+### Why §2a is smaller than §2a-bis implies — and why §9 is not separate work (2026-08-21)
+
+USER: *"Treasures are tappable permanents."* Correct, and it corrects an agent claim made in the
+same conversation that the payment solver "only sees tappable permanents, so a Treasure never
+enters it". That reasoning was wrong. `TapForCostSharedOnce` iterates **every untapped controlled
+permanent** and keeps those whose `produces` list covers the needed colour (`pay_produces` ->
+`makes`). A Treasure is untapped and tappable and passes the loop fine.
+
+It is excluded for a much narrower reason: **its `parameters` carry only `sac_for_mana_amount: 1`
+and no `produces` entry at all**, so `pay_produces()` is empty, `makes` is false, and the scan
+`continue`s. Its own `cards.json` oracle note says so outright — *"Modeled via the Lotus-Bloom
+sac-for-mana machinery: sac_for_mana_amount=1, colour searched (chosen_float_color variants)."*
+The tap is real in the rules; the ENGINE routes the whole ability through the plan enumerator
+instead of the payment path.
+
+So the work is a re-route, not a new concept:
+
+1. Give the sac sources a `produces` (any colour for a Treasure) plus a marker that paying with
+   them also costs a SACRIFICE, so `usable()` / `pay_produces()` admit them and `tap_source`
+   sacrifices rather than merely tapping.
+2. `ManaSourceRank` then orders them like every other source — and **§9 is literally their rank
+   number**, ahead of the mana creatures. No separate ordering machinery, no new hook. This is why
+   §9 cannot land before §2a: until the Treasure is a payment source there is no ordering step for
+   it to be ordered *in*, because cracking it is a SEARCHED BRANCH rather than a payment choice.
+3. Delete the `SacForMana` colour fan for `sac_for_mana_amount == 1`, which is what removes the
+   `3^9 = 19,683` odometer blowup on a 9-Treasure Mirrorwing board.
+
+**This also explains §8's measurement instead of leaving it a curiosity.** The action-level fold
+failed on Treasures because it fixes a colour per source BEFORE total demand is known, while the
+enumerated fan could coordinate across nine sources. A payment solver chooses the colour per PIP as
+it pays, so it gets that coordination for free — the solver is the right home for precisely the
+case the fold could not handle.
+
+**The Lotus is NOT the easy half.** At `amount = 3` one sacrifice yields three mana at once, so it
+is a lump, not a per-tap source, and it still needs the flow matcher's third shape (§2a-bis). The
+Treasure at grain 1 is the part that drops straight into the existing tap path.
+
 Audit of the shipped engine, 2026-08-21 (all three confirmed by reading the code, not the doc):
 Treasures are **still a branching decision** (one `SacForMana` action per candidate colour per
 source, each its own odometer group — the emitter's own comment prices a 9-Treasure Mirrorwing board
