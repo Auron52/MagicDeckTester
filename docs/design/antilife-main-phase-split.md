@@ -879,3 +879,43 @@ needs); the trace confirms no T4 node ever reaches `alt(hold)=4`, so the kill is
 the m1 plans explored. The branch decides COMBAT AFTER the m1 plan is fixed and cannot re-choose
 it. Making the combat variant part of plan enumeration would reach these, at a multiplied plan
 space -- NOT proposed; recorded as the boundary of this lever.
+
+## 2026-08-21q: ADOPTION READINESS -- no unrecoverable games; what is and is not still open
+
+USER: "Are there any remaining unrecoverable games? i.e. Anything blocking adoption?"
+
+### No. Nothing in the residual is unrecoverable.
+* All **18** salt-robust worse games are **exactly +1 turn**; **ZERO become unwon**.
+* The bundle WINS MORE GAMES than control under BOTH salts: 7972 vs 7969 (salt1), 7980 vs 7975
+  (salt2). It converts 4-5 control losses into wins per salt.
+* Exactly ONE game where control wins and the bundle does not: al_d3_s5005 gi43 (ctl 8, bun unwon).
+  It is NOT salt-robust -- under salt 2 BOTH arms lose it. It is the same +1-turn class landing on
+  the max_turns boundary, not a new failure mode.
+* Full delta spread per 8000: salt1 {-4:1, -2:1, -1:28, +1:36, +2:1}, salt2 {-2:3, -1:35, +1:32}.
+
+### Gates PASSED
+| gate | result |
+|---|---|
+| clean-env smoke (all levers off) | 36/36 PASS, 0 configs changed (byte-identical) |
+| `MTG_DORK_ATK_HOLD_DIR=0` vs pre-change search | identical on 23/23 residual jobs |
+| smoke, rung only | searched **0 slower / 5 faster** |
+| regression tier, rung only | searched **0 slower / 1 faster** |
+| regression tier, FULL STACK (rung+phase+condemn+dork+holddir) | searched **0 slower / 12 faster**, every changed key neutral-or-better across all three dork decks |
+| AL 16000 games, rung alone on control | 0 worse / 1-2 better per salt |
+| AL 16000 games, hold direction vs release-only | salt-robust **0 worse : 4 better** |
+
+### Still OPEN (the honest list)
+1. **Overnight held-out validation has not been run** -- the standard final gate (validate the
+   winner on the disjoint overnight seeds). This is the one genuine PROCESS blocker. Launched.
+2. **Perf: ~+8% compute on Anti-Lifegain** for the full stack (6 alternating runs on a quiet box,
+   1600 games: control mean 6040 ms, full stack 6542 ms). The rung alone is ~+2-3%. Within the
+   range previously accepted, but it is not free and it is a USER call.
+3. **The AL aggregate is PARITY, not a win**: salt1 +0.0005 (worse), salt2 -0.0011 (better). The
+   real gains are elsewhere -- more games won, and the salt-robust residual 23 -> 18. Whether
+   parity-plus-fewer-losses justifies +8% compute is a judgment call, and it is the USER's.
+4. **Follow-through IF adopted**: GT rebaseline across all 3 tiers, and the Anti-Lifegain
+   **value leaf must be regenerated** (artifacts fingerprint play behaviour); consider the keep
+   model too. Work, not a blocker to the decision.
+5. **Scope**: the RUNG is deck-agnostic (mirrorwing and fivecolour both gain) while AL_PHASE /
+   AL_CONDEMN are AL-scoped. They can be adopted SEPARATELY -- on the evidence the rung is the
+   cleaner, more clearly-positive candidate and does not need the bundle decision to land.
