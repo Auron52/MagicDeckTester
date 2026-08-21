@@ -644,6 +644,11 @@ public:
     // lands (inert props -- destroying one changes nothing else), so the faithful play is available
     // and +3 becomes the free ramp it is meant to be. Same reason HinataProvider opts in.
     bool OpponentPlaysLands() const override { return true; }
+    // MTG_5C_BUCKET_DISCARD: USER-reviewed bucket cleanup-shed policy (2026-08-21) -- quota-first
+    // keep set (colour coverage / land drops / acceleration / threat floor / Cannons / Greaves),
+    // single-index return. See the .cpp comment for the full design + evidence.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };
 
 // Mirrorwing/Zada spell-copy swarm: overrides ONLY the trick-target narrowing (a 5f perf prune --

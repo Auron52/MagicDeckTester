@@ -6967,6 +6967,282 @@ static int Fc5ScalingIdealRank(const GameState& s)
     return best < 0 ? 200 : best + 3;
 }
 
+// ---- FiveColourProvider cleanup discard (bucket policy) ---------------------
+//
+// USER-REVIEWED bucket policy (2026-08-21; the general shape is encoded in analyze-deck.md 5i).
+// Evidence (discard-analysis stage, 400 games d3, logs/discard_analysis/FiveColour): only 12
+// cleanup sheds reached; 11 were full ties across the hand, and the single non-tie was the
+// generic max-MV rule pitching Progenitus for a 1-turn cost. Stakes are doctrine quality plus
+// rollout/gen fidelity (the rollout always sheds heuristically), so the adoption bar is
+// non-inferiority, not improvement.
+//
+// The keep set is built by BUCKET QUOTAS, all net of board; only overflow beyond quotas is
+// sheddable, and the shed is the single overall-lowest-priority card:
+//   1. colour coverage -- minimal mana set that, with board sources, covers all five colours
+//   2. land drops      -- one land beyond coverage (two before turn 4); sub-roles are fungible
+//                         upward (no dorks in hand => more lands), the parent quota binds
+//   3. acceleration    -- up to two dorks beyond coverage while board sources < 7 (curve top:
+//                         Bolas 8 / Unite 7); scaling dorks (domain) preferred
+//   4. threat floor    -- at least TWO threats before any enabler (USER: Cannons yields)
+//   5. Mana Cannons    -- one net of board, after the floor ("if there is space after")
+//   6. Lightning Greaves while an Archangel-class body is kept or fielded
+//   7. the rest        -- remaining spells are THREATS (USER: "extra spells should always be
+//                         threats"), remaining mana keeps dorks over lands, colour-gain first
+//
+// Threat order (value rank): Archangel > Hellkite > Spider-Man > Unite > Jared > Garth >
+// Progenitus > Oko > (unnamed spells) > Bolas LAST (goldfish-dead: +3 only ramps off opponent
+// props, -2 dead, -9 slow). State promotions (USER 2026-08-21):
+//   * Archangel online (on board or banked free casts): Progenitus and Unite promote to just
+//     behind the engines -- free casts erase their costs and they hit hardest.
+//   * Unite castable for LETHAL next turn (5 modes x 2 face + 5 per Cannons on board): front.
+//   * Otherwise distance-to-playable demotes stranded payoffs in CLASSES (card colours missing
+//     from board+hand coverage, plus mana shortfall vs board sources) -- "dropping a Progenitus
+//     may still make sense... if it is nowhere near playable"; value rank breaks ties inside a
+//     class.
+//
+// Returns ONE index: the rule IS the decision (TreasureHunt precedent -- a single-entry return
+// skips the executor's trial fan; the one-option default is the USER's standing rule). The
+// order is routed through CleanupDiscardRankingWithOrder so the staged-card and required-piece
+// protections stay engine-enforced. MTG_5C_BUCKET_DISCARD=0 restores the generic ranking.
+std::vector<int> FiveColourProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    static const bool s_bucket = EnvOn("MTG_5C_BUCKET_DISCARD", true);
+    if (!s_bucket) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    const Player& ap = s.players[s.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n == 0) { return {}; }
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto color_bit = [](Color c) { return 1u << static_cast<unsigned>(c); };
+    auto popcount5 = [](unsigned m) { int k = 0; while (m) { m &= m - 1; ++k; } return k; };
+    constexpr unsigned kAll5 = 31u;
+
+    // Colours a mana source can produce. Fetches count as WILD: every fetch in this list
+    // reaches a shock/triome mix spanning the deck's colours, and coverage precision is not
+    // load-bearing here (11 of the 12 evidence sheds were full ties).
+    auto source_mask = [&](const Card& c) -> unsigned
+    {
+        const CardDefinition* d = def_of(c);
+        if (d == nullptr) { return 0u; }
+        if (!d->card.IsLand() && d->tmpl != CardTemplate::ManaDork && !d->params.mana_rock)
+        { return 0u; }
+        if (!d->params.fetch_land_types.empty()) { return kAll5; }
+        if (d->params.domain_mana)
+        {
+            unsigned m = 0;
+            for (Color dc : DomainColors(s, s.active_player_index))
+            { if (dc != Color::Colorless) { m |= color_bit(dc); } }
+            return m;
+        }
+        unsigned m = 0;
+        for (Color pc : d->params.produces)
+        { if (pc != Color::Colorless) { m |= color_bit(pc); } }
+        return m;
+    };
+
+    // Board census (every quota nets its board coverage out first).
+    bool archangel_online = s.free_casts_available > 0;
+    bool greaves_target_board = false;
+    int  board_sources = 0, cannons_board = 0;
+    unsigned covered = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        const InternedName& nm = p.card.m_name;
+        if (nm == "Maelstrom Archangel") { archangel_online = true; greaves_target_board = true; }
+        if (nm == "Two-Headed Hellkite" || nm == "Cosmic Spider-Man")
+        { greaves_target_board = true; }
+        if (nm == "Mana Cannons") { ++cannons_board; }
+        const bool dork = d != nullptr && d->tmpl == CardTemplate::ManaDork;
+        const unsigned m = source_mask(p.card);
+        if (m != 0 || dork) { ++board_sources; covered |= m; }
+    }
+
+    // Hand census (staged cards are in exile -- never bucketed; Greaves/Cannons split out).
+    struct HandMana { int idx; unsigned mask; bool land; bool dork; bool domain; };
+    std::vector<HandMana> mana;
+    std::vector<int> threat_idx, cannons_idx;
+    int greaves_idx = -1;
+    unsigned hand_cover = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[i];
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(c);
+        const InternedName& nm = c.m_name;
+        if (nm == "Lightning Greaves") { greaves_idx = i; continue; }
+        if (nm == "Mana Cannons") { cannons_idx.push_back(i); continue; }
+        const bool land = d != nullptr && d->card.IsLand();
+        const bool dork = d != nullptr && d->tmpl == CardTemplate::ManaDork;
+        const bool rock = d != nullptr && d->params.mana_rock;
+        if (land || dork || rock)
+        {
+            const unsigned m = source_mask(c);
+            mana.push_back({i, m, land, dork, d->params.domain_mana});
+            hand_cover |= m;
+            continue;
+        }
+        threat_idx.push_back(i);   // every non-mana spell is a THREAT (USER)
+    }
+
+    // Threat priority (lower = keep harder).
+    const unsigned reach = covered | hand_cover;
+    const int opp_life = s.players[1 - s.active_player_index].life;
+    auto threat_rank = [&](const Card& c) -> int
+    {
+        const InternedName& nm = c.m_name;
+        int r;
+        if      (nm == "Maelstrom Archangel")       { r = 0; }
+        else if (nm == "Two-Headed Hellkite")       { r = 10; }
+        else if (nm == "Cosmic Spider-Man")         { r = 20; }
+        else if (nm == "Unite the Coalition")       { r = 30; }
+        else if (nm == "Jared Carthalion")          { r = 40; }
+        else if (nm == "Garth One-Eye")             { r = 50; }
+        else if (nm == "Progenitus")                { r = 60; }
+        else if (nm == "Oko, Thief of Crowns")      { r = 70; }
+        else if (nm == "Nicol Bolas, Planeswalker") { r = 90; }
+        else                                        { r = 80; }
+        if (archangel_online)
+        {
+            if (nm == "Progenitus")           { r = 12; }
+            else if (nm == "Unite the Coalition") { r = 14; }
+        }
+        if (nm == "Unite the Coalition")
+        {
+            const bool affordable = archangel_online
+                || (board_sources + 1 >= 7 && reach == kAll5);
+            if (affordable && opp_life <= 10 + 5 * cannons_board) { r = -10; }
+        }
+        if (!archangel_online)
+        {
+            const CardDefinition* d = def_of(c);
+            if (d != nullptr)
+            {
+                int missing = 0;
+                for (int ci = 0; ci < 5; ++ci)
+                {
+                    const Color col = static_cast<Color>(ci);
+                    if (d->card.HasColor(col) && (reach & color_bit(col)) == 0) { ++missing; }
+                }
+                const int shortfall = d->card.m_mana_cost.ManaValue() - (board_sources + 1);
+                int dist = missing + (shortfall > 0 ? shortfall : 0);
+                if (dist > 4) { dist = 4; }
+                r += dist * 100;
+            }
+        }
+        return r;
+    };
+    std::stable_sort(threat_idx.begin(), threat_idx.end(), [&](int a, int b)
+                     { return threat_rank(ap.hand[a]) < threat_rank(ap.hand[b]); });
+
+    // Build the KEEP-priority list (front = keep hardest).
+    std::vector<int> keep;
+    std::vector<char> used(static_cast<std::size_t>(n), 0);
+    auto take = [&](int i) { if (i >= 0 && !used[static_cast<std::size_t>(i)])
+                             { used[static_cast<std::size_t>(i)] = 1; keep.push_back(i); } };
+
+    // 1. Colour coverage: greedy set cover of the colours the board is missing (most new
+    //    colours first; a land beats a dork at equal gain -- the drop needs no cast).
+    unsigned cov = covered;
+    while (cov != kAll5)
+    {
+        int best = -1, best_gain = 0; bool best_land = false; unsigned best_mask = 0;
+        for (const HandMana& h : mana)
+        {
+            if (used[static_cast<std::size_t>(h.idx)]) { continue; }
+            const int gain = popcount5(h.mask & ~cov);
+            if (gain > best_gain || (gain == best_gain && gain > 0 && h.land && !best_land))
+            { best = h.idx; best_gain = gain; best_land = h.land; best_mask = h.mask; }
+        }
+        if (best < 0 || best_gain == 0) { break; }
+        take(best);
+        cov |= best_mask;
+    }
+
+    // 2. Land drops beyond coverage: one, two before turn 4 (fungible upward within mana).
+    {
+        int kept_lands = 0;
+        for (int i : keep) { for (const HandMana& h : mana) { if (h.idx == i && h.land) { ++kept_lands; } } }
+        const int drops = s.turn_number <= 3 ? 2 : 1;
+        for (const HandMana& h : mana)
+        {
+            if (kept_lands >= drops) { break; }
+            if (!h.land || used[static_cast<std::size_t>(h.idx)]) { continue; }
+            take(h.idx); ++kept_lands;
+        }
+    }
+
+    // 3. Acceleration: up to two dorks beyond coverage while board sources < 7; scaling
+    //    (domain) dorks first.
+    if (board_sources < 7)
+    {
+        int kept_dorks = 0;
+        for (int i : keep) { for (const HandMana& h : mana) { if (h.idx == i && h.dork) { ++kept_dorks; } } }
+        for (int pass = 0; pass < 2 && kept_dorks < 2; ++pass)
+        {
+            for (const HandMana& h : mana)
+            {
+                if (kept_dorks >= 2) { break; }
+                if (!h.dork || used[static_cast<std::size_t>(h.idx)]) { continue; }
+                if (pass == 0 && !h.domain) { continue; }
+                take(h.idx); ++kept_dorks;
+            }
+        }
+    }
+
+    // 4+5. Threat floor of two, then one Cannons net of board, then Greaves, then the rest of
+    //      the threats in rank order.
+    std::size_t ti = 0;
+    for (int taken = 0; taken < 2 && ti < threat_idx.size(); ++ti, ++taken) { take(threat_idx[ti]); }
+    if (cannons_board == 0 && !cannons_idx.empty()) { take(cannons_idx.front()); }
+    {
+        bool greaves_body = greaves_target_board;
+        for (int i : keep)
+        {
+            const InternedName& nm = ap.hand[i].m_name;
+            if (nm == "Maelstrom Archangel" || nm == "Two-Headed Hellkite"
+                || nm == "Cosmic Spider-Man") { greaves_body = true; }
+        }
+        if (greaves_body) { take(greaves_idx); }
+    }
+    for (; ti < threat_idx.size(); ++ti) { take(threat_idx[ti]); }
+    for (int i : cannons_idx) { take(i); }
+
+    // 7. Remaining mana: dorks over lands, colour-gain (vs the kept coverage) first.
+    {
+        std::vector<int> rest;
+        for (const HandMana& h : mana)
+        { if (!used[static_cast<std::size_t>(h.idx)]) { rest.push_back(h.idx); } }
+        auto rest_key = [&](int i) -> int
+        {
+            for (const HandMana& h : mana)
+            {
+                if (h.idx != i) { continue; }
+                return (h.dork ? 0 : 100) - popcount5(h.mask & ~cov) * 10;
+            }
+            return 1000;
+        };
+        std::stable_sort(rest.begin(), rest.end(),
+                         [&](int a, int b) { return rest_key(a) < rest_key(b); });
+        for (int i : rest) { take(i); }
+    }
+    take(greaves_idx);   // Greaves with no body: last of the keeps, first sensible shed
+
+    // Shed order = keep priority reversed; unbucketed leftovers (staged cards were skipped and
+    // are re-filtered by the shared ranking anyway) fall to the tiers via omission.
+    std::vector<int> shed(keep.rbegin(), keep.rend());
+    std::vector<int> ranked = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+    // MTG_5C_DISCARD_FAN=1: TESTING-ONLY (discard-analysis evidence runs) -- return the full
+    // shed order so the executor's searched pass trials every candidate and the trace grades
+    // the bucket pick against the labels (a single-entry return skips the trace entirely,
+    // AIEngine::ChooseDiscard). Never set in play; the shipped return is ONE index.
+    static const bool s_fan = EnvOn("MTG_5C_DISCARD_FAN");
+    if (!s_fan && ranked.size() > 1) { ranked.resize(1); }
+    return ranked;
+}
+
 int FiveColourProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     if (Fc5OrderEnabled())
