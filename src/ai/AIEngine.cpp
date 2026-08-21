@@ -2329,7 +2329,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // armed: the arming sites run after `cast_by_name(...); resolve_now();`, so by then the
         // cantrip has already drawn and the new card would read as old -- the exact case the
         // exemption exists for. Gated on the levers that read it => ship pays nothing.
-        if (TurnSolver::BreakpointHandSnapshotWanted())
+        if (TurnSolver::BreakpointHandSnapshotWanted(state))
         { rdb_hand = TurnSolver::HandCardNumbers(state); }
         // Prefer an expiring STAGED copy (Light Up the Stage etc.) over a persistent hand copy, so a
         // committed line that spends the staged copy this turn -- freeing the drawn copy for a later
@@ -2635,7 +2635,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
-        TurnSolver::CantripOrderScope _cos(rdb_site, &rdb_hand, &rdb_plan_casts);
+        TurnSolver::CantripOrderScope _cos(rdb_site, &rdb_hand, &rdb_plan_casts,
+                                           ResolveProvider(state).CondemnsConsideredAtBreakpoint());
         Player& rp = state.ActivePlayer();
         std::vector<StagedCard> snap = rp.staged_cards;
         rp.staged_cards.clear();
@@ -2756,7 +2757,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (is_draw_engine(a.card_name))
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
-                    if (TurnSolver::BreakpointHandSnapshotWanted())
+                    if (TurnSolver::BreakpointHandSnapshotWanted(state))
                     {
                         rdb_plan_casts.clear();
                         for (const Action& pa : extra.actions)
@@ -2926,7 +2927,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 else
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
-                    if (TurnSolver::BreakpointHandSnapshotWanted())
+                    if (TurnSolver::BreakpointHandSnapshotWanted(state))
                     {
                         rdb_plan_casts.clear();
                         for (const Action& pa : plan.actions)
@@ -3071,7 +3072,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 else
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
-                    if (TurnSolver::BreakpointHandSnapshotWanted())
+                    if (TurnSolver::BreakpointHandSnapshotWanted(state))
                     {
                         rdb_plan_casts.clear();
                         for (const Action& pa : plan.actions)
@@ -3153,7 +3154,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else
             {
                 rdb_site = CardDatabase::Instance().Lookup(a.card_name);
-                if (TurnSolver::BreakpointHandSnapshotWanted())
+                if (TurnSolver::BreakpointHandSnapshotWanted(state))
                 {
                     rdb_plan_casts.clear();
                     for (const Action& pa : plan.actions)

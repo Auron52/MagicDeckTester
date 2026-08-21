@@ -427,6 +427,23 @@ public:
     // cards. Default false -> byte-identical.
     virtual bool CondemnsPassedMainPhase() const { return false; }
 
+    // CondemnsConsideredAtBreakpoint -- the BREAKPOINT twin of the hook above, and per-deck for
+    // exactly the same reason. A card the section already considered and passed on is not re-offered
+    // in the continuation the section's own draw produced; the DRAWN card is exempt (it is a
+    // duplicate of nothing) via the pre-draw hand snapshot, and a card the plan CASTS is exempt via
+    // BpPlanCasts. That is USER's "we should only be considering spells that have not been
+    // considered already at every point, making the breakpoints fully distinct from each other".
+    //
+    // WHY IT IS NOT A GLOBAL FLAG. MTG_BP_CLASSIFY is the same filter as a process-wide lever, and
+    // turning it on generically is MEASURED HARMFUL: smoke 27/36, 30 searched games slower, 120
+    // play-changed, Dragonstorm gi11/gi146 6 -> loss. Where a deck's breakpoints are cantrip/staging
+    // chains, a card the plan declined really is worth reconsidering after a dig, so the filter is a
+    // genuine quality prune there. It is safe only on a deck whose breakpoints do not have that
+    // property -- KittyEquipment has exactly one breakpoint class (the Puresteel equipment-ETB draw)
+    // and had ZERO before it existed, so nothing else can be filtered. Default false ->
+    // byte-identical. See docs/design/equipment-etb-draw-breakpoint.md.
+    virtual bool CondemnsConsideredAtBreakpoint() const { return false; }
+
     // CastOrderFallbackRanks -- the FUNDING ladder for a cast whose ideal position is LATE but
     // whose output (Treasures, ritual float) may be needed earlier to pay for the line. Returns
     // the ranks to try in preference order (first = preferred); the range ladder walks down the

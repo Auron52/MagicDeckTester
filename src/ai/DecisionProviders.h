@@ -766,6 +766,15 @@ public:
     // USER equip-consolidation doctrine (2026-08-14) -- see the base hook's comment for the full
     // policy (single consolidation host; ds-vs-Kemba searched; move rule; Greaves exemptions).
     bool ConsolidatesEquips() const override { return true; }
+    // Breakpoint condemnation: don't re-offer, in the continuation, a cast this section already
+    // considered and passed on. Safe HERE specifically -- this deck has exactly ONE breakpoint class
+    // (the Puresteel equipment-ETB draw, site 6) and had zero before it existed, so the filter can
+    // only ever touch a site-6 continuation; the global lever is measured harmful on decks whose
+    // breakpoints are cantrip/staging chains (see the base hook). Worth 44-61% of site 6's search
+    // cost for byte-identical play: held-out +32.9% -> +18.3% and train +217% -> +84% over baseline,
+    // same -0.1533/-0.1200 delta and the same 24/18 games faster, 1/0 slower (1800-game sweep,
+    // logs/kitty_shape). Inert until MTG_EQUIP_DRAW_BP arms the class at all.
+    bool CondemnsConsideredAtBreakpoint() const override { return true; }
     // Board-lethal search short-circuit (the Goblins-proven wide-board cut): when attack-all
     // damage already kills this turn, skip the cast-subset odometer and just attack. Win-turn-
     // invariant. This deck's late boards are exactly the pathological shape -- Kemba cats +

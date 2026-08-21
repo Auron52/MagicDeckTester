@@ -499,7 +499,8 @@ public:
     public:
         explicit CantripOrderScope(const CardDefinition* site,
                                    const std::vector<int>* hand_before = nullptr,
-                                   const std::vector<std::uint64_t>* plan_casts = nullptr);
+                                   const std::vector<std::uint64_t>* plan_casts = nullptr,
+                                   bool classify_active = false);
         ~CantripOrderScope();
         CantripOrderScope(const CantripOrderScope&) = delete;
         CantripOrderScope& operator=(const CantripOrderScope&) = delete;
@@ -529,6 +530,9 @@ public:
     // Do either of the snapshot's consumers (MTG_CANTRIP_ORDER / MTG_BP_CLASSIFY) need it? False
     // in every ship config, so the capture is skipped entirely on the cast hot path.
     static bool BreakpointHandSnapshotWanted();
+    // State-aware twin: the per-deck provider route (CondemnsConsideredAtBreakpoint) needs
+    // the board to answer. Callers on the cast hot path all have it.
+    static bool BreakpointHandSnapshotWanted(const GameState& state);
 
     // BREAKPOINT SITE 6 -- the equipment-ETB draw (Puresteel Paladin). True when resolving `def`
     // puts an Equipment onto the battlefield while the active player controls a

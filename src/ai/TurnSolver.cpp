@@ -552,6 +552,15 @@ static bool BpClassifyEnabled()
     return heurarm::Flag(heurarm::BP_CLASSIFY, on);
 }
 
+// The filter is live if the global lever says so OR this deck's provider opts in. Two routes rather
+// than one because the global lever is a MEASUREMENT tool (and measured harmful as a default -- see
+// DecisionProvider::CondemnsConsideredAtBreakpoint), while the provider route is how a deck that can
+// safely take it actually ships. State-keyed, so every caller that filters must have the state.
+static bool BpClassifyActive(const GameState& state)
+{
+    return BpClassifyEnabled() || ResolveProvider(state).CondemnsConsideredAtBreakpoint();
+}
+
 // Memoized SEARCHED second main (defined after BuildBreakpointKey, far below): under
 // MTG_SEARCH_SECOND_MAIN + MTG_SOLVE_MEMO together, each DISTINCT post-combat state is searched
 // exactly once per decision and every later arrival reuses that searched plan. This is the
@@ -4026,15 +4035,21 @@ static bool CantripOrderBans(const CardDefinition& site, const CardDefinition& c
 // ordered class CLEARS the watermark (its continuation is not a cantrip-permutation context).
 TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site,
                                                  const std::vector<int>* hand_before,
-                                                 const std::vector<std::uint64_t>* plan_casts)
+                                                 const std::vector<std::uint64_t>* plan_casts,
+                                                 bool classify_active)
     : m_saved(g_cantrip_order_site), m_saved_hand(g_bp_hand_before),
       m_saved_casts(g_bp_plan_casts)
 {
-    if (CantripOrderEnabled() || BpClassifyEnabled()) { g_bp_plan_casts = plan_casts; }
+    // classify_active is passed in rather than read here because the provider route needs the STATE
+    // and this ctor does not have it. It must NOT default to the env lever: binding the snapshot is
+    // itself observable -- BuildBreakpointKey folds g_bp_hand_before when it is non-null -- so
+    // binding it unconditionally would move the bp-enum cache keys for every deck.
+    const bool classify = BpClassifyEnabled() || classify_active;
+    if (CantripOrderEnabled() || classify) { g_bp_plan_casts = plan_casts; }
     // The hand snapshot binds whenever EITHER consumer is live: the ordering ban needs it to spare
-    // a drawn cantrip, and MTG_BP_CLASSIFY needs it to spare a drawn spell. Bound independently of
+    // a drawn cantrip, and the classifier needs it to spare a drawn spell. Bound independently of
     // the site so the classifier works at a breakpoint whose cantrip is outside the ordered class.
-    if (CantripOrderEnabled() || BpClassifyEnabled()) { g_bp_hand_before = hand_before; }
+    if (CantripOrderEnabled() || classify) { g_bp_hand_before = hand_before; }
     if (!CantripOrderEnabled()) { return; }
     g_cantrip_order_site = (site != nullptr && CantripOrderTier(*site) >= 0) ? site : nullptr;
 }
@@ -4048,6 +4063,11 @@ TurnSolver::CantripOrderScope::~CantripOrderScope()
 bool TurnSolver::BreakpointHandSnapshotWanted()
 {
     return CantripOrderEnabled() || BpClassifyEnabled();
+}
+
+bool TurnSolver::BreakpointHandSnapshotWanted(const GameState& state)
+{
+    return CantripOrderEnabled() || BpClassifyActive(state);
 }
 
 // ---- Breakpoint site 6: the equipment-ETB draw (Puresteel Paladin) ----------------------------
@@ -4797,7 +4817,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // outlets, spectacle/alt costs, free casts -- see OptimisticTurnMana's bail-out list) makes
         // it say "not payable", which KEEPS the action, and a cast that needs the new land is not
         // payable here by construction. See docs/design/breakpoint-phase-classification.md.
-        if (BpClassifyEnabled() && g_bp_hand_before != nullptr
+        if (BpClassifyActive(state) && g_bp_hand_before != nullptr
             && !BpPlanCasts(ap.hand[i].m_name_hash))
         {
             const Card& cand = ap.hand[i];
@@ -11091,7 +11111,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // still in hand at the breakpoint, and the continuation is what realises it. Gated: not built
     // in a ship config.
     std::vector<std::uint64_t> plan_cast_names;
-    if (TurnSolver::BreakpointHandSnapshotWanted())
+    if (TurnSolver::BreakpointHandSnapshotWanted(state))
     {
         for (const Action& pa : plan.actions)
         {
@@ -11495,7 +11515,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // the two levers that read it, so a ship config pays nothing and stays byte-identical
         // (apply_one runs ~200k times a game). See docs/design/breakpoint-phase-classification.md.
         std::vector<int> hand_at_cast;
-        if (TurnSolver::BreakpointHandSnapshotWanted())
+        if (TurnSolver::BreakpointHandSnapshotWanted(state))
         { hand_at_cast = TurnSolver::HandCardNumbers(state); }
 
         std::vector<Card>& zone = from_graveyard ? ap.graveyard : ap.hand;
@@ -12705,7 +12725,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // this continuation is searched (bp_searched_plan) rather than greedy.
                     if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
                     {
-                        TurnSolver::CantripOrderScope _cos(&def, &hand_at_cast, &plan_cast_names);
+                        TurnSolver::CantripOrderScope _cos(&def, &hand_at_cast, &plan_cast_names,
+                                                          BpClassifyActive(state));
                         TurnSolver::Plan extra;
                         if (!bp_searched_plan(6, extra))
                         {
@@ -13300,7 +13321,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // searched list, the greedy fallback, and the continuation's own application). The
         // executor's twin binding is in AIEngine::resolve_draw_breakpoint -- lockstep pair.
         TurnSolver::CantripOrderScope _cos(deferred_cantrip_site, &deferred_hand_before,
-                                           &plan_cast_names);
+                                           &plan_cast_names, BpClassifyActive(state));
         deferred_cantrip_site = nullptr;
         if (out_breakpoint) { sink_stack.push_back(out_breakpoint); }
         TurnSolver::Plan extra;
