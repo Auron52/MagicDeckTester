@@ -548,3 +548,35 @@ not a salt artifact, and the true mechanism is simpler and worse than 21k record
   check, cost unknown).
 * Repro artifacts: logs/al_residual/g8c_{ctl,bun}/ (coupled game logs),
   logs/al_residual/g8_coupled_fsw*.txt (T3 plan/tail traces, memo on+off).
+
+### 21l addendum: the m1-cast sibling's combat-0 is PINNED -- scarcity tap-order taps the pumped
+### attacker; three layers interact
+
+USER asked "why can't we cast it M1?" -- we CAN (the plan is enumerated and resolves; opp even
+reaches 5 pre-combat, lower than the winning line's 6). It loses at the PAYMENT:
+* Swords+Remedy together = {2}{B}{W} = 4 mana; the board has 3 lands (Overgrown Tomb G/B, Temple
+  Garden G/W, Stomping Ground R/G) + Hierarch (B/R/G) + BoP (rainbow). A 4th source MUST tap.
+* ManaSourceRank scarcity order (spend least flexible first): duals rank 20 < Hierarch tri rank
+  30 < BoP rainbow rank 50 -> taps 3 lands + HIERARCH, sparing BoP. Both dorks are 0-power
+  (verified cards.json); Hierarch is the Invigorate target and the ONLY attacker (Cutter is
+  summoning-sick). Tapped attacker -> combat 0 -> opp survives at 5 -> win T4.
+* A sparing assignment EXISTS and wins T3 at m1 too: W=Temple Garden, B=Tomb, generic=
+  Stomping+BoP -> Hierarch attacks 5 -> opp 0 in combat. The tap order just never tries it:
+  TapForCostShared follows ManaSourceRank with zero attacker awareness, and tap order is a
+  greedy island (single assignment, no search branch; dork-atk search overrides HOLDS only,
+  never payment taps).
+* LATENT SECOND DEFECT: PoolWithoutBestAttacker (SubsetPumpWasted's test) computes
+  pool-without-Hierarch = 4 >= 4 and assumes "the payment scarcity order can spare the
+  attacker" -- but the payment DOESN'T actually spare; the flag models a sparing the solver
+  never performs, so pump-waste under-flags exactly this case.
+* The winning sequencing (control's committed line) routes around all of it: Remedy alone at m1
+  = 3 mana = 3 lands, dorks untapped, attack 5, Swords at m2 off BoP. **The m1 "decline" of
+  Swords IS the choice that keeps the attacker untapped -- condemnation deletes precisely that
+  choice.**
+* FIX MENU REVISED (USER review): (a) attacker-aware tap ordering -- when the cast set includes
+  a pump on X / X is the best ready attacker with post-pump power, rank X last (make
+  ManaSourceRank read what PoolWithoutBestAttacker already computes); this alone rescues g8
+  even with condemnation ON (sibling coverage then holds here) and is a measurable
+  heuristic-optimization item; (b) the 21l stamp exemptions for combat-interacting casts --
+  still correct in principle (m1-cast is not universally >= m2-cast: blocker info, pre/post-
+  combat riders), but no longer the only route for g8.
