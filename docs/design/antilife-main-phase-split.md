@@ -1068,3 +1068,18 @@ land-variance floor measured above (16 v 13).
 GATES: clean-env smoke byte-identical (36/36, 0 configs changed). Regression tier with the whole
 new stack (phase + condemn + both exemptions + DAMAGE_BOTH + dork search): searched **2 slower /
 9 faster**.
+
+### 21t addendum: AL HELD-OUT PROGRESSION -- the arc now nets a real gain for Anti-Lifegain
+Searched tier, 8000 held-out games, vs ground truth (negative = better):
+
+| arm | keys worse/better | net turns | per game |
+|---|---|---|---|
+| phase only | 6 / 1 | +15.00 | +0.00187 |
+| phase + condemn | 7 / 1 | +23.00 | +0.00288 |
+| phase + condemn + dork | 3 / 4 | -1.00 | -0.00013 |
+| phase + condemn + EXEMPTIONS | 6 / 1 | +14.00 | +0.00175 |
+| **full new stack** (phase + condemn + 2 exemptions + DAMAGE_BOTH + dork) | **2 / 6** | **-5.00** | **-0.00063** |
+
+This retires 21q/21r's finding that "AL gets no benefit": it did not, because two rule defects were
+eating the gain. With both root-caused and fixed, Anti-Lifegain is now measurably BETTER than
+baseline on held-out seeds (6 keys better, 2 worse), not merely at parity.
