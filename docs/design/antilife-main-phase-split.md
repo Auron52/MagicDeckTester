@@ -1407,3 +1407,96 @@ the interior second main still costs 13 turns over 6000 train games once the gif
 **MTG_AL_SSM stays OFF.** The remaining 13 turns are the honest measure of what else greedy's ordering
 knows that the searched leaf does not -- the next question if the standing "no greedy at any level"
 directive is to be finished.
+
+## 2026-08-22y: THE 13-TURN RESIDUAL IS NOT AT THE DECISION -- it is 100% the ROLLOUT'S PLAYOUT
+## POLICY. Searching AL's interior m2 DECISION is byte-identical to greedy over 26,000 games.
+
+21x closed with "removing greedy is SAFE but not BETTER: +13 turns, the honest measure of what
+greedy's ordering knows that the searched leaf does not." That framing was wrong, and the reason is
+that `MTG_AL_SSM` was measuring **two structurally different call sites at once**.
+`SolveSecondMainInSearch` is reached from:
+
+| site | caller | what it is |
+|---|---|---|
+| **BRANCH** | `SolveWithLookahead`'s candidate loop (4 call sites) | a DECISION: the m2 prices "what does passing buy me". This is what the USER directive is about. |
+| **ROLLOUT** | `SimulateToEndImpl`, per simulated turn | the playout policy of the LEAF ESTIMATOR. Not a decision: a scoring device. |
+
+`MTG_SSM_SITE` (new, default 0 = both = byte-identical) separates them. The decomposition, AL train
+seeds 1001/2002/3003, per game, loss-penalized, greedy-m2 pooled in every batch as a control (its
+digests are identical in all three runs):
+
+| arm | d3, 3000 games | d5, 3000 games |
+|---|---|---|
+| searched at BOTH sites (what 21x measured) | **+12** (12 worse, 1 better) | +1 |
+| searched at the **BRANCH site only** | **+0 -- BYTE-IDENTICAL** | **+0 -- BYTE-IDENTICAL** |
+| searched at the **ROLLOUT site only** | **+12** (12 worse, 1 better) | +1 |
+
+### The branch site: search and greedy simply AGREE on this deck
+Byte-identical play digests across **26,000 games**: 6000 train (d3+d5), 8000 held-out (all four
+overnight seeds 4004/5005/6006/7007, d3+d5, every one of the 8 cells digest-identical), and 12,000
+across four shuffle salts. Not a dead path -- the searched m2 demonstrably fires (163 real solves +
+31 memo hits per 500 held-out games; 5,464 misses per 6000 train games). It is a LOW-EXPOSURE
+decision on AL (~0.4-2.4 solves/game), which is why perfect agreement is plausible rather than
+suspicious, and that caveat belongs with the result.
+
+**So dropping the last greedy DECISION from Anti-Lifegain's main-phase search is free.**
+
+### The rollout site: real, robust, and not variance
+Everything the lever cost lives here, and it is not an artifact of the apparatus:
+
+* **Five shuffle realisations** (`shuffle_salt` 0-4, 30,000 paired games): +12, +7, +9, +13, +7 at
+  d3 -- worse in **5 of 5**, never once better in aggregate. Total **+52 turns, 62 worse : 11 better**.
+  So it is not draw-order luck, which matters because every one of the four games that survives a
+  20x budget is a FETCH-TIMING divergence (different T1 land -> reshuffle -> different draws).
+* **Four DECOUPLED search salts** (`shuffle_salt_search` != `shuffle_salt`, 12,000 games): +13, +6,
+  +8, +16 -- **+43 turns, 52 worse : 11 better**. So it is not reshuffle clairvoyance either.
+* **Budget explains about two thirds of it, not all**: the gap closes +12 -> +7 -> +4 per 3000 games
+  at 1x -> 5x -> 20x budget, and the 4 survivors at 20x are exactly the 4 that need +1 or +2 depth.
+  The mechanism is plain in the code: the rollout charges the shared budget PER SIMULATED TURN-STEP
+  (`SimulateToEndImpl`), and a searched m2 multiplies that charge, so the top-level search's start
+  gate skips passes it would otherwise run.
+* **It is NON-MONOTONE, which is the real lesson.** Dropping the rollout's m2 *entirely*
+  (`MTG_NO_M2_SOLVE=1`) costs **+7 / 3000 at d3, +3 at d5** -- so the interior m2 carries real
+  information, and yet searching it costs **+12**. Greedy is an INTERIOR OPTIMUM: both less fidelity
+  and more fidelity are worse. More faithful playouts are not more accurate rankings -- which is the
+  "HONEST where you SCORE" half of the standing LAW, measured.
+
+### ADOPTED DEFAULT ON 2026-08-22 (USER). `MTG_AL_SSM=0` reverts.
+`DecisionProvider::SearchesRolloutSecondMain()` splits the rollout site off, **defaulting to whatever
+the deck answered for the branch site** so fivecolour and KittyEquipment are byte-identical.
+`AntiLifegainProvider` overrides it to false, and `MTG_AL_SSM` flips default ON. Anti-Lifegain's
+main-phase search now takes its interior second-main DECISION by search, with no greedy `Solve`.
+
+The flip is behaviour-neutral TODAY -- its value is structural (no greedy decision remains, and
+future AL work cannot silently rest on `EvalCard`'s ordering carrying that decision). Gates, all
+against a WORKTREE BUILD OF THE COMMITTED TREE (ed1daedf), never "current binary, flags off":
+
+| gate | result |
+|---|---|
+| play, 8 AL cells x 3200 games (d3+d5, seeds 1001/2002/3003 + held-out 4004), vs committed tree | **every digest IDENTICAL** |
+| **perf**, single-threaded, min of 8 alternating reps per arm | **-0.0% total** (d3 +0.1..+0.6%, d5 -0.2..-1.9%) |
+| smoke tier | 39 passed / 0 failed, **0 configs changed** |
+| regression tier | 65 passed / 0 failed, **0 configs changed**, 0 slower / 0 faster / 0 play-changed |
+| reference reproducibility (--strict, 208 refs) | 0 play-drift, 0 shuffle-dead, 0 enum-gap, 0 mull-drift, 0 contract-fail |
+| unit tests | 11 cases / 233 assertions pass |
+
+No GT rebaseline: there is nothing to rebaseline. The perf read is min-of-N for a reason -- a
+mid-run rep on this box came back 3x slow on BOTH arms with no other process running (WSL2 host
+descheduling), which is the same trap as the "2.1x" contention figure below.
+
+### Cost: the "2.1x slower" figure from the earlier pass was CONTENTION, not the lever
+A multithreaded pooled batch reported ssm_d3 at 140s vs greedy's 67s. Single-threaded on a quiet box
+the same cells are **5556ms vs 5661ms at d3 and 5194 vs 5200 at d5 -- the searched m2 is
+cost-neutral**. `MTG_M2_SEARCH_DEPTH` remains INERT (digest- AND time-identical at caps 1 and 2), so
+the recorded "never binds" verdict stands. Same lesson as 2026-08-19: perf numbers taken under
+contention are worthless; `--threads 1` on one job is the only reliable read on this box.
+
+### Instruments added (all default-inert, smoke 39/39 with 0 configs changed)
+* `MTG_SSM_SITE` = 0 both (default) | 1 branch only | 2 rollout only.
+* `MTG_SSM_BRANCH_ONLY` + `MTG_AL_SSM` as per-job `heurarm` flags -- both arms of the A/B pool into
+  ONE batch instead of one batch per arm.
+* Per-job `shuffle_salt` / `shuffle_salt_search` manifest fields (`core/GameSetup.h`), which is what
+  let a 5-salt ensemble and a 4-salt decouple ensemble each run as a single pooled queue. Previously
+  these were env-only, i.e. one process per salt -- the wave pattern CLAUDE.md forbids.
+* `scripts/diff_game_lines.py` -- per-turn side-by-side action diff of two single-game logs, for arms
+  that differ by a FLAG (test/explain_game.py diffs two BINARIES and does not apply).

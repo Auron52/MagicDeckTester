@@ -39,11 +39,11 @@ These are generic and already in place, so a new deck inherits them:
 |---|---|---|---|---|
 | **FiveColour** | YES | YES | **YES** | the reference adoption -- fully on the design |
 | **KittyEquipment** | no | no | **YES** | `SearchedSecondMainInSearch() { return true; }` only. **Carries NO `gt_logs` rows in the suite, so its behaviour is currently unmeasured by the harness** -- worth fixing before using it as evidence for anything |
-| **Anti-Lifegain** | YES | YES | no | blocked, see §3 |
+| **Anti-Lifegain** | YES | YES | **YES (branch site)** | ADOPTED 2026-08-22, byte-identical + perf-neutral; the ROLLOUT site is declined (`SearchesRolloutSecondMain()=false`), see §3 |
 | Hinata | no | no | no | measured red on the global searched-m2 lever (2026-08-09, re-measured 2026-08-19) -- but see §4, that verdict predates the fixes |
 | burn, auras, goblins, knights, slivers, treasure_hunt, dragonstorm, creature_giving, mirrorwing, StompySurprise | no | no | no | untouched |
 
-## 3. The blocker on Anti-Lifegain, and what it means for every other deck
+## 3. Anti-Lifegain: RESOLVED 2026-08-22 -- the blocker was the ROLLOUT, not the decision
 
 With every fix above in place, turning on hook 3 for Anti-Lifegain measures (6000 train games,
 d3+d5, per game, loss-penalized):
@@ -54,18 +54,42 @@ d3+d5, per game, loss-penalized):
 | searched m2, after it | **-1** | 14 | 14 | 0 |
 | **searched m2 vs KEEPING GREEDY** | **+13** | 13 | 1 | 0 |
 
-So removing greedy is now **SAFE** (no destroyed wins) but not **BETTER**: it still costs 13 turns
-against the greedy interior m2. `MTG_AL_SSM` stays OFF.
+That +13 was measuring TWO call sites at once. `SolveSecondMainInSearch` is reached from the
+candidate loop of `SolveWithLookahead` (the **BRANCH** site -- a real decision) and from
+`SimulateToEndImpl` (the **ROLLOUT** site -- the playout policy of the leaf estimator). Split with
+`MTG_SSM_SITE`, on the same 6000 train games:
 
-**Why, and this is the general lesson for the rollout:** the greedy `Solve` is ordered by `EvalCard`,
-which consults the provider's `ArchetypeCardValue` -- so greedy's CANDIDATE ORDERING silently carries
-per-deck domain knowledge. The searched path selects by projected WIN TURN, where anything whose cost
-lands beyond the horizon is scored as free. **Greedy's ordering was substituting for depth, and the
-searched path had nothing in its place.**
+| site the searched m2 applies to | d3 / 3000 games | d5 / 3000 games |
+|---|---|---|
+| both (what the +13 measured) | +12 | +1 |
+| **BRANCH only -- the decision** | **+0, BYTE-IDENTICAL** | **+0, BYTE-IDENTICAL** |
+| ROLLOUT only | +12 | +1 |
 
-> **Before enabling hook 3 on a deck, ask what that deck's ordering knows that a win-turn leaf cannot
-> see.** Any card that is conditionally self-harming -- or whose value depends on board state the
-> horizon cannot reach -- is a candidate to blow up exactly the way Aria of Flame did.
+The branch-site result holds over **26,000 games** (6000 train, 8000 held-out on all four overnight
+seeds, 12,000 across four shuffle salts) with the searched path demonstrably firing. The rollout-site
+cost is real and robust: worse in all 5 shuffle realisations (+52 / 30,000 games) and all 4 DECOUPLED
+search salts (+43 / 12,000), so it is neither variance nor clairvoyance; ~2/3 of it is budget
+dilution (the rollout charges the shared budget per simulated turn-step) and the rest survives 20x
+budget. And it is NON-MONOTONE: removing the rollout's m2 entirely costs +7, so **greedy is an
+interior optimum** -- more playout fidelity is not more ranking accuracy.
+
+`DecisionProvider::SearchesRolloutSecondMain()` now splits the two (defaulting to the branch-site
+answer, so fivecolour/KittyEquipment are byte-identical); `AntiLifegainProvider` declines the rollout
+site. **`MTG_AL_SSM` is ADOPTED DEFAULT ON (USER, 2026-08-22)**: play is byte-identical to the
+committed tree on 8 cells / 3200 games, perf is -0.0% (single-threaded, min of 8 reps), and smoke +
+regression + the 208-reference gate are clean with 0 configs changed -- so there is no GT to
+rebaseline. Full record: `antilife-main-phase-split.md` 2026-08-22y.
+
+> **The general lesson for this rollout, and it REPLACES the "greedy's ordering knows something"
+> reading:** hook 3 is two levers wearing one name. Adopt it at the BRANCH site -- that is where the
+> USER directive applies, and on AL it was free. Be far more sceptical at the ROLLOUT site: a leaf
+> estimator is scored, not played, and upgrading its playout policy changes the estimate's BIAS
+> unevenly across candidates. Measure the two separately on every deck (`MTG_SSM_SITE=1` vs `=2`),
+> because a single number over both can read "red" while the decision half is free.
+>
+> The older warning still applies to a deck's CARDS: before enabling hook 3, ask what that deck's
+> ordering knows that a win-turn leaf cannot see -- any conditionally self-harming card can blow up
+> the way Aria of Flame did (§4).
 
 ## 4. The two known instances of that class (both fixed, both prunes)
 
@@ -129,6 +153,11 @@ runner was making the same misplay. A new deck may need its own instance of this
 * **Anti-Lifegain's value leaf and keep model** were fit under the pre-2026-08-22 play behaviour and
   are stale on the merits.
 * **KittyEquipment has no ground-truth rows** in the regression suite despite having hook 3 on.
-* **The 13-turn residual** in §3 is the honest measure of what greedy's ordering still knows that the
-  searched leaf does not. Closing it is the real prize: it is what would let hook 3 ship on decks
-  where it is currently a regression rather than merely safe.
+* **The 13-turn residual** in §3 is RESOLVED (2026-08-22): it was entirely the rollout site, and the
+  decision site was free. What is now open is the cross-deck version of the same question --
+  **fivecolour and KittyEquipment both ship the ROLLOUT site on**, inheriting whatever it costs them.
+  A first look at fivecolour (branch-only vs shipped, 600 games d3 / 300 games d5) came back -1 turn
+  / 0 turns, i.e. neutral on a thin sample; it deserves a proper measurement before either deck is
+  left as-is.
+* **Hinata's searched-m2 rejection should be re-measured PER SITE** (`MTG_SSM_SITE=1`), not just
+  re-measured: its red verdict, like AL's, is a single number over both sites.

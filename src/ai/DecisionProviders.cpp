@@ -2169,8 +2169,20 @@ bool AntiLifegainProvider::SearchedSecondMainInSearch() const
 {
     // Scoped to the phase split being live, exactly as FiveColour's hook is: a real split hands
     // the interior m2 real deferred decisions; without it the searched interior m2 is dilution.
-    static const bool on = EnvOn("MTG_AL_SSM");     // DEFAULT OFF pending measurement
-    return on && AlPhaseEnabled();
+    // Overridable PER JOB (heurarm) so both arms of the "drop the last greedy solve" A/B run in ONE
+    // pooled batch instead of one batch per arm -- unset everywhere => the env default, byte-identical.
+    //
+    // 2026-08-22: the recorded "+13 turns vs keeping greedy" rejection was measuring TWO things at
+    // once. Split by call site (MTG_SSM_SITE), the BRANCH site -- the actual decision -- is
+    // BYTE-IDENTICAL to the greedy Solve on this deck over 26,000 games (6000 train d3+d5, 8000
+    // held-out on all four overnight seeds, 12,000 across four shuffle salts), with the searched
+    // path demonstrably firing (163 solves / 500 games, not a dead path). All +13 turns came from
+    // the ROLLOUT site, which SearchesRolloutSecondMain() above declines. So with that override in
+    // place this hook is free: it removes the last greedy DECISION from AL's main-phase search
+    // without changing a single game. See docs/design/antilife-main-phase-split.md 2026-08-22y.
+    // ADOPTED DEFAULT ON 2026-08-22 (USER). MTG_AL_SSM=0 reverts.
+    static const bool env_on = EnvOn("MTG_AL_SSM", true);
+    return heurarm::Flag(heurarm::AL_SSM, env_on) && AlPhaseEnabled();
 }
 
 bool AntiLifegainProvider::CondemnsPassedMainPhase() const

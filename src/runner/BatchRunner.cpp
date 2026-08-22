@@ -105,6 +105,11 @@ struct Job
     // manifest is byte-identical. 30 is the 2HG race; as a job field the 20- and 30-life arms of
     // one comparison share ONE pooled queue instead of one batch each.
     int             starting_life       = -1;
+    // Per-job SHUFFLE SALTS (see core/GameSetup.h). -1 => unset => env => 0 => the identity, so
+    // every existing manifest is byte-identical. A salt ensemble (or a decoupled search salt) is
+    // one job per cell, pooled with every other cell.
+    long long       shuffle_salt        = -1;
+    long long       shuffle_salt_search = -1;
     bool            second_main         = false;  // precomputed DeckUsesSecondMain
     int             sched_weight        = 0;   // optional LPT scheduling priority (higher = run first);
                                                // overrides the depth/budget cost proxy for known-slow
@@ -557,6 +562,11 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     j.sched_weight        = jspec.value("weight", 0);      // LPT priority override (see Job::sched_weight)
     j.max_turns           = jspec.value("max_turns", 8);   // global goldfish horizon; per-job override
     j.starting_life       = jspec.value("starting_life", -1);  // -1 => env => 20 (2HG uses 30)
+    // Shuffle salts (see core/GameSetup.h): -1 => env => 0. A salt ENSEMBLE -- the instrument that
+    // separates a real effect from draw-order luck on any fetch/tutor-class lever -- is one cell per
+    // (arm, salt), so carrying the salt per job is what keeps the ensemble in ONE pooled batch.
+    j.shuffle_salt        = jspec.value("shuffle_salt", -1LL);
+    j.shuffle_salt_search = jspec.value("shuffle_salt_search", -1LL);
     j.abandon_units       = jspec.value("abandon_units", 0LL);   // per-game ceiling; see Job::abandon_units
     j.abandon_k           = jspec.value("abandon_k", 0.0);       // ...or k x the cell's own median
     j.abandon_calib       = jspec.value("abandon_calib", 0);     //    over its first N games
@@ -1452,7 +1462,9 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     valuearm::t_arm = jobs[wi.job].arm;
                     // Same lifetime rule as the arm: set unconditionally so a previous job's
                     // starting life cannot leak into this one through the reused worker thread.
-                    gamesetup::t_setup.starting_life = jobs[wi.job].starting_life;
+                    gamesetup::t_setup.starting_life       = jobs[wi.job].starting_life;
+                    gamesetup::t_setup.shuffle_salt        = jobs[wi.job].shuffle_salt;
+                    gamesetup::t_setup.shuffle_salt_search = jobs[wi.job].shuffle_salt_search;
                     // Same lifetime rule, and it must also precede the engine build: a provider's
                     // cast order is consulted from the first solve onward (see ai/HeuristicArm.h).
                     heurarm::t_arm  = jobs[wi.job].flags;

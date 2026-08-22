@@ -28,7 +28,15 @@ namespace gamesetup
 {
 struct Setup
 {
-    int starting_life = -1;   // -1 unset | >0 explicit   (manifest "starting_life")
+    int       starting_life       = -1;   // -1 unset | >0 explicit   (manifest "starting_life")
+    // Shuffle-variance / clairvoyance-decoupling salts (see GameState::shuffle_salt[_search]).
+    // -1 unset | >=0 explicit. Same argument as starting_life, and it is the one that matters
+    // most here: a SALT ENSEMBLE is how this repo separates a real effect from draw-order luck
+    // for any fetch/tutor-class lever, and as an env-only knob it forced one `mtg --batch` per
+    // salt -- a per-arm/per-salt wave, which is exactly the pattern CLAUDE.md's pooling rule
+    // forbids. As job fields every (arm, salt) cell of an ensemble shares ONE queue and one tail.
+    long long shuffle_salt        = -1;   // manifest "shuffle_salt"
+    long long shuffle_salt_search = -1;   // manifest "shuffle_salt_search"
 };
 
 inline thread_local Setup t_setup;
@@ -43,5 +51,39 @@ inline int StartingLife()
         return v > 0 ? v : 20;
     }();
     return t_setup.starting_life > 0 ? t_setup.starting_life : s_env;
+}
+
+// The resolved MID-GAME shuffle salt (the opening stays fixed; MTG_SHUFFLE_SALT_OPENING is
+// env-only). Per-job override -> env -> 0 (the identity => byte-identical).
+inline unsigned long long ShuffleSalt()
+{
+    static const unsigned long long s_env = []
+    {
+        const char* e = std::getenv("MTG_SHUFFLE_SALT");
+        return (e && *e) ? std::strtoull(e, nullptr, 10) : 0ull;
+    }();
+    return t_setup.shuffle_salt >= 0
+             ? static_cast<unsigned long long>(t_setup.shuffle_salt) : s_env;
+}
+
+// The resolved salt the SEARCH/rollout evaluation uses. DEFAULTS TO ShuffleSalt() when neither
+// the job nor the environment sets it -- equal salts mean lockstep/byte-identical play; making
+// them DIFFER is the decoupling instrument (the search plans against a reshuffle the executor
+// will not deal).
+inline unsigned long long SearchShuffleSalt()
+{
+    static const bool s_env_set = []
+    {
+        const char* e = std::getenv("MTG_SHUFFLE_SALT_SEARCH");
+        return e != nullptr && *e != '\0';
+    }();
+    static const unsigned long long s_env = []
+    {
+        const char* e = std::getenv("MTG_SHUFFLE_SALT_SEARCH");
+        return (e && *e) ? std::strtoull(e, nullptr, 10) : 0ull;
+    }();
+    if (t_setup.shuffle_salt_search >= 0)
+    { return static_cast<unsigned long long>(t_setup.shuffle_salt_search); }
+    return s_env_set ? s_env : ShuffleSalt();
 }
 }   // namespace gamesetup

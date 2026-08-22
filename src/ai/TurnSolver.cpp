@@ -1035,7 +1035,7 @@ namespace m2yield
 
 static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int depth, int max_turns,
                                                 SearchBudget* budget, bool second_main,
-                                                TranspositionTable* tt)
+                                                TranspositionTable* tt, bool in_rollout)
 {
     struct M2Guard { M2Guard() { ++g_cs_m2solve_nest; } ~M2Guard() { --g_cs_m2solve_nest; } } _m2g;
     // MTG_NO_M2_SOLVE=1 -- TEMPORARY MEASUREMENT LEVER (default off). Return an empty plan instead
@@ -1048,8 +1048,29 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     // Two routes into the searched path: the global measurement lever (MTG_SEARCH_SECOND_MAIN),
     // or the provider's per-deck adoption (SearchedSecondMainInSearch -- see the hook note; a
     // phase-specified deck's interior m2 carries real decisions, everyone else keeps greedy).
-    const bool searched = !GreedySecondMainEnabled()
-                       || ResolveProvider(state).SearchedSecondMainInSearch();
+    // MTG_SSM_SITE -- WHICH of the two call sites the searched m2 applies to. The interior m2 is
+    // reached from two structurally different places, and they are not the same kind of thing:
+    //   1 = BRANCH only  -- SolveWithLookahead's candidate loop, where the m2 prices "what does
+    //       passing buy me". This is a DECISION the search is making.
+    //   2 = ROLLOUT only -- SimulateToEndImpl's per-turn m2, i.e. the playout policy of the LEAF
+    //       ESTIMATOR. Not a decision: a scoring device.
+    //   0 = both (default; byte-identical to before this lever existed).
+    // Separating them is what the standing LAW ("OPTIMISTIC where you BRANCH, HONEST where you
+    // SCORE") asks for, and it is the decomposition that says whether "no greedy at any level"
+    // means the branch site alone or the rollout too. See antilife-main-phase-split.md.
+    // Per-JOB route to site 1 as well (heurarm), so both arms of the comparison pool into one batch.
+    static const int s_ssm_site = EnvInt("MTG_SSM_SITE", 0);
+    const int site = heurarm::Flag(heurarm::SSM_BRANCH_ONLY, false) ? 1 : s_ssm_site;
+    const bool site_on = (site == 0)
+                      || (site == 1 && !in_rollout)
+                      || (site == 2 && in_rollout);
+    // Per-deck: the BRANCH site asks SearchedSecondMainInSearch, the ROLLOUT site asks
+    // SearchesRolloutSecondMain (which defaults to the former -> byte-identical). See the hook.
+    const DecisionProvider& prov = ResolveProvider(state);
+    const bool searched = site_on
+                       && (!GreedySecondMainEnabled()
+                           || (in_rollout ? prov.SearchesRolloutSecondMain()
+                                          : prov.SearchedSecondMainInSearch()));
     // MTG_M2_SEARCH_DEPTH=<n>: cap the interior m2 solve's depth (value-carrying; unset/<=0 = no
     // cap = full sub_depth, the 5C-adopted behaviour). n=1 is the "lean form" second-main-greedy.md
     // item 2 recorded: enumerate the m2 candidate set and score each with ONE playout, instead of
@@ -20265,7 +20286,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                 // the rollout's last greedy plan step: every future turn's second main was decided
                 // by the d0 heuristic, so a rollout could not see a future turn holding mana for a
                 // post-combat finisher any more than this turn could.
-                post_plan = SolveSecondMainInSearch(state, depth, max_turns, budget, second_main, tt);
+                post_plan = SolveSecondMainInSearch(state, depth, max_turns, budget, second_main, tt,
+                                                    /*in_rollout=*/true);
             }
             ApplyPlanDirect(state, post_plan, false);
             if (state.Opponent().life <= 0) { return state.turn_number; }
@@ -23964,7 +23986,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (second_main)
                 {
                     Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
-                                                        second_main, tt);
+                                                        second_main, tt, /*in_rollout=*/false);
                     ApplyPlanDirect(copy, post, false);
                     if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return plan; }
                 }
@@ -24095,7 +24117,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                             // Searched, exactly as in the main candidate loop above -- a deferred
                             // wave's variants must be scored on the same footing as wave 0's.
                             Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
-                                                                second_main, tt);
+                                                                second_main, tt, /*in_rollout=*/false);
                             ApplyPlanDirect(copy, post, false);
                             if (copy.Opponent().life <= 0) { report(state.turn_number, depth - 1); return v; }
                         }
@@ -24191,7 +24213,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (second_main)
                     {
                         Plan post = SolveSecondMainInSearch(copy, sub_depth, max_turns, budget,
-                                                            second_main, tt);
+                                                            second_main, tt, /*in_rollout=*/false);
                         ApplyPlanDirect(copy, post, false);
                         if (copy.Opponent().life <= 0) { won_out = true; return true; }
                     }
@@ -24316,7 +24338,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     if (second_main)
                     {
                         Plan post = SolveSecondMainInSearch(copy, committed_sub_depth, max_turns,
-                                                            budget, second_main, &esc_tt);
+                                                            budget, second_main, &esc_tt,
+                                                            /*in_rollout=*/false);
                         ApplyPlanDirect(copy, post, false);
                         if (copy.Opponent().life <= 0) { return state.turn_number; }
                     }

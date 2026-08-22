@@ -449,6 +449,33 @@ public:
     // file warns about.)
     virtual bool SearchedSecondMainInSearch() const { return false; }
 
+    // SearchesRolloutSecondMain -- the OTHER call site of the interior second main, split out
+    // 2026-08-22 because the two are not the same kind of thing:
+    //
+    //   * SearchedSecondMainInSearch (above) is the BRANCH site -- SolveWithLookahead's candidate
+    //     loop, where the m2 prices "what does passing buy me". That is a DECISION the search makes,
+    //     and it is what the USER directive "search should be truly search at every level" is about.
+    //   * This hook is the ROLLOUT site -- SimulateToEndImpl's per-turn second main, i.e. the
+    //     playout policy of the LEAF ESTIMATOR. Not a decision: a scoring device.
+    //
+    // Anti-Lifegain measured the difference and it is large and one-directional. Searching the
+    // BRANCH site is byte-identical to the greedy Solve over 26,000 games (6000 train + 8000
+    // held-out + 12,000 across four shuffle salts) -- the search and greedy simply agree there.
+    // Searching the ROLLOUT site costs +12 turns / 3000 train games at d3, reproduced in all five
+    // shuffle realisations (+52 / 30,000) and all four DECOUPLED search salts (+43 / 12,000), so it
+    // is neither draw-order variance nor reshuffle clairvoyance. It is also non-monotone: dropping
+    // the rollout's m2 entirely costs +7, i.e. greedy is an interior optimum -- more playout
+    // fidelity is not more ranking accuracy, which is the standing LAW's "HONEST where you SCORE"
+    // half. Roughly two thirds of the cost is budget dilution (the gap closes 12 -> 4 at 20x budget;
+    // the rollout charges the shared budget per simulated turn-step, and a searched m2 multiplies
+    // that) and the rest survives 20x.
+    //
+    // DEFAULT = whatever the deck answered for the branch site, so every deck that already adopted
+    // the hook (fivecolour, KittyEquipment) is byte-identical. A deck overrides this to false to
+    // keep the cheap greedy playout while its DECISIONS are fully searched.
+    // See docs/design/antilife-main-phase-split.md 2026-08-22y.
+    virtual bool SearchesRolloutSecondMain() const { return SearchedSecondMainInSearch(); }
+
     // PhaseFilterRootTurnOnly -- per-deck ROOT-TURN AUTHORITY for the pre-combat Main2 filter
     // (the condemnation arc's lesson applied to the phase split, 2026-08-21): the filter fires
     // at REAL decision turns (executor play + the search's root turn, incl. its interior m2 and

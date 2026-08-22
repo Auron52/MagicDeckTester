@@ -675,17 +675,16 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // game_seed be replayed with different shuffle realisations. Default 0 -> SaltSeed identity ->
     // byte-identical. shuffle_salt salts mid-game shuffles only (fixed opening); the _OPENING salt
     // also varies the initial deck shuffle + mulligan reshuffles.
-    static const uint64_t s_shuffle_salt         = []{ const char* e = std::getenv("MTG_SHUFFLE_SALT");         return e ? std::strtoull(e, nullptr, 10) : 0ull; }();
+    // Both salts resolve per-job -> env -> 0 (see core/GameSetup.h); a whole salt ENSEMBLE
+    // therefore runs in one pooled batch instead of one process per salt.
     static const uint64_t s_shuffle_salt_opening = []{ const char* e = std::getenv("MTG_SHUFFLE_SALT_OPENING"); return e ? std::strtoull(e, nullptr, 10) : 0ull; }();
     // Clairvoyance-decoupling instrument (ANALYSIS ONLY): the salt the SEARCH evaluation uses for its
     // mid-game shuffles. Defaults EQUAL to shuffle_salt (unset -> same value) so normal play is
     // byte-identical/lockstep; set it DIFFERENT to make the search plan against a reshuffle the real
     // executor will not deal (strips shuffle-decision clairvoyance). See GameState::shuffle_salt_search.
-    static const bool     s_have_salt_search = EnvSet("MTG_SHUFFLE_SALT_SEARCH");
-    static const uint64_t s_shuffle_salt_search = []{ const char* e = std::getenv("MTG_SHUFFLE_SALT_SEARCH"); return e ? std::strtoull(e, nullptr, 10) : 0ull; }();
-    state.shuffle_salt         = s_shuffle_salt;
+    state.shuffle_salt         = gamesetup::ShuffleSalt();
     state.shuffle_salt_opening = s_shuffle_salt_opening;
-    state.shuffle_salt_search  = s_have_salt_search ? s_shuffle_salt_search : s_shuffle_salt;
+    state.shuffle_salt_search  = gamesetup::SearchShuffleSalt();
     state.deck_feeds_combat    = DeckFeedsCombat(deck);   // main-phase classifier's deck-level input
     // Structural gate for the classifier: a deck that never plays a second main must never have
     // casts deferred INTO one (defer == delete there). Stamped from the same detector the runner

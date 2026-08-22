@@ -53,6 +53,8 @@ enum Slot : int
     KE_BUCKET_DISCARD,        // MTG_KE_BUCKET_DISCARD     bucketed cleanup discard (creatures/mana/equipment)
     EQUIP_PIECE_DEPS,         // MTG_EQUIP_PIECE_DEPS     reject a stranded equip at the odometer digit
     KE_DISCARD_RESIDUAL,      // MTG_KE_DISCARD_RESIDUAL  discard equipment bucket is the 7-card residual
+    AL_SSM,                   // MTG_AL_SSM                Anti-Lifegain searched interior second main
+    SSM_BRANCH_ONLY,          // MTG_SSM_BRANCH_ONLY       searched interior m2 at the BRANCH site only
     COUNT
 };
 
@@ -83,6 +85,8 @@ inline const char* Name(int slot)
         "MTG_KE_BUCKET_DISCARD",
         "MTG_EQUIP_PIECE_DEPS",
         "MTG_KE_DISCARD_RESIDUAL",
+        "MTG_AL_SSM",
+        "MTG_SSM_BRANCH_ONLY",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }
