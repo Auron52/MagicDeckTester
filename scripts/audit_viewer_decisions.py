@@ -210,6 +210,16 @@ INERT_PARAMS = {
     "damage": "damage amount", "draw": "draw count", "cast_draw": "draw count",
     "power_bonus": "stat bonus", "tough_bonus": "stat bonus",
     "power_equals_creature_count": "computed P/T", "damage_equals_top_mv": "computed damage",
+    # Escalating trick pumps. Both are MULTIPLIER CONSTANTS read at resolution, not choices:
+    # Fortifying Draught's is scaled by Player::life_gained_this_turn (a running total nobody
+    # picks), and Luxurious Libation's by the {X} paid. Libation's X IS a real decision, but it
+    # rides the `chosen_x` plan-variant axis -- enumerated in TurnSolver, listed in
+    # tools/play/DECISIONS.md as a human-picked plan index, and emitted as "x" on the plan JSON
+    # (main.cpp) -- so it is surfaced by main_phase, exactly like `x_damage_multiplier` below.
+    "pump_per_life_gained_power": "computed P/T (x life gained this turn)",
+    "pump_per_life_gained_tough": "computed P/T (x life gained this turn)",
+    "pump_per_x_power": "computed P/T (x the {X} paid; the X pick itself rides chosen_x -> main_phase)",
+    "pump_per_x_tough": "computed P/T (x the {X} paid; the X pick itself rides chosen_x -> main_phase)",
     "verse_damage": "damage detail", "x_damage_multiplier": "X-spell damage scale ({X}->main_phase)",
     "animate_power": "animated P/T", "animate_toughness": "animated P/T",
     "attack_token_power": "token P/T", "attack_token_toughness": "token P/T",
@@ -219,6 +229,13 @@ INERT_PARAMS = {
     "tap_token_toughness": "token P/T", "tap_token_subtypes": "token subtypes",
     "tap_token_requires_subtypes": "token gating detail", "upkeep_token_power": "token P/T",
     "upkeep_token_toughness": "token P/T", "upkeep_token_subtypes": "token subtypes",
+    # Luxurious Libation's Citizen. Same shape as the cast_/attack_/upkeep_token_* triples above:
+    # ResolveTrickPayload calls CreateToken with these three fixed param values and no chooser, so
+    # the token's existence, P/T and subtypes are all forced once the spell resolves. The only
+    # CHOICE Libation carries is which creature it targets, which rides `solo_target_trick` ->
+    # main_phase (already mapped), plus its {X} on the chosen_x plan-variant axis.
+    "trick_token_power": "token P/T", "trick_token_toughness": "token P/T",
+    "trick_token_subtypes": "token subtypes",
     # automatic triggers / static effects (no choice)
     "affects_all_creatures": "board-wide static, no target",
     "attack_creates_tokens": "automatic attack trigger",

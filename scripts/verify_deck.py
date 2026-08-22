@@ -119,9 +119,20 @@ def gate_card_costs(no_network):
     if no_network:
         return Gate("card_costs", SKIP, True, "skipped (--no-network)",
                     disclose=["card_costs SKIPPED (--no-network) -- Scryfall cost/cmc reality-diff not run"])
-    rc, out, err = run([sys.executable, str(ROOT / "scripts/audit_card_costs.py")], timeout=300)
+    # A full cold sweep is ~230 cards x (round trip + 0.1s throttle), and every card Scryfall
+    # 429s costs a further 1+2+4s of backoff -- a rate-limited run legitimately needs ~10 min, so
+    # the old 300s cap timed out on a HEALTHY audit rather than on a slow one.
+    rc, out, err = run([sys.executable, str(ROOT / "scripts/audit_card_costs.py")], timeout=1800)
     if rc == 127 or "Traceback" in err:
         return Gate("card_costs", ERROR, True, f"tool error (rc={rc}): {err.strip()[:200]}")
+    # DID-NOT-RUN IS NOT A FINDING. audit_card_costs exits 1 ONLY on a real mismatch (an
+    # unresolved card does not move its rc), so a 124 is our own timeout sentinel -- nothing was
+    # compared. Reporting that as "1 Scryfall cost mismatch(es)" invented a defect that did not
+    # exist and hid the real cause; fail closed, but say which one it is.
+    if rc == 124:
+        return Gate("card_costs", FAIL, True, "cost audit DID NOT COMPLETE (timeout) -- no costs compared",
+                    [("card_costs:*", f"cost audit did not complete: {err.strip()[:120]}; "
+                                      f"no cost was compared -- this is a did-not-run, not a mismatch")])
     findings = []
     if rc != 0 or "MISMATCHES" in out:
         for ln in out.splitlines():
