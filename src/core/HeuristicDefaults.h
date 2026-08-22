@@ -18,6 +18,18 @@
 #include <iostream>
 #include <string>
 #include <filesystem>
+#ifdef _WIN32
+// For GetModuleFileNameW in ExecutablePath(). LEAN_AND_MEAN drops the winsock/GDI bulk; NOMINMAX
+// stops windows.h defining min/max as macros, which would break std::min/std::max at every later
+// use in this codebase.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 // Resolve the defaults file INDEPENDENT of the process CWD. The old behavior resolved the
 // relative path against the CWD only, so running the binary from logs/, a batch worker, or any
@@ -25,12 +37,33 @@
 // difference to catch it (a cross-machine-reproducibility hazard). Now: walk UP from the
 // executable's own directory (build/<Config>/mtg -> repo root two levels up, but the walk handles
 // any nesting) looking for the relative path; fall back to the CWD-relative path if not found.
+// Path to THIS executable, or empty if the platform route is unavailable. The whole point of the
+// walk below is CWD-independence, so a platform without this degrades to CWD-relative -- which is
+// what Windows silently did while only /proc/self/exe was consulted.
+inline std::filesystem::path ExecutablePath()
+{
+    std::error_code ec;
+#if defined(_WIN32)
+    std::wstring buf(MAX_PATH, L'\0');
+    for (;;)
+    {
+        const DWORD n = GetModuleFileNameW(nullptr, buf.data(), static_cast<DWORD>(buf.size()));
+        if (n == 0) { return {}; }
+        if (n < buf.size()) { buf.resize(n); return std::filesystem::path(buf); }
+        buf.resize(buf.size() * 2);                          // truncated -> grow and retry
+    }
+#else
+    std::filesystem::path exe = std::filesystem::read_symlink("/proc/self/exe", ec);
+    return ec ? std::filesystem::path{} : exe;
+#endif
+}
+
 inline std::filesystem::path ResolveHeuristicDefaultsPath(const std::filesystem::path& rel)
 {
     namespace fs = std::filesystem;
     std::error_code ec;
-    fs::path exe = fs::read_symlink("/proc/self/exe", ec);   // Linux; other platforms fall through
-    if (!ec)
+    const fs::path exe = ExecutablePath();
+    if (!exe.empty())
     {
         for (fs::path dir = exe.parent_path(); !dir.empty(); dir = dir.parent_path())
         {

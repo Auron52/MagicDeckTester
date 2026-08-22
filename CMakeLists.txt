@@ -274,4 +274,8 @@ add_executable(mtg-test
     test/unit/test_mana_payment.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
-add_test(NAME unit COMMAND mtg-test)
+# Run from the SOURCE dir: the tests load src/cards/data/cards.json, and ctest's default working
+# directory is the build tree. It happened to work on Linux only because the loader walks up from
+# /proc/self/exe -- a route Windows does not have -- so on MSVC every test threw "Cannot open card
+# data file". Pinning the working directory makes it deterministic on both, independent of that walk.
+add_test(NAME unit COMMAND mtg-test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
