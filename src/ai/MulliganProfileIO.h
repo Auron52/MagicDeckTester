@@ -1157,8 +1157,15 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
             // target_depth silently dropped them -- the Mirrorwing recommend scout ran at the d5/b20
             // gen default instead of the deck's mull_gen d3/b3. With target_depth absent it parses to
             // 0, so present()/drives() stay false and play is untouched.
+            // expected_buckets belongs in this list too: phase F writes a value_play holding ONLY
+            // that key when the deck ships no play policy (nothing to reference a mull_gen setting
+            // against), and it is READ below -- so omitting it here dropped the block, read K as 0,
+            // and silently disarmed the very guard phase F says to rely on ("every later generation
+            // must match it or it refuses to run"). Same defect as the mull_gen_* one above, one key
+            // over. Caught on Mirrorwing 2026-08-22.
             if (vp.is_object() && (vp.contains("target_depth") || vp.contains("mull_gen_depth")
-                                   || vp.contains("mull_gen_budget_ms")))
+                                   || vp.contains("mull_gen_budget_ms")
+                                   || vp.contains("expected_buckets")))
             {
                 profile.value_play.target_depth = vp.value("target_depth", 0);
                 profile.value_play.budget_ms    = vp.value("budget_ms", 0);
