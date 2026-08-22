@@ -835,6 +835,15 @@ public:
     // Review-artifact labels: this deck's reviewed tiers land on generic rank numbers whose
     // generic names mean unrelated things.
     const char* CastOrderTierName(int rank) const override;
+    // BUCKETED cleanup discard, to the USER's design (2026-08-22, verbatim): "bucket creatures
+    // (max 2, preferably Puresteel Paladin and Kor Duelist, or alternatively another enabler
+    // (Armored Skyhunter, Kemba, Stoneforge) and a doublestriker or Kemba if none are available),
+    // mana sources (up to 3-4 mana, no more than 3 sources and always keep sol ring) and equipment
+    // (at least 2 if not 3, preferring high-impact like Colossus Hammer if we have a way to cheat
+    // equip it and otherwise look for cheap equipment like bonesplitter and o-naginata)". Same
+    // shape as AntiLifegainProvider's bucketed rule. Hatch MTG_KE_BUCKET_DISCARD=0.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
     // Enumeration breadth (Mirrorwing's lever on this deck's shape) -- MTG_KE_GROUP_CAP, default
     // OFF -> the generic 12. See the definition for the measured cost/quality dial.
     int EnumGroupCap() const override;

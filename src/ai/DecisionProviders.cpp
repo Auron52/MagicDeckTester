@@ -10457,6 +10457,311 @@ EquipmentProvider::MainPhaseOverride(const GameState&, const CardDefinition& def
     return std::nullopt;
 }
 
+// ---- BUCKETED cleanup discard (USER design, 2026-08-22) ---------------------------------------
+// The user's rule, verbatim: "bucket creatures (max 2, preferably Puresteel Paladin and Kor Duelist,
+// or alternatively another enabler (Armored Skyhunter, Kemba, Stoneforge) and a doublestriker or
+// Kemba if none are available), mana sources (up to 3-4 mana, no more than 3 sources and always keep
+// sol ring) and equipment (at least 2 if not 3, preferring high-impact like Colossus Hammer if we
+// have a way to cheat equip it and otherwise look for cheap equipment like bonesplitter and
+// o-naginata)". Structurally the AntiLifegain bucketed rule: census the hand, fill each bucket to
+// its cap counting what the BOARD already supplies, and shed the surplus worst-first. Omission from
+// the returned order means KEEP (see CleanupDiscardRankingWithOrder), so a bucket is expressed by
+// simply not naming the cards that fill it.
+//
+// WHAT "cheat equip" MEANS HERE, read off cards.json rather than memory. Colossus Hammer is {1} to
+// cast and Equip {8} -- unpayable in a deck whose curve tops out around four mana -- so it is live
+// only through a cost-BYPASS. The question this bucket asks is specifically about a Hammer IN HAND,
+// and by that test the deck has exactly TWO bypasses:
+//   Puresteel Paladin  metalcraft_equip_zero_artifacts=3  -- every equip becomes {0}
+//   Balan              attach_all_equipment_cost={1}{W}   -- attaches EVERY Equipment, equip cost bypassed
+// USER, 2026-08-22: "Armored Skyhunter doesn't help for equipping equipment in hand" -- correct, and
+// the card confirms it. Its attach applies to an Equipment put from "the top six cards of your
+// LIBRARY"; a card sitting in hand is not among them, so it cheats nothing this bucket is deciding
+// about. Stoneforge is out for the mirror-image reason: its put "dodges only the CAST cost --
+// equipping is still the Equip action / metalcraft" (cards.json), and the Hammer's cast is the {1}
+// that was never the problem. Both remain valid ENABLERS in the creature bucket; neither is a
+// cheat-equipper. Without one of the two real bypasses the Hammer is the deck's deadest card in hand
+// and sheds first.
+//
+// O-Naginata carries equip_min_power=3, and the only power-3 bodies here are Balan and Skyhunter --
+// so on a Kor Duelist / Puresteel board it is live only AFTER a Bonesplitter (+2/+0) pumps the host
+// over the line. It is therefore ranked as cheap-but-conditional rather than alongside Bonesplitter.
+//
+// REMOVAL IS IN NO BUCKET, so it sheds first -- which is the user's own standing ruling on these two
+// cards ("Swords and Unexpectedly are essentially unused in goldfish", 2026-08-19) and what the
+// deck's own profile says: Swords to Plowshares scores -0.5016, the worst card in the deck, and
+// Unexpectedly Absent -0.1796.
+//
+// EXPECTATIONS, stated up front because they bound what this can be worth: the cleanup discard
+// almost never fires in PLAY (measured: 1 real shed per 120 games with mulligans on, 9 with them
+// forced off). Its denominator is the ROLLOUT -- 425/game normal, 591/game forced-keep -- and above
+// all the mulligan generator, where a land-light hand cannot deploy and so crosses seven cards every
+// turn. This is a rollout-model and keep-generation rule, not a play rule, and it should be measured
+// on that workload. See docs/design/kitty-tutor-and-discard-heuristics.md.
+static bool KittyBucketDiscardEnabled()
+{
+    static const bool env = EnvOn("MTG_KE_BUCKET_DISCARD", true);
+    return heurarm::Flag(heurarm::KE_BUCKET_DISCARD, env);
+}
+
+// Target hand size after a cleanup discard (CR 514.1). The USER's allocation is stated against it
+// directly -- 2 creatures + 3 mana sources + 2 equipment = 7 -- so the residual below is literally
+// "what is left of the hand".
+static constexpr int kHandTarget = 7;
+
+// The mana the hand is trying to REACH, and the cap on how many source CARDS it spends doing so.
+// USER: "4 mana is pretty much the cap, so we don't need to go higher than that" -- and the curve
+// agrees, topping out at Balan {2}{W}{W} and Armored Skyhunter {3}{W}.
+static constexpr int kManaTarget     = 4;
+static constexpr int kMaxHandSources = 3;
+
+// ...and the COLOUR floor, which is the other half of the same user note: "the bounceland also counts
+// as 2 sources, though not in combination with just sol ring" (2026-08-22). Sol Ring produces {C}{C}
+// and Boros Garrison produces {R}{W} -- one white between them -- so that pair reaches four mana and
+// still cannot cast Puresteel {W}{W}, Kemba {1}{W}{W} or Balan {2}{W}{W}, which are the deck's only
+// two-pip costs and three of its five creatures. Reaching the mana target is therefore not on its own
+// a reason to stop keeping lands.
+static constexpr int kMinWhiteSources = 2;
+
+// A mana source that can actually pay a {W} pip. Read off `produces` rather than assumed from the
+// deck being mono-white: Sol Ring is colourless and the Garrison's other pip is red.
+static bool ProducesWhite(const CardDefinition& d)
+{
+    for (Color c : d.params.produces) { if (c == Color::White) { return true; } }
+    return false;
+}
+
+// EQUIPMENT AS THE RESIDUAL, separable so a sweep can attribute it rather than measuring it folded
+// into the buckets and guessing which half moved. Off = the flat cap of 3 this rule carried before
+// the allocation was settled. See the ALLOCATION block for the argument.
+static bool KittyDiscardResidualEnabled()
+{
+    static const bool env = EnvOn("MTG_KE_DISCARD_RESIDUAL", true);
+    return heurarm::Flag(heurarm::KE_DISCARD_RESIDUAL, env);
+}
+
+std::vector<int> EquipmentProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    if (!KittyBucketDiscardEnabled())
+    { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    const Player& ap = s.players[s.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n == 0) { return {}; }
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+
+    // ---- Role tables. Lower rank = kept sooner. ------------------------------------------------
+    // Enablers: the user named Puresteel first and then "another enabler (Armored Skyhunter, Kemba,
+    // Stoneforge)" without ordering the alternatives. Ordered here by CASTABILITY, because the hands
+    // that reach a discard at all are the land-light ones: Stoneforge {1}{W} < Kemba {1}{W}{W} <
+    // Skyhunter {3}{W}. Flagged as a judgement call the spec did not settle.
+    auto enabler_rank = [](const std::string& nm) -> int {
+        if (nm == "Puresteel Paladin")  { return 0; }
+        if (nm == "Stoneforge Mystic")  { return 1; }
+        if (nm == "Kemba, Kha Regent")  { return 2; }
+        if (nm == "Armored Skyhunter")  { return 3; }
+        return -1;
+    };
+    // Double strikers, cheapest first: Kor Duelist {W} (double_strike_while_equipped) then Balan
+    // {2}{W}{W} (double_strike_min_equipment=2).
+    auto ds_rank = [](const std::string& nm) -> int {
+        if (nm == "Kor Duelist")             { return 0; }
+        if (nm == "Balan, Wandering Knight") { return 1; }
+        return -1;
+    };
+    // Bypasses the EQUIP cost for a card in HAND -- see the note above for why Skyhunter (library
+    // dig) and Stoneforge (cast cost only) are deliberately not here.
+    auto is_cheat_equipper = [](const std::string& nm) {
+        return nm == "Puresteel Paladin" || nm == "Balan, Wandering Knight";
+    };
+
+    // ---- What the BOARD already supplies. A role filled on board needs no hand copy. ------------
+    int  board_mana = 0, board_white = 0, board_lands = 0;
+    bool board_enabler = false, board_ds = false, board_kemba = false, board_cheat = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = def_of(p.card);
+        if (d == nullptr) { continue; }
+        const std::string& nm = p.card.m_name.str();
+        // MANA, not source count -- a Sol Ring or a Boros Garrison already in play taps for two, and
+        // the target below is denominated in mana. (Garrison's second pip is red in a mono-white
+        // deck, but every generic cost in the deck can spend it, starting with Colossus Hammer {1}.)
+        if (d->card.IsLand() || d->params.mana_rock)
+        {
+            board_mana += std::max(1, d->params.produces_amount);
+            if (ProducesWhite(*d)) { ++board_white; }
+            if (d->card.IsLand())  { ++board_lands; }   // what a Karoo's ETB can bounce
+        }
+        if (enabler_rank(nm) >= 0)   { board_enabler = true; }
+        if (ds_rank(nm) >= 0)        { board_ds = true; }
+        if (nm == "Kemba, Kha Regent") { board_kemba = true; }
+        if (is_cheat_equipper(nm))   { board_cheat = true; }
+    }
+
+    // ---- Hand census ---------------------------------------------------------------------------
+    struct Ent { int idx; int rank; };
+    std::vector<Ent> enablers, strikers, kembas, sources, equipment;
+    std::vector<int> unbucketed, sol_rings;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& c = ap.hand[i];
+        if (c.m_is_staged) { continue; }          // in EXILE, never sheddable
+        const CardDefinition* d = def_of(c);
+        if (d == nullptr) { unbucketed.push_back(i); continue; }
+        const std::string& nm = c.m_name.str();
+        if (nm == "Sol Ring")            { sol_rings.push_back(i); continue; }   // never shed
+        if (d->card.IsLand())            { sources.push_back({ i, nm == "Plains" ? 0 : 1 }); continue; }
+        if (d->params.mana_rock)         { sources.push_back({ i, 1 }); continue; }
+        const int er = enabler_rank(nm), dr = ds_rank(nm);
+        if (er >= 0)                     { enablers.push_back({ i, er }); }
+        if (dr >= 0)                     { strikers.push_back({ i, dr }); }
+        if (nm == "Kemba, Kha Regent")   { kembas.push_back({ i, 0 }); }
+        if (er >= 0 || dr >= 0)          { continue; }
+        if (d->params.is_equipment)      { equipment.push_back({ i, 0 }); continue; }
+        unbucketed.push_back(i);         // removal (Swords / Unexpectedly Absent): no bucket
+    }
+    auto by_rank = [](const Ent& a, const Ent& b)
+    { return a.rank != b.rank ? a.rank < b.rank : a.idx < b.idx; };
+    std::stable_sort(enablers.begin(), enablers.end(), by_rank);
+    std::stable_sort(strikers.begin(), strikers.end(), by_rank);
+    std::stable_sort(sources.begin(), sources.end(), by_rank);
+
+    // ---- The ALLOCATION (USER, 2026-08-22) -----------------------------------------------------
+    // "3 mana sources at most and 2 equipment. If some of these are not necessary or can't be filled
+    // we keep more equipment." With the creature bucket that is 2 + 3 + 2 = exactly a seven-card
+    // hand, and EQUIPMENT IS THE RESIDUAL: every slot the other buckets do not need (the role is
+    // already on the battlefield) or cannot fill (the card is not in hand) flows to it.
+    //
+    // That single rule subsumes what I had written as a separate "land skew". Fewer lands in hand
+    // means the source bucket under-fills, so equipment absorbs the slack -- which is right for the
+    // curve, since every creature here costs two to four (Kor Duelist {W}, Puresteel {W}{W},
+    // Stoneforge {1}{W}, Kemba {1}{W}{W}, Balan {2}{W}{W}, Skyhunter {3}{W}) while almost every
+    // Equipment costs {1}. And "count what is on board already" is the same mechanism seen from the
+    // other side: three Plains in play zeroes the source bucket, and an enabler in play zeroes half
+    // the creature bucket, and in both cases the freed slots become equipment.
+    //
+    // The creature bucket is NOT squeezed by any of this. USER: "You keep 1 of each" -- one enabler
+    // and one double striker, as in the original rule. An earlier cut of mine reduced it to a single
+    // creature on a land-light hand, which split exactly the Puresteel + Kor Duelist pair the spec
+    // names first; that pair is three mana across two turns and is the deck's engine.
+    std::vector<char> kept(static_cast<std::size_t>(n), 0);
+
+    // ---- Bucket 1: mana sources -- fill to kManaTarget, never more than kMaxHandSources cards ----
+    // The spec's "up to 3-4 mana, no more than 3 sources" is TWO constraints, and collapsing them
+    // into one count was wrong. USER 2026-08-22: "in the rarer case where we have 2-3 [mana] out
+    // already you might want to keep 1-2 mana sources, so you can hit 4 mana. 4 mana is pretty much
+    // the cap, so we don't need to go higher than that." Counting the board against a flat 3-CARD cap
+    // kept ZERO lands behind three in play, which strands Balan {2}{W}{W} and Skyhunter {3}{W} -- the
+    // top of the curve and the reason the target is four.
+    //
+    // Sol Ring is excluded from `sources` and never shed; it counts as one CARD against the cap and
+    // two MANA against the target, which is exactly what makes it the best source in the deck.
+    // Sol Ring is one CARD but two MANA and -- the point of the colour clause below -- ZERO white.
+    int mana_outlook = board_mana + 2 * static_cast<int>(sol_rings.size());
+    int white_kept   = board_white;
+    int sources_kept = static_cast<int>(sol_rings.size());
+    int lands_avail  = board_lands;
+    for (const Ent& e : sources)
+    {
+        if (sources_kept >= kMaxHandSources) { break; }
+        if (mana_outlook >= kManaTarget && white_kept >= kMinWhiteSources) { break; }
+        const CardDefinition* d = def_of(ap.hand[e.idx]);
+        // A Karoo CANNOT BE PLAYED as your only land. USER 2026-08-22: "the Garrison cannot be played
+        // without a plains." Its ETB returns a land you control, and with no other land that is
+        // itself, so the drop is simply wasted -- which is why LandPlay's drop chooser refuses to
+        // offer it in this state (`etb_bounce_land && !has_other_land`). Crediting it here would keep
+        // a card the engine will never play, so it is passed over and falls through to the shed list.
+        // `sources` ranks plain lands first, so any Plains this hand holds has already been counted.
+        const bool bounce = d != nullptr && d->params.etb_bounce_land;
+        if (bounce && lands_avail == 0) { continue; }
+        kept[e.idx] = 1;
+        ++sources_kept;
+        // USER: "technically the bounceland also counts as 2 sources". Once it IS playable it taps
+        // for two, so it is two mana toward the target off one card -- the credit the board gives it.
+        mana_outlook += d != nullptr ? std::max(1, d->params.produces_amount) : 1;
+        if (d != nullptr && ProducesWhite(*d)) { ++white_kept; }
+        if (!bounce) { ++lands_avail; }   // a Karoo nets no land: it returns one as it enters
+    }
+
+    // ---- Bucket 2: creatures = ONE enabler + ONE double striker (Kemba if none) -----------------
+    // A role already covered on the battlefield is not kept again in hand; that is a freed slot, and
+    // it goes to equipment below.
+    int creatures_kept = 0;
+    int kept_enabler   = -1;
+    if (!board_enabler && !enablers.empty())
+    { kept_enabler = enablers.front().idx; kept[kept_enabler] = 1; ++creatures_kept; }
+    if (!board_ds)
+    {
+        int pick = -1;
+        for (const Ent& e : strikers) { if (!kept[e.idx]) { pick = e.idx; break; } }
+        // "...or Kemba if none are available": the fallback is a Kemba, not a second enabler.
+        if (pick < 0 && !board_kemba)
+        { for (const Ent& e : kembas) { if (!kept[e.idx]) { pick = e.idx; break; } } }
+        if (pick >= 0) { kept[pick] = 1; ++creatures_kept; }
+    }
+
+    // ---- Bucket 3: equipment = the RESIDUAL, a floor of 2 ---------------------------------------
+    // The Hammer's rank is CONDITIONAL on a cost-bypass being secured -- on board, or kept just
+    // above by the creature bucket. Without one it is dead weight and ranks last of all equipment.
+    const bool cheat_secured = board_cheat
+        || (kept_enabler >= 0 && is_cheat_equipper(ap.hand[kept_enabler].m_name.str()))
+        || [&] { for (int i = 0; i < n; ++i)
+                 { if (kept[i] && is_cheat_equipper(ap.hand[i].m_name.str())) { return true; } }
+                 return false; }();
+    auto equip_rank = [&](const std::string& nm) -> int {
+        if (nm == "Colossus Hammer") { return cheat_secured ? 0 : 99; }   // +10/+10 or a dead card
+        if (nm == "Bonesplitter")    { return 1; }   // {1} cast, {1} equip -- the cheap default
+        if (nm == "O-Naginata")      { return 2; }   // {1} cast, {2} equip, needs a power-3 host
+        if (nm == "Shadowspear")     { return 3; }
+        if (nm == "Umezawa's Jitte") { return 4; }
+        if (nm == "Lightning Greaves") { return 5; }
+        if (nm == "Grafted Wargear") { return 6; }
+        if (nm == "Loxodon Warhammer") { return 7; }
+        return 8;
+    };
+    for (Ent& e : equipment) { e.rank = equip_rank(ap.hand[e.idx].m_name.str()); }
+    std::stable_sort(equipment.begin(), equipment.end(), by_rank);
+    // The residual: whatever the seven-card hand has left once the other two buckets have taken what
+    // they need, never fewer than the two the spec asks for outright. With the residual disabled the
+    // bucket is a flat 3, which is the shape this rule had before the allocation was settled -- kept
+    // as the A/B arm so a sweep can attribute the residual rather than measure it folded in.
+    int equip_budget = KittyDiscardResidualEnabled()
+                     ? std::max(2, kHandTarget - creatures_kept - sources_kept)
+                     : 3;
+    for (const Ent& e : equipment)
+    {
+        if (equip_budget <= 0) { break; }
+        kept[e.idx] = 1; --equip_budget;
+    }
+
+    // ---- Shed order: everything not kept, worst first -------------------------------------------
+    // Removal leads (no bucket at all), then surplus equipment worst-first, then surplus creatures,
+    // then surplus sources. Sources go LAST of the surplus because a land-light hand is the one that
+    // reaches a discard, and the deck's own card_scores put a 23rd mana source above a fourth copy
+    // of an Equipment it cannot equip.
+    std::vector<int> shed;
+    for (int i : unbucketed) { if (!kept[i]) { shed.push_back(i); } }
+    for (auto it = equipment.rbegin(); it != equipment.rend(); ++it)
+    { if (!kept[it->idx]) { shed.push_back(it->idx); } }
+    for (auto it = enablers.rbegin(); it != enablers.rend(); ++it)
+    { if (!kept[it->idx]) { shed.push_back(it->idx); } }
+    for (auto it = strikers.rbegin(); it != strikers.rend(); ++it)
+    { if (!kept[it->idx]) { shed.push_back(it->idx); } }
+    for (auto it = sources.rbegin(); it != sources.rend(); ++it)
+    { if (!kept[it->idx]) { shed.push_back(it->idx); } }
+    // Dedup (a Kemba can sit in both the enabler and Kemba lists) while preserving order.
+    std::vector<char> seen(static_cast<std::size_t>(n), 0);
+    std::vector<int> order;
+    for (int i : shed)
+    { if (!seen[i]) { seen[i] = 1; order.push_back(i); } }
+    // The base ranking applies required-piece protection and the staged exemption to this order, and
+    // appends everything unnamed behind it -- so a hand that is ENTIRELY buckets still sheds
+    // something rather than returning empty and stalling the cleanup loop.
+    return CleanupDiscardRankingWithOrder(s, required_pieces, order);
+}
+
 const char* EquipmentProvider::CastOrderTierName(int rank) const
 {
     if (!KittyOrderEnabled()) { return nullptr; }
