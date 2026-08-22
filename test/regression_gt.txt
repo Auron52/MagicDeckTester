@@ -1,6 +1,6 @@
-# Regression ground truth -- commit 953a8097  date 2026-08-22
+# Regression ground truth -- commit 64b81a74  date 2026-08-22
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (overnight, 2026-08-22): AL m1/m2 split + condemnation exemptions + DAMAGE_BOTH + searched dork attack/hold adopted default-ON (2026-08-22), measured under the post-rebase binary. Combined searched tiers, 93100 games: -32 turns, 56 better / 24 worse, ZERO wins turning into losses, TWO losses converted to wins. Per deck: antilife -3, fivecolour -29; every other deck byte-identical; d0 untouched. Smoke alone is +1 turn (3w/2b on 4100 games, noise scale, both AL rows recover at 2.5x budget or more depth). All 24 slower rows escalated on both arms: 22 close at 2-20x budget or depth 5-8; the 2 remaining are ONE fivecolour game (seed 5005 gi112) whose LOOKAHEAD BOTTOMER picked a different card -- proven by MTG_BOTTOM_ROLLOUTS=0 making both arms keep the identical hand -- i.e. a different physical game, not a search failure. See docs/design/antilife-main-phase-split.md 21u-21v.
+# accepted-with-regressions (overnight, 2026-08-22): MTG_UNBACKED_ETB_GIFT default-ON: the unbacked-gift prune extended to ETB payloads (Aria of Flame). All 3 tiers, 229100 games: -82 turns, 0 WORSE / 48 better, 16 losses converted to wins, no win lost; ~18% faster on antilife d3. Every changed key is antilife (one card, one deck); every other deck byte-identical. See docs/design/antilife-main-phase-split.md 21x.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -17,9 +17,9 @@ th_smoke_d5_s1001=4.0000/636316e6e75cd541
 knights_smoke_d0_s1001=4.5400/c25cdc82b946acb0
 knights_smoke_d3_s1001=4.3960/bb65a61d4760365d
 knights_smoke_d5_s1001=4.3933/c9d6dfa4735f4d26
-antilife_smoke_d0_s1001=4.9010/0a225f55fd29eed3
-antilife_smoke_d3_s1001=4.1880/4016cbdf0dacc569
-antilife_smoke_d5_s1001=4.1800/357707f661156372
+antilife_smoke_d0_s1001=4.8960/0af8a6a3979eb16d
+antilife_smoke_d3_s1001=4.1840/538f5aa4716d9082
+antilife_smoke_d5_s1001=4.1800/99e88e4d2d5e9aa5
 hinata_smoke_d0_s1001=6.9620/c5ca1d4e00f8ae1f
 hinata_smoke_d3_s1001=5.6733/c613cf92a5c3dd82
 hinata_smoke_d5_s1001=5.8533/900d0b7c0385dea0
@@ -66,11 +66,11 @@ knights_regression_d3_s2002=4.3033/9a2479408633b3a3
 knights_regression_d3_s3003=4.3667/7f2338b9856e07e1
 knights_regression_d5_s2002=4.2760/cd16b93c6eaf1a86
 knights_regression_d5_s3003=4.3640/40a0ff078cdc76ad
-antilife_regression_d0_s2002=4.9820/18ab28dd32321e34
-antilife_regression_d3_s2002=4.2833/9718cc383b6e983e
+antilife_regression_d0_s2002=4.9810/97df278c8332ea39
+antilife_regression_d3_s2002=4.2833/84fcb2321375aa01
 antilife_regression_d3_s3003=4.2000/39da14c550fcd456
-antilife_regression_d5_s2002=4.3080/dce35a610b45ff0f
-antilife_regression_d5_s3003=4.2000/a0c436f5ce98803d
+antilife_regression_d5_s2002=4.3000/77d0809246f7e7e6
+antilife_regression_d5_s3003=4.1880/237a85a011b57397
 hinata_regression_d0_s2002=7.0470/e99a799e6085f779
 hinata_regression_d3_s2002=5.6600/73affbdd16f35161
 hinata_regression_d3_s3003=5.6800/a50d5b8f3bdf2630
@@ -161,18 +161,18 @@ knights_overnight_d5_s4004=4.3260/19f6425d3182db1c
 knights_overnight_d5_s5005=4.3560/3aa8ce6f4cb15e15
 knights_overnight_d5_s6006=4.3420/227895f32c48a702
 knights_overnight_d5_s7007=4.3390/fc0bac53f9d78eac
-antilife_overnight_d0_s4004=4.9265/111f766198bd7c24
-antilife_overnight_d0_s6006=4.9385/de56d7042aac1cd8
-antilife_overnight_d0_s8008=4.9365/6839f3598a3711df
-antilife_overnight_d0_s10010=4.8570/6d64b7cca1ff5b74
-antilife_overnight_d3_s4004=4.2200/13c2d1b88d8c41c5
-antilife_overnight_d3_s5005=4.2520/cd14fe0094d59e05
-antilife_overnight_d3_s6006=4.2100/ef466f887df94271
-antilife_overnight_d3_s7007=4.1800/c7e8b1d3682c83ec
-antilife_overnight_d5_s4004=4.2180/a8260e3604588419
-antilife_overnight_d5_s5005=4.2540/cba90b4d619e96fc
-antilife_overnight_d5_s6006=4.2110/ba481e3ebdf0c52a
-antilife_overnight_d5_s7007=4.1830/58df01ae7a7d6ca3
+antilife_overnight_d0_s4004=4.9225/96992d8a5d0ff8aa
+antilife_overnight_d0_s6006=4.9305/64b142e56715a612
+antilife_overnight_d0_s8008=4.9345/30a1839aae2bac42
+antilife_overnight_d0_s10010=4.8500/a9659f8f494904f8
+antilife_overnight_d3_s4004=4.2150/6a8fe22e57aea714
+antilife_overnight_d3_s5005=4.2510/90b53de4a2a71dfa
+antilife_overnight_d3_s6006=4.2060/8225aad71c4481f1
+antilife_overnight_d3_s7007=4.1800/2c9fece3a000bd3f
+antilife_overnight_d5_s4004=4.2110/bc9edb9af0cca410
+antilife_overnight_d5_s5005=4.2490/62739403f0004b5d
+antilife_overnight_d5_s6006=4.2080/4c635e2f76fc10fa
+antilife_overnight_d5_s7007=4.1800/2150b1e6fdee4ae0
 hinata_overnight_d0_s4004=7.0405/a17faa68d7e7aad1
 hinata_overnight_d0_s6006=7.0005/d421332e74b47d83
 hinata_overnight_d0_s8008=7.0310/281b307a5af8cf46
