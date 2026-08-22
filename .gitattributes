@@ -8,3 +8,11 @@
 # Belt-and-suspenders for files that MUST stay LF to run in the Linux container.
 *.sh text eol=lf
 *.py text eol=lf
+
+# ...and the mirror image: Windows-only entry points MUST be checked out with CRLF.
+# cmd.exe is only reliably correct on CRLF batch files -- an LF-only .cmd works for trivial
+# cases but misbehaves around labels, goto, and multi-line blocks, which is a miserable thing
+# to debug remotely. The repo still STORES them as LF; only the working copy is CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf

@@ -1,0 +1,58 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 20, "patch": 0 },
+
+  "configurePresets": [
+    {
+      "name": "default",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Release;RelWithDebInfo;Profile",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "linux",
+      "displayName": "Linux / macOS (Ninja Multi-Config)",
+      "description": "Optimized multi-config tree. Binaries land in build/Release, build/RelWithDebInfo, build/Profile.",
+      "inherits": "default",
+      "generator": "Ninja Multi-Config",
+      "condition": { "type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "windows",
+      "displayName": "Windows (Visual Studio 2022, x64)",
+      "description": "Optimized multi-config tree. Binaries land in build/Release/mtg.exe etc.",
+      "inherits": "default",
+      "generator": "Visual Studio 17 2022",
+      "architecture": { "value": "x64", "strategy": "set" },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "windows-ninja",
+      "displayName": "Windows (Ninja Multi-Config, from a VS Developer prompt)",
+      "description": "Faster than the VS generator, but must be run from a Developer Command Prompt so cl.exe is on PATH.",
+      "inherits": "default",
+      "generator": "Ninja Multi-Config",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    }
+  ],
+
+  "buildPresets": [
+    { "name": "release",        "configurePreset": "linux",   "configuration": "Release" },
+    { "name": "relwithdebinfo", "configurePreset": "linux",   "configuration": "RelWithDebInfo" },
+    { "name": "profile",        "configurePreset": "linux",   "configuration": "Profile" },
+
+    { "name": "windows-release",        "configurePreset": "windows", "configuration": "Release" },
+    { "name": "windows-relwithdebinfo", "configurePreset": "windows", "configuration": "RelWithDebInfo" },
+    { "name": "windows-profile",        "configurePreset": "windows", "configuration": "Profile" }
+  ],
+
+  "testPresets": [
+    { "name": "release",         "configurePreset": "linux",   "configuration": "Release",
+      "output": { "outputOnFailure": true } },
+    { "name": "windows-release", "configurePreset": "windows", "configuration": "Release",
+      "output": { "outputOnFailure": true } }
+  ]
+}
