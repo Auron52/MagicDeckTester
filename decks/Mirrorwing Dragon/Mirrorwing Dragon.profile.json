@@ -1,0 +1,79 @@
+{
+  "card_scores": {
+    "Elvish Mystic": [
+      0.3042744225308871,
+      -0.14295644114921213
+    ],
+    "Fists of Flame": [
+      -0.09051545865352661,
+      0.04013377926421402
+    ],
+    "Forest": [
+      0.19321563852813828,
+      -0.18455324313064914,
+      -0.38254632396891797
+    ],
+    "Fortifying Draught": [
+      -0.1389316164955634
+    ],
+    "Game Trail": [
+      0.028939585973806636,
+      -0.22888888888888825
+    ],
+    "Goblin Instigator": [
+      0.06876779280981538,
+      -0.4158415841584153
+    ],
+    "Gold Rush": [
+      -0.019230769230769162,
+      -0.031559744603223194
+    ],
+    "Gruul Turf": [
+      -0.21027519120127547
+    ],
+    "Ignoble Hierarch": [
+      0.44289995378124125,
+      0.1611638302878209
+    ],
+    "Impolite Entrance": [
+      -0.06022073901330938,
+      -0.4451072183630318
+    ],
+    "Luxurious Libation": [
+      -0.1721101757420076
+    ],
+    "Mirrorwing Dragon": [
+      0.31693421718180126,
+      -0.22674611055941707
+    ],
+    "Mountain": [
+      -0.11563735162680278
+    ],
+    "Oracle's Restoration": [
+      -0.1756520544866591
+    ],
+    "Rootbound Crag": [
+      -0.16200206091264224
+    ],
+    "Sandstone Needle": [
+      0.17465939920816798,
+      -0.2701104100946372
+    ],
+    "Zada, Hedron Grinder": [
+      0.4971353322130172,
+      -0.35202492211838
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
