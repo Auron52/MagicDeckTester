@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <iterator>
 #include <mutex>
 #include <stdexcept>
@@ -614,7 +615,19 @@ inline std::string ReadProfileText(const std::filesystem::path& path)
         gzclose(gz);
         return out;
 #else
-        return {};   // no zlib in this build -> a .gz profile cannot be read
+        // No zlib in this build -> a .gz profile cannot be read. Say so ONCE and loudly: every
+        // deck ships its exhaustive keep/bottom table as <name>.keepmodel.exhaustive.profile.json.gz,
+        // so returning {} silently hands back a DEFAULT profile and the deck quietly plays different
+        // mulligans than it does on a zlib build -- a behaviour divergence with no visible cause.
+        // CMake now FetchContent's zlib when the system one is absent, so this branch should be
+        // unreachable; the warning exists so that if it ever is reached, it is not silent.
+        static std::once_flag warned;
+        std::call_once(warned, [] {
+            std::cerr << "[profile] WARNING: this build has no zlib -- gzipped (.gz) profiles "
+                         "cannot be read, so mulligan tables fall back to defaults.\n";
+        });
+        std::cerr << "[profile]   unread: " << path.string() << "\n";
+        return {};
 #endif
     }
     std::ifstream file(path, std::ios::binary);

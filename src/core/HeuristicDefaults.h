@@ -10,8 +10,9 @@
 //   * disable an adopted heuristic:  MTG_X=<baseline>   (or delete its line from the file)
 //   * A/B a candidate against the current default:  MTG_X=<variant>
 //
-// BYTE-IDENTICAL when the file is absent or has no KEY=VALUE lines (no setenv calls -> nothing
+// BYTE-IDENTICAL when the file is absent or has no KEY=VALUE lines (no EnvPut calls -> nothing
 // changes). Call ApplyHeuristicDefaults() at the very top of main(), before any code reads a toggle.
+#include "core/EnvFlags.h"          // EnvPut -- portable setenv (MSVC has only _putenv_s)
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -66,8 +67,8 @@ inline void ApplyHeuristicDefaults(
         std::string val = trim(t.substr(eq + 1));
         if (key.empty()) { continue; }
         const bool overridden = std::getenv(key.c_str()) != nullptr;
-        // overwrite = 0: an already-set env var wins (explicit override / disable / A-B).
-        setenv(key.c_str(), val.c_str(), 0);
+        // overwrite = false: an already-set env var wins (explicit override / disable / A-B).
+        EnvPut(key.c_str(), val.c_str(), /*overwrite=*/false);
         ++n_lines;
         if (!applied.empty()) { applied += ' '; }
         applied += overridden ? key + "(env-override)" : key + "=" + val;

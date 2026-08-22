@@ -270,17 +270,35 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
         // still overrides (captured above) when reproducing a specific historical identity.
         if (cfg.commit.empty())
         {
-            auto sh = [](const char* cmd) -> std::string {
-                std::string out; FILE* p = popen(cmd, "r"); if (!p) { return out; }
+            // popen/pclose are POSIX; MSVC spells them _popen/_pclose. The null sink differs too
+            // ("/dev/null" vs cmd.exe's "NUL") -- getting THAT wrong doesn't fail loudly, it makes
+            // git's stderr leak onto the console while the stamp silently comes back empty.
+            auto sh = [](const std::string& cmd) -> std::string {
+                std::string out;
+#ifdef _WIN32
+                FILE* p = _popen(cmd.c_str(), "r");
+#else
+                FILE* p = popen(cmd.c_str(), "r");
+#endif
+                if (!p) { return out; }
                 char buf[256]; while (std::fgets(buf, sizeof buf, p)) { out += buf; }
+#ifdef _WIN32
+                _pclose(p);
+#else
                 pclose(p);
+#endif
                 while (!out.empty() && (out.back() == '\n' || out.back() == '\r' || out.back() == ' ')) { out.pop_back(); }
                 return out;
             };
-            const std::string head = sh("git rev-parse --short HEAD 2>/dev/null");
+#ifdef _WIN32
+            const std::string quiet = " 2>NUL";
+#else
+            const std::string quiet = " 2>/dev/null";
+#endif
+            const std::string head = sh("git rev-parse --short HEAD" + quiet);
             if (!head.empty())
             {
-                const std::string dirty = sh("git status --porcelain --untracked-files=no 2>/dev/null");
+                const std::string dirty = sh("git status --porcelain --untracked-files=no" + quiet);
                 cfg.commit = head + (dirty.empty() ? "" : "+dirty");
             }
         }

@@ -1,4 +1,5 @@
 #include "core/EnvFlags.h"
+#include <bit>            // std::popcount -- portable replacement for __builtin_popcount (MSVC has no such builtin)
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -1217,7 +1218,7 @@ static std::vector<TargetOption> EnumerateTargetSets(const std::vector<ChosenTar
     }
     for (int mask = 1; mask < (1 << n) && opts.size() < 256; ++mask)
     {
-        int bits = __builtin_popcount(static_cast<unsigned>(mask));
+        int bits = std::popcount(static_cast<unsigned>(mask));
         if (bits > cap || bits < lo) { continue; }
         TargetOption o; std::string lbl;
         for (int i = 0; i < n; ++i)
@@ -3648,7 +3649,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     if (j.contains("env"))
     {
         for (const auto& [k, v] : j.at("env").items())
-        { setenv(k.c_str(), v.get<std::string>().c_str(), 1); }
+        { EnvPut(k.c_str(), v.get<std::string>().c_str(), /*overwrite=*/true); }
     }
 
     const std::string cards_json = j.value("cards_json", std::string("src/cards/data/cards.json"));
@@ -4441,14 +4442,14 @@ int main(int argc, char* argv[])
             // only, so the play GUI and every reference replay stay byte-identical.
             if (!EnvOn("MTG_CLAUDE_PLAY_SHIPPED_PRUNING"))
             {
-                setenv("MTG_UNPRUNED", "1", 1);
-                setenv("MTG_PONDER_SEARCH", "1", 1);
+                EnvPut("MTG_UNPRUNED", "1", /*overwrite=*/true);
+                EnvPut("MTG_PONDER_SEARCH", "1", /*overwrite=*/true);
             }
             // Human play executes EXACTLY the committed plan -- no auto re-solve after a draw, no
             // auto-dig, no auto Land's Edge. Instead the chooser re-fires after any draw so the
             // human re-decides with the revealed cards (a draw "breakpoint"). See ApplyPlanDirect
             // (gated on MTG_HUMAN_PLAY) and AIEngine's external-chooser segment loop.
-            setenv("MTG_HUMAN_PLAY", "1", 1);
+            EnvPut("MTG_HUMAN_PLAY", "1", /*overwrite=*/true);
 
             std::vector<int> choices;
             std::stringstream ss(choices_str);

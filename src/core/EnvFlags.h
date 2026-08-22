@@ -41,3 +41,21 @@ inline int EnvInt(const char* key, int dflt)
     if (e == nullptr || *e == '\0') { return dflt; }
     return std::atoi(e);
 }
+
+// Portable setenv(). POSIX has setenv(3); MSVC has only _putenv_s, which ALWAYS overwrites --
+// so the overwrite=false case must be guarded by hand there.
+//
+// overwrite=false is load-bearing, not a nicety: HeuristicDefaults applies the baked-in
+// heuristic_defaults.env with overwrite=false precisely so a flag the USER set on the command
+// line wins over the file. Silently overwriting would make the defaults file clobber an A/B
+// arm's flag -- the same failure mode as the presence-only truthiness bug this header exists
+// to prevent. Returns true if the variable now holds `value`.
+inline bool EnvPut(const char* key, const char* value, bool overwrite)
+{
+    if (!overwrite && std::getenv(key) != nullptr) { return false; }
+#ifdef _WIN32
+    return _putenv_s(key, value) == 0;
+#else
+    return setenv(key, value, 1) == 0;
+#endif
+}

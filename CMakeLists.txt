@@ -44,10 +44,19 @@ if(CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_DEFAULT_BUILD_TYPE)
   set(CMAKE_DEFAULT_BUILD_TYPE Release CACHE STRING
       "Config built by a bare `cmake --build build` (no --config)" FORCE)
 endif()
-set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
-set(CMAKE_C_FLAGS_PROFILE   "-O3 -g -DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
-set(CMAKE_EXE_LINKER_FLAGS_PROFILE    "" CACHE STRING "")
-set(CMAKE_SHARED_LINKER_FLAGS_PROFILE "" CACHE STRING "")
+# Profile config flags, per toolchain. GCC/Clang spell "optimize + symbols" as -O3 -g; MSVC as
+# /O2 /Zi with /DEBUG on the link. An unguarded -O3 here made the whole Windows configure fail.
+if(MSVC)
+  set(CMAKE_CXX_FLAGS_PROFILE "/O2 /Zi /DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
+  set(CMAKE_C_FLAGS_PROFILE   "/O2 /Zi /DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
+  set(CMAKE_EXE_LINKER_FLAGS_PROFILE    "/DEBUG /INCREMENTAL:NO" CACHE STRING "")
+  set(CMAKE_SHARED_LINKER_FLAGS_PROFILE "/DEBUG /INCREMENTAL:NO" CACHE STRING "")
+else()
+  set(CMAKE_CXX_FLAGS_PROFILE "-O3 -g -DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
+  set(CMAKE_C_FLAGS_PROFILE   "-O3 -g -DNDEBUG" CACHE STRING "Release + debug symbols (faithful profiling)")
+  set(CMAKE_EXE_LINKER_FLAGS_PROFILE    "" CACHE STRING "")
+  set(CMAKE_SHARED_LINKER_FLAGS_PROFILE "" CACHE STRING "")
+endif()
 set(CMAKE_STATIC_LINKER_FLAGS_PROFILE "" CACHE STRING "")
 mark_as_advanced(CMAKE_CXX_FLAGS_PROFILE CMAKE_C_FLAGS_PROFILE
   CMAKE_EXE_LINKER_FLAGS_PROFILE CMAKE_SHARED_LINKER_FLAGS_PROFILE CMAKE_STATIC_LINKER_FLAGS_PROFILE)
@@ -130,17 +139,51 @@ target_include_directories(mtg-core PUBLIC src "${MTG_GENERATED_DIR}")
 target_link_libraries(mtg-core PUBLIC pugixml::pugixml nlohmann_json::nlohmann_json)
 add_dependencies(mtg-core mtg_engine_fp mtg_flag_registry)
 
-# Optional: zlib, so the runtime can read gzipped deck profiles (.json.gz). Committed exhaustive
-# keep/bottom profiles ship gzipped (the raw bottom_keep table is ~13 MB; gzip -> ~1-2 MB). Linked
-# CONDITIONALLY: with zlib, MTG_HAVE_ZLIB enables transparent .gz reading in MulliganProfileIO;
-# without it the build still compiles and plain .json profiles work as before (only .gz is unread).
+# MSVC settings that are REQUIRED, not stylistic -- each one is a hard build failure without it:
+#   /bigobj     src/ai/TurnSolver.cpp is ~25k lines and blows past COFF's 65,535-section limit.
+#   /utf-8      23 sources contain non-ASCII (em-dashes, arrows) in comments and literals; MSVC
+#               otherwise decodes them in the system codepage (C4819, and mangled literals).
+#   /EHsc       the engine uses exceptions (nlohmann::json throws); MSVC's default is no model.
+#   /permissive- conformance, so the code that GCC accepts is held to the same standard rules.
+# PUBLIC so the runner, analyzer and unit tests inherit them (they compile the same headers).
+if(MSVC)
+    target_compile_options(mtg-core PUBLIC /bigobj /utf-8 /EHsc /permissive-)
+endif()
+
+# zlib, so the runtime can read gzipped deck profiles (.json.gz). This is NOT optional in
+# practice: EVERY deck ships its exhaustive keep/bottom mulligan table as
+# decks/<name>/<name>.keepmodel.exhaustive.profile.json.gz (the raw table is ~13 MB; gzip -> ~1-2 MB).
+# A build without zlib reads those as an EMPTY default profile, so the deck silently plays
+# different mulligans -- a behaviour divergence with no visible cause. That is exactly what a
+# stock Windows box (no system zlib, no vcpkg) used to get.
+#
+# So: prefer the system zlib, and FALL BACK to building it via FetchContent when absent. Either
+# way MTG_HAVE_ZLIB is defined and .gz reading works, on every platform, with no user setup.
+# -DMTG_FETCH_ZLIB=OFF opts out of the fallback (the no-zlib path then warns loudly at runtime --
+# see ReadProfileText in src/ai/MulliganProfileIO.h).
+option(MTG_FETCH_ZLIB "Build zlib via FetchContent when the system has none" ON)
 find_package(ZLIB QUIET)
 if(ZLIB_FOUND)
     message(STATUS "mtg: linking zlib (${ZLIB_VERSION_STRING}) -- gzipped profiles enabled")
     target_link_libraries(mtg-core PUBLIC ZLIB::ZLIB)
     target_compile_definitions(mtg-core PUBLIC MTG_HAVE_ZLIB)
+elseif(MTG_FETCH_ZLIB)
+    message(STATUS "mtg: no system zlib -- building it via FetchContent (gzipped profiles enabled)")
+    set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        zlib
+        GIT_REPOSITORY https://github.com/madler/zlib.git
+        GIT_TAG        v1.3.1
+    )
+    FetchContent_MakeAvailable(zlib)
+    # zlib's own CMake exports `zlibstatic` (and `zlib` for the shared build) but no ZLIB::ZLIB,
+    # and its generated zconf.h lands in the BINARY dir -- both include dirs are needed.
+    target_include_directories(mtg-core PUBLIC "${zlib_SOURCE_DIR}" "${zlib_BINARY_DIR}")
+    target_link_libraries(mtg-core PUBLIC zlibstatic)
+    target_compile_definitions(mtg-core PUBLIC MTG_HAVE_ZLIB)
 else()
-    message(STATUS "mtg: zlib not found -- .gz profiles unsupported (plain .json still works)")
+    message(WARNING "mtg: zlib not found and MTG_FETCH_ZLIB=OFF -- gzipped mulligan tables will "
+                    "NOT be read; decks fall back to default mulligans (the runtime warns).")
 endif()
 
 if(MTG_PROFILE)

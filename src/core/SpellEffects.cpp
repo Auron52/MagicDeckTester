@@ -23,6 +23,7 @@
 // about what looks hot: these helpers are fully inlined today, so they do not appear in a profile
 // by name at all -- only the total Ir moves.
 #include "SpellEffects.h"
+#include <bit>            // std::popcount -- portable replacement for __builtin_popcount (MSVC has no such builtin)
 
 // Execute a tutor (Idyllic / Enlightened): fetch `target_name` from the library and move it to
 // hand (to_hand) or the top of the library (to_top). When target_name is empty, fall back to
@@ -1235,7 +1236,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             }
             else
             {
-                const int ftotal = __builtin_popcount(static_cast<unsigned>(fbits));
+                const int ftotal = std::popcount(static_cast<unsigned>(fbits));
                 srcs.push_back({ fbits, ftotal, 1, i });
             }
             continue;
@@ -1264,7 +1265,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
             for (Color c : EffectiveProduces(state, active, *def))
             { dbits |= static_cast<std::uint8_t>(1u << static_cast<int>(c)); }
             if (dbits == 0) { continue; }   // no colours among our permanents -> this tap makes nothing
-            const int dtotal = __builtin_popcount(static_cast<unsigned>(dbits));
+            const int dtotal = std::popcount(static_cast<unsigned>(dbits));
             srcs.push_back({ dbits, dtotal, 1, i });
             continue;
         }
@@ -1334,7 +1335,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
                     CardDatabase::Instance().LookupCached(state.battlefield[sc.bf].card);
                 if (d && d->params.tap_opponent_lifegain > 0) { return -1; }   // spend it FIRST
             }
-            return __builtin_popcount(static_cast<unsigned>(sc.bits));
+            return std::popcount(static_cast<unsigned>(sc.bits));
         };
         std::stable_sort(srcs.begin(), srcs.end(),
                          [&](const SrcColset& a, const SrcColset& b) { return rank(a) < rank(b); });
