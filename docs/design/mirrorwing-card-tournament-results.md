@@ -809,3 +809,47 @@ line a shallower search under-values while Twinflame's hasty copies pay immediat
 **This is a hypothesis, not a measurement:** the engine moved by several commits at once
 (canon, payment cache, main-phase). Isolating it needs a `MTG_CANON_SIMKEY=0` arm on the same
 games, which is ~20 minutes and has not been run.
+
+### 8b. O/D/E re-measured at FIXED 3 Libation (the trick slot pinned to its new winner)
+
+Section 8's flip raised a real question: the O/D/E optimum in 5e was found while the trick slot was
+still contested, so it was measured partly in Twinflame contexts the deck no longer wants. This is
+all nine legal shapes re-run with Libation pinned at 3, same seed/games/apparatus, one pooled batch
+(16 jobs, 160,000 games, 32/32 workers): `logs/tourney/recheck2/`. Old-side values reproduce the
+5e grid's 3-Libation column exactly, all nine.
+
+| shape | L20 old → new | L30 old → new | sum old → new |
+|---|---|---|---|
+| `4 O + 2 D + 2 E` | 5.0454 → 5.0103 | 5.4595 → 5.4130 | 10.5049 → 10.4233 |
+| `3 O + 3 D + 2 E` | 5.0397 → 5.0083 | 5.4625 → 5.4144 | 10.5022 → 10.4227 |
+| `2 O + 4 D + 2 E` | 5.0259 → **5.0009** | 5.4660 → 5.4200 | 10.4919 → 10.4209 |
+| `3 O + 2 D + 3 E` | 5.0503 → 5.0207 | 5.4532 → 5.4154 | 10.5035 → 10.4361 |
+| `2 O + 3 D + 3 E` | 5.0458 → 5.0213 | 5.4602 → 5.4160 | 10.5060 → 10.4373 |
+| `1 O + 4 D + 3 E` | 5.0437 → 5.0205 | 5.4627 → 5.4186 | 10.5064 → 10.4391 |
+| `2 O + 2 D + 4 E` | 5.0459 → 5.0198 | 5.4346 → **5.3940** | 10.4805 → **10.4138** |
+| `1 O + 3 D + 4 E` | 5.0502 → 5.0229 | 5.4517 → 5.4106 | 10.5019 → 10.4335 |
+| `0 O + 4 D + 4 E` | 5.0516 → 5.0275 | 5.4618 → 5.4230 | 10.5134 → 10.4505 |
+
+**Every optimum in 5e survives, unchanged:** 20 life still wants `2 O + 4 D + 2 E`, 30 life still
+wants `2 O + 2 D + 4 E`, and the sum still picks `2 O + 2 D + 4 E`. The Entrance U-shape survives
+too — best sum by Entrance count is 10.4209 (E2), 10.4361 (E3), 10.4138 (E4), so **3 Entrance is
+still a strict middle, worse than either end**. `0 O + 4 D + 4 E` is still last at both life
+totals, so "keep Oracle and Draught both at ≥ 2" also holds.
+
+**What changed is resolution, and it cuts against reading the sum as a decision.** The aliasing
+control (`3 O + 3 D + 2 E`, one decklist under maps A and B) spreads **0.0049 at 20 life and
+0.0067 at 30** — this comparison's apparatus floor, and unchanged from the old engine. Against it:
+
+- **20 life is now unresolved among the Entrance-2 shapes.** `2 O + 4 D + 2 E` leads, but
+  `3 O + 3 D + 2 E` is +0.0074 (t=+1.3) and `4 O + 2 D + 2 E` +0.0094 (t=+1.7) — at or barely
+  above the floor, where the old engine separated them by +0.0138 / +0.0195. Draught's 20-life
+  advantage is real in sign but no longer decisive in size.
+- **30 life is decisive.** `2 O + 2 D + 4 E` beats the next shape by 0.0166 (t=+3.3) and the whole
+  Entrance-2 group by ~0.019–0.026 — 2.5–4x the floor.
+- **The two-life-total SUM is a near-tie and should not be used to pick.** `2 O + 2 D + 4 E`
+  (10.4138) over `2 O + 4 D + 2 E` (10.4209) is 0.0071 across two life totals, i.e. inside the
+  cross-map floor (~0.005–0.007 *per* total). The honest statement is not "the winner wins the
+  sum" but: **each list wins its own life total clearly** (4 Draught by +0.0189 at 20, t=+2.7;
+  4 Entrance by −0.0260 at 30, t=−3.0) **and the average of the two is a coin-flip.** The
+  1b-0 trample tie-break therefore still does real work — but now on the *draw/pump* slot rather
+  than the trick slot, and only for a both-totals list.
