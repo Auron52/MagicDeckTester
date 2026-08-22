@@ -919,3 +919,46 @@ USER: "Are there any remaining unrecoverable games? i.e. Anything blocking adopt
 5. **Scope**: the RUNG is deck-agnostic (mirrorwing and fivecolour both gain) while AL_PHASE /
    AL_CONDEMN are AL-scoped. They can be adopted SEPARATELY -- on the evidence the rung is the
    cleaner, more clearly-positive candidate and does not need the bundle decision to land.
+
+## 2026-08-21r: OVERNIGHT HELD-OUT VALIDATION -- it OVERTURNS the rung recommendation
+
+Three overnight (held-out, disjoint-seed) runs against GT, game-weighted, loss-penalized. This is
+exactly the gate that exists to catch small-sample overfit, and it caught one.
+
+| arm | searched: games / net turns / per-game | d0 per-game | decks touched (searched) |
+|---|---|---|---|
+| rung only  | 13900 / **+0.01** / +0.00000 | -0.00375 | antilife, fivecolour, hinata, mirrorwing |
+| dork only  | 2800 / **-22.98** / -0.00821 | 0 (untouched) | **fivecolour only** |
+| full stack | 13900 / **-22.98** / -0.00165 | -0.00375 | all four |
+
+### The rung does NOT validate, and it SUBTRACTS from the dork search
+* Per-deck, rung alone (searched): mirrorwing **-5.98** turns, fivecolour **+5.00**, hinata
+  **+0.99**, antilife 0.00 -> **net +0.01 turns over 13900 games = exactly neutral.**
+* Its smoke (0 slower / 5 faster) and regression (0 slower / 1 faster) cleanliness was SMALL
+  SAMPLE. On the held-out seeds the fivecolour effect flips sign and cancels the mirrorwing gain.
+* Worse: the full stack's fivecolour gain is **-14.99** while the dork search ALONE delivers
+  **-22.98** on the same deck. The rung eats ~8 turns of the dork search's gain (consistent with
+  its own +5.00 standalone fivecolour cost). Adding it to the dork search makes fivecolour WORSE.
+* It IS better at d0 (-0.00375/game, -105 turns over 28000) -- but d0 is the greedy runner's
+  lighter bar, and the searched tier is what ships.
+
+### The dork search + hold direction is the clean winner
+* **-22.98 turns on fivecolour and ZERO effect on every other deck** (antilife, mirrorwing, hinata
+  all byte-identical under dork-only). A single-deck, single-direction, unambiguous gain on
+  held-out seeds. Note the beneficiary is FIVECOLOUR, not the deck it was designed for.
+* The full stack's ENTIRE held-out gain (-22.98) equals the dork search's alone.
+
+### AL phase + condemn
+* antilife -3.00 turns over 8000 games in the full stack (0 under rung-only, absent under
+  dork-only), i.e. **-0.00038 per game**. Real but marginal, against ~+8% compute.
+
+### REVISED RECOMMENDATION (supersedes 21q's "the rung is the cleaner candidate")
+1. **ADOPT the dork search + MTG_DORK_ATK_HOLD_DIR.** Held-out clean, single-deck gain, no
+   collateral. (Its cost lands on fivecolour's compute, to be quantified before shipping.)
+2. **DO NOT adopt MTG_TAP_ATTACKER_RUNG on this evidence.** Net-zero held-out at searched depth
+   AND it degrades the dork search's fivecolour gain. Keep it default-off as a measured negative.
+   NOTE this does not retract the g8 DIAGNOSIS -- the ladder gap is real and the rung does fix
+   gi8 -- it says the fix as built does not pay for itself across decks. A fivecolour-scoped
+   exclusion, or a narrower rung, is the open direction.
+3. **AL phase+condemn is a USER judgment call**: -0.00038/game on antilife for ~+8% compute, with
+   an 18-game salt-robust +1-turn residual whose causes are documented (21n/21o/21p).
