@@ -1260,3 +1260,150 @@ rules and landing on a different card -- a downstream consequence of adoption, n
 (Anti-Lifegain DOES carry an exhaustive keep model, and regenerating the per-deck artifacts against
 the new play behaviour remains the standing follow-through from 21q #4 -- but gi112 is not evidence
 for it.)
+
+## 2026-08-22w: WHY THE SEARCHED SECOND MAIN LOSES TO GREEDY -- a HORIZON-BLIND LEAF makes a
+## self-harming action FREE. Root-caused; fix is a USER call.
+
+USER: "So anti-lifegain is now fully free of greedy solves?" -- NO. `MTG_AL_SSM` is default OFF, so
+`SearchedSecondMainInSearch()` is false for AL and the search's INTERIOR second mains still run the
+greedy `Solve` at every full-search ply. That hook's own doc calls itself the per-deck adoption route
+for the standing directive "search should be truly search at every level."
+
+I flagged that SSM's rejection had the same bad provenance as the retracted AL_CONDEMN verdict
+(measured before DAMAGE_BOTH + the exemptions). Re-measured on the adopted stack it is WORSE than
+recorded, not better: TRAIN seeds (1001/2002/3003, d3+d5, 6000 games) **29 worse / 4 better / net +31
+turns, with 7 rows turning a WIN into a LOSS**. The recorded "+0.0133 churn, all recover at 4-16x
+budget" no longer describes it.
+
+### CORRECTION (same session): it IS recoverable -- with DEPTH. Budget alone was the wrong lever.
+USER: "With unlimited budget and depth there is no reason why we should miss this. If we are there is
+a bug." Correct, and the first escalation below only varied BUDGET. Sweeping DEPTH at budget 10000:
+
+| game | d3 | d5 | d6 | d8 | d10 | greedy (any depth) |
+|---|---|---|---|---|---|---|
+| gi940 | LOSS | win T8 | win T8 | win T8 | win T8 | win T8 |
+| gi970 | LOSS | win T7 | win T7 | win T7 | win T7 | win T7 |
+| gi695 | LOSS | LOSS | win T8 | win T8 | win T8 | win T8 |
+
+**With unlimited budget AND depth the searched m2 does NOT miss it -- so this is NOT a bug.** Every
+loss is the ordinary depth limitation of a shallow search. The "3 games unrecoverable" claim earlier
+in this section was an artifact of escalating only budget; it is retracted. What survives is the
+narrower and more useful statement: **the searched m2 needs MORE DEPTH than the greedy Solve to be
+safe, because greedy's candidate ORDERING carries domain knowledge that substitutes for depth.** At
+the shipped d3/d5 the search is blind to a beyond-horizon cost and the 10-life gift ties with passing;
+greedy is never blind, because EvalCard prices the unbacked Aria.
+
+### It is not budget, and not truncation
+Escalated on both arms: at the PRODUCTION DEPTH the 3 games stay lost at 20x budget, then at 100x,
+1000x and 10000x (budget_ms 100000 vs the production 10) -- budget genuinely moves nothing, which is
+why depth turned out to be the lever that matters (see the CORRECTION above). Both memos are exonerated (`MTG_NO_M2_SEARCH_MEMO=1` and
+`MTG_SOLVE_MEMO=0` both reproduce the loss), and `BuildBreakpointKey` does fold the condemnation
+stamp, so it is not a key collision. It reproduces with every other adopted lever OFF (phase only),
+so it is SSM alone, not an interaction with this arc's adoption.
+
+### The decisive comparison
+| interior m2 | gi940 | gi970 | gi695 d3 | gi695 d5 |
+|---|---|---|---|---|
+| greedy `Solve` | win T8 | win T7 | win T8 | win T8 |
+| **`MTG_NO_M2_SOLVE=1` (no m2 at all)** | win T8 | win T7 | win T8 | win T8 |
+| searched (`MTG_AL_SSM=1`) | **LOSS** | **LOSS** | **LOSS** | **LOSS** |
+
+**At d3 the searched second main is worse than not acting at all** -- it chooses a strictly
+self-harming action. (At d6+ it matches greedy everywhere; see the CORRECTION above.)
+
+### ROOT CAUSE: a beyond-horizon cost is scored as ZERO
+gi940 play, greedy vs searched: the searched arm casts **Aria of Flame** at T3 m2 and again at T4 m2.
+Its ETB is `etb_opponent_lifegain: 10` -- "each opponent gains 10 life" -- which is 10 DAMAGE with
+Tainted Remedy out and a 10-life GIFT without it. Opponent 16 -> 26 -> 34. The greedy arm holds
+everything and wins at T8 with Remedy + Skyshroud Cutter + Reverent Silence (the gift payloads are
+this deck's WIN CONDITION, but only after the enabler).
+
+The metric is loss-penalized win turn with unwon = max_turns+1. At an interior m2 several turns from
+lethal, NO candidate reaches a win inside the horizon, so **every plan ties at 9 and the 10-life gift
+is free**. Selection is by projected win turn, so the tie is broken by whatever comes next -- and it
+picks the gift.
+
+PROOF -- the horizon, not the card, is the variable:
+
+| max_turns | greedy | searched |
+|---|---|---|
+| 8  | win T8 | **LOSS** |
+| 10 | win T8 | **win T8** |
+| 12 | win T8 | win T8 |
+| 16 | win T8 | win T8 |
+
+At max_turns=10 the searched m2 stops casting Aria entirely and reproduces the greedy line exactly
+(Remedy + Cutter + Silence at T8). Two extra turns of horizon are enough for the gift to cost
+something measurable, and the search then declines it on its own.
+
+### Why greedy is immune, and why the existing fix does not reach this
+`AntiLifegainProvider::ArchetypeCardValue` already prices exactly this card
+(`out = enabler_live ? (1+gift)*DMG : DMG - (gift*DMG)/2`), and its comment records the SAME failure
+in 2026-08-15 gi=136 -- same card, same +10 at T3, a base win-7 turned into a loss. But that value
+feeds **`EvalCard`, the candidate-ORDERING heuristic**; the hook contract says so. Ordering governs
+the greedy `Solve`, which is why greedy never picks the gift. The searched path selects by projected
+win turn, where a beyond-horizon cost is invisible, so the penalty never binds. **The 2026-08-15 fix
+closed the ordering path and the searched-m2 path re-opens the same hole.**
+
+### FIX OPTIONS (not implemented -- shape is a USER judgment call)
+1. **Horizon-honest leaf (general).** When no win is reachable inside the horizon, stop scoring every
+   plan as a flat `max_turns+1` and break the tie on damage progress / opponent life. This fixes the
+   CLASS ("an action whose cost lands past the horizon is free") rather than the card, and it is the
+   "HONEST where you SCORE" half of the standing LAW. Blast radius is every deck and a full GT
+   rebaseline.
+2. **Provider gate (narrow).** Refuse to enumerate an unbacked gift payload in the searched m2, the
+   way the m2 hold tower's `M2ManaCandidate` already excludes "unbacked gift-ETB" (gi=215). Precedented
+   and deck-scoped, but a blanket ban costs real value: the same ArchetypeCardValue comment records
+   that the FIRST pre-Remedy Aria is routinely a strictly-better cast (the verse engine), which is why
+   the existing penalty deters the SPARE copy rather than zeroing the card.
+3. **Status quo** -- leave SSM off for AL. Cheapest, but it leaves the last greedy solve in the
+   deck's search, against the standing directive.
+
+Option 1 is the principled one: the reason greedy currently BEATS the search here is that greedy is
+ordered by a life-aware heuristic while the search's leaf is life-blind, and no amount of search
+fixes a blind evaluation. Hinata is red on this lever too and is the obvious deck to check next.
+
+## 2026-08-22x: THE FIX -- a MISSING CASE in the unbacked-gift prune (not a leaf change)
+
+USER: "Can you work to fix it?" The dig in 21w pointed at the leaf; the actual defect turned out to
+be narrower and already half-written.
+
+### What was wrong
+`SubsetHasUnbackedAltPayload` has always refused to EMIT a subset that hands the opponent life with no
+`lifegain_to_loss` enabler live -- but it keys on `alt_cost`. **Aria of Flame's gift is an ETB on a
+hard-cast enchantment (`etb_opponent_lifegain: 10`), so it was never covered.** The greedy `Solve` was
+protected anyway because `EvalCard` prices the unbacked copy through `ArchetypeCardValue`; the searched
+path selects by projected WIN TURN, where a beyond-horizon 10-life gift is invisible at the depths we
+ship. **Greedy's candidate ORDERING was carrying domain knowledge that substituted for depth, and the
+searched path had nothing in its place.**
+
+### The fix
+`SubsetHasUnbackedEtbGift` -- same shape as its alt-cost sibling, same `MTG_UNPRUNED` hatch, and the
+same SELF-BACKING exemption (an enabler cast in the same subset converts the gift, since the canonical
+order resolves the enabler at rank 0 before Aria's ETB at 19). Wired into the same two emission sites.
+`MTG_UNBACKED_ETB_GIFT=0` reverts.
+
+### Measured
+| arm (Anti-Lifegain, d3+d5) | games | net turns | worse | better | wins lost | losses won |
+|---|---|---|---|---|---|---|
+| SSM alone, BEFORE the fix | 6000 train | **+31** | 29 | 4 | **7** | 0 |
+| **gate alone (greedy kept), train** | 6000 | **-14** | 1 | 13 | 0 | 0 |
+| **gate alone (greedy kept), HELD-OUT** | 8000 | **-28** | **0** | **19** | 0 | **5** |
+| SSM + gate, train | 6000 | -1 | 14 | 14 | **0** | 0 |
+
+* **The gate is a win on its own** -- zero regressions over 8000 held-out games, 19 improvements, and
+  five games converted from a loss to a win. Adopted DEFAULT ON.
+* **It REFUTES a claim in the code**: `ArchetypeCardValue`'s comment says "the FIRST pre-Remedy Aria is
+  routinely a strictly-better cast (the verse engine)". Over 14000 games it is not -- pruning the cast
+  outright is strictly better, and that value was only ever an ordering nudge.
+* **Blast radius is ONE CARD.** Aria of Flame is the only card in `cards.json` carrying
+  `etb_opponent_lifegain`, and only Anti-Lifegain plays it, so every other deck is byte-identical.
+  Levers-off smoke: 0 configs changed, 39 keys unchanged.
+
+### What it does NOT fix: removing greedy is now SAFE, but still not BETTER
+SSM + gate is -1 vs the shipped baseline with **zero wins destroyed** (from +31 and seven destroyed
+wins), so the catastrophic failure is closed. But SSM+gate vs GATE-ALONE is **+13 turns**: searching
+the interior second main still costs 13 turns over 6000 train games once the gift hole is shut.
+**MTG_AL_SSM stays OFF.** The remaining 13 turns are the honest measure of what else greedy's ordering
+knows that the searched leaf does not -- the next question if the standing "no greedy at any level"
+directive is to be finished.

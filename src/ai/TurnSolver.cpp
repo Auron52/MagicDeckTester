@@ -2175,6 +2175,46 @@ static bool SubsetAttackForfeit(const GameState& state,
     return total_mv > PoolWithoutBestAttacker(state, best_attacker);
 }
 
+// MTG_UNBACKED_ETB_GIFT -- a MISSING CASE in the unbacked-gift prune, not a new heuristic. The gate below
+// rejects a subset that hands the opponent life with no lifegain->loss enabler live -- but it keys on
+// `alt_cost`, so an ETB GIFT slips through entirely: Aria of Flame's "each opponent gains 10 life" is
+// a hard-cast enchantment, not an alt payload. That hole is what makes the SEARCHED second main
+// (MTG_AL_SSM) lose games the greedy Solve wins -- AL gi940/gi970/gi695: the searched m2 casts Aria at
+// T3 with no Tainted Remedy out, opponent 16 -> 26 (and again at T4 -> 34), and the T8 Remedy + Cutter
+// + Silence kill is gone. The greedy Solve never picks it because EvalCard prices the unbacked copy
+// (ArchetypeCardValue's `DMG - gift*DMG/2`), but that value only ORDERS candidates; the searched path
+// selects by projected WIN TURN, where a beyond-horizon 10-life gift is invisible at the depths we
+// ship. So greedy's candidate ordering was carrying domain knowledge that substituted for depth, and
+// the searched path had nothing in its place. Same shape, same MTG_UNPRUNED hatch and the same
+// self-backing exemption as the alt gate.
+static bool SubsetHasUnbackedEtbGift(const GameState& state,
+                                     const std::vector<Action>& cands,
+                                     const std::vector<int>& sel)
+{
+// ADOPTED DEFAULT ON 2026-08-22. Held-out (8000 games, AL seeds 4004-7007, d3+d5) with greedy still
+// in place: **0 worse / 19 better / -28 turns, and FIVE losses converted to wins.** Train (6000
+// games, seeds 1001-3003): -14 turns, 1 worse / 13 better. This also REFUTES the ArchetypeCardValue
+// comment's "the first pre-Remedy Aria is routinely a strictly-better cast" -- measured over 14000
+// games it is not, and the value penalty there was only ever an ordering nudge. Blast radius is one
+// card: Aria of Flame is the ONLY card in cards.json with etb_opponent_lifegain, and only
+// Anti-Lifegain plays it, so every other deck is byte-identical. MTG_UNBACKED_ETB_GIFT=0 reverts.
+    static const bool s_gate = EnvOn("MTG_UNBACKED_ETB_GIFT", true);
+    if (!s_gate || sel.empty())                         { return false; }
+    if (RemedyActive(state, state.active_player_index)) { return false; }
+    if (DecisionUnpruned(UnprunedGate::AltPayload))     { return false; }
+    bool has_gift = false;
+    for (int j : sel)
+    {
+        const CardDefinition* d = cands[j].def;
+        if (d == nullptr) { continue; }
+        // An enabler cast in the SAME subset converts the gift: the canonical order resolves the
+        // enabler (rank 0) before Aria's ETB (rank 19), so the subset is self-backing -- keep it.
+        if (d->params.lifegain_to_loss)          { return false; }
+        if (d->params.etb_opponent_lifegain > 0) { has_gift = true; }
+    }
+    return has_gift;
+}
+
 static bool SubsetHasUnbackedAltPayload(const GameState& state,
                                         const std::vector<Action>& cands,
                                         const std::vector<int>& sel)
@@ -10334,6 +10374,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject a free alt-cost payload not backed by a live/same-turn enabler (collapsed-main
         // twin of the Swords gate; inert wherever the extended emission never fires).
         if (SubsetHasUnbackedAltPayload(state, cands, sel)) { return; }
+        if (SubsetHasUnbackedEtbGift(state, cands, sel))    { return; }
         if (SubsetHasUnbackedGiftDamage(state, cands, sel)) { return; }
         // Payoff-prune (PrunesAcceleratorWithoutPayoff): drop a ritual-accelerant subset that casts no payoff
         // (Dragon/Dragonstorm/Apex). Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-
@@ -15873,6 +15914,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // twin of the Swords gate; inert wherever the extended emission never fires). Lockstep
         // twin of the check in Solve::consider.
         if (SubsetHasUnbackedAltPayload(state, cands, sel)) { return; }
+        if (SubsetHasUnbackedEtbGift(state, cands, sel))    { return; }
         if (SubsetHasUnbackedGiftDamage(state, cands, sel)) { return; }
         // Payoff-prune (PrunesAcceleratorWithoutPayoff): drop a ritual-accelerant subset that casts no payoff
         // (Dragon/Dragonstorm/Apex) from the SEARCH branch list -- this is where the freed budget
