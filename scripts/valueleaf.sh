@@ -331,6 +331,48 @@ deck_file() { ls "$1/$2".cod "$1/$2".txt 2>/dev/null | head -1; }
 
 src_fingerprint() { git rev-parse HEAD:src 2>/dev/null; }
 
+# DECKLIST fingerprint: `<key> <sha256 of the decklist>` per deck in the table, sorted.
+#
+# The src/play freeze above is entirely about ENGINE state and is blind to the deck actually being
+# measured -- but every row, matrix cell and trained model is fitted to ONE decklist, so a list that
+# changes under a queue invalidates all of them. This is not hypothetical: the queue dir is
+# `logs/vlq_<key>` and the staged model `logs/eval/<stem>.value.STAGED.json`, both keyed by the deck
+# FAMILY, so replacing a deck's shipping list points a fresh run straight at the previous list's
+# completed run -- whose done-markers make `run` skip every phase and hand back a "finished" model
+# measured on a deck we no longer ship. The play digest cannot catch it either: a swapped deck is
+# usually still pinned to its OLD list in the smoke suite (deliberately, until its artifacts exist),
+# so the digest does not move at all. Caught on Mirrorwing 2026-08-22.
+deck_fingerprint() {
+    local row key dir stem df
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem _ <<<"$row"
+        df=$(deck_file "$dir" "$stem")
+        [ -n "$df" ] && printf '%s %s\n' "$key" "$(sha256sum "$df" | cut -d' ' -f1)"
+    done | sort
+}
+
+# A decklist change is a HARD STOP, unlike a src/play change. There is no chunk rule to fall back on:
+# a play change leaves earlier games VALID (they measured the same deck on an interchangeable engine)
+# so full sets can be banked, whereas a different list makes every row, cell and model describe a
+# different deck -- there is nothing to keep. It also refuses to auto-wipe: hours of work belonging to
+# the previous list are not this script's to discard, and which list they belong to is the operator's
+# call. Archive or delete the queue deliberately, then re-run.
+check_decks() {
+    local frozen now
+    frozen=$VLQ/freeze.decks
+    [ -e "$frozen" ] || return 0            # pre-dates the stamp; nothing to compare against
+    now=$(deck_fingerprint)
+    [ "$now" = "$(cat "$frozen")" ] && return 0
+    log "ABORT: the DECKLIST changed under this queue -- every row, matrix cell and trained model in"
+    log "  $VLQ is fitted to the previous list and describes a deck that is no longer being measured."
+    log "  Unlike a src/play move there is nothing to salvage, so this stops rather than resuming."
+    diff <(cat "$frozen") <(printf '%s\n' "$now") | sed 's/^/    /' | while read -r l; do log "$l"; done
+    log "  Archive the old queue and re-run, e.g.:"
+    log "    mv $VLQ ${VLQ}_<old-list-name>"
+    log "    mv 'logs/eval/<stem>.value.STAGED.json' 'logs/eval/<stem>.<old-list-name>.value.STAGED.json'"
+    return 1
+}
+
 # PLAY fingerprint: the smoke suite's per-case play digests, folded to one hash.
 #
 # What the freeze is actually protecting is that every cell of the table was measured by the same
@@ -422,7 +464,11 @@ phase_freeze() {
         return 1
     fi
     src_fingerprint > "$VLQ/freeze.src"; git rev-parse --short HEAD > "$VLQ/freeze.commit"
+    # Which DECK(s) this queue measures -- see deck_fingerprint. Stamped here so every later `run`
+    # can refuse to resume a queue whose decklist has been replaced.
+    deck_fingerprint > "$VLQ/freeze.decks"
     log "FROZEN at $(cat "$VLQ/freeze.commit")  src-tree $(cut -c1-12 "$VLQ/freeze.src")"
+    log "decklist(s) $(wc -l < "$VLQ/freeze.decks" | tr -d ' ') stamped -> $VLQ/freeze.decks"
     bash build.sh >> "$VLQ/build.log" 2>&1 || { log "ABORT: build failed, see $VLQ/build.log"; return 1; }
     log "build OK"
     # Stamp the PLAY fingerprint alongside the src one, so a later src move can be judged on whether
@@ -791,6 +837,7 @@ finish|run)
     for ph in phase_freeze phase_rows phase_split phase_train phase_matrix phase_riskgate \
               phase_meta phase_measure phase_mullgen; do
         check_freeze || exit 1
+        check_decks  || exit 1
         $ph || { log "STOPPED at $ph"; exit 1; }
     done
     log "=== COMPLETE -- nothing adopted; review the A/B + sweep reports above ==="
@@ -914,6 +961,7 @@ ab)
     E_MARK=E_ab_nomatrix
     log "=== NO-MATRIX ADOPTION A/B: staged (as-is, presence-only) vs live, + play sweep ==="
     check_freeze || exit 1
+    check_decks  || exit 1
     phase_freeze && phase_measure || { log "STOPPED in ab"; exit 1; }
     log "=== AB COMPLETE -- nothing adopted; review the report above ==="
     ;;
