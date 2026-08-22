@@ -22,11 +22,9 @@
     },
     {
       "name": "windows",
-      "displayName": "Windows (Visual Studio 2022, x64)",
-      "description": "Optimized multi-config tree. Binaries land in build/Release/mtg.exe etc.",
+      "displayName": "Windows (Visual Studio)",
+      "description": "Optimized multi-config tree. Binaries land in build/Release/mtg.exe etc. Deliberately does NOT pin a Visual Studio version -- CMake picks the newest installed, so 2019/2022/2026 all work. Pinning 'Visual Studio 17 2022' here failed outright on a VS 2026 machine.",
       "inherits": "default",
-      "generator": "Visual Studio 17 2022",
-      "architecture": { "value": "x64", "strategy": "set" },
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
     },
     {

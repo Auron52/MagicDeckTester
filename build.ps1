@@ -112,6 +112,8 @@ stale single-config CMake tree at build\$c\.
 # ---- configure -------------------------------------------------------------------
 # Pick the preset that matches the available toolchain. The Ninja preset is faster but needs
 # cl.exe on PATH, which only a Developer Command Prompt (or VS's "Open Folder") provides.
+# The 'windows' preset pins no Visual Studio version -- CMake selects the newest installed,
+# so this works on 2019/2022/2026 alike.
 
 $preset = 'windows'
 if ((Get-Command ninja -ErrorAction SilentlyContinue) -and (Get-Command cl -ErrorAction SilentlyContinue)) {

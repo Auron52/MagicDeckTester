@@ -19,9 +19,12 @@ neither.
 
 ## Windows
 
-Install the **Visual Studio 2022 Build Tools** with the *Desktop development with C++*
-workload. That single workload provides the MSVC compiler, the Windows SDK, **and** CMake, so
-it covers three rows of the table at once.
+Install the **Visual Studio Build Tools** with the *Desktop development with C++* workload.
+That single workload provides the MSVC compiler, the Windows SDK, **and** CMake, so it covers
+three rows of the table at once.
+
+Any recent Visual Studio works — 2019, 2022, or 2026. The build does not pin a version; CMake
+selects the newest one you have installed.
 
 - Download: <https://visualstudio.microsoft.com/downloads/> → scroll to *Tools for Visual
   Studio* → *Build Tools for Visual Studio 2022*.
