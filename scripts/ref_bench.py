@@ -187,10 +187,13 @@ def main():
 
     results, skipped = [], []
     for slug, refdir in pairs:
-        if slug not in decks:
-            skipped.append((slug, refdir))
+        # The deck a reference folder was PLAYED on, which is not always the one that owns its slug
+        # today (see deck_registry.REFERENCE_DECK -- an archived list keeps its references).
+        key = deck_registry.reference_deck_key(slug)
+        if key not in decks:
+            skipped.append((slug, refdir, key))
             continue
-        results.append(bench_deck(slug, refdir, decks[slug], args, log_root))
+        results.append(bench_deck(key, refdir, decks[key], args, log_root))
 
     print("\n=== SUMMARY (avg turn-to-win; lower is better; no-win scores %d)" % (args.max_turns + 1))
     print("%-18s %4s %8s %8s   %s" % ("deck", "n", "human", "search", "shortfalls"))
@@ -202,8 +205,10 @@ def main():
         print("%-18s %4d %8.3f %8.3f   %d/%d short, %d faster than human"
               % (r["deck"], r["n"], r["human"], r["search"], short, r["n"], faster))
     print("%-18s %4d %8s %8s   %d/%d short" % ("TOTAL", tot_n, "", "", tot_short, tot_n))
-    for slug, refdir in skipped:
-        print("SKIPPED %s (%s): no decks/ folder with a profile for this slug" % (slug, refdir))
+    for slug, refdir, key in skipped:
+        via = "" if key == slug else " (bound to '%s' by deck_registry.REFERENCE_DECK)" % key
+        print("SKIPPED %s (%s)%s: no decks/ folder with a decklist AND a profile for '%s' -- these "
+              "references are NOT benched" % (slug, refdir, via, key))
     if tmp:
         print("\nper-game logs: %s" % tmp)
 

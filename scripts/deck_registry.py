@@ -49,22 +49,71 @@ class Deck(object):
         return "Deck(%s)" % self.key
 
 
+def _deck_at(d, stem):
+    """-> the decklist path if `d` holds <stem>.cod|.txt AND <stem>.profile.json, else None."""
+    deck_file = next((p for p in ("%s/%s.cod" % (d, stem), "%s/%s.txt" % (d, stem))
+                      if os.path.exists(p)), None)
+    if not deck_file:
+        return None
+    if not os.path.exists("%s/%s.profile.json" % (d, stem)):
+        return None       # never measured at shipped play -> not a deck this tooling can describe
+    return deck_file
+
+
 def discover(root="decks"):
-    """-> {key: Deck} for every deck folder that has a decklist AND a profile."""
+    """-> {key: Deck} for every deck folder that has a decklist AND a profile.
+
+    ARCHIVED / VARIANT LISTS. A deck folder may hold an immediate subdirectory carrying its OWN
+    copy of the same-stem files (`decks/<Name>/<Variant>/<Name>.cod` + `.profile.json`) -- an
+    earlier version of the list, kept beside the one that ships together with the artifacts fitted
+    to it. Those are real, addressable decks (references and ground truth still point at them), so
+    they are discovered under a compound key `<name>_<variant>`, while the BARE `<name>` key always
+    means the list that currently ships. Files inside a variant are named after the PARENT deck
+    rather than the subdirectory, because the engine resolves every sidecar directory-relative off
+    the profile -- so a variant is found by looking for the parent's stem inside it.
+
+    One shared field to be aware of: `staged` is keyed by stem, so a variant and its parent name the
+    same `logs/eval/<stem>.value.STAGED.json`. Staging is transient and only ever done for the
+    shipping list, so this is left as-is rather than inventing a second naming convention."""
     out = {}
     for d in sorted(glob.glob("%s/*" % root)):
         if not os.path.isdir(d):
             continue
         stem = os.path.basename(d)
-        deck_file = next((p for p in ("%s/%s.cod" % (d, stem), "%s/%s.txt" % (d, stem))
-                          if os.path.exists(p)), None)
-        if not deck_file:
-            continue
-        if not os.path.exists("%s/%s.profile.json" % (d, stem)):
-            continue      # never measured at shipped play -> not a deck this tooling can describe
-        out[slug(stem)] = Deck(slug(stem), d, stem, deck_file)
+        deck_file = _deck_at(d, stem)
+        if deck_file:
+            out[slug(stem)] = Deck(slug(stem), d, stem, deck_file)
+        for sub in sorted(glob.glob("%s/*" % d)):
+            if not os.path.isdir(sub):
+                continue
+            sub_file = _deck_at(sub, stem)
+            if sub_file:
+                key = "%s_%s" % (slug(stem), slug(os.path.basename(sub)))
+                out[key] = Deck(key, sub, stem, sub_file)
     _assign_seed_bases(out)
     return out
+
+
+# Which LIST a folder of hand-played references was played on.
+#
+# This CANNOT be derived. A reference JSON records seeds, mulligans and decisions but no decklist,
+# and the folder name slugs the deck FAMILY, not the version -- so when a deck's shipping list is
+# replaced, its existing references silently start resolving to the new list. Replaying a recorded
+# human line against cards that were never in that deck produces a benchmark that means nothing and
+# reports no error, which is exactly the failure this module was written to end.
+#
+# Only exceptions need an entry; anything absent resolves to its own slug.
+REFERENCE_DECK = {
+    # The 24 Mirrorwing references were hand-played on the Twinflame / Ancestral Anger / Scale the
+    # Heights / Expedite list, archived 2026-08-22 when the tournament-winning suite (Oracle /
+    # Draught / Impolite Entrance / Luxurious Libation) took over the shipping slot.
+    "mirrorwing_dragon": "mirrorwing_dragon_v1_twinflame_anger",
+}
+
+
+def reference_deck_key(ref_slug):
+    """-> the key of the deck a reference folder's games were actually played on."""
+    return REFERENCE_DECK.get(ref_slug, ref_slug)
 
 
 def _assign_seed_bases(decks):
