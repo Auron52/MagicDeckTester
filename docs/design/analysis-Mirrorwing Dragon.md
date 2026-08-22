@@ -514,7 +514,14 @@ Frozen at `da5aad3a`, src-tree `d10440440fcc`, play digest `1a04ebebfad8`.
    These live in `value_play` inside `<stem>.value.json` — and note `MulliganProfileIO.h` was
    fixed this session to stop dropping a presence-only sidecar that carries `mull_gen_*` but no
    `target_depth`, which is exactly v1's shape.
-4. Mulligan route per `.claude/skills/mulligan-profile.md`: feasibility pre-check (read K), then
-   `--gen-mulligan recommend` to scout, then generate. Do NOT run either while phase C is live —
-   phase C's `--intractable-median-sec-per-game 30` cutoff is WALL-CLOCK, so added load could
-   condemn cells spuriously.
+4. Mulligan route per `.claude/skills/mulligan-profile.md`: **skip the feasibility pre-check and
+   the `recommend` scout — go straight to `--gen-mulligan fast`** (user, 2026-08-22). Justified
+   rather than assumed: v1 recorded `expected_buckets: 17` and the new list has 17 DISTINCT cards
+   over the same creature core, so K ≤ 17 and the hand count `C(K+6,7)` cannot exceed v1's, which
+   generated successfully. `fast` = adaptive bottoming, cap R30 — comfortably clear of the hard
+   R ≥ 10 floor below which no runtime profile can be written at all.
+   Run it STRICTLY AFTER the value leaf (user: "they should run sequentially"). Never while
+   phase C is live: phase C's `--intractable-median-sec-per-game 30` cutoff is WALL-CLOCK, so
+   added load could condemn cells spuriously.
+   Resume, if it is interrupted, is the IDENTICAL command — cells are journalled as they commit;
+   there is no resume flag and no driver script.
