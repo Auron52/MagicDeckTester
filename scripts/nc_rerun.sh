@@ -36,14 +36,14 @@ jobs = [{"name": a,
          "deck_numbering": f"{R}/{D}/{a}/numbering.json",
          "games": games, "seed": 980000, "max_turns": 8,
          "profile": f"{V}/app_{a}/Mirrorwing Dragon.profile.json",
-         "value_profile": "decks/Mirrorwing Dragon/Mirrorwing Dragon.value.json",
+         "value_profile": "decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.value.json",
          "value_model": False, "ladder_value_leaf": True}
         for a in ("base", "trick", "libonly")]
 json.dump({"jobs": jobs}, sys.stdout, indent=1)
 PY
 
 say "NC: K=2 depth=1, threads 10, ${GAMES} games/arm"
-MTG_DUMP_WINS=1 MTG_PROVIDER_DECK="$(readlink -f 'decks/Mirrorwing Dragon/Mirrorwing Dragon.cod')" \
+MTG_DUMP_WINS=1 MTG_PROVIDER_DECK="$(readlink -f 'decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.cod')" \
 MTG_NC_SEARCH=1 MTG_NC_K=2 MTG_NC_DEPTH=1 \
   ./build/Release/mtg --batch $O/batch/manifest_small.json --threads 10 \
   > $O/batch/nc2.out 2> $O/batch/nc2.err

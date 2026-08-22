@@ -21,9 +21,9 @@ say() { echo "[$(date -u +%H:%M:%S)] $*" | tee -a "$LOG"; }
 
 DECKDIR="logs/deckcmp/Mirrorwing Dragon"
 POOLPROF="$DECKDIR/app_pool/Mirrorwing Dragon.profile.json"   # pooled card_scores, all arms
-VALUE="decks/Mirrorwing Dragon/Mirrorwing Dragon.value.json"
+VALUE="decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.value.json"
 EQUIV="$DECKDIR/pooltable/Mirrorwing Dragon.keepmodel.gencache.json"
-BASE_RAW="decks/Mirrorwing Dragon/Mirrorwing Dragon.keepmodel.exhaustive.raw.json.gz"
+BASE_RAW="decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.keepmodel.exhaustive.raw.json.gz"
 TRICK_RAW="logs/mullgen_trick2/Mirrorwing Trick Suite.keepmodel.exhaustive.raw.json"
 
 say "=== overnight start; HEAD=$(git rev-parse --short HEAD) src=$(git rev-parse HEAD:src)"
@@ -104,12 +104,12 @@ for a in arms:
         "deck_numbering": f"{R}/{D}/{a}/numbering.json",
         "games": 60000, "seed": 980000, "max_turns": 8,
         "profile": f"{O}/app_{a}/Mirrorwing Dragon.profile.json",
-        "value_profile": "decks/Mirrorwing Dragon/Mirrorwing Dragon.value.json",
+        "value_profile": "decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.value.json",
         "value_model": False, "ladder_value_leaf": True,
     })
 json.dump({"jobs": jobs}, sys.stdout, indent=1)
 PY
-MTG_DUMP_WINS=1 MTG_PROVIDER_DECK="$(readlink -f 'decks/Mirrorwing Dragon/Mirrorwing Dragon.cod')" \
+MTG_DUMP_WINS=1 MTG_PROVIDER_DECK="$(readlink -f 'decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.cod')" \
   ./build/Release/mtg --batch "$O/batch/manifest.json" --threads 32 \
   --game-trace-dir $O/traces \
   > $O/batch/batch.out 2> $O/batch/batch.err

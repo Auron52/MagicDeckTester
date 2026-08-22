@@ -28,7 +28,7 @@ declare -A DECK_FILE=(
   [auras]=decks/Auras/Auras.cod
   [goblins]=decks/Goblins/Goblins.cod
   [creature_giving]="decks/Creature Giving/Creature Giving.cod"
-  [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.cod"
+  [mirrorwing]="decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.cod"
   [fivecolour]=decks/FiveColour/FiveColour.cod
   [stompy]=decks/StompySurprise/StompySurprise.cod
 )
@@ -43,7 +43,7 @@ declare -A DECK_PROF=(
   [auras]=decks/Auras/Auras.profile.json
   [goblins]=decks/Goblins/Goblins.profile.json
   [creature_giving]="decks/Creature Giving/Creature Giving.profile.json"
-  [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"
+  [mirrorwing]="decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.profile.json"
   [fivecolour]=decks/FiveColour/FiveColour.profile.json
   [stompy]=decks/StompySurprise/StompySurprise.profile.json
 )

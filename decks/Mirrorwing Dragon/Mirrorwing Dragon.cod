@@ -7,18 +7,18 @@
         <card number="4" name="Zada, Hedron Grinder"/>
         <card number="4" name="Goblin Instigator"/>
         <card number="4" name="Ignoble Hierarch"/>
+        <card number="4" name="Elvish Mystic"/>
         <card number="4" name="Fists of Flame"/>
         <card number="4" name="Gold Rush"/>
+        <card number="4" name="Impolite Entrance"/>
+        <card number="3" name="Luxurious Libation"/>
+        <card number="2" name="Oracle's Restoration"/>
+        <card number="2" name="Fortifying Draught"/>
+        <card number="8" name="Forest"/>
+        <card number="4" name="Game Trail"/>
         <card number="3" name="Sandstone Needle"/>
-        <card number="4" name="Mountain"/>
-        <card number="9" name="Forest"/>
-        <card number="4" name="Ancestral Anger"/>
         <card number="2" name="Gruul Turf"/>
-        <card number="3" name="Twinflame"/>
-        <card number="4" name="Elvish Mystic"/>
-        <card number="2" name="Expedite"/>
-        <card number="1" name="Kazandu Refuge"/>
+        <card number="2" name="Mountain"/>
         <card number="2" name="Rootbound Crag"/>
-        <card number="2" name="Scale the Heights"/>
     </zone>
 </cockatrice_deck>

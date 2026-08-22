@@ -40,8 +40,8 @@ DECKS = {
     "goblins":     ("decks/Goblins/Goblins.cod", "decks/Goblins/Goblins.profile.json"),
     "creature_giving": ("decks/Creature Giving/Creature Giving.cod",
                         "decks/Creature Giving/Creature Giving.profile.json"),
-    "mirrorwing":  ("decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
-                    "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"),
+    "mirrorwing":  ("decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.cod",
+                    "decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.profile.json"),
     "fivecolour":  ("decks/FiveColour/FiveColour.cod", "decks/FiveColour/FiveColour.profile.json"),
 }
 

@@ -4342,6 +4342,27 @@
    }
   },
   {
+   "name": "Game Trail",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped unless you control a Mountain or a Forest.\n{T}: Add {R} or {G}. [Check land: enters untapped iff a controlled land has subtype Mountain or Forest (checkland_subtypes, evaluated in the shared LandWouldEnterTapped predicate so enumeration pricing and the real drop agree). Functional reprint of Rootbound Crag -- identical oracle text and parameters.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "G"
+    ],
+    "checkland_subtypes": [
+     "Mountain",
+     "Forest"
+    ]
+   }
+  },
+  {
    "name": "Bonesplitter",
    "mana_cost": "{1}",
    "types": [

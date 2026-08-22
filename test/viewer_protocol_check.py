@@ -82,8 +82,8 @@ DECKS = {
                         "decks/Creature Giving/Creature Giving.profile.json"),
     "FiveColour":    ("decks/FiveColour/FiveColour.cod",       "decks/FiveColour/FiveColour.profile.json"),
     # Reference dir uses an underscore; the deck folder has a SPACE (same shape as Creature_Giving).
-    "Mirrorwing_Dragon": ("decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
-                          "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"),
+    "Mirrorwing_Dragon": ("decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.cod",
+                          "decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.profile.json"),
 }
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", re.S)

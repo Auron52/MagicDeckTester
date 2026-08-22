@@ -36,13 +36,13 @@ jobs = [{"name": a,
          "deck_numbering": f"{R}/{D}/{a}/numbering.json",
          "games": games, "seed": seed, "max_turns": 8,
          "profile": f"{V}/app_{a}/Mirrorwing Dragon.profile.json",
-         "value_profile": "decks/Mirrorwing Dragon/Mirrorwing Dragon.value.json",
+         "value_profile": "decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.value.json",
          "value_model": False, "ladder_value_leaf": True}
         for a in ("base", "trick", "libonly")]
 json.dump({"jobs": jobs}, sys.stdout, indent=1)
 PY
 
-PROV="$(readlink -f 'decks/Mirrorwing Dragon/Mirrorwing Dragon.cod')"
+PROV="$(readlink -f 'decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.cod')"
 
 # ------------------------------------------------------------------ phase 1a: honest
 say "phase 1a: MTG_HONEST_PLAY=1 (draw-decoupled 1-sample proxy)"

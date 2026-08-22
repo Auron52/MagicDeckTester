@@ -12,12 +12,13 @@
         <card number="3" name="Sandstone Needle"/>
         <card number="4" name="Mountain"/>
         <card number="9" name="Forest"/>
+        <card number="4" name="Ancestral Anger"/>
         <card number="2" name="Gruul Turf"/>
+        <card number="3" name="Twinflame"/>
         <card number="4" name="Elvish Mystic"/>
+        <card number="2" name="Expedite"/>
         <card number="1" name="Kazandu Refuge"/>
         <card number="2" name="Rootbound Crag"/>
-        <card number="4" name="Fortifying Draught"/>
-        <card number="4" name="Impolite Entrance"/>
-        <card number="3" name="Luxurious Libation"/>
+        <card number="2" name="Scale the Heights"/>
     </zone>
 </cockatrice_deck>
