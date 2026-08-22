@@ -506,3 +506,61 @@ target-ranking change — the same shape as TreasureHunt's ShouldCastDrawEngine 
 against the shipped gate before adopting; note the deck's 1-mana tutor often has spare mana, so
 the hold's cost is mostly the information delay, and clairvoyant seeds will flatter EITHER arm
 — use the NC-style read if the clairvoyant delta is suspicious.
+
+## Addendum (2026-08-22): value leaf + d6 play policy ADOPTED, and what is still open
+
+Shipped in `78f57f0d` as `decks/StompySurprise/StompySurprise.value.json` with an **enabled**
+play block: `target_depth 6, escalation_cap 5, budget_ms 20`. Both halves matter and the second
+is easy to lose — the staged model ships `value_play: null`, so adopting it as-is silently takes
+the built-in d5 default, which is exactly the arm d6 beat. Verify with the startup line:
+`[play] depth=6 budget=20ms source=value_play`.
+
+`escalation_cap` is clamped to 5 (the deepest MEASURED heuristic rung); arming past the ladder
+spends budget reaching a depth the crossover can never take. The crossover `[1,1,1,2,3,4,6,6]`
+rides inside the model. `value_trust_depth` stays UNSET, and post-qdead that is a REAL verdict
+rather than a sample-size artifact: the paired basis is now ~1592 games (resolution 0.0019 <
+tol 0.0020) and the leaf needs depth 7 to match `h_conv = 4.8807`, past the shipped depth.
+
+### Evidence
+
+| measurement | result |
+|---|---|
+| phase E gate (leaf vs NO sidecar), 8 seeds x 8000 | -0.01200  t=-6.35  8/8 seeds  0.77x compute |
+| d6 enabled vs leaf@default, 4 seeds x 2000        | -0.00550  t=-4.37  4/4 seeds  0.88x compute |
+| **fresh-seed confirmation**, 8 FRESH seeds x 16000 games/arm | **-0.01425  se 0.00154  t=-9.26  8/8 seeds** |
+
+The fresh-seed run (seeds 21001..28008, disjoint from phase E's 8008/9009/10010/11011 AND from
+every suite seed, at the SHIPPED play point) exists because the skill's Knights lesson says an
+8-seed read can hide a one-sided cost. It came out slightly STRONGER than the gate, same sign on
+every seed. Raw: `logs/stompy_bucket_v2/freshseed.txt` (gitignored — the numbers above are the record).
+
+GT rebaselined smoke + regression, every non-stompy key byte-identical. Shape is **d5 better /
+d3 marginally worse**, which is what a leaf replacing the horizon rollout should do. All 8
+searched-slower games categorised: 6 budget churn; gi112 reaches T5 at 4x/16x (better than its
+old T6, so budget binds, not the leaf); gi195 diffed sidecar-on vs -off from an IDENTICAL opening
+hand showed the **Worldly Tutor target moved** (Craterhoof -> Priest of Titania) — a decision
+change making them different physical games, not a bug.
+
+**Caveat for anyone reading the suite as the verdict:** every harness job carries
+`ignore_play_profile: true`, so the suite bypasses the depth lock and measures the leaf WITHOUT
+the d6 policy that makes it best. Phase E and the fresh-seed run are the honest reads on the
+shipped config.
+
+### Still open (deliberate, not forgotten)
+
+1. **The four cast-order / payment levers are NOT adopted** — `MTG_STOMPY_ORDER`,
+   `MTG_TOP_RESOLVE`, `MTG_TAP_SCALED_LAST`, `MTG_TAP_TRIM` (plus `MTG_SAC_SPARE_ATTACKERS`),
+   all default-OFF. They measure train -0.158 / held-out -0.043 with zero cells worse, and the
+   tap pair is additive rather than redundant with upstream's `MTG_DORK_ATK_SEARCH`. But every
+   one of those numbers was taken with **no sidecar present**, i.e. a configuration we no longer
+   ship. RE-MEASURE on top of the adopted leaf before deciding; adoption then needs the combo
+   fixture (`/tmp/tutor_top_reset.json` shape — recreate it, it was session scratch) committed
+   into `test/scenarios/` plus its own GT rebaseline.
+2. **Phase F (mulligan-generation contract) is now unblocked** — it stood down on every run so
+   far with "no StompySurprise.value.json -- the value leaf must exist first". Its marker is
+   already `done` in the queue, so re-running needs that marker deleted.
+3. **Stompy overnight GT rows are still NEW** — 12 cases are defined in `regression_cases.sh`
+   but no overnight key has ever been generated.
+4. The two modelling items in `stompy-top-of-library-consumers.md` (upkeep Call activation on an
+   intentionally-stacked top; the late "tutor for Craterhoof" line the static rank cannot express)
+   remain deferred, as does the Worldly-Tutor HOLD idea in the addendum above.
