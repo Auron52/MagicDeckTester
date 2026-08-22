@@ -48,6 +48,11 @@ enum Slot : int
     KE_TUTOR_RANK,            // MTG_KE_TUTOR_RANK         reasoned fetch ranking + width 2
     KE_TUTOR_ONE,             // MTG_KE_TUTOR_ONE          ...and width 1 (heuristic only)
     SHED_WORST,               // MTG_SHED_WORST            rollout cleanup sheds the WORST-ranked card
+    EQUIP_COPY_COLLAPSE,      // MTG_EQUIP_COPY_COLLAPSE   one odometer position per fungible-copy class
+    EQUIP_UNSICK_HOST,        // MTG_EQUIP_UNSICK_HOST     no-Kemba/no-ds host must be able to swing now
+    KE_BUCKET_DISCARD,        // MTG_KE_BUCKET_DISCARD     bucketed cleanup discard (creatures/mana/equipment)
+    EQUIP_PIECE_DEPS,         // MTG_EQUIP_PIECE_DEPS     reject a stranded equip at the odometer digit
+    KE_DISCARD_RESIDUAL,      // MTG_KE_DISCARD_RESIDUAL  discard equipment bucket is the 7-card residual
     COUNT
 };
 
@@ -73,6 +78,11 @@ inline const char* Name(int slot)
         "MTG_KE_TUTOR_RANK",
         "MTG_KE_TUTOR_ONE",
         "MTG_SHED_WORST",
+        "MTG_EQUIP_COPY_COLLAPSE",
+        "MTG_EQUIP_UNSICK_HOST",
+        "MTG_KE_BUCKET_DISCARD",
+        "MTG_EQUIP_PIECE_DEPS",
+        "MTG_KE_DISCARD_RESIDUAL",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

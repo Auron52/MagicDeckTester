@@ -2343,11 +2343,44 @@ static bool SubsetWastesAccelerant(const std::vector<Action>& cands, const std::
 // it pollutes the human-facing plan list with silent no-ops (claude-play sweep, confirmation gi0).
 // Mirrors SubsetHasAuraOnUncastCreature. No Equip candidate -> byte-identical for every deck without
 // equipment.
+// MTG_STRANDED_STATS -- sizing diagnostic for the USER's rule (2026-08-22): "if no creature is on
+// board or played, there should be no equip action". The rule IS enforced, but only here, at the
+// subset level: an equip whose only host is a hand creature still becomes its own odometer digit, so
+// every position that takes the equip WITHOUT the cast is built and then thrown away. This counts
+// how much of the walk that is -- calls, rejections, and the sub-case where the board holds no
+// creature at all (where EVERY equip digit is dead unless the cast rides along).
+namespace strandedstats
+{
+    inline bool Enabled() { static const bool v = EnvOn("MTG_STRANDED_STATS"); return v; }
+    inline std::atomic<std::uint64_t> g_calls{0}, g_reject{0}, g_reject_nocreature{0}, g_equip_subsets{0};
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            const std::uint64_t c = g_calls.load(), r = g_reject.load();
+            std::fprintf(stderr,
+                "\n=== STRANDED EQUIP: subsets tested %llu | holding an equip %llu"
+                " | REJECTED as stranded %llu (%.1f%% of equip-bearing)"
+                " | of those, with NO creature on the battlefield %llu ===\n",
+                static_cast<unsigned long long>(c),
+                static_cast<unsigned long long>(g_equip_subsets.load()),
+                static_cast<unsigned long long>(r),
+                g_equip_subsets.load() ? 100.0 * static_cast<double>(r)
+                                         / static_cast<double>(g_equip_subsets.load()) : 0.0,
+                static_cast<unsigned long long>(g_reject_nocreature.load()));
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 static bool SubsetHasStrandedEquip(const GameState& state,
                                    const std::vector<Action>& cands, const std::vector<int>& sel)
 {
     const Player& ap     = state.ActivePlayer();
     const int     active = state.active_player_index;
+    const bool    stats  = strandedstats::Enabled();
+    if (stats) { strandedstats::g_calls.fetch_add(1, std::memory_order_relaxed); }
     auto on_bf = [&](int num) {
         for (const Permanent& p : state.battlefield)
             if (p.controller_index == active && p.card.m_number == num) { return true; }
@@ -2364,13 +2397,32 @@ static bool SubsetHasStrandedEquip(const GameState& state,
         return false;
     };
     auto live = [&](int num) { return num > 0 && (on_bf(num) || cast_here(num)); };
+    bool saw_equip = false, bad = false;
     for (int idx : sel)
     {
         const Action& c = cands[idx];
         if (c.kind != Action::Kind::Equip) { continue; }
-        if (!live(c.sac_source_id) || !live(c.sac_victim_id)) { return true; }
+        saw_equip = true;
+        if (!live(c.sac_source_id) || !live(c.sac_victim_id)) { bad = true; break; }
     }
-    return false;
+    if (stats)
+    {
+        if (saw_equip) { strandedstats::g_equip_subsets.fetch_add(1, std::memory_order_relaxed); }
+        if (bad)
+        {
+            strandedstats::g_reject.fetch_add(1, std::memory_order_relaxed);
+            bool any_creature = false;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != active) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d && d->card.IsCreature()) { any_creature = true; break; }
+            }
+            if (!any_creature)
+            { strandedstats::g_reject_nocreature.fetch_add(1, std::memory_order_relaxed); }
+        }
+    }
+    return bad;
 }
 
 // RULES twin of the equip enumeration's shroud check (user doctrine 2026-08-14): equipping onto a
@@ -3337,6 +3389,287 @@ static inline bool NonPrefixAccelViolated(const std::vector<int>& accel_order, c
     {
         if (choice[g] > 0) { if (saw_uncast) { return true; } }
         else               { saw_uncast = true; }
+    }
+    return false;
+}
+
+// ---- Fungible-COPY group collapse (symmetry, not dominance) -----------------------------------
+// ActivationFamilyKey keys an Equip family on its SOURCE permanent (sac_source_id), so N identical
+// Equipment permanents become N SEPARATE odometer groups and the walk spends 2^N positions on them.
+// The copies are INTERCHANGEABLE, though: attaching Bonesplitter #1 rather than #2 to the same host
+// leaves the same board, so those 2^N positions cover only N+1 distinct outcomes for one host (and
+// C(N+h, h) over h hosts). MEASURED on KittyEquipment seed 9175 gi 166 -- a one-land keep that
+// stacks equipment on a lone creature -- the odometer is FOURTEEN SINGLETON GROUPS with an EMPTY
+// independent mask, seven of them Equip, holding Bonesplitter x2 and Umezawa's Jitte x2: 2^14 =
+// 16,384 positions covering 6,912 distinct outcomes, and 98.1% of the 43.7M subsets that game
+// considers hold an equip.
+//
+// This is the group-odometer sibling of IndependentAccelPrefixViolated (fungible Lotus sacs, 2^L ->
+// L+1) and is enforced the same way -- keep ONE canonical representative per equivalence class, here
+// by requiring a class's choice digits to be NON-INCREASING in group order. Every rejected position
+// has a surviving twin with the identical (equipment -> host) multiset, so no reachable board is
+// lost. It is deliberately a separate predicate from the independent-mask one: that mask is EMPTY on
+// exactly the boards this fires on, which is why collapsing there measured completely inert.
+//
+// SOUNDNESS. Two Equip groups are fungible only when nothing beyond sac_source_id distinguishes
+// them, so the class key spans the equipment NAME, the per-member (host, cost) option list IN
+// ODOMETER ORDER (so digit c means the same attachment in either group), and the source permanent's
+// own state. A copy that is ALREADY ATTACHED is refused outright -- its equip is a MOVE, and moving
+// copy #1 off host A is not the same event as moving copy #2 off host B -- as is any copy carrying
+// counters (Umezawa's Jitte's charge counters are this very deck's case) and any Equipment whose
+// attach has a side effect on the prior host (Grafted Wargear's sacrifice). `tapped` and
+// `entered_this_turn` go in the SIGNATURE rather than the refusal, so a freshly-cast copy simply
+// pairs with another freshly-cast copy instead of blocking the collapse.
+//
+// Hand CASTS are not collapsed here even though two copies of one card in hand are equally fungible:
+// casting from a different hand slot leaves a different hand ORDER, which a later discard or reveal
+// can read. That case needs its own argument, not this one.
+//
+// NOT byte-identical, and gated accordingly (MTG_EQUIP_COPY_COLLAPSE): the surviving representative
+// can put a different PHYSICAL copy on the host than today's tie-break picks, so card numbers -- and
+// therefore play digests -- may move even though the board is isomorphic and the plan's score is
+// identical.
+// MTG_EQUIP_UNSICK_HOST -- the consolidation doctrine's LAST-RESORT host (no Kemba, no double
+// striker on board) must be a creature that can actually attack this turn. USER, 2026-08-22: "if we
+// have neither Kemba nor a doublestriker we should put it on one creature with no summoning
+// sickness." Heuristic (it changes WHICH host a width-1 ranking offers, not how many), so it is
+// gated and measured rather than assumed; per-JOB overridable so one pooled batch runs both arms.
+static bool UnsickEquipHostEnabled()
+{
+    // ADOPTED DEFAULT-ON 2026-08-22 on the USER's call. Measured on KittyEquipment, 16 paired seeds
+    // x 500 games per arm: train -0.0056 turns (t=-8.47, 16 seeds better / 0 worse) and held-out on
+    // fresh seeds 800000+ -0.0065 (t=-7.51, 15 better / 0 worse), for 0.98x the search cost. =0 is
+    // the hatch.
+    static const bool env = EnvOn("MTG_EQUIP_UNSICK_HOST", true);
+    return heurarm::Flag(heurarm::EQUIP_UNSICK_HOST, env);
+}
+
+// MTG_EQUIP_PIECE_DEPS -- hoist the stranded-equip rejection from the subset to the odometer digit.
+// Byte-identical by construction (it rejects a subset of what SubsetHasStrandedEquip rejects, and
+// that guard still runs), so the hatch exists as a cost A/B rather than a behaviour one.
+static bool EquipPieceDepsEnabled()
+{
+    static const bool env = EnvOn("MTG_EQUIP_PIECE_DEPS", true);
+    return heurarm::Flag(heurarm::EQUIP_PIECE_DEPS, env);
+}
+
+static bool EquipCopyCollapseEnabled()
+{
+    static const bool env = EnvOn("MTG_EQUIP_COPY_COLLAPSE");
+    return heurarm::Flag(heurarm::EQUIP_COPY_COLLAPSE, env);   // per-JOB so one pooled batch runs both arms
+}
+
+// Bounded so the per-position check can keep its state in a fixed array (it runs once per odometer
+// position). Real boards reach 2-4 classes; groups past the bound simply keep their 2^N enumeration
+// rather than being silently mis-collapsed.
+static constexpr int kMaxFungibleClasses = 16;
+
+// Choice-INDEPENDENT precompute: group -> class id, -1 for "in no multi-group class". Depends only
+// on cands/groups/state, all fixed across one enumeration, so it runs ONCE per plan enumeration
+// (the same discipline BuildAccelPrefixOrder follows). Returns the class count; 0 means the
+// predicate can never fire and callers skip the per-choice walk entirely.
+static int BuildFungibleEquipClasses(const GameState& state,
+                                     const std::vector<Action>& cands,
+                                     const std::vector<std::vector<int>>& groups,
+                                     std::vector<int>& class_of)
+{
+    class_of.assign(groups.size(), -1);
+    static thread_local std::vector<std::string> sig;   // empty => ineligible, never matches
+    sig.assign(groups.size(), std::string());
+    char buf[96];
+    for (size_t g = 0; g < groups.size(); ++g)
+    {
+        const std::vector<int>& mem = groups[g];
+        if (mem.empty()) { continue; }
+        const Action& a0 = cands[mem[0]];
+        if (a0.kind != Action::Kind::Equip || a0.sac_source_id < 0) { continue; }
+        const Permanent* src = nullptr;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == state.active_player_index
+                && p.card.m_number == a0.sac_source_id)
+            { src = &p; break; }
+        }
+        if (!src || src->equipped_to != 0 || !src->counters.empty()
+            || src->charge_counters != 0 || src->verse_counters != 0
+            || src->storage_counters != 0 || src->age_counters != 0)
+        { continue; }
+        const CardDefinition* d = a0.def ? a0.def : CardDatabase::Instance().LookupCached(src->card);
+        if (!d || !d->params.is_equipment || d->params.equip_sacrifices_prior_host) { continue; }
+        std::string s = "E|";
+        s += a0.card_name.c_str();
+        std::snprintf(buf, sizeof buf, "|%d%d", src->tapped ? 1 : 0, src->entered_this_turn ? 1 : 0);
+        s += buf;
+        bool ok = true;
+        for (int j : mem)
+        {
+            const Action& a = cands[j];
+            if (a.kind != Action::Kind::Equip || a.sac_source_id != a0.sac_source_id)
+            { ok = false; break; }
+            std::snprintf(buf, sizeof buf, "|%d:%d", a.sac_victim_id, a.cost.ManaValue());
+            s += buf;
+        }
+        if (ok) { sig[g] = std::move(s); }
+    }
+    int nclass = 0;
+    for (size_t g = 0; g < groups.size() && nclass < kMaxFungibleClasses; ++g)
+    {
+        if (sig[g].empty() || class_of[g] >= 0) { continue; }
+        int id = -1;
+        for (size_t h = g + 1; h < groups.size(); ++h)
+        {
+            if (sig[h] != sig[g] || class_of[h] >= 0) { continue; }
+            if (id < 0) { id = nclass++; class_of[g] = id; }
+            class_of[h] = id;
+        }
+    }
+    return nclass;
+}
+
+// Per-CHOICE check (a cheap walk of the precomputed class map): reject any position whose class
+// digits are not NON-INCREASING in group order. Exactly one position per (class, digit multiset)
+// survives, and it selects the same attachments as every position it displaces.
+static inline bool FungibleEquipCopyViolated(const std::vector<int>& class_of,
+                                             const std::vector<int>& choice)
+{
+    int last[kMaxFungibleClasses];
+    for (int c = 0; c < kMaxFungibleClasses; ++c) { last[c] = std::numeric_limits<int>::max(); }
+    for (size_t g = 0; g < class_of.size(); ++g)
+    {
+        const int c = class_of[g];
+        if (c < 0) { continue; }
+        if (choice[g] > last[c]) { return true; }
+        last[c] = choice[g];
+    }
+    return false;
+}
+
+// ---- Equip PIECE dependency: hoist the stranded-equip rejection into the odometer ---------------
+// USER, 2026-08-22: "If no creature is on board or played, there should be no equip action."
+//
+// The rule is already ENFORCED -- SubsetHasStrandedEquip rejects any subset whose Equip has a piece
+// (the Equipment itself, or the host) sitting in hand and not cast by that same subset. But it
+// enforces it at the SUBSET level, after `sel` has been built, so the odometer still spends a whole
+// digit on the equip and every position taking that digit without the cast is constructed, scanned
+// and thrown away. MEASURED on KittyEquipment seed 9175 gi 166 (MTG_STRANDED_STATS):
+//
+//     subsets holding an equip   36,035,434
+//     REJECTED as stranded       24,618,188   = 68.3%
+//       ...with NO creature on the battlefield at all:  9,781,278
+//
+// So two thirds of the equip enumeration is dead on arrival, and the user's named case -- an empty
+// board, where every equip digit is live only if the host's cast rides along in the same position --
+// is 9.8M of it.
+//
+// The dependency is expressible on the odometer's CHOICE vector, which is what makes this cheap: a
+// paid hand cast is ALWAYS its own group (PlanGroupKey returns hand_index) and an Equip is always a
+// group too (ActivationFamilyKey keys it on sac_source_id), so neither can hide in the independent
+// mask. For each digit value -- "group g takes its c-th member" -- we precompute the cast groups that
+// must also be selected, then reject the position if they are not.
+//
+// BYTE-IDENTICAL by construction, and deliberately never STRICTER than the subset guard it mirrors:
+// it rejects only when the required group is wholly unselected, which is a strictly weaker condition
+// than "no CastFromHand for this card number is in the subset". A piece reachable only through a
+// non-cast route (Stoneforge's PutFromHandAbility groups on the Stoneforge, not on the hand slot) is
+// marked kDepImpossible -- which matches, rather than extends, what SubsetHasStrandedEquip already
+// does with it. The subset guard stays in place as the authority; this only stops paying for the
+// positions it was going to reject anyway.
+// A piece's requirement is a SET of groups, not a single one, and getting that wrong is what the
+// regression suite caught: a FREE cast (Maelstrom Archangel's bank) is a CastFromHand action that
+// PlanGroupKey routes to a bank-SLOT group rather than the hand-slot group, so a card can be cast by
+// either of two groups. Requiring the paid group specifically made this predicate STRICTER than the
+// SubsetHasStrandedEquip guard it mirrors -- it rejected legal "free-cast the Archangel, equip the
+// Greaves onto it" positions, which moved FiveColour's play (three cases, all at an unchanged score).
+// A mask over groups reproduces cast_here() exactly: satisfied when ANY group that casts this card
+// number is selected.
+struct PieceReq
+{
+    bool          required = false;   // false = the piece is already on the battlefield
+    std::uint64_t groups   = 0;       // required && groups == 0 -> never castable, digit is dead
+};
+
+struct EquipPieceDeps
+{
+    std::vector<int> gs;                                     // equip group indices with a dependency
+    std::vector<std::vector<std::array<PieceReq, 2>>> req;   // parallel to gs; req[k][c-1]
+    bool Empty() const { return gs.empty(); }
+};
+
+static void BuildEquipPieceDeps(const GameState& state, const std::vector<Action>& cands,
+                                const std::vector<std::vector<int>>& groups,
+                                const std::vector<int>& group_hand_index,
+                                EquipPieceDeps& out)
+{
+    out.gs.clear();
+    out.req.clear();
+    const Player& ap     = state.ActivePlayer();
+    const int     active = state.active_player_index;
+    auto on_bf = [&](int num) {
+        for (const Permanent& p : state.battlefield)
+        { if (p.controller_index == active && p.card.m_number == num) { return true; } }
+        return false;
+    };
+    // Which GROUP casts the card with this number. Hand casts group by hand slot, so a group's card
+    // number is fixed across its variants -- the same identity SubsetHasStrandedEquip's cast_here()
+    // tests, resolved once per enumeration instead of once per subset.
+    // EVERY group that casts this card number, exactly as SubsetHasStrandedEquip's cast_here() scans
+    // the subset: keyed on the hand card's number and on the action KIND, so paid and free variants
+    // of one card both qualify however PlanGroupKey happened to bucket them.
+    auto cast_groups_of = [&](int num) -> std::uint64_t {
+        std::uint64_t mask = 0;
+        for (std::size_t h = 0; h < groups.size(); ++h)
+        {
+            for (int j : groups[h])
+            {
+                const Action& d = cands[j];
+                if (d.kind != Action::Kind::CastFromHand) { continue; }
+                if (d.hand_index < 0 || d.hand_index >= static_cast<int>(ap.hand.size())) { continue; }
+                if (ap.hand[d.hand_index].m_number != num) { continue; }
+                mask |= 1ull << h;
+                break;
+            }
+        }
+        return mask;
+    };
+    // The mask is one bit per group, so a wider odometer than that falls back to the subset guard
+    // rather than silently mis-pruning.
+    if (groups.size() > 64) { return; }
+    for (std::size_t g = 0; g < groups.size(); ++g)
+    {
+        if (groups[g].empty() || cands[groups[g][0]].kind != Action::Kind::Equip) { continue; }
+        std::vector<std::array<PieceReq, 2>> req(groups[g].size());
+        bool any = false;
+        for (std::size_t c = 0; c < groups[g].size(); ++c)
+        {
+            const Action& a = cands[groups[g][c]];
+            const int nums[2] = { a.sac_source_id, a.sac_victim_id };
+            for (int k = 0; k < 2; ++k)
+            {
+                if (nums[k] <= 0)   { req[c][k] = { true, 0 }; any = true; continue; }
+                if (on_bf(nums[k])) { continue; }                 // already there: no dependency
+                req[c][k] = { true, cast_groups_of(nums[k]) };
+                any = true;
+            }
+        }
+        if (any) { out.gs.push_back(static_cast<int>(g)); out.req.push_back(std::move(req)); }
+    }
+}
+
+static inline bool EquipPieceDepViolated(const EquipPieceDeps& d, const std::vector<int>& choice)
+{
+    std::uint64_t sel = 0;
+    for (std::size_t g = 0; g < choice.size() && g < 64; ++g)
+    { if (choice[g] > 0) { sel |= 1ull << g; } }
+    for (std::size_t k = 0; k < d.gs.size(); ++k)
+    {
+        const int c = choice[d.gs[k]];
+        if (c <= 0) { continue; }                                   // digit not taken
+        const std::array<PieceReq, 2>& r = d.req[k][static_cast<std::size_t>(c - 1)];
+        for (int s = 0; s < 2; ++s)
+        {
+            if (!r[s].required)            { continue; }
+            if ((r[s].groups & sel) == 0)  { return true; }          // no selected group casts it
+        }
     }
     return false;
 }
@@ -7176,6 +7509,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // MTG_EQUIP_ALL_HOSTS / human play restore the open set for the standing A/B.
                 if (s_consolidate && !open_all && !ed->params.equip_grants_haste)
                 {
+                    // Can this host attack THIS turn carrying the gear? A hand host is not on the
+                    // battlefield yet, and a fresh one without haste is summoning-sick (CR 302.6).
+                    auto host_can_swing = [&](int id) {
+                        for (const Host& h : hosts)
+                        { if (h.id == id) { return !h.in_hand && !(h.fresh && !h.haste); } }
+                        return false;
+                    };
                     auto ds_potential = [&](int id) {
                         const HostStats st = host_stats(id);
                         return st.ds
@@ -7195,10 +7535,30 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             for (const std::pair<int, int>& r : ranked_rider)      // the pair partner
                             { if (r.second == kemba_id) { keep.push_back(r); break; } }
                         }
-                        // No ds/Kemba host at all: a FRESH equip still lands on the single best
-                        // host; a MOVE to an ordinary host is never offered.
+                        // No ds/Kemba host at all: a FRESH equip still lands on ONE host (a MOVE to
+                        // an ordinary host is never offered), and the USER's rule decides WHICH --
+                        // "if we have neither Kemba nor a doublestriker we should put it on one
+                        // creature with no summoning sickness" (2026-08-22). The rider delta is only
+                        // banked if the body carrying it can attack THIS turn; on a sick host the
+                        // same equip could be made next turn instead, for the same effect and with a
+                        // turn more information. Exactly the reasoning the Kemba un-park already
+                        // applies through CanTapNow. Falls back to the plain best host when nothing
+                        // can swing, so the rule only ever REORDERS the choice -- it can never leave
+                        // the equip with no host at all.
                         if (keep.empty() && !moving && !ranked_rider.empty())
-                        { keep.push_back(ranked_rider[0]); }
+                        {
+                            std::size_t pick = 0;
+                            if (UnsickEquipHostEnabled())
+                            {
+                                for (std::size_t r = 0; r < ranked_rider.size(); ++r)
+                                {
+                                    if (!host_can_swing(ranked_rider[r].second)) { continue; }
+                                    pick = r;
+                                    break;
+                                }
+                            }
+                            keep.push_back(ranked_rider[pick]);
+                        }
                     }
                     ranked_rider.swap(keep);
                 }
@@ -9430,6 +9790,12 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                                    const std::vector<int>& accel_order,
                                    bool any_splice, bool splice_collapse_on,
                                    bool accel_pred_on, bool has_ind_accel,
+                                   // group -> fungible-copy class (empty when the collapse is off or
+                                   // found nothing); see BuildFungibleEquipClasses.
+                                   const std::vector<int>& copy_class,
+                                   // equip digit -> the cast groups its pieces need; see
+                                   // BuildEquipPieceDeps.
+                                   const EquipPieceDeps& equip_deps,
                                    // By const reference, NOT by value: Solve's `consider` closure
                                    // captures a dozen locals, and this is called once per rollout
                                    // node -- copying it per call is measurable.
@@ -9472,6 +9838,54 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     }
     for (int b = 0; b < num_ind; ++b)
     { (IsManaSideAction(cands[independent[b]]) ? mi : pi).push_back(b); }
+
+    // Stage A below runs the group predicates on a vector holding only the MANA-SIDE digits, so a
+    // fungible-copy class STRADDLING the split would be judged on a partial position. Interchangeable
+    // copies emit identical actions and IsManaSideAction reads only the action, so they always land on
+    // the same side; this guard exists so a future change to either cannot turn that into a silently
+    // wrong prune. One pass over the groups, once per call.
+    bool copy_pred_on = !copy_class.empty();
+    bool dep_pred_on  = !equip_deps.Empty();
+    if (copy_pred_on || dep_pred_on)
+    {
+        std::vector<char> side(num_groups, 0);
+        for (int g : mg) { side[g] = 1; }
+        if (copy_pred_on)
+        {
+            signed char cs[kMaxFungibleClasses];
+            for (int c = 0; c < kMaxFungibleClasses; ++c) { cs[c] = -1; }
+            for (int g = 0; g < num_groups; ++g)
+            {
+                const int c = copy_class[g];
+                if (c < 0) { continue; }
+                if (cs[c] < 0)                { cs[c] = side[g]; }
+                else if (cs[c] != side[g])    { copy_pred_on = false; break; }
+            }
+        }
+        // Same straddle rule for the piece dependency, and here it genuinely can bite: a {0} equip
+        // and the creature cast it depends on need not land on the same side of the mana split, and
+        // stage A would then judge the equip against a `full` vector whose cast digit is always 0 --
+        // rejecting reachable plans. Fall back to the subset-level guard whenever a dependency spans
+        // the two sides.
+        for (std::size_t k = 0; k < equip_deps.gs.size() && dep_pred_on; ++k)
+        {
+            const char es = side[equip_deps.gs[k]];
+            for (const std::array<PieceReq, 2>& r : equip_deps.req[k])
+            {
+                for (int s = 0; s < 2 && dep_pred_on; ++s)
+                {
+                    if (!r[s].required) { continue; }
+                    // ANY satisfying group on the other side makes stage A's partial vector unsafe.
+                    for (int g2 = 0; g2 < num_groups; ++g2)
+                    {
+                        if ((r[s].groups & (1ull << g2)) == 0) { continue; }
+                        if (side[g2] != es) { dep_pred_on = false; break; }
+                    }
+                }
+                if (!dep_pred_on) { break; }
+            }
+        }
+    }
 
     // Flat position weights: the mixed-radix stride of each group digit (digit 0 is fastest, matching
     // the flat odometer's carry order), so a side's position contribution is just a weighted sum.
@@ -9517,7 +9931,9 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
             {
                 const bool rejected =
                        (any_splice && SpliceGroupChoiceRejected(sidx, groups, choice, splice_collapse_on))
-                    || (accel_pred_on && NonPrefixAccelViolated(accel_order, choice));
+                    || (accel_pred_on && NonPrefixAccelViolated(accel_order, choice))
+                    || (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
+                    || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice));
                 if (!rejected)
                 {
                     Agg ga;
@@ -9569,7 +9985,9 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
             for (int t = 0; t < ng; ++t) { full[mg[t]] = choice[t]; }
             const bool rejected =
                    (any_splice && SpliceGroupChoiceRejected(sidx, groups, full, splice_collapse_on))
-                || (accel_pred_on && NonPrefixAccelViolated(accel_order, full));
+                || (accel_pred_on && NonPrefixAccelViolated(accel_order, full))
+                || (copy_pred_on && FungibleEquipCopyViolated(copy_class, full))
+                || (dep_pred_on && EquipPieceDepViolated(equip_deps, full));
             if (!rejected)
             {
                 for (int imask = 0; imask < (1 << ni); ++imask)
@@ -11165,6 +11583,16 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // walk. Empty when the collapse is off / < 2 accelerant groups. See BuildAccelPrefixOrder.
     std::vector<int> accel_order;
     if (accel_prefix_on && any_accel) { BuildAccelPrefixOrder(cands, groups, group_hand_index, accel_order); }
+    // Fungible identical-Equipment copies -> one canonical odometer position per class. Empty (and so
+    // inert) unless the collapse is on AND the board holds >= 2 interchangeable copies.
+    std::vector<int> copy_class;
+    if (EquipCopyCollapseEnabled()
+        && BuildFungibleEquipClasses(state, cands, groups, copy_class) == 0)
+    { copy_class.clear(); }
+    // Equip piece dependencies -> reject a stranded equip at the DIGIT instead of at the subset.
+    // Byte-identical (SubsetHasStrandedEquip rejects the same positions); see BuildEquipPieceDeps.
+    EquipPieceDeps equip_deps;
+    if (EquipPieceDepsEnabled()) { BuildEquipPieceDeps(state, cands, groups, group_hand_index, equip_deps); }
     // Choice-independent inputs to the two splice predicates (name ids, copy positions, hand counts),
     // plus the lowest odometer digit that can change any predicate. See BuildSpliceOdometerIndex.
     std::unique_ptr<SpliceOdometerIndex> sidx_owned;
@@ -11195,11 +11623,19 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // 2026-07-29). Mirrored in Solve and EnumeratePlans -- change one, change both.
         std::vector<int> choice(num_groups, 0);
         std::vector<int> sel;   // reused across positions (clear keeps capacity)
+        const bool copy_pred_on = !copy_class.empty();
+        const bool dep_pred_on  = !equip_deps.Empty();
         bool done = false;
         while (!done)
         {
+            // Fungible identical-Equipment copies: only the canonical (non-increasing) position of a
+            // class emits. Tested before the mana fold -- a skipped position's aggregate is dead work.
+            // See FungibleEquipCopyViolated. This walk holds the FULL choice vector, so unlike the
+            // two-stage split it needs no straddle guard.
+            const bool copy_skip = (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
+                                || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice));
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
-            if (gate_on)
+            if (!copy_skip && gate_on)
             {
                 for (int g = 0; g < num_groups; ++g)
                 {
@@ -11208,7 +11644,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                     mcost += t.cost; mgain += t.gain; mgy += t.gy; mblock += t.block;
                 }
             }
-            else
+            else if (!copy_skip)
             {
                 for (int g = 0; g < num_groups; ++g)
                 { if (choice[g] > 0) { mcost += cands[groups[g][choice[g] - 1]].cost.ManaValue(); } }
@@ -11217,11 +11653,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // action's float credited, no imask extension of it can be paid, so skip the whole inner
             // loop rather than building `sel` for each of 2^num_ind doomed positions. (Dropping this
             // cost ~2.4pp on burn/Knights, callgrind 2026-07-29.)
-            const bool outer_ok = gate_on
+            const bool outer_ok = !copy_skip && (gate_on
                 ? (mblock > 0 || gate->ind_block
                    || mcost <= gate->pool_total + mgain + gate->ind_gain_all
                                + ManaGateTriangular(mgy + gate->ind_gy_all))
-                : (mcost <= mana_bound);
+                : (mcost <= mana_bound));
             for (int imask = 0; outer_ok && imask < (1 << num_ind); ++imask)
             {
                 int pcost = 0, pgain = 0, pgy = 0, pblock = 0;
@@ -11276,7 +11712,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     {
         EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
-                               has_ind_accel, vial_ok, consider);
+                               has_ind_accel, copy_class, equip_deps, vial_ok, consider);
     }
 
     return best;
@@ -16587,6 +17023,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Precompute the accelerant-prefix order ONCE (choice-independent); per-choice check is a cheap walk.
     std::vector<int> accel_order;
     if (accel_prefix_on && any_accel) { BuildAccelPrefixOrder(cands, groups, group_hand_index, accel_order); }
+    // Fungible identical-Equipment copies (mirrors Solve). See BuildFungibleEquipClasses.
+    std::vector<int> copy_class;
+    if (EquipCopyCollapseEnabled()
+        && BuildFungibleEquipClasses(state, cands, groups, copy_class) == 0)
+    { copy_class.clear(); }
+    // Equip piece dependencies (mirrors Solve). See BuildEquipPieceDeps.
+    EquipPieceDeps equip_deps;
+    if (EquipPieceDepsEnabled()) { BuildEquipPieceDeps(state, cands, groups, group_hand_index, equip_deps); }
     // Choice-independent inputs to the two splice predicates + the lowest predicate-relevant odometer
     // digit (mirrors Solve). See BuildSpliceOdometerIndex / MinPredicateDigit.
     std::unique_ptr<SpliceOdometerIndex> sidx_owned;
@@ -16670,11 +17114,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // 2026-07-29). Mirrored in Solve and EnumeratePlans -- change one, change both.
         std::vector<int> choice(num_groups, 0);
         std::vector<int> sel;   // reused across positions (clear keeps capacity)
+        const bool copy_pred_on = !copy_class.empty();
+        const bool dep_pred_on  = !equip_deps.Empty();
         bool done = false;
         while (!done)
         {
+            // Fungible identical-Equipment copies: only the canonical (non-increasing) position of a
+            // class emits. Tested before the mana fold -- a skipped position's aggregate is dead work.
+            // See FungibleEquipCopyViolated. This walk holds the FULL choice vector, so unlike the
+            // two-stage split it needs no straddle guard.
+            const bool copy_skip = (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
+                                || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice));
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
-            if (gate_on)
+            if (!copy_skip && gate_on)
             {
                 for (int g = 0; g < num_groups; ++g)
                 {
@@ -16683,7 +17135,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     mcost += t.cost; mgain += t.gain; mgy += t.gy; mblock += t.block;
                 }
             }
-            else
+            else if (!copy_skip)
             {
                 for (int g = 0; g < num_groups; ++g)
                 { if (choice[g] > 0) { mcost += cands[groups[g][choice[g] - 1]].cost.ManaValue(); } }
@@ -16692,11 +17144,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // action's float credited, no imask extension of it can be paid, so skip the whole inner
             // loop rather than building `sel` for each of 2^num_ind doomed positions. (Dropping this
             // cost ~2.4pp on burn/Knights, callgrind 2026-07-29.)
-            const bool outer_ok = gate_on
+            const bool outer_ok = !copy_skip && (gate_on
                 ? (mblock > 0 || gate->ind_block
                    || mcost <= gate->pool_total + mgain + gate->ind_gain_all
                                + ManaGateTriangular(mgy + gate->ind_gy_all))
-                : (mcost <= mana_bound);
+                : (mcost <= mana_bound));
             for (int imask = 0; outer_ok && imask < (1 << num_ind); ++imask)
             {
                 int pcost = 0, pgain = 0, pgy = 0, pblock = 0;
@@ -16750,7 +17202,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     {
         EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
-                               has_ind_accel, [](const std::vector<int>&) { return true; },
+                               has_ind_accel, copy_class, equip_deps,
+                               [](const std::vector<int>&) { return true; },
                                eval_and_push);
     }
 
