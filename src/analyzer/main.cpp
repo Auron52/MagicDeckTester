@@ -854,6 +854,17 @@ static int RunEquivDiscoverMode(const AnalyzerArgs& a)
         a.deck_path.parent_path() / (a.deck_path.stem().string() + ".profile.json");
     MulliganProfile profile = std::filesystem::exists(in_path)
                             ? LoadDeckProfile(in_path) : MulliganProfile::DefaultProfile();
+    // The SAME sidecar attach the generator does (line ~170). Without it this mode measured a
+    // value-less policy the deck never plays -- the very bug that comment describes -- so the whole
+    // point of the mode was defeated: it exists to print the buckets FOR REVIEW, and it printed
+    // buckets the generator would not produce. Measured on KittyEquipment at identical recorded
+    // parameters (400 probes, d5/b20, equiv_seed 20260701, threshold 0.01): this mode said K=18 with
+    // Colossus Hammer and O-Naginata 0.015 apart, while the generator said K=17 with the two merged.
+    // Every shared pair disagreed too (Loxodon/Grafted 0.0325 vs 0.0400, Jitte/Greaves 0.065 vs
+    // 0.070), which is what a different rollout policy looks like -- not a clustering difference.
+    // A reviewer who trusts this mode to sanity-check a bucketing gets the wrong K on any deck that
+    // ships a value sidecar, which is most of them.
+    AttachValueSidecar(profile, in_path);
 
     std::cerr << "Equivalence discovery: " << probes << " probes, depth " << depth
               << ", threshold " << threshold << ", horizon " << a.max_turns << "\n";
