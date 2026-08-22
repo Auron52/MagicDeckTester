@@ -525,3 +525,23 @@ Frozen at `da5aad3a`, src-tree `d10440440fcc`, play digest `1a04ebebfad8`.
    added load could condemn cells spuriously.
    Resume, if it is interrupted, is the IDENTICAL command — cells are journalled as they commit;
    there is no resume flag and no driver script.
+5. **Then top up to R40 with a merged R=10 chunk** (user, 2026-08-22). `fast` is R30; a second
+   pass at `MTG_KEEP_ROLLOUTS=10` on a DIFFERENT `--seed`, merged via `MTG_KEEP_MERGE`, sums
+   per-cell `sum`+`count` element-wise to give R40 for ~a third of the first run's cost. Ship the
+   MERGED profile. Deliberately NOT a second `complete` run — that would pool to R70, far more
+   than one profile warrants.
+   Three things this depends on, all checkable before spending anything:
+   * Same commit + same buckets + **non-overlapping seed** — the merge is fingerprint-gated on
+     `bucket_fp`/`deck_fp`/`commit` and rejects seed overlap. Read the fast run's `seed_base`
+     out of its raw sidecar and pick a distinct one; record it here (per-deck seed ledger).
+   * **Play must not move in between.** Keep-gen rollouts run the deck's real play policy,
+     value sidecar included, so the value-model adopt decision must be SETTLED FIRST or the
+     R30 raw is stranded and unpoolable. This is why adoption precedes generation.
+   * A sub-10 chunk writes only a poolable raw, never a `.profile.json` — that is by design, and
+     the merge is the step that produces the shippable artifact.
+   Honest limit: this buys complete's **R**, not complete's **bottoming** (`complete` also sets
+   `adaptive_bottom=false`, which a top-up cannot retroactively apply). Check the report's
+   projected-regret-vs-R curve to see whether R30→R40 is measurable on this deck at all before
+   treating the top-up as necessary.
+6. Commit the profile AND the gzipped `.raw.json.gz` — the raw is the poolable unit, and without
+   it the top-up/fill-out option does not exist.
