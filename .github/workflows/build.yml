@@ -1,0 +1,120 @@
+# Cross-platform build + fast checks.
+#
+# WHY THIS EXISTS: this repo's committed ground truth was generated on Windows/MSVC, and
+# src/core/Library.h deliberately open-codes MSVC STL's std::shuffle so a seed produces
+# IDENTICAL games on Linux and Windows. That parity is load-bearing and was verified by
+# nothing -- there was no CI at all. The determinism job below is the check that guards it.
+#
+# TRIGGER: push on ANY branch (this repo works on shared branches, not PRs), path-filtered so
+# the frequent docs- and decks-only commits don't queue a Windows build. Plus manual dispatch.
+#
+# NOTE FOR AGENTS: push CI NOTIFIES, it does not BLOCK -- required status checks only exist on
+# PRs. After pushing a commit that touches these paths, run `gh run watch` and report the
+# per-OS result. See CLAUDE.md.
+#
+# Nothing long-running belongs here: the regression suite stays a local/overnight tool. Every
+# job below is seconds-to-minutes.
+name: build
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'src/**'
+      - 'test/unit/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'cmake/**'
+      - 'build.sh'
+      - 'build.ps1'
+      - 'build.cmd'
+      - 'play.sh'
+      - 'play.ps1'
+      - 'play.cmd'
+      - 'tools/play/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+# A newer push to the same branch supersedes an in-flight run.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            preset: linux
+            bin: build/Release/mtg
+          - os: windows-latest
+            preset: windows
+            bin: build/Release/mtg.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build (Release)
+        run: cmake --build build --config Release -j 4
+
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      # Pure-Node, no npm install: it only require()s tools/play/linebuild.js and reads the
+      # committed references/. Guards the viewer's client layer, which the engine-side checks
+      # are structurally blind to.
+      - name: Viewer line-build check
+        run: node test/viewer_linebuild_check.js
+
+      # The cross-platform determinism sample. Single-threaded so the result cannot depend on
+      # the runner's core count. Both OSes must produce the same number -- compared in the job
+      # below, because a per-OS assertion could only ever check against a hard-coded constant.
+      - name: Determinism sample
+        shell: bash
+        run: |
+          ${{ matrix.bin }} decks/burn/burn.txt \
+            --profile decks/burn/burn.profile.json \
+            --cards-json src/cards/data/cards.json \
+            --games 200 --seed 1001 --threads 1 \
+            | grep 'avg (turns)' | tr -d '\r' > determinism-${{ runner.os }}.txt
+          cat determinism-${{ runner.os }}.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: determinism-${{ runner.os }}
+          path: determinism-${{ runner.os }}.txt
+
+  determinism:
+    name: Linux/Windows determinism parity
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { pattern: determinism-*, merge-multiple: true }
+
+      - name: Compare the two platforms' results
+        run: |
+          echo "Linux:   $(cat determinism-Linux.txt)"
+          echo "Windows: $(cat determinism-Windows.txt)"
+          if ! diff -u determinism-Linux.txt determinism-Windows.txt; then
+            echo ""
+            echo "::error::Linux and Windows produced DIFFERENT results for the same seed."
+            echo "The engine is supposed to be bit-portable: src/core/Library.h open-codes MSVC"
+            echo "STL's std::shuffle precisely so a seed yields identical games on both. A diff"
+            echo "here means that portability broke -- and the committed ground truth in"
+            echo "test/regression_gt.txt is only valid on one platform. Root-cause it; do not"
+            echo "rebaseline over it."
+            exit 1
+          fi
+          echo "OK: both platforms agree."

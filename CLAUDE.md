@@ -102,6 +102,24 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   without going through `--batch` therefore has NO utilisation reporting — which is one
   more reason the pooled queue is the only route.
 
+- **After pushing platform-sensitive code, WATCH CI and report the Windows result.**
+  `.github/workflows/build.yml` builds on **ubuntu-latest AND windows-latest** on every push
+  (any branch) that touches `src/**`, `test/unit/**`, `CMakeLists.txt`, `CMakePresets.json`,
+  `cmake/**`, `build.*`, `play.*`, or `tools/play/**`. You cannot verify MSVC from the Linux
+  container, so CI is the only Windows signal — and **push CI notifies, it does not block**
+  (required status checks exist only on PRs, and this repo works on shared branches). It is
+  therefore on YOU to look:
+  ```
+  gh run watch                                  # blocks until the just-pushed run lands
+  gh run list --branch "$(git rev-parse --abbrev-ref HEAD)" --limit 3
+  gh run view --log-failed                      # on a red run
+  ```
+  Report the per-OS outcome in the same message as the push. Do NOT rely on email: pushes
+  authenticate as `dtippett-bot`, so GitHub's failure mail goes to the bot's mailbox, not the
+  user's. The job that matters most is **determinism parity** — it asserts Linux and Windows
+  produce the same result for the same seed, which is what `src/core/Library.h`'s open-coded
+  MSVC shuffle exists to guarantee. If it goes red, root-cause it; never rebaseline over it.
+
 - **Log/output directories go under `logs/` (or `test/logs/`), never the repo root.**
   Any script or command that writes game logs, batch output, or A/B scratch must
   target a subdirectory of `logs/` (e.g. `logs/fd_quick`), not a root-level
