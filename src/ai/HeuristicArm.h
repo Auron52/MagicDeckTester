@@ -55,6 +55,9 @@ enum Slot : int
     KE_DISCARD_RESIDUAL,      // MTG_KE_DISCARD_RESIDUAL  discard equipment bucket is the 7-card residual
     AL_SSM,                   // MTG_AL_SSM                Anti-Lifegain searched interior second main
     SSM_BRANCH_ONLY,          // MTG_SSM_BRANCH_ONLY       searched interior m2 at the BRANCH site only
+    LEAF_GRADE_NOWIN,         // MTG_LEAF_GRADE_NOWIN      grade a no-win leaf instead of a flat max_turns+1
+    LEAF_VALUE_RES,           // MTG_LEAF_VALUE_RES        keep the value leaf's milliturn resolution
+    LEAF_TB_BOARD,            // MTG_LEAF_TB_BOARD         ...and grade on board development, not life alone
     COUNT
 };
 
@@ -87,6 +90,9 @@ inline const char* Name(int slot)
         "MTG_KE_DISCARD_RESIDUAL",
         "MTG_AL_SSM",
         "MTG_SSM_BRANCH_ONLY",
+        "MTG_LEAF_GRADE_NOWIN",
+        "MTG_LEAF_VALUE_RES",
+        "MTG_LEAF_TB_BOARD",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

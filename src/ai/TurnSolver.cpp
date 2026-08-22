@@ -1033,6 +1033,116 @@ namespace m2yield
     inline Dumper g_dumper;
 }
 
+// ---- HORIZON-HONEST LEAF (all DEFAULT OFF -> byte-identical) -------------------------------------
+//
+// THE DEFECT. Beyond the search horizon, every line scores THE SAME NUMBER, so an action whose cost
+// lands past the horizon is FREE. Two writers produce that flatness:
+//   * the heuristic rollout returns a flat `max_turns + 1` for any no-win, and
+//   * the value leaf computes a graded MILLITURN estimate and then rounds it to a whole turn AND
+//     clamps anything past the horizon to `max_turns + 1` -- i.e. a model that does discriminate has
+//     its discrimination thrown away (FSLineWin).
+// The pass loop then breaks the resulting tie on `plan.value` -- a PLAN-level heuristic, not a state
+// evaluation -- so among equally-hopeless lines the busiest-looking plan wins.
+//
+// This is one root cause with at least three narrow prunes written against it: SubsetHasUnbackedAltPayload
+// (alt-cost life gifts), SubsetHasUnbackedEtbGift (Aria of Flame's ETB gift -- opponent 16 -> 26 -> 34
+// at a tie), and the Karoo self-bounce enumeration ban, whose own comment states it exactly: "every
+// line scores the same when the rollouts fail to find the win, and nothing in the tie-break prefers a
+// developed board" (Hinata gi226 replayed a Karoo T1-T4 rather than develop). Three prunes for one
+// blind spot is the signal that the EVALUATION is what is wrong, not the enumeration.
+//
+// This is the "HONEST where you SCORE" half of the standing LAW. It does NOT touch the metric (avg
+// turn-to-win, unwon = max_turns+1) -- only the search's internal scoring.
+//
+// SHAPES, independently selectable so the measurement can attribute:
+//   MTG_LEAF_GRADE_NOWIN  a no-win leaf publishes a graded board quantity, used as the tie-break
+//                         where (and ONLY where) every candidate ties at max_turns+1.
+//   MTG_LEAF_VALUE_RES    the value leaf publishes its raw milliturn score when it would be clamped,
+//                         so the model's own beyond-horizon ordering survives.
+//   MTG_LEAF_TB_BOARD     grade on board development too, not opponent life alone.
+// The primary key stays the win turn, so a win inside the horizon ALWAYS beats a no-win.
+namespace leafeval
+{
+inline constexpr long long kInvalid = (std::numeric_limits<long long>::max)();
+
+// LOWER is better. Written by every rollout frame at every return point (see the FRAME RULE below)
+// and consumed by the pass loop immediately after its own SimulateToEnd call -- thread_local because
+// a batch worker owns its thread for a whole game and the search does not spawn threads.
+inline thread_local long long t_tb = kInvalid;
+
+inline bool GradeNoWin()
+{
+    static const bool on = EnvOn("MTG_LEAF_GRADE_NOWIN");
+    return heurarm::Flag(heurarm::LEAF_GRADE_NOWIN, on);
+}
+inline bool ValueRes()
+{
+    static const bool on = EnvOn("MTG_LEAF_VALUE_RES");
+    return heurarm::Flag(heurarm::LEAF_VALUE_RES, on);
+}
+inline bool TbBoard()
+{
+    static const bool on = EnvOn("MTG_LEAF_TB_BOARD");
+    return heurarm::Flag(heurarm::LEAF_TB_BOARD, on);
+}
+inline bool Active() { return GradeNoWin() || ValueRes(); }
+
+// FRAME RULE. Every rollout frame publishes at EVERY one of its return points -- a quantity at the
+// natural horizon exit, kInvalid everywhere else (a win needs no tie-break; an aborted line has
+// nothing honest to say). Nested frames always complete BEFORE their parent returns, so the last
+// write standing is the frame the consumer itself called. An earlier version published only at the
+// outermost frame, which silenced every INTERIOR node -- i.e. precisely the "several turns from
+// lethal, nothing wins in horizon" states this exists for. It measured inert because it never fired:
+// 21 publishes and 0 flips over 400 AL games. Keep the counter for telemetry only.
+
+// Binding-rate telemetry. A lever that measures ~inert is worthless evidence until you know whether
+// it FIRED -- "no effect" and "never reached the state" look identical in an aggregate.
+inline std::atomic<uint64_t> g_published{0};   // leaves that measured a real horizon position
+inline std::atomic<uint64_t> g_ties{0};        // equal-win-turn comparisons the quantity could decide
+inline std::atomic<uint64_t> g_flips{0};       // ...where it picked a DIFFERENT plan than plan.value
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (g_published.load() == 0 && g_ties.load() == 0) { return; }
+        std::fprintf(stderr, "[leaf-eval] published=%llu ties=%llu flips=%llu\n",
+                     (unsigned long long)g_published.load(), (unsigned long long)g_ties.load(),
+                     (unsigned long long)g_flips.load());
+    }
+};
+inline Dumper g_dumper;
+
+// A nested leaf (a rollout inside a rollout) must not overwrite what the outermost one measured.
+inline void Publish(long long v)
+{
+    t_tb = v;
+    if (v != kInvalid) { g_published.fetch_add(1, std::memory_order_relaxed); }
+}
+
+// The graded no-win quantity, LOWER is better. Opponent life is the primary term because it is the
+// same currency as the metric: the Aria class raises it by 10 and that is exactly the cost the flat
+// score hides. MTG_LEAF_TB_BOARD adds development terms UNDER it (they can never outrank a life
+// difference), which is the Karoo class -- a wasted land drop leaves less board.
+inline long long Quantity(const GameState& state)
+{
+    const int opp = state.players[1 - state.active_player_index].life;
+    long long q = static_cast<long long>(opp) * 1000000LL;
+    if (TbBoard())
+    {
+        int power = 0, sources = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            if (p.card.IsCreature()) { power += p.EffectivePower(); }
+            if (p.card.IsLand())     { ++sources; }
+        }
+        q -= static_cast<long long>(power) * 1000LL;
+        q -= static_cast<long long>(sources);
+    }
+    return q;
+}
+}
+
 static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int depth, int max_turns,
                                                 SearchBudget* budget, bool second_main,
                                                 TranspositionTable* tt, bool in_rollout)
@@ -20173,7 +20283,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // incumbent best win turn, so abandon it (win turn only grows from here).
         // Abort only AFTER cutoff_turn so a win exactly on cutoff_turn still
         // registers for the value tiebreak.
-        if (state.turn_number > cutoff_turn) { return max_turns + 1; }
+        if (state.turn_number > cutoff_turn) { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
 
         // Truncated-rollout cap: K turns simulated with no win yet -> hand the tail to the cheap value leaf
         // (see MTG_ROLLOUT_HORIZON above). Fires only for lines that DON'T win fast (the expensive ones);
@@ -20182,9 +20292,17 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             && state.m_value_model && !state.m_value_model->empty())
         {
             const std::vector<int> feats = ExtractMidGameFeatures(state, MidGamePlanSummary{});
-            int w = static_cast<int>((state.m_value_model->Score(feats) + 500) / 1000);
+            const long long score = state.m_value_model->Score(feats);
+            int w = static_cast<int>((score + 500) / 1000);
             if (w < state.turn_number) { w = state.turn_number; }
-            if (w > max_turns)         { w = max_turns + 1; }
+            leafeval::Publish(leafeval::kInvalid);
+            if (w > max_turns)
+            {
+                // Same clamp, same loss of resolution as FSLineWin's -- publish the raw milliturns.
+                if (leafeval::ValueRes())      { leafeval::Publish(score); }
+                else if (leafeval::GradeNoWin()) { leafeval::Publish(leafeval::Quantity(state)); }
+                w = max_turns + 1;
+            }
             return w;
         }
 
@@ -20198,7 +20316,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // is byte-identical for every non-pathological rollout.
         if (budget) { budget->Consume(1); }
         if (s_rollout_stats) { g_rollout_steps.fetch_add(1, std::memory_order_relaxed); }   // one simulated turn-step
-        if (budget && budget->Overrun()) { ++g_fs_trunc_events; return max_turns + 1; }
+        if (budget && budget->Overrun())
+        { ++g_fs_trunc_events; leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
 
         // Expire staged (Light Up the Stage) cards whose play window has passed,
         // mirroring AIEngine::TakeTurn's expiry check (CR 406). Without this the
@@ -20251,6 +20370,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         SimulateCombat(state);
         if (state.Opponent().life <= 0)
         {
+            leafeval::Publish(leafeval::kInvalid);   // a win needs no tie-break
             return state.turn_number;
         }
 
@@ -20290,14 +20410,20 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                                                     /*in_rollout=*/true);
             }
             ApplyPlanDirect(state, post_plan, false);
-            if (state.Opponent().life <= 0) { return state.turn_number; }
+            if (state.Opponent().life <= 0)
+            { leafeval::Publish(leafeval::kInvalid); return state.turn_number; }
         }
 
         // End of turn + start of next. The next turn's land drop is searched as part
         // of that turn's plan (folded into SolveWithLookahead / played by
         // ApplyPlanDirect), so no greedy land play happens here.
-        if (!SimulateEndAndStartNextTurn(state)) { return max_turns + 1; }
+        if (!SimulateEndAndStartNextTurn(state))
+        { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
     }
+    // NATURAL horizon exit: the rollout played every turn and found no win, so `state` is a real
+    // measured position and its quantity is honest. The cutoff / budget-overrun exits above are NOT
+    // (an aborted line never reached the horizon), which is why they do not publish.
+    if (leafeval::GradeNoWin()) { leafeval::Publish(leafeval::Quantity(state)); }
     return max_turns + 1;
 }
 
@@ -21253,7 +21379,14 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             const long long score = vm->Score(feats);                 // milliturns (x1000)
             int w = static_cast<int>((score + 500) / 1000);           // round to a turn (score > 0)
             if (w < state.turn_number) { w = state.turn_number; }
-            if (w > max_turns)         { w = max_turns + 1; }
+            if (w > max_turns)
+            {
+                // The clamp is where the model's discrimination used to die: every beyond-horizon
+                // estimate collapses to one number. Publish the raw milliturns so the ordering the
+                // model already computed survives as the tie-break (LOWER = sooner = better).
+                if (leafeval::ValueRes()) { leafeval::Publish(score); }
+                w = max_turns + 1;
+            }
             return { w, {} };
         }
         // Tail estimate beyond the horizon: roll out to game end at s_fd_leaf_depth
@@ -23887,6 +24020,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         long long used_before     = budget ? budget->Used() : 0;
         Plan      pass_best        = candidates.front();
         int       pass_best_win    = max_turns + 1;
+        long long pass_best_tb     = leafeval::kInvalid;   // graded leaf quantity of pass_best
         bool      pass_has_best    = false;
         bool      pass_aborted     = false;
         long long candidates_done  = 0;
@@ -24026,8 +24160,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // Simulate remaining turns at this pass's sub_depth. The rollout runs to
             // completion (enforce_budget=false inside), only consuming budget; the
             // within-pass running best (pass_best_win) is the branch-and-bound cutoff.
+            leafeval::t_tb = leafeval::kInvalid;   // this candidate's leaf publishes into it, or not
             int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
                                          pass_best_win, second_main, tt);
+            const long long leaf_tb = leafeval::t_tb;
             // Feed the rollout result back so the census can count HARM -- a dominated candidate
             // that outscored its dominator is a win the prune would have deleted (see RecordWin).
             if (DomActive()) { domin::RecordWin(dom_archive, dom_probe, win_turn); }
@@ -24037,13 +24173,31 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                           << "  val=" << plan.value
                           << "  win=" << win_turn << "\n";
             }
+            // Tie-break. The primary key is unchanged -- a win inside the horizon always beats a
+            // no-win. What changes (only with a leaf lever on) is the EQUAL case: where both lines
+            // are hopeless within the horizon and the leaf measured them, prefer the better measured
+            // position instead of the busier-looking plan. `plan.value` remains the fallback for
+            // every tie the leaf did not measure, so an unmeasured state behaves exactly as before.
+            const bool tb_live = leafeval::Active()
+                              && leaf_tb      != leafeval::kInvalid
+                              && pass_best_tb != leafeval::kInvalid
+                              && win_turn == pass_best_win;
+            if (tb_live && pass_has_best)
+            {
+                leafeval::g_ties.fetch_add(1, std::memory_order_relaxed);
+                if ((leaf_tb < pass_best_tb) != (plan.value > pass_best.value))
+                { leafeval::g_flips.fetch_add(1, std::memory_order_relaxed); }
+            }
             bool better = !pass_has_best
                        || win_turn < pass_best_win
-                       || (win_turn == pass_best_win && plan.value > pass_best.value);
+                       || (tb_live && leaf_tb != pass_best_tb ? leaf_tb < pass_best_tb
+                                                              : (win_turn == pass_best_win
+                                                                 && plan.value > pass_best.value));
             if (better)
             {
                 pass_best_win = win_turn;
                 pass_best     = plan;
+                pass_best_tb  = leaf_tb;
                 pass_has_best = true;
             }
             esc_pool.push_back(EscEntry{static_cast<int>(&plan - candidates.data()), win_turn,
