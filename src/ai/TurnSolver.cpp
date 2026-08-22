@@ -4979,6 +4979,23 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
                 // the USER's rule collapses it to Main2 (derived, not per-deck special-cased).
                 return state.deck_feeds_combat ? MP::Both : MP::Main2;
             }
+            // DEFER-COSTS-MANA (MTG_PHASE_DAMAGE_BOTH, default off pending measurement). The
+            // Main2 verdict above reasons about combat BENEFIT -- damage feeds no attack against a
+            // passive opponent -- but never about combat COST. Deferring past combat can make the
+            // spell UNAFFORDABLE, because the attack taps sources the deferred cast needed:
+            // AL gi852 T4 has exactly 6 mana and two Fiery Justice (10 damage each under Tainted
+            // Remedy = exactly lethal from 20), the lone Hierarch swings for 1, taps the 6th
+            // source, and m2 affords ONE. Trading 1 damage for 10. Per-game census: the
+            // cast-deferral class is 10 worse / 0 better -- entirely one-sided, unlike the
+            // land-choice class (16/13, fetch-reshuffle variance).
+            // BOTH, not Main1: this REMOVES a prune rather than replacing it with the opposite
+            // prune, so the search decides the phase per state (the user's search-primary bar),
+            // and the "pre-combat is actively worse for Hinata" case above is still reachable --
+            // the search simply picks m2 there.
+            {
+                static const bool s_dmg_both = EnvOn("MTG_PHASE_DAMAGE_BOTH");
+                if (s_dmg_both) { return MP::Both; }
+            }
             return MP::Main2;
         case CardTemplate::DrawSpell:
         case CardTemplate::DrawX:

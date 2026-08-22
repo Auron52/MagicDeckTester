@@ -1019,3 +1019,52 @@ Held-out fivecolour with both exemptions: 3 keys better, 3 worse, 2 unchanged; s
 **-0.02 turns over 2800 games = -0.00001 per game**. So the fix pays for itself on the deck that
 needed it and costs nothing on the deck already using the rule. (The enabler exemption is inert
 there -- 5C holds no lifegain-to-loss gift payloads -- so this measures the pass exemption.)
+
+## 2026-08-21t: THE PHASE SPLIT ROOT-CAUSED -- deferral is the defect, land churn is variance
+
+Same method as 21s: isolate PHASE-vs-BASELINE per game (coupled, 8000 games, the exact overnight AL
+config) -> **32 worse / 15 better / net +15 turns**, matching the overnight's +15 exactly. Every
+worse game is +1 turn. Then classify the FIRST diverging main-1 decision in BOTH directions:
+
+| first divergence | split LOSES | split WINS |
+|---|---|---|
+| land / fetch choice | 16 | 13 |
+| **cast deferred to m2** | **10** | **0** |
+| split casts MORE at m1 | 6 | 2 |
+
+* **The land class is SYMMETRIC (16 v 13) -- it is not misplay, it is variance.** The split's
+  restricted m1 candidate set changes the folded land choice; when that land is a FETCH the library
+  reshuffles and every subsequent draw differs (gi113 T2: base plays Godless Shrine and holds,
+  split plays Bloodstained Mire + Tainted Remedy; the streams diverge and never re-converge).
+  Roughly +3 turns net, scattering both ways -- the noise floor of this comparison.
+* **The deferral class is 10-0 -- ENTIRELY ONE-SIDED. That is the defect.** Deferred cards:
+  Fiery Justice (6 of 10, alone or with Reverent Silence), Invigorate (2), Hierarch+Remedy (2).
+
+### ROOT CAUSE: the classifier prices combat BENEFIT but never combat COST
+`ClassifyMainPhase`'s DirectDamage arm returns `MP::Main2` unconditionally -- "pure damage feeds no
+attack vs the passive opponent". True, and irrelevant to the real cost: deferring past combat can
+make the spell UNAFFORDABLE, because the attack TAPS sources the deferred cast needed. AL gi852 T4
+is the clean instance -- exactly 6 mana, two Fiery Justice (10 damage each under Tainted Remedy =
+exactly lethal from 20), the lone Hierarch swings for 1, taps the 6th source, m2 affords ONE.
+**The turn trades 1 damage for 10.** This is the same family as g8 (there the payment tapped the
+attacker; here the attack taps the payment): main-1-vs-main-2 placement cannot be decided without
+modelling what combat does to the mana pool.
+
+### FIX: `MTG_PHASE_DAMAGE_BOTH` (default off) -- classify DirectDamage as BOTH, not Main2
+BOTH, not Main1: this REMOVES a prune instead of installing the opposite one, so the search decides
+the phase per state (the search-primary bar), and the documented "pre-combat is actively worse for
+Hinata (Crackle destroys its own discount targets)" case stays reachable -- the search just picks
+m2 there.
+
+| AL coupled, 8000 games, vs BASELINE | worse | better | net |
+|---|---|---|---|
+| phase split (BEFORE) | 32 | 15 | **+15 turns** |
+| phase split + DAMAGE_BOTH (AFTER) | 17 | 12 | **+5 turns** |
+| DAMAGE_BOTH vs plain split | 3 | 15 | **-10 turns** |
+
+The -10 recovered is exactly the deferral class's size. The residual +5 (17 v 12) sits at the
+land-variance floor measured above (16 v 13).
+
+GATES: clean-env smoke byte-identical (36/36, 0 configs changed). Regression tier with the whole
+new stack (phase + condemn + both exemptions + DAMAGE_BOTH + dork search): searched **2 slower /
+9 faster**.
