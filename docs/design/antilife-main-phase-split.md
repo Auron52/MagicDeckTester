@@ -962,3 +962,54 @@ exactly the gate that exists to catch small-sample overfit, and it caught one.
    exclusion, or a narrower rung, is the open direction.
 3. **AL phase+condemn is a USER judgment call**: -0.00038/game on antilife for ~+8% compute, with
    an 18-game salt-robust +1-turn residual whose causes are documented (21n/21o/21p).
+
+## 2026-08-21s: CONDEMNATION'S DAMAGE ROOT-CAUSED AND FIXED -- two rule gaps, 24/24 games
+
+USER: "Condemnation should not make it worse. We need to root source that and every other case."
+Correct -- condemnation is lossless BY RULE, so a cost is a rule violation, not a tuning result.
+
+METHOD: isolate condemn-on-top-of-phase per game (coupled, 8000 games, the exact overnight AL
+config), then partition with the tranche instrument (which re-offers condemned plans).
+* condemn vs phase: **24 worse / 13 better / net +8 turns** -- matching the overnight's +8 exactly.
+* **ALL 24 are recovered by re-offering the condemned plan.** Every one is a plan condemnation
+  deleted that was genuinely better. (This refutes the 21g "tranche rescues are sibling-redundant"
+  verdict that the tranche-off flip rested on -- for THIS configuration.)
+
+### ROOT CAUSE 1 -- A PASS IS NOT A DECLINE (22 of 24)
+When the chosen m1 plan casts NOTHING, the stamp condemns EVERY affordable card in hand, so the
+line "pass at m1, see combat, cast at m2" -- the entire reason a second main exists -- becomes
+unrepresentable, leaving the search only {cast at m1, cast not at all}.
+* AL gi147 T3: phase-only plays a land, PASSES, swings the lone Hierarch for 1, then casts Tainted
+  Remedy at m2 and KEEPS Invigorate for T4's lethal -> win T4. With condemnation the pass condemns
+  Remedy AND Invigorate, forcing both out at m1 for a 5-point swing -> win T5.
+* A pass is a DEFERRAL: nothing was chosen over the card. Fix: `MTG_CONDEMN_PASS_EXEMPT` -- stamp
+  nothing when the m1 plan has no CastFromHand. Recovers **22/24**; condemnation's cost +8 -> +1.
+
+### ROOT CAUSE 2 -- NO ENABLER LIVE (the remaining 2 rows = gi648 at d3 and d5)
+A GIFT PAYLOAD (hands the opponent life: alt-cost, on-resolve, or ETB) is worth negative damage
+with no lifegain-to-loss enabler live and positive damage the moment one is. Judged at the m1 state
+with no enabler out the search declines it CORRECTLY -- but that is a statement about the BOARD,
+not the card, and the enabler can arrive later in the SAME turn.
+* AL gi648 T6: the m1 plan is [Idyllic Tutor], whose BREAKPOINT fetches and casts Tainted Remedy
+  and then Skyshroud Cutter, leaving the opponent on 6; phase-only casts Invigorate + Invigorate at
+  m2 for exactly 6 -> win T6. Both Invigorates were stamped at the pre-Remedy m1 state where each
+  would GIFT 3 -> kill unreachable -> win T7.
+* NOTE why a plan-keyed fix cannot work here (my first attempt, measured and discarded): Tainted
+  Remedy is not in the plan's actions, nor even IN HAND, at stamp time -- the Tutor puts it there.
+  The sound key is the BOARD: `MTG_CONDEMN_ENABLER_EXEMPT` exempts gift payloads whenever no
+  enabler is live at the m1 decision.
+
+### RESULT (AL coupled, 8000 games, condemnation's cost vs PHASE-ONLY)
+| arm | worse | better | net |
+|---|---|---|---|
+| plain condemn | 24 | 13 | **+8 turns** |
+| + pass-exempt | 2 | 1 | +1 turn |
+| + pass-exempt + enabler-exempt | **0** | 1 | **-1 turn** |
+
+**Zero condemnation-caused losses remain across 8000 games.** Held-out overnight confirms:
+phase-only +15.00, phase+condemn +23.00, phase+condemn+EXEMPTIONS **+14.00** -- i.e. condemnation
+is now marginally POSITIVE rather than -8. Clean-env smoke byte-identical (36/36, 0 configs).
+
+### WHAT REMAINS
+The PHASE SPLIT ITSELF is still +14 turns worse than baseline on held-out AL. Condemnation is
+exonerated; the split is now the whole of AL's cost and is the next thing to root-source.

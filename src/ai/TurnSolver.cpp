@@ -4739,6 +4739,22 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
     // rescuing (antilife-main-phase-split.md 2026-08-21i). Excluding the plan's cast numbers
     // restores "condemned == seen AND DECLINED"; the duplicate-copy ambiguity (cast one copy,
     // decline another) errs toward exempting, the safe direction for a hard filter.
+    // PASS-IS-NOT-A-DECLINE (MTG_CONDEMN_PASS_EXEMPT, default off pending measurement). When the
+    // chosen m1 plan casts NOTHING, the stamp condemns EVERY affordable card in hand, so the line
+    // "pass at m1, see combat, cast at m2" -- the whole reason a second main exists -- becomes
+    // unrepresentable and the search is left with {cast at m1, cast not at all}. AL gi147 T3:
+    // phase-only passes m1, swings the lone Hierarch for 1, then casts Tainted Remedy at m2 and
+    // KEEPS Invigorate for T4's lethal (win T4); with condemnation the pass condemns Remedy AND
+    // Invigorate, so it is forced to spend both at m1 for a 5-point swing and wins T5 instead.
+    // A pass is a DEFERRAL, not a rejection: nothing was chosen over the card.
+    static const bool s_pass_exempt = EnvOn("MTG_CONDEMN_PASS_EXEMPT");
+    if (s_pass_exempt && m1_casts != nullptr)
+    {
+        bool any_cast = false;
+        for (const Action& pa : *m1_casts)
+        { if (pa.kind == Action::Kind::CastFromHand) { any_cast = true; break; } }
+        if (!any_cast) { return; }
+    }
     int  cast_nums[GameState::kM1HandCap];
     int  cast_nums_n = 0;
     if (m1_casts != nullptr)
@@ -4769,6 +4785,24 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
         if (hd->params.destroy_all_enchantments)                    { hand_has_wipe = true; }
         if (hd->params.lifegain_to_loss && !hd->card.IsCreature())  { hand_has_ench_enabler = true; }
     }
+    // NO-ENABLER-LIVE EXEMPTION (MTG_CONDEMN_ENABLER_EXEMPT, default off pending measurement).
+    // The order-independence premise fails a second way: a GIFT PAYLOAD (a card that hands the
+    // opponent life -- alt-cost, on-resolve, or ETB) is worth NEGATIVE damage with no
+    // lifegain-to-loss enabler live and POSITIVE damage the moment one is. Judged at the m1 state
+    // with no enabler out, the search declines it correctly -- but that decline is a statement
+    // about the BOARD, not about the card, and the enabler can arrive later in the SAME turn: cast
+    // at a breakpoint, or (AL's actual case) TUTORED into hand by an m1 cast and then played.
+    // So when no enabler is live at the m1 decision, a gift payload has not been "seen and
+    // declined" in any sense that survives to m2, and stamping it deletes the turn's payoff.
+    // AL gi648 T6: the m1 plan is [Idyllic Tutor] whose breakpoint fetches and casts Tainted
+    // Remedy, then Skyshroud Cutter, leaving the opponent on 6; phase-only casts Invigorate +
+    // Invigorate at m2 for exactly 6 (win T6). Both Invigorates were stamped at the pre-Remedy m1
+    // state where each would GIFT 3, so the kill is unreachable (win T7). Keying on the PLAN's
+    // casts cannot cover this -- Remedy is not in the plan, nor even in hand, at stamp time.
+    // Widening an exemption only re-admits candidates; it can never delete a line.
+    static const bool s_enabler_exempt = EnvOn("MTG_CONDEMN_ENABLER_EXEMPT");
+    const bool no_enabler_live =
+        s_enabler_exempt && !RemedyActive(state, state.active_player_index);
     state.m1_hand_n = 0;
     for (const Card& c : ap.hand)
     {
@@ -4781,6 +4815,11 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
         if (!d || d->card.IsLand()) { continue; }
         if (hand_has_wipe && d->params.lifegain_to_loss && !d->card.IsCreature()) { continue; }
         if (hand_has_ench_enabler && d->params.destroy_all_enchantments)          { continue; }
+        // ...and every gift payload while no enabler is live (its sign can still flip this turn).
+        if (no_enabler_live
+            && (d->params.alt_lifegain_cost > 0 || d->params.opponent_lifegain > 0
+                || d->params.etb_opponent_lifegain > 0))
+        { continue; }
         Action a;
         a.kind      = Action::Kind::CastFromHand;
         a.def       = d;
