@@ -253,7 +253,16 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/doctest/doctest.git
     GIT_TAG        v2.4.11
 )
+# doctest v2.4.11's own CMakeLists declares a cmake_minimum_required below 3.5. CMake 3.x only
+# WARNS about that; CMake >= 4.0 REMOVED the compatibility and errors out, which is a hard
+# configure failure on any machine with a current CMake (it is what broke the first Windows CI
+# run, whose runner ships CMake 4.x -- our container's 3.28 merely warned, so this was invisible
+# locally). CMAKE_POLICY_VERSION_MINIMUM is CMake's own documented escape hatch. Scoped to this
+# dependency and unset immediately after, so OUR policy scope is untouched -- the other three
+# FetchContent deps configure clean and must not be silently relaxed too.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 FetchContent_MakeAvailable(doctest)
+unset(CMAKE_POLICY_VERSION_MINIMUM)
 enable_testing()
 add_executable(mtg-test
     test/unit/test_mana_payment.cpp
