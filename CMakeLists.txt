@@ -40,7 +40,13 @@ if(CMAKE_CONFIGURATION_TYPES AND "Debug" IN_LIST CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_CONFIGURATION_TYPES "${CMAKE_CONFIGURATION_TYPES}" CACHE STRING "" FORCE)
   message(STATUS "mtg: removed Debug (-O0) from CMAKE_CONFIGURATION_TYPES -- use ./build.sh")
 endif()
-if(CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_DEFAULT_BUILD_TYPE)
+# CMAKE_DEFAULT_BUILD_TYPE is a NINJA MULTI-CONFIG-ONLY variable: the Visual Studio generators
+# reject it outright ("does not support variable CMAKE_DEFAULT_BUILD_TYPE but it has been
+# specified") and fail the generate step, so it must be scoped to the generator that has it.
+# Nothing is lost on Windows -- a VS generator with no --config builds the FIRST entry of
+# CMAKE_CONFIGURATION_TYPES, and both the preset and the list above put Release first, which is
+# the same protection by ordering.
+if(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config" AND NOT CMAKE_DEFAULT_BUILD_TYPE)
   set(CMAKE_DEFAULT_BUILD_TYPE Release CACHE STRING
       "Config built by a bare `cmake --build build` (no --config)" FORCE)
 endif()
