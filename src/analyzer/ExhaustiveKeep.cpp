@@ -1832,6 +1832,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // the end (accumulators are complete there); the journal is then deleted. See
     // docs/design/adaptive-batched-keepgen.md.  Default ON for the continuous path; MTG_KEEP_JOURNAL=0
     // reverts to the periodic full-raw snapshot (kept for A/B and as a fallback).
+    // Journal a size-7 cell's PROGRESS every this-many rollouts (beyond the floor/freeze records). 4
+    // matches cont_lookahead, so a cell speculating to its bound is always captured at the bound.
+    static constexpr long long kJournalStride = 4;
     bool journal_on = false;                 // set once continuous is known (below)
     std::string journal_path;                // cfg.out_raw + ".journal"
     std::mutex journal_mtx;
@@ -1841,13 +1844,26 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     bool refs_loaded = false;
     std::array<std::vector<double>, 2> loaded_Dopt{ std::vector<double>{}, std::vector<double>{} };
     std::array<double, 2> loaded_vg{ 0.0, 0.0 };
-    auto journal_append = [&](int H, int idx, int pd, double s, double q, long long n, int f)
+    // r0-prefix reloaded from the journal (index k = i*2+pd), for cells resumed ABOVE the floor. Seeds
+    // floor_sum/sumsq/cnt so compute_refs sees the same prefix it would have seen in an uninterrupted
+    // run -- see the fs/fq/fn note on journal_append.
+    std::vector<double>    resumed_floor_sum, resumed_floor_sumsq;
+    std::vector<long long> resumed_floor_cnt;
+    // fs/fq/fn (optional): the cell's r0-PREFIX, carried on any record past the floor. compute_refs
+    // must see the exact r0 prefix, not a partially-refined accumulator -- so a record that resumes a
+    // cell ABOVE r0 has to carry the prefix with it or refs would be recomputed from over-refined
+    // values and silently diverge. Carrying it per record (rather than relying on the earlier floor
+    // record surviving) also makes every record self-sufficient under a truncated log.
+    auto journal_append = [&](int H, int idx, int pd, double s, double q, long long n, int f,
+                              double fs = 0.0, double fq = 0.0, long long fn = 0)
     {
         if (!journal_on) { return; }
         std::lock_guard<std::mutex> lk(journal_mtx);
         if (!journal_f.is_open()) { return; }
         journal_f << "{\"H\":" << H << ",\"i\":" << idx << ",\"p\":" << pd
-                  << ",\"s\":" << s << ",\"q\":" << q << ",\"n\":" << n << ",\"f\":" << f << "}\n";
+                  << ",\"s\":" << s << ",\"q\":" << q << ",\"n\":" << n << ",\"f\":" << f;
+        if (fn > 0) { journal_f << ",\"fs\":" << fs << ",\"fq\":" << fq << ",\"fn\":" << fn; }
+        journal_f << "}\n";
         journal_f.flush();   // push to the OS page cache -> a process kill (not power loss) keeps it
     };
 
@@ -2327,6 +2343,22 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 t.sumsq[i][pd] = e.value("q", 0.0);
                 t.cnt[i][pd]   = n;
                 if (H == HAND && e.value("f", 0) == 1) { prune.frozen7[i][pd] = true; }
+                // Carry the r0 prefix of a cell resumed ABOVE the floor, so compute_refs sees the same
+                // prefix an uninterrupted run would have (refs are recomputed whenever no REFS record
+                // has been written yet -- exactly the window progress records now cover).
+                if (H == HAND && e.value("fn", 0LL) > 0)
+                {
+                    const std::size_t k = static_cast<std::size_t>(i) * 2 + static_cast<std::size_t>(pd);
+                    if (resumed_floor_cnt.size() <= k)
+                    {
+                        const std::size_t sz = t.comps.size() * 2;
+                        resumed_floor_sum.resize(sz, 0.0); resumed_floor_sumsq.resize(sz, 0.0);
+                        resumed_floor_cnt.resize(sz, 0);
+                    }
+                    resumed_floor_sum[k]   = e.value("fs", 0.0);
+                    resumed_floor_sumsq[k] = e.value("fq", 0.0);
+                    resumed_floor_cnt[k]   = e.value("fn", 0LL);
+                }
             }
             recompute();
             journal_resumed = (resume_loaded > 0) || refs_loaded;
@@ -2803,7 +2835,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
           // snapshot with their reloaded accumulators so a vg recompute mirrors the old non-journal reload
           // (mean=sum/cnt); on journal resume refs are restored (not recomputed), so this is unused there.
           // A fresh run has cnt==0 here (Pass A skips size-7), so the true r0 snapshot is captured below.
-          if (S7.cnt[i][pd] >= r0) { floor_sum[k] = S7.sum[i][pd]; floor_sumsq[k] = S7.sumsq[i][pd];
+          // A journal PROGRESS/terminal record carries the true r0 prefix; prefer it over the
+          // (over-refined) reloaded accumulator, else refs would be recomputed from the wrong prefix.
+          if (k < resumed_floor_cnt.size() && resumed_floor_cnt[k] > 0)
+          { floor_sum[k] = resumed_floor_sum[k]; floor_sumsq[k] = resumed_floor_sumsq[k];
+            floor_cnt[k] = resumed_floor_cnt[k]; }
+          else if (S7.cnt[i][pd] >= r0) { floor_sum[k] = S7.sum[i][pd]; floor_sumsq[k] = S7.sumsq[i][pd];
                                      floor_cnt[k] = S7.cnt[i][pd]; } }
         auto SLOT = [&](int i, int pd, long long r) -> std::size_t
         { return ((static_cast<std::size_t>(i) * 2 + pd) * static_cast<std::size_t>(r_max)) + static_cast<std::size_t>(r); };
@@ -2901,7 +2938,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // terminal freeze/cap (frozen7 flips true, f=1). Both are mutually exclusive per fold (floor
                 // phase never freezes; refine phase is already past r0). Snapshot under fold_mtx, write
                 // outside it (journal I/O never blocks folding). See docs/design/adaptive-batched-keepgen.md.
-                bool jfloor = false, jterm = false; double js = 0.0, jq = 0.0; long long jn = 0;
+                bool jfloor = false, jterm = false, jprog = false;
+                double js = 0.0, jq = 0.0; long long jn = 0;
+                double jfs = 0.0, jfq = 0.0; long long jfn = 0;
                 {
                     std::lock_guard<std::mutex> fk(fold_mtx);
                     const std::size_t k = static_cast<std::size_t>(i) * 2 + pd;
@@ -2931,10 +2970,26 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         { jfloor = true; js = S7.sum[i][pd]; jq = S7.sumsq[i][pd]; jn = c; }
                         else if (!was_frozen && prune.frozen7[i][pd])
                         { jterm = true; js = S7.sum[i][pd]; jq = S7.sumsq[i][pd]; jn = c; }
+                        // PROGRESS past the floor. Without this a cell that advances for hours without
+                        // COMPLETING persists nothing: "completion is persistence" holds for the floor
+                        // (cells complete in seconds) but not for the floor-complete -> refs-fixed window,
+                        // where size-7 speculation runs against cont_lookahead while the sub-tables
+                        // converge. Measured on Mirrorwing 2026-08-22: 2h09m and ~1.19M rollouts with
+                        // ZERO journal writes -- every record still at n=r0 -- so a kill discarded all of
+                        // it, contradicting this file's own "a crash loses only the few in-flight cells".
+                        // Strided so the log stays bounded (<= r_max/kJournalStride records per cell-side
+                        // instead of one per fold); at most kJournalStride-1 rollouts of a cell are lost,
+                        // which IS "only in-flight work".
+                        else if (c > c_before && (c / kJournalStride) != (c_before / kJournalStride))
+                        { jprog = true; js = S7.sum[i][pd]; jq = S7.sumsq[i][pd]; jn = c; }
+                        // Any record resuming a cell above r0 must carry the r0 prefix (see journal_append).
+                        if ((jterm || jprog) && floor_cnt[k] > 0)
+                        { jfs = floor_sum[k]; jfq = floor_sumsq[k]; jfn = floor_cnt[k]; }
                     }
                 }
                 if (jfloor)      { journal_append(HAND, i, pd, js, jq, jn, 0); }
-                else if (jterm)  { journal_append(HAND, i, pd, js, jq, jn, 1); }
+                else if (jterm)  { journal_append(HAND, i, pd, js, jq, jn, 1, jfs, jfq, jfn); }
+                else if (jprog)  { journal_append(HAND, i, pd, js, jq, jn, 0, jfs, jfq, jfn); }
                 in_flight.fetch_sub(1);
                 prod_cv.notify_one();
             }
