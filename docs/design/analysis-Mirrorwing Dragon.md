@@ -454,3 +454,67 @@ exactly.
 - `decks/Mirrorwing Trick Suite/` was deleted; its two scenario gates
   (`libation_x_lands_not_dorks`, `draught_magnet_escalation`) now run on the NEW list, and
   `anger_draws_feed_fists` on the archived v1 list.
+
+---
+
+## 2026-08-22 (overnight) — value-leaf generation + mulligan handoff, running autonomously
+
+Stages 4 and 5 are CLOSED for the new shipping list. Stage 5 `verify_deck.py` reports
+**GATE PASS**: coverage 17/17 full, card_costs all matching Scryfall, card_fields 245 matching,
+viewer self-guard + surface sweep clean, no nonconv/fd-diverge, play invariants over 164
+decisions, claude-play sweep 0 unresolved flags.
+
+Two gate defects were fixed to get there, neither specific to this deck (commit `c74b049b`):
+seven trick-pump params on Luxurious Libation / Fortifying Draught were unclassified in the
+viewer manifest, and `gate_card_costs` counted a *timed-out* audit as "1 cost mismatch" while
+capping a ~10-minute cold sweep at 300s.
+
+### The value-leaf queue nearly measured the WRONG DECK
+
+`valueleaf.sh status` for the new list reported every phase complete — 12,570 rows, a trained
+model, a 94% matrix — all of it generated 2026-08-13/16 from the **archived v1 list**. The queue
+dir (`logs/vlq_<key>`) and staged model (`logs/eval/<stem>.value.STAGED.json`) are keyed by the
+deck FAMILY, and `run` is idempotent via done-markers, so it would have skipped every phase and
+returned a "finished" model fitted to a deck we no longer ship.
+
+The freeze could not catch it: it fingerprints `src` and PLAY (engine state only). The play digest
+is no help either — a just-swapped deck is still deliberately pinned to its OLD list in smoke, so
+the fold does not move. Fixed in `da5aad3a`: `freeze.decks` stamps a sha256 per decklist and both
+`run` paths hard-stop on a mismatch (nothing to salvage, unlike a play change; and it refuses to
+auto-wipe work belonging to the previous list). v1's artifacts are preserved as
+`logs/vlq_mirrorwing_dragon_v1_twinflame_anger` and
+`logs/eval/Mirrorwing Dragon.v1-twinflame-anger.value.STAGED.json`.
+
+### Run state
+
+Frozen at `da5aad3a`, src-tree `d10440440fcc`, play digest `1a04ebebfad8`.
+
+| phase | state |
+|---|---|
+| 0 freeze+build | done |
+| A rows | **done** — 12,319 rows from the full 2,500 games (v1: 12,570). Phase A has NO wall-clock backstop (its manifest carries no `condemn` block); the 3-game tail held 29 cores idle for ~30 min but landed on its own |
+| A split / B train | done — 12,319 unique rows, held-out RMSE **0.6590** |
+| C matrix | running — H=[1..5] V=[1..8], 400/cell, ONE pool, 32/32 cores |
+| C.5 / D / E / F | pending |
+
+### Standing instructions for the overnight run (user, 2026-08-22)
+
+1. **Adopt the value model iff it is better on PERFORMANCE and better-or-EVEN on QUALITY**
+   (phase E is the gate; judge quality on avg win turn). Adoption is not the default outcome —
+   of the last nine models one was a clear win, six neutral.
+2. If adopted, the standing gate applies before commit: **smoke + regression**, and an overnight
+   tier for anything that moves a `value_trust_depth`. Trap: sidecar PRESENCE activates the
+   hybrid, so a rejected model ships as `<stem>.value.DISABLED.json`, never `enabled: false`.
+3. **Then start the mulligan run using the SAME generation settings as the previous deck**:
+   `mull_gen_depth: 2`, `mull_gen_budget_ms: 3` (v1 also recorded `expected_buckets: 17`).
+   v1 derived these by measurement 2026-08-16 (24 hands, R=12) against d5/b20 default play —
+   d1/d2/d3 at b3 were indistinguishable in rank fidelity, so the tie broke on units/rollout.
+   Phase F (`mullgen_finalize.py`) derives these independently; if it disagrees, follow the
+   user's directive and REPORT the divergence.
+   These live in `value_play` inside `<stem>.value.json` — and note `MulliganProfileIO.h` was
+   fixed this session to stop dropping a presence-only sidecar that carries `mull_gen_*` but no
+   `target_depth`, which is exactly v1's shape.
+4. Mulligan route per `.claude/skills/mulligan-profile.md`: feasibility pre-check (read K), then
+   `--gen-mulligan recommend` to scout, then generate. Do NOT run either while phase C is live —
+   phase C's `--intractable-median-sec-per-game 30` cutoff is WALL-CLOCK, so added load could
+   condemn cells spuriously.
