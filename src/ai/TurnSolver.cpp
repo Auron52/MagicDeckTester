@@ -3592,6 +3592,17 @@ struct EquipPieceDeps
 {
     std::vector<int> gs;                                     // equip group indices with a dependency
     std::vector<std::vector<std::array<PieceReq, 2>>> req;   // parallel to gs; req[k][c-1]
+    // The group indices that appear in ANY requirement mask -- i.e. the only digits whose
+    // selection the predicate below can possibly read. The first cut of this rebuilt a full
+    // 64-bit selection mask over EVERY digit on EVERY subset, which measured 32.6% of total
+    // runtime on the land-light KittyEquipment profile (perf, cpu-clock): 21M subsets x a
+    // 64-iteration scan, to test a handful of bits. Masking against a `sel` restricted to these
+    // indices is the identical predicate -- `groups & sel` never reads a bit outside `groups`.
+    std::vector<int> needed;
+    // Bits of `gs`. A position that selects no dependent equip digit cannot violate anything, and
+    // that is most positions -- so where the caller already maintains a selection mask across the
+    // odometer walk, the whole predicate collapses to one AND.
+    std::uint64_t gs_mask = 0;
     bool Empty() const { return gs.empty(); }
 };
 
@@ -3602,6 +3613,8 @@ static void BuildEquipPieceDeps(const GameState& state, const std::vector<Action
 {
     out.gs.clear();
     out.req.clear();
+    out.needed.clear();
+    out.gs_mask = 0;
     const Player& ap     = state.ActivePlayer();
     const int     active = state.active_player_index;
     auto on_bf = [&](int num) {
@@ -3653,13 +3666,51 @@ static void BuildEquipPieceDeps(const GameState& state, const std::vector<Action
         }
         if (any) { out.gs.push_back(static_cast<int>(g)); out.req.push_back(std::move(req)); }
     }
+    // The union of every requirement mask: the only digits EquipPieceDepViolated ever reads.
+    std::uint64_t needed_mask = 0;
+    for (const std::vector<std::array<PieceReq, 2>>& req : out.req)
+    {
+        for (const std::array<PieceReq, 2>& r : req)
+        { needed_mask |= r[0].groups | r[1].groups; }
+    }
+    for (int g = 0; g < 64; ++g)
+    { if (needed_mask & (1ull << g)) { out.needed.push_back(g); } }
+    for (int g : out.gs) { out.gs_mask |= 1ull << g; }
+}
+
+// The fast form: `sel` is the caller's running "which digits are non-zero" mask, maintained across
+// the odometer walk (one bit set on a digit's 0->1 step, cleared on its carry-out) instead of
+// rebuilt per position. With it the common position -- no dependent equip digit taken -- costs a
+// single AND. deps is only ever non-empty when num_groups <= 64 (BuildEquipPieceDeps bails above
+// that), so every dependent group has a bit.
+static inline bool EquipPieceDepViolated(const EquipPieceDeps& d, const std::vector<int>& choice,
+                                         std::uint64_t sel)
+{
+    if ((sel & d.gs_mask) == 0) { return false; }
+    for (std::size_t k = 0; k < d.gs.size(); ++k)
+    {
+        const int c = choice[d.gs[k]];
+        if (c <= 0) { continue; }
+        const std::array<PieceReq, 2>& r = d.req[k][static_cast<std::size_t>(c - 1)];
+        for (int s = 0; s < 2; ++s)
+        {
+            if (!r[s].required)          { continue; }
+            if ((r[s].groups & sel) == 0) { return true; }
+        }
+    }
+    return false;
 }
 
 static inline bool EquipPieceDepViolated(const EquipPieceDeps& d, const std::vector<int>& choice)
 {
-    std::uint64_t sel = 0;
-    for (std::size_t g = 0; g < choice.size() && g < 64; ++g)
-    { if (choice[g] > 0) { sel |= 1ull << g; } }
+    // Byte-identical to the scan-everything form, in two respects that are the whole point:
+    //   * `sel` covers only d.needed -- every other bit is masked off by `groups` anyway;
+    //   * it is built LAZILY, so the common subset (no dependent equip digit taken, or a digit
+    //     whose piece is never castable at all) costs nothing. That matters because the predicate
+    //     runs once per odometer position -- 21M times on a single land-light KittyEquipment job,
+    //     where the eager 64-digit scan was 32.6% of total runtime.
+    std::uint64_t sel      = 0;
+    bool          have_sel = false;
     for (std::size_t k = 0; k < d.gs.size(); ++k)
     {
         const int c = choice[d.gs[k]];
@@ -3667,8 +3718,15 @@ static inline bool EquipPieceDepViolated(const EquipPieceDeps& d, const std::vec
         const std::array<PieceReq, 2>& r = d.req[k][static_cast<std::size_t>(c - 1)];
         for (int s = 0; s < 2; ++s)
         {
-            if (!r[s].required)            { continue; }
-            if ((r[s].groups & sel) == 0)  { return true; }          // no selected group casts it
+            if (!r[s].required)   { continue; }
+            if (r[s].groups == 0) { return true; }                   // never castable: digit is dead
+            if (!have_sel)
+            {
+                for (int g : d.needed)
+                { if (g < static_cast<int>(choice.size()) && choice[g] > 0) { sel |= 1ull << g; } }
+                have_sel = true;
+            }
+            if ((r[s].groups & sel) == 0) { return true; }           // no selected group casts it
         }
     }
     return false;
@@ -9926,6 +9984,9 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
             // predicates read only mana-side digits by construction, so running them on the full
             // choice vector is the identical test.
             std::vector<int> choice(num_groups, 0);
+            // Running "which digits are non-zero" mask, maintained by the carry below instead of
+            // rebuilt per position -- see EquipPieceDepViolated's fast overload.
+            std::uint64_t sel_mask = 0;
             bool done = false;
             while (!done)
             {
@@ -9933,7 +9994,7 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                        (any_splice && SpliceGroupChoiceRejected(sidx, groups, choice, splice_collapse_on))
                     || (accel_pred_on && NonPrefixAccelViolated(accel_order, choice))
                     || (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
-                    || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice));
+                    || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask));
                 if (!rejected)
                 {
                     Agg ga;
@@ -9961,8 +10022,10 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                 for (; t < num_groups; ++t)
                 {
                     ++choice[t];
-                    if (choice[t] <= static_cast<int>(groups[t].size())) { break; }
+                    if (choice[t] <= static_cast<int>(groups[t].size()))
+                    { if (choice[t] == 1 && t < 64) { sel_mask |= 1ull << t; } break; }
                     choice[t] = 0;
+                    if (t < 64) { sel_mask &= ~(1ull << t); }
                 }
                 if (t == num_groups) { done = true; }
             }
@@ -11623,6 +11686,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // 2026-07-29). Mirrored in Solve and EnumeratePlans -- change one, change both.
         std::vector<int> choice(num_groups, 0);
         std::vector<int> sel;   // reused across positions (clear keeps capacity)
+        // Running "which digits are non-zero" mask, maintained by the carry below instead of
+        // rebuilt per position -- see EquipPieceDepViolated's fast overload.
+        std::uint64_t sel_mask = 0;
         const bool copy_pred_on = !copy_class.empty();
         const bool dep_pred_on  = !equip_deps.Empty();
         bool done = false;
@@ -11633,7 +11699,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // See FungibleEquipCopyViolated. This walk holds the FULL choice vector, so unlike the
             // two-stage split it needs no straddle guard.
             const bool copy_skip = (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
-                                || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice));
+                                || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask));
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
             if (!copy_skip && gate_on)
             {
@@ -11702,8 +11768,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             for (; g < num_groups; ++g)
             {
                 ++choice[g];
-                if (choice[g] <= static_cast<int>(groups[g].size())) { break; }
+                if (choice[g] <= static_cast<int>(groups[g].size()))
+                { if (choice[g] == 1 && g < 64) { sel_mask |= 1ull << g; } break; }
                 choice[g] = 0;
+                if (g < 64) { sel_mask &= ~(1ull << g); }
             }
             if (g == num_groups) { done = true; }
         }
@@ -17112,6 +17180,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // 2026-07-29). Mirrored in Solve and EnumeratePlans -- change one, change both.
         std::vector<int> choice(num_groups, 0);
         std::vector<int> sel;   // reused across positions (clear keeps capacity)
+        // Running "which digits are non-zero" mask, maintained by the carry below instead of
+        // rebuilt per position -- see EquipPieceDepViolated's fast overload.
+        std::uint64_t sel_mask = 0;
         const bool copy_pred_on = !copy_class.empty();
         const bool dep_pred_on  = !equip_deps.Empty();
         bool done = false;
@@ -17122,7 +17193,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // See FungibleEquipCopyViolated. This walk holds the FULL choice vector, so unlike the
             // two-stage split it needs no straddle guard.
             const bool copy_skip = (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
-                                || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice));
+                                || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask));
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
             if (!copy_skip && gate_on)
             {
@@ -17190,8 +17261,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             for (; g < num_groups; ++g)
             {
                 ++choice[g];
-                if (choice[g] <= static_cast<int>(groups[g].size())) { break; }
+                if (choice[g] <= static_cast<int>(groups[g].size()))
+                { if (choice[g] == 1 && g < 64) { sel_mask |= 1ull << g; } break; }
                 choice[g] = 0;
+                if (g < 64) { sel_mask &= ~(1ull << g); }
             }
             if (g == num_groups) { done = true; }
         }
