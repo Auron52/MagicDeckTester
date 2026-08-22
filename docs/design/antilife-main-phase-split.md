@@ -1013,3 +1013,9 @@ is now marginally POSITIVE rather than -8. Clean-env smoke byte-identical (36/36
 ### WHAT REMAINS
 The PHASE SPLIT ITSELF is still +14 turns worse than baseline on held-out AL. Condemnation is
 exonerated; the split is now the whole of AL's cost and is the next thing to root-source.
+
+### 21s addendum: the exemptions are NEUTRAL on FiveColour (which already ships condemnation ON)
+Held-out fivecolour with both exemptions: 3 keys better, 3 worse, 2 unchanged; searched net
+**-0.02 turns over 2800 games = -0.00001 per game**. So the fix pays for itself on the deck that
+needed it and costs nothing on the deck already using the rule. (The enabler exemption is inert
+there -- 5C holds no lifegain-to-loss gift payloads -- so this measures the pass exemption.)
