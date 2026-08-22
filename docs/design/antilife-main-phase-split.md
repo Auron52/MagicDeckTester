@@ -1236,14 +1236,27 @@ Escalating both arms at equal config (budget 1x/2x/5x/20x, then depth 5/6/8):
 * **`fivecolour gi112` (seed 5005, appearing at both d3 and d5) NEVER closes** -- 5/6 at d5, d6 and
   d8, at any budget.
 
-### Why gi112 is not a counterexample to "recoverable"
-Its explain says **KEPT HANDS DIFFER**: the mulligan/bottom decision diverged, so the two arms are
-holding different opening hands and playing DIFFERENT PHYSICAL GAMES from turn one. There is no
-common line for a deeper search to find, which is why no budget and no depth converges it. This is
-the same class as the fetch-reshuffle rows, one step earlier in the game: the keep/bottom lookahead
-simulates PLAY, so changing play changes what it keeps.
+### Why gi112 is not a counterexample to "recoverable" -- the LOOKAHEAD BOTTOMER, isolated
+Its explain says **KEPT HANDS DIFFER**, so the two arms play DIFFERENT PHYSICAL GAMES from turn one
+and there is no common line for a deeper search to find. Isolated to the exact mechanism rather than
+guessed at (USER: "How does the mulligan diverge?"):
 
-That has a follow-through, not a fix: **the per-deck keep models and value leaves for Anti-Lifegain
-and FiveColour were fit under the OLD play behaviour** and are now slightly stale. gi112 is that
-staleness made visible in a single game. Regeneration is the standing item (21q #4); it is work, not
-a blocker, and it is a USER call because it is hours per deck.
+* Both arms take the SAME number of mulligans -- 3 attempts, keep 5. The difference is purely WHICH
+  TWO CARDS GO TO THE BOTTOM: baseline bottoms Windswept Heath and keeps Godless Shrine, the adopted
+  stack does the reverse. One card.
+* `AIEngine::BottomCards` decides that with a **full clairvoyant game ROLLOUT per candidate card**
+  (`RolloutWinTurn` over the real post-bottom library), keeping the removal that preserves the
+  earliest win and restricting the heuristic tiebreak to the win-optimal set. Those rollouts run the
+  ENGINE'S PLAY LOGIC, so any change to play changes their projected win turns and therefore the
+  pick.
+* PROOF by isolation: with `MTG_BOTTOM_ROLLOUTS=0` (rollouts off, heuristic bottoming alone) the two
+  arms keep the **IDENTICAL** hand. With the rollouts on (the default) they differ. The divergence
+  enters entirely through the bottomer's rollouts.
+
+**This is NOT model staleness, and the earlier "the keep model was fit under the old play behaviour"
+reading of this game was wrong.** FiveColour ships no keep-model sidecar at all; the bottoming
+choice is computed LIVE at game start. The bottomer is re-evaluating correctly under the new play
+rules and landing on a different card -- a downstream consequence of adoption, not a stale artifact.
+(Anti-Lifegain DOES carry an exhaustive keep model, and regenerating the per-deck artifacts against
+the new play behaviour remains the standing follow-through from 21q #4 -- but gi112 is not evidence
+for it.)
