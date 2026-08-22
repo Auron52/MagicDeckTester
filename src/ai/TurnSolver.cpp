@@ -4747,7 +4747,9 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
     // KEEPS Invigorate for T4's lethal (win T4); with condemnation the pass condemns Remedy AND
     // Invigorate, so it is forced to spend both at m1 for a 5-point swing and wins T5 instead.
     // A pass is a DEFERRAL, not a rejection: nothing was chosen over the card.
-    static const bool s_pass_exempt = EnvOn("MTG_CONDEMN_PASS_EXEMPT");
+    // ADOPTED DEFAULT ON 2026-08-22 (USER): 22 of condemnation's 24 AL losses over 8000 games,
+    // and NEUTRAL on FiveColour, which already ships condemnation (-0.02 turns / 2800 games).
+    static const bool s_pass_exempt = EnvOn("MTG_CONDEMN_PASS_EXEMPT", true);
     if (s_pass_exempt && m1_casts != nullptr)
     {
         bool any_cast = false;
@@ -4800,7 +4802,9 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
     // state where each would GIFT 3, so the kill is unreachable (win T7). Keying on the PLAN's
     // casts cannot cover this -- Remedy is not in the plan, nor even in hand, at stamp time.
     // Widening an exemption only re-admits candidates; it can never delete a line.
-    static const bool s_enabler_exempt = EnvOn("MTG_CONDEMN_ENABLER_EXEMPT");
+    // ADOPTED DEFAULT ON 2026-08-22 (USER): the remaining 2 of condemnation's 24 AL losses, and
+    // inert on FiveColour (no lifegain-to-loss gift payloads there).
+    static const bool s_enabler_exempt = EnvOn("MTG_CONDEMN_ENABLER_EXEMPT", true);
     const bool no_enabler_live =
         s_enabler_exempt && !RemedyActive(state, state.active_player_index);
     state.m1_hand_n = 0;
@@ -4979,7 +4983,7 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
                 // the USER's rule collapses it to Main2 (derived, not per-deck special-cased).
                 return state.deck_feeds_combat ? MP::Both : MP::Main2;
             }
-            // DEFER-COSTS-MANA (MTG_PHASE_DAMAGE_BOTH, default off pending measurement). The
+            // DEFER-COSTS-MANA (MTG_PHASE_DAMAGE_BOTH, ADOPTED DEFAULT ON 2026-08-22). The
             // Main2 verdict above reasons about combat BENEFIT -- damage feeds no attack against a
             // passive opponent -- but never about combat COST. Deferring past combat can make the
             // spell UNAFFORDABLE, because the attack taps sources the deferred cast needed:
@@ -4993,7 +4997,7 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
             // and the "pre-combat is actively worse for Hinata" case above is still reachable --
             // the search simply picks m2 there.
             {
-                static const bool s_dmg_both = EnvOn("MTG_PHASE_DAMAGE_BOTH");
+                static const bool s_dmg_both = EnvOn("MTG_PHASE_DAMAGE_BOTH", true);
                 if (s_dmg_both) { return MP::Both; }
             }
             return MP::Main2;

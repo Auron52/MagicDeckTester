@@ -2110,7 +2110,12 @@ int AntiLifegainProvider::CastOrderRank(const GameState& s, const CardDefinition
 // two-lever attribution shape as the FiveColour adoption (Fc5PhaseEnabled / MTG_5C_SSM).
 static bool AlPhaseEnabled()
 {
-    static const bool on = EnvOn("MTG_AL_PHASE");   // DEFAULT OFF pending measurement + review
+    // ADOPTED DEFAULT ON 2026-08-22 (USER). The split shipped only once its two rule defects were
+    // root-caused out of it: condemnation's pass-is-not-a-decline + no-enabler-live gaps
+    // (MTG_CONDEMN_*_EXEMPT) and the classifier's combat-cost blindness (MTG_PHASE_DAMAGE_BOTH).
+    // Held-out (8000 games, searched): phase alone +15.00 turns, the full stack -5.00 (6 keys
+    // better / 2 worse). MTG_AL_PHASE=0 reverts. See docs/design/antilife-main-phase-split.md 21t.
+    static const bool on = EnvOn("MTG_AL_PHASE", true);
     return on;
 }
 
@@ -2141,8 +2146,15 @@ bool AntiLifegainProvider::CondemnsPassedMainPhase() const
     // -- at +14-16% compute (the per-rollout StampM1Hand pool walks outweigh the m2-shrink
     // savings on AL's small m2 sets; 5C's was perf-neutral). The OLD "m2 re-offer recovers
     // prune losses" rejection no longer reproduces post-fixes; the re-offer just no longer
-    // matters either way. Kept as an instrument; NOT adopted (inert semantics don't pay 15%).
-    static const bool on = EnvOn("MTG_AL_CONDEMN");
+    // matters either way.
+    // ^-- THAT INERT-AT-COST VERDICT IS RETRACTED, and it was an artifact of measuring a BROKEN
+    // condemnation. It was taken before the two rule gaps were found (pass-is-not-a-decline,
+    // no-enabler-live): a rule that was deleting real lines and gaining real ones netted to
+    // "inert". With both exemptions in and on top of PHASE+DAMAGE_BOTH+DORK, dropping
+    // condemnation costs 5 turns per 8000 held-out AL games and 4 extra worse games -- one of
+    // them a WIN TURNING UNWON (al_d5_s7007 gi10, T7 -> loss). ADOPTED DEFAULT ON 2026-08-22
+    // (USER). MTG_AL_CONDEMN=0 reverts. See antilife-main-phase-split.md 21u.
+    static const bool on = EnvOn("MTG_AL_CONDEMN", true);
     return on && AlPhaseEnabled();
 }
 

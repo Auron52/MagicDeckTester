@@ -79,7 +79,10 @@ inline bool GarthOrderedEnabled()
 // measurement + user review.
 inline bool DorkAtkSearchEnabled()
 {
-    static const bool v = EnvOn("MTG_DORK_ATK_SEARCH");
+    // ADOPTED DEFAULT ON 2026-08-22 (USER). Overnight held-out: -22.98 turns on FiveColour and
+    // BYTE-IDENTICAL on every other deck -- a single-deck, zero-collateral gain. MTG_DORK_ATK_SEARCH=0
+    // reverts. (Designed for Anti-Lifegain's gi852; the deck that banks it is FiveColour.)
+    static const bool v = EnvOn("MTG_DORK_ATK_SEARCH", true);
     return v;
 }
 
