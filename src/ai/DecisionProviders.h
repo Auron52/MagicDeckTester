@@ -237,6 +237,14 @@ public:
     // lands, two ETB-scry lands and four duals. Those are different cards, not copies of "a land".
     std::vector<int> CleanupDiscardCandidates(
         const GameState&, const std::vector<std::string>*) const override;
+    // The SHED ORDER is the untruncated ranking: the top-1 narrowing above bounds the executor's
+    // searched fan, and this deck's cleanups shed many cards, not one.
+    std::vector<int> CleanupDiscardShedOrder(
+        const GameState&, const std::vector<std::string>*) const override;
+    // NOT prefix-stable: the ranking bands SPARE copies first, so shedding the duplicate Land's Edge
+    // makes the survivor the only outlet and moves it to the back. Verified against the per-shed
+    // loop (MTG_DISCARD_SHED_VERIFY) -- batching this rule sheds both outlets.
+    bool CleanupDiscardShedStable() const override { return false; }
     // The FULL keep-set ranking (every hand index, preference order) behind the hook above. The
     // hook returns only the TOP pick -- the ranking IS the decision, so the searched pass has
     // nothing to fan over (user design 2026-08-06) -- but the multi-card consumers (Land's Edge
@@ -666,6 +674,10 @@ public:
     // keep set (colour coverage / land drops / acceleration / threat floor / Cannons / Greaves),
     // single-index return. See the .cpp comment for the full design + evidence.
     std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
+    // The bucket rule's whole shed ORDER; the hook above is that order narrowed to one candidate
+    // for the searched fan.
+    std::vector<int> CleanupDiscardShedOrder(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };
 

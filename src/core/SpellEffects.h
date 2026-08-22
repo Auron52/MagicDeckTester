@@ -159,6 +159,14 @@ namespace ShedStats
     inline std::atomic<std::uint64_t> g_real{0};
     inline std::atomic<std::uint64_t> g_rollout{0};
     inline std::atomic<std::uint64_t> g_rollout_lowland{0};
+    // How many CLEANUPS shed at least one card, so `rollout / cleanups` is the average number of
+    // cards ONE cleanup sheds. It measured 1.35 on the land-light profile, which is what the
+    // per-shed re-ranking cost above one consultation -- see CleanupDiscardShedSet, which now
+    // decides the whole cleanup in a single call and makes this ratio a shed count, not a
+    // recomputation multiplier.
+    inline std::atomic<std::uint64_t> g_cleanups{0};
+    inline void CountCleanup()
+    { if (Enabled()) { g_cleanups.fetch_add(1, std::memory_order_relaxed); } }
     inline void Count(const GameState& state, bool is_rollout)
     {
         if (!Enabled()) { return; }
@@ -176,10 +184,13 @@ namespace ShedStats
         {
             if (!Enabled()) { return; }
             std::fprintf(stderr,
-                         "\n=== SHED STATS: real=%llu  rollout=%llu (low-land=%llu) ===\n",
+                         "\n=== SHED STATS: real=%llu  rollout=%llu (low-land=%llu)"
+                         "  cleanups-that-shed=%llu  sheds/cleanup=%.2f ===\n",
                          (unsigned long long)g_real.load(),
                          (unsigned long long)g_rollout.load(),
-                         (unsigned long long)g_rollout_lowland.load());
+                         (unsigned long long)g_rollout_lowland.load(),
+                         (unsigned long long)g_cleanups.load(),
+                         g_cleanups.load() ? (double)g_rollout.load() / (double)g_cleanups.load() : 0.0);
         }
     };
     inline Dumper g_dumper;
@@ -307,9 +318,49 @@ inline std::vector<int> CleanupDiscardRankingWithOrder(
     std::vector<int> out;
     if (ap.hand.empty()) { return out; }
     const int n = static_cast<int>(ap.hand.size());
-    std::vector<char> taken(static_cast<std::size_t>(n), 0);
+    // Scratch lives on the STACK, and the two per-card facts the tiers below filter and sort on --
+    // mana value (a CardDatabase lookup) and required-piece protection (a name scan, plus a library
+    // scan under the `deck` scope) -- are computed ONCE here instead of being re-derived inside a
+    // sort comparator. This builder runs once per cleanup shed, which inside a search is ~70k times
+    // per 120 land-light games, and it was allocating four heap vectors (plus stable_sort's own temp
+    // buffer) and doing O(h log h) database lookups to rank an eight-card hand. Byte-identical: same
+    // tiers, same order, same tie-breaks. kScratchMax covers every hand the engine reaches in
+    // practice (Treasure Hunt's 15-25-card cleanups included); above it the heap fallback keeps the
+    // old shape rather than capping anything.
+    constexpr int kScratchMax = 64;
+    char taken_buf[kScratchMax];
+    int  tier_buf[kScratchMax];
+    int  mv_buf[kScratchMax];
+    char prot_buf[kScratchMax];
+    std::vector<char> taken_heap;
+    std::vector<int>  tier_heap;
+    std::vector<int>  mv_heap;
+    std::vector<char> prot_heap;
+    char* taken = taken_buf;
+    int*  tier  = tier_buf;
+    int*  mv    = mv_buf;
+    char* prot  = prot_buf;
+    if (n > kScratchMax)
+    {
+        taken_heap.resize(static_cast<std::size_t>(n));
+        tier_heap.resize(static_cast<std::size_t>(n));
+        mv_heap.resize(static_cast<std::size_t>(n));
+        prot_heap.resize(static_cast<std::size_t>(n));
+        taken = taken_heap.data(); tier = tier_heap.data();
+        mv    = mv_heap.data();    prot = prot_heap.data();
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        taken[i] = 0;
+        mv[i]    = CleanupDiscardManaValue(ap.hand[i]);
+        // Only ever consulted for non-staged cards (every tier checks the staged flag first), so a
+        // staged card skips the scan entirely.
+        prot[i]  = (!ap.hand[i].m_is_staged
+                    && CleanupDiscardProtected(state, ap.hand[i], required_pieces)) ? 1 : 0;
+    }
+    out.reserve(static_cast<std::size_t>(n));
     auto push = [&](int i)
-    { if (i >= 0 && i < n && !taken[static_cast<std::size_t>(i)]) { taken[static_cast<std::size_t>(i)] = 1; out.push_back(i); } };
+    { if (i >= 0 && i < n && !taken[i]) { taken[i] = 1; out.push_back(i); } };
 
     // Tier A -- the provider's own order, else lands-as-ammunition in hand order.
     // A provider order does NOT get to override required-piece protection or the staged exemption:
@@ -321,7 +372,7 @@ inline std::vector<int> CleanupDiscardRankingWithOrder(
         for (int i : preferred)
         {
             if (i < 0 || i >= n || ap.hand[i].m_is_staged) { continue; }
-            if (CleanupDiscardProtected(state, ap.hand[i], required_pieces)) { continue; }
+            if (prot[i]) { continue; }
             push(i);
         }
     }
@@ -339,7 +390,7 @@ inline std::vector<int> CleanupDiscardRankingWithOrder(
             for (int i = 0; i < n; ++i)
             {
                 if (ap.hand[i].m_name != name || ap.hand[i].m_is_staged) { continue; }
-                if (CleanupDiscardProtected(state, ap.hand[i], required_pieces)) { continue; }
+                if (prot[i]) { continue; }
                 push(i);
             }
         }
@@ -359,27 +410,32 @@ inline std::vector<int> CleanupDiscardRankingWithOrder(
     // docs/design/per-deck-discard-analysis-phase.md.)
 
     // Tier B -- eligible cards, descending mana value, ties keeping the earlier card.
-    std::vector<int> tier_b;
+    // The tier is collected in ASCENDING index order, so sorting by (MV desc, index asc) is exactly
+    // the stable sort by descending MV it replaces -- same sequence, without stable_sort's heap
+    // buffer. (Indices are distinct, so the comparator is a strict total order and std::sort's
+    // result is unique.)
+    int nb = 0;
     for (int i = 0; i < n; ++i)
     {
         if (ap.hand[i].m_is_staged) { continue; }
-        if (CleanupDiscardProtected(state, ap.hand[i], required_pieces)) { continue; }
-        tier_b.push_back(i);
+        if (prot[i]) { continue; }
+        tier[nb++] = i;
     }
-    std::stable_sort(tier_b.begin(), tier_b.end(), [&](int a, int b)
-    { return CleanupDiscardManaValue(ap.hand[a]) > CleanupDiscardManaValue(ap.hand[b]); });
-    for (int i : tier_b) { push(i); }
+    std::sort(tier, tier + nb, [&](int a, int b)
+    { if (mv[a] != mv[b]) { return mv[a] > mv[b]; } return a < b; });
+    for (int k = 0; k < nb; ++k) { push(tier[k]); }
 
     // Tier C -- last resort: non-staged before staged, then max mana value, stable.
-    std::vector<int> tier_c;
-    for (int i = 0; i < n; ++i) { if (!taken[static_cast<std::size_t>(i)]) { tier_c.push_back(i); } }
-    std::stable_sort(tier_c.begin(), tier_c.end(), [&](int a, int b)
+    int nc = 0;
+    for (int i = 0; i < n; ++i) { if (!taken[i]) { tier[nc++] = i; } }
+    std::sort(tier, tier + nc, [&](int a, int b)
     {
         const bool sa = ap.hand[a].m_is_staged, sb = ap.hand[b].m_is_staged;
         if (sa != sb) { return !sa; }
-        return CleanupDiscardManaValue(ap.hand[a]) > CleanupDiscardManaValue(ap.hand[b]);
+        if (mv[a] != mv[b]) { return mv[a] > mv[b]; }
+        return a < b;
     });
-    for (int i : tier_c) { push(i); }
+    for (int k = 0; k < nc; ++k) { push(tier[k]); }
 
     // MTG_TRACE=discard: what the rule chose BETWEEN. `cands` is the width of the decision -- the
     // number an axis over it has to justify -- and the distribution is the case for a deck-aware
@@ -415,6 +471,150 @@ inline std::vector<int> CleanupDiscardRanking(const GameState& state,
                                               const std::vector<std::string>* required_pieces)
 {
     return CleanupDiscardRankingWithOrder(state, required_pieces, {});
+}
+
+// ---- The WHOLE cleanup, PERFORMED in one call --------------------------------------------------
+// CR 514.1 sheds one card at a time, and the rollout's cleanup used to model that literally from the
+// OUTSIDE: ask the rule, shed a card, rebuild the hand, ask the rule again, read index 0 again. That
+// is one full ranking of the whole hand per DISCARDED CARD -- ~70k of them per 120 land-light games,
+// 1.35 per cleanup (MTG_SHED_STATS) -- to re-answer a question the rule had already answered in
+// full. The ranking IS the whole decision: everything it does not put in the shed prefix is a KEEP.
+//
+// So the loop lives here, with the rule, and the whole cleanup is one call: this function moves the
+// shed cards to the graveyard, erases them from the hand, and returns how many went. There is no
+// intermediate hand for a caller to hold, and no index for a caller to keep valid.
+//
+//   * `pinned_first` is the searched axis (Plan::discard_choice / scripted_discard_choice): the
+//     candidate the committed line pinned for the FIRST shed of this cleanup, -1 for the rule's own
+//     pick. Clamped, because the plan was enumerated before this turn's draws and casts changed the
+//     hand. `consulted` reports whether the rule answered at all, which is what the caller
+//     conditions the consume-and-clear on.
+//   * `invert` is the headroom bound (MTG_SHED_WORST): take the WORST-ranked card every shed.
+//   * `staged_exempt` mirrors the caller's hand-limit counting: a staged card is in EXILE (CR 514.1
+//     counts the HAND), so the real cleanup can never reach one and neither may this.
+//
+// One consultation answers the whole cleanup only when the rule is PREFIX-STABLE, which it declares
+// (DecisionProvider::CleanupDiscardShedStable). An unstable rule -- Treasure Hunt, whose spare-copy
+// band moves the surviving Land's Edge to the back once its duplicate is gone -- is asked again
+// after each shed, which is what it needs and no worse than before. MTG_DISCARD_SHED_VERIFY=1
+// checks the claim on every cleanup against the historical per-shed loop.
+std::vector<std::string> CleanupDiscardShedLoopReference(
+    const GameState& state, const std::vector<std::string>* required_pieces,
+    int count, int pinned_first, bool invert, bool staged_exempt);
+
+inline bool MaybeReplaceGraveyardWithLibraryShuffle(GameState& state, int controller_index,
+                                                    const Card& c);
+
+inline int CleanupDiscardShed(GameState& state, const std::vector<std::string>* required_pieces,
+                              int count, int pinned_first, bool invert, bool staged_exempt,
+                              bool* consulted)
+{
+    if (consulted != nullptr) { *consulted = false; }
+    if (count <= 0) { return 0; }
+    Player& ap = state.players[state.active_player_index];
+    const DecisionProvider& prov = ResolveProvider(state);
+
+    static const bool s_verify = EnvOn("MTG_DISCARD_SHED_VERIFY");
+    std::vector<std::string> ref;
+    if (s_verify)
+    {
+        ref = CleanupDiscardShedLoopReference(state, required_pieces, count, pinned_first,
+                                              invert, staged_exempt);
+    }
+
+    // The pin and the headroom bound both index the CANDIDATE set, which is the shed order for every
+    // provider except the two that narrow it to one entry to bound the executor's searched fan. So
+    // they are resolved against the candidates -- one extra consultation, on paths that are off by
+    // default (the bound) or fire for a single pinned shed (the axis), never on the shipped hot
+    // path. Where the candidate set IS one entry, `invert` has nothing to invert and the bound is
+    // inert, exactly as it was when the loop re-consulted a one-entry list every shed.
+    int  pin_idx   = -1;
+    bool use_worst = false;
+    if (pinned_first > 0 || invert)
+    {
+        const std::vector<int> cand = prov.CleanupDiscardCandidates(state, required_pieces);
+        use_worst = invert && cand.size() > 1;
+        if (pinned_first > 0 && !cand.empty())
+        { pin_idx = cand[std::min(static_cast<std::size_t>(pinned_first), cand.size() - 1)]; }
+    }
+
+    const bool stable = prov.CleanupDiscardShedStable();
+    std::vector<int> ranked;
+    std::vector<std::string> got;   // MTG_DISCARD_SHED_VERIFY only
+    int done = 0;
+    for (int k = 0; k < count; ++k)
+    {
+        if (k == 0 || !stable)
+        {
+            // The shed ORDER, not the candidate set (see CleanupDiscardShedOrder): reading a
+            // three-card cleanup off a one-entry candidate list is impossible, and asking again for
+            // each card is precisely the loop being retired.
+            ranked = prov.CleanupDiscardShedOrder(state, required_pieces);
+            if (ranked.empty()) { break; }
+            if (consulted != nullptr) { *consulted = true; }
+        }
+        if (ranked.empty()) { break; }
+        const int n = static_cast<int>(ap.hand.size());
+        int v = (k == 0 && pin_idx >= 0) ? pin_idx : (use_worst ? ranked.back() : ranked.front());
+        if (v < 0 || v >= n) { break; }
+        // The ranking's last-resort tier keeps staged cards, so any selector can still land on one.
+        // The caller's hand count proved a non-staged card exists, so substitute the first one
+        // rather than shedding something GameEngine::CleanupStep could not reach.
+        if (staged_exempt && ap.hand[static_cast<std::size_t>(v)].m_is_staged)
+        {
+            v = -1;
+            for (int j = 0; j < n; ++j)
+            { if (!ap.hand[static_cast<std::size_t>(j)].m_is_staged) { v = j; break; } }
+            if (v < 0) { break; }
+        }
+        ShedStats::Count(state, /*is_rollout=*/true);   // MTG_SHED_STATS; off by default
+        if (s_verify) { got.push_back(ap.hand[static_cast<std::size_t>(v)].m_name.str()); }
+        // Progenitus: shuffled into its owner's library instead of the graveyard (replacement) --
+        // lockstep with GameEngine::CleanupStep's identical check.
+        if (!MaybeReplaceGraveyardWithLibraryShuffle(state, state.active_player_index,
+                                                     ap.hand[static_cast<std::size_t>(v)]))
+        {
+            ap.graveyard.push_back(ap.hand[static_cast<std::size_t>(v)]);
+        }
+        ap.hand.erase(ap.hand.begin() + v);
+        ++done;
+        // Re-map the cached order onto the shrunken hand in place -- drop the shed entry, decrement
+        // everything that sat behind it. This is what lets ONE consultation answer a multi-card
+        // cleanup instead of asking the rule again about cards it has already ranked.
+        if (stable)
+        {
+            std::size_t w = 0;
+            for (std::size_t r = 0; r < ranked.size(); ++r)
+            {
+                const int i = ranked[r];
+                if (i == v) { continue; }
+                ranked[w++] = (i > v) ? i - 1 : i;
+            }
+            ranked.resize(w);
+        }
+    }
+
+    if (s_verify)
+    {
+        // Compare by NAME: the loop reference works on its own scratch copy, so its indices mean
+        // nothing here. (Reading the graveyard tail instead would miss a Progenitus, which the
+        // replacement effect shuffles into the LIBRARY -- that read every FiveColour Progenitus shed
+        // as a mismatch until the names were recorded at the shed itself.)
+        if (got != ref)
+        {
+            static std::atomic<std::uint64_t> s_bad{0};
+            const std::uint64_t seen = s_bad.fetch_add(1, std::memory_order_relaxed);
+            if (seen < 40)
+            {
+                std::string a, b;
+                for (const std::string& s : got) { a += s + " "; }
+                for (const std::string& s : ref) { b += s + " "; }
+                std::fprintf(stderr, "[shed-verify] MISMATCH t%d n=%d batched=[%s] loop=[%s]\n",
+                             state.turn_number, count, a.c_str(), b.c_str());
+            }
+        }
+    }
+    return done;
 }
 
 // WHICH lands Land's Edge pitches, most expendable FIRST -- the same provider ranking the cleanup

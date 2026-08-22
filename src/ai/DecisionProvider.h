@@ -247,6 +247,37 @@ public:
     virtual std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const;
 
+    // CleanupDiscardShedOrder -- the same rule, as the FULL shed ORDER: every card in the hand,
+    // most expendable first. It differs from CleanupDiscardCandidates for exactly one reason, and
+    // only on the two providers that have it: NARROWING the candidate set is a statement about the
+    // executor's searched FAN (TreasureHunt and FiveColour each return a single index, measured, so
+    // the trial rollouts have nothing to fan over -- th-d5-five-hour-game.md), not a statement that
+    // the deck has no opinion about which card goes SECOND.
+    //
+    // A cleanup that must shed three cards needs three answers. Reading them off a one-entry
+    // candidate list is impossible, which is what used to force the caller to shed one card, build
+    // a fresh hand, and re-consult -- the loop this hook exists to retire. Consumed by
+    // CleanupDiscardShedSet; the default is the candidate list, which for every other provider
+    // already IS the whole ranking, so only the two narrowing providers override it.
+    virtual std::vector<int> CleanupDiscardShedOrder(
+        const GameState& s, const std::vector<std::string>* required_pieces) const
+    { return CleanupDiscardCandidates(s, required_pieces); }
+
+    // CleanupDiscardShedStable -- is the shed order above PREFIX-STABLE? That is: after shedding
+    // its own top pick, does re-ranking the smaller hand leave the remaining cards in the same
+    // order? When true (the default, and true of every bucket rule in the suite -- they choose which
+    // cards to KEEP from the whole hand and shed the complement, and removing a card that was
+    // already going does not change that), a cleanup that must shed three cards reads three entries
+    // off ONE consultation. When false, the rule has to be asked again after every shed, because
+    // shedding changes its answer.
+    //
+    // Treasure Hunt is the one deck that says false, and it is not an implementation wart: its
+    // ranking bands SPARE copies ahead of unique cards, so shedding the duplicate Land's Edge makes
+    // the survivor the deck's only outlet and moves it to the back. A prefix would shed both. This
+    // is exactly the class of rule that must not be batched, so it is declared rather than assumed
+    // -- MTG_DISCARD_SHED_VERIFY=1 checks the claim against the per-shed loop on every cleanup.
+    virtual bool CleanupDiscardShedStable() const { return true; }
+
     // AttackDigPutCandidates -- Armored Skyhunter's attack trigger: WHICH of the revealed
     // Aura/Equipment cards to put onto the battlefield (ranked best-first; empty = decline the
     // "may"). `examined` is the looked-at top-N in library order; `legal` the indices of

@@ -15092,62 +15092,60 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         for (const Card& c : ap.hand) { if (!c.m_is_staged) { ++n; } }
         return n;
     };
-    while (!unlimited_hand && hand_count() > 7)
+    if (!unlimited_hand && hand_count() > 7)
     {
-        ShedStats::Count(state, /*is_rollout=*/true);   // MTG_SHED_STATS; off by default
+        ShedStats::CountCleanup();
+        const int over = static_cast<int>(hand_count()) - 7;
         // Default (commit-the-line): use the SHARED selector so the rollout sheds exactly the
-        // card the real engine's ChooseDiscard would -- required-piece protection + land-outlet
+        // cards the real engine's ChooseDiscard would -- required-piece protection + land-outlet
         // ammo, reading the deck's pieces from state.m_required_pieces. Without this the rollout
         // shed high-MV spells and hoarded lands, predicting a phantom Land's Edge flood (gi=220).
         // Legacy (MTG_LEGACY_SEARCH): the frozen highest-MV-only rule (held-out ground truth).
-        std::vector<Card>::iterator victim;
         if (s_fd_discard)
         {
-            // Provider-owned rule (CleanupDiscardCandidates); index 0 is the ranked pick, which is
-            // the single answer SelectCleanupDiscardIndex used to return directly.
-            const std::vector<int> cd =
-                ResolveProvider(state).CleanupDiscardCandidates(state, state.m_required_pieces);
-            if (cd.empty()) { break; }
+            // The WHOLE cleanup in ONE call (CleanupDiscardShed). The rule's ranking already decides
+            // every card in the hand -- the prefix goes, the tail is kept -- so shedding one card,
+            // rebuilding the hand and re-ranking to read index 0 again was re-asking a question that
+            // had been answered, 1.35 times per cleanup and ~70k times per 120 land-light games
+            // (MTG_SHED_STATS). The loop, the graveyard moves and the erases now live with the rule;
+            // no intermediate hand exists out here to keep indices valid against.
+            //
             // SEARCHED cleanup discard (Plan::discard_choice -> GameState::scripted_discard_choice):
-            // the plan's pinned candidate, consumed by the FIRST shed of this cleanup and cleared,
+            // the plan's pinned candidate is consumed by the FIRST shed of this cleanup and cleared,
             // so a multi-card cleanup sheds one searched card and then falls back to the ranked
-            // default -- the same one-per-plan convention as the ETB-dig and Lackey axes. Clamped,
-            // because the plan was enumerated before this turn's draws and casts changed the hand.
-            std::size_t pick = 0;
-            if (state.scripted_discard_choice > 0)
-            {
-                pick = std::min(static_cast<std::size_t>(state.scripted_discard_choice),
-                                cd.size() - 1);
-            }
-            else if (ShedWorstEnabled()) { pick = cd.size() - 1; }   // headroom bound; see above
-            state.scripted_discard_choice = -1;
-            victim = ap.hand.begin() + cd[pick];
+            // default -- the same one-per-plan convention as the ETB-dig and Lackey axes.
+            bool consulted = false;
+            CleanupDiscardShed(state, state.m_required_pieces, over,
+                               state.scripted_discard_choice, ShedWorstEnabled(),
+                               s_staged_exempt, &consulted);
+            if (consulted) { state.scripted_discard_choice = -1; }
         }
         else
         {
-            victim = std::max_element(ap.hand.begin(), ap.hand.end(),
-                [](const Card& a, const Card& b)
+            while (!unlimited_hand && hand_count() > 7)
+            {
+                ShedStats::Count(state, /*is_rollout=*/true);
+                std::vector<Card>::iterator victim = std::max_element(
+                    ap.hand.begin(), ap.hand.end(),
+                    [](const Card& a, const Card& b)
+                    {
+                        return a.m_mana_cost.ManaValue() < b.m_mana_cost.ManaValue();
+                    });
+                // max_element ignores the staged flag, and a staged card is in EXILE -- the real
+                // cleanup can never reach one. The count above proves a non-staged card exists.
+                if (s_staged_exempt && victim != ap.hand.end() && victim->m_is_staged)
                 {
-                    return a.m_mana_cost.ManaValue() < b.m_mana_cost.ManaValue();
-                });
+                    victim = std::find_if(ap.hand.begin(), ap.hand.end(),
+                                          [](const Card& c) { return !c.m_is_staged; });
+                    if (victim == ap.hand.end()) { break; }
+                }
+                if (!MaybeReplaceGraveyardWithLibraryShuffle(state, state.active_player_index, *victim))
+                {
+                    ap.graveyard.push_back(*victim);
+                }
+                ap.hand.erase(victim);
+            }
         }
-        // Both selectors may still land on a staged card (SelectCleanupDiscardIndex sheds one as a
-        // last resort when every non-staged card is a required piece; max_element ignores the flag).
-        // The count above proves a non-staged card exists, so fall back to the first one rather than
-        // shedding something the real cleanup could not reach.
-        if (s_staged_exempt && victim != ap.hand.end() && victim->m_is_staged)
-        {
-            victim = std::find_if(ap.hand.begin(), ap.hand.end(),
-                                  [](const Card& c) { return !c.m_is_staged; });
-            if (victim == ap.hand.end()) { break; }
-        }
-        // Progenitus: shuffled into its owner's library instead of the graveyard (replacement) --
-        // lockstep with GameEngine::CleanupStep's identical check.
-        if (!MaybeReplaceGraveyardWithLibraryShuffle(state, state.active_player_index, *victim))
-        {
-            ap.graveyard.push_back(*victim);
-        }
-        ap.hand.erase(victim);
     }
 
     // Reset per-turn damage marks, "until end of turn" power/toughness boosts, and

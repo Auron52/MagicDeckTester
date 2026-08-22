@@ -370,6 +370,47 @@ std::vector<int> DecisionProvider::CleanupDiscardCandidates(
     return CleanupDiscardRanking(s, required_pieces);
 }
 
+// DIAGNOSTIC ONLY (MTG_DISCARD_SHED_VERIFY, see CleanupDiscardShed): the per-shed loop the rollout
+// cleanup used to run -- ask, shed, rebuild the hand, ask again -- re-derived on a scratch copy of
+// the state so the one-consultation answer can be checked against it. Reported as card NAMES: the
+// loop's own indices shift under it as cards are erased, which is exactly the bookkeeping this
+// retires. Off by default and never on a shipped path; it copies a GameState and re-ranks per shed,
+// which is strictly more work than either form.
+std::vector<std::string> CleanupDiscardShedLoopReference(
+    const GameState& state, const std::vector<std::string>* required_pieces,
+    int count, int pinned_first, bool invert, bool staged_exempt)
+{
+    std::vector<std::string> out;
+    GameState copy = state;
+    Player& ap = copy.players[copy.active_player_index];
+    int pin = pinned_first;
+    for (int k = 0; k < count; ++k)
+    {
+        const std::vector<int> cd =
+            ResolveProvider(copy).CleanupDiscardCandidates(copy, required_pieces);
+        if (cd.empty()) { break; }
+        std::size_t pick = 0;
+        if (pin > 0)     { pick = std::min(static_cast<std::size_t>(pin), cd.size() - 1); }
+        else if (invert) { pick = cd.size() - 1; }
+        pin = -1;
+        int idx = cd[pick];
+        const int hand_n = static_cast<int>(ap.hand.size());
+        if (staged_exempt && idx >= 0 && idx < hand_n && ap.hand[idx].m_is_staged)
+        {
+            idx = -1;
+            for (int j = 0; j < hand_n; ++j)
+            { if (!ap.hand[j].m_is_staged) { idx = j; break; } }
+            if (idx < 0) { break; }
+        }
+        if (idx < 0 || idx >= hand_n) { break; }
+        out.push_back(ap.hand[static_cast<std::size_t>(idx)].m_name.str());
+        if (!MaybeReplaceGraveyardWithLibraryShuffle(copy, copy.active_player_index, ap.hand[idx]))
+        { ap.graveyard.push_back(ap.hand[idx]); }
+        ap.hand.erase(ap.hand.begin() + idx);
+    }
+    return out;
+}
+
 // The BASE Goblin Lackey put rule (see DecisionProvider::CombatCheatCandidates). Highest MV, ties
 // by power, then by lowest card number -- exactly the ordering FireCombatDamageCheatIntoPlay
 // computed inline before the hook existed, so index 0 reproduces the historical single pick and
@@ -3139,6 +3180,15 @@ static ThDiscard ThDiscardVariant()
 // cleanups, and (x each trial turn's full-depth ladder) one bounded game cost hours
 // (docs/design/th-d5-five-hour-game.md). The legacy Base variant keeps the full fan: it exists to
 // A/B the ranking rules, and its historical meaning includes the searched pass choosing.
+// The SHED ORDER is the untruncated ranking (see DecisionProvider::CleanupDiscardShedOrder): the
+// top-1 narrowing below is about the searched FAN, and a 15-25-card Treasure Hunt cleanup routinely
+// sheds eight cards -- every one of which this deck has an opinion about.
+std::vector<int> TreasureHuntProvider::CleanupDiscardShedOrder(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    return CleanupDiscardFullRanking(s, required_pieces);
+}
+
 std::vector<int> TreasureHuntProvider::CleanupDiscardCandidates(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
@@ -7321,7 +7371,26 @@ static int Fc5ScalingIdealRank(const GameState& s)
 // skips the executor's trial fan; the one-option default is the USER's standing rule). The
 // order is routed through CleanupDiscardRankingWithOrder so the staged-card and required-piece
 // protections stay engine-enforced. MTG_5C_BUCKET_DISCARD=0 restores the generic ranking.
+// Split in two (see DecisionProvider::CleanupDiscardShedOrder): the bucket rule produces a whole
+// shed ORDER, and the one-index narrowing that follows it is about the executor's searched fan.
+// A cleanup shedding three cards reads three entries off the order; it used to get one, shed it,
+// and re-consult on a rebuilt hand.
 std::vector<int> FiveColourProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    static const bool s_bucket = EnvOn("MTG_5C_BUCKET_DISCARD", true);
+    if (!s_bucket) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    std::vector<int> ranked = CleanupDiscardShedOrder(s, required_pieces);
+    // MTG_5C_DISCARD_FAN=1: TESTING-ONLY (discard-analysis evidence runs) -- return the full
+    // shed order so the executor's searched pass trials every candidate and the trace grades
+    // the bucket pick against the labels (a single-entry return skips the trace entirely,
+    // AIEngine::ChooseDiscard). Never set in play; the shipped return is ONE index.
+    static const bool s_fan = EnvOn("MTG_5C_DISCARD_FAN");
+    if (!s_fan && ranked.size() > 1) { ranked.resize(1); }
+    return ranked;
+}
+
+std::vector<int> FiveColourProvider::CleanupDiscardShedOrder(
     const GameState& s, const std::vector<std::string>* required_pieces) const
 {
     static const bool s_bucket = EnvOn("MTG_5C_BUCKET_DISCARD", true);
@@ -7550,14 +7619,7 @@ std::vector<int> FiveColourProvider::CleanupDiscardCandidates(
     // Shed order = keep priority reversed; unbucketed leftovers (staged cards were skipped and
     // are re-filtered by the shared ranking anyway) fall to the tiers via omission.
     std::vector<int> shed(keep.rbegin(), keep.rend());
-    std::vector<int> ranked = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
-    // MTG_5C_DISCARD_FAN=1: TESTING-ONLY (discard-analysis evidence runs) -- return the full
-    // shed order so the executor's searched pass trials every candidate and the trace grades
-    // the bucket pick against the labels (a single-entry return skips the trace entirely,
-    // AIEngine::ChooseDiscard). Never set in play; the shipped return is ONE index.
-    static const bool s_fan = EnvOn("MTG_5C_DISCARD_FAN");
-    if (!s_fan && ranked.size() > 1) { ranked.resize(1); }
-    return ranked;
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
 int FiveColourProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
