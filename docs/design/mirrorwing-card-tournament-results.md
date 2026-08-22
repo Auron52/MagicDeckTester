@@ -729,3 +729,83 @@ Plus the fixed 49: 4 Mirrorwing Dragon, 4 Zada, 4 Goblin Instigator, 4 Ignoble H
 - **Creature-creation count is held at 3 throughout** and has never been contested.
 - **The trample benefit is unquantified.** Bounded above by the ~40% of wins that cast no Fists of
   Flame (1b-0), but never measured, because a blocking opponent is out of scope for a goldfish.
+
+---
+
+## 8. RE-CHECK ON TODAY'S ENGINE (2026-08-22) — the winner holds, the trick slot does not
+
+The provenance note at the top says these numbers are comparable to each other and to nothing
+outside them, and that a later engine change means re-running would not reproduce the absolute
+means. This section is that re-run, for the "both equally" winner and its two rivals.
+
+**Method — identical apparatus, identical games, only the engine differs.** Seed `1200000`,
+games `0..9999` (the same 10,000 games every grid cell above is computed on — verified by
+reproducing runs A/B/C's per-game `[win]` stream to the digit), `max_turns 8`, both life totals,
+the same aliased maps A/B/C, the same profile and value model, ladder mode, `d5/b20 source=default`.
+Coverage re-verified exactly per arm (no arm falls through to the heuristic keep). One pooled batch,
+28 jobs, 280,000 games, 32/32 workers throughout: `logs/tourney/recheck/`
+(`manifest.json`, `recheck.out/err`, `analyse.py`). Old engine = src tree `514e2539`;
+new = `4b6092df` (canon-simkey default-ON, the payment-cache work, the main-phase changes).
+
+**The bridge still chains.** `4 Anger / 2 Scale / 2 Expedite` is byte-identical under maps A, B and
+C on the new engine as well (same digest), so cross-map comparison remains legal.
+
+### Every list got faster, but nowhere near uniformly
+
+| shape | trick | L20 old→new | L30 old→new |
+|---|---|---|---|
+| `2 O + 2 D + 4 E` | 3 Twin | 5.0595 → 5.0534 (−0.006) | 5.4288 → 5.4273 (−0.002) |
+| `2 O + 2 D + 4 E` | 3 Lib | 5.0459 → **5.0198** (−0.026) | 5.4346 → **5.3940** (−0.041) |
+| `2 O + 4 D + 2 E` | 3 Lib | 5.0259 → **5.0009** (−0.025) | 5.4660 → 5.4200 (−0.046) |
+| `4 O + 2 D + 2 E` | 3 Twin | 5.0551 → 5.0375 (−0.018) | 5.4408 → 5.4264 (−0.014) |
+
+The gain tracks **Libation count**, not shape: a 3-Twinflame list gained 0.002–0.018t, a
+3-Libation list 0.025–0.046t.
+
+### The winner survives, and its 30-life case is stronger
+
+Paired, new engine, negative = `2 O + 2 D + 4 E` @ 3 Libation is faster:
+
+| rival | L20 old → new | L30 old → new |
+|---|---|---|
+| `2 O + 4 D + 2 E` @ 3 Lib | +0.0200 → **+0.0189** (t=+2.7) | −0.0314 → −0.0260 (t=−3.0) |
+| `4 O + 2 D + 2 E` @ 3 Twin | −0.0092 → −0.0177 (t=−2.7) | −0.0062 → **−0.0324** (t=−4.1) |
+| `4 O + 2 D + 2 E` @ 2 Twin/1 Lib | −0.0044 → −0.0091 | −0.0100 → −0.0268 (t=−3.6) |
+
+Two-life-total sum: `2 O + 2 D + 4 E` @ 3 Lib is **10.4138**, first; `2 O + 4 D + 2 E` @ 3 Lib is
+10.4209, second (+0.0071, was +0.0114). The 20-life loss to 4 Draught reproduces almost exactly
+(+0.0200 → +0.0189), so **section 5e's verdict stands: 4 Draught at 20, this list for both.**
+
+### What DID change: "trick free" is dead, and 3 Twinflame's 30-life win has flipped
+
+`3 Libation − 3 Twinflame` at 30 life, paired, on four independent arms:
+
+| arm | old | new | se | t |
+|---|---:|---:|---:|---:|
+| `2 O + 2 D + 4 E` (3 Lib vs 3 Twin) | +0.0058 | **−0.0333** | 0.0047 | −7.1 |
+| `2 O + 4 D + 2 E` (3 Lib vs 2 Twin/1 Lib) | +0.0097 | **−0.0119** | 0.0037 | −3.2 |
+| `4 O + 2 D + 2 E` (2 Twin/1 Lib vs 3 Twin) | +0.0038 | **−0.0056** | 0.0029 | −1.9 |
+| **bridge** `4 Anger / 2 Scale / 2 Expedite` | +0.0090 | **−0.0269** | 0.0049 | −5.5 |
+
+All four flip sign. The bridge flipping matters most: it holds **none** of the contested draw/pump
+cards, so this is not a property of any shape under test — the engine now plays Libation better
+than Twinflame at 30 life, full stop. At 20 life Libation's existing lead simply widens
+(−0.0136 → −0.0336 on the winner).
+
+Consequently the trick slot is **no longer a free choice** for this shape. The old sum span across
+the four splits was 0.0078 (which is what "trick free" meant); it is now 0.067, monotone toward
+Libation: 3 Lib 10.4138, 1 Twin/2 Lib 10.4326, 2 Twin/1 Lib 10.4513, 3 Twin 10.4807. The
+recommendation therefore sharpens rather than changes: **`2 Oracle · 2 Draught · 4 Entrance ·
+3 Libation`**, and 1b-0's unmodelled-trample tie-break is no longer needed to pick the trick slot.
+
+**Reading it.** Section 5e's dose curve already had the 3-Libation penalty at 30 life halving with
+each Entrance (+0.0157 → +0.0076 → +0.0038) — Twinflame's value being haste, which Entrance also
+supplies. The new engine pushes that same curve past zero everywhere, including at Entrance 2 and
+on a list with no Entrance beyond the shipped 2. The plausible mechanism is that the search is
+*effectively deeper at the same deterministic budget* (canon-simkey collapses play-order
+permutations, so more distinct states fit in the same work-unit budget), and Libation's payoff —
+a 1/1 Citizen per copy, i.e. board that pays off a turn later — is exactly the kind of delayed
+line a shallower search under-values while Twinflame's hasty copies pay immediately.
+**This is a hypothesis, not a measurement:** the engine moved by several commits at once
+(canon, payment cache, main-phase). Isolating it needs a `MTG_CANON_SIMKEY=0` arm on the same
+games, which is ~20 minutes and has not been run.
