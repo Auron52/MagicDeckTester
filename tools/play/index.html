@@ -2807,7 +2807,7 @@ async function checkReference() {
 async function loadDecks() {
   const j=await (await fetch('/api/decks')).json();
   $('deck').innerHTML=j.decks.map(d=>`<option value="${esc(d.deck)}"${d.hasProfile?'':' disabled'}>${esc(d.name)}${d.hasProfile?'':' (no profile)'}</option>`).join('');
-  if(!j.binExists) showError('Simulator binary not found — build Release first:\n  cmake --build build --config Release');
+  if(!j.binExists) showError('Simulator binary not found — build it first:\n  Linux/macOS:  ./build.sh\n  Windows:      build.cmd\n\nOr start the viewer with ./play.sh (play.cmd on Windows), which builds it for you.');
   checkReference();   // reflect the initial deck/seed/game# on load
 }
 

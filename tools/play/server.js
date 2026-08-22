@@ -26,7 +26,22 @@ const { spawnSync, spawn } = require('child_process');
 const ROOT = path.resolve(__dirname, '..', '..');          // repo root
 const DECKS_DIR = path.join(ROOT, 'decks');
 const CARDS_JSON = path.join(ROOT, 'src', 'cards', 'data', 'cards.json');
-const BIN = process.env.MTG_BIN || path.join(ROOT, 'build', 'Release', 'mtg');
+// Engine binary. Honours $MTG_BIN, else probes the multi-config layout for BOTH names:
+// build/Release/mtg on Linux/macOS, build/Release/mtg.exe on Windows/MSVC. This mirrors the
+// two-candidate probe every other entry point already does (test/lib/harness.sh:find_engine,
+// scripts/analyze_deck.py's EXE_SUFFIX, scripts/play_invariants.py) -- this file was the one
+// place that hard-coded the Unix name, so the viewer could not find the engine on Windows at
+// all. Falls back to the plain name so the "MISSING" message below names a sensible path.
+function resolveBin() {
+  if (process.env.MTG_BIN) return process.env.MTG_BIN;
+  const dir = path.join(ROOT, 'build', 'Release');
+  for (const name of ['mtg', 'mtg.exe']) {
+    const p = path.join(dir, name);
+    if (fs.existsSync(p)) return p;
+  }
+  return path.join(dir, process.platform === 'win32' ? 'mtg.exe' : 'mtg');
+}
+const BIN = resolveBin();
 const PORT = parseInt(process.env.PORT || '8080', 10);
 // Bind host: defaults to loopback (single-user local tool), but PLAY_HOST=0.0.0.0 lets a
 // devcontainer/WSL forward the port to the host browser (a 127.0.0.1 bind inside a container
@@ -449,9 +464,18 @@ const server = http.createServer(async (req, res) => {
 // serve the exact same protocol the browser talks — do NOT listen (no port bind, no console spam).
 if (require.main === module) {
   server.listen(PORT, HOST, () => {
+    const buildCmd = process.platform === 'win32' ? 'build.cmd' : './build.sh';
+    const found = fs.existsSync(BIN);
     console.log(`MagicDeckTester play GUI: http://localhost:${PORT}  (bound ${HOST}:${PORT})`);
-    console.log(`  binary: ${BIN} ${fs.existsSync(BIN) ? '(found)' : '(MISSING — build Release first)'}`);
+    console.log(`  binary: ${BIN} ${found ? '(found)' : '(MISSING)'}`);
     console.log(`  decks:  ${DECKS_DIR}`);
+    if (!found) {
+      // Name the platform's build command rather than a bare "build Release first" -- this is
+      // the first thing a new user hits, and the answer differs per OS.
+      console.log('');
+      console.log(`  The engine is not built yet. Run ${buildCmd} from the repo root, then restart.`);
+      console.log(`  (Or use ${process.platform === 'win32' ? 'play.cmd' : './play.sh'}, which builds it for you.)`);
+    }
   });
 }
 

@@ -46,7 +46,12 @@ const LB = require(path.join(ROOT, 'tools', 'play', 'linebuild.js'));
 const REFROOT = path.join(ROOT, 'references');
 const DECKS = path.join(ROOT, 'decks');
 const CARDS = path.join(ROOT, 'src', 'cards', 'data', 'cards.json');
-const BIN = process.env.MTG_BIN || path.join(ROOT, 'build', 'Release', 'mtg');
+// Probe BOTH names so this check runs on Windows too: build/Release/mtg on Linux/macOS,
+// build/Release/mtg.exe on Windows/MSVC (same two-candidate probe as tools/play/server.js
+// and test/lib/harness.sh).
+const BIN = process.env.MTG_BIN
+  || ['mtg', 'mtg.exe'].map(n => path.join(ROOT, 'build', 'Release', n)).find(p => fs.existsSync(p))
+  || path.join(ROOT, 'build', 'Release', process.platform === 'win32' ? 'mtg.exe' : 'mtg');
 const BASELINE = path.join(__dirname, 'viewer_validate_baseline.txt');
 const args = process.argv.slice(2);
 const UPDATE = args.includes('--update-baseline');
