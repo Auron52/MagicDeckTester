@@ -16,6 +16,7 @@
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
+#include "core/EnvFlags.h"            // EnvPut -- portable setenv (MSVC has only _putenv_s)
 #include "core/HeuristicDefaults.h"   // ResolveHeuristicDefaultsPath: exe-relative path walk
 
 #include <string>
@@ -251,7 +252,7 @@ TEST_CASE("colour-exact: two white pips off one white source is rejected, one is
 {
     EnsureCards();
     // The lever is read once into a function-local static; set it before the first call.
-    setenv("MTG_COLOR_EXACT", "1", 1);
+    EnvPut("MTG_COLOR_EXACT", "1", /*overwrite=*/true);
     const GameState board = MakeBoard({"Godless Shrine", "Grove of the Burnwillows",
                                        "Ignoble Hierarch", "Forest"});
 
@@ -271,7 +272,7 @@ TEST_CASE("colour-exact: two white pips off one white source is rejected, one is
 TEST_CASE("colour-exact: hybrid pips are un-baked, not demanded in their first colour")
 {
     EnsureCards();
-    setenv("MTG_COLOR_EXACT", "1", 1);
+    EnvPut("MTG_COLOR_EXACT", "1", /*overwrite=*/true);
     // {B/G}{B/G} with no black source at all: payable green, and the gate must say so. Reading the
     // flat pips alone would demand BLACK twice and reject it (the pip is stored in its first colour).
     const GameState board = MakeBoard({"Breeding Pool", "Forest"});
@@ -284,7 +285,7 @@ TEST_CASE("colour-exact: hybrid pips are un-baked, not demanded in their first c
 TEST_CASE("colour-exact: a filter land is credited its GROSS yield, in its own colours only")
 {
     EnsureCards();
-    setenv("MTG_COLOR_EXACT", "1", 1);
+    EnvPut("MTG_COLOR_EXACT", "1", /*overwrite=*/true);
     // Cascade Bluffs turns one {U} into {R}{R}. The flat pool books that as one net wild, which loses
     // the fact that it can make two red -- and also the fact that it can never make WHITE. Credit the
     // gross in its own colours: permissive on count (so a real filter chain is never rejected), exact
@@ -303,7 +304,7 @@ TEST_CASE("colour-exact: a filter land is credited its GROSS yield, in its own c
 TEST_CASE("colour-exact: the NON-CREATURE pool is gated too (creature-only sources dropped)")
 {
     EnsureCards();
-    setenv("MTG_COLOR_EXACT", "1", 1);
+    EnvPut("MTG_COLOR_EXACT", "1", /*overwrite=*/true);
     // Ancient Ziggurat makes any colour but only for creature spells. Two white pips on a NONCREATURE
     // spell may therefore draw on Godless Shrine alone, even though the full pool holds two
     // white-capable sources -- the phantom the flat eff_nc.CanPay admits (wild 2 covers deficit 2).
