@@ -1083,3 +1083,167 @@ Searched tier, 8000 held-out games, vs ground truth (negative = better):
 This retires 21q/21r's finding that "AL gets no benefit": it did not, because two rule defects were
 eating the gain. With both root-caused and fixed, Anti-Lifegain is now measurably BETTER than
 baseline on held-out seeds (6 keys better, 2 worse), not merely at parity.
+
+## 2026-08-22u: THE RESIDUAL IS RECOVERABLE -- every remaining worse game closes with more
+## budget or depth; the stack is ADOPTED (and AL_CONDEMN's "inert-at-cost" verdict is RETRACTED)
+
+USER: "Are the remaining cases unrecoverable? If they are I would like to fix them. Otherwise,
+let's rebaseline and push when we are done. (unrecoverable with unlimited budget or depth that is)"
+
+The right bar, and a sharper one than 21q's "nothing becomes unwon". These levers are PRUNES, so a
+prune that deletes the winning line is unreachable at ANY budget -- that is what "unrecoverable"
+means here, and it would be a defect to fix. A gap that closes when the search gets more work is
+budget churn, not a deleted line.
+
+### ANSWER: NO. All eight recover.
+
+Residual defined PER GAME (not per key): full stack vs baseline, coupled, the 8000-game held-out AL
+ensemble -- **6 worse / 11 better / net -5 turns**, matching 21t's key-level -5.00 exactly. Every
+worse game is +1 turn, none becomes unwon, and one BASELINE LOSS is converted (al_d5_s5005 gi395,
+unwon -> T8). Plus the regression tier's 2 searched-slower rows. Both arms escalated at EQUAL config:
+
+| game | production gap | closes at |
+|---|---|---|
+| al_d3_s4004 gi27  | d3/b10 4->5 | d3/**b20** (2x budget), both 4 |
+| al_d3_s5005 gi52  | d3/b10 5->6 | d3/**b400** (40x), both 5 |
+| al_d5_s7007 gi179 | d5/b20 5->6 | d5/**b100**, both 5 |
+| al_d5_s7007 gi216 | d5/b20 4->5 | d5/**b100**, both 4 |
+| al_d5_s7007 gi731 | d5/b20 4->5 | d5/**b100**, both 4 |
+| al_d5_s7007 gi904 | d5/b20 4->5 | d5/**b100**, both 4 |
+| antilife_regression_d5_s2002 gi142 | d5/b20 5->7 | d5/**b50** (2.5x), both 5 |
+| fivecolour_regression_d5_s2002 gi28 | d6/b20 5->6 | d6/**b50** (2.5x), both 5 |
+
+At d6/b400 and d8/b2000 **every pair is identical**. Seven of the eight close at 2-5x budget at the
+PRODUCTION DEPTH, so this is budget, not horizon. The split does not delete a line the search cannot
+get back; it re-orders which lines the budget reaches first. Nothing here is a defect to fix.
+
+### METHOD TRAP: reproduce a harness row at its RESOLVED depth, not at the case label
+The case named `fivecolour_regression_d5_*` actually runs at **depth 6**. The harness manifest
+(`test/logs/<mode>/manifest.json`) omits `depth` entirely and pins only `budget_ms`, so BatchRunner
+resolves the depth from the deck's `value_play` block -- and FiveColour is the one deck that asks for
+6 (`[play] fivecolour_regression_d5_s2002 depth=6 budget=20ms source=value_play(depth)+cli(budget)`).
+The first repro forced `--depth 5 --ignore-play-profile` and got 5/5 on BOTH arms, which reads as
+"the reported row does not reproduce" when it is simply a DIFFERENT GAME (different depth, and the
+profile's play block switched off). Always read the run's `[play]` line, or the harness manifest,
+before building a single-game repro. Same family as the explain_game.py trap (it diffs the CURRENT
+binary, so flip defaults before auditing).
+
+### AL_CONDEMN: the "MEASURED INERT-AT-COST -- NOT adopted" verdict is RETRACTED
+Adoption forced the question of whether condemnation earns its place, since the code comment said it
+was inert at +14-16% compute. Measured directly, by dropping it from the adopted stack:
+
+| arm (8000 held-out AL games, coupled, vs baseline) | worse | better | net |
+|---|---|---|---|
+| phase + DAMAGE_BOTH + dork (**no condemnation**) | 10 | 11 | **0** |
+| full stack (+ condemn + both exemptions) | **6** | 11 | **-5** |
+
+Condemnation is worth -5 turns and 4 fewer worse games -- one of them a **win turning unwon**
+(al_d5_s7007 gi10, T7 -> loss, which only the condemned configuration avoids). The old "inert"
+reading was an artifact of measuring a BROKEN condemnation: taken before the pass-is-not-a-decline
+and no-enabler-live gaps were found, it averaged a rule that was deleting real lines and gaining
+real ones into a null. **A lever measured while it is buggy has not been measured.**
+
+### ADOPTED (USER, 2026-08-22) -- defaults flipped ON, each keeping its `=0` off switch
+`MTG_AL_PHASE`, `MTG_AL_CONDEMN`, `MTG_CONDEMN_PASS_EXEMPT`, `MTG_CONDEMN_ENABLER_EXEMPT`,
+`MTG_PHASE_DAMAGE_BOTH`, `MTG_DORK_ATK_SEARCH` (with `MTG_DORK_ATK_HOLD_DIR` already default-on
+inside it). NOT adopted, unchanged: `MTG_TAP_ATTACKER_RUNG` (21r, held-out net-zero and it eats the
+dork search's FiveColour gain), `MTG_AL_SSM`, `MTG_AL_BP_CONDEMN`, `MTG_AL_PHASE_ROOT`.
+
+Reversibility gates: with the defaults flipped, all six forced `=0` **byte-reproduces the baseline**
+run over 8000 games, and the defaults-on binary **byte-reproduces the env-forced full stack**.
+
+### PERF -- the real cost, and 21q's "~+8%" is SUPERSEDED
+Single-thread-equivalent job ms on a quiet box (median of 3 alternating runs). 21q's +8% was an
+AL-only measurement on a much lighter config; at the suite's own budgets the cost is bigger:
+
+| cell | OFF | ON | delta |
+|---|---|---|---|
+| al_d3 (300g, d3 b10) | 17,956 | 20,408 | +13.7% |
+| al_d5 (250g, d5 b20) | 8,217 | 12,967 | +57.8% |
+| fc_d3 (200g, d3 b10) | 193,601 | 197,215 | +1.9% |
+| fc_d5 (100g, d6 b20) | 112,019 | 162,613 | +45.2% |
+| **total** | 331,793 | 394,025 | **+18.8%** |
+
+Per-lever decomposition (single lever vs all-off, same jobs):
+
+| lever | al_d5 | fc_d5 |
+|---|---|---|
+| DORK_ATK_SEARCH | +2% (digest UNCHANGED) | +19% |
+| PHASE_DAMAGE_BOTH | +17% | +2% (digest UNCHANGED) |
+| CONDEMN exemptions | inert (digest unchanged) | +22% |
+| AL_PHASE+CONDEMN+exemptions | +30% | inert |
+| all six | +66% | +46% |
+
+NOISE FLOOR: the exemptions are provably inert on AL (identical digest) yet measured +7%, so read
+anything under ~+/-7% as noise. Two things worth stating plainly:
+* **DAMAGE_BOTH is nearly free on FiveColour (+2%, digest unchanged at d6)** -- the generic lever
+  whose cross-deck cost was the open worry turns out to cost the deck that ships the split nothing.
+* **The exemptions cost FiveColour ~22% for a metric-neutral change.** That is the price of the
+  search-primary bar, not a regression: an exemption WIDENS the candidate set (it un-condemns), so
+  it buys rule correctness with compute rather than with turns.
+
+### 21u addendum: the SMOKE tier's three slower rows also recover -- 11 of 11 across all tiers
+Smoke (train seeds) with the adopted defaults: 4 configs changed, searched **3 slower / 2 faster**;
+scenarios 14/14; reference reproducibility **0 play-drift / 0 shuffle-dead / 0 enum-gap / 0
+mull-drift / 0 contract-fail** over 208 refs. Regression: 8 configs changed, searched **2 slower /
+9 faster**, d0 untouched. Escalating the three smoke rows (both arms, equal config):
+
+| game | production gap | closes at | class |
+|---|---|---|---|
+| fivecolour_smoke_d3_s1001 gi124 | d3/b10 7->8 | d3/**b20** (2x) | budget churn (draws IDENTICAL -- a real line change the search fixes with 2x work) |
+| antilife_smoke_d5_s1001 gi70 | d5/b20 4->5 | d5/**b50** (2.5x) | budget churn |
+| antilife_smoke_d3_s1001 gi139 | d3/b10 5->6 | **d6/b400** -- NOT at d3/b400 (40x) | fetch variance: DEPTH-limited, not budget-limited |
+
+gi139 is the one row that budget alone cannot fix, and it is the land/fetch class from 21t: the
+split's restricted m1 set changes the folded land, the fetch reshuffles, and the two arms play
+PHYSICALLY DIFFERENT games from T3 -- no amount of budget at d3 re-converges them, but a horizon
+deep enough to value the land choice does. Still recoverable under the USER's bar (unlimited budget
+**or depth**), and still not a deleted line.
+
+**Tally across all three tiers: 11 residual worse games, 11 recover.** Nine at 2-5x budget at the
+production depth, one at 40x budget (al_d3_s5005 gi52), one only with more depth (gi139).
+
+## 2026-08-22v: OVERNIGHT HELD-OUT GATE -- the stack validates cross-deck, and the one row that
+## does not close is a MULLIGAN divergence, not a search failure
+
+Full overnight (all decks, disjoint held-out seeds) with the adopted defaults. Aggregated PER GAME
+against the committed gt_logs, loss-penalized:
+
+| deck | tier | games | net turns | worse | better |
+|---|---|---|---|---|---|
+| antilife | d3 | 4000 | **-5** | 2 | 7 |
+| antilife | d5 | 4000 | 0 | 4 | 4 |
+| fivecolour | d3 | 1600 | **-17** | 4 | 21 |
+| fivecolour | d5 | 1200 | **-5** | 9 | 13 |
+| **searched total** | | **73600** | **-27** | **19** | **45** |
+| d0 (greedy) | | 96000 | 0 | 0 | 0 |
+
+**ZERO new losses** (no win becomes unwon anywhere). 16 of 144 configs changed.
+
+### The "generic" levers turn out to be scoped by construction
+Every other deck -- hinata, burn, auras, goblins, knights, slivers, treasure hunt, dragonstorm,
+creature_giving -- is **byte-identical**. MTG_PHASE_DAMAGE_BOTH lives in `ClassifyMainPhase`, which
+only runs for a provider that opts into `ClassifiesMainPhases()`, and after this adoption that is
+exactly two decks (AL and FiveColour). The cross-deck risk that made DAMAGE_BOTH the last open
+worry does not exist: the classifier is unreachable for a deck that does not ship the split. d0 is
+untouched for the same structural reason -- every adopted lever is inside the search.
+
+### Residual: 24 rows examined across all three tiers, 22 close
+Escalating both arms at equal config (budget 1x/2x/5x/20x, then depth 5/6/8):
+* **15 of the overnight's 19 close on BUDGET ALONE** -- 13 at 2x, one at 5x, one at 20x.
+* `fivecolour_overnight_d3_s5005 gi301` (fetch reshuffle) closes on **depth** (d5/b100), not budget.
+* `fivecolour_overnight_d5_s6006 gi196` (like-for-like line change) closes at **d8/b2000**.
+* **`fivecolour gi112` (seed 5005, appearing at both d3 and d5) NEVER closes** -- 5/6 at d5, d6 and
+  d8, at any budget.
+
+### Why gi112 is not a counterexample to "recoverable"
+Its explain says **KEPT HANDS DIFFER**: the mulligan/bottom decision diverged, so the two arms are
+holding different opening hands and playing DIFFERENT PHYSICAL GAMES from turn one. There is no
+common line for a deeper search to find, which is why no budget and no depth converges it. This is
+the same class as the fetch-reshuffle rows, one step earlier in the game: the keep/bottom lookahead
+simulates PLAY, so changing play changes what it keeps.
+
+That has a follow-through, not a fix: **the per-deck keep models and value leaves for Anti-Lifegain
+and FiveColour were fit under the OLD play behaviour** and are now slightly stale. gi112 is that
+staleness made visible in a single game. Regeneration is the standing item (21q #4); it is work, not
+a blocker, and it is a USER call because it is hours per deck.
