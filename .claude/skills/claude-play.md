@@ -93,8 +93,7 @@ usefully flags anything.
 
 `--claude-play` is gated behind `AIEngine::SetExternalChooser`; with no chooser set the
 normal autonomous engine is unchanged. It drives only the **main phases**; combat and
-cleanup discards stay on the engine heuristics. Build Release first:
-`cmake --build build --config Release`.
+cleanup discards stay on the engine heuristics. Build Release first: `./build.sh`.
 
 ### Stateless-replay protocol
 

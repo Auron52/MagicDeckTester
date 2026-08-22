@@ -38,13 +38,25 @@ reproducible from `(deck, seed, game #, choices)`.
 
 ## Run
 
+From the repo root:
+
 ```bash
-cmake --build build --config Release      # ensure ./build/Release/mtg exists
+./play.sh          # Linux/macOS
+play.cmd           # Windows
+```
+
+That builds the engine if needed, starts the server, and opens <http://localhost:8080>.
+`--no-open` / `-NoOpen` skips the browser launch.
+
+The two steps by hand, if you'd rather:
+
+```bash
+./build.sh                                # build.cmd on Windows -> build/Release/mtg[.exe]
 node tools/play/server.js                 # then open http://localhost:8080
 ```
 
 No dependencies — `server.js` uses only Node built-ins. Env: `PORT` (default 8080),
-`MTG_BIN` (default `./build/Release/mtg`).
+`MTG_BIN` (default: the first of `build/Release/mtg`, `build/Release/mtg.exe` that exists).
 
 Pick a profiled deck, set seed / game # / max-turns, hit **New game**. First you drive the
 **mulligan**: each London attempt shows the 7-card hand as art with **Keep** / **Mulligan** buttons

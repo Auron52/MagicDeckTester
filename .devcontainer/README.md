@@ -22,16 +22,23 @@ On first creation the container will:
 ## Build & run
 
 ```bash
-cmake --build build --config Release          # or Debug
-./build/Release/mtg <deck>.txt --games 500 --seed 1001
-./build/Release/mtg-analyze <deck>.txt --cards-json src/cards/data/cards.json
+./build.sh                                    # always optimized; see CLAUDE.md
+./build/Release/mtg decks/burn/burn.txt --games 500 --seed 1001
+./build/Release/mtg-analyze decks/burn/burn.txt --cards-json src/cards/data/cards.json
 ```
+
+There is deliberately **no Debug (`-O0`) mode** — `Debug` is removed from the generator's
+config list, because an unoptimized binary here is a silent ~10x slowdown. Use
+`./build.sh relwithdebinfo` for a faithful crash stack.
+
+The play viewer runs in the container too (`./play.sh`); VS Code forwards port 8080 to your
+host browser. Card art comes from `api.scryfall.com`, which the firewall allowlists.
 
 The tooling scripts work unchanged inside the container — they auto-detect the
 Linux binary names:
 
 ```bash
-python scripts/analyze_deck.py decks/treasure_hunt.txt --coverage-only
+python scripts/analyze_deck.py decks/treasure_hunt/treasure_hunt.txt --coverage-only
 bash   test/regression.sh --smoke
 ```
 
@@ -46,7 +53,7 @@ Adding or changing cards works fully in the container — the three stages from
 
 1. **Coverage check** — list missing or partially-implemented cards:
    ```bash
-   python scripts/analyze_deck.py <deck>.txt --coverage-only
+   python scripts/analyze_deck.py decks/<name>/<name>.cod --coverage-only
    ```
 2. **Implement / edit** — add or fix entries in `src/cards/data/cards.json` (Claude
    uses `.claude/skills/mtg-rules.md` for correct ability type, timing, targeting).
@@ -62,7 +69,7 @@ Adding or changing cards works fully in the container — the three stages from
    ```
 4. **Analyze** — rebuild and regenerate the deck profile:
    ```bash
-   python scripts/analyze_deck.py <deck>.txt
+   python scripts/analyze_deck.py decks/<name>/<name>.cod
    ```
 
 ## Claude Code in the container
@@ -194,10 +201,10 @@ the event explicitly:
 ```bash
 cmake --build build --config RelWithDebInfo
 perf record -o build/perf.data -e task-clock -F 999 -g --call-graph dwarf \
-  ./build/RelWithDebInfo/mtg decks/<deck>.txt --games 200 --seed 1001
+  ./build/RelWithDebInfo/mtg decks/<name>/<name>.cod --games 200 --seed 1001
 perf report -i build/perf.data   # where CPU time goes, with call stacks
 perf stat -e task-clock,context-switches,cpu-migrations,page-faults \
-  ./build/RelWithDebInfo/mtg decks/<deck>.txt --games 200 --seed 1001
+  ./build/RelWithDebInfo/mtg decks/<name>/<name>.cod --games 200 --seed 1001
 ```
 
 **Write `perf.data` to a container-native path, never the workspace root.** The

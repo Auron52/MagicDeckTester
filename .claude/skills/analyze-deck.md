@@ -279,7 +279,7 @@ Run `--update` (and commit the snapshot) whenever you add/edit cards; the offlin
 
 Once all cards in `missing` and all `gaps` are resolved:
 ```
-cmake --build build --config Release
+./build.sh
 ```
 
 Fix any build errors before proceeding to Stage 4.
