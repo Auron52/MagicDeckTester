@@ -395,3 +395,62 @@ USER play knowledge encoded (rounds 3-4 of the review):
   suite shapes: the odometer already covers the winning plans within any 8 kept groups, and
   the group waves recover dropped tranches when budget allows. Baseline wins; complexity not
   earned. Revisit only if a budget/shape change makes the cap bind harder.
+
+---
+
+## 2026-08-22 — NEW SHIPPING LIST (tournament winner + Game Trail); v1 archived
+
+The shipping list changed (user-directed). `decks/Mirrorwing Dragon/` is now the tournament's
+measured winning suite; the previous Twinflame / Ancestral Anger / Scale the Heights / Expedite
+list is archived intact at `decks/Mirrorwing Dragon/v1-twinflame-anger/` with ALL its fitted
+artifacts (profile, value model, keep table + raw, caches) — they move together because every
+sidecar resolves directory-relative off the profile.
+
+**New list (60):** 4 Mirrorwing Dragon · 4 Zada · 4 Goblin Instigator · 4 Ignoble Hierarch ·
+4 Elvish Mystic · 4 Fists of Flame · 4 Gold Rush · 4 Impolite Entrance · 3 Luxurious Libation ·
+2 Oracle's Restoration · 2 Fortifying Draught · 8 Forest · 4 Game Trail · 3 Sandstone Needle ·
+2 Gruul Turf · 2 Mountain · 2 Rootbound Crag.
+Mana-base delta vs v1: −2 Mountain, −1 Forest, −1 Kazandu Refuge, +4 Game Trail.
+
+### Game Trail — the reprint assumption was WRONG (Stage 2a earns its keep)
+
+First implemented as a copy of Rootbound Crag on the recollection that they are functional
+reprints. **They are not.** Scryfall:
+
+> As this land enters, you may reveal a Mountain or Forest card **from your hand**. If you don't,
+> this land enters tapped. {T}: Add {R} or {G}.
+
+Rootbound Crag checks the BATTLEFIELD ("unless you **control** a Mountain or a Forest"); Game Trail
+checks the HAND. The two diverge in opposite directions at both ends of the curve — Game Trail is
+untapped on T1 off a Forest in hand (likely at 8 Forest) where the Crag is tapped, and tapped on an
+empty late-game hand where the Crag is untapped. Corrected to **Tier 1**, no engine change: the
+mechanic already exists as `etb_untap_reveal_subtypes` (Frostboil Snarl's cycle), which
+`LandWouldEnterTapped` resolves through the shared predicate, so enumeration pricing and the real
+land drop agree, and `LandEntryHasChoice` already surfaces the reveal to the play viewer (bucket A).
+Verified against the committed Scryfall snapshot (`audit_card_fields.py`): oracle text matches
+exactly.
+
+### Pipeline state
+
+| stage | status |
+|---|---|
+| 1 Coverage | **DONE** — 17 cards, 0 missing, every entry `full` |
+| 2 Implement gaps | **DONE** — Game Trail only (Tier 1, above) |
+| 2d-bis Cost/field audit | **DONE** — Game Trail in the snapshot, fields match (some unrelated cards 429'd; pre-existing advisory oracle diffs on Stompy cards are not from this change) |
+| 3 Re-run coverage | **DONE** — clean |
+| 4 Baseline profile | **NEXT** — `python3 scripts/analyze_deck.py "decks/Mirrorwing Dragon/Mirrorwing Dragon.cod" --no-rebuild` |
+| 5 Verify | pending — `python3 scripts/verify_deck.py` gate |
+| value leaf | pending — after 5 converges (`.claude/skills/value-leaf.md`) |
+| mulligan profile | pending — LAST, user-kicked-off (`.claude/skills/mulligan-profile.md`) |
+
+### Wiring notes for whoever resumes
+
+- The new list has **no profile / value model / keep table yet** — that is what Stage 4 onward builds.
+- `test/regression_cases.sh` deliberately still points `mirrorwing` at the **archived v1 list**
+  (user: switch it once the new list has its own artifacts). GT is therefore unchanged and green.
+- The 24 hand-played references were played on v1 and are BOUND to it by
+  `deck_registry.REFERENCE_DECK` — never let them resolve to the new list by slug (verified: they
+  bench against v1 with zero HAND-MISMATCH).
+- `decks/Mirrorwing Trick Suite/` was deleted; its two scenario gates
+  (`libation_x_lands_not_dorks`, `draught_magnet_escalation`) now run on the NEW list, and
+  `anger_draws_feed_fists` on the archived v1 list.

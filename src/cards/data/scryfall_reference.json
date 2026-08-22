@@ -259,7 +259,7 @@
     "cmc": 0.0,
     "keywords": [],
     "mana_cost": "",
-    "oracle_text": "",
+    "oracle_text": "{T}: Add {G}.",
     "power": null,
     "toughness": null,
     "type_line": "Land // Land"
@@ -686,6 +686,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Game Trail": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "As this land enters, you may reveal a Mountain or Forest card from your hand. If you don't, this land enters tapped.\n{T}: Add {R} or {G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Garth One-Eye": {
     "cmc": 5.0,
