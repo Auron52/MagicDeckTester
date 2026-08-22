@@ -91,6 +91,32 @@ rebaseline. Full record: `antilife-main-phase-split.md` 2026-08-22y.
 > ordering knows that a win-turn leaf cannot see -- any conditionally self-harming card can blow up
 > the way Aria of Flame did (§4).
 
+## 3a. What the ROLLOUT site costs the two decks that ship it (measured 2026-08-22)
+
+The obvious follow-up to §3: fivecolour and KittyEquipment both have hook 3 on, which today means
+BOTH sites, so both inherit whatever the rollout site costs. Measured the same way AL was --
+branch-only (`MTG_SSM_BRANCH_ONLY`) vs shipped, per game, paired, one pooled batch of 51,200 games.
+Positive = removing the rollout site is WORSE.
+
+| deck | train d3 | held-out d3 | train d5 | held-out d5 | salts 1/2/3 (d3) | verdict |
+|---|---|---|---|---|---|---|
+| **KittyEquipment** | +0 (0w/0b) | +0 | +0 | +0 | +0 / +0 / +0 | **exactly INERT -- 0 of 9,600 games differ** |
+| **FiveColour** | -1 (4w/5b) | +8 (15w/6b) | -1 | -1 | +8 / +3 / -2 | no signal: +14 turns / 11,500 games, **44 worse : 32 better** (p ~ 0.19), and rows flip sign |
+
+**Neither deck pays AL's cost, and FiveColour's weak direction is the OPPOSITE one** (its rollout
+site, if anything, mildly earns its keep). AL is the special case; leave both decks alone.
+
+Kitty's result is the striking one: the searched m2 fires ~400 times per game there and **never
+changes an outcome** -- consistent with the evidence its adoption rested on (four arms, one digest).
+Perf, single-threaded min of 4 alternating reps: removing it saves Kitty **1.6% at d3 / 0.5% at d5**
+at byte-identical play, i.e. free but not worth a behaviour-affecting hook change on its own.
+FiveColour's perf (-4.5% d3 / +0.8% d5) is NOT a like-for-like read -- its play differs between the
+arms, so the arms are timing different games.
+
+Method note: the FiveColour cells are 500 games each (its games cost 12-26x an AL game), so this has
+less power than AL's 1000-game cells. It is enough to exclude an AL-sized effect (+12 per 3000), not
+enough to call a sub-turn-per-thousand one.
+
 ## 4. The two known instances of that class (both fixed, both prunes)
 
 `TurnSolver.cpp` refuses to EMIT a candidate subset that hands the opponent life with no
@@ -154,10 +180,7 @@ runner was making the same misplay. A new deck may need its own instance of this
   are stale on the merits.
 * **KittyEquipment has no ground-truth rows** in the regression suite despite having hook 3 on.
 * **The 13-turn residual** in §3 is RESOLVED (2026-08-22): it was entirely the rollout site, and the
-  decision site was free. What is now open is the cross-deck version of the same question --
-  **fivecolour and KittyEquipment both ship the ROLLOUT site on**, inheriting whatever it costs them.
-  A first look at fivecolour (branch-only vs shipped, 600 games d3 / 300 games d5) came back -1 turn
-  / 0 turns, i.e. neutral on a thin sample; it deserves a proper measurement before either deck is
-  left as-is.
+  decision site was free. **The cross-deck version is now MEASURED too, and neither other deck pays
+  AL's cost** -- so AL was the special case and no global change is warranted (see §3a).
 * **Hinata's searched-m2 rejection should be re-measured PER SITE** (`MTG_SSM_SITE=1`), not just
   re-measured: its red verdict, like AL's, is a single number over both sites.

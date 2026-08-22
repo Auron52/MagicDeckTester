@@ -1484,6 +1484,15 @@ No GT rebaseline: there is nothing to rebaseline. The perf read is min-of-N for 
 mid-run rep on this box came back 3x slow on BOTH arms with no other process running (WSL2 host
 descheduling), which is the same trap as the "2.1x" contention figure below.
 
+### Cross-deck: the rollout site is NOT generally harmful -- AL is the special case
+Measured immediately after adoption (51,200 games, one pooled batch), branch-only vs shipped:
+**KittyEquipment is exactly INERT** (0 of 9,600 games differ across train, held-out and three salts,
+both depths -- despite the searched m2 firing ~400x per game), and **FiveColour shows no signal**
+(+14 turns / 11,500 games, 44 worse : 32 better, p ~ 0.19, rows flipping sign) with its weak
+direction the OPPOSITE of AL's. So this is not a case for changing the default anywhere else, and
+`SearchesRolloutSecondMain()` correctly stays opt-out rather than becoming the new default. Detail
+in `searched-design-deck-rollout.md` §3a.
+
 ### Cost: the "2.1x slower" figure from the earlier pass was CONTENTION, not the lever
 A multithreaded pooled batch reported ssm_d3 at 140s vs greedy's 67s. Single-threaded on a quiet box
 the same cells are **5556ms vs 5661ms at d3 and 5194 vs 5200 at d5 -- the searched m2 is
