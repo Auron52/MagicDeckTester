@@ -119,21 +119,34 @@ through these counters; doing so is cheap (`MTG_M2_YIELD_STATS=1` on any batch) 
 first task if the question comes up again.
 
 
-## 4. The open question for Monday
+## 4. MONDAY: finish the audit on the other 11 decks
 
-**Is the budget right?** Most decisions can only afford the shallowest scoring rollout. That is
-legitimate under the accepted design, but it caps what the searched-m2 hooks can ever be worth, so
-it is worth knowing whether it is intended. Things worth knowing before changing anything:
+The greedy audit is complete on **antilife, fivecolour, kitty** only. The remaining 11 decks
+(hinata, burn, auras, goblins, knights, slivers, treasure_hunt, dragonstorm, creature_giving,
+mirrorwing, StompySurprise) have not been run through the counters. This is cheap and needs no code
+change — build a batch at each deck's PLAY settings (omit `depth`/`budget_ms` so the profile
+resolves; do NOT set `ignore_play_profile`) and read three stderr lines:
 
-* Is pass 0 genuinely that expensive, or is pass 1 disproportionately so? There is a start gate
-  (`sub_depth > 0` cost-ratio estimate) that SKIPS a pass it predicts will not fit — measure how
-  often the gate is what stops pass 1, versus the budget actually running out.
-* What does the committed-pass histogram look like at 10x / 100x budget? If pass 1+ commits often
-  there, this is purely a budget-allocation story.
-* Is `budget_ms` (VIRTUAL units) sized for this? The decks ship at 20.
+```
+MTG_M2_YIELD_STATS=1 ./build/Release/mtg --batch <manifest>  2>&1 \
+  | grep -aE "GREEDY SITES|EXECUTOR GREEDY|M2 SITE"
+```
 
-**Do not "fix" this by raising the default budget without measuring** — perf is a shipping
-constraint and the adoption bar (below) applies.
+**What a clean deck looks like** (matching the three already audited):
+
+* `EXECUTOR GREEDY Solve(): ... REAL main-phase decisions by depth:  NONE` and
+  `breakpoint-fallback=0` — the executor never decides greedily. **This is the line that matters.**
+* `GREEDY SITES` showing only `s90` (horizon rollout) and `s8` (breakpoint-variant baseline).
+
+**What would be a genuine finding:** any non-zero EXECUTOR count, or a `GREEDY SITES` entry other
+than s8/s90 — i.e. one of breakpoint sites 0,1,2,4,6 falling back, which never happened on the three
+audited decks.
+
+A secondary, lower-priority question if it comes up: most decisions can only afford the shallowest
+scoring rollout (section 2), which is legitimate under the accepted design but caps what the
+per-deck searched-m2 hooks can ever be worth. Worth knowing whether the 20-virtual-ms budget is
+intended before investing more in those hooks. **Do not raise the default budget without measuring
+against the adoption bar below** — perf is a shipping constraint.
 
 ## 5. The adoption bar all of this is measured against
 
