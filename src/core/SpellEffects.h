@@ -4199,6 +4199,34 @@ inline void ApplyUntapCreature(GameState& state, int controller, int source_id,
     }
 }
 
+// ---- WHICH card a NON-CLEANUP discard sheds ----------------------------------------------------
+// Two Minotaur effects discard OUTSIDE the cleanup step: Burning-Fist Minotaur's "{1}{R}, Discard a
+// card:" activation cost and Neheb, the Worthy's combat-damage trigger. Both are real player
+// decisions, so both route through the SAME `discard` decision type the cleanup shed already uses
+// (g_play_discard_chooser) rather than silently taking the heuristic -- the 2c-ter bucket-A case
+// (reuse an existing decision type; nothing new to build).
+//
+// Autonomously the pick is the provider's cleanup-discard ranking, i.e. the deck's own authored
+// discard doctrine, applied to a cost instead of a hand-size shed. The chooser is nulled by
+// RevealLogPause in every search/rollout scope, so the search is byte-identical and the human only
+// sees the decision on a REAL resolution. Returns a hand index, or -1 when the hand is empty.
+inline int ChooseNonCleanupDiscardIndex(const GameState& state, int controller)
+{
+    const Player& ap = state.players[controller];
+    if (ap.hand.empty()) { return -1; }
+    const std::vector<int> rank = ResolveProvider(state).CleanupDiscardCandidates(state, nullptr);
+    int pick = (!rank.empty() && rank.front() >= 0
+                && rank.front() < static_cast<int>(ap.hand.size())) ? rank.front() : 0;
+    if (g_play_discard_chooser)
+    {
+        std::vector<int> idxs(ap.hand.size());
+        for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i) { idxs[i] = i; }
+        const int chosen = (*g_play_discard_chooser)(state, controller, idxs, pick);
+        if (chosen >= 0 && chosen < static_cast<int>(ap.hand.size())) { pick = chosen; }
+    }
+    return pick;
+}
+
 // ---- Main-phase ACTIVATED PUMP (Action::Kind::ActivatePump) -------------------------------------
 // One shared apply for both shapes, called IDENTICALLY from the rollout (TurnSolver's trailing
 // apply pass) and the executor (AIEngine::TakeTurn) so the two worlds stay lockstep.
@@ -4233,11 +4261,8 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
         {
             Player& ap = state.players[controller];
             if (ap.hand.empty()) { break; }                       // unpayable additional cost
-            const std::vector<int> rank =
-                ResolveProvider(state).CleanupDiscardCandidates(state, nullptr);
-            const int hi = (!rank.empty() && rank.front() >= 0
-                            && rank.front() < static_cast<int>(ap.hand.size()))
-                         ? rank.front() : 0;
+            const int hi = ChooseNonCleanupDiscardIndex(state, controller);   // surfaced as `discard`
+            if (hi < 0) { break; }
             const std::string shed = ap.hand[static_cast<std::size_t>(hi)].m_name.str();
             ap.graveyard.push_back(ap.hand[static_cast<std::size_t>(hi)]);
             ap.hand.erase(ap.hand.begin() + hi);

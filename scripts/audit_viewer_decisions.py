@@ -106,6 +106,28 @@ MANIFEST = {
     # (WriteDragonDecisionJson / dragonPanelHtml). Was `main_phase` while the selection was search-only.
     "tutor_to_battlefield":  ("dragon",               truthy),
     "fetch_land_types":      ("main_phase",           truthy),
+    # ---- Minotaur ----
+    # BESTOW (Gnarled Scarhide): casting it as an AURA instead of a creature is a real decision,
+    # and so is WHICH creature the aura enchants. Both are surfaced as main_phase plan VARIANTS
+    # (one bestow variant per legal host, sharing the hand index with the creature cast), exactly
+    # like is_aura's enchant-target sub. Not its own decision type.
+    "bestow_cost":           ("main_phase",           truthy),
+    # Burning-Fist Minotaur "{1}{R}, Discard a card: +2/+0". TWO decisions, both surfaced:
+    # the activation COUNT rides main_phase (Action::Kind::ActivatePump variants, one per K), and
+    # WHICH CARD each activation discards reuses the existing `discard` type
+    # (ChooseNonCleanupDiscardIndex -> g_play_discard_chooser).
+    "firebreathing_discard": ("discard",              truthy),
+    # Neheb, the Worthy "whenever Neheb deals combat damage to a player, each player discards a
+    # card": WHICH card WE shed is a real choice -> the same existing `discard` type.
+    "combat_damage_each_discards": ("discard",        positive),
+    # Sethron "{2}{B/R}: Minotaurs get +1/+0 and gain menace and haste": whether (and how many
+    # times) to activate it BEFORE attacking is a main_phase plan variant (ActivatePump); the
+    # ability itself takes no target.
+    "team_pump_grants_haste": ("main_phase",          truthy),
+    # Slaughter-Priest's "Sacrifice another creature or an enchantment" widens the sac-outlet
+    # victim filter; WHICH permanent dies is the existing `sacrifice` board-click decision.
+    "sac_outlet_allows_enchantment": ("sacrifice",    truthy),
+    "sac_outlet_excludes_self":      ("sacrifice",    truthy),
     # MDFC (Pathway) land: playing it offers a "which face?" choice surfaced as main_phase plan
     # variants (a `face` choose sub, one variant per face) -- not its own decision type.
     "mdfc_back_name":        ("main_phase",           truthy),
@@ -236,6 +258,28 @@ INERT_PARAMS = {
     # main_phase (already mapped), plus its {X} on the chosen_x plan-variant axis.
     "trick_token_power": "token P/T", "trick_token_toughness": "token P/T",
     "trick_token_subtypes": "token subtypes",
+    # ---- Minotaur: automatic triggers / statics / restrictions (no choice) ----
+    # Kragma "whenever a Minotaur you control attacks, it gets +2/+0": an automatic team trigger
+    # applied to every declared attacker; the player picks attackers, not who the trigger hits.
+    "attack_pump_matching_power": "automatic attack trigger, applies to every matching attacker",
+    # Fanatic of Mogis "damage to EACH OPPONENT equal to your devotion to red": no target choice
+    # (one opponent, and 'each opponent' is not a target), and the amount is computed (CR 700.5).
+    "etb_damage_devotion_color": "ETB damage to each opponent, computed from devotion -- no target",
+    # Sethron's token trigger: forced creation, fixed 2/3 Minotaur, no choice of any kind.
+    "etb_token_includes_self": "automatic ETB token trigger (self-inclusive), no choice",
+    # Neheb's hand-size anthem: a continuous static ability. Note the DECISION that drives it --
+    # whether to empty your hand -- lives on the discard/cast choices, which ARE surfaced.
+    "hand_size_anthem_max":   "conditional static anthem, no choice",
+    "hand_size_anthem_power": "conditional static anthem, no choice",
+    "hand_size_anthem_tough": "conditional static anthem, no choice",
+    # Deathbellow Raider "attacks each combat if able": a RESTRICTION -- it REMOVES a choice.
+    "must_attack": "attack restriction (CR 508.1a) -- removes a choice rather than creating one",
+    # Ragemonger's cost reduction: a continuous static applied at cast-cost time.
+    "reduces_subtype_colored_subtype": "static cost reduction, no choice",
+    "reduces_subtype_colored_cost":    "static cost reduction, no choice",
+    # Slaughter-Priest's sacrifice WATCHER: fires automatically off any sacrifice; the choice is
+    # the sacrifice itself (mapped to `sacrifice` above), not the pump.
+    "sacrifice_watch_pump_power": "automatic sacrifice-watch trigger, no choice",
     # automatic triggers / static effects (no choice)
     "affects_all_creatures": "board-wide static, no target",
     "attack_creates_tokens": "automatic attack trigger",

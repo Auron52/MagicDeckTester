@@ -57,7 +57,7 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `bounce` | `g_play_bounce_chooser` (`BounceChooser`) | `SpellEffects.h` ETB bounce | `WriteBounceDecisionJson` | `promptPanelHtml` | board |
 | `sacrifice` | `g_play_sacrifice_chooser` (`BounceChooser`) | sac-land cost **+ creature-sac outlets** (`ChooseSacOutletVictimIndex`, SpellEffects.h) | `WriteBounceDecisionJson` | `promptPanelHtml` | board |
 | `dig` | `g_play_dig_chooser` (`DigChooser`) | `SpellEffects.h` ETB dig | `WriteDigDecisionJson` | `digPanelHtml` | modal |
-| `discard` | `g_play_discard_chooser` (`DiscardChooser`) | cleanup discard | `WriteDiscardDecisionJson` | `discardPanelHtml` | modal |
+| `discard` | `g_play_discard_chooser` (`DiscardChooser`) | cleanup discard; **non-cleanup discards via `ChooseNonCleanupDiscardIndex`** (Burning-Fist Minotaur's `{1}{R}, Discard a card:` activation cost in `ApplyActivatePump`; Neheb, the Worthy's combat-damage trigger in `ResolveCombatDamage`) | `WriteDiscardDecisionJson` | `discardPanelHtml` | modal |
 | `expressive_iteration` | `g_play_ei_chooser` (`EIChooser`) | Expressive Iteration resolution | `WriteEIDecisionJson` | `eiPanelHtml` | modal |
 | `retrace_discard` | `g_play_retrace_chooser` (`RetraceDiscardChooser`) | `ApplyPlan` `apply_one` retrace | `WriteRetraceDiscardDecisionJson` | `retraceDiscardPanelHtml` | modal |
 | `replicate` | `g_play_replicate_chooser` (`ReplicateChooser`) | `ApplyPlan` `apply_one` replicate loop | `WriteReplicateDecisionJson` | `replicatePanelHtml` | modal |

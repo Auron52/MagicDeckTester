@@ -72,8 +72,24 @@ Everything else on all 12 cards is implemented; there are **no Tier 1–3 clause
 
 ## Stage 5 — verification results
 
-(filled in as the run proceeds — see the Verification log at the bottom)
+| Check | Result |
+|---|---|
+| Stage 3 coverage (re-run) | CLEAN — 0 missing, 0 partial-with-gaps |
+| 2d-bis `audit_card_costs.py` | **All mana costs match Scryfall.** All 11 costed Minotaur cards resolved and matched (66 unrelated pre-existing cards hit HTTP 429 rate-limit transients — none of them this deck's) |
+| **Byte-identity for existing decks (smoke)** | **39/39 PASS**, 0 configs changed, 0 searched/d0 play changes |
+| **Byte-identity for existing decks (regression)** | **65/65 PASS**, 0 configs changed, 0 play changes; viewer-protocol references 0 play-drift / 0 enum-gap |
+| 5a nonconv (d3 b10 s2002 ×300, d5 b20 s3003 ×200) | **0 flagged** |
+| 5a fd-diverge (d5 b20 s2002 ×300) | **0 flagged** |
+| 5b multi-depth (500 games, seed 2002) | d0 5.464 → d3 4.996 → d5 4.994 — **monotone**, and a ~T5 kill is the right clock for a Rakdos tribal aggro deck |
+| Devotion arithmetic | Hand-checked on 8 Fanatic casts against red pips — exact every time, including the self-count and same-turn cast ORDER |
 
 ## Verification log
 
 - 2026-08-23: Stage 1 coverage run, 12 missing identified, Scryfall fetch complete.
+- 2026-08-23: all 12 implemented; build + coverage clean; cost audit clean.
+- 2026-08-23: smoke 39/39 and regression 65/65 byte-identical — the shared-code changes
+  (ComputeLordBonus signature, the OnDragonEnters early-out, CanonicalSacVictim widening,
+  EffectiveSpellCost, ApplyAttackSelfPumps, AttackWith, ResolveCombatDamage, PerformFetch)
+  are provably inert for all 13 existing decks.
+- 2026-08-23: 200-game observational sweep confirms Sethron tokens, both ActivatePump shapes,
+  hybrid payment, and the cost reducer all fire in real games.

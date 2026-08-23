@@ -31,6 +31,7 @@ declare -A DECK_FILE=(
   [mirrorwing]="decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.cod"
   [fivecolour]=decks/FiveColour/FiveColour.cod
   [stompy]=decks/StompySurprise/StompySurprise.cod
+  [minotaur]=decks/Minotaur/Minotaur.cod
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
@@ -46,6 +47,7 @@ declare -A DECK_PROF=(
   [mirrorwing]="decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.profile.json"
   [fivecolour]=decks/FiveColour/FiveColour.profile.json
   [stompy]=decks/StompySurprise/StompySurprise.profile.json
+  [minotaur]=decks/Minotaur/Minotaur.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -132,6 +134,13 @@ SMOKE_CASES=(
   "stompy  0 1001 1000 0"
   "stompy  3 1001  150 10"
   "stompy  5 1001   75 20"
+  # minotaur: Rakdos Minotaur tribal aggro (wins ~T5.0 at searched depth; GenericProvider).
+  # Probed single-thread 2026-08-23: d0 ~0.0002 s/game, d3 b10 ~0.39 s/game, d5 b20 ~0.63 s/game
+  # -- between stompy and hinata. Counts mirror slivers/knights smoke sizing, giving two ~95 s
+  # single-thread jobs that pool alongside the existing gate (smoke makespan was ~160 s).
+  "minotaur 0 1001 1000 0"
+  "minotaur 3 1001  250 10"
+  "minotaur 5 1001  150 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -215,6 +224,13 @@ REGRESSION_CASES=(
   "stompy  3 3003  300 10"
   "stompy  5 2002  250 20"
   "stompy  5 3003  250 20"
+  # minotaur: stompy-style two-seed sweep (~9 min ST added at the probed per-game costs; the
+  # longest job, d5 x250, is ~158 s -- well inside the existing regression makespan).
+  "minotaur 0 2002 1000 0"
+  "minotaur 3 2002  300 10"
+  "minotaur 3 3003  300 10"
+  "minotaur 5 2002  250 20"
+  "minotaur 5 3003  250 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -425,4 +441,18 @@ OVERNIGHT_CASES=(
   "stompy  5 5005  500 40"
   "stompy  5 6006  500 40"
   "stompy  5 7007  500 40"
+  # minotaur: stompy-shaped four-seed deep sweep at 2x the gate budgets (d3 b20 / d5 b40).
+  # At the probed costs that is ~4x1000x0.39 s + 4x500x0.63 s ~= 47 min single-thread, pooled.
+  "minotaur 0  4004 2000 0"
+  "minotaur 0  6006 2000 0"
+  "minotaur 0  8008 2000 0"
+  "minotaur 0 10010 2000 0"
+  "minotaur 3 4004 1000 20"
+  "minotaur 3 5005 1000 20"
+  "minotaur 3 6006 1000 20"
+  "minotaur 3 7007 1000 20"
+  "minotaur 5 4004  500 40"
+  "minotaur 5 5005  500 40"
+  "minotaur 5 6006  500 40"
+  "minotaur 5 7007  500 40"
 )
