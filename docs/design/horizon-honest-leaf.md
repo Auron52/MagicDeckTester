@@ -1,6 +1,7 @@
 # The horizon-honest leaf: grading a no-win instead of flattening it
 
-**Status: BUILT, MEASURED, default OFF. Adoption is a USER call (it changes play -> GT rebaseline).**
+**Status: ADOPTED + SHIPPED (b3dab212, 2026-08-23). Default ON, dragonstorm opted out, GT
+rebaselined on all three tiers, CI green both platforms.**
 Origin: USER, 2026-08-22 -- *"I wouldn't change searched m2. However, we could change what we
 evaluate in it."*
 
@@ -233,12 +234,43 @@ without paying those.
 **Before adoption:** a full regression + overnight run, and a GT rebaseline across all three tiers
 (this changes play). Both are outstanding.
 
+## 4a. SHIPPED -- what landed and where (2026-08-23)
+
+| piece | where |
+|---|---|
+| the hook, DEFAULT ON | `DecisionProvider::GradesNoWinLeaf()` |
+| the one opt-out | `DragonstormProvider::GradesNoWinLeaf() -> false` (stored-value deck; see below) |
+| global off-switch | `MTG_LEAF_GRADE_NOWIN=0` (verified byte-identical to the pre-lever baseline) |
+| per-deck check | `scripts/leaf_tiebreak_check.py`, wired into `.claude/skills/analyze-deck.md` step 5c2 as MANDATORY for a new deck |
+| rejected, kept as instruments | `MTG_LEAF_VALUE_RES` (inert -- the hybrid discards the value leaf), `MTG_LEAF_TB_BOARD` / `_TB_PERMS` / `_TB_NONLAND` (all worse than life alone) |
+
+**Validation before the rebaseline** (the USER asked for root-cause first, then overnight):
+
+* Nine regressed games escalated on BOTH arms at +1/+2 depth AND 20x budget. **Eight of nine are
+  ordinary budget churn** and close at 20x. Exactly one survives: dragonstorm s5005 gi227.
+* OVERNIGHT (held-out, 156 keys): 58 changed / 98 unchanged; slower=30 **faster=58**; 16 keys
+  improved on average, 8 worsened, 34 digest-only; sum of per-key avg deltas **-0.0772**.
+* SMOKE: 6 changed, slower=2 faster=5. REGRESSION: 21 changed, slower=5 faster=13.
+* Reference reproducibility CLEAN throughout (208 refs, 0 play-drift / shuffle-dead / enum-gap /
+  mull-drift / contract-fail). **d0 is untouched on every tier** -- no search at d0, no tie-break.
+* Only antilife is net-worse anywhere (+0.005 over 7 overnight keys = 1-2 turns per 1000 games), and
+  its regressions were escalated and closed at 20x, so per the rule it gets NO opt-out.
+
+**The one opt-out, and how to recognise the next one.** Opponent life at the horizon is a
+DAMAGE-RACE proxy: a deck whose value is STORED rather than expressed as damage by the horizon has
+its build-up priced at ZERO. Dragonstorm at T6 casts a 13-spell chain (three Apex of Power, four
+rituals, Ruby Medallion, Scourge of Valkas) and wins turn 8; the life tie-break stops it after six
+spells and LOSES, and it survives 20x budget. Combo / storm / ramp is the class.
+
 ## 5. Method notes worth keeping
 
 1. **Instrument the binding rate before believing an inert result** (see the frame-rule bug above).
 2. **Pick the test bed by whether the mechanism can fire.** AL was the obvious deck (it owns the Aria
    case) and it was the wrong one -- it wins too fast for the horizon to bind. The deck that owns the
    *other* known instance, hinata, is where the signal was.
-3. **A prune's value is not all reachable from the search.** Anything acting at EMISSION also
+3. **Escalate before opting a deck out.** 8 of the 9 regressions across the whole suite were budget
+   churn that closed at 20x budget; only 1 was a valuation failure. An opt-out taken on the aggregate
+   would have excluded three decks for nothing.
+4. **A prune's value is not all reachable from the search.** Anything acting at EMISSION also
    constrains d0/greedy, which no tie-break inside `SolveWithLookahead` can ever reach -- so a
    search-side fix cannot subsume it by construction.
