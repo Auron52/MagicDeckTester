@@ -119,6 +119,9 @@ def main():
     ap.add_argument("--blocks", type=int, default=12, help="seed blocks per cell (more = tighter sign)")
     ap.add_argument("--games", type=int, default=1000, help="games per cell")
     ap.add_argument("--quick", action="store_true", help="smoke the plumbing only (2 blocks x 200)")
+    ap.add_argument("--seed-base", type=int, default=SEED_BASE,
+                    help="start of the seed range; use a fresh base to EXTEND a sample "
+                         "instead of re-running the seeds you already have")
     ap.add_argument("--gate-cells", action="store_true",
                     help="cross-check at the suite's pinned d3/d5 instead of the deck's PLAY settings")
     ap.add_argument("--force", action="store_true",
@@ -136,7 +139,7 @@ def main():
     blocks, games = (2, 200) if args.quick else (args.blocks, args.games)
     if games > SEED_SPACING:      # SEED-OVERLAP TRAP: jobs would replay each other's games
         sys.exit(f"--games must be <= {SEED_SPACING} (seed spacing) or seed ranges overlap and replay")
-    seeds = [SEED_BASE + i * SEED_SPACING for i in range(blocks)]
+    seeds = [args.seed_base + i * SEED_SPACING for i in range(blocks)]
 
     binary = os.path.join(ROOT, "build/Release/mtg")
     if not os.path.exists(binary):

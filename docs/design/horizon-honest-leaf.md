@@ -314,10 +314,31 @@ regress at play settings, so it never spoke to the shipping configuration.
 Two traps worth keeping: **escalate to CONVERGENCE, not to a round number**, and **check whether a
 regressed game regresses at PLAY settings** before building an argument on it.
 
-**Still open at the time of writing:** whether dragonstorm, stompy (+3 on 5 changed) and kitty (+1 on
-1 changed) clear gate 1 -- all three are being measured at play settings, 30,000 paired games each,
-via `scripts/leaf_tiebreak_check.py --force`. If dragonstorm's average is fine there, its opt-out
-should be REMOVED.
+**Gate 1 for dragonstorm, at PLAY settings (d5/20), 100,000 paired games over two independent seed
+blocks:**
+
+| sample | paired | net turns | worse | better |
+|---|---|---|---|---|
+| seeds 1.0M-5.9M | 50,000 | -4 | 6 | 9 |
+| seeds 20.0M-24.9M | 50,000 | -6 | 4 | 10 |
+| **combined** | **100,000** | **-10** | **10** | **19** |
+
+29 changed games = **0.029% binding**, a tenth of the d3 rate. Both halves agree in direction; 19:10
+is ~1.7 sigma, so the honest reading is *slightly positive, indistinguishable from neutral*. Average
+delta -0.0001 turns/game.
+
+**So at the configuration dragonstorm actually ships, the tie-break is very nearly a non-event, and
+what little it does is not harmful.** Both gates clear: nothing unrecoverable (see the table above),
+and the average does not degrade. The opt-out is therefore not justified by the evidence that
+motivated it -- but removing it buys nothing measurable either, while costing a GT rebaseline of
+dragonstorm's keys. That trade is a USER call; what must NOT stand is the current code comment,
+which asserts a truncated-combo regression that does not occur at play settings.
+
+**Still unmeasured:** stompy (+3 on 5 changed) and kitty (+1 on 1 changed) at play settings. Both
+were flagged only by the retracted argument on tiny samples and neither has a pending decision.
+NOTE for whoever picks this up: kitty is expensive at its shipping d5/20 -- 23 games over 30 s per
+4,000, worst 75.3 s -- and it has NO rows in `test/regression_cases.sh`, so that cost has never
+appeared in any suite tier. That is a performance question in its own right.
 
 ## 5. Method notes worth keeping
 
