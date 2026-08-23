@@ -44,25 +44,32 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SEED_SPACING = 100_000   # >> any sane games-per-cell, so seed ranges cannot overlap and replay games
 SEED_BASE = 1_000_000
-CELLS = ((3, 10), (5, 20))   # production search settings; d0 has no search, so no tie-break to move
+# THE BAR IS "OVERALL QUALITY AT PLAY SETTINGS" (USER, 2026-08-23) -- the depth/budget the deck's
+# profile actually resolves to, NOT the suite's pinned d0/d3/d5 gate cells. Those are a gate, not the
+# shipping configuration, and they differ: stompy ships d6 while the gate only ever probes d3/d5.
+# A job that omits depth/budget resolves via value_play; the [play] line prints what it picked.
+PLAY_CELL = (None, None)
+GATE_CELLS = ((3, 10), (5, 20))   # opt-in cross-check; d0 has no search, so no tie-break to move
 MIN_CHANGED = 20         # below this the net's sign is not worth reporting as a direction
 
 
-def build_manifest(decks, games, path, seeds, force=False):
+def build_manifest(decks, games, path, seeds, cells, force=False):
     """decks: list of (stem, deck_path, profile_path). All arms/decks pool into ONE batch."""
     jobs = []
     for stem, deck, profile in decks:
         for arm, on in (("base", False), ("leaf", True)):
-            for depth, budget in CELLS:
+            for depth, budget in cells:
                 for seed in seeds:
                     # "~"-separated: deck stems contain both "-" and "_" (creature_giving), so
                     # splitting a job name on "_" silently drops decks from the table.
-                    jobs.append({"name": f"{stem}~{arm}~d{depth}~s{seed}", "deck": deck,
-                                 "profile": profile, "games": games, "seed": seed, "depth": depth,
-                                 "budget_ms": budget,
-                                 # the deck profile may LOCK target_depth (value_play); this is the
-                                 # same override the suite passes to pin an explicit depth.
-                                 "ignore_play_profile": True, "weight": 0,
+                    cell = "play" if depth is None else f"d{depth}"
+                    j = {"name": f"{stem}~{arm}~{cell}~s{seed}", "deck": deck,
+                         "profile": profile, "games": games, "seed": seed, "weight": 0}
+                    if depth is not None:
+                        # Pinning a depth needs the override: the profile may LOCK target_depth
+                        # (value_play) and would otherwise reject an explicit depth.
+                        j.update({"depth": depth, "budget_ms": budget, "ignore_play_profile": True})
+                    jobs.append({**j,
                                  "flags": {"MTG_LEAF_GRADE_NOWIN": on,
                                            # --force: a deck that ALREADY opts out reads identical
                                            # in both arms (the provider gate is compiled in), so the
@@ -84,13 +91,14 @@ def parse(out_path):
     return res
 
 
-def compare(res, stem, seeds):
+def compare(res, stem, seeds, cells):
     """-> (net turns, worse, better, games). Positive net = the tie-break is WORSE."""
     net = worse = better = games = 0
-    for depth, _budget in CELLS:
+    for depth, _budget in cells:
+        cell = "play" if depth is None else f"d{depth}"
         for seed in seeds:
-            a = res.get((stem, "base", f"d{depth}", f"s{seed}"))
-            b = res.get((stem, "leaf", f"d{depth}", f"s{seed}"))
+            a = res.get((stem, "base", cell, f"s{seed}"))
+            b = res.get((stem, "leaf", cell, f"s{seed}"))
             if not a or not b:
                 continue
             games += len(a)
@@ -111,6 +119,8 @@ def main():
     ap.add_argument("--blocks", type=int, default=12, help="seed blocks per cell (more = tighter sign)")
     ap.add_argument("--games", type=int, default=1000, help="games per cell")
     ap.add_argument("--quick", action="store_true", help="smoke the plumbing only (2 blocks x 200)")
+    ap.add_argument("--gate-cells", action="store_true",
+                    help="cross-check at the suite's pinned d3/d5 instead of the deck's PLAY settings")
     ap.add_argument("--force", action="store_true",
                     help="re-validate a deck that already opts out (forces the provider gate open)")
     args = ap.parse_args()
@@ -135,8 +145,10 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     manifest, out = f"{outdir}/{args.tag}.json", f"{outdir}/{args.tag}.out"
 
-    total = build_manifest(decks, games, manifest, seeds, args.force)
-    print(f"{total} games ({total // 2} paired) over {len(decks)} deck(s), "
+    cells = GATE_CELLS if args.gate_cells else (PLAY_CELL,)
+    total = build_manifest(decks, games, manifest, seeds, cells, args.force)
+    where = "the suite's pinned d3/d5 gate cells" if args.gate_cells else "each deck's PLAY settings"
+    print(f"{total} games ({total // 2} paired) over {len(decks)} deck(s) at {where}, "
           "both arms in ONE pooled batch ...")
     env = dict(os.environ, MTG_DUMP_WINS="1")
     with open(out, "w") as fh:
@@ -147,10 +159,10 @@ def main():
 
     res = parse(out)
     for stem, _deck, _prof in decks:
-        report(res, stem, seeds, games, blocks)
+        report(res, stem, seeds, games, blocks, cells)
 
 
-def report(res, stem, seeds, games, blocks):
+def report(res, stem, seeds, games, blocks, cells):
     half = len(seeds) // 2 or 1
     splits = [("half A", seeds[:half]), ("half B", seeds[half:])]
     print(f"\n=== {stem} ===")
@@ -158,10 +170,10 @@ def report(res, stem, seeds, games, blocks):
           "   (negative = the tie-break HELPS)")
     signs = {}
     for label, split_seeds in splits:      # NOT `seeds`: shadowing it silently made ALL == one half
-        net, w, b, n = compare(res, stem, split_seeds)
+        net, w, b, n = compare(res, stem, split_seeds, cells)
         signs[label] = net
         print(f"{label:10s} {n:8d} {net:+10d} {w:6d} {b:7d}")
-    net_all, w_all, b_all, n_all = compare(res, stem, seeds)
+    net_all, w_all, b_all, n_all = compare(res, stem, seeds, cells)
     print(f"{'ALL':10s} {n_all:8d} {net_all:+10d} {w_all:6d} {b_all:7d}")
 
     changed = w_all + b_all
@@ -174,7 +186,7 @@ def report(res, stem, seeds, games, blocks):
               " needed\n  to trust a direction. This is NOT evidence the tie-break is harmless here;"
               " it may simply\n  not have fired enough to measure.")
         if changed:
-            need = int(MIN_CHANGED / rate / (2 * len(CELLS) * games)) + 1
+            need = int(MIN_CHANGED / rate / (2 * len(cells) * games)) + 1
             print(f"  Re-run at roughly --blocks {max(need, blocks * 2)} to reach a decisive sample.")
         else:
             print(f"  Re-run at --blocks {blocks * 4} before concluding anything.")
@@ -193,9 +205,11 @@ def report(res, stem, seeds, games, blocks):
         print(f"    bool GradesNoWinLeaf() const override {{ return false; }}")
         print("  to this deck's DecisionProvider, and record the measurement in")
         print("  docs/design/horizon-honest-leaf.md.")
-        print("  Do NOT try to rescue it by escalating depth/budget -- escalation removes the very")
-        print("  regime the leaf operates in, so it can only ever report that the lever stopped")
-        print("  firing. Escalation is for EXPLAINING a game, not for keeping the default.")
+        print("  Escalating depth/budget is NOT a rebuttal here -- it removes the very regime the")
+        print("  leaf operates in, so it can only report that the lever stopped firing. Escalation")
+        print("  belongs to the OTHER gate: 'are we preventing search from finding a win', tested")
+        print("  game-by-game at UNLIMITED budget and the depth the game won at BEFORE the change.")
+        print("  Run that too -- both gates block independently.")
         print("  The known cause, worth naming if it fits: opponent life at the horizon is a")
         print("  DAMAGE-RACE proxy, so a deck whose value is STORED rather than expressed as damage")
         print("  by the horizon (combo, storm, ramp) has its build-up priced at zero.")

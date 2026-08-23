@@ -294,11 +294,30 @@ and needs no opt-out.**
 So the recorded +2 (2 worse / 0 better) was a two-event sample, and the suite-wide sweep's per-deck
 rows are all of that character. The conclusion in 4a was right by luck; its justification was not.
 
-**Still open at the time of writing:** stompy (+3 on 5 changed) and kitty (+1 on 1 changed) were kept
-ON by the same retracted argument, and dragonstorm was opted OUT by it. All three are being
-re-measured at 50,000 paired games each via `scripts/leaf_tiebreak_check.py --force`. Dragonstorm's
-opt-out additionally has a root-caused survivor game (s5005 gi227), which is real evidence of the
-stored-value mechanism -- but under the corrected rule the metric, not that game, decides.
+### Dragonstorm's opt-out does not survive either gate (2026-08-23)
+
+The opt-out rested entirely on s5005 gi227, recorded as "T8 win -> LOSS, survives 20x budget".
+Re-tested against both gates, that game is not evidence of anything:
+
+| where | pre-change | post-change |
+|---|---|---|
+| **d5/20 = the deck's PLAY setting** | win T7 | **win T7 -- no regression at all** |
+| d3/10 (a gate cell), budget 10 | win T8 | LOSS |
+| d3, budget 100 (10x) | win T6 | LOSS |
+| d3, budget 1,000 (100x) | win T6 | **win T6** |
+| d3, budget 100,000 (10,000x) | win T6 | win T6 |
+
+Gate 2 (unlimited budget at the pre-regression winning depth): **RECOVERABLE** -- both arms converge
+on T6. "Survives 20x" was simply not unlimited; it needed 100x. Gate 1: the game does not even
+regress at play settings, so it never spoke to the shipping configuration.
+
+Two traps worth keeping: **escalate to CONVERGENCE, not to a round number**, and **check whether a
+regressed game regresses at PLAY settings** before building an argument on it.
+
+**Still open at the time of writing:** whether dragonstorm, stompy (+3 on 5 changed) and kitty (+1 on
+1 changed) clear gate 1 -- all three are being measured at play settings, 30,000 paired games each,
+via `scripts/leaf_tiebreak_check.py --force`. If dragonstorm's average is fine there, its opt-out
+should be REMOVED.
 
 ## 5. Method notes worth keeping
 
@@ -306,18 +325,21 @@ stored-value mechanism -- but under the corrected rule the metric, not that game
 2. **Pick the test bed by whether the mechanism can fire.** AL was the obvious deck (it owns the Aria
    case) and it was the wrong one -- it wins too fast for the horizon to bind. The deck that owns the
    *other* known instance, hinata, is where the signal was.
-3. **RETRACTED (2026-08-23, USER): "escalate before opting a deck out" is the WRONG test for a leaf
-   lever.** It was written here as a general rule after 8 of 9 suite regressions closed at 20x
-   budget. But this tie-break only fires when a rollout reaches the horizon WITHOUT a win, so raising
-   depth/budget lets the search find real wins inside the horizon and the leaf stops being consulted
-   at all. "It closed at 20x" therefore reports that the lever stopped FIRING, not that its
-   valuation was sound -- near-tautological, and no evidence for keeping the default. Escalation
-   earns its keep for a lever that changes which line the search COMMITS to at production budget,
-   where the escalated run is a fair oracle for "would it have found this anyway"; a leaf evaluator
-   is the case where escalation deletes the regime under test. **The replacement rule: THE METRIC IS
-   THE BAR.** This lever exists solely to lower avg turn-to-win, so a deck whose average it raises
-   opts out, measured at PRODUCTION depth/budget on a sample big enough to have a sign. Escalation
-   stays useful for EXPLAINING a game after the metric has decided.
+3. **CORRECTED (2026-08-23, USER): escalation answers a DIFFERENT question than I was asking it.**
+   I had written "escalate before opting a deck out" here as a general rule after 8 of 9 suite
+   regressions closed at 20x budget, and used it as grounds for KEEPING the default on a deck whose
+   average got worse. That conflates the USER's two adoption gates, which are separate and both
+   blocking:
+   * **Gate 1 -- "are we improving the play generally?"** Aggregate average at PLAY settings, large
+     sample. Escalation is worthless here: the tie-break fires only when a rollout reaches the
+     horizon WITHOUT a win, so raising depth/budget lets the search find real wins inside the horizon
+     and the leaf stops being consulted. "It closed at 20x" reports that the lever stopped FIRING.
+   * **Gate 2 -- "are we preventing search from finding a win?"** Game by game, at UNLIMITED budget
+     and the depth at which the game won BEFORE the change. Win returns => recoverable, gate 1
+     decides. Win never returns => the change deleted the line structurally, and that blocks on its
+     own.
+
+   Escalation is gate 2's instrument, not gate 1's. Run BOTH; block on either.
 4. **Size by CHANGED GAMES, not by games.** Binding rates differ by orders of magnitude across decks;
    antilife changed ~2 games in 3,450, so the suite-wide sweep gave it a sample of *two*. A run that
    reports "0 changed" has not cleared the deck -- it has failed to test it. This is lesson 1 again,

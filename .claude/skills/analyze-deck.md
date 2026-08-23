@@ -414,13 +414,22 @@ Reading the verdict:
   `bool GradesNoWinLeaf() const override { return false; }` to the deck's provider and record the
   measurement in `docs/design/horizon-honest-leaf.md`.
 
-**Do NOT try to rescue a regression by escalating depth/budget.** The tie-break only fires when a
-rollout reaches the horizon *without* a win, so raising depth/budget lets the search find real wins
-inside the horizon and the leaf stops being consulted. A regression that "closes at 20x budget" has
-therefore reported that the lever stopped FIRING, not that its valuation was sound -- the test is
-near-tautological for a leaf evaluator and is not grounds for keeping the default. (Escalation is
-still the right tool for EXPLAINING a specific game once the metric has already decided.) This
-guidance previously said the opposite and was wrong; see the method notes in the design doc.
+**The two gates are separate, and you run BOTH** (USER, 2026-08-23 -- the general adoption bar):
+
+1. **"Are we improving the play generally?"** -- the aggregate average at PLAY settings on a large
+   sample. That is what this script measures. Some seeds being worse is fine if the average improves.
+   Escalating depth/budget is NOT evidence here: the tie-break only fires when a rollout reaches the
+   horizon *without* a win, so raising depth/budget lets the search find real wins inside the horizon
+   and the leaf stops being consulted. "It closed at 20x" says the lever stopped FIRING, not that its
+   valuation was sound.
+2. **"Are we preventing search from finding a win?"** -- tested GAME BY GAME. Take a regressed game
+   and re-run it at **unlimited budget** and the **depth at which it won BEFORE** the change. If the
+   win returns, it is recoverable and only clause 1 decides. If it never returns, the change
+   structurally deleted the line and that blocks adoption on its own.
+
+Two traps, both hit for real on dragonstorm s5005 gi227: escalate to CONVERGENCE (that game needed
+100x budget, not 20x, and had been wrongly filed as unrecoverable), and check whether the game even
+regresses at PLAY settings first (it did not -- only at the d3 gate cell).
 
 See `docs/design/horizon-honest-leaf.md`.
 
