@@ -200,10 +200,11 @@ namespace execgreedy
 {
 inline bool Enabled() { static const bool v = EnvOn("MTG_M2_YIELD_STATS"); return v; }
 inline std::atomic<unsigned long long> g_exec[12] = {};
-inline std::atomic<unsigned long long> g_rollout{0};
+inline std::atomic<unsigned long long> g_rollout{0}, g_bp{0};
 inline void Record(int depth, bool in_rollout)
 {
     if (!Enabled()) { return; }
+    if (depth < 0) { g_bp.fetch_add(1, std::memory_order_relaxed); return; }   // executor BREAKPOINT fallback
     if (in_rollout) { g_rollout.fetch_add(1, std::memory_order_relaxed); return; }
     if (depth >= 0 && depth < 12) { g_exec[depth].fetch_add(1, std::memory_order_relaxed); }
 }
@@ -212,8 +213,8 @@ struct Dumper
     ~Dumper()
     {
         if (!Enabled()) { return; }
-        std::fprintf(stderr, "=== EXECUTOR GREEDY Solve(): in-rollout=%llu | REAL decisions by depth:",
-                     g_rollout.load());
+        std::fprintf(stderr, "=== EXECUTOR GREEDY Solve(): in-rollout=%llu breakpoint-fallback=%llu"
+                     " | REAL main-phase decisions by depth:", g_rollout.load(), g_bp.load());
         bool any = false;
         for (int i = 0; i < 12; ++i)
         {
@@ -2728,7 +2729,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
             }
         }
-        if (!bp_searched_here) { extra = TurnSolver::Solve(state, is_pre_combat_main); }
+        if (!bp_searched_here) { execgreedy::Record(-1, m_in_rollout); extra = TurnSolver::Solve(state, is_pre_combat_main); }
         // Lockstep trace (MTG_BP_TRACE): the EXECUTOR's breakpoint sequence, to be diffed against
         // ApplyPlanDirect's [bp-apply] lines for the same committed line. Diagnosis only.
         if (BpTraceEnabled())

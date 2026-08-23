@@ -1012,6 +1012,32 @@ static bool SecondMainUnproductive(const GameState& state)
 // ever yields an action worth taking. This counts the SOLVES and the ACTIONS they return, by kind,
 // so "limit the search to productive options and skip it for unproductive ones" (USER 2026-08-19)
 // can be aimed at the measured productive set rather than a guess. Dumped at exit.
+namespace greedysite
+{
+// Every remaining greedy TurnSolver::Solve() reached from inside the search, counted by site, so
+// "is there greedy left in the search" is answered by measurement rather than by reading call
+// graphs. Sites 0-7 are BREAKPOINT continuations falling back to greedy because the site was not
+// searchable (bp_searched_plan returned false); site 90 is SolveWithLookahead's depth<=0 base case.
+inline bool Enabled() { static const bool v = EnvOn("MTG_M2_YIELD_STATS"); return v; }
+inline std::atomic<unsigned long long> g[100] = {};
+inline void Record(int site) { if (Enabled() && site >= 0 && site < 100) { g[site].fetch_add(1, std::memory_order_relaxed); } }
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!Enabled()) { return; }
+        std::fprintf(stderr, "=== GREEDY SITES inside search:");
+        bool any = false;
+        for (int i = 0; i < 100; ++i)
+        { if (g[i].load()) { std::fprintf(stderr, "  s%d=%llu", i, g[i].load()); any = true; } }
+        if (!any) { std::fprintf(stderr, "  NONE"); }
+        std::fprintf(stderr, "  ===\n");
+    }
+};
+inline Dumper g_dumper;
+}
+
+
 namespace m2yield
 {
     inline bool Enabled() { static const bool v = EnvOn("MTG_M2_YIELD_STATS"); return v; }
@@ -13944,6 +13970,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (!bp_searched_plan(0, extra))
                 {
                     play_breakpoint_land(my_bp_sink);
+                    greedysite::Record(0);
                     extra = TurnSolver::Solve(state, is_pre_combat);
                 }
                 bp_play_searched_land(extra, my_bp_sink);
@@ -13982,6 +14009,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (!bp_searched_plan(1, extra))
                 {
                     play_drawn_flood_keep_land(my_bp_sink);
+                    greedysite::Record(1);
                     extra = TurnSolver::Solve(state, is_pre_combat);
                 }
                 bp_play_searched_land(extra, my_bp_sink);
@@ -14317,6 +14345,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (!bp_searched_plan(2, extra))
                 {
                     play_breakpoint_land(my_bp_sink);
+                    greedysite::Record(2);
                     extra = TurnSolver::Solve(state, is_pre_combat);
                 }
                 bp_play_searched_land(extra, my_bp_sink);
@@ -14374,6 +14403,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (!bp_searched_plan(0, extra))
                     {
                         play_breakpoint_land(my_bp_sink);
+                        greedysite::Record(0);
                         extra = TurnSolver::Solve(state, is_pre_combat);
                     }
                     bp_play_searched_land(extra, my_bp_sink);
@@ -14516,6 +14546,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         if (!bp_searched_plan(6, extra))
                         {
                             play_breakpoint_land(my_bp_sink);
+                            greedysite::Record(6);
                             extra = TurnSolver::Solve(state, is_pre_combat);
                         }
                         bp_play_searched_land(extra, my_bp_sink);
@@ -15158,6 +15189,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (!bp_searched_plan(deferred_site_index(), extra))
         {
             play_breakpoint_land(out_breakpoint);
+            greedysite::Record(8);
             extra = TurnSolver::Solve(state, is_pre_combat);
         }
         bp_play_searched_land(extra, out_breakpoint);
@@ -15252,6 +15284,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (out_breakpoint) { sink_stack.push_back(my_bp_sink); }
                 TurnSolver::Plan extra;
+                greedysite::Record(4);
                 if (!bp_searched_plan(4, extra)) { extra = TurnSolver::Solve(state, is_pre_combat); }
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
@@ -24077,6 +24110,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     {
         if (budget) { budget->Consume(1); }
         report(max_turns + 1, 0);   // greedy fallback is not an exhaustively-verified win
+        greedysite::Record(90);
         return Solve(state, is_pre_combat);
     }
 

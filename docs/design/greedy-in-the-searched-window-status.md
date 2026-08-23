@@ -83,6 +83,42 @@ byte-identical over 26,000, and the searched-m2 adoptions generally measuring in
 reach passes >= 1, which the budget rarely affords. Not inert levers; levers on a rarely-affordable
 path.
 
+## 3a. ANSWER: is there remaining greedy in the search? (measured, 2026-08-23)
+
+Every greedy `TurnSolver::Solve()` reachable from the search is now counted by site
+(`MTG_M2_YIELD_STATS=1` -> `GREEDY SITES` / `EXECUTOR GREEDY`). At play settings, 200 games/deck:
+
+| site | antilife | fivecolour | kitty | what it is |
+|---|---|---|---|---|
+| s90 | 35,511 | 1,740,445 | 702,380 | `SolveWithLookahead` depth<=0 — the scoring rollout bottoming out |
+| s8 | 74,539 | 215,154 | 0 | breakpoint continuation for a candidate that carries NO bp choice |
+| bp sites 0,1,2,4,6 | 0 | 0 | 0 | never fall back — always searched |
+| EXECUTOR main phase | **NONE** | **NONE** | **NONE** | — |
+| EXECUTOR breakpoint fallback | **0** | **0** | **0** | — |
+
+**Both remaining sites are EVALUATION, not decisions.**
+
+* **s90** is the scoring rollout hitting its horizon — the accepted "beyond the horizon / beyond what
+  budget allows" case.
+* **s8** is subtler and was worth chasing: `bp_searched_plan` searches a breakpoint continuation only
+  for a candidate plan that CARRIES a breakpoint choice (`plan.bp_choice >= 0 && seen_before ==
+  plan.bp_at`). The search enumerates those breakpoint variants separately and compares them against
+  the greedy-continuation baseline, so the greedy continuation is one of the options being compared,
+  not a decision imposed on the line. NOTE: it is NOT caused by `BpSiteMask()` excluding site 3 —
+  running with `MTG_BP_SITES=0x7F` leaves the count unchanged at 74,539, so do not "fix" it there.
+
+**The executor never executes a greedy decision**: 0 greedy main-phase plans and 0 greedy breakpoint
+fallbacks across 600 games / 3 decks. So the committed line always carries a SEARCHED breakpoint
+continuation — the greedy variants never win the comparison.
+
+**Conclusion: no greedy DECISION defect exists on these three decks.** All remaining greedy is
+evaluation or horizon rollout.
+
+**Caveat:** measured on antilife / fivecolour / kitty only. The other 11 decks have not been run
+through these counters; doing so is cheap (`MTG_M2_YIELD_STATS=1` on any batch) and is the obvious
+first task if the question comes up again.
+
+
 ## 4. The open question for Monday
 
 **Is the budget right?** Most decisions can only afford the shallowest scoring rollout. That is
