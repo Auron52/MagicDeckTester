@@ -990,8 +990,27 @@ namespace m2yield
 {
     inline bool Enabled() { static const bool v = EnvOn("MTG_M2_YIELD_STATS"); return v; }
     inline std::atomic<uint64_t> g_solves{0}, g_empty{0}, g_actions{0};
+    // WHICH PATH the interior m2 actually took. g_solves counts BOTH, so it cannot answer "is the
+    // searched m2 live on this deck" -- and a provider hook reading ON while the searched branch
+    // never runs is exactly the "no effect and never fired look identical" trap. Split by the two
+    // reasons greedy can win: the deck/site said greedy, or depth had already run out.
+    inline std::atomic<uint64_t> g_searched{0}, g_greedy_hook{0}, g_greedy_depth{0};
+    // ...split by CALL SITE, because they are two different levers: the BRANCH site is a real
+    // decision, the ROLLOUT site is the leaf estimator's playout policy (see MTG_SSM_SITE).
+    inline std::atomic<uint64_t> g_br_s{0}, g_br_g{0}, g_ro_s{0}, g_ro_g{0};
     inline std::mutex g_mtx;
     inline std::map<std::string, uint64_t> g_by_kind;   // "<kind>:<card>" -> count
+
+    inline void RecordPath(bool searched, bool depth_out, bool in_rollout)
+    {
+        if (!Enabled()) { return; }
+        if (searched)        { g_searched.fetch_add(1, std::memory_order_relaxed); }
+        else if (depth_out)  { g_greedy_depth.fetch_add(1, std::memory_order_relaxed); }
+        else                 { g_greedy_hook.fetch_add(1, std::memory_order_relaxed); }
+        if (depth_out) { return; }   // depth<=0 is greedy at both sites regardless of the hooks
+        if (in_rollout) { (searched ? g_ro_s : g_ro_g).fetch_add(1, std::memory_order_relaxed); }
+        else            { (searched ? g_br_s : g_br_g).fetch_add(1, std::memory_order_relaxed); }
+    }
 
     inline void Record(const TurnSolver::Plan& p)
     {
@@ -1020,6 +1039,18 @@ namespace m2yield
                          (unsigned long long)s, (unsigned long long)e,
                          s ? 100.0 * static_cast<double>(e) / static_cast<double>(s) : 0.0,
                          (unsigned long long)g_actions.load());
+            const uint64_t sr = g_searched.load(), gh = g_greedy_hook.load(), gd = g_greedy_depth.load();
+            std::fprintf(stderr,
+                         "=== M2 PATH: SEARCHED %llu (%.2f%%) | greedy-by-hook %llu | "
+                         "greedy-by-depth<=0 %llu ===\n",
+                         (unsigned long long)sr,
+                         s ? 100.0 * static_cast<double>(sr) / static_cast<double>(s) : 0.0,
+                         (unsigned long long)gh, (unsigned long long)gd);
+            std::fprintf(stderr,
+                         "=== M2 SITE (depth>0 only): BRANCH searched %llu / greedy %llu | "
+                         "ROLLOUT searched %llu / greedy %llu ===\n",
+                         (unsigned long long)g_br_s.load(), (unsigned long long)g_br_g.load(),
+                         (unsigned long long)g_ro_s.load(), (unsigned long long)g_ro_g.load());
             std::vector<std::pair<std::string, uint64_t>> v(g_by_kind.begin(), g_by_kind.end());
             std::sort(v.begin(), v.end(),
                       [](auto& a, auto& b) { return a.second > b.second; });
@@ -1237,8 +1268,10 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     // m2 only; the real (executor) second main is a full-depth top-level decision either way.
     static const int s_m2_depth_cap = EnvInt("MTG_M2_SEARCH_DEPTH", 0);
     const int m2_depth = (s_m2_depth_cap > 0 && s_m2_depth_cap < depth) ? s_m2_depth_cap : depth;
+    const bool depth_out = (depth <= 0);
+    m2yield::RecordPath(!depth_out && searched, depth_out, in_rollout);
     const TurnSolver::Plan p =
-        (depth <= 0 || !searched)
+        (depth_out || !searched)
             ? TurnSolver::Solve(state, false)
             : SearchedSecondMainMemoized(state, m2_depth, max_turns, budget, second_main, tt);
     m2yield::Record(p);
