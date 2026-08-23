@@ -253,8 +253,8 @@ without paying those.
 * SMOKE: 6 changed, slower=2 faster=5. REGRESSION: 21 changed, slower=5 faster=13.
 * Reference reproducibility CLEAN throughout (208 refs, 0 play-drift / shuffle-dead / enum-gap /
   mull-drift / contract-fail). **d0 is untouched on every tier** -- no search at d0, no tie-break.
-* Only antilife is net-worse anywhere (+0.005 over 7 overnight keys = 1-2 turns per 1000 games), and
-  its regressions were escalated and closed at 20x, so per the rule it gets NO opt-out.
+* Only antilife is net-worse anywhere (+0.005 over 7 overnight keys = 1-2 turns per 1000 games).
+  **That "+" was NOISE and the reasoning used to dismiss it was wrong -- see 4b.**
 
 **The one opt-out, and how to recognise the next one.** Opponent life at the horizon is a
 DAMAGE-RACE proxy: a deck whose value is STORED rather than expressed as damage by the horizon has
@@ -262,15 +262,67 @@ its build-up priced at ZERO. Dragonstorm at T6 casts a 13-spell chain (three Ape
 rituals, Ruby Medallion, Scourge of Valkas) and wins turn 8; the life tie-break stops it after six
 spells and LOSES, and it survives 20x budget. Combo / storm / ramp is the class.
 
+## 4b. The escalation test was wrong, and antilife re-measured (2026-08-23, USER)
+
+The USER's objection: *"this is one of the cases where we want a lower average. Checking for budget
+churn isn't useless, but it provides little information when we are changing leaf tiebreak
+behaviour."* Correct on both counts, and it invalidated the reasoning in 4a.
+
+**Why escalation cannot vindicate a leaf lever.** The tie-break fires only when a rollout reaches the
+horizon WITHOUT a win. Raise depth/budget and the search finds real wins inside the horizon, so the
+leaf stops being consulted -- escalation deletes the regime under test. "It closed at 20x" reports
+that the lever stopped FIRING, not that its valuation was sound. The test earns its keep for a lever
+that changes which line the search COMMITS to at production budget; it is near-tautological here.
+The replacement rule is the one the USER states: THE METRIC IS THE BAR.
+
+**Antilife, re-measured at production settings (d3/10 + d5/20), 86 seed blocks x 1,000 games,
+172,000 paired games:**
+
+| split | paired | net turns | worse | better |
+|---|---|---|---|---|
+| half A | 86,000 | **-31** | 43 | 67 |
+| half B | 86,000 | **-35** | 27 | 55 |
+| d3 only | 86,000 | -55 | 49 | 86 |
+| d5 only | 86,000 | -11 | 21 | 36 |
+| **ALL** | **172,000** | **-66** | **70** | **122** |
+
+192 changed games of 172,000 (0.112% binding). Better-beats-worse at 122:70 is ~3.8 sigma against a
+50/50 null, the sign agrees on both halves and both depths, and d3 -- the more horizon-limited cell,
+where the leaf binds more -- carries most of it. **The tie-break HELPS antilife. It keeps the default
+and needs no opt-out.**
+
+So the recorded +2 (2 worse / 0 better) was a two-event sample, and the suite-wide sweep's per-deck
+rows are all of that character. The conclusion in 4a was right by luck; its justification was not.
+
+**Still open at the time of writing:** stompy (+3 on 5 changed) and kitty (+1 on 1 changed) were kept
+ON by the same retracted argument, and dragonstorm was opted OUT by it. All three are being
+re-measured at 50,000 paired games each via `scripts/leaf_tiebreak_check.py --force`. Dragonstorm's
+opt-out additionally has a root-caused survivor game (s5005 gi227), which is real evidence of the
+stored-value mechanism -- but under the corrected rule the metric, not that game, decides.
+
 ## 5. Method notes worth keeping
 
 1. **Instrument the binding rate before believing an inert result** (see the frame-rule bug above).
 2. **Pick the test bed by whether the mechanism can fire.** AL was the obvious deck (it owns the Aria
    case) and it was the wrong one -- it wins too fast for the horizon to bind. The deck that owns the
    *other* known instance, hinata, is where the signal was.
-3. **Escalate before opting a deck out.** 8 of the 9 regressions across the whole suite were budget
-   churn that closed at 20x budget; only 1 was a valuation failure. An opt-out taken on the aggregate
-   would have excluded three decks for nothing.
-4. **A prune's value is not all reachable from the search.** Anything acting at EMISSION also
+3. **RETRACTED (2026-08-23, USER): "escalate before opting a deck out" is the WRONG test for a leaf
+   lever.** It was written here as a general rule after 8 of 9 suite regressions closed at 20x
+   budget. But this tie-break only fires when a rollout reaches the horizon WITHOUT a win, so raising
+   depth/budget lets the search find real wins inside the horizon and the leaf stops being consulted
+   at all. "It closed at 20x" therefore reports that the lever stopped FIRING, not that its
+   valuation was sound -- near-tautological, and no evidence for keeping the default. Escalation
+   earns its keep for a lever that changes which line the search COMMITS to at production budget,
+   where the escalated run is a fair oracle for "would it have found this anyway"; a leaf evaluator
+   is the case where escalation deletes the regime under test. **The replacement rule: THE METRIC IS
+   THE BAR.** This lever exists solely to lower avg turn-to-win, so a deck whose average it raises
+   opts out, measured at PRODUCTION depth/budget on a sample big enough to have a sign. Escalation
+   stays useful for EXPLAINING a game after the metric has decided.
+4. **Size by CHANGED GAMES, not by games.** Binding rates differ by orders of magnitude across decks;
+   antilife changed ~2 games in 3,450, so the suite-wide sweep gave it a sample of *two*. A run that
+   reports "0 changed" has not cleared the deck -- it has failed to test it. This is lesson 1 again,
+   one level up, and `scripts/leaf_tiebreak_check.py` now refuses to call a sign below 20 changed
+   games and prints the scale a decisive run needs.
+5. **A prune's value is not all reachable from the search.** Anything acting at EMISSION also
    constrains d0/greedy, which no tie-break inside `SolveWithLookahead` can ever reach -- so a
    search-side fix cannot subsume it by construction.

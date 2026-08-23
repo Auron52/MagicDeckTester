@@ -396,20 +396,31 @@ games it is worth -58 turns across the suite (hinata -45, treasure_hunt -13, fiv
 mirrorwing -3). The default is ON deliberately, so a new deck inherits the fix rather than waiting
 for someone to notice it should opt in.
 
-It has ONE predictable failure mode, and this check is how you find out whether your deck has it:
-**opponent life at the horizon is a DAMAGE-RACE proxy, so a deck whose value is STORED rather than
-expressed as damage by the horizon has its build-up priced at zero.** Combo, storm and ramp decks
-bank resources for a discontinuous payoff; rituals and enablers lower nobody's life on the turn they
-are cast. Dragonstorm is the measured instance and is the only deck that opts out today: the
-tie-break truncated a 13-spell turn-6 chain to six spells and turned a turn-8 win into a LOSS.
+Its known failure mode -- worth naming when you hit one -- is that **opponent life at the horizon is
+a DAMAGE-RACE proxy, so a deck whose value is STORED rather than expressed as damage by the horizon
+has its build-up priced at zero.** Combo, storm and ramp decks bank resources for a discontinuous
+payoff; rituals and enablers lower nobody's life on the turn they are cast. Dragonstorm is the
+measured instance: the tie-break truncated a 13-spell turn-6 chain to six spells and turned a turn-8
+win into a LOSS.
 
 Reading the verdict:
-* **KEEP THE DEFAULT / INERT** -> nothing to do.
-* **CANDIDATE FOR OPT-OUT** -> do NOT override the hook on the aggregate alone. Escalate the
-  regressed games on BOTH arms at +1/+2 depth AND 20x budget first: 8 of the 9 regressions found
-  across the whole suite were ordinary budget churn that closed at 20x, and only one was a real
-  valuation failure. Override `GradesNoWinLeaf()` to false only for a game that survives BOTH, and
-  say which stored-value mechanism caused it.
+* **KEEP THE DEFAULT / NEUTRAL** -> nothing to do.
+* **NO SIGN AT THIS SAMPLE** -> not a pass. Binding rates vary by orders of magnitude between decks
+  (a deck that wins well inside the horizon can change fewer than 1 game in 1,000), so a small run
+  reporting "0 changed" is indistinguishable from "never fired". Re-run at the `--blocks` the script
+  suggests before concluding.
+* **OPT OUT** -> **THE METRIC IS THE BAR.** This lever exists solely to lower avg turn-to-win, so a
+  deck whose average it raises opts out; you do not owe a mechanism story first. Add
+  `bool GradesNoWinLeaf() const override { return false; }` to the deck's provider and record the
+  measurement in `docs/design/horizon-honest-leaf.md`.
+
+**Do NOT try to rescue a regression by escalating depth/budget.** The tie-break only fires when a
+rollout reaches the horizon *without* a win, so raising depth/budget lets the search find real wins
+inside the horizon and the leaf stops being consulted. A regression that "closes at 20x budget" has
+therefore reported that the lever stopped FIRING, not that its valuation was sound -- the test is
+near-tautological for a leaf evaluator and is not grounds for keeping the default. (Escalation is
+still the right tool for EXPLAINING a specific game once the metric has already decided.) This
+guidance previously said the opposite and was wrong; see the method notes in the design doc.
 
 See `docs/design/horizon-honest-leaf.md`.
 
