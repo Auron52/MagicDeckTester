@@ -97,3 +97,43 @@ This writes config for every future deck, so it should not ship on reasoning alo
 The failure mode to guard: a deck whose matrix is PARTIAL (table present but thin) must fall to
 rule 2, not read a truncated ladder as convergence. Prefer "emit nothing and say so" over emitting a
 setting derived from an incomplete measurement.
+
+---
+
+## 2026-08-23: the step was wired, and inert for the decks that needed it most
+
+The step shipped as **phase F** of `scripts/valueleaf.sh` (`c2eee2a1`, 2026-08-15) and, per the
+disproof in `mullgen-setting-is-a-trust-question.md`, delegates to the MEASURED deriver
+(`derive_mullgen_setting.py`) rather than reading the setting off the depth table. That much worked.
+
+It nonetheless produced nothing for **KittyEquipment**, whose value leaf was adopted a week later
+(`d33dfe75`, 2026-08-22) and which then generated mulligan labels at the built-in **d5/b20** default
+— 4.44x more expensive than the measured d3/b3 — until it was found by hand while scoping an
+overnight run.
+
+Two defects compounded, and neither was a missing feature:
+
+1. **The deriver refused the case.** It exited on `value_play.target_depth/budget_ms unset --
+   nothing to reference against`. But a deck with no `value_play` is not a deck with no play policy:
+   `ResolvePlaySettings` falls through to `MulliganProfile::BuiltinDefaultPlay()` (d5/b20), which is
+   a perfectly good reference — and is exactly what a human typed by hand for Knights and Mirrorwing
+   ("against the deck's real play policy d5/b20 = BuiltinDefaultPlay, since this deck ships no
+   explicit value_play block"). So the tool refused precisely the decks with the most to gain,
+   because *inheriting the default* is the condition that makes generation expensive in the first
+   place. It now resolves that default itself, parsing it out of `src/ai/MulliganProfile.h` rather
+   than keeping a Python copy that could drift.
+
+2. **Phase F swallowed the exit code.** `mullgen_finalize.py` reported the failure correctly
+   (rc=1), but the call site is `python3 ... | tee -a "$VLQ/driver.log"`, and a pipeline's status is
+   `tee`'s. `mark F_mullgen` then ran unconditionally, so the phase was recorded done and the run
+   reported success. Phase F now reads `PIPESTATUS[0]`, names the failing decks, and refuses to mark
+   itself — so a re-run retries instead of skipping.
+
+**The lesson for the "Validate before wiring in" list above.** Every case on that list was
+validated, and the doc still notes what was owed: *"Still owed: one real value-leaf run end-to-end,
+since the synthetic check exercises the rule and not the log-parsing path into it."* That is exactly
+the gap this fell into. The three listed cases all assume a deck that HAS a `value_play` block; the
+case that broke — a deck with none at all — was never on the list, and a synthetic fixture will
+always have whatever fields the fixture author thought to include. A step that writes config for
+every future deck needs at least one test against a deck in its **shipped** state, not a
+constructed one.

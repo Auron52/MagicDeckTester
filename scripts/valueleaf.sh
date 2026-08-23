@@ -804,15 +804,27 @@ PY
 phase_mullgen() {
     done_p F_mullgen && return 0
     log "PHASE F: mulligan-generation contract (setting by measurement, + record K)"
-    local row key dir stem mkey base games df
+    local row key dir stem mkey base games df failed=""
     for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem mkey base games <<< "$row"
         # Only decks this run actually staged a model for.
         [ -s "logs/eval/$stem.value.STAGED.json" ] || continue
         df=$(deck_file "$dir" "$stem")
         [ -n "$df" ] || { log "  PHASE F: no decklist for $stem under $dir -- skipped"; continue; }
+        # PIPESTATUS[0], not $?: $? is `tee`, which always succeeds. mullgen_finalize DID report the
+        # failure (rc=1) when it could not derive a setting -- the pipeline threw the status away and
+        # `mark` below then recorded the phase as done, so the run reported success while the deck
+        # shipped with no generation setting at all. That is how KittyEquipment spent weeks
+        # generating at the d5/b20 default: not an unimplemented step, a swallowed exit code.
         python3 scripts/mullgen_finalize.py "$df" --write 2>&1 | tee -a "$VLQ/driver.log"
+        [ "${PIPESTATUS[0]}" -eq 0 ] || { failed="$failed $stem"; }
     done
+    if [ -n "$failed" ]; then
+        log "  PHASE F: FAILED for:$failed -- phase NOT marked done, so a re-run retries it."
+        log "  PHASE F: those decks would otherwise generate mulligan profiles at the built-in"
+        log "  PHASE F: default play settings, silently and at full cost."
+        return 1
+    fi
     mark F_mullgen
 }
 

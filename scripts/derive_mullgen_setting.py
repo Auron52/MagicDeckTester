@@ -72,6 +72,28 @@ def spearman(a, b):
     return num / (da * db) if da > 0 and db > 0 else float("nan")
 
 
+def builtin_default_play(hdr="src/ai/MulliganProfile.h"):
+    """(depth, budget_ms) of MulliganProfile::BuiltinDefaultPlay(), READ FROM THE HEADER.
+
+    Not hard-coded: this is the reference a no-value_play deck is scored against, so a Python copy
+    that silently drifted from the C++ would make every such derivation measure a policy no deck
+    plays -- the same class of bug as the value-sidecar-less review mode (8811bb28). Parsed, and
+    fails loudly rather than guessing.
+    """
+    try:
+        src = open(hdr).read()
+    except OSError as e:
+        raise SystemExit("cannot read %s to resolve the built-in default play settings: %s" % (hdr, e))
+    body = re.search(r"BuiltinDefaultPlay\s*\(\s*\)\s*\{(.*?)\}", src, re.S)
+    if not body:
+        raise SystemExit("BuiltinDefaultPlay() not found in %s -- resolve the play reference by hand" % hdr)
+    d = re.search(r"target_depth\s*=\s*(\d+)", body.group(1))
+    b = re.search(r"budget_ms\s*=\s*(\d+)", body.group(1))
+    if not d or not b:
+        raise SystemExit("BuiltinDefaultPlay() in %s no longer sets target_depth/budget_ms literally" % hdr)
+    return int(d.group(1)), int(b.group(1))
+
+
 def score(binary, deck, cards, depth, budget, hands, R, seed):
     """-> (labels, units_per_rollout). Labels are the play/draw mean per opener."""
     env = dict(os.environ,
@@ -123,10 +145,18 @@ def main():
     vp = vjson.get("value_play") or {}
     trust = vjson.get("value_trust_depth")
     play_d, play_b = int(vp.get("target_depth") or 0), int(vp.get("budget_ms") or 0)
+    play_src = "value_play"
     if not play_d or not play_b:
-        raise SystemExit("value_play.target_depth/budget_ms unset -- nothing to reference against")
+        # A deck with no value_play (or an unenabled one) is NOT a deck with no play policy -- it is a
+        # deck that plays at MulliganProfile::BuiltinDefaultPlay(), which is what ResolvePlaySettings
+        # falls through to. Refusing here was self-defeating: the decks with no block are exactly the
+        # decks whose GENERATION silently inherits that default, i.e. the ones with the most to gain.
+        # KittyEquipment lost 4.44x for weeks this way, and phase F reported success while doing it.
+        play_d, play_b = builtin_default_play()
+        play_src = "BuiltinDefaultPlay (deck ships no enabled value_play)"
 
-    print("deck=%s  play=d%d b%d  value_trust_depth=%s" % (deck.stem, play_d, play_b, trust))
+    print("deck=%s  play=d%d b%d  [%s]  value_trust_depth=%s"
+          % (deck.stem, play_d, play_b, play_src, trust))
 
     # ---------------------------------------------------------------------------- always MEASURE
     # There is deliberately NO trusted short-circuit. It is tempting -- on a trusted deck, reaching
