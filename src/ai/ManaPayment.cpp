@@ -1184,7 +1184,8 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
         if (noncreature && def->params.creature_mana_only) { continue; }
         const bool is_land = (def->tmpl == CardTemplate::BasicLand);
         const bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
-                          || def->params.mana_rock;
+                          || def->params.mana_rock
+                          || IsPaySacSource(*def);   // §2a: see ComputeAvailableColors
         if (!is_land && !is_dork) { continue; }
         if (def->params.gy_land_exile_mana)
         {

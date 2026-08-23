@@ -1326,7 +1326,14 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
         if (!def) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
                    || (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
-                   || def->params.mana_rock;
+                   || def->params.mana_rock
+                   // §2a: a pay-sac source produces every colour, and it is often a deck's ONLY
+                   // source of an off-colour pip. Omitting it here made the gate reject the line as
+                   // "no untapped source produces red" -- measured: a Forest-only board holding one
+                   // Treasure could not cast Zada {3}{R}, drew three copies, cast none, and never won
+                   // (game 1497, T6 win -> no win). The old sac_wild credit below covered this; when
+                   // the source model took over that credit, this scan had to take over with it.
+                   || IsPaySacSource(*def);
         if (!is_src) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land
         for (Color c : EffectiveProduces(state, active, *def))   // RP -> union of other lands

@@ -257,6 +257,48 @@ collapse* — but the variants are told apart by the ROLLOUT, not by the afforda
 the value being destroyed. The colour of a one-shot lump split across a multi-spell turn is therefore
 NOT purely a payment question, which is what both §2a and the fold assumed.
 
+### 6b. RECOVERED (2026-08-23): the refutation was MY BUG, not the design
+
+USER asked to walk the failing games. The worst was game 1497 (OFF wins T6; ON never won):
+
+```
+T3 OFF : Oracle's Restoration, play Forest, CAST ZADA {3}{R}   -> treasures 1 -> 0, wins T6
+T3 ON  : Oracle's Restoration, Gold Rush, no land, NO ZADA     -> treasure sits at 1 forever
+         Zada drawn 3x, cast 0x. 2 damage/turn. Never wins.
+```
+
+Every land in that game is a **Forest**. The Treasure is the deck's ONLY red source. ON had decided
+red was unavailable.
+
+**Cause.** `ComputeAvailableColors` (TurnSolver.cpp) carries its OWN `is_src` gate
+(BasicLand / ManaDork / mana_rock) which I never patched, so a pay-sac source contributed no colour
+to `have[]` — while I HAD removed the `sac_wild` credit that used to set all five colours true. The
+restricted-colour gate then rejected the line as "no untapped source produces red". Same omission in
+`BuildColorFeasibility` (ManaPayment.cpp). Two lines each.
+
+The lesson generalises past this change: **the source predicate is open-coded in ~10 places** and
+adding a new kind of mana source means finding all of them. The two that bite are the ones that can
+PRUNE a line; the rest are heuristics (source counts) or diagnostics.
+
+### Result after the fix — fast AND quality-neutral
+
+| | delta (paired, 3000 games) | t | better / worse |
+|---|---|---|---|
+| before | +0.0190 turns WORSE | **+4.20** | 47 / 93 |
+| **after** | **-0.0040 turns** | **-0.88** | **65 / 67** |
+
+Speed unchanged-to-better: 5,120 games **55.25 s -> 36.75 s = 1.50x**, avg 4.9672 -> 4.9664.
+Game 1497 now wins on T4 (better than OFF's T6).
+
+**So §1's argument stands after all, and §6's "reframing" was wrong.** The searched colour variants
+really are redundant: with the affordability model told the truth, the payment solver reproduces the
+fan's quality at 1.50x. The apparent "search value" was the fan compensating for a gate I had
+blinded. Keep §6's warning about UNPAIRED samples — that part holds — but disregard its conclusion.
+
+Still to do before adoption: GT rebaseline, a multi-deck regression pass, and the §2b reservation
+doctrine (a one-shot lump is currently spent whenever the greedy wants one more mana; rank falls out
+as 50, the rainbow tier, purely because `produces` is now 5 colours — that is an accident, not a
+decision, and USER notes a Treasure-only rule is the wrong shape anyway).
 ### Where that leaves it
 
 The lever is built, verified, and default-off. Three ways forward, none free:
