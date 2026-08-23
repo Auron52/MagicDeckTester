@@ -140,6 +140,43 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             m_def_hash[bn] = CardDefHash(entry) ^ std::hash<std::string>{}(bn);
             m_cards[bn] = std::move(back);
         }
+        // BESTOW (Gnarled Scarhide, CR 702.103): the same card may be cast for its printed cost as
+        // a CREATURE, or for its bestow cost as an AURA. Synthesize the aura face as a separate,
+        // separately-named CardDefinition -- exactly the MDFC-back trick above, and for the same
+        // reason: every downstream reader (AuraBonusFor, the lord scans, the ETB token cascade,
+        // combat) resolves a permanent's params through LookupCached on its NAME, so an aura face
+        // that is genuinely a different DB entry needs zero special-casing anywhere else. A
+        // bestowed Scarhide is therefore not a creature, is not a Minotaur on the battlefield, does
+        // not trigger Sethron and is not buffed by lords -- all of which is correct.
+        //
+        // The aura face keeps the card's aura_* grant and its bestow cost, drops the creature P/T
+        // and types, and clears bestow_cost so it can never re-bestow.
+        if (def.params.bestow_cost.has_value())
+        {
+            const std::string bname = def.card.m_name.str() + " (Bestowed)";
+            CardDefinition aura;
+            Card ac;
+            ac.m_name = bname;
+            ac.RehashName();
+            ac.AddType(CardType::Enchantment);
+            for (const std::string& st : def.card.m_subtypes) { ac.m_subtypes.push_back(st); }
+            ac.m_subtypes.push_back("Aura");
+            for (int ci = 0; ci < 5; ++ci)
+            { if (def.card.HasColor(static_cast<Color>(ci))) { ac.AddColor(static_cast<Color>(ci)); } }
+            ac.m_mana_cost = def.params.bestow_cost.value();
+            aura.card  = std::move(ac);
+            aura.tier  = def.tier;
+            aura.tmpl  = CardTemplate::None;   // resolves through the generic permanent-enter path
+            CardParams ap2;
+            ap2.is_aura           = true;
+            ap2.aura_power_bonus  = def.params.aura_power_bonus;
+            ap2.aura_tough_bonus  = def.params.aura_tough_bonus;
+            ap2.aura_grants_lifelink = def.params.aura_grants_lifelink;
+            ap2.aura_enchant_requires = def.params.aura_enchant_requires;
+            aura.params = std::move(ap2);
+            m_def_hash[bname] = CardDefHash(entry) ^ std::hash<std::string>{}(bname);
+            m_cards[bname] = std::move(aura);
+        }
         m_cards[def.card.m_name] = std::move(def);
     }
     RebuildInternedIndex();
@@ -255,6 +292,8 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Metalcraft")    { return Keyword::Metalcraft; } // inert tag; param-modelled (equip {0})
     if (s == "First strike")  { return Keyword::FirstStrike; } // Scryfall lowercase variant
     if (s == "Double strike") { return Keyword::DoubleStrike; }
+    if (s == "Regenerate")    { return Keyword::Regenerate; } // inert tag; nothing destroys our creatures
+    if (s == "Bestow")        { return Keyword::Bestow; }     // inert tag; mechanic is param-modelled
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -835,6 +874,27 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.look_put_counter_bonus        = params.value("look_put_counter_bonus", 0);
     p.look_put_counter_bonus_max_mv = params.value("look_put_counter_bonus_max_mv", 0);
     p.created_token_color           = params.value("created_token_color", std::string{});
+
+    // ---- Minotaur tribal (see CardParams' block comment for each field's semantics) ----
+    p.etb_damage_devotion_color       = params.value("etb_damage_devotion_color", std::string{});
+    p.reduces_subtype_colored_subtype = params.value("reduces_subtype_colored_subtype", std::string{});
+    if (params.contains("reduces_subtype_colored_cost"))
+        p.reduces_subtype_colored_cost =
+            ManaCostFromString(params["reduces_subtype_colored_cost"].get<std::string>());
+    p.attack_pump_matching_power    = params.value("attack_pump_matching_power", 0);
+    p.must_attack                   = params.value("must_attack", false);
+    p.hand_size_anthem_max          = params.value("hand_size_anthem_max", -1);
+    p.hand_size_anthem_power        = params.value("hand_size_anthem_power", 0);
+    p.hand_size_anthem_tough        = params.value("hand_size_anthem_tough", 0);
+    p.combat_damage_each_discards   = params.value("combat_damage_each_discards", 0);
+    p.firebreathing_discard         = params.value("firebreathing_discard", false);
+    p.etb_token_includes_self       = params.value("etb_token_includes_self", false);
+    p.team_pump_grants_haste        = params.value("team_pump_grants_haste", false);
+    p.sacrifice_watch_pump_power    = params.value("sacrifice_watch_pump_power", 0);
+    p.sac_outlet_allows_enchantment = params.value("sac_outlet_allows_enchantment", false);
+    p.sac_outlet_excludes_self      = params.value("sac_outlet_excludes_self", false);
+    if (params.contains("bestow_cost"))
+        p.bestow_cost = ManaCostFromString(params["bestow_cost"].get<std::string>());
 
     return p;
 }

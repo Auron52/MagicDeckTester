@@ -99,6 +99,23 @@ struct Action
                              // searched activation COUNT K (cost pre-scaled to K x the printed
                              // activation cost). Applied in the trailing pass (after main casts,
                              // pre-combat), K sequential reveals per action (clairvoyant top).
+        ActivatePump,        // A MAIN-PHASE activated pump whose cost the combat-time firebreathing
+                             // converter cannot price. sac_source_id = the source; chosen_x = the
+                             // activation COUNT K (cost pre-scaled to K x the unit cost, the Call
+                             // of the Wild pattern); gy_exile_mode selects the shape:
+                             //   1 = SELF pump with a DISCARD rider (Burning-Fist Minotaur
+                             //       "{1}{R}, Discard a card: this gets +2/+0"). Not left to
+                             //       ApplyFirebreathing because its greedy damage-per-mana ratio
+                             //       cannot price a CARD -- and in this deck an emptied hand is
+                             //       itself a payoff (Neheb's hand-size anthem), so the tradeoff
+                             //       is exactly the kind of judgment the search must own.
+                             //   2 = TEAM pump that also grants HASTE (Sethron, Hurloon General
+                             //       "{2}{B/R}: Minotaurs you control get +1/+0 and gain menace
+                             //       and haste"). Haste has to land BEFORE attackers are declared,
+                             //       which a combat-time converter structurally cannot do.
+                             // The mana-only half of a team pump stays in ApplyFirebreathing too
+                             // (leftover combat mana); activating both is legal -- the ability is
+                             // repeatable -- and no mana is double-spent.
         UntapCreature,       // Wirewood Lodge "{G}, {T}: Untap target Elf." sac_source_id = the
                              // land; cost = untap_creature_cost. Applied in the trailing pass:
                              // taps the source and untaps the highest-yield TAPPED matching
@@ -235,6 +252,17 @@ struct Action
                                        // (SubsetHasMissingTrickTarget) is a name compare instead of a
                                        // zone scan (it profiled at 3.7%). Empty = battlefield target
                                        // (always legal) or not a trick.
+    bool        bestow           = false;
+                                       // BESTOW (Gnarled Scarhide, CR 702.103): this CastFromHand is
+                                       // the AURA mode -- pay CardParams::bestow_cost instead of the
+                                       // printed cost, and resolve the "<name> (Bestowed)" aura face
+                                       // the DB synthesizes rather than the creature. enchant_target
+                                       // carries the host. CollectActions emits BOTH modes as
+                                       // variants sharing hand_index (mutually exclusive), so the
+                                       // SEARCH decides -- neither dominates (the creature mode is
+                                       // cheaper and is itself a lord-buffed Minotaur; the aura mode
+                                       // dodges summoning sickness and pumps a creature that can
+                                       // attack NOW). false = the ordinary creature cast.
     int         ponder_keep      = -1;
                                        // Ponder-style cast_reorder: the SEARCHED keep-vs-shuffle
                                        // call. CollectActions emits TWO variants (1 = keep top N in

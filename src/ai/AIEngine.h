@@ -419,7 +419,8 @@ private:
                            int splice_count = 0,        // Desperate Ritual splice count k (0 = plain)
                            const std::string& chosen_float_color = "", // Apex of Power: searched float colour
                            int enchant_target = 0,      // Aura: searched creature to enchant (0 = none)
-                           bool free_cast = false);     // Maelstrom Archangel: spend a banked free cast
+                           bool free_cast = false,      // Maelstrom Archangel: spend a banked free cast
+                           bool bestow    = false);     // Gnarled Scarhide: cast the AURA (bestow) mode
                                                         // (GameState::free_casts_available) instead of
                                                         // paying mana; falls back to a paid attempt if
                                                         // the bank is empty (stranded marker).

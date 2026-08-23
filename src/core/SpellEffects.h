@@ -2066,14 +2066,25 @@ inline bool IsLordPermanent(const CardDefinition& def)
         && (!def.params.subtypes_affected.empty() || def.params.affects_all_creatures);
 }
 
+// TAKES THE WHOLE GameState, not just the battlefield (changed 2026-08-23 for Neheb, the Worthy).
+// A CONDITIONAL anthem -- "as long as you have one or fewer cards in hand, Minotaurs you control
+// get +2/+0" (CardParams::hand_size_anthem_max) -- depends on a player's HAND, which the battlefield
+// alone cannot see. The parameter type was changed rather than appended precisely so the compiler
+// flags every one of the 17 call sites: an appended `int hand_size` would have bound silently to the
+// existing `bool all_creature_types` at the 5-argument sites (bool->int is an implicit conversion),
+// producing a wrong bonus with no diagnostic. GameState and std::vector<Permanent> are unrelated
+// types, so no call site can compile against the wrong overload. `state.battlefield` is what every
+// pre-existing call site already passed, so this is byte-identical for every deck with no
+// conditional-anthem card in play.
 inline std::pair<int,int> ComputeLordBonus(
     const Card&                    creature,
-    const std::vector<Permanent>&  battlefield,
+    const GameState&               state,
     int                            controller_index,
     bool                           all_creature_types = false,
     const Permanent*               self               = nullptr,
     const std::vector<int>*        controlled_lord_idx = nullptr)
 {
+    const std::vector<Permanent>& battlefield = state.battlefield;
     int pb = 0, tb = 0;
 
     // Faeburrow Elder characteristic P/T (domain_self_pump): +1/+1 for each color among the
@@ -2178,6 +2189,42 @@ inline std::pair<int,int> ComputeLordBonus(
     else
     {
         for (const Permanent& lord : battlefield) { process_lord(lord); }
+    }
+
+    // CONDITIONAL anthem (Neheb, the Worthy: "As long as you have one or fewer cards in hand,
+    // Minotaurs you control get +2/+0"). Deliberately NOT folded into process_lord above: the
+    // source is not an IsLordPermanent (its static power_bonus is 0), so it is absent from the
+    // caller's pre-filtered controlled_lord_idx list and must be scanned separately. The bonus is
+    // SELF-INCLUSIVE ("Minotaurs you control", not "other"), so there is no self-exclusion here.
+    // The scan is skipped entirely unless the state actually holds such a permanent, so every
+    // deck without one pays a single bool test per call and is byte-identical.
+    {
+        const std::size_t hand_size = state.players[controller_index].hand.size();
+        for (const Permanent& src : battlefield)
+        {
+            if (src.controller_index != controller_index) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+            if (!sd || sd->params.hand_size_anthem_max < 0)                        { continue; }
+            if (static_cast<int>(hand_size) > sd->params.hand_size_anthem_max)     { continue; }
+            bool matches = sd->params.affects_all_creatures;
+            if (!matches && all_creature_types && !sd->params.subtypes_affected.empty())
+            { matches = true; }
+            if (!matches)
+            {
+                // Manual subtype loop (not CardHasSubtype): that helper is defined further down
+                // this header, and `process_lord` above open-codes the same scan for the same
+                // reason.
+                for (const std::string& sub : sd->params.subtypes_affected)
+                {
+                    if (matches) { break; }
+                    for (const std::string& cs : creature.m_subtypes)
+                    { if (cs == sub) { matches = true; break; } }
+                }
+            }
+            if (!matches) { continue; }
+            pb += sd->params.hand_size_anthem_power;
+            tb += sd->params.hand_size_anthem_tough;
+        }
     }
     return {pb, tb};
 }
@@ -2449,7 +2496,7 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         {
             const Permanent& e = state.battlefield[entered_index];
             entered_power = e.EffectivePower()
-                + ComputeLordBonus(e.card, state.battlefield, e.controller_index,
+                + ComputeLordBonus(e.card, state, e.controller_index,
                                    e.is_animated, &e).first;
         }
         return entered_power;
@@ -2720,8 +2767,14 @@ inline void OnDragonEnters(GameState& state, int controller, int entered_index)
             }
         }
     }
-    // Early out for every non-Dragon enter (keeps all other token/creature decks byte-identical).
-    if (!CardHasSubtype(state.battlefield[entered_index].card, "Dragon")) { return; }
+    // Early out for every NONCREATURE enter. This used to early-out on "not a Dragon", which made
+    // the token cascade below Dragon-only; Sethron, Hurloon General needs the same shape for
+    // Minotaurs, so the subtype gate moved DOWN to where it belongs -- STEP 1 already filters per
+    // SOURCE on that source's own etb_token_requires_subtype, and STEP 2 (the Scourge ping) keeps
+    // its explicit Dragon gate. Byte-identical for every existing deck: a non-Dragon creature now
+    // runs STEP 1's scan, but no shipped source has etb_other_subtype_creates_tokens with a
+    // non-Dragon requirement, so it creates nothing and STEP 2 still returns early.
+    if (!state.battlefield[entered_index].card.IsCreature()) { return; }
     const bool entered_is_token = state.battlefield[entered_index].is_token;
     // Copy the newcomer's subtypes: CreateToken below push_backs and may reallocate the vector,
     // which would dangle a reference (entered_index itself stays valid -- tokens only append).
@@ -2731,25 +2784,28 @@ inline void OnDragonEnters(GameState& state, int controller, int entered_index)
     // is a NONTOKEN Dragon that is not the Lathliss itself and matches the required subtype.
     if (!entered_is_token)
     {
-        struct Spec { int p, t; std::vector<std::string> subs; };
+        struct Spec { int p, t; std::vector<std::string> subs; std::string color; };
         std::vector<Spec> specs;
         const int bf_size = static_cast<int>(state.battlefield.size());
         for (int i = 0; i < bf_size; ++i)
         {
-            if (i == entered_index) { continue; }                 // "another Dragon" -- not the source
             const Permanent& src = state.battlefield[i];
             if (src.controller_index != controller) { continue; }
             const CardDefinition* sdef = CardDatabase::Instance().LookupCached(src.card);
             if (!sdef || !sdef->params.etb_other_subtype_creates_tokens) { continue; }
+            // "another Dragon" (Lathliss) skips the source's own enter; "Sethron OR another
+            // nontoken Minotaur" (etb_token_includes_self) does not.
+            if (i == entered_index && !sdef->params.etb_token_includes_self) { continue; }
             if (!sdef->params.etb_token_requires_subtype.empty()
                 && !CardHasSubtype(entered_card, sdef->params.etb_token_requires_subtype)) { continue; }
             specs.push_back({ sdef->params.etb_created_token_power,
                               sdef->params.etb_created_token_toughness,
-                              sdef->params.etb_created_token_subtypes });
+                              sdef->params.etb_created_token_subtypes,
+                              sdef->params.created_token_color });
         }
         for (const Spec& s : specs)
         {
-            CreateToken(state, controller, s.p, s.t, s.subs);      // recursively re-pings Scourge
+            CreateToken(state, controller, s.p, s.t, s.subs, s.color);   // re-pings Scourge
         }
     }
 
@@ -2847,6 +2903,49 @@ inline int CountEtbDestroyTargets(const GameState& state, int controller)
 // 2026-08-21: "we might be able to see it in the current turn plan? ... That would make things
 // the easiest"). Defined after AvailableManaPool's declaration; full doctrine at the definition.
 inline int ProjectEtbDestroyK(const GameState& state, int controller, const CardDefinition& def);
+
+// ---- CR 700.5 DEVOTION -------------------------------------------------------------------------
+// "Your devotion to [color] is the number of mana symbols of that color among the mana costs of
+// permanents you control." Counts only PERMANENTS (battlefield), only their printed mana costs,
+// and never generic/{C}/{X}. HYBRID pips count for BOTH their colours (CR 202.2b): the engine's
+// flat ManaCost bakes a hybrid into its FIRST colour, so that half is already in the flat int and
+// only each pip's SECOND colour has to be added here. That makes Boros Reckoner's {R/W}{R/W}{R/W}
+// read as devotion-to-red 3 AND devotion-to-white 3, both correct.
+//
+// A card OUTSIDE the battlefield carries no mask (see the DeckLoader note at the top of this
+// header), but every permanent here was built from `def.card`, so its m_mana_cost is real; the
+// LookupCached fallback keeps a token (no DB entry, no cost) contributing 0, which is right --
+// a token has no mana cost.
+inline int DevotionTo(const GameState& state, int controller, const std::string& color)
+{
+    if (color.empty()) { return 0; }
+    const char c = color[0];
+    int dev = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller) { continue; }
+        const ManaCost& mc = q.card.m_mana_cost;
+        switch (c)
+        {
+            case 'W': dev += mc.white; break;
+            case 'U': dev += mc.blue;  break;
+            case 'B': dev += mc.black; break;
+            case 'R': dev += mc.red;   break;
+            case 'G': dev += mc.green; break;
+            default: break;
+        }
+        for (int i = 0; i < mc.hybrid_count; ++i)
+        {
+            const Color second = static_cast<Color>(mc.hybrid_pair[i] & 0xF);
+            const bool  hit =
+                  (c == 'W' && second == Color::White) || (c == 'U' && second == Color::Blue)
+                || (c == 'B' && second == Color::Black) || (c == 'R' && second == Color::Red)
+                || (c == 'G' && second == Color::Green);
+            if (hit) { ++dev; }
+        }
+    }
+    return dev;
+}
 
 inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
                            const std::string& chosen_tutor = "", int etb_kx = -1)
@@ -2973,7 +3072,15 @@ inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
     // (2) ETB single-target burn ("deals N damage to any target" -> opponent face; Twinshot 2)
     //     and (3) "each opponent" ping (Chainwhirler 1: face + each opponent creature/pw).
     const int opp = 1 - controller;
-    const int face_dmg = p.etb_damage_any + p.etb_damage_each_opponent;
+    // (2b) ETB devotion burn (Fanatic of Mogis: "deals damage to each opponent equal to your
+    //      devotion to red"). Counted AFTER it enters -- the Fanatic is already on the battlefield
+    //      when its own ETB trigger resolves, so its own {R} pip counts (CR 700.5 / 603.6a). A
+    //      single opponent, so "each opponent" is one face hit. Routed through the same life sink
+    //      as the fixed ETB burn so the win projection reads it.
+    const int devotion_dmg = p.etb_damage_devotion_color.empty()
+                           ? 0
+                           : DevotionTo(state, controller, p.etb_damage_devotion_color);
+    const int face_dmg = p.etb_damage_any + p.etb_damage_each_opponent + devotion_dmg;
     if (face_dmg > 0)
     {
         state.players[opp].life -= face_dmg;
@@ -3030,6 +3137,37 @@ inline void OnGoblinEnters(GameState& state, int controller, int entered_index,
 // pass) resolves each against the survivors, so a watcher that dies alongside another watched
 // creature does not see that co-death. This is essentially unreachable in goldfishing (our creatures
 // die one-at-a-time via sacrifice outlets, never in combat vs the passive opponent).
+// ---- SACRIFICE watchers ("whenever you sacrifice a permanent, ...") ----------------------------
+// Slaughter-Priest of Mogis: "Whenever you sacrifice a permanent, this creature gets +2/+0 until
+// end of turn." Distinct from OnCreatureDies below in BOTH directions: a sacrifice is not always a
+// death (a sacrificed LAND is not a creature dying) and a death is not always a sacrifice (combat
+// damage, a -X/-X sweep). So this is its own hook, called from every site where the controller
+// SACRIFICES one of their own permanents -- the fetchland crack, the creature-sac outlets, a
+// sacrifice paid as an additional cost, and Lotus Bloom's tap-and-sac. Call it ONCE PER SACRIFICED
+// PERMANENT, after the permanent has left the battlefield.
+//
+// Gated on a watcher being in play, so every deck without one pays a single battlefield scan whose
+// body never runs -> byte-identical. Note the interaction that makes this live in the Minotaur
+// deck: cracking a Bloodstained Mire IS a sacrifice, so a fetch played on the attacking turn pumps
+// the Priest for free.
+inline void FireSacrificeWatchers(GameState& state, int controller)
+{
+    for (Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != controller) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (!wd || wd->params.sacrifice_watch_pump_power <= 0) { continue; }
+        w.temp_power_bonus += wd->params.sacrifice_watch_pump_power;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          w.card.m_name.str() + ": +"
+                          + std::to_string(wd->params.sacrifice_watch_pump_power)
+                          + "/+0 (a permanent was sacrificed)");
+        }
+    }
+}
+
 inline void OnCreatureDies(GameState& state, int dead_controller, const Card& dead_card,
                            bool dead_was_token = false)
 {
@@ -3629,7 +3767,7 @@ inline ManaCost EquipActionCostNow(const GameState& state, int controller, int e
 inline int EquipGatePowerOf(const Permanent& host, const GameState& state)
 {
     int pw = host.EffectivePower()
-           + ComputeLordBonus(host.card, state.battlefield, host.controller_index,
+           + ComputeLordBonus(host.card, state, host.controller_index,
                               host.is_animated, &host).first
            + AuraBonusFor(host, state).first
            + EquipBonusFor(host, state).first;
@@ -3800,8 +3938,13 @@ inline void ApplyGraveyardExileAbility(GameState& state, int controller, int sou
 // victim's card.m_number, or -1 if none. MIRRORS the enumeration's bounded victim pick in
 // TurnSolver::CollectActions -> the single-victim GT is unchanged and the multi-sac burst apply picks
 // the same order in both worlds (executor + rollout), so it is lockstep. `need_sub` empty = any creature.
+// `allow_enchantment` / `exclude_self` widen the victim filter for Slaughter-Priest of Mogis
+// ("{2}, Sacrifice another creature OR AN ENCHANTMENT"): an enchantment permanent becomes legal
+// fodder, and "another" makes the source itself ILLEGAL rather than merely last-ranked. Both
+// default false -> every pre-existing outlet (Skirk / Siege-Gang / Pashalik) is byte-identical.
 inline int CanonicalSacVictim(const GameState& state, int controller, int source_id,
-                              const std::string& need_sub)
+                              const std::string& need_sub,
+                              bool allow_enchantment = false, bool exclude_self = false)
 {
     // Expendability heuristic (lower rank = sacrifice FIRST). Base metric is EFFECTIVE power (sac the
     // weakest), adjusted so we:
@@ -3815,8 +3958,16 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
     int victim_id = -1; int victim_rank = std::numeric_limits<int>::max();
     for (const Permanent& v : state.battlefield)
     {
-        if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
-        if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
+        if (v.controller_index != controller) { continue; }
+        const bool eligible = v.card.IsCreature()
+                           || (allow_enchantment && v.card.IsEnchantment());
+        if (!eligible) { continue; }
+        if (exclude_self && v.card.m_number == source_id) { continue; }   // "another ..."
+        // A subtype filter constrains only CREATURES; an enchantment admitted by
+        // allow_enchantment is legal fodder on its type alone (the oracle says "or an
+        // enchantment", not "or an enchantment of that type").
+        if (!need_sub.empty() && v.card.IsCreature() && !CardHasSubtype(v.card, need_sub))
+        { continue; }
         int rank = v.EffectivePower();                 // base: sac the weakest first
         const CardDefinition* d = CardDatabase::Instance().LookupCached(v.card);
         const bool self_replacing = d && d->params.dies_trigger_creates_tokens > 0
@@ -3845,6 +3996,7 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     const bool was_tok  = state.battlefield[idx].is_token;
     state.players[controller].graveyard.push_back(dead);
     state.battlefield.erase(state.battlefield.begin() + idx);
+    FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
     OnCreatureDies(state, controller, dead, was_tok);
 }
 
@@ -4047,6 +4199,82 @@ inline void ApplyUntapCreature(GameState& state, int controller, int source_id,
     }
 }
 
+// ---- Main-phase ACTIVATED PUMP (Action::Kind::ActivatePump) -------------------------------------
+// One shared apply for both shapes, called IDENTICALLY from the rollout (TurnSolver's trailing
+// apply pass) and the executor (AIEngine::TakeTurn) so the two worlds stay lockstep.
+//
+//   mode 1 -- SELF pump with a discard rider (Burning-Fist Minotaur). Per activation: the source
+//             gains +firebreathing_power/+0 until end of turn and its controller discards ONE card,
+//             chosen by the provider's cleanup-discard ranking (so a deck that owns its discard
+//             doctrine sheds by that doctrine here too, not by an ad-hoc rule). Stops early when
+//             the hand runs out -- "Discard a card" is an unpayable cost with an empty hand.
+//   mode 2 -- TEAM pump + HASTE (Sethron). Per activation: every creature the controller controls
+//             matching team_pump_subtypes gets +team_pump_power/+0 and temp_haste until end of
+//             turn. Menace is inert (no blockers) and not modelled -- disclosed deferral D7.
+//
+// The MANA has already been paid by the caller (pre-scaled to K x unit cost), so this only applies
+// the effects; `k` is the activation count. Returns the number of activations actually realised
+// (mode 1 can stop short on an empty hand), which is what the caller logs.
+inline int ApplyActivatePump(GameState& state, int controller, int source_id, int mode, int k)
+{
+    int src = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index == controller && p.card.m_number == source_id) { src = i; break; }
+    }
+    if (src < 0) { return 0; }   // source left the battlefield: stranded-outlet safe, a full no-op
+    const CardDefinition* sd = CardDatabase::Instance().LookupCached(state.battlefield[src].card);
+    if (!sd) { return 0; }
+    int done = 0;
+    for (int n = 0; n < std::max(1, k); ++n)
+    {
+        if (mode == 1)
+        {
+            Player& ap = state.players[controller];
+            if (ap.hand.empty()) { break; }                       // unpayable additional cost
+            const std::vector<int> rank =
+                ResolveProvider(state).CleanupDiscardCandidates(state, nullptr);
+            const int hi = (!rank.empty() && rank.front() >= 0
+                            && rank.front() < static_cast<int>(ap.hand.size()))
+                         ? rank.front() : 0;
+            const std::string shed = ap.hand[static_cast<std::size_t>(hi)].m_name.str();
+            ap.graveyard.push_back(ap.hand[static_cast<std::size_t>(hi)]);
+            ap.hand.erase(ap.hand.begin() + hi);
+            state.battlefield[src].temp_power_bonus += sd->params.firebreathing_power;
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              state.battlefield[src].card.m_name.str() + ": +"
+                              + std::to_string(sd->params.firebreathing_power)
+                              + "/+0 (discarded " + shed + ")");
+            }
+        }
+        else   // mode 2 -- team pump + haste
+        {
+            for (Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != controller) { continue; }
+                if (!q.card.IsCreature() && !q.is_animated) { continue; }
+                bool m = sd->params.team_pump_subtypes.empty();
+                for (const std::string& sub : sd->params.team_pump_subtypes)
+                { if (q.is_animated || CardHasSubtype(q.card, sub)) { m = true; break; } }
+                if (!m) { continue; }
+                q.temp_power_bonus += sd->params.team_pump_power;
+                if (sd->params.team_pump_grants_haste) { q.temp_haste = true; }
+            }
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              state.battlefield[src].card.m_name.str() + ": Minotaurs +"
+                              + std::to_string(sd->params.team_pump_power) + "/+0 and haste");
+            }
+        }
+        ++done;
+    }
+    return done;
+}
+
 // HUMAN-PLAY victim override for a creature-sac outlet (viewer issue #4). Autonomously the victim is
 // CanonicalSacVictim's expendability pick and the human never saw it -- but "which Goblin dies" is a
 // real decision (feeding a lord to Skirk de-buffs the whole board; feeding Mogg War Marshal is nearly
@@ -4131,9 +4359,15 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         for (int i = 0; !found && i < static_cast<int>(state.battlefield.size()); ++i)
         {
             Permanent& q = state.battlefield[i];
-            if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
+            if (q.controller_index != controller) { continue; }
+            // Slaughter-Priest widening: an ENCHANTMENT is legal fodder too, and "another" bars
+            // the source itself. Both gated -> every pre-existing outlet keeps the creature-only,
+            // source-allowed filter exactly (byte-identical).
+            if (!q.card.IsCreature()
+                && !(op->sac_outlet_allows_enchantment && q.card.IsEnchantment())) { continue; }
             if (q.card.m_number != victim_id) { continue; }
-            if (!op->sac_creature_requires_subtype.empty()
+            if (op->sac_outlet_excludes_self && q.card.m_number == source_id) { continue; }
+            if (!op->sac_creature_requires_subtype.empty() && q.card.IsCreature()
                 && !CardHasSubtype(q.card, op->sac_creature_requires_subtype)) { continue; }
             victim = q.card; found = true; victim_tok = q.is_token;
             state.players[controller].graveyard.push_back(q.card);
@@ -4142,7 +4376,9 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         }
         if (found || attempt > 0 || !victim_was_token) { break; }
         victim_id = CanonicalSacVictim(state, controller, source_id,
-                                       op->sac_creature_requires_subtype);
+                                       op->sac_creature_requires_subtype,
+                                       op->sac_outlet_allows_enchantment,
+                                       op->sac_outlet_excludes_self);
         if (victim_id < 0) { break; }
     }
     if (!found) { return; }
@@ -4155,6 +4391,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     if (!mana_color.empty()) { AddChosenColorFloat(state, mana_color, mana_amt); }
     if (dmg > 0) { state.players[1 - controller].life -= dmg; state.opponent_lost_life_this_turn = true; }
     for (int k = 0; k < ntok; ++k) { CreateToken(state, controller, tp, tt, tsub); }
+    FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
     OnCreatureDies(state, controller, victim, victim_tok);   // Pashalik ping / Rundvelt impulse / Mogg death token
 }
 
@@ -4168,18 +4405,25 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
 inline void ApplySacCreatureOutletBurst(GameState& state, int controller, int source_id, int count)
 {
     std::string need_sub;
+    bool allow_ench = false, excl_self = false;
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index == controller && p.card.m_number == source_id)
         {
             const CardDefinition* od = CardDatabase::Instance().LookupCached(p.card);
-            if (od) { need_sub = od->params.sac_creature_requires_subtype; }
+            if (od)
+            {
+                need_sub   = od->params.sac_creature_requires_subtype;
+                allow_ench = od->params.sac_outlet_allows_enchantment;
+                excl_self  = od->params.sac_outlet_excludes_self;
+            }
             break;
         }
     }
     for (int n = 0; n < count; ++n)
     {
-        int victim_id = CanonicalSacVictim(state, controller, source_id, need_sub);
+        int victim_id = CanonicalSacVictim(state, controller, source_id, need_sub,
+                                           allow_ench, excl_self);
         if (victim_id < 0) { break; }   // ran out of victims
         ApplySacCreatureOutlet(state, controller, source_id, victim_id);
     }
@@ -4309,6 +4553,33 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
             }
             self.temp_power_bonus += p.attack_self_pump_power * others;
             self.temp_tough_bonus += p.attack_self_pump_tough * others;
+        }
+    }
+
+    // Kragma Warcaller: "Whenever a Minotaur you control attacks, it gets +2/+0 until end of turn."
+    // A TEAM attack trigger, so it is driven by the SOURCES the controller has in play rather than
+    // by each attacker's own params (the two loops above). One trigger per (source, matching
+    // attacker) pair, and the source pumps ITSELF when it attacks -- the oracle says "a Minotaur
+    // you control", not "another". The source need not be attacking for the trigger to fire on
+    // other attackers. Gated on the param, so the source scan is skipped for every other deck.
+    {
+        const int bf_all = static_cast<int>(state.battlefield.size());
+        for (int si = 0; si < bf_all; ++si)
+        {
+            const Permanent& src = state.battlefield[si];
+            if (src.controller_index != controller) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+            if (!sd || sd->params.attack_pump_matching_power <= 0) { continue; }
+            for (int idx : attacker_indices)
+            {
+                if (idx < 0 || idx >= bf_all) { continue; }
+                Permanent& a = state.battlefield[idx];
+                if (a.controller_index != controller) { continue; }
+                bool m = sd->params.subtypes_affected.empty();   // empty = every attacker
+                for (const std::string& sub : sd->params.subtypes_affected)
+                { if (a.is_animated || CardHasSubtype(a.card, sub)) { m = true; break; } }
+                if (m) { a.temp_power_bonus += sd->params.attack_pump_matching_power; }
+            }
         }
     }
 }
@@ -4854,6 +5125,13 @@ inline int ApplyFirebreathing(GameState& state, int controller,
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (!d || !d->params.firebreathing_cost.has_value() || d->params.firebreathing_power <= 0)
             { continue; }
+            // A firebreather with a DISCARD rider (Burning-Fist Minotaur) is deliberately NOT
+            // converted here. This loop's damage-per-MANA ratio cannot price a CARD, and in the
+            // deck that runs it an emptied hand is itself a payoff (Neheb's hand-size anthem), so
+            // spending the hand for +2/+0 is a judgment the SEARCH must own -- it is enumerated as
+            // a main-phase Action::Kind::ActivatePump instead. Leaving it in would be exactly the
+            // greedy-step-inside-the-searched-window this repo forbids.
+            if (d->params.firebreathing_discard) { continue; }
             const ManaCost& c = d->params.firebreathing_cost.value();
             if (!pool.CanPay(c)) { continue; }
             double ratio = static_cast<double>(d->params.firebreathing_power)
@@ -8416,6 +8694,13 @@ inline void PerformFetch(GameState& state, int controller_index,
 {
     Player& ap = state.players[controller_index];
     ap.life -= 1;   // pay 1 life (irrelevant vs a passive opponent, but faithful)
+    // "Sacrifice this land" is the OTHER half of the activation cost, and it is a real sacrifice
+    // even though this engine collapses the fetchland's own battlefield stay to nothing (see the
+    // card's bracket note: it never enters, so it never taps). A sacrifice-watcher must still see
+    // it -- in a real game the fetchland is on the battlefield and is sacrificed, so cracking a
+    // Bloodstained Mire pumps a Slaughter-Priest of Mogis. Fired here, at the cost, before the
+    // search resolves. Param-gated -> byte-identical for every deck with no watcher in play.
+    FireSacrificeWatchers(state, controller_index);
 
     std::string want = target_name;
     if (want.empty())
@@ -8489,6 +8774,7 @@ inline void PerformSacrificeLandCost(GameState& state, const std::string& spell_
     {
         ap.graveyard.push_back(state.battlefield[idx].card);
         state.battlefield.erase(state.battlefield.begin() + idx);
+        FireSacrificeWatchers(state, state.active_player_index);   // Slaughter-Priest
     }
 }
 
@@ -8577,6 +8863,7 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
         EmitPlayEvent(state.turn_number, "sacrifice",
                       "\xF0\x9F\x94\xAA " + spell_name + " -- sacrificed " + dead.m_name.str());
     }
+    FireSacrificeWatchers(state, active);   // Slaughter-Priest (a sac cost IS a sacrifice)
     OnCreatureDies(state, active, dead, was_tok);
 }
 

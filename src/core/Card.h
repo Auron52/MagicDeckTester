@@ -65,7 +65,18 @@ enum class Keyword
     // Metalcraft (Puresteel Paladin): an INERT ability-word tag -- the mechanic is modelled
     // structurally via CardParams::metalcraft_equip_zero_artifacts (EquipCostGenericNow). Kept
     // only so the Scryfall keywords field stays faithful; no engine code reads it.
-    Metalcraft
+    Metalcraft,
+    // Regenerate (Deathbellow Raider's "{2}{B}: Regenerate this creature"): an INERT keyword-ability
+    // tag. Regeneration is a replacement effect for DESTRUCTION, and nothing in this sim destroys our
+    // creatures (the opponent never blocks, casts, or removes -- see Combat.cpp, which has no blocker
+    // path at all), so the ability can never apply. Kept only so the Scryfall keywords field
+    // ["Regenerate"] stays faithful; no engine code reads it. Disclosed deferral D8.
+    Regenerate,
+    // Bestow (Gnarled Scarhide): an INERT keyword-ability TAG -- the mechanic itself is fully modelled
+    // structurally via CardParams::bestow_cost + Action::bestow + the DB's synthesized
+    // "<name> (Bestowed)" aura face. Kept only so the Scryfall keywords field ["Bestow"] stays
+    // faithful; no engine code reads this enumerator.
+    Bestow
 };
 enum class Supertype { Legendary, Basic, Snow, World };
 
@@ -230,6 +241,7 @@ struct Card
     bool IsCreature() const { return HasType(CardType::Creature); }
     bool IsInstant()  const { return HasType(CardType::Instant); }
     bool IsSorcery()  const { return HasType(CardType::Sorcery); }
+    bool IsEnchantment() const { return HasType(CardType::Enchantment); }
 
     bool HasType(CardType t)       const { return (m_type_mask      & Bit(t)) != 0; }
     bool HasSupertype(Supertype s) const { return (m_supertype_mask & Bit(s)) != 0; }

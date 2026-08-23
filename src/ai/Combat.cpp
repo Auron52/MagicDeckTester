@@ -50,7 +50,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     {
         Permanent& p = state.battlefield[idx];
         const bool animated = p.is_animated;
-        auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state.battlefield, active, animated, &p, &lord_idx);
+        auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, animated, &p, &lord_idx);
         (void)lord_tb;
         const bool ds = (animated
             ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true, &ds_idx)
@@ -128,5 +128,29 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // permanent from hand onto the battlefield (shared enter cascade). Fired AFTER Utvara so the
     // pre-token attacker pointers above are already consumed.
     FireCombatDamageCheatIntoPlay(state, active, damaging_idx);
+
+    // Neheb, the Worthy: "Whenever Neheb deals combat damage to a player, each player discards a
+    // card." Fired here, after damage, off the same damaging_idx list Goblin Lackey uses -- so it
+    // is once per connecting copy, in the shared combat core (executor + rollout lockstep). Only
+    // OUR half is modelled: the passive opponent never casts and no decision reads their hand
+    // (disclosed deferral D10). The shed card is the provider's cleanup-discard pick, and the
+    // discard is what can switch Neheb's own hand-size anthem ON -- but only for a LATER turn's
+    // combat, since this fires after damage has already been dealt.
+    for (int idx : damaging_idx)
+    {
+        if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
+        const CardDefinition* nd = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
+        if (!nd || nd->params.combat_damage_each_discards <= 0) { continue; }
+        Player& ap = state.players[active];
+        for (int k = 0; k < nd->params.combat_damage_each_discards && !ap.hand.empty(); ++k)
+        {
+            const std::vector<int> rank = ResolveProvider(state).CleanupDiscardCandidates(state, nullptr);
+            const int hi = (!rank.empty() && rank.front() >= 0
+                            && rank.front() < static_cast<int>(ap.hand.size()))
+                         ? rank.front() : 0;
+            ap.graveyard.push_back(ap.hand[static_cast<std::size_t>(hi)]);
+            ap.hand.erase(ap.hand.begin() + hi);
+        }
+    }
     return out;
 }

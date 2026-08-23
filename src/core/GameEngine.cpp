@@ -744,7 +744,7 @@ void GameEngine::CheckStateBasedActions(GameState& state)
                     // freshly-cast Faeburrow dies on ETB despite always counting its own G/W.
                     // Entered only when the raw toughness is already <= 0 -> byte-identical for
                     // every ordinary creature (their damage check keeps the raw value).
-                    tough += ComputeLordBonus(p.card, state.battlefield,
+                    tough += ComputeLordBonus(p.card, state,
                                               p.controller_index, p.is_animated, &p).second;
                     tough += EquipBonusFor(p, state).second;   // Grafted Wargear +3/+2 etc. --
                                                                // equipment toughness must be seen

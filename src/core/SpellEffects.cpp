@@ -682,7 +682,7 @@ void ApplyJitteMode(GameState& state, int controller, int jitte_id, int mode, in
         // realistic target is an opponent SPAWN token (plain P/T, no death triggers, tokens
         // cease -- CR 111.7); a nontoken card goes to its owner's graveyard.
         int tough = t.EffectiveToughness()
-                  + ComputeLordBonus(t.card, state.battlefield, t.controller_index,
+                  + ComputeLordBonus(t.card, state, t.controller_index,
                                      t.is_animated, &t).second
                   + AuraBonusFor(t, state).second
                   + EquipBonusFor(t, state).second;

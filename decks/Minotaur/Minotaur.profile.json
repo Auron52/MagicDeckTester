@@ -1,0 +1,84 @@
+{
+  "card_scores": {
+    "Aether Vial": [
+      0.13808751823035692
+    ],
+    "Blood Crypt": [
+      0.016139470013946777
+    ],
+    "Bloodstained Mire": [
+      0.22018681100291015
+    ],
+    "Boros Reckoner": [
+      -0.17504581982236012
+    ],
+    "Burning-Fist Minotaur": [
+      0.06943508024232692,
+      -0.1457259367546362
+    ],
+    "Cavern of Souls": [
+      0.088567208753906
+    ],
+    "Deathbellow Raider": [
+      -0.12805927481695356,
+      -0.11243737105806062
+    ],
+    "Fanatic of Mogis": [
+      0.008175513627825204
+    ],
+    "Gnarled Scarhide": [
+      0.3345542569318791,
+      -0.15529643810186844
+    ],
+    "Kragma Warcaller": [
+      0.13978036852676645,
+      -0.27543290043290103
+    ],
+    "Mountain": [
+      0.02700617283950635,
+      -0.04931009440813394
+    ],
+    "Neheb, the Worthy": [
+      -0.08837529391523802
+    ],
+    "Rageblood Shaman": [
+      -0.08712804154531284,
+      0.03780068728522323
+    ],
+    "Ragemonger": [
+      0.23288333959516017,
+      -0.03832752613240409
+    ],
+    "Rakdos Carnarium": [
+      -0.01780534831083891
+    ],
+    "Secluded Courtyard": [
+      0.002937410559614939,
+      0.012299465240641183
+    ],
+    "Sethron, Hurloon General": [
+      -0.19319612938194464
+    ],
+    "Slaughter-Priest of Mogis": [
+      -0.08050903239961915,
+      -0.15537780803267598
+    ],
+    "Unclaimed Territory": [
+      0.06205985707884221,
+      0.01011139674378736
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1,
+  "vial_target_mv": 3
+}

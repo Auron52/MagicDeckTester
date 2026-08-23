@@ -1298,6 +1298,113 @@ struct CardParams
     // Terastodon token sites so a green token is legal "sacrifice a green creature" fodder
     // (Natural Order). Empty = colourless token (the historical default; byte-identical).
     std::string created_token_color;
+
+    // ================= Minotaur tribal (Rakdos aggro) =================
+    // Every field below is gated (0/false/empty/-1 = inert) so decks that don't run Minotaurs
+    // stay byte-identical. See docs/design/analysis-Minotaur.md for the per-card mapping.
+
+    // Fanatic of Mogis: "When this creature enters, it deals damage to each opponent equal to your
+    // devotion to red." Non-empty colour ("R") gates it: on ETB, count that colour's mana symbols
+    // across the mana costs of every permanent the controller controls (CR 700.5 devotion --
+    // INCLUDING this creature, which is already on the battlefield when its own ETB resolves) and
+    // deal that much to the opponent's face through the life-loss sink the win projection reads.
+    // A HYBRID pip counts for BOTH its colours (CR 202.2b); the engine's flat representation bakes
+    // a hybrid into its FIRST colour, so Boros Reckoner's {R/W}{R/W}{R/W} already reads as red 3 --
+    // exact here, and DevotionTo() adds the SECOND colour of each hybrid pip explicitly so a
+    // future devotion-to-white card is right too. Empty = no ETB devotion damage.
+    std::string etb_damage_devotion_color;
+
+    // Ragemonger: "Minotaur spells you cast cost {B}{R} less to cast. This effect reduces only the
+    // amount of COLORED mana you pay." The coloured twin of reduces_spell_subtype (which reduces
+    // GENERIC). Each permanent you control whose reduces_subtype_colored_subtype matches a subtype
+    // of the spell being cast subtracts reduces_subtype_colored_cost's coloured pips from that
+    // spell's cost (each colour floored at 0, stacking per copy); the generic is untouched. A
+    // reduction that lands on a colour with HYBRID pips consumes a PLAIN pip first and only then a
+    // hybrid one (keeping the hybrid the more flexible symbol -- {R}{R/W} minus {R} leaves {R/W},
+    // not {R}). Empty subtype / unset cost = not a reducer.
+    std::string             reduces_subtype_colored_subtype;
+    std::optional<ManaCost> reduces_subtype_colored_cost;
+
+    // Kragma Warcaller: "Whenever a Minotaur you control attacks, it gets +2/+0 until end of turn."
+    // A TEAM attack trigger from a lord-like source, unlike attack_pump_power_per_other_matching
+    // (Piledriver, which pumps only ITSELF). > 0 gates it: at declare-attackers every declared
+    // attacker whose subtype is in this permanent's subtypes_affected gets +this/+0, once per
+    // source (the source pumps itself too when it attacks -- "a Minotaur you control" is not
+    // "another"). Applied in ApplyAttackSelfPumps, i.e. in BOTH worlds.
+    int attack_pump_matching_power = 0;
+
+    // Deathbellow Raider: "This creature attacks each combat if able." A RESTRICTION, not a
+    // benefit: DecisionProvider::AttackWith returns true unconditionally for such a permanent, so
+    // no provider hold (e.g. the mana-dork hold) can keep it home. Vs the passive opponent the
+    // goldfish default already attacks with everything, so this is faithful and today inert --
+    // but it is the correct model and it binds the moment any provider declines an attack.
+    bool must_attack = false;
+
+    // Neheb, the Worthy: "As long as you have one or fewer cards in hand, Minotaurs you control
+    // get +2/+0." A CONDITIONAL anthem: hand_size_anthem_max >= 0 gates it, and the bonus applies
+    // to creatures matching subtypes_affected (SELF-INCLUSIVE -- "Minotaurs you control", not
+    // "other Minotaurs") only while the controller's hand size is <= hand_size_anthem_max.
+    // Evaluated inside ComputeLordBonus, which is why that function takes the whole GameState.
+    // -1 = not a conditional anthem.
+    int hand_size_anthem_max   = -1;
+    int hand_size_anthem_power = 0;
+    int hand_size_anthem_tough = 0;
+
+    // Neheb, the Worthy: "Whenever Neheb deals combat damage to a player, each player discards a
+    // card." > 0 gates it: after this creature's combat damage connects, its controller discards
+    // that many cards (chosen by the provider's cleanup-discard ranking, so the deck's own doctrine
+    // picks the card). The OPPONENT's half is inert and not modelled -- the passive opponent never
+    // casts and no decision reads their hand (disclosed deferral D10). Note the SYNERGY this
+    // creates with hand_size_anthem_max above: the discard is what turns the anthem on.
+    int combat_damage_each_discards = 0;
+
+    // Burning-Fist Minotaur: "{1}{R}, Discard a card: This creature gets +2/+0 until end of turn."
+    // Rides the existing firebreathing_cost/_power machinery with this extra non-mana cost: each
+    // activation also discards one card from the controller's hand, so ApplyFirebreathing stops
+    // when the hand is empty. The discarded card is chosen by the provider's cleanup-discard
+    // ranking (same doctrine as a cleanup shed). false = a plain mana-only firebreather.
+    bool firebreathing_discard = false;
+
+    // Sethron, Hurloon General: "Whenever Sethron OR another nontoken Minotaur you control enters,
+    // create a 2/3 red Minotaur creature token." The Lathliss shape
+    // (etb_other_subtype_creates_tokens) fires only for ANOTHER matching permanent; this flag
+    // widens it to include the source's OWN enter. false = "another ..." (Lathliss, unchanged).
+    bool etb_token_includes_self = false;
+
+    // Sethron, Hurloon General: "{2}{B/R}: Minotaurs you control get +1/+0 and gain menace and
+    // haste until end of turn." The +1/+0 rides team_pump_cost/_power/_subtypes (spent as combat
+    // firebreathing). This flag adds the HASTE half, which cannot be a combat-time conversion --
+    // haste has to be granted BEFORE attackers are declared -- so it is enumerated as a main-phase
+    // Action::Kind::TeamPumpActivate that sets Permanent::temp_haste (and the same +1/+0) on every
+    // matching creature. Menace is inert (no blockers; disclosed deferral D7). false = no haste.
+    bool team_pump_grants_haste = false;
+
+    // Slaughter-Priest of Mogis: "Whenever you sacrifice a permanent, this creature gets +2/+0
+    // until end of turn." > 0 gates a SACRIFICE WATCHER on this permanent, fired from the shared
+    // sacrifice sites (fetchland self-sacrifice, sac outlets, sac-as-an-additional-cost) for every
+    // permanent its controller sacrifices. Note a fetchland cracking is a sacrifice, so this fires
+    // on a Bloodstained Mire the same turn it fixes mana.
+    int sacrifice_watch_pump_power = 0;
+
+    // Slaughter-Priest of Mogis: "{2}, Sacrifice another creature or an enchantment: ...". Widens
+    // the sac_creature_outlet victim filter: an ENCHANTMENT you control is also legal fodder
+    // (sac_outlet_allows_enchantment), and the source itself is excluded ("another" --
+    // sac_outlet_excludes_self). The outlet's own payload here is first strike, which is inert
+    // (disclosed deferral D9); the LIVE effect of activating it is the sacrifice_watch_pump_power
+    // trigger above, so an outlet with no payload is legal and is NOT a no-op.
+    bool sac_outlet_allows_enchantment = false;
+    bool sac_outlet_excludes_self      = false;
+
+    // Gnarled Scarhide: "Bestow {3}{B}". An ALTERNATE cast mode (CR 702.103): the same card may be
+    // cast for its printed cost as a creature, or for this cost as an AURA that enters attached to
+    // a creature and grants aura_power_bonus/aura_tough_bonus. Set alongside the aura_* fields; the
+    // card itself stays a creature card (is_aura stays FALSE -- it is an aura only when cast this
+    // way, carried on Action/StackEntry::bestow). Both modes are emitted as distinct plan variants
+    // so the SEARCH chooses; neither dominates (the body is cheaper and is itself a Minotaur that
+    // lords buff, the aura mode dodges summoning sickness by pumping a creature that can attack
+    // now). "It becomes a creature again if it's not attached" is inert -- nothing removes our
+    // creatures. nullopt = no bestow.
+    std::optional<ManaCost> bestow_cost;
 };
 
 // A fully resolved card definition: base Card data plus template + parameters.

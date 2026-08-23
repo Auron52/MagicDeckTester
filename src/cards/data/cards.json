@@ -5038,6 +5038,286 @@
     "look_put_counter_bonus": 3,
     "look_put_counter_bonus_max_mv": 3
    }
+  },
+  {
+   "name": "Boros Reckoner",
+   "mana_cost": "{R/W}{R/W}{R/W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Minotaur",
+    "Wizard"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Whenever this creature is dealt damage, it deals that much damage to any target.\n{R/W}: This creature gains first strike until end of turn. [Vanilla 3/3 Minotaur Wizard for goldfishing. The three {R/W} HYBRID pips are modelled as real either-colour pips (ManaCost::hybrid_pair), so the deck's black sources cannot pay them but any red source can; they also make the card RED AND WHITE (CR 202.2b) and give it DEVOTION TO RED 3, which is what Fanatic of Mogis reads. [PARTIAL: the damage-reflection trigger is inert -- nothing in this sim ever deals damage to our creatures (the opponent never blocks, casts, or removes; Combat.cpp has no blocker path), so the trigger has no event that could fire it. Disclosed deferral D1.] [PARTIAL: '{R/W}: gains first strike' is inert -- first strike is only observable against blockers. Disclosed deferral D2.]]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Burning-Fist Minotaur",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Minotaur",
+    "Wizard"
+   ],
+   "keywords": [
+    "First strike"
+   ],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "First strike\n{1}{R}, Discard a card: This creature gets +2/+0 until end of turn. [The activated pump is modelled via firebreathing_cost/_power plus firebreathing_discard, which routes it OUT of the greedy combat-time firebreathing converter and INTO a searched main-phase Action::Kind::ActivatePump (one variant per activation count K, K also capped by hand size). That placement is deliberate: the converter's damage-per-MANA ratio cannot price a CARD, and in this deck an emptied hand is itself a payoff (Neheb, the Worthy's hand-size anthem), so the trade is a judgment the SEARCH must own. The discarded card is the provider's cleanup-discard pick. [PARTIAL: first strike is inert -- no blockers. Disclosed deferral D5.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "firebreathing_cost": "{1}{R}",
+    "firebreathing_power": 2,
+    "firebreathing_discard": true
+   }
+  },
+  {
+   "name": "Deathbellow Raider",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Minotaur",
+    "Berserker"
+   ],
+   "keywords": [
+    "Regenerate"
+   ],
+   "power": 2,
+   "toughness": 3,
+   "oracle_text": "This creature attacks each combat if able.\n{2}{B}: Regenerate this creature. [The attack RESTRICTION is modelled via must_attack: DecisionProvider::AttackWith returns true for it unconditionally, ahead of every provider hold, so no heuristic can keep it home. Vs the passive opponent the goldfish default already attacks with everything, so it is faithful and currently inert -- but it binds the moment any provider declines an attack. [PARTIAL: regeneration is inert -- it is a replacement effect for DESTRUCTION and nothing in this sim destroys our creatures (no blockers, no opponent removal). Disclosed deferral D8.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "must_attack": true
+   }
+  },
+  {
+   "name": "Fanatic of Mogis",
+   "mana_cost": "{3}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Minotaur",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, it deals damage to each opponent equal to your devotion to red. (Each {R} in the mana costs of permanents you control counts toward your devotion to red.) [ETB devotion burn via etb_damage_devotion_color 'R'. DevotionTo() counts red mana symbols across the mana costs of every permanent the controller controls (CR 700.5), INCLUDING this Fanatic -- it is already on the battlefield when its own ETB trigger resolves (CR 603.6a) -- and counts a HYBRID pip for both its colours (CR 202.2b), so a Boros Reckoner contributes 3. 'Each opponent' is one face hit vs the single goldfish opponent, routed through the same life sink the win projection reads.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_damage_devotion_color": "R"
+   }
+  },
+  {
+   "name": "Gnarled Scarhide",
+   "mana_cost": "{B}",
+   "types": [
+    "Enchantment",
+    "Creature"
+   ],
+   "subtypes": [
+    "Minotaur"
+   ],
+   "keywords": [
+    "Bestow"
+   ],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "Bestow {3}{B} (If you cast this card for its bestow cost, it's an Aura spell with enchant creature. It becomes a creature again if it's not attached.)\nThis creature can't block.\nEnchanted creature gets +2/+1 and can't block. [BESTOW is fully modelled as an alternate cast mode: bestow_cost {3}{B} makes the DB synthesize a separate 'Gnarled Scarhide (Bestowed)' AURA face (is_aura, +2/+1), and CollectActions emits BOTH modes as plan variants sharing the hand index, so the SEARCH picks. Neither dominates: the creature mode is 3 mana cheaper and is itself a Minotaur that lords buff and Sethron triggers on; the aura mode costs more but its +2 power lands on a creature that can attack THIS turn (no summoning sickness). Bestowed, it is correctly NOT a creature -- no lord bonus, no Sethron trigger, no Minotaur count. [PARTIAL: both 'can't block' clauses are inert -- we are the only attacker and never block. Disclosed deferral D6.] ['It becomes a creature again if it's not attached' is unreachable: nothing removes our creatures.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "bestow_cost": "{3}{B}",
+    "aura_power_bonus": 2,
+    "aura_tough_bonus": 1
+   }
+  },
+  {
+   "name": "Kragma Warcaller",
+   "mana_cost": "{3}{B}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Minotaur",
+    "Warrior"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 3,
+   "oracle_text": "Minotaur creatures you control have haste.\nWhenever a Minotaur you control attacks, it gets +2/+0 until end of turn. [Haste grant via grants_haste + subtypes_affected (covers Sethron's 2/3 Minotaur tokens too, so they attack the turn they are made). The TEAM attack trigger is attack_pump_matching_power 2: at declare-attackers every declared attacker whose subtype matches gets +2/+0, once per Kragma. Self-inclusive -- the oracle says 'a Minotaur you control', not 'another' -- so an attacking Kragma pumps itself. Not a P/T lord (no static power_bonus), so IsLordPermanent is correctly false.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "subtypes_affected": [
+     "Minotaur"
+    ],
+    "grants_haste": true,
+    "attack_pump_matching_power": 2
+   }
+  },
+  {
+   "name": "Neheb, the Worthy",
+   "mana_cost": "{1}{B}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Minotaur",
+    "Warrior"
+   ],
+   "keywords": [
+    "First strike"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "First strike\nOther Minotaurs you control have first strike.\nAs long as you have one or fewer cards in hand, Minotaurs you control get +2/+0.\nWhenever Neheb deals combat damage to a player, each player discards a card. [The CONDITIONAL anthem is hand_size_anthem_max 1 / hand_size_anthem_power 2, evaluated inside ComputeLordBonus (which is why that function takes the whole GameState -- the battlefield alone cannot see a hand). It is SELF-INCLUSIVE ('Minotaurs you control', not 'other'), so Neheb gets it too. The combat-damage trigger is combat_damage_each_discards 1: after Neheb connects, its controller sheds one card by the provider's cleanup-discard ranking -- which is also how the deck TURNS THE ANTHEM ON. Legend rule enforced (the deck runs 3 copies, so it binds). [PARTIAL: first strike, own and granted, is inert -- no blockers. Disclosed deferral D4.] [PARTIAL: the OPPONENT's half of 'each player discards' is not modelled -- the passive opponent never casts and no decision reads their hand. Disclosed deferral D10.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "subtypes_affected": [
+     "Minotaur"
+    ],
+    "hand_size_anthem_max": 1,
+    "hand_size_anthem_power": 2,
+    "combat_damage_each_discards": 1
+   }
+  },
+  {
+   "name": "Rageblood Shaman",
+   "mana_cost": "{1}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Minotaur",
+    "Shaman"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 2,
+   "toughness": 3,
+   "oracle_text": "Trample\nOther Minotaur creatures you control get +1/+1 and have trample. [Standard lord: +1/+1 to OTHER Minotaurs (lord_excludes_self), which includes Sethron's tokens. [PARTIAL: trample -- both its own and the grant -- is inert; trample only matters when a blocker absorbs damage, and this sim has no blocking. Disclosed deferral D3.]]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Minotaur"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Ragemonger",
+   "mana_cost": "{1}{B}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Minotaur",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 3,
+   "oracle_text": "Minotaur spells you cast cost {B}{R} less to cast. This effect reduces only the amount of colored mana you pay. (For example, if you cast a Minotaur spell with mana cost {2}{R}, it costs {2} to cast.) [COLOURED subtype cost reduction via reduces_subtype_colored_subtype 'Minotaur' + reduces_subtype_colored_cost {B}{R}, applied in the shared EffectiveSpellCost. It subtracts one black and one red PIP (each floored at 0) and never touches the generic, exactly as the reminder text specifies. Stacks per copy. A reduction landing on a colour that has HYBRID pips consumes a PLAIN pip first and only then retires a hybrid entry, so {R}{R/W} minus {R} correctly leaves the flexible {R/W}.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "reduces_subtype_colored_subtype": "Minotaur",
+    "reduces_subtype_colored_cost": "{B}{R}"
+   }
+  },
+  {
+   "name": "Rakdos Carnarium",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {B}{R}. [Karoo bounce land (the Izzet Boilerworks pattern): enters tapped, taps for 2 mana ({B}{R}), and on ETB returns one of your lands to hand -- BounceKarooLand prefers an already-tapped land so no mana is lost this turn. The returned land must be replayed, which is the real tempo cost and is modelled so the deck's mana is not over-rated.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B",
+     "R"
+    ],
+    "produces_amount": 2,
+    "enters_tapped": true,
+    "etb_bounce_land": true
+   }
+  },
+  {
+   "name": "Sethron, Hurloon General",
+   "mana_cost": "{3}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Minotaur",
+    "Warrior"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Whenever Sethron or another nontoken Minotaur you control enters, create a 2/3 red Minotaur creature token.\n{2}{B/R}: Minotaurs you control get +1/+0 and gain menace and haste until end of turn. ({B/R} can be paid with either {B} or {R}.) [Token engine via etb_other_subtype_creates_tokens + etb_token_includes_self (the Lathliss shape widened to fire on the source's OWN enter, which is what 'Sethron OR another' means). Only NONTOKEN Minotaurs trigger it, and the created token is is_token, so it is loop-safe. The token carries subtype Minotaur, so Rageblood buffs it, Kragma hastes and pumps it, and Neheb's anthem covers it. The activated ability's +1/+0 rides team_pump_cost {2}{B/R} (a real hybrid pip) / team_pump_power / team_pump_subtypes, spendable as leftover combat mana; its HASTE half needs team_pump_grants_haste, because haste must land BEFORE attackers are declared and a combat-time converter structurally cannot do that -- so it is also enumerated as a searched main-phase Action::Kind::ActivatePump. Legend rule enforced (the deck runs 2 copies). [PARTIAL: the 'menace' rider is inert -- menace only restricts blockers. Disclosed deferral D7.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_other_subtype_creates_tokens": true,
+    "etb_token_includes_self": true,
+    "etb_token_requires_subtype": "Minotaur",
+    "etb_created_token_power": 2,
+    "etb_created_token_toughness": 3,
+    "etb_created_token_subtypes": [
+     "Minotaur"
+    ],
+    "created_token_color": "R",
+    "team_pump_cost": "{2}{B/R}",
+    "team_pump_power": 1,
+    "team_pump_subtypes": [
+     "Minotaur"
+    ],
+    "team_pump_grants_haste": true
+   }
+  },
+  {
+   "name": "Slaughter-Priest of Mogis",
+   "mana_cost": "{B}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Minotaur",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Whenever you sacrifice a permanent, this creature gets +2/+0 until end of turn.\n{2}, Sacrifice another creature or an enchantment: This creature gains first strike until end of turn. [The SACRIFICE WATCHER (sacrifice_watch_pump_power 2) fires from FireSacrificeWatchers at every site where the controller sacrifices one of their own permanents -- including CRACKING A FETCHLAND, which is this deck's most common trigger: a Bloodstained Mire played on the attacking turn pumps the Priest for free. The outlet itself is modelled (sac_creature_outlet with sac_outlet_allows_enchantment + sac_outlet_excludes_self widening the victim filter to 'another creature OR an enchantment') even though its PAYLOAD is inert, because activating it is a real line: the sacrifice triggers the +2/+0 above, so trading a summoning-sick token for +2 damage is a legal, occasionally-correct play the search can find. [PARTIAL: the first-strike payload is inert -- no blockers. Disclosed deferral D9.]]",
+   "template": "custom",
+   "parameters": {
+    "sacrifice_watch_pump_power": 2,
+    "sac_creature_outlet": true,
+    "sac_creature_cost": "{2}",
+    "sac_outlet_allows_enchantment": true,
+    "sac_outlet_excludes_self": true
+   }
   }
  ]
 }

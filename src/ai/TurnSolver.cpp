@@ -1880,7 +1880,7 @@ static std::vector<AttackingManaSource> CollectAttackingManaSources(const GameSt
         if (!ResolveProvider(state).AttackWith(state, p)) { continue; }
 
         const bool animated = p.is_animated;
-        auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state.battlefield, active, animated, &p);
+        auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, animated, &p);
         (void)lord_tb;
         const bool ds = (animated
             ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true)
@@ -1949,7 +1949,7 @@ static int PendingAttackDamage(const GameState& state)
         if (!ResolveProvider(state).AttackWith(state, p)) { continue; }
         bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(
-            p.card, state.battlefield, active, animated, &p);
+            p.card, state, active, animated, &p);
         bool ds = (animated
             ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true)
             : (p.card.HasKeyword(Keyword::DoubleStrike)
@@ -1998,7 +1998,7 @@ static int PendingAttackDamage(const GameState& state)
             tok.AddType(CardType::Creature);
             tok.m_subtypes = d->params.attack_token_subtypes;
             tok.m_power    = d->params.attack_token_power;
-            auto [tpb, ttb] = ComputeLordBonus(tok, state.battlefield, active, false, nullptr);
+            auto [tpb, ttb] = ComputeLordBonus(tok, state, active, false, nullptr);
             dmg += d->params.attack_creates_tokens
                  * (d->params.attack_token_power + tpb);
         }
@@ -2129,7 +2129,7 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
 
     if (def.card.IsCreature())
     {
-        auto [lord_pb, lord_tb] = ComputeLordBonus(def.card, state.battlefield, state.active_player_index);
+        auto [lord_pb, lord_tb] = ComputeLordBonus(def.card, state, state.active_player_index);
         bool ds = def.card.HasKeyword(Keyword::DoubleStrike)
                || HasDoubleStrikeFromLords(def.card, state.battlefield, state.active_player_index);
         // Adeline (power = creatures you control): estimate as the current creature count
@@ -2248,7 +2248,7 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
             const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
             if (!cdef || !cdef->card.IsCreature()) { continue; }
             if (target_mv > 0 && cdef->card.m_mana_cost.ManaValue() != target_mv) { continue; }
-            auto [lord_pb, lord_tb] = ComputeLordBonus(cdef->card, state.battlefield,
+            auto [lord_pb, lord_tb] = ComputeLordBonus(cdef->card, state,
                                                         state.active_player_index);
             bool ds = cdef->card.HasKeyword(Keyword::DoubleStrike)
                    || HasDoubleStrikeFromLords(cdef->card, state.battlefield,
@@ -5380,7 +5380,7 @@ static bool BoardHasVigilantManaScalerAttacker(const GameState& state)
         if (!d->card.HasKeyword(Keyword::Vigilance)) { continue; }
         if (!CanAttackFull(p, state.battlefield, active)) { continue; }
         const int power = p.EffectivePower()
-            + ComputeLordBonus(p.card, state.battlefield, active,
+            + ComputeLordBonus(p.card, state, active,
                                /*all_creature_types=*/false, &p).first;
         if (power > 0) { return true; }
     }
@@ -6861,6 +6861,35 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             continue;
         }
 
+        // BESTOW (Gnarled Scarhide): the AURA mode is an EXTRA set of variants, not a replacement --
+        // no `continue` here, so the ordinary creature cast is still emitted below and the two modes
+        // share hand_index (mutually exclusive within a plan). Neither mode dominates: as a creature
+        // it is cheaper and is itself a lord-buffed Minotaur that triggers Sethron; as an aura it
+        // costs more but its +2/+0 lands on a creature that can attack THIS turn (no summoning
+        // sickness). That is a real decision, so the SEARCH owns it -- one variant per legal host.
+        if (def.params.bestow_cost.has_value())
+        {
+            const CardDefinition* bdef =
+                CardDatabase::Instance().Lookup(def.card.m_name.str() + " (Bestowed)");
+            if (bdef != nullptr)
+            {
+                for (int tgt_num : LegalEnchantTargets(state, state.active_player_index, bdef->params))
+                {
+                    Action a;
+                    a.kind           = Action::Kind::CastFromHand;
+                    a.card_name      = ap.hand[i].m_name;
+                    a.hand_index     = i;
+                    a.cost           = EffectiveCost(*bdef, state);
+                    a.eval           = EvalCard(*bdef, state);
+                    a.is_noncreature = true;   // bestowed, it is an Aura -- not a creature spell
+                    a.card_mv        = bdef->card.m_mana_cost.ManaValue();
+                    a.enchant_target = tgt_num;
+                    a.bestow         = true;
+                    actions.push_back(std::move(a));
+                }
+            }
+        }
+
         // Zada/Mirrorwing solo-target trick: WHICH creature it targets is a SEARCH decision --
         // one CastFromHand variant per legal target (sharing hand_index -> mutually exclusive),
         // reusing enchant_target to carry the chosen creature's card.m_number (aura precedent).
@@ -7191,7 +7220,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             && (def.card.HasKeyword(Keyword::Haste)
                 || HasHasteFromLords(def.card, state.battlefield, state.active_player_index)))
         {
-            auto [lord_pb, lord_tb] = ComputeLordBonus(def.card, state.battlefield,
+            auto [lord_pb, lord_tb] = ComputeLordBonus(def.card, state,
                                                        state.active_player_index);
             (void)lord_tb;
             const bool ds = def.card.HasKeyword(Keyword::DoubleStrike)
@@ -7345,7 +7374,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (copt->card.m_mana_cost.ManaValue() != target_mv) { continue; }
 
                 auto [lord_pb, lord_tb] = ComputeLordBonus(
-                    copt->card, state.battlefield, state.active_player_index);
+                    copt->card, state, state.active_player_index);
                 bool ds = copt->card.HasKeyword(Keyword::DoubleStrike)
                        || HasDoubleStrikeFromLords(copt->card, state.battlefield,
                                                    state.active_player_index);
@@ -8536,6 +8565,77 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.is_noncreature = true;
                 actions.push_back(std::move(a));
             }
+
+            // Main-phase ACTIVATED PUMPS whose cost the combat-time firebreathing converter cannot
+            // price (Minotaur; see Action::Kind::ActivatePump). K activations as mutually-exclusive
+            // variants sharing sac_source_id, cost pre-scaled -- the Call of the Wild pattern.
+            //   mode 1: Burning-Fist Minotaur "{1}{R}, Discard a card: +2/+0". K is additionally
+            //           capped by the HAND SIZE (each activation discards one card).
+            //   mode 2: Sethron "{2}{B/R}: Minotaurs +1/+0 and haste". Only emitted when at least
+            //           one matching creature would actually gain something -- otherwise it is a
+            //           guaranteed no-op option, which the human-play plan menu must never contain
+            //           (the Wirewood Lodge lesson directly above).
+            const bool self_pump_discard = sd->params.firebreathing_discard
+                                        && sd->params.firebreathing_cost.has_value()
+                                        && sd->params.firebreathing_power > 0;
+            const bool team_pump_haste   = sd->params.team_pump_grants_haste
+                                        && sd->params.team_pump_cost.has_value();
+            if (self_pump_discard || team_pump_haste)
+            {
+                const int  mode = self_pump_discard ? 1 : 2;
+                const ManaCost per = self_pump_discard ? sd->params.firebreathing_cost.value()
+                                                       : sd->params.team_pump_cost.value();
+                const int per_mv = per.ManaValue();
+                int kmax = per_mv > 0 ? AvailableManaPool(state).Total() / per_mv : 1;
+                if (mode == 1)
+                { kmax = std::min<int>(kmax, static_cast<int>(state.players[state.active_player_index].hand.size())); }
+                if (kmax > 3) { kmax = 3; }   // bounded branching; >3 activations/turn is fringe
+                // K copies of a HYBRID cost need K x its hybrid pips, and ManaCost holds at most 4
+                // (see its comment). Sethron's {2}{B/R} has one, so K<=3 already fits; the clamp is
+                // here so a future multi-hybrid activation cost cannot silently produce a cost whose
+                // hybrid metadata under-counts its own pips (which would REFUSE a legal payment).
+                if (per.hybrid_count > 0) { kmax = std::min(kmax, 4 / per.hybrid_count); }
+                bool any_beneficiary = (mode == 1);
+                if (mode == 2)
+                {
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != state.active_player_index) { continue; }
+                        if (!q.card.IsCreature() && !q.is_animated) { continue; }
+                        bool m = sd->params.team_pump_subtypes.empty();
+                        for (const std::string& sub : sd->params.team_pump_subtypes)
+                        { if (q.is_animated || CardHasSubtype(q.card, sub)) { m = true; break; } }
+                        if (m) { any_beneficiary = true; break; }
+                    }
+                }
+                for (int k = 1; any_beneficiary && k <= kmax; ++k)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::ActivatePump;
+                    a.card_name      = src.card.m_name;
+                    a.def            = sd;
+                    a.hand_index     = -1;
+                    a.sac_source_id  = src.card.m_number;
+                    a.chosen_x       = k;
+                    a.gy_exile_mode  = mode;
+                    ManaCost c = per;
+                    c.generic *= k; c.white *= k; c.blue *= k; c.black *= k;
+                    c.red *= k; c.green *= k; c.colorless *= k;
+                    // Replicate the hybrid entries too: the flat ints above already scaled the
+                    // pips' FIRST colours, so without this K copies of {B/R} would carry K black
+                    // pips but only ONE either-colour permission.
+                    c.hybrid_count = 0;
+                    for (int rep = 0; rep < k; ++rep)
+                    {
+                        for (int hi = 0; hi < per.hybrid_count && c.hybrid_count < 4; ++hi)
+                        { c.hybrid_pair[c.hybrid_count++] = per.hybrid_pair[hi]; }
+                    }
+                    a.cost           = c;
+                    a.eval           = k;             // rollout scores the real damage/haste
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
         }
 
         // Costed VALUE outlets (Siege-Gang "{1}{R}, Sac a Goblin: 2 damage"; Pashalik "{3}{R}, Sac a
@@ -8575,8 +8675,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // see CanonicalSacVictim). This emits ONE action per outlet -- linear, not exponential, and
             // keeps the single-sac pick in lockstep with the Skirk multi-sac burst's apply-time picks.
             const int victim_id = CanonicalSacVictim(state, state.active_player_index,
-                                                     src.card.m_number, need_sub);
-            if (victim_id < 0) { continue; }   // no legal Goblin to sacrifice
+                                                     src.card.m_number, need_sub,
+                                                     sd->params.sac_outlet_allows_enchantment,
+                                                     sd->params.sac_outlet_excludes_self);
+            if (victim_id < 0) { continue; }   // no legal victim to sacrifice
             Action a;
             a.card_name      = src.card.m_name;
             a.hand_index     = -1;
@@ -13262,11 +13364,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (act.free_cast && state.free_casts_available > 0)
         { cascade_free = true; --state.free_casts_available; }
     };
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
                     int own_targets, int ponder_keep, int crackle_targets, int splice_count,
-                    const std::string& chosen_float_color, int enchant_target)
+                    const std::string& chosen_float_color, int enchant_target, bool bestow)
     {
         // PARTITION TRUNCATION (see bp_truncate): this plan's section ended at its first draw and
         // the continuation has already decided everything after it, so every remaining cast of this
@@ -13310,6 +13412,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (it == zone.end()) { return; }
         const CardDefinition* opt = CardDatabase::Instance().LookupCached(*it);
         if (!opt) { return; }
+        // BESTOW: the card leaves the hand exactly as it would for a normal cast, but everything
+        // downstream -- the cost paid, the permanent that enters, its params -- comes from the DB's
+        // synthesized "<name> (Bestowed)" AURA face instead of the creature. Swapping the def here,
+        // once, is the whole implementation: no resolution site below needs to know about bestow.
+        // A missing bestowed face (impossible for a card with bestow_cost, but cheap to guard)
+        // falls back to the creature cast rather than dropping the play.
+        if (bestow && opt->params.bestow_cost.has_value())
+        {
+            const CardDefinition* bopt =
+                CardDatabase::Instance().Lookup(opt->card.m_name.str() + " (Bestowed)");
+            if (bopt != nullptr) { opt = bopt; }
+        }
         const CardDefinition& def = *opt;
 
         // Irencrag Feat "you can cast only one more spell this turn": once a restrictor has resolved, the
@@ -13471,6 +13585,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // See docs/design/rollout-executor-lockstep.md.
             rec.chosen_float_color = chosen_float_color;
             rec.enchant_target     = enchant_target;
+            // BESTOW mode must ride the breakpoint record too, or a committed line's replay would
+            // re-cast the same card as a CREATURE and realise a different board (the fd-diverge
+            // class the chosen_float_color note above documents).
+            rec.bestow             = bestow;
             sink_stack.back()->push_back(rec);
             my_bp_sink = &sink_stack.back()->back().breakpoint_casts;
         }
@@ -14055,7 +14173,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     ap.hand.push_back(cdef2->card);
                     cascade_free = true;   // cascade cast pays no mana
-                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0);
+                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false);
                 }
             }
         }
@@ -14647,7 +14765,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
                     prep_free(a);
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow);
                     fire_unlock();
                 }
             }
@@ -14719,7 +14837,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                          < ResolveProvider(state).CastOrderRank(state, *dy);
                 });
                 for (int i : ena)
-                { const Action& a = acts[i]; prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); fire_unlock(); }
+                { const Action& a = acts[i]; prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow); fire_unlock(); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -14743,7 +14861,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
                         prep_free(a);
-                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
+                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -14770,7 +14888,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
-                    prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target); fire_unlock();
+                    prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow); fire_unlock();
                 }
             }
             else
@@ -14798,7 +14916,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     prep_free(a);
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow);
                     fire_unlock();
                 }
             }
@@ -14810,14 +14928,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
                 prep_free(a);
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target);
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow);
             }
         }
 
@@ -14951,7 +15069,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0);
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };
@@ -15040,6 +15158,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 for (int k = 0; k < std::max(1, a.chosen_x); ++k)
                 { if (!ApplyRevealTopDeploy(state, state.active_player_index)) { break; } }
+            }
+        }
+        else if (a.kind == Action::Kind::ActivatePump)
+        {
+            // Burning-Fist discard-pump / Sethron team-pump-with-haste: pay K x cost, then apply K
+            // activations. Stranded (cost unpayable, or the source left) -> full no-op, both worlds.
+            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            {
+                ApplyActivatePump(state, state.active_player_index, a.sac_source_id,
+                                  a.gy_exile_mode, a.chosen_x);
             }
         }
         else if (a.kind == Action::Kind::UntapCreature)
@@ -17838,6 +17966,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // Wirewood Lodge untap: which source (one per Lodge).
                 case Action::Kind::UntapCreature:
                     msf.push_back("WWL#" + std::to_string(act.sac_source_id)); break;
+                // Activated pump: which source, which shape, and distinct activation COUNTS are
+                // distinct plans (K changes both the mana spent and the cards discarded).
+                case Action::Kind::ActivatePump:
+                    msf.push_back("APUMP#" + std::to_string(act.sac_source_id)
+                                  + "m" + std::to_string(act.gy_exile_mode)
+                                  + "x" + std::to_string(act.chosen_x)); break;
             }
         }
         std::sort(v.begin(), v.end());

@@ -1200,6 +1200,16 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
 
 bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker) const
 {
+    // "This creature attacks each combat if able" (Deathbellow Raider, CR 508.1a). A RESTRICTION,
+    // so it outranks every hold and every archetype's ShouldAttackWith -- the player has no choice.
+    // Placed ahead of the mana hold deliberately: a must-attack creature that also taps for mana
+    // still has to attack. Vs the passive opponent the goldfish default already attacks with
+    // everything, so today this only binds if a provider would have declined; it is here because
+    // the rule is a restriction, not because it currently changes a game.
+    {
+        const CardDefinition* ad = CardDatabase::Instance().LookupCached(attacker.card);
+        if (ad && ad->params.must_attack) { return true; }
+    }
     if (HoldManaSourceForCollapsedMain(s, attacker)) { return false; }
     return ShouldAttackWith(s, attacker);
 }
@@ -2455,7 +2465,7 @@ static int AttackPowerOf(const GameState& s, const Permanent& p)
 {
     const int active = s.active_player_index;
     const bool animated = p.is_animated;
-    const std::pair<int,int> lb = ComputeLordBonus(p.card, s.battlefield, active, animated, &p);
+    const std::pair<int,int> lb = ComputeLordBonus(p.card, s, active, animated, &p);
     int base = p.EffectivePower() + lb.first;
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
     if (d)
@@ -5577,7 +5587,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     auto board_power = [&](const Permanent& p, const Card& pc) -> int
     {
         if (!s_board_lord_power) { return std::max(0, pc.m_power.value_or(0)); }
-        const int lp = ComputeLordBonus(pc, s.battlefield, controller, p.is_animated, &p).first;
+        const int lp = ComputeLordBonus(pc, s, controller, p.is_animated, &p).first;
         return std::max(0, p.EffectivePower() + lp);
     };
     // ... and the ATTACK-PUMP term of the same read (MTG_GOBLIN_BOARD_PUMP_POWER=0 restores):
@@ -10356,7 +10366,7 @@ void FiveColourProvider::ModalSplitCandidates(const GameState& s, const CardDefi
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me || !p.card.IsCreature()) { continue; }
-        const int lp = ComputeLordBonus(p.card, s.battlefield, me, p.is_animated, &p).first;
+        const int lp = ComputeLordBonus(p.card, s, me, p.is_animated, &p).first;
         board_power += std::max(0, p.EffectivePower() + lp);
         colors_desc.push_back(p.card.ColorCount());
     }

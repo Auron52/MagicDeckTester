@@ -147,6 +147,10 @@ struct StackEntry
                                         // creature). Set at the cast site from Action::enchant_target; read at
                                         // resolution (EffectHandler default case) to set the aura permanent's
                                         // aura_attached_to. 0 => not an aura / heuristic fallback pick.
+    bool                bestow         = false;     // BESTOW (Gnarled Scarhide): this cast is the AURA mode.
+                                        // Stamped from Action::bestow at the cast site; the resolver then
+                                        // enters the DB's synthesized "<name> (Bestowed)" aura face instead
+                                        // of the creature. false => the ordinary creature cast.
     // Resolve dispatch is added in Phase 1.2 when CardDatabase provides ability implementations.
 };
 

@@ -580,6 +580,64 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
         }
         cost.generic = std::max(0, cost.generic - subtype_reduction);
     }
+    // Ragemonger-style SUBTYPE COLOURED cost reduction: "Minotaur spells you cast cost {B}{R} less
+    // to cast. This effect reduces only the amount of COLORED mana you pay." The coloured twin of
+    // reduces_spell_subtype above -- same subtype match, but it subtracts the reducer's coloured
+    // pips instead of 1 generic, and never touches the generic. Stacks per copy (two Ragemongers
+    // take {B}{B}{R}{R} off a Minotaur spell that has that much colour to give).
+    //
+    // HYBRID handling: a colour's flat int already includes hybrid pips baked into their first
+    // colour (see ManaCost), so a naive `--cost.red` on Boros Reckoner's {R/W}{R/W}{R/W} would
+    // leave red=2 with hybrid_count=3 -- an inconsistent cost that ExpandHybrids would mis-expand.
+    // ReduceColoredPip therefore consumes a PLAIN pip first and only falls back to retiring a
+    // hybrid entry, which is also the strictly better choice for the player: {R}{R/W} minus one
+    // red should leave the FLEXIBLE {R/W}, not the rigid {R}.
+    if (!def.card.m_subtypes.empty())
+    {
+        auto reduce_colored_pip = [](ManaCost& c, Color col)
+        {
+            int* flat = nullptr;
+            switch (col)
+            {
+                case Color::White: flat = &c.white; break;
+                case Color::Blue:  flat = &c.blue;  break;
+                case Color::Black: flat = &c.black; break;
+                case Color::Red:   flat = &c.red;   break;
+                case Color::Green: flat = &c.green; break;
+                default: return;                     // {C} is not coloured mana
+            }
+            if (*flat <= 0) { return; }
+            int baked = 0;                            // hybrid pips whose FIRST colour is `col`
+            for (int i = 0; i < c.hybrid_count; ++i)
+            { if (static_cast<Color>(c.hybrid_pair[i] >> 4) == col) { ++baked; } }
+            if (*flat - baked > 0) { --*flat; return; }             // a plain pip exists: take it
+            for (int i = 0; i < c.hybrid_count; ++i)                // else retire one hybrid entry
+            {
+                if (static_cast<Color>(c.hybrid_pair[i] >> 4) != col) { continue; }
+                for (int j = i; j + 1 < c.hybrid_count; ++j) { c.hybrid_pair[j] = c.hybrid_pair[j + 1]; }
+                c.hybrid_pair[--c.hybrid_count] = 0;
+                --*flat;
+                return;
+            }
+        };
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || pd->params.reduces_subtype_colored_subtype.empty()
+                    || !pd->params.reduces_subtype_colored_cost.has_value()) { continue; }
+            bool subtype_match = false;
+            for (const std::string& cs : def.card.m_subtypes)
+            { if (cs == pd->params.reduces_subtype_colored_subtype) { subtype_match = true; break; } }
+            if (!subtype_match) { continue; }
+            const ManaCost& r = pd->params.reduces_subtype_colored_cost.value();
+            for (int k = 0; k < r.white; ++k) { reduce_colored_pip(cost, Color::White); }
+            for (int k = 0; k < r.blue;  ++k) { reduce_colored_pip(cost, Color::Blue);  }
+            for (int k = 0; k < r.black; ++k) { reduce_colored_pip(cost, Color::Black); }
+            for (int k = 0; k < r.red;   ++k) { reduce_colored_pip(cost, Color::Red);   }
+            for (int k = 0; k < r.green; ++k) { reduce_colored_pip(cost, Color::Green); }
+        }
+    }
     // Hinata's per-target cost reduction (fixed-cost spells; {X} spells apply it at the X-cost
     // sites where the whole generic, incl. X, is known -- CastSpellFromHand / apply_one).
     if (!def.card.m_mana_cost.has_x)
@@ -1053,7 +1111,7 @@ ManaPool AvailableManaPoolNoAttackers(const GameState& state)
         if (def->card.IsCreature() && CanAttackFull(p, state.battlefield, active))
         {
             const int power = p.EffectivePower()
-                + ComputeLordBonus(p.card, state.battlefield, active,
+                + ComputeLordBonus(p.card, state, active,
                                    /*all_creature_types=*/false, &p).first;
             if (power > 0) { continue; }   // its tap costs an attack -> not in this pool
         }
