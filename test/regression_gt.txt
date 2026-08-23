@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 27bd0f17  date 2026-08-23
+# Regression ground truth -- commit cad8eb15  date 2026-08-23
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -276,3 +276,15 @@ stompy_overnight_d5_s4004=4.9500/81ec91c32129465f
 stompy_overnight_d5_s5005=4.9900/14027be6ea82ca85
 stompy_overnight_d5_s6006=4.9400/18820b87ceb97be4
 stompy_overnight_d5_s7007=4.9120/2ec36e428ea138c2
+minotaur_overnight_d0_s4004=5.5330/3f6a7f493b61978d
+minotaur_overnight_d0_s6006=5.5085/97f9b67dc28b5a84
+minotaur_overnight_d0_s8008=5.5030/04056aff88a83ab6
+minotaur_overnight_d0_s10010=5.4785/df139ac4c80f8efb
+minotaur_overnight_d3_s4004=4.9750/70ba14a22b7cee1f
+minotaur_overnight_d3_s5005=5.0080/0a607268a117b6e0
+minotaur_overnight_d3_s6006=4.9890/f58f0c8cd0e1dc8b
+minotaur_overnight_d3_s7007=4.9780/b82df3436926c24e
+minotaur_overnight_d5_s4004=4.9480/a78a85b346640de4
+minotaur_overnight_d5_s5005=4.9900/bb00c90e3833cf7c
+minotaur_overnight_d5_s6006=4.9620/73efedf4a1b8eb15
+minotaur_overnight_d5_s7007=4.9640/7c3763b850ee164f
