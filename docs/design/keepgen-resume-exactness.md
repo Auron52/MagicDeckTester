@@ -139,6 +139,25 @@ a function of producer timing, not of the data. Evidence: adding the (tiny) writ
 `A == A2` result was the "lagged safe margin" holding by luck, not by construction. **A resume cannot
 be byte-exact while the freeze target is scheduled off a racy frontier.**
 
+### The unit that matters: the SHIPPED DECISION TABLE
+
+Sample counts are an internal detail. What ships is `exhaustive_keep.entries` -- a keep/bottom
+decision per hand-type. Weighting each hand-type by its hypergeometric draw probability gives the
+only figure that describes the deck as played:
+
+| | kills | hand-types decided differently (of 10,945) | share of REAL opening hands |
+|---|---|---|---|
+| pre-fix | 9 | 62 | **0.72 %** |
+| post-fix | 9 | 6 | **0.0042 %** |
+| post-fix | 3 | **0** | **0 %** |
+
+`bottom_keep` was IDENTICAL in every run ever compared here -- only `keep` moved.
+
+So the pre-fix bug shipped a policy that mulliganed differently on ~1 in 140 real opening hands: a
+genuinely different deck. What is left is ~1 in 24,000 at nine resumes and bit-identical at three,
+which is the realistic case. That 170x gap is the whole argument for stopping: the residual is
+smaller than the noise of the thing it perturbs.
+
 ### How much the residual actually costs -- measured, and the reason to STOP here
 
 The pre-fix divergence was a ONE-SHOT: 3 kills produced the same +17.1% as 9, because defect 1 fired
