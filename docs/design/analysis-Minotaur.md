@@ -106,8 +106,48 @@ unattended; flagged for the user to schedule.
 | 5c2 horizon-honest tie-break | binds on **1 game in 12,000** (0.008%); that one is BETTER. Deck wins well inside the horizon; default ON is correct and there is nothing to opt out of |
 | 5d claude-play legality sweep | **0 legality/invariant violations** over 6 driven games (every plan's casts in hand, every activation's source on the battlefield, no over-budget plan, no land-drop violation) — and it found the viewer hang below |
 | 5h viewer decision surface | **PASS** — `bounce`, `discard`, `land_entry`, `sacrifice`, `vial_charge` all surfaced |
+| 5g heuristic mining (600 games, 2 seeds, 2,969 decisions) | **no rule clears the bar** — a useful negative result, detailed below |
 | 5i discard analysis | `STATUS_QUO_OK`; only **10 cleanup sheds in 400 games**. Bucket policy authored as a proposal → `minotaur-discard-policy-proposal.md` |
 | Devotion arithmetic | hand-checked on 8 Fanatic casts against red pips — exact every time, incl. the self-count and same-turn cast ORDER |
+| Ragemonger cost reduction | verified against the ACTUAL `manaPaid` in 200 games of logs, across every Minotaur and 0/1/2/3 Ragemongers in play (table below) |
+
+#### Ragemonger verification (real `manaPaid` from game logs)
+
+| card | printed | 0 Ragemonger | 1 | 2 | 3 |
+|---|---|---|---|---|---|
+| Fanatic of Mogis | `{3}{R}` | `{3}{R}` | `{3}` | `{3}` | — |
+| Kragma Warcaller | `{3}{B}{R}` | `{3}{B}{R}` | `{3}` | `{3}` | `{3}` |
+| Neheb, the Worthy | `{1}{B}{R}` | `{1}{B}{R}` | `{1}` | `{1}` | — |
+| Rageblood Shaman | `{1}{R}{R}` | `{1}{R}{R}` | `{1}{R}` | `{1}` | — |
+| Sethron | `{3}{R}{R}` | `{3}{R}{R}` | `{3}{R}` | — | — |
+| **Boros Reckoner** | `{R/W}{R/W}{R/W}` | `{R}{R}{R}` | **`{R}{R}`** | — | — |
+
+Every cell is correct: the GENERIC is never reduced (the reminder text's own `{2}{R}` → `{2}`
+example is the Fanatic row), each colour floors at 0 rather than going negative (Kragma at 2 and 3
+Ragemongers is still `{3}`), the reduction STACKS per copy (Rageblood `{1}{R}{R}` → `{1}{R}` → `{1}`),
+and the HYBRID case consumes exactly one `{R/W}` pip (Boros Reckoner 3 pips → 2). The `{R}` rendering
+of a hybrid pip is deferral D11, not a payment error.
+
+### 5g heuristic mining — nothing to encode, and that is the right answer
+
+`mine_heuristics.sh` over 600 games / 2 seeds / 2,969 real decisions:
+
+* **ORDER rules: none with enough support.** Expected, not under-sampling — the skill notes order
+  rules stay sparse on lord/anthem decks, and that is exactly what this deck is.
+* **INCLUSION:** Kragma Warcaller is the standout at **-0.63 (113 help / 0 hurt)** — but a strongly
+  negative delta means "it already gets cast", so per the skill's encoding table there is no code to
+  write. Ragemonger (-0.12), Fanatic (-0.10) and Gnarled Scarhide (-0.08) are the same shape.
+  Sethron is **+0.56 with help=0** — consistently slower early, which is simply a 5-drop being
+  outclassed by the curve in a deck that wins on turn 5; the search already deprioritises it and the
+  table says gate only on a CONFIRMED misplay, which there is none of. Neheb (+0.15) is the
+  interesting one and is explicitly **not** gateable: its anthem wants an EMPTY hand, so casting it
+  early is bad and casting it late is good — textbook situational, leave it to the search.
+* **LAND/FETCH:** Mountain dominates both land plays (5933) and fetch targets (828 vs 238 Blood
+  Crypt). A Mountain-first rule is available, but it is a NARROWING and would need the 5e
+  with/without A/B plus user review; it is not taken.
+
+So the mining corroborates the routing fix from the other direction: **this deck genuinely wants no
+provider heuristics**, which is what `GenericProvider` gives it.
 
 ### Two engine bugs found and fixed
 
