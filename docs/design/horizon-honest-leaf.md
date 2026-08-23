@@ -190,6 +190,37 @@ So "one principled fix replaces three prunes" is **refuted as stated**. The corr
 weaker and still worth having: the prunes stay, and the graded leaf is an independent gain on the
 decks where the horizon binds.
 
+### ALL 14 SUITE DECKS (2026-08-23) -- the coverage a global default needs
+Life-first no-win tie-break vs today, train (1001/2002/3003) + held-out (4004/5005/6006/7007),
+d3+d5, 48,300 paired games. Negative = better.
+
+| | deck | train | held-out | all |
+|---|---|---|---|---|
+| **improve** | hinata | -17 (14w/27b) | -28 (15w/38b) | **-45** |
+| | treasure_hunt | -8 | -5 | **-13** |
+| | fivecolour | -1 | -3 | **-4** |
+| | mirrorwing | -3 | +0 | **-3** |
+| no win-turn change | slivers, burn, knights, auras, goblins, creature_giving | | | 0 |
+| **worse** | stompy | +1 | +2 | +3 (4w/1b) |
+| | antilife | +1 | +1 | +2 (2w/0b) |
+| | kitty | +1 | +0 | +1 |
+| | dragonstorm | +0 | +1 | +1 |
+
+**GLOBAL: -58 turns / 48,300 games, 50 worse : 91 better.**
+**PER-DECK (the four that improve): -65 turns, and no deck made worse.**
+
+CAVEAT on the "no win-turn change" row: that means no CHANGED GAME WAS SAMPLED at these counts, not
+byte-identical. The suite run below changes auras / goblins / dragonstorm / creature_giving digests,
+i.e. their PLAY moves without (sampled) win turns moving. Only a per-deck hook guarantees a deck is
+untouched.
+
+### The suite with the lever ON (regression tier)
+23 of 65 configs change; per-game audit **slower=5, faster=13, play-changed=53**; d0 untouched (there
+is no search at d0, so no tie-break to move). Reference reproducibility is CLEAN: 208 refs,
+0 play-drift / shuffle-dead / enum-gap / mull-drift / contract-fail. Averages move on th (-0.008),
+hinata (net -0.035 over four keys), mirrorwing (-0.015) and stompy (+0.003); the rest are digest-only.
+Adoption therefore needs a GT rebaseline of those 23 keys (fewer under the per-deck shape).
+
 ## 4. Recommendation
 
 Adopt **shape A with the opponent-life quantity** (`MTG_LEAF_GRADE_NOWIN` alone); reject B, and
