@@ -1085,6 +1085,16 @@ inline bool TbBoard()
     static const bool on = EnvOn("MTG_LEAF_TB_BOARD");
     return heurarm::Flag(heurarm::LEAF_TB_BOARD, on);
 }
+inline bool TbPerms()
+{
+    static const bool on = EnvOn("MTG_LEAF_TB_PERMS");
+    return heurarm::Flag(heurarm::LEAF_TB_PERMS, on);
+}
+inline bool TbNonland()
+{
+    static const bool on = EnvOn("MTG_LEAF_TB_NONLAND");
+    return heurarm::Flag(heurarm::LEAF_TB_NONLAND, on);
+}
 inline bool Active() { return GradeNoWin() || ValueRes(); }
 
 // FRAME RULE. Every rollout frame publishes at EVERY one of its return points -- a quantity at the
@@ -1127,17 +1137,30 @@ inline long long Quantity(const GameState& state)
 {
     const int opp = state.players[1 - state.active_player_index].life;
     long long q = static_cast<long long>(opp) * 1000000LL;
-    if (TbBoard())
+    // Secondary terms sit strictly UNDER the life term (a board count cannot reach 1000), so life
+    // always outranks development -- these only order positions the life term ties.
+    if (TbBoard() || TbPerms() || TbNonland())
     {
-        int power = 0, sources = 0;
+        int power = 0, lands = 0, perms = 0, nonland = 0;
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index) { continue; }
+            ++perms;
             if (p.card.IsCreature()) { power += p.EffectivePower(); }
-            if (p.card.IsLand())     { ++sources; }
+            if (p.card.IsLand())     { ++lands; } else { ++nonland; }
         }
-        q -= static_cast<long long>(power) * 1000LL;
-        q -= static_cast<long long>(sources);
+        // TB_BOARD weights creature POWER, which is a poor proxy for "a developed board": it scores
+        // a land drop at 1/1000th of a point of power and ignores equipment/enchantments entirely.
+        // That is why it measured WORSE than life alone on hinata (-8 vs -18) -- the power term was
+        // churn while the development signal it was meant to carry was drowned out. TB_PERMS is the
+        // USER's reading (2026-08-23) and matches the case this exists for far better: the Karoo
+        // durdle is a land BOUNCE, i.e. exactly one fewer permanent, which a count prices directly
+        // and power barely notices. TB_NONLAND is the same idea for decks where a land is worth more
+        // in HAND than on board -- treasure_hunt pitches lands to Land's Edge, so rewarding lands on
+        // the battlefield can push its ammunition out of hand (USER's own caveat, measured).
+        if      (TbPerms())   { q -= static_cast<long long>(perms)   * 1000LL; }
+        else if (TbNonland()) { q -= static_cast<long long>(nonland) * 1000LL; }
+        else                  { q -= static_cast<long long>(power) * 1000LL + lands; }
     }
     return q;
 }

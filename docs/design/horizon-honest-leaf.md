@@ -78,7 +78,7 @@ leaf is the heuristic one.** Reject B as written; it would need the hybrid polic
 ### Cross-deck sweep, shape A (1,000 games per deck per arm, d3+d5, seeds 1001/4004)
 Negative = better.
 
-| deck | A (opponent life) | A (+ board development) |
+| deck | A (opponent life) | A (+ creature power) |
 |---|---|---|
 | **hinata** | **-6** (6w/11b) | -4 (8w/11b) |
 | fivecolour | -2 (0w/2b) | -2 (0w/2b) |
@@ -87,8 +87,43 @@ Negative = better.
 | slivers, burn | +0 (inert) | +0 (inert) |
 | **total** | **-7** | -6 |
 
-**Opponent life beats the board blend**, and the blend's extra terms mostly add churn (26 worse vs
-19 worse on hinata for a smaller gain). Use life alone.
+**Opponent life beats the power blend** (26 worse vs 19 worse on hinata for a smaller gain). The
+permanent-count readings are settled in the quantity section below: also worse. Use life alone.
+Note treasure_hunt reads +0 here at 1,000 games and **-13** at 5,600 -- this sweep was under-powered.
+
+### The tie-break QUANTITY, settled (USER question, 2026-08-23)
+The USER asked whether "opponent life, then PERMANENTS on board" would beat what was tried. It is a
+different rule -- `MTG_LEAF_TB_BOARD` weights creature POWER and scores a land drop at 1/1000th of a
+point of it, so it ignores equipment/enchantments entirely and barely notices the land BOUNCE the
+Karoo case is about. Two readings were added and measured: `MTG_LEAF_TB_PERMS` (all own permanents)
+and `MTG_LEAF_TB_NONLAND` (non-land only, for decks where a land is worth more in hand).
+
+First sweep, 1,000 games/deck/arm, ranked non-land best (-10 total vs life-only's -7). **That ranking
+did not survive more data.** At 5,600 games per deck per arm (train 1001/2002/3003 + held-out
+4004/5005/6006/7007, d3+d5):
+
+| quantity | hinata | hinata w:b | treasure_hunt | th w:b | th HELD-OUT |
+|---|---|---|---|---|---|
+| **opponent life only** | **-45** | 29 : 65 | **-13** | 11 : 17 | -5 (8w/10b) |
+| + non-land permanents | -41 | 32 : 65 | -12 | 15 : 19 | -5 (10w/11b) |
+| + all permanents | -40 | 35 : 67 | -6 | 15 : 17 | **+2 (12w/9b)** |
+
+**Life alone wins on both decks.** A board term adds WORSE games without adding better ones (hinata:
+29 worse for life-only against 35 for all-permanents, at the same ~65 better).
+
+**The USER's treasure_hunt caveat is confirmed and is the sharpest signal here:** all-permanents is
+the only arm that goes NEGATIVE on held-out for treasure_hunt (+2 turns, 12 worse : 9 better).
+Excluding lands recovers nearly all of it. treasure_hunt pitches lands to Land's Edge, so a land in
+HAND is ammunition and rewarding lands on the battlefield pushes it out.
+
+**Why life alone is enough, and this is the useful part:** the quantity is measured AT THE HORIZON,
+*after* the rollout has played every turn -- not at the decision point. Development has therefore
+already been converted into damage by the time it is read. A developed board simply IS lower opponent
+life at turn 8, and the Karoo durdle registers as "opponent life did not move". An explicit board
+term double-counts what the life term already integrates, and contributes mostly churn.
+
+METHOD: the 1,000-game margins between quantities were noise and were presented as a ranking; the
+5,600-game run reversed them. Rank tie-break variants only at a sample where the arms separate.
 
 ### Hinata is where the horizon actually binds -- and there it is a real gain
 Anti-Lifegain wins on turn ~4.2 of a max_turns=8 horizon, so "nothing wins in horizon" is rare there;
@@ -116,8 +151,9 @@ decks where the horizon binds.
 
 ## 4. Recommendation
 
-Adopt **shape A with the opponent-life quantity** (`MTG_LEAF_GRADE_NOWIN`, without
-`MTG_LEAF_TB_BOARD`); reject B and reject the board blend. Per-deck vs global is the open question:
+Adopt **shape A with the opponent-life quantity** (`MTG_LEAF_GRADE_NOWIN` alone); reject B, and
+reject EVERY board term -- power, all-permanents and non-land-permanents all measured worse than life
+alone once the sample was large enough to separate them (see the quantity section). Per-deck vs global is the open question:
 the gain is concentrated on hinata (-45 / 5,600) and mildly positive on fivecolour, while kitty and
 Anti-Lifegain are each ~+1 to +2 turns worse. A `DecisionProvider` hook would take hinata's gain
 without paying those.
