@@ -7054,6 +7054,61 @@ inline const std::vector<Color>& DomainColors(const GameState& state, int contro
     return cols;
 }
 
+// ---- One-shot "lump" sac sources as PAYMENT sources (§2a) -------------------------------------
+// MTG_TREASURE_PAY_SOURCE -- DEFAULT OFF (experiment; =1 enables). Routes a 1-mana sac source
+// (Treasure Token) through the mana PAYMENT solver instead of the plan enumerator's per-colour
+// SacForMana fan, deleting its odometer group outright.
+//
+// WHY. The colour of a mana source is a payment question, not a plan question -- which is how every
+// land is already treated. The enumerated fan makes each Treasure a 3-option odometer group, so a
+// 9-Treasure Mirrorwing board enumerates 3^9 = 19,683 states for what is one payment decision.
+// Measured counterfactual (MTG_SAC_DUP_CAP=1, 5,120 games, which UNDER-states this since it leaves
+// a 3-option group where this leaves none): 1.08x deck-wide but BIMODAL -- 11.78x / 10.66x / 8.02x
+// on individual games, and the 2nd most expensive game in the sweep collapses 8x. See
+// docs/design/lump-mana-sources-as-payment-sources.md and mirrorwing-search-cost.md.
+//
+// SCOPED TO amount == 1. Lotus / Lotus Bloom (amount 3) are "N mana all of ONE colour", a payment
+// shape the flow matcher does not have (§2a-bis shape A/B); they keep the action-level colour fold.
+// A 1-mana source is exactly the existing `add(mask, 1)` shape, so this needs no new solver
+// machinery -- which is the whole reason Treasures come first.
+inline bool TreasurePaySourceEnabled()
+{
+    static const bool v = EnvOn("MTG_TREASURE_PAY_SOURCE");
+    return v;
+}
+
+// A sac source the PAYMENT solver owns. `produces.empty()` keeps this to the sources that carry no
+// colour of their own today (the whole reason they are invisible to the payment path: pay_produces()
+// comes back empty, `makes` is false, and every source scan skips them).
+inline bool IsPaySacSource(const CardDefinition& def)
+{
+    return TreasurePaySourceEnabled()
+        && def.params.sac_for_mana_amount == 1
+        && def.params.produces.empty();
+}
+
+// Cracking a Treasure SACRIFICES it; the payment path can only tap. Erasing mid-payment is unsafe
+// (the source loops hold `Permanent&` and derive the reserved-mask index from
+// `&p - battlefield.data()`; ApplySacForMana carries the same warning), so the tap marks it TAPPED
+// and the erase is deferred to each payment success path via this helper.
+//
+// No new Permanent field is needed: nothing else in the engine taps a Treasure, so "tapped pay-sac
+// source" means exactly "cracked during this payment", and a FAILED payment restores the untapped
+// state from its `bf_pre` snapshot before this is ever reached. Inert (and byte-identical) when the
+// flag is off, because IsPaySacSource is then always false.
+inline void CommitPaySacSacrifices(GameState& state, int controller)
+{
+    if (!TreasurePaySourceEnabled()) { return; }
+    for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != controller || !p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && IsPaySacSource(*d))
+        { state.battlefield.erase(state.battlefield.begin() + i); }
+    }
+}
+
 // The colours a mana source currently produces. Identical to def.params.produces (by const ref,
 // zero cost, byte-identical) for every normal source; the dynamic Reflecting-Pool union only for
 // a `reflecting` source; the dynamic colour-domain union for a `domain_mana` source (Faeburrow /
@@ -7062,6 +7117,16 @@ inline const std::vector<Color>& EffectiveProduces(const GameState& state, int c
                                                    const CardDefinition& def, bool in_hand = false)
 {
     if (def.params.domain_mana) { return DomainColors(state, controller); }
+    // A pay-sac source makes one mana of ANY colour. Giving it a real `produces` is what admits it to
+    // every source scan, and AddSourceToPool already credits a multi-colour source as `wild += amt`
+    // -- exactly the credit the SacForMana action's `ritual_float` gives today, so this is a SWAP of
+    // the accounting, not an addition to it (the action is removed in the same change).
+    if (IsPaySacSource(def))
+    {
+        static const std::vector<Color> kAnyColor{ Color::White, Color::Blue, Color::Black,
+                                                   Color::Red,   Color::Green };
+        return kAnyColor;
+    }
     if (!def.params.reflecting) { return def.params.produces; }
     return ReflectedColors(state, controller, in_hand);
 }
@@ -7488,7 +7553,8 @@ inline int SpareUntappedMana(const GameState& state, int controller)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         const bool is_land = (d->tmpl == CardTemplate::BasicLand);
-        const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || d->params.mana_rock;
+        const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || d->params.mana_rock
+                          || IsPaySacSource(*d);   // §2a
         if (!is_land && !is_dork) { continue; }
         // Deathrite: credit at most #graveyard-lands such sources (mirrors AvailableManaPool).
         if (d->params.gy_land_exile_mana)

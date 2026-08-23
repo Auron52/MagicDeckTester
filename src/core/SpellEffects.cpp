@@ -1112,7 +1112,8 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         const CardDefinition* def = cand.second;
         const bool is_src = (def->tmpl == CardTemplate::BasicLand)
                          || (def->tmpl == CardTemplate::ManaDork && CanTapNow(state.battlefield[i], state.battlefield))
-                         || def->params.mana_rock;
+                         || def->params.mana_rock
+                         || IsPaySacSource(*def);   // §2a: a cracked Treasure is a payment source
         if (!is_src) { continue; }
         if (def->params.creature_mana_only && !for_creature) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }
@@ -1528,7 +1529,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (!d) { continue; }
             if (d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
-                || d->params.mana_rock)
+                || d->params.mana_rock || IsPaySacSource(*d))   // §2a
             { s_src_cands_buf.push_back({ i, d }); }
         }
         src_cands = &s_src_cands_buf;
@@ -1863,7 +1864,8 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 if (!d) { continue; }
                 const bool is_src = (d->tmpl == CardTemplate::BasicLand)
                                  || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
-                                 || d->params.mana_rock;
+                                 || d->params.mana_rock
+                                 || IsPaySacSource(*d);   // §2a
                 if (!is_src) { continue; }
                 if (d->params.creature_mana_only && !for_creature) { continue; }
                 if (!StorageSourceLive(p, *d)) { continue; }   // uncharged storage land makes no mana
@@ -1983,7 +1985,8 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         const CardDefinition* def = cand.second;   // hoisted: controller==active filter + LookupCached done once
         const bool is_src = (def->tmpl == CardTemplate::BasicLand)
                          || (def->tmpl == CardTemplate::ManaDork && CanTapNow(state.battlefield[i], state.battlefield))
-                         || def->params.mana_rock;
+                         || def->params.mana_rock
+                         || IsPaySacSource(*def);   // §2a: a cracked Treasure is a payment source
         if (!is_src) { continue; }
         if (def->params.creature_mana_only && !for_creature) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }   // uncharged storage: no mana
@@ -2509,7 +2512,7 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
-              || d->params.mana_rock)) { continue; }
+              || d->params.mana_rock || IsPaySacSource(*d))) { continue; }   // §2a
         // Domain source: its yield IS the colour domain -- the set of colours among every permanent
         // you control, most of which this loop never visits. Hash the realised SET (not a count: two
         // boards with two colours each pay different pips), once, exactly as `reflecting` does below.
@@ -2700,7 +2703,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (!d) { continue; }
             if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
-                  || d->params.mana_rock)) { continue; }
+                  || d->params.mana_rock || IsPaySacSource(*d))) { continue; }   // §2a
             mc_ord[static_cast<std::size_t>(i)] = mc_nsrc++;
         }
     }
@@ -2781,6 +2784,9 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
             if (e.drip_life > 0) { OpponentGainsLife(state, hit_active, e.drip_life); }
             if (out_full_pool) { *out_full_pool = e.produced; }
             if (out_leftover)  { *out_leftover  = e.leftover; }
+            // §2a: a replayed Treasure tap is a SACRIFICE. After the entry is applied, never before
+            // -- the entry's taps are battlefield INDICES and erasing would shift them. Inert when off.
+            CommitPaySacSacrifices(state, hit_active);
             return true;
         }
         if (tapstats::Enabled()) { tapstats::g_mc_miss.fetch_add(1, std::memory_order_relaxed); }
@@ -2972,6 +2978,10 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         { tapstats::g_mc_unstorable.fetch_add(1, std::memory_order_relaxed); }
         if (storable) { g_mana_cache[mk1] = std::move(e); }
     }
+    // §2a: sacrifice the Treasures this solve cracked. AFTER the cache store above, so the stored
+    // entry describes the same board the live solve produced (hit/miss lockstep). Done here rather
+    // than only in TapForCostSharedOnce so the TurnSolver callers of this entry are covered too.
+    if (ok) { CommitPaySacSacrifices(state, state.active_player_index); }
     return ok;
 }
 

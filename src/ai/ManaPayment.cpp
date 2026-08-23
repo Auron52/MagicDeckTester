@@ -48,7 +48,8 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         }
         bool is_src = (def.tmpl == CardTemplate::BasicLand)
                    || (def.tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
-                   || def.params.mana_rock;
+                   || def.params.mana_rock
+                   || IsPaySacSource(def);   // §2a: a Treasure pays like a land, then dies
         if (!is_src) { return false; }
         if (def.params.creature_mana_only && !for_creature) { return false; }
         if (!StorageSourceLive(p, def)) { return false; }   // uncharged storage land makes no mana
@@ -428,7 +429,9 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         for (int i = 0; i < cost.generic;   ++i) { if (!pay(Color::Colorless, true )) return false; }
         return true;
     };
-    if (greedy()) { commit_leftover(floating); return true; }
+    // §2a: a Treasure that paid is SACRIFICED, not left tapped. Deferred to here because erasing
+    // mid-payment invalidates the source loops' references (see CommitPaySacSacrifices). Inert when off.
+    if (greedy()) { commit_leftover(floating); CommitPaySacSacrifices(state, active); return true; }
     // Greedy failed: try the backtracking solver from a clean board.
     // OPPONENT life is part of the rollback (2026-08-21): a Grove-class drip land tapped by the
     // failed greedy arrangement has already paid the opponent's gain/loss, and without restoring
@@ -444,7 +447,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     if (tapstats::Enabled()) { tapstats::g_site_percast.fetch_add(1, std::memory_order_relaxed); }
     if (TapForCostBacktrack(state, cost, for_creature, ManaPool{}, nullptr, nullptr, &bt_leftover,
                             /*tapped_mask=*/0, /*untapped_max=*/-1, reserved_mask))
-    { commit_leftover(bt_leftover); return true; }
+    { commit_leftover(bt_leftover); CommitPaySacSacrifices(state, active); return true; }
     // Floating-fed filter retry: a filter / ramp-filter land (Ferrous Lake {1},{T}: Add {U}{R}) can be
     // FED by turn-scoped floating (a ritual's output, a depletion over-tap). SpendFloatingTowardCost
     // above spent that floating on the cost DIRECTLY, stranding the filter (no feeder left) -- so the
@@ -467,6 +470,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         {
             state.floating_mana = ManaPool{};   // the whole reserve was re-allocated by the backtracker
             commit_leftover(bt2_leftover);
+            CommitPaySacSacrifices(state, active);
             return true;
         }
     }
@@ -1014,7 +1018,8 @@ ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
         auto def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
-        bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || def->params.mana_rock;
+        bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || def->params.mana_rock
+                    || IsPaySacSource(*def);   // §2a
         if (!is_land && !is_dork) { continue; }
         // Deathrite: credit at most #graveyard-lands such sources (fuel-counted, lazily).
         if (def->params.gy_land_exile_mana)

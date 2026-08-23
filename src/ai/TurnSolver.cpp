@@ -5836,7 +5836,9 @@ static int OptimisticTurnMana(const GameState& state)
         // to spend, and the prune drops it. This is the Mirrorwing half of the lossy-prune defect:
         // Gold Rush mints Treasures and the enumeration then could not afford what they paid for.
         // Cracking one yields sac_for_mana_amount once, so this is EXACT, not a slack constant.
-        if (d && !p.tapped && d->params.sac_for_mana_amount > 0)
+        // §2a: once the source model owns it, AvailableManaPool counts it like any rock, so this
+        // manual credit would DOUBLE-count it. Still required for the action-modelled sources (Lotus).
+        if (d && !p.tapped && d->params.sac_for_mana_amount > 0 && !IsPaySacSource(*d))
         { m += d->params.sac_for_mana_amount; }
     }
     bool any_land_in_hand = false;
@@ -7456,6 +7458,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // combinatorial partner to coordinate with, which is exactly where the greedy is sound.
                 // So Treasures (amount 1) keep the fan; Lotus / Lotus Bloom (amount 3) fold.
                 // NOTE this inverts the doc's original expectation that treasures were the safe half.
+                // §2a: a pay-sac source is owned by the PAYMENT solver -- emit no action at all,
+                // so its odometer group disappears rather than merely collapsing 3 -> 2. This is the
+                // whole point of MTG_TREASURE_PAY_SOURCE; EffectiveProduces has already made it a real
+                // source, so skipping here is a SWAP of the accounting, not a loss of the mana.
+                if (IsPaySacSource(*pd)) { continue; }
                 const bool fold = SacColorFoldEnabled() && pd->params.sac_for_mana_amount >= 2;
                 // FAN-WIDTH census (MTG_SAC_COLOR_TRACE): how wide is the fan the fold collapses?
                 // The fold can only save enumeration where width > 1; a provider that already
@@ -25606,7 +25613,9 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     {
         if (p.controller_index != s.active_player_index || p.tapped) { continue; }
         const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
-        if (pd && pd->params.sac_for_mana_amount > 0) { sac_wild += pd->params.sac_for_mana_amount; }
+        // §2a: a pay-sac source is in the untapped-source colour scan below on its own merits.
+        if (pd && pd->params.sac_for_mana_amount > 0 && !IsPaySacSource(*pd))
+        { sac_wild += pd->params.sac_for_mana_amount; }
     }
 
     // Restricted-color gate: reject a line that needs a colored pip NO untapped source can produce
