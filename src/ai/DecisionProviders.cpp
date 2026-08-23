@@ -1549,11 +1549,53 @@ std::vector<int> GenericProvider::XCandidates(const GameState& s, const CardDefi
     return { max_affordable };
 }
 
+static int ManaSourceRankBase(const GameState& s, const CardDefinition& def);
+
 int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
+{
+    const int r = ManaSourceRankBase(s, def);
+    // TEMPORARY SWEEP SCAFFOLDING (MTG_DORK_RANK_FLOOR, 0/unset = off = byte-identical). The ladder
+    // ranks a mana CREATURE by colour like a land (Elvish Mystic 10, Ignoble Hierarch 30), so no
+    // rank means "before every creature" -- and §9's doctrine (a body has a this-turn use a land
+    // does not, so spend the bodiless source first) needs exactly that. This floor raises every
+    // mana creature to at least the given rank, so the doctrine can be tested AS WRITTEN rather
+    // than inferred from a variant that also moved the source ahead of the lands (the skill's
+    // Attempt-1 lesson: a variant only tests what you actually coded). DELETE with the sweep.
+    // MTG_DORK_RANK_OFFSET is the same doctrine in the shape that PRESERVES the tuned order among
+    // creatures (mono < dual < rainbow < scaled): a floor collapses them all onto one rank and lets
+    // battlefield order decide, which is not a heuristic at all. Offset wins the tie if both are set.
+    // MTG_DORK_RANK_BAND=<n> is the form that resolves the two honestly: a COMPRESSED band at
+    // n + rank/10, which keeps the creatures in their tuned relative order (mono < dual < tri <
+    // rainbow < scaled) AND keeps them all below the 60-63 reserve tiers. The plain OFFSET form
+    // fails to separate those two effects -- offset 54 puts a mono dork at 64, i.e. past the
+    // storage land and the untap-burst land as well -- so a floor-beats-offset result says nothing
+    // about whether intra-creature order matters. Compare band vs floor, not offset vs floor.
+    static const int band_rank  = EnvInt("MTG_DORK_RANK_BAND", 0);
+    static const int off_rank   = EnvInt("MTG_DORK_RANK_OFFSET", 0);
+    static const int floor_rank = EnvInt("MTG_DORK_RANK_FLOOR", 0);
+    if (def.tmpl != CardTemplate::ManaDork) { return r; }
+    if (band_rank > 0)  { return band_rank + r / 10; }
+    if (off_rank > 0)   { return r + off_rank; }
+    if (floor_rank > 0 && r < floor_rank) { return floor_rank; }
+    return r;
+}
+
+static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
 {
     // See DecisionProvider::ManaSourceRank. Flexibility rank for the scarcity-first tap order (LOWER =
     // tap earlier). SPEND the least flexible first so the flexible sources stay available.
     const int active = s.active_player_index;
+    // TEMPORARY SWEEP SCAFFOLDING (MTG_PAYSAC_RANK, value-carrying int, 0/unset = off = fall through
+    // to the flexibility ladder below). A §2a payment source (IsPaySacSource) has an EMPTY produces
+    // list, so EffectiveProduces synthesises WUBRG for it and the ladder rates it "rainbow" (50) --
+    // an accident of the colour model, not a decision. This selector prices the alternatives so the
+    // rank can be chosen by measurement. Inert unless MTG_TREASURE_PAY_SOURCE is on (nothing else
+    // satisfies IsPaySacSource). DELETE once the sweep is recorded.
+    if (IsPaySacSource(def))
+    {
+        static const int v = EnvInt("MTG_PAYSAC_RANK", 0);
+        if (v > 0) { return v; }
+    }
     // A COLOURLESS-only manland (Mutavault) has marginal mana (pays only generic) but real attack
     // value, so SAVE it: rank above even rainbow, so it's tapped only when nothing else can pay. (It
     // is still used when required; ranking it last just stops the greedy spending it on a pip a real

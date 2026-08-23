@@ -63,6 +63,16 @@ static const int   s_fd_leaf_depth     = s_fd_leaf_depth_env ? std::atoi(s_fd_le
 static const bool             s_rollout_stats = EnvOn("MTG_ROLLOUT_STATS");
 static std::atomic<long long> g_rollout_calls{0};
 static std::atomic<long long> g_rollout_steps{0};
+// Two-stage-split fallback telemetry (MTG_ODO_FALLBACK_STATS). EnumeratePlanPositions abandons the
+// split -- and with it the whole-row payoff gating -- whenever either side would materialize more
+// than MTG_ODO_FLAT_FALLBACK lines (default 1e6), a guard added for the Mirrorwing swarm's 4 GiB
+// node. That makes the gating's coverage a MEASURABLE quantity rather than an assumed one: these
+// counters say how many enumeration calls, and how many odometer POSITIONS, take the ungated flat
+// walk. Namespace-scope (not a magic static) so the disabled path costs one predictable load on the
+// rollout leaf -- see plan-odometer-factorization.md's note on thread-safe-init guards.
+static const bool             s_odo_fb_stats = EnvOn("MTG_ODO_FALLBACK_STATS");
+static std::atomic<long long> g_odo_calls{0}, g_odo_flat_calls{0};
+static std::atomic<long long> g_odo_positions{0}, g_odo_flat_positions{0};
 // Interior-node telemetry (same MTG_ROLLOUT_STATS gate): the number of full-depth search
 // interior nodes = plans applied (EnumeratePlansWithLand + ApplyPlanDirect + a GameState
 // copy per node). Reported next to turn_steps so the interior fraction
@@ -146,6 +156,22 @@ namespace
         }
     };
     RolloutStatsReporter g_rollout_stats_reporter;
+
+    struct OdoFallbackReporter
+    {
+        ~OdoFallbackReporter()
+        {
+            if (!s_odo_fb_stats) { return; }
+            const long long c = g_odo_calls.load(), fc = g_odo_flat_calls.load();
+            const long long p = g_odo_positions.load(), fp = g_odo_flat_positions.load();
+            std::cerr << "[odo-fallback] calls=" << c << " flat_calls=" << fc
+                      << " flat_call_frac=" << (c ? static_cast<double>(fc) / c : 0.0) << "\n";
+            std::cerr << "[odo-fallback] positions=" << p << " flat_positions=" << fp
+                      << " flat_position_frac=" << (p ? static_cast<double>(fp) / p : 0.0)
+                      << "   (the share of odometer work the two-stage gating never sees)\n";
+        }
+    };
+    OdoFallbackReporter g_odo_fallback_reporter;
 
     struct EscPredictReporter
     {
@@ -10210,6 +10236,13 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     std::vector<std::uint64_t> stride(num_groups, 1);
     std::uint64_t acc = 1;
     for (int g = 0; g < num_groups; ++g) { stride[g] = acc; acc *= static_cast<std::uint64_t>(groups[g].size()) + 1; }
+    // Whole-odometer size, for the fallback telemetry only: group product x the independent bits.
+    const std::uint64_t flat_positions = (num_ind < 63) ? (acc << num_ind) : acc;
+    if (s_odo_fb_stats)
+    {
+        g_odo_calls.fetch_add(1, std::memory_order_relaxed);
+        g_odo_positions.fetch_add(static_cast<long long>(flat_positions), std::memory_order_relaxed);
+    }
 
     // ---- Degenerate-width guard (Mirrorwing swarm, 2026-08-11) --------------------------------
     // The two-stage split MATERIALIZES each side's lines (mdig/pdig flat digit stores, then the
@@ -10239,6 +10272,12 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         if (kLineBound != 0
             && (side_lines(mg, mi) > kLineBound || side_lines(pg, pi) > kLineBound))
         {
+            if (s_odo_fb_stats)
+            {
+                g_odo_flat_calls.fetch_add(1, std::memory_order_relaxed);
+                g_odo_flat_positions.fetch_add(static_cast<long long>(flat_positions),
+                                               std::memory_order_relaxed);
+            }
             // FLAT walk: mixed-radix over ALL groups (digit 0 fastest -- the same carry order the
             // split's sort reproduces), independent bits ascending inside each position; the group
             // predicates read only mana-side digits by construction, so running them on the full
