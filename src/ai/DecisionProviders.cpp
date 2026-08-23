@@ -2185,6 +2185,24 @@ bool AntiLifegainProvider::SearchedSecondMainInSearch() const
     return heurarm::Flag(heurarm::AL_SSM, env_on) && AlPhaseEnabled();
 }
 
+bool AntiLifegainProvider::SearchesRolloutSecondMain() const
+{
+    // The ROLLOUT site is the leaf estimator's PLAYOUT POLICY, not a decision -- a plan that is
+    // scored, never played. Declined here since 2026-08-22 on measurement: searching it cost +12
+    // turns at d3 / +1 at d5 per 3000 train games, robust across 5 shuffle realisations and 4
+    // DECOUPLED search salts, and NON-MONOTONE (removing the rollout's m2 entirely costs +7, so
+    // greedy is an interior optimum -- more playout fidelity is not more ranking accuracy).
+    // ~2/3 of the cost was budget dilution: the rollout charges the shared budget per simulated
+    // turn-step, starving the outer candidate loop.
+    //
+    // USER 2026-08-23: "We shouldn't have any greedy within the searched window." MTG_AL_SSM_ROLLOUT
+    // is the lever to re-open that, default OFF until the measurement says it can ship -- and the
+    // strict-win route to try first is MTG_M2_CAP1, which caps the interior solve to depth 1 so it
+    // is still SEARCHED (no greedy pick) without compounding against the iterative-deepening pass.
+    static const bool env_on = EnvOn("MTG_AL_SSM_ROLLOUT");
+    return heurarm::Flag(heurarm::AL_SSM_ROLLOUT, env_on) && SearchedSecondMainInSearch();
+}
+
 bool AntiLifegainProvider::CondemnsPassedMainPhase() const
 {
     // ORDER CONDEMNATION for the split (USER 2026-08-21: "within a turn all breakpoints and

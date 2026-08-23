@@ -117,6 +117,53 @@ Method note: the FiveColour cells are 500 games each (its games cost 12-26x an A
 less power than AL's 1000-game cells. It is enough to exclude an AL-sized effect (+12 per 3000), not
 enough to call a sub-turn-per-thousand one.
 
+## 3b. The ROLLOUT site re-opened and re-measured at PLAY settings (2026-08-23)
+
+USER: *"We shouldn't have any greedy within the searched window."* `MTG_AL_SSM_ROLLOUT` (heurarm,
+DEFAULT OFF) was added to re-open the declined rollout site, and `MTG_M2_CAP1` to try the
+strict-win route first (cap the interior m2 solve to depth 1, so it is still SEARCHED -- no greedy
+pick -- without compounding against the iterative-deepening pass).
+
+**GATE 1 -- aggregate at PLAY settings (d5/20 value_play), 30 seed blocks x 1,000 games:**
+
+| arm | paired | net turns | worse | better |
+|---|---|---|---|---|
+| rollout searched | 30,000 | **+10** | 15 | 5 |
+| rollout searched + cap1 | 30,000 | **+10** | 15 | 5 |
+
+Both halves positive (+2, +8); 15:5 of 20 changed games is ~2.2 sigma WORSE. **Fails gate 1.**
+
+The cap1 arm is byte-identical to uncapped -- and so is the pre-existing `MTG_M2_SEARCH_DEPTH=1`
+env knob, so this is the knob being inert on this deck, not a wiring bug. AL's interior m2 candidate
+sets are small enough that the solve's DEPTH does not change the plan it returns. **The strict-win
+route via the depth cap is therefore dead**, and with it the "~2/3 of the cost is budget dilution,
+so cap the interior" hypothesis.
+
+**GATE 2 -- game by game, unlimited budget at the pre-regression winning depth:** 14 of the 15
+regressed games recover at 10x budget (b200), so the bulk of the cost really is the rollout's m2
+charging the shared budget and starving the outer candidate loop. ONE game does not:
+
+| s1200000 gi264 | b20 | b200 | b2,000 | b20,000 | b200,000 |
+|---|---|---|---|---|---|
+| control | 7 | 7 | 7 | 7 | 7 |
+| rollout searched | 8 | 8 | 8 | 8 | 8 |
+
+Never converges on budget -- but it DOES recover on depth: d6 -> 7, d7 -> 7. So the T7 line is not
+structurally deleted, it is pushed past what d5 can find. Borderline rather than a clean gate-2
+failure; gate 1 is the one that settles it.
+
+**Conclusion: the rollout site stays greedy on AL, now on a play-settings measurement rather than a
+gate-cell one.** Note what the architecture says about scope: `depth` passes through
+`SimulateToEndImpl` UNCHANGED (it does not decrement per simulated turn), so the rollout is the leaf
+ESTIMATOR -- a playout that is scored, never played -- not part of the branching. Under the repo's
+own law (OPTIMISTIC where you BRANCH, HONEST where you SCORE) it is the SCORE side. By that reading
+AL already has no greedy in the searched window: its branch site is 79 searched / 0 greedy at play
+settings.
+
+**What IS inside the window, on every deck, is the d<=0 branch-site greedy** -- see the M2 SITE
+counter. FiveColour, the reference adoption, takes 2,025,249 greedy branch-site second mains at
+d<=0 against 42,502 searched ones: 98% greedy. That is the open item.
+
 ## 4. The two known instances of that class (both fixed, both prunes)
 
 `TurnSolver.cpp` refuses to EMIT a candidate subset that hands the opponent life with no

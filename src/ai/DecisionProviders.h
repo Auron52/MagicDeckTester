@@ -171,9 +171,9 @@ public:
     // Both gated default-OFF pending measurement + the user's classification review.
     bool ClassifiesMainPhases() const override;
     bool SearchedSecondMainInSearch() const override;
-    // ...but NOT in the rollout: the leaf estimator keeps the cheap greedy playout. Measured, see
-    // the .cpp note and DecisionProvider::SearchesRolloutSecondMain.
-    bool SearchesRolloutSecondMain() const override { return false; }
+    // ...and the ROLLOUT site separately -- the leaf estimator's playout policy is a DIFFERENT
+    // lever from the branch-site decision. See the .cpp note.
+    bool SearchesRolloutSecondMain() const override;
     bool PhaseFilterRootTurnOnly() const override;
     // The FiveColour condemnation doctrine, AL arm (USER 2026-08-21: one condemnation across a
     // turn's phases and breakpoints; AL first). MTG_AL_CONDEMN / MTG_AL_BP_CONDEMN, both

@@ -1277,7 +1277,11 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     // outer candidate loop at the gate budget). The cap changes SCORING fidelity of the interior
     // m2 only; the real (executor) second main is a full-depth top-level decision either way.
     static const int s_m2_depth_cap = EnvInt("MTG_M2_SEARCH_DEPTH", 0);
-    const int m2_depth = (s_m2_depth_cap > 0 && s_m2_depth_cap < depth) ? s_m2_depth_cap : depth;
+    // MTG_M2_CAP1 is the same knob pinned to 1, exposed per-job so the capped arm pools into the
+    // SAME batch as the uncapped one (heurarm carries booleans only, and this is the value the
+    // budget-dilution question actually needs).
+    const int cap = heurarm::Flag(heurarm::M2_CAP1, false) ? 1 : s_m2_depth_cap;
+    const int m2_depth = (cap > 0 && cap < depth) ? cap : depth;
     const bool depth_out = (depth <= 0);
     m2yield::RecordPath(!depth_out && searched, depth_out, in_rollout);
     const TurnSolver::Plan p =
