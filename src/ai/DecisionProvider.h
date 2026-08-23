@@ -476,6 +476,30 @@ public:
     // See docs/design/antilife-main-phase-split.md 2026-08-22y.
     virtual bool SearchesRolloutSecondMain() const { return SearchedSecondMainInSearch(); }
 
+    // GradesNoWinLeaf -- DEFAULT ON. When the rollout reaches the horizon with no win, publish the
+    // resulting position's OPPONENT LIFE as the tie-break instead of letting every hopeless line
+    // score the identical `max_turns + 1` and fall through to `plan.value`. See
+    // docs/design/horizon-honest-leaf.md for the measurement (48,300 paired games across all 14
+    // suite decks: -58 turns global, 50 worse : 91 better; hinata -45, treasure_hunt -13,
+    // fivecolour -4, mirrorwing -3).
+    //
+    // ON BY DEFAULT, and deliberately so (USER 2026-08-23: "we should have a sensible default...
+    // per-deck logic requires per-deck work"). A new deck inherits the fix instead of needing
+    // someone to notice and opt in; a deck OPTS OUT only on measured evidence, and there is exactly
+    // one such deck today.
+    //
+    // WHEN TO OVERRIDE THIS TO FALSE -- the failure mode is specific and predictable: opponent life
+    // at the horizon is a DAMAGE-RACE proxy, so it undervalues a deck whose value is STORED rather
+    // than expressed as damage by the horizon. Combo/storm/ramp decks bank resources that pay off
+    // discontinuously, and a shallow rollout cannot see the payoff land. Dragonstorm is the measured
+    // instance (s5005 gi227, turn-8 win -> LOSS): at T6 `plan.value` casts a 13-spell chain -- three
+    // Apex of Power, four rituals, Ruby Medallion, Scourge of Valkas -- and wins on turn 8; the life
+    // tie-break stops the chain after six spells because the extra rituals lower nobody's life
+    // inside the horizon. It survives 20x budget (a valuation error, not a depth one) and only
+    // recovers at d4+. Every OTHER regression measured across the suite -- stompy x4, antilife x2,
+    // kitty x1, dragonstorm's other one -- is ordinary budget churn that closes at 20x budget.
+    virtual bool GradesNoWinLeaf() const { return true; }
+
     // PhaseFilterRootTurnOnly -- per-deck ROOT-TURN AUTHORITY for the pre-combat Main2 filter
     // (the condemnation arc's lesson applied to the phase split, 2026-08-21): the filter fires
     // at REAL decision turns (executor play + the search's root turn, incl. its interior m2 and

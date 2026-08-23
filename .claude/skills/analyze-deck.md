@@ -383,6 +383,36 @@ Run the deck at depth 0, 3, and 5 and judge whether the numbers make sense — d
 
 If 5b shows a deck winning much slower than its line should, confirm the cause before blaming the AI: re-run the slow game at a much larger `--budget-ms`. If a bigger budget recovers the good line (monotonically), the suite budget is **starving** this deck — note the threshold for the suite's time-budget sizing; it is not a logic bug. (Seen on Treasure Hunt: the Land's Edge combo needs ~b2000 at d5; b200 starves it.)
 
+### 5c2. Horizon-honest tie-break check (MANDATORY for a new deck)
+
+```
+python3 scripts/leaf_tiebreak_check.py decks/<Name>/<Name>.cod
+```
+
+`DecisionProvider::GradesNoWinLeaf()` ships **DEFAULT ON**: when a rollout reaches the horizon with
+no win, the tie-break is the resulting position's OPPONENT LIFE instead of every hopeless line
+scoring the identical `max_turns+1` and falling through to `plan.value`. Measured over 48,300 paired
+games it is worth -58 turns across the suite (hinata -45, treasure_hunt -13, fivecolour -4,
+mirrorwing -3). The default is ON deliberately, so a new deck inherits the fix rather than waiting
+for someone to notice it should opt in.
+
+It has ONE predictable failure mode, and this check is how you find out whether your deck has it:
+**opponent life at the horizon is a DAMAGE-RACE proxy, so a deck whose value is STORED rather than
+expressed as damage by the horizon has its build-up priced at zero.** Combo, storm and ramp decks
+bank resources for a discontinuous payoff; rituals and enablers lower nobody's life on the turn they
+are cast. Dragonstorm is the measured instance and is the only deck that opts out today: the
+tie-break truncated a 13-spell turn-6 chain to six spells and turned a turn-8 win into a LOSS.
+
+Reading the verdict:
+* **KEEP THE DEFAULT / INERT** -> nothing to do.
+* **CANDIDATE FOR OPT-OUT** -> do NOT override the hook on the aggregate alone. Escalate the
+  regressed games on BOTH arms at +1/+2 depth AND 20x budget first: 8 of the 9 regressions found
+  across the whole suite were ordinary budget churn that closed at 20x, and only one was a real
+  valuation failure. Override `GradesNoWinLeaf()` to false only for a game that survives BOTH, and
+  say which stored-value mechanism caused it.
+
+See `docs/design/horizon-honest-leaf.md`.
+
 ### 5d. Claude-play validation sweep (~15-20 games)
 
 As the final verification step, run a **small (~15-20 game) claude-play sweep** — an

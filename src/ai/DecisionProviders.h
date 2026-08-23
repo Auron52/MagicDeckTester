@@ -395,6 +395,16 @@ public:
 class DragonstormProvider : public GenericProvider
 {
 public:
+    // OPT OUT of the horizon-honest no-win tie-break (DecisionProvider::GradesNoWinLeaf, default ON).
+    // This deck's value is STORED, not expressed as damage by the horizon: rituals and Apex of Power
+    // lower nobody's life on the turn they are cast, they build toward a discontinuous payoff. Grading
+    // a no-win leaf on OPPONENT LIFE therefore prices the chain at zero and stops it early -- measured
+    // on s5005 gi227, where it truncates a 13-spell turn-6 chain to six spells and turns a turn-8 win
+    // into a LOSS. It survives 20x budget (a valuation error, not a depth one). `plan.value`, which
+    // this falls back to, prices the combo pieces through ArchetypeCardValue and gets it right.
+    // See docs/design/horizon-honest-leaf.md.
+    bool GradesNoWinLeaf() const override { return false; }
+
     const char* Name() const override { return "Dragonstorm"; }
     std::vector<std::string>
     TutorToBattlefieldPutOrder(const GameState&, int, const CardParams&, int) const override;

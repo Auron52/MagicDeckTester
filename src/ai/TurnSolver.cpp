@@ -1074,9 +1074,11 @@ inline thread_local long long t_tb = kInvalid;
 // is the tie rate of the key above it.
 inline thread_local long long t_life = kInvalid;
 
-inline bool GradeNoWin()
+// ADOPTED DEFAULT ON 2026-08-23 (USER). MTG_LEAF_GRADE_NOWIN=0 reverts globally; a deck opts out via
+// DecisionProvider::GradesNoWinLeaf (dragonstorm does -- see that hook for the measured reason).
+inline bool GradeNoWinEnabled()
 {
-    static const bool on = EnvOn("MTG_LEAF_GRADE_NOWIN");
+    static const bool on = EnvOn("MTG_LEAF_GRADE_NOWIN", true);
     return heurarm::Flag(heurarm::LEAF_GRADE_NOWIN, on);
 }
 inline bool ValueRes()
@@ -1099,7 +1101,9 @@ inline bool TbNonland()
     static const bool on = EnvOn("MTG_LEAF_TB_NONLAND");
     return heurarm::Flag(heurarm::LEAF_TB_NONLAND, on);
 }
-inline bool Active() { return GradeNoWin() || ValueRes(); }
+// NOTE: the per-deck opt-out lives at the PUBLISH sites (which have a GameState); a deck that opts
+// out simply never publishes, so leaf_tb stays kInvalid and the consumer falls back to plan.value.
+inline bool Active() { return GradeNoWinEnabled() || ValueRes(); }
 
 // FRAME RULE. Every rollout frame publishes at EVERY one of its return points -- a quantity at the
 // natural horizon exit, kInvalid everywhere else (a win needs no tie-break; an aborted line has
@@ -20331,7 +20335,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             {
                 // Same clamp, same loss of resolution as FSLineWin's -- publish the raw milliturns.
                 if (leafeval::ValueRes())      { leafeval::Publish(score); }
-                else if (leafeval::GradeNoWin()) { leafeval::Publish(leafeval::Quantity(state)); }
+                else if (leafeval::GradeNoWinEnabled() && ResolveProvider(state).GradesNoWinLeaf())
+                { leafeval::Publish(leafeval::Quantity(state)); }
                 w = max_turns + 1;
             }
             return w;
@@ -20454,7 +20459,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
     // NATURAL horizon exit: the rollout played every turn and found no win, so `state` is a real
     // measured position and its quantity is honest. The cutoff / budget-overrun exits above are NOT
     // (an aborted line never reached the horizon), which is why they do not publish.
-    if (leafeval::GradeNoWin())
+    if (leafeval::GradeNoWinEnabled() && ResolveProvider(state).GradesNoWinLeaf())
     {
         leafeval::Publish(leafeval::Quantity(state));
         leafeval::PublishLife(state.players[1 - state.active_player_index].life);
