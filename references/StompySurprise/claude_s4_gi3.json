@@ -1,0 +1,146 @@
+{
+  "seed": 4, "game_index": 3, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 52, "name": "Wirewood Lodge" }, { "num": 39, "name": "Priest of Titania" }, { "num": 40, "name": "Priest of Titania" }, { "num": 17, "name": "Forest" }, { "num": 18, "name": "Forest" }, { "num": 37, "name": "Natural Order" }, { "num": 50, "name": "Vaultborn Tyrant" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 17, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Natural Order", "cost": "{2}{G}{G}", "mv": 4, "kind": "nonpermanent" }, { "num": 39, "name": "Priest of Titania", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Priest of Titania", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Vaultborn Tyrant", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Wirewood Lodge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Wirewood Lodge; cast: (nothing)", "land": "Wirewood Lodge", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 17, "is_land": true }], "vial_counters": [], "hand": [{ "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Natural Order", "cost": "{2}{G}{G}", "mv": 4, "kind": "nonpermanent" }, { "num": 39, "name": "Priest of Titania", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Priest of Titania", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Vaultborn Tyrant", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Wirewood Lodge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Wirewood Lodge; cast: Priest of Titania", "land": "Wirewood Lodge", "casts": ["Priest of Titania"], "actions": [{ "card": "Priest of Titania" }] },
+    { "index": 1, "summary": "land=Forest; cast: Priest of Titania", "land": "Forest", "casts": ["Priest of Titania"], "actions": [{ "card": "Priest of Titania" }] },
+    { "index": 2, "summary": "land=Wirewood Lodge; cast: (nothing)", "land": "Wirewood Lodge", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 15, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 17, "is_land": true }, { "name": "Forest", "idx": 3, "num": 18, "is_land": true }, { "name": "Priest of Titania", "idx": 4, "num": 39, "is_land": false }], "vial_counters": [], "hand": [{ "num": 19, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Natural Order", "cost": "{2}{G}{G}", "mv": 4, "kind": "nonpermanent" }, { "num": 40, "name": "Priest of Titania", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Vaultborn Tyrant", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Wirewood Lodge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Wirewood Lodge; cast: Priest of Titania", "land": "Wirewood Lodge", "casts": ["Priest of Titania"], "actions": [{ "card": "Priest of Titania" }] },
+    { "index": 1, "summary": "land=Forest; cast: Priest of Titania", "land": "Forest", "casts": ["Priest of Titania"], "actions": [{ "card": "Priest of Titania" }] },
+    { "index": 2, "summary": "land=none; cast: Priest of Titania", "land": null, "casts": ["Priest of Titania"], "actions": [{ "card": "Priest of Titania" }] },
+    { "index": 3, "summary": "land=Wirewood Lodge; cast: Natural Order", "land": "Wirewood Lodge", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Elvish Mystic", "soulfire_targets": 39 }] },
+    { "index": 4, "summary": "land=Wirewood Lodge; cast: Natural Order", "land": "Wirewood Lodge", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Worldspine Wurm", "soulfire_targets": 39 }] },
+    { "index": 5, "summary": "land=Wirewood Lodge; cast: Natural Order", "land": "Wirewood Lodge", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Llanowar Elves", "soulfire_targets": 39 }] },
+    { "index": 6, "summary": "land=Wirewood Lodge; cast: Natural Order", "land": "Wirewood Lodge", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Terastodon", "soulfire_targets": 39 }] },
+    { "index": 7, "summary": "land=Wirewood Lodge; cast: Natural Order", "land": "Wirewood Lodge", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Priest of Titania", "soulfire_targets": 39 }] },
+    { "index": 8, "summary": "land=Wirewood Lodge; cast: Natural Order", "land": "Wirewood Lodge", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Vaultborn Tyrant", "soulfire_targets": 39 }] },
+    { "index": 9, "summary": "land=Wirewood Lodge; cast: Natural Order", "land": "Wirewood Lodge", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Elvish Archdruid", "soulfire_targets": 39 }] },
+    { "index": 10, "summary": "land=Wirewood Lodge; cast: Natural Order", "land": "Wirewood Lodge", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Elderscale Wurm", "soulfire_targets": 39 }] },
+    { "index": 11, "summary": "land=Wirewood Lodge; cast: Natural Order", "land": "Wirewood Lodge", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Arbor Elf", "soulfire_targets": 39 }] },
+    { "index": 12, "summary": "land=Wirewood Lodge; cast: Natural Order", "land": "Wirewood Lodge", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Hornet Queen", "soulfire_targets": 39 }] },
+    { "index": 13, "summary": "land=Wirewood Lodge; cast: Natural Order", "land": "Wirewood Lodge", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Craterhoof Behemoth", "soulfire_targets": 39 }] },
+    { "index": 14, "summary": "land=Forest; cast: Natural Order", "land": "Forest", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Elvish Mystic", "soulfire_targets": 39 }] },
+    { "index": 15, "summary": "land=Forest; cast: Natural Order", "land": "Forest", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Worldspine Wurm", "soulfire_targets": 39 }] },
+    { "index": 16, "summary": "land=Forest; cast: Natural Order", "land": "Forest", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Llanowar Elves", "soulfire_targets": 39 }] },
+    { "index": 17, "summary": "land=Forest; cast: Natural Order", "land": "Forest", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Terastodon", "soulfire_targets": 39 }] },
+    { "index": 18, "summary": "land=Forest; cast: Natural Order", "land": "Forest", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Priest of Titania", "soulfire_targets": 39 }] },
+    { "index": 19, "summary": "land=Forest; cast: Natural Order", "land": "Forest", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Vaultborn Tyrant", "soulfire_targets": 39 }] },
+    { "index": 20, "summary": "land=Forest; cast: Natural Order", "land": "Forest", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Elvish Archdruid", "soulfire_targets": 39 }] },
+    { "index": 21, "summary": "land=Forest; cast: Natural Order", "land": "Forest", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Elderscale Wurm", "soulfire_targets": 39 }] },
+    { "index": 22, "summary": "land=Forest; cast: Natural Order", "land": "Forest", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Arbor Elf", "soulfire_targets": 39 }] },
+    { "index": 23, "summary": "land=Forest; cast: Natural Order", "land": "Forest", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Hornet Queen", "soulfire_targets": 39 }] },
+    { "index": 24, "summary": "land=Forest; cast: Natural Order", "land": "Forest", "casts": ["Natural Order"], "actions": [{ "card": "Natural Order", "tutor_target": "Craterhoof Behemoth", "soulfire_targets": 39 }] },
+    { "index": 25, "summary": "land=Wirewood Lodge; cast: (nothing)", "land": "Wirewood Lodge", "casts": [], "actions": [] },
+    { "index": 26, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 27, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Vaultborn Tyrant" }],
+  "events": [{ "turn": 3, "kind": "sacrifice", "text": "🔪 Natural Order -- sacrificed Priest of Titania" }, { "turn": 3, "kind": "dragonstorm", "text": "🐉 Worldspine Wurm -- put onto the battlefield (Dragonstorm)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 17, "is_land": true }, { "name": "Forest", "idx": 3, "num": 18, "is_land": true }, { "name": "Forest", "idx": 5, "num": 19, "is_land": true }, { "name": "Worldspine Wurm", "idx": 6, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 40, "name": "Priest of Titania", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Vaultborn Tyrant", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Vaultborn Tyrant", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Wirewood Lodge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Natural Order", "Priest of Titania"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Wirewood Lodge; cast: Priest of Titania", "land": "Wirewood Lodge", "casts": ["Priest of Titania"], "actions": [{ "card": "Priest of Titania" }] },
+    { "index": 1, "summary": "land=Forest; cast: Priest of Titania", "land": "Forest", "casts": ["Priest of Titania"], "actions": [{ "card": "Priest of Titania" }] },
+    { "index": 2, "summary": "land=none; cast: Priest of Titania", "land": null, "casts": ["Priest of Titania"], "actions": [{ "card": "Priest of Titania" }] },
+    { "index": 3, "summary": "land=Wirewood Lodge; cast: (nothing)", "land": "Wirewood Lodge", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Forest" }],
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Worldspine Wurm (15) — 15 to opponent (20→5)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 1, "num": 17, "is_land": true }, { "name": "Forest", "idx": 3, "num": 18, "is_land": true }, { "name": "Forest", "idx": 5, "num": 19, "is_land": true }, { "name": "Forest", "idx": 7, "num": 20, "is_land": true }, { "name": "Priest of Titania", "idx": 8, "num": 40, "is_land": false }, { "name": "Worldspine Wurm", "idx": 6, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 24, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Vaultborn Tyrant", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Vaultborn Tyrant", "cost": "{5}{G}{G}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Wirewood Lodge", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Natural Order", "Priest of Titania"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 0, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 0, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Wirewood Lodge; cast: (nothing)", "land": "Wirewood Lodge", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "note": "reply with one plan index (0-based), or -1 to pass / cast nothing"
+}
+}
+  ]
+}
