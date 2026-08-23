@@ -301,6 +301,31 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 else if (a.direct_damage > 0) { tag += " \xE2\x86\x92 " + std::to_string(a.direct_damage) + " damage"; }
                 break;
             }
+            // Main-phase activated pumps (Minotaur). Without a case here these fell to the
+            // "(other)" default and read to the human as a CAST of the card -- Burning-Fist's
+            // two-activation pump rendered as "Burning-Fist Minotaur (other)", indistinguishable
+            // from casting it, and with no hint that it DISCARDS two cards. The activation count
+            // is the whole difference between two otherwise identical menu entries, exactly as
+            // for the sac outlets above (viewer issue #4's lesson).
+            case Action::Kind::ActivatePump:
+            {
+                const int k = std::max(1, a.chosen_x);
+                if (a.gy_exile_mode == 1)
+                {
+                    const CardDefinition* pd = CardDatabase::Instance().Lookup(a.card_name);
+                    const int per = pd ? pd->params.firebreathing_power : 0;
+                    tag = a.card_name + ": pump +" + std::to_string(per * k) + "/+0"
+                        + " (discard " + std::to_string(k)
+                        + (k == 1 ? " card)" : " cards)");
+                }
+                else
+                {
+                    tag = a.card_name + ": team +" + std::to_string(k)
+                        + "/+0 and haste"
+                        + (k > 1 ? " \xC3\x97" + std::to_string(k) : std::string());
+                }
+                break;
+            }
             default:                              tag = a.card_name + " (other)"; break;
         }
         if (a.sacrifice_land) { tag += " +sac-land"; }
@@ -853,8 +878,14 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // IMPLICIT mana source the enumerator slipped in when a cast needed it, so it carried no
             // flag and the viewer had no way to render or queue it (viewer issue #4). It is an
             // activation of a permanent already in play, exactly like Krenko's tap.
+            // ActivatePump joins these for the same reason: it is an activation of a permanent
+            // already in play (Burning-Fist's discard-pump, Sethron's team pump + haste), and
+            // without the flag it serialized as a bare {"card": ..., "x": K} -- byte-identical in
+            // shape to CASTING an {X} spell, so the viewer would render it as a hand cast and the
+            // human would have no way to click the source or see that it discards.
             if (ac.kind == Action::Kind::TapForTokens
              || ac.kind == Action::Kind::SacForMana
+             || ac.kind == Action::Kind::ActivatePump
              || ac.kind == Action::Kind::SacCreatureOutlet)
             {
                 os << ", \"activate\": true";

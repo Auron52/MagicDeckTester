@@ -8610,6 +8610,36 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 for (int k = 1; any_beneficiary && k <= kmax; ++k)
                 {
+                    // HUMAN PLAY: never offer an activation the payment path cannot actually pay.
+                    // kmax above is bounded by AvailableManaPool, which is COLOUR-BLIND about a
+                    // colored_creature_only source (Unclaimed Territory / Secluded Courtyard /
+                    // Cavern of Souls): it books the land as wild, but ProducesForPayment strips
+                    // its colours for a NON-creature cost, so the trailing apply's TapForCost fails
+                    // and the activation is a total no-op. For a CAST that stranding is the engine's
+                    // long-accepted behaviour (see BuildNonCreaturePool's note -- measured neutral,
+                    // deliberately withdrawn) because the autonomous search just wastes a branch.
+                    // For the VIEWER it is fatal: a no-op plan changes nothing, so the mid-phase
+                    // re-prompt re-offers the identical menu forever. Found by the Stage-5d decision
+                    // sweep on Minotaur seed 9403 T5 -- 64 identical consecutive prompts, board
+                    // frozen, every land a tribal land and the pump costing {1}{R}. Exactly the
+                    // Wirewood Lodge phantom-option loop above, and gated the same way: probe the
+                    // REAL payment on a scratch copy of the state (precise by construction -- no
+                    // second affordability model to drift), human-play only, so every rollout and
+                    // autonomous run is byte-identical.
+                    if (HumanPlayActive())
+                    {
+                        ManaCost probe = per;
+                        probe.generic *= k; probe.white *= k; probe.blue *= k; probe.black *= k;
+                        probe.red *= k; probe.green *= k; probe.colorless *= k;
+                        probe.hybrid_count = 0;
+                        for (int rep = 0; rep < k; ++rep)
+                        {
+                            for (int hi = 0; hi < per.hybrid_count && probe.hybrid_count < 4; ++hi)
+                            { probe.hybrid_pair[probe.hybrid_count++] = per.hybrid_pair[hi]; }
+                        }
+                        GameState scratch = state;
+                        if (!TapForCostDirect(scratch, probe, /*for_creature=*/false)) { continue; }
+                    }
                     Action a;
                     a.kind           = Action::Kind::ActivatePump;
                     a.card_name      = src.card.m_name;
