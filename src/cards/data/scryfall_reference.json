@@ -246,6 +246,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Boros Reckoner": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{R/W}{R/W}{R/W}",
+    "oracle_text": "Whenever this creature is dealt damage, it deals that much damage to any target.\n{R/W}: This creature gains first strike until end of turn.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Minotaur Wizard"
+  },
   "Braingeyser": {
     "cmc": 2.0,
     "keywords": [],
@@ -281,6 +290,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Burning-Fist Minotaur": {
+    "cmc": 2.0,
+    "keywords": [
+      "First strike"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "First strike\n{1}{R}, Discard a card: This creature gets +2/+0 until end of turn.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Minotaur Wizard"
   },
   "Call of the Wild": {
     "cmc": 4.0,
@@ -410,6 +430,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
+  },
+  "Deathbellow Raider": {
+    "cmc": 2.0,
+    "keywords": [
+      "Regenerate"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "This creature attacks each combat if able.\n{2}{B}: Regenerate this creature.",
+    "power": "2",
+    "toughness": "3",
+    "type_line": "Creature — Minotaur Berserker"
   },
   "Deathrite Shaman": {
     "cmc": 1.0,
@@ -586,6 +617,15 @@
     "toughness": "0",
     "type_line": "Creature — Treefolk Druid"
   },
+  "Fanatic of Mogis": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{R}",
+    "oracle_text": "When this creature enters, it deals damage to each opponent equal to your devotion to red. (Each {R} in the mana costs of permanents you control counts toward your devotion to red.)",
+    "power": "4",
+    "toughness": "2",
+    "type_line": "Creature — Minotaur Shaman"
+  },
   "Ferrous Lake": {
     "cmc": 0.0,
     "keywords": [],
@@ -715,6 +755,17 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf Scout"
+  },
+  "Gnarled Scarhide": {
+    "cmc": 1.0,
+    "keywords": [
+      "Bestow"
+    ],
+    "mana_cost": "{B}",
+    "oracle_text": "Bestow {3}{B} (If you cast this card for its bestow cost, it's an Aura spell with enchant creature. It becomes a creature again if it's not attached.)\nThis creature can't block.\nEnchanted creature gets +2/+1 and can't block.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Enchantment Creature — Minotaur"
   },
   "Goblin Chainwhirler": {
     "cmc": 3.0,
@@ -1125,6 +1176,15 @@
     "toughness": "2",
     "type_line": "Creature — Kor Wizard"
   },
+  "Kragma Warcaller": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{3}{B}{R}",
+    "oracle_text": "Minotaur creatures you control have haste.\nWhenever a Minotaur you control attacks, it gets +2/+0 until end of turn.",
+    "power": "2",
+    "toughness": "3",
+    "type_line": "Creature — Minotaur Warrior"
+  },
   "Krenko, Mob Boss": {
     "cmc": 4.0,
     "keywords": [],
@@ -1457,6 +1517,17 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Neheb, the Worthy": {
+    "cmc": 3.0,
+    "keywords": [
+      "First strike"
+    ],
+    "mana_cost": "{1}{B}{R}",
+    "oracle_text": "First strike\nOther Minotaurs you control have first strike.\nAs long as you have one or fewer cards in hand, Minotaurs you control get +2/+0.\nWhenever Neheb deals combat damage to a player, each player discards a card.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Minotaur Warrior"
+  },
   "Nicol Bolas, Planeswalker": {
     "cmc": 8.0,
     "keywords": [],
@@ -1624,6 +1695,35 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Rageblood Shaman": {
+    "cmc": 3.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{1}{R}{R}",
+    "oracle_text": "Trample\nOther Minotaur creatures you control get +1/+1 and have trample.",
+    "power": "2",
+    "toughness": "3",
+    "type_line": "Creature — Minotaur Shaman"
+  },
+  "Ragemonger": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}{R}",
+    "oracle_text": "Minotaur spells you cast cost {B}{R} less to cast. This effect reduces only the amount of colored mana you pay. (For example, if you cast a Minotaur spell with mana cost {2}{R}, it costs {2} to cast.)",
+    "power": "2",
+    "toughness": "3",
+    "type_line": "Creature — Minotaur Shaman"
+  },
+  "Rakdos Carnarium": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {B}{R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Rancor": {
     "cmc": 1.0,
@@ -1831,6 +1931,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Sethron, Hurloon General": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{3}{R}{R}",
+    "oracle_text": "Whenever Sethron or another nontoken Minotaur you control enters, create a 2/3 red Minotaur creature token.\n{2}{B/R}: Minotaurs you control get +1/+0 and gain menace and haste until end of turn. ({B/R} can be paid with either {B} or {R}.)",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Minotaur Warrior"
+  },
   "Shadowspear": {
     "cmc": 1.0,
     "keywords": [
@@ -1906,6 +2015,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Beast"
+  },
+  "Slaughter-Priest of Mogis": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{B}{R}",
+    "oracle_text": "Whenever you sacrifice a permanent, this creature gets +2/+0 until end of turn.\n{2}, Sacrifice another creature or an enchantment: This creature gains first strike until end of turn.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Minotaur Shaman"
   },
   "Slippery Bogle": {
     "cmc": 1.0,

@@ -8421,6 +8421,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
     bool goblin = false, gift = false, fivec = false, mirrorwing = false, equipment = false;
     bool stompy = false;   // StompySurprise (elf ramp) -- routes to Generic BEFORE the anti check
+    bool minotaur = false; // Minotaur tribal -- routes to Generic BEFORE the goblin check
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -8433,6 +8434,34 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // the deck to GenericProvider before the anti check (see the goblin return below). Every
         // one of these fields is new + gated (0/false/empty inert), so ONLY a deck carrying the new
         // Goblin params sets this -- all existing decks are byte-identical.
+        // Minotaur tribal (Rakdos aggro). MUST be detected and MUST win over the goblin check
+        // below, because Slaughter-Priest of Mogis carries sac_creature_outlet and that ALONE sets
+        // the Goblin signature -- the exact misroute class that already caught Mirrorwing (Goblin
+        // Instigator) and StompySurprise (Hornet Queen's etb_self_creates_tokens). Verified for
+        // real before this fix: `mtg --batch` reported `provider=Goblins` for Minotaur, and
+        // GoblinsProvider::DeferSacOutletPreCombat then deferred Slaughter-Priest's outlet to the
+        // SECOND MAIN -- which this deck does not have (DeckUsesSecondMain is false: no spectacle,
+        // no lifegain_to_loss, no Goblin Lackey). So the outlet was not merely delayed, it was
+        // silently DELETED from the autonomous search: a Goblins-tuned narrowing removing a real
+        // decision branch from another deck, which is precisely what the core invariant forbids.
+        // (It is doubly wrong here: the outlet's live effect is Slaughter-Priest's own +2/+0
+        // sacrifice trigger, a COMBAT pump, so deferring it past combat destroys all of its value.)
+        //
+        // Signature = any of the Minotaur-only gated params, OR'd so a deckbuilding swap that drops
+        // one card cannot silently lose the signature (the deck-screening lesson). Every one of
+        // these is new and gated, and no other deck in cards.json carries any of them.
+        if (p.hand_size_anthem_max >= 0
+            || !p.etb_damage_devotion_color.empty()
+            || !p.reduces_subtype_colored_subtype.empty()
+            || p.attack_pump_matching_power > 0
+            || p.sacrifice_watch_pump_power > 0
+            || p.team_pump_grants_haste
+            || p.bestow_cost.has_value()
+            || p.must_attack)
+        {
+            minotaur = true;
+        }
+
         if (p.sac_creature_outlet
             || !p.tap_creates_tokens_per_controlled_subtype.empty()
             || !p.reduces_spell_subtype.empty()
@@ -8550,6 +8579,14 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // 2026-08-21 this deck silently ran under GoblinsProvider) -- and over anti (Worldly Tutor's
     // tutor_to_top).
     if (stompy) { return g_stompy; }
+    // Minotaur: GenericProvider -- it has NO measured deck heuristic to hold, so per the core
+    // invariant it gets no narrowing at all and every decision resolves through the generic
+    // baseline (its Aether Vials are fine there: the hand-aware charge policy is the ROOT default
+    // since 2026-08-18, which is the fix that stopped Goblins/Minotaur silently losing the Vial).
+    // Placed above goblin for the reason spelled out in the detection block. If the proposed
+    // cleanup-discard bucket policy (docs/design/minotaur-discard-policy-proposal.md) is ever
+    // approved and measured, THAT is when this becomes a MinotaurProvider.
+    if (minotaur) { return g_generic; }
     if (goblin) { return g_goblins; }
     // Equipment aggro; must WIN OVER anti (Stoneforge Mystic's tutor_to_hand sets that signature
     // on its own -- see the equipment detection note above). No other deck carries the equipment

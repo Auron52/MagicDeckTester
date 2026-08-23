@@ -1,4 +1,4 @@
-# Regression ground truth -- commit a43ef60f  date 2026-08-23
+# Regression ground truth -- commit 27bd0f17  date 2026-08-23
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -43,9 +43,9 @@ fivecolour_smoke_d5_s1001=5.1733/ff6497d537320e48
 stompy_smoke_d0_s1001=5.9620/c4c4ac2fbfbb0d0f
 stompy_smoke_d3_s1001=4.8733/d3648c8fb02a7b38
 stompy_smoke_d5_s1001=4.8133/ee0ac5aea231fc9c
-minotaur_smoke_d0_s1001=5.4950/871f315509350bc3
-minotaur_smoke_d3_s1001=4.9920/cdb18f549fc27606
-minotaur_smoke_d5_s1001=5.0133/2f13fec5b54a2898
+minotaur_smoke_d0_s1001=5.5070/85b6d651d316c22f
+minotaur_smoke_d3_s1001=4.9960/e0bc3a48207830bd
+minotaur_smoke_d5_s1001=5.0133/cefeffd27c5e9ec4
 
 # --- regression ---
 slivers_regression_d0_s2002=4.6780/4ec30ea41e344477
@@ -113,11 +113,11 @@ stompy_regression_d3_s2002=4.9100/d67bb0a1cfd4d43d
 stompy_regression_d3_s3003=5.0033/3ca1041cafbe657a
 stompy_regression_d5_s2002=4.9280/0a8ff1e859212830
 stompy_regression_d5_s3003=4.9920/6b8b61a06ced20ed
-minotaur_regression_d0_s2002=5.4920/82e220f44d8093d8
-minotaur_regression_d3_s2002=5.0200/0f3faa992ac31c0e
-minotaur_regression_d3_s3003=4.9733/616c7501b6290ed8
-minotaur_regression_d5_s2002=5.0320/6b19a5ab56aa91d2
-minotaur_regression_d5_s3003=4.9600/2e5811b88a359e92
+minotaur_regression_d0_s2002=5.5090/acda52e017080c31
+minotaur_regression_d3_s2002=5.0200/b65e75677bdf91db
+minotaur_regression_d3_s3003=4.9733/cd21f3b065b16a08
+minotaur_regression_d5_s2002=5.0320/252e584a5642bdb1
+minotaur_regression_d5_s3003=4.9600/03d16b22c49255d0
 
 # --- overnight ---
 slivers_overnight_d0_s4004=4.6420/fe364b007bbfaa56
