@@ -1081,6 +1081,17 @@ inline bool GradeNoWinEnabled()
     static const bool on = EnvOn("MTG_LEAF_GRADE_NOWIN", true);
     return heurarm::Flag(heurarm::LEAF_GRADE_NOWIN, on);
 }
+// MEASUREMENT INSTRUMENT, DEFAULT OFF; =1 forces the tie-break past a provider's opt-out.
+// Re-validating an opt-out needs both arms to move, but GradesNoWinLeaf() is compiled in, so an
+// opted-out deck reads byte-identical with MTG_LEAF_GRADE_NOWIN on and off -- the A/B silently
+// measures nothing. This opens the provider gate so an opt-out can be re-measured against THE
+// METRIC without a scratch build. It exists to VERIFY a decision, never to ship one: a deck that
+// needs this to look good is a deck whose opt-out was wrong.
+inline bool ForceNoWin()
+{
+    static const bool on = EnvOn("MTG_LEAF_NOWIN_FORCE");
+    return heurarm::Flag(heurarm::LEAF_NOWIN_FORCE, on);
+}
 inline bool ValueRes()
 {
     static const bool on = EnvOn("MTG_LEAF_VALUE_RES");
@@ -20335,7 +20346,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             {
                 // Same clamp, same loss of resolution as FSLineWin's -- publish the raw milliturns.
                 if (leafeval::ValueRes())      { leafeval::Publish(score); }
-                else if (leafeval::GradeNoWinEnabled() && ResolveProvider(state).GradesNoWinLeaf())
+                else if (leafeval::GradeNoWinEnabled()
+                         && (leafeval::ForceNoWin() || ResolveProvider(state).GradesNoWinLeaf()))
                 { leafeval::Publish(leafeval::Quantity(state)); }
                 w = max_turns + 1;
             }
@@ -20459,7 +20471,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
     // NATURAL horizon exit: the rollout played every turn and found no win, so `state` is a real
     // measured position and its quantity is honest. The cutoff / budget-overrun exits above are NOT
     // (an aborted line never reached the horizon), which is why they do not publish.
-    if (leafeval::GradeNoWinEnabled() && ResolveProvider(state).GradesNoWinLeaf())
+    if (leafeval::GradeNoWinEnabled()
+        && (leafeval::ForceNoWin() || ResolveProvider(state).GradesNoWinLeaf()))
     {
         leafeval::Publish(leafeval::Quantity(state));
         leafeval::PublishLife(state.players[1 - state.active_player_index].life);

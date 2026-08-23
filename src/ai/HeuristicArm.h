@@ -60,6 +60,7 @@ enum Slot : int
     LEAF_TB_BOARD,            // MTG_LEAF_TB_BOARD         ...and grade on board development, not life alone
     LEAF_TB_PERMS,            // MTG_LEAF_TB_PERMS         ...on a PERMANENT COUNT under the life term
     LEAF_TB_NONLAND,          // MTG_LEAF_TB_NONLAND       ...on NON-LAND permanents only
+    LEAF_NOWIN_FORCE,         // MTG_LEAF_NOWIN_FORCE      force the tie-break past a provider opt-out
     COUNT
 };
 
@@ -97,6 +98,7 @@ inline const char* Name(int slot)
         "MTG_LEAF_TB_BOARD",
         "MTG_LEAF_TB_PERMS",
         "MTG_LEAF_TB_NONLAND",
+        "MTG_LEAF_NOWIN_FORCE",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }
