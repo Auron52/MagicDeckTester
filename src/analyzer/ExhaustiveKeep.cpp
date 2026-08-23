@@ -1513,15 +1513,29 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // Cadence is deliberately coarse (minutes): this is a multi-day read-out, and a rarer wake takes even
     // less time from the worker cores. The property that matters is that it FIRES on its own timer, always,
     // regardless of what the driver loop is doing.
+    // The two HALVES are counted separately, and in ROLLOUTS rather than tasks. A single `fed` task
+    // counter cannot project a run: a size-7 task is one rollout but a sub-table task is a whole batch
+    // of (r1-r0), so their sum is not a work quantity and its rate is not a throughput. Worse, the only
+    // completion signal used to be `frozen`, which denominates on size-7 ALONE -- on this deck the
+    // sub-tables are ~34% of the cell-sides, so extrapolating from `frozen` silently projects two thirds
+    // of the job and reads as if it covered all of it. Both halves are now reported with their own
+    // rollout count, rate and completion, which is what makes a projection checkable.
     struct GenProgress
     {
         std::atomic<int>       phase{ 0 };   // 0 pre-pool (discovery/digest), 1 floor, 2 refine
-        std::atomic<long long> fed{ 0 };     // size-7 + sub rollouts enqueued so far (feed path)
+        std::atomic<long long> roll7{ 0 };   // size-7 ROLLOUTS enqueued (1 per kind-0 task)
+        std::atomic<long long> rollsub{ 0 }; // sub-table ROLLOUTS enqueued (r1-r0 per kind-1/2 batch)
         std::atomic<long long> frozen{ 0 };  // size-7 cell-sides settled (freeze path + resume seed)
         std::atomic<long long> cells{ 0 };   // total size-7 cell-sides (2*NC); 0 until the pool starts
+        std::atomic<long long> subwave{ 0 }; // adaptive sub-refine waves dispatched (kind 2)
+        std::atomic<long long> subwsz{ 0 };  // cells marked by the LAST sub-refine wave. The sub half has no
+                                             // frozen/total ratio to read (its work is the shrinking set of
+                                             // still-ambiguous bottoming argmins, not a fixed cell count), so
+                                             // this decaying number IS its remaining-work signal.
+        std::atomic<int>       subconv{ 0 }; // 1 once adaptive sub-refine has converged (or was never on)
         std::atomic<long long> cap{ 0 };     // r_max
-        // SUB-TABLE progress. Without these the monitor is BLIND for most of a run: every counter above
-        // describes size-7 only, so while the sub-tables run the line reports fed=<flat> (0/s -- the
+        // SUB-TABLE batch completion. Without these the monitor is BLIND for most of a run: every counter
+        // above describes size-7 only, so while the sub-tables run the line reports a flat fed (0/s -- the
         // producer is QCAP-throttled, not idle) and frozen=0/N (size-7 refine has not started), for as
         // long as the sub-tables take. Measured on slivers 2026-08-23: size-7 floored in 5 min, then
         // ~109 min of sub-table work during which the monitor printed a zero-signal line every 60s on
@@ -1549,7 +1563,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             th = std::thread([this]
             {
                 std::unique_lock<std::mutex> lk(mx);
-                long long prev_fed = 0; double prev_el = 0.0; long long prev_sub = 0;
+                long long prev_7 = 0, prev_rs = 0, prev_sd = 0; double prev_el = 0.0;
                 while (!cv.wait_for(lk, std::chrono::seconds(period), [this] { return stop; }))
                 {
                     const double el = std::chrono::duration<double>(
@@ -1557,22 +1571,25 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     lk.unlock();
                     const int       ph    = gp.phase.load(std::memory_order_relaxed);
                     const char*     pn    = ph == 2 ? "refine" : ph == 1 ? "floor" : "pre-pool";
-                    const long long fed   = gp.fed.load(std::memory_order_relaxed);
+                    const long long r7    = gp.roll7.load(std::memory_order_relaxed);
+                    const long long rs    = gp.rollsub.load(std::memory_order_relaxed);
                     const long long cells = gp.cells.load(std::memory_order_relaxed);
                     const long long fr    = gp.frozen.load(std::memory_order_relaxed);
+                    const long long sd    = gp.sub_done.load(std::memory_order_relaxed);
+                    const long long st    = gp.sub_total.load(std::memory_order_relaxed);
                     const double    dt    = el - prev_el;
-                    const long long rate  = dt > 0.0 ? static_cast<long long>((fed - prev_fed) / dt) : 0;
-                    prev_fed = fed; prev_el = el;
-                    const long long sd = gp.sub_done.load(std::memory_order_relaxed);
-                    const long long st = gp.sub_total.load(std::memory_order_relaxed);
-                    // TENTHS, not a truncated integer: sub batches are coarse (tens of seconds each), so a
+                    const long long rate7 = dt > 0.0 ? static_cast<long long>((r7 - prev_7)  / dt) : 0;
+                    const long long rateS = dt > 0.0 ? static_cast<long long>((rs - prev_rs) / dt) : 0;
+                    // TENTHS, not a truncated integer: sub BATCHES are coarse (tens of seconds each), so a
                     // healthy 0.7/s printed as "0/s" reproduces the very "looks dead" reading this
-                    // counter exists to end -- next to a percentage that is visibly advancing.
+                    // counter exists to end -- next to a percentage that is visibly advancing. The rollout
+                    // rates above are fine as integers; they are hundreds per second.
                     const long long srate10 = dt > 0.0
-                        ? static_cast<long long>((sd - prev_sub) * 10.0 / dt + 0.5) : 0;
-                    prev_sub = sd;
+                        ? static_cast<long long>((sd - prev_sd) * 10.0 / dt + 0.5) : 0;
+                    prev_7 = r7; prev_rs = rs; prev_sd = sd; prev_el = el;
                     std::cerr << "[keepgen]   monitor: " << static_cast<long long>(el) << "s  phase=" << pn
-                              << "  fed=" << fed << " (" << rate << "/s)"
+                              << "  roll7=" << r7 << " (" << rate7 << "/s)"
+                              << "  rollsub=" << rs << " (" << rateS << "/s)"
                               << "  frozen=" << fr << "/" << cells;
                     if (cells > 0)
                     { const long long tenths = 1000 * fr / cells;   // 0..1000
@@ -1583,6 +1600,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                       std::cerr << "  sub=" << sd << "/" << st
                                 << " (" << (tenths / 10) << "." << (tenths % 10) << "%, "
                                 << (srate10 / 10) << "." << (srate10 % 10) << "/s)"; }
+                    // ADAPTIVE sub-refine has no done/total to report -- its work is the SHRINKING set of
+                    // still-ambiguous bottoming argmins, not a fixed batch list -- so print the wave count
+                    // and the last wave's size, whose decay is the remaining-work signal, plus `conv` when
+                    // it has settled. Absent for recipes that drive sub-tables straight to the cap.
+                    if (!gp.subconv.load(std::memory_order_relaxed))
+                    { std::cerr << "  subwave=" << gp.subwave.load(std::memory_order_relaxed)
+                                << "x" << gp.subwsz.load(std::memory_order_relaxed); }
+                    else if (gp.subwave.load(std::memory_order_relaxed) > 0)
+                    { std::cerr << "  subwave=" << gp.subwave.load(std::memory_order_relaxed) << " conv"; }
                     std::cerr << "  cap=" << gp.cap.load(std::memory_order_relaxed) << "\n" << std::flush;
                     Slow().Dump(std::cerr, "so far", 3);
                     lk.lock();
@@ -2941,8 +2967,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 if (task[0] >= 1)   // sub-table batch (fusion filler): whole batch on one thread, self-committing
                 {
                     run_batch(ai, static_cast<int>(task[1]), static_cast<int>(task[2]), task[3], task[4]);
-                    gen_prog.sub_done.fetch_add(1, std::memory_order_relaxed);   // monitor read-out
-                    if (task[0] == 1) { sub_remaining.fetch_sub(1); }     // fuse_sub fixed-cap batch
+                    // sub_done counts KIND-1 only, because sub_total is fused_sub_tasks.size() and those are
+                    // the only kind-1 tasks. Counting kind-2 (adaptive sub-refine wave) batches here as well
+                    // drives sub= past 100% on any recipe with adaptive bottoming -- i.e. exactly `fast`.
+                    // Adaptive waves are reported by subwave/subwsz instead.
+                    if (task[0] == 1) { sub_remaining.fetch_sub(1);        // fuse_sub fixed-cap batch
+                                        gen_prog.sub_done.fetch_add(1, std::memory_order_relaxed); }
                     else              { sub_wave_pending.fetch_sub(1); }  // fuse_subfloor adaptive wave batch
                     in_flight.fetch_sub(1);
                     prod_cv.notify_one();
@@ -3140,6 +3170,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                   << (sub_refine_on ? " + adaptive sub-refine" : "") << ")\n" << std::flush;
         gen_prog.cap.store(r_max, std::memory_order_relaxed);
         gen_prog.cells.store(static_cast<long long>(NC) * 2, std::memory_order_relaxed);
+        // A run with no adaptive sub-refine (bottoming-full, or the `recommend` scout) is converged from
+        // the start -- report it that way rather than as a wave count stuck at zero.
+        gen_prog.subconv.store(sub_refine_on ? 0 : 1, std::memory_order_relaxed);
         gen_prog.phase.store(1, std::memory_order_relaxed);   // floor; flips to refine when refs publish
 
         // Resumed mid-refine: the journal carried the fixed refs -> restore them and skip the floor phase
@@ -3171,7 +3204,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                   q_nf.wait(lk, [&]{ return q.size() < QCAP; });
                   q.push_back({ 0, static_cast<long long>(i), static_cast<long long>(pd), f, 0 }); }
                 q_ne.notify_one();
-                ++f; in_flight.fetch_add(1); ++fed_total; any_fed = true; gen_prog.fed.store(fed_total, std::memory_order_relaxed);
+                ++f; in_flight.fetch_add(1); ++fed_total; any_fed = true;
+                gen_prog.roll7.fetch_add(1, std::memory_order_relaxed);
             }
         };
         // FUSION: drain the sub-table batch tasks into the same queue (kind 1). This is what removes the
@@ -3193,7 +3227,8 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                   q.push_back({ 1, static_cast<long long>(st.w), static_cast<long long>(st.pd),
                                 st.r0, st.r1 }); }
                 q_ne.notify_one();
-                ++sub_cursor; in_flight.fetch_add(1); ++fed_total; any_fed = true; gen_prog.fed.store(fed_total, std::memory_order_relaxed);
+                ++sub_cursor; in_flight.fetch_add(1); ++fed_total; any_fed = true;
+                gen_prog.rollsub.fetch_add(st.r1 - st.r0, std::memory_order_relaxed);
             }
         };
         // fuse_subfloor: advance the adaptive sub-refine ONE wave at a time, driven from the producer so it
@@ -3212,16 +3247,20 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             apply_prior_override_sub();     // change-detection: restore prior V on resolved sub-cells
             std::vector<Task> wave;
             compute_sub_wave_tasks(wave);   // next wave's argmin sub-cells (empty => converged)
-            if (wave.empty()) { sub_converged = true; return; }
+            if (wave.empty())
+            { sub_converged = true; gen_prog.subconv.store(1, std::memory_order_relaxed); return; }
             sub_wave_pending.store(static_cast<long long>(wave.size()));
+            gen_prog.subwsz.store(static_cast<long long>(wave.size()), std::memory_order_relaxed);
             for (const Task& st : wave)
             {
                 { std::unique_lock<std::mutex> lk(qmtx);
                   q_nf.wait(lk, [&]{ return q.size() < QCAP; });
                   q.push_back({ 2, static_cast<long long>(st.w), static_cast<long long>(st.pd), st.r0, st.r1 }); }
                 q_ne.notify_one();
-                in_flight.fetch_add(1); ++fed_total; any_fed = true; gen_prog.fed.store(fed_total, std::memory_order_relaxed);
+                in_flight.fetch_add(1); ++fed_total; any_fed = true;
+                gen_prog.rollsub.fetch_add(st.r1 - st.r0, std::memory_order_relaxed);
             }
+            gen_prog.subwave.fetch_add(1, std::memory_order_relaxed);
             ++refine_waves;
         };
         for (;;)
