@@ -91,6 +91,44 @@ Negative = better.
 permanent-count readings are settled in the quantity section below: also worse. Use life alone.
 Note treasure_hunt reads +0 here at 1,000 games and **-13** at 5,600 -- this sweep was under-powered.
 
+### What the tie-break actually DISPLACES, and how much exposure it has
+`plan.value` is the greedy solver's score for the SET OF SPELLS CAST THIS MAIN PHASE, computed at
+enumeration time -- tempo-aware (creatures at power x expected remaining attacks), routed through
+`EvalCard` -> the provider's `ArchetypeCardValue`. It is the same value that orders the greedy
+`Solve`. Critically it scores THE CARDS YOU CAST, never the position the rollout ends in.
+
+So a graded leaf quantity does not add information to a vacuum: it DISPLACES `plan.value` as the key
+under the win turn. Any further sub-key (a board term) in turn displaces `plan.value` under the life
+term. The exposure is large, not marginal (`[leaf-eval]` telemetry, 400 games/deck):
+
+| deck | no-win ties | life term EQUAL | share |
+|---|---|---|---|
+| hinata | 256,296 | 189,149 | **74%** |
+| treasure_hunt | 143,319 | 140,475 | **98%** |
+
+Two consequences worth keeping:
+* A board sub-key would decide 74-98% of ties, so its measured "slightly worse" is a REAL negative
+  result on a big exposure, not an underpowered one.
+* Conversely life DISCRIMINATES in only ~26% (hinata) / ~2% (treasure_hunt) of ties -- and those few
+  are worth the entire -45 / -13. A key that rarely speaks can still carry the whole gain.
+
+### Does life beat `plan.value` CONSISTENTLY? (USER question, 2026-08-23) -- yes
+Life-first tie-break vs today's `plan.value`-only, train (1001/2002/3003) vs held-out
+(4004/5005/6006/7007), d3+d5. Negative = life is better.
+
+| deck | train | held-out | all |
+|---|---|---|---|
+| **hinata** | -17 (14w/27b) | **-28** (15w/38b) | **-45** (29w/65b) |
+| **treasure_hunt** | -8 (3w/7b) | -5 (8w/10b) | **-13** (11w/17b) |
+| **fivecolour** | -1 (0w/1b) | -3 (0w/2b) | **-4** (0w/3b) |
+| kitty | +1 (1w/0b) | +0 | +1 |
+| antilife | +1 | +1 | +2 (2w/0b) |
+| slivers, burn | +0 | +0 | 0 (inert) |
+
+**TOTAL: -59 turns over 28,700 paired games, 43 worse : 85 better.** No deck changes sign between
+train and held-out, and both negatives are 3 individual games in 14,400. That is the consistency
+result the adoption rests on.
+
 ### The tie-break QUANTITY, settled (USER question, 2026-08-23)
 The USER asked whether "opponent life, then PERMANENTS on board" would beat what was tried. It is a
 different rule -- `MTG_LEAF_TB_BOARD` weights creature POWER and scores a land drop at 1/1000th of a
@@ -109,7 +147,10 @@ did not survive more data.** At 5,600 games per deck per arm (train 1001/2002/30
 | + all permanents | -40 | 35 : 67 | -6 | 15 : 17 | **+2 (12w/9b)** |
 
 **Life alone wins on both decks.** A board term adds WORSE games without adding better ones (hinata:
-29 worse for life-only against 35 for all-permanents, at the same ~65 better).
+29 worse for life-only against 35 for all-permanents, at the same ~65 better). PAIRED directly
+against life-only -- the comparison that actually asks the question, rather than each arm against
+baseline -- adding a board sub-key costs: hinata +5 (all perms) / +4 (non-land), treasure_hunt +7
+(all perms, and +7 of it on HELD-OUT alone: 10 worse : 5 better) / +1 (non-land).
 
 **The USER's treasure_hunt caveat is confirmed and is the sharpest signal here:** all-permanents is
 the only arm that goes NEGATIVE on held-out for treasure_hunt (+2 turns, 12 worse : 9 better).

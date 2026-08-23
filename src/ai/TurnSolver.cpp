@@ -1069,6 +1069,10 @@ inline constexpr long long kInvalid = (std::numeric_limits<long long>::max)();
 // and consumed by the pass loop immediately after its own SimulateToEnd call -- thread_local because
 // a batch worker owns its thread for a whole game and the search does not spawn threads.
 inline thread_local long long t_tb = kInvalid;
+// The LIFE term alone, published alongside t_tb. Only used to measure EXPOSURE: how often the life
+// term ties, i.e. how often any further tiebreaker under it can matter at all. A sub-key's ceiling
+// is the tie rate of the key above it.
+inline thread_local long long t_life = kInvalid;
 
 inline bool GradeNoWin()
 {
@@ -1110,14 +1114,16 @@ inline bool Active() { return GradeNoWin() || ValueRes(); }
 inline std::atomic<uint64_t> g_published{0};   // leaves that measured a real horizon position
 inline std::atomic<uint64_t> g_ties{0};        // equal-win-turn comparisons the quantity could decide
 inline std::atomic<uint64_t> g_flips{0};       // ...where it picked a DIFFERENT plan than plan.value
+inline std::atomic<uint64_t> g_life_ties{0};   // ...of which the LIFE term was EQUAL (a sub-key's ceiling)
 struct Dumper
 {
     ~Dumper()
     {
         if (g_published.load() == 0 && g_ties.load() == 0) { return; }
-        std::fprintf(stderr, "[leaf-eval] published=%llu ties=%llu flips=%llu\n",
+        std::fprintf(stderr,
+                     "[leaf-eval] published=%llu ties=%llu flips=%llu life-equal-ties=%llu\n",
                      (unsigned long long)g_published.load(), (unsigned long long)g_ties.load(),
-                     (unsigned long long)g_flips.load());
+                     (unsigned long long)g_flips.load(), (unsigned long long)g_life_ties.load());
     }
 };
 inline Dumper g_dumper;
@@ -1127,7 +1133,9 @@ inline void Publish(long long v)
 {
     t_tb = v;
     if (v != kInvalid) { g_published.fetch_add(1, std::memory_order_relaxed); }
+    else               { t_life = kInvalid; }
 }
+inline void PublishLife(long long v) { t_life = v; }
 
 // The graded no-win quantity, LOWER is better. Opponent life is the primary term because it is the
 // same currency as the metric: the Aria class raises it by 10 and that is exactly the cost the flat
@@ -20446,7 +20454,11 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
     // NATURAL horizon exit: the rollout played every turn and found no win, so `state` is a real
     // measured position and its quantity is honest. The cutoff / budget-overrun exits above are NOT
     // (an aborted line never reached the horizon), which is why they do not publish.
-    if (leafeval::GradeNoWin()) { leafeval::Publish(leafeval::Quantity(state)); }
+    if (leafeval::GradeNoWin())
+    {
+        leafeval::Publish(leafeval::Quantity(state));
+        leafeval::PublishLife(state.players[1 - state.active_player_index].life);
+    }
     return max_turns + 1;
 }
 
@@ -24044,6 +24056,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         Plan      pass_best        = candidates.front();
         int       pass_best_win    = max_turns + 1;
         long long pass_best_tb     = leafeval::kInvalid;   // graded leaf quantity of pass_best
+        long long pass_best_life   = leafeval::kInvalid;   // ...and its life term (exposure telemetry)
         bool      pass_has_best    = false;
         bool      pass_aborted     = false;
         long long candidates_done  = 0;
@@ -24184,9 +24197,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             // completion (enforce_budget=false inside), only consuming budget; the
             // within-pass running best (pass_best_win) is the branch-and-bound cutoff.
             leafeval::t_tb = leafeval::kInvalid;   // this candidate's leaf publishes into it, or not
+            leafeval::t_life = leafeval::kInvalid;
             int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
                                          pass_best_win, second_main, tt);
-            const long long leaf_tb = leafeval::t_tb;
+            const long long leaf_tb   = leafeval::t_tb;
+            const long long leaf_life = leafeval::t_life;
             // Feed the rollout result back so the census can count HARM -- a dominated candidate
             // that outscored its dominator is a win the prune would have deleted (see RecordWin).
             if (DomActive()) { domin::RecordWin(dom_archive, dom_probe, win_turn); }
@@ -24208,6 +24223,8 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             if (tb_live && pass_has_best)
             {
                 leafeval::g_ties.fetch_add(1, std::memory_order_relaxed);
+                if (leaf_life == pass_best_life)
+                { leafeval::g_life_ties.fetch_add(1, std::memory_order_relaxed); }
                 if ((leaf_tb < pass_best_tb) != (plan.value > pass_best.value))
                 { leafeval::g_flips.fetch_add(1, std::memory_order_relaxed); }
             }
@@ -24220,8 +24237,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             {
                 pass_best_win = win_turn;
                 pass_best     = plan;
-                pass_best_tb  = leaf_tb;
-                pass_has_best = true;
+                pass_best_tb   = leaf_tb;
+                pass_best_life = leaf_life;
+                pass_has_best  = true;
             }
             esc_pool.push_back(EscEntry{static_cast<int>(&plan - candidates.data()), win_turn,
                                         g_condemn_drops != esc_drops_before});
