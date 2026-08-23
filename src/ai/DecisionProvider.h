@@ -485,19 +485,23 @@ public:
     //
     // ON BY DEFAULT, and deliberately so (USER 2026-08-23: "we should have a sensible default...
     // per-deck logic requires per-deck work"). A new deck inherits the fix instead of needing
-    // someone to notice and opt in; a deck OPTS OUT only on measured evidence, and there is exactly
-    // one such deck today.
+    // someone to notice and opt in. **NO DECK OPTS OUT TODAY** -- dragonstorm did until 2026-08-23,
+    // when re-testing showed its one piece of evidence supported neither gate (see below).
     //
-    // WHEN TO OVERRIDE THIS TO FALSE -- the failure mode is specific and predictable: opponent life
-    // at the horizon is a DAMAGE-RACE proxy, so it undervalues a deck whose value is STORED rather
-    // than expressed as damage by the horizon. Combo/storm/ramp decks bank resources that pay off
-    // discontinuously, and a shallow rollout cannot see the payoff land. Dragonstorm is the measured
-    // instance (s5005 gi227, turn-8 win -> LOSS): at T6 `plan.value` casts a 13-spell chain -- three
-    // Apex of Power, four rituals, Ruby Medallion, Scourge of Valkas -- and wins on turn 8; the life
-    // tie-break stops the chain after six spells because the extra rituals lower nobody's life
-    // inside the horizon. It survives 20x budget (a valuation error, not a depth one) and only
-    // recovers at d4+. Every OTHER regression measured across the suite -- stompy x4, antilife x2,
-    // kitty x1, dragonstorm's other one -- is ordinary budget churn that closes at 20x budget.
+    // WHEN TO OVERRIDE THIS TO FALSE. The predicted failure mode is that opponent life at the
+    // horizon is a DAMAGE-RACE proxy, so it undervalues a deck whose value is STORED rather than
+    // expressed as damage by the horizon -- combo/storm/ramp banking resources for a discontinuous
+    // payoff a shallow rollout cannot see land. That remains the shape to look for, but note that
+    // the ONE deck we believed exhibited it did not, so do not assume an archetype qualifies:
+    // measure it. Run `scripts/leaf_tiebreak_check.py <deck>` and clear BOTH of the USER's adoption
+    // gates (2026-08-23), which are separate and both blocking:
+    //   1. "are we improving the play generally" -- aggregate average AT PLAY SETTINGS (the deck's
+    //      resolved value_play depth/budget, NOT the suite's d3/d5 gate cells) on a large sample.
+    //      Escalating depth/budget proves nothing here: this tie-break fires only when a rollout
+    //      reaches the horizon WITHOUT a win, so more budget just stops it firing.
+    //   2. "are we preventing search from finding a win" -- game by game, at UNLIMITED budget and
+    //      the depth the game won at BEFORE the change. Escalate to CONVERGENCE, not to a round
+    //      number: dragonstorm's case was filed as "survives 20x" when it recovers at 100x.
     virtual bool GradesNoWinLeaf() const { return true; }
 
     // PhaseFilterRootTurnOnly -- per-deck ROOT-TURN AUTHORITY for the pre-combat Main2 filter

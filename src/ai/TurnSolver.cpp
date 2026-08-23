@@ -1075,7 +1075,7 @@ inline thread_local long long t_tb = kInvalid;
 inline thread_local long long t_life = kInvalid;
 
 // ADOPTED DEFAULT ON 2026-08-23 (USER). MTG_LEAF_GRADE_NOWIN=0 reverts globally; a deck opts out via
-// DecisionProvider::GradesNoWinLeaf (dragonstorm does -- see that hook for the measured reason).
+// DecisionProvider::GradesNoWinLeaf (no deck does today -- see that hook before adding one).
 inline bool GradeNoWinEnabled()
 {
     static const bool on = EnvOn("MTG_LEAF_GRADE_NOWIN", true);

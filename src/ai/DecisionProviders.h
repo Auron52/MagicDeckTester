@@ -395,15 +395,15 @@ public:
 class DragonstormProvider : public GenericProvider
 {
 public:
-    // OPT OUT of the horizon-honest no-win tie-break (DecisionProvider::GradesNoWinLeaf, default ON).
-    // This deck's value is STORED, not expressed as damage by the horizon: rituals and Apex of Power
-    // lower nobody's life on the turn they are cast, they build toward a discontinuous payoff. Grading
-    // a no-win leaf on OPPONENT LIFE therefore prices the chain at zero and stops it early -- measured
-    // on s5005 gi227, where it truncates a 13-spell turn-6 chain to six spells and turns a turn-8 win
-    // into a LOSS. It survives 20x budget (a valuation error, not a depth one). `plan.value`, which
-    // this falls back to, prices the combo pieces through ArchetypeCardValue and gets it right.
+    // NOTE (2026-08-23): this deck used to OPT OUT of the horizon-honest no-win tie-break
+    // (GradesNoWinLeaf) on the strength of s5005 gi227 -- "truncates a 13-spell turn-6 chain, turn-8
+    // win -> LOSS, survives 20x budget". Re-tested against both adoption gates, that game supports
+    // neither claim: at this deck's PLAY setting (d5/20) both arms win T7, so it does not regress at
+    // the configuration we ship, and at d3 it recovers fully at 100x budget (LOSS, LOSS, T6, T6, T6
+    // as budget goes 10 -> 100 -> 1,000 -> 100,000) -- recoverable, not a valuation error. "20x" was
+    // simply not unlimited. Measured overall at play settings the tie-break is ~inert here and mildly
+    // positive: -10 turns over 100,000 paired games, 0.029% binding. The opt-out was removed.
     // See docs/design/horizon-honest-leaf.md.
-    bool GradesNoWinLeaf() const override { return false; }
 
     const char* Name() const override { return "Dragonstorm"; }
     std::vector<std::string>
