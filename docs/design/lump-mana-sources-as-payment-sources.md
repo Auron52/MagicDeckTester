@@ -202,6 +202,72 @@ goes: the stopped run put **30% of all compute (28.4 of 95 core-hours) into roll
 Note the 12.65x hand is a **non-Garth opener** — Garth is drawn mid-rollout, so the effect tracks
 *a Lotus existing on board*, not the opening hand.
 
+## 6. BUILT AND MEASURED (2026-08-23) — fast, but REFUTED on quality
+
+`MTG_TREASURE_PAY_SOURCE` (default OFF), commit `fd7d9632`. §2a for `sac_for_mana_amount == 1`
+(Treasure Token) exactly as designed: `EffectiveProduces` returns WUBRG, six source scans admit it,
+the `SacForMana` fan skips it, three compensating wild credits are suppressed, and the sacrifice is
+deferred to each payment success path.
+
+### It works, and it is fast
+
+Mirrorwing, gen settings (d2 / budget 3 ms):
+
+| set (5,120 games) | OFF | ON | speedup |
+|---|---:|---:|---:|
+| all | 1664.8 s | 1135.8 s | **1.47x** |
+| top 10 % (47.5 % of cost) | 791.6 s | 489.6 s | 1.62x |
+| top 1 % | 181.7 s | 101.7 s | 1.79x |
+| top 0.1 % | 29.8 s | 12.6 s | **2.37x** |
+
+Individual collapses reach **19.0x / 18.7x / 15.8x / 11.6x**. Far beyond the `MTG_SAC_DUP_CAP=1`
+proxy (1.08x), because §2a deletes the group instead of shrinking it AND unlocks the Treasures the
+8-group `EnumGroupCap` was silently dropping from the plan space.
+
+Correctness verified: flag OFF byte-identical; burn / slivers / Goblins / **Dragonstorm**
+byte-identical with it ON (Lotus Bloom is amount 3, correctly still action-modelled); scenarios 18/18;
+and across 300 logged games the ON arm shows treasure-count DROPS in 78 games (0 would mean the
+sacrifice never happened), zero tapped-Treasure snapshots, same max-held of 20.
+
+### And it is WORSE — the design's central hypothesis is refuted
+
+PAIRED, 3,000 games, common random numbers:
+
+```
+OFF avg 4.9510   ON avg 4.9700
+paired delta = +0.0190 turns WORSE   se 0.0045   t = +4.20
+140 of 3000 games changed (4.7%) -- ON better 47, ON worse 93
+```
+
+An UNPAIRED 5,120-game read (+0.0230, ~1.4 se) and a 640-game read (-0.0046, i.e. apparently BETTER)
+both failed to resolve this. Only the paired test does. **Do not judge this change on an unpaired
+sample** — the effect is ~4x smaller than the per-game noise.
+
+§2a's whole claim was that the payment solver, choosing per PIP with full knowledge of what the lands
+cover, would beat the plan-time greedy that the colour fold uses (§7/§8, measured 4/4 mirrorwing keys
+worse). It IS better than the fold. It is still worse than the enumerated fan, in the same direction,
+significantly.
+
+**Why — and this reframes §1.** The fan is not merely enumerating redundant variants. A `SacForMana`
+colour variant is a SEARCHED branch, so the search scores each colour assignment by its downstream
+consequences across the whole turn; the payment solver only ever answers "can this cost be paid",
+one cost at a time, greedily. Those are different questions. §1's argument that "the affordability
+model cannot tell the five variants apart" is correct and remains the reason the fan is *cheap to
+collapse* — but the variants are told apart by the ROLLOUT, not by the affordability test, and that is
+the value being destroyed. The colour of a one-shot lump split across a multi-spell turn is therefore
+NOT purely a payment question, which is what both §2a and the fold assumed.
+
+### Where that leaves it
+
+The lever is built, verified, and default-off. Three ways forward, none free:
+
+1. **Reject** and keep the fan. Costs the 1.47x.
+2. **Take the trade deliberately** — +0.019 turns for 1.47x. Defensible for the mulligan GEN (whose
+   labels already carry far more noise than this, and which is the thing that is too slow), not for
+   shipped play. Note this would make gen and play disagree about colour choice, which the
+   mulligan-profile workflow deliberately avoids.
+3. **Hybrid** — source-model the payment but keep a narrow searched axis (2 options) for the colour,
+   so the search retains a say. Untested, and it forfeits most of the 1.47x.
 ## 5. Implementation map (2026-08-23, from a read of the current tree)
 
 Written while picking this up so the next attempt does not re-derive it. Nothing below is built.
