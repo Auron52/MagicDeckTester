@@ -1576,8 +1576,32 @@ int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& de
     if (def.tmpl != CardTemplate::ManaDork) { return r; }
     if (band_rank > 0)  { return band_rank + r / 10; }
     if (off_rank > 0)   { return r + off_rank; }
-    if (floor_rank > 0 && r < floor_rank) { return floor_rank; }
-    return r;
+    if (floor_rank <= 0) { return r; }
+    // MTG_SCALED_DORK_BUMP keeps the DorkGrowth doctrine alive ON TOP of the floor: a SCALED dork
+    // (Priest of Titania / Elvish Archdruid) taps for more the more Elves have landed, so it wants
+    // to tap AFTER the flat dorks, not tied with them. A bare floor collapses tier 61 into the
+    // flat rank and leaves that ordering to battlefield order. DELETE with the sweep.
+    static const int scaled_bump = EnvInt("MTG_SCALED_DORK_BUMP", 0);
+    if (scaled_bump > 0 && DorkGrowthEnabled())
+    {
+        // MTG_DOMAIN_IS_SCALED widens "scaled" from the SUBTYPE scalers (Priest of Titania,
+        // Elvish Archdruid -- mana_per_creature_subtype) to the COLOUR scalers (Faeburrow Elder,
+        // Bloom Tender -- domain_mana), which grow with the colours you control. Those belong in
+        // the same class: holding one is worth more than holding a FIXED rainbow dork (Birds),
+        // because its yield can still rise. Worse, the flexibility ladder currently ranks a domain
+        // dork off EffectiveProduces -- i.e. its CURRENT colour count -- so at two colours out
+        // Bloom Tender ranks 20 (dual) and is spent AHEAD of Birds at 50, which is exactly
+        // backwards: it is cheapest to spend precisely when it has the most room to grow.
+        // MTG_BUMP_NO_SUBTYPE separates the two scaling classes, because they measure OPPOSITELY:
+        // holding a DOMAIN scaler back helps (its yield rises with colours), while holding a
+        // SUBTYPE scaler back costs -- Priest of Titania taps for N off ONE body, so forcing it
+        // last burns N small Elves instead, and on an Elf deck the bodies are the win condition.
+        static const bool domain_scaled = EnvOn("MTG_DOMAIN_IS_SCALED");
+        static const bool no_subtype    = EnvOn("MTG_BUMP_NO_SUBTYPE");
+        if ((!no_subtype && IsScaledManaDork(def)) || (domain_scaled && def.params.domain_mana))
+        { return floor_rank + scaled_bump; }
+    }
+    return r < floor_rank ? floor_rank : r;
 }
 
 static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)

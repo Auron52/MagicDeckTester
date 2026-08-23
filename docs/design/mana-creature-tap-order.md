@@ -160,6 +160,127 @@ fixed library order. The draws diverge because the game diverged, not the other 
 any future card. At floor 51 the d0 arm is **107 faster / 6 slower** across the suite, and Mirrorwing
 d0 alone is −0.0550. A clairvoyance artifact cannot appear at d0.
 
+## 5b. The two SCALING classes measure OPPOSITELY, and the shape that wins
+
+A mana creature whose yield can still GROW is worth holding longer than a fixed one. There are two
+such classes and the engine only recognised one:
+
+| class | param | cards | current rank |
+|---|---|---|---|
+| subtype scaler | `mana_per_creature_subtype` | Priest of Titania, Elvish Archdruid | 61 (`IsScaledManaDork`) |
+| **colour (domain) scaler** | `domain_mana` | Faeburrow Elder, Bloom Tender | **none — ranked by colour like Birds** |
+
+USER, 2026-08-23: *"Same with Faeburrow Elder and Bloom Tender actually. They also kind of have the
+ability to scale if you don't have all of the colors out. So, it's better to hold them then a birds
+or equivalent."*
+
+**And the ladder currently gets the domain scaler exactly backwards.** `ManaSourceRank` ranks off
+`EffectiveProduces`, which for a domain source returns only the colours CURRENTLY in play — so at two
+colours out Bloom Tender ranks **20 (dual)** and is spent AHEAD of a fixed Birds of Paradise at 50.
+It is cheapest to spend precisely when it has the most room to grow.
+
+Measured on smoke (floor 64 in every arm; `MTG_SCALED_DORK_BUMP` holds a class one rank later):
+
+| arm | NET | stompy d0/d3/d5 | fivecolour d0/d3 |
+|---|---:|---|---|
+| floor 64 (both classes tied with the flat dorks) | −0.3607 | −0.059 / −0.067 / −0.040 | −0.0190 / −0.0334 |
+| + hold the SUBTYPE scalers back | −0.2584 | −0.030 / −0.033 / 0 | −0.0190 / −0.0334 |
+| + hold BOTH classes back | −0.2660 | −0.030 / −0.033 / 0 | −0.0200 / −0.0400 |
+| **+ hold the DOMAIN scalers only** | **−0.3683** | −0.059 / −0.067 / −0.040 | −0.0200 / −0.0400 |
+
+So the two classes want **opposite** treatment:
+
+* **Domain scalers: hold them back.** Confirms the USER's read, and it is the only thing that has
+  moved fivecolour in this whole arc.
+* **Subtype scalers: do NOT hold them back** — that costs −0.10, all on stompy, and it is the tier-61
+  `DorkGrowth` doctrine ("tap it last so its burst is bigger") being wrong on this deck. The reason is
+  BODY COUNT: Priest of Titania taps for N off ONE body, so forcing it last burns N Llanowar Elves
+  for the same mana and loses N bodies — and on an Elf deck the bodies are the win condition. That is
+  the same exactness argument the Treasure ordering rests on, pointing the other way.
+
+Both effects are real; which dominates is a per-deck fact, and the static rank buys the average.
+
+## 5c. What a SITUATIONAL order would need (deferred)
+
+USER, 2026-08-23: *"It's the typical problem. If we want a smarter order we'll need situational
+awareness. For example: We are attacking for lethal this turn or the creatures will be pumped vs a
+turn where attacks are low impact."*
+
+That is the correct framing and it is out of reach of this hook as written. The signals wanted are
+per-TURN and per-PERMANENT:
+
+* is this turn a lethal alpha strike (then a body is worth its damage, not its mana)?
+* is a pump / copy-magnet trick castable this turn (then a body is a multiplier)?
+* or are attacks low-impact (then a body is just mana and should be spent freely)?
+* and, for the yield question: does this source's yield MATCH the remaining need, so one big body
+  pays what several small ones would?
+
+None of it is visible to `ManaSourceRank`, which takes a `CardDefinition` and cannot see counters,
+temp pump, animation, or current yield — the same wall `TapPowerOrderEnabled` documents ("Extending
+the scarcity path the same way needs that signature widened").
+
+### The right framing (USER, 2026-08-23): the payment depends on WHAT THE PLAN DOES
+
+> *"Mirrorwing Dragon has the same problem with the treasure situation you mentioned... Sometimes we
+> aren't buffing our creatures and we should just sit back and use the dorks for mana and other times
+> we need to go off and in those cases the treasures are better so we have more attackers. So, in a
+> sense, the right way to pay the mana is actually dependent on what the plan does."*
+
+This is the generalisation of the gi81 loss in §6b, and it is the correct one. The tap order is not a
+property of the CARD, it is a property of the PLAN being paid for:
+
+* plan contains a pump / copy-magnet trick targeting your own creatures -> a body is a MULTIPLIER;
+  spend the one-shot Treasure and keep the dorks untapped;
+* plan is a plain durdle turn -> a body is just mana; tap the dorks and KEEP the Treasure, because
+  a Treasure held is worth exactly one mana on any later turn while a dork untaps anyway.
+
+Both halves are visible today. **`PlanContext` (`ai/PlanContext.h`) already exists for precisely this
+purpose** — *"what else this turn's plan is going to do, visible to a DecisionProvider while it is
+being asked about ONE action inside that plan"* — exposing the plan's action list, the land it plays,
+and the rest of the plan after the current action, via the free function `CurrentPlanContext()`. So a
+plan-aware tap order does NOT require widening `ManaSourceRank`'s signature after all; a provider can
+read the context directly.
+
+**The one thing to verify before building it:** `PlanContext` is set on the plan-ENUMERATION path, and
+the tap decisions happen during payment/application. Whether a `PlanContextScope` is live at
+`ManaSourceRank` time (and at `TapForCostBacktrackWorker` time) has not been checked. If it is not,
+the work is to extend the scope over payment — which is far smaller than a signature change, and
+`CurrentPlanContext()` returning null already has a defined "behave exactly as before" contract, so it
+degrades safely.
+
+This supersedes the "widen the signature" note above as the recommended route.
+
+### The cheapest situational signal of all: MAIN 2 (USER, 2026-08-23)
+
+> *"If we are in the second main, the 'reserve creatures for attacks' rule is no longer relevant. So,
+> the situational awareness is potentially how we could construct a more general solution."*
+
+Combat is over by main 2, so a body held back post-combat buys nothing **in a goldfish** — it cannot
+attack this turn and there is no opponent attack to block. The whole-turn reserve
+(`BatchPrepayMainCasts`) currently gates on `DorkReserveEnabled() && g_scripted_tapmode != 1 &&
+n <= 64` and carries **no phase test**, so it holds dorks back in main 2 for a combat that has
+already happened. `AttackerReserveEnabled`'s "hold your beater" has the same shape.
+
+This is the cheapest possible version of the situational rule and it needs nothing new:
+`BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts)` already receives BOTH
+signals it would need — the phase (from `state`) and what the plan does (from `acts`). Expected to be
+free-or-better in the goldfish; it must be revisited for 1v1, where holding a blocker in main 2 is
+real value (same caveat as `untap-land-burst-net-cancellation-limits.md`).
+
+Caveat to check before measuring: a VIGILANT mana source (Faeburrow Elder) attacks and stays
+untapped, so it is already tappable in main 2 at no cost — the FAEBURROW DOCTRINE
+(`BoardHasVigilantManaScalerAttacker`) covers that case, and a main-2 release must not double-count
+it.
+
+**Ranked follow-ups, best first:**
+
+1. **Phase-gate the reserve** (main 2 releases the bodies). Smallest change, both inputs already in
+   hand, expected free-or-better.
+2. **Plan-aware tap order** via `acts` / `CurrentPlanContext()`: pump-or-copy-trick in the plan ->
+   keep bodies and spend the one-shot; plain turn -> tap bodies and keep the one-shot. This is what
+   fixes §6b's gi81 properly.
+3. **Yield-vs-need matching** for the subtype scalers (§5b) — one big body instead of N small ones.
+
 ## 6b. The one REAL same-draws loss, traced — it reaches for the one-shot instead of the dork
 
 Of the 30 searched-depth SLOWER games on the held-out overnight run, `classify_turn_later.sh` scores
