@@ -1520,6 +1520,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::atomic<long long> frozen{ 0 };  // size-7 cell-sides settled (freeze path + resume seed)
         std::atomic<long long> cells{ 0 };   // total size-7 cell-sides (2*NC); 0 until the pool starts
         std::atomic<long long> cap{ 0 };     // r_max
+        // SUB-TABLE progress. Without these the monitor is BLIND for most of a run: every counter above
+        // describes size-7 only, so while the sub-tables run the line reports fed=<flat> (0/s -- the
+        // producer is QCAP-throttled, not idle) and frozen=0/N (size-7 refine has not started), for as
+        // long as the sub-tables take. Measured on slivers 2026-08-23: size-7 floored in 5 min, then
+        // ~109 min of sub-table work during which the monitor printed a zero-signal line every 60s on
+        // 32 busy cores. That is what made a healthy Mirrorwing run look dead for 4.5 h.
+        std::atomic<long long> sub_done{ 0 };
+        std::atomic<long long> sub_total{ 0 };
     } gen_prog;
 
     struct SlowMonitor
@@ -1541,7 +1549,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             th = std::thread([this]
             {
                 std::unique_lock<std::mutex> lk(mx);
-                long long prev_fed = 0; double prev_el = 0.0;
+                long long prev_fed = 0; double prev_el = 0.0; long long prev_sub = 0;
                 while (!cv.wait_for(lk, std::chrono::seconds(period), [this] { return stop; }))
                 {
                     const double el = std::chrono::duration<double>(
@@ -1555,12 +1563,26 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     const double    dt    = el - prev_el;
                     const long long rate  = dt > 0.0 ? static_cast<long long>((fed - prev_fed) / dt) : 0;
                     prev_fed = fed; prev_el = el;
+                    const long long sd = gp.sub_done.load(std::memory_order_relaxed);
+                    const long long st = gp.sub_total.load(std::memory_order_relaxed);
+                    // TENTHS, not a truncated integer: sub batches are coarse (tens of seconds each), so a
+                    // healthy 0.7/s printed as "0/s" reproduces the very "looks dead" reading this
+                    // counter exists to end -- next to a percentage that is visibly advancing.
+                    const long long srate10 = dt > 0.0
+                        ? static_cast<long long>((sd - prev_sub) * 10.0 / dt + 0.5) : 0;
+                    prev_sub = sd;
                     std::cerr << "[keepgen]   monitor: " << static_cast<long long>(el) << "s  phase=" << pn
                               << "  fed=" << fed << " (" << rate << "/s)"
                               << "  frozen=" << fr << "/" << cells;
                     if (cells > 0)
                     { const long long tenths = 1000 * fr / cells;   // 0..1000
                       std::cerr << " (" << (tenths / 10) << "." << (tenths % 10) << "%)"; }
+                    // Sub-tables: the phase that owns most of a run's wall clock and had no read-out.
+                    if (st > 0)
+                    { const long long tenths = 1000 * sd / st;
+                      std::cerr << "  sub=" << sd << "/" << st
+                                << " (" << (tenths / 10) << "." << (tenths % 10) << "%, "
+                                << (srate10 / 10) << "." << (srate10 % 10) << "/s)"; }
                     std::cerr << "  cap=" << gp.cap.load(std::memory_order_relaxed) << "\n" << std::flush;
                     Slow().Dump(std::cerr, "so far", 3);
                     lk.lock();
@@ -2856,6 +2878,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         // Sub-cap tasks still to complete (fusion): the size-7 refs cannot be fixed until every sub-table is
         // at the cap (Dopt reads sub-table V). Zero unless fuse_sub. Decremented after each run_batch commits.
         std::atomic<long long> sub_remaining{ static_cast<long long>(fused_sub_tasks.size()) };
+        gen_prog.sub_total.store(static_cast<long long>(fused_sub_tasks.size()), std::memory_order_relaxed);
         // fuse_subfloor: rollouts still outstanding in the CURRENT producer-driven sub-refine wave. The
         // producer computes the next wave only once this hits 0 (the wave's sub-cell commits are all in),
         // so its recompute_sub/mark never races a kind-2 worker; meanwhile the size-7 floor fills cores.
@@ -2918,6 +2941,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 if (task[0] >= 1)   // sub-table batch (fusion filler): whole batch on one thread, self-committing
                 {
                     run_batch(ai, static_cast<int>(task[1]), static_cast<int>(task[2]), task[3], task[4]);
+                    gen_prog.sub_done.fetch_add(1, std::memory_order_relaxed);   // monitor read-out
                     if (task[0] == 1) { sub_remaining.fetch_sub(1); }     // fuse_sub fixed-cap batch
                     else              { sub_wave_pending.fetch_sub(1); }  // fuse_subfloor adaptive wave batch
                     in_flight.fetch_sub(1);
