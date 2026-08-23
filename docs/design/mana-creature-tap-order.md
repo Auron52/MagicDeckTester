@@ -1,9 +1,33 @@
 # A mana CREATURE should tap after every LAND — the doctrine the tap order never implemented
 
-**Status:** MEASURED 2026-08-23 behind throwaway scaffolding (`MTG_DORK_RANK_FLOOR`,
-`MTG_DORK_RANK_OFFSET`), **not adopted**. Found while sweeping the rank for a §2a payment source
-(`lump-mana-sources-as-payment-sources.md` §2b); it turned out to be a much larger, entirely
-separate effect that has nothing to do with Treasures.
+**Status:** BUILT, fully measured on all three seed tiers, and **DEFAULT OFF** — opt in with
+`MTG_DORK_TAP_LAST=1`. Found while sweeping the rank for a §2a payment source
+(`lump-mana-sources-as-payment-sources.md` §2b); it turned out to be a much larger, separate effect.
+
+**It is not adopted, and the blocker is a REFERENCE, not an aggregate.** The numbers are strong
+(held-out overnight NET −1.3682; searched 545 faster / 54 slower; blind d0 1132 faster / 108 slower;
+and it is CHEAPER). But with it on, the hand-played
+`references/Mirrorwing_Dragon/claude_s26_gi25.json` replays to **T8 against a recorded T5** — a
+`play-drift`, which the reference reproducibility gate fails outright. With it off: **0 play-drift
+across all 208 refs**.
+
+**Why, in one line:** making the dork expensive to tap does not make the payment cheaper, it makes it
+reach for the ONE-SHOT instead — a Gold Rush Treasure on Mirrorwing. The dork untaps next turn; the
+Treasure is gone for good, and the turn that needed it loses the kill (traced in §6b). USER,
+2026-08-23: *"We need to keep the treasures for sure."*
+
+**The prerequisite, therefore, is the one-shot rule, not this rank:** prefer the REPEATABLE source
+whenever the turn can be paid either way (§2b's "waste is the trigger"). That lives at the PLAN level,
+where the sac is actually chosen — with `MTG_TREASURE_PAY_SOURCE` off, a Treasure is a `SacForMana`
+action picked by the enumerator and never reaches `ManaSourceRank` at all. Adopting this half alone
+trades a Treasure for a tap, and the reference says that is a losing trade.
+
+Note also that **stompy (−0.774) and fivecolour (−0.265) carry most of the measured gain and neither
+is Mirrorwing**, so holding this back costs the Mirrorwing generation nothing. USER: *"Other parts can
+potentially wait. Especially if they don't impact mirrorwing."*
+
+Revisit together with the deferred items in §5c — the standing goal is a genuinely high-quality mana
+engine rather than another static constant.
 
 ## 1. The defect
 

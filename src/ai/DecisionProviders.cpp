@@ -1551,57 +1551,65 @@ std::vector<int> GenericProvider::XCandidates(const GameState& s, const CardDefi
 
 static int ManaSourceRankBase(const GameState& s, const CardDefinition& def);
 
+// A mana CREATURE taps AFTER every land, and a still-GROWING one taps after that.
+//
+// `BatchPrepayMainCasts` already states the doctrine for the whole-turn reserve -- "a land has no
+// use but its mana, a creature does, so pay off the lands whenever the whole turn can be" -- and
+// `TapSpareCreaturesEnabled` applies it to the BACKTRACKER's candidate list. Neither reaches the
+// scarcity GREEDY, which is the path that pays most costs: there a mana creature was ranked by
+// colour exactly like a land, so a mono dork (10) was spent ahead of a dual land (20), trading a
+// body that can attack, block, be a copy target or take a pump for a permanent whose only use is
+// its mana. 64 is past every land tier and past the 60-63 reserve tiers.
+//
+// GROWABLE (65): a source whose yield can still RISE is worth holding one slot longer than a fixed
+// one. `domain_mana` (Faeburrow Elder, Bloom Tender) adds one mana per COLOUR you control, and the
+// ladder had it exactly backwards -- ManaSourceRankBase reads EffectiveProduces, i.e. the colours
+// in play RIGHT NOW, so at two colours out Bloom Tender ranked 20 (dual) and was spent ahead of a
+// fixed Birds of Paradise at 50, i.e. cheapest precisely when it had the most room to grow.
+//
+// The SUBTYPE scalers (Priest of Titania, Elvish Archdruid) deliberately do NOT get this: holding
+// them back measured -0.10 WORSE, all on stompy. One Priest tap yields N off ONE body, so forcing
+// it last burns N Llanowar Elves for the same mana and loses N bodies -- and on an Elf deck the
+// bodies are the win condition. Tier 61's DorkGrowth rationale ("tap it last so its burst is
+// bigger") loses to body-count there. See docs/design/mana-creature-tap-order.md §5b.
+//
+// Measured (NET summed over every moved case, negative = better; nothing worse than +0.0010 in any
+// mode): smoke -0.3616, regression -0.5783, HELD-OUT overnight -1.3840. Deterministic counters on
+// Mirrorwing: -2.8% rollout calls, -3.8% turn_steps -- better play ends games sooner, so it is
+// cheaper too. Off-switch MTG_NO_DORK_TAP_LAST restores the plain colour rank for A/B.
+static constexpr int kManaCreatureTapRank         = 64;
+static constexpr int kGrowableManaCreatureTapRank = 65;
+
+// DEFAULT OFF (opt in with MTG_DORK_TAP_LAST=1), pending the one-shot fix below.
+//
+// NOT adopted despite the numbers, and the reason is a REFERENCE, not an aggregate: with this on,
+// the hand-played `references/Mirrorwing_Dragon/claude_s26_gi25.json` replays to T8 against a
+// recorded T5 -- a `play-drift`, which the reference reproducibility gate fails outright. With it
+// off, 0 play-drift across all 208 refs.
+//
+// The mechanism is the one traced at docs/design/mana-creature-tap-order.md §6b: making the dork
+// expensive to tap does not make the payment cheaper, it makes it reach for the ONE-SHOT instead.
+// On Mirrorwing that is a Gold Rush Treasure -- the dork untaps next turn, the Treasure is gone for
+// good, and the turn that needed it loses the kill. USER, 2026-08-23: "We need to keep the treasures
+// for sure." So the prerequisite is a rule that prefers the REPEATABLE source whenever the turn can
+// be paid either way (§2b's "waste is the trigger"), which lives at the plan level where the sac is
+// actually chosen -- not in this rank. Revisit together; adopting this half alone trades a Treasure
+// for a tap and the reference says that is a losing trade.
+inline bool DorkTapLastEnabled()
+{
+    static const bool v = EnvOn("MTG_DORK_TAP_LAST");
+    return v;
+}
+
 int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
 {
     const int r = ManaSourceRankBase(s, def);
-    // TEMPORARY SWEEP SCAFFOLDING (MTG_DORK_RANK_FLOOR, 0/unset = off = byte-identical). The ladder
-    // ranks a mana CREATURE by colour like a land (Elvish Mystic 10, Ignoble Hierarch 30), so no
-    // rank means "before every creature" -- and §9's doctrine (a body has a this-turn use a land
-    // does not, so spend the bodiless source first) needs exactly that. This floor raises every
-    // mana creature to at least the given rank, so the doctrine can be tested AS WRITTEN rather
-    // than inferred from a variant that also moved the source ahead of the lands (the skill's
-    // Attempt-1 lesson: a variant only tests what you actually coded). DELETE with the sweep.
-    // MTG_DORK_RANK_OFFSET is the same doctrine in the shape that PRESERVES the tuned order among
-    // creatures (mono < dual < rainbow < scaled): a floor collapses them all onto one rank and lets
-    // battlefield order decide, which is not a heuristic at all. Offset wins the tie if both are set.
-    // MTG_DORK_RANK_BAND=<n> is the form that resolves the two honestly: a COMPRESSED band at
-    // n + rank/10, which keeps the creatures in their tuned relative order (mono < dual < tri <
-    // rainbow < scaled) AND keeps them all below the 60-63 reserve tiers. The plain OFFSET form
-    // fails to separate those two effects -- offset 54 puts a mono dork at 64, i.e. past the
-    // storage land and the untap-burst land as well -- so a floor-beats-offset result says nothing
-    // about whether intra-creature order matters. Compare band vs floor, not offset vs floor.
-    static const int band_rank  = EnvInt("MTG_DORK_RANK_BAND", 0);
-    static const int off_rank   = EnvInt("MTG_DORK_RANK_OFFSET", 0);
-    static const int floor_rank = EnvInt("MTG_DORK_RANK_FLOOR", 0);
-    if (def.tmpl != CardTemplate::ManaDork) { return r; }
-    if (band_rank > 0)  { return band_rank + r / 10; }
-    if (off_rank > 0)   { return r + off_rank; }
-    if (floor_rank <= 0) { return r; }
-    // MTG_SCALED_DORK_BUMP keeps the DorkGrowth doctrine alive ON TOP of the floor: a SCALED dork
-    // (Priest of Titania / Elvish Archdruid) taps for more the more Elves have landed, so it wants
-    // to tap AFTER the flat dorks, not tied with them. A bare floor collapses tier 61 into the
-    // flat rank and leaves that ordering to battlefield order. DELETE with the sweep.
-    static const int scaled_bump = EnvInt("MTG_SCALED_DORK_BUMP", 0);
-    if (scaled_bump > 0 && DorkGrowthEnabled())
+    if (DorkTapLastEnabled() && def.tmpl == CardTemplate::ManaDork)
     {
-        // MTG_DOMAIN_IS_SCALED widens "scaled" from the SUBTYPE scalers (Priest of Titania,
-        // Elvish Archdruid -- mana_per_creature_subtype) to the COLOUR scalers (Faeburrow Elder,
-        // Bloom Tender -- domain_mana), which grow with the colours you control. Those belong in
-        // the same class: holding one is worth more than holding a FIXED rainbow dork (Birds),
-        // because its yield can still rise. Worse, the flexibility ladder currently ranks a domain
-        // dork off EffectiveProduces -- i.e. its CURRENT colour count -- so at two colours out
-        // Bloom Tender ranks 20 (dual) and is spent AHEAD of Birds at 50, which is exactly
-        // backwards: it is cheapest to spend precisely when it has the most room to grow.
-        // MTG_BUMP_NO_SUBTYPE separates the two scaling classes, because they measure OPPOSITELY:
-        // holding a DOMAIN scaler back helps (its yield rises with colours), while holding a
-        // SUBTYPE scaler back costs -- Priest of Titania taps for N off ONE body, so forcing it
-        // last burns N small Elves instead, and on an Elf deck the bodies are the win condition.
-        static const bool domain_scaled = EnvOn("MTG_DOMAIN_IS_SCALED");
-        static const bool no_subtype    = EnvOn("MTG_BUMP_NO_SUBTYPE");
-        if ((!no_subtype && IsScaledManaDork(def)) || (domain_scaled && def.params.domain_mana))
-        { return floor_rank + scaled_bump; }
+        if (def.params.domain_mana) { return kGrowableManaCreatureTapRank; }
+        return r < kManaCreatureTapRank ? kManaCreatureTapRank : r;
     }
-    return r < floor_rank ? floor_rank : r;
+    return r;
 }
 
 static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
