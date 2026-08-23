@@ -1892,18 +1892,43 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     bool refs_loaded = false;
     std::array<std::vector<double>, 2> loaded_Dopt{ std::vector<double>{}, std::vector<double>{} };
     std::array<double, 2> loaded_vg{ 0.0, 0.0 };
+    // ROLLING vg (the freeze shrink target) + the level it was derived at. Journaled because it is a
+    // GLOBAL quantity re-derived from every cell's accumulators as the completed frontier advances, so
+    // re-deriving it after a resume follows a different trajectory than the uninterrupted run and moves
+    // freeze verdicts. Measured on burn: pinning it (MTG_KEEP_REFS_OFFSET=0) removed 98% of the cells
+    // that resumed UNDER-sampled (539 -> 9). Absent from a pre-fix journal -> falls back to the floor vg,
+    // i.e. exactly the old behaviour.
+    bool refs_vgroll_loaded = false;
+    std::array<double, 2> loaded_vg_roll{ 0.0, 0.0 };
+    long long             loaded_vg_base = 0;
     // r0-prefix reloaded from the journal (index k = i*2+pd), for cells resumed ABOVE the floor. Seeds
     // floor_sum/sumsq/cnt so compute_refs sees the same prefix it would have seen in an uninterrupted
     // run -- see the fs/fq/fn note on journal_append.
     std::vector<double>    resumed_floor_sum, resumed_floor_sumsq;
     std::vector<long long> resumed_floor_cnt;
+    // Size-7 cell-sides whose TERMINAL (f=1) record has been replayed (index k = i*2+pd). A terminal
+    // record is authoritative and LOCKS its cell-side: see the truncation note on the replay loop.
+    std::vector<char>      replay_terminal;
+    // SPECULATIVE ROLLOUT VALUES for r in [r0, cnt), per size-7 cell-side (index k = i*2+pd). The
+    // floor phase runs cells past r0 with no freeze test and compute_refs' reconcile then replays the
+    // test over (r0, cnt] -- reading the per-rollout `slot` array. On a resume that array is EMPTY for
+    // rollouts a PREVIOUS invocation ran, so the replay summed zeros and could freeze a cell on a
+    // fabricated prefix. It was invisible while the highest-n rule discarded the reconcile's terminal
+    // record; making terminal records authoritative exposed it (905 cell-sides with a count-inconsistent
+    // sum). Carrying the values makes the replay reconstruct exactly what it would have read. Bounded by
+    // cont_lookahead (<= 4 doubles per cell-side), and only written in the floor phase, where they are
+    // the only thing that can still be reconciled.
+    std::vector<std::vector<double>> resumed_spec;
     // fs/fq/fn (optional): the cell's r0-PREFIX, carried on any record past the floor. compute_refs
     // must see the exact r0 prefix, not a partially-refined accumulator -- so a record that resumes a
     // cell ABOVE r0 has to carry the prefix with it or refs would be recomputed from over-refined
     // values and silently diverge. Carrying it per record (rather than relying on the earlier floor
     // record surviving) also makes every record self-sufficient under a truncated log.
+    // sv (optional): the per-rollout values for r in [r0, n), so a resumed compute_refs can replay the
+    // freeze test over the speculated range instead of summing zeros. See the resumed_spec note.
     auto journal_append = [&](int H, int idx, int pd, double s, double q, long long n, int f,
-                              double fs = 0.0, double fq = 0.0, long long fn = 0)
+                              double fs = 0.0, double fq = 0.0, long long fn = 0,
+                              const std::vector<double>* sv = nullptr)
     {
         if (!journal_on) { return; }
         std::lock_guard<std::mutex> lk(journal_mtx);
@@ -1911,6 +1936,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         journal_f << "{\"H\":" << H << ",\"i\":" << idx << ",\"p\":" << pd
                   << ",\"s\":" << s << ",\"q\":" << q << ",\"n\":" << n << ",\"f\":" << f;
         if (fn > 0) { journal_f << ",\"fs\":" << fs << ",\"fq\":" << fq << ",\"fn\":" << fn; }
+        if (sv != nullptr && !sv->empty())
+        {
+            journal_f << ",\"sv\":[";
+            for (std::size_t z = 0; z < sv->size(); ++z) { if (z) { journal_f << ","; } journal_f << (*sv)[z]; }
+            journal_f << "]";
+        }
         journal_f << "}\n";
         journal_f.flush();   // push to the OS page cache -> a process kill (not power loss) keeps it
     };
@@ -2378,6 +2409,17 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     refs_loaded = true;
                     continue;
                 }
+                if (e.contains("vgroll"))
+                {
+                    // LAST one wins (these are strictly increasing in vgbase), so the resumed run
+                    // re-enters refine at the same vg epoch the killed run was in.
+                    if (e["vgroll"].is_array() && e["vgroll"].size() == 2)
+                    { loaded_vg_roll[0] = e["vgroll"][0].get<double>();
+                      loaded_vg_roll[1] = e["vgroll"][1].get<double>();
+                      loaded_vg_base    = e.value("vgbase", 0LL);
+                      refs_vgroll_loaded = true; }
+                    continue;
+                }
                 const int H = e.value("H", 0);
                 if (H > HAND || H < min_size) { continue; }
                 const int i = e.value("i", -1), pd = e.value("p", -1);
@@ -2385,12 +2427,37 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 SizeTable& t = tables[HAND - H];
                 if (i < 0 || i >= static_cast<int>(t.comps.size())) { continue; }
                 const long long n = e.value("n", 0LL);
-                if (n <= t.cnt[i][pd]) { continue; }   // keep the highest-cnt record (order-independent)
+                const bool terminal = (H == HAND && e.value("f", 0) == 1);
+                // TERMINAL RECORDS OUTRANK HIGHER-n ONES. "Highest n wins" is right for the monotone
+                // case (a cell's count only grows), but compute_refs' reconcile can LOWER a cell's
+                // count: floor speculation runs a cell past r0 with no freeze test, then the reconcile
+                // replays the test over (r0, cnt] and TRUNCATES to the first hit. That truncation is
+                // journaled as a terminal record whose n is BELOW the progress record written during
+                // speculation -- so under a pure highest-n rule the truncation was silently discarded,
+                // and the cell resumed above its own freeze level, unfrozen, and refined on. Measured
+                // on burn (docs/design/keepgen-resume-exactness.md): 14.5k of 21.9k size-7 cell-sides
+                // came back over-counted, +17% rollouts, with cells running to the cap that an
+                // uninterrupted run froze at 3. Latent until progress records existed (commit
+                // 69d5ba77) -- before them the only pre-refs record sat at exactly n==r0, which can
+                // never outrank a truncation.
+                //
+                // Order-independence is preserved (the property the highest-n rule exists for): a
+                // terminal record applies unconditionally and then LOCKS the cell-side, so replaying
+                // the same records in any order lands on the same state.
+                if (H == HAND)
+                {
+                    const std::size_t k = static_cast<std::size_t>(i) * 2 + static_cast<std::size_t>(pd);
+                    if (replay_terminal.size() <= k) { replay_terminal.resize(t.comps.size() * 2, 0); }
+                    if (replay_terminal[k]) { continue; }          // settled: nothing may override it
+                    if (terminal) { replay_terminal[k] = 1; }
+                    else if (n <= t.cnt[i][pd]) { continue; }
+                }
+                else if (n <= t.cnt[i][pd]) { continue; }   // sub-tables: counts are monotone
                 if (t.cnt[i][pd] == 0) { ++resume_loaded; }
                 t.sum[i][pd]   = e.value("s", 0.0);
                 t.sumsq[i][pd] = e.value("q", 0.0);
                 t.cnt[i][pd]   = n;
-                if (H == HAND && e.value("f", 0) == 1) { prune.frozen7[i][pd] = true; }
+                if (terminal) { prune.frozen7[i][pd] = true; }
                 // Carry the r0 prefix of a cell resumed ABOVE the floor, so compute_refs sees the same
                 // prefix an uninterrupted run would have (refs are recomputed whenever no REFS record
                 // has been written yet -- exactly the window progress records now cover).
@@ -2406,6 +2473,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     resumed_floor_sum[k]   = e.value("fs", 0.0);
                     resumed_floor_sumsq[k] = e.value("fq", 0.0);
                     resumed_floor_cnt[k]   = e.value("fn", 0LL);
+                }
+                if (H == HAND && e.contains("sv") && e["sv"].is_array())
+                {
+                    const std::size_t k = static_cast<std::size_t>(i) * 2 + static_cast<std::size_t>(pd);
+                    if (resumed_spec.size() <= k) { resumed_spec.resize(t.comps.size() * 2); }
+                    resumed_spec[k] = e["sv"].get<std::vector<double>>();
                 }
             }
             recompute();
@@ -2892,6 +2965,21 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                                      floor_cnt[k] = S7.cnt[i][pd]; } }
         auto SLOT = [&](int i, int pd, long long r) -> std::size_t
         { return ((static_cast<std::size_t>(i) * 2 + pd) * static_cast<std::size_t>(r_max)) + static_cast<std::size_t>(r); };
+        // Refill the per-rollout slots for floor-phase speculation carried in the journal, so a resumed
+        // compute_refs reconcile replays the freeze test over the SAME values the killed run would have
+        // read. `have` is set only for [r0, cnt), so the fold (which starts at cnt) is unaffected.
+        for (std::size_t k = 0; k < resumed_spec.size(); ++k)
+        {
+            if (resumed_spec[k].empty()) { continue; }
+            const int i = static_cast<int>(k / 2), pd = static_cast<int>(k % 2);
+            for (std::size_t z = 0; z < resumed_spec[k].size(); ++z)
+            {
+                const long long r = r0 + static_cast<long long>(z);
+                if (r >= r_max) { break; }
+                slot[SLOT(i, pd, r)] = resumed_spec[k][z];
+                have[SLOT(i, pd, r)] = 1;
+            }
+        }
 
         std::mutex fold_mtx;                         // guards the fold (sum/sumsq/cnt + slot/have + frozen7)
         std::mutex qmtx; std::condition_variable q_ne, q_nf;
@@ -2995,6 +3083,7 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 bool jfloor = false, jterm = false, jprog = false;
                 double js = 0.0, jq = 0.0; long long jn = 0;
                 double jfs = 0.0, jfq = 0.0; long long jfn = 0;
+                std::vector<double> jsv;   // floor-phase speculative values [r0, c), for resumed reconcile
                 {
                     std::lock_guard<std::mutex> fk(fold_mtx);
                     const std::size_t k = static_cast<std::size_t>(i) * 2 + pd;
@@ -3039,11 +3128,17 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                         // Any record resuming a cell above r0 must carry the r0 prefix (see journal_append).
                         if ((jterm || jprog) && floor_cnt[k] > 0)
                         { jfs = floor_sum[k]; jfq = floor_sumsq[k]; jfn = floor_cnt[k]; }
+                        // FLOOR-PHASE speculation past r0 has not been freeze-tested yet -- compute_refs
+                        // will replay the test over it, reading `slot`. Carry those values so a resumed
+                        // reconcile reads the same numbers instead of the zeros of an unfilled slot array.
+                        // Refine-phase records need none: the fold already applied the test inline.
+                        if (!refine && jprog && c > r0)
+                        { for (long long z = r0; z < c; ++z) { jsv.push_back(slot[SLOT(i, pd, z)]); } }
                     }
                 }
                 if (jfloor)      { journal_append(HAND, i, pd, js, jq, jn, 0); }
                 else if (jterm)  { journal_append(HAND, i, pd, js, jq, jn, 1, jfs, jfq, jfn); }
-                else if (jprog)  { journal_append(HAND, i, pd, js, jq, jn, 0, jfs, jfq, jfn); }
+                else if (jprog)  { journal_append(HAND, i, pd, js, jq, jn, 0, jfs, jfq, jfn, &jsv); }
                 in_flight.fetch_sub(1);
                 prod_cv.notify_one();
             }
@@ -3158,6 +3253,24 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
               if (c > 1) { const double mn = S7.sum[i][pd] / c;
                            vg[pd] += std::max(0.0, S7.sumsq[i][pd] / c - mn * mn); ++ng[pd]; } }
             for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[pd] /= ng[pd]; } }
+            // WRITE-AHEAD, before publishing: the instant vg_roll moves, a concurrent fold may freeze a
+            // cell against it, and that verdict has to be reproducible after a kill. Journaling it
+            // afterwards would leave a window in which a freeze used a vg no resume can recover. Rare
+            // (at most (r_max-r0)/refs_offset records per run), so the flush under fold_mtx costs nothing.
+            if (journal_on)
+            {
+                // journal_mtx, not bare stream access: workers append concurrently and two unsynchronised
+                // writers interleave into a corrupt line, which the replay's parse then silently drops.
+                // Lock order is fold_mtx -> journal_mtx here and journal_mtx alone in journal_append, so
+                // there is no cycle.
+                std::lock_guard<std::mutex> jk(journal_mtx);
+                if (journal_f.is_open())
+                {
+                    nlohmann::json r;
+                    r["vgroll"] = { vg[0], vg[1] }; r["vgbase"] = completed_level;
+                    journal_f << r.dump() << "\n"; journal_f.flush();
+                }
+            }
             vg_roll = vg; vg_base = completed_level;
         };
 
@@ -3180,7 +3293,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         if (refs_loaded)
         {
             Dopt_ref = loaded_Dopt; vg_ref = loaded_vg;
-            vg_roll = loaded_vg; vg_base = r0;   // rolling vg re-derives from the reloaded accumulators below
+            // Rolling vg: restore the epoch the killed run was in, so freeze verdicts continue against
+            // the same shrink target. Falling back to the floor vg (a pre-fix journal, or a kill before
+            // the frontier ever advanced refs_offset) is the old behaviour and is still SOUND -- it just
+            // re-derives, and diverges. See the loaded_vg_roll note.
+            if (refs_vgroll_loaded) { vg_roll = loaded_vg_roll; vg_base = loaded_vg_base; }
+            else                    { vg_roll = loaded_vg;      vg_base = r0; }
             refs_ready.store(true, std::memory_order_release);
             gen_prog.phase.store(2, std::memory_order_relaxed);   // resumed mid-refine
             std::cerr << "[keepgen]   continuous: refs restored from journal -> resuming refine ("
