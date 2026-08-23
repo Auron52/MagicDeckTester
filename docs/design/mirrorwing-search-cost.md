@@ -67,6 +67,52 @@ On the single worst game (`--seed 900413`) the driver table is **Treasure Token 
 two-stage estimate below: sampled on two games it read 1.35x and *0.63x (a loss)*; deck-wide it is a
 1.51x win. Two games settle nothing here.
 
+## CORRECTION (2026-08-23): the 3.5 % Treasure figure is an ARTEFACT — USER was right
+
+The driver table above credits **the single biggest option-group** with the call's ENTIRE odometer:
+
+```cpp
+if (sz < 2) { continue; }
+if (sz > max_opts) { max_opts = sz; driver = cands[gp[0]].card_name; }
+```
+
+But the odometer is a PRODUCT. A node holding nine Treasures (3^9 = 19,683) and one Libation group of
+5 has its whole 118,098 credited to **Libation**, because Libation's single group is larger. The
+instrument systematically UNDER-credits many-small-groups and OVER-credits one-big-group — and
+Treasures are precisely the many-small-groups case. A second bias compounds it: goldfish draws hands
+by natural probability, while the mulligan gen evaluates every composition EQUALLY, so
+Treasure-heavy boards are far better represented in the gen workload than in this sample.
+
+### Counterfactual measurement (`MTG_SAC_DUP_CAP=1`, 5,120 games, seed 910000)
+
+Capping fungible sac sources to one collapses `3^N` to `3`. This UNDER-states §2a, which removes the
+group entirely (`-> 1`).
+
+| set | baseline | cap=1 | speedup |
+|---|---:|---:|---:|
+| all 5,120 games | 1665.2 s | 1535.0 s | **1.08x** |
+| top 1 % (51) | 181.8 s | 154.9 s | 1.17x |
+| top 0.1 % (5) | 30.5 s | 21.5 s | 1.42x |
+
+The aggregate is worthless here, because the distribution is **BIMODAL** — the FiveColour Garth shape:
+
+```
+11.78x     424 ms ->   36 ms   gi=4890
+10.66x    1066 ms ->  100 ms   gi=2662
+10.58x     508 ms ->   48 ms   gi=3700
+ 8.87x     674 ms ->   76 ms   gi=2540
+ 8.02x    5925 ms ->  739 ms   gi=4046   <- the 2nd most expensive game in the whole sweep
+ 5.74x    2794 ms ->  487 ms   gi=2275
+...median per-game 1.03x
+```
+
+**There is a class of games where Treasures are ~85-90 % of the cost and collapse 6-12x.** They are
+rare per draw, common in the gen, and they are where the mulligan-gen wall clock goes. Wall gains also
+run ~3x the odometer gains deck-wide (odometer -2.6 %, wall -8.0 % at 640 games), confirming §3's
+"cost is superlinear in group size".
+
+**So: judge §2a on the tail, and do not quote a mean.** The 15.4 % / 3.5 % split above should be read
+as "Libation drives the widest single groups", NOT as "Libation costs 4x what Treasures cost".
 ## The actual target: 69.5 % of enumerated payoff lines cannot be paid for
 
 `MTG_ENUM_STATS`, same 640 games (this counter includes the enumeration's inner per-land calls, so
