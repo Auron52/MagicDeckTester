@@ -999,6 +999,21 @@ namespace m2yield
     // decision, the ROLLOUT site is the leaf estimator's playout policy (see MTG_SSM_SITE).
     inline std::atomic<uint64_t> g_br_s{0}, g_br_g{0}, g_ro_s{0}, g_ro_g{0};
     inline std::atomic<uint64_t> g_br_d0{0}, g_ro_d0{0};   // depth<=0: no search left, greedy by structure
+    // Which iterative-deepening passes COMPLETED. sub_depth is the PASS INDEX (0..depth-1), and
+    // pass 0 is the one whose interior m2 -- and whose whole rollout -- falls to greedy, because
+    // SolveSecondMainInSearch takes Solve() at depth<=0. Every completed pass overwrites the
+    // previous one, so this is CUMULATIVE: p[k] counts decisions that got AS FAR AS pass k, and the
+    // number that FINALLY committed at pass k is p[k]-p[k+1]. Read it that way or it inverts.
+    //
+    // This is the number that says whether a greedy interior m2 ever DECIDED anything, and at
+    // production budgets it says yes, nearly always: antilife commits at pass 0 in 99.5% of
+    // decisions, fivecolour 94.7%, kitty 82.9%. So the per-deck SearchedSecondMainInSearch hooks
+    // only reach the small minority of decisions where pass 1+ completes -- which is why turning
+    // MTG_5C_SSM off is byte-identical on 60 games, and why AL's branch-site hook was
+    // byte-identical over 26,000. Not inert levers: levers on a rarely-taken path.
+    inline std::atomic<uint64_t> g_commit[8] = {};
+    inline void RecordCommit(int sub_depth)
+    { if (Enabled() && sub_depth >= 0 && sub_depth < 8) { g_commit[sub_depth].fetch_add(1, std::memory_order_relaxed); } }
     inline std::mutex g_mtx;
     inline std::map<std::string, uint64_t> g_by_kind;   // "<kind>:<card>" -> count
 
@@ -1061,6 +1076,13 @@ namespace m2yield
                          (unsigned long long)g_br_d0.load(),
                          (unsigned long long)g_ro_s.load(), (unsigned long long)g_ro_g.load(),
                          (unsigned long long)g_ro_d0.load());
+            std::fprintf(stderr, "=== COMMITTED PASS (sub_depth):");
+            for (int i = 0; i < 8; ++i)
+            {
+                const uint64_t c = g_commit[i].load();
+                if (c) { std::fprintf(stderr, "  p%d=%llu", i, (unsigned long long)c); }
+            }
+            std::fprintf(stderr, "  ===\n");
             std::vector<std::pair<std::string, uint64_t>> v(g_by_kind.begin(), g_by_kind.end());
             std::sort(v.begin(), v.end(),
                       [](auto& a, auto& b) { return a.second > b.second; });
@@ -24536,6 +24558,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             best_plan           = pass_best;
             committed_win       = pass_best_win;
             committed_sub_depth = sub_depth;
+            m2yield::RecordCommit(sub_depth);
             committed_esc_pool  = std::move(esc_pool);   // escalation reads the COMMITTED pass
             if (trace_this)
             {
