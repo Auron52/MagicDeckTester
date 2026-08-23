@@ -998,6 +998,7 @@ namespace m2yield
     // ...split by CALL SITE, because they are two different levers: the BRANCH site is a real
     // decision, the ROLLOUT site is the leaf estimator's playout policy (see MTG_SSM_SITE).
     inline std::atomic<uint64_t> g_br_s{0}, g_br_g{0}, g_ro_s{0}, g_ro_g{0};
+    inline std::atomic<uint64_t> g_br_d0{0}, g_ro_d0{0};   // depth<=0: no search left, greedy by structure
     inline std::mutex g_mtx;
     inline std::map<std::string, uint64_t> g_by_kind;   // "<kind>:<card>" -> count
 
@@ -1007,7 +1008,14 @@ namespace m2yield
         if (searched)        { g_searched.fetch_add(1, std::memory_order_relaxed); }
         else if (depth_out)  { g_greedy_depth.fetch_add(1, std::memory_order_relaxed); }
         else                 { g_greedy_hook.fetch_add(1, std::memory_order_relaxed); }
-        if (depth_out) { return; }   // depth<=0 is greedy at both sites regardless of the hooks
+        if (depth_out)
+        {
+            // depth<=0 is greedy at BOTH sites regardless of the hooks -- there is no search left to
+            // do. Counted separately per site so "greedy inside the branching" (the search's own
+            // leaf boundary) is never confused with "greedy in the playout".
+            (in_rollout ? g_ro_d0 : g_br_d0).fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
         if (in_rollout) { (searched ? g_ro_s : g_ro_g).fetch_add(1, std::memory_order_relaxed); }
         else            { (searched ? g_br_s : g_br_g).fetch_add(1, std::memory_order_relaxed); }
     }
@@ -1047,10 +1055,12 @@ namespace m2yield
                          s ? 100.0 * static_cast<double>(sr) / static_cast<double>(s) : 0.0,
                          (unsigned long long)gh, (unsigned long long)gd);
             std::fprintf(stderr,
-                         "=== M2 SITE (depth>0 only): BRANCH searched %llu / greedy %llu | "
-                         "ROLLOUT searched %llu / greedy %llu ===\n",
+                         "=== M2 SITE: BRANCH searched %llu / greedy %llu / d<=0 %llu | "
+                         "ROLLOUT searched %llu / greedy %llu / d<=0 %llu ===\n",
                          (unsigned long long)g_br_s.load(), (unsigned long long)g_br_g.load(),
-                         (unsigned long long)g_ro_s.load(), (unsigned long long)g_ro_g.load());
+                         (unsigned long long)g_br_d0.load(),
+                         (unsigned long long)g_ro_s.load(), (unsigned long long)g_ro_g.load(),
+                         (unsigned long long)g_ro_d0.load());
             std::vector<std::pair<std::string, uint64_t>> v(g_by_kind.begin(), g_by_kind.end());
             std::sort(v.begin(), v.end(),
                       [](auto& a, auto& b) { return a.second > b.second; });
