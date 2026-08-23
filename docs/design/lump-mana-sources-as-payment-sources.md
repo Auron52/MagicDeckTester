@@ -202,6 +202,60 @@ goes: the stopped run put **30% of all compute (28.4 of 95 core-hours) into roll
 Note the 12.65x hand is a **non-Garth opener** — Garth is drawn mid-rollout, so the effect tracks
 *a Lotus existing on board*, not the opening hand.
 
+## 5. Implementation map (2026-08-23, from a read of the current tree)
+
+Written while picking this up so the next attempt does not re-derive it. Nothing below is built.
+
+**First, a negative result that removes the cheap option.** Before committing to §2a I looked for a
+smaller increment: extend the fold to `amount == 1` and make `SacFloatColorFor` smarter. Both
+refinements I would have added **already exist and are default-ON**:
+
+* sequential assignment charging each pick against the *remaining* demand (not independent argmax);
+* `MTG_SAC_COLOR_SCARCITY` (default on), which subtracts the board's own coloured supply
+  (`AvailableManaPool`) from demand before the argmax -- the same scarcity-first doctrine
+  `ManaSourceRank` uses.
+
+The fold is therefore already sequential AND supply-aware, and it *still* measured 4/4 Mirrorwing keys
+worse at `amount == 1`. **The residual is coordination a plan-time greedy structurally cannot do** --
+it must commit each Treasure's colour before knowing which pips the lands and dorks will end up
+covering, and the payment solver decides exactly that, per pip, later. So §2a is the fix; there is no
+cheaper variant left to try first.
+
+### The seven edits
+
+1. **`EffectiveProduces` (`SpellEffects.h` ~7062)** -- a sac source with an empty `produces` returns
+   WUBRG. Single source of truth; `AddSourceToPool` already credits a multi-colour source as
+   `pool.wild += amt`, which is exactly the credit the action's `ritual_float` gives today, so the
+   accounting is a swap and not a double-count.
+2. **`usable()` (`ManaPayment.cpp` ~42)** -- `is_src` currently requires BasicLand / ManaDork /
+   `mana_rock`; admit `sac_for_mana_amount == 1`.
+3. **`tap_source()` (`ManaPayment.cpp` ~62)** -- must SACRIFICE, not tap. Erasing mid-loop is unsafe
+   (the loop holds `Permanent&` and derives the reserved-mask index from `&p - battlefield.data()`,
+   and `ApplySacForMana` already warns "erasing from the battlefield invalidates `p`"). Mark tapped +
+   defer the erase to the success paths. Rollback is already atomic via the `bf_pre` snapshot.
+4. **Census admission** -- `AvailableManaPool` (~1006) and `SpareUntappedMana` (`SpellEffects.h` ~7480)
+   share the same open-coded `is_land || is_dork` filter; both need the sac source. Note there are ~68
+   `params.mana_rock` sites in total, but the rest are provider *heuristics* (source counts, ranks,
+   keep features) where omitting a Treasure is imprecision, not a correctness bug. Do not sweep all 68.
+5. **`ManaSourceRank`** -- §9 falls out here: Treasures rank ahead of the mana creatures.
+6. **Delete the fan for `amount == 1`** (`TurnSolver.cpp` ~7205). This is the win: the odometer group
+   per Treasure disappears entirely rather than collapsing 3 -> 2.
+7. **Remove the compensating wild credits**, or they double-count once the source is real:
+   `TurnSolver.cpp` ~5613 (`m += sac_for_mana_amount`), ~25326 (`sac_wild +=`), and the two
+   feasibility patches at ~4046 and ~22334 that §1 quotes.
+
+**Three success paths, not one.** `TapForCostSharedOnce` returns through the greedy, then
+`TapForCostBacktrack`, then the floating-fed filter retry -- and the backtracker is a separate function
+with its own speculative tap/undo (`g_tap_speculating`). The deferred sacrifice has to be correct in
+all three, which is the single largest source of risk in this change.
+
+### Sizing caveat found while profiling (see `mirrorwing-search-cost.md`)
+
+Deck-wide, `Treasure Token` is **3.5 %** of Mirrorwing's odometer; `Luxurious Libation` is **15.4 %**.
+The `3^9` board this doc is motivated by is a TAIL case, not the mean. That does not make §2a
+unattractive -- 5.5 % of games carry ~30 % of cost and the tail is what stalls the mulligan gen, and
+cost is superlinear in group size (§3: an atom collapsing 41x against a 2.8x odometer drop) -- but it
+does mean **§2a should not be expected to move mean throughput much**. Judge it on the tail.
 ## 4. Status
 
 **AGREED SCOPE (USER, 2026-08-21) — STILL UNBUILT, handed off:**
