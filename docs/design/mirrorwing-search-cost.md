@@ -160,6 +160,41 @@ Combined ceiling if independent: ~2x.
   not predict wall time either: game 900289 walks 4.84M positions in 1.2 s, game 900413 walks 1.57M
   in 2.4 s. Mana-side combos track it better (194 k vs 657 k).
 
+## MEASURED AND REFUTED (2026-08-23): the two-stage gating is NOT switched off on this deck
+
+An agent hypothesis worth killing before someone re-derives it. `EnumeratePlanPositions` abandons the
+two-stage split — and with it the whole-row payoff gating — whenever either side would materialize
+more than `MTG_ODO_FLAT_FALLBACK` lines (default 1e6). That guard was added **for the Mirrorwing
+swarm** (a 4 GiB `vector<int>` on a 79-candidate / 12-group node), which made it very plausible that
+Mirrorwing's expensive Libation nodes were falling back to the ungated flat walk and paying the full
+cross-product. That was the stated target of the "Libation thread".
+
+**It is false.** `MTG_ODO_FALLBACK_STATS=1` (added for exactly this question) counts enumeration calls
+and odometer positions, and how many of each take the fallback:
+
+| config | calls | positions | flat_calls | flat share |
+|---|---:|---:|---:|---:|
+| gen settings (d2 / b3), 5,120 games | 3,934,883 | 353,979,515 | **0** | **0 %** |
+| real play settings (b20, value_play depth), 1,280 games | 2,347,886 | 193,343,834 | **0** | **0 %** |
+
+The fallback **never fires on this deck**, at either configuration. The two-stage gating — including
+the whole-row skip that drops a payoff line no mana line can fund — is active on 100 % of Mirrorwing's
+enumeration work already.
+
+Consequences:
+
+* The `1.51x` two-stage figure in the `MTG_ENUM_STATS` block above is a **model of two-stage vs a
+  hypothetical FLAT walk**, not headroom currently being lost. Do not read it as available speedup.
+* **Libation's cost is intrinsic to its group width**, not a gating gap. It is the widest single
+  option-group the deck produces and its lines are 93.7 % discarded, but they are already being
+  discarded by the cheap path.
+* The remaining measured, byte-identical lever on this deck is the **mana-side exact dedup (1.32x)**.
+  The gating one is spent.
+
+This matters for cost planning: the `fast`-vs-`complete` decision on the mulligan profile
+(`decks/Mirrorwing Dragon/`, ~36.4 h projected for complete vs a ~33 h window) will NOT be changed by
+a gating fix, because there is no gating fix left to make here.
+
 ## Related
 
 * `docs/design/plan-odometer-factorization.md` -- the prior art, and the template for fix 1
