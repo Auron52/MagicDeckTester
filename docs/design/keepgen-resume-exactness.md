@@ -1,7 +1,10 @@
 # Keepgen kill/resume: what is exact, and what is not
 
-**Status:** MEASURED 2026-08-23. Data recovery is exact; the size-7 refine SCHEDULE is not.
-Not fixed. The measurement apparatus is `logs/resume_proof/` (regenerable in ~5 minutes, below).
+**Status:** MEASURED + LARGELY FIXED 2026-08-23 (`a47f75dd`). Data recovery was always exact; the
+size-7 refine SCHEDULE was not. Three defects found and fixed. A residual schedule drift remains and
+is **deliberately left** -- it moves the shipped keep decision on 0.0042 % of real opening hands at
+nine resumes, and nothing at three (see "the unit that matters"). The measurement apparatus is
+`logs/resume_proof/` (regenerable in ~5 minutes, below); the `cmp` gate still fails by design.
 
 ## Why this was measured
 
