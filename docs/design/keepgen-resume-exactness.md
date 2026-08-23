@@ -139,6 +139,43 @@ a function of producer timing, not of the data. Evidence: adding the (tiny) writ
 `A == A2` result was the "lagged safe margin" holding by luck, not by construction. **A resume cannot
 be byte-exact while the freeze target is scheduled off a racy frontier.**
 
+### How much the residual actually costs -- measured, and the reason to STOP here
+
+The pre-fix divergence was a ONE-SHOT: 3 kills produced the same +17.1% as 9, because defect 1 fired
+once (at the single floor-speculation phase) and then saturated. With defects 1+2 fixed that one-shot
+is gone, and what remains is a small drift that scales with the NUMBER OF RESUMES:
+
+| | kills | divergent cell-sides (of 37,706) | extra work | wrong values |
+|---|---|---|---|---|
+| post-fix, rolling vg | 3 | **4** | **+0.00 %** | 0 |
+| post-fix, rolling vg | 9 | 3,410 | +3.79 % | 0 |
+| post-fix, vg PINNED | 18 | 9,513 | +11.42 % | 0 |
+
+~380 cell-sides and ~0.4 % per resume. A gen killed a handful of times -- the realistic case -- is now
+within a rounding error of exact.
+
+Note the last row: **pinning the vg (`MTG_KEEP_REFS_OFFSET=0`) is NOT a cheap workaround.** It removes
+the under-sampling direction entirely (`fewer` = 0, which is what identified defect 3) but diverges
+*more* overall, so at least one per-resume source besides the vg schedule remains unidentified. It
+also costs -0.5 % on the uninterrupted run.
+
+**Recommendation: leave it.** What exactness buys is reproducibility and provenance -- it does not buy
+correctness. The values are already exact, the estimates unbiased, and pooling is designed for unequal
+counts. Against that:
+
+* the remaining source is not isolated, so the next step is more measurement, not a known edit;
+* the confirmed part is a hot-path change. `min_live_c` is an O(NC) scan (~218k cell-sides on
+  Mirrorwing) already run every producer iteration on unlocked reads. Making its epoch schedule exact
+  means either holding `fold_mtx` -- the single mutex guarding every rollout commit across 32 workers
+  -- across that scan, or restructuring vg into a pure function of level, which then has to define
+  what a frozen cell (which stops early) contributes at levels it never reached;
+* any change to the freeze schedule moves every generated profile, so the shipped keep profiles would
+  need regeneration to stay comparable -- and Mirrorwing's is the expensive one;
+* this is the path that just produced three defects, two of which only became visible *because* of a
+  partial fix.
+
+Revisit only if a profile ever has to be reproduced bit-for-bit.
+
 ### Where the three fixes leave it
 
 | | divergent cell-sides | under-sampled | extra rollouts | wrong values |
