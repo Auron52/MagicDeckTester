@@ -195,6 +195,38 @@ static const char* s_divergence_log = std::getenv("MTG_DIVERGENCE_LOG");
 // Positions dropped because their label search was cut short (see EarliestWinReport::truncated).
 // A bounded run that silently emits fewer rows reads as "covered everything" when it did not, so
 // this is reported at exit whenever it is non-zero -- the repo's no-silent-caps rule.
+
+namespace execgreedy
+{
+inline bool Enabled() { static const bool v = EnvOn("MTG_M2_YIELD_STATS"); return v; }
+inline std::atomic<unsigned long long> g_exec[12] = {};
+inline std::atomic<unsigned long long> g_rollout{0};
+inline void Record(int depth, bool in_rollout)
+{
+    if (!Enabled()) { return; }
+    if (in_rollout) { g_rollout.fetch_add(1, std::memory_order_relaxed); return; }
+    if (depth >= 0 && depth < 12) { g_exec[depth].fetch_add(1, std::memory_order_relaxed); }
+}
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!Enabled()) { return; }
+        std::fprintf(stderr, "=== EXECUTOR GREEDY Solve(): in-rollout=%llu | REAL decisions by depth:",
+                     g_rollout.load());
+        bool any = false;
+        for (int i = 0; i < 12; ++i)
+        {
+            const unsigned long long c = g_exec[i].load();
+            if (c) { std::fprintf(stderr, "  d%d=%llu", i, c); any = true; }
+        }
+        if (!any) { std::fprintf(stderr, "  NONE"); }
+        std::fprintf(stderr, "  ===\n");
+    }
+};
+inline Dumper g_dumper;
+}
+
 static std::atomic<long long> g_label_positions_truncated{0};
 static std::atomic<long long> g_label_positions_total{0};
 struct LabelTruncationReport
@@ -2251,6 +2283,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         else
         {
+            // INSTRUMENT (MTG_M2_YIELD_STATS): does the EXECUTOR ever decide greedily at a
+            // production depth? A greedy EVALUATION inside the search is the accepted design
+            // (rollouts beyond the horizon / beyond what budget allows); a greedy DECISION here
+            // would be a defect. Counted so the question is settled by measurement.
+            execgreedy::Record(m_lookahead_depth, m_in_rollout);
             plan = TurnSolver::Solve(state, is_pre_combat_main);
         }
     }

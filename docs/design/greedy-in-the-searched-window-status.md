@@ -30,50 +30,64 @@ greedy within the searched window."**
 searching. The engine is supposed to use real search instead. The job was: find every place greedy
 still runs inside the search, and remove it if removing it clears the adoption bar.
 
-## 2. What we found — the short version
+## 2. CORRECTION — there is no new design, and no demonstrated defect
 
-**The engine's search is real, but at production budgets the thing that RANKS its options is a
-greedy playout, 83–99% of the time.**
+An earlier version of this file (and commit `73e98ecd`) claimed the engine had a "pass design" in
+which a greedy evaluation "IS the decision 83-99% of the time". **That framing was wrong and the
+USER was right to reject it.** What is actually there is exactly the design the USER has been
+working under.
 
-`SolveWithLookahead` uses iterative deepening: it evaluates every candidate at pass 0, then pass 1,
-then pass 2, and so on, each pass overwriting the last. The decision that ships is whichever pass
-finished before the budget ran out. **Pass 0 is fully greedy** — its interior second main and its
-whole rollout both take `Solve()`, because `SolveSecondMainInSearch` short-circuits at `depth <= 0`.
+`SolveWithLookahead` scores every candidate with a rollout, and **deepens that rollout until the
+budget runs out** — the code calls it iterative deepening and its own comment says "evaluate EVERY
+candidate at increasing ROLLOUT depth (sub_depth = 0, 1, ... depth-1)". So `sub_depth` is **the
+depth of the rollout used to SCORE a candidate**, not a search-tree ply and not a separate
+architecture. At `sub_depth = 0` that scoring rollout is greedy.
 
-Measured at play settings, 200 games (`MTG_M2_YIELD_STATS=1`, the `COMMITTED PASS` line — note it is
-CUMULATIVE, so the share finally committing at pass k is `(p[k]-p[k+1])/p[0]`):
+So the measured numbers mean:
 
-| deck | decisions | got past pass 0 | **final decision made by the GREEDY pass 0** |
-|---|---|---|---|
-| antilife | 7,046 | 38 | **99.5%** |
-| fivecolour | 238,775 | 12,543 | **94.7%** |
-| kitty | 135,455 | 23,223 | **82.9%** |
+| deck | decisions | got past the depth-0 scoring rollout |
+|---|---|---|
+| antilife | 7,046 | 38 |
+| fivecolour | 238,775 | 12,543 |
+| kitty | 135,455 | 23,223 |
 
-So the outer candidate loop is genuine search — it enumerates the options and plays each one out.
-But the *evaluation* used to compare them is greedy in the overwhelming majority of decisions,
-because the budget dies before pass 1 completes.
+read as: **at a 20-virtual-ms budget, most decisions can only afford the shallowest (greedy)
+scoring rollout.** That is "greedy rollouts beyond the horizon / beyond what budget allows" — the
+understood, accepted limitation — NOT greedy taking over a decision.
 
-## 3. Why this matters more than the per-deck work
+**The decision itself is never greedy.** Every pass compares ALL candidates; the committed plan is
+always a complete comparison. And the executor was instrumented directly to check the stronger
+claim:
 
-Three results had been filed separately as clean nulls:
+```
+antilife    EXECUTOR GREEDY Solve(): REAL decisions by depth:  NONE
+fivecolour  EXECUTOR GREEDY Solve(): REAL decisions by depth:  NONE
+kitty       EXECUTOR GREEDY Solve(): REAL decisions by depth:  NONE
+```
 
-* `MTG_5C_SSM=0` is byte-identical to default on FiveColour over 60 games.
-* Anti-Lifegain's branch-site hook is byte-identical over 26,000 games.
-* The searched-m2 adoptions generally measure inert.
+Zero greedy executor decisions at play settings, 200 games per deck (`MTG_M2_YIELD_STATS=1`). The
+`TurnSolver::Solve()` call in `AIEngine.cpp` is the depth-0 runner configuration; it does not fire
+in real play.
 
-**They have one cause.** The per-deck `SearchedSecondMainInSearch()` hooks only affect passes >= 1,
-and passes >= 1 rarely commit. These are not inert levers — they are levers on a path the budget
-rarely reaches. Three independent "byte-identical" results should have been treated as a signal to
-check the binding rate, not as three clean nulls.
+**By the USER's criterion — "greedy logic taking over mid-search decisions I consider a defect" —
+no defect has been demonstrated.** The interior second main is likewise part of EVALUATING an m1
+candidate (the real second main is decided separately, by its own top-level search), so greedy
+there is evaluation fidelity, not a decision.
 
-**Consequence: adding the hook to more decks is close to decorative until the pass-0 dominance
-changes.** The rollout project (`searched-design-deck-rollout.md`) should not resume deck-by-deck
-until this is understood.
+## 3. What the per-deck searched-m2 hooks actually do
+
+They make the *scoring* more faithful inside the horizon, on the passes that get past the greedy
+rollout. That is a quality lever, not a correctness fix. It also explains three results previously
+filed as independent clean nulls — `MTG_5C_SSM=0` byte-identical over 60 games, AL's branch hook
+byte-identical over 26,000, and the searched-m2 adoptions generally measuring inert: the hooks only
+reach passes >= 1, which the budget rarely affords. Not inert levers; levers on a rarely-affordable
+path.
 
 ## 4. The open question for Monday
 
-**Why does iterative deepening almost never get past pass 0 at a 20-virtual-ms budget?** That is a
-budget/cost question, not a per-deck one. Things worth knowing before changing anything:
+**Is the budget right?** Most decisions can only afford the shallowest scoring rollout. That is
+legitimate under the accepted design, but it caps what the searched-m2 hooks can ever be worth, so
+it is worth knowing whether it is intended. Things worth knowing before changing anything:
 
 * Is pass 0 genuinely that expensive, or is pass 1 disproportionately so? There is a start gate
   (`sub_depth > 0` cost-ratio estimate) that SKIPS a pass it predicts will not fit — measure how
