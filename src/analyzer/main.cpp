@@ -10,6 +10,7 @@
 #include "../core/FlagRegistry.h"
 #include "EquivalenceDiscovery.h"
 #include "ExhaustiveKeep.h"
+#include "BucketPolicy.h"
 #include "SlowRollouts.h"
 #include "../ai/AIEngine.h"
 #include "../core/GameEngine.h"
@@ -168,6 +169,18 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
     // (MTG_VALUE_MODEL=0 forces the pure-heuristic leaf for an A/B). RolloutConfigDigest folds
     // this into the pooling identity, so cross-machine pools stay correct.
     AttachValueSidecar(profile, in_path);
+    // The deck's stored bucket ruling (BucketPolicy.h). Loaded here, before anything reads a
+    // bucketing, and validated against the decklist so a renamed card turns into an error rather
+    // than a silently-dropped decision. Its merge groups join the env force-merge spec; its
+    // keep_apart groups ride into discovery on cfg.policy.
+    BucketPolicy bucket_policy = LoadBucketPolicy(a.deck_path);
+    {
+        std::vector<std::string> distinct;
+        for (const Card& c : a.deck.mainboard)
+        { if (std::find(distinct.begin(), distinct.end(), c.m_name.str()) == distinct.end())
+          { distinct.push_back(c.m_name.str()); } }
+        ValidateBucketPolicy(bucket_policy, distinct);
+    }
     ExhaustiveKeepConfig cfg;
     cfg.probes    = env_int("MTG_EQUIV_PROBES", 400, 1);
     cfg.threshold = []{ const char* s = std::getenv("MTG_EQUIV_THRESHOLD");
@@ -216,6 +229,12 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
     // turn it off. MTG_KEEP_PROBE_CARRY / MTG_KEEP_NO_PROBE_CARRY are gone.)
     if (const char* c = std::getenv("MTG_COMMIT")) { cfg.commit = c; }
     if (const char* fm = std::getenv("MTG_EQUIV_FORCE_MERGE")) { cfg.force_merge = fm; }
+    cfg.policy = bucket_policy.Empty() ? nullptr : &bucket_policy;
+    // The file's merge groups go through the SAME force-merge path as the env override rather than
+    // a second implementation; when both are present the env spec is appended, so an experiment can
+    // add a merge without editing the committed ruling.
+    if (const std::string ms = bucket_policy.MergeSpec(); !ms.empty())
+    { cfg.force_merge = cfg.force_merge.empty() ? ms : (ms + ";" + cfg.force_merge); }
     // Write the serialized keep policy + poolable raw sidecar next to the deck.
     {
         const std::string stem = (a.deck_path.parent_path() / a.deck_path.stem().string()).string();
@@ -388,6 +407,7 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
                   << "   r_batch: " << cfg.r_batch << "\n";
         std::cout << "  max_mull        : " << cfg.max_mull << "   max_turns: " << cfg.max_turns << "\n";
         std::cout << "  bucket probes   : " << cfg.probes << "   threshold: " << cfg.threshold << "\n";
+        PrintBucketPolicy(std::cout, bucket_policy);
         std::cout << "  seed            : " << cfg.seed << "\n";
         std::cout << "  out profile     : " << (cfg.out_profile.empty() ? "(none)" : cfg.out_profile) << "\n";
         std::cout << "  out raw         : " << (cfg.out_raw.empty() ? "(none)" : cfg.out_raw) << "\n";
@@ -865,11 +885,24 @@ static int RunEquivDiscoverMode(const AnalyzerArgs& a)
     // A reviewer who trusts this mode to sanity-check a bucketing gets the wrong K on any deck that
     // ships a value sidecar, which is most of them.
     AttachValueSidecar(profile, in_path);
+    // The review mode honours the deck's ruling too. It exists to preview what the generator will
+    // produce, and a preview that ignores a stored decision is the same class of bug as one that
+    // ignores the value sidecar.
+    BucketPolicy bucket_policy = LoadBucketPolicy(a.deck_path);
+    {
+        std::vector<std::string> distinct;
+        for (const Card& c : a.deck.mainboard)
+        { if (std::find(distinct.begin(), distinct.end(), c.m_name.str()) == distinct.end())
+          { distinct.push_back(c.m_name.str()); } }
+        ValidateBucketPolicy(bucket_policy, distinct);
+    }
+    PrintBucketPolicy(std::cerr, bucket_policy);
 
     std::cerr << "Equivalence discovery: " << probes << " probes, depth " << depth
               << ", threshold " << threshold << ", horizon " << a.max_turns << "\n";
     EquivReport rep = DiscoverEquivalence(a.deck, profile, probes, depth, budget_ms,
-                                          threshold, a.seed, a.max_turns);
+                                          threshold, a.seed, a.max_turns,
+                                          bucket_policy.Empty() ? nullptr : &bucket_policy);
     PrintEquivReport(std::cout, rep);
     return 0;
 }

@@ -112,6 +112,11 @@ struct ExhaustiveKeepConfig
                                 // Gameplay is untouched -- cards keep real identities; only the keep/bottom
                                 // bucketing merges. Baked into bucket_fp, so pooled chunks MUST use the same
                                 // spec (a different merge => different fingerprint => won't pool).
+    // The deck's stored bucket RULING (<stem>.buckets.json -- see BucketPolicy.h), non-owning. Its
+    // keep_apart groups constrain the clustering itself; its merge groups are appended to
+    // force_merge above, so both halves of a ruling reach bucket_fp by the routes already proven.
+    // Null == the deck has made no ruling, which is every deck that has not needed one.
+    const struct BucketPolicy* policy = nullptr;
 };
 
 // Build the exhaustive policy and print a diagnostic report (bucket list, per-size hand counts,

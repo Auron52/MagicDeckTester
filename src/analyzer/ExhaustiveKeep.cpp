@@ -1,6 +1,7 @@
 #include "../core/EnvFlags.h"
 #include "../core/GameSetup.h"
 #include "ExhaustiveKeep.h"
+#include "BucketPolicy.h"
 #include "../deck/DeckLoader.h"
 
 #include <algorithm>
@@ -456,7 +457,10 @@ static std::string RolloutConfigDigest(const Decklist& deck, const MulliganProfi
 //   3 = discovery runs under PLAY settings, not mull_gen_* (2026-08-15). The cached depth/budget_ms
 //       fields now mean the DISCOVERY pair; an old cache holds the gen pair under the same names, so
 //       it could match on paper while describing different buckets. Bumping forces the MISS.
-static constexpr int kDiscoveryVersion = 3;
+//   4 = per-deck bucket POLICY constrains the clustering (2026-08-23, BucketPolicy.h). keep_apart
+//       vetoes a union, so the same inputs can now yield different classes depending on a file the
+//       old cache key knew nothing about.
+static constexpr int kDiscoveryVersion = 4;
 
 static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganProfile& profile,
                                            const ExhaustiveKeepConfig& cfg,
@@ -477,6 +481,9 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
     const uint64_t eq_deck_fp = DeckFp(deck);
     const std::string eq_commit = []{ const char* s = std::getenv("MTG_COMMIT"); return s ? std::string(s) : std::string(); }();
     const long long   eq_thr_x1e6 = static_cast<long long>(std::llround(cfg.threshold * 1e6));
+    // The deck's bucket ruling is a discovery INPUT (BucketPolicy.h): its canonical form keys the
+    // cache, so editing the file re-discovers instead of handing back buckets it no longer describes.
+    const std::string eq_policy_fp = cfg.policy != nullptr ? cfg.policy->Canonical() : std::string();
     const std::string eq_cache_s  = []{ const char* s = std::getenv("MTG_EQUIV_CACHE");
                                         return (s && *s) ? std::string(s) : std::string(); }();
     const std::string eq_cache_path = !eq_cache_s.empty() ? eq_cache_s : cfg.gen_cache;
@@ -508,7 +515,8 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
                             // pre-merge buckets on every deck that already had a cache. Bump
                             // kDiscoveryVersion whenever DiscoverEquivalence's output can move for
                             // unchanged inputs. An old cache has no field -> 0 -> MISS.
-                            && m.value("disco_ver", 0) == kDiscoveryVersion;
+                            && m.value("disco_ver", 0) == kDiscoveryVersion
+                            && m.value("policy_fp", std::string("\x01")) == eq_policy_fp;
             if (match)
             {
                 eq.probes         = m.value("probes", 0);
@@ -534,7 +542,7 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
         std::cerr << "[keepgen] equivalence discovery: " << cfg.probes << " probes, depth " << cfg.equiv_depth
                   << " ...\n" << std::flush;
         eq = DiscoverEquivalence(deck, profile, cfg.probes, cfg.equiv_depth, cfg.equiv_budget_ms,
-                                 cfg.threshold, cfg.equiv_seed, cfg.max_turns);
+                                 cfg.threshold, cfg.equiv_seed, cfg.max_turns, cfg.policy);
         std::cerr << "[keepgen] equivalence discovery done: " << eq.classes.size() << " raw buckets ("
                   << static_cast<long long>(std::chrono::duration<double>(
                          std::chrono::steady_clock::now() - t_bucket).count()) << "s)\n" << std::flush;
@@ -545,7 +553,7 @@ static EquivReport BuildEquivalenceClasses(const Decklist& deck, const MulliganP
                            {"budget_ms", cfg.equiv_budget_ms}, {"threshold_x1e6", eq_thr_x1e6},
                            {"equiv_seed", cfg.equiv_seed}, {"max_turns", cfg.max_turns},
                            {"commit", eq_commit}, {"play_digest", play_digest},
-                           {"disco_ver", kDiscoveryVersion},
+                           {"disco_ver", kDiscoveryVersion}, {"policy_fp", eq_policy_fp},
                            {"distinct_cards", eq.distinct_cards} };
             nlohmann::json jclasses = nlohmann::json::array();
             for (const EquivClass& ec : eq.classes)

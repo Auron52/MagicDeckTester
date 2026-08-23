@@ -1,4 +1,5 @@
 #include "EquivalenceDiscovery.h"
+#include "BucketPolicy.h"
 
 #include <algorithm>
 #include <atomic>
@@ -32,7 +33,8 @@ double SigDistance(const std::vector<int>& a, const std::vector<int>& b)
 
 EquivReport DiscoverEquivalence(const Decklist& deck, const MulliganProfile& profile,
                                 int probes, int depth, int budget_ms, double threshold,
-                                uint64_t seed, int max_turns)
+                                uint64_t seed, int max_turns,
+                                const BucketPolicy* policy)
 {
     // Rollout fidelity mirrors the keep-model labels: keep_model cleared (the static play policy),
     // second-main search matched to the deck, same required_pieces / vial target.
@@ -130,6 +132,10 @@ EquivReport DiscoverEquivalence(const Decklist& deck, const MulliganProfile& pro
     {
         for (int b = a + 1; b < N; ++b)
         {
+            // The deck's keep_apart ruling VETOES the union (BucketPolicy.h). It has to act here,
+            // during clustering, because the alternative -- splitting a finished class -- is not
+            // well defined once single-linkage has chained cards together.
+            if (policy && policy->MustKeepApart(names[a], names[b])) { continue; }
             if (SigDistance(sig[a], sig[b]) <= threshold) { parent[find(a)] = find(b); }
         }
     }
@@ -174,6 +180,27 @@ EquivReport DiscoverEquivalence(const Decklist& deck, const MulliganProfile& pro
         {
             if (fetch_root < 0) { fetch_root = k; }
             else { parent[find(k)] = find(fetch_root); }
+        }
+    }
+    // The veto above blocks the DIRECT union, but two kept-apart cards can still land together by
+    // chaining (a ~ x ~ b) or through a by-construction merge that asserts they are provably the
+    // same dead draw. Both are real conflicts between the ruling and the engine's own evidence, so
+    // say so and stop -- silently honouring one side would hide exactly the thing worth knowing.
+    if (policy != nullptr)
+    {
+        for (int a = 0; a < N; ++a)
+        {
+            for (int b = a + 1; b < N; ++b)
+            {
+                if (find(a) != find(b))                       { continue; }
+                if (!policy->MustKeepApart(names[a], names[b])) { continue; }
+                throw std::runtime_error(
+                    "bucket policy conflict: '" + names[a] + "' and '" + names[b] + "' are marked"
+                    " keep_apart, but discovery still put them in one class -- either they were"
+                    " chained together through a third card, or a by-construction rule (inert /"
+                    " fetchland) merged them as provably identical. Resolve it deliberately: drop"
+                    " the ruling, or name the chaining card in the same keep_apart group.");
+            }
         }
     }
     EquivReport rep;

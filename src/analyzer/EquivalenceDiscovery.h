@@ -39,9 +39,17 @@ struct EquivReport
 // cards may differ and still merge. threshold 0 == exact-match, which fragments as probes grow (a
 // rare probe eventually separates near-identical cards); a small threshold in the empirical gap
 // between merge-worthy (~0.005) and distinct (~0.05) pairs is the stable criterion.
+// `policy` (may be null) is the deck's human bucket ruling -- see BucketPolicy.h. Its keep_apart
+// groups are a CONSTRAINT ON THE CLUSTERING, not a post-pass: single-linkage can chain two cards
+// together through a third, and there is no well-defined way to undo that afterwards. Any keep_apart
+// pair that still ends up in one class (via chaining, or via a by-construction merge that claims
+// they are provably identical) is a genuine conflict between the ruling and the engine, and throws
+// rather than silently picking one.
+struct BucketPolicy;
 EquivReport DiscoverEquivalence(const Decklist& deck, const MulliganProfile& profile,
                                 int probes, int depth, int budget_ms, double threshold,
-                                uint64_t seed, int max_turns);
+                                uint64_t seed, int max_turns,
+                                const BucketPolicy* policy = nullptr);
 
 // Human-readable dump for review: the classes, then a near-miss list (closest other class + the
 // mean |Δ win-turn| per probe) so the strict-vs-loose merge boundary is visible.

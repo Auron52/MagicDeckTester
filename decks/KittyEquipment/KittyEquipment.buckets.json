@@ -1,0 +1,16 @@
+{
+  "_comment": [
+    "Bucket policy for equivalence discovery -- see src/analyzer/BucketPolicy.h.",
+    "HUMAN-OWNED: no tool writes this file. It is the one bucketing input that survives a",
+    "regeneration, a threshold change, a card-data edit and a play change."
+  ],
+
+  "keep_apart": [
+    {
+      "cards": ["Colossus Hammer", "O-Naginata"],
+      "why": "USER RULING 2026-08-23: these two are too different to share a keep dimension, and their dependency structures are OPPOSITE. O-Naginata is easily equippable ({2}) but needs another Equipment first -- the deck's core bodies are Kor Duelist 1/1, Puresteel 2/2, Stoneforge 1/2, so nothing but Armored Skyhunter and Balan meets its power-3 restriction unpumped -- and the payoff is small (+3/+0; trample is inert in a goldfish, nothing blocks). Colossus Hammer is the reverse: it needs a way to CHEAT its equip {8} (Puresteel metalcraft or Balan), and when that lands the payoff is +10/+10. The hands each card is good in are close to disjoint, which is exactly what a keep table must be able to express. The measurement cannot see this: over 400 probes the two differ on FIVE, three favouring the Hammer and two the Naginata, giving distance 0.0175 unsigned but ~0.0025 signed -- and under the shipped play they land on exactly 0.01, the merge threshold itself. At one-turn granularity a card whose value shows up only when its enabler does is invisible, so this is a judgement the metric is not equipped to make. Cost of the split: K 17 -> 18, size-7 cells 120124 -> 164118."
+    }
+  ],
+
+  "merge": []
+}
