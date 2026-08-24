@@ -190,6 +190,17 @@ if [ "$ACCEPT" = 1 ]; then
   fi
 
   echo "Accepted $MODE results into $GT (and $promoted per-game log(s) into test/gt_logs/)."
+  # Verify the two halves of the ground truth agree: regression_gt.txt's case digest is an FNV-1a
+  # fold of the per-game digests in gt_logs/<key>.wins, so a mismatch means this accept promoted a
+  # fingerprint without its matching log (or vice versa). Checked HERE because an accept is the only
+  # thing that writes either half, so it is the only place the drift can be introduced -- and 26
+  # keys had silently drifted before this check existed. Advisory: report, do not fail the accept.
+  if [ -f "$HERE/check_gt_logs.py" ] && command -v python3 >/dev/null 2>&1; then
+    if ! python3 "$HERE/check_gt_logs.py" --mode "$MODE"; then
+      echo "WARNING: the accepted $MODE ground truth is INTERNALLY INCONSISTENT (see above)."
+      echo "         Every later run's per-game audit will mis-attribute those keys."
+    fi
+  fi
   exit 0
 fi
 
@@ -407,6 +418,21 @@ fi
 # human judgement on the NET delta, not a per-game gate. See docs/design/auto-audit-integration.md.
 if [ -f "$HERE/audit_changed_games.py" ] && command -v python3 >/dev/null 2>&1; then
   log ""
+  # The audit below diffs against test/gt_logs/. Those per-game logs and the fingerprints in
+  # regression_gt.txt are promoted by the same --accept but under different rules, so they CAN
+  # drift apart (a per-deck accept, a clobbered wins dir, an interrupted run) -- and a stale
+  # per-game log makes every later run's audit report a PREVIOUS commit's changes as its own.
+  # That is not hypothetical: on 2026-08-24 a green 42/42 smoke run simultaneously reported 2
+  # slower + 22 play-changed games, all of them eaccc120's, on decks the change under test could
+  # not touch. Say so before printing an audit the reader would otherwise trust.
+  if [ -f "$HERE/check_gt_logs.py" ]; then
+    if ! gtchk=$(python3 "$HERE/check_gt_logs.py" --mode "$MODE" 2>&1); then
+      log "--- WARNING: committed gt_logs are STALE vs regression_gt.txt ---"
+      printf '%s\n' "$gtchk" | grep -E '^(STALE|---)' | while IFS= read -r cl; do log "  $cl"; done
+      log "  The per-game audit below is diffing against those stale logs -- treat its"
+      log "  'slower / play-changed' list as UNATTRIBUTED until a clean run is accepted."
+    fi
+  fi
   log "--- per-game audit (vs committed gt_logs) ---"
   audit_out=$(python3 "$HERE/audit_changed_games.py" "$MODE" 2>&1)
   printf '%s\n' "$audit_out" | while IFS= read -r al; do log "$al"; done
