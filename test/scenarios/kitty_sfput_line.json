@@ -1,0 +1,24 @@
+{
+ "_comment": "Stoneforge Mystic's '{1}{W}, {T}: put an Equipment card from your hand onto the battlefield' must be expressible as a viewer LINE (2026-08-23). The engine has enumerated PutFromHandAbility since the deck was built and LineSpec has had an sfput= verb just as long, but no plan action told the GUI which permanent to click or which verb to write, so the ability was unusable by a human. A self-driving sweep never reaches the state (an untapped, unsick Stoneforge with an Equipment still in hand), which is exactly why this is a hand-built fixture. env pins human-play mode because that is what the viewer runs.",
+ "deck": "decks/KittyEquipment/KittyEquipment.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 4,
+ "active_life": 20,
+ "opponent_life": 20,
+ "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1" },
+ "battlefield": [
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Stoneforge Mystic", "controller": 0, "tapped": false, "sick": false }
+ ],
+ "hand": [ "Bonesplitter" ],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "sfput=Bonesplitter",
+ "expect_verdict": "accept",
+ "expect_no_win": true
+}

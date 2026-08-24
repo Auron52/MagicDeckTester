@@ -40,6 +40,10 @@ function defaultFor(d) {
     const hit = (d.options || []).find(o => prefer.some(s => (o.label || '').includes(s)));
     if (hit) return hit.index;
   }
+  // `bottom` emits ai_choice as an OBJECT ({index, num, name}), not a bare int (see
+  // WriteBottomDecisionJson) — taking it verbatim pushed "[object Object]" into --choices and the
+  // engine died on stoi, so no reproduction could get past a mulligan.
+  if (d.ai_choice && typeof d.ai_choice === 'object') return d.ai_choice.index;
   if (d.ai_choice !== undefined && d.ai_choice !== null) return d.ai_choice;
   if (d.heuristic_default !== undefined && d.heuristic_default !== null) return d.heuristic_default;
   return 0;

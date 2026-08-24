@@ -68,6 +68,21 @@
   // untouched; only the encoding differs. One entry == one creature sacrificed.
   function isSacOut(p) { return p.kind === 'activate' && !!p.sacout; }
 
+  // The LineSpec verb a queued entry writes. Only an 'activate' entry can carry one other than
+  // 'cast': the engine tags each activation with the verb CheckLine matches it by (see the
+  // `verb` field in main.cpp's plan-action JSON). `sacout` predates the field, so an entry that
+  // only carries the old flag still resolves to sacout=.
+  //   cast=       Krenko's tap, a loyalty ability, Call of the Wild            (orderNames match)
+  //   sacout=     Skirk Prospector / Siege-Gang / Pashalik                     (LineSpec::sac_outlets)
+  //   equip=      attach an Equipment ALREADY IN PLAY to a creature            (LineSpec::equips)
+  //   attachall=  Balan's "attach all Equipment"                               (LineSpec::attach_all)
+  //   sfput=      Stoneforge Mystic's put-from-hand (names the EQUIPMENT)      (LineSpec::sf_puts)
+  //   jittemode=  Umezawa's Jitte counter-spend (names the MODE INT)           (LineSpec::jitte_modes)
+  function lineVerb(p) {
+    if (p.kind !== 'activate') return 'cast';
+    return p.verb || (p.sacout ? 'sacout' : 'cast');
+  }
+
   // A multi-land plan (a Scale the Heights bonus drop) as the SEGMENTS the engine can accept: one
   // land-only segment per extra drop, then the final land WITH every cast. Lands go first so the
   // casts are paid off the full set of lands the human meant to play -- committing a cast segment
@@ -82,12 +97,17 @@
 
   function encodeLine(plan) {
     const parts = []; const l = planLand(plan); if (l) parts.push('land=' + l.name);
-    for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && !isSacOut(p)) parts.push('cast=' + p.name);
+    for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && lineVerb(p) === 'cast') parts.push('cast=' + p.name);
     for (const p of plan) if (p.kind === 'vial') parts.push('vial=' + p.name);
     for (const p of plan) if (p.kind === 'retrace') parts.push('retrace=' + p.name);
-    // Sac outlets need their own verb: they are neither a hand cast nor a pass, and a line made up
-    // ONLY of sacs used to encode as 'pass' (CheckLine stage 0) -- see LineSpec::sac_outlets.
-    for (const p of plan) if (isSacOut(p)) parts.push('sacout=' + p.name);
+    // Board activations that are neither a hand cast nor a pass need their own verb -- a line made
+    // up ONLY of them used to encode as 'pass' (CheckLine stage 0). jittemode= names the MODE INT,
+    // every other verb names a card.
+    for (const p of plan) {
+      const v = lineVerb(p);
+      if (v === 'cast') continue;
+      parts.push(v + '=' + (v === 'jittemode' ? String(p.mode) : p.name));
+    }
     const n = leCount(plan); if (n > 0) parts.push('landsedge=' + n);
     return parts.length ? parts.join(';') : 'pass';
   }
@@ -127,7 +147,16 @@
   // `free` (Maelstrom Archangel pay-vs-bank) is asked FIRST among the per-spell dimensions: it
   // decides how much mana the rest of the line has, so every later sub-decision reads in that
   // context. `modal` (Unite the Coalition's mode split) sits where the old generic `x` sub used to.
-  const SUBKIND_PRI = { face: -1, fetch: 0, free: 0.5, tutor: 1, enchant: 1.5, x: 2, modal: 2.5, soulfire: 3, crackle: 4, splice: 5 };
+  // `sacrifice` (Natural Order's additional cost) is asked BEFORE `tutor`: the victim gates the fetch
+  // — a sacrificed Worldspine Wurm shuffles itself back into the library and only then is a legal
+  // target — so asking the target first would offer a card whose availability isn't decided yet.
+  // `activations` (Call of the Wild / a Minotaur pump's repeat count) sits where the old generic `x`
+  // sub did; it is that action's own count, coupled to nothing.
+  // `equip` (which creature an Equipment attaches to) and `jitte` (which counter mode) sit with the
+  // other per-action target picks.
+  const SUBKIND_PRI = { face: -1, fetch: 0, free: 0.5, sacrifice: 0.75, tutor: 1, enchant: 1.5,
+                        equip: 1.5, jitte: 1.6, x: 2, activations: 2, modal: 2.5, soulfire: 3,
+                        crackle: 4, splice: 5 };
   function subKindPri(k) { return SUBKIND_PRI[k] === undefined ? 9 : SUBKIND_PRI[k]; }
   function subOf(v, key) { return (v.subs || []).filter(s => s.key === key)[0]; }
   function choiceOf(v, key) { const s = subOf(v, key); return s ? s.choice : '—'; }
@@ -166,6 +195,6 @@
   }
 
   return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
-           leCount, leMax, encodeLine, encodeSegments, queueCard, isSacOut,
+           leCount, leMax, encodeLine, encodeSegments, queueCard, isSacOut, lineVerb,
            nextDimension, filterByChoice, dimensionsRemaining, choiceOf, subOf };
 });

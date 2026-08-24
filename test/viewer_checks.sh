@@ -18,6 +18,10 @@
 #   * line-build (frontend) -- viewer_linebuild_check.js drives the REAL browser queue logic
 #     (tools/play/linebuild.js): can the GUI still rebuild every line the user actually played?
 #     Sub-second, needs node, no binary.
+#   * client (frontend, in a DOM) -- viewer_client_check.js loads index.html's own script in jsdom
+#     and plays games through the GUI's entry points. The only layer that RENDERS the decision
+#     panels, so it is the only one that can see a panel that throws (a dead modal = a frozen
+#     game). Needs node + jsdom + the binary; ~2 min.
 #   * protocol (engine<->GUI) -- viewer_protocol_check.py replays each reference's chosen plan
 #     indices through the binary and asserts the decision-JSON contract holds (well-formed,
 #     valid index, clean terminal). Needs python3 + the binary. FULL sweep ~35 min; --sample
@@ -77,6 +81,35 @@ if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_linebuild_check.js" ]; 
   fi
 elif ! command -v node >/dev/null 2>&1; then
   echo "SKIP: viewer line-build check (node not found)."
+fi
+
+# 1b) Headless CLIENT check (node + jsdom + binary): loads index.html's REAL script in a DOM and
+#     plays games through the GUI's own entry points, so it is the ONLY layer that executes the
+#     decision-PANEL renderers and the undo/history bookkeeping. Skipped in --line-only (it drives
+#     the binary) and SKIPPED-not-failed when jsdom is absent (exit 2 = setup, 1 = a real break).
+#     WIRED IN 2026-08-23. It was written months earlier and never run from here, and meanwhile
+#     ce487708 removed index.html's #maxturns input while the check still wrote to it -- so it died
+#     at setup on every invocation. Net effect: a `ReferenceError: aiPick is not defined` shipped in
+#     lackeyPanelHtml (92c7ce07) and froze the viewer the moment Goblin Lackey connected, with every
+#     other check green, because no other check renders a panel. Same lesson as layer 3 below: an
+#     unrun check is not a check.
+if [ "$MODE" != line ]; then
+  if command -v node >/dev/null 2>&1 && [ -f "$HERE/viewer_client_check.js" ]; then
+    if [ ! -f "$BIN" ]; then
+      echo "FAIL: viewer client check needs the binary but '$BIN' is missing."
+      rc=1
+    else
+      echo "--- viewer client check (index.html in jsdom: panels + undo bookkeeping) ---"
+      MTG_BIN="$BIN" node "$HERE/viewer_client_check.js"
+      crc=$?
+      if   [ $crc -eq 0 ]; then :
+      elif [ $crc -eq 2 ]; then echo "SKIP: viewer client check (jsdom not installed -- 'npm i' in test/)."
+      else
+        echo "FAIL: viewer client check (a decision panel cannot render, or undo corrupts history)."
+        rc=1
+      fi
+    fi
+  fi
 fi
 
 # 2) Engine<->GUI protocol contract (python + binary). Skipped in --line-only.

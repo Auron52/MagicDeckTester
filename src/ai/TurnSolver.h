@@ -836,6 +836,13 @@ public:
         std::vector<std::string> attach_all;    // "attachall=<Balan name>": AttachAllEquipment
         std::vector<std::string> sf_puts;       // "sfput=<equipment name>": PutFromHandAbility
         std::vector<int>         jitte_modes;   // "jittemode=<1|2>": JitteModeAbility activations
+        // "equip=<equipment name>": Equip, one entry per activation. Needed as its own verb because
+        // an Equipment on the battlefield and a copy of it in hand share a NAME: with Equip matched
+        // inside the ordinary `cast=` multiset (the legacy behaviour, still used when this is empty),
+        // "equip the Bonesplitter in play" and "cast the Bonesplitter in hand" encode identically, so
+        // the viewer could not express the first without maybe getting the second. WHICH creature it
+        // attaches to is NOT encoded here -- that is the `equip` sub-decision the choose dialog asks.
+        std::vector<std::string> equips;
     };
     // One concrete plan variant the human's line matched -- when several enumerated plans
     // share the same land + cast names but differ in a per-spell sub-decision (tutor target,

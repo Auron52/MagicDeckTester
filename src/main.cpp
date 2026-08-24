@@ -883,16 +883,64 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // without the flag it serialized as a bare {"card": ..., "x": K} -- byte-identical in
             // shape to CASTING an {X} spell, so the viewer would render it as a hand cast and the
             // human would have no way to click the source or see that it discards.
+            // The flag is a property of the KIND, so this list is exactly "every action kind whose
+            // source is a permanent already on the battlefield". Eight were missing it (2026-08-23)
+            // and were therefore unusable by a human even though the engine enumerated them every
+            // turn: Call of the Wild (ActivateRevealTop), every planeswalker loyalty ability
+            // (ActivateLoyalty -- Bolas / Oko / Jared), Garth's tap-to-conjure, Wirewood Lodge's
+            // untap (UntapCreature), and the whole KittyEquipment set (Equip, Balan's attach-all,
+            // Stoneforge's put, the Jitte modes), which left the deck built around equipping
+            // unplayable by hand.
             if (ac.kind == Action::Kind::TapForTokens
              || ac.kind == Action::Kind::SacForMana
              || ac.kind == Action::Kind::ActivatePump
-             || ac.kind == Action::Kind::SacCreatureOutlet)
+             || ac.kind == Action::Kind::SacCreatureOutlet
+             || ac.kind == Action::Kind::ActivateRevealTop
+             || ac.kind == Action::Kind::ActivateLoyalty
+             || ac.kind == Action::Kind::GarthActivate
+             || ac.kind == Action::Kind::UntapCreature
+             || ac.kind == Action::Kind::Equip
+             || ac.kind == Action::Kind::AttachAllEquipment
+             || ac.kind == Action::Kind::PutFromHandAbility
+             || ac.kind == Action::Kind::JitteModeAbility)
             {
                 os << ", \"activate\": true";
                 // `sacout` tells the GUI to encode this as the sacout= line verb rather than cast=,
-                // and sac_count is how many creatures ONE activation eats (the burst).
-                if (ac.kind != Action::Kind::TapForTokens)
+                // and sac_count is how many creatures ONE activation eats (the burst). ONLY the two
+                // kinds that really eat a creature get it: ActivatePump used to be swept in by a
+                // `!= TapForTokens` test, so the viewer encoded a pump as `sacout=<source>` -- a verb
+                // CheckLine only ever matches against SacForMana / SacCreatureOutlet actions, so the
+                // line could never match a plan and every Minotaur pump read as a reject.
+                if (ac.kind == Action::Kind::SacForMana
+                 || ac.kind == Action::Kind::SacCreatureOutlet)
                 { os << ", \"sacout\": true, \"sac_count\": " << std::max(1, ac.sac_count); }
+                // `verb` = the LineSpec token the GUI must write for this activation. Absent means the
+                // ordinary `cast=<card>` (matched inside CheckLine's orderNames multiset), which is
+                // what the kinds above use. A kind needs its own verb exactly when `cast=<name>` would
+                // be AMBIGUOUS with a hand cast of the same-named card: Stoneforge's put and a hard
+                // cast of the Equipment it puts both read `cast=Colossus Hammer`, and equipping the
+                // Bonesplitter in play reads the same as casting the copy in hand.
+                if (ac.kind == Action::Kind::AttachAllEquipment)      { os << ", \"verb\": \"attachall\""; }
+                else if (ac.kind == Action::Kind::PutFromHandAbility) { os << ", \"verb\": \"sfput\""; }
+                else if (ac.kind == Action::Kind::Equip)              { os << ", \"verb\": \"equip\""; }
+                else if (ac.kind == Action::Kind::JitteModeAbility)
+                { os << ", \"verb\": \"jittemode\", \"mode\": " << ac.gy_exile_mode; }
+                // `activate_source` = the permanent the human CLICKS, when that is not `card`.
+                // PutFromHandAbility's card_name is the Equipment being PUT (it is in hand), so
+                // without this the viewer would look for a board thumb that isn't there.
+                if (ac.kind == Action::Kind::PutFromHandAbility)
+                {
+                    os << ", \"activate_source\": ";
+                    JsonStr(os, EnchantTargetName(s, ac.sac_source_id));
+                }
+                // Equip: the host this variant attaches to, so the plan list reads "Bonesplitter ->
+                // Kor Duelist" rather than a bare card name. WHICH host the human actually gets is
+                // the `equip` sub-decision CheckLine emits (the choose dialog picks it).
+                if (ac.kind == Action::Kind::Equip && ac.sac_victim_id != 0)
+                {
+                    os << ", \"equip_host\": " << ac.sac_victim_id << ", \"equip_host_name\": ";
+                    JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
+                }
             }
             if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
@@ -1767,8 +1815,10 @@ static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, con
 
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
 // "land=<name>", "cast=<name>", "vial=<name>", "retrace=<name>", "landsedge=<n>",
-// "sacout=<outlet name>" (repeat for repeat activations), or the bare word "pass". Card names may
-// contain spaces and commas (no MTG name contains ';' or '='), so they pass through verbatim.
+// "sacout=<outlet name>" (repeat for repeat activations), "equip=<equipment name>",
+// "attachall=<name>", "sfput=<equipment name>", "jittemode=<1|2>", or the bare word "pass". Card
+// names may contain spaces and commas (no MTG name contains ';' or '='), so they pass through
+// verbatim.
 static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
 {
     TurnSolver::LineSpec ls;
@@ -1795,6 +1845,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "attachall") { ls.attach_all.push_back(val); }    // Balan attach-all
         else if (key == "sfput")     { ls.sf_puts.push_back(val); }       // Stoneforge put (card name)
         else if (key == "jittemode") { ls.jitte_modes.push_back(std::atoi(val.c_str())); }
+        else if (key == "equip")     { ls.equips.push_back(val); }        // equip an Equipment in play
     }
     return ls;
 }

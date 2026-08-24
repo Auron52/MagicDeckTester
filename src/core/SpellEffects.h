@@ -1357,9 +1357,16 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         state.battlefield.push_back(perm);
         if (g_play_event_sink)   // nulled by RevealLogPause during search/rollout -> byte-identical
         {
+            // Name the SPELL that did the putting. This routine is shared by every
+            // tutor-to-battlefield card, so the hardcoded "(Dragonstorm)" misattributed every other
+            // one of them: a StompySurprise Natural Order read "Worldspine Wurm -- put onto the
+            // battlefield (Dragonstorm)" for a deck that has never contained the card
+            // (user-reported). `source_name` is already threaded in by both call sites
+            // (EffectHandler + the rollout's apply_one); fall back only when it is absent.
+            const std::string put_by = source_name.empty() ? std::string("Dragonstorm") : source_name;
             EmitPlayEvent(state.turn_number, "dragonstorm",
                           "\xF0\x9F\x90\x89 " + lc.m_name.str()
-                          + " -- put onto the battlefield (Dragonstorm)");
+                          + " -- put onto the battlefield (" + put_by + ")");
         }
         // #1 wiring requirement: route the put Dragon through the SAME cascade the hard-cast enter
         // uses (Scourge ping -> opponent life loss; Lathliss 5/5 token; token-first ordering baked in).

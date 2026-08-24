@@ -84,8 +84,34 @@ leaked the top-7 into a no-reveal game and went stale the moment a same-line Wor
 reordered the library); the human picks at resolution off the REAL look, or -1 to put nothing.
 Autonomous play keeps the searched named-variant axis unchanged. Unexpectedly Absent's target reuses `target` (the
 tuck branch consults `g_play_target_chooser` with every nonland permanent legal, own side included).
-Balan's attach-all, Stoneforge's put, and the Jitte -1/-1 / lifegain modes are `main_phase` plan
-lines (`attachall=` / `sfput=` / `jittemode=` LineSpec verbs).
+Balan's attach-all, Stoneforge's put, the Equip itself and the Jitte -1/-1 / lifegain modes are
+`main_phase` plan lines (`equip=` / `attachall=` / `sfput=` / `jittemode=` LineSpec verbs) — see
+**Board activations** below for how a human reaches them.
+
+**Board activations (an ability of a permanent ALREADY IN PLAY) — a FIFTH wiring site.**
+These are not a decision `type` at all: they are part of the main-phase LINE, so the four sites above
+do not apply and the registry cannot describe them. They need their own three things, and forgetting
+any one makes the ability unusable by a human while every engine-side check stays green (this has now
+happened to Call of the Wild, all three planeswalkers, Garth, and every Equipment in the deck built
+around them):
+
+1. **`activate: true` on the plan action** (`src/main.cpp`, the plan-action JSON). This is what makes
+   the permanent's board thumb clickable — the GUI can only queue cards from HAND, so without the flag
+   there is no way to express the ability. Add `activate_source` when the clicked permanent is not the
+   action's own `card` (Stoneforge's put names the Equipment it puts, which is in hand).
+2. **A LineSpec verb** the GUI writes (`verb` on the same action; absent = the ordinary `cast=`, which
+   CheckLine matches inside its `orderNames` multiset). Give a kind its own verb whenever `cast=<name>`
+   would be AMBIGUOUS with a hand cast of the same-named card — that is why `equip=` exists.
+3. **A `SubChoice` in `TurnSolver::CheckLine`** for anything the verb does not encode. Every variant of
+   one activation carries the same `card_name`, so with no sub they share a dedup signature, the first
+   enumerated one wins, and the human silently gets it with no dialog. Which creature an Equip attaches
+   to (`equip`), which loyalty ability (`loyalty`), which Jitte mode (`jitte`), how many times a
+   repeatable ability fires (`activations`) all live here. Register the key's trailing relation word in
+   `renderDimPick`'s `srcName` strip, or the dialog's header art 404s.
+
+Anything decided AFTER the commit belongs in the choose-variant dialog (site 3); anything the verb must
+NAME has to be picked at QUEUE time, which is what the GUI's activation picker (`activationPickerHtml`,
+opened when one source offers several distinct activations) is for.
 
 **Firebreathe amount (#4) — the first COMBAT-phase decision, and the first on a KEYED SIDE-CHANNEL.**
 At combat, leftover mana is spent greedily on attacker pumps (`ApplyFirebreathing`). The human instead

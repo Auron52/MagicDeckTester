@@ -1,0 +1,24 @@
+{
+ "_comment": "Umezawa's Jitte's non-combat counter modes must be expressible as a viewer LINE (2026-08-23). They are enumerated ONLY in human play (the autonomous search prunes them -- USER doctrine 2026-08-14: goldfishing always spends counters on the +2/+2) and only while the Jitte actually holds charge counters, so no self-driving sweep reaches them; hand-build the charged board. jittemode=1 is the -1/-1 mode; the LineSpec verb names the MODE INT, which is why a Jitte click opens the queue-time ability picker in the GUI rather than guessing. KNOWN GAP (not this fixture's job): the gain-2-life mode (jittemode=2) is EMITTED as a candidate action but never survives into an enumerated plan, so `jittemode=2` grades legal_not_enumerated -- an engine-side narrowing that predates the viewer work.",
+ "deck": "decks/KittyEquipment/KittyEquipment.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 4,
+ "active_life": 20,
+ "opponent_life": 20,
+ "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1" },
+ "battlefield": [
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Kor Duelist", "controller": 0, "tapped": false, "sick": false },
+  { "name": "Umezawa's Jitte", "controller": 0, "tapped": false, "charge_counters": 2 }
+ ],
+ "hand": [],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "jittemode=1",
+ "expect_verdict": "accept",
+ "expect_no_win": true
+}

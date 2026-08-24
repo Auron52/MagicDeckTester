@@ -84,6 +84,11 @@ DECKS = {
     # Reference dir uses an underscore; the deck folder has a SPACE (same shape as Creature_Giving).
     "Mirrorwing_Dragon": ("decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.cod",
                           "decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.profile.json"),
+    # Added 2026-08-23: f0a6d9e7 committed 4 hand-played StompySurprise references, and an unmapped
+    # reference dir is a CONTRACT-FAIL here (not a skip) -- so the whole gate went red the moment
+    # they landed. Any new references/<dir> needs a row the same day.
+    "StompySurprise": ("decks/StompySurprise/StompySurprise.cod",
+                       "decks/StompySurprise/StompySurprise.profile.json"),
 }
 
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\s*(\{.*?\})\s*<<<END_DECISION>>>", re.S)

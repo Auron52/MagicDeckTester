@@ -11,11 +11,16 @@
 // with the network seam (fetch) pointed at the SAME server.js route logic (runStep/runValidate)
 // the live bridge uses — so the engine truth is real, only the transport is in-process.
 //
-// BLIND SPOT (measured, not assumed): this check drives the client's COMMIT functions directly
-// (pushChoice/commitTurn/applyAccepted), so it never renders the decision panel and cannot see the
-// SUBDECISIONS gate in renderBoard. Deleting a type from that whitelist — which hides the modal and
-// leaves the game unanswerable in a real browser — still passes here. test/viewer_decision_types_check.js
-// is what guards that; keep both.
+// It DOES render the decision panels: renderBoard() draws the modal for each sub-decision on the live
+// path, and stepForward additionally calls it explicitly (PANEL_ERRORS) because a throw on the live
+// path arrives as a rejected promise inside an un-awaited handler — i.e. silently. That is the only
+// layer that can see a *PanelHtml function that throws; the ReferenceError shipped in lackeyPanelHtml
+// (92c7ce07) froze the viewer the moment Goblin Lackey connected while every other check stayed green.
+//
+// BLIND SPOT: it only renders the types the chosen decks/seeds actually PLAY INTO (the tally is
+// printed at the end). A type nobody plays into is unguarded here — test/viewer_decision_types_check.js
+// covers the complementary static question ("is the type in the SUBDECISIONS whitelist at all?").
+// Keep both. Runtime ~2m: the undo property is quadratic in a game's rest points.
 //
 // It is a PROPERTY test, deck-agnostic: because the whole protocol is a STATELESS replay from
 // (deck, seed, game-index, choices), the client state after undo-then-nothing MUST equal the
@@ -60,6 +65,11 @@ const SCENARIOS = argVal('deck', null)
       // Goblins on the model's own line: develops a board and connects with Goblin Lackey, so this is
       // the scenario that drives a lackey_put modal through the client's history/undo bookkeeping.
       { deck: 'Goblins',       seed: 1, turns: 8, main: 'ai' },
+      // NOT here: KittyEquipment. Its turns are almost entirely board ACTIVATIONS, each committed as
+      // its own segment, so one game reaches ~80 rest points -- and the undo property is quadratic in
+      // rests (each one replays the game from scratch), i.e. ~6400 binary spawns for one deck. The
+      // undo/history bookkeeping being tested is deck-AGNOSTIC, so the four above cover it; the
+      // equipment-specific path has its own linear walk in testEquip().
     ];
 
 // ---- fetch stub: dispatch the viewer's XHRs to the real server.js route logic ----
@@ -110,7 +120,15 @@ function buildDom() {
   acc.textContent = 'window.__getS = function(){ return S; };'
     + 'window.__fb = { panel: firebreathePanelHtml, commit: commitFirebreathe, rollback: rollbackStep };'
     + 'window.__sh = { panel: storageHoldPanelHtml, commit: commitStorageHold, rollback: rollbackStep };'
-    + 'window.__co = { apply: applyAccepted, rollback: rollbackStep };';
+    + 'window.__co = { apply: applyAccepted, rollback: rollbackStep };'
+    // Top-level `const`s are lexical bindings, not window properties — expose the two the harness
+    // reads. __subdecisions/__panel are what let stepForward render each frame's panel explicitly
+    // (see PANEL_ERRORS): renderBoard already does it in the live flow, but a throw there surfaces
+    // as a rejected promise inside an un-awaited handler, i.e. silently.
+    + 'window.__MAX_TURNS = MAX_TURNS;'
+    + 'window.__subdecisions = SUBDECISIONS;'
+    + 'window.__panel = function(d, dec){ return renderDecisionPanel(d, dec); };'
+    + 'window.__actpick = activationPickerHtml;';
   win.document.body.appendChild(acc);
   return win;
 }
@@ -171,8 +189,12 @@ function testStorageHoldBookkeeping(win) {
 
 // #10 cast-order GUI bookkeeping: committing a main plan whose non-sac casts were QUEUED in a non-canonical
 // order pins that order in the main-ordinal-keyed side-channel (S.castOrder) WITHOUT an extra --choices slot
-// (the plan int is the only positional entry), and undo drops it. A canonical (or single-cast) order pins
-// NOTHING -> references stay byte-identical. Mirrors the engine's cast_order_canonical + main_ordinal diff.
+// (the plan int is the only positional entry), and undo drops it.
+// The pin is UNCONDITIONAL for a multi-cast commit (USER 2026-08-21: "the user's order in the viewer
+// should be respected regardless of the deck order") — a queue that happens to MATCH canonical is still
+// pinned, because under MTG_UNPRUNED the matched plan's execution order is its vector order, not
+// canonical, so "human == canonical" could still execute a different order (see applyAccepted). This
+// check used to assert the older send-only-if-it-differs contract and had been red ever since.
 function testCastOrderBookkeeping(win) {
   const S = win.__getS(), co = win.__co, fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
@@ -197,10 +219,22 @@ function testCastOrderBookkeeping(win) {
   chk(last && last.n === 1 && last.co === '3', 'step marks n=1 + co=3 (cast-order key)');
   S.busy = false; co.rollback();
   chk(!('3' in S.castOrder), 'undo drops the cast-order side-channel entry');
-  // Canonical queue [A, B] -> pins NOTHING (byte-identical / reference-clean).
+  // Canonical queue [A, B] -> pinned TOO (the queued order is authoritative, see above).
   seed(['Spell A', 'Spell B']);
   co.apply(0, 'canonical');
-  chk(Object.keys(S.castOrder).length === 0, 'canonical queue pins no castOrder (references stay byte-identical)');
+  chk(JSON.stringify(S.castOrder['3']) === JSON.stringify(['Spell A', 'Spell B']),
+      'canonical queue is pinned as well (queued order is authoritative)');
+  // A SINGLE-cast commit still pins nothing: there is no order to respect, and pinning would put a
+  // --cast-order on every reference for no reason.
+  const dec1 = { type: 'main_phase', turn: 4, main_ordinal: 3,
+                 me: { life: 20, battlefield: [] }, opponent: { life: 20, battlefield: [] },
+                 plans: [{ index: 0, casts: ['Spell A'] }] };
+  S.choices = [1, 1]; S.steps = [{ n: 1 }, { n: 1 }];
+  S.checkpoints = [{ histLen: 0 }, { histLen: 0 }, { histLen: 0 }];
+  S.history = []; S.castOrder = {}; S.decision = dec1; S.prev = null; S.busy = false;
+  S.plan = [{ name: 'Spell A', kind: 'spell' }];
+  co.apply(0, 'single');
+  chk(Object.keys(S.castOrder).length === 0, 'a single-cast commit pins no castOrder');
   return fails;
 }
 // The live client state. newGame() rebinds `let S` to a fresh object, so always re-read through the
@@ -249,11 +283,26 @@ function diff(a, b) {
 // so without this the pass tells you nothing about coverage (an empty "Commit turn" line develops no
 // board, so it may never reach e.g. a combat-damage lackey_put). --verbose prints the tally.
 const TYPES_SEEN = new Map();
+// Every panel-render error hit while walking a game, as "<type>: <message>". renderBoard() renders
+// the modal for each sub-decision, but it is reached through an un-awaited async chain, so a throw
+// inside a *PanelHtml function became a swallowed promise rejection and the check stayed green while
+// the browser froze on a blank board (the lackey_put ReferenceError, shipped in 92c7ce07). Rendering
+// it here as well makes that a hard, attributable failure.
+const PANEL_ERRORS = [];
+const RENDERED_TYPES = new Set();
 async function stepForward(win, mainMode) {
   const st = S(win);
   if (st.over || !st.decision) return false;
   const d = st.decision, t = d.type;
   TYPES_SEEN.set(t, (TYPES_SEEN.get(t) || 0) + 1);
+  if (t !== 'main_phase' && (win.__subdecisions || []).includes(t)) {
+    try {
+      win.__panel(d, t);
+      const rendered = win.document.getElementById('decpanel');
+      if (rendered && !rendered.innerHTML) PANEL_ERRORS.push(`${t}: panel rendered EMPTY`);
+      else RENDERED_TYPES.add(t);
+    } catch (e) { PANEL_ERRORS.push(`${t}: ${e && e.message ? e.message : e}`); }
+  }
   // 'ai': play the model's own plan (index 0) through applyAccepted — the same entry point the
   // "click an enumerated plan" button uses — so the board develops and in-game decisions are reached.
   if (t === 'main_phase' && mainMode === 'ai') { st.plan = []; win.applyAccepted(0, 'AI plan'); }
@@ -272,7 +321,15 @@ async function startGame(win, sc) {
   if (!opt) throw new Error('deck not listed: ' + sc.deck);
   win.document.getElementById('deck').value = opt.value;
   win.document.getElementById('seed').value = String(sc.seed);
-  win.document.getElementById('maxturns').value = String(sc.turns);
+  // NO #maxturns input: ce487708 removed the box because max_turns keys the search's horizon, so
+  // it is a FIXED const (MAX_TURNS = 8) rather than a user setting. This line used to write it and
+  // threw `Cannot set properties of null` — which the runner catches with process.exit(2), so the
+  // WHOLE check died here and not one scenario ever ran (that is why the lackey_put panel's
+  // ReferenceError shipped: this is the only check that renders index.html's panels). A scenario's
+  // `turns` is now an assertion about the page's constant, not an input.
+  if (sc.turns != null && win.__MAX_TURNS !== sc.turns) {
+    throw new Error(`scenario wants ${sc.turns} turns but index.html pins MAX_TURNS=${win.__MAX_TURNS}`);
+  }
   await win.newGame();
   await settle(win);
 }
@@ -369,6 +426,86 @@ async function testBoardActivation() {
   return fails;
 }
 
+// The QUEUE-time activation picker (a source offering several distinct activations). It is not an
+// engine decision type, so viewer_decision_types_check.js cannot see it and it renders only on
+// boards a walked game may never reach — exactly the shape of the lackey_put ReferenceError. Render
+// it directly against each verb so a break is caught whatever the deck does.
+function testActivationPicker(win) {
+  const fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const cases = [
+    { src: 'Stoneforge Mystic', opts: [{ verb: 'sfput', mode: null, name: 'Colossus Hammer' },
+                                       { verb: 'sfput', mode: null, name: 'Bonesplitter' }] },
+    { src: "Umezawa's Jitte",   opts: [{ verb: 'jittemode', mode: 1, name: "Umezawa's Jitte" },
+                                       { verb: 'jittemode', mode: 2, name: "Umezawa's Jitte" }] },
+    { src: 'Balan, Wandering Knight', opts: [{ verb: 'attachall', mode: null, name: 'Balan, Wandering Knight' },
+                                             { verb: 'cast', mode: null, name: 'Balan, Wandering Knight' }] },
+  ];
+  cases.forEach(pick => {
+    let html;
+    try { html = win.__actpick(pick); }
+    catch (e) { fails.push(`${pick.src}: threw ${e && e.message ? e.message : e}`); return; }
+    chk(html && html.length > 0, `${pick.src}: picker rendered EMPTY`);
+    const n = (html.match(/data-actopt="\d+"/g) || []).length;
+    chk(n === pick.opts.length, `${pick.src}: rendered ${n} option tiles, expected ${pick.opts.length}`);
+    chk(/data-actopt="-1"/.test(html), `${pick.src}: no Cancel button`);
+  });
+  return fails;
+}
+
+// Equipment: the KittyEquipment deck's central action. The engine enumerates an Equip for every
+// legal (Equipment, host) pair, but nothing told the GUI which permanent to click or which LineSpec
+// verb to write, so an equipment deck simply could not be played by hand (user-reported 2026-08-23).
+// Drives the whole chain: board click -> `equip=<name>` line -> engine accept -> host picked in the
+// choose dialog -> the Equipment ends up ATTACHED and renders stacked behind its host like an Aura.
+async function testEquip() {
+  const fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const win = buildDom(); await settle(win);
+  await startGame(win, { deck: 'KittyEquipment', seed: 2, turns: 8 });
+  const st = () => S(win);
+  let guard = 0;
+  while (guard++ < 40 && !(st().decision && st().decision.type === 'main_phase' && st().decision.turn === 3)) {
+    if (!(await stepForward(win, 'ai'))) break;
+  }
+  chk(st().decision && st().decision.turn === 3, 'reached KittyEquipment s2 turn 3');
+  if (fails.length) return fails;
+
+  const thumb = (n) => [...win.document.getElementById('board').querySelectorAll('.thumb[data-name]')]
+                        .find(t => t.dataset.name === n);
+  const spear = thumb('Shadowspear');
+  chk(!!spear, 'Shadowspear is on the battlefield');
+  chk(spear && spear.hasAttribute('data-activate'), 'an Equipment in play is CLICKABLE (data-activate)');
+  if (!spear || !spear.hasAttribute('data-activate')) return fails;
+
+  spear.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  const q = st().plan[0];
+  chk(st().plan.length === 1 && q && q.kind === 'activate' && q.verb === 'equip',
+      'one click queues an activate entry carrying the equip verb');
+  chk(win.LineBuild.encodeLine(st().plan) === 'equip=Shadowspear',
+      `the line encodes as equip=<name>, got "${win.LineBuild.encodeLine(st().plan)}"`);
+
+  await win.commitLine(); await settle(win);
+  // A multi-host board resolves as `choose`: walk the dialog by clicking the first option of each
+  // dimension until it closes (the same clicks a human makes).
+  for (let i = 0; i < 6; i++) {
+    const pick = win.document.querySelector('#decpanel .varpick');
+    if (!pick) break;
+    pick.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    await settle(win);
+  }
+  chk(!S(win).hadReject, 'the equip line is ACCEPTED by the engine (not a reject)');
+  const after = st().decision;
+  const bf = (after && after.me && after.me.battlefield) || [];
+  const eq = bf.find(p => p.name === 'Shadowspear');
+  chk(eq && eq.attached_to > 0, `Shadowspear is ATTACHED after the commit (attached_to=${eq && eq.attached_to})`);
+  // ...and is drawn the way an Aura is: inside its host's .enchgroup stack, not free-floating.
+  const grouped = [...win.document.querySelectorAll('#board .enchgroup .thumb[data-name]')]
+                    .some(t => t.dataset.name === 'Shadowspear');
+  chk(grouped, 'the attached Equipment renders stacked behind its host (.enchgroup), like an Aura');
+  return fails;
+}
+
 (async () => {
   let anyFail = false;
   // #4 firebreathe GUI bookkeeping (fast, DOM-only — no game needed).
@@ -385,6 +522,10 @@ async function testBoardActivation() {
     const coFails = testCastOrderBookkeeping(win);
     if (coFails.length) { anyFail = true; console.log(`✗ cast_order bookkeeping: ${coFails.length} fail`); coFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ cast_order GUI bookkeeping (canonical diff + side-channel + undo)'); }
+    // Queue-time activation picker (fast, DOM-only).
+    const apFails = testActivationPicker(win);
+    if (apFails.length) { anyFail = true; console.log(`✗ activation picker: ${apFails.length} fail`); apFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ activation picker renders for sfput / jittemode / attachall'); }
   }
   // Board-activated ability reachable + resolving (needs a real game walk, so it runs on its own).
   {
@@ -393,6 +534,14 @@ async function testBoardActivation() {
     catch (e) { console.error(`✗ board activation: harness error: ${e.stack || e}`); process.exit(2); }
     if (baFails.length) { anyFail = true; console.log(`✗ board activation: ${baFails.length} fail`); baFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ board-activated ability (Krenko: clickable → queued → accepted → tokens)'); }
+  }
+  // Equip reachable + resolving + displayed like an Aura (needs a real game walk).
+  {
+    let eqFails;
+    try { eqFails = await testEquip(); }
+    catch (e) { console.error(`✗ equip: harness error: ${e.stack || e}`); process.exit(2); }
+    if (eqFails.length) { anyFail = true; console.log(`✗ equip: ${eqFails.length} fail`); eqFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ equip (Equipment: clickable → equip= line → accepted → attached → stacked on its host)'); }
   }
   for (const sc of SCENARIOS) {
     let res;
@@ -407,6 +556,18 @@ async function testBoardActivation() {
       }
     } else {
       console.log(`✓ ${res.deck} s${res.seed}: ${res.rests} rest points, undo reproduces history exactly`);
+    }
+  }
+  // Panel-render errors collected across every walked frame. Deduped by type+message: a broken panel
+  // throws once per time the deck plays into it, and one line per distinct break is what you want.
+  {
+    const uniq = [...new Set(PANEL_ERRORS)];
+    if (uniq.length) {
+      anyFail = true;
+      console.log(`✗ decision panel render: ${uniq.length} distinct error(s) — the modal cannot be drawn, so the game is stuck on a dead board:`);
+      uniq.forEach(m => console.log('  - ' + m));
+    } else {
+      console.log(`✓ decision panels rendered clean for every type reached (${[...RENDERED_TYPES].sort().join(' ') || 'none'})`);
     }
   }
   process.exit(anyFail ? 1 : 0);

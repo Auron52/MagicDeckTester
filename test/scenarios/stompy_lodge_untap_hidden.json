@@ -1,0 +1,23 @@
+{
+ "_comment": "The other half of the Wirewood Lodge viewer rule (2026-08-23): when its {G} is NOT payable the option must NOT be offered to a human -- 'a plan menu must never contain a silent no-op option'. Board: untapped Lodge (which makes {C}, not {G}), a TAPPED Elvish Archdruid (so the tapped-Elf gate passes) and a TAPPED Forest with no Arbor Elf to untap it, so nothing can produce {G}. Without the human-play trial-pay gate the action is enumerated here and the click does nothing: everything upstream reasons about the over-approximate AvailableManaPool while the trailing apply pays through the exact TapForCostDirect. Autonomous enumeration deliberately keeps the looser gate (its trailing apply runs after the plan's casts, which enumeration cannot see) -- see stompy_lodge_burst.json for the burst it needs that looseness to find.",
+ "deck": "decks/StompySurprise/StompySurprise.cod",
+ "turn": 5,
+ "on_the_play": true,
+ "max_turns": 5,
+ "active_life": 20,
+ "opponent_life": 20,
+ "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1" },
+ "battlefield": [
+  { "name": "Wirewood Lodge", "controller": 0, "tapped": false },
+  { "name": "Forest", "controller": 0, "tapped": true },
+  { "name": "Elvish Archdruid", "controller": 0, "tapped": true, "sick": false }
+ ],
+ "hand": [],
+ "library_filler": "Forest",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "cast=Wirewood Lodge",
+ "expect_verdict": "legal_not_enumerated",
+ "expect_no_win": true
+}

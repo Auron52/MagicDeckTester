@@ -136,6 +136,70 @@ function checkDimensionWalk() {
   return fails;
 }
 
+// ---- Natural Order: the SACRIFICE victim is asked, and asked FIRST ---------------------------
+// "As an additional cost to cast this spell, sacrifice a green creature" is a real, irreversible
+// choice, but it rode Action::soulfire_own_targets with no sub -- so the per-victim plans shared a
+// signature, the dedup kept one, and the viewer silently ate the engine's pick (user-reported
+// 2026-08-23: "No choice was given for what to sacrifice to Natural Order"). It must also be asked
+// BEFORE the tutor target, because the victim GATES the fetch: a sacrificed Worldspine Wurm
+// shuffles itself back in and only then is a legal target. Synthetic + binary-free, like the walk
+// above; the engine half is guarded by the reference sweep and the scenario fixtures.
+function checkSacrificeDimension() {
+  const VICTIMS = ['Arbor Elf', 'Elvish Archdruid'];
+  const TARGETS = ['Worldspine Wurm', 'Craterhoof Behemoth', 'Terastodon'];
+  const variants = [];
+  let pi = 0;
+  for (const v of VICTIMS) for (const t of TARGETS) {
+    variants.push({ plan_index: pi++, label: `Natural Order sacrifices ${v}; Natural Order → ${t}`,
+                    subs: [{ key: 'Natural Order sacrifices', choice: v, card: v, kind: 'sacrifice' },
+                           { key: 'Natural Order →', choice: t, card: t, kind: 'tutor' }] });
+  }
+  const fails = [];
+  if (LB.dimensionsRemaining(variants) !== 2)
+    fails.push(`dimensionsRemaining = ${LB.dimensionsRemaining(variants)}, expected 2 (victim AND target)`);
+  const first = LB.nextDimension(variants);
+  if (!first || first.dim.kind !== 'sacrifice')
+    fails.push(`first picker is ${first ? first.dim.kind : 'none'}, expected the sacrifice victim ` +
+               `(it gates which creatures the fetch can find)`);
+  if (first && first.choices.length !== VICTIMS.length)
+    fails.push(`victim picker offered ${first.choices.length} choices, expected ${VICTIMS.length}`);
+  let remaining = first ? LB.filterByChoice(variants, first.dim.key, first.choices[0].choice) : variants;
+  const second = LB.nextDimension(remaining);
+  if (!second || second.dim.kind !== 'tutor')
+    fails.push(`second picker is ${second ? second.dim.kind : 'none'}, expected the tutor target`);
+  if (second && second.choices.length !== TARGETS.length)
+    fails.push(`target picker offered ${second.choices.length} choices, expected ${TARGETS.length}`);
+  return fails;
+}
+
+// ---- Board activations encode with the RIGHT LineSpec verb ------------------------------------
+// An activation of a permanent already in play is committed by a verb the engine chose (see the
+// `verb` field on the plan action). Writing the wrong one makes CheckLine reject a legal line: an
+// ActivatePump used to encode as `sacout=`, a verb only ever matched against SacForMana /
+// SacCreatureOutlet actions, so every Minotaur pump read as a reject; and equipping needs `equip=`
+// because `cast=Bonesplitter` cannot be told apart from CASTING the copy in hand.
+function checkActivationVerbs() {
+  const fails = [];
+  const enc = (entry) => LB.encodeLine([entry]);
+  const cases = [
+    [{ name: 'Krenko, Mob Boss', src: 'Krenko, Mob Boss', kind: 'activate' }, 'cast=Krenko, Mob Boss'],
+    [{ name: 'Skirk Prospector', src: 'Skirk Prospector', kind: 'activate', verb: 'sacout', sacout: true }, 'sacout=Skirk Prospector'],
+    [{ name: 'Skirk Prospector', src: 'Skirk Prospector', kind: 'activate', sacout: true }, 'sacout=Skirk Prospector'],  // legacy entry, no verb
+    [{ name: 'Bonesplitter', src: 'Bonesplitter', kind: 'activate', verb: 'equip' }, 'equip=Bonesplitter'],
+    [{ name: 'Balan, Wandering Knight', src: 'Balan, Wandering Knight', kind: 'activate', verb: 'attachall' }, 'attachall=Balan, Wandering Knight'],
+    [{ name: 'Colossus Hammer', src: 'Stoneforge Mystic', kind: 'activate', verb: 'sfput' }, 'sfput=Colossus Hammer'],
+    [{ name: "Umezawa's Jitte", src: "Umezawa's Jitte", kind: 'activate', verb: 'jittemode', mode: 1 }, 'jittemode=1'],
+  ];
+  cases.forEach(([entry, want]) => {
+    const got = enc(entry);
+    if (got !== want) fails.push(`${entry.src} (${entry.verb || 'default'}) encoded "${got}", expected "${want}"`);
+  });
+  // A line made only of board activations must NOT collapse to 'pass' (CheckLine stage 0).
+  const only = LB.encodeLine([{ name: 'Bonesplitter', src: 'Bonesplitter', kind: 'activate', verb: 'equip' }]);
+  if (only === 'pass') fails.push('an activation-only line encoded as "pass"');
+  return fails;
+}
+
 // The BONUS LAND DROP path (viewer issue #7). A Scale the Heights / Explore grant makes
 // me.land_drops_left > 1, and the engine's Plan still carries ONE land -- so a two-land turn is
 // committed as consecutive SEGMENTS. Both halves of that live here (queueCard must ADD rather than
@@ -213,7 +277,15 @@ function main() {
   landFails.forEach(m => console.log(`  FAIL  bonus land drop: ${m}`));
   console.log(`Viewer bonus land drop: ${landFails.length ? 'WRONG' : 'two drops commit as two segments'} ` +
               `(${landFails.length} FAIL)`);
-  return (fail + dimFails.length + landFails.length) ? 1 : 0;
+  const sacFails = checkSacrificeDimension();
+  sacFails.forEach(m => console.log(`  FAIL  sacrifice dimension: ${m}`));
+  console.log(`Viewer sacrifice picker: ${sacFails.length ? 'WRONG' : 'victim asked first, then the fetch target'} ` +
+              `(${sacFails.length} FAIL)`);
+  const verbFails = checkActivationVerbs();
+  verbFails.forEach(m => console.log(`  FAIL  activation verb: ${m}`));
+  console.log(`Viewer activation verbs: ${verbFails.length ? 'WRONG' : 'cast/sacout/equip/attachall/sfput/jittemode all encode'} ` +
+              `(${verbFails.length} FAIL)`);
+  return (fail + dimFails.length + landFails.length + sacFails.length + verbFails.length) ? 1 : 0;
 }
 
 process.exit(main());

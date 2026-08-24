@@ -189,20 +189,34 @@ external-chooser surface exposes:
   clairvoyance; clean games saved to tracked `references/`; a best-effort "what changed" strip
   after each action. Scryfall board reusing `tools/replay/` idioms. Combat, blocks,
   mulligan/bottoming stay on the engine heuristics.
+- **Board activations — single-click a permanent already in play.** A permanent whose ability the
+  model enumerates this phase carries a ⟳ badge; clicking it queues one activation, clicking again
+  removes it. Covered: creature-sac outlets (Skirk Prospector / Siege-Gang / Pashalik — you pick
+  which creature dies as each sacrifice resolves), Krenko's token tap, main-phase pumps, Call of the
+  Wild, **every planeswalker loyalty ability**, Garth, Wirewood Lodge's untap, and **all of the
+  equipment abilities** —
+  `equip` (attach an Equipment already in play), Balan's attach-all, Stoneforge's put-from-hand, the
+  Jitte's counter modes. A source offering *several* distinct activations opens a small picker
+  first (which Equipment to put, which Jitte mode); everything decided *after* the commit — which
+  creature an Equip attaches to, which loyalty ability, how many times a repeatable ability fires —
+  is asked by the ordinary choose-variant dialog. An **attached** Equipment renders stacked behind
+  its host exactly like an Aura, and stays clickable so you can move it. An ability is offered only
+  when it can really resolve *now* — the menu must never hold a silent no-op, so e.g. the Lodge's
+  untap is hidden when its `{G}` is not actually payable (the enumeration gate reasons about an
+  over-approximate mana pool; the human-play branch trial-pays the exact cost). See `DECISIONS.md` →
+  *Board activations* for the three wiring sites a new one needs.
 - **Next:**
-  - **Ability activation by single-click** — cycle/dig and Land's Edge discard as committable
-    line actions (new `LineSpec` kinds in `ParseLineSpec` + `CheckLine` matching/affordability).
-    Today single-click just hints; cast/play is double-click/drag. *(Creature-sac outlets — Skirk
-    Prospector, Siege-Gang, Pashalik — are DONE: single-click queues one `sacout=` activation per
-    creature, and you pick which creature dies as each sacrifice resolves. See `DECISIONS.md`.)*
+  - **The rest of ability activation by single-click** — cycle/dig and Land's Edge discard as
+    committable line actions. Today those two still only hint; cast/play is double-click/drag.
   - **Higher-fidelity resolved effects** — the "what changed" strip is a client-side state diff,
     so it can't show *which* card Gamble discarded or Soulfire's per-target flips. Faithful detail
     needs the `claude-play` apply path to emit the `tools/replay/` action log (Gamble discard /
     Soulfire reveals / targets) and the GUI to render that step.
   - Route **mulligan/keep/bottom** and **combat (attackers/blockers)** through the chooser too,
     for a fully human-controlled game.
-- **v1 line-check limits:** validates land + plain casts + tutors + sac-outlet activations;
-  only **{X}** casts report *unsupported*. The affordability sim models same-turn rock ramp + colour availability but uses the
+- **v1 line-check limits:** validates land + plain casts + tutors + every board activation
+  (`sacout=` / `equip=` / `attachall=` / `sfput=` / `jittemode=`); only **{X}** casts report
+  *unsupported*. The affordability sim models same-turn rock ramp + colour availability but uses the
   enumerator's over-approximate multi-colour "wild" mana, so a rare colour-contention line could
   read *legal* when the real payment can't make it — caught on artifact review. Reconciliation is
   **end-of-main-phase** (not end-of-turn).

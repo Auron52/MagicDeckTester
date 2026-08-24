@@ -1,0 +1,26 @@
+{
+ "_comment": "Equipping an Equipment ALREADY IN PLAY must be expressible as a viewer LINE (2026-08-23, user-reported: 'Equipment seems to be missing a way to equip in the viewer'). Two things had to exist for that: the plan action must be tagged as a board activation so the GUI makes the Equipment clickable, and Equip needs its OWN verb -- with it matched inside the ordinary cast= multiset (the legacy behaviour), 'equip the Bonesplitter in play' and 'cast the Bonesplitter in hand' encode identically and the viewer cannot ask for the first. WHICH creature it attaches to is NOT in the line: that is the `equip` sub-decision, so a two-host board grades `choose`, which is what this fixture pins.",
+ "deck": "decks/KittyEquipment/KittyEquipment.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 4,
+ "active_life": 20,
+ "opponent_life": 20,
+ "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1" },
+ "battlefield": [
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Kor Duelist", "controller": 0, "tapped": false, "sick": false },
+  { "name": "Kemba, Kha Regent", "controller": 0, "tapped": false, "sick": false },
+  { "name": "Bonesplitter", "controller": 0, "tapped": false }
+ ],
+ "hand": [],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "equip=Bonesplitter",
+ "expect_verdict": "choose",
+ "expect_no_win": true
+}

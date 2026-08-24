@@ -8555,6 +8555,25 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { any_match = true; break; }
                 }
                 if (!any_match) { continue; }
+                // HUMAN PLAY, second half of the same "never offer a silent no-op" rule: the tapped-Elf
+                // gate above is necessary but not sufficient, because the trailing apply pays through
+                // TapForCostDirect (exact) while everything upstream reasons about AvailableManaPool
+                // (over-approximate). Measured on StompySurprise s2 t6: the pool reported 5 green while
+                // the only untapped green sources were an Arbor Elf whose "untap target Forest" tap had
+                // no untapped Forest left, and an Elvish Mystic that entered off Call of the Wild that
+                // turn -- so the option was offered 127 times across 6 seeds and could never once fire.
+                // Trial-pay on a COPY (the same predicate the apply will run) and drop the action when
+                // it fails. Autonomous play is untouched -- it keeps the looser gate and does fire the
+                // ability (measured: 20/25, 13/22 and 0/4 executed activations over three 40-game
+                // seeds, with every paid attempt firing) -- so this is human-play-only and therefore
+                // byte-identical. Cost: one GameState copy per Lodge on the viewer path only.
+                if (HumanPlayActive())
+                {
+                    GameState probe = state;
+                    if (!TapForCostDirect(probe, sd->params.untap_creature_cost.value(),
+                                          /*for_creature=*/false))
+                    { continue; }
+                }
                 Action a;
                 a.kind           = Action::Kind::UntapCreature;
                 a.card_name      = src.card.m_name;
@@ -25162,6 +25181,17 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p)
         // summaries, so the viewer offered two indistinguishable menu entries with very different
         // mana consequences (same defect the sac-outlet count fixed for viewer issue #4).
         else if (a.free_cast) { cast_names.push_back(a.card_name + " (free)"); }
+        // Equipment activations: say what they DO. Listed bare under "cast:", an equip-only line
+        // read "cast: Umezawa's Jitte" -- which is a different (and impossible) play from attaching
+        // the copy already in play, and gave the human no way to tell the two menu entries apart.
+        else if (a.kind == Action::Kind::Equip)
+        { cast_names.push_back("equip " + a.card_name); }
+        else if (a.kind == Action::Kind::AttachAllEquipment)
+        { cast_names.push_back(a.card_name + ": attach all Equipment"); }
+        else if (a.kind == Action::Kind::PutFromHandAbility)
+        { cast_names.push_back("put " + a.card_name + " from hand"); }
+        else if (a.kind == Action::Kind::JitteModeAbility)
+        { cast_names.push_back(a.card_name + (a.gy_exile_mode == 1 ? ": -1/-1" : ": gain 2 life")); }
         else { cast_names.push_back(a.card_name); }
     }
     s += "cast: ";
@@ -25217,7 +25247,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     if (spec.pass || (!spec.has_land && spec.casts.empty() && spec.lands_edge == 0 &&
                       spec.vial_deploys.empty() && spec.retrace_casts.empty() &&
                       spec.sac_outlets.empty() && spec.attach_all.empty() &&
-                      spec.sf_puts.empty() && spec.jitte_modes.empty()))
+                      spec.sf_puts.empty() && spec.jitte_modes.empty() && spec.equips.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -25248,6 +25278,13 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     const bool attachall_declared = !spec.attach_all.empty();
     const bool sfput_declared     = !spec.sf_puts.empty();
     const bool jitte_declared     = !spec.jitte_modes.empty();
+    // Equip, same declared-vs-legacy split. Declared (the viewer's `equip=` verb) matches Equip
+    // actions against their OWN multiset, so a hand cast of the same-named Equipment no longer
+    // collides with equipping the copy already in play; empty keeps the legacy card-name-in-casts
+    // behaviour every saved reference was recorded under.
+    std::vector<std::string> sortedEquips = spec.equips;
+    std::sort(sortedEquips.begin(), sortedEquips.end());
+    const bool equip_declared     = !spec.equips.empty();
 
     // --- 1) Does the line match a plan (or several variants) the model would play? ----
     // A "match" is same land + same multiset of cast card names. Several enumerated plans can
@@ -25285,7 +25322,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         //                         prefers the no-sac plan (saving the one-shot source; see the pool sort).
         int planLE = 0, planSacs = 0;
         std::vector<std::string> orderNames, vialNames, retraceNames, sacOutNames;
-        std::vector<std::string> attachAllNames, sfPutNames;
+        std::vector<std::string> attachAllNames, sfPutNames, equipNames;
         std::vector<int> jitteModes;
         for (const Action& a : p.actions)
         {
@@ -25311,6 +25348,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             { sfPutNames.push_back(a.card_name); continue; }
             if (jitte_declared && a.kind == Action::Kind::JitteModeAbility)
             { jitteModes.push_back(a.gy_exile_mode); continue; }
+            if (equip_declared && a.kind == Action::Kind::Equip)
+            { equipNames.push_back(a.card_name); continue; }
             orderNames.push_back(a.card_name);
         }
         if (planLE != spec.lands_edge) { continue; }
@@ -25337,6 +25376,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             std::vector<int> v2 = jitteModes;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedJitteModes) { continue; }
+        }
+        if (equip_declared)
+        {
+            std::vector<std::string> v2 = equipNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedEquips) { continue; }
         }
         std::vector<std::string> sortedNames = orderNames;
         std::sort(sortedNames.begin(), sortedNames.end());
@@ -25372,6 +25417,31 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         int trickRank = 0;
         for (const Action& a : p.actions)
         {
+            // Natural Order's "As an additional cost to cast this spell, sacrifice a green creature":
+            // WHICH of your creatures dies is the player's call -- and an irreversible one -- but the
+            // enumerated victim rode Action::soulfire_own_targets (a card m_number) with NO sub, so the
+            // per-victim plans shared a signature, the dedup kept the first-enumerated one, and the
+            // viewer silently sacrificed the engine's pick with no dialog at all (user-reported: "no
+            // choice was given for what to sacrifice to Natural Order" -- it ate the Arbor Elf).
+            // Emitted BEFORE the tutor sub of the same action so the label reads in cost-then-effect
+            // order, and asked before it too (linebuild.js SUBKIND_PRI): the victim GATES the fetch --
+            // a sacrificed Worldspine Wurm shuffles itself back into the library and is then a legal
+            // target -- so the coupling only reads correctly in that direction.
+            {
+                const CardDefinition* vdef = CardDatabase::Instance().Lookup(a.card_name);
+                if (vdef && !vdef->params.sac_additional_creature_color.empty()
+                    && a.soulfire_own_targets > 0)
+                {
+                    std::string vn;
+                    for (const Permanent& perm : state.battlefield)
+                    { if (perm.card.m_number == a.soulfire_own_targets) { vn = perm.card.m_name.str(); break; } }
+                    if (!vn.empty())
+                    {
+                        addSub(a.card_name + " sacrifices " + vn, a.card_name + " sacrifices",
+                               vn, vn, "sacrifice");
+                    }
+                }
+            }
             if (!a.tutor_target.empty())   { addSub(a.card_name + " \xE2\x86\x92 " + a.tutor_target, a.card_name + " \xE2\x86\x92", a.tutor_target, a.tutor_target, "tutor"); }
             // Zada/Mirrorwing solo-target trick: the target rides enchant_target (the aura precedent),
             // but it is NOT a sub-decision the human makes HERE. ResolveSoloTargetTrick re-asks it at
@@ -25444,6 +25514,18 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                 const std::string desc = std::to_string(dmg) + " damage + " + std::to_string(draws)
                                        + " card" + (draws == 1 ? "" : "s");
                 addSub(a.card_name + " " + desc, a.card_name + " modes", desc, a.card_name, "modal");
+            }
+            // A REPEATABLE battlefield activation enumerates its per-turn COUNT K as mutually-exclusive
+            // variants carrying K on chosen_x (Call of the Wild's "{2}{G}{G}: reveal the top card",
+            // Burning-Fist / Sethron's pumps). That is a count of activations, not an {X} in a cost, so
+            // the generic branch below labelled it "X=2" -- meaningless on a card with no {X}. Give it
+            // its own sub so the human picks "activate twice" from a readable list.
+            else if ((a.kind == Action::Kind::ActivateRevealTop || a.kind == Action::Kind::ActivatePump)
+                     && a.chosen_x > 0)
+            {
+                const std::string times = "\xC3\x97" + std::to_string(a.chosen_x);   // ×K
+                addSub(a.card_name + " " + times, a.card_name + " activations", times,
+                       a.card_name, "activations");
             }
             else if (a.chosen_x > 0)       { addSub(a.card_name + " X=" + std::to_string(a.chosen_x), a.card_name + " X", "X=" + std::to_string(a.chosen_x), a.card_name, "x"); }
             // NOTE: a.ponder_keep is deliberately NOT a variant token. The Ponder reorder (keep-top
@@ -25525,11 +25607,53 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                         ab.effect == "face_damage"           ? (std::to_string(ab.amount) + " damage") :
                         ab.effect == "food_token"            ? "create a Food token" :
                         ab.effect == "elk_transform"         ? "turn a permanent into a 3/3 Elk" :
+                        // Bolas's -2. Missing from this map, so the dialog offered the human a raw
+                        // "-2: steal_creature" next to a plain-English "+3: destroy a noncreature
+                        // permanent" -- the only ability of the three walkers that read as source code.
+                        ab.effect == "steal_creature"        ? "gain control of a creature" :
                                                                ab.effect;
                     const std::string desc = (ab.delta >= 0 ? "+" : "") + std::to_string(ab.delta)
                                            + ": " + what;
                     addSub(a.card_name + " " + desc, a.card_name + " ability", desc,
                            a.card_name, "loyalty");
+                }
+                // EQUIP host: which creature this Equipment attaches to. The enumerator emits one
+                // Equip action per legal host, all carrying the SAME card_name, so without a sub they
+                // shared a signature and the dedup silently attached to the first-enumerated host --
+                // exactly the loyalty failure above, on the central action of an equipment deck.
+                // `card` = the HOST so the choose grid shows the creature you are equipping, which is
+                // the thing being decided (the Equipment is already named in the line summary).
+                if (a.kind == Action::Kind::Equip && a.sac_victim_id != 0)
+                {
+                    std::string hn;
+                    for (const Permanent& perm : state.battlefield)
+                    {
+                        if (perm.controller_index == state.active_player_index
+                            && perm.card.m_number == a.sac_victim_id)
+                        { hn = perm.card.m_name.str(); break; }
+                    }
+                    if (!hn.empty())
+                    {
+                        addSub(a.card_name + " \xE2\x86\x92 " + hn, a.card_name + " equips to",
+                               hn, hn, "equip");
+                    }
+                }
+                // Umezawa's Jitte's non-combat modes: mode 1 shrinks a creature (sac_victim_id names
+                // it), mode 2 gains 2 life. Both are JitteModeAbility actions on the same card, so
+                // the same dedup collapse applies. The `jittemode=` LineSpec verb carries the MODE,
+                // so this sub is what lets the human pick it (and, in mode 1, which creature).
+                if (a.kind == Action::Kind::JitteModeAbility)
+                {
+                    std::string desc = "gain 2 life";
+                    if (a.gy_exile_mode == 1)
+                    {
+                        std::string tn;
+                        for (const Permanent& perm : state.battlefield)
+                        { if (perm.card.m_number == a.sac_victim_id) { tn = perm.card.m_name.str(); break; } }
+                        desc = "-1/-1 to " + (tn.empty() ? std::string("a creature") : tn);
+                    }
+                    addSub(a.card_name + " " + desc, a.card_name + " counter", desc,
+                           a.card_name, "jitte");
                 }
                 if (state.free_casts_available > 0
                     && a.kind == Action::Kind::CastFromHand && !a.alt_cost)

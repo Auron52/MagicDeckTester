@@ -631,41 +631,70 @@ function activatableSources(){
   const d = S.decision;
   if (!d) return {};
   if (S._actSrcFor === d.decision_index && S._actSrc) return S._actSrc;
-  const max = {}, sacout = {};
+  const max = {}, sacout = {}, opts = {};
   (d.plans||[]).forEach(p=>{
     const per = {};
     // A sac outlet contributes its sac_count, not 1: one Skirk Prospector action with sac_count:3
     // is THREE creatures sacrificed, and the line verb carries one token per creature — so the cap
     // on how many times the human may click it is the largest burst any plan offers.
+    // `activate_source` is the CLICKED permanent when it isn't the action's own card (Stoneforge
+    // Mystic's put names the Equipment it puts, which is in HAND) — key the affordance on that.
     (p.actions||[]).forEach(a=>{ if (a && a.activate && a.card) {
-      per[a.card]=(per[a.card]||0)+(a.sacout ? Math.max(1, a.sac_count||1) : 1);
-      if (a.sacout) sacout[a.card]=true;
+      const src = a.activate_source || a.card;
+      per[src]=(per[src]||0)+(a.sacout ? Math.max(1, a.sac_count||1) : 1);
+      if (a.sacout) sacout[src]=true;
+      // Every distinct (verb, payload) this source can produce, deduped — the menu a two-step
+      // activation offers after the first click (which Equipment to put, which Jitte mode).
+      const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+a.card;
+      (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:a.card };
     }});
     Object.keys(per).forEach(n=>{ if (!(max[n]>=per[n])) max[n]=per[n]; });
   });
   S._actSrcFor = d.decision_index; S._actSrc = max; S._sacOutSrc = sacout;
+  S._actOpts = {}; Object.keys(opts).forEach(n=>{ S._actOpts[n] = Object.keys(opts[n]).map(k=>opts[n][k]); });
   return max;
 }
 // Is this battlefield permanent a SAC OUTLET (its activation eats a creature) rather than a plain
 // activated ability? Decides the line verb (sacout= vs cast=) and the hint wording.
 function isSacOutletSource(name){ activatableSources(); return !!(S._sacOutSrc||{})[name]; }
-function activateCount(name){ return S.plan.filter(p=>p.kind==='activate' && p.name===name).length; }
+// The distinct activations this source offers, as {verb, mode, name} (name = what the line verb
+// names, which for Stoneforge's put is the Equipment, not the source).
+function activationOptions(name){ activatableSources(); return (S._actOpts||{})[name] || []; }
+function activateCount(name){ return S.plan.filter(p=>p.kind==='activate' && p.src===name).length; }
 // Queue (or unqueue) one activation of a battlefield permanent's ability. Toggles the LAST queued
 // activation off when already at the cap, so a click always does something visible.
+// A source offering SEVERAL distinct activations (Stoneforge: which Equipment to put; a Jitte:
+// which counter mode) opens a picker instead of guessing — the same click-then-choose shape the
+// Aether Vial deploy already uses.
 function toggleActivate(name){
   if (S.over || !S.decision || S.decision.type!=='main_phase') return;
   hideVerdict();
   const cap = activatableSources()[name]||0, have = activateCount(name);
   if (have >= cap) {                                  // at the cap -> clicking removes the last one
-    const i = S.plan.map(p=>p.kind==='activate'&&p.name===name).lastIndexOf(true);
+    const i = S.plan.map(p=>p.kind==='activate'&&p.src===name).lastIndexOf(true);
     if (i>=0) { S.plan.splice(i,1); flashHint(`Removed ${name}’s ability from this turn’s line.`); renderBoard(); }
     return;
   }
-  const sac = isSacOutletSource(name);
-  S.plan.push(sac ? {name, kind:'activate', sacout:true} : {name, kind:'activate'});
+  const opts = activationOptions(name);
+  if (opts.length > 1) { S.actPick = { src:name, opts }; renderBoard(); return; }
+  queueActivation(name, opts[0] || { verb:'cast', mode:null, name });
+}
+// Commit one chosen activation into the plan. `src` is the permanent clicked; `opt` says which verb
+// the line writes and what it names. Kept apart from toggleActivate so the picker can call it.
+function queueActivation(src, opt){
+  const sac = isSacOutletSource(src);
+  const cap = activatableSources()[src]||0, have = activateCount(src);
+  S.actPick = null;
+  // A sac outlet's verb is sacout=, whatever the action said — the engine only tags `verb` on the
+  // kinds with a dedicated one, and `sacout` predates that field.
+  S.plan.push({ name:opt.name, src, kind:'activate', verb:(sac ? 'sacout' : (opt.verb||'cast')),
+                mode:opt.mode, sacout: sac || undefined });
   flashHint(sac
-    ? `${name}: sacrificing ${have+1} creature${have?'s':''}${cap>1?` (max ${cap})`:''} — click again to sac another, then commit. You pick WHICH creature as each one resolves.`
-    : `Activating ${name}’s ability${cap>1?` (${have+1}/${cap})`:''}. Commit the phase to resolve it.`);
+    ? `${src}: sacrificing ${have+1} creature${have?'s':''}${cap>1?` (max ${cap})`:''} — click again to sac another, then commit. You pick WHICH creature as each one resolves.`
+    : opt.verb==='sfput' ? `${src}: putting ${opt.name} from hand onto the battlefield. Commit the phase to resolve it.`
+    : opt.verb==='attachall' ? `${src}: attaching every Equipment you control to it. Commit the phase to resolve it.`
+    : opt.verb==='jittemode' ? `${src}: spending a charge counter (${opt.mode===1?'−1/−1 on a creature':'gain 2 life'}). Commit the phase to resolve it.`
+    : `Activating ${src}’s ability${cap>1?` (${have+1}/${cap})`:''}. Commit the phase to resolve it.`);
   renderBoard();
 }
 function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
@@ -727,10 +756,21 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
     `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/>`+
     src+`<em>${esc(entry.name)}</em></span>`;
 }
-// A RESOLVED aura stacked BEHIND its host, shifted up so its top bar (name) peeks out identifiably.
+// A RESOLVED aura (or attached Equipment) stacked BEHIND its host, shifted up so its top bar (name)
+// peeks out identifiably. An attached EQUIPMENT stays clickable when the engine still enumerates an
+// Equip for it — that is how you MOVE it to another creature (Grafted Wargear's re-host, parking the
+// Greaves on the next threat). Without data-activate here an equipment became unusable the moment it
+// was attached, because attached permanents render through this path instead of bfThumb.
 function auraAttThumb(o, z, top) {
-  return `<span class="thumb spell aura-att" style="z-index:${z};top:${top}px" data-name="${esc(o.name)}" title="${esc(o.name)} — enchanting">`+
-    `<img loading="lazy" src="${scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(o.name)}</em></span>`;
+  const actCap = !S.over ? (activatableSources()[o.name]||0) : 0;
+  const actN   = actCap ? activateCount(o.name) : 0;
+  const what   = o.is_equip ? 'equipping' : 'enchanting';
+  const attrs  = actCap ? ` data-activate="${esc(o.name)}" title="${esc(o.name)} — ${what}; click to re-equip it this phase${actN?' (click again to remove)':''}"`
+                        : ` title="${esc(o.name)} — ${what}"`;
+  return `<span class="thumb spell aura-att${actCap?' act-src':''}${actN?' act-on':''}" style="z-index:${z};top:${top}px" data-name="${esc(o.name)}"${attrs}>`+
+    `<img loading="lazy" src="${scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/>`+
+    (actCap?`<span class="actbadge" title="activated ability available">⟳${actN?` ×${actN}`:''}</span>`:'')+
+    `<em>${esc(o.name)}</em></span>`;
 }
 // A PLANNED aura (dragged onto this creature this turn, not yet cast) — same stack, planned styling +
 // an order badge and a remove ✕ (reuses the .thumb.planned .rm[data-rm] handler wired after render).
@@ -961,7 +1001,9 @@ function renderBoard() {
   if (isMain) h += `<div id="planbar"></div>`;
   board.innerHTML = h;
   renderBanner(); renderEffects(); if(isMain){ renderPlanbar(); renderHand(); } wireBoard();
-  if (dec) { wireDecisionBoard(d, dec); renderDecisionPanel(d, dec); } else hideDecPanel();
+  if (dec) { wireDecisionBoard(d, dec); renderDecisionPanel(d, dec); }
+  else if (S.actPick) renderActivationPicker();   // queue-time "which ability?" (see below)
+  else hideDecPanel();
 }
 
 function renderBanner() {
@@ -982,7 +1024,17 @@ function renderPlanbar() {
   const chips = S.plan.map((p,i)=>{
     if (p.kind==='le') return '';
     const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':p.kind==='activate'?'act':(p.kind==='land'?'land':'spell');
-    const tag = (p.kind==='vial'?' ⚡':p.kind==='retrace'?' ↩':p.kind==='activate'?' ⟳ ability':'')
+    // A board activation names WHAT it does where the verb already says so — "⟳ ability" on four
+    // chips reading "Bonesplitter / Shadowspear / Balan / Stoneforge" tells you nothing about which
+    // of them equips, attaches everything, or puts a card from hand.
+    const act = p.kind!=='activate' ? ''
+              : p.verb==='equip'     ? ' ⟳ equip'
+              : p.verb==='attachall' ? ' ⟳ attach all'
+              : p.verb==='sfput'     ? ' ⟳ put from hand'
+              : p.verb==='jittemode' ? (p.mode===1?' ⟳ −1/−1':' ⟳ gain 2')
+              : p.verb==='sacout'    ? ' ⟳ sacrifice'
+              :                        ' ⟳ ability';
+    const tag = (p.kind==='vial'?' ⚡':p.kind==='retrace'?' ↩':act)
               + (p.targetName?` → ${esc(p.targetName)}`:'');
     // An Aura chip (something with legal enchant targets) is draggable onto a creature to (re)aim it.
     const isAura = p.kind!=='land' && p.kind!=='activate' && Object.keys(enchantTargetsFor(p.name)).length>0;
@@ -1290,7 +1342,10 @@ function renderChooseDialog(v, line){
     const step = picks.length + 1, total = picks.length + LB.dimensionsRemaining(remaining);
     // dim.key is "<card> →" / "<land> fetches" / "<card> X" / "<card> own targets" -- the leading
     // card name is the source. Strip the trailing relation word to get the art to show.
-    const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|face)\s*$/,'').trim();
+    // Every relation word a dimension key can end with must be listed, or the leftover text is asked
+    // of Scryfall as a card name and the header art comes back broken ("Natural Order sacrifices" is
+    // not a card). Keep this in sync with the addSub() keys in TurnSolver::CheckLine.
+    const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|face|sacrifices|activations|equips to|counter|ability|modes|strive|cost)\s*$/,'').trim();
     const crumbs = picks.length
       ? `<div class="chosen">${picks.map(p=>`<span class="crumb">${esc(p.key)} <b>${esc(p.choice)}</b></span>`).join('')}</div>`
       : '';
@@ -1632,6 +1687,44 @@ function renderDecisionPanel(d, dec){
 }
 function hideDecPanel(){ const p=$('decpanel'); p.className=''; p.innerHTML=''; const b=$('decback'); b.className=''; b.style.display='none'; }
 
+// ---- Activation picker (a source with SEVERAL distinct activations) -------------------------
+// Not an engine decision — a QUEUE-time choice, because the LineSpec verb has to name what it
+// activates before the line is committed: Stoneforge Mystic's put names the Equipment (so
+// `sfput=Colossus Hammer` and a hard cast of the same card stay tellable apart), and a Jitte's
+// counter-spend names the MODE (`jittemode=1`). Anything decided AFTER the commit belongs in the
+// engine's choose-variant dialog instead (that is where an Equip's host is picked).
+// Reuses #decpanel, which is free during a main phase (main_phase is not in SUBDECISIONS).
+function activationPickerHtml(pick){
+  // A Jitte is the case that needs all four branches at once: it is an Equipment you can attach AND
+  // a source of two counter modes, so "Activate Umezawa's Jitte" three times would say nothing.
+  const label = o => o.verb==='sfput'     ? `Put ${o.name} onto the battlefield`
+                   : o.verb==='attachall' ? `Attach every Equipment to ${pick.src}`
+                   : o.verb==='equip'     ? `Equip ${o.name} to a creature`
+                   : o.verb==='jittemode' ? (o.mode===1 ? '−1/−1 to a creature' : 'Gain 2 life')
+                   :                        `Activate ${o.name}`;
+  let h=`<h3>${esc(pick.src)} — choose an ability</h3>`;
+  h+=`<div class="sub">This permanent offers more than one activation this phase. Pick the one to add to your line, then <b>Commit phase</b>.</div>`;
+  h+=`<div class="tutgrid">`;
+  pick.opts.forEach((o,i)=>{
+    h+=`<span class="cardmini tdig" data-actopt="${i}" title="${esc(label(o))}">`+
+       `<img loading="lazy" src="${scryImg(o.verb==='jittemode'||o.verb==='attachall'?pick.src:o.name,'small')}" onerror="this.style.opacity=.15"/>`+
+       `<em>${esc(label(o))}</em></span>`;
+  });
+  h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+     `<button class="ghost" data-actopt="-1">Cancel</button></div>`;
+  return h;
+}
+function renderActivationPicker(){
+  const pick=S.actPick, panel=$('decpanel'), back=$('decback');
+  back.className='modal'; back.style.display='block';
+  panel.className='show modal'; panel.innerHTML=activationPickerHtml(pick);
+  panel.querySelectorAll('[data-actopt]').forEach(el=>{
+    el.onclick=()=>{ const i=+el.dataset.actopt;
+      if (i<0) { S.actPick=null; renderBoard(); return; }
+      queueActivation(pick.src, pick.opts[i]); };
+  });
+}
+
 // A small card-art tile (image + truncated name) for the dialogs. `ver` is the Scryfall image
 // version: default 'small' (the 54px grids), 'normal' for a dialog that shows ONE card large.
 function cardMini(name, extraCls, ver){ return `<span class="cardmini ${extraCls||''}" data-name="${esc(name)}">`+
@@ -1692,7 +1785,13 @@ function digPanelHtml(d){
 // (highest-MV) is tagged.
 function lackeyPanelHtml(d){
   const cands=d.candidates||[];
-  const defName=(cands.find(c=>c.index===d.heuristic_default)||{}).name;
+  // `lackey_put` carries only heuristic_default (unlike free_cast, whose default is a deliberate
+  // decline and whose suggestion rides a separate ai_pick) — read both so the AI-pick tag is right
+  // either way. This was a bare `aiPick` copy-pasted from freeCastPanelHtml, i.e. an undeclared
+  // identifier: rendering the panel threw a ReferenceError, so the modal never appeared and the
+  // game froze the moment Goblin Lackey connected (user-reported, Goblins seed 25).
+  const aiPick=(d.ai_pick===undefined? d.heuristic_default : d.ai_pick);
+  const defName=(cands.find(c=>c.index===aiPick)||{}).name;
   let h=`<h3>Goblin Lackey — put a Goblin into play</h3>`;
   h+=`<div class="sub"><b>${esc(d.source||'Goblin Lackey')}</b> dealt combat damage — you may put a Goblin permanent card from your hand onto the battlefield. Click one, or decline.</div>`;
   h+=`<div class="tutgrid">`;
@@ -2592,6 +2691,7 @@ function autoResolveDecision(dec){
 }
 function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n));
   S.decision=dec; S.over=false; S.result=null; S.leMode=false; S.vialMode=null; S.boardSel=null; S._selFor=null;
+  S.actPick=null;   // a half-open activation picker belongs to the decision it was opened on
   // When this decision was reached by an UNDO (user stepping back), suppress the forward-play
   // auto-advance below for THIS one decision: the dead-opponent auto-pass / commit-turn skip exist to
   // spare a FORWARD player clicking through a decided game, but on undo they would instantly re-commit
