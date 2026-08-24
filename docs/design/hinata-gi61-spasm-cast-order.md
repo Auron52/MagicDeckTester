@@ -3,6 +3,11 @@
 **Status:** OPEN, root-caused, not fixed. Found 2026-08-24 while asking why commit `72226ff1`
 "made things worse" — it did not (see §1); this is the regression it made visible.
 
+> **§7 CORRECTS §2.** Measured properly afterwards — 9,800 games per arm against the two sides of
+> `eaccc120` — the rank change is **exactly neutral on Hinata** (total turn-delta +0; 11 games
+> better, 8 worse). The +0.0159 in the ground truth is a small-sample artifact of gi61 landing in
+> the smoke seed and being counted three times. Read §7 before quoting §2's per-deck table.
+
 ## 1. It is not `72226ff1`
 
 `72226ff1` contains no engine source: a checker, a harness warning, and 25 repaired
@@ -105,3 +110,64 @@ it needs the full suite as its A/B rather than a one-game fix. Recorded rather t
 
 Related: `docs/design/cast-order-ideal-with-ranges.md`, `docs/design/th-colourless-first-s3003-gi301.md`
 (the same session's Land's Edge bug, and the same lesson about instrumenting the decision site).
+
+## 7. Measured: the rank change is a WASH on Hinata, not a regression
+
+§2 read Hinata's +0.0159 off the ground truth. That is four cells, two of them 150 and 75 games —
+denominators small enough that one game is worth +0.0067 and +0.0133. So it was measured properly:
+**9,800 games per arm**, built from the two sides of `eaccc120` itself (`/tmp/ec_pre` = `eaccc120^`,
+`/tmp/ec_post` = `eaccc120`), across d0 x 8 seeds x 1000, d3 x 4 x 300, d5 x 4 x 150.
+
+| | |
+|---|---|
+| pooled total turn-delta | **+0** (avg +0.000000) |
+| games whose PLAY changed | 76 / 9,800 = **0.78%** |
+| of those, games whose SCORE changed | 19 |
+| better / worse | **11 / 8** |
+
+Exactly neutral. Hinata runs **one** Sol Ring, and it is the only card in the deck the `{C}`-only
+branch applies to (Izzet Signet produces `U`/`R`), which is why the binding rate is under 1%. This
+is a high-variance, low-frequency lever: it re-rolls a handful of games in both directions and nets
+zero. `eaccc120` is carried by stompy (-0.0380 over 6 cells, none worse) and costs Hinata nothing.
+
+**Attribution is exact, not inferred.** gi61 flips at `eaccc120` itself — turn 8 to a loss at d0,
+d3 AND d5 — against its own parent build. The commit's only code change is one line of
+`ManaSourceRank` (`{C}`-only 10 -> 5); the rest is ground truth and a viewer test.
+
+### 7.1 The games the suite never saw are the interesting ones
+
+The two largest moves in the whole sweep are both outside the suite's cells:
+
+| game | | |
+|---|---|---|
+| `d0 s8008 gi939` | 8 -> **6** | biggest gain |
+| `d0 s4004 gi752` | loss -> **8** | an unwon game rescued |
+| `d0 s5005 gi322` | 4 -> **loss** | **biggest regression — larger than gi61** |
+
+gi322 is worth reading, because it is §4's defect in a second costume. Turn 2, same hand in both
+arms; both play Mountain, cast Sol Ring `{1}` and Ornithopter `{2}`. The pre arm then **stops** —
+out of mana. The post arm has a red source spare (Sol Ring's `{C}` absorbed the generic pips) and
+spends it on **`Gamble {R}`**, which tutors Reality Spasm and then, per its
+`discard_random_after_tutor`, discards at random — hitting **Hinata, Dawn-Crowned**, the deck's
+namesake payoff. Turn-4 win becomes a loss.
+
+So the two worst regressions share a cause, and it is not the tap order:
+
+> `eaccc120` leaves MORE coloured mana unspent, and the engine spends it on a marginal cast that is
+> net negative — a mana SINK before the untap ENGINE (gi61), or a tutor whose random-discard cost
+> it does not price (gi322).
+
+That is a "cast everything affordable" bias, not an affordability bug. The rank change is only the
+thing that hands it the extra mana. Both instances are at d0, where no search exists to reject the
+marginal cast; gi61 also survives a gate-budget search (§5).
+
+### 7.2 What this changes about the fix
+
+§6 proposed a cast-order rule (mana-positive before mana-sink). That still addresses gi61, but gi322
+shows the class is wider than ordering: Gamble is not mis-ORDERED, it should not be cast at all with
+the only Hinata in hand. Pricing `discard_random_after_tutor` against what is in hand is a separate,
+smaller fix and is probably the cheaper of the two to validate.
+
+Neither is attempted here. Both touch shared, all-deck machinery (the cast-order comparator; the
+tutor value model), and the deck-level measurement says there is **no aggregate regression to chase**
+— these are two latent defects worth fixing on their own merits, not a reason to revisit `eaccc120`.
