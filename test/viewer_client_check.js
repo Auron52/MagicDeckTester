@@ -506,6 +506,70 @@ async function testEquip() {
   return fails;
 }
 
+// COLOURLESS-FIRST tap order, driven exactly as the user reported it (StompySurprise seed 9,
+// 2026-08-24): T1 land=Forest + Llanowar Elves, then T2 `land=Wirewood Lodge; cast Sol Ring,
+// Natural Order`. That line is exactly payable -- the Lodge's {C} pays Sol Ring's {1}, Forest +
+// Llanowar make {G}{G}, and Sol Ring's own {C}{C} pays the {2} -- and the engine enumerates it, but
+// a colourless-only source and a mono-coloured one both ranked 10 in ManaSourceRank, so the generic
+// pip took the Forest and Natural Order was left one green short: silently dropped autonomously, a
+// hard "not enough mana" reject in the viewer.
+//
+// It lives HERE, not in test/scenarios/, on purpose: the defect is in the PAYMENT, and CheckLine
+// (which every validate_line fixture asserts on) accepted the line both before and after the fix --
+// enumeration is deliberately optimistic. Only a real commit through the apply path can see it, and
+// only the GUI turns the silent drop into a visible failure.
+async function testColorlessFirstTapOrder() {
+  const fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const win = buildDom(); await settle(win);
+  await startGame(win, { deck: 'StompySurprise', seed: 9, turns: 8 });
+  const st = () => S(win);
+  let guard = 0;
+  while (guard++ < 10 && st().decision && st().decision.type === 'mulligan') {
+    win.commitMulligan(st().decision, 1); await settle(win);
+  }
+  chk(st().decision && st().decision.type === 'main_phase' && st().decision.turn === 1,
+      'reached StompySurprise s9 turn 1 main phase');
+  if (fails.length) return fails;
+
+  st().plan = []; win.queueCard('Forest', 'land'); win.queueCard('Llanowar Elves', 'permanent');
+  await win.commitLine(); await settle(win);
+  for (let i = 0; i < 6; i++) {
+    const p = win.document.querySelector('#decpanel .varpick');
+    if (!p) break;
+    p.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); await settle(win);
+  }
+  guard = 0;
+  while (guard++ < 10 && st().decision && st().decision.type !== 'main_phase') {
+    if (!(await stepForward(win, 'ai'))) break;
+  }
+  chk(st().decision && st().decision.turn === 2, `reached turn 2, got ${st().decision && st().decision.turn}`);
+  if (fails.length) return fails;
+
+  st().plan = [];
+  win.queueCard('Wirewood Lodge', 'land');
+  win.queueCard('Sol Ring', 'permanent');
+  win.queueCard('Natural Order', 'nonpermanent');
+  chk(win.LineBuild.encodeLine(st().plan) === 'land=Wirewood Lodge;cast=Sol Ring;cast=Natural Order',
+      `the line encodes as expected, got "${win.LineBuild.encodeLine(st().plan)}"`);
+  await win.commitLine(); await settle(win);
+  // Natural Order's fetch is a `choose` dimension -- answer it the way a human does.
+  for (let i = 0; i < 8; i++) {
+    const p = win.document.querySelector('#decpanel .varpick');
+    if (!p) break;
+    p.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); await settle(win);
+  }
+  chk(!st().hadReject,
+      'Wirewood Lodge + Sol Ring + Natural Order is PAID, not rejected for mana (colourless-first)');
+  chk(st().decision && st().decision.turn === 3,
+      `the phase resolved and play moved on, got turn ${st().decision && st().decision.turn}`);
+  const bf = ((st().decision || {}).me || {}).battlefield || [];
+  chk(bf.some(p => p.name === 'Sol Ring'), 'Sol Ring resolved');
+  chk(!(((st().decision || {}).me || {}).hand || []).some(c => c.name === 'Natural Order'),
+      'Natural Order actually left hand (it was silently dropped before the fix)');
+  return fails;
+}
+
 (async () => {
   let anyFail = false;
   // #4 firebreathe GUI bookkeeping (fast, DOM-only — no game needed).
@@ -542,6 +606,14 @@ async function testEquip() {
     catch (e) { console.error(`✗ equip: harness error: ${e.stack || e}`); process.exit(2); }
     if (eqFails.length) { anyFail = true; console.log(`✗ equip: ${eqFails.length} fail`); eqFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ equip (Equipment: clickable → equip= line → accepted → attached → stacked on its host)'); }
+  }
+  // Colourless-first tap order: an exactly-payable line must not lose a coloured pip to a generic one.
+  {
+    let cfFails;
+    try { cfFails = await testColorlessFirstTapOrder(); }
+    catch (e) { console.error(`✗ colourless-first tap order: harness error: ${e.stack || e}`); process.exit(2); }
+    if (cfFails.length) { anyFail = true; console.log(`✗ colourless-first tap order: ${cfFails.length} fail`); cfFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ colourless-first tap order (s9 T2: Lodge {C} pays Sol Ring, Natural Order keeps its {G}{G})'); }
   }
   for (const sc of SCENARIOS) {
     let res;

@@ -1680,7 +1680,25 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     const int amt = ManaProducedPerTap(def);
     if (amt > 1 && static_cast<int>(prod.size()) > 1) { return 10; }  // bounce/fixed-multi: no choice
     const int ncol = static_cast<int>(prod.size());
-    int rank = ncol <= 1 ? 10 : ncol * 10;                            // mono=10 dual=20 tri=30 rainbow=50
+    // A COLOURLESS-ONLY source is strictly LESS flexible than a mono-COLOURED one, so scarcity-first
+    // must spend it EARLIER -- its mana pays generic pips only (no card in any deck has a {C} pip),
+    // while a Forest's {G} pays generic AND green. Both read as "mono" (ncol == 1) and so both
+    // ranked 10, which is not a tie: it let a GENERIC pip consume a coloured source while a
+    // colourless one sat untapped, stranding the coloured pips of a later cast in the same turn.
+    // Found by the user 2026-08-24 on StompySurprise s9 T2: `land=Wirewood Lodge; cast Sol Ring,
+    // Natural Order` is EXACTLY payable (Lodge {C} pays Sol Ring's {1}; Forest + Llanowar make
+    // {G}{G}; Sol Ring's {C}{C} pays the {2}) and the engine enumerated it, but the rank tie put
+    // Forest ahead of the Lodge for Sol Ring's generic pip, leaving Natural Order one green short --
+    // silently dropped in autonomous play, a hard "not enough mana" reject in the viewer. Nothing
+    // downstream rescues it: the backtracker is per-PAYMENT (Sol Ring's own payment succeeds
+    // whichever source it takes) and BatchPrepayMainCasts, the cross-cast solver, declines on a
+    // line containing a producer (PP_PRODUCER). The colourless tiers ABOVE keep their reserves --
+    // an animated manland (Mutavault, 60), a storage land (62) and a live untap-burst Lodge (63)
+    // are all deliberately held back and are returned before this point.
+    bool any_colored = false;
+    for (Color c : prod) { if (c != Color::Colorless) { any_colored = true; break; } }
+    int rank = (!prod.empty() && !any_colored) ? 5                    // {C}-only: least flexible
+             : (ncol <= 1 ? 10 : ncol * 10);                          // mono=10 dual=20 tri=30 rainbow=50
     // A COLOUR-producing land must not sit in the colourless-manland RESERVE tier (60): its {C} mode
     // pushes ncol to 6 and collides with Mutavault's save-to-attack rank, stranding the manland's
     // attack. Keep it just below (docs/design/slivers-restricted-mana-tap-order-bug.md).
