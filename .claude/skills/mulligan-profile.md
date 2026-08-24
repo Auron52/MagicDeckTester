@@ -186,6 +186,27 @@ MTG_KEEP_EXHAUSTIVE=1 \
 commit, same recipe, **a different `--seed`**, then pool with `MTG_KEEP_MERGE`. Low-R uniform chunks are
 no longer generatable.
 
+> **⚠ A second chunk on the SAME MACHINE overwrites the first.** The recipe writes to a fixed path per
+> deck (`<stem>.keepmodel.exhaustive.{profile,raw}.json`), so running chunk 2 for the same deck
+> silently destroys chunk 1's raw and profile on disk — the merge then has only one input to pool.
+> **Commit chunk 1 (as `.gz`) or copy its raw aside BEFORE starting chunk 2.** Recovered once via
+> `git show HEAD:<path>.gz | gunzip > /tmp/chunk1.raw.json` only because it had already been
+> committed. This does not arise in the cross-machine flow (separate filesystems), which is why the
+> handoff section above never mentions it.
+
+**Pooling gates on the PLAY DIGEST, not the commit string** (verified 2026-08-24, Mirrorwing). Two
+chunks whose `commit` stamps differed (11 commits apart) pooled fine because `play_digest`,
+`bucket_fp`, `deck_fp` and `K` all matched — the merge printed `pooled 2 file(s); 2 distinct
+seed_base(s); effective R=60`. So the parity checklist's "same commit" is a *sufficient* condition,
+not a necessary one: what must actually match is the play logic those fingerprints capture. Confirm
+it the Rule 0 way (the deck's GT keys unmoved by the intervening commits), not by assuming.
+
+**Pooling is the cheap route to `complete`-grade R when `complete` does not fit the window.** Two
+`fast` chunks (R30 each, ~10 h + ~11 h) pool to **R=60** — above `complete`'s R40 — for less wall
+clock than one `complete` run (36.4 h projected on that deck), and neither chunk ever occupies the
+box for longer than a single overnight. Validate the pooled table with the in-game A/B, never the
+merge's own `D_opt` (winner's-curse optimistic).
+
 The report prints per-size hand counts, the optimal-vs-static policy gap, the disagreement
 decomposition, the label-noise diagnostic, and a **projected-regret-vs-R curve** (extrapolated) — read
 it to pick the minimum viable R for the deck.
