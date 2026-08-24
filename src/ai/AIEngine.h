@@ -97,7 +97,10 @@ public:
     // Discard all lands from hand to each Land's Edge permanent the active player
     // controls, dealing 2 damage per land per Land's Edge.  Called by GameEngine
     // after ResolveStack so Treasure Hunt has already resolved and filled the hand.
-    void ActivateLandsEdge(GameState& state);
+    // `is_pre_combat` names WHICH main phase is calling, so the depth>0 fire-count
+    // trial rollouts can resume the rest of THIS turn instead of skipping it (see
+    // RolloutWinTurnFrom, and docs/design/th-colourless-first-s3003-gi301.md).
+    void ActivateLandsEdge(GameState& state, bool is_pre_combat);
 
     // Lookahead bottoming evaluates each candidate removal with a full clairvoyant
     // game rollout and bottoms the card whose removal preserves the earliest win

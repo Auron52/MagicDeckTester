@@ -442,7 +442,7 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
 
     // Discard lands to Land's Edge after stack resolves so Treasure Hunt's drawn
     // lands are in hand and any Land's Edge cast this turn has entered the battlefield.
-    m_ai.ActivateLandsEdge(state);
+    m_ai.ActivateLandsEdge(state, is_pre_combat);
 
     if (m_logger)
     {

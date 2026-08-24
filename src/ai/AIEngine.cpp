@@ -1095,6 +1095,19 @@ int AIEngine::RolloutWinTurn(GameState trial, int max_turns, int* lands_out)
 // between-turns caller passes NewTurn (= the old PlayOut behaviour); a caller that captured its
 // trial state part-way through a turn MUST name its own step, or the rest of that turn is skipped
 // and the label describes a state the real game cannot reach.
+//
+// TWO RULES FOR A MID-GAME TRIAL CALLER, both learned the hard way. `from` above is the first.
+// The second: this function runs the trial on an EMPTY committed line (see the stash below), so a
+// trial's label is always the win turn of a FRESHLY RE-SEARCHED continuation. If you act on that
+// label by DEVIATING from what the heuristic -- and therefore what TurnSolver::ApplyPlanDirect,
+// and therefore what the search that built m_committed_line -- assumed, the queued line is stale
+// by construction: it plans around resources the deviation just spent, and replaying it is a
+// train/serve split (label from a fresh search, realised game from a stale plan). Every such
+// caller must `m_committed_line.clear()` on the deviating branch. There are exactly three today
+// (the searched cleanup discard, the searched Vial charge, and the Land's Edge fire count) and it
+// took three separate bug hunts -- the last of them costing two full turns on TH s3304 gi301,
+// unrecoverable at depth 8 / budget 60000 -- to fix them one at a time. A fourth site added later
+// needs the same clear. See docs/design/th-colourless-first-s3003-gi301.md §7.6.
 int AIEngine::RolloutWinTurnFrom(GameState trial, int max_turns,
                                  GameEngine::ResumeAt from, int* lands_out)
 {
@@ -4457,7 +4470,7 @@ Card* AIEngine::ChooseDiscard(GameState& state)
 // Land's Edge activation
 // ============================================================
 
-void AIEngine::ActivateLandsEdge(GameState& state)
+void AIEngine::ActivateLandsEdge(GameState& state, bool is_pre_combat)
 {
     // Human play (tools/play): Land's Edge is the human's to fire -- they choose the
     // DiscardToLandsEdge amount as a plan action, executed in the segment loop via
@@ -4501,15 +4514,80 @@ void AIEngine::ActivateLandsEdge(GameState& state)
     // the search handles the ambiguous "hold" case where early activation might win faster.
     if (m_lookahead_depth > 0 && !m_in_rollout && fire_count < lands_in_hand)
     {
+        // WHERE the trial rollouts resume. Land's Edge fires at the END of a main phase, so a trial
+        // captured here is mid-turn: the rest of THIS turn (combat, main 2, end step, and the
+        // CLEANUP DISCARD that sheds a flooded hand) still has to happen before the next turn
+        // begins. Resuming at NewTurn -- the default, and what this call passed until 2026-08-24 --
+        // skips all of it, which is exactly what RolloutWinTurnFrom's own comment forbids a
+        // mid-turn caller from doing: "the rest of that turn is skipped and the label describes a
+        // state the real game cannot reach". The two arms are not even skipping the same thing --
+        // firing empties the hand, so it is the HOLD arm that keeps, unshed, lands the real
+        // cleanup would have discarded.
+        //
+        // HONEST SCOPE: this is a latent contract fix, not the fix for the bug below. Swept over
+        // every Treasure Hunt cell at d0/d3/d5 on seeds 1001/2002/3003/4004/5005/6006/7007 --
+        // 10,725 games, the only deck in the repo with a Land's Edge -- it is BYTE-IDENTICAL to the
+        // old skip: 0 of 18 cells moved. It is inert only because TH's post-main-1 remainder
+        // happens not to change these particular projections. MTG_LE_TRIAL_NEWTURN=1 restores the
+        // old skip (A/B). See docs/design/th-colourless-first-s3003-gi301.md §7.3-7.4.
+        static const bool s_newturn = EnvOn("MTG_LE_TRIAL_NEWTURN");
+        const GameEngine::ResumeAt from =
+            s_newturn       ? GameEngine::ResumeAt::NewTurn
+            : is_pre_combat ? GameEngine::ResumeAt::Combat    // main 1 -> combat, main 2, end, cleanup
+                            : GameEngine::ResumeAt::End;      // main 2 -> end, cleanup
+
+        const int heur_count = fire_count;                    // pre-override, for the trace below
+
         GameState trial_heuristic = state;
         DoActivateLandsEdge(trial_heuristic, fire_count, rate, /*log=*/false);
-        int w_heuristic = RolloutWinTurn(std::move(trial_heuristic), m_max_turns);
+        int w_heuristic = RolloutWinTurnFrom(std::move(trial_heuristic), m_max_turns, from);
 
         GameState trial_all = state;
         DoActivateLandsEdge(trial_all, lands_in_hand, rate, /*log=*/false);
-        int w_all = RolloutWinTurn(std::move(trial_all), m_max_turns);
+        int w_all = RolloutWinTurnFrom(std::move(trial_all), m_max_turns, from);
 
-        if (w_all < w_heuristic) { fire_count = lands_in_hand; }
+        if (w_all < w_heuristic)
+        {
+            // DEVIATION from the heuristic: burning every land leaves a board the committed line
+            // was never searched for. That line came out of a search whose inline executor
+            // (TurnSolver::ApplyPlanDirect) auto-fires LandsEdgeHeuristicFireCount and NEVER this
+            // fire-all override -- so every plan still queued in it was chosen on the assumption
+            // that the lands we are about to throw away are still in hand. It holds at minimum the
+            // rest of THIS turn (the second main), and when the search verified a win inside its
+            // horizon it holds the whole multi-turn line to that win (see the !verified_win
+            // truncation in TakeTurn) -- which is exactly the case that bites, because a verified
+            // win is precisely when the plan is most specific about the lands. Meanwhile the trial
+            // that justified firing rolled out on an EMPTY line (RolloutWinTurnFrom clears it) and
+            // so re-searched the board it actually created. Replaying the stale line is the
+            // train/serve split s_discard_reline and the searched vial already fix at their own
+            // deviation sites; Land's Edge is the third such site and was missed.
+            //
+            // Untreated it is not a small error. TH s3304 gi301: the trial ranks fire-all a turn-4
+            // win over hold's turn-5, and it is RIGHT about its own line -- re-searched, firing
+            // wins on 4. The realised game replayed the pre-fire line instead, which spends a land
+            // drop it no longer has and then cannot pay for the Treasure Hunt it planned
+            // ("[bp-pay] -> FAILED" at T5), and won on 6. No depth (to 8) or budget (to 60000)
+            // recovered it, because more search only builds a longer stale line.
+            // See docs/design/th-colourless-first-s3003-gi301.md.
+            static const bool s_le_reline = EnvOn("MTG_LE_RELINE", true);
+            if (s_le_reline) { m_committed_line.clear(); }
+            fire_count = lands_in_hand;
+        }
+
+        // MTG_LE_TRIAL: one line per fire-count decision -- the two trial projections and what was
+        // chosen. This is the instrument that settled the gi301 root cause: the pair `w_heur=5
+        // w_all=4` against a realised turn 6 is what shows the trial is right about a line the game
+        // will not play, which no amount of reading the call graph had made visible. Off by
+        // default, and the whole block is inside the depth>0 comparison, so it costs nothing.
+        static const bool s_le_trial = EnvOn("MTG_LE_TRIAL");
+        if (s_le_trial)
+        {
+            std::fprintf(stderr,
+                "[le-trial] t%d main%d opp_life=%d rate=%d lands_in_hand=%d heur=%d"
+                " w_heur=%d w_all=%d -> fire=%d\n",
+                state.turn_number, is_pre_combat ? 1 : 2, state.Opponent().life, rate,
+                lands_in_hand, heur_count, w_heuristic, w_all, fire_count);
+        }
     }
 
     DoActivateLandsEdge(state, fire_count, rate);
