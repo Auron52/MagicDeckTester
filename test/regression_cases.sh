@@ -28,7 +28,7 @@ declare -A DECK_FILE=(
   [auras]=decks/Auras/Auras.cod
   [goblins]=decks/Goblins/Goblins.cod
   [creature_giving]="decks/Creature Giving/Creature Giving.cod"
-  [mirrorwing]="decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.cod"
+  [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.cod"
   [fivecolour]=decks/FiveColour/FiveColour.cod
   [stompy]=decks/StompySurprise/StompySurprise.cod
   [minotaur]=decks/Minotaur/Minotaur.cod
@@ -44,7 +44,7 @@ declare -A DECK_PROF=(
   [auras]=decks/Auras/Auras.profile.json
   [goblins]=decks/Goblins/Goblins.profile.json
   [creature_giving]="decks/Creature Giving/Creature Giving.profile.json"
-  [mirrorwing]="decks/Mirrorwing Dragon/v1-twinflame-anger/Mirrorwing Dragon.profile.json"
+  [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"
   [fivecolour]=decks/FiveColour/FiveColour.profile.json
   [stompy]=decks/StompySurprise/StompySurprise.profile.json
   [minotaur]=decks/Minotaur/Minotaur.profile.json
@@ -109,10 +109,15 @@ SMOKE_CASES=(
   "creature_giving 0 1001 1000 0"
   "creature_giving 3 1001  150 10"
   "creature_giving 5 1001   75 20"
-  # mirrorwing: Zada/Mirrorwing copy-magnet swarm (Tier-3 trick engine; wins ~T5). Hinata-class
-  # cost (measured 2026-08-11 post Twinflame-policy, single-thread: d3 b10 ~0.9 s/game, d5 b20
-  # ~1.8 s/game; no multi-minute tail at suite budgets -- the provider prunes + strive fold are
-  # what keep it tractable, see analysis-Mirrorwing Dragon.md). th/hinata smoke sizing.
+  # mirrorwing: Zada/Mirrorwing copy-magnet swarm (Tier-3 trick engine; wins ~T4.8). Switched
+  # 2026-08-24 from the v1-twinflame-anger list to the SHIPPING list (tournament winner + Game
+  # Trail mana base; the archived v1 lives on at decks/Mirrorwing Dragon/v1-twinflame-anger/).
+  # Dropping Twinflame took most of the copy-token combinatorics with it: re-measured on the new
+  # list single-thread, d3 b10 ~0.20 s/game and d5 b20 ~0.30 s/game -- 4-6x CHEAPER than the v1
+  # list's 0.9/1.8, so this deck is no longer Hinata-class and the counts below now carry a lot of
+  # headroom (deliberately left as-is; raising them is a separate, GT-moving decision). No
+  # multi-minute tail at suite budgets -- the provider prunes + strive fold are what keep it
+  # tractable, see analysis-Mirrorwing Dragon.md. th/hinata smoke sizing.
   "mirrorwing 0 1001 1000 0"
   "mirrorwing 3 1001  150 10"
   "mirrorwing 5 1001   75 20"
@@ -120,7 +125,8 @@ SMOKE_CASES=(
   # burn -- so its d5 case (depth key dropped, block owns the depth) is the suite's coverage of the
   # d6 + escalation_cap 5 path adopted 2026-08-14. Costliest deck per game in the suite, measured
   # 2026-08-14 single-thread over 2800 games: d0 ~0.03 ms/game, d3 b10 ~1.19 s/game, d5(->d6) b20
-  # ~1.89 s/game -- just above mirrorwing (0.9/1.8), so it takes the same hinata/mirrorwing sizing.
+  # ~1.89 s/game -- it took the same hinata/mirrorwing sizing (mirrorwing was 0.9/1.8 on the v1
+  # list; since the 2026-08-24 decklist switch it is ~0.20/0.30, so fivecolour now stands alone).
   # Tail is mild: 2 games of 2800 over 30 s (worst 60.8 s), no multi-minute blowups. ~5 min ST added.
   "fivecolour 0 1001 1000 0"
   "fivecolour 3 1001  150 10"
@@ -206,7 +212,8 @@ REGRESSION_CASES=(
   "creature_giving 3 3003  300 10"
   "creature_giving 5 2002  250 20"
   "creature_giving 5 3003  250 20"
-  # mirrorwing: hinata-mirror sizing (~20 min ST added; see SMOKE block for costs).
+  # mirrorwing: sizing inherited from the v1 list (~20 min ST budgeted); on the 2026-08-24
+  # shipping list it actually costs ~2 min ST. See SMOKE block for the re-measured costs.
   "mirrorwing 0 2002 1000 0"
   "mirrorwing 3 2002  200 10"
   "mirrorwing 3 3003  200 10"
@@ -397,8 +404,9 @@ OVERNIGHT_CASES=(
   "creature_giving 5 5005  500 40"
   "creature_giving 5 6006  500 40"
   "creature_giving 5 7007  500 40"
-  # mirrorwing: hinata-mirror overnight sizing (~60 min ST added; heaviest suite deck per game
-  # after slivers -- deeper budgets deliberately NOT raised until a b-sweep motivates them).
+  # mirrorwing: sizing inherited from the v1 list (~60 min ST budgeted, when this was the heaviest
+  # suite deck per game after slivers); on the 2026-08-24 shipping list it costs ~10 min ST.
+  # Deeper budgets deliberately NOT raised until a b-sweep motivates them.
   "mirrorwing 0 4004 2000 0"
   "mirrorwing 0 6006 2000 0"
   "mirrorwing 0 8008 2000 0"
