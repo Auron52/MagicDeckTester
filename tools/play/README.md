@@ -193,18 +193,24 @@ external-chooser surface exposes:
   model enumerates this phase carries a ⟳ badge; clicking it queues one activation, clicking again
   removes it. Covered: creature-sac outlets (Skirk Prospector / Siege-Gang / Pashalik — you pick
   which creature dies as each sacrifice resolves), Krenko's token tap, main-phase pumps, Call of the
-  Wild, **every planeswalker loyalty ability**, Garth, Wirewood Lodge's untap, and **all of the
-  equipment abilities** —
-  `equip` (attach an Equipment already in play), Balan's attach-all, Stoneforge's put-from-hand, the
-  Jitte's counter modes. A source offering *several* distinct activations opens a small picker
-  first (which Equipment to put, which Jitte mode); everything decided *after* the commit — which
-  creature an Equip attaches to, which loyalty ability, how many times a repeatable ability fires —
-  is asked by the ordinary choose-variant dialog. An **attached** Equipment renders stacked behind
-  its host exactly like an Aura, and stays clickable so you can move it. An ability is offered only
-  when it can really resolve *now* — the menu must never hold a silent no-op, so e.g. the Lodge's
-  untap is hidden when its `{G}` is not actually payable (the enumeration gate reasons about an
-  over-approximate mana pool; the human-play branch trial-pays the exact cost). See `DECISIONS.md` →
-  *Board activations* for the three wiring sites a new one needs.
+  Wild, **every planeswalker loyalty ability**, Garth, Wirewood Lodge's untap, Balan's attach-all,
+  Stoneforge's put-from-hand, and the Jitte's counter modes — **including its `+2/+2`**, which is now
+  activatable in the main phase whenever the Jitte holds counters and is attached, instead of only
+  inside combat (spend several at once and the choose dialog asks how many). A source offering
+  *several* distinct activations opens a small picker first (which Equipment to put, which Jitte
+  mode); everything decided *after* the commit — which loyalty ability, how many times a repeatable
+  ability fires — is asked by the ordinary choose-variant dialog. An ability is offered only when it
+  can really resolve *now*: the menu must never hold a silent no-op.
+- **Equipping is a DRAG, like an Aura** — grab the Equipment on the battlefield (it carries a
+  ⚔ drag badge) and drop it on one of your creatures. The legal hosts light up while you drag, the
+  queued equip renders stacked behind the creature it will attach to, and dragging it again moves it
+  rather than queueing a second one. An **attached** Equipment stays draggable, which is how you
+  re-host it. Because the drop already names the host, no post-commit dialog asks for it.
+  See `DECISIONS.md` → *Board activations* for the wiring sites a new activation needs.
+- **A card with two playable faces gets a route for each** — an MDFC whose back is a land (Turntimber
+  Symbiosis // Turntimber, Serpentine Wood) shows a **▣ land** badge; click it to take the land drop
+  instead of casting the front. The badge only appears when the model is actually offering that land
+  play this phase.
 - **Next:**
   - **The rest of ability activation by single-click** — cycle/dig and Land's Edge discard as
     committable line actions. Today those two still only hint; cast/play is double-click/drag.

@@ -1899,10 +1899,12 @@ void ApplyAttachAllEquipment(GameState& state, int controller, int balan_id);
 bool ApplyPutFromHand(GameState& state, int controller, int source_id,
                       const std::string& put_name);
 
-// ApplyJitteMode -- body in SpellEffects.cpp. Umezawa's Jitte's non-combat modes: remove one
+// ApplyJitteMode -- body in SpellEffects.cpp. Umezawa's Jitte's counter-spend modes: remove one
 // charge counter from `jitte_id` for mode 1 = target_id gets -1/-1 until end of turn (the death
-// check runs inline against effective toughness, shared by both worlds) or mode 2 = controller
-// gains charge_lifegain. Fizzles without spending the counter if the target left the battlefield.
+// check runs inline against effective toughness, shared by both worlds), mode 2 = controller gains
+// charge_lifegain, or mode 3 = the EQUIPPED creature gets +charge_pump_power/+charge_pump_tough
+// until end of turn (untargeted; needs a host). Fizzles without spending the counter if the target
+// (or, for mode 3, the host) left the battlefield.
 void ApplyJitteMode(GameState& state, int controller, int jitte_id, int mode, int target_id);
 
 // PerformLightPawsAttach -- body in SpellEffects.cpp (see the header note above).

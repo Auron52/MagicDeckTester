@@ -1,0 +1,45 @@
+{
+ "_comment": "Umezawa's Jitte's THIRD counter mode -- 'Equipped creature gets +2/+2 until end of turn' -- as an ordinary main-phase activation (USER 2026-08-24: 'Pump for Umezawa's Jitte should be handled like the others. I should be able to activate them any time counters are present.'). It used to be reachable ONLY inside combat: JitteDamageMath's greedy spend, plus the human's pre-strike `firebreathe` prompt. Now it is a JitteModeAbility like the -1/-1 and gain-2-life modes, gated on charge counters being present AND the Jitte being ATTACHED ('equipped creature' is not a target, so an unattached activation is a guaranteed no-op and a plan menu must never contain one). K counters spend as chosen_x variants, the Call of the Wild pattern, because ActivationFamilyKey allows only one Jitte activation per plan -- so 'spend two' is a count, not two actions. Board: charged Jitte EQUIPPED to a Kor Duelist (the new scenario `equips` key stages the attachment; nothing self-driving reaches an attached charged Jitte). Pairs with kitty_jitte_mode_line.json (jittemode=1). Expects `choose`, not `accept`, and that is the point: with TWO counters on the Jitte the only thing left to resolve for `jittemode=3` is HOW MANY to spend (the mode is fixed by the verb and there is exactly one host), so `choose` IS the count axis being offered. Flips to legal_not_enumerated if the mode stops being enumerated in the main phase.",
+ "deck": "decks/KittyEquipment/KittyEquipment.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 4,
+ "active_life": 20,
+ "opponent_life": 20,
+ "env": {
+  "MTG_HUMAN_PLAY": "1",
+  "MTG_UNPRUNED": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Plains",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Kor Duelist",
+   "controller": 0,
+   "tapped": false,
+   "sick": false
+  },
+  {
+   "name": "Umezawa's Jitte",
+   "controller": 0,
+   "tapped": false,
+   "charge_counters": 2,
+   "equips": "Kor Duelist"
+  }
+ ],
+ "hand": [],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "jittemode=3",
+ "expect_verdict": "choose"
+}

@@ -8657,6 +8657,51 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.is_noncreature = true;
                 actions.push_back(std::move(a));
             }
+            // MODE 3: "Equipped creature gets +2/+2 until end of turn" -- the same counter-spend as
+            // the two above, and now enumerated in the main phase like them (USER 2026-08-24: "Pump
+            // for Umezawa's Jitte should be handled like the others. I should be able to activate
+            // them any time counters are present."). It was previously reachable ONLY inside combat
+            // (JitteDamageMath's greedy spend + the human's pre-strike `firebreathe` prompt), so a
+            // player who wanted to pump before combat -- or at all, on their own terms -- could not.
+            // Both routes now coexist: this spends counters here, combat spends whatever is left.
+            //
+            // K activations as mutually-exclusive variants riding chosen_x, the Call of the Wild /
+            // ActivatePump pattern -- "any time counters are present" means several counters may be
+            // spent in one phase, and ActivationFamilyKey buckets every JitteModeAbility of one
+            // source into ONE odometer group (at most one per plan), so a repeat COUNT is the only
+            // shape that can express it. CheckLine gives it an `activations` sub, so the human picks
+            // the count in the choose dialog; the `jittemode=` verb only carries the mode.
+            //
+            // Gated on being ATTACHED: "equipped creature" is not a target, so an unattached Jitte's
+            // activation is legal but does nothing -- a guaranteed no-op, which a plan menu must
+            // never contain (the Wirewood Lodge / ActivatePump rule).
+            if (pd->params.charge_pump_power != 0 || pd->params.charge_pump_tough != 0)
+            {
+                bool has_host = false;
+                if (p.equipped_to > 0)
+                {
+                    for (const Permanent& h : state.battlefield)
+                    {
+                        if (h.card.m_number == p.equipped_to
+                            && (h.card.IsCreature() || h.is_animated)) { has_host = true; break; }
+                    }
+                }
+                const int kmax = std::min(p.charge_counters, 3);   // bounded branching, as elsewhere
+                for (int k = 1; has_host && k <= kmax; ++k)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::JitteModeAbility;
+                    a.card_name      = p.card.m_name;
+                    a.hand_index     = -1;
+                    a.cost           = ManaCost{};    // the cost is the counter
+                    a.sac_source_id  = p.card.m_number;
+                    a.gy_exile_mode  = 3;             // +N/+N to the equipped creature
+                    a.chosen_x       = k;             // how many counters to spend
+                    a.eval           = k * pd->params.charge_pump_power;
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
         }
 
         // Call of the Wild "{2}{G}{G}: reveal top; creature -> battlefield, else graveyard"
@@ -15410,9 +15455,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         else if (a.kind == Action::Kind::JitteModeAbility)
         {
-            // Jitte -1/-1 / lifegain: the cost is the counter, spent inside the apply.
-            ApplyJitteMode(state, state.active_player_index, a.sac_source_id,
-                           a.gy_exile_mode, a.sac_victim_id);
+            // Jitte -1/-1 / lifegain / +N/+N: the cost is the counter, spent inside the apply.
+            // chosen_x is the repeat COUNT (mode 3 only; 0 elsewhere -> exactly one application, so
+            // modes 1 and 2 are byte-identical). Each pass re-checks the counter, so a Jitte that
+            // runs out mid-burst simply stops.
+            for (int k = 0; k < std::max(1, a.chosen_x); ++k)
+            {
+                ApplyJitteMode(state, state.active_player_index, a.sac_source_id,
+                               a.gy_exile_mode, a.sac_victim_id);
+            }
         }
         else if (a.kind == Action::Kind::Equip)
         {
@@ -25675,7 +25726,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             // Burning-Fist / Sethron's pumps). That is a count of activations, not an {X} in a cost, so
             // the generic branch below labelled it "X=2" -- meaningless on a card with no {X}. Give it
             // its own sub so the human picks "activate twice" from a readable list.
-            else if ((a.kind == Action::Kind::ActivateRevealTop || a.kind == Action::Kind::ActivatePump)
+            else if ((a.kind == Action::Kind::ActivateRevealTop || a.kind == Action::Kind::ActivatePump
+                      || a.kind == Action::Kind::JitteModeAbility)   // Jitte +N/+N: how many counters
                      && a.chosen_x > 0)
             {
                 const std::string times = "\xC3\x97" + std::to_string(a.chosen_x);   // ×K
@@ -25806,6 +25858,20 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                         for (const Permanent& perm : state.battlefield)
                         { if (perm.card.m_number == a.sac_victim_id) { tn = perm.card.m_name.str(); break; } }
                         desc = "-1/-1 to " + (tn.empty() ? std::string("a creature") : tn);
+                    }
+                    else if (a.gy_exile_mode == 3)
+                    {
+                        // Mode 3 names no victim -- it pumps whatever this Jitte is attached to, so
+                        // resolve the host for the label the way the other two name theirs.
+                        std::string hn;
+                        for (const Permanent& perm : state.battlefield)
+                        {
+                            if (perm.card.m_number != a.sac_source_id) { continue; }
+                            for (const Permanent& h : state.battlefield)
+                            { if (h.card.m_number == perm.equipped_to) { hn = h.card.m_name.str(); break; } }
+                            break;
+                        }
+                        desc = "+2/+2 to " + (hn.empty() ? std::string("the equipped creature") : hn);
                     }
                     addSub(a.card_name + " " + desc, a.card_name + " counter", desc,
                            a.card_name, "jitte");

@@ -129,6 +129,8 @@ function buildDom() {
     + 'window.__subdecisions = SUBDECISIONS;'
     + 'window.__panel = function(d, dec){ return renderDecisionPanel(d, dec); };'
     + 'window.__actpick = activationPickerHtml;';
+  // NB renderBoard/renderHand are function declarations, so they already are window properties --
+  // the MDFC test below drives them directly against a synthetic decision.
   win.document.body.appendChild(acc);
   return win;
 }
@@ -453,11 +455,62 @@ function testActivationPicker(win) {
   return fails;
 }
 
+// MDFC LAND BACK on a nonland front (Turntimber Symbiosis // Turntimber, Serpentine Wood). The hand
+// card's `kind` is the FRONT's ("nonpermanent"), so every route on the thumb -- double-click, drag --
+// casts the {4}{G}{G}{G} sorcery, and the land drop the engine enumerates as `land=<front name>` had
+// no affordance at all: user-reported 2026-08-24 with a saved rejection artifact (StompySurprise s5
+// gi4 t2). DOM-only, driven off a synthetic decision, because the bug is entirely in the palette --
+// the engine accepted `land=Turntimber Symbiosis;cast=Priest of Titania` all along.
+function testMdfcLandFace(win) {
+  const S = win.__getS(), fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const mk = (idx, plans) => ({
+    type: 'main_phase', decision_index: idx, turn: 2, phase: 'pre_main', on_the_play: true,
+    me: { life: 20, library_size: 40, land_drops_left: 1, battlefield: [], graveyard: [],
+          hand: [{ num: 46, name: 'Turntimber Symbiosis', cost: '{4}{G}{G}{G}', mv: 7,
+                   kind: 'nonpermanent', mdfc_land_back: 'Turntimber, Serpentine Wood' }] },
+    opponent: { life: 20, battlefield: [] },
+    plans,
+  });
+  const reset = d => { S.decision = d; S.prev = null; S.plan = []; S.over = false; S.busy = false;
+                       S.handOrder = []; S.leMode = false; S.vialMode = null; win.renderBoard(); };
+
+  // OFFERED: a plan plays it as this phase's land -> the badge is there and names the back face.
+  reset(mk(3, [{ index: 0, summary: 'land=Turntimber Symbiosis', land: 'Turntimber Symbiosis',
+                 casts: [], actions: [] }]));
+  const badge = win.document.querySelector('#handrow .landface[data-landface]');
+  chk(!!badge, 'a nonland MDFC whose land side the engine offers renders the land badge');
+  chk(badge && /Turntimber, Serpentine Wood/.test(badge.getAttribute('title') || ''),
+      'the badge names the BACK face, so the player knows what they are playing');
+  if (badge) {
+    badge.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    chk(S.plan.length === 1 && S.plan[0].kind === 'land',
+        `clicking it queues the LAND face, got ${JSON.stringify(S.plan)}`);
+    chk(win.LineBuild.encodeLine(S.plan) === 'land=Turntimber Symbiosis',
+        `the line encodes as land=<front name>, got "${win.LineBuild.encodeLine(S.plan)}"`);
+    // The front cast must still be reachable from the same thumb -- this adds a route, it does not
+    // replace one.
+    const thumb = win.document.querySelector('#handrow .thumb[data-card="Turntimber Symbiosis"]');
+    chk(thumb && thumb.dataset.kind === 'nonpermanent',
+        'the thumb still carries the FRONT kind, so double-click/drag still cast the sorcery');
+  }
+  // NOT OFFERED (drop already spent / no legal face): no badge -- a plan menu must never contain a
+  // silent no-op option, which is why the affordance is gated on the enumerated plans, not on the
+  // card being an MDFC.
+  reset(mk(4, [{ index: 0, summary: 'cast: Priest of Titania', land: null, casts: ['Priest of Titania'],
+                 actions: [{ card: 'Priest of Titania' }] }]));
+  chk(!win.document.querySelector('#handrow .landface'),
+      'no land badge when the engine enumerated no land drop for that card');
+  return fails;
+}
+
 // Equipment: the KittyEquipment deck's central action. The engine enumerates an Equip for every
 // legal (Equipment, host) pair, but nothing told the GUI which permanent to click or which LineSpec
 // verb to write, so an equipment deck simply could not be played by hand (user-reported 2026-08-23).
-// Drives the whole chain: board click -> `equip=<name>` line -> engine accept -> host picked in the
-// choose dialog -> the Equipment ends up ATTACHED and renders stacked behind its host like an Aura.
+// Since 2026-08-24 the gesture is a DRAG onto the creature, not a click (USER: "rather than activate
+// them normally you would drag them onto a creature") -- the same gesture Auras have always used, so
+// the host is picked by the drop instead of by a post-commit dialog. Drives the whole chain: drag ->
+// `equip=<name>` line with the host stamped -> engine accept -> ATTACHED, stacked behind its host.
 async function testEquip() {
   const fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
@@ -475,19 +528,36 @@ async function testEquip() {
                         .find(t => t.dataset.name === n);
   const spear = thumb('Shadowspear');
   chk(!!spear, 'Shadowspear is on the battlefield');
-  chk(spear && spear.hasAttribute('data-activate'), 'an Equipment in play is CLICKABLE (data-activate)');
-  if (!spear || !spear.hasAttribute('data-activate')) return fails;
+  chk(spear && spear.getAttribute('draggable') === 'true' && spear.hasAttribute('data-equip'),
+      'an Equipment in play is DRAGGABLE (draggable + data-equip)');
+  chk(spear && !spear.hasAttribute('data-activate'),
+      'an equip-only Equipment no longer offers a CLICK activation (it moved to the drag)');
+  // ...and the drop targets it advertises are exactly the hosts the engine enumerated an Equip for.
+  const hosts = win.equipTargetsFor('Shadowspear');
+  chk(Object.keys(hosts).length > 0, 'the engine offers at least one legal host for Shadowspear');
+  if (!spear || !Object.keys(hosts).length) return fails;
 
-  spear.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  const hostNum = +Object.keys(hosts)[0];
+  chk(win.tryEquipDrop('Shadowspear', hostNum), 'dropping it on a legal creature queues the equip');
   const q = st().plan[0];
   chk(st().plan.length === 1 && q && q.kind === 'activate' && q.verb === 'equip',
-      'one click queues an activate entry carrying the equip verb');
+      'the drop queues an activate entry carrying the equip verb');
+  chk(q && q.target === hostNum && q.targetName === hosts[hostNum],
+      'the HOST rides on the queued entry, so no dialog has to re-ask it');
   chk(win.LineBuild.encodeLine(st().plan) === 'equip=Shadowspear',
-      `the line encodes as equip=<name>, got "${win.LineBuild.encodeLine(st().plan)}"`);
+      `the line still encodes as equip=<name>, got "${win.LineBuild.encodeLine(st().plan)}"`);
+  // Dropping it again MOVES it rather than queueing a second attach (an Equipment has one host).
+  const otherNum = Object.keys(hosts).map(Number).find(n => n !== hostNum);
+  if (otherNum != null) {
+    win.tryEquipDrop('Shadowspear', otherNum);
+    chk(st().plan.length === 1 && st().plan[0].target === otherNum,
+        're-dropping on another creature RE-AIMS the queued equip instead of duplicating it');
+    win.tryEquipDrop('Shadowspear', hostNum);
+  }
 
   await win.commitLine(); await settle(win);
-  // A multi-host board resolves as `choose`: walk the dialog by clicking the first option of each
-  // dimension until it closes (the same clicks a human makes).
+  // Any remaining dimension (a second Equipment's host, a tutor) is answered the way a human does;
+  // the dragged host itself is auto-resolved, so it must NOT be re-asked.
   for (let i = 0; i < 6; i++) {
     const pick = win.document.querySelector('#decpanel .varpick');
     if (!pick) break;
@@ -590,6 +660,10 @@ async function testColorlessFirstTapOrder() {
     const apFails = testActivationPicker(win);
     if (apFails.length) { anyFail = true; console.log(`✗ activation picker: ${apFails.length} fail`); apFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ activation picker renders for sfput / jittemode / attachall'); }
+    // MDFC land back reachable from the palette (fast, DOM-only).
+    const lfFails = testMdfcLandFace(win);
+    if (lfFails.length) { anyFail = true; console.log(`✗ mdfc land face: ${lfFails.length} fail`); lfFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ MDFC land back playable from the palette (badge → land= line, gated on the offer)'); }
   }
   // Board-activated ability reachable + resolving (needs a real game walk, so it runs on its own).
   {
@@ -605,7 +679,7 @@ async function testColorlessFirstTapOrder() {
     try { eqFails = await testEquip(); }
     catch (e) { console.error(`✗ equip: harness error: ${e.stack || e}`); process.exit(2); }
     if (eqFails.length) { anyFail = true; console.log(`✗ equip: ${eqFails.length} fail`); eqFails.forEach(m => console.log('  - ' + m)); }
-    else { console.log('✓ equip (Equipment: clickable → equip= line → accepted → attached → stacked on its host)'); }
+    else { console.log('✓ equip (Equipment: DRAGGED onto a creature → equip= line + stamped host → accepted → attached)'); }
   }
   // Colourless-first tap order: an exactly-payable line must not lose a coloured pip to a generic one.
   {

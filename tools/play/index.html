@@ -184,6 +184,11 @@
   /* Dig abilities: cycling (a land in HAND) + sacrifice-to-draw (Fiery Islet on the board). Single-click. */
   .thumb .digbadge { position:absolute; bottom:2px; left:2px; background:rgba(90,200,180,.95); color:#0c1116;
       border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; cursor:pointer; }
+  /* MDFC land BACK on a nonland front (Turntimber Symbiosis): the card's own kind is the front's,
+     so this badge is the only route to the land drop. Land-coloured to read as a land play. */
+  .thumb .landface { position:absolute; bottom:2px; right:2px; background:rgba(122,180,255,.95); color:#0c1116;
+      border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:3; cursor:pointer; }
+  .thumb .landface:hover { background:#a6d8ff; box-shadow:0 0 6px rgba(122,180,255,.7); }
   .thumb.sac-src { cursor:pointer; box-shadow:0 0 0 1px #2f8f7e inset; }
   .thumb.sac-src:hover { box-shadow:0 0 0 2px #5ac8b4, 0 0 8px rgba(90,200,180,.45); }
   .hand .thumb.cyc-src { cursor:pointer; }
@@ -194,6 +199,13 @@
       border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; cursor:pointer; }
   .thumb.act-src { cursor:pointer; box-shadow:0 0 0 1px #6b4a8a inset; }
   .thumb.act-src:hover { box-shadow:0 0 0 2px #c58cf0, 0 0 8px rgba(197,140,240,.45); }
+  /* Equipment in play: DRAGGED onto a creature to equip it, the same gesture as an Aura (the plan
+     chip / hand aura use .aura). Grab cursor + a badge, because "drag me" has no other affordance. */
+  .thumb .eqbadge { position:absolute; bottom:2px; left:2px; background:rgba(240,190,120,.95); color:#0c1116;
+      border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; cursor:grab; }
+  .thumb.equip-src { cursor:grab; box-shadow:0 0 0 1px #8a6a3a inset; }
+  .thumb.equip-src:active { cursor:grabbing; }
+  .thumb.equip-src:hover { box-shadow:0 0 0 2px #f0be78, 0 0 8px rgba(240,190,120,.45); }
   .thumb.act-src.act-on img { box-shadow:0 0 0 2px #c58cf0; }
   .zone.ledrop { border:1px dashed #7a5a1e; border-radius:10px; background:rgba(58,47,27,.35); padding:2px 6px; }
   .zone.ledrop.active { border-color:#ffb84d; background:rgba(58,47,27,.6); }
@@ -534,6 +546,58 @@ function enchantTargetsFor(name) {
   }));
   return out;
 }
+// Legal HOSTS an Equipment already in play can attach to, harvested from the enumerated plans the
+// same way enchantTargetsFor does for Auras: the engine emits one Equip action per legal (Equipment,
+// host) pair, each carrying equip_host + equip_host_name. Returns num -> creature name; empty for
+// anything that is not an Equipment with a live equip. USER 2026-08-24: equipping should work like
+// an Aura -- drag the Equipment onto the creature -- rather than click-then-answer-a-dialog.
+function equipTargetsFor(name) {
+  const d = S.decision, out = {};
+  if (!d || !Array.isArray(d.plans)) return out;
+  d.plans.forEach(pl => (pl.actions||[]).forEach(a => {
+    if (a.card===name && a.verb==='equip' && a.equip_host>0)
+    { out[a.equip_host] = a.equip_host_name || ('#'+a.equip_host); }
+  }));
+  return out;
+}
+// The attach targets for a QUEUED plan entry, whichever kind of attachment it is. One funnel so the
+// #playfield drop handler and the dragstart wiring never have to branch on aura-vs-equipment.
+function attachTargetsForEntry(e) {
+  if (!e) return {};
+  return (e.kind==='activate' && e.verb==='equip') ? equipTargetsFor(e.name) : enchantTargetsFor(e.name);
+}
+// Queue (or RE-AIM) one Equip of a battlefield Equipment onto a specific host -- the drag-and-drop
+// counterpart of queueActivation for the `equip` verb. The host rides on `target`/`targetName`, the
+// same fields a dragged Aura stamps, so the planned-attachment grouping in renderBoard and the
+// choose-dialog auto-resolve (attachPrefFor) both work for equipment with no extra cases.
+function queueEquip(name, num, hostName) {
+  if (S.over || !S.decision || S.decision.type!=='main_phase') return false;
+  hideVerdict();
+  const cap = activatableSources()[name]||0;
+  const mine = S.plan.map((p,i)=>({p,i})).filter(x=>x.p.kind==='activate' && x.p.verb==='equip' && x.p.src===name);
+  // An Equipment can only be attached to ONE creature, so a second drop is a CORRECTION, not an
+  // addition: re-aim the queued equip instead of refusing (or worse, queueing a duplicate).
+  if (mine.length >= Math.max(1, cap)) {
+    const last = mine[mine.length-1].p;
+    last.target = num; last.targetName = hostName;
+    flashHint(`Equipping ${hostName} with ${name}.`);
+    renderBoard();
+    return true;
+  }
+  S.plan.push({ name, src:name, kind:'activate', verb:'equip', mode:null, target:num, targetName:hostName });
+  flashHint(`Equipping ${hostName} with ${name}. Commit the phase to resolve it.`);
+  renderBoard();
+  return true;
+}
+// Attempt a drag-drop of the battlefield Equipment `name` onto the creature with m_number `num`.
+function tryEquipDrop(name, num) {
+  const tgts = equipTargetsFor(name);
+  if (!(num in tgts)) {
+    flashHint(`${name} can’t be equipped to that${Object.keys(tgts).length?'':' — no legal creature this phase'}.`);
+    return false;
+  }
+  return queueEquip(name, num, tgts[num]);
+}
 // Attempt a drag-drop of hand card `name` onto the creature with m_number `num`. Only auras with `num`
 // among their legal targets enchant; anything else falls through so the caller queues it normally.
 function tryEnchantDrop(name, kind, num) {
@@ -543,21 +607,24 @@ function tryEnchantDrop(name, kind, num) {
   flashHint(`Enchanting ${tgts[num]} with ${name}.`);
   return true;
 }
-// The creature name the user dragged `auraName` onto this turn (null if it was queued without a drag).
-// Used by the choose dialog to auto-resolve the aura's enchant target instead of re-asking.
-function enchantPrefFor(auraName) {
-  const e = (S.plan||[]).find(p=>p.name===auraName && p.targetName);
+// The creature name the user dragged `cardName` onto this turn (null if it was queued without a
+// drag). Used by the choose dialog to auto-resolve the attach target instead of re-asking -- for an
+// Aura's `enchant` sub and, since 2026-08-24, an Equipment's `equip` sub.
+function attachPrefFor(cardName) {
+  const e = (S.plan||[]).find(p=>p.name===cardName && p.targetName);
   return e ? e.targetName : null;
 }
-// Re-aim an ALREADY-PLANNED Aura by dragging its plan chip (or its board overlap) onto a legal
-// creature. Unlike tryEnchantDrop (which queues a fresh copy from hand), this just re-stamps the
-// existing plan entry's target — so dragging a mis-aimed queued aura moves it, never duplicates it.
+// Re-aim an ALREADY-PLANNED attachment (Aura or Equipment) by dragging its plan chip / board overlap
+// onto a legal creature. Unlike tryEnchantDrop (which queues a fresh copy from hand), this just
+// re-stamps the existing plan entry's target — so dragging a mis-aimed queued one moves it, never
+// duplicates it.
 function retargetPlanAura(planIdx, num) {
   const e = S.plan[planIdx]; if (!e) return false;
-  const tgts = enchantTargetsFor(e.name);
-  if (!(num in tgts)) { flashHint(`${e.name} can’t enchant that creature.`); return false; }
+  const tgts = attachTargetsForEntry(e);
+  const equip = e.kind==='activate' && e.verb==='equip';
+  if (!(num in tgts)) { flashHint(`${e.name} can’t ${equip?'be equipped to':'enchant'} that creature.`); return false; }
   e.target = num; e.targetName = tgts[num];
-  flashHint(`Enchanting ${tgts[num]} with ${e.name}.`);
+  flashHint(`${equip?'Equipping':'Enchanting'} ${tgts[num]} with ${e.name}.`);
   renderBoard();
   return true;
 }
@@ -594,6 +661,26 @@ function floatingManaHtml(me) {
 // Forgotten Cave) and sac-to-draw (a land in play, e.g. Fiery Islet) as standalone ONE-action plans
 // with actions:[{card, dig:true, dig_sacrifice}]. Surface them as single-click abilities: find the
 // matching plan and commit its index (the engine draws a card and re-prompts). Memoized per decision.
+// Names the engine offers as THIS phase's land drop, harvested from the enumerated plans. Used to
+// gate the MDFC land-face affordance: a hand card only gets the "play the land side" badge when the
+// model actually enumerated a plan that plays it as a land (drop already spent / no legal face =>
+// no badge, per the rule that a plan menu must never offer a silent no-op). Memoised per decision
+// like activatableSources/digSources -- a wide-enumeration deck offers hundreds of plans.
+function landPlayableNames() {
+  const d = S.decision;
+  if (!d || d.type !== 'main_phase') return {};
+  if (S._lfFor === d.decision_index && S._lf) return S._lf;
+  const out = {};
+  (d.plans || []).forEach(p => { if (p.land) out[p.land] = true; });
+  S._lfFor = d.decision_index; S._lf = out;
+  return out;
+}
+// Is this hand card an MDFC whose LAND side the engine is offering right now? `mdfc_land_back` is
+// emitted only for a nonland front with a land back (see WriteDecisionJson), so a plain land is
+// never routed through here.
+function mdfcLandFaceOf(c) {
+  return (c && c.mdfc_land_back && landPlayableNames()[c.name]) ? c.mdfc_land_back : null;
+}
 function digSources() {
   const d = S.decision;
   if (!d || d.type !== 'main_phase') return { cyc:{}, sac:{} };
@@ -660,7 +747,31 @@ function isSacOutletSource(name){ activatableSources(); return !!(S._sacOutSrc||
 // The distinct activations this source offers, as {verb, mode, name} (name = what the line verb
 // names, which for Stoneforge's put is the Equipment, not the source).
 function activationOptions(name){ activatableSources(); return (S._actOpts||{})[name] || []; }
+// Umezawa's Jitte counter-spend modes, in ONE place: three sites labelled them and a fourth mode
+// would have had to be added to each. Mode 3 (+2/+2 on the equipped creature) became a main-phase
+// activation 2026-08-24 -- it used to be reachable only inside combat.
+const JITTE_MODE_LABEL = { 1: '\u22121/\u22121 to a creature', 2: 'gain 2 life',
+                           3: '+2/+2 to the equipped creature' };
+function jitteModeLabel(m){ return JITTE_MODE_LABEL[m] || ('mode ' + m); }
+// The activations of `src` that are still CLICK-driven. Equipping moved to DRAG-and-drop (USER
+// 2026-08-24: "rather than activate them normally you would drag them onto a creature"), because the
+// host is a choice about a creature and picking it by dragging onto that creature is how Auras have
+// always worked here. So the `equip` option never enters the click path or the queue-time picker: a
+// source whose ONLY activation is Equip (a plain Bonesplitter) has no click affordance at all, while
+// a Jitte -- Equip plus two counter modes -- still opens the picker for the modes alone.
+function clickActivationOptions(name){ return activationOptions(name).filter(o=>o.verb!=='equip'); }
+// Can this battlefield Equipment be dragged onto a creature right now?
+function isEquipDragSource(name){
+  return !S.over && S.decision && S.decision.type==='main_phase'
+      && Object.keys(equipTargetsFor(name)).length > 0;
+}
 function activateCount(name){ return S.plan.filter(p=>p.kind==='activate' && p.src===name).length; }
+// Same count restricted to the CLICK-driven activations, so a queued (dragged) equip neither eats a
+// click's cap slot nor gets removed by clicking the source -- a dragged equip is unqueued by its own
+// ✕ or moved by dragging it again, exactly like a queued Aura.
+function clickActivateCount(name){
+  return S.plan.filter(p=>p.kind==='activate' && p.src===name && p.verb!=='equip').length;
+}
 // Queue (or unqueue) one activation of a battlefield permanent's ability. Toggles the LAST queued
 // activation off when already at the cap, so a click always does something visible.
 // A source offering SEVERAL distinct activations (Stoneforge: which Equipment to put; a Jitte:
@@ -669,15 +780,23 @@ function activateCount(name){ return S.plan.filter(p=>p.kind==='activate' && p.s
 function toggleActivate(name){
   if (S.over || !S.decision || S.decision.type!=='main_phase') return;
   hideVerdict();
-  const cap = activatableSources()[name]||0, have = activateCount(name);
+  const opts = clickActivationOptions(name);
+  // Equip-only source: there is nothing to click. Say what the gesture IS rather than doing
+  // nothing, which is how a removed affordance reads as a broken one.
+  if (!opts.length) {
+    flashHint(isEquipDragSource(name)
+      ? `Drag ${name} onto one of your creatures to equip it.`
+      : `${name} has no ability you can activate this phase.`);
+    return;
+  }
+  const cap = activatableSources()[name]||0, have = clickActivateCount(name);
   if (have >= cap) {                                  // at the cap -> clicking removes the last one
-    const i = S.plan.map(p=>p.kind==='activate'&&p.src===name).lastIndexOf(true);
+    const i = S.plan.map(p=>p.kind==='activate'&&p.src===name&&p.verb!=='equip').lastIndexOf(true);
     if (i>=0) { S.plan.splice(i,1); flashHint(`Removed ${name}’s ability from this turn’s line.`); renderBoard(); }
     return;
   }
-  const opts = activationOptions(name);
   if (opts.length > 1) { S.actPick = { src:name, opts }; renderBoard(); return; }
-  queueActivation(name, opts[0] || { verb:'cast', mode:null, name });
+  queueActivation(name, opts[0]);
 }
 // Commit one chosen activation into the plan. `src` is the permanent clicked; `opt` says which verb
 // the line writes and what it names. Kept apart from toggleActivate so the picker can call it.
@@ -693,7 +812,7 @@ function queueActivation(src, opt){
     ? `${src}: sacrificing ${have+1} creature${have?'s':''}${cap>1?` (max ${cap})`:''} — click again to sac another, then commit. You pick WHICH creature as each one resolves.`
     : opt.verb==='sfput' ? `${src}: putting ${opt.name} from hand onto the battlefield. Commit the phase to resolve it.`
     : opt.verb==='attachall' ? `${src}: attaching every Equipment you control to it. Commit the phase to resolve it.`
-    : opt.verb==='jittemode' ? `${src}: spending a charge counter (${opt.mode===1?'−1/−1 on a creature':'gain 2 life'}). Commit the phase to resolve it.`
+    : opt.verb==='jittemode' ? `${src}: spending a charge counter (${jitteModeLabel(opt.mode)}). Commit the phase to resolve it.`
     : `Activating ${src}’s ability${cap>1?` (${have+1}/${cap})`:''}. Commit the phase to resolve it.`);
   renderBoard();
 }
@@ -710,26 +829,39 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   // A permanent with an enumerated activated ability (Krenko's token tap, a Goblin sac outlet):
   // single-click queues one activation. The engine already gates legality (summoning sickness, an
   // untapped source, the cost), because the offer is derived from the plans it actually enumerated.
-  const actCap = (!S.over && !le && !isVial && !canSac) ? (activatableSources()[o.name]||0) : 0;
-  const actN = actCap ? activateCount(o.name) : 0;
+  // CLICK-driven activations only: equipping is a DRAG now (see clickActivationOptions), so an
+  // Equipment whose only ability is Equip must not render a click affordance it no longer honours.
+  const clickOpts = (!S.over && !le && !isVial && !canSac) ? clickActivationOptions(o.name) : [];
+  const actCap = clickOpts.length ? (activatableSources()[o.name]||0) : 0;
+  const actN = actCap ? clickActivateCount(o.name) : 0;
+  // Drag-to-equip source: an Equipment (attached or not) the engine offers an Equip for this phase.
+  const eqDrag = !le && !isVial && !canSac && isEquipDragSource(o.name);
+  const eqN = eqDrag ? S.plan.filter(p=>p.kind==='activate'&&p.verb==='equip'&&p.src===o.name).length : 0;
   const cls = (le ? `spell le-src${S.leMode?' active':''}` : (land?'land':'spell'))
-            + (canSac?' sac-src':'') + (actCap?' act-src':'') + (actN?' act-on':'');
+            + (canSac?' sac-src':'') + (actCap?' act-src':'') + (actN?' act-on':'')
+            + (eqDrag?' equip-src':'') + (eqN?' act-on':'');
   const vcls = isVial ? ` vial-src${vialActive?' active':''}` : '';
   const attrs = le ? ' data-le="1" title="click to discard lands to Land’s Edge"'
               : isVial ? ` data-vial="${charge.count}" title="click to deploy a creature with mana value ${charge.count} via this Vial"`
               : canSac ? ` data-sacdig="${esc(o.name)}" title="click to sacrifice ${esc(o.name)} to draw a card"`
               : actCap ? ` data-activate="${esc(o.name)}" title="click to activate ${esc(o.name)}’s ability this phase${actN?' (click again to remove)':''}"` : '';
+  // Equipment drags onto a creature, the way an Aura does. draggable + data-equip is all wireBoard
+  // needs; a source that ALSO has click activations (a Jitte) keeps both, so its thumb is clickable
+  // for the counter modes and draggable for the attach.
+  const eqAttr = eqDrag ? ` draggable="true" data-equip="${esc(o.name)}"`
+                        + (actCap?'':` title="${esc(o.name)} — drag onto one of your creatures to equip it"`) : '';
   const idxAttr = (o.idx!=null) ? ` data-idx="${o.idx}"` : '';
-  // data-num = stable m_number; it is the drop target key for drag-to-enchant (a creature only — lands
-  // have num 0). enchantTargetsFor()/tryEnchantDrop() gate to legal aura targets, so a non-creature num
+  // data-num = stable m_number; it is the drop target key for drag-to-attach (a creature only — lands
+  // have num 0). enchantTargetsFor()/equipTargetsFor() gate to legal targets, so a non-creature num
   // is simply never a match.
   const numAttr = (o.num) ? ` data-num="${o.num}"` : '';
   const tcls = o.tapped ? ' tapped' : '';   // #9: show tapped (used / enters-tapped) permanents
-  return `<span class="thumb ${cls}${vcls}${tcls}" data-name="${esc(o.name)}"${idxAttr}${numAttr}${attrs}>`+
+  return `<span class="thumb ${cls}${vcls}${tcls}" data-name="${esc(o.name)}"${idxAttr}${numAttr}${attrs}${eqAttr}>`+
     `<img loading="lazy" src="${scryImg(o.name,'small')}" alt="${esc(o.name)}" onerror="this.style.opacity=.15"/>`+
     (le?`<span class="lebadge">⚡${S.leMode?' active':''}</span>`:'')+
     (canSac?`<span class="digbadge" title="sacrifice ${esc(o.name)} to draw a card">🩸 sac</span>`:'')+
     (actCap?`<span class="actbadge" title="activated ability available">⟳${actN?` ×${actN}`:''}</span>`:'')+
+    (eqDrag?`<span class="eqbadge" title="drag onto one of your creatures to equip it">⚔ drag${eqN?` ×${eqN}`:''}</span>`:'')+
     (o.tapped?`<span class="tapbadge" title="tapped">⤵</span>`:'')+
     counterBadges(o)+
     `<em>${esc(o.name)}</em></span>`;
@@ -762,20 +894,31 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
 // Greaves on the next threat). Without data-activate here an equipment became unusable the moment it
 // was attached, because attached permanents render through this path instead of bfThumb.
 function auraAttThumb(o, z, top) {
-  const actCap = !S.over ? (activatableSources()[o.name]||0) : 0;
-  const actN   = actCap ? activateCount(o.name) : 0;
+  const clickOpts = !S.over ? clickActivationOptions(o.name) : [];
+  const actCap = clickOpts.length ? (activatableSources()[o.name]||0) : 0;
+  const actN   = actCap ? clickActivateCount(o.name) : 0;
   const what   = o.is_equip ? 'equipping' : 'enchanting';
-  const attrs  = actCap ? ` data-activate="${esc(o.name)}" title="${esc(o.name)} — ${what}; click to re-equip it this phase${actN?' (click again to remove)':''}"`
+  // An ATTACHED Equipment stays a drag source: dragging it onto another creature is how you MOVE it
+  // (Grafted Wargear's re-host, parking the Greaves on the next threat). Before, that was a click;
+  // it is the same gesture as the first attach now, which is the point of the change.
+  const eqDrag = isEquipDragSource(o.name);
+  const eqN    = eqDrag ? S.plan.filter(p=>p.kind==='activate'&&p.verb==='equip'&&p.src===o.name).length : 0;
+  const attrs  = actCap ? ` data-activate="${esc(o.name)}" title="${esc(o.name)} — ${what}; click to use its ability this phase${actN?' (click again to remove)':''}"`
+               : eqDrag ? ` title="${esc(o.name)} — ${what}; drag onto another of your creatures to move it"`
                         : ` title="${esc(o.name)} — ${what}"`;
-  return `<span class="thumb spell aura-att${actCap?' act-src':''}${actN?' act-on':''}" style="z-index:${z};top:${top}px" data-name="${esc(o.name)}"${attrs}>`+
+  const eqAttr = eqDrag ? ` draggable="true" data-equip="${esc(o.name)}"` : '';
+  return `<span class="thumb spell aura-att${actCap?' act-src':''}${eqDrag?' equip-src':''}${(actN||eqN)?' act-on':''}" style="z-index:${z};top:${top}px" data-name="${esc(o.name)}"${attrs}${eqAttr}>`+
     `<img loading="lazy" src="${scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/>`+
     (actCap?`<span class="actbadge" title="activated ability available">⟳${actN?` ×${actN}`:''}</span>`:'')+
+    (eqDrag?`<span class="eqbadge" title="drag onto another creature to move it">⚔ drag${eqN?` ×${eqN}`:''}</span>`:'')+
     `<em>${esc(o.name)}</em></span>`;
 }
 // A PLANNED aura (dragged onto this creature this turn, not yet cast) — same stack, planned styling +
 // an order badge and a remove ✕ (reuses the .thumb.planned .rm[data-rm] handler wired after render).
 function plannedAuraThumb(entry, planIdx, ord, z, top) {
-  return `<span class="thumb spell planned aura-plan" draggable="true" data-pi="${planIdx}" style="z-index:${z};top:${top}px" data-name="${esc(entry.name)}" title="${esc(entry.name)} — queued; drag onto a creature to re-aim">`+
+  const equip = entry.kind==='activate' && entry.verb==='equip';
+  const tip = `${entry.name} — queued ${equip?'equip':'aura'}; drag onto another creature to re-aim`;
+  return `<span class="thumb spell planned aura-plan" draggable="true" data-pi="${planIdx}" style="z-index:${z};top:${top}px" data-name="${esc(entry.name)}" title="${esc(tip)}">`+
     `<span class="ord">${ord}</span><span class="rm" data-rm="${planIdx}">✕</span>`+
     `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(entry.name)}</em></span>`;
 }
@@ -851,6 +994,10 @@ function renderBoard() {
     if(p.kind==='land'){ plannedLands.push(plannedThumb(p,i,ord[i])); return; }
     // 'activate' = an ability of a permanent ALREADY in play. It puts no new card onto the battlefield,
     // so it belongs with the spells being cast this phase, not in the planned-permanents row.
+    // A queued EQUIP carries its host on `target` like a dragged Aura, so it is drawn stacked on
+    // that host below -- not in the spells row. Checked BEFORE the activate branch, which would
+    // otherwise route it there and leave the attachment invisible until it resolved.
+    if(p.target && p.kind==='activate'){ return; }
     if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
     if(p.target){ return; }   // a queued aura with a target -> drawn overlapping its host (below)
     // A queued CREATURE that has queued Auras on it (and isn't already a board creature) renders as a
@@ -953,7 +1100,11 @@ function renderBoard() {
   // important) drops to the bottom.
   // hand palette: interactive (drag/queue) in the main phase; a read-only reference row during a
   // sub-decision (so the board+hand stay visible while you resolve scry/target/bounce/vial).
+  // Name the MDFC land-side route in the header too, not just on the card: the badge is small and
+  // the play it unlocks is a LAND DROP, which is the one thing a player looks for and cannot cast.
+  const anyLandFace = isMain && (me.hand||[]).some(c=>mdfcLandFaceOf(c));
   if (isMain) h += `<div class="zone hand" id="handzone"><h3>Hand <span class="help">double-click = cast/play · drag onto your field above`+
+       (anyLandFace?` · ▣ <b>land</b> badge = play that card's land side instead of casting it`:'')+
        (d.lands_edge?(S.leMode?` · ⚡ <b>Land’s Edge active</b> — click lands to discard (${d.lands_edge.rate} dmg each)`:` · ⚡ click your Land’s Edge to discard lands to it`):` · single-click = activate ability`)+`</span></h3>`+
        `<div class="row" id="handrow"></div></div>`;
   else if (dec && (me.hand||[]).length) {
@@ -1031,14 +1182,17 @@ function renderPlanbar() {
               : p.verb==='equip'     ? ' ⟳ equip'
               : p.verb==='attachall' ? ' ⟳ attach all'
               : p.verb==='sfput'     ? ' ⟳ put from hand'
-              : p.verb==='jittemode' ? (p.mode===1?' ⟳ −1/−1':' ⟳ gain 2')
+              : p.verb==='jittemode' ? ' \u27f3 ' + jitteModeLabel(p.mode)
               : p.verb==='sacout'    ? ' ⟳ sacrifice'
               :                        ' ⟳ ability';
     const tag = (p.kind==='vial'?' ⚡':p.kind==='retrace'?' ↩':act)
               + (p.targetName?` → ${esc(p.targetName)}`:'');
-    // An Aura chip (something with legal enchant targets) is draggable onto a creature to (re)aim it.
-    const isAura = p.kind!=='land' && p.kind!=='activate' && Object.keys(enchantTargetsFor(p.name)).length>0;
-    const drag = isAura ? ` draggable="true" data-pi="${i}" title="drag onto a creature to enchant it"` : '';
+    // An attachment chip -- an Aura (legal enchant targets) or a queued EQUIP -- is draggable onto a
+    // creature to (re)aim it. Same .aura affordance for both: it is the same gesture.
+    const isEquipChip = p.kind==='activate' && p.verb==='equip';
+    const isAura = isEquipChip
+                || (p.kind!=='land' && p.kind!=='activate' && Object.keys(enchantTargetsFor(p.name)).length>0);
+    const drag = isAura ? ` draggable="true" data-pi="${i}" title="drag onto a creature to ${isEquipChip?'equip it':'enchant it'}"` : '';
     return `<span class="chip ${cls}${isAura?' aura':''}"${drag}><span class="n">${i+1}</span>`+
       `<span class="nm" data-name="${esc(p.name)}">${esc(p.name)}${tag}</span><span class="x" data-rm="${i}">✕</span></span>`;
   }).join('');
@@ -1069,7 +1223,7 @@ function renderPlanbar() {
   pb.querySelectorAll('.chip[data-pi]').forEach(ch=>{
     ch.addEventListener('dragstart', e=>{ const i=+ch.dataset.pi;
       e.dataTransfer.setData('text/planidx', String(i));
-      S._dragCard=null; S._dragKind=null; S._dragTargets=enchantTargetsFor(S.plan[i].name); });
+      S._dragCard=null; S._dragKind=null; S._dragTargets=attachTargetsForEntry(S.plan[i]); });
     ch.addEventListener('dragend', ()=>{ S._dragCard=null; S._dragKind=null; S._dragTargets=null; clearEnchDropHi(); });
   });
 }
@@ -1092,7 +1246,11 @@ function renderHand() {
   for (const name of order) {
     const c=byName[name];
     const land = c.kind==='land';
-    const q = land ? LB.planLands(S.plan).filter(p=>p.name===c.name).length : plannedCount(c.name);
+    // An MDFC land back (Turntimber Symbiosis) can be queued EITHER way, so its queued count is the
+    // sum: counting only the cast side left a queued land face invisible on the palette.
+    const lface = mdfcLandFaceOf(c);
+    const qLand = LB.planLands(S.plan).filter(p=>p.name===c.name).length;
+    const q = land ? qLand : (plannedCount(c.name) + (lface ? qLand : 0));
     const leN = land ? S.plan.filter(p=>p.kind==='le' && p.name===c.name).length : 0;  // copies moved to Land's Edge
     const total = counts[c.name]||0;
     const spent = land && (q+leN) >= total;          // every copy is played or discarded -> dim it
@@ -1104,6 +1262,10 @@ function renderHand() {
       (leN?`<span class="lealloc" title="${leN} copy/copies discarded to Land’s Edge">⚡${leN}</span>`:'')+
       (c.is_draw?`<span class="draws" title="draws — re-prompts after; commit without a land to play a revealed one">↻ draws</span>`:'')+
       (canCyc?`<span class="digbadge" title="single-click to cycle — discard to draw a card">↻ cycle</span>`:'')+
+      // MDFC land side: an explicit badge, because the card's own kind is the FRONT's and every
+      // other route on this thumb (double-click, drag) casts that front. Clicking it queues the
+      // land drop instead (`land=<front name>`, which is how the engine names the play).
+      (lface?`<span class="landface" data-landface="${esc(c.name)}" title="play the LAND side — ${esc(lface)} — instead of casting ${esc(c.name)}">▣ land</span>`:'')+
       (total>1?`<span class="pip">×${total}</span>`:'')+(q?`<span class="qct">${q}</span>`:'')+
       `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
   }
@@ -1125,6 +1287,15 @@ function renderHand() {
     }
   }
   row.innerHTML = html;
+  // MDFC land-side badge: queue the LAND drop, not the front cast. stopPropagation keeps the
+  // thumb's own click/dblclick (which cast the front) from also firing.
+  row.querySelectorAll('.landface[data-landface]').forEach(b => {
+    b.onclick = e => { e.stopPropagation(); e.preventDefault();
+      const nm = b.dataset.landface;
+      queueCard(nm, 'land');
+      flashHint(`Playing ${nm}'s land side. Click again to take it back.`); };
+    b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
+  });
   row.querySelectorAll('.thumb[data-card]').forEach(t => {
     const card=t.dataset.card, kind=t.dataset.kind;
     t.addEventListener('click', () => { if (S._clickT) return;
@@ -1142,12 +1313,22 @@ function wireBoard() {
   // remove ✕ on planned cards in the field
   $('board').querySelectorAll('.thumb.planned .rm[data-rm]').forEach(x =>
     x.onclick = e => { e.stopPropagation(); removePlanAt(+x.dataset.rm); });
-  // A planned Aura overlapping its host can be dragged onto ANOTHER creature to re-aim it (same
-  // path as the plan-bar chip: stamp text/planidx, retargetPlanAura reassigns; never duplicates).
+  // A planned Aura/Equip overlapping its host can be dragged onto ANOTHER creature to re-aim it
+  // (same path as the plan-bar chip: stamp text/planidx, retargetPlanAura reassigns; never
+  // duplicates).
   $('board').querySelectorAll('.thumb.aura-plan[data-pi]').forEach(t=>{
     t.addEventListener('dragstart', e=>{ e.stopPropagation(); const i=+t.dataset.pi;
       e.dataTransfer.setData('text/planidx', String(i));
-      S._dragCard=null; S._dragKind=null; S._dragTargets=enchantTargetsFor(S.plan[i].name); });
+      S._dragCard=null; S._dragKind=null; S._dragTargets=attachTargetsForEntry(S.plan[i]); });
+    t.addEventListener('dragend', ()=>{ S._dragCard=null; S._dragKind=null; S._dragTargets=null; clearEnchDropHi(); });
+  });
+  // An EQUIPMENT in play (attached or not) drags onto a creature to equip it -- the Aura gesture,
+  // applied to Equipment (USER 2026-08-24). stopPropagation matters for an ATTACHED one: it renders
+  // inside its host's .enchgroup, so without it the host would start the drag instead.
+  $('board').querySelectorAll('.thumb[data-equip]').forEach(t=>{
+    t.addEventListener('dragstart', e=>{ e.stopPropagation(); const nm=t.dataset.equip;
+      e.dataTransfer.setData('text/equip', nm);
+      S._dragCard=null; S._dragKind=null; S._dragTargets=equipTargetsFor(nm); });
     t.addEventListener('dragend', ()=>{ S._dragCard=null; S._dragKind=null; S._dragTargets=null; clearEnchDropHi(); });
   });
   // click the Land's Edge permanent (the ability source) to enter/exit discard mode
@@ -1318,12 +1499,15 @@ function renderChooseDialog(v, line){
       const next=remaining.filter(x=>choiceOf(x,dim.key)===minChoice);
       return stepChoose(next, picks.concat([{key:dim.key, choice:minChoice}]));
     }
-    // Drag-to-enchant: if the user dragged this Aura onto a specific creature, auto-resolve its enchant
-    // target to that creature (skip the manual pick), mirroring the crackle/soulfire auto-commit above.
-    // The dimension key is "<Aura> →"; strip the arrow to get the aura name.
-    if (dim.kind==='enchant'){
-      const aura = dim.key.replace(/\s*→\s*$/,'').trim();
-      const pref = enchantPrefFor(aura);
+    // Drag-to-attach: if the user dragged this Aura (or Equipment) onto a specific creature,
+    // auto-resolve its target to that creature and skip the manual pick, mirroring the
+    // crackle/soulfire auto-commit above. The dimension key is "<Aura> →" or "<Equipment> equips
+    // to"; strip the relation to get the card name. Without the `equip` half here the drag would
+    // pick a host and then the dialog would immediately ask again, which is exactly the
+    // double-asking the Natural Order put dialog was fixed for.
+    if (dim.kind==='enchant' || dim.kind==='equip'){
+      const card = dim.key.replace(/\s*(→|equips to)\s*$/,'').trim();
+      const pref = attachPrefFor(card);
       const hit  = pref && choices.find(c=>c.choice===pref);
       if (hit){ const next=remaining.filter(x=>choiceOf(x,dim.key)===hit.choice);
                 return stepChoose(next, picks.concat([{key:dim.key, choice:hit.choice}])); }
@@ -1692,15 +1876,15 @@ function hideDecPanel(){ const p=$('decpanel'); p.className=''; p.innerHTML=''; 
 // activates before the line is committed: Stoneforge Mystic's put names the Equipment (so
 // `sfput=Colossus Hammer` and a hard cast of the same card stay tellable apart), and a Jitte's
 // counter-spend names the MODE (`jittemode=1`). Anything decided AFTER the commit belongs in the
-// engine's choose-variant dialog instead (that is where an Equip's host is picked).
+// engine's choose-variant dialog instead.
+// NB `equip` never reaches this picker: the host is picked by DRAGGING the Equipment onto the
+// creature (USER 2026-08-24), so clickActivationOptions filters it out upstream. A Jitte therefore
+// opens this picker for its two counter modes only, and is dragged for the attach.
 // Reuses #decpanel, which is free during a main phase (main_phase is not in SUBDECISIONS).
 function activationPickerHtml(pick){
-  // A Jitte is the case that needs all four branches at once: it is an Equipment you can attach AND
-  // a source of two counter modes, so "Activate Umezawa's Jitte" three times would say nothing.
   const label = o => o.verb==='sfput'     ? `Put ${o.name} onto the battlefield`
                    : o.verb==='attachall' ? `Attach every Equipment to ${pick.src}`
-                   : o.verb==='equip'     ? `Equip ${o.name} to a creature`
-                   : o.verb==='jittemode' ? (o.mode===1 ? '−1/−1 to a creature' : 'Gain 2 life')
+                   : o.verb==='jittemode' ? jitteModeLabel(o.mode)
                    :                        `Activate ${o.name}`;
   let h=`<h3>${esc(pick.src)} — choose an ability</h3>`;
   h+=`<div class="sub">This permanent offers more than one activation this phase. Pick the one to add to your line, then <b>Commit phase</b>.</div>`;
@@ -2925,10 +3109,16 @@ async function loadDecks() {
   document.addEventListener('drop', e=>{ if(!e.target.closest('#playfield')) return; e.preventDefault();
     pf()&&pf().classList.remove('drop-hi'); clearEnchDropHi();
     const ct=e.target.closest('#playfield .thumb[data-num]');
-    // A PLANNED aura (dragged from its plan chip / board overlap) carries text/planidx -> re-aim it
-    // in place. Must be checked before the hand-card path so it never queues a duplicate.
+    // A PLANNED aura/equip (dragged from its plan chip / board overlap) carries text/planidx ->
+    // re-aim it in place. Must be checked before the other paths so it never queues a duplicate.
     const pi=e.dataTransfer.getData('text/planidx');
     if(pi!==''){ if(ct) retargetPlanAura(+pi, +ct.dataset.num); return; }
+    // A battlefield EQUIPMENT dragged onto a creature -> queue the Equip with that host. Dropped on
+    // empty field it is a miss, not a play: an Equipment already IS on the battlefield, so there is
+    // nothing sensible to queue without a host.
+    const eq=e.dataTransfer.getData('text/equip');
+    if(eq!==''){ if(ct) tryEquipDrop(eq, +ct.dataset.num);
+                 else flashHint(`Drop ${eq} ON one of your creatures to equip it.`); return; }
     const card=e.dataTransfer.getData('text/card'); if(!card) return;
     const kind=e.dataTransfer.getData('text/kind')||'permanent';
     // Dropped ON a legal creature -> enchant it; otherwise queue the card as a plain play.

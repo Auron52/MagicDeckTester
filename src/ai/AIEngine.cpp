@@ -3415,13 +3415,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // and the ability string should still name it.
             if (m_logger)
             {
+                const int reps = std::max(1, a.chosen_x);
+                int host = 0;   // mode 3 pumps the EQUIPPED creature, which the action does not name
+                for (const Permanent& jp : state.battlefield)
+                { if (jp.card.m_number == a.sac_source_id) { host = jp.equipped_to; break; } }
                 m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id),
                                      a.gy_exile_mode == 1
                                          ? "-1/-1 -> " + bf_name(a.sac_victim_id)
+                                     : a.gy_exile_mode == 3
+                                         ? "+2/+2 -> " + bf_name(host)
+                                           + (reps > 1 ? " x" + std::to_string(reps) : "")
                                          : "gain 2 life");
             }
-            ApplyJitteMode(state, state.active_player_index, a.sac_source_id,
-                           a.gy_exile_mode, a.sac_victim_id);
+            // chosen_x = the repeat count (mode 3 only; 0 elsewhere -> one application, so modes 1
+            // and 2 stay byte-identical). Lockstep twin of ApplyPlanDirect's JitteModeAbility branch.
+            for (int k = 0; k < std::max(1, a.chosen_x); ++k)
+            {
+                ApplyJitteMode(state, state.active_player_index, a.sac_source_id,
+                               a.gy_exile_mode, a.sac_victim_id);
+            }
         }
         else if (a.kind == Action::Kind::Equip)
         {

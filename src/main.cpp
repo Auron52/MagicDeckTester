@@ -276,10 +276,25 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             case Action::Kind::PutFromHandAbility:
                 tag = "put " + a.card_name + " onto battlefield (Stoneforge)"; break;
             case Action::Kind::JitteModeAbility:
-                tag = a.card_name + (a.gy_exile_mode == 1
-                        ? ": -1/-1 \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id)
-                        : std::string(": gain 2 life"));
+            {
+                // Mode 3 (+2/+2) names no victim -- it pumps the EQUIPPED creature -- and carries a
+                // repeat COUNT on chosen_x, which is the only thing telling a 1-counter spend apart
+                // from a 3-counter one in the menu (the sac-outlet count lesson).
+                std::string jm = ": gain 2 life";
+                if (a.gy_exile_mode == 1)
+                { jm = ": -1/-1 \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id); }
+                else if (a.gy_exile_mode == 3)
+                {
+                    int host = 0;
+                    for (const Permanent& jp : s.battlefield)
+                    { if (jp.card.m_number == a.sac_source_id) { host = jp.equipped_to; break; } }
+                    const int reps = std::max(1, a.chosen_x);
+                    jm = ": +2/+2 \xE2\x86\x92 " + EnchantTargetName(s, host)
+                       + (reps > 1 ? " x" + std::to_string(reps) : "");
+                }
+                tag = a.card_name + jm;
                 break;
+            }
             // Sac outlets (Skirk Prospector "Sacrifice a Goblin: Add {R}", Siege-Gang, Pashalik):
             // a battlefield ACTIVATION, and the sac COUNT is the whole difference between two
             // otherwise identical menu entries -- a 1-sac and a 3-sac Skirk read the same without
@@ -409,6 +424,18 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         // is_creature lets the GUI offer an Aether Vial deploy (a creature whose MV equals a
         // Vial's charge counters can be put onto the battlefield for free).
         if (d && d->card.IsCreature()) { os << ", \"is_creature\": true"; }
+        // MDFC with a LAND back on a NONLAND front (Turntimber Symbiosis // Turntimber, Serpentine
+        // Wood). `kind` above is the FRONT's ("nonpermanent" for the sorcery), so the palette could
+        // only ever offer the cast -- while the engine enumerates the land drop as `land=<FRONT
+        // name>` and accepts it. The land side was therefore unreachable by hand: user-reported
+        // 2026-08-24 with a saved rejection artifact (StompySurprise s5 gi4 t2, "cast=Turntimber
+        // Symbiosis" rejected for {4}{G}{G}{G} while `land=Turntimber Symbiosis;cast=Priest of
+        // Titania` was accepted). Naming the back face lets the palette offer it explicitly. A
+        // land//land MDFC (Branchloft Pathway) is excluded -- its front IS a land, so the ordinary
+        // land route already reaches it and the `face` sub picks the side.
+        if (d && !d->card.IsLand() && !d->params.mdfc_back_name.empty()
+            && !d->params.mdfc_back_produces.empty())
+        { os << ", \"mdfc_land_back\": "; JsonStr(os, d->params.mdfc_back_name); }
         // Staged (exiled-but-playable) cards live in hand with m_is_staged set; surface that so
         // the GUI sets them apart (Light Up the Stage / Soulfire Eruption / Expressive Iteration).
         if (hc->m_is_staged) { os << ", \"is_staged\": true, \"staged_until\": " << hc->m_staged_expiry; }
@@ -3704,6 +3731,8 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //     "turn": 4, "on_the_play": true,            // turn to run; state runs THROUGH this turn
 //     "active_life": 20, "opponent_life": 5,
 //     "battlefield": [ { "name": "Birds of Paradise", "controller": 0, "tapped": false, "sick": false }, ... ],
+//                                    // also: "charge_counters" / "storage_counters", and
+//                                    // "equips": "<host card name>" to stage an ATTACHED Equipment/Aura
 //     "hand": [ "Aria of Flame", "Invigorate" ],
 //     "library_filler": "Forest", "library_size": 40,   // so draws / rollouts don't run dry
 //     "depth": 5, "budget_ms": 100, "max_turns": 4,
@@ -3806,6 +3835,29 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             p.storage_counters  = e.value("storage_counters", 0);
             p.charge_counters   = e.value("charge_counters", 0);
             state.battlefield.push_back(p);
+        }
+        // Optional ATTACHMENT ("equips": "<host card name>" on an Equipment / Aura entry), resolved
+        // after the whole battlefield exists so it can name a host listed later. Same reason
+        // charge_counters is settable: an ATTACHED equipment is a state no self-driving sweep
+        // reliably reaches, and abilities that read the host (Umezawa's Jitte's "equipped creature
+        // gets +2/+2") are unreachable without it. First permanent of that name wins; an unmatched
+        // name is a hard scenario error rather than a silently unattached fixture.
+        {
+            const auto& bf_spec = j.value("battlefield", json::array());
+            for (std::size_t i = 0; i < bf_spec.size() && i < state.battlefield.size(); ++i)
+            {
+                const std::string host = bf_spec[i].value("equips", std::string());
+                if (host.empty()) { continue; }
+                int host_num = 0;
+                for (const Permanent& h : state.battlefield)
+                { if (h.card.m_name.str() == host) { host_num = h.card.m_number; break; } }
+                if (host_num == 0)
+                { std::cerr << "scenario: \"equips\" names no permanent: " << host << "\n"; return 2; }
+                const CardDefinition* ed =
+                    CardDatabase::Instance().Lookup(state.battlefield[i].card.m_name.str());
+                if (ed && ed->params.is_aura) { state.battlefield[i].aura_attached_to = host_num; }
+                else                          { state.battlefield[i].equipped_to      = host_num; }
+            }
         }
         for (const auto& hc : j.value("hand", json::array()))
         { state.players[0].hand.push_back(make_card(hc.get<std::string>())); }

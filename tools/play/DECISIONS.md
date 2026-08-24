@@ -113,6 +113,31 @@ Anything decided AFTER the commit belongs in the choose-variant dialog (site 3);
 NAME has to be picked at QUEUE time, which is what the GUI's activation picker (`activationPickerHtml`,
 opened when one source offers several distinct activations) is for.
 
+**EQUIP is the exception: it is a DRAG, not a click (USER 2026-08-24).** *"Change the means to equip
+equipment to resemble the approach used for auras — rather than activate them normally you would drag
+them onto a creature."* An Equipment in play (attached or not) renders `draggable` + `data-equip` and
+is dropped onto one of your creatures; `equipTargetsFor` reads the legal hosts straight out of the
+enumerated plans (`equip_host` / `equip_host_name` on the Equip action) exactly as `enchantTargetsFor`
+does for Auras, and the drop stamps the host on the queued entry's `target`/`targetName` — the SAME
+fields a dragged Aura uses. Three things follow from reusing those fields rather than inventing new
+ones: the queued equip renders stacked behind its host like a planned Aura, dragging it again re-aims
+it in place (`retargetPlanAura`, never a duplicate — an Equipment has ONE host), and the choose
+dialog's `equip` dimension auto-resolves to the dragged host instead of asking again (`attachPrefFor`,
+the same shortcut the `enchant` dimension has always had). `clickActivationOptions` filters `equip`
+out of the click path, so an equip-only Equipment has no click affordance at all while a Jitte — Equip
+plus two counter modes — still opens the picker for the modes and is dragged for the attach.
+
+**Umezawa's Jitte's +2/+2 is a main-phase activation like its other two modes (USER 2026-08-24).**
+*"Pump for Umezawa's Jitte should be handled like the others. I should be able to activate them any
+time counters are present."* It used to be reachable only inside combat (`JitteDamageMath`'s greedy
+spend plus the pre-strike `firebreathe` prompt). It is now `JitteModeAbility` mode **3**, gated on
+charge counters being present AND the Jitte being ATTACHED — "equipped creature" is not a target, so
+an unattached activation is a guaranteed no-op and a plan menu must never contain one. Because
+`ActivationFamilyKey` buckets every Jitte activation of one source into a single odometer group (one
+per plan), spending SEVERAL counters is a repeat COUNT on `chosen_x` (the Call of the Wild pattern)
+and surfaces as the `activations` sub, not as N actions. Both routes coexist: the main phase spends
+what the human asks for, combat spends whatever is left.
+
 **Firebreathe amount (#4) — the first COMBAT-phase decision, and the first on a KEYED SIDE-CHANNEL.**
 At combat, leftover mana is spent greedily on attacker pumps (`ApplyFirebreathing`). The human instead
 picks how many pump ACTIVATIONS to buy (0..max, default = greedy max), so they can hold mana back.
@@ -244,3 +269,16 @@ fully wired (all four sites) regardless of the menu default.
 - **Cascade / Retrace SEARCH target** — which card the flip casts. Heuristic-picked today;
   build a type only when a deck needs it.
   <!-- Light-Paws fetch target is now the wired `lightpaws` type (see Registry), no longer a gap. -->
+
+**A hand card's PLAYABLE FACES are a wiring site too** (added 2026-08-24 after a user report). An MDFC
+whose front is a nonland and whose back is a land — Turntimber Symbiosis // Turntimber, Serpentine
+Wood — reaches the palette with the FRONT's `kind` (`nonpermanent`), so double-click and drag both
+cast the sorcery and the land drop the engine happily enumerates as `land=<FRONT name>` had no
+affordance at all. The card was unplayable as a land by hand (rejection artifact:
+`logs/play/rejections/StompySurprise_cod_s5_gi4_t2.json`, where `cast=Turntimber Symbiosis` was
+rejected for `{4}{G}{G}{G}` while `land=Turntimber Symbiosis;cast=Priest of Titania` was accepted).
+Fixed by emitting `mdfc_land_back` on the hand card and rendering a `▣ land` badge, gated on the
+enumerated plans actually offering that land drop (`landPlayableNames`) so it is never a no-op. A
+land//land MDFC (Branchloft Pathway) is unaffected — its front IS a land, so the ordinary land route
+reaches it and the `face` sub picks the side. **The general rule: whenever a card can be played more
+than one way, check that every way has a route in the palette — `kind` describes only one of them.**

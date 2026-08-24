@@ -706,6 +706,29 @@ void ApplyJitteMode(GameState& state, int controller, int jitte_id, int mode, in
         state.players[controller].life += d->params.charge_lifegain;
         state.players[controller].life_gained_this_turn += d->params.charge_lifegain;
     }
+    else if (mode == 3)
+    {
+        // "Equipped creature gets +2/+2 until end of turn" -- the third mode of the same
+        // counter-spend, activatable at any priority (no {T} in the cost), so it belongs in the main
+        // phase alongside the other two rather than only inside the combat spend (USER 2026-08-24:
+        // "Pump for Umezawa's Jitte should be handled like the others. I should be able to activate
+        // them any time counters are present."). NOT a targeted mode -- "equipped creature" is not
+        // "target creature" -- so no shroud/hexproof check, unlike mode 1. It does need a HOST: an
+        // unattached Jitte's ability resolves with nothing to pump, which is why the enumeration
+        // gates on equipped_to and why this fizzles (counter kept) rather than eating the counter.
+        if (je->equipped_to <= 0) { return; }
+        int hi = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& h = state.battlefield[i];
+            if (h.card.m_number == je->equipped_to && (h.card.IsCreature() || h.is_animated))
+            { hi = i; break; }
+        }
+        if (hi < 0) { return; }   // host left the battlefield -> fizzle, counter kept
+        je->charge_counters -= 1;
+        state.battlefield[hi].temp_power_bonus += d->params.charge_pump_power;
+        state.battlefield[hi].temp_tough_bonus += d->params.charge_pump_tough;
+    }
 }
 
 // Armored Skyhunter's attack-trigger dig-and-attach (see the SpellEffects.h declaration note).
