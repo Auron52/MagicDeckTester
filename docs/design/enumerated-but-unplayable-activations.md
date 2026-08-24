@@ -5,10 +5,11 @@ work in `src/main.cpp`'s plan-action JSON). One is **fixed**; one is **open**.
 
 ---
 
-## 1. Wirewood Lodge's `{G}, {T}: Untap target Elf` — FIXED (human-play gate)
+## 1. Wirewood Lodge's `{G}, {T}: Untap target Elf` — CLOSED (nothing was wrong with the pool)
 
-**The ability works.** This section originally claimed it never did; that claim was wrong and the
-measurement behind it was broken. Recording both, because the bad method is the reusable lesson.
+**The ability works, and the mana pool is not over-approximate.** This section has now been wrong
+twice about the same card, in two different ways. Both are recorded, because the reusable content
+here is entirely methodological.
 
 ### What is actually true
 
@@ -27,27 +28,57 @@ the burst line (tap out for 9, then `{G}` + tap Lodge → untap Priest of Titani
 only way to reach Worldspine Wurm's 11th mana. Looking at that fixture first would have settled the
 question in a minute.
 
-### The real (much narrower) defect
+### Retraction 2: there is no pool over-approximation (2026-08-24)
 
-Everything upstream of the apply reasons about `AvailableManaPool` (over-approximate); the trailing
-apply pays through `TapForCostDirect` (exact). On StompySurprise s2 t6 the pool reported **5 green**
-while the only untapped green sources were an Arbor Elf whose "untap target Forest" had no untapped
-Forest left and an Elvish Mystic that had entered off Call of the Wild that turn. So the enumeration
-offered an activation the apply could not pay — harmless in autonomous play (the search just scores
-a no-op line) but a **dead button** in the viewer: measured 127 offers across 6 seeds, 0 fires.
+The revision above claimed a "real (much narrower) defect": that everything upstream of the apply
+reasons about the over-approximate `AvailableManaPool` while the trailing apply pays through the
+exact `TapForCostDirect`, so the viewer offered a Lodge untap that could never fire — "127 offers
+across 6 seeds, 0 fires", blamed on an Arbor Elf with no untapped Forest and a Call-of-the-Wild
+Elvish Mystic. **None of that survived measurement.** `MTG_POOL_AUDIT` (added with this retraction,
+`TurnSolver.cpp`) compares, board by board, the largest pip count the pool CLAIMS it can pay against
+the largest the exact payer actually produces on a copy:
 
-**Fix (shipped).** The Lodge enumeration's existing `HumanPlayActive()` branch already narrows to
-"a matching Elf is actually tapped" under the rule *a plan menu must never contain a silent no-op
-option*. It now also trial-pays the cost on a `GameState` copy and drops the action when that fails.
-Human-play-only → autonomous enumeration is byte-identical and keeps the looser gate it needs (its
-trailing apply runs after the plan's casts, which enumeration cannot see). `UntapCreature` is
-therefore in the clickable set. Pinned by `stompy_lodge_untap_offered.json` (payable → offered) and
-`stompy_lodge_untap_hidden.json` (unpayable → hidden).
+| measurement | result |
+|---|---|
+| Lodge offers, autonomous d0, 200 games s2002 | 122 offers, pool payable 122, exact payer pays 122 — **0 over-claims** |
+| Lodge offers, human play, all 4 committed StompySurprise references | 4 offers, 2 payable both ways, 2 unpayable **both ways** |
+| every colour + total, 14 suite decks × 150 games, d0 | **0 gaps / 16,527 probes** |
+| every colour + total, 4 decks × 10 games, d3 (rollouts included) | **0 gaps / 906,474 probes** |
 
-**Still open, deliberately not fixed here:** the pool over-approximation itself. It is the same
-conditional-source / summoning-sickness blindness the affordability arc has been chipping at
-(`mana-affordability-arc-handoff.md`), it is GT-moving, and it is not Lodge-specific — the trial-pay
-above is a viewer-side containment, not a cure.
+Both named causes are in fact already gated in the pool: the Arbor Elf conditional by
+`ManaSubtypeGateLive` (through `PermanentManaYield`) and summoning sickness by `CanTapNow`. The two
+genuinely unpayable human-play offers are ones the pool ALSO called unpayable — a board with only an
+untapped Lodge and a Worldspine Wurm, no green source and no land in hand. The pool was right.
+
+The only looseness the audit does find is the **already-known and already-owned** one: a
+multi-colour source is booked as one `ManaPool::wild` and `CanPayFlat` lets a wild pay any pip
+(53.5% of probes with `MTG_POOL_AUDIT_WILD=1`). That is the colour-blindness the adopted
+`ColorFeasibility` gate (`MTG_COLOR_EXACT`) contains at the subset sites, and per the affordability
+arc's LAW (`mana-affordability-arc-handoff.md`) enumeration is *supposed* to stay optimistic there,
+because every plan is rollout-scored. It is not a Lodge defect and it is not open work.
+
+### So why was the untap ever offered unpayably? And what happened to the fix?
+
+Because the emission carries no affordability gate of its own — deliberately. It does not need one:
+the action carries its `{G}` like any other, `EnumeratePlans` prices it into the subset, and the
+plan is dropped when the board cannot pay. The c4153b0e human-play trial-pay was therefore a **dead
+check**, and this was measurable three ways:
+
+* toggling it changed **nothing** in all four reference replays (byte-identical stdout);
+* `stompy_lodge_untap_hidden.json` returns `legal_not_enumerated` with the trial-pay **disabled**,
+  with or without `MTG_UNPRUNED` — the fixture never discriminated;
+* it is also unsound in principle in the one direction that matters for a viewer: it runs on the
+  pre-cast state, so a plan whose own earlier cast funds the `{G}` would have the option hidden.
+  The land drop is safe — `EnumeratePlansWithLand` plays the land before `CollectActions`, now
+  pinned by the new `stompy_lodge_untap_after_land.json` — so what remains is a same-plan mana
+  spell, unreachable for StompySurprise (Sol Ring makes `{C}`, not `{G}`). It is nonetheless the
+  exact looseness the comment itself gives as the reason autonomous enumeration must keep the wider
+  gate, applied to human play without noticing.
+
+It has been removed. The **tapped-Elf** half of the human-play gate stays: that one is load-bearing
+(it fixed the s9101 gi2/gi3 re-prompt hang). Both fixtures stay as behaviour pins with corrected
+comments naming the mechanism that actually enforces them, and the land-drop leg above is added —
+so any affordability gate a future change puts back at this emission has three boards to satisfy.
 
 ### Method lesson (this is the part worth keeping)
 
@@ -58,6 +89,19 @@ a handful of distinct frames counted hundreds of times, dressed up as a large-N 
 `--depth 0 --claude-play` throughout, so it never executed the autonomous path it was used to
 indict. **A stateless-replay protocol makes per-step instrumentation counts meaningless — count
 inside ONE process, and check the deck's existing fixtures before declaring a card inert.**
+
+The second wrong diagnosis has its own lesson, and it is not about mana:
+
+* **"The model here is over-approximate" is a hypothesis, not an observation.** It was written into
+  a shipped comment, a commit message and a design doc without one board being compared against the
+  payer. Two of the three named causes were code that already existed and already worked.
+* **A fix whose test passes with the fix disabled is not a fix.** The same commit that shipped this
+  one led with *"the dead check that let one ship"* — and shipped another. Toggling the mechanism
+  and re-running its own fixture is a ten-second check.
+* **Pair a pool with the payment mode it is built for.** The first version of `MTG_POOL_AUDIT`
+  compared the full pool against a *noncreature* payment and reported 166 gaps, every one of them
+  Ancient Ziggurat — a creature-only source that `BuildNonCreaturePool` already drops. The
+  instrument was measuring its own miscalibration, which is how both earlier claims happened too.
 
 ---
 

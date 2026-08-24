@@ -1,16 +1,32 @@
 {
- "_comment": "The other half of the Wirewood Lodge viewer rule (2026-08-23): when its {G} is NOT payable the option must NOT be offered to a human -- 'a plan menu must never contain a silent no-op option'. Board: untapped Lodge (which makes {C}, not {G}), a TAPPED Elvish Archdruid (so the tapped-Elf gate passes) and a TAPPED Forest with no Arbor Elf to untap it, so nothing can produce {G}. Without the human-play trial-pay gate the action is enumerated here and the click does nothing: everything upstream reasons about the over-approximate AvailableManaPool while the trailing apply pays through the exact TapForCostDirect. Autonomous enumeration deliberately keeps the looser gate (its trailing apply runs after the plan's casts, which enumeration cannot see) -- see stompy_lodge_burst.json for the burst it needs that looseness to find.",
+ "_comment": "The other half of the Wirewood Lodge viewer rule (2026-08-23): when its {G} is NOT payable the option must NOT be offered to a human -- 'a plan menu must never contain a silent no-op option'. Board: untapped Lodge (which makes {C}, not {G}), a TAPPED Elvish Archdruid (so the tapped-Elf gate passes) and a TAPPED Forest with no Arbor Elf to untap it, so nothing can produce {G}. WHAT ENFORCES IT (corrected 2026-08-24): the untap action carries its {G} like any other, so EnumeratePlans prices it into the subset and drops the plan -- NOT the human-play trial-pay that c4153b0e added here on an over-approximate-pool theory MTG_POOL_AUDIT then refuted (0 gaps in 16,527 d0 probes; this fixture returned legal_not_enumerated with that gate disabled, i.e. it never discriminated). The trial-pay is gone; this stays as a behaviour pin. Autonomous enumeration deliberately keeps the wider tapped-Elf gate -- see stompy_lodge_burst.json for the burst it needs that looseness to find.",
  "deck": "decks/StompySurprise/StompySurprise.cod",
  "turn": 5,
  "on_the_play": true,
  "max_turns": 5,
  "active_life": 20,
  "opponent_life": 20,
- "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1" },
+ "env": {
+  "MTG_HUMAN_PLAY": "1",
+  "MTG_UNPRUNED": "1"
+ },
  "battlefield": [
-  { "name": "Wirewood Lodge", "controller": 0, "tapped": false },
-  { "name": "Forest", "controller": 0, "tapped": true },
-  { "name": "Elvish Archdruid", "controller": 0, "tapped": true, "sick": false }
+  {
+   "name": "Wirewood Lodge",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": true
+  },
+  {
+   "name": "Elvish Archdruid",
+   "controller": 0,
+   "tapped": true,
+   "sick": false
+  }
  ],
  "hand": [],
  "library_filler": "Forest",

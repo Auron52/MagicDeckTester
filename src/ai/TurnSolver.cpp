@@ -5978,6 +5978,168 @@ static int OptimisticTurnMana(const GameState& state)
 
 static const bool g_emit_prune = EnvOn("MTG_EMIT_PRUNE");   // DEFAULT OFF -- see the measurement above
 
+// --- Mana-pool over-approximation audit (MTG_POOL_AUDIT, off by default = zero cost) ----------
+// "The pool is over-approximate" is a claim that keeps getting ASSERTED about this engine and has
+// now twice been the wrong diagnosis of a real symptom (see
+// docs/design/enumerated-but-unplayable-activations.md). This is the instrument that settles it.
+//
+// AvailableManaPool is an ACCOUNTING pool: it credits every untapped source its yield without
+// asking whether the exact payer (TapForCostSharedOnce) can realise it. The probe measures that gap
+// BEHAVIOURALLY -- for each colour, the largest pip count the pool claims it can pay
+// (ManaPool::CanPay, the predicate every upstream caller uses) against the largest the exact payer
+// actually produces on a COPY -- and attributes it to the credited sources on the board. No
+// predicate is duplicated, so the probe cannot drift from either side.
+//
+// Two pairings the first version of this probe got wrong, both of which manufacture phantom gaps:
+//   * each pool must be audited in the payment mode it is BUILT for (the full pool prices a
+//     CREATURE cast, BuildNonCreaturePool everything else) -- crossing them reported 166 gaps that
+//     were all Ancient Ziggurat, i.e. the pairing and not the pool;
+//   * a coloured gap on a board holding `wild` is the KNOWN colour-blind approximation the adopted
+//     ColorFeasibility gate owns, not news -- it is off by default (MTG_POOL_AUDIT_WILD=1).
+// Paired correctly: 0 gaps in 16,527 d0 probes over 14 decks and 906,474 d3 probes over 4.
+namespace poolaudit
+{
+    // Namespace-scope, not a function-local `static const bool`: this is read at the top of
+    // CollectActions, a millions-of-calls path, and a magic-static guard check there is not free.
+    // Same reason as g_prepay_probe_on below.
+    inline const bool g_on = EnvOn("MTG_POOL_AUDIT");
+    inline bool Enabled() { return g_on; }
+    // MTG_POOL_AUDIT_WILD=1 also reports the KNOWN colour-blind class (see the filter below);
+    // default off, because it swamps the table with gaps the ColorFeasibility gate already owns.
+    inline const bool s_include_wild = EnvOn("MTG_POOL_AUDIT_WILD");
+    inline std::mutex                           g_mtx;
+    inline std::map<std::string, std::uint64_t> g_by_sig;      // credited-source signature -> gaps
+    inline std::map<std::string, std::uint64_t> g_by_site;     // probe site -> gaps
+    inline std::map<std::string, std::uint64_t> g_site_calls;  // probe site -> reaches
+    inline std::uint64_t g_calls = 0, g_gapped = 0, g_dumps = 0;
+
+    inline ManaCost PipCost(int col, int n)
+    {
+        ManaCost c;
+        switch (col)
+        {
+            case 0: c.white = n; break;   case 1: c.blue  = n; break;
+            case 2: c.black = n; break;   case 3: c.red   = n; break;
+            case 4: c.green = n; break;   case 5: c.colorless = n; break;
+            default: c.generic = n; break;
+        }
+        return c;
+    }
+    inline const char* PipName(int col)
+    {
+        static const char* n[7] = { "W", "U", "B", "R", "G", "C", "generic" };
+        return n[col];
+    }
+
+    inline void Probe(const GameState& state, const char* site)
+    {
+        if (!Enabled()) { return; }
+        { std::lock_guard<std::mutex> lk(g_mtx); ++g_site_calls[site]; }
+
+        // Each pool is audited against the payment mode it is BUILT for -- the full pool prices a
+        // creature cast (for_creature=true, so a Ziggurat-class creature-only source is legal
+        // supply), BuildNonCreaturePool prices everything else. Comparing the full pool against a
+        // noncreature payment measures nothing but that pairing, and reads as 166 phantom gaps.
+        struct Arm { ManaPool pool; bool for_creature; const char* tag; };
+        const Arm arms[2] = { { AvailableManaPool(state),   true,  "cr" },
+                              { BuildNonCreaturePool(state), false, "nc" } };
+
+        std::string detail;
+        bool gapped = false;
+        for (const Arm& arm : arms)
+        {
+            const int total = arm.pool.Total();
+            if (total <= 0) { continue; }
+            for (int col = 0; col <= 6; ++col)
+            {
+                int claimed = 0;
+                for (int n = total; n > 0; --n)
+                { if (arm.pool.CanPay(PipCost(col, n))) { claimed = n; break; } }
+                if (claimed == 0) { continue; }
+                int real = 0;
+                for (int n = claimed; n > 0; --n)
+                {
+                    GameState copy = state;
+                    if (TapForCostDirect(copy, PipCost(col, n), arm.for_creature)) { real = n; break; }
+                }
+                // Which gaps COUNT. A coloured-row gap on a board holding `wild` is the KNOWN
+                // colour-blind approximation (AddSourceToPool books every multi-colour source as one
+                // wild and CanPayFlat lets it pay any pip); the adopted ColorFeasibility gate owns
+                // that one, so it is excluded unless MTG_POOL_AUDIT_WILD asks for it. The GENERIC
+                // row is colour-independent -- a gap there means the pool claims more TOTAL mana
+                // than the board can make, which no colour gate can explain.
+                const bool colour_blind_class = (col < 6 && arm.pool.wild > 0 && !s_include_wild);
+                if (real < claimed && !colour_blind_class)
+                {
+                    gapped = true;
+                    detail += std::string(" ") + arm.tag + "/" + PipName(col) + ":"
+                            + std::to_string(claimed) + "->" + std::to_string(real);
+                }
+            }
+        }
+
+        // Signature: the sources the pool credited (untapped, controlled, land/dork/rock), each
+        // tagged with the properties the two sides disagree about most often.
+        std::vector<std::string> srcs;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            auto d = CardDatabase::Instance().LookupCached(p.card);
+            if (!d) { continue; }
+            const bool is_land = (d->tmpl == CardTemplate::BasicLand);
+            const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                              || d->params.mana_rock || IsPaySacSource(*d);
+            if (!is_land && !is_dork) { continue; }
+            std::string s = d->card.m_name.str();
+            s += "[y" + std::to_string(PermanentManaYield(state, p, *d));
+            if (!ManaSubtypeGateLive(state, state.active_player_index, *d)) { s += ",gate-dead"; }
+            if (d->card.IsCreature() && !CanTapNow(p, state.battlefield))   { s += ",sick"; }
+            if (d->params.creature_mana_only)                               { s += ",cr-only"; }
+            s += "]";
+            srcs.push_back(std::move(s));
+        }
+        std::sort(srcs.begin(), srcs.end());
+        std::string sig;
+        for (const std::string& s : srcs) { sig += s + " "; }
+
+        std::lock_guard<std::mutex> lk(g_mtx);
+        ++g_calls;
+        if (!gapped) { return; }
+        ++g_gapped;
+        ++g_by_sig[sig];
+        ++g_by_site[site];
+        if (g_dumps < 15)
+        {
+            ++g_dumps;
+            const ManaPool& pool = arms[0].pool;
+            std::fprintf(stderr,
+                "[pool-audit] site=%s turn=%d pool W%d U%d B%d R%d G%d C%d wild%d float%d |%s | srcs: %s\n",
+                site, state.turn_number, pool.white, pool.blue, pool.black, pool.red,
+                pool.green, pool.colorless, pool.wild, state.floating_mana.Total(),
+                detail.c_str(), sig.c_str());
+        }
+    }
+
+    struct Dumper {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            std::fprintf(stderr, "\n=== POOL AUDIT: probes=%llu gapped=%llu (%.1f%%) ===\n",
+                         (unsigned long long)g_calls, (unsigned long long)g_gapped,
+                         g_calls ? 100.0 * double(g_gapped) / double(g_calls) : 0.0);
+            for (auto& kv : g_site_calls)
+            { std::fprintf(stderr, "  site %-20s reaches=%llu gaps=%llu\n", kv.first.c_str(),
+                           (unsigned long long)kv.second, (unsigned long long)g_by_site[kv.first]); }
+            std::vector<std::pair<std::string, std::uint64_t>> v(g_by_sig.begin(), g_by_sig.end());
+            std::sort(v.begin(), v.end(), [](auto& a, auto& b){ return a.second > b.second; });
+            std::fprintf(stderr, "--- top gapped source signatures ---\n");
+            for (std::size_t i = 0; i < v.size() && i < 25; ++i)
+            { std::fprintf(stderr, "  %6llu  %s\n", (unsigned long long)v[i].second, v[i].first.c_str()); }
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     const Player& ap = state.ActivePlayer();
@@ -5987,6 +6149,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // Hoisted: one battlefield scan per CollectActions call, not one per candidate card, and only
     // when the prune is on (this is a millions-of-calls hot path). See the exemption below.
     const bool free_charge_live = g_emit_prune && FreeCastChargeLive(state);
+
+    if (poolaudit::Enabled()) { poolaudit::Probe(state, is_pre_combat ? "collect-m1" : "collect-m2"); }
 
     std::vector<Action> actions;
     // Reserve an optimistic upper bound so the push_backs below never re-grow the backing store
@@ -8555,25 +8719,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { any_match = true; break; }
                 }
                 if (!any_match) { continue; }
-                // HUMAN PLAY, second half of the same "never offer a silent no-op" rule: the tapped-Elf
-                // gate above is necessary but not sufficient, because the trailing apply pays through
-                // TapForCostDirect (exact) while everything upstream reasons about AvailableManaPool
-                // (over-approximate). Measured on StompySurprise s2 t6: the pool reported 5 green while
-                // the only untapped green sources were an Arbor Elf whose "untap target Forest" tap had
-                // no untapped Forest left, and an Elvish Mystic that entered off Call of the Wild that
-                // turn -- so the option was offered 127 times across 6 seeds and could never once fire.
-                // Trial-pay on a COPY (the same predicate the apply will run) and drop the action when
-                // it fails. Autonomous play is untouched -- it keeps the looser gate and does fire the
-                // ability (measured: 20/25, 13/22 and 0/4 executed activations over three 40-game
-                // seeds, with every paid attempt firing) -- so this is human-play-only and therefore
-                // byte-identical. Cost: one GameState copy per Lodge on the viewer path only.
-                if (HumanPlayActive())
-                {
-                    GameState probe = state;
-                    if (!TapForCostDirect(probe, sd->params.untap_creature_cost.value(),
-                                          /*for_creature=*/false))
-                    { continue; }
-                }
+                // NO affordability gate here, deliberately -- and note that the {G} is NOT free of
+                // one: the action carries its cost like any other, so EnumeratePlans prices it into
+                // the subset and drops the plan when the board cannot pay. c4153b0e added a
+                // human-play trial-pay here on the theory that the subset gate reasons about an
+                // over-approximate AvailableManaPool while the apply pays exactly; MTG_POOL_AUDIT
+                // refuted that (see docs/design/enumerated-but-unplayable-activations.md): pool and
+                // exact payer agree on 122/122 autonomous and 4/4 human-play Lodge offers, the two
+                // unpayable human-play offers were ones the pool ALSO called unpayable, and the
+                // trial-pay changed no reference replay and no fixture verdict. It was removed as a
+                // dead check whose own fixture passed with it disabled.
                 Action a;
                 a.kind           = Action::Kind::UntapCreature;
                 a.card_name      = src.card.m_name;

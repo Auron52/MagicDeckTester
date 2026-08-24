@@ -1,0 +1,41 @@
+{
+ "_comment": "Third leg of the Wirewood Lodge human-play rule (2026-08-24): the {G} may be funded by the turn's LAND DROP, and the option must still be offered. Same board as stompy_lodge_untap_hidden.json -- untapped Lodge, tapped Elvish Archdruid, tapped Forest, no untapped green source -- plus a FOREST IN HAND with the land drop unused, so 'play Forest, tap it for {G}, tap the Lodge, untap the Archdruid' is a legal line. This exists because c4153b0e's (now removed) human-play trial-pay probed the PRE-cast state, and a gate of that shape can only be sound if the land drop is already applied when CollectActions runs. It is -- EnumeratePlansWithLand plays the land first -- and this pins that, so any future affordability gate added at this emission has to keep it true. Fails as legal_not_enumerated the moment something prices the untap before the land.",
+ "deck": "decks/StompySurprise/StompySurprise.cod",
+ "turn": 5,
+ "on_the_play": true,
+ "max_turns": 5,
+ "active_life": 20,
+ "opponent_life": 20,
+ "env": {
+  "MTG_HUMAN_PLAY": "1",
+  "MTG_UNPRUNED": "1"
+ },
+ "battlefield": [
+  {
+   "name": "Wirewood Lodge",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": true
+  },
+  {
+   "name": "Elvish Archdruid",
+   "controller": 0,
+   "tapped": true,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Forest"
+ ],
+ "library_filler": "Forest",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "land=Forest;cast=Wirewood Lodge",
+ "expect_verdict": "accept",
+ "expect_no_win": true
+}
