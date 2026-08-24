@@ -119,34 +119,86 @@ through these counters; doing so is cheap (`MTG_M2_YIELD_STATS=1` on any batch) 
 first task if the question comes up again.
 
 
-## 4. MONDAY: finish the audit on the other 11 decks
+## 4. AUDIT COMPLETE — all 14 decks (2026-08-24)
 
-The greedy audit is complete on **antilife, fivecolour, kitty** only. The remaining 11 decks
-(hinata, burn, auras, goblins, knights, slivers, treasure_hunt, dragonstorm, creature_giving,
-mirrorwing, StompySurprise) have not been run through the counters. This is cheap and needs no code
-change — build a batch at each deck's PLAY settings (omit `depth`/`budget_ms` so the profile
-resolves; do NOT set `ignore_play_profile`) and read three stderr lines:
+Every deck run through the greedy counters at its own PLAY settings.
 
-```
-MTG_M2_YIELD_STATS=1 ./build/Release/mtg --batch <manifest>  2>&1 \
-  | grep -aE "GREEDY SITES|EXECUTOR GREEDY|M2 SITE"
-```
+### 4.1 Executor greedy DECISIONS — the line that matters
 
-**What a clean deck looks like** (matching the three already audited):
+**13 of 14 decks: ZERO.** No greedy main-phase decisions anywhere, and no greedy breakpoint
+fallbacks. One exception:
 
-* `EXECUTOR GREEDY Solve(): ... REAL main-phase decisions by depth:  NONE` and
-  `breakpoint-fallback=0` — the executor never decides greedily. **This is the line that matters.**
-* `GREEDY SITES` showing only `s90` (horizon rollout) and `s8` (breakpoint-variant baseline).
+| deck | sample | greedy executor decisions |
+|---|---|---|
+| **hinata** | 150 games (s777000) | **breakpoint-fallback = 4** |
+| **hinata** | 300 games (s900000/s910000) | **breakpoint-fallback = 1** |
+| every other deck | — | 0 |
 
-**What would be a genuine finding:** any non-zero EXECUTOR count, or a `GREEDY SITES` entry other
-than s8/s90 — i.e. one of breakpoint sites 0,1,2,4,6 falling back, which never happened on the three
-audited decks.
+Hinata is the ONLY deck where the executor ever decides greedily. It is a BREAKPOINT continuation
+(`AIEngine.cpp`, `if (!bp_searched_here) { extra = TurnSolver::Solve(...) }`) — a real, executed
+mid-turn decision made without search. Rate is roughly 1 per 100–300 games: rare, reproducible on
+independent seeds, and by the USER's criterion ("greedy logic taking over mid-search decisions I
+consider a defect") this is the one thing found that qualifies.
 
-A secondary, lower-priority question if it comes up: most decisions can only afford the shallowest
-scoring rollout (section 2), which is legitimate under the accepted design but caps what the
-per-deck searched-m2 hooks can ever be worth. Worth knowing whether the 20-virtual-ms budget is
-intended before investing more in those hooks. **Do not raise the default budget without measuring
-against the adoption bar below** — perf is a shipping constraint.
+### 4.2 Which decks even HAVE an interior second main
+
+`AIEngine::SetSearchPostCombat` is driven by `GoldFishRunner::DeckUsesSecondMain`, a narrow
+CARD-PARAMETER rule (`spectacle_cost`, `lifegain_to_loss`, `hinata_cost_reducer`,
+`combat_damage_puts_subtype_from_hand`, `attack_draw_cards`, `combat_damage_free_cast`,
+`attack_dig_attach_count` + `draw_on_equipment_etb`). Measured `M2 SITE` confirms it:
+
+| has a second main | antilife, fivecolour, kitty, hinata, goblins |
+|---|---|
+| **has NONE (M2 SITE all zeros)** | burn, auras, slivers, treasure_hunt, dragonstorm, knights, creature_giving, mirrorwing, stompy |
+
+**This retires most of the searched-design rollout.** Hooks 1/2/3 all concern the m1/m2 split and the
+interior second main, so on the nine decks with no second main they are **structurally inapplicable
+— not "unmeasured", inapplicable.** Do not spend time rolling them out there.
+
+### 4.3 Greedy at the BRANCH site (the decision site), depth > 0
+
+| deck | BRANCH searched | BRANCH greedy |
+|---|---|---|
+| antilife / fivecolour / kitty | all searched | **0** |
+| goblins | 0 | 0 (only d<=0) |
+| **hinata** | **0** | **20,842 per 150 games** |
+
+**Hinata is the only deck where hook 3 (`SearchedSecondMainInSearch`) would bind.** Its interior
+second main is decided greedily at the branch site ~20.8k times per 150 games, and it has no
+override.
+
+### 4.4 Per-deck greedy site map (all EVALUATION unless noted)
+
+`s0` draw breakpoint · `s1`,`s2`,`s4` other breakpoint classes · `s8` deferred/cantrip breakpoint ·
+`s90` `SolveWithLookahead` depth<=0 horizon rollout.
+
+| deck | sites seen |
+|---|---|
+| knights, stompy, auras, slivers | s90 only |
+| creature_giving | s8, s90 |
+| goblins | s90 |
+| burn | s0 |
+| dragonstorm | s2, s90 |
+| treasure_hunt | s1, s4, s90 |
+| mirrorwing | s0, s8, s90 |
+| hinata | s0, s8, s90 |
+
+All are the greedy-continuation BASELINE that the search compares against its searched breakpoint
+variants — benign wherever the executor count is 0, which is everywhere but hinata.
+
+### 4.5 Answering the USER's question directly
+
+*"Let's move on to any other decks that have a user approved order."* Seven decks have a
+USER-reviewed cast order: antilife, knights, creature_giving, fivecolour, mirrorwing (orders
+DEFAULT ON) and kitty, stompy (`MTG_KE_ORDER` / `MTG_STOMPY_ORDER` still default OFF A/B levers).
+
+Of those, the ones not yet touched by this work — **knights, creature_giving, mirrorwing, stompy —
+are all CLEAN (zero greedy executor decisions) and all structurally ineligible for the
+searched-design hooks (no second main). There is no work to do on them.**
+
+**The deck that needs work is HINATA, which does NOT have a USER-approved cast order.** Per the
+standing process gate (cast order is USER-REVIEWED per deck, never adopted from a measurement
+alone), a Hinata cast-order review is the prerequisite before any searched-design work there.
 
 ## 5. The adoption bar all of this is measured against
 
