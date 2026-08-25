@@ -5544,6 +5544,30 @@ bool TurnSolver::EquipmentDrawBreakpointInline()
     return heurarm::Flag(heurarm::EQUIP_DRAW_BP_INLINE, on);
 }
 
+// MTG_SF_PUT_BP -- site 6 also fires off a Stoneforge PUT, not only an Equipment CAST. USER
+// 2026-08-25: "It does matter that we can process the draw we get off it." DEFAULT ON;
+// MTG_SF_PUT_BP=0 disables. Scoped to the same watcher gate as the cast route, so every deck
+// without a draw_on_equipment_etb watcher is byte-identical whatever this says.
+//
+// ADOPTED ON REACHABILITY, not on frequency, and the distinction is the USER's: "I don't expect
+// it is that frequent, but it is possible which is reason enough to support it. In general I'm
+// looking for the highest degree of correctness we can manage and especially don't want this
+// truncated if I decide to run a high-depth high-budget set of games (which could be relevant
+// when choosing between two cards that are very close in terms of effectiveness and rarely
+// diverge)." Without this the drawn card is unreachable at ANY depth or budget -- the
+// infinite-budget test -- and the games it hides are precisely the rare divergences a close
+// deck-screening comparison is decided by. Frequency-at-play-settings is the wrong axis.
+//
+// MEASURED. Quality: 4,000 paired games, 0 better / 0 worse, 1 game play-changed (so it binds).
+// Cost, deterministic GameWorkMeter units over 3,000 paired games: +0.56% / -0.17% / +0.73% /
+// +0.60% work, and ~92% of games are bit-identical (688-706 of 750 unchanged per block). Cheap,
+// because the arming is gated on a live watcher and a put actually occurring.
+static bool SfPutBreakpointEnabled()
+{
+    static const bool on = EnvOn("MTG_SF_PUT_BP", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::SF_PUT_BP, on);
+}
+
 bool TurnSolver::EquipmentEtbDrawFires(const GameState& state, const CardDefinition& def)
 {
     // Cheapest test first: is_equipment is false for all but a handful of cards in one deck, so
@@ -16703,8 +16727,51 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             // Stoneforge put: pay {1}{W}, then tap + move the named hand card onto the
             // battlefield through the shared enter cascade (stranded-outlet safe).
+            //
+            // SITE 6 OFF A PUT (MTG_SF_PUT_BP). USER 2026-08-25: Stoneforge "should be handled this
+            // way" too -- "we want to dump the equipment on the board earlier so it could be
+            // equipped (and for the draw)... It's kind of like an Aether Vial for equipment."
+            // A put IS an Equipment entering, so a live Puresteel draws off it exactly as it does
+            // off a cast -- but PlanOpensBreakpoint's site-6 clause tests
+            // `a.kind == Action::Kind::CastFromHand`, so until now the draw fired and the turn was
+            // never re-decided on the card. Partly masked today: the deferred re-solve runs after
+            // the trailing Equip/Stoneforge/Balan passes, so a plan that ALSO casts an Equipment
+            // gets a continuation that incidentally sees the put's card. The hole is the PUT-ONLY
+            // plan -- no cast, no breakpoint, drawn card wasted.
+            //
+            // Evaluated PRE-put, matching the cast side's rule: the watcher has to be out already
+            // for its trigger to see this enter. Armed only at sink depth 0, like the cast-side
+            // deferral, so a put inside a continuation does not re-arm (this class has no
+            // do-while; that is the tutor-top reset's contract, not this one).
+            // Cheap tests FIRST. Lookup() is a by-NAME map probe with a std::string materialised
+            // from the InternedName, and this branch runs on every put the ROLLOUT applies (measured
+            // thousands per game, not the ~1.6% of REAL games that put) -- so ordering the lookup
+            // ahead of the flag made the lever cost ~29% wall with the lever OFF. Statics and a
+            // vector-empty test first; the map probe only once they all pass.
+            const bool put_maybe = s_defer_cantrip && sink_stack.empty()
+                                && SfPutBreakpointEnabled()
+                                && TurnSolver::EquipmentDrawBreakpointEnabled();
+            const CardDefinition* put_def =
+                put_maybe ? CardDatabase::Instance().Lookup(a.card_name.str()) : nullptr;
+            const bool put_draws = put_def != nullptr
+                                && TurnSolver::EquipmentEtbDrawFires(state, *put_def);
+            const std::vector<int> hand_before_put =
+                put_draws ? TurnSolver::HandCardNumbers(state) : std::vector<int>{};
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
-            { ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str()); }
+            {
+                ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str());
+                if (put_draws)
+                {
+                    static const bool s_sfput_trial = EnvOn("MTG_SF_PUT_TRIAL");
+                    if (s_sfput_trial)
+                    { std::fprintf(stderr, "[sfput] armed site6 off put of %s (turn %d)\n",
+                                   a.card_name.str().c_str(), state.turn_number); }
+                    deferred_cantrip_resolve = true;
+                    deferred_cantrip_site    = put_def;
+                    deferred_hand_before     = hand_before_put;
+                    deferred_equip_armed     = true;   // site 6, not the plain-cantrip site 3
+                }
+            }
         }
         else if (a.kind == Action::Kind::JitteModeAbility)
         {
@@ -20021,6 +20088,16 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
     }
     for (const Action& a : p.actions)
     {
+        // Site 6 off a Stoneforge PUT (MTG_SF_PUT_BP; arming site in ApplyPlanDirect). A put IS an
+        // Equipment entering, so a live watcher draws off it exactly as off a cast -- and this
+        // predicate is what earns the plan its bp_choice variants, so without the clause the
+        // continuation would exist but be permanently GREEDY (the wave walker reads this same
+        // predicate). a.card_name is the PUT card for this kind; the source rides sac_source_id.
+        if (watcher && SfPutBreakpointEnabled() && a.kind == Action::Kind::PutFromHandAbility)
+        {
+            const CardDefinition* pd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (pd && pd->params.is_equipment) { mask |= 1 << 6; }
+        }
         if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
         { continue; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
