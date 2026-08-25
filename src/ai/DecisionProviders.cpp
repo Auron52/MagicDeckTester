@@ -11460,6 +11460,36 @@ static bool StompyOrderEnabled()
     return heurarm::Flag(heurarm::STOMPY_ORDER, on);
 }
 
+// LITERAL-ORDER PROBES (2026-08-25). The gate-2 failure asks a question the USER put first: are we
+// failing to implement their written order, or did their order miss a case? Two clauses in the rank
+// below are ENGINE ADDITIONS beyond the verbatim list in docs/design/cast-order-rankings.md, and
+// each one is what flips a sampled counterexample. These levers restore the written list so the two
+// hypotheses can be told apart by measurement instead of by reading.
+//
+// MTG_STOMPY_WT_LITERAL -- the tutor's mid-vs-last census counts ONLY the two consumers the USER
+// named ("resets Call of the Wild Activations and Turntimber"). The shipped census also counts an
+// enters-draw engine (Vaultborn, own_creature_enters_draw), which the written [9] never mentions.
+// Counterexample s1500000g137 T4: the set is {Worldly Tutor, Vaultborn Tyrant}; the rank casts the
+// tutor first (14 < 16) and wins T6, the searched order casts Vaultborn first and wins T5. Under the
+// literal census the tutor has no consumer, ranks 24, and casts last -- the winning order.
+static bool StompyWtLiteral()
+{
+    static const bool on = EnvOn("MTG_STOMPY_WT_LITERAL");
+    return heurarm::Flag(heurarm::STOMPY_WT_LITERAL, on);
+}
+
+// MTG_STOMPY_TT_LITERAL -- Turntimber keeps the USER's single [7] position (rank 12) and never takes
+// the post-tutor 15. Rank 15 is a later refinement (the gi47 root cause) that puts Turntimber AFTER
+// the tutor whenever one is held and the top is unstacked; the written list puts [7] BEFORE [9].
+// Counterexample s1000000g444 T3: the set is {Worldly Tutor, Turntimber, Mirri's Guile}; the rank
+// casts the tutor first and wins T5, the searched order consumes the unstacked top with Turntimber
+// FIRST and wins T4 -- i.e. the USER's original 12-before-14.
+static bool StompyTtLiteral()
+{
+    static const bool on = EnvOn("MTG_STOMPY_TT_LITERAL");
+    return heurarm::Flag(heurarm::STOMPY_TT_LITERAL, on);
+}
+
 int StompyProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     if (!StompyOrderEnabled()) { return GenericProvider::CastOrderRank(s, def); }
@@ -11478,25 +11508,36 @@ int StompyProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
         // enters-draw engine (Vaultborn -- on the battlefield watching, or in hand to cast later
         // at 16). Otherwise it is the turn's LAST cast, setting up next turn's upkeep/draw
         // ("can choose to cast either location").
+        // StompyWtLiteral drops the enters-draw engine from BOTH censuses -- the USER's [9] names
+        // only Call activations and Turntimber. See the lever's note above.
+        const bool draw_engine_counts = !StompyWtLiteral();
         bool consumer = false;
         for (const Permanent& q : s.battlefield)
         {
             if (q.controller_index != s.active_player_index) { continue; }
             const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
             if (qd && (qd->params.activated_reveal_top_cost.has_value()
-                       || qd->params.own_creature_enters_draw > 0)) { consumer = true; break; }
+                       || (draw_engine_counts && qd->params.own_creature_enters_draw > 0)))
+            { consumer = true; break; }
         }
         if (!consumer)
         {
             // Hand consumers include a Turntimber (look_top): it now ranks 15 -- AFTER this 14 --
             // exactly so the {tutor, Turntimber} pair composes; without counting it here a
             // Call-less/Vaultborn-less hand would send the tutor to 24 (after 15) and break it.
+            // Under TT_LITERAL Turntimber sits at 12 (BEFORE this 14), so a hand Turntimber is no
+            // longer a reason to cast the tutor mid -- it already precedes us.
+            // Independent of WT_LITERAL: the USER's [9] DOES name Turntimber as a consumer, so a
+            // hand Turntimber keeps counting there. Only TT_LITERAL (which moves it to 12, ahead of
+            // us) removes the reason. Keeping the two levers separable is the point of the probe.
+            const bool hand_tt_counts = !StompyTtLiteral();
             for (const Card& hc : s.players[s.active_player_index].hand)
             {
                 const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
                 if (hd && (hd->params.activated_reveal_top_cost.has_value()
-                           || hd->params.own_creature_enters_draw > 0
-                           || hd->params.look_top_put_creature_count > 0)) { consumer = true; break; }
+                           || (draw_engine_counts && hd->params.own_creature_enters_draw > 0)
+                           || (hand_tt_counts && hd->params.look_top_put_creature_count > 0)))
+                { consumer = true; break; }
             }
         }
         return consumer ? 14 : 24;
@@ -11526,7 +11567,7 @@ int StompyProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
         // the doc: with TWO Turntimbers + a tutor, both share rank 15, losing "spend #1 on the
         // unknown top first"; the loop's pass structure, not the rank, is the route for that.
         const bool stacked = (s.top_stacked_turn == s.turn_number);
-        if (!stacked)
+        if (!stacked && !StompyTtLiteral())
         {
             for (const Card& hc : s.players[s.active_player_index].hand)
             {
@@ -11534,7 +11575,7 @@ int StompyProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
                 if (hd && hd->params.tutor_to_top) { return 15; }
             }
         }
-        return 12;
+        return 12;   // the USER's [7]; TT_LITERAL takes this branch unconditionally
     }
     if (p.tutor_to_battlefield_single)
     {
@@ -11553,13 +11594,18 @@ int StompyProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
         {
             const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
             if (hd == nullptr || !hd->params.tutor_to_top) { continue; }
+            // LOCKSTEP with the tutor's rank-14 census above, including under the literal-order
+            // probes: the two MUST agree (see below), so both levers are read here identically.
+            const bool draw_engine_counts2 = !StompyWtLiteral();
+            const bool hand_tt_counts2     = !StompyTtLiteral();
             bool consumer = false;
             for (const Permanent& q : s.battlefield)
             {
                 if (q.controller_index != s.active_player_index) { continue; }
                 const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
                 if (qd && (qd->params.activated_reveal_top_cost.has_value()
-                           || qd->params.own_creature_enters_draw > 0)) { consumer = true; break; }
+                           || (draw_engine_counts2 && qd->params.own_creature_enters_draw > 0)))
+                { consumer = true; break; }
             }
             if (!consumer)
             {
@@ -11570,8 +11616,9 @@ int StompyProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
                 {
                     const CardDefinition* hd2 = CardDatabase::Instance().LookupCached(hc2);
                     if (hd2 && (hd2->params.activated_reveal_top_cost.has_value()
-                                || hd2->params.own_creature_enters_draw > 0
-                                || hd2->params.look_top_put_creature_count > 0)) { consumer = true; break; }
+                                || (draw_engine_counts2 && hd2->params.own_creature_enters_draw > 0)
+                                || (hand_tt_counts2 && hd2->params.look_top_put_creature_count > 0)))
+                    { consumer = true; break; }
                 }
             }
             if (consumer) { return 13; }   // early: shuffle before the live tutor stack

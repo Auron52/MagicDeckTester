@@ -65,6 +65,10 @@ enum Slot : int
     M2_CAP1,                  // MTG_M2_CAP1               cap the interior m2 solve to depth 1
     STOMPY_ORDER,             // MTG_STOMPY_ORDER          USER-reviewed StompySurprise cast order
     SCALED_LAND_RANK,         // MTG_SCALED_LAND_RANK      reserve a live board-scaled LAND (Three Tree City)
+    TOP_RESOLVE,              // MTG_TOP_RESOLVE           tutor-to-top reset (the order's LOOP half)
+    STOMPY_WT_LITERAL,        // MTG_STOMPY_WT_LITERAL     tutor census = the USER's two consumers only
+    STOMPY_TT_LITERAL,        // MTG_STOMPY_TT_LITERAL     Turntimber always [7]=12, no post-tutor 15
+    KE_NO_CONDEMN,            // MTG_KE_NO_CONDEMN         suppress Kitty's breakpoint condemnation
     COUNT
 };
 
@@ -107,6 +111,10 @@ inline const char* Name(int slot)
         "MTG_M2_CAP1",
         "MTG_STOMPY_ORDER",
         "MTG_SCALED_LAND_RANK",
+        "MTG_TOP_RESOLVE",
+        "MTG_STOMPY_WT_LITERAL",
+        "MTG_STOMPY_TT_LITERAL",
+        "MTG_KE_NO_CONDEMN",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

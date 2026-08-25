@@ -11,6 +11,7 @@
 // delegating the rest.
 
 #include "DecisionProvider.h"
+#include "HeuristicArm.h"   // per-job A/B levers read inline by the provider hooks below
 
 struct Decklist;
 
@@ -840,7 +841,11 @@ public:
     // cost for byte-identical play: held-out +32.9% -> +18.3% and train +217% -> +84% over baseline,
     // same -0.1533/-0.1200 delta and the same 24/18 games faster, 1/0 slower (1800-game sweep,
     // logs/kitty_shape). Inert until MTG_EQUIP_DRAW_BP arms the class at all.
-    bool CondemnsConsideredAtBreakpoint() const override { return true; }
+    // MTG_KE_NO_CONDEMN (heurarm) suppresses this route so the SAVING can be measured with the
+    // class armed -- "condemnation on vs off, breakpoint on both sides" is otherwise unaskable
+    // (the global MTG_BP_CLASSIFY only ORs in, it cannot subtract). A/B lever only.
+    bool CondemnsConsideredAtBreakpoint() const override
+    { return !heurarm::Flag(heurarm::KE_NO_CONDEMN, false); }
     // Tutor breadth: score EVERY distinct Equipment, not the generic 6.
     //
     // This is a COVERAGE fix, not a heuristic. GenericProvider::TutorCandidates deliberately

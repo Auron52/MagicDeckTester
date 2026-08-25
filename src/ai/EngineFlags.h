@@ -188,8 +188,14 @@ inline bool AcqDigEnabled()
 // classification (AIEngine note_draw_engine + is_draw_engine) -- shared reader, lockstep pair.
 inline bool TopResolveEnabled()
 {
+    // Per-job overridable (heurarm) so the ORDER and the ORDER+LOOP arms of the StompySurprise
+    // adoption A/B run in ONE pooled batch. The order's rank-15 Turntimber / rank-19 Natural Order
+    // placements were designed ASSUMING this reset exists (the USER's proposal opens with it:
+    // "we could put the search cards above and trigger something like a breakpoint that re-enables
+    // cards that interact with the top of the library"), so measuring the order without it measures
+    // half a design. Unset everywhere => the env default, byte-identical.
     static const bool v = EnvOn("MTG_TOP_RESOLVE");   // default OFF; =1 enables (A/B lever)
-    return v;
+    return heurarm::Flag(heurarm::TOP_RESOLVE, v);
 }
 
 // MTG_LEGACY_STATIC_TAPPED=1: classify land tapped-ness from the STATIC enters_tapped flag in the
