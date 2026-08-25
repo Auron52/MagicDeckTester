@@ -11711,6 +11711,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         ManaPool eff = pool, eff_nc = pool_noncreature;
         bool credited = false;
         int  simul_ritual_credit = 0;
+        int  simul_mint_credit   = 0;   // §2a minted-Treasure credit (excluded from the surplus FILL)
         if (any_ritual)
         {
             int ritual_credit = 0;
@@ -11778,7 +11779,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 sel_mint = true;
             }
             if (sel_mint && minted > 0 && pool.CanPay(mint_costs))
-            { eff.wild += minted; eff_nc.wild += minted; credited = true; }
+            { eff.wild += minted; eff_nc.wild += minted; credited = true; simul_mint_credit = minted; }
         }
         // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
         if (any_affinity)
@@ -11898,6 +11899,13 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // per plan (mutually exclusive by hand_index). Feeds direct_dmg/total_eval BEFORE the win projection
         // and stores the filled action below; lockstep cost is recomputed from crackle_targets at execution.
         int fill_surplus = mana_ok ? std::max(0, (credited ? eff.Total() : pool.Total()) - combined.ManaValue()) : 0;
+        // §2a: a same-plan MINT cannot fund the surplus FILL. The fill's cost is paid at CAST time,
+        // before any minted Treasure exists (and the fan-maximal order casts the X trick BEFORE the
+        // minter), so a credited mint here sizes an X the real payment can only cover by tapping the
+        // attacker the trick pumps -- mw43 T4: the credit set Libation to X=2, the payment tapped the
+        // exalted Hierarch, and the 20-damage exact-lethal became 15 (win T4 -> T5, unbounded-persistent).
+        // Joint PAYABILITY keeps the credit (a mint really can fund a LATER cast); the FILL does not.
+        fill_surplus = std::max(0, fill_surplus - simul_mint_credit);
         int fill_j = -1; Action fill_action;
         if (fill_surplus > 0)
         {
@@ -17679,6 +17687,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         ManaPool eff = pool, eff_nc = pool_noncreature;
         bool credited = false;
         int  simul_ritual_credit = 0;
+        int  simul_mint_credit   = 0;   // §2a minted-Treasure credit (excluded from the surplus FILL)
         if (any_ritual)
         {
             int ritual_credit = 0;
@@ -17728,7 +17737,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 sel_mint = true;
             }
             if (sel_mint && minted > 0 && pool.CanPay(mint_costs))
-            { eff.wild += minted; eff_nc.wild += minted; credited = true; }
+            { eff.wild += minted; eff_nc.wild += minted; credited = true; simul_mint_credit = minted; }
         }
         // Same-turn HASTED dork credit. The rock credit above excludes creatures because a dork cast
         // this turn is summoning-sick -- but when THIS subset attaches a haste-granting Equipment to
@@ -18059,6 +18068,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // per plan. Feeds direct_dmg/total_eval before the win projection and stores the filled action;
         // lockstep cost recomputed from crackle_targets at execution. Mirrors Solve::consider.
         int fill_surplus = mana_ok ? std::max(0, (credited ? eff.Total() : pool.Total()) - combined.ManaValue()) : 0;
+        // §2a: a same-plan MINT cannot fund the surplus FILL. The fill's cost is paid at CAST time,
+        // before any minted Treasure exists (and the fan-maximal order casts the X trick BEFORE the
+        // minter), so a credited mint here sizes an X the real payment can only cover by tapping the
+        // attacker the trick pumps -- mw43 T4: the credit set Libation to X=2, the payment tapped the
+        // exalted Hierarch, and the 20-damage exact-lethal became 15 (win T4 -> T5, unbounded-persistent).
+        // Joint PAYABILITY keeps the credit (a mint really can fund a LATER cast); the FILL does not.
+        fill_surplus = std::max(0, fill_surplus - simul_mint_credit);
         int fill_j = -1; Action fill_action;
         if (fill_surplus > 0)
         {
