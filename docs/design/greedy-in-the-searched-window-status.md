@@ -143,9 +143,12 @@ deck. It was NOT zero, so the per-deck attribution below came from 12 single-dec
 `build/Release/mtg` that had been rebuilt from a WORKING TREE carrying ~660 lines of unrelated
 uncommitted engine work (a mana-order/reserve overhaul, `MTG_PAYSAC_FRESH_HOLD` /
 `MTG_M2_RELEASE` / `MTG_ONESHOT_RESERVE` / `MTG_PUMP_TARGET_HOLD` / `MTG_SCALER_PLAN_BIAS`). That
-work is NOT behaviour-neutral — the suite under it was failing 14/42 smoke and 27/70 regression at
-the time. Every number in this section was therefore **re-measured on a clean `git worktree` build of
-HEAD `994feba6`** and came back **identical, digit for digit, on all 12 decks**. The tables below are
+work is byte-identical with its levers OFF (verified: `mirrorwing_smoke_d3_s1001` reproduces GT
+`4.7200/bf00585158c29bdc` under the working-tree binary with no flags set) — the 14/42 smoke and
+27/70 regression failures visible in `test/logs/` at the time were its lever-ON A/B arms, which is
+what an arm is supposed to look like, not a broken tree. Every number in this section was
+nonetheless **re-measured on a clean `git worktree` build of HEAD `994feba6`** and came back
+**identical, digit for digit, on all 12 decks**. The tables below are
 clean-HEAD numbers. If you re-run this while the tree is dirty, check
 `test/logs/<mode>/mtg.run.meta` + `mtg.run.diff` first — `git_state=dirty` alone is not alarming
 (your own uncommitted test edits set it), but a diff touching `src/` invalidates the measurement.
