@@ -62,7 +62,10 @@
 #include "../core/GameState.h"
 #include "../core/ManaPool.h"
 #include "../cards/CardDatabase.h"
-#include "KeepModel.h"   // KeepGuard (Undecided / ForceKeep / ForceMulligan) for the keep-floor hook
+#include "KeepModel.h"    // KeepGuard (Undecided / ForceKeep / ForceMulligan) for the keep-floor hook
+#include "PlanContext.h"  // PlanTraits for the reserve-override hooks (Action-free header)
+#include <algorithm>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -999,6 +1002,47 @@ public:
     // pure-virtual-defaulted here because the ranking needs SpellEffects helpers unavailable in this
     // header; GenericProvider implements it and every archetype inherits that.
     virtual int ManaSourceRank(const GameState& s, const CardDefinition& def) const = 0;
+
+    // ReserveCreatureHold -- which of the turn's reservable mana CREATURES the whole-turn reserve
+    // ladder (BatchPrepayMainCasts) should keep holding once the full "hold every dork" rung has
+    // FAILED, i.e. when the bodies genuinely compete for mana. `crea_mask` is the battlefield-index
+    // bitmask of every reservable untapped mana creature; return the subset worth holding hardest.
+    // Consulted only under MTG_PUMP_TARGET_HOLD with live PlanTraits (see
+    // docs/design/mana-order-and-reserve-overhaul.md layer 3); returning `crea_mask` unchanged is
+    // "no narrowing" and reproduces the ladder exactly as shipped.
+    //
+    // Base rule (USER 2026-08-25: "with targeted pumps I would have the default only reserve the
+    // pumped creature"): when the plan casts an own-creature pump, hold ONLY its projected target
+    // (the body the pump lands on -- losing it to a mana tap wastes the trick); with no pump, no
+    // narrowing. A copy-magnet archetype overrides this the other way (Mirrorwing: EVERY untapped
+    // creature is a copy target, so hold them all -- see MirrorwingProvider).
+    virtual std::uint64_t ReserveCreatureHold(const GameState& s, const PlanTraits& t,
+                                              std::uint64_t crea_mask) const
+    {
+        if (t.pump_target_card == 0) { return crea_mask; }
+        std::uint64_t hold = 0;
+        const int n = static_cast<int>(std::min<std::size_t>(s.battlefield.size(), 64));
+        for (int i = 0; i < n; ++i)
+        {
+            if (((crea_mask >> i) & 1ull)
+                && s.battlefield[static_cast<std::size_t>(i)].card.m_number == t.pump_target_card)
+            { hold |= (1ull << i); }
+        }
+        return hold;   // may be 0: a non-mana-source target is never in the tap set anyway
+    }
+
+    // SpendOneShotsFreely -- flip the one-shot (§2b) hold OFF for this plan: true = let the payment
+    // spend pay-sac one-shots (Treasures) like any ranked source, false = hold them whenever the
+    // turn pays without them (the default doctrine: a spent one-shot is gone forever, a held one is
+    // worth exactly one mana on any later turn). Consulted under MTG_ONESHOT_RESERVE; `t` may
+    // legitimately be a default-constructed PlanTraits when no plan is in scope (per-payment path
+    // outside an apply), which the base rule treats as "no reason to spend" -> hold.
+    //
+    // The override case this exists for (lump doc §9, USER: "Especially in Mirrorwing Treasures
+    // should be used before creatures"): on a go-off turn whose bodies are multipliers, the
+    // Treasure should be SPENT so the bodies stay untapped -- see MirrorwingProvider.
+    virtual bool SpendOneShotsFreely(const GameState& /*s*/, const PlanTraits& /*t*/) const
+    { return false; }
 
     // OpponentLifegainUseful -- is making the OPPONENT gain life USEFUL to us right now? A
     // Grove-of-the-Burnwillows- style drip land (tap_opponent_lifegain) normally GIFTS the opponent life -- a

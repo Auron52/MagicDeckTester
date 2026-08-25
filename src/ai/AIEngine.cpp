@@ -2971,6 +2971,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::Suspend)
         { ApplySuspend(state, state.active_player_index, a.card_name); }
     }
+    // PLAN TRAITS -- executor mirror of ApplyPlanDirect (lockstep, same builder): in scope over the
+    // prepay and every cast payment below. Null scope (levers off) changes nothing.
+    PlanTraits _plan_traits;
+    if (PlanTraitsWanted()) { _plan_traits = TurnSolver::ComputePlanTraits(state, plan.actions); }
+    PlanTraitsScope _plan_traits_scope(PlanTraitsWanted() ? &_plan_traits : nullptr);
+    TapKeepLastScope _keep_last(PumpTargetHoldEnabled() ? _plan_traits.pump_target_card : 0);
     // Whole-turn batch pre-payment -- mirror of ApplyPlanDirect (lockstep): tap for the combined
     // cost of the main hand casts and pre-load floating so the casts below drain the pool instead of
     // the stranding per-cast greedy. Same (state, plan.actions) inputs as the rollout at the same

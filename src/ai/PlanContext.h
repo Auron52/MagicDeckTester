@@ -57,3 +57,57 @@ public:
 private:
     const PlanContext* m_prev;
 };
+
+// PLAN TRAITS: what this turn's committed plan DOES, distilled for the mana payment layer
+// (docs/design/mana-order-and-reserve-overhaul.md, layer 3). Where PlanContext above is a raw view
+// for per-action decisions on the ENUMERATION path, PlanTraits is a one-shot summary computed at
+// plan APPLICATION time (TurnSolver::ComputePlanTraits, called by both apply paths -- rollout
+// ApplyPlanDirect and executor AIEngine::TakeTurn, through the one shared builder so the two cannot
+// drift) and installed over the whole payment (prepay + casts) via PlanTraitsScope. Consumers:
+// the prepay reserve ladder (BatchPrepayMainCasts), the per-payment one-shot hold, and
+// ManaSourceRank's scaler bias. All consumers treat a null CurrentPlanTraits() as "no extra
+// information" -- behave exactly as the static rules always did -- so real resolution, human play
+// and every path outside a plan apply are byte-identical by construction.
+struct PlanTraits
+{
+    bool main2                 = false;  // built in the POST-combat main: combat already happened,
+                                         // so a body held back buys nothing this turn (goldfish)
+    bool plan_has_own_pump     = false;  // a plan cast targets an OWN creature (target_own_creature
+                                         // pump or a solo_target_trick)
+    bool copy_magnet_live      = false;  // board has a copies_solo_targeted_spells permanent
+                                         // (Zada / Mirrorwing): every own creature is a copy target
+    bool bodies_are_multipliers= false;  // own-pump in plan AND magnet live -> the trick pays per
+                                         // untapped body, so bodies out-value their mana this turn
+    int  pump_target_card      = 0;      // projected pump target's card.m_number (0 = none): the
+                                         // SAME picker the apply's auto-target uses, evaluated
+                                         // pre-payment -- replaces the old every-turn greatest-
+                                         // power-attacker proxy with a plan-gated exact hold
+    bool casts_scaler_food     = false;  // plan casts a creature matching a board subtype-scaler's
+                                         // subtype (Priest of Titania + Elves in the plan): the
+                                         // scaler's burst GROWS if it taps after those casts
+    bool attack_matters        = false;  // pre-combat main and an eligible attacker exists: a held
+                                         // body converts to damage this turn
+    int  mana_casts            = 0;      // plan casts that pay real mana (nonfree, ManaValue>0):
+                                         // the PER-PAYMENT one-shot hold is only sound when this
+                                         // is <=1 -- on a multi-cast turn the per-cast greedy
+                                         // holding a one-shot strands the joint line (the retired
+                                         // MTG_RESERVE failure mode; traced on MW gi75/gi141 at
+                                         // UNBOUNDED budget), so multi-cast turns rely on the
+                                         // whole-turn prepay ladder alone
+};
+
+// Null when no plan apply is in scope (or every consumer lever is off -- the builder is not run).
+const PlanTraits* CurrentPlanTraits();
+
+// RAII setter, PlanContextScope's twin. Nests safely.
+class PlanTraitsScope
+{
+public:
+    explicit PlanTraitsScope(const PlanTraits* pt);
+    ~PlanTraitsScope();
+    PlanTraitsScope(const PlanTraitsScope&)            = delete;
+    PlanTraitsScope& operator=(const PlanTraitsScope&) = delete;
+
+private:
+    const PlanTraits* m_prev;
+};

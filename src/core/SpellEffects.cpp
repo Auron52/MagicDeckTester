@@ -1136,7 +1136,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         const bool is_src = (def->tmpl == CardTemplate::BasicLand)
                          || (def->tmpl == CardTemplate::ManaDork && CanTapNow(state.battlefield[i], state.battlefield))
                          || def->params.mana_rock
-                         || IsPaySacSource(*def);   // §2a: a cracked Treasure is a payment source
+                         || PaySacSpendableNow(state, state.battlefield[i], *def);   // §2a (fresh-hold aware, matching the payer)
         if (!is_src) { continue; }
         if (def->params.creature_mana_only && !for_creature) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }
@@ -1744,6 +1744,21 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                     return pa < pb;
                 });
         }
+        // PUMP-TARGET LAST (g_tap_keep_last_card -- MTG_PUMP_TARGET_HOLD's core-side half): within
+        // the body group, the projected pump target is the very LAST source a payment should reach
+        // for -- it is the creature the plan's trick lands on, so burning it for a pip any other
+        // body covers wastes the trick. Stable partition AFTER the yield/power sorts so it sits at
+        // the back whatever they decided. 0 (lever off / no pump in plan) = untouched order.
+        if (g_tap_keep_last_card != 0 && first_body != s_src_cands_buf.end())
+        {
+            const int bfn = static_cast<int>(state.battlefield.size());
+            std::stable_partition(first_body, s_src_cands_buf.end(),
+                [&state, bfn](const std::pair<int, const CardDefinition*>& c)
+                {
+                    return !(c.first >= 0 && c.first < bfn
+                             && state.battlefield[c.first].card.m_number == g_tap_keep_last_card);
+                });
+        }
     }
     const std::vector<std::pair<int, const CardDefinition*>>& cands = *src_cands;
 
@@ -1888,7 +1903,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 const bool is_src = (d->tmpl == CardTemplate::BasicLand)
                                  || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                                  || d->params.mana_rock
-                                 || IsPaySacSource(*d);   // §2a
+                                 || PaySacSpendableNow(state, p, *d);   // §2a (fresh-hold aware, matching the payer)
                 if (!is_src) { continue; }
                 if (d->params.creature_mana_only && !for_creature) { continue; }
                 if (!StorageSourceLive(p, *d)) { continue; }   // uncharged storage land makes no mana
@@ -2009,7 +2024,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         const bool is_src = (def->tmpl == CardTemplate::BasicLand)
                          || (def->tmpl == CardTemplate::ManaDork && CanTapNow(state.battlefield[i], state.battlefield))
                          || def->params.mana_rock
-                         || IsPaySacSource(*def);   // §2a: a cracked Treasure is a payment source
+                         || PaySacSpendableNow(state, state.battlefield[i], *def);   // §2a (fresh-hold aware, matching the payer)
         if (!is_src) { continue; }
         if (def->params.creature_mana_only && !for_creature) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }   // uncharged storage: no mana

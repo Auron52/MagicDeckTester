@@ -49,7 +49,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         bool is_src = (def.tmpl == CardTemplate::BasicLand)
                    || (def.tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                    || def.params.mana_rock
-                   || IsPaySacSource(def);   // §2a: a Treasure pays like a land, then dies
+                   || PaySacSpendableNow(state, p, def);   // §2a: a Treasure pays like a land, then dies (fresh-hold aware)
         if (!is_src) { return false; }
         if (def.params.creature_mana_only && !for_creature) { return false; }
         if (!StorageSourceLive(p, def)) { return false; }   // uncharged storage land makes no mana
@@ -194,7 +194,12 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     kind = 1;
                     }
                 }
-                const int rank = ResolveProvider(state).ManaSourceRank(state, *def);
+                int rank = ResolveProvider(state).ManaSourceRank(state, *def);
+                // Reference-replay tap preference (--tap-pref; nulled by RevealLogPause -> real
+                // payments only): a source the RECORDING tapped in this same (turn, phase)
+                // outranks every unpinned source. Order bias only -- never legality; among
+                // pinned sources the normal rank still decides.
+                if (g_play_tap_pref_chooser && (*g_play_tap_pref_chooser)(state, p)) { rank -= 100000; }
                 if (rank < best_rank) { best_rank = rank; best_i = i; best_kind = kind; }
             }
             if (best_i < 0) { return false; }
@@ -812,6 +817,23 @@ static bool LadderProjectable(const GameState& state, const std::vector<Action>&
     return true;
 }
 
+// §2a FRESH-HOLD: a minted Treasure is same-turn mana only when a copy-magnet is live (board) or
+// the plan itself casts one -- otherwise the hold banks it, and crediting it below would promise
+// mana the payer will refuse. Plan-wide magnet check, not order-position-exact: an over-credit
+// here only ever picks a DIFFERENT legal order (see the FirstUnpayablePos header note), and the
+// common fan shape is Zada-then-Gold-Rush inside one plan.
+static bool MintedTreasureSpendable(const GameState& state, const std::vector<Action>& acts)
+{
+    if (!TreasurePaySourceEnabled() || !PaySacFreshHoldEnabled()) { return true; }
+    if (CopyMagnetLive(state, state.active_player_index)) { return true; }
+    for (const Action& a : acts)
+    {
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d && d->params.copies_solo_targeted_spells) { return true; }
+    }
+    return false;
+}
+
 // The ORDER POSITION of the first cast the line cannot pay for, or -1 when all of them pay.
 // Projected against AvailableManaPool -- the same aggregate accounting pool the batch pre-payment
 // uses, not a per-source solve, so it is approximate in the same direction and to the same degree.
@@ -851,7 +873,7 @@ static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& 
         // an unpayable line as payable.
         {
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-            if (d && d->params.creates_treasures > 0)
+            if (d && d->params.creates_treasures > 0 && MintedTreasureSpendable(state, acts))
             { AddColorToPool(pool, std::string(), d->params.creates_treasures); }
         }
     }
@@ -1077,7 +1099,7 @@ ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
         if (!def) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || def->params.mana_rock
-                    || IsPaySacSource(*def);   // §2a
+                    || PaySacSpendableNow(state, p, *def);   // §2a (fresh-hold aware)
         if (!is_land && !is_dork) { continue; }
         // Deathrite: credit at most #graveyard-lands such sources (fuel-counted, lazily).
         if (def->params.gy_land_exile_mana)
@@ -1106,7 +1128,8 @@ ManaPool AvailableManaPoolNoAttackers(const GameState& state)
         auto def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
-        bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || def->params.mana_rock;
+        bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || def->params.mana_rock
+                    || PaySacSpendableNow(state, p, *def);   // §2a lockstep with AvailableManaPool (a Treasure never attacks)
         if (!is_land && !is_dork) { continue; }
         if (def->card.IsCreature() && CanAttackFull(p, state.battlefield, active))
         {
@@ -1243,7 +1266,7 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
         const bool is_land = (def->tmpl == CardTemplate::BasicLand);
         const bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                           || def->params.mana_rock
-                          || IsPaySacSource(*def);   // §2a: see ComputeAvailableColors
+                          || PaySacSpendableNow(state, p, *def);   // §2a: see ComputeAvailableColors (fresh-hold aware)
         if (!is_land && !is_dork) { continue; }
         if (def->params.gy_land_exile_mana)
         {
@@ -1483,6 +1506,46 @@ static std::uint64_t PlanReserveMask(const GameState& state)
     return mask;
 }
 
+// Per-payment ONE-SHOT hold (MTG_ONESHOT_RESERVE, §2b "waste is the trigger" -- see
+// docs/design/mana-order-and-reserve-overhaul.md layer 2). The whole-turn ladder in
+// BatchPrepayMainCasts covers multi-cast turns, but single-cast turns DECLINE the prepay
+// (PP_FEW_CASTS, the majority shape) and the §2a rank-26 tier would then spend a pay-sac Treasure
+// EAGERLY -- ahead of tri/rainbow lands -- on a turn with slack. Same reserve-then-fallback
+// soundness as ReservableSpecialMask: the held attempt runs first, and a payment that genuinely
+// needs the one-shot releases it via the unrestricted retry. The provider bias (SpendOneShotsFreely,
+// e.g. Mirrorwing's go-off turns) zeroes the hold for the whole plan. Inert unless BOTH
+// MTG_ONESHOT_RESERVE and MTG_TREASURE_PAY_SOURCE are on.
+static std::uint64_t OneShotHoldMask(const GameState& state)
+{
+    if (!OneShotReserveEnabled() || !TreasurePaySourceEnabled()) { return 0; }
+    const int n = static_cast<int>(state.battlefield.size());
+    if (n > 64) { return 0; }                    // bitmask limit, matching ReservableSpecialMask
+    const PlanTraits* pt = CurrentPlanTraits();
+    // The per-payment hold fires ONLY under LIVE traits on a SINGLE-mana-cast plan -- where this
+    // one payment IS the turn's whole demand, so "payable without the one-shot" is judged against
+    // the turn and the hold is sound. Everywhere else it must stay out:
+    //   * multi-cast plans: each cast paying "without the one-shot" locally is the retired
+    //     MTG_RESERVE stranding (judged per payment, not per turn) -- the whole-turn prepay
+    //     ladder owns those turns with ONE joint solve;
+    //   * null traits (search-interior payments outside a plan apply): a bare hold here distorts
+    //     the ROLLOUT'S simulated futures -- traced on MW gi75 (T+O, unbounded d5): the deep
+    //     rollouts under the hold flipped a near-tie T2 pick (Hierarch -> Mystic) whose line then
+    //     never assembles the T4 double-Gold-Rush kill. Conservative null-scope = exactly the
+    //     PlanTraits contract ("null -> behave exactly as before").
+    if (!pt || pt->mana_casts >= 2) { return 0; }
+    if (ResolveProvider(state).SpendOneShotsFreely(state, *pt)) { return 0; }
+    const int active = state.active_player_index;
+    std::uint64_t mask = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && IsPaySacSource(*d)) { mask |= (1ull << i); }
+    }
+    return mask;
+}
+
 // THE public payment entry (C1 unit 5) -- reserved-first retry around TapForCostSharedOnce.
 // Snapshot everything a payment can touch (incl. the executor's `available` accounting pool, when
 // present) so a reserved MISS restores byte-identically before the normal attempt (which must
@@ -1533,7 +1596,8 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         return false;
     }
 
-    const std::uint64_t rmask = ReservableSpecialMask(state) | PlanReserveMask(state);
+    const std::uint64_t rmask = ReservableSpecialMask(state) | PlanReserveMask(state)
+                              | OneShotHoldMask(state);
     if (rmask != 0)
     {
         const int a = state.active_player_index;

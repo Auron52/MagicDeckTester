@@ -1634,8 +1634,32 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def);
 // mode): smoke -0.3616, regression -0.5783, HELD-OUT overnight -1.3840. Deterministic counters on
 // Mirrorwing: -2.8% rollout calls, -3.8% turn_steps -- better play ends games sooner, so it is
 // cheaper too. Off-switch MTG_NO_DORK_TAP_LAST restores the plain colour rank for A/B.
+//
+// FUEL-CONSUMING (67): a dork whose mana tap burns a NONRENEWABLE resource (gy_land_exile_mana --
+// Deathrite Shaman exiles a graveyard land per tap) taps after EVERY other creature. USER doctrine
+// (2026-08-25): "We should be prioritizing tapping most other dorks over Deathrite because Fetches
+// are a limited resource" -- with the explicit caveat that this is NOT generic against a domain
+// grower (Faeburrow Elder / Bloom Tender): "You might tap those after to get the full value of
+// their tap" (spending Deathrite's one mana on a small pip can be what saves the grower's
+// multi-yield for a later cast, exactly the FiveColour s13_gi12 human line), "or for the higher
+// attack damage of Faeburrow" (+1/+1 per colour + vigilance: a pre-combat mana tap forfeits a
+// 4-5 power attack that an attacking-but-vigilant Faeburrow would have kept, while still tapping
+// for mana post-combat). So 67 is the
+// DEFAULT, not a law: it is the measured-better greedy order on the one deck that has both
+// (held-out fivecolour: every mover returned-to-GT or beat it), and the contextual exceptions
+// belong to the layers that can see the whole turn -- the reserve ladder in engine play, the
+// --tap-pref recording pin in reference replay -- never to this per-source rank. Any other
+// creature tap is recovered at untap; this one permanently destroys a future activation. The plain
+// colour ladder got this right by accident (DRS's any-colour yield read as rainbow 50, after
+// domain ~30), and the band collapsed the pair: DRS landed at F (plain dork) / F+1 (plan-bias
+// flat), BEFORE the domain grower, so a T3 payment that clean covered with lands+Faeburrow instead
+// tapped Deathrite and exiled the fetch land -- and the T4 exact-cover the hand-played reference
+// FiveColour s9_gi8 recorded (Cannons+Faeburrow+Oko off 9 = 3 duals + DRS + Faeburrow-5) became
+// unpayable, dropping the recorded plan from enumeration. Same defect family as the Lodge band
+// inversion below: a within-band order that spends the irrecoverable source first.
 static constexpr int kManaCreatureTapRank         = 64;
 static constexpr int kGrowableManaCreatureTapRank = 65;
+static constexpr int kFuelManaCreatureTapRank     = 67;
 
 // DEFAULT OFF (opt in with MTG_DORK_TAP_LAST=1), pending the one-shot fix below.
 //
@@ -1663,8 +1687,34 @@ int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& de
     const int r = ManaSourceRankBase(s, def);
     if (DorkTapLastEnabled() && def.tmpl == CardTemplate::ManaDork)
     {
+        const int F = kManaCreatureTapRank;
+        // Fuel-consuming dork (Deathrite): last of ALL creatures, both band paths -- its tap
+        // permanently exiles graveyard fuel, which no other band member's tap costs. See the
+        // kFuelManaCreatureTapRank comment for the FiveColour s9_gi8 trace.
+        if (def.params.gy_land_exile_mana) { return kFuelManaCreatureTapRank; }
+        // SCALER PLAN BIAS (MTG_SCALER_PLAN_BIAS + live PlanTraits): a scaler's slot in the band
+        // depends on WHAT THE PLAN DOES (USER 2026-08-24; mana-order-and-reserve-overhaul.md).
+        // Casting its food this turn -> tap it LAST (F+2): the burst counts the creatures the plan
+        // is about to land. Attack turn, no food -> tap it FIRST among creatures (F): one big body
+        // pays what N flat bodies would, keeping the flat dorks untapped to swing (§5b's stompy
+        // body-count lesson, applied only on the turns it holds). The flat creatures sit at F+1 and
+        // the domain scaler (Faeburrow/Bloom Tender -- grows with COLOURS, held back per §5b's
+        // winning arm) at F+2. Null traits (lever off / outside a plan apply) -> the static band
+        // below, byte-identical to the shipped shape.
+        const PlanTraits* pt = ScalerPlanBiasEnabled() ? CurrentPlanTraits() : nullptr;
+        if (pt)
+        {
+            if (IsScaledManaDork(def))
+            {
+                if (pt->casts_scaler_food) { return F + 2; }
+                if (pt->attack_matters)    { return F; }
+                return F + 1;
+            }
+            if (def.params.domain_mana) { return F + 2; }
+            return r < F + 1 ? F + 1 : r;
+        }
         if (def.params.domain_mana) { return kGrowableManaCreatureTapRank; }
-        return r < kManaCreatureTapRank ? kManaCreatureTapRank : r;
+        return r < F ? F : r;
     }
     return r;
 }
@@ -1674,17 +1724,18 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // See DecisionProvider::ManaSourceRank. Flexibility rank for the scarcity-first tap order (LOWER =
     // tap earlier). SPEND the least flexible first so the flexible sources stay available.
     const int active = s.active_player_index;
-    // TEMPORARY SWEEP SCAFFOLDING (MTG_PAYSAC_RANK, value-carrying int, 0/unset = off = fall through
-    // to the flexibility ladder below). A §2a payment source (IsPaySacSource) has an EMPTY produces
-    // list, so EffectiveProduces synthesises WUBRG for it and the ladder rates it "rainbow" (50) --
-    // an accident of the colour model, not a decision. This selector prices the alternatives so the
-    // rank can be chosen by measurement. Inert unless MTG_TREASURE_PAY_SOURCE is on (nothing else
-    // satisfies IsPaySacSource). DELETE once the sweep is recorded.
-    if (IsPaySacSource(def))
-    {
-        static const int v = EnvInt("MTG_PAYSAC_RANK", 0);
-        if (v > 0) { return v; }
-    }
+    // PAY-SAC ONE-SHOT (§2a Treasure): rank 26 -- after the filters (25), before tri (30). Without
+    // this tier it accidentally ranked "rainbow" (50): its produces list is EMPTY, EffectiveProduces
+    // synthesises WUBRG, and the ladder read that as flexibility. But its governing axis is
+    // EXACTNESS, not colour (lump-mana-sources doc §9): one wild mana, gone forever when spent --
+    // so it pays ahead of the flexible lands and all creatures, behind the fixed lands. Swept via
+    // the (deleted) MTG_PAYSAC_RANK scaffolding: 25/26 measured -0.0050 train / -0.0044 held-out
+    // (t=-6.77) on Mirrorwing, compounding with the creature band (mana-creature-tap-order.md §8).
+    // The "keep the Treasure on a durdle turn" half is NOT this rank -- it is the reserve ladder's
+    // one-shot hold (mana-order-and-reserve-overhaul.md layer 2), which overrides this order
+    // whenever the turn pays without the one-shot. Inert unless MTG_TREASURE_PAY_SOURCE is on
+    // (nothing else satisfies IsPaySacSource).
+    if (IsPaySacSource(def)) { return 26; }
     // A COLOURLESS-only manland (Mutavault) has marginal mana (pays only generic) but real attack
     // value, so SAVE it: rank above even rainbow, so it's tapped only when nothing else can pay. (It
     // is still used when required; ranking it last just stops the greedy spending it on a pip a real
@@ -1745,8 +1796,18 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // the normal {C}-land rank below and its colourless is spent early -- USER 2026-08-20: "allow
     // using it for colourless early if there are no scaling sources at 2+ elves. Otherwise the
     // colourless could be stranded." (MTG_UNTAP_BURST=0 zeroes the net -> plain rank everywhere.)
+    // BAND INTERACTION (strict-bar fix 2026-08-25, stompy block st139/st4/st351/...): 63 is "past
+    // the scaled dorks" only against their STATIC rank (61). With the creature band on
+    // (MTG_DORK_TAP_LAST) every dork moves to 64..66 (F..F+2), which INVERTED this invariant -- the
+    // Lodge tapped before the Priest, its at-fire-time yield read an UNTAPPED board, and the burst
+    // died (10 uniform 4->5 losses on held-out stompy; the {Priest, Symbiosis} pair became
+    // unpayable). The burst land must out-rank the whole band; 63 is unchanged with the band off.
     if (def.params.untap_creature_cost.has_value()
-        && UntapLandBurstNet(s, active, def) > 0) { return 63; }
+        && UntapLandBurstNet(s, active, def) > 0)
+    // +3 not +2 since the fuel tier (kFuelManaCreatureTapRank, 67) joined the band: the burst land
+    // must stay past EVERY band member. Behaviour-identical for every existing deck (no deck holds
+    // both a Lodge and a fuel dork; nothing else occupies 67/68).
+    { return DorkTapLastEnabled() ? kGrowableManaCreatureTapRank + 3 : 63; }
     // Depletion lands (Saprazzan Skerry, Sandstone Needle) are deliberately NOT reserved: they are
     // RAMP you normally want to spend, so blanket-conserving them via the ordering would misfire far
     // more often than the rare "wasted a counter" case helps. They rank by colour like any land.
@@ -9008,13 +9069,22 @@ bool MirrorwingProvider::TrickCastSensible(const GameState& s, int me,
         if (fists_in_hand > 0) { proj += drawn + 2; }                // a held Fists can also fire
         if (proj >= s.players[1 - me].life) { return true; }
     }
+
     // (A draw-trick HOLD rule lived here 2026-08-12 and was retired the same day by
     // measurement: zero branching reduction on the label path, and a persistent line-loss
     // (smoke gi99: the winning line spends Fists as tempo and never deploys the in-hand
     // Zada -- two lands through T4 meant "everything in place" was never true). USER call:
     // "if it doesn't reduce branching we can skip it.")
 
-    if (gas_mv_sum > pot) { return true; }   // (c) mana-poor relative to TOTAL gas in hand
+    // (c) mana-poor relative to TOTAL gas in hand. DELIBERATELY LOOSE -- admission is not
+    // choice. A next-turn "acceleration" tightening was built and REVERTED the same day
+    // (2026-08-25): it was compensating for the real §2a defect (BuildNonCreaturePool missing
+    // the pay-sac term starved the deferred continuations that make an admitted Gold Rush GOOD
+    // or BAD visible to the search), and once that was fixed the tightening only *cost* lines --
+    // mw74's winning T2 bank is SPECULATIVE (Mirrorwing drawn next turn, made castable by the
+    // banked Treasure), which no hand-aware acceleration test can credit. With the pools honest,
+    // the search itself separates mw68's bad early GR (a body forgone) from mw74's good one.
+    if (gas_mv_sum > pot) { return true; }
     // (d) redundancy: the candidate itself is in hand, so >=2 means multiple copies held.
     if (gr_in_hand >= 2 && creatures_bf >= 2) { return true; }
     // (e) combat-pump chip (gi87: old T6 win -> gated T9). The gi87 denial profile was flooded

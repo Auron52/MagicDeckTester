@@ -6,12 +6,18 @@
 namespace
 {
     thread_local const PlanContext* t_current = nullptr;
+    thread_local const PlanTraits*  t_traits  = nullptr;
 }
 
 const PlanContext* CurrentPlanContext() { return t_current; }
 
 PlanContextScope::PlanContextScope(const PlanContext* pc) : m_prev(t_current) { t_current = pc; }
 PlanContextScope::~PlanContextScope() { t_current = m_prev; }
+
+const PlanTraits* CurrentPlanTraits() { return t_traits; }
+
+PlanTraitsScope::PlanTraitsScope(const PlanTraits* pt) : m_prev(t_traits) { t_traits = pt; }
+PlanTraitsScope::~PlanTraitsScope() { t_traits = m_prev; }
 
 std::pair<const Action*, const Action*> PlanContextRest(const PlanContext* pc)
 {

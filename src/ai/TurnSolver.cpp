@@ -421,7 +421,15 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
         auto def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.creature_mana_only) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
-        bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || def->params.mana_rock;
+        // §2a: a pay-sac Treasure is an artifact source -- it must be in the NONCREATURE pool or the
+        // noncreature affordability test rejects casts the payer would happily crack it for. The
+        // MISSED conversion site of the §2a swap (mw68 T4: post-Gold-Rush re-solve, Fists of Flame
+        // payable via Crag + fan Treasures, pool_nc saw only the Crag -> {Fists} subset "unpayable"
+        // -> empty continuation -> opponent survives at exactly 1 life). The colour-feasibility scan
+        // that post-filters this pool (ComputeColorFeasibility, noncreature=true) already counted
+        // them -- this restores flat/colour consistency. Fresh-hold aware like every pool scan.
+        bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || def->params.mana_rock
+                    || PaySacSpendableNow(state, p, *def);
         if (!is_land && !is_dork) { continue; }
         // Deathrite: credit at most #graveyard-lands such sources (mirrors AvailableManaPool).
         if (def->params.gy_land_exile_mana)
@@ -1385,7 +1393,10 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
                    // Treasure could not cast Zada {3}{R}, drew three copies, cast none, and never won
                    // (game 1497, T6 win -> no win). The old sac_wild credit below covered this; when
                    // the source model took over that credit, this scan had to take over with it.
-                   || IsPaySacSource(*def);
+                   // (the fresh-hold narrows this to Treasures banked before this turn -- the
+                   // colour-fix line stays "bank magnetless, cast off it NEXT turn", which is
+                   // exactly the clause-(c) banking shape; a banked Treasure still passes here.)
+                   || PaySacSpendableNow(state, p, *def);
         if (!is_src) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land
         for (Color c : EffectiveProduces(state, active, *def))   // RP -> union of other lands
@@ -2418,7 +2429,8 @@ static int PoolWithoutBestAttacker(const GameState& state, int best_attacker)
         if (!d || d->params.creature_mana_only) { continue; }
         const bool is_land = (d->tmpl == CardTemplate::BasicLand);
         const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
-                          || d->params.mana_rock;
+                          || d->params.mana_rock
+                          || PaySacSpendableNow(state, p, *d);   // §2a: spendable Treasures are spare mana too
         if (!is_land && !is_dork) { continue; }
         const int y = PermanentManaYield(state, p, *d);
         pool += (y >= 0 ? y : ManaProducedPerTap(*d));
@@ -3036,7 +3048,8 @@ std::vector<int> TurnSolver::ColorCriticalReserve(const GameState& state,
         if (!d) { continue; }
         const bool is_src = (d->tmpl == CardTemplate::BasicLand)
                          || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
-                         || d->params.mana_rock;
+                         || d->params.mana_rock
+                         || PaySacSpendableNow(state, p, *d);   // §2a: BuildColorFeasibility counts these
         if (!is_src) { continue; }
         const ColorFeasibility without = BuildColorFeasibility(state, /*noncreature=*/false, &p);
         if (!without.usable) { continue; }
@@ -3109,7 +3122,8 @@ std::vector<int> TurnSolver::ManaUnlockColorReserve(const GameState& state,
             if (!d) { continue; }
             const bool is_land = (d->tmpl == CardTemplate::BasicLand);
             const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
-                              || d->params.mana_rock;
+                              || d->params.mana_rock
+                              || PaySacSpendableNow(state, p, *d);   // §2a: a spendable Treasure makes any colour
             if (!is_land && !is_dork) { continue; }
             // Deathrite-style fuel-gated mana is not a dependable source of the colour.
             if (d->params.gy_land_exile_mana) { continue; }
@@ -6088,7 +6102,7 @@ namespace poolaudit
             if (!d) { continue; }
             const bool is_land = (d->tmpl == CardTemplate::BasicLand);
             const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
-                              || d->params.mana_rock || IsPaySacSource(*d);
+                              || d->params.mana_rock || PaySacSpendableNow(state, p, *d);
             if (!is_land && !is_dork) { continue; }
             std::string s = d->card.m_name.str();
             s += "[y" + std::to_string(PermanentManaYield(state, p, *d));
@@ -6309,6 +6323,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // wants is not a line a pilot considers (USER doctrine -- see TrickCastSensible).
         // Same single choke point as the flood-engine gate above, so search + rollouts + greedy
         // re-solves inherit it together. Generic providers return true -> byte-identical.
+        // (A wider gate over ALL solo tricks -- the magnetless fan-trick hold -- was built and
+        // REVERTED 2026-08-25: it did not flip its motivating games (mw43/mwo344 pay the magnet
+        // through a same-plan Treasure bank the next-turn-pot test cannot see) and regressed
+        // mwo127. Third strike for gate-level holds on this valuation class; see the design doc.)
         if (def.params.solo_target_trick && def.params.creates_treasures > 0
             && !ResolveProvider(state).TrickCastSensible(state, state.active_player_index, def))
         {
@@ -9865,7 +9883,6 @@ static const bool s_legacy_mana_bound = EnvOn("MTG_LEGACY_MANA_BOUND");
 // Rite-of-Flame graveyard escalation credit: the Nth same-turn copy floats +(N-1) beyond its base
 // ritual_float, which consider() credits as this triangular term. Used by BOTH total-mana bounds.
 static inline int ManaGateTriangular(int gy) { return gy > 1 ? gy * (gy - 1) / 2 : 0; }
-
 // ---- Same-turn ritual credit: SEQUENCED vs simultaneous -------------------------------------
 // A/B gate (MTG_RITUAL_SEQ_CREDIT=1; default OFF -> byte-identical). The affordability model in
 // consider()/eval_and_push credits a selected ritual's GROSS float unconditionally while the same
@@ -11724,6 +11741,45 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             }
             if (sel_rock && pool.CanPay(rock_costs)) { eff.AddPool(rock_prod); eff_nc.AddPool(rock_prod); credited = true; }
         }
+        // §2a MINTED TREASURE -- the same-turn ramp credit that vanished with the SacForMana actions.
+        //
+        // Before §2a, cracking a minted Treasure was an explicit SacForMana Action carrying
+        // `ritual_float = sac_for_mana_amount`, so the ritual branch above credited that mana and a
+        // subset needing it was payable here. §2a makes Treasures payment-native and stops emitting
+        // those actions (TurnSolver's `if (IsPaySacSource(*pd)) continue;`) -- but nothing replaced
+        // their CREDIT, so a minting cast contributes 0 and this test prices the turn as if the
+        // Treasure did not exist. mw68 (s3003 gi68) T4: three lands, Zada live, Gold Rush {1}{G} +
+        // Fists of Flame {1}{R} = 4 against pool 3, so the pair is judged unpayable and Fists is
+        // dropped -- with an untapped Crag and three unspent Treasures on board. Pre-§2a wins that
+        // turn (18 -> -8); §2a wins the next one. Note this is neither a "prune" nor a "bound", which
+        // is why MTG_MANA_PRUNE=0 and MTG_UNPRUNED=1 both leave the loss in place.
+        //
+        // Guarded exactly like the rock branch above -- "a rock never funds its own cost" -- because
+        // the same hazard applies: a Treasure cannot pay for the spell that mints it. Credit only
+        // once the board can already pay for the minting casts themselves, which keeps this net and
+        // conservative with those casts' costs already sitting in `combined`.
+        //
+        // BASE count, not the magnet fan width: a fan mints one Treasure per copy, but the width is
+        // target-dependent and this model is deliberately conservative. Under-crediting only walks a
+        // funding spell one rung later than it could go; over-crediting would admit a line the payer
+        // then refuses. Inert unless MTG_TREASURE_PAY_SOURCE is on -> byte-identical with §2a off.
+        if (TreasurePaySourceEnabled())
+        {
+            int minted = 0; ManaCost mint_costs; bool sel_mint = false;
+            for (int j : sel)
+            {
+                const CardDefinition* md = cands[j].def;
+                if (md == nullptr || md->params.creates_treasures <= 0) { continue; }
+                minted += md->params.creates_treasures;
+                const ManaCost& mc = cands[j].cost;
+                mint_costs.white += mc.white; mint_costs.blue  += mc.blue;  mint_costs.black += mc.black;
+                mint_costs.red   += mc.red;   mint_costs.green += mc.green;
+                mint_costs.colorless += mc.colorless; mint_costs.generic += mc.generic;
+                sel_mint = true;
+            }
+            if (sel_mint && minted > 0 && pool.CanPay(mint_costs))
+            { eff.wild += minted; eff_nc.wild += minted; credited = true; }
+        }
         // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
         if (any_affinity)
         {
@@ -12774,6 +12830,63 @@ inline bool Pp(PrepayOutcome o)
 }
 }  // namespace
 
+// PlanTraits builder -- see TurnSolver.h and docs/design/mana-order-and-reserve-overhaul.md
+// (layer 3). Runs ONCE per plan apply, only when PlanTraitsWanted(); two bounded scans (board,
+// acts), LookupCached / a.def only -- the MTG_PREPAY_FASTDECLINE lesson says string-keyed lookups
+// on this path are a measured cost.
+PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vector<Action>& acts)
+{
+    PlanTraits t;
+    t.main2 = (state.phase == Phase::PostCombatMain);
+    const int active = state.active_player_index;
+
+    // Board scan: copy magnet + the untapped subtype scalers (whose subtype the food test needs).
+    const CardDefinition* scalers[4];
+    int n_scalers = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.copies_solo_targeted_spells) { t.copy_magnet_live = true; }
+        if (!p.tapped && IsScaledManaDork(*d) && n_scalers < 4) { scalers[n_scalers++] = d; }
+    }
+
+    // Plan scan: an own-creature pump (Invigorate-class target_own_creature with a bonus, or any
+    // solo_target_trick -- those only ever target own creatures) and scaler food (a creature cast
+    // sharing a live scaler's subtype: the scaler's burst grows if it taps after the cast).
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand
+            && a.kind != Action::Kind::CastFromGraveyard) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (!d) { continue; }
+        if (d->params.solo_target_trick
+            || (d->params.target_own_creature
+                && (d->params.power_bonus > 0 || d->params.tough_bonus > 0)))
+        { t.plan_has_own_pump = true; }
+        if (!a.free_cast && !a.alt_cost && a.cost.ManaValue() > 0) { ++t.mana_casts; }
+        if (d->card.IsCreature())
+        {
+            for (int s = 0; s < n_scalers && !t.casts_scaler_food; ++s)
+            {
+                if (CardHasSubtype(d->card, scalers[s]->params.mana_per_creature_subtype))
+                { t.casts_scaler_food = true; }
+            }
+        }
+    }
+    t.bodies_are_multipliers = t.plan_has_own_pump && t.copy_magnet_live;
+
+    // Projected pump target -- the SAME picker the apply's auto-target uses (target_own_creature:
+    // "targets the controller's best attacker"), evaluated pre-payment so the reserve can hold
+    // exactly the creature the pump will land on. Also the attack-relevance signal.
+    const int best = FindBestOwnAttacker(state, active);
+    if (t.plan_has_own_pump && best >= 0)
+    { t.pump_target_card = state.battlefield[static_cast<std::size_t>(best)].card.m_number; }
+    t.attack_matters = !t.main2 && best >= 0;
+    return t;
+}
+
 bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts)
 {
     static const bool s_enabled = !EnvOn("MTG_NO_BATCH_PAY");
@@ -12940,7 +13053,16 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // held set stays in lockstep. Cheap prescan: no untapped depletion land -> reserved=0 (every
     // non-depletion deck skips the held attempt entirely -> byte-identical + no extra solve).
     std::uint64_t reserved = 0, reserved_depl = 0, reserved_crea = 0, reserved_atk = 0;
+    std::uint64_t reserved_shot = 0;
     const int n = static_cast<int>(state.battlefield.size());
+    // Plan-traits overrides (mana-order-and-reserve-overhaul.md layer 3). `pt` is null unless an
+    // apply site computed traits (PlanTraitsWanted) -- every consumer below treats null as "lever
+    // off", so paths outside a plan apply are unchanged by construction.
+    const PlanTraits* pt = CurrentPlanTraits();
+    // MAIN-2 RELEASE (MTG_M2_RELEASE): post-combat, a held body buys nothing in a goldfish --
+    // combat already happened -- so skip BOTH creature hold classes (attacker + dorks) and let the
+    // bodies pay. Depletion/one-shot holds stay: wasting a counter is phase-blind.
+    const bool m2_release = M2ReleaseEnabled() && pt && pt->main2;
     if (DepletionReserveEnabled() && n <= 64)
     {
         for (int i = 0; i < n; ++i)
@@ -12956,7 +13078,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // creature an own-creature pump lands on, so reserving it makes the pump target the one left up).
     // A non-mana beater is never in the tap set, so restrict to mana sources (else the all-or-nothing
     // hold below carries an inert bit). Same leave-out-if-you-can fallback as depletion.
-    if (AttackerReserveEnabled() && n <= 64)
+    if (AttackerReserveEnabled() && !m2_release && n <= 64)
     {
         const int best = FindBestOwnAttacker(state, active);
         if (best >= 0 && best < 64)
@@ -12974,7 +13096,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // so holding it would only make the solve fail and cost a second backtrack.
     // g_scripted_tapmode == 1: this plan variant is the SEARCHED "spend the dorks" branch, so skip
     // the hold entirely and let the solve spend them like any other source (UnprunedGate::TapReserve).
-    if (DorkReserveEnabled() && g_scripted_tapmode != 1 && n <= 64)
+    if (DorkReserveEnabled() && !m2_release && g_scripted_tapmode != 1 && n <= 64)
     {
         for (int i = 0; i < n; ++i)
         {
@@ -12985,7 +13107,23 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             { reserved_crea |= (1ull << i); }
         }
     }
-    reserved = reserved_depl | reserved_crea;
+    // ONE-SHOT class (MTG_ONESHOT_RESERVE, §2b "waste is the trigger"): hold every untapped pay-sac
+    // one-shot (§2a Treasure) the turn can pay without -- it is gone forever when spent, so its
+    // rank-26 eagerness must only apply once the turn genuinely needs it. Provider bias can flip a
+    // whole turn to "spend freely" (Mirrorwing go-off: bodies out-value the Treasures). Inert (mask
+    // 0, no extra solve) unless MTG_TREASURE_PAY_SOURCE makes IsPaySacSource live.
+    if (OneShotReserveEnabled() && n <= 64
+        && !ResolveProvider(state).SpendOneShotsFreely(state, pt ? *pt : PlanTraits{}))
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != active || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && IsPaySacSource(*d)) { reserved_shot |= (1ull << i); }
+        }
+    }
+    reserved = reserved_depl | reserved_crea | reserved_shot;
 
     // Solve the combined cost, HOLDING as much as the turn can spare. First try with everything
     // reservable held: if it pays wild-free, those sources are preserved for free. If holding them
@@ -13004,13 +13142,43 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // so the joint solve may spend the ONE body the turn needs (the attacker / pump target) on a pip
     // a SPARE dork covers identically. The attacker-only rung (MTG_TAP_ATTACKER_RUNG, default off)
     // is that missing step; see TapAttackerRungEnabled for the AL gi8 case and its verification.
-    std::uint64_t rungs[10];
+    std::uint64_t rungs[14];
     int n_rungs = 0;
-    if (reserved) { rungs[n_rungs++] = reserved; }
-    if (reserved_depl && reserved_crea && DorkReserveEnabled())
-    { rungs[n_rungs++] = reserved_crea; rungs[n_rungs++] = reserved_depl; }
+    // Dedup push: a rung is emitted only when non-empty, novel, and there is room. With the
+    // overhaul levers off (reserved_shot == 0, no provider narrowing) this reproduces the shipped
+    // ladder EXACTLY: [all] -> [creatures] -> [depletion], the split rungs existing only when both
+    // classes are non-empty (dedup collapses them otherwise) -- byte-identical by construction.
+    auto push = [&](std::uint64_t m)
+    {
+        if (!m || n_rungs >= 14) { return; }
+        for (int i = 0; i < n_rungs; ++i) { if (rungs[i] == m) { return; } }
+        rungs[n_rungs++] = m;
+    };
+    push(reserved);                                    // hold everything reservable
+    if (DorkReserveEnabled())
+    {
+        // Class priority creatures > one-shots > depletion: release the lowest class first.
+        push(reserved_crea | reserved_shot);           // release depletion
+        push(reserved_crea);                           // release one-shots too
+        // Provider-narrowed creature hold (MTG_PUMP_TARGET_HOLD): once holding EVERY creature has
+        // failed, retreat to the body worth holding hardest -- the projected pump target (generic)
+        // or the whole board again (copy-magnet override, where narrow == crea and dedup elides
+        // these rungs). Tried first with the consumable classes still held, then alone.
+        if (PumpTargetHoldEnabled() && pt && reserved_crea)
+        {
+            const std::uint64_t narrow =
+                ResolveProvider(state).ReserveCreatureHold(state, *pt, reserved_crea);
+            if (narrow && (narrow & ~reserved_crea) == 0 && narrow != reserved_crea)
+            {
+                push(narrow | reserved_shot | reserved_depl);
+                push(narrow);
+            }
+        }
+        push(reserved_shot);                           // last resorts: hold SOMETHING
+        push(reserved_depl);
+    }
     if (TapAttackerRungEnabled() && reserved_atk && reserved_atk != reserved)
-    { rungs[n_rungs++] = reserved_atk; }
+    { push(reserved_atk); }
     // PARTIAL CREATURE HOLD (MTG_DORK_HOLD_PARTIAL, default OFF pending measurement -- the USER's
     // margin-1 combo games, 2026-08-21). When even the creatures-only hold is unaffordable, the
     // all-or-nothing release above taps EVERY dork -- losing attackers the lethality projection
@@ -13024,13 +13192,25 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     {
         std::vector<int> crea;
         for (int i = 0; i < n; ++i) { if (reserved_crea & (1ull << i)) { crea.push_back(i); } }
+        // Release order: weakest EffectivePower first (tie: lower battlefield index). Under
+        // MTG_PUMP_TARGET_HOLD the projected pump target releases LAST regardless of power -- it
+        // is the body the trick lands on, so it outranks a bigger idle body this turn.
+        const int keep_last = (PumpTargetHoldEnabled() && pt) ? pt->pump_target_card : 0;
         std::stable_sort(crea.begin(), crea.end(), [&](int a, int b)
-        { return state.battlefield[a].EffectivePower() < state.battlefield[b].EffectivePower(); });
+        {
+            if (keep_last != 0)
+            {
+                const bool ka = state.battlefield[a].card.m_number == keep_last;
+                const bool kb = state.battlefield[b].card.m_number == keep_last;
+                if (ka != kb) { return kb; }   // the kept target sorts to the back
+            }
+            return state.battlefield[a].EffectivePower() < state.battlefield[b].EffectivePower();
+        });
         std::uint64_t hold = reserved_crea;
-        for (std::size_t k = 0; k + 1 < crea.size() && n_rungs < 9; ++k)
+        for (std::size_t k = 0; k + 1 < crea.size() && n_rungs < 13; ++k)
         {
             hold &= ~(1ull << crea[k]);          // release the weakest still-held creature
-            rungs[n_rungs++] = hold | reserved_depl;
+            rungs[n_rungs++] = hold | reserved_shot | reserved_depl;
         }
     }
     ManaPool produced;
@@ -15536,6 +15716,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         { ApplySuspend(state, state.active_player_index, a.card_name); }
     }
 
+    // PLAN TRAITS for the payment layer (mana-order-and-reserve-overhaul.md layer 3): computed
+    // once, in scope over the prepay AND the casts below. Mirrored in AIEngine::TakeTurn through
+    // the same builder -> lockstep. Null scope (levers off) = every consumer behaves as before.
+    PlanTraits _plan_traits;
+    if (PlanTraitsWanted()) { _plan_traits = TurnSolver::ComputePlanTraits(state, plan.actions); }
+    PlanTraitsScope _plan_traits_scope(PlanTraitsWanted() ? &_plan_traits : nullptr);
+    TapKeepLastScope _keep_last(PumpTargetHoldEnabled() ? _plan_traits.pump_target_card : 0);
+
     // Whole-turn batch pre-payment: tap for the combined cost of the main hand casts and pre-load
     // floating (see BatchPrepayMainCasts). The main casts below then drain the pool -- scarce colours
     // allocated jointly, filters fed, unneeded sources left up -- instead of the stranding per-cast
@@ -15780,11 +15968,53 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Trick-armed (Gold Rush / draw-payload trick) => site 5 (searchable); equipment-ETB draw
         // (Puresteel) => site 6 (searchable); plain cantrip => site 3 (pruned). See
         // deferred_site_index, where the precedence lives.
-        if (!bp_searched_plan(deferred_site_index(), extra))
+        const bool bp5_from_rank = bp_searched_plan(deferred_site_index(), extra);
+        if (!bp5_from_rank)
         {
             play_breakpoint_land(out_breakpoint);
             greedysite::Record(8);
             extra = TurnSolver::Solve(state, is_pre_combat);
+        }
+        // Diagnostic (default off): what the deferred continuation solved, and from which arm.
+        {
+            static const bool s_bp5_trace = EnvOn("MTG_BP5_TRACE");
+            if (s_bp5_trace && out_breakpoint != nullptr)   // committed/recorded applies only
+            {
+                int n_tre = 0, n_untapped_land = 0;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index) { continue; }
+                    if (p.card.m_name == "Treasure Token") { ++n_tre; }
+                    else if (p.card.IsLand() && !p.tapped) { ++n_untapped_land; }
+                }
+                std::string line = std::string("[bp5] T") + std::to_string(state.turn_number)
+                                 + " site=" + std::to_string(deferred_site_index())
+                                 + (bp5_from_rank ? " rank" : " greedy")
+                                 + " pool=" + std::to_string(AvailableManaPool(state).Total())
+                                 + " tre=" + std::to_string(n_tre)
+                                 + " land!=" + std::to_string(n_untapped_land)
+                                 + " magnet=" + (CopyMagnetLive(state, state.active_player_index) ? "1" : "0")
+                                 + " casts:";
+                for (const Action& a : extra.actions)
+                { if (a.kind == Action::Kind::CastFromHand) { line += " " + a.card_name; } }
+                // For an empty continuation with mana up: per-hand-card payment verdicts.
+                if (extra.actions.empty())
+                {
+                    line += " pend_atk=" + std::to_string(PendingAttackDamage(state))
+                          + " opp_life=" + std::to_string(state.players[1 - state.active_player_index].life);
+                    line += " | hand:";
+                    for (const Card& hc : state.players[state.active_player_index].hand)
+                    {
+                        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                        if (!hd || hd->card.IsLand()) { continue; }
+                        GameState scratch = state;
+                        const bool ok = TapForCostShared(scratch, hd->card.m_mana_cost,
+                                                         hd->card.IsCreature(), nullptr, false);
+                        line += " " + hc.m_name.str() + (ok ? "=payable" : "=NO");
+                    }
+                }
+                std::cerr << line << "\n";
+            }
         }
         bp_play_searched_land(extra, out_breakpoint);
         // The deferred trick class (site 5) is the site this pre-loop was MISSING from: the Gold
@@ -17478,6 +17708,27 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 sel_rock = true;
             }
             if (sel_rock && pool.CanPay(rock_costs)) { eff.AddPool(rock_prod); eff_nc.AddPool(rock_prod); credited = true; }
+        }
+        // §2a MINTED TREASURE -- lockstep twin of the credit in consider(); see the full rationale
+        // there (mw68). §2a stops emitting the SacForMana actions whose ritual_float used to carry
+        // this mana, so without it a subset that funds a later cast from a Treasure it mints itself
+        // reads as unpayable. Same "never funds its own cost" guard as the rock branch above.
+        if (TreasurePaySourceEnabled())
+        {
+            int minted = 0; ManaCost mint_costs; bool sel_mint = false;
+            for (int j : sel)
+            {
+                const CardDefinition* md = cands[j].def;
+                if (md == nullptr || md->params.creates_treasures <= 0) { continue; }
+                minted += md->params.creates_treasures;
+                const ManaCost& mc = cands[j].cost;
+                mint_costs.white += mc.white; mint_costs.blue  += mc.blue;  mint_costs.black += mc.black;
+                mint_costs.red   += mc.red;   mint_costs.green += mc.green;
+                mint_costs.colorless += mc.colorless; mint_costs.generic += mc.generic;
+                sel_mint = true;
+            }
+            if (sel_mint && minted > 0 && pool.CanPay(mint_costs))
+            { eff.wild += minted; eff_nc.wild += minted; credited = true; }
         }
         // Same-turn HASTED dork credit. The rock credit above excludes creatures because a dork cast
         // this turn is summoning-sick -- but when THIS subset attaches a haste-granting Equipment to

@@ -7529,6 +7529,43 @@ inline void CommitPaySacSacrifices(GameState& state, int controller)
     }
 }
 
+// §2a FRESH-HOLD (USER doctrine 2026-08-12, strict-bar fix 2026-08-25): a magnetless Gold Rush is
+// "never a this-turn mana play", so a pay-sac source that ENTERED THIS TURN is a BANK -- invisible
+// to payment and to every pool/colour scan -- unless a copy-magnet (Zada / Mirrorwing) is live,
+// where fan-minted Treasures legitimately fund same-turn continuation. Banked (pre-turn) Treasures
+// always pay. Why: §2a made same-PLAN consumption enumerable (the SacForMana fan could not emit an
+// action for a not-yet-existing Treasure), which turned clause-(c) Gold Rush casts into net-minus-
+// one-mana same-turn ramp lines the search then preferred (mw22/mw68 traces; unbounded-persistent,
+// value-leaf-independent). MTG_PAYSAC_FRESH_HOLD=0 restores the unheld §2a behaviour for A/B;
+// inert when MTG_TREASURE_PAY_SOURCE is off (IsPaySacSource is then always false).
+inline bool PaySacFreshHoldEnabled()
+{
+    static const bool v = EnvOn("MTG_PAYSAC_FRESH_HOLD", true);
+    return v;
+}
+
+inline bool CopyMagnetLive(const GameState& state, int controller)
+{
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd && qd->params.copies_solo_targeted_spells) { return true; }
+    }
+    return false;
+}
+
+// The state-aware twin of IsPaySacSource: use at every "can this permanent pay / produce NOW"
+// site (payment usability + the pool/colour scans that must promise exactly what payment
+// delivers). Def-only IsPaySacSource remains correct at the identity sites (odometer exclusion,
+// rank, the tapped-means-cracked erase above).
+inline bool PaySacSpendableNow(const GameState& state, const Permanent& p, const CardDefinition& def)
+{
+    if (!IsPaySacSource(def)) { return false; }
+    if (!PaySacFreshHoldEnabled() || !p.entered_this_turn) { return true; }
+    return CopyMagnetLive(state, p.controller_index);
+}
+
 // The colours a mana source currently produces. Identical to def.params.produces (by const ref,
 // zero cost, byte-identical) for every normal source; the dynamic Reflecting-Pool union only for
 // a `reflecting` source; the dynamic colour-domain union for a `domain_mana` source (Faeburrow /
@@ -7790,6 +7827,88 @@ inline bool DorkReserveEnabled()
     return v;
 }
 
+// ---- Plan-traits override levers (docs/design/mana-order-and-reserve-overhaul.md, layer 3). ----
+// All DEFAULT OFF (=1 enables) while the bundle is measured; adoption flips each winner to
+// default-ON with a MTG_NO_* hatch and this comment records the outcome. Every consumer treats a
+// null CurrentPlanTraits() as "lever off" -- outside a plan apply nothing changes regardless.
+
+// MAIN-2 RELEASE (MTG_M2_RELEASE): in the POST-combat main the "hold the bodies" reservation buys
+// nothing in a goldfish -- combat already happened and there is no opponent turn to block in -- so
+// the prepay's creature holds (dork + attacker classes) are skipped there and the bodies pay
+// freely. Depletion/one-shot holds are phase-blind (a wasted counter is wasted in any phase).
+// Revisit for 1v1, where an untapped blocker in main 2 is real value.
+inline bool M2ReleaseEnabled()
+{
+    static const bool v = EnvOn("MTG_M2_RELEASE");
+    return v;
+}
+
+// PUMP-TARGET HOLD (MTG_PUMP_TARGET_HOLD): when the plan casts an own-creature pump/trick, the
+// creature it will target is the body worth holding HARDEST -- the reserve ladder gains a
+// provider-narrowed rung (DecisionProvider::ReserveCreatureHold) between "hold every dork" and
+// "hold nothing", and the partial-release order keeps the projected target until last. Replaces
+// the every-turn greatest-power-attacker bet (AttackerReserveEnabled's documented hack) with a
+// plan-gated exact hold. USER 2026-08-25: "with targeted pumps I would have the default only
+// reserve the pumped creature" -- and the Mirrorwing copy-magnet override holds the whole board.
+inline bool PumpTargetHoldEnabled()
+{
+    static const bool v = EnvOn("MTG_PUMP_TARGET_HOLD");
+    return v;
+}
+
+// MTG_PUMP_TARGET_HOLD's CORE-side half: the card.m_number of the body the backtracker should
+// reach for LAST within its spare-the-creatures dork block (the projected pump target). Core
+// cannot see ai/PlanContext, so the apply sites mirror the trait into this thread_local alongside
+// PlanTraitsScope -- the g_flow_src_mask pattern. 0 = no hint = the shipped candidate order.
+inline thread_local int g_tap_keep_last_card = 0;
+struct TapKeepLastScope
+{
+    int prev;
+    explicit TapKeepLastScope(int v) : prev(g_tap_keep_last_card) { g_tap_keep_last_card = v; }
+    ~TapKeepLastScope() { g_tap_keep_last_card = prev; }
+    TapKeepLastScope(const TapKeepLastScope&)            = delete;
+    TapKeepLastScope& operator=(const TapKeepLastScope&) = delete;
+};
+
+// ONE-SHOT RESERVE (MTG_ONESHOT_RESERVE) -- §2b "waste is the trigger" (lump doc): a pay-sac
+// one-shot (§2a Treasure) is GONE when spent, so hold it whenever the turn pays without it -- at
+// the whole-turn ladder (its own class, below creatures and above depletion) AND at the
+// per-payment reserve-first attempt (single-cast turns decline the prepay, and rank 26 would
+// otherwise spend the Treasure eagerly on a turn with slack). When the payment genuinely needs
+// it, the fallback releases it and rank 26 spends it ahead of the flexible sources (exactness).
+// The provider can flip the bias per turn (SpendOneShotsFreely: Mirrorwing spends Treasures on
+// go-off turns to keep bodies untapped). Inert unless MTG_TREASURE_PAY_SOURCE is on (nothing else
+// is a pay-sac source). KNOWN RISK CLASS to probe in the A/B: a per-payment hold once regressed by
+// stranding a later same-turn cast (treasure_hunt s3044, the retired MTG_RESERVE scheme) -- the
+// whole-turn ladder covers multi-cast turns jointly, but watch the declined-prepay shapes.
+inline bool OneShotReserveEnabled()
+{
+    static const bool v = EnvOn("MTG_ONESHOT_RESERVE");
+    return v;
+}
+
+// SCALER PLAN BIAS (MTG_SCALER_PLAN_BIAS): a subtype scaler's tap order depends on WHAT THE PLAN
+// DOES (USER 2026-08-24). Casting its food this turn (more Elves for Priest of Titania) -> tap it
+// LAST so the burst counts them. Attack turn with no food -> tap it FIRST among creatures: one
+// big body pays what N small ones would, keeping the flat dorks untapped to swing. Resolves the
+// static tension mana-creature-tap-order.md §5b measured (hold-back helps some decks, costs
+// stompy) plan-conditionally. Only meaningful with the creature band (MTG_DORK_TAP_LAST) on --
+// without the band, creatures rank by colour and "first among creatures" is not expressible.
+inline bool ScalerPlanBiasEnabled()
+{
+    static const bool v = EnvOn("MTG_SCALER_PLAN_BIAS");
+    return v;
+}
+
+// Should the apply paths compute PlanTraits at all? One check so the builder costs nothing while
+// every consumer lever is off (and the scope then installs nullptr = today's behaviour).
+inline bool PlanTraitsWanted()
+{
+    static const bool v = M2ReleaseEnabled() || PumpTargetHoldEnabled()
+                       || OneShotReserveEnabled() || ScalerPlanBiasEnabled();
+    return v;
+}
+
 // ATTACKER-ONLY RUNG on the prepay reservation ladder (MTG_TAP_ATTACKER_RUNG, default off).
 // The ladder above is all-or-nothing per class: hold EVERYTHING reservable, and if that is
 // unaffordable fall straight to the unrestricted solve. When the turn needs exactly one body's
@@ -7974,7 +8093,7 @@ inline int SpareUntappedMana(const GameState& state, int controller)
         if (!d) { continue; }
         const bool is_land = (d->tmpl == CardTemplate::BasicLand);
         const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || d->params.mana_rock
-                          || IsPaySacSource(*d);   // §2a
+                          || PaySacSpendableNow(state, p, *d);   // §2a (fresh-hold aware)
         if (!is_land && !is_dork) { continue; }
         // Deathrite: credit at most #graveyard-lands such sources (mirrors AvailableManaPool).
         if (d->params.gy_land_exile_mana)

@@ -1,6 +1,7 @@
 #pragma once
 #include "../core/GameState.h"
 #include "../cards/CardDatabase.h"
+#include "PlanContext.h"   // PlanTraits (ComputePlanTraits below); header is Action-free on purpose
 #include "SearchBudget.h"
 #include <chrono>
 #include <string>
@@ -727,6 +728,15 @@ public:
     // Called identically by the rollout (ApplyPlanDirect) and the executor (AIEngine::TakeTurn)
     // so the two stay in lockstep. Off-switch: MTG_NO_BATCH_PAY.
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts);
+
+    // PlanTraits builder (docs/design/mana-order-and-reserve-overhaul.md layer 3): distil what the
+    // plan DOES (own-creature pump + its projected target, copy magnet, scaler food, phase, attack
+    // relevance) for the payment layer's reserve/rank overrides. ONE function called by BOTH apply
+    // paths (rollout ApplyPlanDirect, executor AIEngine::TakeTurn) and installed over the whole
+    // payment via PlanTraitsScope -- the same lockstep-by-construction as BatchPrepayMainCasts.
+    // Only run when PlanTraitsWanted() (some consumer lever on); otherwise the scope holds nullptr
+    // and every consumer behaves exactly as before.
+    static PlanTraits ComputePlanTraits(const GameState& state, const std::vector<Action>& acts);
 
     // SAC-COLOUR FOLD (MTG_SAC_COLOR_FOLD, default OFF -- see docs/design/
     // lump-mana-sources-as-payment-sources.md). With the fold ON, a SacForMana source emits ONE
