@@ -924,3 +924,32 @@ creature_giving train cell re-measure vs bundle12 (bundle13_saclever_cg_regressi
 SEARCHED **5 faster / 0 slower** (gi30 d3+d5 5->4 = the fix; gi38 d3+d5 5->4; gi272 d3 5->4);
 d0 greedy 11 faster / 1 slower incl. gi475+gi949 unwon->T8 wins; d0 loss-penalized avg
 5.586 -> 5.576. Lever byte-inert on all other decks (no taps_spawn_opp_token card).
+
+### fc96 dig (2026-08-25 s3, partial — root-cause bounded, not yet fixed)
+
+Forced-walk proof (claude-play, DTL-only, CSV `1,14,7,0,2,-1,0`, seed 1097 gi96 d3): the executor
+realizes **win 4** playing clean's exact line — T1 Zagoth (hold), T2 Catacombs->Godless Shrine +
+DRS + BoP, T3 Heath->Stomping + Bloom + Faeburrow, T4 Hellkite pre-combat, attack 10 (Hellkite 5 +
+vigilant 5/5 Faeburrow), then post-combat **land drop of the attack-drawn Scalding Tarn** + Unite
+the Coalition x=5 (7 mana: Faeburrow's 5-colour tap + DRS + the Tarn). The DTL deep search
+(EWINS T1, unbounded) says earliest=5.
+
+Mechanism as bounded so far:
+- Clean's dork-first Hellkite payment leaves the LANDS untapped -> post-combat pool reaches
+  Unite's 7 without any m2 land drop -> clean search finds 4.
+- DTL's lands-first payment leaves only Faeburrow+DRS (6) -> the m2 Unite needs the 7th mana from
+  the attack-drawn fetch, and the search's second main is CAST-ONLY by default: the m2 land drop
+  is `Main2DropEnabled()` = **MTG_MAIN2_DROP, DEFAULT OFF** (EngineFlags.h — a parked adoption
+  item: "on adoption flips default-ON with MTG_NO_MAIN2_DROP hatch + GT rebaseline"). The
+  autonomous executor's greedy m2 land play is suppressed at depth>0 for the same reason
+  (AIEngine::TakeTurn gi=141 note).
+- HOWEVER MTG_MAIN2_DROP=1 does NOT rescue fc96 (DTL+drop still 5) — the remaining blocker is
+  inside the m2 machinery (suspects: the m2 drop path not CRACKING a fetchland, or the m2 pool
+  estimate; also note no traced m2 node scored sub=4 in EITHER arm while clean's EWINS says 4,
+  so the winning path routes around the [m2t]/[fsw] traced sites — instrument the collapsed-main
+  route next).
+- Negative probes: MTG_ESC_BEAM=0 still 5 (not beam pruning); sim combat DOES attack with the
+  vigilant Faeburrow when untapped (cbdbg 19->8 node exists under DTL); Spirit/vigilance
+  modelling not implicated. MTG_SAC_SPAWN_LAND_LAST inert (no spawn lands).
+- fc341 (M2_RELEASE single-lever): M2R+MAIN2_DROP still 6 — same family suspicion (second-main
+  machinery), undug.
