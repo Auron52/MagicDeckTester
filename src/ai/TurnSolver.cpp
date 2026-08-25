@@ -12890,7 +12890,20 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
             || (d->params.target_own_creature
                 && (d->params.power_bonus > 0 || d->params.tough_bonus > 0)))
         { t.plan_has_own_pump = true; }
-        if (!a.free_cast && !a.alt_cost && a.cost.ManaValue() > 0) { ++t.mana_casts; }
+        if (!a.free_cast && !a.alt_cost && a.cost.ManaValue() > 0)
+        {
+            ++t.mana_casts;
+            t.cast_mv_total += a.cost.ManaValue();
+        }
+        // M2-payload-reserve inputs: the cast's name (payload exclusion) and, for a PERMANENT,
+        // its colours (they widen every domain source's post-cast yield -- see PlanTraits).
+        if (t.cast_name_count < PlanTraits::kMaxCastNames)
+        { t.cast_names[t.cast_name_count++] = &d->card.m_name.str(); }
+        if (!d->card.IsInstant() && !d->card.IsSorcery())
+        {
+            for (int ci = 0; ci < 5; ++ci)
+            { if (d->card.HasColor(static_cast<Color>(ci))) { t.cast_color_mask |= (1 << ci); } }
+        }
         if (d->card.IsCreature())
         {
             for (int s = 0; s < n_scalers && !t.casts_scaler_food; ++s)

@@ -94,6 +94,23 @@ struct PlanTraits
                                          // MTG_RESERVE failure mode; traced on MW gi75/gi141 at
                                          // UNBOUNDED budget), so multi-cast turns rely on the
                                          // whole-turn prepay ladder alone
+
+    // --- M2-PAYLOAD RESERVE inputs (MTG_M2_PAYLOAD_RESERVE; overhaul ledger "fc96 s4") ---
+    // The pre-combat payment is otherwise blind to the POST-combat payload sitting in hand
+    // (fc96: DTL's lands-first Hellkite payment leaves 6 post-combat where Unite needs 7,
+    // while an equally legal payment leaves 7 -- so the payment choice, not the plan, forecloses
+    // the m2 kill). These three summaries let PayloadReserveMask (ManaPayment.cpp) see it.
+    int  cast_color_mask       = 0;      // (1<<Color) bits of the plan's PERMANENT casts: they sit
+                                         // on the battlefield by the m2, so a domain source's
+                                         // post-cast yield/colours widen by exactly this set
+                                         // (fc96: Hellkite's WUBRG lifts Faeburrow from 3 to 5)
+    int  cast_mv_total         = 0;      // summed mana value of the real-mana casts: what the m1
+                                         // will spend, for the payload-fits-the-pool precheck
+    static constexpr int kMaxCastNames = 8;
+    const std::string* cast_names[kMaxCastNames] = {};  // interned-name pointers of the plan's
+    int  cast_name_count       = 0;      // casts (payload exclusion: a hand card the plan itself
+                                         // casts is not an m2 payload; copies beyond the cast
+                                         // count still qualify)
 };
 
 // Null when no plan apply is in scope (or every consumer lever is off -- the builder is not run).

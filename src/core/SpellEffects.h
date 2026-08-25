@@ -7920,7 +7920,8 @@ inline bool ScalerPlanBiasEnabled()
 inline bool PlanTraitsWanted()
 {
     static const bool v = M2ReleaseEnabled() || PumpTargetHoldEnabled()
-                       || OneShotReserveEnabled() || ScalerPlanBiasEnabled();
+                       || OneShotReserveEnabled() || ScalerPlanBiasEnabled()
+                       || EnvOn("MTG_M2_PAYLOAD_RESERVE");   // PayloadReserveMask (ManaPayment.cpp)
     return v;
 }
 

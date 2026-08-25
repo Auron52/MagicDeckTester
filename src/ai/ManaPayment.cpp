@@ -1546,6 +1546,155 @@ static std::uint64_t OneShotHoldMask(const GameState& state)
     return mask;
 }
 
+// M2-PAYLOAD RESERVE (MTG_M2_PAYLOAD_RESERVE, DEFAULT OFF -- adoption-config candidate; overhaul
+// ledger "fc96 s4"). The pre-combat payment is otherwise blind to the POST-combat payload in hand:
+// fc96's T4 casts Hellkite, and under MTG_DORK_TAP_LAST's lands-first order the payment leaves
+// Faeburrow+Deathrite = 6 post-combat mana where Unite the Coalition needs 7 -- while an EQUALLY
+// LEGAL payment (spend Deathrite + the R land, spare two lands) leaves exactly 7 with all five
+// colours via Faeburrow's widened domain. No plan/branch can recover that: every enumerated line
+// is priced under the committed payment, so the m2 kill is foreclosed before the m2 is asked.
+//
+// The rule: while a PRE-COMBAT plan apply is paying (live traits, !main2), find the best hand card
+// the plan does NOT cast that the leftover pool could still cast post-combat (the payload), and
+// reserve a source set that keeps it payable: a DOMAIN dork as the colour anchor (its post-cast
+// yield/colours include the plan's own permanent casts -- PlanTraits::cast_color_mask, computed by
+// the one shared builder so executor and rollout cannot drift), plus plain untapped lands to cover
+// the rest of its mana value. Same reserved-first / unrestricted-fallback soundness as every other
+// mask here: a payment that genuinely needs the reserved sources gets them back on the retry, so no
+// cast is ever lost -- the reserve only picks WHICH legal payment is committed.
+//
+// Scope guards (each load-bearing):
+//  * null traits -> 0: search-interior payments outside a plan apply stay untouched (the MW gi75
+//    rollout-distortion trap, same contract as OneShotHoldMask).
+//  * main2 -> 0: in the post-combat main the payload is being cast (or not) NOW; holding for it is
+//    meaningless there.
+//  * requires a DOMAIN anchor whose post-cast colours cover the payload's pips: without one the
+//    right reserve set is a joint colouring problem this greedy cannot solve; conservative 0 keeps
+//    every non-domain deck byte-identical.
+//  * NO cast is deferred or dropped by this rule -- a Greaves-hasted m1 Garth line (USER caveat,
+//    2026-08-26) is still enumerated, paid and scored exactly as before; win-turn selection, not a
+//    phase rule, decides between it and the hold-Garth line.
+static std::uint64_t PayloadReserveMask(const GameState& state)
+{
+    static const bool s_on = EnvOn("MTG_M2_PAYLOAD_RESERVE");
+    if (!s_on) { return 0; }
+    const PlanTraits* pt = CurrentPlanTraits();
+    if (!pt || pt->main2) { return 0; }
+    const int n = static_cast<int>(state.battlefield.size());
+    if (n > 64) { return 0; }                    // bitmask limit, matching ReservableSpecialMask
+    const int active = state.active_player_index;
+
+    // Post-cast domain: today's colours plus the plan's permanent casts'.
+    int domain_mask = 0;
+    for (Color c : DomainColors(state, active)) { domain_mask |= (1 << static_cast<int>(c)); }
+    domain_mask |= pt->cast_color_mask;
+
+    // One pass over the untapped sources: total yield (feasibility precheck), the best domain
+    // anchor (max post-cast yield, first-index tiebreak), and the plain-land filler candidates.
+    int total_yield = 0, anchor = -1, anchor_yield = 0;
+    bool anchor_vig = false;
+    int lands[64]; int n_lands = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const bool dork = d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)
+                          && GraveyardFuelLive(state, active, *d);
+        const bool land = p.card.IsLand();
+        if (!dork && !land && !d->params.mana_rock) { continue; }
+        int y = PermanentManaYield(state, p, *d);
+        if (d->params.domain_mana && dork)
+        {
+            // Widened post-cast yield: one mana of each colour the m2 board will show.
+            int wide = 0;
+            for (int ci = 0; ci < 5; ++ci) { if (domain_mask & (1 << ci)) { ++wide; } }
+            y = wide;
+            // Anchor preference: VIGILANT first, then yield. A vigilant domain dork does double
+            // duty -- it attacks without tapping and its mana still pays the m2 payload (the
+            // USER's Faeburrow doctrine) -- so reserving the non-vigilant twin instead (Bloom
+            // over Faeburrow, fc96's first-build failure) pushes the vigilant body into the m1
+            // payment and forfeits its attack for nothing.
+            const bool vig = p.card.HasKeyword(Keyword::Vigilance);
+            if ((vig && !anchor_vig) || (vig == anchor_vig && y > anchor_yield))
+            { anchor = i; anchor_yield = y; anchor_vig = vig; }
+        }
+        if (y > 0) { total_yield += y; }
+        if (land && !d->params.domain_mana && n_lands < 64) { lands[n_lands++] = i; }
+    }
+    if (anchor < 0) { return 0; }
+
+    // The payload: a hand card the plan does not cast that converts to DAMAGE on the turn it is
+    // cast (a goldfish m2's only same-turn value -- a creature is summoning-sick and a walker's
+    // loyalty is next-turn value, so reserving for those holds mana that buys nothing this turn;
+    // the first build's max-MV selector picked Nicol Bolas over Unite for exactly that trap),
+    // highest MV among those, whose coloured pips the anchor's post-cast domain covers and whose
+    // cost still fits the pool after the m1 spends. Copies beyond the plan's cast count still
+    // qualify (name-count exclusion).
+    int consumed[PlanTraits::kMaxCastNames] = {};
+    const Card* payload = nullptr;
+    int payload_mv = 0;
+    for (const Card& c : state.players[active].hand)
+    {
+        if (c.IsLand()) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d) { continue; }
+        if (d->params.damage <= 0 && d->params.modal_damage_per_choice <= 0) { continue; }
+        bool is_cast = false;
+        for (int k = 0; k < pt->cast_name_count; ++k)
+        {
+            if (&c.m_name.str() == pt->cast_names[k] && consumed[k] == 0)
+            { consumed[k] = 1; is_cast = true; break; }
+        }
+        if (is_cast) { continue; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        if (mc.has_x) { continue; }              // X cost: no fixed payload size to reserve for
+        const int mv = mc.ManaValue();
+        if (mv <= payload_mv) { continue; }      // keep the biggest payoff
+        if (pt->cast_mv_total + mv > total_yield) { continue; }   // cannot fit even before combat
+        // Coloured-pip coverage by the anchor's post-cast domain (hybrids: either half).
+        const int pips[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
+        bool covered = true;
+        for (int ci = 0; ci < 5 && covered; ++ci)
+        { if (pips[ci] > 0 && !(domain_mask & (1 << ci))) { covered = false; } }
+        for (int h = 0; h < mc.hybrid_count && covered; ++h)
+        {
+            const int c1 = mc.hybrid_pair[h] >> 4, c2 = mc.hybrid_pair[h] & 0xF;
+            const bool ok1 = c1 >= 0 && c1 < 5 && (domain_mask & (1 << c1));
+            const bool ok2 = c2 >= 0 && c2 < 5 && (domain_mask & (1 << c2));
+            if (!ok1 && !ok2) { covered = false; }
+        }
+        if (!covered) { continue; }
+        payload = &c; payload_mv = mv;
+    }
+    if (payload == nullptr) { return 0; }
+
+    // Reserve = the anchor + plain untapped lands (battlefield order) until the payload's mana
+    // value is covered. Lands are the cheapest thing to promise the m2 (a held dork has other
+    // uses); if the lands run out the payload provably needed sources the m1 also needs, and the
+    // conservative answer is no reserve at all (the fallback would fire anyway).
+    std::uint64_t mask = 1ull << anchor;
+    int reserved_yield = anchor_yield;
+    for (int li = 0; li < n_lands && reserved_yield < payload_mv; ++li)
+    {
+        mask |= 1ull << lands[li];
+        ++reserved_yield;
+    }
+    if (reserved_yield < payload_mv) { return 0; }
+    {   // Diagnostic (MTG_PAYLOAD_TRACE=1, default off): which payload/anchor/mask fired.
+        static const bool s_tr = EnvOn("MTG_PAYLOAD_TRACE");
+        if (s_tr)
+        {
+            std::fprintf(stderr, "[pldr] T%d payload=%s mv=%d anchor=%s mask=%llx\n",
+                         state.turn_number, payload->m_name.c_str(), payload_mv,
+                         state.battlefield[anchor].card.m_name.c_str(),
+                         static_cast<unsigned long long>(mask));
+        }
+    }
+    return mask;
+}
+
 // THE public payment entry (C1 unit 5) -- reserved-first retry around TapForCostSharedOnce.
 // Snapshot everything a payment can touch (incl. the executor's `available` accounting pool, when
 // present) so a reserved MISS restores byte-identically before the normal attempt (which must
@@ -1597,7 +1746,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     }
 
     const std::uint64_t rmask = ReservableSpecialMask(state) | PlanReserveMask(state)
-                              | OneShotHoldMask(state);
+                              | OneShotHoldMask(state) | PayloadReserveMask(state);
     if (rmask != 0)
     {
         const int a = state.active_player_index;
