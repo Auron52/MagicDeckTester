@@ -1664,6 +1664,17 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // Priest.) Param-gated -> byte-identical for every deck without one. MTG_DORK_GROWTH=0 restores
     // the plain mono-colour rank.
     if (DorkGrowthEnabled() && IsScaledManaDork(def)) { return 61; }
+    // A board-scaled LAND (Three Tree City: "{T}: Add {C}" plus "{2},{T}: Add {R} per Goblin") is a
+    // mana MULTIPLIER, not a plain colourless source, and it belongs in the same reserve band as the
+    // scaled dork above for the same reason: its yield grows with every creature the turn deploys.
+    // IsScaledManaDork cannot see it (it demands IsCreature() and a ZERO feeder), so before this it
+    // fell through to the plain ladder -- and since eaccc120 ranked a {C}-only source 5 ("spend
+    // FIRST"), the best source on the board became the first one tapped, paying a one-generic pip
+    // with a five-mana ability. See EngineFlags.h ScaledLandRankEnabled for the measured game.
+    // Gated on the engine's own liveness predicate, mirroring the untap-burst tier just below: a
+    // scaled mode that is dead, unaffordable, or no better than the basic {C} tap yields 0 and the
+    // land keeps its ordinary rank, so no deck without a LIVE scaled land can move.
+    if (ScaledLandRankEnabled() && ScaledManaNetYield(s, def) > 0) { return 61; }
     // An untap-land with a LIVE burst (Wirewood Lodge + a 2+ scaled Elf, see UntapBurstBestYield)
     // is reserved past even the scaled dorks: its burst yield reads the best Elf's count AT FIRE
     // TIME, so firing it absolutely last maximises the net. With no live burst it falls through to

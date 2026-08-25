@@ -64,6 +64,7 @@ enum Slot : int
     AL_SSM_ROLLOUT,           // MTG_AL_SSM_ROLLOUT        AL also searches the ROLLOUT's per-turn m2
     M2_CAP1,                  // MTG_M2_CAP1               cap the interior m2 solve to depth 1
     STOMPY_ORDER,             // MTG_STOMPY_ORDER          USER-reviewed StompySurprise cast order
+    SCALED_LAND_RANK,         // MTG_SCALED_LAND_RANK      reserve a live board-scaled LAND (Three Tree City)
     COUNT
 };
 
@@ -105,6 +106,7 @@ inline const char* Name(int slot)
         "MTG_AL_SSM_ROLLOUT",
         "MTG_M2_CAP1",
         "MTG_STOMPY_ORDER",
+        "MTG_SCALED_LAND_RANK",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

@@ -140,6 +140,49 @@ Typical rebaseline cycle after a deliberate change:
 `run → inspect FAILs/deltas → analyze EVERY changed game per-game → --accept → (optional) re-run to confirm all PASS`.
 The per-game analysis comes **before** `--accept`, always.
 
+### If your evidence says a tier WILL regress, rebaseline that tier NOW
+
+**Never adopt a change while leaving a tier you already know is stale.** If your
+adoption write-up can say "the overnight tier will show a regression at cell X",
+then you have already done the expensive part — the measurement and the judgement
+that the regression is acceptable. Running and accepting that tier is the cheap
+close-out, and it is **your** job, not the next agent's.
+
+**Scope: prefer the FULL tier.** Overnight is ~8 h of wall clock but almost none of your
+attention — launch it, do other work, accept it. `--deck=<name>[,<name>]` exists and is
+safe (the aggregate rebuild iterates the full mode arrays, so other decks' keys survive),
+but it only narrows the *promotion* when the RESULTS file itself came from a per-deck
+**run**; `--accept` after a full run promotes every key in `test/results/<mode>.env`
+regardless of `--deck`. So: re-run the whole tier unless you have a specific reason not
+to, and reach for `--deck` only when you must.
+
+Record *why* you accepted a known regression, in the ground truth itself:
+`bash test/regression.sh --overnight --accept-with-regressions="<note>"` writes an
+`# accepted-with-regressions` provenance line into `regression_gt.txt`. A future agent
+seeing a red-looking baseline then finds the reasoning instead of re-deriving it.
+
+This is not hypothetical. `8dc20bdc` (dragonstorm's no-win tie-break opt-out) shipped
+with the note *"STILL OUTSTANDING: the overnight tier has not been rebaselined … so
+overnight WILL show a real per-key regression there"*. Two days later the next agent
+found those cells red and spent a session re-deriving evidence that already existed in
+that commit message — building GT-era binaries and bisecting to rediscover a cause the
+author already knew. A known-stale tier also **masks** the next real regression: it
+cannot be distinguished from the one you left behind.
+
+Two smaller traps that same episode exposed:
+
+* **A game-by-game gate must cover every game that moved, not just the one that
+  motivated the change.** `8dc20bdc`'s Gate 2 examined only `s5005 gi227` and concluded
+  "no regression at all" at the deck's play setting `d5/20`. `d5_s4004 gi188` also went
+  T8 → unwon at exactly that setting, and `d3_s6006 gi218` went 5 → 6. Both were
+  recoverable, so the adoption still stood — but the claim as written was generalised
+  from a single game. Enumerate the movers from the per-game logs; do not reason from
+  the motivating case.
+* **Different cells of one deck can have GT from wildly different commits.** Dragonstorm's
+  d3 baseline was 489 `src/` commits old while its d5 baseline was 71. Before attributing
+  a red cell to a recent change, check what its GT actually dates to:
+  `git log -1 -S"<key>=<value>" -- test/regression_gt.txt`.
+
 ### Before `--accept`: analyze every changed game (the discipline)
 
 This is the step that most often gets skipped — so **the harness surfaces it for

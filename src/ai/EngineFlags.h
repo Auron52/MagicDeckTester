@@ -305,3 +305,30 @@ inline bool EquipLogTruthEnabled()
     static const bool v = EnvOn("MTG_EQUIP_LOG_TRUTH");
     return heurarm::Flag(heurarm::EQUIP_LOG_TRUTH, v);
 }
+
+// MTG_SCALED_LAND_RANK=1 -- DEFAULT OFF pending the adoption A/B.
+//
+// ManaSourceRank reserves every OTHER board-scaled source (scaled dork 61, storage land 62, live
+// untap-burst Lodge 63) but has no tier for a board-scaled LAND, because IsScaledManaDork is gated
+// on `IsCreature() && feeder == 0` and Three Tree City is a land with a {2} feeder. It therefore
+// falls through to the plain colour ladder, and since eaccc120 gave a {C}-only source rank 5
+// ("least flexible -> spend FIRST"), the highest-yield source on the board became the first one
+// tapped.
+//
+// Measured on Goblins d0 s4004 gi90 (the eaccc120 bisect's first bad commit). T4, four lands, five
+// Goblins out. Three Tree City's scaled mode is `{2},{T}: Add {R} per Goblin` = 5 red for a {2}
+// feeder, net +3; its basic mode is one {C}. Paying Aether Vial's {1} with the CITY spends the
+// multiplier for one generic pip and leaves three Mountains -> ONE Siege-Gang activation, opponent
+// survives at 1. Paying it with a Mountain leaves the city up -> {2} in, five {R} out -> TWO
+// activations, exact lethal, win T4. Pre-eaccc120 the rank tie put a Mountain first and the game
+// was won on T4; this is the regression that tie removal introduced.
+//
+// The gate is ScaledManaNetYield() > 0 -- the engine's own "the scaled mode is live, affordable,
+// and beats the basic {C} tap" predicate -- exactly mirroring how tier 63 gates on
+// UntapLandBurstNet() > 0. A source whose scaled mode is dead or unaffordable is untouched and
+// keeps its plain {C} rank, so no deck without a live scaled land can move.
+inline bool ScaledLandRankEnabled()
+{
+    static const bool v = EnvOn("MTG_SCALED_LAND_RANK");
+    return heurarm::Flag(heurarm::SCALED_LAND_RANK, v);
+}
