@@ -860,6 +860,26 @@ public:
     // Returning false puts KittyEquipment back on the base behaviour every deck but AntiLifegain and
     // FiveColour already has. MTG_KE_CONDEMN=1 restores it per-job for re-measurement.
     //
+    // >>> RE-MEASURED 2026-08-25 (second pass), AFTER three fixes, and the verdict CHANGED from
+    // "harmful" to "inert". Do not quote the WRONG SIGN bullet above as a live result: it was
+    // measured on a broken filter. The fixes were (1) order-awareness, (2) rank TIES, (3) a
+    // mana-source exemption -- see BpSlotIsAfterSite in TurnSolver.cpp for the two reachability
+    // bugs and the games that pinned them. With all three in, over 10,000 PAIRED games across two
+    // modes (mode 2 = d5/b40, mode 3 = d7/b10000; train and hold blocks, 2,500 each):
+    //   * QUALITY EXACTLY NEUTRAL. 0 games better, 0 worse, in all four cells. Every block average
+    //     is byte-identical to baseline. Only 5-6 games per cell play differently at all, and none
+    //     of them changes a win turn.
+    //   * NO SAVING, STILL. Deterministic GameWorkMeter units: +0.21% / -0.11% / -1.14% / +3.13%,
+    //     net +0.72% -- i.e. marginally DEARER. The mean ratio is ~1.000 everywhere, so the typical
+    //     game is untouched and a heavy tail on m3train carries the total. The original 44-61%
+    //     saving remains what the DROPPED note says it was: a d3 gate-cell artefact.
+    // So the honest summary is that a CORRECT condemnation buys nothing here. It is no longer a
+    // reason to avoid the filter, and no longer a reason to want it. Leaving it OFF is the
+    // adoption bar applied literally (quality-neutral requires "other upside"; there is none).
+    // The remaining argument for turning it ON is doctrinal, not empirical -- the USER's "within a
+    // turn all breakpoints and phases are one decision" framing that AntiLifegain encodes -- and
+    // that is a USER call, recorded in docs/design/breakpoint-condemnation-status.md.
+    //
     // The env_default is EnvOn(), not a literal `false`, and that is not cosmetic. A literal makes
     // the lever MANIFEST-ONLY: MTG_KE_CONDEMN=1 on the command line silently does nothing, so a
     // single-game repro of a batch divergence runs the BASELINE while reading as the arm. That cost
