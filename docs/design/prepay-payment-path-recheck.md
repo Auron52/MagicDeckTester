@@ -76,14 +76,56 @@ python3 test/gt_line_playable.py overnight --verbose --jobs 1 mirrorwing_overnig
 **Ruled out.** `MTG_DORK_HOLD_PARTIAL=1` and `MTG_DORK_TAP_LAST=1` do not recover it; only
 `MTG_PREPAY_TRUE_COLOURS=0` does. There is no decline and no drop — `MTG_PREPAY_PROBE` reports zero
 `PP_WILD`/`PP_UNPAYABLE` (only "<2 casts") and `MTG_AFFORD_AUDIT=2` reports `real drops: 0` on both
-arms. So the batch prepay *succeeds*; it just picks a tap set that spends a creature.
+arms. So the batch prepay *succeeds*; it just leaves the phase unable to pay for what comes next.
 
-A likely place to look, unverified: the reserve ladder in `BatchPrepayMainCasts` holds creatures via
-`rungs[r]`, but a held rung is only accepted when `produced.wild == 0`, and a dual land's tap is
-exactly what puts mana in `wild`. On a manabase of R/G duals the hold rung may therefore be rejected
-and the unreserved solve taken, which is free to tap the dork. **Treat that as a hypothesis, not a
-finding** — it was not confirmed, and the observed symptom (identical line, different tap set) is the
-part that is established.
+### 2a. ROOT CAUSE — surplus prepaid mana loses its fungibility
+
+The `floating_mana` in the per-decision dumps shows the whole thing. On gi309's turn 4 the accepted
+plan is two casts, `Oracle's Restoration {G}` + `Fortifying Draught {G}` — a **two-mana** batch. Both
+arms prepay it by tapping **all four lands** (Forest, Game Trail, Game Trail, Mountain), so two mana
+of surplus is left floating. Then Oracle's Restoration *draws a card*, and that card is `Gold Rush
+{1}{G}`, cast in a second segment:
+
+| after the two casts | leftover float | can it pay `Gold Rush {1}{G}`? |
+|---|---|---|
+| `MTG_PREPAY_TRUE_COLOURS=0` | `{wild: 2}` | **yes** — wild pays any pip; nothing else is tapped |
+| default (fix on) | `{R: 2}` | **no** — red cannot pay the `{G}`. Every land is already tapped, so the only green source left is the reserved **Elvish Mystic**, and it gets tapped. |
+
+So the causal chain is:
+
+1. prepay taps **more sources than the batch needs** and floats the surplus;
+2. pre-fix, that surplus was `wild` — *fungible for any later cast in the phase*, which silently
+   covered anything the rest of the turn wanted;
+3. post-fix the surplus carries its true colour, so a later cast needing a different colour cannot
+   use it;
+4. the lands are already committed, so the payment falls through to the reserved mana creature;
+5. the creature is now tapped and cannot attack — which is what actually costs the game.
+
+**The colour fix is not the defect.** Step 2 was always unsound: it is the same laundering the fix
+exists to stop. What the fix exposed is a *latent* defect in step 1 — prepay over-commits sources and
+was relying on `wild` fungibility to make that harmless. Repairing the payment path means fixing the
+over-tap (tap what the batch needs, or leave the surplus uncommitted), not restoring the laundering.
+
+**The trigger is a cast that appears AFTER the batch is prepaid** — i.e. a mid-phase draw. That is
+why Mirrorwing is the deck hit: it is a cantrip-heavy trick deck (`Oracle's Restoration`,
+`Impolite Entrance` and `Fists of Flame` all draw), so a second segment with a fresh cast is routine.
+
+Confirmed on all three of Mirrorwing's non-converging games, same signature each time:
+
+| case | leftover, fix OFF | leftover, fix ON | consequence |
+|---|---|---|---|
+| `d3_s5005` gi309 | `{wild: 2}` | `{R: 2}` | taps Elvish Mystic, 4 → 5 |
+| `d3_s7007` gi280 | `{wild: 1}` | `{R: 1}` | taps Elvish Mystic, 4 → 5 |
+| `d5_s6006` gi136 | `{wild: 1}` | `{G: 1}` | forced walk fails to win at all |
+
+**Signature to grep for** when triaging any other case: a turn with two or more main-phase segments,
+non-empty `floating_mana` carried between them, and a non-land permanent that is tapped in the
+fixed arm but not in the control at the pre-combat decision.
+
+An earlier hypothesis — that the reserve ladder's `produced.wild == 0` gate rejects the
+creature-holding rung on a dual-land manabase — is **not** what happens here: the dork *is* held
+successfully during the batch, and is only tapped afterwards, by the second segment. Recorded so the
+next person does not re-run it.
 
 ## 3. Scope — what is and is not suspect
 
@@ -162,8 +204,13 @@ arms down every prepay-attributed line).
 
 ## 7. Honest limits of this document
 
-- The mechanism in §2 is *observed* (identical line, different tap set, creature lost as an
-  attacker). The `produced.wild == 0` explanation is a hypothesis and was not confirmed.
+- The root cause in §2a is **established** for Mirrorwing (3 of 3 cases, same signature, read
+  directly off `floating_mana`). What is NOT established is *why* prepay taps four lands for a
+  two-mana batch — whether that is deliberate ("commit the turn's sources up front") or itself a
+  bug. That question lives inside the payment path and was left alone on purpose.
+- Whether the same signature explains any hinata / dragonstorm / slivers case is **unchecked**.
+  Those decks' movement is attributed to the ritual-colour fix, but attribution names a switch, not
+  a mechanism, and slivers is also cantrip-adjacent. Use the signature in §2a to triage.
 - The 418 cases are games that got **worse**. 125 got better over the same batch; those are not
   tracked here and some may be luck of the same re-ranking.
 - `pre_fix` is not automatically the "right" answer. For the ritual-colour decks the pre-fix value
