@@ -447,6 +447,22 @@ public:
         // the same property that makes the name axis additive.
         int tutor_choice = -1;
 
+        // Searched SAC-LAND TARGET by index (MTG_SAC_AXIS): which candidate of the provider's
+        // SacrificeLandCandidates ranking -- computed AT RESOLUTION, on the true mid-plan state
+        // (a mid-plan fetch can add a land the turn-start board never held) -- each
+        // sacrifice-a-land additional cost (Crop Rotation, Shard Volley) takes. One entry PER
+        // SAC ORDINAL in this plan's canonical execution order, because the winning deviation
+        // can be the SECOND sacrifice of a turn (cg30: CR#1's default is right, CR#2 must spare
+        // the Orchard). Empty (default) == every sacrifice takes the provider's front,
+        // byte-identical to no branch; entry k >= 0 pins that ordinal to
+        // ranked[min(k, size-1)] (clamp = the tutor axis's duplicate-not-whiff rule); entry -1
+        // is per-ordinal inert. Pinned for the apply (ScriptedSacLand list+cursor);
+        // PerformSacrificeLandCost consumes one entry per call. Without this axis the sac
+        // target was heuristic-only, so no depth or budget could represent the line where a
+        // spawn land survives -- the cg30 unrecoverable-regression class.
+        // See docs/design/searched-choice-audit.md.
+        std::vector<int> sac_pins;
+
         // HOLD-vs-TAP of this turn's mana creatures. 0 (default) == the shipped heuristic (reserve
         // every mana creature for the whole turn, and sort them last in the tap backtracker);
         // 1 == spend them like any other source. Pinned for the apply (ScriptedTapMode) and NOT

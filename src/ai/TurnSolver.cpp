@@ -4240,6 +4240,17 @@ static bool TutorAxisEnabled()
     static const bool on = EnvOn("MTG_TUTOR_AXIS", true);
     return on;
 }
+// MTG_SAC_AXIS (default off, adoption-config candidate): fan the sacrifice-a-land target out as
+// Plan::sac_pins variants so the search -- not the SacrificeLandCandidates heuristic alone --
+// picks which land each additional cost eats. USER directive (2026-08-25): "It should be a
+// branch by default and be overridden by a heuristic." The heuristic keeps three roles: the
+// branch ORDER (provider front first), the only decision on plan-less paths (d0 greedy,
+// rollouts), and the base plan's default. See docs/design/searched-choice-audit.md.
+static bool SacAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_SAC_AXIS");
+    return on;
+}
 // MTG_TUTOR_AXIS_RESOLVE=1 (default off): bind the searched tutor pick by INDEX resolved at the
 // TRUE per-plan state, instead of by NAME ranked at the shared pre-land turn-start state. This is
 // the honest form of the located axis defect (see the fan-out note in EnumeratePlansWithLand):
@@ -13434,6 +13445,9 @@ struct BpPrefixSnap
                                      // full apply did, or its ranks index a different list
     bool cascade_free = false;       // one-shot free-cast marker, captured for exactness
     int  pin_top = -1, pin_etbdig = -1, pin_tutor = -1, pin_reorder = -1;   // scripted-pin state
+    int  pin_sac_cursor = 0;         // sac-pin consumption point (the LIST is the plan's own
+                                     // sac_pins, re-installed by the resumed apply's entry guard;
+                                     // only the cursor is prefix state)
     const CardDefinition* deferred_site = nullptr;   // MTG_CANTRIP_ORDER watermark (registry-stable)
     std::vector<int>      deferred_hand;             // PRE-DRAW hand of that site (drawn-card exemption)
 };
@@ -13506,6 +13520,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     ScriptedReorder _sr(plan.ponder_choice);   // searched Ponder disposition (own pin; see ScriptedReorder)
     ScriptedTutor _stut(plan.tutor_choice);    // searched tutor pick by index, resolved at the true
                                                // mid-plan state (MTG_TUTOR_AXIS_RESOLVE); -1 inert
+    ScriptedSacLand _ssac(plan.sac_pins);      // searched sac-land picks, one per sac ordinal,
+                                               // resolved at the true mid-plan state (MTG_SAC_AXIS);
+                                               // empty inert
     // Searched hold-vs-tap of the mana creatures. Scoped like the pins above, but NOT consumed by
     // its first reader: every payment in the apply -- the whole-turn prepay and any post-draw
     // re-solve -- must see the same mode, or one plan would be scored under two payment policies.
@@ -15717,6 +15734,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         g_scripted_etbdig_choice = bp_resume->pin_etbdig; // consumed pin stays consumed; the
         g_scripted_tutor_choice  = bp_resume->pin_tutor;  // entry guards' dtors still restore
         g_scripted_reorder_choice= bp_resume->pin_reorder;// the outer values on exit)
+        g_scripted_sac_cursor    = bp_resume->pin_sac_cursor; // list already re-installed by _ssac
         if (out_breakpoint != nullptr) { *out_breakpoint = bp_resume->sink; }
     }
     else
@@ -15964,6 +15982,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_etbdig   = g_scripted_etbdig_choice;
             bp_capture->pin_tutor    = g_scripted_tutor_choice;
             bp_capture->pin_reorder  = g_scripted_reorder_choice;
+            bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
             bp_capture->deferred_site = deferred_cantrip_site;
             bp_capture->deferred_hand = deferred_hand_before;
         }
@@ -20659,6 +20678,59 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         }
     }
 
+    // SEARCHED SAC-LAND TARGET (MTG_SAC_AXIS; docs/design/searched-choice-audit.md). Same
+    // post-dedup additive fan-out as the tutor axis: the target does not change what the plan can
+    // afford, so every variant shares a cast-name signature and only survives by being emitted
+    // here. One variant per (sac ordinal, candidate rank) -- per-ORDINAL one-hot, not a cross
+    // product, because the winning deviation can be the SECOND sacrifice of the turn (cg30: CR#1's
+    // default is right, CR#2 must spare the Orchard); cost is S x (W-1) per base plan. The width
+    // sizes from the turn-start distinct sacable land NAMES, +1 headroom because the mid-plan land
+    // set can GROW (cg30's Forest exists only after Misty's crack, and the winning pin resolves to
+    // it); resolution clamps any drift (PerformSacrificeLandCost's duplicate-not-whiff rule). No
+    // provider call here at all -- the ranking runs inside PerformSacrificeLandCost at each plan's
+    // own resolution state, exactly as the tutor resolve axis.
+    if (SacAxisEnabled() && !HumanPlayActive())
+    {
+        std::vector<InternedName> sac_names;
+        for (const Permanent& perm : state.battlefield)
+        {
+            if (perm.controller_index != state.active_player_index || !perm.card.IsLand())
+            { continue; }
+            if (std::find(sac_names.begin(), sac_names.end(), perm.card.m_name) == sac_names.end())
+            { sac_names.push_back(perm.card.m_name); }
+        }
+        const std::size_t W = std::min<std::size_t>(4, sac_names.size() + 1);
+        if (W > 1)
+        {
+            std::vector<TurnSolver::Plan> extra;
+            for (const TurnSolver::Plan& p : all)
+            {
+                // Base plans only -- one axis at a time, so cost stays additive (tutor's rule).
+                if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
+                    || p.etbdig_choice >= 0 || p.lackey_choice >= 0
+                    || !p.sac_pins.empty()) { continue; }
+                int sacs = 0;
+                for (const Action& act : p.actions)
+                {
+                    if (act.kind == Action::Kind::CastFromHand && act.sacrifice_land) { ++sacs; }
+                }
+                if (sacs == 0) { continue; }
+                for (int j = 0; j < sacs; ++j)
+                {
+                    for (std::size_t c = 1; c < W; ++c)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.sac_pins.assign(static_cast<std::size_t>(sacs), -1);
+                        v.sac_pins[static_cast<std::size_t>(j)] = static_cast<int>(c);
+                        extra.push_back(std::move(v));
+                    }
+                }
+            }
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
+    }
+
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
           state.turn_number, all.size(), land_names.size(), ap.hand.size());
     PROF_ADD(plans_generated, all.size());
@@ -20666,7 +20738,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     // the choice tag -- the fans above set exactly one per variant ("one axis at a time").
     if (branchstats::Enabled())
     {
-        std::size_t base = 0, scry = 0, tut = 0, dig = 0, lack = 0, pond = 0, disc = 0;
+        std::size_t base = 0, scry = 0, tut = 0, dig = 0, lack = 0, pond = 0, disc = 0, sac = 0;
         for (const TurnSolver::Plan& p : all)
         {
             if      (p.scry_choice    >= 0) { ++scry; }
@@ -20675,6 +20747,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             else if (p.lackey_choice  >= 0) { ++lack; }
             else if (p.ponder_choice  >= 0) { ++pond; }
             else if (p.discard_choice >= 0) { ++disc; }
+            else if (!p.sac_pins.empty())   { ++sac;  }
             else                            { ++base; }
         }
         branchstats::RecordAxis("(base plans)", base);
@@ -20684,6 +20757,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         branchstats::RecordAxis("axis: lackey", lack);
         branchstats::RecordAxis("axis: ponder", pond);
         branchstats::RecordAxis("axis: cleanup-discard", disc);
+        branchstats::RecordAxis("axis: sac-land", sac);
     }
     return all;
 }
@@ -25711,9 +25785,16 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     // (a pinned tutor pick flips the fetch-target enumeration; tapmode=1 flips dork-reserve
     // emission) -- so the SAME state enumerates differently under different pin sets. Folded
     // only when some pin is live; pin-free calls keep the exact prior key.
+    // Sac-land pins: live only while UNCONSUMED entries remain (a fully consumed list steers
+    // nothing more, so it must key exactly as no list -- same rule as a consumed single pin).
+    // The remaining SUFFIX is the steering state: entries of -1 are individually inert but
+    // positionally load-bearing (they decide which future ordinal the pinned entry lands on),
+    // so the whole suffix folds, values shifted +2 to keep -1 distinct from the length fold.
+    const bool sac_pins_live = g_scripted_sac_pins != nullptr
+        && g_scripted_sac_cursor < static_cast<int>(g_scripted_sac_pins->size());
     if (g_scripted_top_choice >= 0 || g_scripted_etbdig_choice >= 0
         || g_scripted_tutor_choice >= 0 || g_scripted_reorder_choice >= 0
-        || g_scripted_tapmode != 0)
+        || g_scripted_tapmode != 0 || sac_pins_live)
     {
         Fold(k, 0x5C21);
         Fold(k, static_cast<uint64_t>(g_scripted_top_choice + 1));
@@ -25721,6 +25802,15 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
         Fold(k, static_cast<uint64_t>(g_scripted_tutor_choice + 1));
         Fold(k, static_cast<uint64_t>(g_scripted_reorder_choice + 1));
         Fold(k, static_cast<uint64_t>(g_scripted_tapmode));
+        if (sac_pins_live)
+        {
+            Fold(k, 0x5AC1);
+            Fold(k, static_cast<uint64_t>(g_scripted_sac_pins->size()
+                                          - static_cast<std::size_t>(g_scripted_sac_cursor)));
+            for (std::size_t i = static_cast<std::size_t>(g_scripted_sac_cursor);
+                 i < g_scripted_sac_pins->size(); ++i)
+            { Fold(k, static_cast<uint64_t>((*g_scripted_sac_pins)[i] + 2)); }
+        }
     }
     // Archangel free-cast bank (added 2026-08-20, caught by MTG_ENUM_MEMO_VERIFY: cached 9
     // plans vs fresh 4 at t8 m2 = the free-variant emission): a this-turn post-combat counter,

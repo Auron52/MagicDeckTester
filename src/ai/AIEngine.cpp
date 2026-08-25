@@ -2437,6 +2437,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     ScriptedReorder _sr_exec(plan.ponder_choice);   // executor/rollout lockstep for the Ponder disposition
     ScriptedTutor _stut_exec(plan.tutor_choice);    // executor/rollout lockstep for the searched tutor
                                                     // pick (index resolved at the true state); -1 inert
+    ScriptedSacLand _ssac_exec(plan.sac_pins);      // executor/rollout lockstep for the searched
+                                                    // sac-land picks (one entry per sac ordinal,
+                                                    // resolved at the true state); empty inert
 
     // Same for the searched Lackey put -- executor/rollout lockstep: without it the search would
     // score one Goblin entering and the real game would put a different one.
@@ -4309,6 +4312,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // duplicate of the provider's flag-off order, EXCEPT it never saw the flag: the search
         // (PerformSacrificeLandCost) spared the Forbidden Orchard while the executor ate it,
         // the cg30 lockstep hole (overhaul ledger, 2026-08-25).
+        // Same ordinal pin the search consumed when it scored this plan (Plan::sac_pins,
+        // installed by _ssac_exec) -- executor/rollout lockstep; -1 / no plan is inert.
+        const int sac_pin = ConsumeScriptedSacPin();
         std::vector<int> lands;
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
@@ -4320,7 +4326,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         {
             const std::vector<int> ranked = ResolveProvider(state).SacrificeLandCandidates(
                 state, state.active_player_index, lands);
-            const int idx = ranked.empty() ? lands.front() : ranked.front();
+            int idx = lands.front();
+            if (!ranked.empty())
+            {
+                const std::size_t c = sac_pin < 0 ? 0
+                    : std::min<std::size_t>(static_cast<std::size_t>(sac_pin), ranked.size() - 1);
+                idx = ranked[c];
+            }
             ap.graveyard.push_back(state.battlefield[idx].card);
             state.battlefield.erase(state.battlefield.begin() + idx);
         }

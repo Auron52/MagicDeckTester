@@ -31,7 +31,29 @@ mulligan trials), (3) an optional collapse of the branch where it is provably lo
 (the dork-atk contest's "every obvious case closed heuristically, search the contested
 remainder" idiom).
 
-## (A) SAC-LAND AXIS design (next session's implementation)
+## (A) SAC-LAND AXIS design — IMPLEMENTED 2026-08-25
+
+Status: built exactly per the design below, plus the bounceland prior tier. Sites:
+`Plan::sac_pins` (TurnSolver.h), `ScriptedSacLand` + `ConsumeScriptedSacPin` +
+consumption in `PerformSacrificeLandCost` (SpellEffects.h; the one consumption rule is a
+SHARED helper because two open-coded copies of one sacrifice rule is exactly the cg30
+lockstep hole), thread-locals in GameLogger.cpp, fan-out + `SacAxisEnabled` +
+branchstats + memo-key suffix fold (TurnSolver.cpp; the remaining UNCONSUMED pin suffix
+folds -- a fully consumed list keys as no list), bp-snapshot carries the cursor only (the
+list is re-installed from the resumed plan by the entry guard), executor pins in
+AIEngine.cpp (`_ssac_exec` + the cast-path site consumes the same shared helper).
+Verified: acid test PASSED -- cg30 with MTG_SAC_AXIS=1 and MTG_SAC_SPAWN_LAND_LAST=0 wins
+T4 (baseline without either: 5; game log confirms 3 Orchards on board after the double
+Crop Rotation, Temple Garden + the mid-plan Forest eaten -- the pinned ordinal resolving
+to a land that exists only mid-plan, which is what the +1 width headroom is for);
+axis+veto also 4; clean-env smoke 42/42 with 0 config changes (dormant = byte-identical).
+The bounceland tier (below) is live in the prior under MTG_SAC_SPAWN_LAND_LAST
+(fungible < bounceland < spawn, tapped-first within each band); Creature Giving runs
+Azorius Chancery so the tier is exercised in the suite. Still open from the doctrine: the
+Crop-Rotation cast-desirability gate for plan-less paths (d0/rollout MoveOrder) -- the
+axis prices it at searched depths.
+
+## (A.1) Original design (for reference)
 
 Motivating case: cg30 (overhaul ledger). The sac target is chosen by
 `DecisionProvider::SacrificeLandCandidates` (tapped-first; + MTG_SAC_SPAWN_LAND_LAST

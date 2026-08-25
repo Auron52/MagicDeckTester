@@ -939,19 +939,29 @@ std::vector<int> DecisionProvider::SacrificeLandCandidates(
     // tap it before the sac fires (under MTG_DORK_TAP_LAST's lands-first order, reliably), and
     // the sac target is NOT a search branch, so no budget/depth recovers the loss: cg30's T4 win
     // exists for the executor (forced-walk proof in the ledger) but every searched line sacked
-    // the Orchard and scored 5. Rank spawn lands AFTER every fungible land, tapped-first within
-    // each band; a board with only spawn lands is unchanged.
+    // the Orchard and scored 5. Since MTG_SAC_AXIS the target IS a branch (Plan::sac_pins), and
+    // this ranking is its PRIOR: the branch order for cutoffs, and the only decision on the
+    // plan-less paths (d0 greedy, rollouts) and for the base plan's default.
+    //
+    // Band order under the lever (USER doctrine, 2026-08-25: "sacrifice Orchard last. Anything
+    // else is a better choice except maybe the bounceland"): fungible lands first (tapped-first
+    // within), then BOUNCELANDS (etb_bounce_land -- a Karoo taps for two, so it is 2 mana/turn
+    // of ongoing production vs a fungible land's 1), then spawn lands strictly last. A board
+    // with only spawn lands is unchanged.
     static const bool s_spawn_last = EnvOn("MTG_SAC_SPAWN_LAND_LAST");
     std::vector<int> out = land_indices;
     std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
         if (s_spawn_last)
         {
-            auto spawns = [&](int i) {
+            auto band = [&](int i) {
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(s.battlefield[i].card);
-                return d && d->params.taps_spawn_opp_token;
+                if (d == nullptr) { return 0; }
+                if (d->params.taps_spawn_opp_token) { return 2; }
+                if (d->params.etb_bounce_land)      { return 1; }
+                return 0;
             };
-            const bool sa = spawns(a), sb = spawns(b);
-            if (sa != sb) { return !sa; }
+            const int ba = band(a), bb = band(b);
+            if (ba != bb) { return ba < bb; }
         }
         return s.battlefield[a].tapped && !s.battlefield[b].tapped;
     });

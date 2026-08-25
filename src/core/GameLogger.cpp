@@ -20,6 +20,10 @@ thread_local bool           g_le_pitch_ranking = false; // set by LandsEdgePitch
 thread_local int            g_scripted_etbdig_choice = -1;
 thread_local int            g_scripted_tutor_choice  = -1;
 thread_local int            g_scripted_reorder_choice = -1;
+// Searched sac-land pin list + consumption cursor (Plan::sac_pins, MTG_SAC_AXIS); null = the
+// provider heuristic decides every sacrifice (the default, byte-identical).
+thread_local const std::vector<int>* g_scripted_sac_pins = nullptr;
+thread_local int            g_scripted_sac_cursor = 0;
 // Searched hold-vs-tap of the mana creatures; 0 = the shipped "spare the body" default.
 thread_local int            g_scripted_tapmode = 0;
 thread_local TargetChooser* g_play_target_chooser = nullptr;

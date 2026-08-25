@@ -8564,6 +8564,52 @@ struct ScriptedTutor
     int saved;
 };
 
+// Searched SAC-LAND target by index (Plan::sac_pins, MTG_SAC_AXIS): a per-ordinal pin LIST
+// rather than a single consumable int, because one plan can pay several sacrifice-a-land costs
+// and the winning deviation can be the second (cg30). PerformSacrificeLandCost consumes one
+// entry per call in canonical execution order; entry k >= 0 takes ranked[min(k, size-1)]
+// (duplicate-not-whiff clamp), entry -1 keeps the provider's front, and a call past the list's
+// end (a breakpoint continuation's extra sacrifice) also keeps the front. The list rides a
+// POINTER to the Plan's own vector (the Plan outlives the apply), so installing the pin never
+// copies.
+extern thread_local const std::vector<int>* g_scripted_sac_pins;
+extern thread_local int g_scripted_sac_cursor;
+
+// Scoped pin, mirroring ScriptedTutor (restores list AND cursor on exit so a nested apply
+// cannot leak its script into the outer one -- and so the outer apply resumes at its own
+// consumption point).
+struct ScriptedSacLand
+{
+    explicit ScriptedSacLand(const std::vector<int>& pins)
+        : saved(g_scripted_sac_pins), saved_cursor(g_scripted_sac_cursor)
+    {
+        g_scripted_sac_pins   = pins.empty() ? nullptr : &pins;
+        g_scripted_sac_cursor = 0;
+    }
+    ~ScriptedSacLand() { g_scripted_sac_pins = saved; g_scripted_sac_cursor = saved_cursor; }
+    ScriptedSacLand(const ScriptedSacLand&) = delete;
+    ScriptedSacLand& operator=(const ScriptedSacLand&) = delete;
+    const std::vector<int>* saved;
+    int saved_cursor;
+};
+
+// The ONE consumption rule for the sac-pin list, shared by every sacrifice-a-land site
+// (PerformSacrificeLandCost for search/rollout/plan-executor; AIEngine's cast-path site) --
+// two open-coded copies of one sacrifice rule is exactly the lockstep hole cg30 exposed.
+// Returns this call's ordinal pin (-1 = provider front), advancing the cursor; a call past the
+// list's end returns -1.
+inline int ConsumeScriptedSacPin()
+{
+    if (g_scripted_sac_pins != nullptr
+        && g_scripted_sac_cursor < static_cast<int>(g_scripted_sac_pins->size()))
+    {
+        const int pin = (*g_scripted_sac_pins)[g_scripted_sac_cursor];
+        ++g_scripted_sac_cursor;
+        return pin;
+    }
+    return -1;
+}
+
 // MTG_FB_TRACE diagnostic only (no play change): how many firebreathing activations the CURRENT
 // turn's combat paid for. Reset at every Firebreathe call; read by GameEngine::MainPhase to detect
 // a post-combat main that casts on a turn that pumped -- the one situation in which the pump pool's
@@ -9035,6 +9081,10 @@ inline void PerformFetch(GameState& state, int controller_index,
 // sacrifice target (2026-08-06 claude-play sweep flag, seeds 9012/9015).
 inline void PerformSacrificeLandCost(GameState& state, const std::string& spell_name)
 {
+    // Consume this call's ordinal from the searched pin list (Plan::sac_pins) FIRST,
+    // unconditionally -- even a sacrifice that finds no land holds its ordinal, so the plan's
+    // j-th entry always steers the plan's j-th sacrifice.
+    const int pin = ConsumeScriptedSacPin();
     Player& ap = state.players[state.active_player_index];
     std::vector<int> lands;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
@@ -9048,7 +9098,14 @@ inline void PerformSacrificeLandCost(GameState& state, const std::string& spell_
     {
         const std::vector<int> ranked = ResolveProvider(state).SacrificeLandCandidates(
             state, state.active_player_index, lands);
-        if (!ranked.empty()) { idx = ranked.front(); }
+        if (!ranked.empty())
+        {
+            // pin >= 0 takes the k-th candidate of the ranking computed at THIS resolution
+            // state, clamped to the last (duplicate-not-whiff, as the tutor axis); -1 = front.
+            const std::size_t k = pin < 0 ? 0
+                : std::min<std::size_t>(static_cast<std::size_t>(pin), ranked.size() - 1);
+            idx = ranked[k];
+        }
     }
     if (g_play_sacrifice_chooser && lands.size() > 1 && idx >= 0)
     {
