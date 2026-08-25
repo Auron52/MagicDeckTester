@@ -1082,3 +1082,49 @@ else rank 24 (last; the tutored card becomes next turn's upkeep-Call dump or dra
   20     [2..20]   m2    1  4  Throes of Chaos   -- draw, but its cost IS the turn -> cost-efficient end
 ```
 
+
+---
+
+## ADOPTION MEASUREMENT of the two un-adopted USER orders (2026-08-25)
+
+Both USER-reviewed orders had been implemented but NEVER measured (`MTG_KE_ORDER`,
+`MTG_STOMPY_ORDER`, both default OFF "pending measurement"; `heuristic_defaults.env` is empty so
+nothing turned them on). Measured at each deck's PLAY settings.
+
+### StompySurprise — GATE 1 PASS, GATE 2 FAIL (do not adopt yet; there is a BUG to fix first)
+
+| sample | paired | net turns | worse | better |
+|---|---|---|---|---|
+| blocks 1.0M-1.9M | 5,000 | -7 | 12 | 19 |
+| blocks 20.0M-21.9M (fresh) | 10,000 | -30 | 31 | 60 |
+| **COMBINED** | **15,000** | **-37** | **43** | **79** |
+
+122 changed games (0.81%), better:worse 79:43 = **+3.26 sigma**, both samples agree in direction.
+Perf single-threaded min-of-3: **2.2% FASTER** (30,485 ms vs 31,181 ms). So on gate 1 it is a
+strict win — better AND faster.
+
+**GATE 2 FAILS.** Of the 43 regressed games, 37 do NOT recover at **depth = target win turn** with
+budget 2,000,000 (100,000x production) — the USER's exact procedure. Every one is a win one turn
+later (4->5, 5->6, 6->7), never a lost win, but the earlier line is unreachable at any budget/depth.
+
+**ROOT CAUSE: the cast order is a hard PRUNE of the cast sequence, not an ordering.**
+`MTG_UNPRUNE=searchorder` ("cast/resolve ordering search enabled") recovers **8 of 8** sampled games
+to their pre-regression win turn; `MTG_UNPRUNE=tutor` recovers only 2 of 8; the other nine gates
+recover none. With the ordering search off (the default), `CastOrderRank` fixes the sequence, so a
+rank that is wrong for a particular board makes the winning sequence unreachable — exactly the
+"heuristics are wired as PRUNES" bar, and why budget and depth cannot buy it back.
+
+Per the USER (2026-08-25): *"If they still don't recover it is a bug and requires a fix."* The fix
+belongs at the ordering-prune, not in the order's ranks: a better aggregate does not license
+deleting 37 reachable wins.
+
+### KittyEquipment — quality-INERT and slightly slower (a USER call, not a measurement call)
+
+5,000 paired games at play settings: **0 changed games**. The order changes PLAY (digest moves) but
+never a win turn. Perf single-threaded min-of-3: **+4.8% SLOWER** (43,078 ms vs 41,119 ms).
+
+NOTE the perf trap: the same comparison inside the pooled batch read **+71%**, which was pure
+contention. On this box a perf A/B needs `--threads 1` + min-of-N; do not quote a pooled delta.
+
+So Kitty's order is quality-neutral with a small perf cost — it does not clear the adoption bar on
+measurement alone. Whether to ship it anyway (it is the USER's reviewed intent) is a USER decision.

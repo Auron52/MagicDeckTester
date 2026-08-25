@@ -63,6 +63,7 @@ enum Slot : int
     LEAF_NOWIN_FORCE,         // MTG_LEAF_NOWIN_FORCE      force the tie-break past a provider opt-out
     AL_SSM_ROLLOUT,           // MTG_AL_SSM_ROLLOUT        AL also searches the ROLLOUT's per-turn m2
     M2_CAP1,                  // MTG_M2_CAP1               cap the interior m2 solve to depth 1
+    STOMPY_ORDER,             // MTG_STOMPY_ORDER          USER-reviewed StompySurprise cast order
     COUNT
 };
 
@@ -103,6 +104,7 @@ inline const char* Name(int slot)
         "MTG_LEAF_NOWIN_FORCE",
         "MTG_AL_SSM_ROLLOUT",
         "MTG_M2_CAP1",
+        "MTG_STOMPY_ORDER",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

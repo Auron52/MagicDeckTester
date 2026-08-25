@@ -10219,8 +10219,10 @@ int StompyProvider::ExtraLethalDamage(const GameState& s,
 // becomes a default-on read with an off switch, like the adopted per-deck rules).
 static bool StompyOrderEnabled()
 {
+    // Per-job overridable (heurarm) so both arms of the adoption A/B run in ONE pooled batch
+    // rather than one batch per arm -- unset everywhere => the env default, byte-identical.
     static const bool on = EnvOn("MTG_STOMPY_ORDER");   // default OFF; =1 enables (A/B lever)
-    return on;
+    return heurarm::Flag(heurarm::STOMPY_ORDER, on);
 }
 
 int StompyProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
