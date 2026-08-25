@@ -11807,11 +11807,32 @@ void FiveColourProvider::ModalSplitCandidates(const GameState& s, const CardDefi
 // advances metalcraft and Balan's two-equipment double-strike threshold), so it rides the
 // equipment tier with the rest.
 //
-// MTG_KE_ORDER, DEFAULT OFF -> byte-identical. On adoption this becomes a default-on read with an
-// off switch, like the other adopted per-deck orders.
+// ADOPTED 2026-08-25 (USER). DEFAULT ON; MTG_KE_ORDER=0 disables. It governs three hooks together
+// -- CastOrderRank, OrderOpaqueCastsByRank and MainPhaseOverride -- and all three were measured as
+// one arm.
+//
+// Quality: 3,000 paired games at play settings, 0 better / 0 worse against the generic order (and
+// 5,000 paired earlier, likewise 0 changed win turns). Cost: single-threaded min-of-3 over 750
+// games x 2 seeds, 67.47 vs 67.35 and 65.81 vs 65.80 -- inside +-0.2%. The "+4.8% SLOWER" recorded
+// in cast-order-rankings.md does NOT reproduce at that sample size; do not quote it again without
+// re-measuring (and never from a pooled batch -- this deck has already produced a +71% pooled
+// artifact for a +4.8% real delta).
+//
+// So it does not clear the bar on its own measurement -- it is neutral on both axes. What carries
+// it is a SECOND, independent result: this order is the precondition that makes breakpoint
+// condemnation sound. The generic order ranks creatures 10 and every other noncreature, Equipment
+// included, 20 -- so it deploys Kor Duelist BEFORE the Equipment whose Puresteel ETB does the
+// drawing, which is backwards from the information-first rule this order exists to encode
+// (Equipment 8, ahead of the hosts at 10: "with a Paladin out a {1} Equipment IS this deck's
+// cantrip"). Under the generic order, order-aware condemnation still loses 6 games in 3,000
+// because the winning line is unrepresentable; under this one it loses none. USER 2026-08-25:
+// "It just shouldn't be played until you have finished drawing."
+//
+// Adopted SEPARATELY from condemnation, at the USER's direction -- condemnation may yet need more
+// work, and this order should not be held hostage to it.
 static bool KittyOrderEnabled()
 {
-    static const bool on = EnvOn("MTG_KE_ORDER");
+    static const bool on = EnvOn("MTG_KE_ORDER", true);   // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::KE_ORDER, on);
 }
 
