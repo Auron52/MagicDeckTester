@@ -1128,3 +1128,36 @@ contention. On this box a perf A/B needs `--threads 1` + min-of-N; do not quote 
 
 So Kitty's order is quality-neutral with a small perf cost — it does not clear the adoption bar on
 measurement alone. Whether to ship it anyway (it is the USER's reviewed intent) is a USER decision.
+
+## Equip timing is NOT the cast order (USER question, 2026-08-25)
+
+**Does the cast order decide when we equip? No.** `CastOrderRank` ranks CASTS. Equips are
+activated abilities and run in a separate **trailing pass after every cast in the phase** --
+which is exactly the placement the USER recommended ("I suppose it goes at the end of the list
+in main 1"). The contract is stated at `TurnSolver.cpp` (SameTurnMetalcraftEquipCredit): *"Casts
+are applied before the trailing equip/outlet pass in BOTH worlds (the executor's cast loop
+precedes its ability loop; ApplyPlanDirect the same)"* -- and that ordering is load-bearing, since
+it is what makes the same-turn metalcraft credit realisable rather than an optimistic guess.
+
+So the USER's *"we shouldn't need to include equip activations earlier"* is already the default.
+There are exactly **three** named exceptions, each self-gating, and each fires early only because
+something the enumerator already credited depends on it happening before a later cast:
+
+| # | exception | gate | why it must precede the casts |
+|---|---|---|---|
+| 1 | **mana unlock** (`HasteUnlockedManaOf`) | host is a mana source that cannot tap yet | the enumerator offered the plan *because* the hasted dork pays for a later cast, so the equip has to happen before that cast. Fired before the casts and again after each one, by both worlds through one function, so they stay in lockstep. An equip onto a beater is untouched and still fires in the trailing pass. |
+| 2 | **Stoneforge enable** (doctrine 4b, `stoneforge_id`) | a summoning-sick, UNTAPPED tap-put source with an Equipment in hand | hasting it unlocks the {T} put THIS turn. This is the USER's own *"except perhaps to activate Stoneforge Mystic with Lightning Greaves"* -- already implemented. |
+| 3 | **Kemba park** (doctrine 4e, `kemba_id`) | haste equip under `ConsolidatesEquips` | *"always be equipped to Kemba by end of turn if possible"* -- and it is explicitly the POST-COMBAT park, i.e. the USER's *"arguably main 2 for the Kemba park"*. |
+
+Exceptions 2 and 3 are not scheduling hacks: they widen the equip HOST set (`kept = true` past the
+width policy) so the search can see the line at all. Haste equips are additionally exempt from the
+"never move an attached equipment off a host" rule for the same reason.
+
+Ordering WITHIN the trailing pass is its own small ruling and is also not the cast order: the
+equips vector is sorted by an order class, which is where *"O-Naginata should be equipped before
+Lightning Greaves, but last otherwise, so the power is okay"* (USER 2026-08-19) lives, and where
+"Greaves last" falls out for free.
+
+**Net: the engine already does what the USER recommended here, on all three points.** Recorded
+because the rules were previously only in scattered code comments, and the question "does the cast
+order control equips?" has an answer that is easy to guess wrong.
