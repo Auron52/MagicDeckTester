@@ -48,6 +48,27 @@ import json, os, re, subprocess, sys, glob
 MTG = os.environ.get("MTG_BIN", "./build/Release/mtg")
 STRICT = "--strict" in sys.argv[1:]
 
+# §2a REPLAY COMPAT (MTG_TREASURE_PAY_SOURCE -- lump-mana-sources-as-payment-sources.md §2a, and
+# mana-order-and-reserve-overhaul.md). With the flag on, an amount-1 pay-sac source (Treasure
+# Token) is a PAYMENT source, not a per-colour SacForMana plan action -- so references recorded
+# under the action fan encode plans ("cast: Zada, Treasure Token: sacrifice for {R}x1") and
+# re-prompt frames (offered again because crackable Treasures were still actions) that can no
+# longer occur verbatim. Two env-gated repairs keep those recordings replayable WITHOUT weakening
+# the gate -- the drift test (same won + win_turn as recorded) still decides pass/fail
+# (USER 2026-08-25: permission conditional on reproducing the same win turn):
+#   1. find_plan tier 3: match a recorded plan MODULO its Treasure-sac actions (the sac is now
+#      implicit in payment; the colour choice moves to the payment solver, the same class of
+#      information the stale-index repair already re-derives).
+#   2. Frame alignment: skip a recorded main-phase frame that (a) answered PASS and (b) sits
+#      strictly BEFORE the engine's current frame -- the fan-era re-prompt that no longer fires
+#      because there is no crack action left to offer. A stale frame that recorded a REAL cast is
+#      never skipped: losing it is genuine content loss and must surface as drift.
+# Scope: card name "Treasure Token" -- the only amount-1 pay-sac source (`sac_count` cannot
+# distinguish it: Lotus Bloom also records sac_count 1 but is amount 3 and KEEPS its action fold).
+_tps = os.environ.get("MTG_TREASURE_PAY_SOURCE")
+TREASURE_PAY_COMPAT = bool(_tps) and _tps != "0"
+PAY_SAC_NAMES = {"Treasure Token"}
+
 # Per-replay ADDRESS-SPACE cap, in MB (MTG_REPLAY_AS_CAP_MB; 0 disables). A replay is an ordinary
 # few-MB run -- the whole 208-reference sweep peaks around 90 MB per process -- but the plan
 # enumerator's fan-out is combinatorial in the number of untapped fungible sac sources, and this
@@ -130,12 +151,72 @@ def flatten_choices(decisions, drop_mulligan=False):
     return out
 
 
+def recorded_attackers(decisions):
+    """turn -> the attacker names the RECORDING's combat declared that turn, parsed from the
+    play-viewer combat events ("⚔ attacked: A (2), B (3) — 5 to opponent (20→15)"). The attack
+    declaration is engine-automatic and its heuristic reads the spare-mana pools, so mana-model
+    work legitimately re-decides WHO attacks -- which can tap a creature the recorded post-combat
+    line needed as a mana source and kill the replay (FiveColour s9_gi8: the tap-order bundle sent
+    Deathrite Shaman in on T4 and the recorded Cannons+Faeburrow+Oko line became unpayable). The
+    events pin the recorded attack, so the replay passes it back via --force-attackers.
+
+    Only turns WITH a combat event are pinned: the event is emitted only when combat dealt damage,
+    so "no event" cannot distinguish "did not attack" from "attacked for 0" -- and the final
+    lethal swing often has no later frame to carry its event at all. Unpinned turns declare
+    naturally, exactly as before."""
+    by_turn = {}
+    for d in decisions:
+        for ev in (d.get("decision", {}).get("events") or []):
+            if ev.get("kind") != "combat" or "attacked: " not in ev.get("text", ""):
+                continue
+            body = ev["text"].split("attacked: ", 1)[1].rsplit(" — ", 1)[0]
+            body = re.sub(r" \+ \d+ \(attack triggers\)$", "", body)
+            # Attackers are "Name (power)" joined by ", "; split on '), ' because names themselves
+            # can carry commas ("Oko, Thief of Crowns (3)"), then strip the power suffix.
+            names = [re.sub(r" \(\d+\)?$", "", piece) for piece in body.split("), ")]
+            by_turn[ev.get("turn")] = names
+    return by_turn
+
+
+def recorded_tap_prefs(decisions):
+    """(turn, phase) -> battlefield idxs the recording's committed plan TAPPED in that main phase,
+    read from the tapped-delta between two consecutive same-(turn, phase) main_phase frames (the
+    engine re-prompts after committing a line, so the pair brackets exactly that line's payment
+    and activations). Which sources pay is engine-automatic, and no static tap order reproduces
+    every recording -- FiveColour s13_gi12's T4 spent Deathrite and KEPT Bloom Tender (its
+    multi-yield paid the post-combat casts) while s9_gi8's T3 needed Deathrite spared (its
+    graveyard fuel paid T4) -- so where the recording witnessed the taps, --tap-pref pins them.
+    Restricted to permanents already present in the FIRST frame (a fetched land arriving tapped
+    between the frames is an ETB state, not a payment tap). Turns/phases without a pair replay on
+    the engine's own order, exactly as before."""
+    prefs = {}
+    prev = None
+    for d in decisions:
+        dec = d.get("decision", {})
+        if dec.get("type") != "main_phase":
+            continue
+        if prev is not None and prev.get("turn") == dec.get("turn") \
+                and prev.get("phase") == dec.get("phase"):
+            def field(fr, want_tapped):
+                return {p["idx"] for p in fr.get("me", {}).get("battlefield", [])
+                        if isinstance(p.get("idx"), int)
+                        and (bool(p.get("tapped")) or not want_tapped)}
+            delta = (field(dec, True) - field(prev, True)) & field(prev, False)
+            if delta:
+                key = (dec.get("turn"), dec.get("phase"))
+                prefs[key] = sorted(set(prefs.get(key, [])) | delta)
+        prev = dec
+    return prefs
+
+
 def side_channel_args(decisions):
     """Reconstruct the keyed side-channel args a reference used, so a saved reordered/held game replays
     faithfully: --firebreathe "turn:count", --storage-hold "turn:num:val", --cast-order "ord:A|B" (the
-    applied cast order recorded on the main-phase entry). All keyed (turn / land# / main-ordinal), so
-    passing the full set for every prefix is safe -- the engine applies each only when it reaches that
-    turn/ordinal. Empty (existing references use none) => no extra args => identical to before."""
+    applied cast order recorded on the main-phase entry), --force-attackers "turn:A|B" (the recorded
+    combat's attackers -- see recorded_attackers; pins the engine-automatic declaration to the game
+    the human actually saw). All keyed (turn / land# / main-ordinal), so passing the full set for
+    every prefix is safe -- the engine applies each only when it reaches that turn/ordinal. Empty
+    (a reference recording none of these) => no extra args => identical to before."""
     fb, sh, co = [], [], []
     for d in decisions:
         dec = d.get("decision", {})
@@ -146,6 +227,8 @@ def side_channel_args(decisions):
             sh.append(f'{dec.get("turn")}:{dec.get("land_idx")}:{int(d["chosen"])}')
         elif t == "main_phase" and d.get("cast_order"):
             co.append(f'{dec.get("main_ordinal")}:' + "|".join(d["cast_order"]))
+    fa = recorded_attackers(decisions)
+    tp = recorded_tap_prefs(decisions)
     extra = []
     if fb:
         extra += ["--firebreathe", ",".join(fb)]
@@ -153,6 +236,14 @@ def side_channel_args(decisions):
         extra += ["--storage-hold", ",".join(sh)]
     if co:
         extra += ["--cast-order", ";".join(co)]
+    if fa:
+        extra += ["--force-attackers",
+                  ";".join(f"{t}:" + "|".join(ns) for t, ns in sorted(fa.items()))]
+    if tp:
+        extra += ["--tap-pref",
+                  ";".join(f"{t}:{'post' if ph == 'post_main' else 'pre'}:"
+                           + ",".join(str(i) for i in idxs)
+                           for (t, ph), idxs in sorted(tp.items()))]
     return extra
 
 
@@ -215,6 +306,21 @@ def plan_key(p):
     return (p.get("land"), tuple(sorted(p.get("casts") or [])))
 
 
+def plan_key_sans_pay_sac(p):
+    """§2a compat key (see TREASURE_PAY_COMPAT): the recorded plan's identity with its Treasure-sac
+    entries removed -- one cast instance per recorded sac ACTION (a plan can crack several). None
+    when the plan has no such action (then this tier adds nothing over plan_key)."""
+    sacs = [a.get("card") for a in (p.get("actions") or [])
+            if a.get("sacout") and a.get("card") in PAY_SAC_NAMES]
+    if not sacs:
+        return None
+    casts = list(p.get("casts") or [])
+    for name in sacs:
+        if name in casts:
+            casts.remove(name)
+    return (p.get("land"), tuple(sorted(casts)))
+
+
 def find_plan(recorded, plans, recorded_index=None):
     """Index of `recorded` in the current `plans`, or None. Exact summary first (keeps cast-order
     variants distinct), then land+casts (tolerates a summary-format change or a dropped order
@@ -240,6 +346,13 @@ def find_plan(recorded, plans, recorded_index=None):
     if not hits:
         want = plan_key(recorded)
         hits = [i for i, p in enumerate(plans) if plan_key(p) == want]
+    if not hits and TREASURE_PAY_COMPAT:
+        # §2a compat tier: the recorded plan's Treasure-sac actions are implicit payment now, so
+        # match the plan MINUS them. The sac colour is re-derived by the payment solver, the same
+        # way a stale index is re-derived by content.
+        want = plan_key_sans_pay_sac(recorded)
+        if want is not None:
+            hits = [i for i, p in enumerate(plans) if plan_key(p) == want]
     if not hits:
         return None
     if recorded_index is not None and recorded_index in hits:
@@ -468,8 +581,32 @@ def check_reference(path, collect=None):
                        resolved=resolved,   # 'resolved' is THIS list; it fills in as the walk runs
                        frames=frames)
     ri = 0               # how many of the reference's own decisions have been consumed
-    inserted, shifted, vanished = [], [], []
+    inserted, shifted, vanished, skipped = [], [], [], []
     hand_checked = False
+
+    def stale_pass_frame(entry, dec):
+        """§2a compat (TREASURE_PAY_COMPAT): is this recorded frame a PASS on a main-phase decision
+        that sits strictly BEFORE the engine's current frame -- i.e. a fan-era re-prompt that can
+        no longer occur (no crack action left to offer), safe to skip because passing it changed
+        nothing? A stale frame with a REAL recorded cast is never skipped."""
+        d = entry.get("decision") or {}
+        if d.get("type") != "main_phase":
+            return False
+        rec = entry.get("chosen")
+        rec0 = rec[0] if isinstance(rec, list) and rec else rec
+        try:
+            if int(rec0) != -1:
+                return False
+        except (TypeError, ValueError):
+            return False
+        rank = {"pre_main": 0, "post_main": 1}
+        dt, ct = d.get("turn"), dec.get("turn")
+        if not isinstance(dt, int) or not isinstance(ct, int):
+            return False
+        if dt < ct:
+            return True
+        return (dt == ct and d.get("phase") in rank and dec.get("phase") in rank
+                and rank[d.get("phase")] < rank[dec.get("phase")])
     # One invocation per decision; bounded well above any real game so a protocol change that
     # loops cannot hang the suite (that is why these checks live outside smoke/regression).
     for _ in range(400):
@@ -491,6 +628,9 @@ def check_reference(path, collect=None):
             if vanished:
                 repairs.append(f"{len(vanished)} declined decision(s) the engine no longer offers "
                                f"skipped (e.g. {vanished[0]})")
+            if skipped:
+                repairs.append(f"{len(skipped)} recorded pass-frame(s) collapsed by §2a skipped "
+                               f"(e.g. {skipped[0]})")
             if ri < len(kept):
                 repairs.append(f"terminated with {len(kept) - ri}/{len(kept)} recorded decisions unused")
             det = (f"replay won={res.get('won')} win_turn={res.get('win_turn')} "
@@ -499,7 +639,7 @@ def check_reference(path, collect=None):
                 det += "; " + "; ".join(repairs)
             if drift:
                 return True, "play", det
-            return True, ("repaired" if (shifted or inserted or vanished) else "ok"), det
+            return True, ("repaired" if (shifted or inserted or vanished or skipped) else "ok"), det
         # rc == 70: a decision frame -- contract checks first.
         m = DEC_RE.search(out)
         if not m:
@@ -541,6 +681,14 @@ def check_reference(path, collect=None):
                     vanished.append(f"{frame_ident(kept[k]['decision'])}(declined)")
                 ri = j
                 aligned = True
+        if not aligned and TREASURE_PAY_COMPAT:
+            # §2a compat: consume recorded pass-frames the engine can no longer present (the
+            # fan-era re-prompts) so the alignment pointer does not jam and default every
+            # subsequent real decision. See stale_pass_frame for the (deliberately narrow) test.
+            while ri < len(kept) and stale_pass_frame(kept[ri], dec):
+                skipped.append(f"{frame_ident(kept[ri]['decision'])}")
+                ri += 1
+            aligned = ri < len(kept) and frame_ident(dec) == frame_ident(kept[ri]["decision"])
         if not aligned:
             # A decision this reference never recorded (a point added after it was saved, or an
             # extra frame because the line ran longer). Consume no recorded pick. For a MAIN_PHASE
@@ -624,6 +772,33 @@ def check_reference(path, collect=None):
                         return True, "shuffle-dead", (
                             f"{where}; hand differs (ref-only {gone} vs now {new}) -> a mid-game "
                             f"reshuffle moved the draws; only re-playing can restore this game")
+                    # BOARD-AWARE classification (2026-08-25): "same state" cannot be asserted
+                    # from hand equality alone -- an upstream payment that TAPPED differently
+                    # (exactly what the mana-order overhaul changes) leaves an identical hand on
+                    # a different board, where the recorded plan is legitimately unofferable
+                    # (StompySurprise s11_gi10: the Lodge-untap plan gone because the Lodge is
+                    # already tapped). That is the shuffle-dead shape, not an enumeration gap:
+                    # only re-playing can restore the game. The gating ENUM-GAP class is reserved
+                    # for a truly identical visible state.
+                    def board_key(state):
+                        return sorted((pp.get("name"), bool(pp.get("tapped")))
+                                      for pp in state.get("me", {}).get("battlefield", []))
+                    if board_key(dec) != board_key(rd):
+                        return True, "shuffle-dead", (
+                            f"{where}; hand identical but the BOARD differs (tap state / "
+                            f"permanents) -> an upstream payment or decision diverged the game; "
+                            f"only re-playing can restore this reference")
+                    if TREASURE_PAY_COMPAT and (inserted or skipped):
+                        # §2a compat: this replay is already LOOSE (defaults / collapsed frames
+                        # upstream -- hidden state may have diverged invisibly). The pre-compat
+                        # walk skated past such frames by defaulting them; hard-failing here
+                        # would make the compat STRICTER than baseline on old references. Answer
+                        # the engine default (pass) and let the walk complete -- the drift test
+                        # on the final outcome (same won + win_turn) remains the arbiter.
+                        inserted.append(f"{frame_ident(dec)}<--1(pass; recorded plan "
+                                        f"unmatchable in loose replay)")
+                        resolved.append(-1)
+                        continue
                     caveat = ""
                     if inserted:
                         # A defaulted answer can diverge HIDDEN state (library order, exile) while

@@ -10,6 +10,30 @@ std::vector<int> DeclareAttackerIndices(const GameState& state)
     std::vector<int> atk_idx;
     const DecisionProvider& provider = ResolveProvider(state);
     const int active = state.active_player_index;
+    // Reference-replay attacker pin (--force-attackers; nulled by RevealLogPause -> real
+    // declaration only). The recorded game's attack set overrides the willingness heuristic
+    // (AttackWith) but never legality (CanAttackFull): declare exactly the eligible recorded
+    // names, consuming the multiset so duplicate names pin the right number of copies. Player 0
+    // only -- the human's deck is always player 0 under --claude-play, and the recording says
+    // nothing about opponent combats.
+    if (g_play_attackers_chooser && active == 0)
+    {
+        if (const std::vector<std::string>* pin = (*g_play_attackers_chooser)(state.turn_number))
+        {
+            std::vector<std::string> want = *pin;
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            {
+                const Permanent& p = state.battlefield[i];
+                if (p.controller_index != active) { continue; }
+                if (!CanAttackFull(p, state.battlefield, active)) { continue; }
+                auto it = std::find(want.begin(), want.end(), p.card.m_name.str());
+                if (it == want.end()) { continue; }
+                want.erase(it);
+                atk_idx.push_back(i);
+            }
+            return atk_idx;
+        }
+    }
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         const Permanent& p = state.battlefield[i];

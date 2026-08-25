@@ -12,6 +12,7 @@
 #include <sstream>
 #include <cstdlib>
 #include <map>
+#include <set>            // --tap-pref (reference-replay payment-tap preference)
 #include "deck/DeckLoader.h"
 #include "cards/CardDatabase.h"
 #include "core/HeuristicDefaults.h"
@@ -1999,6 +2000,60 @@ std::map<int, std::vector<std::string>> ParseCastOrderSpec(const std::string& ca
     return cast_order_by_main;
 }
 
+// --force-attackers "<turn>:A|B;<turn>:" -> turn -> the recorded attacker names for that combat
+// (empty after ':' = attack with nobody). Same pipe/semicolon discipline as --cast-order (card
+// names carry commas, never '|' or ';'). Turns NOT listed keep the natural declaration -- absence
+// and "no attack" are different statements, which is why an empty name list is preserved as an
+// entry rather than skipped.
+std::map<int, std::vector<std::string>> ParseForceAttackersSpec(const std::string& spec)
+{
+    std::map<int, std::vector<std::string>> attackers_by_turn;
+    std::stringstream cs(spec);
+    std::string entry;
+    while (std::getline(cs, entry, ';'))
+    {
+        auto colon = entry.find(':');
+        if (colon == std::string::npos) { continue; }
+        int turn = 0;
+        try { turn = std::stoi(entry.substr(0, colon)); }
+        catch (...) { continue; }
+        std::vector<std::string> names;
+        std::stringstream ns(entry.substr(colon + 1));
+        std::string nm;
+        while (std::getline(ns, nm, '|')) { if (!nm.empty()) { names.push_back(nm); } }
+        attackers_by_turn[turn] = std::move(names);
+    }
+    return attackers_by_turn;
+}
+
+// --tap-pref "<turn>:<pre|post>:<idx>,<idx>;..." -> (turn, is_post_main) -> battlefield indices the
+// RECORDING tapped in that main phase (the tapped-delta between two same-phase recorded frames).
+// The payment greedy prefers these sources; see TapPrefChooser (GameLogger.h).
+std::map<std::pair<int, int>, std::set<int>> ParseTapPrefSpec(const std::string& spec)
+{
+    std::map<std::pair<int, int>, std::set<int>> pref;
+    std::stringstream cs(spec);
+    std::string entry;
+    while (std::getline(cs, entry, ';'))
+    {
+        auto c1 = entry.find(':');
+        if (c1 == std::string::npos) { continue; }
+        auto c2 = entry.find(':', c1 + 1);
+        if (c2 == std::string::npos) { continue; }
+        int turn = 0;
+        try { turn = std::stoi(entry.substr(0, c1)); }
+        catch (...) { continue; }
+        const int post = (entry.substr(c1 + 1, c2 - c1 - 1) == "post") ? 1 : 0;
+        std::set<int> idxs;
+        std::stringstream ns(entry.substr(c2 + 1));
+        std::string tok;
+        while (std::getline(ns, tok, ','))
+        { try { idxs.insert(std::stoi(tok)); } catch (...) { /* skip malformed token */ } }
+        if (!idxs.empty()) { pref[{ turn, post }] = std::move(idxs); }
+    }
+    return pref;
+}
+
 // --storage-hold "<turn>:<land#>:<0|1>,..." -> (turn, land battlefield index) -> hold the counter?
 std::map<std::pair<int, int>, bool> ParseStorageHoldSpec(const std::string& storage_hold_spec)
 {
@@ -2049,6 +2104,8 @@ g_play_firebreathe_chooser = nullptr;
 g_play_jitte_chooser = nullptr;
 g_play_attach_host_chooser = nullptr;
 g_play_cast_order_chooser = nullptr;
+g_play_attackers_chooser = nullptr;
+g_play_tap_pref_chooser = nullptr;
 g_play_storage_hold_chooser = nullptr;
 g_play_draw_sink = nullptr;
 g_play_reveal_sink = nullptr;
@@ -2209,6 +2266,8 @@ struct ClaudePlayHarness
     std::map<int, std::vector<std::string>> cast_order_by_main;
     std::map<std::pair<int, int>, bool>     storage_hold_by_land;
     std::map<int, int>                      jitte_by_turn;   // Umezawa's Jitte counter-spend
+    std::map<int, std::vector<std::string>> attackers_by_turn;   // --force-attackers (ref replay)
+    std::map<std::pair<int, int>, std::set<int>> tap_pref_by_phase;   // --tap-pref (ref replay)
     bool firebreathe_prompt  = false;
     bool storage_hold_prompt = false;
     bool jitte_prompt        = false;
@@ -2233,6 +2292,8 @@ struct ClaudePlayHarness
     FirebreatheChooser    jitte_chooser;        // Umezawa's Jitte counter-spend (same shape)
     BounceChooser         attach_host_chooser;  // Skyhunter attach-host (same shape as bounce)
     CastOrderChooser      cast_order_chooser;
+    AttackersChooser      attackers_chooser;    // --force-attackers (reference replay)
+    TapPrefChooser        tap_pref_chooser;     // --tap-pref (reference replay)
     StorageHoldChooser    storage_hold_chooser;
     LandEntryChooser      land_entry_chooser;
     SoulfireTargetChooser soulfire_chooser;
@@ -3259,6 +3320,37 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
         };
     if (!cast_order_by_main.empty()) { g_play_cast_order_chooser = &cast_order_chooser; }
 
+    // Forced attackers (reference replay): the recorded game's per-turn attack sets. Keyed by TURN
+    // (--force-attackers "turn:A|B;turn:"), NOT the positional --choices stream -- absent turns
+    // return nullptr so the natural declaration stands, and an empty recorded set (":"), meaning
+    // "the recording attacked with nobody", pins exactly that. Installed only when non-empty, so
+    // references replayed without the flag are byte-identical to before. See DeclareAttackerIndices
+    // (Combat.cpp) for why: the attack heuristic reads the spare-mana pools, so mana-model work can
+    // re-decide WHO attacks and tap a creature the recorded post-combat line needed as a source.
+    attackers_chooser =
+        [this](int turn) -> const std::vector<std::string>*
+        {
+            auto it = attackers_by_turn.find(turn);
+            return it != attackers_by_turn.end() ? &it->second : nullptr;
+        };
+    if (!attackers_by_turn.empty()) { g_play_attackers_chooser = &attackers_chooser; }
+
+    // Payment-tap preference (reference replay): where the recording brackets a main phase's
+    // payment between two same-phase frames, the tapped-delta names the sources it spent
+    // (--tap-pref "turn:pre|post:idx,idx;..."). The scarcity greedy prefers those battlefield
+    // indices in that (turn, phase); everything else -- other phases, enumeration, the search
+    // (chooser nulled by RevealLogPause) -- is untouched. Order bias only, never legality.
+    tap_pref_chooser =
+        [this](const GameState& s, const Permanent& p) -> bool
+        {
+            const int post = (s.phase == Phase::PostCombatMain) ? 1 : 0;
+            auto it = tap_pref_by_phase.find({ s.turn_number, post });
+            if (it == tap_pref_by_phase.end()) { return false; }
+            const int idx = static_cast<int>(&p - s.battlefield.data());
+            return it->second.count(idx) > 0;
+        };
+    if (!tap_pref_by_phase.empty()) { g_play_tap_pref_chooser = &tap_pref_chooser; }
+
     // #6 Storage-land tap-vs-charge: the human's per-(turn, land) tap-vs-charge answers. Keyed by
     // (turn, land BATTLEFIELD INDEX) on a side-channel (--storage-hold "turn:idx:val,...", val 1=HOLD/charge,
     // 0=allow tap), NOT the positional --choices cursor -> existing references (no --storage-hold) replay
@@ -3422,7 +3514,9 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          const std::string& storage_hold_spec = "",
                          bool storage_hold_prompt = false,
                          const std::string& jitte_spec = "",
-                         bool jitte_prompt = false)
+                         bool jitte_prompt = false,
+                         const std::string& force_attackers_spec = "",
+                         const std::string& tap_pref_spec = "")
 {
     GameState state = GoldFishRunner::SetupGame(deck, seed);
     state.vial_target_mv = profile.vial_target_mv;
@@ -3460,6 +3554,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     h.storage_hold_prompt  = storage_hold_prompt;
     h.jitte_by_turn        = ParseFirebreatheSpec(jitte_spec);   // same "turn:count" format
     h.jitte_prompt         = jitte_prompt;
+    h.attackers_by_turn    = ParseForceAttackersSpec(force_attackers_spec);
+    h.tap_pref_by_phase    = ParseTapPrefSpec(tap_pref_spec);
     // Belt-and-braces (see g_play_hooks_installed): this process drives human choosers, so it must
     // never take the pause fast path even if a future chooser is installed outside Install().
     g_play_hooks_installed = true;
@@ -4380,6 +4476,8 @@ int main(int argc, char* argv[])
     std::string jitte_str;            // Umezawa's Jitte: "turn:count,..." counter-spend side-channel
     bool jitte_prompt = false;        // --jitte-prompt -> exit-70 to ask when a turn is unanswered
     std::string cast_order_str;       // #10: "<ord>:A|B|C;..." cast-order side-channel (main-ordinal-keyed)
+    std::string force_attackers_str;  // ref replay: "<turn>:A|B;..." forced-attackers side-channel (turn-keyed)
+    std::string tap_pref_str;         // ref replay: "<turn>:<pre|post>:<idx>,..." payment-tap preference
     std::string storage_hold_str;     // #6: "turn:num:val,..." storage tap-vs-charge side-channel
     bool storage_hold_prompt = false; // #6: --storage-hold-prompt -> exit-70 to ask per charged storage land
     int         reveal_count = 0;     // --reveal N: expose top N upcoming draws (claude-play)
@@ -4455,6 +4553,19 @@ int main(int argc, char* argv[])
                     // Umezawa's Jitte counter-spend side-channel: "turn:count,..." (same format and
                     // turn-keyed discipline as --firebreathe; references without it replay greedy).
                     jitte_str = argv[++i];
+                }
+                else if (flag == "--tap-pref")
+                {
+                    // Reference-replay payment-tap preference: "<turn>:<pre|post>:<idx>,...;..."
+                    // (the recording's tapped-delta for that main phase). Keyed, never positional.
+                    tap_pref_str = argv[++i];
+                }
+                else if (flag == "--force-attackers")
+                {
+                    // Reference-replay attacker pin: "<turn>:A|B;<turn>:" (turn -> recorded attacker
+                    // names; empty list = attack with nobody). Turn-keyed like --firebreathe, so it
+                    // never touches the positional --choices stream; unlisted turns declare naturally.
+                    force_attackers_str = argv[++i];
                 }
                 else if (flag == "--cast-order")
                 {
@@ -4657,7 +4768,7 @@ int main(int argc, char* argv[])
                                  lookahead_depth, timeout_ms, choices, reveal_count, log_dir,
                                  validate_line, force_mulligan, firebreathe_str, firebreathe_prompt,
                                  cast_order_str, storage_hold_str, storage_hold_prompt,
-                                 jitte_str, jitte_prompt);
+                                 jitte_str, jitte_prompt, force_attackers_str, tap_pref_str);
         }
 
         // Forced-mulligan replay (isolates play from mulligan/bottoming): reconstruct a recorded

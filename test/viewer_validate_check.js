@@ -187,10 +187,16 @@ function main() {
     const ref = JSON.parse(fs.readFileSync(file, 'utf8'));
     const maxTurns = Math.max(8, (ref.win_turn || 8) + 1);
     const rel = path.relative(REFROOT, file);
-    const extra = sideChannelArgs(ref.decisions || []);   // --firebreathe / --storage-hold / --cast-order the ref used
     const force = forceArg(ref);   // reconstruct the recorded opening hand (see forceArg)
 
     const al = aligned.get(file);
+    // Side-channel args come from the RESOLVER's walk when available (al.side), so this check
+    // replays with exactly the args the protocol walk used -- including channels added later
+    // (--force-attackers / --tap-pref) that the local fallback below does not know. Rebuilding
+    // them independently is the two-implementations drift this file's header warns about.
+    const extra = (al && Array.isArray(al.side) && al.side.length)
+      ? al.side
+      : sideChannelArgs(ref.decisions || []);   // fallback: --firebreathe / --storage-hold / --cast-order
     // Deck + profile come from the RESOLVER, not from a second name->path guess here. The
     // references/<dir> name need not match decks/<dir> (references/Creature_Giving vs
     // "decks/Creature Giving"), and the local guess silently skipped that whole deck.

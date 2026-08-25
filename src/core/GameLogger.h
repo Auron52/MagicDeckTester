@@ -426,6 +426,35 @@ extern thread_local FirebreatheChooser* g_play_firebreathe_chooser;
 // as greedy. Nulled by RevealLogPause so every search/rollout spends greedily.
 extern thread_local FirebreatheChooser* g_play_jitte_chooser;
 
+// ---- Reference-replay forced-ATTACKERS chooser -------------------------------------------------
+// A saved reference records the human's CHOICES, but the attack declaration is engine-automatic --
+// and its heuristic consults the spare-mana pools, so mana-model work legitimately changes WHO
+// attacks. That divergence taps a creature the recorded post-combat line needed as a mana source
+// and kills the replay (FiveColour s9_gi8: the bundle sent Deathrite Shaman in on T4, the recorded
+// Cannons+Faeburrow+Oko line became unpayable). The recording DOES pin the attack -- every combat
+// emits a play-viewer event naming the attackers -- so the replay passes them back on a TURN-keyed
+// side-channel (--force-attackers), NOT the positional --choices stream. Given the turn, returns
+// the recorded attacker names (declare exactly the CanAttackFull-eligible among them, bypassing
+// the willingness heuristic) or nullptr for the natural declaration (turns the recording does not
+// cover). Nulled by RevealLogPause so every search/rollout combat declares naturally. Inert unless
+// set.
+using AttackersChooser = std::function<const std::vector<std::string>*(int turn)>;
+extern thread_local AttackersChooser* g_play_attackers_chooser;
+
+// ---- Reference-replay payment-tap PREFERENCE chooser -------------------------------------------
+// The companion to the attackers pin, for the other engine-automatic sub-decision a recording
+// witnesses: WHICH sources paid. Two references proved no static tap order can reproduce both --
+// FiveColour s13_gi12's T4 pre-main spent Deathrite and KEPT Bloom Tender (its multi-yield paid
+// the post-combat casts) while s9_gi8's T3 needed Deathrite SPARED (its fuel paid T4) -- so where
+// the recording brackets a payment between two same-(turn, phase) frames, the tapped-delta is
+// passed back on a side-channel (--tap-pref) and preferred. Returns true when the recording
+// tapped this permanent in the current (turn, phase); the scarcity greedy then ranks it ahead of
+// every unpinned source. ORDER BIAS ONLY, never legality: an unpinned source still pays when the
+// pinned set cannot, and enumeration/search run with the chooser nulled (RevealLogPause), so what
+// is offered never changes -- only which copies pay it. Inert unless set.
+using TapPrefChooser = std::function<bool(const GameState& state, const Permanent& p)>;
+extern thread_local TapPrefChooser* g_play_tap_pref_chooser;
+
 // ---- Human-play cast-ORDER chooser (#10) -------------------------------------------------------
 // After the human commits a main-phase plan, they may pin the ORDER its non-sacrifice hand casts
 // resolve in (e.g. cast payoff before enabler, or a specific Dragonstorm go-off sequence the
@@ -693,7 +722,8 @@ inline bool AllPlayHooksNull()
         && g_play_free_cast_chooser == nullptr && g_play_lightpaws_chooser == nullptr
         && g_play_firebreathe_chooser == nullptr && g_play_cast_order_chooser == nullptr
         && g_play_storage_hold_chooser == nullptr && g_play_tutor_chooser == nullptr
-        && g_play_attach_host_chooser == nullptr && g_play_jitte_chooser == nullptr;
+        && g_play_attach_host_chooser == nullptr && g_play_jitte_chooser == nullptr
+        && g_play_attackers_chooser == nullptr && g_play_tap_pref_chooser == nullptr;
 }
 
 // 0 = flag fast path (DEFAULT). 1 = MTG_PAUSE_HOOK_FLAG=0, the original 26-pointer scan (identical
@@ -738,6 +768,8 @@ struct RevealLogPause
     TutorChooser*       saved_tutorchooser;
     BounceChooser*      saved_ahchooser;
     FirebreatheChooser* saved_jitchooser;
+    AttackersChooser*   saved_atkchooser;
+    TapPrefChooser*     saved_tpchooser;
     std::vector<PlayReveal>* saved_revealsink;
     bool saved_real;
     bool noop;   // fast path: nothing installed -> nothing to save/null/restore (see ctor)
@@ -778,6 +810,8 @@ struct RevealLogPause
         saved_tutorchooser = g_play_tutor_chooser;
         saved_ahchooser = g_play_attach_host_chooser;
         saved_jitchooser = g_play_jitte_chooser;
+        saved_atkchooser = g_play_attackers_chooser;
+        saved_tpchooser = g_play_tap_pref_chooser;
         g_real_resolution = false; g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
         g_play_ei_chooser = nullptr; g_play_retrace_chooser = nullptr; g_play_soulfire_chooser = nullptr;
@@ -790,6 +824,7 @@ struct RevealLogPause
         g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr;
         g_play_tutor_chooser = nullptr;
         g_play_attach_host_chooser = nullptr; g_play_jitte_chooser = nullptr;
+        g_play_attackers_chooser = nullptr; g_play_tap_pref_chooser = nullptr;
     }
     ~RevealLogPause() { if (noop) { return; }
                         g_real_resolution = saved_real; g_reveal_logger = saved; g_play_top_chooser = saved_chooser;
@@ -810,7 +845,9 @@ struct RevealLogPause
                         g_play_storage_hold_chooser = saved_shchooser;
                         g_play_tutor_chooser = saved_tutorchooser;
                         g_play_attach_host_chooser = saved_ahchooser;
-                        g_play_jitte_chooser = saved_jitchooser; }
+                        g_play_jitte_chooser = saved_jitchooser;
+                        g_play_attackers_chooser = saved_atkchooser;
+                        g_play_tap_pref_chooser = saved_tpchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
 };
