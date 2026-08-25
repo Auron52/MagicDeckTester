@@ -69,6 +69,7 @@ enum Slot : int
     STOMPY_WT_LITERAL,        // MTG_STOMPY_WT_LITERAL     tutor census = the USER's two consumers only
     STOMPY_TT_LITERAL,        // MTG_STOMPY_TT_LITERAL     Turntimber always [7]=12, no post-tutor 15
     KE_CONDEMN,               // MTG_KE_CONDEMN            re-enable Kitty's breakpoint condemnation
+    BP_CONDEMN_TAIL,          // MTG_BP_CONDEMN_TAIL_EXEMPT  don't condemn when the plan has no cast left
     COUNT
 };
 
@@ -115,6 +116,7 @@ inline const char* Name(int slot)
         "MTG_STOMPY_WT_LITERAL",
         "MTG_STOMPY_TT_LITERAL",
         "MTG_KE_CONDEMN",
+        "MTG_BP_CONDEMN_TAIL_EXEMPT",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

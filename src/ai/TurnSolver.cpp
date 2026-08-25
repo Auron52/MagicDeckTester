@@ -632,6 +632,49 @@ static bool BpPlanCasts(std::uint64_t name_hash)
            != g_bp_plan_casts->end();
 }
 
+// PLAN-HAS-NO-TAIL EXEMPTION (MTG_BP_CONDEMN_TAIL_EXEMPT), the breakpoint twin of the main-phase
+// filter's PASS-IS-NOT-A-DECLINE. Root-caused 2026-08-25 on KittyEquipment: breakpoint condemnation
+// lost 6 games in 3,000 and won none, and all six are ONE line -- T2 casts Puresteel Paladin plus an
+// Equipment, the ETB draw opens the breakpoint, and the continuation lands KOR DUELIST. The filter
+// bans it, the Duelist slips to T3, and a T3 kill becomes T4. Every loss, the same card.
+//
+// The premise is what is wrong. "In hand before the draw and not in the chosen plan" does NOT mean
+// "considered and declined": the base plan is ONE plan, not an exhaustive verdict on every card in
+// hand, and the continuation is a fresh solve from a state that has strictly more information (the
+// card just drawn). So the complement of the chosen plan carries no evidence that a card was
+// rejected on merit. Note also that the `dominated` test above self-matches -- a card is its own
+// same-named pre-draw copy at equal urgency -- so on a deck with no duplicate staging the filter is
+// not the duplicate-suppressor it reads as, it is a blanket ban on the continuation's option set.
+//
+// When the plan has no cast LEFT to make, the continuation is the only remaining decision of the
+// turn, so condemning every payable pre-draw card makes it a no-op and can only delete lines. The
+// tail test is computed from the plan-cast set that BOTH worlds already bind, so it needs no new
+// lockstep state: if some card the plan still intends to cast is in hand, there is a tail.
+// The pre-draw snapshot is load-bearing here, not decoration. Plan casts are matched by NAME, so a
+// card the plan ALREADY cast whose second copy the breakpoint just DREW reads as a pending cast and
+// fakes a tail -- which errs in the deleting direction. Measured: it was the sole reason the first
+// version of this exemption left 2 of the 6 losses standing (s5005 gi18 draws a second Bonesplitter,
+// gi108 a second Puresteel Paladin -- in both the plan had already cast that name). A card drawn AT
+// the breakpoint cannot be something the pre-breakpoint plan intended to cast, so requiring the
+// pre-draw snapshot is exactly the right discriminator.
+static bool BpPlanHasTail(const Player& ap)
+{
+    if (g_bp_plan_casts == nullptr) { return false; }
+    for (const Card& c : ap.hand)
+    {
+        if (!BpPlanCasts(c.m_name_hash))        { continue; }
+        if (!BpCardWasInHandBefore(c.m_number)) { continue; }   // drawn AT the bp: not a pending cast
+        return true;
+    }
+    return false;
+}
+
+static bool BpCondemnTailExemptEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_TAIL_EXEMPT");   // default OFF pending measurement
+    return heurarm::Flag(heurarm::BP_CONDEMN_TAIL, on);
+}
+
 // Was this card already in hand when the current breakpoint's cantrip was cast? True outside a
 // continuation (no snapshot bound => the "new card" concept does not apply and every caller's
 // existing behaviour stands).
@@ -6462,7 +6505,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // it say "not payable", which KEEPS the action, and a cast that needs the new land is not
         // payable here by construction. See docs/design/breakpoint-phase-classification.md.
         if (BpClassifyActive(state) && g_bp_hand_before != nullptr
-            && !BpPlanCasts(ap.hand[i].m_name_hash))
+            && !BpPlanCasts(ap.hand[i].m_name_hash)
+            && !(BpCondemnTailExemptEnabled() && !BpPlanHasTail(ap)))
         {
             const Card& cand = ap.hand[i];
             // Lower = more urgent. A staged copy expires; a hand copy never does.
