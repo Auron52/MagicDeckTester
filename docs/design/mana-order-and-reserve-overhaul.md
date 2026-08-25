@@ -809,3 +809,118 @@ byte-identical under the flag in the combined arm. The subset table also cleared
 greedy-bottoming victims beyond gi374: gi176/gi679/gi896/gi232/gi731/gi905/gi299/gi779/gi968/
 gi3/gi104/gi500/gi671/gi75 all faster -- the oversized-hand illusion was a standing tax on
 stompy mulligan games, not a one-off.
+
+### USER challenge overturns two classifications (2026-08-25, session 2 cont.)
+
+The USER rejected "draws diverge" as an explanation ("we changed no search heuristic nor
+randomness") — and the code agrees: SearchShuffleSeed keys on (game_seed, shuffle ordinal), salts
+equal in normal play, so mid-game shuffles are DETERMINISTIC and the search's simulation of a
+shuffling line reproduces the real post-shuffle order exactly ("they stay in lockstep",
+SpellEffects.h ~1058). A shuffle is therefore fully priced by a search whose window spans the win
+turn — "variance" was never a closed class. Depth-4/5 unbounded probes:
+
+- **gi196 (mw overnight d3_s7007) RECLASSIFIED COVERABLE**: clean d4/d5 unbounded = 4, bundle
+  (+BOTTOM_LEGAL) d4/d5 unbounded = 4. The earlier "pre-existing depth non-monotonicity" was a
+  d3-horizon artifact — at d3 the T4 win sits at the tail boundary and the tail heuristic
+  mis-prices it; at depth spanning the win turn both arms find it. Satisfies the USER rule.
+  (Consequence: the "gi196 family" framing for st993 is RETRACTED — st993 does NOT recover at
+  d4/d5 unbounded and stands alone as an unrecovered search-frontier case.)
+- **cg30 (creature_giving train d3+d5 s3003) RECLASSIFIED OPEN DEFECT**: clean d3 unbounded = 4,
+  bundle d3/d4/d5 unbounded ALL = 5. Since the post-shuffle future is faithfully visible to the
+  search, the bundle arm's preference for the T2 Crop Rotation line (realizing 5) over the
+  win-4 line is an evaluable, wrong choice at some layer — the same score-vs-realization or
+  frontier class as the other clusters, NOT draw luck. Needs the standard route (minus-one
+  bisect on cg30, then game-log diff / EWINS / fd). The fix5-era "proven fetch-shuffle
+  variance" note stands only as a description of WHERE the games diverge, not as a benign class.
+
+### Re-audit of the variance-waved set + cg30/fc96/fc341 bisects (2026-08-25, session 3)
+
+Depth-spanning unbounded probes on every game previously waved off as fetch/shuffle variance
+(current tree = bundle12 + MTG_BOTTOM_LEGAL; bundle vs clean, single games):
+
+| game | shape probed | clean | bundle | verdict |
+|------|--------------|-------|--------|---------|
+| fc82 (overnight d3+d5 s4004) | d3 unb, d5 unb | 4 | 4 | RESOLVED (= GT) |
+| fc350 (overnight d3 s5005) | d3 unb | 4 | 4 | RESOLVED |
+| fc391 (overnight d3 s6006) | d3 unb | 4 | 4 | RESOLVED |
+| ds227 (overnight d3 s5005) | d3 unb | 6 | 6 | RESOLVED (both beat GT 8) |
+| fc96 (smoke s1001) | d3 unb, d5 unb | 4 | 5 | **OPEN DEFECT** |
+| fc341 (overnight d3 s4004) | d3 unb, d5 unb | 5 | 6 | **OPEN DEFECT** |
+
+Minus-one bisects (single-lever confirmations both ways):
+- **cg30 = MTG_DORK_TAP_LAST alone** (minus-DTL 4, all other minus-ones 5, DTL-only 5).
+- **fc96 = MTG_DORK_TAP_LAST alone** (same signature: minus-DTL 4, DTL-only 5).
+- **fc341 = MTG_M2_RELEASE alone** (minus-M2R 5, all other minus-ones 6, M2R-only 6,
+  DTL-only 5).
+
+Game-log diffs (all three share one shape — an EARLY near-tie choice flips under the lever,
+its fetch/CR shuffle reroutes the draws, and the realized game is one turn slower):
+- cg30: T2 clean holds Crop Rotation; DTL casts CR#12 T2 → T3 draw flips BoP→Hunted Phantasm →
+  only 5 mana T4 → Massacre Wurm slips T4→T5 (clean T4 Wurm ETB = exact −2 lethal).
+- fc96: T1 clean plays Zagoth Triome (tapped); DTL cracks Verdant Catacombs + T1 Deathrite →
+  draws reroute → Hellkite line lands T5 not T4.
+- fc341: T1 clean plays Godless Shrine, T2 Foothills; M2R fetches T1 → never draws the 2nd
+  BoP → Cosmic Spider-Man T3→T4, win 5→6.
+
+**EWINS oracle result on cg30 T2 (the decisive fact):** clean arm — the hold candidate
+(Orchard + Suture Priest, no CR) realizes win 4, earliest=4. DTL arm — the SAME hold candidate
+realizes win **5**, earliest=5 (NO candidate reaches 4). Since EnumerateEarliestWins EXECUTES
+continuations, DTL play loses the win-4 continuation DOWNSTREAM of T2 (T3/T4), and the T2 CR
+cast is a mere tiebreak among all-5 candidates. This is why depth cannot cover it (bundle
+d4/d5 unb still 5): the defect is not the T2 branch choice but the DTL play POLICY misplaying a
+later turn on every branch. Next: claude-play forced walk of the clean line under DTL to catch
+the leaking turn (suspects: CR sac/fetch choice, Orchard-tap count into the Wurm ETB
+drip math, or the T4 {3}{B}{B}{B} payment).
+
+### cg30 ROOT-CAUSED: a DTL search-vs-executor fidelity hole, NOT a tap-order preference (2026-08-25 s3)
+
+Forced-walk proof (claude-play, DTL-only arm, exact autonomous opening incl. the Temple Garden T1
+fetch; CSV `0,1,0,0,46,-1,0,0,0,0`): forcing the clean line — T2 play Orchard + cast Suture Priest
+ONLY, T3 Misty + CR->Orchard + CR->Orchard + BoP (sacs = engine defaults), T4 Heath + Massacre
+Wurm — the EXECUTOR reaches opponent **-1 by end of turn 4** under MTG_DORK_TAP_LAST=1. Every plan
+chosen is in the engine's own enumerated plan list and every sub-choice is the engine default, so
+this line is fully search-visible. `PlayOutFrom` checks `CheckWinCondition` after every turn ->
+the real game would record WIN 4. Yet `EnumerateEarliestWins` at the same T2 state (deep exact
+search, unbounded) reports earliest=5 with NO candidate at 4, and the autonomous DTL game plays 5.
+
+Therefore cg30 is a **search-simulation fidelity hole under DTL** (the search's simulated
+continuation loses damage the executor actually deals), same FAMILY as Cluster A's
+continuation-traits lockstep hole — not the Orchard-rank/band-design issue previously sketched.
+The deck mechanism that makes the game sensitive: every Forbidden Orchard tap with Suture Priest
+out = 1 drip + 1 opponent Spirit that Massacre Wurm's ETB converts to 2 more damage; the win-4
+line's margin lives in those token-drip chains, so a simulation that mis-taps or mis-credits one
+Orchard tap flips 4->5. Next diagnostic: MTG_FSW_LINE on the T2 hold plan to dump the search's
+simulated T3/T4 and diff it against the executor walk above (suspects: the search's per-cast
+payment under DTL sacking/tapping an Orchard the executor keeps, or the payment-Spirit Priest
+drip not credited in the search's fast path).
+
+Same-arm observations logged on the way:
+- **fc96 = same DTL signature at the choice level** (EWINS T1: the Zagoth-hold candidate itself
+  degrades 4->5 under DTL; earliest=5) — likely the same fidelity class, verify after the cg30 fix.
+- **fc341 = MTG_M2_RELEASE single-lever** (minus-M2R=5, M2R-only=6); divergence T1
+  Godless-Shrine-vs-fetch near-tie, realized 5->6; not yet root-caused.
+- **claude-play bottom decision: `ai_choice` != `ai_set`** (cg30 mull-1: ai_choice says bottom
+  Massacre Wurm idx 3, ai_set=[0]=Soul Warden which is what the autonomous engine actually
+  bottoms — following ai_choice does NOT reproduce the autonomous opening, contradicting the
+  skill's claim; use ai_set. Worth a look + a skill doc fix.)
+
+### cg30 FIX BUILT, VERIFIED, COMMITTED 94653ab3 (2026-08-25 s3)
+
+`MTG_SAC_SPAWN_LAND_LAST` (DEFAULT OFF, joins the adoption config): SacrificeLandCandidates
+ranks a `taps_spawn_opp_token` land after every fungible land (tapped-first within bands). TWO
+code changes were required — the provider rule, AND the executor's autonomous cast path
+(AIEngine ~4295), which open-coded its own "first tapped land" duplicate that never consulted
+the provider. That duplicate was itself a live lockstep hole: after the provider-only fix, the
+SEARCH found the win-4 hold line (EWINS T2 earliest 5 -> 4) while the EXECUTOR still ate the
+Orchard and realized 5 — the two-sites failure mode of the coding conventions, caught in vivo.
+The executor site now routes through the provider (byte-identical order with the flag off).
+
+Verified: cg30 bundle+lever = 4 at d3/d4/d5 UNBOUNDED and at CASE budget (was 5 at every
+shape); DTL-only+lever = 4; lever-off bundle = 5 (lever is the difference both ways); clean
+unchanged 4; clean-env smoke 42/42 byte-identical (the executor refactor is order-preserving);
+lever inert on FiveColour (param-gated — no spawn lands). fc96/fc341 remain open (different
+mechanisms: fc96 = DTL on FiveColour, no spawn land involved; fc341 = M2_RELEASE).
+creature_giving train cell re-measure vs bundle12 (bundle13_saclever_cg_regression_wins):
+SEARCHED **5 faster / 0 slower** (gi30 d3+d5 5->4 = the fix; gi38 d3+d5 5->4; gi272 d3 5->4);
+d0 greedy 11 faster / 1 slower incl. gi475+gi949 unwon->T8 wins; d0 loss-penalized avg
+5.586 -> 5.576. Lever byte-inert on all other decks (no taps_spawn_opp_token card).

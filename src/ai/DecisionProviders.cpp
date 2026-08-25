@@ -930,8 +930,29 @@ std::vector<int> DecisionProvider::SacrificeLandCandidates(
 {
     // Historical rule: the first TAPPED land if any, else the first land. Reproduced as "tapped
     // before untapped, stable within each band" -- index 0 is the same land as before.
+    //
+    // MTG_SAC_SPAWN_LAND_LAST (DEFAULT OFF; =1 enables -- adoption lever, overhaul ledger cg30):
+    // a token-spawn land (Forbidden Orchard, taps_spawn_opp_token) is a per-turn damage engine
+    // (one opponent Spirit per turn = Suture Priest drip + Massacre Wurm death payoff), and a
+    // sacrifice destroys it PERMANENTLY -- the same irrecoverable-source shape as the fuel-dork
+    // tap rank (Deathrite). Tapped-first alone eats it whenever the turn's payment happened to
+    // tap it before the sac fires (under MTG_DORK_TAP_LAST's lands-first order, reliably), and
+    // the sac target is NOT a search branch, so no budget/depth recovers the loss: cg30's T4 win
+    // exists for the executor (forced-walk proof in the ledger) but every searched line sacked
+    // the Orchard and scored 5. Rank spawn lands AFTER every fungible land, tapped-first within
+    // each band; a board with only spawn lands is unchanged.
+    static const bool s_spawn_last = EnvOn("MTG_SAC_SPAWN_LAND_LAST");
     std::vector<int> out = land_indices;
     std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
+        if (s_spawn_last)
+        {
+            auto spawns = [&](int i) {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(s.battlefield[i].card);
+                return d && d->params.taps_spawn_opp_token;
+            };
+            const bool sa = spawns(a), sb = spawns(b);
+            if (sa != sb) { return !sa; }
+        }
         return s.battlefield[a].tapped && !s.battlefield[b].tapped;
     });
     return out;

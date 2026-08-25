@@ -4303,17 +4303,24 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
 
     if (def->params.sacrifice_land)
     {
-        // Prefer a tapped land (already spent this turn) to preserve untapped mana sources.
-        int idx = -1;
+        // WHICH land is provider-owned: SacrificeLandCandidates (tapped-first, and under
+        // MTG_SAC_SPAWN_LAND_LAST a token-spawn land ranks after every fungible land). This
+        // site used to open-code "first tapped land, else first land" -- a byte-identical
+        // duplicate of the provider's flag-off order, EXCEPT it never saw the flag: the search
+        // (PerformSacrificeLandCost) spared the Forbidden Orchard while the executor ate it,
+        // the cg30 lockstep hole (overhaul ledger, 2026-08-25).
+        std::vector<int> lands;
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             const Permanent& p = state.battlefield[i];
             if (p.controller_index != state.active_player_index || !p.card.IsLand()) { continue; }
-            if (idx < 0)   { idx = i; }       // first land found
-            if (p.tapped)  { idx = i; break; } // tapped land preferred
+            lands.push_back(i);
         }
-        if (idx >= 0)
+        if (!lands.empty())
         {
+            const std::vector<int> ranked = ResolveProvider(state).SacrificeLandCandidates(
+                state, state.active_player_index, lands);
+            const int idx = ranked.empty() ? lands.front() : ranked.front();
             ap.graveyard.push_back(state.battlefield[idx].card);
             state.battlefield.erase(state.battlefield.begin() + idx);
         }
