@@ -7,7 +7,9 @@
 > either alone, so the comparison is in "Two sightings" below; the hypothesis table further down is
 > retained because it eliminates several candidates theirs did not test (and vice versa).
 >
-> **STATUS: OPEN, one observation, NOT reproduced in 19 subsequent full-scale executions.**
+> **STATUS: OPEN, one observation, NOT reproduced in 20 subsequent full-scale executions.**
+> (The 20th was the 2026-08-25 overnight rebaseline for the reveal-pause fix, `1fcd22dc` — a full
+> 180-job matrix in which all 12 Mirrorwing cells matched ground truth.)
 > This document exists so the observation is not lost and so the next person does not re-walk the
 > eight hypotheses already eliminated below. It does **not** claim a mechanism. If you see a
 > suite key move that your change cannot explain, read this first — and capture the evidence listed

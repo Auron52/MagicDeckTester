@@ -468,6 +468,34 @@ costs priced at start-of-phase artifact count) cost 1 turn in 2 of 16 claude-pla
 the only systematic gap between the search and an informed human. Deferred improvement:
 price equips at post-subset artifact count (heuristic-optimization route).
 
+### `MTG_METALCRAFT_CREDIT` — VALIDATED at play settings (2026-08-25)
+
+The same-turn metalcraft equip-{0} credit (`TurnSolver.cpp:708`, `EnvOn(..., true)`) is the
+partial answer to that gap, and it ships default-ON. It was adopted on 2026-08-20 from
+gate-cell numbers — the same basis that later turned out to have **lied twice** about the
+equip-ETB breakpoint lever (see `equipment-etb-draw-breakpoint.md`), so it was re-measured
+once KittyEquipment entered the suite (`a9fbb920`) and the suite could act as the harness.
+
+`MTG_METALCRAFT_CREDIT=0` vs ground truth, kitty regression cells (2,100 games):
+
+| cell | ON (GT) | OFF | delta |
+|---|---|---|---|
+| d0 s2002 | 4.9490 | 4.9490 | **+0.0000** |
+| d3 s2002 | 4.3267 | 4.5000 | +0.1733 |
+| d3 s3003 | 4.3800 | 4.5033 | +0.1233 |
+| d5 s2002 | 4.3120 | 4.5000 | +0.1880 |
+| d5 s3003 | 4.3320 | 4.4600 | +0.1280 |
+
+Per game, turning it off is **164 slower : 4 faster** — a sign test that needs no further
+argument. The lever is worth ~0.15 turns at the deck's play settings and stays ON; unlike the
+breakpoint-condemnation opt-in from the same session, the play-settings re-measure *confirmed*
+this one rather than overturning it.
+
+**The informative cell is d0: byte-identical.** The credit is optimism at the ENUMERATION
+affordability gate, so with no lookahead there is no multi-step plan whose affordability it can
+unlock, and it can never bind. That is the signature to expect from any enumeration-side
+optimism lever, and it is why a d0 cell can neither justify nor refute one.
+
 **Not done / user calls**: regression-suite addition (test/regression_cases.sh) — user
 decision; commit of this tree — nothing committed yet; value-leaf + exhaustive mulligan
 profile — separate skills, on request (generate LATE, post-commit-freeze per their Rule 0).
