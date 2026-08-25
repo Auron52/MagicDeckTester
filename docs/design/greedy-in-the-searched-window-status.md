@@ -1,7 +1,10 @@
 # Greedy inside the search: what we found, and what it means
 
-**Status: PAUSED 2026-08-23, resuming Monday. Nothing is running. Tree is clean.**
-Self-contained — everything needed to pick this up is in this file and in git.
+**Status: the 14-deck audit is COMPLETE as of 2026-08-25 (section 4). Nothing is running.**
+It found two things the first three decks did not show: a rollout-side breakpoint fallback on 5
+decks, and **one real greedy DECISION in the executor, on hinata**. No fix has been attempted — the
+next move is a USER decision, measured against section 5's two gates. Section 4c lists what is still
+unknown. Self-contained: everything needed to pick this up is in this file and in git.
 
 ---
 
@@ -114,14 +117,117 @@ continuation — the greedy variants never win the comparison.
 **Conclusion: no greedy DECISION defect exists on these three decks.** All remaining greedy is
 evaluation or horizon rollout.
 
-**Caveat:** measured on antilife / fivecolour / kitty only. The other 11 decks have not been run
-through these counters; doing so is cheap (`MTG_M2_YIELD_STATS=1` on any batch) and is the obvious
-first task if the question comes up again.
+**Caveat (RESOLVED 2026-08-25 — see section 4):** this was measured on antilife / fivecolour / kitty
+only, and the remaining decks were run through the counters on 2026-08-25. **The clean result above
+does NOT generalise.** Five decks fall back to greedy at breakpoint sites the audited three never
+touched, and hinata reaches a greedy DECISION in the executor. Read section 4 before quoting
+section 3a.
 
 
 ## 4. AUDIT COMPLETE — all 14 decks (2026-08-24)
 
 Every deck run through the greedy counters at its own PLAY settings.
+
+### 4.0 Independent re-measurement (2026-08-25, seed base 9001 — agrees on every conclusion)
+
+A second, independent run of the same audit (different agent, different seeds): the remaining
+**12** decks (the 11 listed here plus **minotaur**), 200 games each at resolved PLAY settings, one
+pooled batch, `MTG_M2_YIELD_STATS=1`. Manifest and raw stderr are under `logs/greedy_audit/`
+(regenerable; the recipe is below). Seed base 9001, disjoint from every suite tier.
+
+Because the counters are **process-global atomics dumped at exit**, a mixed batch yields one
+aggregate — which is still decisive when the answer is zero, since zero in aggregate implies zero per
+deck. It was NOT zero, so the per-deck attribution below came from 12 single-deck re-runs.
+
+**Provenance — this matters, read it before re-running.** The first pass was measured on a
+`build/Release/mtg` that had been rebuilt from a WORKING TREE carrying ~660 lines of unrelated
+uncommitted engine work (a mana-order/reserve overhaul, `MTG_PAYSAC_FRESH_HOLD` /
+`MTG_M2_RELEASE` / `MTG_ONESHOT_RESERVE` / `MTG_PUMP_TARGET_HOLD` / `MTG_SCALER_PLAN_BIAS`). That
+work is NOT behaviour-neutral — the suite under it was failing 14/42 smoke and 27/70 regression at
+the time. Every number in this section was therefore **re-measured on a clean `git worktree` build of
+HEAD `994feba6`** and came back **identical, digit for digit, on all 12 decks**. The tables below are
+clean-HEAD numbers. If you re-run this while the tree is dirty, check
+`test/logs/<mode>/mtg.run.meta` + `mtg.run.diff` first — `git_state=dirty` alone is not alarming
+(your own uncommitted test edits set it), but a diff touching `src/` invalidates the measurement.
+
+### 4a. GREEDY SITES, per deck
+
+| deck | s0 | s1 | s2 | s4 | s8 | s90 | verdict |
+|---|---|---|---|---|---|---|---|
+| hinata | 1,403,839 | | | | 2,653,398 | 345,489 | **bp site 0 falls back** |
+| mirrorwing | 541,190 | | | | 1,074,670 | 357,325 | **bp site 0 falls back** |
+| burn | 139,294 | | | | | 2,466 | **bp site 0 falls back** |
+| th | | 338,591 | | 1,341* | | 52,374 | **bp sites 1 (+4*) fall back** |
+| dragonstorm | | | 35,517 | | | 62,941 | **bp site 2 falls back** |
+| creature_giving | | | | | 365,956 | 1,567,375 | clean (s8/s90 only) |
+| auras | | | | | | 1,569 | clean |
+| goblins | | | | | | 27,160 | clean |
+| knights | | | | | | 52,045 | clean |
+| slivers | | | | | | 95,215 | clean |
+| stompy | | | | | | 814,434 | clean |
+| minotaur | | | | | | 6,031,599 | clean |
+
+Six decks are clean by the criterion in this doc (s8/s90 only). **Five are not** — and the sites they
+hit (0, 1, 2, 4) are exactly the "never happened on the three audited decks" case this doc named as a
+genuine finding. These are all the ROLLOUT-side twins of the executor's breakpoint re-solve: when a
+candidate plan carries no searched breakpoint continuation, the rollout continues the line greedily.
+That is evaluation, not a decision, so it sits inside the accepted design — but it is a fidelity gap
+on 5 of 14 decks that was previously believed absent everywhere.
+
+*\* **`s4` is overcounted — instrument bug.** Sites 0, 1, 2, 6 and 8 call `greedysite::Record()`
+INSIDE the `if (!bp_searched_plan(...))` branch; site 4 (`TurnSolver.cpp:15805`) calls it
+UNCONDITIONALLY, one line before the check. So `s4=1341` counts every visit to that site, not every
+greedy fallback, and th's true site-4 fallback count is unknown (possibly 0). Fixing it is a
+one-line move with no behaviour change. Do not quote s4 until it is fixed.*
+
+### 4b. The real finding: hinata reaches a greedy DECISION in the executor
+
+```
+hinata    EXECUTOR GREEDY Solve(): in-rollout=0 breakpoint-fallback=5 | REAL main-phase decisions:  NONE
+<all 11 others>                    in-rollout=0 breakpoint-fallback=0 | REAL main-phase decisions:  NONE
+```
+
+`REAL main-phase decisions: NONE` still holds everywhere — the top-level main-phase plan is never
+greedy on any of the 14 decks. But **hinata's executor took a greedy breakpoint continuation 5 times
+in 200 games**, at `AIEngine.cpp:2747`. That is a DECISION: the continuation it plays is the one
+`TurnSolver::Solve()` returns, and the code comment eight lines above it states the stake exactly —
+"re-solving greedily here would realise a turn the search never scored (a rollout/execution
+divergence)".
+
+`MTG_BP_TRACE=1` on the same 200 games identifies the sub-case, and it is the same one all 5 times:
+
+```
+[bp-exec]  turn=8 idx=-1 bp_at=0 bp_choice=-1 searched=0     (x3)
+[bp-exec]  turn=6 idx=-1 bp_at=0 bp_choice=-1 searched=0
+[bp-exec]  turn=4 idx=-1 bp_at=0 bp_choice=-1 searched=0
+```
+
+All 5 have **`bp_choice = -1`: the committed plan carries no breakpoint continuation at all**, yet the
+executor hit a draw breakpoint while playing it. `MTG_BP_SEARCH` defaults to W=2 and emits variants
+"for every plan that opens a breakpoint", so the search did not classify this line as opening one.
+Execution disagreed. Note the trace printed exactly 5 `[bp-exec]` lines total — so hinata's executor
+never once replayed a SEARCHED breakpoint continuation in these games; every breakpoint it met was
+unanticipated.
+
+This is a search/execution divergence, and greedy is what covers it. It is small (5 in 200 games, one
+deck) but it is the defect class the USER named, and it is not the accepted horizon case.
+
+### 4c. What is NOT yet known
+
+* Whether those 5 games play worse for it — no A/B has been run. The count is an occurrence count,
+  not a cost. Section 5's two gates are how any fix must be judged.
+* Whether the divergence is a misclassification in the search (a breakpoint it should have
+  anticipated) or a genuinely unforeseeable one. That is the first thing to find out.
+* Whether the 5 decks in 4a lose measurable quality to the rollout-side fallback.
+* th's true site-4 count, pending the instrument fix.
+
+### The recipe (unchanged, for re-running)
+
+Build a batch at each deck's PLAY settings — omit `depth`/`budget_ms` so the profile resolves, and do
+NOT set `ignore_play_profile`. Run ONE deck per process if you need attribution — the counters are
+process-global. **What a clean deck looks like:** `EXECUTOR GREEDY ... REAL main-phase decisions by
+depth: NONE` with `breakpoint-fallback=0`, and `GREEDY SITES` showing only `s90` (horizon rollout)
+and `s8` (breakpoint-variant baseline).
 
 ### 4.1 Executor greedy DECISIONS — the line that matters
 
@@ -138,7 +244,11 @@ Hinata is the ONLY deck where the executor ever decides greedily. It is a BREAKP
 (`AIEngine.cpp`, `if (!bp_searched_here) { extra = TurnSolver::Solve(...) }`) — a real, executed
 mid-turn decision made without search. Rate is roughly 1 per 100–300 games: rare, reproducible on
 independent seeds, and by the USER's criterion ("greedy logic taking over mid-search decisions I
-consider a defect") this is the one thing found that qualifies.
+consider a defect") this is the one thing found that qualifies. The 9001-seed re-measurement
+(§4.0) saw the same class at a similar rate — 5 in 200 games, all with `bp_choice = -1` (the
+committed plan carried NO breakpoint continuation at all, yet execution hit one; see §4.0's
+`[bp-exec]` trace) — so the two runs agree the divergence is real, hinata-only, and unanticipated
+by the search rather than a replay of a searched continuation.
 
 ### 4.2 Which decks even HAVE an interior second main
 
