@@ -15,8 +15,9 @@ These are the interface guarantees the GUI is built against; they should stay
 green across engine changes. A CONTRACT failure exits non-zero (a real break).
 
 Replay is by INTENT, not by raw index (see check_reference): recorded picks are
-re-anchored by plan CONTENT, and decision points a reference predates are
-answered from the engine's own heuristic_default. This is what keeps the
+re-anchored by plan CONTENT, decision points a reference predates are answered
+from the engine's own heuristic_default, and recorded points the engine no
+longer reaches are skipped when the human declined them. This is what keeps the
 user-owned references stable across engine evolution (per
 docs/design/decision-indexed-choice-protocol.md: absent answer -> engine
 default). What the walk can then still surface, as information:
@@ -246,15 +247,28 @@ def find_plan(recorded, plans, recorded_index=None):
     return hits[0]
 
 
+# A target label's VOLATILE tail: the printed power/toughness and the "(yours)" marker, which
+# restate board facts rather than naming the target. "Goblin Guide (2/2, yours)" and "Goblin Guide
+# (yours)" are the same creature; a pump between recordings must not make them different targets.
+# "(face)" / "(self)" are NOT stripped -- those distinguish real targets ("You (face)" is a player).
+_LABEL_VOLATILE = re.compile(r"\s*\((?:\d+/\d+)?(?:,\s*)?(?:yours)?\)$")
+
+
 def option_key(o):
     """STABLE content identity of an auxiliary-decision option, or None when the option has no
-    order-independent identity. Two shapes are stable across engine evolution:
+    order-independent identity. Three shapes are stable across engine evolution:
       * library placements (scry / reorder / surveil): what goes on top, what goes away, shuffle --
         pure card names, deterministic;
-      * card picks (discard): the card name.
-    Everything else (notably `target` options, whose content embeds battlefield indexes that
-    legitimately shift with board composition) has NO stable content key -- those replay by
-    verbatim index, which is exactly the recorded intent for a positional target list."""
+      * card picks (discard): the card name;
+      * TARGET SETS: the option's `label`, normalised -- "Zada, Hedron Grinder (yours)",
+        "Opponent (face) + 1/1 Spirit Token". This one used to be excluded ("no stable content
+        key") and replayed by verbatim INDEX, on the reasoning that its `targets` array embeds
+        battlefield indexes that legitimately shift. True of `targets`; NOT true of the label,
+        which names the creatures. Index-replay means any change to the legal-target LIST silently
+        re-points every recorded pick: fixing CollectOwnCreatureTargets to stop dropping tokens
+        added one option to Mirrorwing's boards and drifted 8 references to a target the human
+        never chose. The label is the recorded intent; positions are not.
+    """
     if not isinstance(o, dict):
         return None
     if "top" in o or "away" in o or "shuffle" in o:
@@ -262,6 +276,9 @@ def option_key(o):
                 bool(o.get("shuffle")))
     if "name" in o:
         return ("name", o.get("name"))
+    if isinstance(o.get("label"), str) and o["label"]:
+        parts = [p.strip() for p in o["label"].split(" + ")]
+        return ("label", tuple(_LABEL_VOLATILE.sub("", p) for p in parts))
     return None
 
 
@@ -393,7 +410,11 @@ def check_reference(path, collect=None):
         now carries the same plan summary (an index shift is repaired, not reported as drift),
       * a frame the reference does NOT have (a decision point added after it was saved) -> answer
         from the engine's own heuristic_default/ai_choice and consume NO recorded pick, so the rest
-        of the recorded line stays aligned.
+        of the recorded line stays aligned,
+      * a frame the reference HAS that the engine no longer emits (a decision point removed after
+        it was saved) -> skip it, provided the human declined it, so the rest of the recorded line
+        stays aligned. Insertion and deletion are the same problem from opposite ends; handling
+        only one of them strands every pick after the first removed frame.
 
     Returns (contract_ok, kind, detail) where kind is one of:
       "ok"            -- contract holds AND the recorded outcome reproduces,
@@ -447,7 +468,7 @@ def check_reference(path, collect=None):
                        resolved=resolved,   # 'resolved' is THIS list; it fills in as the walk runs
                        frames=frames)
     ri = 0               # how many of the reference's own decisions have been consumed
-    inserted, shifted = [], []
+    inserted, shifted, vanished = [], [], []
     hand_checked = False
     # One invocation per decision; bounded well above any real game so a protocol change that
     # loops cannot hang the suite (that is why these checks live outside smoke/regression).
@@ -467,6 +488,9 @@ def check_reference(path, collect=None):
             if inserted:
                 repairs.append(f"{len(inserted)} decision(s) the ref predates answered by engine "
                                f"default (e.g. {inserted[0]})")
+            if vanished:
+                repairs.append(f"{len(vanished)} declined decision(s) the engine no longer offers "
+                               f"skipped (e.g. {vanished[0]})")
             if ri < len(kept):
                 repairs.append(f"terminated with {len(kept) - ri}/{len(kept)} recorded decisions unused")
             det = (f"replay won={res.get('won')} win_turn={res.get('win_turn')} "
@@ -475,7 +499,7 @@ def check_reference(path, collect=None):
                 det += "; " + "; ".join(repairs)
             if drift:
                 return True, "play", det
-            return True, ("repaired" if (shifted or inserted) else "ok"), det
+            return True, ("repaired" if (shifted or inserted or vanished) else "ok"), det
         # rc == 70: a decision frame -- contract checks first.
         m = DEC_RE.search(out)
         if not m:
@@ -491,6 +515,32 @@ def check_reference(path, collect=None):
             return False, "play", f"main_phase decision after {len(resolved)} picks has no plans list"
 
         aligned = ri < len(kept) and frame_ident(dec) == frame_ident(kept[ri]["decision"])
+        if not aligned and ri < len(kept):
+            # DELETION, the mirror of the insertion case below. A frame the reference recorded may
+            # simply STOP OCCURRING -- an engine fix can remove the only option a re-prompt existed
+            # to offer, and then there is nothing to prompt for. Aligning strictly left-to-right
+            # cannot express that: the walk holds `ri` on the vanished frame, mis-reads the NEXT
+            # real frame as an insertion, passes it, and every later recorded pick is stranded.
+            # That is not drift, it is the checker losing the thread -- and it cost a user their
+            # whole T5 line (Dragonstorm s26_gi25: the two T4 re-prompts whose entire plan list was
+            # the illegal `Lotus Bloom (other)` suspend of an Apex-staged card, removed with that
+            # bug, made the reference read as a T5->T6 regression the engine never had).
+            #
+            # So skip forward to the next recorded frame with this identity -- but ONLY over frames
+            # the human DECLINED. A pass carries no intent, so dropping it is a no-op; a recorded
+            # frame with a real pick is user work, and silently stepping over it would fabricate a
+            # line the human never played. That stays loud (falls through to the insertion branch,
+            # and the stranded picks surface as drift), which is the whole point: repair what is
+            # provably lossless, report what is not.
+            def _declined(rec):
+                return (rec["decision"].get("type") == "main_phase" and rec.get("chosen") == -1)
+            j = next((k for k in range(ri + 1, len(kept))
+                      if frame_ident(kept[k]["decision"]) == frame_ident(dec)), None)
+            if j is not None and all(_declined(kept[k]) for k in range(ri, j)):
+                for k in range(ri, j):
+                    vanished.append(f"{frame_ident(kept[k]['decision'])}(declined)")
+                ri = j
+                aligned = True
         if not aligned:
             # A decision this reference never recorded (a point added after it was saved, or an
             # extra frame because the line ran longer). Consume no recorded pick. For a MAIN_PHASE
