@@ -953,3 +953,71 @@ Mechanism as bounded so far:
   modelling not implicated. MTG_SAC_SPAWN_LAND_LAST inert (no spawn lands).
 - fc341 (M2_RELEASE single-lever): M2R+MAIN2_DROP still 6 — same family suspicion (second-main
   machinery), undug.
+
+### fc96 dig, session 4 (2026-08-25 s4) — every layer but one ELIMINATED; the defect is
+### "pre-combat payment is blind to the post-combat payload"
+
+Instruments this session (all temp, reverted; artifacts in logs/overhaul_sweep/sac_axis/):
+[m2t] NODE census + WIN-THIS-TURN print at the FSLineTail second-main early return
+(fc96_m2drop_diag*.err), [cbt] sim-combat census with per-site tags + Faeburrow
+vigilance/tap state (fc96_cbt*.err), [pay] both-world payment tap trace keyed on the
+Hellkite cost {1}WUBRG (fc96_paytrace*.err), [shuf] shuffle-ordinal trace (fc96_shuf.err).
+
+Corrections to the s3 bound (card data re-read — the recall trap the claude-play skill
+warns about, again):
+- Two-Headed Hellkite is {1}{W}{U}{B}{R}{G} (6 MV, one pip of each colour), NOT {3}{R}{R}.
+- The committed bundle line at T4 is "cast Hellkite AND Garth One-Eye" — Garth {WUBRG} is
+  paid by Faeburrow's 5-colour burst, which TAPS Faeburrow, which is why the committed
+  combat is only Hellkite+DRS (6 dmg). The walk's winning deviation is exactly "HOLD Garth
+  this turn": Faeburrow stays untapped, attacks (vigilant 5/5), combat = 11, and the m2
+  casts Unite off Faeburrow+DRS+the drop.
+
+ELIMINATED this session (each with direct evidence):
+- Sac axis / spawn lands: MTG_SAC_AXIS=1 inert on fc96 (no sacrifice_land spells). Still 5.
+- Attack declaration: an untapped vigilant Faeburrow DOES attack in sim combat — 474/524
+  [cbt] nodes with fae=VIG untapped declare it. The vigilance exemptions exist at BOTH hold
+  layers (HoldManaSourceForCollapsedMain under DorkAtkSearchEnabled default-ON;
+  FiveColourProvider::ShouldAttackWith first check) and the card data carries Vigilance.
+- Summoning sickness across sim turn boundaries: SimulateEndAndStartNextTurn clears
+  entered_this_turn (TurnSolver ~16271). Hellkite attacks in-sim via Haste (keyword).
+- Payment: the payer credits domain bursts correctly (real T4 [pay]: Garth {WUBRG} paid by
+  ONE Faeburrow tap amt=5; Bloom tapped for G floats its surplus) and the ROLLOUT's dominant
+  Hellkite payment (607x) is byte-identical to the executor's (Godless,Zagoth,BoP,Stomping,
+  Bloom — Faeburrow AND DRS left up). The reserve masks were rmask=0 throughout (no
+  reservation interference).
+- Shuffle/draw determinism: [shuf] shows perfect CRN alignment — every shuffle at ordinal 0
+  yields top=Bolas|Garth, every ordinal-1 shuffle yields top=BoP|Mana Cannons, across real
+  play and every sim line at any turn/libsize. Draws do NOT diverge.
+- Commit-the-line: MTG_LEGACY_SEARCH=1 (per-turn SolveWithLookahead, no committed replay)
+  reproduces the exact split — bundle 5, clean 4. Not a commit/replay artifact.
+- MTG_FD_ORACLE: no divergence flags (the committed 5-line realises its predicted 5).
+
+THE MECHANISM, now precise:
+  clean (dork-first): T4 Hellkite payment taps dorks, leaves the 3 lands + Faeburrow -> the
+  post-combat pool reaches Unite's {2}WUBRG=7 WITHOUT any land drop -> search finds 4.
+  DTL (lands-first): the same plan's payment leaves exactly Faeburrow(5)+DRS(1)=6 < 7 ->
+  the only rescue is the m2 drop of the attack-drawn Tarn (-> Breeding Pool, +1 = 7), i.e.
+  the executor's realized walk line. MTG_MAIN2_DROP=1 still scores 5; the [m2t] NODE census
+  under it shows nodes at oppL=8 with land_plans>0 but unite_plans=0 — on-path prefixes
+  reach the right life total but their m1 payment (plans casting more than Hellkite, or
+  eating DRS for a generic pip) never leaves BOTH the 6 dork mana AND the drop-completable
+  7th, so Unite is correctly excluded by affordability at every enumerated node. Zero
+  on-path (site=1) T4 combats ever occur with the real library AND Faeburrow untapped: the
+  solver never simulates the exact winning T4 shape because the shapes it enumerates are
+  priced under the DTL payment, which forecloses the m2 before the m2 is ever asked.
+
+CLASSIFICATION: not an m2-machinery bug and not a payment-legality bug — a PLANNING
+blindness: the pre-combat payment (and the plan pricing built on it) never sees the
+post-combat payload (Unite, {2}WUBRG, 7) sitting in hand, so under DTL's fixed lands-first
+order it spends the exact sources the m2 needs. The overhaul's own reserve layer
+(ONESHOT_RESERVE / M2_RELEASE rungs) is the architecture for "leave up what a later phase
+needs" but has no rung for "reserve toward a castable post-combat payload". Candidate fix
+shapes (user decision):
+  (a) an m2-PAYLOAD RESERVE rung: when the hand holds a payload castable off (post-combat
+      pool + planned drop), bias/deviate the m1 payment to keep it payable — the (c)-style
+      whole-turn reserve, phase-aware;
+  (b) a searched payment-order axis for the contested case only (audit doc item 4 — wide);
+  (c) accept DTL's cost here and let fc341's dig decide whether the family is one defect.
+fc341 (M2_RELEASE-caused, same second-main family) should be re-diagnosed with THIS lens
+first — its bisect lever differs but the shape (post-combat payload priced out by an m1
+decision) may be identical.
