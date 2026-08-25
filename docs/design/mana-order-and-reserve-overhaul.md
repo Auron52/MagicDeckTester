@@ -1021,3 +1021,26 @@ shapes (user decision):
 fc341 (M2_RELEASE-caused, same second-main family) should be re-diagnosed with THIS lens
 first — its bisect lever differs but the shape (post-combat payload priced out by an m1
 decision) may be identical.
+
+### fc96 FIXED (2026-08-26, commit 0e35cde4): MTG_M2_PAYLOAD_RESERVE
+
+USER ratified the payload-reserve shape ("this is clearly correct") with ONE caveat, now
+encoded in the design: never rule-defer Garth to m2, because a Lightning-Greaves-hasted m1
+Garth attacks (and activates); the reserve therefore only re-picks WHICH legal payment is
+committed — every cast line (including hasted-Garth-m1) stays enumerated and win-turn
+selection owns the phase decision.
+
+Build lessons (both caught by the acid loop, both now comments in the code):
+1. Anchor = the VIGILANT domain dork, not max-yield-first-index: anchoring Bloom pushed
+   Faeburrow into the m1 payment and forfeited its attack (still 5).
+2. Payload = highest-MV DAMAGE-ON-CAST card, not highest-MV: max-MV picked Nicol Bolas (8)
+   over Unite (7), and a walker converts to nothing the turn it lands (still 5, 775 wrong
+   T4 reservations traced).
+
+Measured: fc96 = 4 at d3 and d5 (bundle+lever; was the last DTL-caused unrecoverable);
+cg30 still 4; clean smoke 42/42 byte-identical (dormant); FiveColour train bundle-vs-
+bundle+lever 1600 games ZERO win-turn changes; structurally inert without a domain_mana
+anchor. fc341 (M2_RELEASE, 6 vs clean 5) NOT rescued — different mechanism, still open.
+Lever default OFF; joins the adoption-config candidate list (now: 8 levers +
+MTG_BOTTOM_LEGAL + MTG_SAC_SPAWN_LAND_LAST + MTG_SAC_AXIS? + MTG_M2_PAYLOAD_RESERVE —
+axis default and payload default are USER decisions at the flip).
