@@ -68,7 +68,7 @@ enum Slot : int
     TOP_RESOLVE,              // MTG_TOP_RESOLVE           tutor-to-top reset (the order's LOOP half)
     STOMPY_WT_LITERAL,        // MTG_STOMPY_WT_LITERAL     tutor census = the USER's two consumers only
     STOMPY_TT_LITERAL,        // MTG_STOMPY_TT_LITERAL     Turntimber always [7]=12, no post-tutor 15
-    KE_NO_CONDEMN,            // MTG_KE_NO_CONDEMN         suppress Kitty's breakpoint condemnation
+    KE_CONDEMN,               // MTG_KE_CONDEMN            re-enable Kitty's breakpoint condemnation
     COUNT
 };
 
@@ -114,7 +114,7 @@ inline const char* Name(int slot)
         "MTG_TOP_RESOLVE",
         "MTG_STOMPY_WT_LITERAL",
         "MTG_STOMPY_TT_LITERAL",
-        "MTG_KE_NO_CONDEMN",
+        "MTG_KE_CONDEMN",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

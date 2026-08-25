@@ -1,6 +1,6 @@
 # An unreproduced determinism anomaly in the regression suite (2026-08-25)
 
-> **STATUS: OPEN, one observation, NOT reproduced in 13 subsequent full-scale executions.**
+> **STATUS: OPEN, one observation, NOT reproduced in 19 subsequent full-scale executions.**
 > This document exists so the observation is not lost and so the next person does not re-walk the
 > eight hypotheses already eliminated below. It does **not** claim a mechanism. If you see a
 > suite key move that your change cannot explain, read this first — and capture the evidence listed

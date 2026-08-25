@@ -841,11 +841,25 @@ public:
     // cost for byte-identical play: held-out +32.9% -> +18.3% and train +217% -> +84% over baseline,
     // same -0.1533/-0.1200 delta and the same 24/18 games faster, 1/0 slower (1800-game sweep,
     // logs/kitty_shape). Inert until MTG_EQUIP_DRAW_BP arms the class at all.
-    // MTG_KE_NO_CONDEMN (heurarm) suppresses this route so the SAVING can be measured with the
-    // class armed -- "condemnation on vs off, breakpoint on both sides" is otherwise unaskable
-    // (the global MTG_BP_CLASSIFY only ORs in, it cannot subtract). A/B lever only.
+    // >>> DROPPED 2026-08-25, and the reason is worth reading before re-proposing it. The opt-in
+    // above was justified entirely by a COST saving (44-61% of site 6's search work for "byte-
+    // identical play"). Both halves of that turn out to be artefacts of the d3 GATE CELLS it was
+    // measured on; neither survives at the settings the deck actually plays at (d5/b20).
+    //
+    // Measured 2026-08-25 with the class armed on both sides -- which required MTG_KE_CONDEMN,
+    // because the global MTG_BP_CLASSIFY only ORs the filter IN and cannot subtract it, so
+    // "condemnation on vs off" had never been an askable question:
+    //   * NOT play-neutral. All 20 job digests differ and 18 of 10,000 paired win turns move. The
+    //     "every shape plays IDENTICALLY" finding does not hold here.
+    //   * WRONG SIGN. Condemnation OFF vs ON: -16 turns, **17 games better : 1 worse, +3.77 sigma**.
+    //   * NO SAVING. Deterministic GameWorkMeter units over 2,000 paired games: condemnation is
+    //     cheaper in 859 games and dearer in 109, but the 109 swamp the rest -- total work +0.09%.
+    //     Once the filter changes the LINE (see the first bullet) some games simply run longer, so
+    //     it is not the pure cost filter the design assumed.
+    // Returning false puts KittyEquipment back on the base behaviour every deck but AntiLifegain and
+    // FiveColour already has. MTG_KE_CONDEMN=1 restores it per-job for re-measurement.
     bool CondemnsConsideredAtBreakpoint() const override
-    { return !heurarm::Flag(heurarm::KE_NO_CONDEMN, false); }
+    { return heurarm::Flag(heurarm::KE_CONDEMN, false); }
     // Tutor breadth: score EVERY distinct Equipment, not the generic 6.
     //
     // This is a COVERAGE fix, not a heuristic. GenericProvider::TutorCandidates deliberately
