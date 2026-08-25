@@ -187,21 +187,36 @@ by one question:
   Modest — these two decks' enumeration volume is not where the design's big win lives
   (that is the equipment/tribal powerset decks); the value-leaf hybrid already absorbs
   much of the d5/ship cost here.
-- **Bonus pre-existing bug found by the A/B log diff — FIX DEFERRED (needs GT rebaseline)**:
-  `FullSearchLineHybrid` has NO RevealLogPause — its single-pass escalation's FSLineWin calls
-  run planning with the reveal logger/human choosers live. Three consequences: phantom
-  planning reveals in --log-dir games (10 turn-1 Ponder reveals in the hinata gi=6 log);
-  those phantom REVEALs are FOLDED into every play digest (GameLogger `FoldStr("R")`), so the
-  committed GT is baselined WITH the pollution — adding the obvious pause moves 4 d5 smoke
-  digests (goblins/antilife/hinata/th) at byte-identical per-game win turns; and under
-  --claude-play the planning sims CONSULT THE HUMAN CHOOSERS (likely implicated in viewer
-  weirdness on value-leaf decks). The fix is one `RevealLogPause` at the function top **plus
-  a scheduled full GT rebaseline** (smoke/regression/overnight digest-only moves) — land it
-  with the viewer HumanPlaySuppress work. TRAP for that change, measured this session:
-  `g_real_resolution` must KEEP the caller's value (real-only game logic exists despite the
-  flag's diagnostic-only contract — Lackey's `s_lackey_pref`); a blanket pause that clears it
-  also changes the escalation's planning CHOICES. A deferred-fix comment sits at the function
-  head in TurnSolver.cpp.
+- **Bonus pre-existing bug found by the A/B log diff — FIXED 2026-08-25 (was: deferred)**:
+  `FullSearchLineHybrid` had NO RevealLogPause — its single-pass escalation's FSLineWin calls
+  ran planning with the reveal logger/human choosers live. Three consequences: phantom
+  planning reveals in --log-dir games; those phantom REVEALs are FOLDED into every play digest
+  (GameLogger `FoldStr("R")`), so the GT was baselined WITH the pollution; and under
+  --claude-play the planning sims CONSULT THE HUMAN CHOOSERS. Fixed by the one
+  `RevealLogPause` at the function top, with the smoke+regression GT rebaselined digest-only.
+
+  Two things this record got wrong, both corrected by measurement when the fix landed:
+
+  1. **The leak was ~4x larger than described, and it was not only REVEALs.** On the hinata
+     gi=6 log the before/after counts are 101 → 7 REVEAL (16 → 1 on turn 1 alone) **and
+     25 → 1 DISCARD** — so 94 of 101 reveals and 24 of 25 discards were phantom. Phantom
+     DISCARDs were never noted here; a viewer rendering 25 discards on turn 3 is the most
+     likely concrete form of the "viewer weirdness on value-leaf decks" this entry suspected.
+     PLAY_LAND/CAST_SPELL/DRAW/ATTACK counts are identical before and after (7/10/13/3),
+     which is what confirms the line itself is untouched.
+  2. **The "TRAP" was wrong: a blanket pause that clears `g_real_resolution` does NOT change
+     the escalation's planning choices.** The flag's only readers are the default-off
+     diagnostics `MTG_TUTOR_CHOSEN_RANK` and `MTG_LACKEY_PREF` (the latter labelled
+     "DIAGNOSTIC (no play change)"), matching `GameLogger.cpp`'s "diagnostic only" contract —
+     so at shipped settings the plain pause every other planning entry point already uses is
+     behaviour-neutral, and clearing the flag is the *intended* half of it (both diagnostics
+     exist to report the committed choice, never hypothetical rollout resolutions). Measured:
+     **52,650 games over all 45 smoke + 75 regression keys, ZERO per-game win-turn moves**;
+     the 15 keys that moved are digest-only with byte-identical averages, and they are exactly
+     the five value-leaf decks at d5 (th/antilife/hinata/goblins/stompy) — i.e. precisely the
+     cells that reach the hybrid. Goblins, the deck the trap named via Lackey, is among the
+     zero-win-turn-move keys. Overnight GT for those same d5 cells is stale until rebaselined;
+     any win-turn move under that rebaseline is a BUG, not churn.
 
 ## Measurement round 2 — TOTAL Hinata doctrine (2026-08-14) and the main-2 parity work list
 

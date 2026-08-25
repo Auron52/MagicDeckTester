@@ -24775,20 +24775,21 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                                         int escalation_cap,
                                                         double escalation_r)
 {
-    // KNOWN LEAK, FIX DEFERRED (2026-08-14, needs a scheduled GT rebaseline -- see
-    // docs/design/main-phase-classification.md "pre-existing bug"): this whole function is
-    // planning on state COPIES, but it is called straight from AIEngine::TakeTurn (real-play
-    // context) and its single-pass escalation invokes FSLineWin DIRECTLY (line ~16531) -- the
-    // one planning entry point with NO enclosing RevealLogPause. Consequences: the escalation's
-    // simulated resolutions are logged as REAL events (e.g. 10 phantom turn-1 Ponder reveals in
-    // a --log-dir hinata game), those phantom REVEALs are FOLDED into every play digest
-    // (GameLogger FoldStr("R") -- the current GT is baselined WITH the pollution, which is why
-    // the obvious `RevealLogPause _rlp;` here moves 4 d5 smoke digests at byte-identical
-    // per-game win turns), and under --claude-play the sims consult the human choosers.
-    // The fix is that one line + a GT rebaseline; land it with the viewer HumanPlaySuppress
-    // work. NOTE for that change: g_real_resolution must KEEP the caller's value (real-only
-    // guards exist, e.g. Lackey's s_lackey_pref) -- restore it after the pause, or the
-    // escalation's planning choices move too.
+    // This whole function is planning on state COPIES, but it is called straight from
+    // AIEngine::TakeTurn (real-play context) and its single-pass escalation invokes FSLineWin
+    // DIRECTLY -- so until 2026-08-25 this was the one planning entry point with NO enclosing
+    // RevealLogPause, and the escalation's simulated resolutions were logged as REAL events (10
+    // phantom turn-1 Ponder reveals in a --log-dir hinata game; 25 of 37 tutor reveals phantom on
+    // stompy). Those phantom REVEALs are FOLDED into the play digest (GameLogger FoldStr("R")),
+    // and under --claude-play the sims consulted the human choosers. The pause below closes all
+    // three. It is a LOG-FIDELITY fix, not a play change: it moves digests only, at byte-identical
+    // per-game win turns (verified smoke + regression, 2026-08-25), so the accompanying GT
+    // rebaseline is digest-only by construction -- any win-turn move under it is a BUG, not churn.
+    // Clearing g_real_resolution is the intended half of the pause here, not collateral: its only
+    // readers are the default-off diagnostics MTG_TUTOR_CHOSEN_RANK and MTG_LACKEY_PREF, both of
+    // which exist precisely to report the COMMITTED choice and "never the thousands of hypothetical
+    // tutors inside rollouts" -- which is what this function's resolutions are.
+    RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     // --- Escalation budget shaping (all opt-in; ALL unset => byte-identical to the shared-budget hybrid) ---
     // MTG_ESC_SPLIT=c   : CAP the value-leaf probe to c*budget_ms so the probe cannot eat the whole decision
     //                     budget; the remaining (1-c) is RESERVED for the heuristic escalation. No total
