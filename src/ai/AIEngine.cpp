@@ -2654,6 +2654,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             rp.hand.push_back(sc.card);
         }
 
+        // CONTINUATION TRAITS (lockstep with ApplyPlanDirect's deferred-continuation apply): pay
+        // the recorded continuation under PlanTraits computed from ITS actions, not the main
+        // plan's still-open scopes (the mirrorwing gi43 divergent-payment class -- see
+        // resolve_draw_breakpoint's twin install). Null scope (levers off) = unchanged.
+        PlanTraits _rec_traits;
+        if (PlanTraitsWanted()) { _rec_traits = TurnSolver::ComputePlanTraits(state, recs); }
+        PlanTraitsScope  _rec_scope(PlanTraitsWanted() ? &_rec_traits : nullptr);
+        TapKeepLastScope _rec_keep(PumpTargetHoldEnabled() ? _rec_traits.pump_target_card : 0);
+
         for (const Action& a : recs)
         {
             if (a.kind == Action::Kind::PlayLand)
@@ -2759,6 +2768,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                          state.turn_number, bp_idx, plan.bp_at, plan.bp_choice,
                          bp_searched_here ? 1 : 0);
         }
+        // CONTINUATION TRAITS (lockstep with ApplyPlanDirect's deferred-continuation apply): the
+        // continuation is its own mini-plan -- pay it under PlanTraits computed from ITS actions,
+        // not the main plan's still-open scopes (which the rollout's continuation never saw; the
+        // mirrorwing gi43 divergent-Draught-payment class). Null scope (levers off) = unchanged.
+        PlanTraits _cont_traits;
+        if (PlanTraitsWanted()) { _cont_traits = TurnSolver::ComputePlanTraits(state, extra.actions); }
+        PlanTraitsScope  _cont_scope(PlanTraitsWanted() ? &_cont_traits : nullptr);
+        TapKeepLastScope _cont_keep(PumpTargetHoldEnabled() ? _cont_traits.pump_target_card : 0);
         // Lotus Bloom: apply any SacForMana (float the chosen colour) / Suspend this re-solve chose BEFORE
         // the casts, mirroring TakeTurn's top-of-turn pre-pass. Without this a mid-turn Lotus sac was
         // silently dropped in the fallback breakpoint re-solve, so the floated mana never materialised and

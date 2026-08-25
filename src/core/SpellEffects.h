@@ -5949,6 +5949,21 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
     }
     if (pw != 0) { tgt.temp_power_bonus += pw; }
     if (tf != 0) { tgt.temp_tough_bonus += tf; }
+    // DIG INSTRUMENT (MTG_TRICK_TRACE, default off): real-resolution-only dump of where a trick
+    // payload landed -- target, pump, treasure count -- for diffing an executed turn against the
+    // committed line's projection (the mw gi43 class: same casts, pump landed differently).
+    {
+        static const bool s_trick_trace = EnvOn("MTG_TRICK_TRACE");
+        if (s_trick_trace && g_real_resolution)
+        {
+            std::fprintf(stderr,
+                         "[trick] T%d %s -> %s#%d%s pw=%+d tf=%+d treasures=%d\n",
+                         state.turn_number, def.card.m_name.str().c_str(),
+                         tgt.card.m_name.str().c_str(), tgt.card.m_number,
+                         tgt.tapped ? "(tapped)" : "", pw, tf,
+                         CountTreasuresControlled(state, controller));
+        }
+    }
 
     // Luxurious Libation's token. Placed AFTER the pump deliberately -- its oracle order is
     // "gets +X/+X ... Create a ... token", the OPPOSITE of Gold Rush (token first, then count

@@ -11778,7 +11778,13 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 mint_costs.colorless += mc.colorless; mint_costs.generic += mc.generic;
                 sel_mint = true;
             }
-            if (sel_mint && minted > 0 && pool.CanPay(mint_costs))
+            // FRESH-HOLD parity: a magnetless mint is BANKED this turn (PaySacSpendableNow), so
+            // crediting it prices a fund the payer will refuse -- the same phantom-credit class as
+            // the X-fill fix above (mirrorwing gi43/242/292: the credit admitted lines whose
+            // continuation then starved, killing the T5 pump finish). Credit only when the minted
+            // Treasure is actually spendable this turn: magnet live, or the hold disabled.
+            if (sel_mint && minted > 0 && pool.CanPay(mint_costs)
+                && (!PaySacFreshHoldEnabled() || CopyMagnetLive(state, state.active_player_index)))
             { eff.wild += minted; eff_nc.wild += minted; credited = true; simul_mint_credit = minted; }
         }
         // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
@@ -16025,6 +16031,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
         }
         bp_play_searched_land(extra, out_breakpoint);
+        // CONTINUATION TRAITS (lockstep with the executor's breakpoint replay): the deferred
+        // continuation is its own mini-plan, so price and pay it under PlanTraits computed from
+        // ITS actions. The MAIN plan's trait scopes closed with the cast section above (they are
+        // block-scoped there), while the executor's twin scopes in TakeTurn span the whole turn --
+        // so without this pair of installs the rollout paid the continuation TRAIT-LESS (one-shot
+        // Treasures spent eagerly) and the executor paid it under the main plan's LIVE traits
+        // (Treasure held, the pump target tapped instead): mirrorwing gi43/242/292's committed T5
+        // pump line scored 12 damage and executed 5. Null scope (levers off) changes nothing.
+        PlanTraits _cont_traits;
+        if (PlanTraitsWanted()) { _cont_traits = TurnSolver::ComputePlanTraits(state, extra.actions); }
+        PlanTraitsScope  _cont_scope(PlanTraitsWanted() ? &_cont_traits : nullptr);
+        TapKeepLastScope _cont_keep(PumpTargetHoldEnabled() ? _cont_traits.pump_target_card : 0);
         // The deferred trick class (site 5) is the site this pre-loop was MISSING from: the Gold
         // Rush Treasures the deferral banks are exactly the SacForMana candidates the continuation
         // enumerates, and dropping the crack made every crack-carrying rank a no-op duplicate of
@@ -17736,7 +17754,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 mint_costs.colorless += mc.colorless; mint_costs.generic += mc.generic;
                 sel_mint = true;
             }
-            if (sel_mint && minted > 0 && pool.CanPay(mint_costs))
+            // FRESH-HOLD parity -- lockstep twin of the gate in consider() (see the rationale
+            // there): a magnetless mint is banked this turn, so it can fund nothing.
+            if (sel_mint && minted > 0 && pool.CanPay(mint_costs)
+                && (!PaySacFreshHoldEnabled() || CopyMagnetLive(state, state.active_player_index)))
             { eff.wild += minted; eff_nc.wild += minted; credited = true; simul_mint_credit = minted; }
         }
         // Same-turn HASTED dork credit. The rock credit above excludes creatures because a dork cast

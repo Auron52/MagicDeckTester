@@ -648,3 +648,61 @@ enough to surface the fan chain — a search-fidelity project, not an accounting
 **Bar position after the fix:** train (smoke + regression) uncoverable-earlier-win-turn set =
 {mw148} only. Everything else: coverable churn (mw56, st202@d5, st203, st252, st292, gi767@16x,
 gi831@d5) or shuffle variance (cg30, fc96).
+
+### Held-out overnight (mirrorwing+stompy) under the full bundle — and the continuation-traits lockstep bug (2026-08-25, cont.)
+
+**Measurement (BUNDLE9 = all 8 levers + the mw43 fill fix, mirrorwing+stompy overnight, 24 cells,
+24,800 games; arm `logs/overhaul_sweep/arm_BUNDLE9_mwst_overnight.txt`, wins in
+`bundle9_mwst_overnight_wins/`).** Every one of the 24 cells improves its average (d0, d3 and d5
+alike; e.g. mw d3_s4004 4.7800→4.7275, st d3_s5005 4.9550→4.8320). Per-game (loss=99):
+**2515 better / 301 worse**. The USER rule was applied to all 34 SEARCHED slower games (d0 is
+greedy — outside the rule): pooled repro at case budget + unbounded probes
+(`bundle9_probe_manifest.json`, 68 jobs). 23/34 coverable unbounded — including all three
+newly-unwon d5 games (unbounded wins them 2 turns faster than GT). 11 uncoverable → minus-one-flag
+bisect over the 8 levers (`bisect/cfg_*.log`):
+
+| cluster | games | rescued by removing | class |
+|---|---|---|---|
+| A | mw gi43 (d3+d5), gi242 (d5, 5→8), gi292 (d3+d5) | any of TPS / OSR / DTL | FIXED below |
+| B | st gi374 (d3+d5), gi993 (d3) | DORK_TAP_LAST alone | OPEN |
+| C | mw gi136 (d5) | TREASURE_PAY_SOURCE alone | OPEN |
+| D | mw gi326 (d3) | only all-off | OPEN (multi-lever) |
+| — | mw gi196 (d3) | nothing (all-off unbounded=5 too) | NOT lever-caused: pre-existing depth non-monotonicity; the GT config reproduces GT 4 exactly |
+
+**Cluster A root cause — continuation-traits lockstep hole (FIXED this commit).** Microscope on
+mw gi43 (route: game-log diff → EWINS → FSW → `[fd]` committed line → new `MTG_TRICK_TRACE`):
+the committed T5 line is `Gold Rush` + site-5 breakpoint continuation `[Fortifying Draught]`,
+scored win=5 = 12 exact lethal (6 bodies + GR +4 and Draught +2 concentrated on Elvish Mystic #1,
+Draught paid by cracking the banked Treasure so Mystic #1 swings). The brace depths told the
+story: ApplyPlanDirect's `PlanTraitsScope`/`TapKeepLastScope` close with the main cast section
+(depth 2), so the ROLLOUT applied the deferred continuation TRAIT-LESS — no one-shot hold, §2a
+rank-26 cracks the Treasure eagerly, Mystic spared. AIEngine::TakeTurn's twin scopes span the
+whole turn (depth 1), so the EXECUTOR replayed the same continuation under the MAIN plan's LIVE
+traits — OneShotHoldMask held the Treasure and the payment tapped Mystic #1, the pump target:
+`[trick] T5 Fortifying Draught -> Elvish Mystic#1(tapped)`. 12 scored, 5 executed, win 5→7.
+Fix: the continuation is its own mini-plan — BOTH sides now install
+`ComputePlanTraits(state, continuation.actions)` (+ keep-last) around the continuation apply
+(TurnSolver deferred loop; AIEngine resolve_draw_breakpoint + replay_recorded). Null scope
+(levers off) unchanged. Also kept: the mint-credit fresh-hold parity gate (a magnetless mint is
+banked and cannot fund this turn — credit only with a live magnet), the same phantom-credit class
+as the mw43 fill fix. Result: all five Cluster-A entries at-or-better-than GT (gi43 → 5 beats GT
+6 at both depths; gi242 → 5 = GT; gi292 → 6 beats GT 7 at both depths).
+
+**Diagnostic added:** `MTG_TRICK_TRACE` (default off, real-resolution only) — dumps where each
+solo-target trick payload landed (target, pump, treasure count).
+
+**Cluster B first look (st374):** divergence at T1 (all-on skips the T1 Llanowar Elves the win-4
+line needs). `[fd]` shows win-4 Llanowar-first candidates being demoted to 5 on committed-line
+verification — the same score-vs-replay divergence class at a different site, DTL-conditioned.
+Root-cause pending (next session): same route as gi43.
+
+**BUNDLE10 validation (fixed tree, same 24-cell overnight; `arm_BUNDLE10_mwst_overnight.txt`,
+wins in `bundle10_mwst_overnight_wins/`).** Smoke (levers off) 42/42 byte-identical. Levers on:
+every mirrorwing cell improves further vs bundle9 (e.g. d5_s4004 4.7267→4.7067); stompy cells
+byte-identical to bundle9 (no treasures — the fixes are inert there). vs GT: 2509 better / 276
+worse (was 2515/301); 66 games moved vs bundle9, mirrorwing only. USER-rule re-probe of all 26
+searched slower games (`bundle10_probe_manifest.json`): 20 coverable (including the one new
+mover, mw d3_s6006 gi209 5→6, unbounded=GT), **6 uncoverable = exactly the open clusters**:
+st374 d3+d5 / st993 (B, DTL), mw136 (C — rescued by `MTG_PAYSAC_FRESH_HOLD=0`, so fresh-hold
+class like Cluster A but NOT via the continuation scope; site-5-off does NOT rescue it), mw326
+(D, multi-lever), mw196 (non-lever, pre-existing). Payment worklist remaining: B, C, D.
