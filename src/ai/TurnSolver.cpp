@@ -657,6 +657,7 @@ static bool BpPlanCasts(std::uint64_t name_hash)
 // gi108 a second Puresteel Paladin -- in both the plan had already cast that name). A card drawn AT
 // the breakpoint cannot be something the pre-breakpoint plan intended to cast, so requiring the
 // pre-draw snapshot is exactly the right discriminator.
+static bool BpCardWasInHandBefore(int card_number);   // defined just below
 static bool BpPlanHasTail(const Player& ap)
 {
     if (g_bp_plan_casts == nullptr) { return false; }
@@ -673,6 +674,51 @@ static bool BpCondemnTailExemptEnabled()
 {
     static const bool on = EnvOn("MTG_BP_CONDEMN_TAIL_EXEMPT");   // default OFF pending measurement
     return heurarm::Flag(heurarm::BP_CONDEMN_TAIL, on);
+}
+
+// The breakpoint's own site definition, bound whenever the classifier is live. Needed because
+// condemnation has to know WHERE in the cast order the breakpoint sits -- see the order-aware rule
+// below. Bound alongside g_bp_hand_before rather than reusing g_cantrip_order_site, which is bound
+// only under CantripOrderEnabled() and cleared for a site outside the ordered class.
+static thread_local const CardDefinition* g_bp_site_def = nullptr;
+
+// ORDER-AWARE CONDEMNATION (MTG_BP_CONDEMN_ORDER_AWARE). USER, 2026-08-25, on why the six
+// KittyEquipment losses are NOT evidence against condemnation: "If the card was in hand and earlier
+// in the order then it should be rejected even if it was drawn... It just shouldn't be played until
+// you have finished drawing."
+//
+// That is the missing half of the specification. Condemnation asks "has this card already been
+// considered?" and the honest answer depends on the CAST ORDER: a card whose slot precedes the
+// breakpoint's site has had its turn and was declined, but a card whose slot comes AFTER the site
+// has not been reached yet -- the continuation is exactly where it gets considered, and banning it
+// there deletes the only line that plays it at its proper position.
+//
+// This also explains why the filter measured harmful. It was only ever measured under the GENERIC
+// order, which ranks creatures (10) ahead of "other noncreature" (20) and therefore deploys Kor
+// Duelist BEFORE the Equipment whose ETB does the drawing -- backwards from the information-first
+// rule. The deck's own reviewed order (MTG_KE_ORDER) puts Equipment at 8 ahead of the hosts at 10
+// for precisely this reason. So the soundness of condemnation is CONDITIONAL on the deck's cast
+// order encoding draws-before-deploys, which is why it is a per-deck hook and not a global.
+//
+// Clairvoyance is what makes the rule exact rather than a heuristic: the search already knows what
+// the trigger will draw, so "new information arrived" is never a reason to re-offer a card. Only
+// ORDER POSITION is.
+static bool BpCondemnOrderAwareEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_ORDER_AWARE");   // default OFF pending measurement
+    return heurarm::Flag(heurarm::BP_CONDEMN_ORDER, on);
+}
+
+// True when the candidate's cast slot comes AFTER the breakpoint site's, i.e. it has not been
+// considered yet and must not be condemned. False (condemn as before) whenever the comparison
+// cannot be made, so the exemption only ever re-admits candidates.
+static bool BpSlotIsAfterSite(const GameState& state, const Card& cand)
+{
+    if (!BpCondemnOrderAwareEnabled() || g_bp_site_def == nullptr) { return false; }
+    const CardDefinition* cd = CardDatabase::Instance().LookupCached(cand);
+    if (cd == nullptr) { return false; }
+    const DecisionProvider& prov = ResolveProvider(state);
+    return prov.CastOrderRank(state, *cd) > prov.CastOrderRank(state, *g_bp_site_def);
 }
 
 // Was this card already in hand when the current breakpoint's cantrip was cast? True outside a
@@ -5417,7 +5463,7 @@ TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site,
                                                  const std::vector<std::uint64_t>* plan_casts,
                                                  bool classify_active)
     : m_saved(g_cantrip_order_site), m_saved_hand(g_bp_hand_before),
-      m_saved_casts(g_bp_plan_casts)
+      m_saved_casts(g_bp_plan_casts), m_saved_site(g_bp_site_def)
 {
     // classify_active is passed in rather than read here because the provider route needs the STATE
     // and this ctor does not have it. It must NOT default to the env lever: binding the snapshot is
@@ -5429,6 +5475,10 @@ TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site,
     // a drawn cantrip, and the classifier needs it to spare a drawn spell. Bound independently of
     // the site so the classifier works at a breakpoint whose cantrip is outside the ordered class.
     if (CantripOrderEnabled() || classify) { g_bp_hand_before = hand_before; }
+    // The site itself, for the order-aware condemnation rule (BpSlotIsAfterSite). Bound under the
+    // same condition as the snapshot and independently of the cantrip watermark below, because the
+    // classifier must work at a breakpoint whose site is outside the ordered class.
+    if (classify) { g_bp_site_def = site; }
     if (!CantripOrderEnabled()) { return; }
     g_cantrip_order_site = (site != nullptr && CantripOrderTier(*site) >= 0) ? site : nullptr;
 }
@@ -5437,6 +5487,7 @@ TurnSolver::CantripOrderScope::~CantripOrderScope()
     g_cantrip_order_site = m_saved;
     g_bp_hand_before     = m_saved_hand;
     g_bp_plan_casts      = m_saved_casts;
+    g_bp_site_def        = m_saved_site;
 }
 
 bool TurnSolver::BreakpointHandSnapshotWanted()
@@ -6506,7 +6557,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // payable here by construction. See docs/design/breakpoint-phase-classification.md.
         if (BpClassifyActive(state) && g_bp_hand_before != nullptr
             && !BpPlanCasts(ap.hand[i].m_name_hash)
-            && !(BpCondemnTailExemptEnabled() && !BpPlanHasTail(ap)))
+            && !(BpCondemnTailExemptEnabled() && !BpPlanHasTail(ap))
+            && !BpSlotIsAfterSite(state, ap.hand[i]))
         {
             const Card& cand = ap.hand[i];
             // Lower = more urgent. A staged copy expires; a hand copy never does.

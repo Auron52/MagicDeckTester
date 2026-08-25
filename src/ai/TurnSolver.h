@@ -653,6 +653,7 @@ public:
         const CardDefinition*   m_saved;
         const std::vector<int>* m_saved_hand;
         const std::vector<std::uint64_t>* m_saved_casts;
+        const CardDefinition*   m_saved_site;   // order-aware condemnation: the breakpoint's site
     };
 
     // Card numbers in the active player's hand, for the breakpoint snapshot above. Cheap (one

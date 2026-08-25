@@ -70,6 +70,7 @@ enum Slot : int
     STOMPY_TT_LITERAL,        // MTG_STOMPY_TT_LITERAL     Turntimber always [7]=12, no post-tutor 15
     KE_CONDEMN,               // MTG_KE_CONDEMN            re-enable Kitty's breakpoint condemnation
     BP_CONDEMN_TAIL,          // MTG_BP_CONDEMN_TAIL_EXEMPT  don't condemn when the plan has no cast left
+    BP_CONDEMN_ORDER,         // MTG_BP_CONDEMN_ORDER_AWARE  don't condemn a slot AFTER the bp site
     COUNT
 };
 
@@ -117,6 +118,7 @@ inline const char* Name(int slot)
         "MTG_STOMPY_TT_LITERAL",
         "MTG_KE_CONDEMN",
         "MTG_BP_CONDEMN_TAIL_EXEMPT",
+        "MTG_BP_CONDEMN_ORDER_AWARE",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }
