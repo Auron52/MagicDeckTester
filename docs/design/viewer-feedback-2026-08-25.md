@@ -186,8 +186,9 @@ representational, and the cost lands only on decks that were actually laundering
 **Attribution, all 97 searched-slower games:** ritual-colours 44, prepay-colours 41, both 3,
 aura-fetch-order 4, combination 1 — and 4 that came back *"(none — not moved by this batch)"*, which
 is the interesting part (below). **Escalation A/B: 38/97 converge**, a much lower share than the train
-tiers' 60/76 — as it should be, because 88 of the 97 are caused by the two LEGALITY fixes, and a line
-that was illegal does not come back at d6/20000ms. That is the price of legality, not a quality loss.
+tiers' 60/76. The obvious reading — 88 of the 97 are caused by the two LEGALITY fixes, and an illegal
+line does not come back at d6/20000ms — is only PARTLY right; see the correction below, which
+separates the games where a cheat was removed from the ones where a tempo judgement merely changed.
 
 ### What the 4 unattributed games exposed: a lever with no off-switch
 
@@ -207,6 +208,57 @@ elimination argument, now measured. That leaves **zero unexplained movers** acro
 ritual-colours, 41 prepay-colours, 4 bestow-signature, 4 aura-fetch-order, 3 both-mana-fixes, and 1
 genuine combination (hinata gi96, where no single switch restores the old score but all of them
 together do).
+
+### CORRECTION — "still worse at every rung" is NOT always the price of legality
+
+The escalation A/B was reported above as: the games that never converge are the LEGALITY fixes doing
+their job. That is right for the ritual-colour games and wrong for mirrorwing, and the distinction
+matters because it is the difference between "a cheat was removed" and "the engine now judges a
+tempo trade differently".
+
+**Dragonstorm is the genuine article.** `dragonstorm_overnight_d3_s4004` gi318 (4 → 6), turn 2 off
+exactly two lands (Unclaimed Territory, Mountain):
+
+```
+Rite of Flame {R} -> Seething Song {2}{R} -> Irencrag Feat {1}{R}{R}{R}
+   -> Karrthus, Tyrant of Jund   manaPaid={4}{B}{R}{G}      <- wins T4
+```
+
+Karrthus needs `{B}` AND `{G}` — two distinct off-red pips. The only non-red source is the single
+Unclaimed Territory (`colored_creature_only`), and one tap is one coloured mana. The second off-red
+pip came from Irencrag Feat's seven, which were WILD. Coloured red, the turn-2 Karrthus is gone. Mana
+that did not exist; no depth recovers it, and none should.
+
+**Mirrorwing is not.** Its three non-converging games were checked with three instruments and none of
+them shows a refusal:
+
+| instrument | result |
+|---|---|
+| `--first-div` on all 3 (gi309, gi280, gi136) | old choice **STILL AVAILABLE, verdict `accept`** |
+| `MTG_PREPAY_PROBE` on gi309 | zero `PP_WILD` / `PP_UNPAYABLE` declines (only "<2 casts") |
+| `MTG_AFFORD_AUDIT=2` on gi309, both arms | `real drops: 0`, no stranding, no per-drop lines |
+
+And the old line's mana is legal by hand: gi309's T4 pays `{G}` + `{G}` + `{1}{G}` from two Game
+Trails (`produces: ["R","G"]`) plus a Forest for the three green pips, with the Mountain covering the
+generic — Elvish Mystic is not even tapped (`boardAfter` shows it untapped).
+
+So nothing is being refused. What changed is the CHOICE, and all three are tempo/colour-supply
+decisions: gi309 T1 `land=Game Trail` (hold) vs `land=Game Trail;cast=Elvish Mystic`; gi280 T1
+`land=Sandstone Needle` vs `land=Forest;cast=Elvish Mystic`; gi136 T2 Forest vs Sandstone Needle
+(red-only, enters tapped, 2 depletion counters, 2 red per tap). Those are exactly the judgements that
+SHOULD move when the pool stops pretending colourless is fungible — the value of a land now depends
+on the colours it really provides.
+
+The honest reading is [[measure-before-fixing-a-shipped-bug]] again: **optimism was acting as a tempo
+prior**, and removing it costs a little. The pre-fix engine held the dork at T1 partly because its
+rollouts over-valued the later turns they could not actually pay for. It reached T4 for a reason that
+was not sound.
+
+Not a defect, and no fix is proposed here. What it does open is a heuristic question worth a sweep on
+its own terms: land-drop ranking and dork timing were tuned against the OPTIMISTIC pool, so
+`ManaSourceRank` and the T1 hold/cast trade may both be re-tunable now that colours are honest (see
+`.claude/skills/heuristic-optimization.md`; `ManaSourceRank` is already an open item in
+[[session-state-2026-08-02]]).
 
 ### A deck-wide divergence in 1 of 3 full runs — caught only by re-running
 
