@@ -60,6 +60,39 @@ The `play_digest`/`commit` fingerprints gate **pooling and resume** (the mid-gen
 > and materially moves *this deck's* play (or the deck's list changes), confirmed by a **regression**,
 > not by a digest diff.
 
+#### Settling the mid-gen case in ~2 minutes: probe the digest, don't argue about the commit
+
+The first bullet above (mid-generation invalidation) is real but is a **measurement, not a reading of
+the commit log** — and on a shared branch the commit log will look alarming. During one 36.7 h
+KittyEquipment run, 50 commits landed including a leaf tie-break adopted default-ON whose own message
+named this deck among its regressed games, and a mana tap-order fix aimed exactly at its Sol Ring +
+Plains pairing. Both looked disqualifying. Neither moved the deck at its **generation** settings.
+
+```bash
+git worktree add /tmp/wt_head origin/<branch> --detach && (cd /tmp/wt_head && bash build.sh)
+mkdir -p /tmp/dg && cp -r decks/<name> /tmp/dg/           # ISOLATED copy -- see the warning below
+rm -f /tmp/dg/<name>/*journal* /tmp/dg/<name>/*raw.json* /tmp/dg/<name>/*gencache*
+cd /tmp/dg && /tmp/wt_head/build/Release/mtg-analyze <name>/<name>.cod \
+    --cards-json <repo>/src/cards/data/cards.json --gen-mulligan recommend
+#  -> "rollout-config play digest (dN/bM, 64-game battery): <hash>"   then KILL it
+```
+
+Compare that hash to the one the running gen printed at startup. Same hash ⇒ the incoming commits do
+not change this deck's play at gen settings, the labels are current, and nothing needs restarting.
+
+- **Copy the deck to an isolated directory.** `--gen-mulligan` writes its journal/raw/gencache next to
+  the decklist; pointed at the live folder it will fight the running generation for its own artifacts.
+- **Kill the probe by pid from `ps`, not `$!`** — see the wrapper-pid trap; a probe believed dead once
+  held ~6 cores against the user's generation.
+
+**The related hazard, which the fingerprints do NOT cover:** the journal's resume gate checks
+`bucket_fp`/`deck_fp`/`seed_base`/`K`/`max_mull`/`equiv_seed`/cap `R` and the rollout depth+budget —
+but **neither `commit` nor `play_digest`**. So a rebuilt binary carrying engine changes will resume an
+in-flight journal silently and mix rollouts from two engines, which is precisely the skew Rule 0
+exists to prevent. Before any long run, `cp build/Release/mtg-analyze <logdir>/mtg-analyze.frozen` and
+resume with that copy. (`RunKeepMerge` is the opposite and is correct: it PREFERS `play_digest` and
+treats `commit` as advisory, so chunks still pool across commits that left the deck's play alone.)
+
 ## The three mulligan tiers over a deck's life
 
 | tier | policy | cost | when |
