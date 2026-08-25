@@ -270,6 +270,58 @@ private:
     std::vector<int> m_prev;
 };
 
+// ---- LINE-SCOPED UNPAID COST ("what does the committed line still owe?") ----------------------
+//
+// A GREEDY mid-line mana sink -- today, exactly one: REPLICATE -- spends from
+// `AvailableManaPool(state)`, i.e. every untapped source PLUS `state.floating_mana`. On a batch-
+// prepaid turn that float is the mana already tapped for the plan's LATER casts, so a greedy
+// replicate eats them and the later cast is then dropped ("a declared cast that can't be paid is
+// dropped", ApplyPlanDirect). The search cannot price that away, because the replicate COUNT is not
+// a plan dimension: every plan casting a replicable Sliver implicitly replicates maximally, so the
+// line "cast the Sliver, replicate 0 times, cast Thrumming Hivepool" does not exist in the space at
+// all. That is the user-reported "it replicates as much as possible even if that means you can't
+// play a Thrumming Hivepool".
+//
+// MEASURED before fixing (MTG_REPLICATE_TRACE, slivers 200 games, seed 2002): replicate fires 50
+// times and 34 of those 50 -- 68% -- squeeze at least one hand card out of affordability, 41 cards
+// in total. This is not a rare corner; greedy-max is wrong about two thirds of the time it fires.
+//
+// The fix keeps greedy-max (with genuinely spare mana there is no reason not to replicate -- USER
+// 2026-08-25) and corrects what "spare" MEANS: this holds the summed effective cost of the casts
+// the applying line has NOT paid yet, and the sink must be able to afford ITS cost ON TOP of it.
+// Zero for every plan without a mid-line sink -> byte-identical everywhere else.
+extern thread_local ManaCost g_line_unpaid_cost;
+
+// Sum `add` into `dst`, field by field ({X} and hybrids are already baked out by EffectiveCost).
+void AddManaCost(ManaCost& dst, const ManaCost& add);
+// Subtract `paid` from `dst`, clamped at zero per field (a cast paid via an alt cost / free cast
+// may owe less than the sum assumed, and the hold must never go negative).
+void SubManaCost(ManaCost& dst, const ManaCost& paid);
+
+// RAII for g_line_unpaid_cost, same nesting contract as PlanSourceReserveScope: a nested apply (a
+// breakpoint re-solve inside an apply) sets its own hold and restores the outer one on exit.
+class LineUnpaidCostScope
+{
+public:
+    explicit LineUnpaidCostScope(const ManaCost& c) : m_prev(g_line_unpaid_cost)
+    { g_line_unpaid_cost = c; }
+    ~LineUnpaidCostScope() { g_line_unpaid_cost = m_prev; }
+    LineUnpaidCostScope(const LineUnpaidCostScope&)            = delete;
+    LineUnpaidCostScope& operator=(const LineUnpaidCostScope&) = delete;
+private:
+    ManaCost m_prev;
+};
+
+// The cost a mid-line greedy sink must clear: its own cost PLUS everything the line still owes.
+// Off-switch MTG_NO_LINE_HOLD=1 drops the hold (the pre-fix greedy) for the standing A/B.
+ManaCost SinkCostWithLineHold(const ManaCost& own);
+
+// Summed mana the line's hand casts owe, for seeding the hold. Defined in TurnSolver.cpp (it reads
+// Action::cost, the same effective cost the subset math afforded the plan with); both apply paths
+// -- the rollout/human ApplyPlanDirect and the autonomous executor -- seed from this one function so
+// their holds cannot drift apart.
+ManaCost LineCastCostTotal(const std::vector<Action>& acts);
+
 // Post-spell mana sinks (C1 unit 5): animate manlands (Mutavault) / tap-and-pay token abilities
 // (Sliver Hive), run pre-combat so the creatures can attack. Twin pairs
 // (AIEngine::{AnimateLands,ActivateTapTokens} / TurnSolver's Simulate{AnimateLands,TapTokens})

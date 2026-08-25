@@ -971,6 +971,37 @@ private:
     bool m_prev;
 };
 
+// ---- MANLAND RESERVE RELEASE (human play, replicate-capable cast) ----------------------------
+//
+// A colourless-only manland (Mutavault) ranks 60 -- past even rainbow -- so the greedy spends it
+// only when nothing else can pay. That reserve is MEASURED-BEST for autonomous play (slivers, 1800
+// games, seeds 2002/3003/4004: rank 5 and rank 30 are both +0.05 turns WORSE than 60, and identical
+// to each other, so the reserve is the whole effect). Keeping the manland untapped to attack is
+// simply worth more on average than the colour it occasionally strands.
+//
+// It is not worth more when the human has a REPLICATE coming. Its {C} can only ever pay a GENERIC
+// pip, so spending it there costs no colour at all -- while spending a colour land on that same
+// generic pip strands the replicate's coloured pip outright. Repro (slivers seed 30 / game-index 29,
+// turn 5): Cavern + Courtyard + 2x Mutavault, Sinew Sliver {1}{W} with replicate {1}{W} exactly
+// payable, and the engine offered `replicate ... max_count: 0` because both white sources went to
+// the cast. Releasing the reserve for that one payment makes the count reachable.
+//
+// Scoped to the payment, and to human play, so autonomous ground truth cannot move: the AI keeps the
+// measured-better reserve, and the human keeps the option the reserve was silently costing them.
+extern thread_local bool g_release_manland_reserve;
+
+class ManlandReserveReleaseScope
+{
+public:
+    ManlandReserveReleaseScope() : m_prev(g_release_manland_reserve)
+    { g_release_manland_reserve = true; }
+    ~ManlandReserveReleaseScope() { g_release_manland_reserve = m_prev; }
+    ManlandReserveReleaseScope(const ManlandReserveReleaseScope&)            = delete;
+    ManlandReserveReleaseScope& operator=(const ManlandReserveReleaseScope&) = delete;
+private:
+    bool m_prev;
+};
+
 inline const DecisionProvider& ResolveProvider(const GameState& s)
 {
     return s.m_provider ? *s.m_provider : DefaultProvider();

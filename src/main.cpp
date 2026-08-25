@@ -341,6 +341,17 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 }
                 break;
             }
+            // The two greedy sinks, now human activations. Without a case here they fall to the
+            // "(other)" default, which reads as a CAST of the land -- meaningless for a land, and
+            // silent about what the ability actually does. Same lesson as ActivatePump above.
+            case Action::Kind::AnimateLand:
+                tag = a.card_name + ": animate (becomes a creature)"; break;
+            case Action::Kind::TapForTokenPay:
+                tag = a.card_name + ": tap for a token"; break;
+            // Channel is a from-HAND ability, so "(other)" was indistinguishable from casting the
+            // creature -- the exact ambiguity the `channel=` verb exists to remove.
+            case Action::Kind::Channel:
+                tag = a.card_name + ": channel (discard)"; break;
             default:                              tag = a.card_name + " (other)"; break;
         }
         if (a.sacrifice_land) { tag += " +sac-land"; }
@@ -841,8 +852,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
         // instead skips token-named entries in its casts-must-be-in-hand advisory.
         auto is_activation = [](Action::Kind k)
         {
+            // AnimateLand / TapForTokenPay name a LAND, which is never castable: leaving them in the
+            // casts multiset made the GUI's land+cast match read "cast Mutavault", and a hand-built
+            // line then carried both `cast=Mutavault` and `animate=Mutavault` and matched no plan.
             return k == Action::Kind::GarthActivate || k == Action::Kind::ActivateLoyalty
-                || k == Action::Kind::Equip         || k == Action::Kind::GraveyardExileAbility;
+                || k == Action::Kind::Equip         || k == Action::Kind::GraveyardExileAbility
+                || k == Action::Kind::AnimateLand   || k == Action::Kind::TapForTokenPay;
         };
         {
             bool first = true;
@@ -850,6 +865,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             {
                 if (p.actions[a].kind == Action::Kind::DiscardToLandsEdge) { continue; }
                 if (p.actions[a].kind == Action::Kind::DigDraw)            { continue; }  // a dig, not a cast
+                // Channel: a from-HAND ABILITY that discards the card. It is not a cast, and leaving
+                // it in this list made the GUI's cast multiset ask for `cast=Twinshot Sniper` AND
+                // `channel=Twinshot Sniper` for one action -- a line CheckLine rightly calls illegal.
+                if (p.actions[a].kind == Action::Kind::Channel)            { continue; }
                 if (is_activation(p.actions[a].kind))                      { continue; }  // ability, not a cast
                 if (!first) { os << ", "; }
                 first = false;
@@ -918,6 +937,11 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // untap (UntapCreature), and the whole KittyEquipment set (Equip, Balan's attach-all,
             // Stoneforge's put, the Jitte modes), which left the deck built around equipping
             // unplayable by hand.
+            // GraveyardExileAbility was the THIRTEENTH miss (2026-08-25, user report #1): Deathrite
+            // Shaman's "{B}, {T}: Exile target instant or sorcery card from a graveyard, each
+            // opponent loses 2 life" is enumerated on every fueled FiveColour turn and `is_activation`
+            // above already excludes it from `casts` -- but with no flag here the viewer had no board
+            // thumb for it, so the one ability that turns a graveyard into a clock was unusable by hand.
             if (ac.kind == Action::Kind::TapForTokens
              || ac.kind == Action::Kind::SacForMana
              || ac.kind == Action::Kind::ActivatePump
@@ -929,6 +953,9 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
              || ac.kind == Action::Kind::Equip
              || ac.kind == Action::Kind::AttachAllEquipment
              || ac.kind == Action::Kind::PutFromHandAbility
+             || ac.kind == Action::Kind::GraveyardExileAbility
+             || ac.kind == Action::Kind::AnimateLand
+             || ac.kind == Action::Kind::TapForTokenPay
              || ac.kind == Action::Kind::JitteModeAbility)
             {
                 os << ", \"activate\": true";
@@ -952,6 +979,16 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 else if (ac.kind == Action::Kind::Equip)              { os << ", \"verb\": \"equip\""; }
                 else if (ac.kind == Action::Kind::JitteModeAbility)
                 { os << ", \"verb\": \"jittemode\", \"mode\": " << ac.gy_exile_mode; }
+                // Deathrite's graveyard-exile ability names the SOURCE permanent, so `cast=Deathrite
+                // Shaman` would be ambiguous with hard-casting one of the other copies from hand --
+                // exactly the test above. `mode` distinguishes the drain (1) from the lifegain (2).
+                else if (ac.kind == Action::Kind::GraveyardExileAbility)
+                { os << ", \"verb\": \"gyexile\", \"mode\": " << ac.gy_exile_mode; }
+                // Mutavault's animate and Sliver Hive's token ability both name the LAND, so
+                // `cast=<land>` would be meaningless (a land is played, not cast) -- and a deck can
+                // hold several copies, so the verb also has to be distinguishable per source.
+                else if (ac.kind == Action::Kind::AnimateLand)    { os << ", \"verb\": \"animate\""; }
+                else if (ac.kind == Action::Kind::TapForTokenPay) { os << ", \"verb\": \"taptoken\""; }
                 // `activate_source` = the permanent the human CLICKS, when that is not `card`.
                 // PutFromHandAbility's card_name is the Equipment being PUT (it is in hand), so
                 // without this the viewer would look for a board thumb that isn't there.
@@ -969,6 +1006,19 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                     JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
                 }
             }
+            // A hand card with more than ONE way to be played needs a route in the palette for each
+            // (the MDFC-face rule generalised -- `kind` describes only one of them). Two shapes here:
+            //
+            //  * CHANNEL (Twinshot Sniper "{1}{R}, Discard this card: 2 damage to any target") is a
+            //    from-hand ABILITY, not a cast: same card, same hand slot, and it serialised as a
+            //    bare {"card": "Twinshot Sniper"} -- byte-identical in shape to CASTING the creature.
+            //    Its own `channel=` verb removes that ambiguity; the GUI badges the hand card.
+            //  * BESTOW (Gnarled Scarhide) casts the SAME card as an Aura instead of a creature. It
+            //    already splits from the creature cast by its `enchant` sub, so it needs no verb --
+            //    but without this key nothing in the plan JSON says WHICH mode the variant is, so the
+            //    choose dialog offered "Gnarled Scarhide" twice with no way to tell them apart.
+            if (ac.kind == Action::Kind::Channel) { os << ", \"channel\": true, \"verb\": \"channel\""; }
+            if (ac.bestow)                        { os << ", \"bestow\": true"; }
             if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }
@@ -1247,8 +1297,14 @@ static void CollectOwnCreatureTargets(const GameState& s, int controller,
     {
         const Permanent& p = s.battlefield[i];
         if (p.controller_index != controller) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d || !d->card.IsCreature()) { continue; }
+        // Card::IsCreature() directly, NOT a CardDatabase lookup -- the same reason the two
+        // collectors below already say so: OUR creatures are often TOKENS too (Mirrorwing's whole
+        // plan is token copies; Goblin Instigator's ETB makes one), tokens have no cards.json entry,
+        // and a LookupCached here returned null and silently dropped every one of them. The search
+        // enumerates tokens as trick targets on purpose ("tokens carry unique ids now, so they ride
+        // the target axis too", CollectActions), so this dropped a target the AI can pick and the
+        // rules allow -- copying a 1/1 Goblin Token with Twinflame is an ordinary legal line.
+        if (!p.card.IsCreature()) { continue; }
         if (!legacy_shroud && CreatureHasShroud(p, s)) { continue; }
         out.push_back({ 1, i });
         labels.push_back(p.card.m_name.str() + " (yours)");
@@ -1843,7 +1899,8 @@ static void WriteLandEntryDecisionJson(std::ostream& os, const GameState& s, con
 // Parse a --validate-line spec into a LineSpec. Tokens are ';'-separated; each is
 // "land=<name>", "cast=<name>", "vial=<name>", "retrace=<name>", "landsedge=<n>",
 // "sacout=<outlet name>" (repeat for repeat activations), "equip=<equipment name>",
-// "attachall=<name>", "sfput=<equipment name>", "jittemode=<1|2>", or the bare word "pass". Card
+// "attachall=<name>", "sfput=<equipment name>", "jittemode=<1|2>", "gyexile=<1|2>",
+// "channel=<card name>", or the bare word "pass". Card
 // names may contain spaces and commas (no MTG name contains ';' or '='), so they pass through
 // verbatim.
 static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
@@ -1873,6 +1930,10 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "sfput")     { ls.sf_puts.push_back(val); }       // Stoneforge put (card name)
         else if (key == "jittemode") { ls.jitte_modes.push_back(std::atoi(val.c_str())); }
         else if (key == "equip")     { ls.equips.push_back(val); }        // equip an Equipment in play
+        else if (key == "gyexile")   { ls.gy_exiles.push_back(std::atoi(val.c_str())); }  // Deathrite mode
+        else if (key == "channel")   { ls.channels.push_back(val); }      // from-hand channel ability
+        else if (key == "animate")   { ls.animates.push_back(val); }      // Mutavault "{1}: 2/2"
+        else if (key == "taptoken")  { ls.tap_tokens.push_back(val); }    // Sliver Hive "{5},{T}: token"
     }
     return ls;
 }

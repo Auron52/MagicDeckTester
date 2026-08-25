@@ -667,6 +667,8 @@ std::vector<int> DecisionProvider::LightPawsAuraCandidates(
     //   1 = scale-first SCALING -> power -> MV        (all scalers ahead of all flat Auras)
     //   2 = scale-last  power -> MV -> SCALING        (scaling breaks EXACT ties only)
     //   3 = conditional  scale-first WHEN another Aura is castable this/next turn, else mode 2
+    //   4 = last-chance   scale-first ONLY on the last fetch, or for a scaler already in hand
+    //                     (the USER's rule, 2026-08-25 -- see mode4_scale_first below)
     //
     // Both beat legacy decisively and by almost the same margin (12600 fresh games/arm, seeds
     // 9001-9006, d0+d3+d5): mode 1 -0.0067, mode 2 -0.0071, each 18 jobs better / 0 worse. The
@@ -692,9 +694,19 @@ std::vector<int> DecisionProvider::LightPawsAuraCandidates(
     // gi=1472, where mode 2 casts All That Glitters on T3 instead of Spirit Link and simply attacks
     // for more. Weighed against a mechanism that is real in every game, 0.0003 of cast-order churn
     // is not a reason to prefer the flat Aura.
+    // DEFAULT = 4, the user's last-chance rule (2026-08-25). Measured against mode 1 on the Auras
+    // deck, 500-per-seed held-out plus 400-per-seed train, 2700 games:
+    //     train    2002 0.0000   3003 -0.0025   4004 -0.0025
+    //     held-out 10010 +0.0020 11011 0.0000   12012 0.0000
+    // i.e. a WASH on win turn (net -0.0030 summed), which is what the user predicted -- "this might
+    // not provide that much benefit in terms of win-turn, but is a good idea in our heuristic". What
+    // it buys is the BEHAVIOUR (200-game fetch census, MTG_TRACE=aura): Rancor 55 -> 63 fetches and
+    // 4th -> 2nd most-fetched, while Ethereal Armor stays the most-fetched card at 97 (was 102) --
+    // "we still want to get Ethereal Armor most of the time" holds. MTG_AURA_RANK_MODE=1 restores
+    // the unconditional scale-first default for the A/B.
     static const int s_rank_mode = []{
         const char* e = std::getenv("MTG_AURA_RANK_MODE");
-        return (e && *e) ? std::atoi(e) : 1;   // scale-first (see the note above)
+        return (e && *e) ? std::atoi(e) : 4;   // last-chance scale-first (see the note above)
     }();
     auto scales = [&](int i) -> bool {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
@@ -721,13 +733,45 @@ std::vector<int> DecisionProvider::LightPawsAuraCandidates(
         }
         return false;
     };
+    // Mode 4 -- the USER's rule (2026-08-25), reported as "Auras aren't fetched in the right order:
+    // it prioritizes Ethereal Armor even though Rancor is better as you are about to play Rancor".
+    // Mode 1 puts EVERY scaling Aura ahead of EVERY flat one unconditionally, so Ethereal Armor beats
+    // Rancor no matter what is in hand or in the plan. The user's rule keeps the scaler for the cases
+    // where it is the LAST chance at it, and takes the flat Aura otherwise:
+    //
+    //     take the SCALER  iff  this is the last 1-drop Aura fetch in the plan
+    //                       OR  the scaler is about to be cast from hand before another fetch fires
+    //     else             take the flat Aura
+    //
+    // "Last fetch in the plan" is the negation of another_aura_soon(): each Aura you CAST fires
+    // Light-Paws again, so another castable Aura in hand IS another fetch coming. "About to be cast
+    // before we can get it" is a same-NAME copy already in hand -- fetching it then duplicates
+    // something the line delivers anyway, and the flat Aura is the one you cannot otherwise get.
+    // Applied per-CANDIDATE (a scaler in hand does not speak for a scaler that is not), so the
+    // comparator asks it of each side rather than flipping one global switch.
+    auto in_hand_by_name = [&](int i) -> bool {
+        const InternedName& nm = ap.library[i].m_name;
+        for (const Card& c : ap.hand) { if (c.m_name == nm) { return true; } }
+        return false;
+    };
+    const bool more_fetches_coming = another_aura_soon();
+    // Under mode 4 a scaling candidate keeps its head start only when this is the last fetch, or when
+    // that very Aura would otherwise arrive from hand first.
+    auto mode4_scale_first = [&](int i) -> bool {
+        return scales(i) && (!more_fetches_coming || in_hand_by_name(i));
+    };
     const bool scale_first_now = (s_rank_mode == 1)
                               || (s_rank_mode == 3 && another_aura_soon());
     std::vector<int> out = legal;
     // Every comparison is strict, so the FIRST library index wins any remaining tie -- which
     // stable_sort preserves (that is what keeps mode 0 byte-identical to the historical scan).
     std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
-        if (scale_first_now)
+        if (s_rank_mode == 4)
+        {
+            const bool sa = mode4_scale_first(a), sb = mode4_scale_first(b);
+            if (sa != sb) { return sa; }        // only a scaler this is the last chance at leads
+        }
+        else if (scale_first_now)
         {
             const bool sa = scales(a), sb = scales(b);
             if (sa != sb) { return sa; }        // all scaling Auras ahead of all flat ones
@@ -1370,6 +1414,9 @@ bool IsIdealOrderCantrip(const CardDefinition& def)
 // See IdealOrderSuppressScope: the range's cost-efficient end is this same rank with the tier
 // below stood down, so the two ends share one definition.
 thread_local bool g_suppress_ideal_order_tier = false;
+// Manland reserve release (see DecisionProviders.h). False everywhere except inside one
+// ManlandReserveReleaseScope -> every autonomous rank query is unchanged.
+thread_local bool g_release_manland_reserve = false;
 
 bool IsIdealOrderDraw(const CardDefinition& def)
 {
@@ -1645,12 +1692,29 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // COLOURED manland (dual creature-land) has valuable fixing you tap for many turns before you'd
     // rather attack, so it falls through to the normal colour rank; holding it to attack is a
     // situational call left to the search, not this ordering.
+    //
+    // THE COST OF THE RESERVE (user report, 2026-08-25). Ranking it last is not free: on a board of
+    // Cavern of Souls + Secluded Courtyard + 2x Mutavault, casting Sinew Sliver {1}{W} with replicate
+    // {1}{W} available is EXACTLY payable (each Mutavault pays a generic, each colour land pays a
+    // {W}) -- but the greedy takes Courtyard for the generic pip because 50 < 60, both white-capable
+    // lands are gone, and the replicate reports max_count 0. Repro: slivers seed 30 / game-index 29,
+    // turn 5. The manland's {C} can ONLY ever pay a generic pip, so spending it there costs nothing
+    // in colour terms; what the reserve buys is the attack, and what it costs is a stranded colour.
+    //
+    // That trade was SWEPT (slivers, 1800 games, seeds 2002/3003/4004, MTG_MANLAND_RANK selector):
+    // rank 5 and rank 30 are each +0.05 turns WORSE than the reserve at 60, and identical to each
+    // other -- so the reserve is the whole effect and the rung it would move to is irrelevant. The
+    // selector is deleted per the convention that a sweep scaffold goes once its result is recorded
+    // (docs/design/viewer-feedback-2026-08-25.md). What SHIPPED instead is human-play-only: hold the
+    // attack for the autonomous game, release it for the one payment a human's replicate follows.
     if (def.params.can_animate)
     {
         const std::vector<Color>& mprod = EffectiveProduces(s, active, def);
         bool has_colored = false;
         for (Color c : mprod) { if (c != Color::Colorless) { has_colored = true; break; } }
-        if (!has_colored) { return 60; }
+        // Released for one human-play payment that has a replicate to follow -- see the scope's
+        // note in DecisionProviders.h. Falls through to the ordinary {C}-only rung (5) below.
+        if (!has_colored && !g_release_manland_reserve) { return 60; }
     }
     // Storage-counter land (Dwarven Hold, Mercadian Bazaar): tap it LAST of all sources. Its burst is
     // a partial one -- it removes only the payment's remaining shortfall (see tap_source), so tapping
@@ -8703,6 +8767,35 @@ void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDef
         else
         { if (pw > best_sick_pw)  { best_sick_pw  = pw; best_sick  = p.card.m_number; } }
     }
+    // HUMAN PLAY: a narrowing may hide a TARGET, but it must never delete the CAST.
+    //
+    // Every pass below ranks targets by what the AI would gain, and when nothing scores the result
+    // is the `{0}` sentinel -- which does not narrow a choice, it removes the spell from the plan
+    // list entirely, so the human cannot cast it AT ALL. Measured on the recorded Mirrorwing
+    // s3_gi2 T5 board (no magnet out or in hand, pending attack short of the gap-closing bound):
+    // four own creatures, Twinflame in hand, {1}{R} trivially affordable -- and ZERO Twinflame
+    // plans offered, on the exact turn that reference records casting it.
+    //
+    // ONE representative is the whole fix, because the target is re-asked at RESOLUTION off the
+    // board and that chooser deliberately ignores this narrowing (see UnpruneHumanExempt): the
+    // human still picks any creature they like. So this costs one option-group entry, NOT the
+    // per-target fan-out that opening UnprunedGate::TrickTarget would cost -- which was measured
+    // at 30ms -> 2.1s -> 21s -> 31s per segment, past the viewer's 120s step timeout.
+    // Autonomous play is untouched: the doctrine that Twinflame waits for a magnet still holds
+    // wherever no human is driving.
+    auto human_keep_one_target = [&]()
+    {
+        if (!HumanPlayActive() || !out.empty()) { return; }
+        int pick = 0, pick_pw = -1;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me || !p.card.IsCreature() || p.card.m_number == 0)
+            { continue; }
+            const int pw = p.EffectivePower();
+            if (pw > pick_pw) { pick_pw = pw; pick = p.card.m_number; }
+        }
+        if (pick != 0) { out.push_back(pick); }
+    };
     // Twinflame (token_copy_of_target) target policy (user, Stage-6 round 3): the go-off is the
     // MAGNET fan-out -- ungated (the draw-breakpoint re-solves own "might draw into lethal", so
     // the search tries it whenever a magnet target exists; no heuristic lethal gate). Without a
@@ -8744,6 +8837,7 @@ void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDef
             if (!hd || !hd->params.copies_solo_targeted_spells) { continue; }
             if (seen_hand_magnet.insert(hc.m_name.str()).second) { out.push_back(hc.m_number); }
         }
+        human_keep_one_target();                 // narrowing may hide a target, not the cast
         if (out.empty()) { out.push_back(0); }   // narrowing active, no candidates
         return;
     }
@@ -8803,6 +8897,7 @@ void MirrorwingProvider::TrickTargetCandidates(const GameState& s, const CardDef
     // all (empty out would mean "no narrowing"), push a sentinel-free fallback: with no creatures
     // there are no legal targets and the caller's loops emit nothing anyway -- but out.empty()
     // must not silently mean "all", so mark narrowing active with a 0 (skipped by the caller).
+    human_keep_one_target();                 // narrowing may hide a target, not the cast
     if (out.empty()) { out.push_back(0); }
 }
 

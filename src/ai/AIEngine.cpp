@@ -2276,6 +2276,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                         s_condemn_trace && !m_in_rollout);
             }
 
+            // What this line still owes, seeded at the SAME point ApplyPlanDirect seeds it -- plan
+            // chosen, nothing executed -- so the executor's mid-line replicate gate and the rollout's
+            // ask the identical question. Each cast decrements it as it pays (CastSpellFromHand).
+            // Zero for every plan with no hand cast, and inert for every deck with no mid-line sink.
+            LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
+
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
@@ -4134,6 +4140,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             }
             return;
         }
+        // Paid, so the line no longer owes it -- the executor half of ApplyPlanDirect's identical
+        // decrement, keeping the mid-line replicate gate below in lockstep with the rollout's.
+        SubManaCost(g_line_unpaid_cost, effective);
     }
 
     if (m_logger)
@@ -4248,7 +4257,11 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // got offered. Zero => the firebreathing argument transfers and there is nothing to search.
         static const bool s_rep_trace = EnvOn("MTG_REPLICATE_TRACE");
         const ManaPool rep_pool_before = remaining;
-        while (remaining.CanPay(rep_cost))
+        // The trace's own question, answered: 34 of 50 events squeezed a hand card (slivers, 200
+        // games), so greedy-max was NOT dominant. Each copy must now clear its cost PLUS what the
+        // committed line still owes -- the lockstep twin of ApplyPlanDirect's replicate gate.
+        const ManaCost rep_gate = SinkCostWithLineHold(rep_cost);
+        while (remaining.CanPay(rep_gate))
         {
             if (!TapForCost(state, rep_cost, available, true)) { break; }
             remaining = AvailableManaPool(state);

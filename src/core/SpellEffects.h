@@ -6986,6 +6986,64 @@ inline int RitualRefloatMana(const GameState& state, int count)
     return total;
 }
 
+// The same refloat, COLOURED. RitualRefloatMana answers "how much"; this answers "of what", and it
+// is what the real resolution floats. Untapping an Island and tapping it again yields BLUE, not
+// "any colour" -- but the flat wild lump the refloat used to add paid a {W} pip off a mono-red
+// board (the same defect Irencrag Feat's missing ritual_float_color had; user report #6).
+//
+// Per source, the colour rule is EXACTLY tap_source's (ManaPayment.cpp), so a refloated tap and a
+// real tap produce the same pool: a single-colour source gives `amt` of its colour; a lumpy
+// multi-colour source (a Karoo's 2-for-1) gives one of each colour it makes; a genuinely FLEXIBLE
+// one-mana source (Forbidden Orchard, a rainbow dork) stays WILD, because there the controller
+// really does choose the colour at tap time. Per-source contribution always sums to exactly
+// ManaProducedPerTap, so Total() == RitualRefloatMana(state, count) by construction -- the planner's
+// credit (which reads the int) is unchanged, and only the realised colours move.
+// Forward decl: EffectiveProduces is defined further down (its default argument lives there, so it
+// must not be repeated here -- the call below passes in_hand explicitly).
+inline const std::vector<Color>& EffectiveProduces(const GameState& state, int controller,
+                                                  const CardDefinition& def, bool in_hand);
+
+inline ManaPool RitualRefloatPool(const GameState& state, int count)
+{
+    ManaPool pool;
+    if (count <= 0) { return pool; }
+    const int active = state.active_player_index;
+    std::vector<std::pair<int, const CardDefinition*>> srcs;   // (per-tap output, def)
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const bool is_src = d->card.IsLand()
+                         || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+                         || d->params.mana_rock;
+        if (!is_src) { continue; }
+        srcs.emplace_back(ManaProducedPerTap(*d), d);
+    }
+    // Highest output first, battlefield order breaking ties (stable_sort) -- the same selection
+    // RitualRefloatMana's plain descending sort makes, made deterministic in the source identity too.
+    std::stable_sort(srcs.begin(), srcs.end(),
+                     [](const std::pair<int, const CardDefinition*>& a,
+                        const std::pair<int, const CardDefinition*>& b) { return a.first > b.first; });
+    for (int i = 0; i < static_cast<int>(srcs.size()) && i < count; ++i)
+    {
+        const int amt = srcs[i].first;
+        if (amt <= 0) { continue; }
+        // Consumed immediately -- EffectiveProduces may return a thread_local buffer (reflecting /
+        // domain sources), valid only until the next call.
+        const std::vector<Color>& prod = EffectiveProduces(state, active, *srcs[i].second, false);
+        if (prod.size() == 1)                      { pool.Add(prod[0], amt); }
+        else if (amt > 1 && prod.size() > 1)
+        {
+            int left = amt;
+            for (Color c : prod) { if (left <= 0) { break; } pool.Add(c, 1); --left; }
+            pool.wild += left;                     // more output than colours -> the rest is free choice
+        }
+        else                                       { pool.wild += amt; }   // rainbow / unknown: real choice
+    }
+    return pool;
+}
+
 // Number of mana sources the active player controls (the natural chosen X for Reality Spasm:
 // untap them ALL, which Hinata makes free). Used to size the ritual's X in the planner.
 inline int ManaSourceCount(const GameState& state)
@@ -7077,6 +7135,42 @@ inline void AddChosenColorFloat(GameState& state, const std::string& col, int am
 // RitualFloatAmount so the resolved float scales by (k+1) in lockstep across all cast paths.
 inline void ApplyRitualFloat(GameState& state, const CardDefinition& def, int chosen_x, int copies = 1)
 {
+    // An UNTAP ritual (Reality Spasm) refloats the output of the sources it untaps, so its colours are
+    // those sources' colours -- see RitualRefloatPool. A FIXED burst names its colour on the card
+    // (ritual_float_color); every ritual in the database now sets one, so the empty-string WILD
+    // fallback in AddColorToPool is a guard, not a mode any real card takes.
+    //
+    // MTG_LEGACY_RITUAL_WILD=1 restores the PRE-FIX behaviour (every ritual floats WILD, which pays
+    // any coloured pip) for A/B ATTRIBUTION only -- it is how a ground-truth game that moved is tied
+    // to this fix rather than to another change in the same batch. It re-enables an illegal payment;
+    // never run a measurement on it.
+    // AUDIT (MTG_WILD_PIP_AUDIT): mana a ritual floats with NO colour, which then pays any coloured
+    // pip -- exactly Irencrag Feat's seven "red" and Reality Spasm's untap. Counted on BOTH paths,
+    // so the same meter sizes the old hole (fixes off) and asserts it is shut (fixes on, = 0).
+    static const bool s_legacy_wild = EnvOn("MTG_LEGACY_RITUAL_WILD");
+    if (WildPipAuditOn())
+    {
+        const int amt = RitualFloatAmount(state, def, chosen_x, copies);
+        const bool uncolored = s_legacy_wild
+                             || (!def.params.untap_x_mana_sources
+                                 && def.params.ritual_float_color.empty());
+        if (amt > 0 && uncolored)
+        { g_ritual_uncolored_float.fetch_add(amt, std::memory_order_relaxed); }
+    }
+    if (s_legacy_wild)
+    {
+        // Exactly the pre-fix line: one colourless-agnostic WILD lump, ignoring ritual_float_color
+        // (RitualFloatAmount already handles the untap case via RitualRefloatMana).
+        AddChosenColorFloat(state, std::string(), RitualFloatAmount(state, def, chosen_x, copies));
+        return;
+    }
+    if (def.params.untap_x_mana_sources)
+    {
+        ManaPool add = RitualRefloatPool(state, chosen_x);
+        for (int c = 1; c < copies; ++c) { state.floating_mana.AddPool(add); }   // copies==1 in practice
+        state.floating_mana.AddPool(add);
+        return;
+    }
     AddChosenColorFloat(state, def.params.ritual_float_color, RitualFloatAmount(state, def, chosen_x, copies));
 }
 
@@ -7941,7 +8035,12 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost)
     drain(cost.red,       reserve.red);
     drain(cost.green,     reserve.green);
     drain(cost.colorless, reserve.colorless);
-    // 2) Wild reserve mana covers any remaining COLOUR pip (not {C}).
+    // 2) Wild reserve mana covers any remaining COLOUR pip (not {C}). This is LEGITIMATE: `wild`
+    // means "one tap of a source that can make more than one colour". Reports #6 and #7 were not
+    // about this step -- they were about PRODUCERS putting inflexible mana into `wild` (a ritual
+    // with no ritual_float_color; BatchPrepayMainCasts dumping a Sol Ring's {C}{C} in). Counting
+    // wild->colour payments here is therefore useless as an assertion: it reads ~1M per 200 healthy
+    // Hinata games. The audit lives at the two producers instead (MTG_WILD_PIP_AUDIT).
     drain(cost.white, reserve.wild);
     drain(cost.blue,  reserve.wild);
     drain(cost.black, reserve.wild);

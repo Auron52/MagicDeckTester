@@ -213,6 +213,76 @@ NAME_CHOICES = {
 }
 
 # ---------------------------------------------------------------------------
+# BOARD-ACTIVATION MANIFEST: cards.json parameter -> the marker its plan action MUST carry in the
+# human-play decision JSON. This is the FIFTH wiring site tools/play/DECISIONS.md describes ("an
+# ability of a permanent ALREADY IN PLAY"), and until 2026-08-25 nothing checked it: every one of
+# these params was classified in NAME_CHOICES as "rides main_phase", a claim the audit asserted and
+# never verified. Four abilities were unreachable by a human behind that unverified claim --
+# Deathrite Shaman's graveyard exile (a plan action with no `activate` flag, so no board thumb),
+# Mutavault's animate and Sliver Hive's token ability (no Action::Kind AT ALL -- greedy mana sinks),
+# and Twinshot Sniper's Channel (a from-HAND ability serialised identically to casting the creature).
+#
+# Each entry: param -> (marker, predicate). `marker` is either "activate" (the flag alone is enough,
+# because `cast=<name>` is unambiguous for that kind) or "verb:<v>" (the kind needs its own LineSpec
+# verb because `cast=<name>` would collide with a hand cast of the same-named card).
+#
+# The check is: for every deck card carrying the param, did the sweep ever OFFER a plan action with
+# that marker? Never offered while the source did reach play = HARD MISS (the ability is unusable).
+# Source never reached play = UNVERIFIED (soft), same policy as the decision-type sweep.
+def _activation_marker(a):
+    """Every marker string a single plan-action JSON satisfies."""
+    out = set()
+    if a.get("activate"):        out.add("activate")
+    if a.get("verb"):            out.add("verb:" + a["verb"])
+    if a.get("channel"):         out.add("verb:channel")
+    return out
+
+# The third field is where the ability's own COST lives: a param name holding a mana-cost string or
+# a generic int, or None for a free ({T} / counter / loyalty) activation. It is what separates "the
+# engine cannot wire this" (a HARD miss) from "the sweep never had the mana" (UNVERIFIED) -- without
+# it a {5} ability like Sliver Hive's reads as broken in any short sweep.
+BOARD_ACTIVATIONS = {
+    "tap_creates_tokens_per_controlled_subtype": ("activate",       truthy,   None),  # Krenko's {T}
+    "sac_creature_outlet":                       ("activate",       truthy,   "sac_creature_cost"),
+    "sac_for_mana_amount":                       ("activate",       positive, None),  # Lotus crack
+    "activated_reveal_top_cost":                 ("activate",       truthy,   "activated_reveal_top_cost"),
+    "loyalty_abilities":                         ("activate",       truthy,   None),  # planeswalkers
+    "garth_copy_ability":                        ("activate",       truthy,   None),  # Garth's tap
+    "untap_creature_cost":                       ("activate",       truthy,   "untap_creature_cost"),
+    "team_pump_cost":                            ("activate",       truthy,   "team_pump_cost"),
+    "firebreathing_discard":                     ("activate",       truthy,   "firebreathing_cost"),
+    "attach_all_equipment_cost":                 ("verb:attachall", truthy,   "attach_all_equipment_cost"),
+    "tap_put_from_hand_cost":                    ("verb:sfput",     truthy,   "tap_put_from_hand_cost"),
+    "equip_cost_generic":                        ("verb:equip",     truthy,   "equip_cost_generic"),
+    "equip_combat_damage_charges":               ("verb:jittemode", truthy,   None),  # spends a counter
+    "gy_exile_instant_sorcery_drain":            ("verb:gyexile",   positive, 1),     # "{B}, {T}"
+    "can_animate":                               ("verb:animate",   truthy,   "animate_cost"),
+    "tap_token_cost":                            ("verb:taptoken",  truthy,   "tap_token_cost"),
+    "channel_cost":                              ("verb:channel",   truthy,   "channel_cost"),
+    # gy_exile_creature_lifegain is the DEFAULT-OFF goldfish cut (MTG_SKIP_INERT_LIFEGAIN): the
+    # engine deliberately does not enumerate it, so requiring it to surface would fail by design.
+}
+
+
+def _cost_mv(card, cost_from):
+    """Mana value of a board activation's own cost. `cost_from` is an int (a literal MV), a param
+    name holding either a mana-cost STRING ("{1}{W}") or a plain generic int, or None (free)."""
+    if cost_from is None:
+        return 0
+    if isinstance(cost_from, int):
+        return cost_from
+    v = (card.get("parameters") or {}).get(cost_from)
+    if isinstance(v, int):
+        return v
+    if isinstance(v, str):
+        mv = 0
+        for sym in re.findall(r"\{([^}]*)\}", v):
+            mv += int(sym) if sym.isdigit() else 1
+        return mv
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # INERT param registry: cards.json params that create NO interactive player choice, each with
 # the reason. Together with MANIFEST (decision params) + NAME_CHOICES, this must cover EVERY
 # param key any deck card uses. The self-guard (below) hard-fails on a param in NEITHER set --
@@ -794,7 +864,7 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
                            f"(try a different/wider seed or more games)"})
 
 
-def run_sweep(deck, prof, base_seed, n_games, max_turns):
+def run_sweep(deck, prof, base_seed, n_games, max_turns, mana_names=frozenset()):
     """Return (observed decision types, text of the plans actually CHOSEN).
 
     Only the chosen plan's summary counts as "cast" -- scanning every offered variant would
@@ -802,6 +872,10 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns):
     """
     GUARD = 160
     observed = collections.Counter()
+    activations = set()             # activation markers OFFERED (board-activation gate, below)
+    # name -> the most mana the controller plausibly had while that permanent sat UNTAPPED. Proxy
+    # for "was the ability ever affordable", so an unaffordable {5} is UNVERIFIED, not a hard miss.
+    max_open_mana = collections.defaultdict(int)
     cast_text = []
     stuck = 0                       # games that hit the guard without finishing (driver pathology)
     for gi in range(n_games):
@@ -813,6 +887,20 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns):
             if d is None:
                 break
             observed[d.get("type", "?")] += 1
+            # Board activations are gated on being OFFERED, not chosen: the question is whether a
+            # human COULD express the ability, which the plan menu answers on its own.
+            for pl in d.get("plans", []):
+                for a in pl.get("actions", []):
+                    activations |= _activation_marker(a)
+            if d.get("type") == "main_phase":
+                bf = (d.get("me") or {}).get("battlefield") or []
+                open_mana = sum(1 for b in bf if not b.get("tapped")
+                                and (b.get("is_land") or b.get("name") in mana_names))
+                for b in bf:
+                    if not b.get("tapped"):
+                        nm = b.get("name")
+                        if open_mana > max_open_mana[nm]:
+                            max_open_mana[nm] = open_mana
             choice = pick(d)
             if d.get("type") == "jitte":     # side-channel reply, keyed by turn (see step())
                 jitte.append(f"{d.get('turn')}:{choice}")
@@ -837,7 +925,7 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns):
             push_choice(choices, choice)
         if guard >= GUARD:
             stuck += 1
-    return observed, cast_text, stuck
+    return observed, cast_text, stuck, activations, max_open_mana
 
 
 def print_oracle_crosscheck(cards):
@@ -944,7 +1032,16 @@ def main():
               "Run without --no-sweep to verify decisions actually surface.")
         return 0
 
-    if not expected_types:
+    # A deck with no decision-TYPE expectations can still have board activations to verify (a pure
+    # equipment/manland deck), so this early exit must ask about both -- it used to skip the sweep
+    # entirely and report PASS without driving a single game.
+    def _has_board_activation(cs):
+        for c in cs:
+            for key, (_marker, pred, _cf) in BOARD_ACTIVATIONS.items():
+                v = (c.get("parameters") or {}).get(key)
+                if v is not None and pred(v): return True
+        return False
+    if not expected_types and not _has_board_activation(cards):
         print("No param-driven interactive decisions expected for this deck. PASS.")
         return 0
     if prof is None:
@@ -953,7 +1050,12 @@ def main():
         return 2
 
     print(f"Driving {n_games} games from seed {base_seed} to observe surfaced decisions...")
-    observed, cast_text, stuck = run_sweep(deck, prof, base_seed, n_games, max_turns)
+    # Nonland permanents that make mana (dorks / rocks), so the open-mana proxy above counts them.
+    mana_names = frozenset(c.get("name") for c in cards
+                           if (c.get("parameters") or {}).get("produces")
+                           or (c.get("parameters") or {}).get("mana_rock"))
+    observed, cast_text, stuck, activations, max_open_mana = run_sweep(
+        deck, prof, base_seed, n_games, max_turns, mana_names)
     obs_types = set(observed) - {"main_phase", "mulligan", "bottom", "?"}
     print(f"Observed decision types: {sorted(obs_types) or '(none)'}")
 
@@ -983,11 +1085,49 @@ def main():
         for name, m, _ in unverified:
             print(f"  {name}: expected '{m}' (not reached)")
 
+    # ---- BOARD-ACTIVATION GATE (the fifth wiring site) --------------------
+    # An ability of a permanent already in play is not a decision `type` at all, so the diff above
+    # is blind to it: it rides the main-phase LINE and needs `activate: true` (to make the board
+    # thumb clickable) plus, when `cast=<name>` would be ambiguous, its own LineSpec verb. Four
+    # abilities shipped unreachable behind the unverified "rides main_phase" classification -- see
+    # BOARD_ACTIVATIONS. `joined` (the CHOSEN plan summaries) is what tells a never-offered ability
+    # apart from one whose source never reached play.
+    act_miss, act_unver = [], []
+    for name, card in ((c.get("name"), c) for c in cards):
+        for key, (marker, pred, cost_from) in BOARD_ACTIVATIONS.items():
+            v = (card.get("parameters") or {}).get(key)
+            if v is None or not pred(v):
+                continue
+            if marker in activations:
+                continue
+            # Never affordable while the source was untapped -> the sweep could not have offered it
+            # whatever the wiring says. Soft, not a miss.
+            if max_open_mana.get(name, 0) < _cost_mv(card, cost_from):
+                act_unver.append((name, key, marker + "  [never affordable in this sweep]"))
+                continue
+            # Source reached play? For a LAND the name shows up as `land=<name>`; for a spell as a
+            # cast. Either way `joined` holds the chosen summaries, which is the same evidence the
+            # decision-type diff uses.
+            reached = (name or "").lower() in joined
+            (act_miss if reached else act_unver).append((name, key, marker))
+    if act_unver:
+        print("\nUNVERIFIED board activations (source never reached play in the sweep):")
+        for name, key, marker in act_unver:
+            print(f"  {name}: {key} -> expected a plan action carrying '{marker}' (not reached)")
+    if act_miss:
+        print("\nHARD MISS -- board ACTIVATION unusable by a human. The source reached play but no "
+              "enumerated plan action carried the marker, so the viewer has no way to express the "
+              "ability (see 'Board activations' in tools/play/DECISIONS.md for the three things it "
+              "needs: the `activate: true` flag, a LineSpec verb, and a CheckLine SubChoice):")
+        for name, key, marker in act_miss:
+            print(f"  {name}: {key} -> NO plan action carried '{marker}'")
+
     if hard_miss:
         print("\nHARD MISS -- card WAS cast but its decision never surfaced "
               "(silently heuristic-resolved; go back to Stage 2c-ter and wire it):")
         for name, m, _ in hard_miss:
             print(f"  {name}: expected '{m}' -> NOT surfaced")
+    if hard_miss or act_miss:
         return 1
 
     if unverified:

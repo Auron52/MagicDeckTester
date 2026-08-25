@@ -1422,6 +1422,51 @@ bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vect
 // reserve-then-fallback below is byte-identical to before for every other plan.
 thread_local std::vector<int> g_plan_reserved_sources;
 
+// Line-scoped unpaid cost (see the header). Zero unless a plan application set it.
+thread_local ManaCost g_line_unpaid_cost;
+
+void AddManaCost(ManaCost& dst, const ManaCost& add)
+{
+    dst.generic   += add.generic;   dst.white += add.white; dst.blue  += add.blue;
+    dst.black     += add.black;     dst.red   += add.red;   dst.green += add.green;
+    dst.colorless += add.colorless;
+}
+
+void SubManaCost(ManaCost& dst, const ManaCost& paid)
+{
+    auto s = [](int& d, int p) { d = std::max(0, d - p); };
+    s(dst.generic, paid.generic); s(dst.white, paid.white); s(dst.blue, paid.blue);
+    s(dst.black, paid.black);     s(dst.red, paid.red);     s(dst.green, paid.green);
+    s(dst.colorless, paid.colorless);
+}
+
+ManaCost SinkCostWithLineHold(const ManaCost& own)
+{
+    // HUMAN PLAY ONLY, and the A/B is why (1800 games, slivers, seeds 2002/3003/4004, hold ON minus
+    // hold OFF): +0.0484 / +0.0150 / +0.0233 turns -- the hold is WORSE on every seed. Greedy-max
+    // replicate wins on average even when it eats a co-planned cast, because a replicate token is a
+    // lord-buffed Sliver body and the card it squeezes out usually is not worth more. The USER's
+    // instinct ("I can't think of an advantage to not replicating if we have the extra mana") is
+    // right for the AI, and then some.
+    //
+    // It is NOT right for a HUMAN's declared line. There the casts are an intent, not a heuristic:
+    // silently converting "cast Hatchery Sliver AND Thrumming Hivepool" into "cast the Sliver and
+    // make tokens" is the reported bug, and it also makes the replicate dialog's offered 0..max a
+    // lie (the max is only reachable by dropping something the human asked for). So the hold binds
+    // exactly where a declared line exists, and autonomous play -- and therefore all ground truth --
+    // is untouched by construction.
+    //
+    // MTG_LINE_HOLD=1 forces it on (the arm that produced the numbers above); MTG_NO_LINE_HOLD=1
+    // forces it off, including in human play.
+    static const bool s_no_hold    = EnvOn("MTG_NO_LINE_HOLD");
+    static const bool s_force_hold = EnvOn("MTG_LINE_HOLD");
+    if (s_no_hold) { return own; }
+    if (!s_force_hold && !HumanPlayActive()) { return own; }
+    ManaCost c = own;
+    AddManaCost(c, g_line_unpaid_cost);
+    return c;
+}
+
 static std::uint64_t PlanReserveMask(const GameState& state)
 {
     if (g_plan_reserved_sources.empty()) { return 0; }
@@ -1521,6 +1566,12 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
 // leaves the board untouched).
 void AnimateLandsShared(GameState& state, ManaPool* available)
 {
+    // HUMAN PLAY: stand down. The animate is an enumerated plan action there
+    // (Action::Kind::AnimateLand), so the human asks for it or declines it; firing greedily as well
+    // would make the queued action pointless and "no" unexpressible -- the same reason
+    // DeferSacOutletPreCombat is skipped under HumanPlayActive(). Autonomous play is unchanged, so
+    // no ground truth moves.
+    if (HumanPlayActive()) { return; }
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index
@@ -1545,6 +1596,9 @@ void AnimateLandsShared(GameState& state, ManaPool* available)
 // branch below keeps each side byte-identical to its historical behaviour.
 void ActivateTapTokensShared(GameState& state, ManaPool* available)
 {
+    // HUMAN PLAY: stand down -- the token ability is Action::Kind::TapForTokenPay there. Same
+    // reasoning as AnimateLandsShared above.
+    if (HumanPlayActive()) { return; }
     int bf_size = static_cast<int>(state.battlefield.size());
     for (int i = 0; i < bf_size; ++i)
     {

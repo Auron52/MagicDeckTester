@@ -2025,10 +2025,11 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Add seven {R}. You can cast only one more spell this turn. [A burst-mana RITUAL: pay {1}{R}{R}{R} (4), add seven {R} to the turn-scoped reserve (state.floating_mana) -- net +3 mana and a red fix. Modelled via ritual_floating_mana:7 (the floating-mana engine, shared with Reality Spasm); the planner credits the SAME 7 it floats so the predicted combo and the executed one stay in lockstep. DRAWBACK 'you can cast only one more spell this turn' modelled via max_casts_after:1 -- after Irencrag resolves the active player may cast at most ONE more spell, so the only legal combo shape is (other rituals/setup) -> Irencrag -> Crackle (Crackle = the one more spell). Without this the search could illegally chain Irencrag -> Reality Spasm -> Crackle. Needs no Hinata (no {X} to discount).]",
+   "oracle_text": "Add seven {R}. You can cast only one more spell this turn. [A burst-mana RITUAL: pay {1}{R}{R}{R} (4), add seven {R} to the turn-scoped reserve (state.floating_mana.red) -- net +3 mana and a red fix. Modelled via ritual_floating_mana:7 + ritual_float_color:R; the planner credits the SAME 7 it floats so the predicted combo and the executed one stay in lockstep. The COLOUR is load-bearing: with the default (empty = WILD) those seven paid ANY pip, so Hinata {1}{U}{R}{W} was castable off a mono-red board with no white or blue source at all -- the user's 'Hinata is played without having the right colours' report. Red mana pays red and generic pips only. DRAWBACK 'you can cast only one more spell this turn' modelled via max_casts_after:1 -- after Irencrag resolves the active player may cast at most ONE more spell, so the only legal combo shape is (other rituals/setup) -> Irencrag -> Crackle (Crackle = the one more spell). Without this the search could illegally chain Irencrag -> Reality Spasm -> Crackle. Needs no Hinata (no {X} to discount).]",
    "template": "custom",
    "parameters": {
     "ritual_floating_mana": 7,
+    "ritual_float_color": "R",
     "max_casts_after": 1
    }
   },
@@ -2040,7 +2041,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Add {R}{R}{R}. [Burst-mana RITUAL: pay {1}{R} (2), add {R}{R}{R} = GROSS 3 RED to the turn-scoped reserve (state.floating_mana.red), net +1. Modelled via ritual_floating_mana:3 + ritual_float_color:R (colored-float variant so the red can't pay the off-color {B}/{G} pips of the Dragonstorm-only dragons; Irencrag Feat/Reality Spasm keep the default wild). Instant speed is inert in the single-player goldfish. No drawback, so no max_casts_after.]",
+   "oracle_text": "Add {R}{R}{R}. [Burst-mana RITUAL: pay {1}{R} (2), add {R}{R}{R} = GROSS 3 RED to the turn-scoped reserve (state.floating_mana.red), net +1. Modelled via ritual_floating_mana:3 + ritual_float_color:R (colored-float variant so the red can't pay the off-color {B}/{G} pips of the Dragonstorm-only dragons; Irencrag Feat now carries it too, and Reality Spasm's untap-refloat is coloured by the sources it untaps). Instant speed is inert in the single-player goldfish. No drawback, so no max_casts_after.]",
    "template": "custom",
    "parameters": {
     "ritual_floating_mana": 3,
@@ -2055,7 +2056,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Add {R}{R}{R}{R}{R}. [Burst-mana RITUAL: pay {2}{R} (3), add {R}{R}{R}{R}{R} = GROSS 5 RED to the turn-scoped reserve (state.floating_mana.red), net +2. Modelled via ritual_floating_mana:5 + ritual_float_color:R (colored-float variant so the red can't pay the off-color {B}/{G} pips of the Dragonstorm-only dragons; Irencrag Feat/Reality Spasm keep the default wild). Instant speed is inert in the single-player goldfish. No drawback, so no max_casts_after.]",
+   "oracle_text": "Add {R}{R}{R}{R}{R}. [Burst-mana RITUAL: pay {2}{R} (3), add {R}{R}{R}{R}{R} = GROSS 5 RED to the turn-scoped reserve (state.floating_mana.red), net +2. Modelled via ritual_floating_mana:5 + ritual_float_color:R (colored-float variant so the red can't pay the off-color {B}/{G} pips of the Dragonstorm-only dragons; Irencrag Feat now carries it too, and Reality Spasm's untap-refloat is coloured by the sources it untaps). Instant speed is inert in the single-player goldfish. No drawback, so no max_casts_after.]",
    "template": "custom",
    "parameters": {
     "ritual_floating_mana": 5,

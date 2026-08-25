@@ -95,6 +95,18 @@ any one makes the ability unusable by a human while every engine-side check stay
 happened to Call of the Wild, all three planeswalkers, Garth, and every Equipment in the deck built
 around them):
 
+> **THIS SITE IS NOW GATED (2026-08-25).** `scripts/audit_viewer_decisions.py` carries a
+> `BOARD_ACTIVATIONS` manifest (param → the `activate` / `verb:<v>` marker its plan action must
+> carry) and asserts, over the sweep, that the marker was actually OFFERED. It exists because the
+> auditor used to classify every one of these params as *"rides main_phase"* — a claim it asserted
+> and never checked — and four abilities shipped unreachable behind it: **Deathrite Shaman's**
+> graveyard exile (a plan action with no `activate` flag), **Mutavault's** animate and **Sliver
+> Hive's** token ability (no `Action::Kind` AT ALL — they were greedy mana sinks in
+> `AnimateLandsShared` / `ActivateTapTokensShared`, so a human could neither ask for them nor decline
+> them), and **Twinshot Sniper's** Channel (a from-HAND ability that serialised identically to
+> casting the creature). An ability whose cost was never affordable while its source sat untapped is
+> reported UNVERIFIED, not a miss — the manifest's third field is where that cost is read from.
+
 1. **`activate: true` on the plan action** (`src/main.cpp`, the plan-action JSON). This is what makes
    the permanent's board thumb clickable — the GUI can only queue cards from HAND, so without the flag
    there is no way to express the ability. Add `activate_source` when the clicked permanent is not the
@@ -112,6 +124,23 @@ around them):
 Anything decided AFTER the commit belongs in the choose-variant dialog (site 3); anything the verb must
 NAME has to be picked at QUEUE time, which is what the GUI's activation picker (`activationPickerHtml`,
 opened when one source offers several distinct activations) is for.
+
+**The verbs added 2026-08-25** (all from the user's "abilities can't be used" report):
+
+| verb | ability | why it needs its own verb |
+|---|---|---|
+| `gyexile=<mode>` | Deathrite Shaman's `{B},{T}: exile an instant/sorcery, each opponent loses 2` | the action names the SOURCE, so `cast=Deathrite Shaman` collides with hard-casting one of the other three copies |
+| `animate=<land>` | Mutavault's `{1}: becomes a 2/2` | a land is played, not cast, so `cast=<land>` is meaningless; several copies must stay distinguishable |
+| `taptoken=<land>` | Sliver Hive's `{5},{T}: create a Sliver` | same |
+| `channel=<card>` | Twinshot Sniper's `{1}{R}, Discard this card: 2 damage` | a from-HAND ability, not a board activation and not a cast — `cast=<name>` cannot say which of the two ways you are playing the card |
+
+`animate` and `taptoken` are enumerated **only under `HumanPlayActive()`** (the `jitte_modes_open`
+precedent) and the greedy sinks `AnimateLandsShared` / `ActivateTapTokensShared` **stand down** there,
+so the human's answer is the only one — while autonomous play keeps the measured-better greedy and no
+ground truth moves. `bestow` is NOT a verb: a bestowed cast already splits from the creature cast by
+its `enchant` sub, and it now also emits an explicit `bestow` mode sub so the choose dialog can say
+which of the two it is (before, the mixed sub/no-sub set fell into the flat fallback picker and the
+two modes rendered as the same card name twice).
 
 **EQUIP is the exception: it is a DRAG, not a click (USER 2026-08-24).** *"Change the means to equip
 equipment to resemble the approach used for auras — rather than activate them normally you would drag

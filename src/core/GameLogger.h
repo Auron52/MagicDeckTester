@@ -842,6 +842,20 @@ inline bool HumanPlayActive()
 // symptom). Split by path: `rollout` = search scoring (ApplyPlanDirect::apply_one, TurnSolver.cpp);
 // `real` = the actually-executed move (AIEngine::CastSpellFromHand). Purely additive counters -- game
 // logic and every digest are byte-identical whether or not the audit is on. Dumped to stderr at exit.
+// ---- WILD-pays-a-COLOUR-pip audit (MEASUREMENT ONLY; MTG_WILD_PIP_AUDIT) ---------------------
+// Counts mana put INTO `ManaPool::wild` that was never colour-flexible -- the actual defect behind
+// reports #6 and #7. Deliberately NOT counted at the consumer (SpendFloatingTowardCost step 2):
+// spending wild on a colour is legitimate, being what a dual land's tap looks like, and that meter
+// reads ~1M per 200 healthy Hinata games. The two producers are checkable, and both must read ZERO
+// with the fixes on:
+//   ritual_uncolored_float  a ritual floating mana with no declared colour (Irencrag's seven "red")
+//   prepay_excess           BatchPrepayMainCasts wild beyond the batch's GENERIC requirement (a Sol
+//                           Ring's {C}{C} laundered into "any pip")
+// Purely additive -- game logic and every digest are byte-identical whether or not it is on.
+bool WildPipAuditOn();
+extern std::atomic<long> g_ritual_uncolored_float;   // rituals floating mana with no colour
+extern std::atomic<long> g_wild_prepay_excess;       // prepaid wild beyond the batch's generic pips
+
 bool AffordAuditOn();
 extern std::atomic<long> g_afford_rollout_fails;
 extern std::atomic<long> g_afford_rollout_attempts;

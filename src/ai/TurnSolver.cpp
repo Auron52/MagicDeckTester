@@ -7623,6 +7623,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // hand. Emitted only when suspend_time_counters > 0 -> every other deck is byte-identical.
     for (int i = 0; i < n; ++i)
     {
+        // Staged cards are impulse-EXILED (castable-only), and suspend is explicitly an alternative
+        // to casting "from your hand" (CR 702.61a) -- so it cannot reach them. Apex of Power grants
+        // only "you may CAST spells from among them", which suspending is not. Same skip, same
+        // reason, as the Aether Vial put and the Stoneforge put above: the real executor's hand
+        // never holds staged cards mid-phase, simulated states do, and without this the search
+        // suspends a Lotus Bloom off Apex's exile -- a play reality cannot make (user report #4).
+        // MTG_LEGACY_STAGED_SUSPEND=1 re-enables the illegal suspend for A/B ATTRIBUTION only (tying
+        // a moved ground-truth game to THIS fix rather than another in the same batch). It restores
+        // a rules violation; never run a measurement on it.
+        static const bool s_legacy_staged_suspend = EnvOn("MTG_LEGACY_STAGED_SUSPEND");
+        if (ap.hand[i].m_is_staged && !s_legacy_staged_suspend) { continue; }
         auto sdef = CardDatabase::Instance().LookupCached(ap.hand[i]);
         if (!sdef || sdef->params.suspend_time_counters <= 0) { continue; }
         Action a;
@@ -8785,6 +8796,61 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 actions.push_back(std::move(a));
             }
 
+            // ---- The two GREEDY post-cast mana sinks, as real actions -- HUMAN PLAY ONLY ----------
+            // Mutavault's "{1}: becomes a 2/2" and Sliver Hive's "{5}, {T}: create a Sliver" are the
+            // only activated abilities in the database with NO Action::Kind of their own: both are
+            // spent automatically by AnimateLandsShared / ActivateTapTokensShared after the main
+            // casts. That is measured-fine for the AI, but it left a human unable to ask for either
+            // OR to decline it -- there was no plan action, hence no `activate` flag, hence no board
+            // affordance at all (user report #1, "abilities can't be used").
+            //
+            // Enumerated only under HumanPlayActive(), exactly like the Jitte's non-combat modes and
+            // Crackle's target-count range: the autonomous plan space -- and therefore all ground
+            // truth -- is untouched by construction, and under human play the greedy sinks stand down
+            // (see AnimateLandsShared / ActivateTapTokensShared) so the human's answer is the only one.
+            if (HumanPlayActive())
+            {
+                // Mutavault: one action per un-animated, untapped animatable land it controls.
+                if (sd->params.can_animate && sd->params.animate_cost.has_value()
+                    && !src.is_animated && !src.tapped)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::AnimateLand;
+                    a.card_name      = src.card.m_name;
+                    a.hand_index     = -1;
+                    a.sac_source_id  = src.card.m_number;
+                    a.cost           = sd->params.animate_cost.value();
+                    a.eval           = 1;
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+                // Sliver Hive: gated on the same "do you control a matching creature" clause the
+                // greedy checks, so a plan menu never offers a guaranteed no-op.
+                if (sd->params.tap_token_cost.has_value() && !src.tapped)
+                {
+                    bool gate_ok = sd->params.tap_token_requires_subtypes.empty();
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (gate_ok) { break; }
+                        if (q.controller_index != state.active_player_index) { continue; }
+                        for (const std::string& req : sd->params.tap_token_requires_subtypes)
+                        { if (CardHasSubtype(q.card, req)) { gate_ok = true; break; } }
+                    }
+                    if (gate_ok)
+                    {
+                        Action a;
+                        a.kind           = Action::Kind::TapForTokenPay;
+                        a.card_name      = src.card.m_name;
+                        a.hand_index     = -1;
+                        a.sac_source_id  = src.card.m_number;
+                        a.cost           = sd->params.tap_token_cost.value();
+                        a.eval           = 1;
+                        a.is_noncreature = true;
+                        actions.push_back(std::move(a));
+                    }
+                }
+            }
+
             // Main-phase ACTIVATED PUMPS whose cost the combat-time firebreathing converter cannot
             // price (Minotaur; see Action::Kind::ActivatePump). K activations as mutually-exclusive
             // variants sharing sac_source_id, cost pre-scaled -- the Call of the Wild pattern.
@@ -9045,6 +9111,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // Twinshot Sniper channel: a from-hand ability (pay channel_cost + discard -> 2 face damage).
         for (int i = 0; i < n; ++i)
         {
+            // "Discard this card" is a from-HAND cost, so a staged (impulse-exiled) copy cannot pay
+            // it -- same zone rule as the Vial/Stoneforge puts and the Suspend action above.
+            if (ap.hand[i].m_is_staged) { continue; }
             const CardDefinition* cd = CardDatabase::Instance().LookupCached(ap.hand[i]);
             if (!cd || !cd->params.channel_cost.has_value() || cd->params.channel_damage <= 0) { continue; }
             Action a;
@@ -13072,16 +13141,75 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     }
 
     // Pre-load floating as the combined cost: COLOURED/{C} pips pinned to their colours (produced
-    // covers them since it has no wild), the generic requirement + any over-production carried as
-    // `wild`. Total == produced.Total(), so no mana is lost even if the solve over-tapped. Each main
-    // cast drains this (generic pips take wild first -- see SpendFloatingTowardCost), so a colour is
-    // never spent on a generic pip a later cast needed.
+    // covers them since it has no wild), the generic requirement carried as `wild`, and everything
+    // ELSE -- the OVER-production -- kept in the colours the solve actually made. Total ==
+    // produced.Total(), so no mana is lost even if the solve over-tapped. Each main cast drains this
+    // (generic pips take wild first -- see SpendFloatingTowardCost), so a colour is never spent on a
+    // generic pip a later cast needed.
+    //
+    // The over-production used to go into `wild` too, and that was wrong in both directions
+    // (user report #7, "leftover mana in StompySurprise becomes colorless"):
+    //
+    //  * UNSOUND. `wild` pays any COLOURED pip (SpendFloatingTowardCost step 2) and no deck has a
+    //    {C} pip, so a Sol Ring's {C}{C} over-production landed in `wild` and could then pay a {G}
+    //    -- colourless mana paying a coloured pip, which is simply illegal. Keeping it in
+    //    `colorless` makes that unrepresentable.
+    //  * LOSSY. In mono-green StompySurprise every source is a Forest or an Elf, so leftover green
+    //    was booked as fungible generic and the viewer drew it as the ◇ pip (repro: seed 6 /
+    //    game-index 5, turn 5 main 2, `floating_mana {"wild": 1}` on a board with no colourless
+    //    source at all). It is green; it should say green.
+    //
+    // `wild` is now EXACTLY the batch's own generic requirement, i.e. the part that genuinely is
+    // colour-agnostic. The mana that funds it is taken out of the over-production, colourless first
+    // (the least useful thing to leave behind), then the largest surplus colour -- so what remains
+    // after the batch is the most useful colours, in their true identities.
     ManaPool pool;
     pool.white = combined.white; pool.blue = combined.blue; pool.black = combined.black;
     pool.red   = combined.red;   pool.green = combined.green; pool.colorless = combined.colorless;
     const int pinned = combined.white + combined.blue + combined.black
                      + combined.red + combined.green + combined.colorless;
-    pool.wild = produced.Total() - pinned;
+    static const bool s_true_colours = EnvOn("MTG_PREPAY_TRUE_COLOURS", true);
+    if (!s_true_colours)
+    {
+        pool.wild = produced.Total() - pinned;
+        // AUDIT (MTG_WILD_PIP_AUDIT): same meter as the fixed branch below, so one number sizes the
+        // pre-fix hole and asserts the fixed path has none.
+        if (WildPipAuditOn() && pool.wild > combined.generic)
+        { g_wild_prepay_excess.fetch_add(pool.wild - combined.generic, std::memory_order_relaxed); }
+    }
+    else
+    {
+        // Free (unpinned) production, per colour: what the solve made beyond the coloured pips.
+        int* dst[6]  = { &pool.white, &pool.blue, &pool.black, &pool.red, &pool.green, &pool.colorless };
+        int  free_[6] = { produced.white     - combined.white, produced.blue  - combined.blue,
+                          produced.black     - combined.black, produced.red   - combined.red,
+                          produced.green     - combined.green, produced.colorless - combined.colorless };
+        for (int i = 0; i < 6; ++i) { if (free_[i] < 0) { free_[i] = 0; } }   // guard; the solve covers the pips
+        // Fund the generic requirement out of `free`, colourless first, then the largest surplus.
+        int need = combined.generic;
+        while (need > 0 && free_[5] > 0) { --free_[5]; --need; }
+        while (need > 0)
+        {
+            int best = -1;
+            for (int i = 0; i < 5; ++i) { if (free_[i] > 0 && (best < 0 || free_[i] > free_[best])) { best = i; } }
+            if (best < 0) { break; }        // nothing left to attribute -- the remainder rides `wild`
+            --free_[best]; --need;
+        }
+        pool.wild = combined.generic;
+        for (int i = 0; i < 6; ++i) { *dst[i] += free_[i]; }
+        // Total must still be exactly what was produced: any shortfall means the solve made LESS than
+        // the combined cost (it cannot -- it succeeded), and any excess would invent mana. `need` is
+        // the part of the generic requirement no free colour could fund, which can only happen if the
+        // arithmetic above drifted; give it back to `wild` so the pool total is preserved either way.
+        pool.wild -= need;
+        pool.wild += produced.Total() - pool.Total();
+        // AUDIT (MTG_WILD_PIP_AUDIT): the invariant this fix establishes is that prepaid `wild`
+        // covers the batch's GENERIC requirement and nothing else -- generic pips are colour-blind,
+        // so that wild can never launder a colour. Anything beyond it is production whose colour
+        // was thrown away, which is precisely what let a Sol Ring's {C}{C} pay {U}. Should be 0.
+        if (WildPipAuditOn() && pool.wild > combined.generic)
+        { g_wild_prepay_excess.fetch_add(pool.wild - combined.generic, std::memory_order_relaxed); }
+    }
     state.floating_mana = pool;
     Pp(mixed_ok ? PP_OK_MIXED : PP_OK);
     _decl.ok = true; return true;
@@ -13115,6 +13243,23 @@ struct BpPrefixSnap
     const CardDefinition* deferred_site = nullptr;   // MTG_CANTRIP_ORDER watermark (registry-stable)
     std::vector<int>      deferred_hand;             // PRE-DRAW hand of that site (drawn-card exemption)
 };
+
+// Summed MANA a line's hand casts still owe, for the mid-line sink hold (see g_line_unpaid_cost).
+// Reads Action::cost -- the effective cost the SUBSET MATH afforded the plan with -- so the hold and
+// the affordability that admitted the plan are the same numbers by construction. A free cast owes
+// nothing; an alt-cost cast pays something other than mana; a battlefield activation is not a hand
+// cast and its cost is paid in its own trailing pass. Shared by both apply paths (rollout/executor).
+ManaCost LineCastCostTotal(const std::vector<Action>& acts)
+{
+    ManaCost total;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
+        if (a.free_cast || a.alt_cost) { continue; }
+        AddManaCost(total, a.cost);
+    }
+    return total;
+}
 
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint,   // default args on the fwd decl
@@ -13171,6 +13316,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // its first reader: every payment in the apply -- the whole-turn prepay and any post-draw
     // re-solve -- must see the same mode, or one plan would be scored under two payment policies.
     ScriptedTapMode _stm(plan.tapmode_choice);
+    // What this line still owes for casts it has not paid yet, so a mid-line greedy sink (replicate)
+    // cannot spend a later cast's mana and get it dropped. Built from the plan's own action costs --
+    // the SAME numbers the subset math afforded the plan with -- and decremented in apply_one as each
+    // cast pays. Scoped, so a nested breakpoint re-solve gets its own hold and restores this one.
+    // Empty (zero) for every plan without a hand cast, and inert for every deck with no mid-line sink.
+    LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
 
     // Searched Goblin Lackey put: copied onto the STATE (not a scoped guard) because the trigger
     // fires later, in this turn's combat-damage step. Only a real variant writes it, so a plan that
@@ -13745,6 +13896,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (AffordAuditOn()) { g_afford_rollout_attempts.fetch_add(1, std::memory_order_relaxed); }
             if (g_bp_trace_arm) { BpTraceCast("apply", state, name, ec, is_creature); }
+            // A REPLICATE follows this cast and will be offered to the human: release the manland
+            // reserve for THIS payment so a colourless manland pays the generic pips and the colour
+            // sources stay free for the replicate's coloured ones (DecisionProviders.h has the repro
+            // and the A/B that keeps the reserve everywhere else). Human play only, so autonomous
+            // ground truth cannot move; a deck with no manland or no replicate never constructs it.
+            const bool replicate_follows = HumanPlayActive() && def.card.IsCreature()
+                                        && CanReplicate(def, state.battlefield, state.active_player_index);
+            std::optional<ManlandReserveReleaseScope> _mrr;
+            if (replicate_follows) { _mrr.emplace(); }
             if (!TapForCostDirect(state, ec, is_creature))
             {
                 if (g_bp_trace_arm) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
@@ -13757,6 +13917,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (sink_stack.empty() && g_play_dropped_cast_sink) { g_play_dropped_cast_sink->push_back(name); }
                 return;
             }
+            // This cast is paid, so the line no longer owes it: a mid-line greedy sink (replicate)
+            // downstream may now spend it. Clamped at zero per field (see SubManaCost) -- the hold is
+            // an upper bound built from the plan's costs, and an alt-cost / free cast owes less.
+            SubManaCost(g_line_unpaid_cost, ec);
         }
         // Apex of Power cast-from-hand gate (captured BEFORE the erase invalidates `it`): a hand copy
         // has m_is_staged == false -> cast_from_hand true (adds Apex's 10-colour float); an Apex cast off
@@ -14229,17 +14393,27 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (CanReplicate(def, state.battlefield, state.active_player_index))
             {
                 ManaCost rep_cost = def.card.m_mana_cost;
-                // Heuristic default: replicate GREEDILY (as many times as leftover mana allows).
+                // BUDGET, not just affordability. Replicate TAPS REAL SOURCES (unlike firebreathing,
+                // whose by-value pool is what made greedy-max provably dominant there), so every
+                // copy competes with the rest of this line -- and `AvailableManaPool` includes
+                // `floating_mana`, which after the whole-turn prepay IS the later casts' mana. Each
+                // copy must therefore clear its own cost PLUS what the line still owes
+                // (g_line_unpaid_cost); otherwise the greedy silently converts a co-planned cast into
+                // a dropped one. Measured: 34 of 50 replicate events squeezed a hand card
+                // (MTG_REPLICATE_TRACE, slivers 200 games). MTG_NO_LINE_HOLD=1 restores the old greedy.
+                const ManaCost rep_gate = SinkCostWithLineHold(rep_cost);
+                // Heuristic default: replicate GREEDILY (as many times as genuinely spare mana allows).
                 // Human play (g_play_replicate_chooser set, nulled during search/rollout) may choose
                 // FEWER: count the max affordable first on a scratch copy so we can offer 0..max, then
-                // cap the real loop. cap < 0 => uncapped => byte-identical to the greedy default.
+                // cap the real loop. cap < 0 => uncapped => the greedy default. The scratch walk uses
+                // the SAME gate, so the count the human is offered is the count that is actually free.
                 int cap = -1;
                 if (g_play_replicate_chooser)
                 {
                     int max_count = 0;
                     GameState scratch = state;
                     ManaPool rem = AvailableManaPool(scratch);
-                    while (rem.CanPay(rep_cost) && TapForCostDirect(scratch, rep_cost, true))
+                    while (rem.CanPay(rep_gate) && TapForCostDirect(scratch, rep_cost, true))
                     { ++max_count; rem = AvailableManaPool(scratch); }
                     int k = (*g_play_replicate_chooser)(state, state.active_player_index,
                                                         def.card.m_name.str(), max_count);
@@ -14247,7 +14421,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
                 int made = 0;
                 ManaPool remaining = AvailableManaPool(state);
-                while ((cap < 0 || made < cap) && remaining.CanPay(rep_cost))
+                while ((cap < 0 || made < cap) && remaining.CanPay(rep_gate))
                 {
                     if (!TapForCostDirect(state, rep_cost, true)) { break; }
                     Permanent token = perm;
@@ -15438,6 +15612,43 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // source got tapped for mana or the fuel got exiled meanwhile -- stranded-outlet safe).
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             { ApplyGraveyardExileAbility(state, state.active_player_index, a.sac_source_id, a.gy_exile_mode); }
+        }
+        else if (a.kind == Action::Kind::AnimateLand)
+        {
+            // Mutavault: pay {1} and animate. Precondition FIRST so a stranded activation never pays
+            // (the land may have been tapped for mana by an earlier cast in this same line), and the
+            // source is addressed by card number like every other activation in this pass.
+            for (Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                if (p.card.m_number != a.sac_source_id) { continue; }
+                if (p.tapped || p.is_animated) { break; }
+                if (TapForCostDirect(state, a.cost, /*for_creature=*/false)) { p.is_animated = true; }
+                break;
+            }
+        }
+        else if (a.kind == Action::Kind::TapForTokenPay)
+        {
+            // Sliver Hive: {T} the source, pay the cost, create the token. Tap BEFORE paying (the
+            // {T} is part of the cost, and the source must not fund its own activation), and untap
+            // it again if the mana turns out to be unpayable -- the executor's ordering in
+            // ActivateTapTokensShared, kept identical here so the two worlds realise one board.
+            const CardDefinition* td = CardDatabase::Instance().Lookup(a.card_name);
+            for (std::size_t pi = 0; pi < state.battlefield.size(); ++pi)
+            {
+                Permanent& p = state.battlefield[pi];
+                if (p.controller_index != state.active_player_index) { continue; }
+                if (p.card.m_number != a.sac_source_id) { continue; }
+                if (p.tapped || td == nullptr) { break; }
+                p.tapped = true;
+                if (!TapForCostDirect(state, a.cost, /*for_creature=*/true))
+                { state.battlefield[pi].tapped = false; break; }
+                // CreateToken appends to the battlefield, so `p` must not be touched after this.
+                CreateToken(state, state.active_player_index,
+                            td->params.tap_token_power, td->params.tap_token_toughness,
+                            td->params.tap_token_subtypes);
+                break;
+            }
         }
         else if (a.kind == Action::Kind::AttachAllEquipment)
         {
@@ -18124,6 +18335,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // MTG_HUMAN_PLAY: the autonomous search and the MTG_UNPRUNED A/B stay byte-identical (the
     // shortcut, warts and all, is unchanged there -- widening the search is a separate question).
     const bool s_human_play_sig = HumanPlayActive();
+    // Off-switch for the #B0/#B1 bestow split below. Unlike the rest of this batch's fixes, that one
+    // moves the AUTONOMOUS search space (it is gated on the param, not on human play), so without a
+    // switch it is the one change `gt_line_playable.py --attribute` cannot bisect -- Minotaur's moved
+    // games came back "(none - not moved by this batch)" purely because there was nothing to turn off.
+    // MTG_LEGACY_BESTOW_SIG=1 restores the collapsed signature (the pre-fix search).
+    static const bool s_legacy_bestow_sig = EnvOn("MTG_LEGACY_BESTOW_SIG");
     auto plan_signature = [s_human_play_sig](const TurnSolver::Plan& p) -> std::string
     {
         std::vector<std::string> v, s, a, g, l, u, msf;
@@ -18158,7 +18375,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // Terastodon: distinct ETB destroy-K counts are DISTINCT plans (core
                         // invariant); gated on the param so no existing deck's signature moves.
                         + ((act.def && act.def->params.etb_destroy_own_noncreature_max > 0)
-                           ? ("#K" + std::to_string(act.chosen_x)) : "")); break;
+                           ? ("#K" + std::to_string(act.chosen_x)) : "")
+                        // BESTOW: casting Gnarled Scarhide as a CREATURE and casting it as an AURA are
+                        // two different spells that happen to share a name -- different cost, different
+                        // type, different board. The signature keyed on the name alone, so the two modes
+                        // collapsed and the dedup kept whichever plan sorted higher: the search could
+                        // only ever see ONE mode per subset, despite the enumeration deliberately
+                        // emitting both ("that is a real decision, so the SEARCH owns it"). Gated on the
+                        // param, so only a bestow deck's signature moves -- the #S/#V/#K precedent.
+                        + ((act.def && act.def->params.bestow_cost.has_value()
+                            && !s_legacy_bestow_sig)
+                           ? (act.bestow ? "#B1" : "#B0") : "")); break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;
@@ -18221,6 +18448,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // Wirewood Lodge untap: which source (one per Lodge).
                 case Action::Kind::UntapCreature:
                     msf.push_back("WWL#" + std::to_string(act.sac_source_id)); break;
+                // Human-play-only sinks: which source, so animating/tapping THIS land is a distinct
+                // plan from animating a different copy and from not doing it at all.
+                case Action::Kind::AnimateLand:
+                    msf.push_back("ANIM#" + std::to_string(act.sac_source_id)); break;
+                case Action::Kind::TapForTokenPay:
+                    msf.push_back("TTOK#" + std::to_string(act.sac_source_id)); break;
                 // Activated pump: which source, which shape, and distinct activation COUNTS are
                 // distinct plans (K changes both the mana spent and the cards discarded).
                 case Action::Kind::ActivatePump:
@@ -18449,6 +18682,10 @@ static void AppendHumanPlayLandsEdgePlans(const GameState& state, std::vector<Tu
     int lands_in_hand = 0;
     for (const Card& c : ap.hand)
     {
+        // Match LandsEdgePitchOrder's `usable`: a staged (impulse-exiled) land is not IN HAND, so it
+        // cannot be discarded to Land's Edge. Counting it here enumerated an N-land pitch the picker
+        // could only fill N-1 of -- the same from-hand zone rule as the Suspend/Channel skips.
+        if (c.m_is_staged) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d ? d->card.IsLand() : c.IsLand()) { ++lands_in_hand; }
     }
@@ -25453,7 +25690,9 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     if (spec.pass || (!spec.has_land && spec.casts.empty() && spec.lands_edge == 0 &&
                       spec.vial_deploys.empty() && spec.retrace_casts.empty() &&
                       spec.sac_outlets.empty() && spec.attach_all.empty() &&
-                      spec.sf_puts.empty() && spec.jitte_modes.empty() && spec.equips.empty()))
+                      spec.sf_puts.empty() && spec.jitte_modes.empty() && spec.equips.empty() &&
+                      spec.gy_exiles.empty() && spec.channels.empty() &&
+                      spec.animates.empty() && spec.tap_tokens.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -25491,6 +25730,21 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     std::vector<std::string> sortedEquips = spec.equips;
     std::sort(sortedEquips.begin(), sortedEquips.end());
     const bool equip_declared     = !spec.equips.empty();
+    // Deathrite's graveyard-exile activations (by MODE) and Twinshot's from-hand channel (by card
+    // NAME), each with the same declared-vs-legacy split every verb above uses -- so a line that does
+    // not mention them keeps matching exactly as it did and every saved reference is unaffected.
+    std::vector<int> sortedGyExiles = spec.gy_exiles;
+    std::sort(sortedGyExiles.begin(), sortedGyExiles.end());
+    const bool gyexile_declared   = !spec.gy_exiles.empty();
+    std::vector<std::string> sortedChannels = spec.channels;
+    std::sort(sortedChannels.begin(), sortedChannels.end());
+    const bool channel_declared   = !spec.channels.empty();
+    std::vector<std::string> sortedAnimates = spec.animates;
+    std::sort(sortedAnimates.begin(), sortedAnimates.end());
+    const bool animate_declared   = !spec.animates.empty();
+    std::vector<std::string> sortedTapTokens = spec.tap_tokens;
+    std::sort(sortedTapTokens.begin(), sortedTapTokens.end());
+    const bool taptoken_declared  = !spec.tap_tokens.empty();
 
     // --- 1) Does the line match a plan (or several variants) the model would play? ----
     // A "match" is same land + same multiset of cast card names. Several enumerated plans can
@@ -25528,8 +25782,9 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         //                         prefers the no-sac plan (saving the one-shot source; see the pool sort).
         int planLE = 0, planSacs = 0;
         std::vector<std::string> orderNames, vialNames, retraceNames, sacOutNames;
-        std::vector<std::string> attachAllNames, sfPutNames, equipNames;
-        std::vector<int> jitteModes;
+        std::vector<std::string> attachAllNames, sfPutNames, equipNames, channelNames;
+        std::vector<std::string> animateNames, tapTokenNames;
+        std::vector<int> jitteModes, gyExileModes;
         for (const Action& a : p.actions)
         {
             if (a.kind == Action::Kind::DiscardToLandsEdge) { planLE += a.discard_lands; continue; }
@@ -25556,6 +25811,14 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             { jitteModes.push_back(a.gy_exile_mode); continue; }
             if (equip_declared && a.kind == Action::Kind::Equip)
             { equipNames.push_back(a.card_name); continue; }
+            if (gyexile_declared && a.kind == Action::Kind::GraveyardExileAbility)
+            { gyExileModes.push_back(a.gy_exile_mode); continue; }
+            if (channel_declared && a.kind == Action::Kind::Channel)
+            { channelNames.push_back(a.card_name); continue; }
+            if (animate_declared && a.kind == Action::Kind::AnimateLand)
+            { animateNames.push_back(a.card_name); continue; }
+            if (taptoken_declared && a.kind == Action::Kind::TapForTokenPay)
+            { tapTokenNames.push_back(a.card_name); continue; }
             orderNames.push_back(a.card_name);
         }
         if (planLE != spec.lands_edge) { continue; }
@@ -25588,6 +25851,30 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             std::vector<std::string> v2 = equipNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedEquips) { continue; }
+        }
+        if (gyexile_declared)
+        {
+            std::vector<int> v2 = gyExileModes;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedGyExiles) { continue; }
+        }
+        if (channel_declared)
+        {
+            std::vector<std::string> v2 = channelNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedChannels) { continue; }
+        }
+        if (animate_declared)
+        {
+            std::vector<std::string> v2 = animateNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedAnimates) { continue; }
+        }
+        if (taptoken_declared)
+        {
+            std::vector<std::string> v2 = tapTokenNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedTapTokens) { continue; }
         }
         std::vector<std::string> sortedNames = orderNames;
         std::sort(sortedNames.begin(), sortedNames.end());
@@ -25681,6 +25968,22 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                                 magnet = hd && hd->params.copies_solo_targeted_spells; break;
                             }
                     trickRank += magnet ? 0 : 1;
+                }
+            }
+            // BESTOW mode (Gnarled Scarhide): the same hand card cast as a CREATURE or as an AURA. Both
+            // modes carry the same card_name, and only the Aura mode set a sub (its enchant target) --
+            // so the choose dialog saw a MIXED sub/no-sub set and fell into its flat fallback picker,
+            // where the two modes render as the same card name twice with nothing to tell them apart
+            // (the shape the Unite-the-Coalition note below describes). Give BOTH modes an explicit
+            // mode sub so the dimension is asked once, cleanly, and the enchant sub only picks the host.
+            {
+                const CardDefinition* bd = (a.kind == Action::Kind::CastFromHand)
+                                         ? CardDatabase::Instance().Lookup(a.card_name) : nullptr;
+                if (bd && bd->params.bestow_cost.has_value())
+                {
+                    const std::string mode = a.bestow ? "bestowed (Aura)" : "as a creature";
+                    addSub(a.card_name + " " + mode, a.card_name + " mode", mode,
+                           a.card_name.str(), "bestow");
                 }
             }
             // Aura enchant TARGET: which creature this Aura attaches to. Emit a sub per legal target so the

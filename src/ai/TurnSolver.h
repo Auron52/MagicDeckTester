@@ -116,6 +116,19 @@ struct Action
                              // The mana-only half of a team pump stays in ApplyFirebreathing too
                              // (leftover combat mana); activating both is legal -- the ability is
                              // repeatable -- and no mana is double-spent.
+        AnimateLand,         // Mutavault "{1}: This land becomes a 2/2 creature with all creature
+                             // types until end of turn." sac_source_id = the land; cost =
+                             // animate_cost. HUMAN PLAY ONLY: autonomously this is a greedy
+                             // post-cast mana sink (AnimateLandsShared) that fires whenever there is
+                             // spare mana, which is fine for the AI but leaves a human unable to ask
+                             // for it OR to decline it -- the ability had no plan action at all, so
+                             // no verb, no board affordance, nothing (user report #1). Applied in the
+                             // trailing pass, pre-combat, so the animated land can attack.
+        TapForTokenPay,      // Sliver Hive "{5}, {T}: Create a 1/1 colorless Sliver creature token.
+                             // Activate only if you control a Sliver." sac_source_id = the land;
+                             // cost = tap_token_cost. Same story and same fix as AnimateLand above:
+                             // ActivateTapTokensShared spends spare mana on it greedily and a human
+                             // could neither request nor refuse it.
         UntapCreature,       // Wirewood Lodge "{G}, {T}: Untap target Elf." sac_source_id = the
                              // land; cost = untap_creature_cost. Applied in the trailing pass:
                              // taps the source and untaps the highest-yield TAPPED matching
@@ -843,6 +856,23 @@ public:
         // the viewer could not express the first without maybe getting the second. WHICH creature it
         // attaches to is NOT encoded here -- that is the `equip` sub-decision the choose dialog asks.
         std::vector<std::string> equips;
+        // "gyexile=<mode>": Deathrite Shaman's graveyard-exile activations, one entry per activation,
+        // carrying the MODE (1 = exile an instant/sorcery, each opponent loses 2; 2 = exile a creature,
+        // gain 2). Its own verb for the same reason `equip=` has one: the action names the SOURCE
+        // permanent, so `cast=Deathrite Shaman` is ambiguous with hard-casting another copy from hand
+        // -- and FiveColour runs four. WHICH graveyard card is exiled is fungible (disclosed 6a).
+        std::vector<int>         gy_exiles;
+        // "channel=<card name>": Twinshot Sniper's from-HAND channel ability. Not a board activation
+        // (its source is a card in hand) and not a cast either -- "{1}{R}, Discard this card" plays the
+        // same card a different way, so `cast=<name>` cannot distinguish the two. EMPTY => legacy
+        // matching (a Channel action matches by card name inside the ordinary cast multiset).
+        std::vector<std::string> channels;
+        // "animate=<land name>" / "taptoken=<land name>": the two greedy mana sinks, now real
+        // human-play activations (Mutavault's "{1}: becomes a 2/2", Sliver Hive's "{5},{T}: create a
+        // Sliver"). One entry per activation; EMPTY keeps the legacy card-name-in-casts matching, so
+        // a line that does not mention them is unchanged.
+        std::vector<std::string> animates;
+        std::vector<std::string> tap_tokens;
     };
     // One concrete plan variant the human's line matched -- when several enumerated plans
     // share the same land + cast names but differ in a per-spell sub-decision (tutor target,

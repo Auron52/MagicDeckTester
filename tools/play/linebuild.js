@@ -78,7 +78,16 @@
   //   attachall=  Balan's "attach all Equipment"                               (LineSpec::attach_all)
   //   sfput=      Stoneforge Mystic's put-from-hand (names the EQUIPMENT)      (LineSpec::sf_puts)
   //   jittemode=  Umezawa's Jitte counter-spend (names the MODE INT)           (LineSpec::jitte_modes)
+  //   gyexile=    Deathrite Shaman's graveyard exile (names the MODE INT)      (LineSpec::gy_exiles)
+  //   channel=    Twinshot Sniper's from-HAND channel ability (names the card) (LineSpec::channels)
+  // The verbs whose value is a MODE INT rather than a card name. Kept as a set so encodeLine has one
+  // rule instead of a growing `v === 'jittemode' || v === 'gyexile' || ...` chain.
+  const MODE_VERBS = { jittemode: true, gyexile: true };
   function lineVerb(p) {
+    // A CHANNEL entry is the one non-'activate' kind with its own verb: its source is a card in HAND
+    // (so it is not a board activation) but it is not a cast either -- "{1}{R}, Discard this card"
+    // plays the same card a different way, and `cast=` cannot say which.
+    if (p.kind === 'channel') return 'channel';
     if (p.kind !== 'activate') return 'cast';
     return p.verb || (p.sacout ? 'sacout' : 'cast');
   }
@@ -101,12 +110,12 @@
     for (const p of plan) if (p.kind === 'vial') parts.push('vial=' + p.name);
     for (const p of plan) if (p.kind === 'retrace') parts.push('retrace=' + p.name);
     // Board activations that are neither a hand cast nor a pass need their own verb -- a line made
-    // up ONLY of them used to encode as 'pass' (CheckLine stage 0). jittemode= names the MODE INT,
+    // up ONLY of them used to encode as 'pass' (CheckLine stage 0). MODE_VERBS name the MODE INT,
     // every other verb names a card.
     for (const p of plan) {
       const v = lineVerb(p);
       if (v === 'cast') continue;
-      parts.push(v + '=' + (v === 'jittemode' ? String(p.mode) : p.name));
+      parts.push(v + '=' + (MODE_VERBS[v] ? String(p.mode) : p.name));
     }
     const n = leCount(plan); if (n > 0) parts.push('landsedge=' + n);
     return parts.length ? parts.join(';') : 'pass';
@@ -154,9 +163,12 @@
   // sub did; it is that action's own count, coupled to nothing.
   // `equip` (which creature an Equipment attaches to) and `jitte` (which counter mode) sit with the
   // other per-action target picks.
-  const SUBKIND_PRI = { face: -1, fetch: 0, free: 0.5, sacrifice: 0.75, tutor: 1, enchant: 1.5,
-                        equip: 1.5, jitte: 1.6, x: 2, activations: 2, modal: 2.5, soulfire: 3,
-                        crackle: 4, splice: 5 };
+  // `bestow` sits just ahead of `enchant`: the mode decides whether an enchant target is asked at
+  // all (the creature mode has none), so asking the host first would offer a dimension that the
+  // other mode does not have -- the same gating reason `sacrifice` is asked before `tutor`.
+  const SUBKIND_PRI = { face: -1, fetch: 0, free: 0.5, sacrifice: 0.75, tutor: 1, bestow: 1.4,
+                        enchant: 1.5, equip: 1.5, jitte: 1.6, x: 2, activations: 2, modal: 2.5,
+                        soulfire: 3, crackle: 4, splice: 5 };
   function subKindPri(k) { return SUBKIND_PRI[k] === undefined ? 9 : SUBKIND_PRI[k]; }
   function subOf(v, key) { return (v.subs || []).filter(s => s.key === key)[0]; }
   function choiceOf(v, key) { const s = subOf(v, key); return s ? s.choice : '—'; }

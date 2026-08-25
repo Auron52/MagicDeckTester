@@ -69,6 +69,26 @@ std::atomic<long> g_afford_rollout_attempts{0};
 std::atomic<long> g_afford_real_fails{0};
 std::atomic<long> g_afford_real_attempts{0};
 bool AffordAuditOn() { static const bool on = EnvOn("MTG_AFFORD_AUDIT"); return on; }
+
+// WILD-pays-a-COLOUR-pip audit (MTG_WILD_PIP_AUDIT; see GameLogger.h).
+std::atomic<long> g_ritual_uncolored_float{0};
+std::atomic<long> g_wild_prepay_excess{0};
+bool WildPipAuditOn() { static const bool on = EnvOn("MTG_WILD_PIP_AUDIT"); return on; }
+namespace {
+struct WildPipDump
+{
+    ~WildPipDump()
+    {
+        if (WildPipAuditOn())
+        {
+            const long a = g_ritual_uncolored_float.load(), b = g_wild_prepay_excess.load();
+            std::fprintf(stderr,
+                "WILD_PIP_AUDIT  uncoloured ritual floats=%ld  prepay wild beyond generic=%ld  %s\n",
+                a, b, (a == 0 && b == 0) ? "(CLEAN)" : "<-- inflexible mana is reaching `wild`");
+        }
+    }
+} g_wild_pip_dump;
+}   // namespace
 // =2 also prints one line PER DROP (turn, card, cost, what was still untapped). The aggregate counts
 // tell you a class of drop exists; only the per-drop line tells you whether the subset was ever
 // payable or whether an earlier cast in the same turn took the colour this one needed.
