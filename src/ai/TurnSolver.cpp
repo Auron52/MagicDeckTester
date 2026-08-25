@@ -5428,9 +5428,19 @@ bool TurnSolver::BreakpointHandSnapshotWanted(const GameState& state)
 // cascade in ApplyPlanDirect and the executor arms its second pass from note_draw_engine, and if
 // the two could answer differently the executor would replay a committed continuation the search
 // never scored (the lockstep failure BpSiteMask's comment describes).
+// ADOPTED 2026-08-25, DEFAULT ON; `MTG_EQUIP_DRAW_BP=0` is the hatch. Re-measured at the deck's
+// PLAY settings (d5/b20) rather than the d3 gate cells the 2026-08-20 work used, over 10,000 paired
+// games on fresh seeds: avg 4.37650 -> 4.37110, **63 games faster : 11 slower, +6.04 sigma**, for
+// 1.121x the search work (deterministic GameWorkMeter units over 2,000 paired games -- NOT wall
+// clock, which this box cannot measure). That is far cheaper than the +79% the d3 cells reported,
+// because the cost multiplier falls as the search gets deeper and the games get shorter.
+//
+// Param-gated on a live draw_on_equipment_etb watcher (EquipmentEtbDrawFires), so every deck
+// without a Puresteel-style watcher stays byte-identical -- confirmed by smoke/regression, where
+// all 42/70 non-kitty keys held their digests.
 bool TurnSolver::EquipmentDrawBreakpointEnabled()
 {
-    static const bool on = EnvOn("MTG_EQUIP_DRAW_BP");
+    static const bool on = EnvOn("MTG_EQUIP_DRAW_BP", true);   // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::EQUIP_DRAW_BP, on);
 }
 
