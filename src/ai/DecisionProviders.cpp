@@ -1707,6 +1707,15 @@ int GenericProvider::ManaSourceRank(const GameState& s, const CardDefinition& de
             if (IsScaledManaDork(def))
             {
                 if (pt->casts_scaler_food) { return F + 2; }
+                // NOTE (2026-08-25): a per-CAST waste-aware refinement here (demote the scaler
+                // when the current payment's remaining pips < its yield) was BUILT AND REFUTED by
+                // measurement -- held-out stompy overnight went +0.021/cell (net 111 slower / 23
+                // faster with its companion). The per-cast view is myopic: the scaler's "wasted"
+                // surplus floats into the turn's LATER casts (commit_leftover), so the demotion
+                // taps a flat body on every cast's tail pip and bleeds attackers -- §5b's
+                // one-big-tap rationale is correct at TURN scope. Any retry must reason at turn
+                // scope (e.g. tap-the-sac-fodder-first, or batch-combined remaining need). See
+                // the overhaul ledger's Cluster B section.
                 if (pt->attack_matters)    { return F; }
                 return F + 1;
             }

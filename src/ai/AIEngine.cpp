@@ -1250,6 +1250,51 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     TranspositionTable* saved_tt = m_shared_tt;
     m_shared_tt = LookaheadBottoming() ? &shared_tt : saved_tt;
 
+    // LEGAL-SIZE SUBSET TABLE (MTG_BOTTOM_LEGAL, default OFF while A/B'd -- adopt with the
+    // overhaul flip's rebaseline). The shipped greedy scores each candidate removal on a hand
+    // that is still (count - i - 1) cards TOO BIG, so a line that needs EVERY remaining card can
+    // score win-N at step i yet be unrealisable by any legal keep -- st374's mull-3: "bottom Sol
+    // Ring" tied at 4 off a 5-card-only line (the chip + Terastodon line needs all 3 Forests +
+    // Llanowar + Natural Order), killing the only real 4-win keep (Sol Ring -> T2 Natural
+    // Order). Fix: roll out every LEGAL removal SUBSET once (C(h,count) <= 35 trials, shared-TT
+    // amortised, vs the greedy's h+(h-1)+... oversized trials), then run the SAME per-step
+    // greedy where a candidate's score is the best win over subsets consistent with the bottoms
+    // so far -- a candidate is allowed iff SOME legal completion achieves the best win. Later
+    // steps reuse the table (no further rollouts) and the heuristic tiebreak among allowed
+    // candidates is unchanged. Clairvoyant path only (the blind bottomer keeps its own model).
+    static const bool s_legal_trials = EnvOn("MTG_BOTTOM_LEGAL");
+    std::vector<int>  subset_win;    // win turn per removal mask over the initial hand (0 = not a legal mask)
+    std::vector<int>  nums0;         // initial hand card numbers, in mask-bit order
+    std::uint32_t     done_mask = 0; // bottoms committed so far, as initial-hand bits
+    bool subset_table = false;
+    {
+        static const bool s_rollouts_on = EnvOn("MTG_BOTTOM_ROLLOUTS", true);
+        static const bool s_blind       = EnvOn("MTG_NC_BLIND_BOTTOM");
+        const int h0 = static_cast<int>(ap.hand.size());
+        if (s_legal_trials && count > 1 && count < h0 && h0 <= 16
+            && LookaheadBottoming() && !m_forced_mull_active && s_rollouts_on && !s_blind)
+        {
+            auto popcnt = [](std::uint32_t v) { int n = 0; while (v) { v &= v - 1; ++n; } return n; };
+            subset_win.assign(std::size_t{1} << h0, 0);
+            nums0.reserve(h0);
+            for (const Card& c : ap.hand) { nums0.push_back(c.m_number); }
+            for (std::uint32_t m = 0; m < (1u << h0); ++m)
+            {
+                if (popcnt(m) != count) { continue; }
+                GameState trial = state;
+                Player& tp = trial.ActivePlayer();
+                // Bottom the masked cards in ascending hand order (the order the step greedy
+                // would send them down), erasing descending so indices stay valid.
+                for (int idx = 0; idx < h0; ++idx)
+                { if (m & (1u << idx)) { tp.library.push_back(tp.hand[idx]); } }
+                for (int idx = h0 - 1; idx >= 0; --idx)
+                { if (m & (1u << idx)) { tp.hand.erase(tp.hand.begin() + idx); } }
+                subset_win[m] = RolloutWinTurn(std::move(trial), max_turns);
+            }
+            subset_table = true;
+        }
+    }
+
     // When forced, bottom EXACTLY the listed cards (its size, not `count`): a full list (size ==
     // count) is a faithful replay; an empty/short list is a deliberate probe that exposes the
     // pre-bottom depth-N hand (used to derive the bottomed set when patching old references).
@@ -1292,7 +1337,26 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             int best_win = std::numeric_limits<int>::max();
             for (int j = 0; j < hand_size; ++j)
             {
-                if (s_blind_bottom)
+                if (subset_table)
+                {
+                    // Legal-subset score: the best win over legal removal sets that contain the
+                    // bottoms committed so far plus this candidate.
+                    std::uint32_t bit = 0;
+                    for (std::size_t idx = 0; idx < nums0.size(); ++idx)
+                    {
+                        if (nums0[idx] == ap.hand[j].m_number && !((done_mask >> idx) & 1u))
+                        { bit = 1u << idx; break; }
+                    }
+                    int best = max_turns + 1;
+                    const std::uint32_t need = done_mask | bit;
+                    for (std::uint32_t m = 0; m < subset_win.size(); ++m)
+                    {
+                        if (subset_win[m] != 0 && (m & need) == need && subset_win[m] < best)
+                        { best = subset_win[m]; }
+                    }
+                    win_turn[j] = best;
+                }
+                else if (s_blind_bottom)
                 {
                     // Average the removal's value over K reshuffled unseen futures (non-clairvoyant).
                     long long acc = 0;
@@ -1364,6 +1428,15 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             }
         }
 
+        if (subset_table)
+        {
+            // Record the pick in initial-hand bits so later steps score only completions of it.
+            for (std::size_t idx = 0; idx < nums0.size(); ++idx)
+            {
+                if (nums0[idx] == ap.hand[pick].m_number && !((done_mask >> idx) & 1u))
+                { done_mask |= 1u << idx; break; }
+            }
+        }
         m_last_bottomed_numbers.push_back(ap.hand[pick].m_number);
         if (m_logger)
         {

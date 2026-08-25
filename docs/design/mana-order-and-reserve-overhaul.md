@@ -706,3 +706,106 @@ mover, mw d3_s6006 gi209 5→6, unbounded=GT), **6 uncoverable = exactly the ope
 st374 d3+d5 / st993 (B, DTL), mw136 (C — rescued by `MTG_PAYSAC_FRESH_HOLD=0`, so fresh-hold
 class like Cluster A but NOT via the continuation scope; site-5-off does NOT rescue it), mw326
 (D, multi-lever), mw196 (non-lever, pre-existing). Payment worklist remaining: B, C, D.
+
+## Cluster B root-caused: two mechanisms, neither a payment-legality bug (2026-08-25, session 2)
+
+Both stompy uncoverables (gi374 d3+d5, gi993) are DORK_TAP_LAST-conditioned, but by different
+routes, and in both the bundle's PLAY is right or better — the loss happens a layer above payment.
+
+**st374 — the greedy-bottoming oversized-hand illusion (pre-existing; DTL exposes it).**
+The arms diverge at the mull-3 BOTTOM choice, not in play. `AIEngine::BottomCards`' clairvoyant
+lookahead evaluates each candidate removal on a hand one card too big (at step 2 of 3 the trial
+plays 5 cards). Under DTL that oversized trial finds a REAL win-4 — T2 Llanowar chip (DTL taps
+Forests for Priest, keeping Llanowar to swing — exactly the lever working) + T3 Natural Order →
+Terastodon destroying OUR OWN three Forests for three 3/3 Elephants + T4 alpha 9+3+3+3+1 = 19 =
+exact lethal after the chip — but that line needs ALL FIVE cards; no legal 4-card keep realises
+it. "Bottom Sol Ring" therefore ties at 4 in step 2, the heuristic picks it, and the only real
+4-line (Sol Ring → T2 NO) dies one step later when everything scores 5. The DTL-off arm plays the
+trial WORSE (taps Llanowar for Priest's cost with two Forests open — the reservation defect this
+overhaul fixes — losing the chip), scores it 5, and keeps Sol Ring by accident. Verified by
+replaying the 5-card trial as a real game via `--force-mulligan "3:53,43"`: DTL-on wins 4,
+DTL-off wins 5. Fix shape: evaluate bottom candidates at LEGAL final hand size (heuristic-bottom
+the remaining count inside each trial before the rollout; rollout count unchanged). That is an
+unconditional engine change (clean-GT churn), so it goes behind a temporary A/B flag and adopts
+with the flip's single rebaseline.
+
+**st993 — the SPB attack-rung's un-valued scaler tap (SCALER_PLAN_BIAS × DTL).**
+Mull-1 (legal trials); the play itself. On the T4 lethal-alpha turn the winning plan is NO-only
+(4 mana = 3 lands + one dork pip). The attack-turn scaler bias ranks scalers F=64 ahead of flat
+dorks F+1=65 ("one big body pays what N flat bodies would"), so the per-pip greedy taps Elvish
+Archdruid — yield 3 for a 1-pip need (waste 2), body worth 5 under Craterhoof — while Arbor Elf
+(yield 1 via the untap trick, waste 0, and the NO sac fodder = zero body cost) sits idle. Alpha
+13 < 16 → win 5. Forced-walk proof (claude-play `--choices "0,0,46,-1,150,-1"` +
+`--force-mulligan "1:5"`): full bundle → Priest+Hoof = 13 (opp 3); identical walk with
+MTG_SCALER_PLAN_BIAS=0 → Archdruid+Priest+Hoof = 18, opponent -2, WIN 4. (Autonomous minus-SPB
+does not rescue the full game — earlier turns shift — which is why the suite bisect read
+"DTL alone".) Fix shape, per §2b "waste is the trigger" and the USER's reservation doctrine
+("tapping the Llanowar first is good when we need its mana, bad when we don't", 2026-08-25):
+scaler-first only when the remaining need ≥ the scaler's yield; when a flat band-mate covers the
+remaining pips exactly, flat taps first. Lever-gated — no clean-GT churn.
+
+Open sub-question found on the way: the TAP_ATTACKER_RUNG / partial-hold ladder should have held
+Archdruid at that T4 and did not — suspect TapForCostBacktrack cannot sequence Arbor Elf's
+untap-trick (its yield needs a tapped Forest at fire time), making every scaler-held rung read
+infeasible on untap-trick boards. Verify before trusting the rung on such boards.
+
+### Cluster B fixes: built and locally verified (2026-08-25, session 2 cont.)
+
+**Fix 1 — waste-aware scaler rung (in-tree, lever-gated).** `TapForCostSharedOnce`'s greedy now
+publishes the payment's per-pip remaining need net of floating (`g_pay_remaining_pips`,
+SpellEffects.h; 0 everywhere else = every other reader unchanged), and the SPB attack-turn branch
+in `GenericProvider::ManaSourceRank` demotes a scaled dork behind the flat band whenever the
+remaining need is smaller than its yield. Verified on the st993 forced walk: the T4 Natural Order
+pip now taps Arbor Elf (the sac fodder) instead of Elvish Archdruid — alpha 13 → 18, executor
+kill restored. Inert with levers off (smoke 42/42 byte-identical).
+
+**Fix 2 — legal-size bottoming subset table (`MTG_BOTTOM_LEGAL`, default OFF pending A/B).**
+`BottomCards` under the flag rolls out every legal removal subset once (C(h,count) ≤ 35,
+shared-TT amortised) and scores each per-step candidate as the best win over subsets consistent
+with the bottoms so far; the heuristic tiebreak among allowed candidates is unchanged. A first
+attempt that heuristically bottomed the remainder inside each trial was REFUTED (the standalone
+heuristic bottoms payload; trials collapsed to 7s/9s) — do not rebuild it. Verified: st374 →
+win 4 at BOTH shapes (d3 case budget 20ms and d5-shape unbounded), = GT; flag off → 5
+(shipped behavior intact); smoke 42/42 byte-identical.
+
+**st993 residual (OPEN — discussion case).** With both fixes the autonomous game is still 5.
+The [t4dbg] node dump proved the loss is not payment or combat: under DTL the T3 chip is
+BIGGER (3 vs off-arm 2), both T4 states are kill-capable, and the forced walk executes the kill —
+but the T2-line search never SIMULATES a T4 Natural Order node from the {Archdruid, Priest}
+board (the off arm reaches it exactly once and wins). Not depth-coverable (d4/d5 unbounded = 5).
+Negative probes (do not re-run): every single minus-lever except DTL, LEGACY_SEARCH,
+FD_ALWAYS_RESEARCH, BP_SEARCH=0, DORK_ATK_HOLD_DIR=0, DORK_ATK_SEARCH=0, FORCE_HOLD_TURN=3/4,
+TAP_SCALED_LAST=1, TAP_POWER_ORDER=1. Classification: a search-frontier expansion boundary
+flipped by the one-point opp-life delta the (better) DTL chip creates — the gi196 family
+(pre-existing expansion non-monotonicity), surfaced-not-caused by the lever. Candidate for the
+USER's "impractical cases get discussed" clause rather than a payment-honesty fix.
+
+### Fix 1 REFUTED by measurement and reverted (2026-08-25, session 2 cont.)
+
+The waste-aware scaler demotion (per-cast remaining-pips vs scaler yield) measured NET WORSE on
+held-out stompy overnight: the fix1+fix2 arm was 111 slower / 23 faster per-game vs bundle10, and
+the single-cell bisect (stompy d3 s4004, 1000g) attributed it to fix 1 alone — bundle10 4.8410,
+fix1-only 4.8620, fix1+fix2 4.8580, post-revert flag-off 4.8410 (byte-exact bundle10 parity
+restored). WHY it lost: the per-CAST view is myopic — the scaler's "wasted" surplus floats into
+the turn's later casts (commit_leftover), so §5b's one-big-tap is correct at TURN scope and the
+demotion instead tapped one flat body per cast tail-pip, bleeding attackers. The refutation note
+is inline at the ManaSourceRank site. Retry directions if ever revisited (turn-scope only):
+tap-the-sac-fodder-first (a body the plan sacrifices this turn pays for free — the true zero-cost
+insight from st993's T4), or batch-combined remaining need. Neither closes st993 itself (its
+residual is the search-frontier expansion boundary, already ledgered), so nothing payment-honest
+is currently lost by the revert.
+
+Fix 2 (MTG_BOTTOM_LEGAL) survives on its own: gi374 -> 4 at case budget post-revert, smoke 42/42
+byte-identical, and the fix2-only stompy overnight arm (arm_BUNDLE12_fix2only_st_overnight.txt)
+is the adoption measurement.
+
+### Fix 2 held-out validation: strictly dominant (2026-08-25, session 2 cont.)
+
+Fix2-only stompy overnight (arm_BUNDLE12_fix2only_st_overnight.txt, bundle + MTG_BOTTOM_LEGAL on
+the reverted tree) vs bundle10, per-game across all 8 searched cells: **0 slower / 20 faster**
+(every cell average improves; gi374 5->4 at d3_s6006 AND d5_s6006). Stompy d0 cells are
+byte-identical to bundle10 (flag gated on lookahead bottoming), and mirrorwing was measured
+byte-identical under the flag in the combined arm. The subset table also cleared the ORIGINAL
+greedy-bottoming victims beyond gi374: gi176/gi679/gi896/gi232/gi731/gi905/gi299/gi779/gi968/
+gi3/gi104/gi500/gi671/gi75 all faster -- the oversized-hand illusion was a standing tax on
+stompy mulligan games, not a one-off.
