@@ -612,3 +612,39 @@ belong to `MTG_TAP_ATTACKER_RUNG`; `MTG_DORK_HOLD_PARTIAL` is score-inert in eve
 (train, all decks; held-out stompy) — its case rests on the origin trace (StompySurprise gi47
 margin-1 Craterhoof kill) and the USER's doctrine, not on suite numbers. Adoption remains the
 USER's call.
+
+### mw43 FIXED, mw148 reclassified (2026-08-25, cont. — the USER's unbounded-recovery rule)
+
+USER rule (2026-08-25, standing): **a regression must win at unbounded budget with depth spanning
+the original win turn; target ZERO unrecoverable regressions** (cases that make this impractical
+get discussed, not silently tolerated).
+
+**mw43 — root-caused and FIXED (commit `cb46b356`).** Not a near-tie after all: the §2a mint
+credit leaked into `FillScaledXTrick`'s surplus, sized Libation to X=2 against a Treasure that
+cannot exist at payment time, and the payment tapped the exalted Hierarch — the attacker the fan
+needed. Dropping the credit from the FILL (payability keeps it) returns mw43 to GT T4 at both
+depths and improves gi13 (s3003) 6→5 at both depths as a side effect; movers are mirrorwing-only,
+searched net −4, clean smoke byte-identical. Diagnostic route for the record: `MTG_DUMP_EWINS`
+(the clairvoyant oracle capped at 5 under §2a alone → mechanical block, not preference) → flag
+bisect (eight minus-one arms) → claude-play forced walk of the winning line (frozen at the T4
+attack: "Mirrorwing Dragon (15)" alone, Hierarch tapped) → `FillScaledXTrick`. The earlier
+"three-strike / plan-preference" classification of mw43 was WRONG — it was an honest-accounting
+bug all along, exactly the class the three-strike rule says to fix.
+
+**mw148 — reclassified: the win is invisible to BOTH arms' searches.** `MTG_FSW_TRACE` at T4
+shows no candidate with tail=4 in EITHER clean or §2a — both value their best plans at 5. Clean's
+recorded T4 win emerges at EXECUTION: its chosen plan opens a draw breakpoint (Impolite Entrance
+first), the mid-turn re-solve sees the freshly drawn Luxurious Libation, and the executed
+continuation over-delivers (23 damage) relative to its searched value. §2a's §2a-priced plan
+choice (same searched value 5, different first cast → different breakpoint) does not stumble into
+that fortune. Attribution: §2a core (fresh-hold off doesn't restore it; bundle-minus-§2a does).
+A fan-width mint credit (width = 1 + other own creatures when the mint targets a live magnet) was
+built and REVERTED — it did not flip mw148 and had no other measured effect. Because no search at
+any budget/depth values the 4 in either arm, budget/depth escalation cannot recover it — this is
+the "impractical" discussion case the USER's rule anticipates. Candidate real fix (unbuilt):
+value draw-breakpoint continuations against the post-draw hand in the bp-variant search wide
+enough to surface the fan chain — a search-fidelity project, not an accounting fix.
+
+**Bar position after the fix:** train (smoke + regression) uncoverable-earlier-win-turn set =
+{mw148} only. Everything else: coverable churn (mw56, st202@d5, st203, st252, st292, gi767@16x,
+gi831@d5) or shuffle variance (cg30, fc96).
