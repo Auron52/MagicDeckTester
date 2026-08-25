@@ -5039,6 +5039,16 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
         perm.controller_index  = controller;
         perm.owner_index       = controller;
         perm.entered_this_turn = true;
+        // `src` is a REFERENCE INTO state.battlefield, and the push_back below can REALLOCATE that
+        // vector -- after which any later read of `src` is a use-after-free. InternedName holds a
+        // const std::string* into the global registry, so the stale read yields a WILD pointer that
+        // is then dereferenced: usually the freed block still holds the old pointer and the game
+        // plays correctly (which is why ground truth is stable), but under a different allocator
+        // state it is garbage or a crash. Caught by ASAN 2026-08-25 at the EmitReveal below, on
+        // Goblin Lackey (the only card with combat_damage_puts_subtype_from_hand). Copy the name out
+        // BEFORE the vector is touched -- InternedName is trivially copyable (a pointer), so this is
+        // free and byte-identical. Do NOT use `src` past this point.
+        const InternedName src_name = src.card.m_name;
         state.battlefield.push_back(perm);
         const int slot = static_cast<int>(state.battlefield.size()) - 1;
         // Report WHAT was cheated in. A Lackey put moves a card from a HIDDEN zone (hand) to a public
@@ -5054,7 +5064,7 @@ inline void FireCombatDamageCheatIntoPlay(GameState& state, int controller,
         // fires for combat_damage_puts_subtype_from_hand, so ONLY Goblins digests move.
         if (RevealVisible())
         {
-            EmitReveal(state.turn_number, src.card.m_name.str() + " (put)",
+            EmitReveal(state.turn_number, src_name.str() + " (put)",
                        { raw.m_number }, { raw.m_name.str() }, { raw.m_number }, {},
                        /*dispositions*/ { "\xE2\x86\x92 battlefield (from hand)" });
         }
@@ -5509,8 +5519,12 @@ inline void PerformUpkeepCumulativeGifts(GameState& state)
         if (p.controller_index != active) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d || !d->params.cumulative_upkeep_opp_token) { continue; }
-        ++p.age_counters;
-        for (int k = 0; k < p.age_counters; ++k)
+        // CreateToken APPENDS to state.battlefield, which reallocates it and leaves `p` dangling --
+        // so the loop bound must not be re-read off `p` after the first token (that read is a
+        // use-after-free: ASAN 2026-08-25, READ of size 4 = age_counters). Latch the count first.
+        // The token subtypes come from `d`, which points into the CardDatabase and is unaffected.
+        const int gifts = ++p.age_counters;   // do NOT touch `p` past this point
+        for (int k = 0; k < gifts; ++k)
         {
             CreateToken(state, 1 - active, d->params.upkeep_token_power,
                         d->params.upkeep_token_toughness, d->params.upkeep_token_subtypes);
@@ -8426,7 +8440,15 @@ inline std::vector<TopDisposition> TopDispositionCandidates(const GameState& sta
 {
     std::vector<TopDisposition> out;
     out.push_back(HeuristicTopDisposition(state, looked, kind, keep_decision));
-    const TopDisposition& h = out.front();
+    // COPY, not a reference: the loop below push_backs into `out`, which reallocates and would
+    // leave a reference to out.front() dangling -- and the dedup then compares against freed
+    // memory. When the stale read happens to differ, the `continue` misfires and the heuristic
+    // candidate is emitted a SECOND time, so the search explores a candidate list it should not
+    // have (a silent, allocator-dependent change to the plan set, not just a cosmetic one).
+    // Caught by ASAN 2026-08-25 (heap-use-after-free, READ of size 1 = h.shuffle). A TopDisposition
+    // is a bool + a small vector<int>; copying it once per call is negligible next to the
+    // permutation enumeration it guards.
+    const TopDisposition h = out.front();
     for (const TopOption& o : EnumerateTopDispositions(kind, looked))
     {
         if (o.disp.shuffle == h.shuffle && o.disp.top_order == h.top_order) { continue; }

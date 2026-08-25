@@ -855,6 +855,13 @@ inline bool DeserializeExhaustiveKeep(const std::string& blob, uint64_t src_size
     if (!GetStr(p, end, ek.commit))      { return false; }
     if (!GetStr(p, end, ek.play_digest)) { return false; }
     int32_t R; if (!GetPod(p, end, R)) { return false; } ek.effective_R = R;
+    // The blob must be consumed EXACTLY. Serialize is this function's inverse, so a well-formed cache
+    // always ends here with p == end; anything left over means the bytes we parsed did not all come
+    // from one coherent write (a zero tail from a short read, or a mix of two files from a non-atomic
+    // rename on 9p). Those parse "successfully" -- zero-filled counts read as legitimate empty
+    // vectors -- so length-exactness is what separates a valid cache from a plausible-looking corrupt
+    // one. Cheap, and byte-identical for every intact cache.
+    if (p != end) { return false; }
     ek.Index();
     return true;
 }
@@ -892,6 +899,16 @@ inline std::shared_ptr<const ExhaustiveKeepPolicy> CachedExhaustiveKeep(const st
                 blob.resize(static_cast<std::size_t>(blen));
                 bf.seekg(0);
                 bf.read(&blob[0], blen);
+                // A SHORT read must invalidate the whole blob, never be parsed. resize() zero-filled
+                // it, so a partial read leaves a real prefix + a zero TAIL -- and zeros parse as valid
+                // empty counts, so Deserialize would happily return a silently TRUNCATED policy (the
+                // buckets survive from the prefix, so !empty() passes too) and the deck would play a
+                // mulligan table that is neither the model nor the heuristic. Reachable here: the repo
+                // lives on 9p, where the writer's temp+rename is NOT atomic against an open fd, so a
+                // concurrent process rebuilding this cache can shrink the file between tellg() and
+                // read(). Measured 2026-08-25 on Mirrorwing: a zero-tailed blob scored 6.1630 vs the
+                // correct 5.9320, with no error reported.
+                if (!bf || bf.gcount() != blen) { blob.clear(); }
             }
             ExhaustiveKeepPolicy ek;
             if (DeserializeExhaustiveKeep(blob, src_size, src_mtime, ek) && !ek.empty())
