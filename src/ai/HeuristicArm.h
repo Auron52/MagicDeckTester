@@ -71,6 +71,7 @@ enum Slot : int
     KE_CONDEMN,               // MTG_KE_CONDEMN            re-enable Kitty's breakpoint condemnation
     BP_CONDEMN_TAIL,          // MTG_BP_CONDEMN_TAIL_EXEMPT  don't condemn when the plan has no cast left
     BP_CONDEMN_ORDER,         // MTG_BP_CONDEMN_ORDER_AWARE  don't condemn a slot AFTER the bp site
+    BP_CONDEMN_MANA,          // MTG_BP_CONDEMN_MANA_EXEMPT  never condemn a mana source
     SF_PUT_BP,                // MTG_SF_PUT_BP             site 6 fires off a Stoneforge PUT too
     COUNT
 };
@@ -120,6 +121,7 @@ inline const char* Name(int slot)
         "MTG_KE_CONDEMN",
         "MTG_BP_CONDEMN_TAIL_EXEMPT",
         "MTG_BP_CONDEMN_ORDER_AWARE",
+        "MTG_BP_CONDEMN_MANA_EXEMPT",
         "MTG_SF_PUT_BP",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;

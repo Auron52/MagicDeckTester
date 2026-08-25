@@ -709,16 +709,61 @@ static bool BpCondemnOrderAwareEnabled()
     return heurarm::Flag(heurarm::BP_CONDEMN_ORDER, on);
 }
 
-// True when the candidate's cast slot comes AFTER the breakpoint site's, i.e. it has not been
-// considered yet and must not be condemned. False (condemn as before) whenever the comparison
-// cannot be made, so the exemption only ever re-admits candidates.
+// True when the candidate's cast slot is NOT STRICTLY EARLIER than the breakpoint site's, i.e. it
+// has not already had its turn and must not be condemned. False (condemn as before) whenever the
+// comparison cannot be made, so the exemption only ever re-admits candidates.
+//
+// The comparison is >=, and the tie case is the whole point rather than a rounding choice. The
+// USER's rule condemns a card that is "earlier in the order", and its justification is that a
+// SIBLING line already casts it at its proper position -- so condemning it here loses nothing. That
+// argument holds only for a STRICT predecessor. Two cards at the SAME rank are peers with no
+// enumerated order between them, and condemning a peer is symmetric: whichever one the plan casts
+// first, the other is condemned in the continuation, so NO sibling line survives and the pair can
+// never both be cast in one turn.
+//
+// Measured, not reasoned (hold gi=1325, seed 901326): Puresteel Paladin out, Bonesplitter and
+// Lightning Greaves both Equipment at rank 8. Baseline casts Greaves, draws a Plains off the
+// Paladin trigger, PLAYS that Plains as its land drop, and the extra mana affords Bonesplitter for a
+// second draw -- T4 win. Under strict > the second Equipment is condemned either way round, so the
+// turn gets one draw instead of two and the game is a T5 win. That is a line no depth or budget can
+// reach, which is the class the no-lossy-truncation bar rejects outright.
+//
+// This is also exactly the case the USER flagged when specifying equipment ordering: "I don't think
+// we have any equipment that particularly care about order, though I may be wrong. It does matter
+// that we can process the draw we get off it, though." Peers at one rank ARE the no-order-between-
+// them case, and processing the draw is what strict > was deleting.
+// MANA-SOURCE EXEMPTION (MTG_BP_CONDEMN_MANA_EXEMPT). A mana source is never "considered and
+// declined" in the sense the sibling-line argument needs.
+//
+// Condemnation is sound only because a strictly-earlier card is assumed to be cast at its proper
+// position in some SIBLING line, so banning it in the continuation loses nothing. That argument
+// silently assumes the card's placement does not change what else is castable. For a mana source it
+// always does: an accelerant is cast when the rest of the turn needs the mana, and how much mana the
+// turn needs is exactly what a breakpoint draw reveals.
+//
+// Measured, not reasoned (train gi=26, seed 300027, mode 3): a diagnostic at the drop site
+// (MTG_CONDEMN_WHO) reported 70,805 condemnations in that one game and EVERY ONE of them was
+// Sol Ring (rank 5) at an Equipment site (rank 8) -- nothing else was ever condemned. The baseline's
+// winning line casts Shadowspear, draws, casts O-Naginata, draws Lightning Greaves, and only THEN
+// casts Sol Ring to afford the Greaves: a T5 win that becomes T6 once the accelerant is nailed to
+// rank 5. Sol Ring is {1} for {C}{C}, so re-sequencing it is a pure mana decision the cast order
+// cannot express.
+static bool BpCondemnManaExemptEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_MANA_EXEMPT", true);
+    return heurarm::Flag(heurarm::BP_CONDEMN_MANA, on);
+}
+
 static bool BpSlotIsAfterSite(const GameState& state, const Card& cand)
 {
     if (!BpCondemnOrderAwareEnabled() || g_bp_site_def == nullptr) { return false; }
     const CardDefinition* cd = CardDatabase::Instance().LookupCached(cand);
     if (cd == nullptr) { return false; }
+    // A mana source re-sequences legitimately; exempt it before the rank comparison.
+    if (BpCondemnManaExemptEnabled()
+        && (cd->params.mana_rock || cd->tmpl == CardTemplate::ManaDork)) { return true; }
     const DecisionProvider& prov = ResolveProvider(state);
-    return prov.CastOrderRank(state, *cd) > prov.CastOrderRank(state, *g_bp_site_def);
+    return prov.CastOrderRank(state, *cd) >= prov.CastOrderRank(state, *g_bp_site_def);
 }
 
 // Was this card already in hand when the current breakpoint's cantrip was cast? True outside a
@@ -6600,7 +6645,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             {
                 ManaPool now = AvailableManaPool(state);
                 now.AddPool(state.floating_mana);
-                if (now.CanPay(EffectiveCost(def, state))) { continue; }
+                if (now.CanPay(EffectiveCost(def, state)))
+                {
+                    // TEMPORARY DIAGNOSTIC (MTG_CONDEMN_WHO): name the card each condemnation
+                    // actually drops, and the ranks that justified it. Inference from the two game
+                    // logs could not do this -- the losing game diverges at T1, so the condemned
+                    // card is not visible as "the one missing from the line".
+                    static const bool s_condemn_who = EnvOn("MTG_CONDEMN_WHO");
+                    if (s_condemn_who)
+                    {
+                        const DecisionProvider& p = ResolveProvider(state);
+                        std::fprintf(stderr, "[condemn-who] drop=%s rank=%d site=%s site_rank=%d\n",
+                                     def.card.m_name.c_str(), p.CastOrderRank(state, def),
+                                     g_bp_site_def ? g_bp_site_def->card.m_name.c_str() : "(none)",
+                                     g_bp_site_def ? p.CastOrderRank(state, *g_bp_site_def) : -1);
+                    }
+                    continue;
+                }
             }
         }
 

@@ -12,6 +12,7 @@
 
 #include "DecisionProvider.h"
 #include "HeuristicArm.h"   // per-job A/B levers read inline by the provider hooks below
+#include "../core/EnvFlags.h"   // EnvOn -- the env_default half of a per-job lever
 
 struct Decklist;
 
@@ -858,8 +859,18 @@ public:
     //     it is not the pure cost filter the design assumed.
     // Returning false puts KittyEquipment back on the base behaviour every deck but AntiLifegain and
     // FiveColour already has. MTG_KE_CONDEMN=1 restores it per-job for re-measurement.
+    //
+    // The env_default is EnvOn(), not a literal `false`, and that is not cosmetic. A literal makes
+    // the lever MANIFEST-ONLY: MTG_KE_CONDEMN=1 on the command line silently does nothing, so a
+    // single-game repro of a batch divergence runs the BASELINE while reading as the arm. That cost
+    // a diagnosis cycle on 2026-08-25 (hold gi=1325 refused to reproduce until the repro was
+    // rebuilt as a one-job manifest). Unset, EnvOn is false, so this is behaviour-identical to the
+    // literal -- it only restores the env route the comment above already advertises.
     bool CondemnsConsideredAtBreakpoint() const override
-    { return heurarm::Flag(heurarm::KE_CONDEMN, false); }
+    {
+        static const bool env = EnvOn("MTG_KE_CONDEMN");
+        return heurarm::Flag(heurarm::KE_CONDEMN, env);
+    }
     // Tutor breadth: score EVERY distinct Equipment, not the generic 6.
     //
     // This is a COVERAGE fix, not a heuristic. GenericProvider::TutorCandidates deliberately
