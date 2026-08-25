@@ -434,6 +434,44 @@ When making implementation trade-offs, use this priority order:
 3. **Simplicity** — prefer simpler implementations when accuracy is equal. Complexity is justified when it improves accuracy, not as an end in itself.
 4. **Determinism** — prefer deterministic algorithms. Where nondeterminism is unavoidable (e.g. MCTS rollouts), it must be driven by the game's seeded RNG so that the same seed always produces the same final result (win turn, board state, etc.). Nondeterminism that affects only internal search paths is acceptable; nondeterminism that changes game outcomes is not.
 
+### What `--budget-ms` actually meters (it is NOT wall time, and it is NOT even most of the work)
+
+Two facts that reliably mislead anyone reading a budget number. Both are load-bearing when you are
+deciding whether a game lost to *starvation* or to *judgement*.
+
+1. **It is a deterministic work-unit budget, not milliseconds.** `SearchBudget::FromVirtualMs`
+   multiplies by `NODES_PER_VIRTUAL_MS = 900`, and one unit is one simulated **rollout turn-step**
+   (`src/ai/SearchBudget.h`). So "this game needs 1.5x budget" means it needs 50% more *work*, on
+   every machine — not that your box was slow. `--budget-ms 0` is UNLIMITED; a huge number does not
+   disable it.
+2. **Only the rollout leaf is charged. Interior node expansion is free.** On a Dragonstorm d5 game,
+   `MTG_ROLLOUT_STATS` reported `turn_steps=6031` against `interior_nodes=60761` —
+   `interior_frac=0.91`. The budget saw 9% of the search's actual work.
+
+Consequently the budget does **not** stop a search by running out. The iterative-deepening ladder
+gates by *extrapolated estimate*: it measures each pass's cost, takes the growth ratio
+`r = c_prev / c_prev2`, and starts the next pass only while `est <= gate_alpha * budget->Remaining()`
+(`TurnSolver.cpp`, the jump-ladder). A pass that starts routinely OVERRUNS the nominal limit — the
+same game showed `T1 pass=5 cost=31278 used=34112` under an 18,000-unit budget. So a change that
+merely shifts per-pass cost can silently add or remove a whole ply at a fixed budget.
+
+**How to use this when triaging a red cell.** `MTG_TRACE=search` prints
+`T<n> pass=<d> done win=<w> cost=<units>` per pass. Diff that ladder between two binaries on the
+same game: identical prefixes then a divergence tells you *which turn* and *which pass* changed, and
+whether the arm that lost actually did LESS work (starvation) or MORE work and still missed the line
+(a judgement/evaluation change). In the 2026-08-25 dragonstorm case the losing arm spent more units
+over more passes and still never saw the T6 line — which ruled starvation out and pointed at the
+leaf tie-break. Do not infer "needs more budget ⇒ starved"; check the ladder.
+
+### A regression caused by an ADOPTION is usually one flag away
+
+Most adopted behaviour changes keep an escape hatch, and `src/ai/HeuristicArm.h`'s slot list plus
+`--list-flags` is the searchable inventory. Before bisecting, try flipping the suspected lever: on
+2026-08-25 `MTG_LEAF_GRADE_NOWIN=0` restored ground truth exactly on all three regressed Dragonstorm
+games in seconds. Bisect is the fallback when you cannot name the lever — and it is cheap if you
+give `git bisect run` a **single-game** predicate (`--seed base+gi --game-index gi`, exit 0/1 on the
+win turn) rather than a whole cell.
+
 ### Search is the primary decision route (heuristics only curb branching)
 
 **Search dominates; heuristics serve search — never the reverse.** The default for any
