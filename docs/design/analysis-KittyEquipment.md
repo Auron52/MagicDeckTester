@@ -204,7 +204,7 @@ REGENERATE on the final engine (mandatory).
    Integration bullets; heuristics to disclose: equip host rankings + widths, Skyhunter
    put/host provider picks, JitteSpendCount greedy, UA X={0} + opponent-only pruned targets,
    metalcraft enumeration conservatism, always-take Puresteel draw).
-4. Regression suite: deck is NOT in test/regression_cases.sh yet — adding it is a user call.
+4. Regression suite: **DONE 2026-08-25 (`a9fbb920`)** — 20 GT keys across all three tiers.
 - [ ] Stage 5 verification (5a nonconv/fd-diverge, 5b multi-depth, 5d claude-play sweep, 5h viewer audit)
 - [ ] Stage 6 report
 - Smoke: 3 games d3/b200 seed 42 → avg 5.67 turn-to-win; engine plays the deck.
@@ -496,9 +496,12 @@ affordability gate, so with no lookahead there is no multi-step plan whose affor
 unlock, and it can never bind. That is the signature to expect from any enumeration-side
 optimism lever, and it is why a d0 cell can neither justify nor refute one.
 
-**Not done / user calls**: regression-suite addition (test/regression_cases.sh) — user
-decision; commit of this tree — nothing committed yet; value-leaf + exhaustive mulligan
-profile — separate skills, on request (generate LATE, post-commit-freeze per their Rule 0).
+**Not done / user calls** (updated 2026-08-25): regression-suite addition and the tree
+commit are both DONE; value-leaf and the exhaustive mulligan profile are both shipped. What
+remains is `MTG_KE_ORDER` — the USER's reviewed cast order, still default OFF because it is
+quality-INERT (0 changed win turns in 5,000 paired games at play settings) and ~4.8% slower.
+That is a USER call, not a measurement call: measurement says do not adopt, the order is the
+USER's reviewed intent. See `cast-order-rankings.md`.
 
 ## USER HEURISTIC DOCTRINE (2026-08-14, post-push directives) — IN FLIGHT
 

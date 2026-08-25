@@ -362,5 +362,9 @@ searched 4,529, identical to default. **A/B-ing searched-vs-greedy on an opted-i
 lever produces a false null.** Not fixed — fixing it is a lever change worth a USER decision.
 
 Also unrelated but recorded: **KittyEquipment is expensive at its shipping d5/20** — 23 games over
-30 s per 4,000, worst 75.3 s — and it has **no rows in `test/regression_cases.sh`**, so that cost
-has never appeared in any suite tier.
+30 s per 4,000, worst 75.3 s — and it had **no rows in `test/regression_cases.sh`**, so that cost
+had never appeared in any suite tier. **UPDATE 2026-08-25 (`a9fbb920`): it is now in all three
+tiers**, and at suite scale the cost reads far milder — overnight d3 ~0.43 s/game, **d5 ~0.30
+s/game** (d5 is ~30% CHEAPER than d3; the value-leaf hybrid is absorbing it), d0 effectively free.
+The heavy tail above is NOT contradicted by this — the batch slow-game instrumentation emitted
+nothing to that run's log, so the tail remains unverified either way rather than shown gone.
