@@ -5,6 +5,13 @@ machine can reproduce. Four subsequent runs — including one with the *literal 
 that produced it* — all reproduce committed ground truth exactly. The anomaly has not recurred.
 Self-contained; everything needed to pick this up is here.
 
+> **A SECOND, INDEPENDENT SIGHTING was recorded the same day** — see
+> `regression-suite-determinism-anomaly.md`. Different tier (regression, seeds 2002/3003), different
+> agent, found while adopting an unrelated flag; same deck, same all-improving direction, equally
+> unreproducible (19 later full-scale executions). **It disagrees with this one on d0**: there d0 was
+> byte-identical while only the searched cells moved, whereas here d0 diverged. That disagreement is
+> the sharpest discriminator either record has — any proposed mechanism must explain both.
+
 ## What happened
 
 `bash test/regression.sh --overnight` at 2026-08-25 01:29 (HEAD `11923ab9`, tree clean) returned

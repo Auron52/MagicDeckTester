@@ -1,5 +1,12 @@
 # An unreproduced determinism anomaly in the regression suite (2026-08-25)
 
+> **READ `mirrorwing-overnight-anomaly-2026-08-25.md` FIRST.** That is the same phenomenon, on the
+> same deck, on the same day, investigated far more thoroughly by another agent. **This document is
+> the SECOND, INDEPENDENT observation of it** — different tier, different seeds, different agent,
+> found while adopting an unrelated flag. Two sightings of an unreproducible bug are worth more than
+> either alone, so the comparison is in "Two sightings" below; the hypothesis table further down is
+> retained because it eliminates several candidates theirs did not test (and vice versa).
+>
 > **STATUS: OPEN, one observation, NOT reproduced in 19 subsequent full-scale executions.**
 > This document exists so the observation is not lost and so the next person does not re-walk the
 > eight hypotheses already eliminated below. It does **not** claim a mechanism. If you see a
@@ -33,6 +40,35 @@ Four properties of the anomaly, all of which a mechanism has to explain:
 
 Two subsequent full runs were **byte-identical to each other across all 75 keys**, and matched
 ground truth for every non-kitty deck.
+
+## Two sightings, and where they disagree
+
+| | overnight sighting (`mirrorwing-overnight-anomaly-2026-08-25.md`) | this one |
+|---|---|---|
+| tier / seeds | overnight, 4004-10010 | regression, 2002/3003 |
+| cells affected | **all 12** Mirrorwing cells | **4** Mirrorwing cells |
+| direction | all improving (42 better / 0 worse on one d0 cell) | all improving (2 cells better, 2 digest-only) |
+| **d0** | **DIVERGED** | **byte-identical (PASSED)** |
+| reproduced? | no — 4 later runs, incl. one with the snapshotted binary | no — 19 later full-scale executions |
+| trigger context | another agent committing into the same working tree as the batch started | adopting `MTG_EQUIP_DRAW_BP`, tree quiescent |
+
+**The d0 disagreement is the sharpest discriminator available and it should be the next thing
+pursued.** The overnight record reasons from d0 diverging that the cause cannot be a timing or
+budget effect, since d0 runs no search and no budget. Here d0 was byte-identical while the searched
+cells moved — which is the opposite constraint. Either the two sightings have different causes, or
+the true cause can express itself at d0 or not depending on something neither investigation has
+identified. Any proposed mechanism has to account for BOTH.
+
+Worth noting explicitly: the three use-after-frees fixed in `303c51be` are **not** the explanation
+for either sighting. That commit's own analysis rules Mirrorwing out of all three (no Goblin Lackey,
+zero look-effect cards, no Varchild's War-Riders), and this sighting post-dates none of it — but the
+UAF write-up describes exactly the failure profile both sightings show ("silent, allocator-dependent,
+unreproducible... turns wrong only when the allocator reuses the block, which depends on load, thread
+count and heap history"). So the *class* of bug is demonstrated to exist in this codebase even though
+these particular three instances are excluded. A fourth instance on a path Mirrorwing DOES reach is
+the most promising hypothesis neither investigation has yet tested; an ASAN run of the regression
+tier (the overnight matrix was already ASAN'd, which is how those three were found) is the cheap
+next step.
 
 ## Hypotheses eliminated
 
