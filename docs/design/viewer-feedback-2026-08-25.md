@@ -1,7 +1,8 @@
 # Viewer feedback batch, 2026-08-25 — what shipped and what is still OPEN
 
 A play-tester reported seven issues from a `tools/play` session, with no saved history and only seed
-hints. All seven were root-caused and fixed on top of `90a537bd` (working tree, **not committed**).
+hints. All seven were root-caused and fixed, and the batch is **ADOPTED AND PUSHED** as
+`90a537bd..c6743509` (three commits; CI green on Linux, Windows and determinism parity).
 This doc is the standing record of the parts that are **not** finished, because they need the user or
 a decision that was deliberately deferred.
 
@@ -137,34 +138,33 @@ legality finding and is not one. That produced 4 false "illegal" verdicts before
 walk was added to discriminate them. The escalation A/B above needs no forcing at all, which is why
 it is the primary evidence.
 
-## ADOPT — the remaining sequence (resume point)
+## ADOPTED AND PUSHED — `90a537bd..c6743509`
 
-The user has approved committing and adopting *once we are satisfied with the results*. Everything
-below the line is verified; what is left is mechanical.
+All three tiers rebaselined and pushed on 2026-08-25:
 
-**State of the tree:** ~19 files changed, **nothing committed**, on top of `90a537bd`.
+| commit | what |
+|---|---|
+| `945c39d4` | `fix(refs)` — the reference CHECKER repair (deletion tolerance + label-anchored targets) |
+| `e5e2eb16` | `fix(viewer,mana,rules)` — the seven reports, the auditor gate, the two instruments |
+| `c6743509` | `gt(all)` — three-tier rebaseline, every mover attributed |
 
-**Verified with the FINAL binary** (after the `MTG_MANLAND_RANK` removal and the wild-pip audit):
-- smoke `25 passed / 17 failed / 0 new` — identical to every earlier run of this batch, so the
-  scaffold removal and the audit are behaviour-neutral;
+**Verified with the FINAL binary:**
+- smoke `25/17/0 new`, regression `38/32/0 new`, overnight `75/93/0 new`, scenarios `25/25`;
 - `MTG_WILD_PIP_AUDIT` CLEAN on all 14 regression decks;
 - reference sweep `130 ok / 94 repaired / 0 drift / 0 enum-gap / 0 contract-fail`, `--strict` exit 0;
 - `viewer_validate_check.js` 912 accept / 0 regression;
-- the per-game audit above: 60 of 76 moved cell-entries converge once searched; the 16 that do not
-  are 10 distinct games with named causes (7 mana-fix, 3 the requested aura rule).
+- per-game audit: **zero unexplained movers** in either tier group; 60 of 76 (train) and 38 of 97
+  (overnight) converge under escalation, the rest being the price of the legality fixes;
+- `--accept` reported `gt_logs consistent: 42 / 70 / 168, STALE 0, missing 0`.
 
-**Then:**
-1. `bash test/regression.sh --smoke --accept`, `bash test/regression.sh --accept`,
-   `bash test/regression.sh --overnight --accept` — FULL suite per mode, never `--deck=X`
-   (a scoped run commits other decks' stale `.wins`; see [[regression-accept-promotes-stale-gtlogs]]).
-   Each mode must have been RUN with the final binary immediately before its accept.
-2. Commit. Rebase onto origin, never merge.
-3. Push and `gh run watch` — report the **Windows** result and the determinism-parity job; push CI
-   notifies but does not block, and the mail goes to `dtippett-bot`, not the user.
+**CI green on both platforms** (run `32906212100`): windows-latest 5m29s, ubuntu-latest 2m26s, and
+the **Linux/Windows determinism parity** job passed — which is the one that matters, since MSVC
+cannot be checked from the container.
 
 Still OPEN after this batch, unchanged: the three pre-existing audit hard misses (Goblins echo /
 KittyEquipment bounce / burn sacrifice), the `protection_from_everything` classification, the literal
-replicate plan dimension, and the Reality Spasm model.
+replicate plan dimension, and the Reality Spasm model. **New and open: the mirrorwing run-to-run
+divergence below — cause unknown.**
 
 ## The OVERNIGHT tier — audited the same way, and one thing it caught
 
@@ -235,7 +235,7 @@ What IS established, and what makes the tier safe to rebaseline anyway:
 Do NOT accept a tier from a single run without re-running it. Two runs of the SAME binary is what
 caught this; it is cheap next to a corrupted baseline.
 
-## OPEN 2 — ground truth is NOT rebaselined
+## CLOSED 2 — ground truth IS rebaselined (this section records the pre-accept state)
 
 Deliberately left to the user: GT is shared state and another agent rebaselined the overnight tier
 the same day (`29ea1ffa`). (The reference sweep inside regression mode is green now — `VPC_SKIP=1`
@@ -369,7 +369,7 @@ opponent); the colour fix does not close it.
 
 ---
 
-## Index of what DID ship (all in the working tree, uncommitted)
+## Index of what DID ship
 
 | # | report | fix |
 |---|---|---|
