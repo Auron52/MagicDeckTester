@@ -325,6 +325,72 @@ searched-design hooks (no second main). There is no work to do on them.**
 standing process gate (cast order is USER-REVIEWED per deck, never adopted from a measurement
 alone), a Hinata cast-order review is the prerequisite before any searched-design work there.
 
+## 4.6 CENSUS AT SHIPPED PLAY SETTINGS — where the greedy actually is (2026-08-26)
+
+`bash test/tools/greedy_census.sh 200 600001` — 15 decks x 200 games, each deck's own `value_play`
+settings, one process per deck (the counters are process-global atomics, so pooling would make them
+unattributable). Greedy `Solve()` calls reached from inside the search, PER GAME, summed over all 15:
+
+| site | /game | share | what it is |
+|---|---|---|---|
+| **s90** | **53,742** | **61.7%** | `SolveWithLookahead` at `depth <= 0` — the search's own HORIZON |
+| s8 | 22,295 | 25.6% | deferred / cantrip breakpoint continuation |
+| s0 | 8,670 | 10.0% | staged-draw breakpoint (Light Up the Stage, Expressive Iteration) |
+| s1 / s2 / s4 | 2,334 | 2.7% | DrawUntilNonland, impulse-exile, other breakpoint classes |
+
+Per deck (greedy per game, and the d<=0 interior second main for scale):
+
+| deck | play | greedy/game | by site | bp greedy% | m2 d<=0 /game |
+|---|---|---|---|---|---|
+| minotaur | d5/b20 | 32,627 | s90 only | — | 0 |
+| hinata | d5/b20 | 19,105 | s0=5,618 s8=11,840 s90=1,647 | 91.8% | 1,461 |
+| mirrorwing | d5/b20 | 9,770 | s0=2,299 s8=5,667 s90=1,802 | 45.9% | 0 |
+| creature_giving | d5/b20 | 9,514 | s8=1,729 s90=7,785 | 100% | 0 |
+| stompy | d6/b20 | 5,739 | s90 only | — | 0 |
+| kitty | d5/b20 | 3,271 | s8=2,493 s90=777 | 62.4% | 778 |
+| th | d5/b20 | 2,161 | s1=1,791 s4=9 s90=361 | 64.5% | 0 |
+| fivecolour | d6/b20 | 1,926 | s8=298 s90=1,628 | 100% | 1,341 |
+| dragonstorm | d5/b20 | 963 | s2=534 s90=428 | 43.0% | 0 |
+| burn | d6/b20 | 784 | s0=752 s90=32 | 82.6% | 36 |
+| antilife | d5/b20 | 521 | s8=266 s90=255 | 100% | 246 |
+| slivers / knights / goblins | d5-6 | 330 / 182 / 140 | s90 only | — | 0 / 0 / 214 |
+| auras | d5/b20 | **3** | s90 only | — | 0 |
+
+**The committed line is still essentially never greedy**: 0 real main-phase executor decisions on
+every deck, and the only greedy that decides anything on the played line is a breakpoint fallback on
+hinata (3) and treasure_hunt (8) across 200 games each.
+
+### What this changes about the plan
+
+* **The dominant site is the HORIZON, and it is different in kind.** At `depth <= 0` there is no
+  search left to do, so the replacement for s90 is not "search it instead" -- that is either infinite
+  regress or simply a deeper search. It is *"evaluate the leaf with something principled rather than
+  playing it out greedily"*, which is what the VALUE LEAF already does where a deck has one. s90 is
+  62% of all greedy and it is the biggest single lever available.
+* **The breakpoint families (38%) are a REACHABILITY problem, not a policy one.** `MTG_BP_SEARCH`
+  is 2 wide and `MTG_BP_DEPTH` is 1 deep; on kitty at shipped settings the continuation lists average
+  7.13 and reach 49, and **73.0% of all continuations are unreachable** -- `bp_choice` can never
+  index them. Every plan outside that 1x2 window hits the breakpoint and takes greedy BY
+  CONSTRUCTION. That is the same lossy-truncation shape the standing USER bar already rejects.
+* **Two decks are pure horizon** (minotaur, stompy: s90 only, no breakpoints), and **auras is
+  already effectively greedy-free** at 3 calls per game.
+* **Three decks report 100% greedy breakpoint continuations** (antilife, creature_giving,
+  fivecolour) -- `bp_searched_plan` never resolves for them. Unexplained; worth a look before
+  anything is built on their numbers.
+* The `depth <= 0` interior second main (§3c of `searched-design-deck-rollout.md`) is 0-1,461 calls
+  per game, i.e. a SMALL slice of the total. Converting it was worth measuring but it is not where
+  the volume is.
+
+### Method warning this census exists to correct
+
+The first attempt at "why is the conversion expensive" was diagnosed on a `budget_ms=0` run. On the
+same KittyEquipment game that reports **124,747** breakpoint encounters and **1,887** interior second
+mains at d5/b20, the unbudgeted run reports **5,183,560** and **1,293,023** -- ~700x, and the
+DIRECTION is wrong too (the shipped search covers 29.2% of continuations, the unbudgeted one 69.8%).
+Conclusions drawn there -- "the memos are thrashing", "condemnation should be bound at more sites" --
+were about a configuration nobody runs. **Unbudgeted has exactly one legitimate use: pricing a prune
+or a conversion so the budget cannot reinvest the saving. Never for "why".**
+
 ## 5. The adoption bar all of this is measured against
 
 USER, 2026-08-23. Both are gates; test both, block on either.
