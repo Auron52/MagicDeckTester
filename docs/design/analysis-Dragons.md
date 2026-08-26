@@ -189,6 +189,54 @@ no `landfall_damage` (burn), no `domain_mana` (FiveColour), none of the equipmen
 Greaves carries only `is_equipment`/`equip_*`), and Mind Stone's `sacrifice_draw_cost` no longer
 trips Treasure-Hunt detection.
 
+## Claude-play sweep
+
+- commit: `99338658`
+- seeds: 8800 games: 30
+- flags: 0 unresolved
+
+30 Opus players (one game each, seed 8800 / game-indices 0-29, disjoint from every suite and
+probe seed). 30/30 returned, 0 died. **Win turns matched the search exactly in all 30 games
+(5/5)** — zero misplay candidates, which is the expected weak signal.
+
+Model/size note: run on **Opus**, not the `model: 'sonnet'` the claude-play skill pins, and at 30
+games rather than its 15-20 — per the CLAUDE.md fan-out convention (the skill's pin is cost-control
+reasoning that no longer applies). Flag quality was visibly high: every agent independently
+root-caused its findings into actual source files and line numbers.
+
+### Adjudication (every flag resolved)
+
+| # | flag | games | disposition |
+|---|---|---|---|
+| A | T1 `land=Mountain; cast: Lightning Bolt, Sol Ring` is unpayable in either order (Sol Ring's `{C}{C}` cannot pay Bolt's `{R}`) | 30/30 | **DISMISSED — deliberate, already-adjudicated design** |
+| B | Bolt's `legal_targets` omitted every token and opponent spawn | 3 | **FIXED** |
+| C | Gruul Turf's ETB bounce omitted Gruul Turf itself | 8 | **FIXED** |
+| D1 | decisions kept being offered after the opponent was at ≤ 0 life | 5 | **FIXED** (residual below) |
+| D2 | committing `land=none; cast: (nothing)` re-asked the same decision forever | 1 | **FIXED** |
+| E | the deferred Karoo bounce made an otherwise-unpayable Scourge cast payable | 1 | **DISMISSED — legal play** |
+
+**A — dismissed, with the reasoning.** The agents are right that the plan is unpayable, and right
+that the executor degrades gracefully (it drops the cast and reports `dropped_casts`; state stays
+correct). But the optimistic affordability bound is *deliberate*, and this repo has already tried
+the obvious fix and documented it as **unsound** — `TurnSolver.cpp`'s note on `plan_pays`: dropping
+candidates a trial-apply calls unpayable "false-NEGATIVES real combo lines and would reject payable
+Dragonstorm turns", because the trial runs with choosers nulled. Tightening it would trade a
+cosmetic menu wart for lost combo lines, and three prior mana-projection "fixes" all measured
+worse. The authoritative answer is already shipped: server-truth `dropped_casts` on the next
+decision. Left as-is, deliberately.
+
+**E — dismissed, it is a legal line.** The engine defers the Karoo's ETB bounce until after the
+plan's casts, which the agent read as illegal trigger ordering. In real Magic you may tap lands for
+mana *in response to your own ETB trigger* (mana abilities do not use the stack) and the pool does
+not empty until end of step/phase (CR 500.4), so floating `{R}{R}{R}` before the bounce resolves
+and then casting is exactly this line. No defect.
+
+**D1 residual (disclosed, not fixed):** one *in-flight* mandatory trigger — the deferred Karoo
+bounce — still resolves after lethal, because it fires inside `ApplyPlan` rather than in the
+segment loop. Strictly, SBAs would have ended the game first. Fixing it means an SBA check inside
+shared resolution code that the search also runs, which is not worth the risk for a cosmetic gain;
+the recorded win turn was correct in all 30 games. The game now ends immediately after it.
+
 ## Open convergence loops
 
 * **5d claude-play sweep — NOT RUN.** The one gate item still open. It needs the ~15–20 game

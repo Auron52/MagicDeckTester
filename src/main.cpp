@@ -1297,8 +1297,17 @@ static void CollectDamageTargets(const GameState& s, int controller, bool player
             {
                 const Permanent& p = s.battlefield[i];
                 if (p.controller_index != side) { continue; }
-                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                if (!d || !d->card.IsCreature()) { continue; }
+                // Ask the PERMANENT, not the card database. Tokens (CreateToken) and the goldfish
+                // opponent's scheduled spawns (GameEngine::UpkeepStep) are synthetic Cards that
+                // carry CardType::Creature but have no cards.json entry, so the old
+                // `LookupCached(...) -> IsCreature()` filter silently dropped EVERY one of them
+                // from the human's target list -- while the engine's own targeting (e.g.
+                // FindLifegainRemovalTarget) uses `p.card.IsCreature()` directly. That made
+                // claude-play/viewer targeting strictly NARROWER than the AI's: Lathliss's 5/5 and
+                // Utvara's 6/6 Dragon tokens could never be Bolt targets, and neither could the
+                // opponent spawns that exist precisely "to provide creature targets for spells like
+                // Searing Blood" (GameState.h). Found by the Dragons Stage-5d claude-play sweep.
+                if (!p.card.IsCreature()) { continue; }
                 out.push_back({ 1, i });
                 labels.push_back(p.card.m_name.str() + (side == controller ? " (yours)" : " (opponent)"));
             }

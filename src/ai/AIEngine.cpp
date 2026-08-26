@@ -1861,6 +1861,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             const int this_main_ordinal = m_ext_main_ordinal++;   // #10 side-channel key
             int idx = m_external_chooser(state, plans, is_pre_combat_main);
             if (idx < 0 || idx >= static_cast<int>(plans.size())) { break; }  // pass / done
+            // An EMPTY committed plan ("land=none; cast: (nothing)") means exactly what a pass
+            // means, so it must END the phase like one. Applying it changes nothing, and under the
+            // commit-the-line rule above the loop then re-enumerates and offers the identical menu
+            // -- so choosing it repeated the SAME decision forever (turn frozen, only main_ordinal
+            // advancing; reproduced at seed 8800 gi19 by the Dragons Stage-5d sweep, where an agent
+            // that picks "do nothing" hangs the game instead of passing). The autonomous search
+            // never reaches this branch (use_external && !m_in_rollout), so this is GT-neutral; the
+            // plan stays in the menu with its index intact, so no saved reference is renumbered.
+            if (plans[idx].actions.empty() && plans[idx].land_to_play.empty()) { break; }
             // #10: honour a human-pinned cast order for this main-phase decision (empty / unset =>
             // no-op => canonical). Copy the chosen plan so the enumerated menu stays untouched.
             TurnSolver::Plan chosen = plans[idx];
@@ -1870,6 +1879,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 ReorderPlanCasts(chosen, ord);
             }
             TurnSolver::ApplyPlan(state, chosen, is_pre_combat_main);
+            // The opponent is DEAD -- stop asking. Under the commit-the-line rule the loop would
+            // otherwise re-enumerate and keep prompting inside an already-won turn (the Dragons
+            // sweep saw three Scourge ETB pings take the opponent to -1 and then still be offered a
+            // land drop and a bounce). The recorded win turn was always correct, so this is
+            // human-play ergonomics, not a scoring fix -- and it is the same shape as the empty-plan
+            // break above. Autonomous play never reaches this branch, so it is GT-neutral.
+            if (state.players[1 - state.active_player_index].life <= 0) { break; }
             drew_last = state.ActivePlayer().library.size() < lib_before;
             prev_inplay = std::move(cur_inplay);
         }

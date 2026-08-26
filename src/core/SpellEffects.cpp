@@ -1007,6 +1007,22 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
         if (!ranked.empty()) { pick = ranked.front(); }
     }
     if (pick < 0) { pick = self_index; legal.push_back(self_index); }  // mandatory: only the karoo
+    // HUMAN PLAY WIDENING: "return a land you control to its owner's hand" makes the karoo ITSELF a
+    // legal choice, and the viewer must never narrow a legal one (the same rule that keeps the
+    // Jitte's pruned modes open). The scan above deliberately excludes self because self-bouncing is
+    // essentially always worse for the AI -- you surrender the land drop and replay a tapped karoo --
+    // and that stays the autonomous heuristic, untouched. But it is a REAL line a person may want
+    // (it keeps every other land untapped this turn), and the Dragons Stage-5d sweep flagged its
+    // absence across many games. Gated on the chooser pointer, which RevealLogPause nulls for every
+    // search/rollout, so the autonomous engine is byte-identical. Appended LAST so the heuristic
+    // pick's position in `legal` (and thus `hidx` below) is unchanged.
+    if (g_play_bounce_chooser && self_index >= 0
+        && self_index < static_cast<int>(state.battlefield.size()))
+    {
+        bool has_self = false;
+        for (int i : legal) { if (i == self_index) { has_self = true; break; } }
+        if (!has_self) { legal.push_back(self_index); }
+    }
     // Human play (claude-play): let the player choose which land to return. The chooser gets the
     // legal battlefield indices + the heuristic's pick (as an index INTO `legal`); RevealLogPause
     // nulls it for search/enumeration, so the autonomous heuristic above stands there.
