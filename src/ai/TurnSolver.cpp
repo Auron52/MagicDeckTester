@@ -13134,15 +13134,22 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // so holding it would only make the solve fail and cost a second backtrack.
     // g_scripted_tapmode == 1: this plan variant is the SEARCHED "spend the dorks" branch, so skip
     // the hold entirely and let the solve spend them like any other source (UnprunedGate::TapReserve).
-    if (DorkReserveEnabled() && !m2_release && g_scripted_tapmode != 1 && n <= 64)
+    if (DorkReserveEnabled() && g_scripted_tapmode != 1 && n <= 64)
     {
         for (int i = 0; i < n; ++i)
         {
             const Permanent& p = state.battlefield[i];
             if (p.controller_index != active || p.tapped || !p.card.IsCreature()) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d && d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
-            { reserved_crea |= (1ull << i); }
+            if (!(d && d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)))
+            { continue; }
+            // MAIN-2 RELEASE frees only bodies whose tap costs nothing beyond this turn. A
+            // gy_land_exile_mana dork's tap EXILES a graveyard land -- one-shot fuel, and wasting
+            // it is phase-blind (the lever's own depletion/one-shot principle). fc341 (FiveColour
+            // s4345 gi341): releasing Deathrite Shaman in the T2 post-combat main burned the only
+            // graveyard fetch, stranding T3's five-pip Cosmic Spider-Man -- win 5 -> 6.
+            if (m2_release && !d->params.gy_land_exile_mana) { continue; }
+            reserved_crea |= (1ull << i);
         }
     }
     // ONE-SHOT class (MTG_ONESHOT_RESERVE, §2b "waste is the trigger"): hold every untapped pay-sac

@@ -1044,3 +1044,40 @@ anchor. fc341 (M2_RELEASE, 6 vs clean 5) NOT rescued — different mechanism, st
 Lever default OFF; joins the adoption-config candidate list (now: 8 levers +
 MTG_BOTTOM_LEGAL + MTG_SAC_SPAWN_LAND_LAST + MTG_SAC_AXIS? + MTG_M2_PAYLOAD_RESERVE —
 axis default and payload default are USER decisions at the flip).
+
+### fc341 ROOT-CAUSED + FIXED (2026-08-26): M2_RELEASE must not release a fuel-burning dork
+
+Diagnosis (artifacts in logs/overhaul_sweep/fc341/): EWINS T1 under M2R-only says
+earliest=6 with EVERY candidate at 6 — including the Godless-Shrine hold that clean
+realizes at 5 — and the FD oracle raises no divergence (predicted 6, realized 6). So the
+T1 Godless-vs-Foothills flip is a mere tiebreak among all-6; the lever's PLAY POLICY
+degrades every branch downstream (the cg30/fc96 signature). Forcing Godless T1 under M2R
+(MTG_FORCE_LAND) exposes the leak in one frame: after T2's post-combat main the graveyard
+is EMPTY and Deathrite Shaman is tapped — the released dork hold let the two-cast m2
+payment tap DRS, whose gy_land_exile_mana tap EXILED the cracked Wooded Foothills.
+Clean instead holds DRS (dork reserve), pays with two lands, and T3's Cosmic Spider-Man
+{W}{U}{B}{R}{G} is paid exactly by Godless + Breeding Pool + Steam Vents + BoP + the
+FUELED DRS tap — five pips, zero slack. Burn the fuel a turn early and the five-pip cast
+is one colour short: Spider-Man slips T3→T4, win 5→6.
+
+CLASSIFICATION: M2_RELEASE's premise — "a held body buys nothing post-combat" — is FALSE
+for a dork whose tap consumes a one-shot resource. The lever's own comment already states
+the principle ("depletion/one-shot holds are phase-blind: a wasted counter is wasted in
+any phase") but the dork class (reserved_crea) included DRS and the release skipped the
+whole class. Same heuristic-audit family as the sac-victim default: an untested premise
+quietly overriding a resource-preservation rule.
+
+FIX (TurnSolver::BatchPrepayMainCasts, the one m2_release consumer): under m2_release the
+dork-reserve loop now still reserves any ManaDork with params.gy_land_exile_mana — the
+release frees only bodies whose tap costs nothing beyond the turn. Same lossless
+leave-out-if-you-can ladder: if the m2 genuinely needs the fuel, the fallback rungs spend
+it. Blast radius: DRS is the ONLY gy_land_exile_mana card in cards.json and FiveColour
+the only deck running it — byte-inert everywhere else even with the bundle on.
+
+Verified: fc341 = 5 at M2R-only d3 unb, full-bundle d3 unb, AND full-bundle d5 shape
+(all were 6); clean arm unchanged 5; fc96 recheck 4 (bundle+payload), cg30 recheck 4
+(bundle); clean-env smoke 42/42, 0 configs changed (dormant byte-identity); FiveColour
+train under the full candidate config vs the pre-fix fcB baseline: 1600 games, ZERO
+win-turn changes, 4 games play-fingerprint-only (d3 gi16/gi151, d5 gi16/gi47 — the m2
+payment re-picked, same outcome). fc341 closes the M2_RELEASE-caused unrecoverable;
+open list is now Cluster C (mw136), Cluster D (mw326), st993, CR-cast gate, flip.
