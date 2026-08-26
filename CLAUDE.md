@@ -28,6 +28,33 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
 
 ## Repository Conventions
 
+- **AGENT FAN-OUT IS EXPECTED — do NOT stop to ask before it (user directive, 2026-08-26).**
+  Where a skill in this repo says to fan work out across subagents — the analyze-deck Stage 5d
+  claude-play sweep, the Stage 2 per-card research fan-out, the Stage 5 verification verdicts —
+  **just do it.** The user's words: *"I don't want agents stopping before doing the fan-out."*
+  Pausing to request permission, or quietly downgrading a prescribed fan-out to serial work, is
+  the failure mode this rule exists to prevent: it strands a mandated verification step
+  (`verify_deck.py`'s `claude_sweep` gate) as un-run and hands the user a deck that only *looks*
+  analyzed.
+  * **Cost is not the constraint it once was.** The user is on a Max 20x plan and has said
+    plainly that **cost is not a concern** here.
+  * **FABLE is the only genuinely scarce model. Sonnet AND OPUS are both fine for a fan-out.**
+    The user's words: *"Sonnet agents are quite cheap. If they were Fable agents it would be a
+    different story"* and *"even opus would be fine as part of the fan-out... and I have
+    difficulty using the non-fable part of my usage."* So the non-Fable budget is going UNUSED —
+    defaulting a fan-out to Sonnet to "save money" saves a resource the user has a surplus of
+    while giving up judgement quality. **Pick the model on task difficulty, not on price:** Opus
+    for anything whose value IS the judgement (the claude-play sweep's flag verification, card-data
+    reasoning, adversarial review), Sonnet for mechanical protocol-following at high volume.
+    Reserve Fable for where it is genuinely required.
+  * This OVERRIDES the `model: 'sonnet'` pin in `.claude/skills/claude-play.md`'s sweep section,
+    whose stated rationale is cost-control ("the chain's most expensive step") — that rationale no
+    longer holds. Likewise treat its "~15-20 games, never near 100" as a *signal* guideline, not a
+    budget one, and size up when a wider sample buys real coverage.
+  * If a session's harness blocks agents/workflows outright, say so explicitly and record the step
+    as **UN-RUN** in the per-deck ledger — never as "deferred to the user", which reads as a
+    sign-off the user never gave.
+
 - **NEVER create merge commits — REBASE local work onto origin (user directive, 2026-08-12).**
   The user wants linear history. `git config pull.rebase true` + `rebase.autoStash true` are
   set in this repo; keep them set on any new clone, and integrate remote work with
