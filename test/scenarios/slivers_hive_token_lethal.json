@@ -1,0 +1,25 @@
+{
+ "_comment": "USER-constructed board, 2026-08-26: Sliver Hive's '{5}, {T}: create a 1/1 colorless Sliver' is the LETHAL line, so the SEARCH must find it -- not merely offer it. Six lands and NO Ancient Ziggurat, which is the point of the board: Ziggurat is creature_mana_only, so it cannot pay a land ability's {5} at all, while Cavern of Souls / Secluded Courtyard each have an unrestricted {T}: Add {C} mode that can. Empty hand, so the token is the only play. Damage math: Muscle Sliver pumps all Slivers +1/+1, so Cloudshredder is 2/2 and Muscle is 2/2 = 4 on an unaided swing, two short. The token enters 1/1, takes Muscle's +1/+1 to 2/2, and Cloudshredder grants Slivers haste, so it attacks the turn it is created: exactly 6. A win here therefore PROVES the token was created, pumped and hasted -- opponent_life 0 is unreachable any other way. This ability reports UNVERIFIED in the short audit sweeps (6 games x 8 turns rarely leaves {5} spare with the Hive untapped), which is a coverage limit of the sweep, not a reachability gap; this fixture is what closes that gap permanently. Sibling: slivers_hive_token_line.json pins the human-play viewer affordance on a non-lethal board.",
+ "deck": "decks/slivers_vial/slivers_vial.txt",
+ "turn": 6,
+ "on_the_play": true,
+ "max_turns": 6,
+ "active_life": 20,
+ "opponent_life": 6,
+ "battlefield": [
+  { "name": "Cavern of Souls", "controller": 0, "tapped": false },
+  { "name": "Cavern of Souls", "controller": 0, "tapped": false },
+  { "name": "Cavern of Souls", "controller": 0, "tapped": false },
+  { "name": "Cavern of Souls", "controller": 0, "tapped": false },
+  { "name": "Secluded Courtyard", "controller": 0, "tapped": false },
+  { "name": "Sliver Hive", "controller": 0, "tapped": false },
+  { "name": "Cloudshredder Sliver", "controller": 0, "tapped": false, "sick": false },
+  { "name": "Muscle Sliver", "controller": 0, "tapped": false, "sick": false }
+ ],
+ "hand": [],
+ "library_filler": "Plated Sliver",
+ "library_size": 20,
+ "depth": 3,
+ "budget_ms": 0,
+ "expect_win_turn": 6
+}

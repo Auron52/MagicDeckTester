@@ -1,0 +1,26 @@
+{
+ "_comment": "Sliver Hive's '{5}, {T}: create a 1/1 colorless Sliver. Activate only if you control a Sliver' as a viewer LINE (`taptoken=`), on a board where it is NOT lethal -- so this pins the human-play affordance itself rather than the combat math the sibling slivers_hive_token_lethal.json asserts. Five spare sources plus the activating Hive: Cavern of Souls' unrestricted '{T}: Add {C}' mode is what pays the {5} (its coloured mana is colored_creature_only, and Ancient Ziggurat is creature_mana_only and could not pay this at all). Muscle Sliver satisfies the 'you control a Sliver' gate. The ability reports UNVERIFIED in short audit sweeps because {5} is rarely spare with the Hive untapped in 6 games x 8 turns; that is a sweep coverage limit, not a reachability gap, and this fixture is the standing proof.",
+ "deck": "decks/slivers_vial/slivers_vial.txt",
+ "turn": 6,
+ "on_the_play": true,
+ "max_turns": 6,
+ "active_life": 20,
+ "opponent_life": 20,
+ "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1" },
+ "battlefield": [
+  { "name": "Cavern of Souls", "controller": 0, "tapped": false },
+  { "name": "Cavern of Souls", "controller": 0, "tapped": false },
+  { "name": "Cavern of Souls", "controller": 0, "tapped": false },
+  { "name": "Cavern of Souls", "controller": 0, "tapped": false },
+  { "name": "Sliver Hive", "controller": 0, "tapped": false },
+  { "name": "Sliver Hive", "controller": 0, "tapped": false },
+  { "name": "Muscle Sliver", "controller": 0, "tapped": false, "sick": false }
+ ],
+ "hand": [],
+ "library_filler": "Plated Sliver",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "taptoken=Sliver Hive",
+ "expect_verdict": "accept"
+}
