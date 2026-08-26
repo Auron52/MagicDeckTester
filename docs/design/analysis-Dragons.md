@@ -130,7 +130,8 @@ Scourge 0.145; Utvara Hellkite **−0.284** (an 8-drop), Lightning Greaves −0.
 | check | result |
 |---|---|
 | coverage | DEFER — Atsushi's dies-trigger, signed off above |
-| card_fields | all hard fields (cost, P/T, types, keywords) match the Scryfall snapshot |
+| card_costs | `audit_card_costs.py`: "All mana costs match Scryfall" over the 203 that resolved; 83 unresolved were all HTTP-429/timeout transients, so the 9 new cards were closed against the freshly-refreshed snapshot instead (cost + P/T verified card-by-card, all 9 OK) |
+| card_fields | all hard fields (cost, P/T, types, keywords) match the Scryfall snapshot, 266 cards, exit 0. One HARD flag resolved: Scryfall lists `exert` on Glorybringer, allowlisted in `scryfall_divergences.json` as the approved deferral (Progenitus/Piledriver precedent) |
 | viewer | PASS — self-guard + surface sweep clean |
 | viewer_wiring | PASS — 2 types wired end-to-end (`bounce`, `target`) |
 | mismatch (5a) | **PASS — zero `[nonconv]`, zero `[fd-diverge]`** over seeds 7001/7002 × 60 games |
