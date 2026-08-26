@@ -402,6 +402,60 @@ payable without the creature the current engine taps — usually both. `slivers`
 19 of 19 slivers cases are LEGAL with zero laundering anywhere in the deck, so its four
 EXECUTION-DIFFERS games have no colour-honesty explanation whatsoever.
 
+### 2f. THE REPAIR — the over-tap is real, avoidable, and closes 6 of the 16 (2026-08-26)
+
+§2a named the repair without measuring it: "fixing the over-tap (tap what the batch needs, or leave
+the surplus uncommitted), not restoring the laundering." Both halves are now measured.
+
+**The over-tap is broad, not a one-off.** A meter on the accepted prepay
+(`tapstats::g_prepay_overtap_*`, `MTG_TAP_STATS`), 8 decks x 24 games, 983k accepted solves:
+
+| | shrink OFF (shipped default) | shrink ON |
+|---|---|---|
+| accepted prepays producing more than the bill | **28.4%** | 16.2% |
+| surplus mana per accepted prepay | **0.44** | 0.24 |
+| sources tapped beyond the bill's mana points | **182,863** | **5,137** |
+
+**And it is overwhelmingly AVOIDABLE.** `MTG_PREPAY_SHRINK` (default OFF) adds a post-pass: after an
+accepted solve, each newly-tapped source is re-solved with itself added to the hold, most-flexible-
+first (most colours produced), and kept untapped whenever the batch still pays wild-free without it.
+It gives a source back on **90.8% of over-tapping solves** — 198k sources returned. The residual
+16.2% is the legitimate kind (a source that makes two mana cannot be half-tapped), and the "tapped
+for nothing" count falls by **97%**.
+
+Starting the shrink from the hold the accepted solve actually ran under (`won_hold`) is load-bearing,
+not bookkeeping: from a zero hold the re-solve is free to tap the dork the rung ladder just spent
+rungs protecting, which is the very thing this repair exists to prevent.
+
+**What it recovers, measured against the §2c proven-defect set (the behaviour test, not the average):**
+
+| | RECOVERED | STILL-WORSE | MOVED |
+|---|---|---|---|
+| control (shrink off) | **0** | 16 | 0 |
+| shrink on | **6** | 10 | 0 |
+
+All 3 creature_giving cases, 2 mirrorwing, 1 hinata. Attribution is clean — the control recovers
+none — and nothing moves the wrong way. It does NOT close the other 10 (7 mirrorwing, 3 hinata), so
+the over-tap is one mechanism behind this class rather than the whole of it.
+
+**Aggregate cost: none, and that is the point.** Both tiers are play-neutral, so this buys the
+defect games for free rather than trading strength for them:
+
+| tier | cells better | worse | unchanged | mean per-cell delta |
+|---|---|---|---|---|
+| smoke (42) | 6 | 4 | 32 | **-0.0001** turns |
+| regression (70) | 6 | 1 | 63 | **-0.0002** turns |
+
+No searched-depth slowdown on the regression tier (60 searched games change play at the same score).
+The honest cost is **wall clock**: the regression tier's makespan went 178s -> 224s (~+25%), which is
+the extra solve per released source. If that matters it can be narrowed — the defect only bites when
+a cast appears AFTER the batch is prepaid (a mid-phase draw), so the post-pass could be gated on the
+plan containing a draw, at the price of leaving the other over-taps in place.
+
+**Not adopted.** The flag ships OFF and smoke is byte-identical with it off. Flipping the default
+rebaselines ground truth across every tier, so it needs held-out (overnight-seed) validation and the
+user's call first — §6 is the rebaseline procedure.
+
 ## 3. Scope — what is and is not suspect
 
 Superseded in one respect by §2d, and the correction is worth stating plainly: an earlier draft of

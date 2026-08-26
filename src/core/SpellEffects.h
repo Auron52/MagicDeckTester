@@ -9485,6 +9485,25 @@ namespace tapstats
     inline std::atomic<std::uint64_t> g_site_percast_filter{0};// per-cast floating-fed filter retry
     inline std::atomic<std::uint64_t> g_prepay_calls{0};       // BatchPrepayMainCasts invocations
     inline std::atomic<std::uint64_t> g_prepay_declined{0};    // ...that declined (-> per-cast path)
+    // OVER-TAP of the whole-turn prepay: how much more mana the accepted solve PRODUCED than the
+    // batch's combined cost required. This is the quantity behind the recheck's proven-defect class
+    // (docs/design/prepay-payment-path-recheck.md §2a): the surplus used to be laundered as `wild`
+    // and so was harmlessly fungible for a later mid-phase cast; now it carries its true colour, and
+    // a second segment that needs a different colour finds every land committed and taps the
+    // reserved mana creature instead -- which costs the attack, and the game. Over-tap is not always
+    // avoidable (a source that makes two mana cannot be half-tapped), so the meter separates the
+    // total from the count and from the part that is pure EXCESS SOURCES (over-tap >= the smallest
+    // possible granularity, i.e. a source that need not have been touched at all).
+    inline std::atomic<std::uint64_t> g_prepay_accepted{0};     // solves that succeeded and pre-loaded
+    inline std::atomic<std::uint64_t> g_prepay_overtap_calls{0};// ...with produced > combined
+    inline std::atomic<std::uint64_t> g_prepay_overtap_mana{0}; // total surplus mana, summed
+    inline std::atomic<std::uint64_t> g_prepay_overtap_srcs{0}; // sources tapped beyond the minimum
+    // SHRINK post-pass (MTG_PREPAY_SHRINK): accepted solves it gave at least one source back on,
+    // and how many sources in total. The ratio against g_prepay_overtap_calls is the answer to
+    // "how much of the over-tap was AVOIDABLE" -- the number that decides whether the prepay's
+    // over-commitment is a real defect or an artefact of indivisible two-mana sources.
+    inline std::atomic<std::uint64_t> g_prepay_shrunk{0};
+    inline std::atomic<std::uint64_t> g_prepay_shrunk_srcs{0};
     // Outcome split of the top-level entries (payable vs unpayable) + the nodes each outcome consumed.
     // Answers: is the backtracker mostly PROVING FAILURE (a byte-identical exact-frontier prune would
     // remove those nodes) or mostly SEARCHING FOR A PAYMENT it does find (only pay-from-frontier or a
@@ -9566,6 +9585,21 @@ namespace tapstats
                 (unsigned long long)g_prepay_declined.load(),
                 g_prepay_calls.load() ? 100.0 * (double)g_prepay_declined.load()
                                               / (double)g_prepay_calls.load() : 0.0);
+            const unsigned long long pacc = g_prepay_accepted.load();
+            const unsigned long long potc = g_prepay_overtap_calls.load();
+            std::fprintf(stderr,
+                "=== PREPAY OVER-TAP: accepted=%llu  with-surplus=%llu (%.1f%%)  surplus-mana=%llu "
+                "(%.2f per accepted)  excess-sources=%llu ===\n",
+                pacc, potc, pacc ? 100.0 * (double)potc / (double)pacc : 0.0,
+                (unsigned long long)g_prepay_overtap_mana.load(),
+                pacc ? (double)g_prepay_overtap_mana.load() / (double)pacc : 0.0,
+                (unsigned long long)g_prepay_overtap_srcs.load());
+            const unsigned long long pshr = g_prepay_shrunk.load();
+            std::fprintf(stderr,
+                "=== PREPAY SHRINK: solves that gave a source back=%llu (%.1f%% of over-tapping)  "
+                "sources returned=%llu ===\n",
+                pshr, potc ? 100.0 * (double)pshr / (double)potc : 0.0,
+                (unsigned long long)g_prepay_shrunk_srcs.load());
             std::fprintf(stderr,
                 "=== FLOW PRUNE: pruned=%llu (%.1f%% of top-level entries)  bailed=%llu (%.1f%%) ===\n",
                 fp, top ? 100.0 * (double)fp / (double)top : 0.0,

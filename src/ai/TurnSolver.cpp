@@ -13431,6 +13431,10 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     }
     ManaPool produced;
     bool ok = false;
+    // Which hold the accepted solve ran under. The shrink post-pass below must start from it, not
+    // from zero: releasing a source with the dork/depletion reservations dropped would let the
+    // re-solve tap the very creature the ladder just spent rungs protecting.
+    std::uint64_t won_hold = 0;
     for (int r = 0; r < n_rungs && !ok; ++r)
     {
         if (tapstats::Enabled()) { tapstats::g_site_prepay_held.fetch_add(1, std::memory_order_relaxed); }
@@ -13439,6 +13443,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                  /*tapped_mask=*/0, /*untapped_max=*/-1, /*reserved_mask=*/rungs[r],
                                  /*out_full_pool=*/&produced)
              && produced.wild == 0;
+        if (ok) { won_hold = rungs[r]; }
         if (!ok)   // this hold is infeasible/ambiguous -> restore for the next rung (or the plain solve)
         {
             state.battlefield                  = bf_snap;
@@ -13519,7 +13524,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 sum.red += p2.red; sum.green += p2.green; sum.colorless += p2.colorless;
                 sum.wild += p2.wild;
                 if (sum.wild != 0) { continue; }   // same ambiguous-pinning bar as the single solve
-                produced = sum; ok = true; mixed_ok = true;
+                produced = sum; ok = true; mixed_ok = true; won_hold = hold;
             }
         }
         if (!mixed_ok) { restore(); }
@@ -13536,6 +13541,131 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         return Pp(ok ? PP_WILD : PP_UNPAYABLE);
     }
 
+    // ---- SHRINK THE TAP SET (MTG_PREPAY_SHRINK, default OFF -> byte-identical) ------------------
+    // The solve above finds *a* payment, not a MINIMAL one, and 28.4% of accepted prepays produce
+    // more mana than the batch costs (983k accepted over 8 decks; 0.44 surplus mana each, and 183k
+    // of them tap more SOURCES than the bill has mana points). While the surplus was laundered into
+    // `wild` that was harmless -- fungible mana covered whatever the rest of the phase wanted. Now
+    // the surplus carries its true colour, so a cast that appears AFTER the batch (a mid-phase draw)
+    // can find every land committed to a colour it cannot use and fall through to the reserved mana
+    // creature, which then cannot attack. That is the proven-defect class in
+    // docs/design/prepay-payment-path-recheck.md §2a -- 32 games across 4 decks -- and the repair it
+    // names is to stop over-committing, NOT to restore the laundering.
+    //
+    // So: try to give sources BACK. Each candidate is re-solved with that source added to the hold;
+    // if the batch still pays wild-free without it, it was never needed and stays untapped for the
+    // rest of the turn. Candidates are tried MOST-FLEXIBLE-FIRST (most colours produced), because
+    // the source worth leaving up is the one that can pay the most different later pips -- gi309's
+    // shape exactly: a dual Game Trail released, so segment 2's {G} comes off the land instead of
+    // the Elvish Mystic. Deterministic: flexibility desc, then battlefield index asc.
+    //
+    // Cost is bounded and paid only where there is something to give back: the whole block is
+    // skipped unless the solve tapped more sources than the bill has mana points.
+    static const bool s_shrink = EnvOn("MTG_PREPAY_SHRINK");
+    if (s_shrink && n <= 64)
+    {
+        std::uint64_t newly = 0;
+        int newly_n = 0;
+        const int lim = std::min<int>(n, static_cast<int>(bf_snap.size()));
+        for (int i = 0; i < lim; ++i)
+        {
+            if (state.battlefield[i].tapped && !bf_snap[i].tapped)
+            { newly |= (1ull << i); ++newly_n; }
+        }
+        if (newly_n > combined.ManaValue())
+        {
+            // Flexibility = how many distinct colours the source can add. A source we cannot price
+            // sorts last (released only if nothing better works).
+            auto flex = [&](int i) -> int
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(bf_snap[i].card);
+                return d ? static_cast<int>(d->params.produces.size()) : 0;
+            };
+            std::vector<int> cand;
+            cand.reserve(static_cast<std::size_t>(newly_n));
+            for (int i = 0; i < lim; ++i) { if (newly & (1ull << i)) { cand.push_back(i); } }
+            std::stable_sort(cand.begin(), cand.end(),
+                             [&](int a, int b) { return flex(a) > flex(b); });
+            // Start from the hold the accepted solve ran under, and add to it. Everything the
+            // winning solve wrote -- City of Brass tap damage, a depletion counter, the float --
+            // rides on the saved STATE, so each candidate is judged against a full restore and the
+            // best attempt is copied back wholesale rather than reconstructed field by field.
+            std::uint64_t hold = won_hold;
+            std::vector<Permanent> best_bf   = state.battlefield;
+            ManaPool               best_fm   = state.floating_mana;
+            int                    best_la   = state.players[active].life;
+            int                    best_lo   = state.players[1 - active].life;
+            bool                   best_oll  = state.opponent_lost_life_this_turn;
+            ManaPool               best_produced = produced;
+            int                    released = 0;
+            for (int c : cand)
+            {
+                if (hold & (1ull << c)) { continue; }      // already given back
+                const std::uint64_t trial = hold | (1ull << c);
+                state.battlefield                  = bf_snap;
+                state.floating_mana                = fm_snap;
+                state.players[active].life         = la;
+                state.players[1 - active].life     = lo;
+                state.opponent_lost_life_this_turn = oll;
+                ManaPool p2;
+                const bool o2 = TapForCostBacktrack(state, combined, /*for_creature=*/all_creatures,
+                                                    ManaPool{}, /*rp_colors=*/nullptr,
+                                                    /*fail_memo=*/nullptr, /*out_leftover=*/nullptr,
+                                                    /*tapped_mask=*/0, /*untapped_max=*/-1,
+                                                    /*reserved_mask=*/trial, /*out_full_pool=*/&p2)
+                                 && p2.wild == 0;
+                if (o2)
+                {
+                    hold          = trial;
+                    best_bf       = state.battlefield;
+                    best_fm       = state.floating_mana;
+                    best_la       = state.players[active].life;
+                    best_lo       = state.players[1 - active].life;
+                    best_oll      = state.opponent_lost_life_this_turn;
+                    best_produced = p2;
+                    ++released;
+                }
+            }
+            // Restore whichever tap set won (the original when nothing could be given back).
+            state.battlefield                  = best_bf;
+            state.floating_mana                = best_fm;
+            state.players[active].life         = best_la;
+            state.players[1 - active].life     = best_lo;
+            state.opponent_lost_life_this_turn = best_oll;
+            produced                           = best_produced;
+            if (tapstats::Enabled() && released > 0)
+            {
+                tapstats::g_prepay_shrunk.fetch_add(1, std::memory_order_relaxed);
+                tapstats::g_prepay_shrunk_srcs.fetch_add(
+                    static_cast<std::uint64_t>(released), std::memory_order_relaxed);
+            }
+        }
+    }
+
+    // OVER-TAP METER (MTG_TAP_STATS): how much more the accepted solve produced than the batch
+    // needed, and how many sources were touched beyond the minimum the surplus could have come from.
+    // See tapstats::g_prepay_overtap_* for why this number is the one that matters.
+    if (tapstats::Enabled())
+    {
+        tapstats::g_prepay_accepted.fetch_add(1, std::memory_order_relaxed);
+        const int surplus = produced.Total() - combined.ManaValue();
+        if (surplus > 0)
+        {
+            tapstats::g_prepay_overtap_calls.fetch_add(1, std::memory_order_relaxed);
+            tapstats::g_prepay_overtap_mana.fetch_add(
+                static_cast<std::uint64_t>(surplus), std::memory_order_relaxed);
+            // How many sources this solve newly tapped, and how many the combined cost could in
+            // principle have needed at ONE mana each. The difference is sources that were touched
+            // for nothing -- the shape that is avoidable, as distinct from a Karoo's indivisible pair.
+            int newly = 0;
+            for (std::size_t i = 0; i < state.battlefield.size() && i < bf_snap.size(); ++i)
+            { if (state.battlefield[i].tapped && !bf_snap[i].tapped) { ++newly; } }
+            const int floor_srcs = combined.ManaValue();
+            if (newly > floor_srcs)
+            { tapstats::g_prepay_overtap_srcs.fetch_add(
+                  static_cast<std::uint64_t>(newly - floor_srcs), std::memory_order_relaxed); }
+        }
+    }
     // Pre-load floating as the combined cost: COLOURED/{C} pips pinned to their colours (produced
     // covers them since it has no wild), the generic requirement carried as `wild`, and everything
     // ELSE -- the OVER-production -- kept in the colours the solve actually made. Total ==
