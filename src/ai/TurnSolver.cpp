@@ -703,6 +703,13 @@ static thread_local const CardDefinition* g_bp_site_def = nullptr;
 // Clairvoyance is what makes the rule exact rather than a heuristic: the search already knows what
 // the trigger will draw, so "new information arrived" is never a reason to re-offer a card. Only
 // ORDER POSITION is.
+// See the call site in bp_searched_plan: replace the greedy continuation with the CANONICAL one.
+static bool BpNoGreedyContinuationEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_NO_GREEDY_CONT");
+    return heurarm::Flag(heurarm::BP_NO_GREEDY_CONT, on);
+}
+
 static bool BpCondemnOrderAwareEnabled()
 {
     static const bool on = EnvOn("MTG_BP_CONDEMN_ORDER_AWARE");   // default OFF pending measurement
@@ -14780,6 +14787,42 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 out      = cands[plan.bp_choice];
                 resolved = true;
             }
+        }
+        // MTG_BP_NO_GREEDY_CONT -- DELETE the greedy continuation (USER 2026-08-26: "greedy removal
+        // is a correctness thing ... that is the whole purpose of the design").
+        //
+        // Everything above resolves a continuation only for the ONE variant targeting this
+        // breakpoint. Every other plan reaching the same breakpoint -- above all the BASE PLAN
+        // itself -- fell through to a greedy TurnSolver::Solve below. On KittyEquipment that is the
+        // dominant greedy site in the engine: measured at shipped settings, 278,794 of 337,769
+        // greedy calls per 200 games (82.5%), and FLAT across every width, order and condemnation
+        // configuration tried -- because it is decided by plan/variant structure, not by the length
+        // of the continuation list.
+        //
+        // The replacement is the CANONICAL continuation, cands[0]. That is only a principled answer
+        // once the deck has a FULL cast order (MTG_KE_ORDER_FULL): with a class ranking, rank ties
+        // leave cands[0] arbitrary among peers, whereas under a total order it is exactly "continue
+        // in the USER's order". So this is the payoff the full order was the prerequisite for.
+        //
+        // Note what it also fixes beyond deleting greedy: today a base plan is SCORED on a greedy
+        // continuation while its own variants are scored on searched ones, so the two are not
+        // compared on the same footing. The overrun case (bp_choice >= cands.size(), a duplicate of
+        // the base plan) collapses onto cands[0] too, which is what it was always meant to be.
+        //
+        // Cost should be near-free rather than a new enumeration: the variants of this same base
+        // plan already enumerated this exact breakpoint state, so this is an enum-memo HIT and a
+        // vector index in place of a greedy Solve. That is the measurement, not the assumption.
+        if (!resolved && class_on && BpNoGreedyContinuationEnabled())
+        {
+            const std::vector<TurnSolver::Plan> cands =
+                TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat);
+            if (!cands.empty())
+            {
+                out      = cands.front();
+                resolved = true;
+            }
+            // cands EMPTY means the enumeration offers nothing here; the greedy Solve below is then
+            // the only remaining answer and is left in place rather than emitting an empty plan.
         }
         // Lockstep trace (MTG_BP_TRACE): the apply side's breakpoint SEQUENCE for the committed
         // line, printed only while g_bp_trace_arm is set (the fd-trace committed-line replay), so

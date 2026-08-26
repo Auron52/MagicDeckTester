@@ -75,6 +75,7 @@ enum Slot : int
     SF_PUT_BP,                // MTG_SF_PUT_BP             site 6 fires off a Stoneforge PUT too
     M2_D0_SEARCHED,           // MTG_M2_D0_SEARCHED        branch-site interior m2 at d<=0 is SEARCHED
     KE_ORDER_FULL,            // MTG_KE_ORDER_FULL         KittyEquipment FULL (total) cast order
+    BP_NO_GREEDY_CONT,        // MTG_BP_NO_GREEDY_CONT     canonical continuation instead of greedy Solve
     COUNT
 };
 
@@ -127,6 +128,7 @@ inline const char* Name(int slot)
         "MTG_SF_PUT_BP",
         "MTG_M2_D0_SEARCHED",
         "MTG_KE_ORDER_FULL",
+        "MTG_BP_NO_GREEDY_CONT",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }
