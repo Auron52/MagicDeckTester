@@ -47,6 +47,31 @@ the mode an A/B arm believed it was disabling.
    to the baseline to disable" is now literally correct: `MTG_X=0` disables a default-off
    flag's adoption.
 
+### The rule crosses the language boundary
+
+A Python/JS tool that MIRRORS an engine flag must mirror its **default** too, not just its name.
+`os.environ.get("MTG_X")` returning `None` means "unset", which for a default-ON lever means the
+engine has it **ON** — so a presence-read (`bool(v)`, `v is not None`) leaves the tool off exactly
+when the binary is on, and the two then disagree about the same run.
+
+Measured cost (2026-08-26): `MTG_TREASURE_PAY_SOURCE` is `EnvOn(..., true)` in the engine, while
+`test/viewer_protocol_check.py` gated its compat tier on `bool(_tps) and _tps != "0"`. On an
+ordinary run the engine treated a Treasure as a payment source (the crack is implicit, not an
+enumerated action) and the checker still expected the recorded plan to name it — so a user-owned
+reference reported a false **ENUM-GAP** ("the engine no longer offers this plan for the same
+state"), which is the checker's loudest category and points investigation at the enumerator rather
+than at the tool. It is the same presence-only defect as rule 1, one language over.
+
+The mirror forms, matching the table above:
+
+| engine read | Python mirror |
+|---|---|
+| `EnvOn("MTG_X")` | `os.environ.get("MTG_X", "") not in ("", "0")` |
+| `EnvOn("MTG_X", true)` | `os.environ.get("MTG_X") != "0"` |
+
+Grep for `environ.get("MTG_` when converting a flag's default: the tools do not fail the build when
+they fall out of step, they just quietly disagree.
+
 ### Testing a flag change
 
 Flags are unset in the harness environment, so the regression suite alone cannot prove a
