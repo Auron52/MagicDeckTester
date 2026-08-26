@@ -69,7 +69,54 @@ payment engine produced the same payments and only the cast sequence moved. The 
   Worldly Tutor TWICE two turns later: the lever delayed it, costing a turn of ramp. The naive test
   would have handed a lever's own valuation change to the payment owner.
 
-## 3. What is NOT settled
+## 3. TOP_RESOLVE's own regressions: one shape, and it is NOT payment
+
+The 18 games where `MTG_TOP_RESOLVE` ALONE is worse were reproduced and classified separately
+(the section above analysed the combined arm). 13 are a different cast choice, 3 are mulligan
+divergence, 1 is sequencing, 1 is deferred timing.
+
+**10 of the 13 cast-choice regressions have the arm casting an EXTRA top-of-library card the
+baseline did not**: Worldly Tutor x6, Mirri's Guile x2, Call of the Wild x1 (plus the deferred-timing
+case, also Worldly Tutor). The lever makes a tutor more attractive because casting it arms a
+re-solve, and the search sometimes buys that with mana it needed elsewhere.
+
+### Not horizon, not budget
+
+| setting | regressions remaining of 18 |
+|---|---|
+| d6 / b20 (play) | 18 |
+| d8 / b10000 | 11 |
+| d8 / b100000 | 11 (identical results) |
+
+A 10x budget changes nothing, so the 11 survivors are neither horizon-truncated nor budget-cut.
+
+### The mechanism, pinned (hold gi=1600, seed 901601, d8/b100k)
+
+Both arms have the same 4 creatures on board at T3 and the same hand. The tap states say it all:
+
+* **base** taps 3 Forests for 3 spells, leaves Llanowar Elves and Elvish Archdruid UNTAPPED, and
+  attacks with both for **4** (opp 20 -> 16).
+* **arm** casts a SECOND Worldly Tutor and pays for it by tapping 3 Forests **+ a Llanowar Elves**.
+  That Llanowar cannot then attack, so the swing is **2** (opp 20 -> 18).
+
+Two damage at T3 compounds: base kills on T4 (16 -> -1), the arm reaches only 8 and needs T5.
+
+**The payment layer is not at fault, and this is worth stating explicitly.** The arm needed 4 mana
+and had 3 lands, so the fourth spell costs an attacker NO MATTER WHICH source is tapped -- tapping
+Elvish Archdruid instead yields all 4 mana from one permanent but loses ITS attack, the same 2
+damage. There is no tap assignment that avoids the cost. The defect is the DECISION to cast the
+fourth spell, which is the search's, not the payment solver's.
+
+### The machinery to fix it already exists, and one deck uses it
+
+`AvailableManaPoolNoAttackers` (`src/ai/ManaPayment.cpp`) is exactly this guard -- the pool minus
+creature sources whose tap would cost a real attack (`CanAttackFull` + effective power > 0). It has
+exactly TWO callers, both in the FiveColour provider ("CONDEMN-DIG REFINEMENT 2026-08-19: Main1 only
+when payable WITHOUT tapping an attacker"). Nothing else in the engine prices an attack into a cast
+decision. The obvious candidate fix -- gate a SPECULATIVE cast (a tutor, a dig) on the
+no-attackers pool -- is untested and is the natural next experiment.
+
+## 4. What is NOT settled
 
 * **Adoption is not proposed yet.** 59 : 31 combined is a real signal, but the 7 mulligan-divergence
   games mean the play-only effect is smaller than the raw counts suggest, and the regressions are
