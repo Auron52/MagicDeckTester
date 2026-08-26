@@ -260,18 +260,133 @@ def cmd_classify(args):
     return 0
 
 
+# ---------------------------------------------------------------- tapdiff
+# The dork-tap signature, mechanised. Adjudicating mirrorwing gi309 by hand came down to one
+# comparison: at the pre-combat decision, is a NON-LAND permanent tapped in the fixed arm that the
+# control left untapped? A tapped creature cannot attack, which is what actually costs the game.
+# Combat itself taps attackers, so the comparison must be made BEFORE combat -- the last decision in
+# the turn at which the opponent's life is still the turn's opening value.
+_tls = __import__("threading").local()
+
+
+def _logging_play_step(bin_, r, gi, force, choices, validate=None, max_turns=None, env_extra=None):
+    args = [bin_, os.path.join(ROOT, r["deckfile"]), "--claude-play",
+            "--profile", os.path.join(ROOT, r["profile"]), "--seed", str(r["seed"] + gi),
+            "--game-index", str(gi), "--depth", str(r["depth"]), "--budget-ms", str(r["budget"]),
+            "--ignore-play-profile", "--force-mulligan", force]
+    if max_turns is not None:
+        args += ["--max-turns", str(max_turns)]
+    if choices:
+        args += ["--choices", ",".join(str(c) for c in choices)]
+    if validate is not None:
+        args += ["--validate-line", validate]
+    d = getattr(_tls, "logdir", None)
+    if d:
+        args += ["--log-dir", d]
+    p = subprocess.run(args, cwd=ROOT, capture_output=True, text=True,
+                       env=dict(os.environ, MTG_PLAY_PLANS_CAP="0", **(env_extra or {})))
+    return p.returncode, p.stdout + p.stderr
+
+
+def _precombat_tapped(logdir):
+    """{turn: set(non-land permanents tapped before combat)} from a --claude-play decision log."""
+    files = glob.glob(os.path.join(logdir, "*.json"))
+    if not files:
+        return {}, None
+    g = json.load(open(files[0]))
+    by_turn = {}
+    for rec in g.get("decisions", []):
+        d = rec["decision"]
+        t = d.get("turn")
+        if t is None:
+            continue
+        by_turn.setdefault(t, []).append(d)
+    out = {}
+    for t, decs in by_turn.items():
+        lives = [d.get("opponent", {}).get("life") for d in decs if d.get("opponent")]
+        if not lives:
+            continue
+        opening = max(x for x in lives if x is not None)
+        pre = [d for d in decs if d.get("opponent", {}).get("life") == opening]
+        if not pre:
+            continue
+        d = pre[-1]
+        out[t] = {c["name"] for c in d.get("me", {}).get("battlefield", [])
+                  if not c.get("is_land") and c.get("tapped")}
+    return out, g.get("win_turn")
+
+
+def tapdiff_one(binary, r):
+    import gt_line_playable as G
+    G.play_step = _logging_play_step                      # route every walk through --log-dir
+    gi, key = int(r["gi"]), r["key"]
+    base = tempfile.mkdtemp(prefix="tapdiff_")
+    try:
+        cfg = G.explain.load_cases()
+        rr = G.explain.resolve(mode_of(key), key, cfg)
+        og = G.old_game(binary, rr, gi, G.LEGACY_ENV)
+        if og is None:
+            return dict(r, tap_class="NO-OLD-LOG", tap_detail="")
+        turns, force = og[0], og[1]
+        caps, res = [], {}
+        for tag, env, use_hints in (("off", G.LEGACY_ENV, False), ("on", None, True)):
+            d = os.path.join(base, tag)
+            os.makedirs(d, exist_ok=True)
+            _tls.logdir = d
+            G.walk_line(binary, rr, gi, force, turns,
+                        hints=(caps if use_hints else None),
+                        capture=(None if use_hints else caps), tag=tag, env_extra=env)
+            res[tag] = _precombat_tapped(d)
+        _tls.logdir = None
+        off, on = res["off"][0], res["on"][0]
+        hits = []
+        for t in sorted(set(off) & set(on)):
+            extra = on[t] - off[t]
+            if extra:
+                hits.append(f"T{t}:" + "+".join(sorted(extra)))
+        if hits:
+            return dict(r, tap_class="TAP-ORDER", tap_detail=";".join(hits))
+        return dict(r, tap_class="no-tap-diff", tap_detail="")
+    except Exception as e:
+        return dict(r, tap_class=f"ERR:{type(e).__name__}", tap_detail="")
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
+
+
+def cmd_tapdiff(args):
+    binary = args.bin or os.path.join(ROOT, "build/Release/mtg")
+    rows = read_cases(args.filter)
+    print(f"TAPDIFF  {len(rows)} cases -- non-land permanents tapped pre-combat in the FIXED arm")
+    print("         that the control left untapped. A tapped creature cannot attack.\n")
+    done, agg = [], {}
+    with futures.ThreadPoolExecutor(max_workers=args.jobs) as ex:
+        for a in ex.map(lambda r: tapdiff_one(binary, r), rows):
+            done.append(a)
+            agg[a["tap_class"]] = agg.get(a["tap_class"], 0) + 1
+            if a["tap_class"] == "TAP-ORDER":
+                print(f"  {a['key']} gi{a['gi']}: {a['pre_fix']}->{a['post_fix']}  "
+                      f"[{a['attribution']}]  {a['tap_detail']}", flush=True)
+    print("\nsummary: " + ", ".join(f"{k}={v}" for k, v in sorted(agg.items())))
+    with open(os.path.join(ROOT, "logs", "prepay_tapdiff.json"), "w") as fh:
+        json.dump(done, fh, indent=1)
+    print("detail -> logs/prepay_tapdiff.json")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build");    b.add_argument("--baseline", default="90a537bd")
     v = sub.add_parser("verify")
     c = sub.add_parser("classify")
-    for p in (v, c):
+    t = sub.add_parser("tapdiff")
+    for p in (v, c, t):
         p.add_argument("--jobs", type=int, default=min(16, (os.cpu_count() or 4) - 2))
         p.add_argument("--bin", default=None)
         p.add_argument("--filter", default=None)
     a = ap.parse_args()
-    return {"build": cmd_build, "verify": cmd_verify, "classify": cmd_classify}[a.cmd](a)
+    return {"build": cmd_build, "verify": cmd_verify, "classify": cmd_classify,
+            "tapdiff": cmd_tapdiff}[a.cmd](a)
 
 
 if __name__ == "__main__":
