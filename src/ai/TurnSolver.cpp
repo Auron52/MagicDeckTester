@@ -4250,7 +4250,7 @@ static bool TutorAxisEnabled()
     static const bool on = EnvOn("MTG_TUTOR_AXIS", true);
     return on;
 }
-// MTG_SAC_AXIS (default off, adoption-config candidate): fan the sacrifice-a-land target out as
+// MTG_SAC_AXIS (default ON, adopted 2026-08-26; =0 disables): fan the sacrifice-a-land target out as
 // Plan::sac_pins variants so the search -- not the SacrificeLandCandidates heuristic alone --
 // picks which land each additional cost eats. USER directive (2026-08-25): "It should be a
 // branch by default and be overridden by a heuristic." The heuristic keeps three roles: the
@@ -4258,7 +4258,7 @@ static bool TutorAxisEnabled()
 // rollouts), and the base plan's default. See docs/design/searched-choice-audit.md.
 static bool SacAxisEnabled()
 {
-    static const bool on = EnvOn("MTG_SAC_AXIS");
+    static const bool on = EnvOn("MTG_SAC_AXIS", true);
     return on;
 }
 // MTG_TUTOR_AXIS_RESOLVE=1 (default off): bind the searched tutor pick by INDEX resolved at the
@@ -6736,7 +6736,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { has_land = true; break; }
                 }
                 if (!has_land) { continue; }
-                // CAST-DESIRABILITY GATE (MTG_SAC_SPAWN_CAST_GATE, default OFF -- adoption-config
+                // CAST-DESIRABILITY GATE (MTG_SAC_SPAWN_CAST_GATE, default ON, adopted 2026-08-26; =0 disables -- adoption-config
                 // candidate; overhaul ledger cg30 family). USER doctrine 2026-08-25: it is a
                 // "wasted play to use Crop Rotation when you would have to sacrifice an Orchard"
                 // -- a token-spawn land (taps_spawn_opp_token) is a per-turn damage engine and the
@@ -6758,7 +6758,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // a live drain is free damage plus an intact engine. Gate only when the library
                 // holds no spawn land to re-fetch (goldfish-clairvoyant library reads are the
                 // engine's standard, e.g. Turntimber's top-7).
-                static const bool s_spawn_gate = EnvOn("MTG_SAC_SPAWN_CAST_GATE");
+                static const bool s_spawn_gate = EnvOn("MTG_SAC_SPAWN_CAST_GATE", true);
                 if (s_spawn_gate && !g_search_candidate_enum && !HumanPlayActive())
                 {
                     bool all_spawn = true, drain_live = false;
@@ -13252,7 +13252,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // The SAME competition exists one level in -- dork vs dork -- and had no rung: when the turn
     // needs exactly one body's mana, "hold every dork" is infeasible and the fallback holds NOTHING,
     // so the joint solve may spend the ONE body the turn needs (the attacker / pump target) on a pip
-    // a SPARE dork covers identically. The attacker-only rung (MTG_TAP_ATTACKER_RUNG, default off)
+    // a SPARE dork covers identically. The attacker-only rung (MTG_TAP_ATTACKER_RUNG, default on)
     // is that missing step; see TapAttackerRungEnabled for the AL gi8 case and its verification.
     std::uint64_t rungs[14];
     int n_rungs = 0;
@@ -13291,7 +13291,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     }
     if (TapAttackerRungEnabled() && reserved_atk && reserved_atk != reserved)
     { push(reserved_atk); }
-    // PARTIAL CREATURE HOLD (MTG_DORK_HOLD_PARTIAL, default OFF pending measurement -- the USER's
+    // PARTIAL CREATURE HOLD (MTG_DORK_HOLD_PARTIAL, default ON, adopted 2026-08-26 -- the USER's
     // margin-1 combo games, 2026-08-21). When even the creatures-only hold is unaffordable, the
     // all-or-nothing release above taps EVERY dork -- losing attackers the lethality projection
     // counted (StompySurprise gi47: the 17-vs-16 Craterhoof-combo kill needs exactly one Llanowar
@@ -13299,7 +13299,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // at a time, WEAKEST EffectivePower first (tie: lower battlefield index -- deterministic), each
     // rung keeping the remaining stronger attackers (and every depletion land) held; the first
     // payable subset wins. Costs extra solve attempts only after the full holds already failed.
-    static const bool s_partial_hold = EnvOn("MTG_DORK_HOLD_PARTIAL");
+    static const bool s_partial_hold = EnvOn("MTG_DORK_HOLD_PARTIAL", true);
     if (s_partial_hold && reserved_crea && DorkReserveEnabled() && g_scripted_tapmode != 1)
     {
         std::vector<int> crea;

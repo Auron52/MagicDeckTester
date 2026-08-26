@@ -1250,7 +1250,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     TranspositionTable* saved_tt = m_shared_tt;
     m_shared_tt = LookaheadBottoming() ? &shared_tt : saved_tt;
 
-    // LEGAL-SIZE SUBSET TABLE (MTG_BOTTOM_LEGAL, default OFF while A/B'd -- adopt with the
+    // LEGAL-SIZE SUBSET TABLE (MTG_BOTTOM_LEGAL, default ON, adopted 2026-08-26 (=0 disables) -- with the
     // overhaul flip's rebaseline). The shipped greedy scores each candidate removal on a hand
     // that is still (count - i - 1) cards TOO BIG, so a line that needs EVERY remaining card can
     // score win-N at step i yet be unrealisable by any legal keep -- st374's mull-3: "bottom Sol
@@ -1262,7 +1262,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     // so far -- a candidate is allowed iff SOME legal completion achieves the best win. Later
     // steps reuse the table (no further rollouts) and the heuristic tiebreak among allowed
     // candidates is unchanged. Clairvoyant path only (the blind bottomer keeps its own model).
-    static const bool s_legal_trials = EnvOn("MTG_BOTTOM_LEGAL");
+    static const bool s_legal_trials = EnvOn("MTG_BOTTOM_LEGAL", true);
     std::vector<int>  subset_win;    // win turn per removal mask over the initial hand (0 = not a legal mask)
     std::vector<int>  nums0;         // initial hand card numbers, in mask-bit order
     std::uint32_t     done_mask = 0; // bottoms committed so far, as initial-hand bits

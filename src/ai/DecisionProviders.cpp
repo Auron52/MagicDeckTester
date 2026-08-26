@@ -931,7 +931,7 @@ std::vector<int> DecisionProvider::SacrificeLandCandidates(
     // Historical rule: the first TAPPED land if any, else the first land. Reproduced as "tapped
     // before untapped, stable within each band" -- index 0 is the same land as before.
     //
-    // MTG_SAC_SPAWN_LAND_LAST (DEFAULT OFF; =1 enables -- adoption lever, overhaul ledger cg30):
+    // MTG_SAC_SPAWN_LAND_LAST (DEFAULT ON, adopted 2026-08-26 (=0 disables) -- overhaul ledger cg30):
     // a token-spawn land (Forbidden Orchard, taps_spawn_opp_token) is a per-turn damage engine
     // (one opponent Spirit per turn = Suture Priest drip + Massacre Wurm death payoff), and a
     // sacrifice destroys it PERMANENTLY -- the same irrecoverable-source shape as the fuel-dork
@@ -948,7 +948,7 @@ std::vector<int> DecisionProvider::SacrificeLandCandidates(
     // within), then BOUNCELANDS (etb_bounce_land -- a Karoo taps for two, so it is 2 mana/turn
     // of ongoing production vs a fungible land's 1), then spawn lands strictly last. A board
     // with only spawn lands is unchanged.
-    static const bool s_spawn_last = EnvOn("MTG_SAC_SPAWN_LAND_LAST");
+    static const bool s_spawn_last = EnvOn("MTG_SAC_SPAWN_LAND_LAST", true);
     std::vector<int> out = land_indices;
     std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
         if (s_spawn_last)
@@ -1692,7 +1692,7 @@ static constexpr int kManaCreatureTapRank         = 64;
 static constexpr int kGrowableManaCreatureTapRank = 65;
 static constexpr int kFuelManaCreatureTapRank     = 67;
 
-// DEFAULT OFF (opt in with MTG_DORK_TAP_LAST=1), pending the one-shot fix below.
+// DEFAULT ON, adopted 2026-08-26 (MTG_DORK_TAP_LAST=0 disables); requires the one-shot fix below.
 //
 // NOT adopted despite the numbers, and the reason is a REFERENCE, not an aggregate: with this on,
 // the hand-played `references/Mirrorwing_Dragon/claude_s26_gi25.json` replays to T8 against a
@@ -1709,7 +1709,7 @@ static constexpr int kFuelManaCreatureTapRank     = 67;
 // for a tap and the reference says that is a losing trade.
 inline bool DorkTapLastEnabled()
 {
-    static const bool v = EnvOn("MTG_DORK_TAP_LAST");
+    static const bool v = EnvOn("MTG_DORK_TAP_LAST", true);
     return v;
 }
 

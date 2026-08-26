@@ -1549,7 +1549,7 @@ static std::uint64_t OneShotHoldMask(const GameState& state)
     return mask;
 }
 
-// M2-PAYLOAD RESERVE (MTG_M2_PAYLOAD_RESERVE, DEFAULT OFF -- adoption-config candidate; overhaul
+// M2-PAYLOAD RESERVE (MTG_M2_PAYLOAD_RESERVE, DEFAULT ON, adopted 2026-08-26 (=0 disables); overhaul
 // ledger "fc96 s4"). The pre-combat payment is otherwise blind to the POST-combat payload in hand:
 // fc96's T4 casts Hellkite, and under MTG_DORK_TAP_LAST's lands-first order the payment leaves
 // Faeburrow+Deathrite = 6 post-combat mana where Unite the Coalition needs 7 -- while an EQUALLY
@@ -1579,7 +1579,7 @@ static std::uint64_t OneShotHoldMask(const GameState& state)
 //    phase rule, decides between it and the hold-Garth line.
 static std::uint64_t PayloadReserveMask(const GameState& state)
 {
-    static const bool s_on = EnvOn("MTG_M2_PAYLOAD_RESERVE");
+    static const bool s_on = EnvOn("MTG_M2_PAYLOAD_RESERVE", true);
     if (!s_on) { return 0; }
     const PlanTraits* pt = CurrentPlanTraits();
     if (!pt || pt->main2) { return 0; }

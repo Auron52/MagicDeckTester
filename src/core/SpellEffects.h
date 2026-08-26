@@ -7490,7 +7490,7 @@ inline const std::vector<Color>& DomainColors(const GameState& state, int contro
 }
 
 // ---- One-shot "lump" sac sources as PAYMENT sources (§2a) -------------------------------------
-// MTG_TREASURE_PAY_SOURCE -- DEFAULT OFF (experiment; =1 enables). Routes a 1-mana sac source
+// MTG_TREASURE_PAY_SOURCE -- DEFAULT ON, adopted 2026-08-26 (=0 disables). Routes a 1-mana sac source
 // (Treasure Token) through the mana PAYMENT solver instead of the plan enumerator's per-colour
 // SacForMana fan, deleting its odometer group outright.
 //
@@ -7508,7 +7508,7 @@ inline const std::vector<Color>& DomainColors(const GameState& state, int contro
 // machinery -- which is the whole reason Treasures come first.
 inline bool TreasurePaySourceEnabled()
 {
-    static const bool v = EnvOn("MTG_TREASURE_PAY_SOURCE");
+    static const bool v = EnvOn("MTG_TREASURE_PAY_SOURCE", true);
     return v;
 }
 
@@ -7570,7 +7570,7 @@ inline bool CopyMagnetLive(const GameState& state, int controller)
     return false;
 }
 
-// FRESH-SPEND AXIS (MTG_FRESH_SPEND_AXIS, default OFF): make the fresh-hold doctrine above a
+// FRESH-SPEND AXIS (MTG_FRESH_SPEND_AXIS, default ON, adopted 2026-08-26; =0 disables): make the fresh-hold doctrine above a
 // searched BRANCH for exactly one shape -- a plan that converts the fresh mint into a THIS-TURN
 // kill (mw136: T5 Gold Rush -> crack the mint -> Luxurious Libation X+1 = exact lethal; banking
 // has zero option value when the game ends now). The doctrine stays the DEFAULT world: the train
@@ -7580,7 +7580,7 @@ inline bool CopyMagnetLive(const GameState& state, int controller)
 // discards every other freshmode variant before its tail is ever scored).
 inline bool FreshSpendAxisEnabled()
 {
-    static const bool v = EnvOn("MTG_FRESH_SPEND_AXIS");
+    static const bool v = EnvOn("MTG_FRESH_SPEND_AXIS", true);
     return v;
 }
 
@@ -7915,7 +7915,7 @@ inline bool DorkReserveEnabled()
 // Revisit for 1v1, where an untapped blocker in main 2 is real value.
 inline bool M2ReleaseEnabled()
 {
-    static const bool v = EnvOn("MTG_M2_RELEASE");
+    static const bool v = EnvOn("MTG_M2_RELEASE", true);
     return v;
 }
 
@@ -7928,7 +7928,7 @@ inline bool M2ReleaseEnabled()
 // reserve the pumped creature" -- and the Mirrorwing copy-magnet override holds the whole board.
 inline bool PumpTargetHoldEnabled()
 {
-    static const bool v = EnvOn("MTG_PUMP_TARGET_HOLD");
+    static const bool v = EnvOn("MTG_PUMP_TARGET_HOLD", true);
     return v;
 }
 
@@ -7959,7 +7959,7 @@ struct TapKeepLastScope
 // whole-turn ladder covers multi-cast turns jointly, but watch the declined-prepay shapes.
 inline bool OneShotReserveEnabled()
 {
-    static const bool v = EnvOn("MTG_ONESHOT_RESERVE");
+    static const bool v = EnvOn("MTG_ONESHOT_RESERVE", true);
     return v;
 }
 
@@ -7972,11 +7972,11 @@ inline bool OneShotReserveEnabled()
 // without the band, creatures rank by colour and "first among creatures" is not expressible.
 inline bool ScalerPlanBiasEnabled()
 {
-    static const bool v = EnvOn("MTG_SCALER_PLAN_BIAS");
+    static const bool v = EnvOn("MTG_SCALER_PLAN_BIAS", true);
     return v;
 }
 
-// SCARCE-COLOR HOLD (MTG_SCARCE_COLOR_HOLD, default OFF -- adoption-config candidate; overhaul
+// SCARCE-COLOR HOLD (MTG_SCARCE_COLOR_HOLD, default ON, adopted 2026-08-26 (=0 disables); overhaul
 // ledger "mw326 DTL"). On a multi-cast plan whose whole-turn prepay DECLINED (the joint combined
 // cost is unpayable up front -- e.g. it needs a mid-turn Treasure mint), the per-cast greedy pays
 // each cast with no view of the NEXT cast's colour needs. mw326 (Mirrorwing s4330 gi326): under
@@ -7993,7 +7993,7 @@ inline bool ScalerPlanBiasEnabled()
 // contract).
 inline bool ScarceColorHoldEnabled()
 {
-    static const bool v = EnvOn("MTG_SCARCE_COLOR_HOLD");
+    static const bool v = EnvOn("MTG_SCARCE_COLOR_HOLD", true);
     return v;
 }
 
@@ -8004,11 +8004,11 @@ inline bool PlanTraitsWanted()
     static const bool v = M2ReleaseEnabled() || PumpTargetHoldEnabled()
                        || OneShotReserveEnabled() || ScalerPlanBiasEnabled()
                        || ScarceColorHoldEnabled()   // ScarceColorHoldMask (ManaPayment.cpp)
-                       || EnvOn("MTG_M2_PAYLOAD_RESERVE");   // PayloadReserveMask (ManaPayment.cpp)
+                       || EnvOn("MTG_M2_PAYLOAD_RESERVE", true);   // PayloadReserveMask (ManaPayment.cpp)
     return v;
 }
 
-// ATTACKER-ONLY RUNG on the prepay reservation ladder (MTG_TAP_ATTACKER_RUNG, default off).
+// ATTACKER-ONLY RUNG on the prepay reservation ladder (MTG_TAP_ATTACKER_RUNG, default ON, adopted 2026-08-26; =0 disables).
 // The ladder above is all-or-nothing per class: hold EVERYTHING reservable, and if that is
 // unaffordable fall straight to the unrestricted solve. When the turn needs exactly one body's
 // mana, "hold every dork" is infeasible and the fallback holds NOTHING -- so the joint solve is
@@ -8031,7 +8031,7 @@ inline bool PlanTraitsWanted()
 // attacker bit) recovers the T3 win.
 inline bool TapAttackerRungEnabled()
 {
-    static const bool v = EnvOn("MTG_TAP_ATTACKER_RUNG");
+    static const bool v = EnvOn("MTG_TAP_ATTACKER_RUNG", true);
     return v;
 }
 
