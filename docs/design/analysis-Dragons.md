@@ -142,10 +142,36 @@ Scourge 0.145; Utvara Hellkite **−0.284** (an 8-drop), Lightning Greaves −0.
 → d5 **5.735**. Monotonic (non-increasing with depth) and plausible for a deck whose payoffs
 cost 5–8 mana. d3 == d5 exactly: the search has converged at this budget.
 
-**5c2 horizon-honest tie-break** (`leaf_tiebreak_check.py`): 12,000 paired games → net −1 turn,
-**1 changed game (0.008% binding)**, that one BETTER, 0 worse. Verdict "NO SIGN AT THIS SAMPLE";
-re-run at `--blocks 121` in progress. The deck wins well inside the horizon, so the no-win leaf
-is almost never consulted — the default (ON) is kept.
+**5c2 horizon-honest tie-break** (`leaf_tiebreak_check.py`) — run at BOTH sizes, and the small
+one would have misled:
+
+| sample | paired games | binding | net turns | worse / better |
+|---|---|---|---|---|
+| default | 12,000 | 1 (0.008%) | **−1** | 0 / 1 |
+| `--blocks 121` | 121,000 | 9 (0.007%) | **+5** | 7 / 2 |
+
+**The sign FLIPPED between the two** — the 1-event sample said "helps", the 9-event sample says
+"hurts". That is the underpowered-sample trap, and it is exactly why the script refuses to call a
+direction below 20 changed games; a one-event read is worth nothing.
+
+**DECISION: keep the default (ON).** Not because the sample cleared the bar — it did not, the
+verdict is "NO SIGN AT THIS SAMPLE" both times — but because the lever demonstrably almost never
+fires here, and the skill's own escape clause covers exactly this case: *"If it stays unbindable at
+a large sample, the default (ON) is fine by default: a lever that never fires costs the deck
+nothing."* Supporting numbers:
+
+* **Binding is stable at ~0.007%** across a 10x sample increase, so this is a property of the deck,
+  not undersampling: Dragons wins well inside the horizon (avg 5.7), so a rollout rarely reaches
+  the horizon *without* a win and the no-win leaf is rarely consulted at all.
+* **The effect is negligible even taken at face value:** +5 turns over 121,000 games is
+  **+0.000041 turns/game**.
+* **It is not statistically distinguishable from noise:** 7-of-9 events in one direction is
+  two-sided binomial p = 0.18 against a 50/50 null.
+
+Reaching the script's 20-event bar needs roughly `--blocks 270` (~8 h) to resolve an effect of
+4e-5 turns/game. Not worth the compute; flagged to the user rather than decided silently. If the
+deck is ever added to the regression suite, revisit — the suite's pinned d3/d5 gate cells bind
+differently from PLAY settings (`--gate-cells`).
 
 **Suite regressions after all engine changes:** smoke 42/42 and regression 70/70, byte-identical
 *including play digests*, plus reference reproducibility 224 refs / 0 play-drift / 0 enum-gap.
@@ -170,8 +196,8 @@ trips Treasure-Hunt detection.
   spawn agents, so it is deferred to the user. `play_invariants` (determinism / integrity /
   progress over 1120 decisions) already guards the protocol mechanically, but it is not a
   substitute — the sweep's value is a second opinion on *legality and missed lines*.
-* **5c2 at a decisive sample** — the `--blocks 121` re-run is in flight; the 12k-game result
-  showed no harm (1 changed game, better).
+* **5c2 CLOSED** at 121,000 paired games — default kept ON, see the table above. Re-open only if
+  someone wants the ~8 h `--blocks 270` run to resolve a 4e-5 turns/game effect.
 * **Not in the regression suite.** Adding Dragons to `test/regression_cases.sh` costs shared
   per-mode time budget, so it is the user's call (same status as FiveColour and Creature Giving
   when they were analyzed).
