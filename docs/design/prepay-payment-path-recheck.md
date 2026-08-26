@@ -8,7 +8,8 @@ pre-built set of games rather than a re-derivation.
 `src/ai/TurnSolver.cpp`, gated by `MTG_PREPAY_TRUE_COLOURS` (default on).
 
 **The list:** `test/prepay_recheck_cases.tsv` — 418 games, self-contained and classified.
-**Start with the 44 `EXECUTION-DIFFERS` rows** (mirrorwing 32, hinata 8, slivers 4).
+**Start with the 25 rows in §2b**, every case in the set that is traceable to TAP ORDER
+(mirrorwing 13, creature_giving 6, hinata 6; all three tiers). All 418 were checked for it.
 **The tool:** `test/prepay_recheck.py verify` — run it on your tree, read the summary.
 
 ---
@@ -128,6 +129,75 @@ creature-holding rung on a dual-land manabase — is **not** what happens here: 
 successfully during the batch, and is only tapped afterwards, by the second segment. Recorded so the
 next person does not re-run it.
 
+### 2b. Every case traceable to TAP ORDER (all 418 checked)
+
+`test/prepay_recheck.py tapdiff` mechanises the adjudication done by hand for gi309: force both arms
+down the recorded line, and at the **pre-combat decision** of each turn diff the set of tapped
+NON-LAND permanents. Pre-combat matters — combat taps attackers, so an end-of-turn comparison would
+flag every game. Validated against the hand analysis: gi309 reports `T4:Elvish Mystic`, the exact
+permanent identified manually.
+
+**All 418 cases were run. 25 show the signature; 393 do not; zero errored.**
+
+| | |
+|---|---|
+| by deck | mirrorwing 13, creature_giving 6, hinata 6 |
+| by tier | overnight 20, smoke 3, regression 2 |
+| by attribution | prepay-colours 22, ritual-colours **2**, combination 1 |
+| by `walk_class` | EXECUTION-DIFFERS 10, INCONCLUSIVE 7, CHOICE-ONLY 4, REFUSED 2, never walked 2 |
+| lost the win entirely | 3 |
+| permanents spent | Birds of Paradise 14, Elvish Mystic 9, Ignoble Hierarch 4, Ornithopter of Paradise 4, Sol Ring 2 |
+
+Two things in that table matter more than the headline count:
+
+- **15 of the 25 sit in classes the earlier triage would have dismissed** — 7 `INCONCLUSIVE`,
+  4 `CHOICE-ONLY`, 2 `REFUSED`, 2 never walked. `walk_class` alone would have missed them, which is
+  why every case was checked rather than the indicted subset.
+- **2 are attributed to `ritual-colours`, not `prepay-colours`.** Flipping the ritual switch alone
+  restores their score, yet a creature is still tapped differently — so the ritual refloat feeds the
+  same pool and the tap-order effect is not exclusive to the prepay switch.
+
+| case | gi | turns | attributed to | walk class | tapped in the FIXED arm only |
+|---|---|---|---|---|---|
+| `creature_giving_overnight_d0_s4004` | 67 | 6 → 7 | prepay-colours | INCONCLUSIVE | T3:Birds of Paradise; T4:Birds of Paradise; T5:Birds of Paradise; T6:Birds of Paradise; T7:Birds of Paradise |
+| `creature_giving_overnight_d0_s6006` | 259 | 4 → 5 | prepay-colours | INCONCLUSIVE | T3:Birds of Paradise |
+| `creature_giving_overnight_d0_s6006` | 501 | 5 → 6 | prepay-colours | INCONCLUSIVE | T5:Birds of Paradise |
+| `creature_giving_overnight_d0_s8008` | 121 | 6 → 7 | prepay-colours | INCONCLUSIVE | T3:Birds of Paradise; T4:Birds of Paradise; T5:Birds of Paradise; T6:Birds of Paradise; T7:Birds of Paradise |
+| `creature_giving_overnight_d0_s8008` | 1958 | 5 → 6 | prepay-colours | REFUSED | T5:Birds of Paradise |
+| `creature_giving_smoke_d0_s1001` | 385 | 5 → 6 | prepay-colours | INCONCLUSIVE | T3:Birds of Paradise |
+| `hinata_overnight_d0_s10010` | 1941 | 6 → no win | (combination) | INCONCLUSIVE | T4:Ornithopter of Paradise |
+| `hinata_overnight_d0_s4004` | 107 | 6 → 7 | ritual-colours | — | T3:Ornithopter of Paradise |
+| `hinata_overnight_d0_s6006` | 1370 | 5 → 6 | prepay-colours | CHOICE-ONLY | T4:Ornithopter of Paradise |
+| `hinata_overnight_d0_s8008` | 1241 | 5 → 6 | prepay-colours | EXECUTION-DIFFERS | T3:Sol Ring |
+| `hinata_overnight_d5_s6006` | 270 | 6 → 7 | prepay-colours | INCONCLUSIVE | T5:Ornithopter of Paradise |
+| `hinata_regression_d0_s2002` | 934 | 8 → no win | ritual-colours | — | T7:Sol Ring |
+| `mirrorwing_overnight_d0_s10010` | 1994 | 6 → 7 | prepay-colours | EXECUTION-DIFFERS | T3:Elvish Mystic |
+| `mirrorwing_overnight_d0_s4004` | 245 | 5 → 7 | prepay-colours | EXECUTION-DIFFERS | T3:Elvish Mystic |
+| `mirrorwing_overnight_d0_s4004` | 284 | 8 → no win | prepay-colours | REFUSED | T5:Elvish Mystic |
+| `mirrorwing_overnight_d0_s4004` | 1946 | 4 → 5 | prepay-colours | EXECUTION-DIFFERS | T4:Ignoble Hierarch |
+| `mirrorwing_overnight_d0_s6006` | 566 | 7 → 8 | prepay-colours | EXECUTION-DIFFERS | T4:Elvish Mystic |
+| `mirrorwing_overnight_d0_s6006` | 852 | 5 → 6 | prepay-colours | CHOICE-ONLY | T4:Ignoble Hierarch |
+| `mirrorwing_overnight_d0_s8008` | 173 | 5 → 6 | prepay-colours | EXECUTION-DIFFERS | T4:Ignoble Hierarch |
+| `mirrorwing_overnight_d3_s5005` | 309 | 4 → 5 | prepay-colours | EXECUTION-DIFFERS | T4:Elvish Mystic |
+| `mirrorwing_overnight_d3_s7007` | 280 | 4 → 5 | prepay-colours | EXECUTION-DIFFERS | T4:Elvish Mystic |
+| `mirrorwing_overnight_d5_s7007` | 280 | 4 → 5 | prepay-colours | EXECUTION-DIFFERS | T4:Elvish Mystic |
+| `mirrorwing_regression_d3_s3003` | 67 | 6 → 7 | prepay-colours | CHOICE-ONLY | T4:Ignoble Hierarch |
+| `mirrorwing_smoke_d0_s1001` | 490 | 7 → 8 | prepay-colours | EXECUTION-DIFFERS | T6:Elvish Mystic |
+| `mirrorwing_smoke_d0_s1001` | 921 | 7 → 8 | prepay-colours | CHOICE-ONLY | T4:Elvish Mystic |
+
+**Caveat that must not be dropped.** A tap-order diff proves the fixed arm spends a mana creature the
+control did not, on the same line. It does **not** by itself prove the extra tap is wrong: if the
+control was paying with laundered mana it should never have had, then the fixed arm *correctly* has
+to find a real source, and a mana dork is a real source. That is a live possibility for the two
+`ritual-colours` rows and for the hinata rows generally (hinata's leftover reads `{R:1, C:1}`, and
+the `C` is a Sol Ring's colourless — precisely what the fix exists to stop).
+
+Only **`mirrorwing_overnight_d3_s5005` gi309** has been adjudicated end to end: its T4 cost
+`{G}+{G}+{1}{G}` was shown payable from two Game Trails and a Forest with the Mountain on the
+generic, so the dork was provably unnecessary. The other 24 carry the signature but not that proof.
+Deciding each one needs the same question answered: *was the batch payable without the creature,
+using only sources the control also had?*
+
 ## 3. Scope — what is and is not suspect
 
 | deck family | attributed to | verdict |
@@ -243,6 +313,10 @@ arms down every prepay-attributed line).
   directly off `floating_mana`). What is NOT established is *why* prepay taps four lands for a
   two-mana batch — whether that is deliberate ("commit the turn's sources up front") or itself a
   bug. That question lives inside the payment path and was left alone on purpose.
+- Every one of the 418 has now been checked for the tap-order signature (§2b) and attributed by
+  switch bisect. What is still NOT done per-case is the legality adjudication — "was the batch
+  payable without the creature?" — which stands for exactly one game, gi309. 24 of the 25 tap-order
+  rows and all 393 others rest on classification, not proof.
 - ANSWERED since the first draft: the signature is **not** confined to Mirrorwing. EXECUTION-DIFFERS
   covers hinata (8) and slivers (4) as well, and 217 of the 418 cases attribute to `prepay-colours`.
   What remains unchecked is the per-case legality question above — which of those 44 + 59 cases
