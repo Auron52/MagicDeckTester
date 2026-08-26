@@ -20,5 +20,8 @@
   },
   "Bloom Tender": {
     "keywords": "Scryfall lists 'vivid' in keywords -- a data quirk (no rules-meaningful innate keyword on this card); the each-color-among-permanents mana ability is modeled via domain_mana."
+  },
+  "Glorybringer": {
+    "keywords": "'Exert' is a real keyword but its use is OPTIONAL and provably worthless here: exerting costs the next untap step (so Glorybringer cannot attack the following turn -- strictly negative) and its payload is 4 damage to a non-Dragon creature an opponent controls, which against the passive goldfish never blocks, never attacks, and is read by no card in the deck. Never exerting is therefore the OPTIMAL line, so omitting the keyword is byte-identical to modelling it and playing it correctly. USER-approved deferral 2026-08-26; see docs/design/analysis-Dragons.md. Mirrors the Progenitus / Goblin Piledriver protection precedent (a real keyword, inert in goldfishing). Revisit in phase 2, when a real opponent makes removal meaningful."
   }
 }
