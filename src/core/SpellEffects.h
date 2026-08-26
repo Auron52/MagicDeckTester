@@ -1185,12 +1185,26 @@ inline bool CardHasColorNamed(const Card& c, const std::string& col)
     }
 }
 
+// True while a tutor-to-battlefield is RESOLVING (PerformTutorToBattlefield's provider calls run
+// under it). A provider ranking that pre-discounts the tutor's own additional cost (Stompy's
+// Natural Order "minus the sac victim" board adjustment) must SKIP the discount here: the cost is
+// already paid, the victim is already off the battlefield, and discounting again double-counts it
+// (st993: resolution-state n_cre read 1 instead of 2, the lethality gate flipped to "no lethal",
+// and the front became raw-power Worldspine over the actually-lethal Craterhoof).
+inline thread_local bool g_tutor_at_resolution = false;
+
 inline void PerformTutorToBattlefield(GameState& state, int controller, const CardParams& pp,
                                       int max_puts,
                                       const std::vector<std::string>& preferred = {},
                                       const std::string& source_name = {})
 {
     if (max_puts <= 0 || pp.tutor_types.empty()) { return; }
+    struct ResolveScope
+    {
+        bool prev;
+        ResolveScope() : prev(g_tutor_at_resolution) { g_tutor_at_resolution = true; }
+        ~ResolveScope() { g_tutor_at_resolution = prev; }
+    } _trs;
     Player& ap = state.players[controller];
 
     auto matches_types = [&](const Card& c) -> bool {
@@ -7629,6 +7643,34 @@ struct PayNeedScope
     }
     PayNeedScope(const PayNeedScope&)            = delete;
     PayNeedScope& operator=(const PayNeedScope&) = delete;
+};
+
+// SAC-FODDER PAYS FIRST (MTG_SAC_FODDER_PAYS, default OFF -- A/B lever, st993): while paying
+// for a cast that sacrifices a specific creature as an ADDITIONAL COST (Natural Order; the
+// searched victim rides own_targets as a card m_number), that victim's mana ability is FREE --
+// the body is already spent by the cost itself, so tapping it can never lose an attacker or a
+// later cast. st993's T4 measured the miss: NO {2}{G}{G} on 3 Forests + {Arbor Elf(victim),
+// Priest, Archdruid} tapped ARCHDRUID for the 4th mana (attack-rung F: "one big body pays what
+// N flat bodies would" -- correct when the bodies are interchangeable, wrong when one body is
+// leaving anyway), removing a 5-power-under-Hoof attacker: alpha 13 < 16, win 5; tapping the
+// doomed Arbor instead = alpha 18, win 4. Published RAII-scoped around each cast's payment at
+// all three pay sites (rollout apply cast, executor CastSpellFromHand, BatchPrepayMainCasts) --
+// executor/rollout lockstep. Consumer: TapForCostSharedOnce's rank selection (ManaPayment.cpp),
+// which promotes the exact victim COPY (m_number match) ahead of every other source. 0 = dead.
+inline bool SacFodderPaysEnabled()
+{
+    static const bool v = EnvOn("MTG_SAC_FODDER_PAYS");
+    return v;
+}
+inline thread_local int g_pay_sac_victim = 0;
+struct PaySacVictimScope
+{
+    int prev;
+    explicit PaySacVictimScope(int victim_num) : prev(g_pay_sac_victim)
+    { if (SacFodderPaysEnabled()) { g_pay_sac_victim = victim_num; } }
+    ~PaySacVictimScope() { g_pay_sac_victim = prev; }
+    PaySacVictimScope(const PaySacVictimScope&)            = delete;
+    PaySacVictimScope& operator=(const PaySacVictimScope&) = delete;
 };
 
 // The state-aware twin of IsPaySacSource: use at every "can this permanent pay / produce NOW"

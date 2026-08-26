@@ -231,6 +231,30 @@ GenericProvider::TutorCandidates(const GameState& s, int controller, const CardP
         if (!CardHasColorNamed(card, pp.tutor_color)) { type_ok = false; }   // Natural Order: green only
         if (type_ok && seen.insert(lc.m_name).second) { all.push_back(lc.m_name); }
     }
+    // RANKED DEFAULT for put-onto-battlefield tutors (MTG_TUTOR_RANKED_DEFAULT, default off --
+    // A/B lever, st993): the tutor-axis width prune and the tc=-1 base pick both assume this
+    // list is BEST-FIRST ("the provider orders candidates best-first" -- TutorAxisWidth), but
+    // library order is SHUFFLE order. st993's T4 Natural Order drew a library where Craterhoof
+    // Behemoth sat 6th of 11 distinct names under width 5: neither the greedy default (which
+    // fetched Llanowar Elves) nor any searched variant could reach the deck's win condition, so
+    // no projection anywhere priced the T4 kill. For a tutor that CHEATS a card onto the
+    // battlefield, mana value is the value being cheated -- rank MV descending (name ascending
+    // for a total, shuffle-independent order). The searched variants then simulate the real
+    // outcomes; the ranking only has to put the contenders inside the width, not pick the winner.
+    static const bool s_ranked = EnvOn("MTG_TUTOR_RANKED_DEFAULT");
+    if (s_ranked && pp.tutor_to_battlefield_single)
+    {
+        std::stable_sort(all.begin(), all.end(),
+            [](const std::string& a, const std::string& b)
+            {
+                const CardDefinition* da = CardDatabase::Instance().Lookup(a);
+                const CardDefinition* db = CardDatabase::Instance().Lookup(b);
+                const int ma = da ? da->card.m_mana_cost.ManaValue() : 0;
+                const int mb = db ? db->card.m_mana_cost.ManaValue() : 0;
+                if (ma != mb) { return ma > mb; }
+                return a < b;
+            });
+    }
     return all;
 }
 
@@ -10237,7 +10261,17 @@ StompyProvider::TutorCandidates(const GameState& s, int controller, const CardPa
         const bool is_no = pp.tutor_to_battlefield_single;
         const Player& ap = s.players[controller];
         const int opp_life = s.players[1 - controller].life;
-        int n_cre = 0, base_power = 0, board_sources = 0;
+        // Board survey for the lethality model (rewritten 2026-08-26; the original conflated
+        // three quantities the gi130 family showed must stay separate):
+        //   n_cre     -- creatures that will be pumped (Craterhoof's X counts ALL of them);
+        //   atk_sum/atk_n -- the ATTACK-CAPABLE subset and its lorded power (at RESOLUTION the
+        //                 payment is real: a tapped or this-turn creature deals nothing; pre-cast
+        //                 everything is still untapped so the two coincide);
+        //   max_atk   -- the largest single attacker's lorded power (the margin term below).
+        // Lord bonuses are ADDED here (EffectivePower excludes them; Priest under Archdruid
+        // attacks for 2, not 1 -- the lordless read was off by one per lord which is exactly the
+        // margin these 18-vs-18 kills live on).
+        int n_cre = 0, atk_n = 0, atk_sum = 0, max_atk = 0, board_sources = 0;
         bool call_live = false;
         for (const Permanent& q : s.battlefield)
         {
@@ -10252,9 +10286,27 @@ StompyProvider::TutorCandidates(const GameState& s, int controller, const CardPa
             }
             if (!(q.card.IsCreature() || q.is_animated)) { continue; }
             ++n_cre;
-            base_power += std::max(0, q.EffectivePower() - q.temp_power_bonus);
+            const int lp = std::max(0, q.EffectivePower() - q.temp_power_bonus
+                                       + ComputeLordBonus(q.card, s, controller,
+                                                          false, &q).first);
+            const bool can_attack = !g_tutor_at_resolution
+                                  || (!q.tapped && !q.entered_this_turn);
+            if (can_attack) { ++atk_n; atk_sum += lp; max_atk = std::max(max_atk, lp); }
         }
-        if (is_no) { n_cre = std::max(0, n_cre - 1); base_power = std::max(0, base_power - 1); }
+        // Pre-cast, Natural Order's board still holds the sacrifice-to-be: discount one body. At
+        // RESOLUTION (g_tutor_at_resolution) the cost is paid and the victim is already gone --
+        // discounting again double-counts the sac (st993's resolution front went Worldspine).
+        if (is_no && !g_tutor_at_resolution)
+        { n_cre = std::max(0, n_cre - 1); atk_n = std::max(0, atk_n - 1);
+          atk_sum = std::max(0, atk_sum - 1); }
+        // DIG INSTRUMENT (MTG_STOMPY_TUTOR_TRACE, default off): one line per ranking call.
+        static const bool s_ttrace = EnvOn("MTG_STOMPY_TUTOR_TRACE");
+        if (s_ttrace)
+        {
+            std::fprintf(stderr, "[sttut] res=%d is_no=%d oppL=%d n=%d atkn=%d atk=%d T%d\n",
+                         g_tutor_at_resolution ? 1 : 0, is_no ? 1 : 0, opp_life, n_cre,
+                         atk_n, atk_sum, s.turn_number);
+        }
         int outlet_t = 1000;   // turns until a cheat-out can flip the tutored top into play
         if (is_no) { outlet_t = 0; }
         else
@@ -10276,8 +10328,15 @@ StompyProvider::TutorCandidates(const GameState& s, int controller, const CardPa
             const int   t_dep = is_no ? 0
                               : std::min(outlet_t, std::max(1, mv - board_sources));
             const int   t_sw  = t_dep + (pump ? 0 : 1);   // only the team pump has haste
-            const int   swing = pump ? base_power + n_cre * n_cre + n_cre + 5
-                                     : base_power + d.card.m_power.value_or(0);
+            // Team-pump swing: Craterhoof's X counts ITSELF ("+X/+X ... where X is the number of
+            // creatures you control" -- the Hoof is on the battlefield when its ETB resolves), so
+            // X = n_cre + 1, ATTACKERS each swing for (lorded power + X), and the hasty Hoof adds
+            // 5 + X. The original n^2 + n + 5 form modelled X = n (Hoof excluded) on a lordless
+            // all-creatures sum -- st993's T4 read 15 vs a true alpha of 18 against 16 life, and
+            // gi130's post-payment boards read pumped power for bodies that were TAPPED for the
+            // very cost being paid.
+            const int   swing = pump ? atk_sum + atk_n * (n_cre + 1) + 5 + (n_cre + 1)
+                                     : atk_sum + d.card.m_power.value_or(0);
             // (A permanent-board-stats tie-break was tried for the non-lethal case and REVERTED:
             // d0 -- the purest front-quality read, no axis exists there -- measured it 0.032
             // WORSE than the swing tie-break, and it recovered none of the searched-depth gap.)
@@ -10333,7 +10392,21 @@ StompyProvider::TutorCandidates(const GameState& s, int controller, const CardPa
                 }
                 if (dork != nullptr) { out.push_back(*dork); }
             }
-            if (best.kill < 1000)
+            // COLLAPSE ONLY ON A ROBUST KILL (2026-08-26, the gi130 family). Pre-cast, the
+            // "lethal" read is computed on a board the CAST ITSELF will damage: paying the
+            // tutor's mana taps an attacker (or the sac eats one), and which body it costs
+            // depends on the victim/tap combo -- exactly the choice the searched variants
+            // exist to explore. Collapsing to one name on a 1-point margin is therefore false
+            // confidence: the fixed (correct) swing formula made st993-class boards read
+            // "certain" at 19-vs-18, k fell to 1, the variant fan died, and SEVEN held-out
+            // games regressed 4->5 unrecoverably (the old buggy formula's underconfidence had
+            // been keeping the variants alive by accident). Collapse only when the kill
+            // survives losing the biggest single attacker to the cost; at RESOLUTION the board
+            // is post-payment and the read is real, so collapse freely.
+            const bool robust_kill = best.kill < 1000
+                && (g_tutor_at_resolution
+                    || best.tie - (max_atk + n_cre + 1) >= opp_life);
+            if (robust_kill)
             {
                 for (const std::string& c : threats)
                 {

@@ -4198,6 +4198,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         const int audit_have = AffordAuditOn()
                              ? AvailableManaPool(state).Total() + state.floating_mana.Total() : 0;
         if (AffordAuditOn()) { g_afford_real_attempts.fetch_add(1, std::memory_order_relaxed); }
+        // Sac-fodder-first (MTG_SAC_FODDER_PAYS): lockstep twin of the rollout's apply-cast
+        // publish -- the additional-cost victim (own_targets) pays before any other source.
+        PaySacVictimScope _psv(
+            !def->params.sac_additional_creature_color.empty() ? own_targets : 0);
         if (!TapForCost(state, effective, available, def->card.IsCreature()))
         {
             if (BpTraceEnabled() && !m_in_rollout) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }

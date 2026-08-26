@@ -6736,31 +6736,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { has_land = true; break; }
                 }
                 if (!has_land) { continue; }
-                // CAST-DESIRABILITY GATE (MTG_SAC_SPAWN_CAST_GATE, default ON, adopted 2026-08-26; =0 disables -- adoption-config
-                // candidate; overhaul ledger cg30 family). USER doctrine 2026-08-25: it is a
-                // "wasted play to use Crop Rotation when you would have to sacrifice an Orchard"
-                // -- a token-spawn land (taps_spawn_opp_token) is a per-turn damage engine and the
-                // sac destroys it permanently, while the fetched land is at best a sidegrade.
+                // CAST-DESIRABILITY GATE (MTG_SAC_SPAWN_CAST_GATE, default ON; =0 disables).
+                // USER doctrine, restated 2026-08-26: "It is simply a waste of Crop Rotation to
+                // sacrifice an Orchard" -- when EVERY controlled land is a token-spawn land
+                // (taps_spawn_opp_token), the sacrifice necessarily eats one, so skip the cast.
+                // THE RULE IS CONDITION 1 ALONE. Two refinements an earlier build hardcoded are
+                // now A/B toggles, DEFAULT OFF (the user rejected them as doctrine -- even
+                // Orchard->Orchard "is still throwing away the crop rotation" -- but allowed
+                // measurement; the flat gate's first measurement read d0 ~22 slower / 13 faster
+                // on the cg train, which the user attributes to budget/search artifacts rather
+                // than strategy -- adjudicate the slower GAMES, not the aggregate, before
+                // re-litigating):
+                //   MTG_SAC_SPAWN_GATE_DRAIN=1   -- gate only while a drain payoff (enters-loss /
+                //                                   dies-loss) is on the battlefield;
+                //   MTG_SAC_SPAWN_GATE_REFETCH=1 -- allow the cast when the library still holds a
+                //                                   spawn land to re-fetch (Orchard->Orchard).
                 // GREEDY SCOPE ONLY (g_search_candidate_enum false = d0 decision + rollout
                 // leaves): those paths take the provider's default sac target with no branch, so
                 // the bad sac is committed unexamined. Searched enumeration keeps the cast -- the
                 // MTG_SAC_AXIS branch prices every victim by simulation and can still take the
                 // line when it genuinely wins. Human play keeps the cast (the chooser decides).
-                // LIVE-SYNERGY REQUIREMENT (load-bearing): the Orchard is an engine only while a
-                // drain payoff is on the battlefield (Suture Priest's enters-loss / Massacre
-                // Wurm's dies-loss); with no payoff out, feeding the opponent Spirits is a
-                // LIABILITY and sacking the Orchard is often the best use of it. A first build
-                // gated unconditionally and measured net-worse on the cg train (d0 ~22 slower /
-                // 13 faster; searched gi158 4->5 via the rollout-leaf policy shift).
-                // RE-FETCH EXCEPTION (load-bearing, second measured refinement): sacking an
-                // Orchard to FETCH ANOTHER ORCHARD is a net-positive engine play -- the fetched
-                // copy spawns its Spirit on entry (see the Crop Rotation card note), which under
-                // a live drain is free damage plus an intact engine. Gate only when the library
-                // holds no spawn land to re-fetch (goldfish-clairvoyant library reads are the
-                // engine's standard, e.g. Turntimber's top-7).
                 static const bool s_spawn_gate = EnvOn("MTG_SAC_SPAWN_CAST_GATE", true);
                 if (s_spawn_gate && !g_search_candidate_enum && !HumanPlayActive())
                 {
+                    static const bool s_need_drain = EnvOn("MTG_SAC_SPAWN_GATE_DRAIN");
+                    static const bool s_allow_refetch = EnvOn("MTG_SAC_SPAWN_GATE_REFETCH");
                     bool all_spawn = true, drain_live = false;
                     for (const Permanent& p : state.battlefield)
                     {
@@ -6772,16 +6772,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (ld->params.opp_creature_enters_life_loss > 0
                             || ld->params.opp_dies_life_loss > 0) { drain_live = true; }
                     }
-                    bool refetchable = false;
-                    if (all_spawn && drain_live)
+                    bool gate = all_spawn;
+                    if (gate && s_need_drain && !drain_live) { gate = false; }
+                    if (gate && s_allow_refetch)
                     {
                         for (const Card& lc : ap.library)
                         {
                             const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
-                            if (ld && ld->params.taps_spawn_opp_token) { refetchable = true; break; }
+                            if (ld && ld->params.taps_spawn_opp_token) { gate = false; break; }
                         }
                     }
-                    if (all_spawn && drain_live && !refetchable) { continue; }
+                    if (gate) { continue; }
                 }
             }
             // RESOLVE MODE (MTG_TUTOR_AXIS_RESOLVE=1): bind NO name at all. The decision moves to
@@ -13021,6 +13022,23 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // one observable difference is PROBE ATTRIBUTION: a single-cast turn that used to be counted as
     // dig/flood/float/producer is now counted PP_FEW_CASTS. That shifts MTG_PREPAY_PROBE's histogram
     // (an instrument), never play.
+    // Sac-fodder-first (MTG_SAC_FODDER_PAYS): if the batch contains a cast that sacrifices a
+    // specific creature as an additional cost (Natural Order; victim in soulfire_own_targets),
+    // that victim's mana is free for the WHOLE prepay -- it is on the battlefield until its cast
+    // and its body is spent by the cost regardless. Scope covers every tap this function makes.
+    int _sac_victim = 0;
+    if (SacFodderPaysEnabled())
+    {
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.soulfire_own_targets <= 0) { continue; }
+            const CardDefinition* d = a.def != nullptr
+                ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+            if (d != nullptr && !d->params.sac_additional_creature_color.empty())
+            { _sac_victim = a.soulfire_own_targets; break; }
+        }
+    }
+    PaySacVictimScope _psv(_sac_victim);
     static const bool s_fast_decline = EnvOn("MTG_PREPAY_FASTDECLINE", true);
     if (s_fast_decline)
     {
@@ -14206,6 +14224,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                         && CanReplicate(def, state.battlefield, state.active_player_index);
             std::optional<ManlandReserveReleaseScope> _mrr;
             if (replicate_follows) { _mrr.emplace(); }
+            // Sac-fodder-first (MTG_SAC_FODDER_PAYS): the creature this cast sacrifices as an
+            // additional cost (searched victim in own_targets) pays its mana before any other
+            // source -- it is free, the body is spent by the cost either way. st993's T4.
+            PaySacVictimScope _psv(
+                !def.params.sac_additional_creature_color.empty() ? own_targets : 0);
             if (!TapForCostDirect(state, ec, is_creature))
             {
                 if (g_bp_trace_arm) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
@@ -23009,9 +23032,19 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             {
                 std::string sum;
                 if (p.land_decided) { sum += "land=" + p.land_to_play + ";"; }
-                for (const Action& a : p.actions) { sum += a.card_name + ","; }
-                std::fprintf(stderr, "[fsw] T%d d%d p=%s tail=%d best=%d cutoff=%d\n",
-                             state.turn_number, depth, sum.empty() ? "(pass)" : sum.c_str(),
+                for (const Action& a : p.actions)
+                {
+                    sum += a.card_name;
+                    if (a.soulfire_own_targets > 0)
+                    { sum += "#V" + std::to_string(a.soulfire_own_targets); }
+                    if (!a.tutor_target.empty()) { sum += ">" + a.tutor_target; }
+                    sum += ",";
+                }
+                std::fprintf(stderr, "[fsw] T%d d%d oppL=%d tc=%d p=%s tail=%d best=%d cutoff=%d\n",
+                             state.turn_number, depth,
+                             state.players[1 - state.active_player_index].life,
+                             p.tutor_choice,
+                             sum.empty() ? "(pass)" : sum.c_str(),
                              tail.win_turn, best.win_turn, cutoff);
                 // MTG_FSW_LINE=1: also print the tail's projected WINNING line (its phase plans),
                 // so a mis-projection can be compared against the realized game cast-for-cast

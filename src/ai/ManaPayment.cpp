@@ -198,6 +198,11 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     }
                 }
                 int rank = ResolveProvider(state).ManaSourceRank(state, *def);
+                // SAC-FODDER PAYS FIRST (MTG_SAC_FODDER_PAYS; see SacFodderPaysEnabled in
+                // SpellEffects.h for the st993 trace): the exact creature this payment's cast is
+                // about to sacrifice pays before everything -- its body is already spent, so its
+                // mana is the one truly free source on the board.
+                if (g_pay_sac_victim != 0 && p.card.m_number == g_pay_sac_victim) { rank = -1000; }
                 // Reference-replay tap preference (--tap-pref; nulled by RevealLogPause -> real
                 // payments only): a source the RECORDING tapped in this same (turn, phase)
                 // outranks every unpinned source. Order bias only -- never legality; among
@@ -259,7 +264,9 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     for (Color pc : EffectiveProduces(state, active, *sd))
                     { for (Color ic : bdef->params.produces) { if (pc == ic) { m = true; match = ic; break; } } if (m) { break; } }
                     if (!m) { continue; }
-                    const int r = ResolveProvider(state).ManaSourceRank(state, *sd);
+                    int r = ResolveProvider(state).ManaSourceRank(state, *sd);
+                    // Sac-fodder-first, same bias as the direct-source loop above.
+                    if (g_pay_sac_victim != 0 && s.card.m_number == g_pay_sac_victim) { r = -1000; }
                     if (r < frank) { frank = r; fi = i; fcol = match; }
                 }
                 if (fi < 0) { return false; }
