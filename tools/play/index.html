@@ -696,6 +696,21 @@ function channelSources() {
   return out;
 }
 function channelCountFor(name) { return S.plan.filter(p => p.kind === 'channel' && p.name === name).length; }
+// SUSPEND (Lotus Bloom, CR 702.61) is the third from-hand route on a card thumb, alongside the MDFC
+// land face and channel: exile it with time counters instead of casting it. It needs its own badge
+// for the same reason those do -- every other gesture on the thumb casts the card, and the engine
+// action serialises identically to a cast, so without the badge the choice cannot be expressed.
+function suspendSources() {
+  const d = S.decision;
+  if (!d || d.type !== 'main_phase') return {};
+  if (S._suFor === d.decision_index && S._su) return S._su;
+  const out = {};
+  (d.plans || []).forEach(p => (p.actions || []).forEach(a => {
+    if (a && a.verb === 'suspend' && a.card) out[a.card] = true; }));
+  S._suFor = d.decision_index; S._su = out;
+  return out;
+}
+function suspendCountFor(name) { return S.plan.filter(p => p.kind === 'suspend' && p.name === name).length; }
 function digSources() {
   const d = S.decision;
   if (!d || d.type !== 'main_phase') return { cyc:{}, sac:{} };
@@ -1018,7 +1033,7 @@ function renderBoard() {
     if(p.target && p.kind==='activate'){ return; }
     // 'channel' is a from-HAND ability: the card is discarded for an effect, so like an activation it
     // puts nothing onto the battlefield and belongs in the spells row, not the planned-permanents row.
-    if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'||p.kind==='channel'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
+    if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
     if(p.target){ return; }   // a queued aura with a target -> drawn overlapping its host (below)
     // A queued CREATURE that has queued Auras on it (and isn't already a board creature) renders as a
     // planned enchant group; otherwise a plain planned thumb. ('vial' deploy is a creature -> perms zone.)
@@ -1194,11 +1209,12 @@ function renderPlanbar() {
   // (per-land removal lives in the discard zone), appended at the end.
   const chips = S.plan.map((p,i)=>{
     if (p.kind==='le') return '';
-    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel')?'act':(p.kind==='land'?'land':'spell');
+    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend')?'act':(p.kind==='land'?'land':'spell');
     // A board activation names WHAT it does where the verb already says so — "⟳ ability" on four
     // chips reading "Bonesplitter / Shadowspear / Balan / Stoneforge" tells you nothing about which
     // of them equips, attaches everything, or puts a card from hand.
     const act = p.kind==='channel' ? ' ⚡ channel (discard)'
+              : p.kind==='suspend' ? ' ⌛ suspend (exile)'
               : p.kind!=='activate' ? ''
               : p.verb==='gyexile'   ? ' ⟳ ' + (p.mode===2 ? 'exile a creature, gain 2' : 'exile an instant/sorcery, drain 2')
               : p.verb==='animate'   ? ' ⟳ animate'
@@ -1283,6 +1299,8 @@ function renderHand() {
     const canCyc = digSources().cyc[c.name] != null;   // a cycling land in hand -- single-click to cycle
     const canCh  = !!channelSources()[c.name];         // a channel ability in hand -- badge to activate
     const chN    = canCh ? channelCountFor(c.name) : 0;
+    const canSu  = !!suspendSources()[c.name];         // suspendable from hand -- badge to exile it
+    const suN    = canSu ? suspendCountFor(c.name) : 0;
     html += `<span class="thumb ${land?'land':'spell'} ${q?'queued':''} ${spent?'spent':''} ${lehot?'lehot':''} ${vialhot?'vialhot':''} ${canCyc?'cyc-src':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
       `<img loading="lazy" src="${scryImg(c.name,'small')}" alt="${esc(c.name)}" onerror="this.style.opacity=.15"/>`+
       (leN?`<span class="lealloc" title="${leN} copy/copies discarded to Land’s Edge">⚡${leN}</span>`:'')+
@@ -1296,6 +1314,9 @@ function renderHand() {
       // one -- every other route on this thumb casts the creature, so without it the ability could
       // not be expressed at all (user report #1).
       (canCh?`<span class="landface" data-channel="${esc(c.name)}" title="CHANNEL — discard ${esc(c.name)} from hand to use its ability instead of casting it${chN?' (click again to take it back)':''}">⚡ channel${chN>1?` ×${chN}`:''}</span>`:'')+
+      // Suspend: the same shape as channel -- another way to play THIS card, which the ordinary
+      // cast gesture would silently take instead.
+      (canSu?`<span class="landface" data-suspend="${esc(c.name)}" title="SUSPEND — exile ${esc(c.name)} from hand with time counters instead of casting it${suN?' (click again to take it back)':''}">⌛ suspend${suN>1?` ×${suN}`:''}</span>`:'')+
       (total>1?`<span class="pip">×${total}</span>`:'')+(q?`<span class="qct">${q}</span>`:'')+
       `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
   }
@@ -1335,6 +1356,17 @@ function renderHand() {
       if (i >= 0) { S.plan.splice(i, 1); flashHint(`Took back ${nm}'s channel.`); }
       else { S.plan.push({ name: nm, kind: 'channel' });
              flashHint(`Channelling ${nm} — it is discarded from hand for its ability. Commit the phase to resolve it.`); }
+      renderBoard(); };
+    b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
+  });
+  // Suspend badge: same toggle contract as the channel badge above.
+  row.querySelectorAll('.landface[data-suspend]').forEach(b => {
+    b.onclick = e => { e.stopPropagation(); e.preventDefault();
+      const nm = b.dataset.suspend;
+      const i = S.plan.map(p => p.kind === 'suspend' && p.name === nm).lastIndexOf(true);
+      if (i >= 0) { S.plan.splice(i, 1); flashHint(`Took back ${nm}'s suspend.`); }
+      else { S.plan.push({ name: nm, kind: 'suspend' });
+             flashHint(`Suspending ${nm} — it is exiled with time counters and arrives later. Commit the phase to resolve it.`); }
       renderBoard(); };
     b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
   });
@@ -1571,7 +1603,7 @@ function renderChooseDialog(v, line){
     // Every relation word a dimension key can end with must be listed, or the leftover text is asked
     // of Scryfall as a card name and the header art comes back broken ("Natural Order sacrifices" is
     // not a card). Keep this in sync with the addSub() keys in TurnSolver::CheckLine.
-    const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|face|sacrifices|activations|equips to|counter|ability|modes|mode|strive|cost)\s*$/,'').trim();
+    const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|replicate|face|sacrifices|activations|equips to|counter|ability|modes|mode|strive|cost)\s*$/,'').trim();
     const crumbs = picks.length
       ? `<div class="chosen">${picks.map(p=>`<span class="crumb">${esc(p.key)} <b>${esc(p.choice)}</b></span>`).join('')}</div>`
       : '';
@@ -1584,7 +1616,7 @@ function renderChooseDialog(v, line){
     // .optlist/button.opt rows the Ponder / scry / surveil reorder dialog uses -- with the source
     // card shown ONCE in the header where it is actually informative.
     const sameCard = choices.every(c => (c.card||'') === (choices[0].card||''));
-    const listShape = sameCard || ['modal','x','splice','free','loyalty'].indexOf(dim.kind) >= 0;
+    const listShape = sameCard || ['modal','x','splice','replicate','free','loyalty'].indexOf(dim.kind) >= 0;
     let h=`<div class="dimhead">${srcName?cardMini(srcName,'dimsrc'):''}`+
           `<div class="dimtext"><h3>${esc(dim.key)}?</h3>`+
           `<div class="sub">${total>1?`Decision ${step} of ${total} for this line — `:''}`+

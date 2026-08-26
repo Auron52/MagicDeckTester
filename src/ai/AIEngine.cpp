@@ -2467,7 +2467,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             const std::string& chosen_float_color = "",  // Apex of Power: searched float colour
                             int enchant_target = 0,      // Aura: searched creature to enchant (0 = none)
                             bool free_cast = false,      // Archangel: spend a banked free cast
-                            bool bestow = false)         // Gnarled Scarhide: cast the AURA mode
+                            bool bestow = false,         // Gnarled Scarhide: cast the AURA mode
+                            int replicate_count = -1)    // Replicate: the count the PLAN pinned
+                                                         // (-1 = greedy-max sink, the autonomous default)
     {
         Player& ap = state.ActivePlayer();
         // PRE-CAST hand snapshot for the breakpoint drawn-card exemption (lockstep twin of
@@ -2500,7 +2502,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         ManaPool available = AvailableManaPool(state);
         CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets, ponder_keep,
                           crackle_targets, splice_count, chosen_float_color, enchant_target, free_cast,
-                          bestow);
+                          bestow, replicate_count);
     };
 
     // Cast a spell from hand via its alternative cost (Invigorate / Skyshroud Cutter /
@@ -2750,7 +2752,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::ActivateVial)
             { deploy_via_vial(a.card_name); resolve_now(); }
             else if (a.kind == Action::Kind::CastFromHand)
-            { if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow); } resolve_now(); }
+            { if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count); } resolve_now(); }
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
             else if (a.kind == Action::Kind::SacForMana)
@@ -2931,7 +2933,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             const Action& a = extra.actions[ci];
             {
-                cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow); resolve_now();
+                cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count); resolve_now();
                 if (is_draw_engine(a.card_name))
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
@@ -2951,7 +2953,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (const Action& a : extra.actions)
         {
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-            { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow); resolve_now(); }
+            { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count); resolve_now(); }
         }
         for (const Action& a : extra.actions)
         {
@@ -3104,7 +3106,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -3170,7 +3172,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (int i : ena)
         {
             const Action& a = plan.actions[i];
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
         }
     }
     // Spectacle hoist (mirror of ApplyPlanDirect): a sac-land damage source (Shard Volley) would
@@ -3192,7 +3194,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
             spec_hoisted_sac.insert(ai);
         }
     }
@@ -3249,7 +3251,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
                  && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
-            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
+            cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
             if (s_full_depth && is_draw_engine(a.card_name))
             {
                 if (fd_plan_committed)
@@ -3319,7 +3321,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             continue;
         }
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-        cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
+        cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count); note_draw_engine(a.card_name); resolve_now(); fire_unlock();
         // SITE 6 (MTG_EQUIP_DRAW_BP_INLINE) is the first breakpoint class that can appear in a
         // CLEAN set: the branch comment above ("No draw engine here, so no breakpoint handling is
         // needed") held only because every other class carries an OrderingOpaque param and an
@@ -3361,7 +3363,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow); note_draw_engine(a.card_name); resolve_now(); fire_unlock(); }
+        { cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count); note_draw_engine(a.card_name); resolve_now(); fire_unlock(); }
     }
     for (const Action& a : plan.actions)
     {
@@ -3954,7 +3956,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                                  int chosen_x, int own_targets, int ponder_keep,
                                  int crackle_targets, int splice_count,
                                  const std::string& chosen_float_color, int enchant_target,
-                                 bool free_cast, bool bestow)
+                                 bool free_cast, bool bestow, int replicate_count)
 {
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached(hand_card);
@@ -4250,6 +4252,17 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // Paid, so the line no longer owes it -- the executor half of ApplyPlanDirect's identical
         // decrement, keeping the mid-line replicate gate below in lockstep with the rollout's.
         SubManaCost(g_line_unpaid_cost, effective);
+        // A PINNED replicate count is part of THIS cast's bill (Action::cost = effective + k x
+        // printed) while the payment above spends only the effective half -- so the k x printed must
+        // come off the hold here or the sink gate below can never clear it. Lockstep twin of
+        // ApplyPlanDirect's identical decrement; inert when nothing pinned a count.
+        if (replicate_count > 0)
+        {
+            ManaCost rep_share;
+            for (int c = 0; c < replicate_count; ++c)
+            { AddManaCost(rep_share, def->card.m_mana_cost); }
+            SubManaCost(g_line_unpaid_cost, rep_share);
+        }
     }
 
     if (m_logger)
@@ -4375,11 +4388,27 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         // games), so greedy-max was NOT dominant. Each copy must now clear its cost PLUS what the
         // committed line still owes -- the lockstep twin of ApplyPlanDirect's replicate gate.
         const ManaCost rep_gate = SinkCostWithLineHold(rep_cost);
-        while (remaining.CanPay(rep_gate))
+        // PINNED BY THE PLAN (replicate_count >= 0): the count was chosen at queue time and its mana
+        // is already in this cast's bill, so make exactly k -- never the greedy max. Lockstep twin of
+        // ApplyPlanDirect's apply_one gate, so a plan the rollout scored with k copies executes with
+        // k copies. -1 (autonomous play, every deck without a replicate variant) keeps the greedy.
+        const int rep_cap = replicate_count;
+        while ((rep_cap < 0 || static_cast<int>(replicate_tokens.size()) < rep_cap)
+               && remaining.CanPay(rep_gate))
         {
             if (!TapForCost(state, rep_cost, available, true)) { break; }
             remaining = AvailableManaPool(state);
             replicate_tokens.push_back(def->card);
+        }
+        // Path attribution (diagnostic only): two replicate implementations exist -- this one and
+        // ApplyPlanDirect's apply_one -- and which one a given mode actually runs is not obvious from
+        // the call graph. Print unconditionally when replicate is AVAILABLE (not only when copies
+        // were made) so "no line" means "this path did not run", never "this path made zero copies".
+        if (s_rep_trace)
+        {
+            std::cerr << "[rep-trace] path=aiengine turn=" << state.turn_number << " "
+                      << def->card.m_name.str() << " pinned=" << rep_cap
+                      << " copies=" << replicate_tokens.size() << "\n";
         }
         if (s_rep_trace && !replicate_tokens.empty())
         {

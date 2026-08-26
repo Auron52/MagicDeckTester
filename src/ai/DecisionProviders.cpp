@@ -73,6 +73,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"tapreserve", UnprunedGate::TapReserve},
     {"mainphase",  UnprunedGate::MainPhase},
     {"terak",      UnprunedGate::TeraK},
+    {"replicate",  UnprunedGate::Replicate},
 };
 
 const char* GateName(UnprunedGate g)

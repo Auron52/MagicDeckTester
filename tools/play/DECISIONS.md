@@ -60,7 +60,7 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `discard` | `g_play_discard_chooser` (`DiscardChooser`) | cleanup discard; **non-cleanup discards via `ChooseNonCleanupDiscardIndex`** (Burning-Fist Minotaur's `{1}{R}, Discard a card:` activation cost in `ApplyActivatePump`; Neheb, the Worthy's combat-damage trigger in `ResolveCombatDamage`) | `WriteDiscardDecisionJson` | `discardPanelHtml` | modal |
 | `expressive_iteration` | `g_play_ei_chooser` (`EIChooser`) | Expressive Iteration resolution | `WriteEIDecisionJson` | `eiPanelHtml` | modal |
 | `retrace_discard` | `g_play_retrace_chooser` (`RetraceDiscardChooser`) | `ApplyPlan` `apply_one` retrace | `WriteRetraceDiscardDecisionJson` | `retraceDiscardPanelHtml` | modal |
-| `replicate` | `g_play_replicate_chooser` (`ReplicateChooser`) | `ApplyPlan` `apply_one` replicate loop | `WriteReplicateDecisionJson` | `replicatePanelHtml` | modal |
+| `replicate` | `g_play_replicate_chooser` (`ReplicateChooser`) | `ApplyPlan` `apply_one` replicate loop — **FALLBACK ONLY** since 2026-08-26; the count is normally a plan variant (see below) | `WriteReplicateDecisionJson` | `replicatePanelHtml` | modal |
 | `land_entry` | `g_play_land_entry_chooser` (`LandEntryChooser`) | `TurnSolver::PlayLandByName` (shared land drop) | `WriteLandEntryDecisionJson` | `landEntryPanelHtml` | modal |
 | `dragon` | `g_play_dragon_chooser` (`DragonChooser`) | `PerformTutorToBattlefield` (SpellEffects.h, shared executor+rollout) | `WriteDragonDecisionJson` | `dragonPanelHtml` | modal |
 | `sac_tutor` | `g_play_sac_tutor_chooser` (`SacTutorChooser`) | `PerformUpkeepSacTutor` (SpellEffects.h, shared executor+rollout) | `WriteSacTutorDecisionJson` | `sacTutorPanelHtml` | modal |
@@ -87,6 +87,19 @@ tuck branch consults `g_play_target_chooser` with every nonland permanent legal,
 Balan's attach-all, Stoneforge's put, the Equip itself and the Jitte -1/-1 / lifegain modes are
 `main_phase` plan lines (`equip=` / `attachall=` / `sfput=` / `jittemode=` LineSpec verbs) — see
 **Board activations** below for how a human reaches them.
+
+**Replicate moved from a resolution dialog to a PLAN VARIANT (2026-08-26).** Its count is now
+`Action::replicate_count`, fanned under human play as one cast variant per k with the cost priced at
+`effective + k x printed`, and surfaced as a `replicate` `CheckLine` SubChoice (the splice pattern).
+This is not cosmetic: a dialog asked at RESOLUTION is asked after the mana is already committed, so
+the whole-turn payment had solved only the cast's own pips and could spend a coloured source on a
+generic one, leaving the copies unaffordable — the play-tester's "it offered me `max_count: 0`" with
+white sources untapped. Measured on slivers over 40 driven games: **12 games gain a copy the old path
+never offered, 0 lose one, and 10 of the 12 went from a flat 0 to 1–2.** The dialog above is retained
+as the FALLBACK for a cast no plan variant priced (a cast made inside a draw-breakpoint re-solve),
+which is now 5 firings where there used to be 52. When a plan pinned the count, resolution obeys it
+and does NOT re-prompt — the count is a decision already taken, and asking twice lets the second
+answer contradict the mana the first one reserved. `MTG_REPLICATE_DIM=0` is the revert hatch.
 
 **Board activations (an ability of a permanent ALREADY IN PLAY) — a FIFTH wiring site.**
 These are not a decision `type` at all: they are part of the main-phase LINE, so the four sites above

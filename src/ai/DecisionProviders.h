@@ -91,6 +91,12 @@ enum class UnprunedGate
                   // threat can drop, the K that kills next turn, the K that kills the turn after,
                   // K=max when a team-pump haste finisher (Craterhoof) is also in hand; human play
                   // always keeps the full fan)
+    Replicate,    // REPLICATE COUNT opened as a searched plan dimension: enumerate one cast variant
+                  // per k (extra token copies, priced into the cast's cost) instead of leaving the
+                  // count to the greedy-max sink at resolution. Pruned by default because the sink
+                  // is already budget-correct (SinkCostWithLineHold) and the fan multiplies every
+                  // Sliver in hand; human play always keeps the full fan, so the person -- not a
+                  // greedy at resolution time -- decides how many copies the turn's mana buys
     _Count
 };
 

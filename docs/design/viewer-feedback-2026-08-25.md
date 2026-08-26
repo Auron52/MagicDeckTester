@@ -403,32 +403,81 @@ Result: **14 of 15 decks report `5h PASS`** with every expectation either observ
 targeted search. Ground truth is unmoved — smoke `42 passed, 0 failed, 0 new` — because the
 Dragon-put fix is human-play-only and the sac-land delegation is byte-identical.
 
-### STILL OPEN from this section — Stoneforge Mystic's `sfput`
+### CLOSED from this section — Stoneforge Mystic's `sfput` was REACHABLE all along
 
-`Stoneforge Mystic: tap_put_from_hand_cost -> no enumerated action ever carried 'verb:sfput'`, across
-240 driven games (in play in 24 of 120). Ruled out: the plan cap (re-tested uncapped), and sweep
-length (120 games / 12 turns). The enumeration in `CollectActions` looks correct on its face —
-untapped source, `CanTapNow`, a matching Equipment in hand — so the next step is to determine whether
-that state is ever actually reached (Stoneforge's own ETB tutors the Equipment to hand, and the AI
-may simply cast it before the ability is ever legal) or whether a gate upstream drops the action.
-Until that is settled this is the one ability in the suite not shown reachable by hand.
+The gate reported `Stoneforge Mystic: tap_put_from_hand_cost -> no enumerated action ever carried
+'verb:sfput'`, and the plan cap and sweep length had both been ruled out — so it read as the one
+ability in the suite not shown reachable by hand. **It was a gate-side false alarm.** Reconstructing
+the ability's precondition from the decision JSON alone (source on the battlefield at a pre_main
+frame, present at an EARLIER turn's frame so it is past summoning sickness, a matching Equipment
+still in hand) and asking whether an `sfput` action was offered on those exact frames:
 
-## OPEN 4 — replicate is NOT a plan dimension (deliberate deviation from the ask)
+> **3 of 60 games reach the live put state, and in ALL 3 the `sfput` action IS offered.**
+> (`test/probe_activation_reachability.py`, seed 1, 60 games x 14 turns: Stoneforge in play in 8 games, 913
+> decisions with it on the battlefield, 3 with the full conjunction.)
 
-The user asked to "make it a plan dimension for the viewer". What shipped instead is a **line-scoped
-budget hold** (`g_line_unpaid_cost`, `SinkCostWithLineHold`) plus the existing `replicate` dialog.
+Why the search missed it: an activation needs a strictly harder state than a cast — the source in
+play AND untapped AND past its arrival turn AND its cost spare on top of the turn's other business
+AND, for a put, the card it acts on *still in hand* rather than already cast. With one Stoneforge in
+a 60-card deck and every Equipment in it costing {1}–{3}, that conjunction is rare, and the
+escalation searched 40 games at 10 turns.
 
-**Why the deviation:** enumerating `replicate_count` as plan variants shifts every plan INDEX, and a
-reference records the index. `test/viewer_protocol_check.py` re-anchors by plan CONTENT, but a recorded
-`cast: Hatchery Sliver` would then match k=0/1/2 variants and pick one arbitrarily — drifting the 10
-slivers references, which only the user can re-record. The budget hold delivers the same outcome (0
-declared casts dropped, down from 8-9 per 40 human-play games) with zero index churn.
+Fixed in the gate rather than papered over: board activations now get their own budget
+(`VERIFY_ACT_BUDGET = 80`, `VERIFY_ACT_TURNS = 14`) instead of borrowing the cast search's, and a
+`NOT_FORCED` now reports the **conjunction** — in play in N/B games, untapped past its arrival turn
+in M/B — so the three very different reasons an activation can go unseen are told apart. Only the
+third (settled, affordable, still never offered) is a wiring gap. KittyEquipment now reports
+`5h PASS` with no escalation at all.
 
-**Still open if the user wants the literal thing:** add `Action::replicate_count` with the cost
-pre-scaled `(k+1) x` printed — the exact shape of Call of the Wild's `chosen_x` and Desperate Ritual's
-`splice_count` — enumerated **only under `HumanPlayActive()`** (the `jitte_modes_open` precedent), and
-accept the slivers reference re-record. That would also let the whole-turn solve price cast+replicate
-jointly, which is a cleaner fix for OPEN 5 than the scoped reserve release.
+## CLOSED 4 — replicate IS a plan dimension, and the references were repaired
+
+The earlier deviation is withdrawn. The user rejected its premise ("I don't accept this. I would like
+you to do it and repair the references"), and the premise was also weak: measured, only **1 of the 10**
+slivers references contains replicate frames at all.
+
+**What shipped.** `Action::replicate_count` (sentinel -1 = not declared), fanned in `CollectActions`
+as one cast variant per k under `HumanPlayActive() || MTG_UNPRUNE=replicate`, with the cost priced at
+`EffectiveCost + k x printed` (CR 702.56a: replicate's additional cost is the spell's *printed* cost,
+and a cost reduction applies to the spell once, not per copy). It carries a `replicate` `CheckLine`
+SubChoice, a `replicate_count` key in the plan JSON, and a `SUBKIND_PRI` slot that asks the count
+LAST — it is the dimension that consumes whatever the rest of the line left. Resolution obeys a
+pinned count and does **not** re-prompt; the old dialog survives only as the fallback for a cast no
+plan variant priced. `MTG_REPLICATE_DIM=0` is the revert hatch.
+
+**Why it is a fix and not a re-arrangement.** A dialog asked at RESOLUTION is asked after the mana is
+already committed, so `BatchPrepayMainCasts` had solved only the cast's own pips and was free to spend
+a coloured source on a generic one — leaving the copies unaffordable. That is the tester's "it offered
+me `max_count: 0`" with white sources untapped. Pricing k into the cast makes the whole-turn payment
+solve `{2}{W}{W}` in one bill, so the colourless manlands take the generic pips.
+
+> **A/B, slivers, 40 driven games, same driving rule both arms** (`MTG_REPLICATE_DIM` 1 vs 0,
+> `test/probe_replicate_ab.py`): **12 games gain a copy the human could not previously get, 0 lose
+> one**, and in 10 of the 12 the old path offered a flat **0**. Resolution dialogs fall from 52 to 5.
+
+**One real trap found by measuring rather than reasoning.** With the count priced into `a.cost`, the
+first build resolved *every* pinned count to zero copies (`pinned=2 copies=0`). `LineCastCostTotal`
+sums `Action::cost` for the mid-line sink hold, but the cast pays only the *effective* half — so the
+`k x printed` stayed owed forever and the sink gate could never clear it. Both apply paths now
+decrement the hold by the replicate share too. `MTG_REPLICATE_TRACE` gained a `path=` field for this:
+it settles which of the two replicate implementations a mode actually runs (human play is
+`path=applyplan`; `AIEngine::CastSpellFromHand`'s copy never fires there).
+
+**The references were repaired in the TOOL, and no reference file was touched.** Two changes to
+`test/viewer_protocol_check.py`, both about a sub-decision MOVING between frames rather than
+disappearing:
+* `find_plan` takes an optional `prefer` predicate. The k-variants are identical by summary and by
+  cast multiset, so the first-match rule would silently answer "replicate 0"; the intent is recovered
+  from the reference's own later `replicate` frame (`replicate_intent`), and where a reference
+  predates the chooser entirely, from the engine default of its day — greedy max, never 0, because 0
+  is the one count the old engine could not produce on its own.
+* the deletion skip now steps over a vanished `replicate` frame, but **only** once the walk has
+  actually pinned that (turn, source, count) into a committed plan (`honoured`). A frame whose count
+  was not reproduced still reports loudly.
+
+Result: `slivers_vial/claude_s9_gi8` goes from **play-drift** (won=False, 6 of 8 recorded decisions
+stranded) to **repaired**, same won/win_turn as recorded, with the three dialogs reported as
+`(count moved into the plan)`. Full sweep: **141 ok / 83 repaired / 0 play-drift / 0 shuffle-dead /
+0 enum-gap / 0 mull-drift / 0 contract-fail** (224 refs).
 
 ## CLOSED 5 — `MTG_MANLAND_RANK` scaffolding removed
 
@@ -447,15 +496,24 @@ rather than actually untapping them, so the choice of WHICH permanents to untap 
 is the long-standing phase-2 deferral (an untap is only equivalent to mana against a passive
 opponent); the colour fix does not close it.
 
-## OPEN 7 — small unverified tails
+## CLOSED 7 — the two wiring tails; one residual is a STATE fact, not a gap
 
-- **Lotus Bloom's own suspend has no verb.** It rides `cast=Lotus Bloom` in the casts multiset. That is
-  unambiguous *today* only because the card has no mana cost and can never be hard-cast — a second
-  suspend card with a real cost would collide. Not round-tripped through `CheckLine`.
-- **Deathrite's lifegain mode (`gy_exile_creature_lifegain`, mode 2)** is never enumerated:
-  `MTG_SKIP_INERT_LIFEGAIN` defaults ON (a measured goldfish cut). It is deliberately excluded from the
-  board-activation manifest for that reason, and must be re-added when phase 2 gives the opponent a
-  clock.
+- **Lotus Bloom's suspend now has its own verb.** `LineSpec::suspends` (`suspend=<card>`), a
+  `verb: "suspend"` key on the plan action, a `CheckLine` match arm, and a `⌛ suspend` hand badge in
+  the viewer with the same toggle contract as the channel badge. Round-tripped: at Dragonstorm seed 1
+  / gi 1 / T1, `suspend=Lotus Bloom` → **accept**, `land=Unclaimed Territory;suspend=Lotus Bloom` →
+  **accept**, and the legacy `cast=Lotus Bloom` still → **accept** (so no saved reference moves).
+- **Deathrite's lifegain mode is no longer GATED** — the cut is an autonomous one. It rests on "this
+  buys nothing against a passive opponent", which is a claim about the goldfish *search*, not about
+  the mode's legality, and the viewer must never narrow a legal choice (the rule that already keeps
+  the Jitte's pruned modes open). Human play now enumerates both modes; only the search drops the
+  inert one.
+  **It is still not forward-reachable, and that is a fact about goldfishing rather than a wiring
+  gap:** the ability needs a CREATURE CARD IN A GRAVEYARD, and in a goldfish nothing kills creatures.
+  Measured on FiveColour: Deathrite was on the battlefield at **633** decisions across 12 driven
+  games and the graveyard held a creature card at **0** of them. So the mode cannot be exercised by a
+  forward driver at all, and no sweep length changes that — it comes live with phase 2, alongside the
+  reversal of the cut itself.
 - **Sliver Hive's `taptoken` reports UNVERIFIED in short sweeps** — `{5}` is rarely affordable in 6
   games x 8 turns. Verified instead by a targeted probe (slivers seed 11 / gi 10, turn 5:
   `taptoken=Sliver Hive` → `accept`).
@@ -468,14 +526,14 @@ opponent); the colour fix does not close it.
 |---|---|---|
 | 1 | abilities can't be used | `activate`+verbs for Deathrite (`gyexile=`), Mutavault (`animate=`), Sliver Hive (`taptoken=`), Twinshot (`channel=`); bestow mode sub + signature key; `BOARD_ACTIVATIONS` gate in the auditor |
 | 2 | Mutavault deprioritised | `ManlandReserveReleaseScope` — reserve released for one human-play payment that has a replicate to follow |
-| 3 | over-replication | `g_line_unpaid_cost` budget hold, human-play only |
+| 3 | over-replication | `g_line_unpaid_cost` budget hold, human-play only; **then** `Action::replicate_count` as a real plan dimension (see CLOSED 4) |
 | 4 | Lotus Bloom suspend off Apex | `m_is_staged` guard on Suspend (+ Channel, + Land's Edge pitch count) |
 | 5 | aura fetch order | `MTG_AURA_RANK_MODE=4`, now the default — see the BEHAVIOUR census below |
 | 6 | Hinata off-colour | Irencrag `ritual_float_color: "R"`; `RitualRefloatPool` colours Reality Spasm's refloat |
 | 7 | leftover mana colourless | `BatchPrepayMainCasts` keeps true colours; `wild` is now exactly the batch's generic requirement |
 | — | (reference repair) | `check_reference` deletion tolerance; `option_key` label-matching for target options; `TrickTargetCandidates` keeps one target in human play; `CollectOwnCreatureTargets` stops dropping tokens |
 
-Reference sweep, final: **130 ok / 94 repaired / 0 play-drift / 0 shuffle-dead / 0 enum-gap /
+Reference sweep, final: **141 ok / 83 repaired / 0 play-drift / 0 shuffle-dead / 0 enum-gap /
 0 mull-drift / 0 contract-fail** (224 refs). No reference file was modified.
 
 ### #5 is the one item judged on BEHAVIOUR, not on the win turn

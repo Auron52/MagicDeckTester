@@ -325,7 +325,7 @@ def plan_key_sans_pay_sac(p):
     return (p.get("land"), tuple(sorted(casts)))
 
 
-def find_plan(recorded, plans, recorded_index=None):
+def find_plan(recorded, plans, recorded_index=None, prefer=None):
     """Index of `recorded` in the current `plans`, or None. Exact summary first (keeps cast-order
     variants distinct), then land+casts (tolerates a summary-format change or a dropped order
     variant). This is how a recorded pick survives an enumeration change: the reference stores WHAT
@@ -343,7 +343,15 @@ def find_plan(recorded, plans, recorded_index=None):
     visibly IDENTICAL yet distinct -- an MDFC land's two faces ('Branchloft Pathway' {G} vs its
     Boulderloft {W} back) emit the same summary and land name, and only the index separates them.
     Auras s3_gi2 records pick 2 of two identical 'Branchloft' summaries; taking the FIRST match
-    silently flips the face to {G} and starves every downstream {W}{W} cast."""
+    silently flips the face to {G} and starves every downstream {W}{W} cast.
+
+    prefer: optional predicate over a plan. When a SUB-DECISION that used to be asked at resolution
+    becomes a plan VARIANT, the variants share a summary and a cast multiset -- they are identical
+    by every key above -- so `hits` holds all of them and the first-match rule silently picks one.
+    That is not a tie: the reference recorded the human's answer, just in a different frame. The
+    caller reconstructs the intent from the reference's own later frames and passes it here, and it
+    is applied BEFORE recorded_index (whose meaning is an index into the OLD, shorter list, so it
+    cannot address a variant that did not exist when the reference was saved)."""
     if recorded is None:
         return None
     hits = [i for i, p in enumerate(plans) if p.get("summary") == recorded.get("summary")]
@@ -359,6 +367,13 @@ def find_plan(recorded, plans, recorded_index=None):
             hits = [i for i, p in enumerate(plans) if plan_key(p) == want]
     if not hits:
         return None
+    if prefer is not None:
+        want = [i for i in hits if prefer(plans[i])]
+        if want:
+            hits = want
+            if recorded_index in want:
+                return recorded_index
+            return want[0]
     if recorded_index is not None and recorded_index in hits:
         return recorded_index
     return hits[0]
@@ -434,6 +449,57 @@ def engine_default(d):
     if isinstance(hd, int):
         return hd, "heuristic_default"
     return 0, "fallback"
+
+
+def _max_rep_for(plans, card_name):
+    """The largest replicate count any current plan offers for `card_name`.
+
+    This is the stand-in for the OLD engine's default, which was greedy-max: replicate as many times
+    as the mana left after the cast allowed. It is an upper bound rather than that exact number (the
+    new pricing can reserve a copy the old payment stranded -- which is the whole point of the fix),
+    so a reference whose count is not recoverable this way falls through to the plain content match
+    and is reported honestly as drift rather than silently re-answered."""
+    best = -1
+    for pl in plans:
+        for a in (pl.get("actions") or []):
+            if a.get("card") == card_name and "replicate_count" in a:
+                best = max(best, a["replicate_count"])
+    return best
+
+
+def replicate_intent(dec, kept, ri):
+    """What the reference's own line replicated on this turn: {source card name: count}.
+
+    Replicate (CR 702.56) used to be asked at the Sliver's RESOLUTION -- after the plan was
+    committed and the mana already spent -- so a reference records it as its own `replicate` frame
+    with a `source` and a `chosen` count. It is now a plan VARIANT (Action::replicate_count), priced
+    into the cast, which is what lets the whole-turn payment reserve the copies' coloured pips
+    instead of stranding them. Two consequences for a reference saved under the old protocol:
+
+      * its main_phase frame now matches SEVERAL current plans that differ only in the count, and
+      * its `replicate` frame no longer occurs at all.
+
+    Both are repaired from this map: the count picks the variant (find_plan's `prefer`), and having
+    consumed the intent, the vanished frame is losslessly skippable. The lookup is forward-only and
+    turn-scoped because that is where the old dialog fired -- at resolution of a cast the SAME turn's
+    main_phase frame committed.
+
+    Absence of a frame is NOT "replicate zero": references predating the chooser have no frames at
+    all, and for those the old engine's own default -- greedy max -- is the recorded intent. The
+    caller distinguishes the two cases; this returns only what the reference actually says.
+    """
+    turn = dec.get("turn")
+    out = {}
+    for rec in kept[ri:]:
+        rd = rec.get("decision") or {}
+        if rd.get("type") != "replicate":
+            continue
+        if rd.get("turn") != turn:
+            break                      # a later turn: this turn's dialogs are all behind us
+        chosen = rec.get("chosen")
+        if isinstance(chosen, int) and rd.get("source"):
+            out[rd["source"]] = chosen
+    return out
 
 
 def free_cast_intent(dec, kept, ri):
@@ -586,6 +652,10 @@ def check_reference(path, collect=None):
                        frames=frames)
     ri = 0               # how many of the reference's own decisions have been consumed
     inserted, shifted, vanished, skipped = [], [], [], []
+    # (turn, source, count) triples this walk actually pinned into a committed plan. Lets the
+    # deletion skip tell "the dialog moved into the plan and its answer was applied" apart from
+    # "the dialog vanished and the answer was lost" -- only the first is a lossless repair.
+    honoured = set()
     hand_checked = False
 
     def stale_pass_frame(entry, dec):
@@ -677,12 +747,25 @@ def check_reference(path, collect=None):
             # and the stranded picks surface as drift), which is the whole point: repair what is
             # provably lossless, report what is not.
             def _declined(rec):
-                return (rec["decision"].get("type") == "main_phase" and rec.get("chosen") == -1)
+                if rec["decision"].get("type") == "main_phase" and rec.get("chosen") == -1:
+                    return True
+                # A recorded REPLICATE frame the engine no longer emits is losslessly skippable --
+                # but only once its intent has actually been APPLIED. The count moved out of this
+                # dialog and into the plan (Action::replicate_count), so the main_phase pick just
+                # ahead of it already committed the human's k; skipping the now-dead frame drops a
+                # duplicate, not a decision. `honoured` records the (turn, source, k) triples the
+                # walk really did pin, so a frame whose count was NOT reproduced still stays loud.
+                rd_ = rec["decision"]
+                if rd_.get("type") == "replicate":
+                    return (rd_.get("turn"), rd_.get("source"), rec.get("chosen")) in honoured
+                return False
             j = next((k for k in range(ri + 1, len(kept))
                       if frame_ident(kept[k]["decision"]) == frame_ident(dec)), None)
             if j is not None and all(_declined(kept[k]) for k in range(ri, j)):
                 for k in range(ri, j):
-                    vanished.append(f"{frame_ident(kept[k]['decision'])}(declined)")
+                    why = ("count moved into the plan"
+                           if kept[k]["decision"].get("type") == "replicate" else "declined")
+                    vanished.append(f"{frame_ident(kept[k]['decision'])}({why})")
                 ri = j
                 aligned = True
         if not aligned and TREASURE_PAY_COMPAT:
@@ -757,7 +840,39 @@ def check_reference(path, collect=None):
                         f"recorded pick {p} is not a plan in the reference's own list at "
                         f"{frame_ident(rd)} -- the reference itself is inconsistent")
                 cur_plans = dec.get("plans") or []
-                q = find_plan(recorded, cur_plans, recorded_index=p)
+                # REPLICATE COUNT: a sub-decision that moved from resolution into the plan. The
+                # k-variants are identical by summary and cast multiset, so without a preference
+                # find_plan would take the first (k=0) and silently turn "replicate twice" into
+                # "replicate not at all". Reconstruct the intent from the reference's own frames.
+                rep_want = replicate_intent(dec, kept, ri)
+                rep_prefer = None
+                if any("replicate_count" in a
+                       for pp in cur_plans for a in (pp.get("actions") or [])):
+                    def rep_prefer(pl, _want=rep_want):
+                        for a in (pl.get("actions") or []):
+                            if "replicate_count" not in a:
+                                continue
+                            nm = a.get("card")
+                            if nm in _want:
+                                if a["replicate_count"] != _want[nm]:
+                                    return False
+                            # No recorded frame for this cast: the reference predates the chooser,
+                            # and what it played was the engine default of its day -- greedy MAX.
+                            # Deliberately NOT "prefer k == 0": zero is the one count the old engine
+                            # could never produce on its own, so defaulting to it would rewrite the
+                            # saved line rather than reproduce it.
+                            elif a["replicate_count"] != _max_rep_for(cur_plans, nm):
+                                return False
+                        return True
+                q = find_plan(recorded, cur_plans, recorded_index=p, prefer=rep_prefer)
+                if q is None and rep_prefer is not None:
+                    # The intended count is not affordable in the current enumeration (the payment
+                    # path moved, so a count the old greedy reached may no longer be reserved).
+                    # Fall back to the content match rather than declaring the plan gone -- and let
+                    # the ordinary drift reporting speak if the line then plays out differently.
+                    q = find_plan(recorded, cur_plans, recorded_index=p)
+                    if q is not None:
+                        shifted.append(f"{frame_ident(dec)} replicate-count not reproducible")
                 if q is None:
                     # Root-cause the miss before reporting it. If the hand at this frame is not
                     # the hand the reference recorded, a mid-game reshuffle (fetch/cantrip) moved
@@ -817,6 +932,9 @@ def check_reference(path, collect=None):
                         f"the same state (enumeration gap){caveat}")
                 if q != p:
                     shifted.append(f"{frame_ident(dec)} {p}->{q}")
+                for a in ((cur_plans[q] if 0 <= q < len(cur_plans) else {}).get("actions") or []):
+                    if "replicate_count" in a:
+                        honoured.add((dec.get("turn"), a.get("card"), a["replicate_count"]))
                 resolved.append(q)
         else:
             # Auxiliary decision (scry / reorder / discard / target / ...). These carry an

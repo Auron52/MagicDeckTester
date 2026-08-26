@@ -237,6 +237,17 @@ def _activation_marker(a):
     if a.get("channel"):         out.add("verb:channel")
     return out
 
+
+# A sub-decision can live EITHER as its own resolution frame OR as a key on a plan action, and a
+# decision that moves from the first form to the second must not read as "the type disappeared".
+# Replicate did exactly that (2026-08-26): the count is now Action::replicate_count, priced into
+# the cast, and the resolution dialog survives only as the fallback for a cast no plan variant
+# covered -- so a short sweep can legitimately see the key many times and the frame never. Offering
+# the choice at queue time IS surfacing it, so the key satisfies the type.
+PLAN_KEY_SATISFIES = {
+    "replicate_count": "replicate",
+}
+
 # The third field is where the ability's own COST lives: a param name holding a mana-cost string or
 # a generic int, or None for a free ({T} / counter / loyalty) activation. It is what separates "the
 # engine cannot wire this" (a HARD miss) from "the sweep never had the mana" (UNVERIFIED) -- without
@@ -822,6 +833,15 @@ def pick_toward(d, target_lc):
 # runs used to settle Boros Garrison / Stingscourger / Shard Volley; the escalation only fires for a
 # card the sweep already flagged, so the cost is paid on failures, not every run.
 VERIFY_BUDGET = 40
+# A BOARD ACTIVATION needs a strictly harder state than a cast, so its search gets its own,
+# longer budget. A cast only needs the card in hand and its mana; an activation needs the SOURCE
+# already in play and untapped and past summoning sickness (so at least the turn AFTER it landed),
+# its own cost spare on top of whatever the turn otherwise spends, and -- for a put/tutor ability --
+# the card it acts on still in hand rather than already cast. Measured on KittyEquipment's lone
+# Stoneforge Mystic: the full conjunction holds in 3 of 60 games at 14 turns, and in NONE of 40 at
+# 10, which is exactly how a wired, reachable ability got reported as an unverified gap.
+VERIFY_ACT_BUDGET = 80
+VERIFY_ACT_TURNS  = 14
 
 
 def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_turns):
@@ -859,6 +879,14 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
             t = d.get("type")
             if t not in ("main_phase", "mulligan", "bottom", "?"):
                 observed.add((t, (d.get("source") or "").lower()))
+            # A sub-decision that lives as a plan-action KEY rather than its own frame still counts
+            # as surfaced -- see PLAN_KEY_SATISFIES. Sourced from the action's own card so the
+            # "was it THIS card's decision" test below stays exact.
+            for pl in d.get("plans", []):
+                for a in pl.get("actions", []):
+                    for k, kt in PLAN_KEY_SATISFIES.items():
+                        if k in a:
+                            observed.add((kt, str(a.get("card") or "").lower()))
             hand = (d.get("me", {}) or {}).get("hand") or []
             if any(str(c.get("name", "")).lower() == target_lc for c in hand):
                 in_hand_here = True
@@ -920,9 +948,11 @@ def verify_activation(deck, prof, card_name, marker, base_seed, budget, max_turn
     """
     target_lc = (card_name or "").lower()
     in_play_games = 0
+    settled_games = 0        # ... and survived into a LATER turn (past summoning sickness)
     for gi in range(budget):
         choices, jitte, guard = [], [], 0
         seen_states, in_play = set(), False
+        arrived_turn, settled = None, False
         while guard < 220:
             guard += 1
             d = step(deck, prof, base_seed, gi, choices, max_turns, jitte)
@@ -931,6 +961,11 @@ def verify_activation(deck, prof, card_name, marker, base_seed, budget, max_turn
             for b in ((d.get("me") or {}).get("battlefield") or []):
                 if str(b.get("name", "")).lower() == target_lc:
                     in_play = True
+                    t = d.get("turn")
+                    if arrived_turn is None:
+                        arrived_turn = t
+                    elif t is not None and arrived_turn is not None and t > arrived_turn:
+                        settled = True
             for pl in d.get("plans", []):
                 for a in pl.get("actions", []):
                     if str(a.get("card", "")).lower() != target_lc:
@@ -952,8 +987,17 @@ def verify_activation(deck, prof, card_name, marker, base_seed, budget, max_turn
             push_choice(choices, choice)
         if in_play:
             in_play_games += 1
-    return ("NOT_FORCED", {"note": f"{card_name} was in play in {in_play_games}/{budget} games but "
-                           f"no enumerated action ever carried '{marker}'"})
+        if settled:
+            settled_games += 1
+    # Report the CONJUNCTION, not just "was it in play". The three terms fail for very different
+    # reasons and only the last is a wiring gap: never in play (the card was not drawn/cast), in
+    # play but never past its arrival turn (still summoning-sick, so the {T} was never legal), or
+    # settled yet still never offered (which is what a real gap looks like).
+    return ("NOT_FORCED", {"note": f"{card_name} was in play in {in_play_games}/{budget} games, "
+                           f"untapped past its arrival turn in {settled_games}/{budget}, and no "
+                           f"enumerated action ever carried '{marker}'",
+                           "in_play_games": in_play_games, "settled_games": settled_games,
+                           "budget": budget, "max_turns": max_turns})
 
 
 def run_sweep(deck, prof, base_seed, n_games, max_turns, mana_names=frozenset()):
@@ -984,6 +1028,9 @@ def run_sweep(deck, prof, base_seed, n_games, max_turns, mana_names=frozenset())
             for pl in d.get("plans", []):
                 for a in pl.get("actions", []):
                     activations |= _activation_marker(a)
+                    for k, t in PLAN_KEY_SATISFIES.items():
+                        if k in a:
+                            observed[t] += 1
             if d.get("type") == "main_phase":
                 bf = (d.get("me") or {}).get("battlefield") or []
                 open_mana = sum(1 for b in bf if not b.get("tapped")
@@ -1267,7 +1314,8 @@ def main():
         for name, key, marker in act_unver:
             bare = marker.split("  [")[0]
             status, detail = verify_activation(deck, prof, name, bare, base_seed,
-                                               VERIFY_BUDGET, max(max_turns, 10))
+                                               VERIFY_ACT_BUDGET,
+                                               max(max_turns, VERIFY_ACT_TURNS))
             print(f"  {name}: {key} -> {status} {detail}")
             if status == "VERIFIED":
                 escalated.append((name, [key]))
@@ -1279,7 +1327,8 @@ def main():
         still_miss = []
         for name, key, marker in act_miss:
             status, detail = verify_activation(deck, prof, name, marker, base_seed,
-                                               VERIFY_BUDGET, max(max_turns, 10))
+                                               VERIFY_ACT_BUDGET,
+                                               max(max_turns, VERIFY_ACT_TURNS))
             print(f"  {name}: {key} -> {status} {detail}")
             if status == "VERIFIED":
                 escalated.append((name, [key]))

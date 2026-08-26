@@ -326,6 +326,7 @@ static std::vector<std::string> PlanActionKeys(const TurnSolver::Plan& p)
         k += "#" + std::to_string(static_cast<int>(a.kind));
         if (a.chosen_x)               { k += "/x" + std::to_string(a.chosen_x); }
         if (a.splice_count)           { k += "/s" + std::to_string(a.splice_count); }
+        if (a.replicate_count >= 0)   { k += "/r" + std::to_string(a.replicate_count); }
         if (a.discard_lands)          { k += "/d" + std::to_string(a.discard_lands); }
         if (a.alt_cost)               { k += "/alt"; }
         if (!a.tutor_target.empty())  { k += "/t" + a.tutor_target; }
@@ -7521,6 +7522,82 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             continue;
         }
+        // REPLICATE (CR 702.56 -- Hatchery Sliver, and every Sliver spell it grants replicate to):
+        // HOW MANY extra token copies to pay for. Until now this was not a plan dimension at all: the
+        // count was decided GREEDILY at the Sliver's resolution, from whatever mana was left. That is
+        // what the play-tester hit twice. The greedy budget is `AvailableManaPool`, which after
+        // BatchPrepayMainCasts includes the mana pre-tapped for the line's LATER casts, so a maximal
+        // replicate could convert a co-planned cast into a DROPPED one (report #3, Thrumming
+        // Hivepool); and because cast and replicate were priced SEPARATELY, the prepay solved only
+        // the cast's `{1}{W}` and happily spent a white source on its generic pip, stranding the
+        // replicate's coloured pip (report #2, max_count reading 0 with two Mutavaults untapped).
+        //
+        // Pricing k into the cast's own cost fixes both by construction: the whole-turn solve now
+        // pays `EffectiveCost + k x printed` in ONE bill, so the payment search assigns the
+        // colourless manlands to the generic pips, and a subset that cannot afford the copies is
+        // simply not a plan. The count becomes a thing the person picks at QUEUE time, next to the
+        // cast it competes with, instead of a dialog after the mana is already spent.
+        //
+        // Fanned under human play (and MTG_UNPRUNE=replicate) only -- the autonomous plan space, and
+        // therefore all ground truth, is untouched by construction: with no variant emitted every
+        // action keeps replicate_count == -1 and resolution keeps the greedy-max sink.
+        // MTG_REPLICATE_DIM=0 is the revert hatch: no variant is fanned, so every replicate cast
+        // falls back to the pre-2026-08-26 behaviour (greedy-max sink + the resolution dialog).
+        // It exists because this moves the PAYMENT path for a replicate turn, and an A/B needs an
+        // arm; it is not a play lever (autonomous play never fans a variant either way).
+        static const bool s_replicate_dim = EnvOn("MTG_REPLICATE_DIM", true);
+        if (s_replicate_dim
+            && def.card.IsCreature()
+            && CanReplicate(def, state.battlefield, state.active_player_index)
+            && (HumanPlayActive() || DecisionUnpruned(UnprunedGate::Replicate)))
+        {
+            // Replicate's additional cost is the spell's PRINTED mana cost (CR 702.56a) -- a cost
+            // reduction applies to the total cost of the spell once, not per copy, so this is
+            // effective-cost + k x printed and NOT EffectiveCost(def, state, k+1).
+            const ManaCost& printed = def.card.m_mana_cost;
+            const int rep_mv  = printed.ManaValue();
+            const int base_mv = a.cost.ManaValue();
+            // Bound the fan by what the turn's whole pool could conceivably pay. This is an
+            // ENUMERATION bound, not a legality claim: the subset solve still has to find a real
+            // payment, so an unaffordable k is dropped there rather than offered.
+            int kmax = 0;
+            if (rep_mv > 0)
+            {
+                int pool = AvailableManaPool(state).Total();
+                // A plan that has not played its land yet will have one more mana by the time it
+                // casts, so bound against the pool the LINE will have, not the one standing now.
+                // Without this the fan silently stops one copy short on exactly the turns the
+                // decision is interesting (the land drop is what made the extra copy affordable).
+                if (ap.lands_played_this_turn < ap.LandDropsAvailable())
+                {
+                    for (const Card& h : ap.hand)
+                    {
+                        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+                        if ((hd ? hd->card.IsLand() : h.IsLand()) && !h.m_is_staged) { ++pool; break; }
+                    }
+                }
+                kmax = std::max(0, (pool - base_mv) / rep_mv);
+            }
+            kmax = std::min(kmax, 8);   // sanity cap: a viewer plan list, not a search space
+            for (int k = 0; k <= kmax; ++k)
+            {
+                Action v = a;
+                v.replicate_count = k;
+                for (int c = 0; c < k; ++c) { AddManaCost(v.cost, printed); }
+                // Each copy is another body on the board; keep the ordering hint monotone in k so
+                // the plan list reads high-to-low rather than in an arbitrary order.
+                v.eval += k * EvalCard(def, state);
+                if (v.haste_attack_power > 0)
+                {
+                    // Token copies of a hasted creature attack this turn too, so the this-turn
+                    // attack projection must count them (lockstep with the tokens apply pushes).
+                    v.haste_attack_power += k * (a.haste_attack_power);
+                }
+                actions.push_back(std::move(v));
+            }
+            continue;
+        }
+
         // Ponder (cast_reorder): keep-vs-shuffle. This was the #1 branching source (MTG_BRANCH_STATS:
         // ~47% of all enumeration) because searching BOTH futures emits two variants that multiply
         // every plan where Ponder is castable. By default we now DECIDE it with the heuristic
@@ -8609,8 +8686,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             //
             // PHASE 2: a real opponent attacks, and then lifegain is not inert at all -- this cut must
             // be reverted with the goldfish assumption it rests on.
+            // ... and the cut is an AUTONOMOUS one. It rests on "this buys nothing against a passive
+            // opponent", which is a statement about the goldfish SEARCH, not about the mode's
+            // legality: a person at the viewer may exile a creature and gain 2 for any reason they
+            // like, and with the mode unemitted there was no plan action, hence no `gyexile=2` line,
+            // hence no way to ask for it at all. The viewer must never narrow a legal choice (the
+            // same rule that keeps the Jitte's pruned non-combat modes open in human play), so human
+            // play keeps both modes and only the search drops the inert one.
             static const bool s_skip_inert_lifegain = EnvOn("MTG_SKIP_INERT_LIFEGAIN", true);
-            if (pd->params.gy_exile_creature_lifegain > 0 && !s_skip_inert_lifegain)
+            if (pd->params.gy_exile_creature_lifegain > 0
+                && (!s_skip_inert_lifegain || HumanPlayActive()))
             {
                 bool fuel = false;
                 for (const Card& c : gy) { if (ZoneCard(c).IsCreature()) { fuel = true; break; } }
@@ -11437,6 +11522,7 @@ namespace solvememo
             const Action& y = b.actions[i];
             if (x.kind != y.kind || !(x.card_name == y.card_name) || x.hand_index != y.hand_index
                 || x.chosen_x != y.chosen_x || x.splice_count != y.splice_count
+                || x.replicate_count != y.replicate_count
                 || !(x.tutor_target == y.tutor_target) || x.sacrifice_land != y.sacrifice_land
                 || x.discard_lands != y.discard_lands)
             { return false; }
@@ -14083,11 +14169,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (act.free_cast && state.free_casts_available > 0)
         { cascade_free = true; --state.free_casts_available; }
     };
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool, int)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
                     int own_targets, int ponder_keep, int crackle_targets, int splice_count,
-                    const std::string& chosen_float_color, int enchant_target, bool bestow)
+                    const std::string& chosen_float_color, int enchant_target, bool bestow,
+                    int replicate_count)
     {
         // PARTITION TRUNCATION (see bp_truncate): this plan's section ended at its first draw and
         // the continuation has already decided everything after it, so every remaining cast of this
@@ -14245,6 +14332,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // downstream may now spend it. Clamped at zero per field (see SubManaCost) -- the hold is
             // an upper bound built from the plan's costs, and an alt-cost / free cast owes less.
             SubManaCost(g_line_unpaid_cost, ec);
+            // ... and a PINNED replicate count is part of THIS cast's bill, not a later cast's. The
+            // hold is summed from Action::cost, which for a replicate variant is `effective + k x
+            // printed`, but the payment above spends only the effective half -- so without this the
+            // k x printed stays owed forever and the sink gate below can never clear it. (Measured:
+            // every pinned count resolved to ZERO copies, i.e. the human picked "replicate twice"
+            // and got a lone Sliver. The hold has to shrink by exactly what the plan priced.)
+            if (replicate_count > 0)
+            {
+                ManaCost rep_share;
+                for (int c = 0; c < replicate_count; ++c)
+                { AddManaCost(rep_share, def.card.m_mana_cost); }
+                SubManaCost(g_line_unpaid_cost, rep_share);
+            }
         }
         // Apex of Power cast-from-hand gate (captured BEFORE the erase invalidates `it`): a hand copy
         // has m_is_staged == false -> cast_from_hand true (adds Apex's 10-colour float); an Apex cast off
@@ -14732,7 +14832,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // cap the real loop. cap < 0 => uncapped => the greedy default. The scratch walk uses
                 // the SAME gate, so the count the human is offered is the count that is actually free.
                 int cap = -1;
-                if (g_play_replicate_chooser)
+                // PINNED BY THE PLAN. When the line committed a replicate_count the choice was already
+                // made at queue time, where the person could see it competing with the rest of the turn
+                // and where its mana was priced into the cast's own bill -- so resolution must obey it
+                // and must NOT ask again. (The same rule the Dragonstorm put-order dialog needed: a
+                // count the plan pinned is a decision already taken, and re-prompting for it both
+                // double-asks and lets the answer contradict the mana the solve already reserved.)
+                if (replicate_count >= 0)
+                {
+                    cap = replicate_count;
+                }
+                else if (g_play_replicate_chooser)
                 {
                     int max_count = 0;
                     GameState scratch = state;
@@ -14753,6 +14863,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     state.battlefield.push_back(token);
                     remaining = AvailableManaPool(state);
                     ++made;
+                }
+                // Path attribution (diagnostic only) -- the twin of the AIEngine trace. Printed only
+                // at REAL resolution so the millions of rollout applies stay silent; MTG_REPLICATE_TRACE
+                // off => one bool test.
+                static const bool s_rep_trace_ap = EnvOn("MTG_REPLICATE_TRACE");
+                if (s_rep_trace_ap && g_real_resolution)
+                {
+                    std::cerr << "[rep-trace] path=applyplan turn=" << state.turn_number << " "
+                              << def.card.m_name.str() << " pinned=" << replicate_count
+                              << " copies=" << made << "\n";
                 }
             }
         }
@@ -14920,7 +15040,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     ap.hand.push_back(cdef2->card);
                     cascade_free = true;   // cascade cast pays no mana
-                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false);
+                    apply_one(cname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false, -1);
                 }
             }
         }
@@ -15512,7 +15632,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
                     prep_free(a);
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count);
                     fire_unlock();
                 }
             }
@@ -15584,7 +15704,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                          < ResolveProvider(state).CastOrderRank(state, *dy);
                 });
                 for (int i : ena)
-                { const Action& a = acts[i]; prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow); fire_unlock(); }
+                { const Action& a = acts[i]; prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count); fire_unlock(); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -15608,7 +15728,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
                         prep_free(a);
-                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow);
+                        apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -15635,7 +15755,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
-                    prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow); fire_unlock();
+                    prep_free(a); apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count); fire_unlock();
                 }
             }
             else
@@ -15663,7 +15783,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     prep_free(a);
-                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow);
+                    apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count);
                     fire_unlock();
                 }
             }
@@ -15675,14 +15795,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
                 prep_free(a);
-                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow);
+                apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow);
+                apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count);
             }
         }
 
@@ -15816,7 +15936,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false);
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false, -1);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };
@@ -18918,6 +19038,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // human-play. Autonomous dedup keys only on cast NAMES (the 's' bucket above), so distinct
                 // k collapse to the first-enumerated representative -- exactly the chosen_x precedent.
                 if (act.splice_count > 0)        { sub.push_back("k" + act.card_name + "=" + std::to_string(act.splice_count)); }
+                // Replicate COUNT: distinct k are distinct human choices (each buys another token
+                // copy with mana the rest of the turn wanted), so they must survive as separate plan
+                // variants. Keyed from >= 0, not > 0: "replicate ZERO times" is a real, chosen line
+                // here -- it is the one that leaves the mana for Thrumming Hivepool -- and collapsing
+                // it into the un-declared cast would hide exactly the choice this dimension exists
+                // for. Autonomous play never emits a variant at all (replicate_count stays -1).
+                if (act.replicate_count >= 0)    { sub.push_back("r" + act.card_name + "=" + std::to_string(act.replicate_count)); }
                 // Aura enchant TARGET: which creature the Aura attaches to is a human choice (Bogles piles
                 // auras on one creature, but Daybreak Coronet / Lion Umbra restrictions and simple threat
                 // choice make the target meaningful). Keyed on the stable target m_number so plans differing
@@ -26254,6 +26381,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                       spec.sac_outlets.empty() && spec.attach_all.empty() &&
                       spec.sf_puts.empty() && spec.jitte_modes.empty() && spec.equips.empty() &&
                       spec.gy_exiles.empty() && spec.channels.empty() &&
+                      spec.suspends.empty() &&
                       spec.animates.empty() && spec.tap_tokens.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
@@ -26301,6 +26429,9 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     std::vector<std::string> sortedChannels = spec.channels;
     std::sort(sortedChannels.begin(), sortedChannels.end());
     const bool channel_declared   = !spec.channels.empty();
+    std::vector<std::string> sortedSuspends = spec.suspends;
+    std::sort(sortedSuspends.begin(), sortedSuspends.end());
+    const bool suspend_declared   = !spec.suspends.empty();
     std::vector<std::string> sortedAnimates = spec.animates;
     std::sort(sortedAnimates.begin(), sortedAnimates.end());
     const bool animate_declared   = !spec.animates.empty();
@@ -26344,7 +26475,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         //                         prefers the no-sac plan (saving the one-shot source; see the pool sort).
         int planLE = 0, planSacs = 0;
         std::vector<std::string> orderNames, vialNames, retraceNames, sacOutNames;
-        std::vector<std::string> attachAllNames, sfPutNames, equipNames, channelNames;
+        std::vector<std::string> attachAllNames, sfPutNames, equipNames, channelNames, suspendNames;
         std::vector<std::string> animateNames, tapTokenNames;
         std::vector<int> jitteModes, gyExileModes;
         for (const Action& a : p.actions)
@@ -26377,6 +26508,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             { gyExileModes.push_back(a.gy_exile_mode); continue; }
             if (channel_declared && a.kind == Action::Kind::Channel)
             { channelNames.push_back(a.card_name); continue; }
+            if (suspend_declared && a.kind == Action::Kind::Suspend)
+            { suspendNames.push_back(a.card_name); continue; }
             if (animate_declared && a.kind == Action::Kind::AnimateLand)
             { animateNames.push_back(a.card_name); continue; }
             if (taptoken_declared && a.kind == Action::Kind::TapForTokenPay)
@@ -26425,6 +26558,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             std::vector<std::string> v2 = channelNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedChannels) { continue; }
+        }
+        if (suspend_declared)
+        {
+            std::vector<std::string> v2 = suspendNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedSuspends) { continue; }
         }
         if (animate_declared)
         {
@@ -26650,6 +26789,17 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                     addSub(a.card_name + " splice+" + std::to_string(a.splice_count),
                            a.card_name + " splice", "+" + std::to_string(a.splice_count),
                            a.card_name, "splice");
+                }
+                // Replicate COUNT (CR 702.56): how many extra token copies the cast pays for. Same
+                // shape as splice -- the k-variants share a card name, so without a sub the dedup
+                // below would collapse them to the first enumerated and the human's count would
+                // silently become "whatever was enumerated first". Emitted for every k >= 0; -1 is
+                // the autonomous sentinel (no variant was fanned) and carries no sub.
+                if (a.replicate_count >= 0)
+                {
+                    addSub(a.card_name + " replicate+" + std::to_string(a.replicate_count),
+                           a.card_name + " replicate", "+" + std::to_string(a.replicate_count),
+                           a.card_name, "replicate");
                 }
                 // Maelstrom Archangel FREE CAST: with a banked charge, "pay for this spell" and
                 // "spend the bank on it" are two genuinely different lines (the freed mana funds

@@ -1019,12 +1019,22 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             //    but without this key nothing in the plan JSON says WHICH mode the variant is, so the
             //    choose dialog offered "Gnarled Scarhide" twice with no way to tell them apart.
             if (ac.kind == Action::Kind::Channel) { os << ", \"channel\": true, \"verb\": \"channel\""; }
+            //  * SUSPEND (Lotus Bloom) is the third shape: a from-hand ALTERNATIVE to casting, which
+            //    serialises as a bare {"card": "Lotus Bloom"} exactly like the cast would. Its own
+            //    `suspend=` verb removes that ambiguity before a suspend card with a real mana cost
+            //    makes it bite.
+            if (ac.kind == Action::Kind::Suspend) { os << ", \"verb\": \"suspend\""; }
             if (ac.bestow)                        { os << ", \"bestow\": true"; }
             if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }
             if (ac.soulfire_own_targets > 0) { os << ", \"soulfire_targets\": " << ac.soulfire_own_targets; }
             if (ac.splice_count > 0)      { os << ", \"splice_count\": " << ac.splice_count; }
+            // Replicate: how many EXTRA token copies this cast pays for (CR 702.56). Emitted from
+            // >= 0, not > 0 -- "replicate zero times" is a real declared line whose whole point is
+            // the mana it does NOT spend, so the GUI must be able to tell it from a cast that never
+            // had replicate at all (which carries no key).
+            if (ac.replicate_count >= 0)  { os << ", \"replicate_count\": " << ac.replicate_count; }
             // Aura enchant target: the creature (m_number + resolved name) this Aura attaches to, so
             // the GUI shows WHICH creature when several plans cast the same aura on different targets.
             if (ac.enchant_target > 0)
@@ -1933,6 +1943,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "equip")     { ls.equips.push_back(val); }        // equip an Equipment in play
         else if (key == "gyexile")   { ls.gy_exiles.push_back(std::atoi(val.c_str())); }  // Deathrite mode
         else if (key == "channel")   { ls.channels.push_back(val); }      // from-hand channel ability
+        else if (key == "suspend")   { ls.suspends.push_back(val); }      // from-hand Suspend (Lotus Bloom)
         else if (key == "animate")   { ls.animates.push_back(val); }      // Mutavault "{1}: 2/2"
         else if (key == "taptoken")  { ls.tap_tokens.push_back(val); }    // Sliver Hive "{5},{T}: token"
     }

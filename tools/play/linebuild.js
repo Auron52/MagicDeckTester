@@ -80,6 +80,7 @@
   //   jittemode=  Umezawa's Jitte counter-spend (names the MODE INT)           (LineSpec::jitte_modes)
   //   gyexile=    Deathrite Shaman's graveyard exile (names the MODE INT)      (LineSpec::gy_exiles)
   //   channel=    Twinshot Sniper's from-HAND channel ability (names the card) (LineSpec::channels)
+  //   suspend=    Lotus Bloom's from-HAND Suspend (names the card)             (LineSpec::suspends)
   // The verbs whose value is a MODE INT rather than a card name. Kept as a set so encodeLine has one
   // rule instead of a growing `v === 'jittemode' || v === 'gyexile' || ...` chain.
   const MODE_VERBS = { jittemode: true, gyexile: true };
@@ -88,6 +89,9 @@
     // (so it is not a board activation) but it is not a cast either -- "{1}{R}, Discard this card"
     // plays the same card a different way, and `cast=` cannot say which.
     if (p.kind === 'channel') return 'channel';
+    // ... and SUSPEND is the second: exiling the card from hand with time counters is an
+    // alternative to casting it (CR 702.61a), and `cast=` cannot say which of the two was meant.
+    if (p.kind === 'suspend') return 'suspend';
     if (p.kind !== 'activate') return 'cast';
     return p.verb || (p.sacout ? 'sacout' : 'cast');
   }
@@ -166,9 +170,13 @@
   // `bestow` sits just ahead of `enchant`: the mode decides whether an enchant target is asked at
   // all (the creature mode has none), so asking the host first would offer a dimension that the
   // other mode does not have -- the same gating reason `sacrifice` is asked before `tutor`.
+  // `replicate` (how many extra token copies a Sliver spell pays for) is asked LAST among the
+  // per-spell dimensions for the same reason `free` is asked first: it is the one that consumes
+  // whatever mana the rest of the line left, so every earlier pick reads in a fixed context and the
+  // count is chosen against what is actually spare.
   const SUBKIND_PRI = { face: -1, fetch: 0, free: 0.5, sacrifice: 0.75, tutor: 1, bestow: 1.4,
                         enchant: 1.5, equip: 1.5, jitte: 1.6, x: 2, activations: 2, modal: 2.5,
-                        soulfire: 3, crackle: 4, splice: 5 };
+                        soulfire: 3, crackle: 4, splice: 5, replicate: 6 };
   function subKindPri(k) { return SUBKIND_PRI[k] === undefined ? 9 : SUBKIND_PRI[k]; }
   function subOf(v, key) { return (v.subs || []).filter(s => s.key === key)[0]; }
   function choiceOf(v, key) { const s = subOf(v, key); return s ? s.choice : '—'; }

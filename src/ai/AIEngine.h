@@ -423,7 +423,11 @@ private:
                            const std::string& chosen_float_color = "", // Apex of Power: searched float colour
                            int enchant_target = 0,      // Aura: searched creature to enchant (0 = none)
                            bool free_cast = false,      // Maelstrom Archangel: spend a banked free cast
-                           bool bestow    = false);     // Gnarled Scarhide: cast the AURA (bestow) mode
+                           bool bestow    = false,      // Gnarled Scarhide: cast the AURA (bestow) mode
+                           int replicate_count = -1);   // Replicate: extra token copies the PLAN pinned
+                                                        // (-1 = not declared -> the greedy-max sink, the
+                                                        // autonomous default; >= 0 = make exactly k, the
+                                                        // count already priced into this cast's bill)
                                                         // (GameState::free_casts_available) instead of
                                                         // paying mana; falls back to a paid attempt if
                                                         // the bank is empty (stranded marker).

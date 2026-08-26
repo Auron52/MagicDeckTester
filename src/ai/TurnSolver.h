@@ -284,6 +284,25 @@ struct Action
                                        // hand_index -> mutually exclusive, so the search plays both
                                        // out and picks. -1 = not a reorder spell (legacy heuristic
                                        // path in ReorderTopOrShuffle).
+    int         replicate_count  = -1;
+                                       // REPLICATE (CR 702.56, Hatchery Sliver + every Sliver spell it
+                                       // grants it to): how many EXTRA token copies this cast pays for.
+                                       // The dimension exists because replicate TAPS REAL SOURCES, so
+                                       // the count competes with the rest of the turn -- it is priced
+                                       // into a.cost here (effective cast cost + k x the PRINTED cost,
+                                       // CR 702.56a) so the whole-turn solve pays cast + replicate in
+                                       // ONE BatchPrepayMainCasts bill instead of letting a greedy sink
+                                       // spend the mana a later cast was holding (user report #2/#3:
+                                       // the Sliver's coloured pip stranded, then Thrumming Hivepool
+                                       // dropped). CollectActions emits one variant per k sharing
+                                       // hand_index -> mutually exclusive, exactly like splice_count.
+                                       // SENTINEL -1 = NOT DECLARED: resolution keeps the greedy-max
+                                       // default (autonomous play, every rollout, and every deck
+                                       // without replicate) -- so ground truth is untouched by
+                                       // construction. >= 0 = pinned by the plan; resolution makes
+                                       // exactly k copies and does NOT consult the human chooser
+                                       // (the choice was already made where the person could see it).
+                                       // Fanned only under HumanPlayActive() / MTG_UNPRUNE=replicate.
 
     // Valuation / win-check scalars (mirror the former per-function Candidate fields).
     int  eval                  = 0;
@@ -903,6 +922,14 @@ public:
         // same card a different way, so `cast=<name>` cannot distinguish the two. EMPTY => legacy
         // matching (a Channel action matches by card name inside the ordinary cast multiset).
         std::vector<std::string> channels;
+        // "suspend=<card name>": Lotus Bloom's own Suspend (CR 702.61) -- exile it from hand with
+        // time counters instead of casting it. Its own verb for the SAME reason `channel=` has one:
+        // suspend is a from-hand ALTERNATIVE to casting the same card, so `cast=<name>` cannot say
+        // which of the two the human meant. Today that is unambiguous only by accident -- Lotus
+        // Bloom has no mana cost and can never be hard-cast -- and the ambiguity becomes real the
+        // moment a suspend card with a payable cost is added. EMPTY => legacy matching (a Suspend
+        // action matches by card name inside the ordinary cast multiset), so no saved reference moves.
+        std::vector<std::string> suspends;
         // "animate=<land name>" / "taptoken=<land name>": the two greedy mana sinks, now real
         // human-play activations (Mutavault's "{1}: becomes a 2/2", Sliver Hive's "{5},{T}: create a
         // Sliver"). One entry per activation; EMPTY keeps the legacy card-name-in-casts matching, so
