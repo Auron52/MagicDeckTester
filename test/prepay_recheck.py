@@ -33,6 +33,17 @@ USAGE
               identical line and still disagree on the result, which cannot be a search or
               ranking effect -- it is the payment path.
 
+    tapdiff   python3 test/prepay_recheck.py tapdiff [--jobs N]
+              Force both arms down the recorded line and diff the NON-LAND permanents tapped
+              before combat. A tapped creature cannot attack -- this is the dork-tap signature.
+
+    adjudicate python3 test/prepay_recheck.py adjudicate [--jobs N]
+              Reads logs/prepay_tapdiff.json (run tapdiff first) and SETTLES each TAP-ORDER case
+              from the control's own game log: reconstruct the pre-combat bill and every mana
+              source that was available, and ask whether the bill was payable WITHOUT the disputed
+              creature. DEFECT = it was, so the tap was a choice. WARRANTED = it was not.
+              No engine change: board state per phase plus each cast's `manaPaid` is enough.
+
 EXIT CODE
     verify exits 0 always; read the summary. It is a report, not a gate.
 """
@@ -41,7 +52,10 @@ import argparse, concurrent.futures as futures, json, os, re, subprocess, sys, t
 ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CASES = os.path.join(ROOT, "test", "prepay_recheck_cases.tsv")
 COLS  = ["key", "gi", "deck", "profile", "seed", "game_index", "depth", "budget",
-         "pre_fix", "post_fix", "attribution", "walk_class"]
+         "pre_fix", "post_fix", "attribution", "walk_class", "verdict"]
+# `verdict` is filled by `adjudicate` and is blank for the 393 cases that never carried the
+# tap-order signature. DEFECT there means: that game has a turn PROVEN payable without the mana
+# creature the current engine taps, so a repaired payment path should move it.
 
 # The batch's off-switches. Setting all of them reproduces the PRE-batch engine in the SAME
 # executable, which is the only valid control: src/cards/data/cards.json is read at RUNTIME and
@@ -131,7 +145,7 @@ def cmd_build(args):
                 continue
             gi = int(a[0])
             rows.append([k, gi, r["deckfile"], r["profile"], r["seed"] + gi, gi,
-                         r["depth"], r["budget"], ow, nw, "", ""])
+                         r["depth"], r["budget"], ow, nw, "", "", ""])
     rows.sort(key=lambda x: (x[0], x[1]))
     with open(CASES, "w") as fh:
         fh.write("# Games the 2026-08-25 colour-honesty batch made WORSE (baseline %s).\n" % args.baseline)
@@ -144,9 +158,20 @@ def cmd_build(args):
 
 
 # ---------------------------------------------------------------- verify
+MAX_TURNS = 8          # mtg's default; the harness does not override it
+
+
+def _score(v):
+    """gt_logs writes an unwon game as -1; a run reports it as the loss-penalized max_turns+1. Compare
+    them raw and every lost game reads MOVED -- which is how the one `post_fix=-1` case in the DEFECT
+    set showed up as "now=9.0, MOVED" against a binary that had not changed at all."""
+    v = float(v)
+    return float(MAX_TURNS + 1) if v < 0 else v
+
+
 def verify_one(binary, r):
     now = score_once(binary, r)
-    pre, post = float(r["pre_fix"]), float(r["post_fix"])
+    pre, post = _score(r["pre_fix"]), _score(r["post_fix"])
     if now is None:
         cls = "ERROR"
     elif now <= pre:
@@ -161,6 +186,8 @@ def verify_one(binary, r):
 def cmd_verify(args):
     binary = args.bin or os.path.join(ROOT, "build/Release/mtg")
     rows = read_cases(args.filter)
+    if getattr(args, "defects", False):
+        rows = [r for r in rows if r.get("verdict") == "DEFECT"]
     print(f"VERIFY  {len(rows)} cases  bin={binary}")
     print("  RECOVERED  = now at or better than the PRE-fix turn (the payment-path defect is gone here)")
     print("  STILL-WORSE= unchanged from the rebaselined value")
@@ -373,6 +400,490 @@ def cmd_tapdiff(args):
     return 0
 
 
+# ---------------------------------------------------------------- adjudicate
+# `tapdiff` says the fixed arm spends a mana creature the control did not. That is a SIGNATURE, not a
+# verdict: if the control was paying with laundered mana it never legally had, the fixed arm is
+# *right* to go looking for a real source, and a mana dork is a real source. The question that
+# actually settles a case is the one gi309 was settled by hand on:
+#
+#     was the turn's cost payable, under TRUE colours, from the sources the control actually spent?
+#
+# The control never taps the disputed creature (that is what tapdiff proved), so its own spend set is
+# a witness that excludes it. If that witness set pays the bill under true colours, the pre-fix line
+# needed no laundering and the extra tap is avoidable -> DEFECT. If it does not, the control was
+# laundering and the regression is correct behaviour -> WARRANTED.
+#
+# Everything here reads the CONTROL's own autonomous game log -- board state per phase plus each
+# cast's `manaPaid` -- so no engine change and no re-derivation is involved.
+CARDS_JSON = os.path.join(ROOT, "src", "cards", "data", "cards.json")
+ALL_COLORS = frozenset("WUBRG")
+ANY_PIP    = frozenset("WUBRGC")          # a generic pip: colourless mana pays it too
+_PIP_RE    = re.compile(r"\{([^}]*)\}")
+
+
+def _units_for(card):
+    """Mana UNITS a source yields when tapped, as a list of producible-colour sets, plus the mana it
+    COSTS to activate (filter/signet lands are net +1, not free). None = not a mana source.
+
+    `produces_amount == len(produces) > 1` is "add one of each" (Gruul Turf's {R}{G}, Izzet
+    Boilerworks' {U}{R}) -- the engine audits exactly that distinction as an illegal bundle tap
+    (GameLogger.cpp NoteIllegalBundleTap), so it must not be read as "N of any listed colour"."""
+    p = card.get("parameters", {})
+    if p.get("sac_for_mana_amount"):                      # Treasure: {T}, sac: one mana of any colour
+        return [ALL_COLORS] * int(p["sac_for_mana_amount"]), 0
+    prod = p.get("produces")
+    if not prod:
+        return None
+    n = int(p.get("produces_amount", 1))
+    cols = [frozenset([c]) if c != "C" else frozenset("C") for c in prod]
+    if n > 1 and len(prod) == n:   units = cols                     # one of each
+    elif len(prod) == 1:           units = [cols[0]] * n
+    elif n == 1:                   units = [frozenset(prod)]        # any ONE of the listed colours
+    else:                          return None                      # shape we do not model
+    # A filter/signet is not free: it CONSUMES mana to run. The input matters -- Cascade Bluffs costs
+    # {U/R}, so a Sol Ring's colourless cannot feed it, while a Signet's {1} can be fed by anything.
+    if p.get("is_filter"):         return units * 2, frozenset(prod)   # {U/R},{T}: add two of U/R
+    if p.get("ramp_filter"):       return units, ANY_PIP               # Signet: {1},{T}: one of each
+    return units, 0
+
+
+def _card_db():
+    if not hasattr(_card_db, "v"):
+        db = {c["name"]: c for c in json.load(open(CARDS_JSON))["cards"]}
+        _card_db.v = db
+    return _card_db.v
+
+
+def _enters_tapped_always(card):
+    """Does this land ALWAYS enter tapped? Then a copy played this turn cannot have paid for
+    anything, and must not be counted as a source. Conditional ones (Game Trail's reveal, a
+    shockland's 2 life) can enter untapped and are counted."""
+    p = card.get("parameters", {})
+    if p.get("etb_untap_reveal_subtypes") or p.get("etb_pay_life_to_untap"):
+        return False
+    o = (card.get("oracle_text") or "").lower()
+    return "enters tapped" in o or "enters the battlefield tapped" in o
+
+
+def _parse_cost(s):
+    """'{1}{G}' -> ([pip colour-sets], ok). Returns ok=False for anything we refuse to price."""
+    pips, pos = [], 0
+    for m in _PIP_RE.finditer(s or ""):
+        if m.start() != pos:
+            return [], False
+        pos = m.end()
+        t = m.group(1)
+        if t.isdigit():                       pips += [ANY_PIP] * int(t)
+        elif len(t) == 1 and t in "WUBRGC":    pips.append(frozenset("C") if t == "C" else frozenset(t))
+        elif "/" in t and all(x in "WUBRG" for x in t.split("/")):
+            pips.append(frozenset(t.split("/")))          # hybrid
+        else:                                  return [], False   # {X}, phyrexian, snow, ...
+    return pips, (pos == len(s or ""))
+
+
+def _payable(pips, units):
+    """Is every pip assignable to a DISTINCT unit it accepts? Kuhn's bipartite matching.
+    Coloured pips are matched first (generic accepts anything, so it never blocks a colour)."""
+    if len(pips) > len(units):
+        return False
+    order = sorted(range(len(pips)), key=lambda i: len(pips[i]))
+    match = [-1] * len(units)
+
+    def aug(pi, seen):
+        for ui, u in enumerate(units):
+            if ui in seen or not (pips[pi] & u):
+                continue
+            seen.add(ui)
+            if match[ui] < 0 or aug(match[ui], seen):
+                match[ui] = pi
+                return True
+        return False
+
+    return all(aug(pi, set()) for pi in order)
+
+
+def _turn_ledger(game, turn, db):
+    """For one turn of a game log: the mana UNITS the player spent across its main phases, the PIPS
+    those mains paid, and the notes that bound how far the ledger can be trusted.
+
+    Only the mains BEFORE combat are counted. That is the segment where a tapped creature costs an
+    attack, and it is where `tapdiff` samples -- span the whole turn instead and a source the control
+    tapped in main 2 is booked as though it had been available before combat, which is how gi107's
+    Ornithopter (tapped post-combat by the control) inflated the pre-combat pool.
+
+    Sources are read as a tapped-delta against the record immediately before each MAIN, plus
+    permanents played-and-tapped inside the main itself (the turn's land, routinely tapped the moment
+    it lands) and permanents that VANISHED mid-main.
+
+    The vanished ones are the subtle part. A Treasure disappears BECAUSE it was sacrificed for mana;
+    Sandstone Needle sacrifices itself as its last depletion counter comes off; a Karoo land
+    (Gruul Turf) bounces a land that was, in the ordinary line, tapped for mana first. Dropping them
+    is what made four cases read "4 pips vs 1 units". They are counted separately as `maybe` so a
+    verdict can say whether it leaned on them.
+
+    Notes are split by which side of the ledger they under-count, because that decides which verdicts
+    stay sound:
+      soft -> UNITS are under-counted (an untap-refloat taps a source twice; an uncoloured ritual
+              adds mana this checker will not colour). Payable-anyway still proves DEFECT.
+      hard -> PIPS are under-counted or unparseable ({X} costs). Nothing is provable either way."""
+    recs = [t for t in game.get("turns", []) if t.get("turn") == turn]
+    units, maybe, bill, fcost, soft, hard = [], [], [], [], [], []
+
+    def board(rec):
+        return (rec.get("boardAfter") or {}).get("battlefield") or []
+
+    def add(c, sink):
+        d = db.get(c.get("cardName"))
+        if not d:
+            soft.append("unknown-source:" + str(c.get("cardName")))
+            return
+        u = _units_for(d)
+        if u is None:
+            return                                        # tapped for something that is not mana
+        sink += u[0]
+        if u[1]:
+            # A spent filter land's own activation cost. Kept OUT of `bill` -- the bill is what the
+            # SPELLS cost, and the availability test prices filters itself; folding it into both is
+            # how gi1370 came out one pip short of its own sources.
+            fcost.append(u[1])
+
+    for i, rec in enumerate(recs):
+        if (rec.get("phase") or "").startswith("COMBAT"):
+            break
+        if not (rec.get("phase") or "").startswith("MAIN"):
+            continue
+        prev_by, now_by = {}, {}
+        for c in (board(recs[i - 1]) if i else []):
+            prev_by.setdefault(c.get("card"), c)
+        for c in board(rec):
+            now_by.setdefault(c.get("card"), c)
+        for num, c in now_by.items():
+            was = prev_by.get(num)
+            if not c.get("tapped"):
+                continue
+            if was is not None and not was.get("tapped"):
+                add(c, units)                             # untapped -> tapped inside this main
+            elif was is None:                             # played and tapped in the same main
+                d = db.get(c.get("cardName"))
+                if d and not _enters_tapped_always(d):
+                    add(c, units)
+        for num, c in prev_by.items():
+            if num in now_by or c.get("tapped"):
+                continue
+            d = db.get(c.get("cardName")) or {}
+            if (d.get("parameters") or {}).get("sac_for_mana_amount"):
+                add(c, units)                             # a Treasure vanishes BECAUSE it paid
+            else:
+                add(c, maybe)                             # bounced / self-sacrificed: probably paid
+        for a in rec.get("actions", []):
+            if a.get("type") == "ABILITY":
+                # A {T} ability that is not a mana ability would have this ledger booking its source
+                # as mana it never made -- which is the one direction that could invent a DEFECT.
+                hard.append("tap-ability:" + str(a.get("cardName")))
+                continue
+            if a.get("type") != "CAST_SPELL":
+                continue
+            got, ok = _parse_cost(a.get("manaPaid"))
+            if not ok:
+                hard.append("uncosted:%s(%s)" % (a.get("cardName"), a.get("manaPaid")))
+            if a.get("chosenX") is not None:
+                # `manaPaid` is NOT consistent about X: Crackle with Power records {4}{R}{R} with the
+                # X folded in, Reality Spasm records {U}{U} for an X of 4. Under-counting pips is the
+                # unsafe direction (it makes a bill look payable), so an X spell voids the turn.
+                hard.append("x-spell:%s(X=%s,paid=%s)"
+                            % (a.get("cardName"), a.get("chosenX"), a.get("manaPaid")))
+            bill += got
+            p = (db.get(a.get("cardName")) or {}).get("parameters") or {}
+            if p.get("untap_x_mana_sources"):
+                hard.append("untap-refloat:" + a.get("cardName", "?"))   # a source taps twice
+            if p.get("ritual_floating_mana"):
+                col = p.get("ritual_float_color")
+                if col:
+                    units += [frozenset(col)] * int(p["ritual_floating_mana"])
+                else:
+                    soft.append("uncoloured-ritual:" + a.get("cardName", "?"))
+    return units, maybe, bill, fcost, soft, hard
+
+
+def _pre_main(game, turn):
+    """The record just before the turn's first main -- the board as the main phase opens."""
+    recs = [t for t in game.get("turns", []) if t.get("turn") == turn]
+    pre = None
+    for rec in recs:
+        if (rec.get("phase") or "").startswith("MAIN"):
+            return pre, recs
+        pre = rec
+    return None, recs
+
+
+def _no_free_copy(game, turn, names):
+    """On the CONTROL's own line, does it reach combat with NO untapped copy of `names` that could
+    have attacked anyway? Then no attacker was lost there and the case has no consequence.
+
+    Measured at the end of the last main before combat -- the declare-attackers state. `tapdiff`
+    samples earlier (at a claude-play decision, before the final segment pays), so a permanent the
+    control taps LATE in its own main reads as spared there; this is the stricter look.
+
+    Two things it must not be fooled by, both of which it was:
+      * COPIES. Creature Giving routinely holds two Birds of Paradise, and a name set reads "tapped"
+        when one is tapped and the other is free to swing -- not the same board at all.
+      * SUMMONING SICKNESS. gi284 casts a second Elvish Mystic on the very turn it taps its first;
+        the new one is untapped and cannot attack, so counting it as a free copy said "an attacker
+        survived" about a board where none did. Only copies present as the main opened count."""
+    pre, recs = _pre_main(game, turn)
+    # By CARD NUMBER, not name. gi284's second Elvish Mystic shares the first one's NAME, so a
+    # name-keyed "was it already on the battlefield" test waves the summoning-sick copy through.
+    present = {c.get("card") for c in ((pre or {}).get("boardAfter", {}).get("battlefield") or [])}
+    last = None
+    for rec in recs:
+        if (rec.get("phase") or "").startswith("COMBAT"):
+            break
+        last = rec
+    if last is None:
+        return False
+    free = {c["cardName"] for c in ((last.get("boardAfter") or {}).get("battlefield") or [])
+            if not c.get("tapped") and c.get("card") in present}
+    return all(nm not in free for nm in names)
+
+
+def _available_pool(game, turn, db, exclude, skip_played=False):
+    """Every mana source the player could have tapped before combat, minus `exclude`.
+
+    This is the pool the USER's question names -- "payable without the creature, using only sources
+    the control also had" -- and it is deliberately WIDER than what the control actually spent. A
+    source the control left untapped was still available, so a bill it covers is a bill the fixed arm
+    could have paid without reaching for a creature.
+
+    `skip_played` drops the land played this turn. That land is CONDITIONALLY untapped for the
+    duals here (Game Trail wants a reveal, a shockland wants 2 life), and the log does not say which
+    branch was taken -- so a verdict that survives without it is one that does not rest on the guess.
+
+    Returns (fixed_units, filters). A filter land is not a plain source: Cascade Bluffs is
+    "{U/R}, {T}: add two of U/R", so it is only worth taking if something can FEED it, and taking it
+    when nothing can would invent mana. It is returned separately so the payability test can try the
+    subsets."""
+    pre, recs = _pre_main(game, turn)
+    cards = list((pre or {}).get("boardAfter", {}).get("battlefield") or [])
+    if not skip_played:
+        for rec in recs:                    # lands played inside the main, if they can enter untapped
+            if (rec.get("phase") or "").startswith("COMBAT"):
+                break
+            for a in rec.get("actions", []):
+                if a.get("type") == "PLAY_LAND":
+                    d = db.get(a.get("cardName"))
+                    if d and not _enters_tapped_always(d):
+                        cards.append({"cardName": a.get("cardName"), "tapped": False})
+    drop = dict.fromkeys(exclude, 0)
+    for nm in exclude:
+        drop[nm] = sum(1 for c in cards if c.get("cardName") == nm)   # every copy, not just one
+    fixed, filters = [], []
+    for c in cards:
+        nm = c.get("cardName")
+        if c.get("tapped") or nm not in db:
+            continue
+        if drop.get(nm):
+            drop[nm] -= 1
+            continue
+        u = _units_for(db[nm])
+        if not u:
+            continue
+        (filters if u[1] else fixed).append(u)
+    return fixed, filters
+
+
+def _conditional_land_played(game, turn, db):
+    """Was the land played this turn one whose ETB-untapped-ness is a CHOICE the log does not
+    record? Game Trail (reveal a Mountain/Forest) and the shocklands (pay 2 life) are; a basic, a
+    filter land and Reflecting Pool are not -- they always enter untapped."""
+    _, recs = _pre_main(game, turn)
+    for rec in recs:
+        if (rec.get("phase") or "").startswith("COMBAT"):
+            break
+        for a in rec.get("actions", []):
+            if a.get("type") != "PLAY_LAND":
+                continue
+            p = (db.get(a.get("cardName")) or {}).get("parameters") or {}
+            if p.get("etb_untap_reveal_subtypes") or p.get("etb_pay_life_to_untap"):
+                return True
+    return False
+
+
+def _played_land_paid(game, turn, db):
+    """Did the land played this turn demonstrably PRODUCE mana -- i.e. did it enter untapped?
+
+    Counting settles it without knowing which ETB branch ran. If the pre-combat bill needs more mana
+    than every OTHER source the control tapped can supply, the shortfall can only have come from the
+    land it played, so that land entered untapped. gi309 is the shape: {G}+{G}+{1}{G} off three
+    standing lands plus the Game Trail it played that turn -- four mana, four sources, no slack."""
+    pre, recs = _pre_main(game, turn)
+    played, bill = [], []
+    prev = dict.fromkeys([], 0)
+    prev = {c.get("card"): c for c in ((pre or {}).get("boardAfter", {}).get("battlefield") or [])}
+    others = 0
+    for rec in recs:
+        if (rec.get("phase") or "").startswith("COMBAT"):
+            break
+        if not (rec.get("phase") or "").startswith("MAIN"):
+            continue
+        for a in rec.get("actions", []):
+            if a.get("type") == "PLAY_LAND":
+                played.append(a.get("cardName"))
+            elif a.get("type") == "CAST_SPELL":
+                got, ok = _parse_cost(a.get("manaPaid"))
+                if not ok:
+                    return False
+                bill += got
+        for c in ((rec.get("boardAfter") or {}).get("battlefield") or []):
+            was = prev.get(c.get("card"))
+            if c.get("tapped") and was is not None and not was.get("tapped"):
+                u = _units_for(db.get(c.get("cardName"), {}))
+                others += len(u[0]) if u else 0
+    return bool(played) and others < len(bill)
+
+
+def _payable_with_filters(pips, fixed, filters):
+    """Payable using the fixed units plus any SUBSET of the filter lands (each one adding its units
+    and its own activation pip)."""
+    flat = [u for f in fixed for u in f[0]]
+    for mask in range(1 << min(len(filters), 6)):
+        units, extra = list(flat), []
+        for i, f in enumerate(filters):
+            if mask >> i & 1:
+                units += f[0]
+                extra += [f[1]] if isinstance(f[1], frozenset) else [ANY_PIP] * f[1]
+        if _payable(pips + extra, units):
+            return True
+    return False
+
+
+def adjudicate_one(binary, r):
+    db = _card_db()
+    detail = r.get("tap_detail") or ""
+    if not detail:
+        return dict(r, verdict="NOT-TAP-ORDER", verdict_detail="")
+    tmp = tempfile.mkdtemp(prefix="adjud_")
+    try:
+        cmd = [binary, os.path.join(ROOT, r["deck"]), "--profile", os.path.join(ROOT, r["profile"]),
+               "--games", "1", "--seed", r["seed"], "--game-index", r["game_index"],
+               "--depth", r["depth"], "--budget-ms", r["budget"],
+               "--ignore-play-profile", "--log-dir", tmp]
+        subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True,
+                       env=dict(os.environ, **LEGACY_ENV))
+        logs = glob.glob(os.path.join(tmp, "*.json"))
+        if not logs:
+            return dict(r, verdict="ERR:no-control-log", verdict_detail="")
+        g = json.load(open(logs[0]))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    res = g.get("result") or {}
+    ctl = res.get("turn") if res.get("winner") not in (None, "none") else -1
+    if str(ctl) != str(r["pre_fix"]):
+        # The control must reproduce the PRE-fix score or it is not the line under dispute.
+        return dict(r, verdict="ERR:control-drift", verdict_detail="control=%s pre_fix=%s"
+                    % (ctl, r["pre_fix"]))
+
+    # TWO questions, deliberately kept apart -- conflating them is what made the first pass of this
+    # checker wrong twice:
+    #   Q1 SPEND LEGALITY  was the control's OWN payment colour-legal under true colours? A `no`
+    #                      means the pre-fix score came off a laundered payment, so `pre_fix` is not
+    #                      automatically the right answer to restore.
+    #   Q2 AVOIDABILITY    was the bill payable from everything AVAILABLE, without any copy of the
+    #                      disputed creature? A `yes` means the tap was a source-selection choice,
+    #                      not a requirement -- which is the defect.
+    # They are independent: a turn can launder AND still have had a creature-free legal payment.
+    out, worst = [], 0
+    RANK = {"DEFECT": 4, "WARRANTED": 3, "CONTROL-ALSO-TAPS": 2, "UNMODELLED": 1}
+    for seg in detail.split(";"):
+        tn = int(seg.split(":", 1)[0][1:])
+        disputed = seg.split(":", 1)[1].split("+")
+        units, maybe, bill, fcost, soft, hard = _turn_ledger(g, tn, db)
+        fixed, filters = _available_pool(g, tn, db, disputed)
+        navail = sum(len(f[0]) for f in fixed) + sum(len(f[0]) for f in filters)
+        if _no_free_copy(g, tn, disputed):
+            # The signature came from the forced WALK; on the control's own autonomous line -- the
+            # one ground truth actually records -- no copy that could have attacked survives to
+            # combat either, so nothing was lost here. Reported, not silently folded in.
+            v, why = "CONTROL-ALSO-TAPS", "control reaches combat with no free %s" % "+".join(disputed)
+        elif hard:
+            v, why = "UNMODELLED", ",".join(sorted(set(hard)))
+        elif not bill:
+            v, why = "UNMODELLED", "no cast before combat -- the tap paid for nothing pre-combat"
+        else:
+            spend_ok = (_payable(bill + fcost, units)
+                        or _payable(bill + fcost, units + maybe))
+            avoid_ok = _payable_with_filters(bill, fixed, filters)
+            if avoid_ok:
+                nf, nfil = _available_pool(g, tn, db, disputed, skip_played=True)
+                if (not _payable_with_filters(bill, nf, nfil)
+                        and _conditional_land_played(g, tn, db)
+                        and not _played_land_paid(g, tn, db)):
+                    # Only a CONDITIONALLY untapped land is in doubt (Game Trail wants a reveal, a
+                    # shockland 2 life) and the log does not record which branch ran -- unless the
+                    # control's own spend proves it, which _played_land_paid tests. A plain land or
+                    # an always-untapped dual needs no assumption at all.
+                    soft.append("needs-the-land-played-this-turn")
+            n = "%d pips, %d sources free of %s" % (len(bill), navail, "+".join(disputed))
+            if avoid_ok and not soft:
+                v = "DEFECT"
+                why = n + (", colour-legal" if spend_ok
+                           else ", colour-legal -- though the control's OWN payment was NOT "
+                                "(it laundered, so pre_fix is not automatically the right target)")
+            elif avoid_ok:
+                v, why = "DEFECT", n + ", colour-legal (units under-counted: %s -- only helps)" \
+                                       % ",".join(sorted(set(soft)))
+            elif soft:
+                v, why = "UNMODELLED", ",".join(sorted(set(soft)))
+            else:
+                v, why = "WARRANTED", n + " cannot cover the bill -- a creature was genuinely needed"
+        out.append("T%d=%s(%s)" % (tn, v, why))
+        worst = max(worst, RANK[v])
+    verdict = {v: k for k, v in RANK.items()}.get(worst, "UNMODELLED")
+    return dict(r, verdict=verdict, verdict_detail="; ".join(out))
+
+
+def cmd_adjudicate(args):
+    binary = args.bin or os.path.join(ROOT, "build/Release/mtg")
+    src = os.path.join(ROOT, "logs", "prepay_tapdiff.json")
+    if not os.path.exists(src):
+        print("run `tapdiff` first -- adjudicate reads logs/prepay_tapdiff.json")
+        return 1
+    rows = [r for r in json.load(open(src)) if r.get("tap_class") == "TAP-ORDER"]
+    if args.filter:
+        rows = [r for r in rows if args.filter in r["key"]]
+    print(f"ADJUDICATE  {len(rows)} TAP-ORDER cases -- was the bill payable WITHOUT the creature?")
+    print("  DEFECT            = yes, from sources the control also had: the tap was a CHOICE")
+    print("  WARRANTED         = no: a creature was genuinely needed, so the fix is right")
+    print("  CONTROL-ALSO-TAPS = the control reaches combat without that attacker either -- no loss")
+    print("  UNMODELLED        = the ledger contains something this checker refuses to price\n")
+    done, agg = [], {}
+    with futures.ThreadPoolExecutor(max_workers=args.jobs) as ex:
+        for a in ex.map(lambda r: adjudicate_one(binary, r), rows):
+            done.append(a)
+            agg[a["verdict"]] = agg.get(a["verdict"], 0) + 1
+            print(f"  {a['key']} gi{a['gi']}: {a['pre_fix']}->{a['post_fix']}  "
+                  f"{a['verdict']:10s} {a['verdict_detail']}", flush=True)
+    print("\nsummary: " + ", ".join(f"{k}={v}" for k, v in sorted(agg.items())))
+    with open(os.path.join(ROOT, "logs", "prepay_adjudicate.json"), "w") as fh:
+        json.dump(done, fh, indent=1)
+    print("detail -> logs/prepay_adjudicate.json")
+    # ... and back into the COMMITTED case list, because logs/ is gitignored and the tsv is the
+    # artifact another tree actually gets. `verify --defects` then narrows to the proven set.
+    by = {r["key"] + "|" + str(r["gi"]): r["verdict"] for r in done}
+    rows_all = read_cases()
+    with open(CASES, "w") as fh:
+        fh.write("# Games the 2026-08-25 colour-honesty batch made WORSE.\n")
+        fh.write("# pre_fix = win turn before the batch, post_fix = win turn now (-1 = no win).\n")
+        fh.write("# verdict: DEFECT = the turn is PROVEN payable without the creature the engine\n")
+        fh.write("#          taps (see docs/design/prepay-payment-path-recheck.md section 2c).\n")
+        fh.write("# " + "\t".join(COLS) + "\n")
+        for r in rows_all:
+            r["verdict"] = by.get(r["key"] + "|" + str(r["gi"]), r.get("verdict", ""))
+            fh.write("\t".join(str(r[c]) for c in COLS) + "\n")
+    print(f"verdicts -> {os.path.relpath(CASES, ROOT)}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -380,13 +891,16 @@ def main():
     v = sub.add_parser("verify")
     c = sub.add_parser("classify")
     t = sub.add_parser("tapdiff")
-    for p in (v, c, t):
+    j = sub.add_parser("adjudicate")
+    v.add_argument("--defects", action="store_true",
+                   help="only the games section 2c PROVED were payable without the creature")
+    for p in (v, c, t, j):
         p.add_argument("--jobs", type=int, default=min(16, (os.cpu_count() or 4) - 2))
         p.add_argument("--bin", default=None)
         p.add_argument("--filter", default=None)
     a = ap.parse_args()
     return {"build": cmd_build, "verify": cmd_verify, "classify": cmd_classify,
-            "tapdiff": cmd_tapdiff}[a.cmd](a)
+            "tapdiff": cmd_tapdiff, "adjudicate": cmd_adjudicate}[a.cmd](a)
 
 
 if __name__ == "__main__":

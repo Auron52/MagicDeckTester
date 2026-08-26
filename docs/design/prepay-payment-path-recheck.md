@@ -8,8 +8,10 @@ pre-built set of games rather than a re-derivation.
 `src/ai/TurnSolver.cpp`, gated by `MTG_PREPAY_TRUE_COLOURS` (default on).
 
 **The list:** `test/prepay_recheck_cases.tsv` — 418 games, self-contained and classified.
-**Start with the 25 rows in §2b**, every case in the set that is traceable to TAP ORDER
-(mirrorwing 13, creature_giving 6, hinata 6; all three tiers). All 418 were checked for it.
+**Start with the 16 games marked DEFECT in §2c** — every case in the set whose turn is *proven*
+payable without the mana creature the fixed arm taps (mirrorwing 9, hinata 4, creature_giving 3;
+all three tiers). All 418 were checked for the signature (§2b, 25 hits) and all 25 hits were then
+adjudicated (§2c: 16 DEFECT, 1 WARRANTED, 8 lose no attacker on the control's line either).
 **The tool:** `test/prepay_recheck.py verify` — run it on your tree, read the summary.
 
 ---
@@ -185,18 +187,134 @@ Two things in that table matter more than the headline count:
 | `mirrorwing_smoke_d0_s1001` | 490 | 7 → 8 | prepay-colours | EXECUTION-DIFFERS | T6:Elvish Mystic |
 | `mirrorwing_smoke_d0_s1001` | 921 | 7 → 8 | prepay-colours | CHOICE-ONLY | T4:Elvish Mystic |
 
-**Caveat that must not be dropped.** A tap-order diff proves the fixed arm spends a mana creature the
-control did not, on the same line. It does **not** by itself prove the extra tap is wrong: if the
-control was paying with laundered mana it should never have had, then the fixed arm *correctly* has
-to find a real source, and a mana dork is a real source. That is a live possibility for the two
-`ritual-colours` rows and for the hinata rows generally (hinata's leftover reads `{R:1, C:1}`, and
-the `C` is a Sol Ring's colourless — precisely what the fix exists to stop).
+**Caveat that must not be dropped — now DISCHARGED per case in §2c, but read it first.** A tap-order
+diff proves the fixed arm spends a mana creature the control did not, on the same line. It does
+**not** by itself prove the extra tap is wrong: if the control was paying with laundered mana it
+should never have had, then the fixed arm *correctly* has to find a real source, and a mana dork is a
+real source. Nor does it prove the tap cost anything — the table above is sampled at a claude-play
+decision, before the turn's last segment pays, so a creature the control taps *late in its own main*
+reads here as spared.
 
-Only **`mirrorwing_overnight_d3_s5005` gi309** has been adjudicated end to end: its T4 cost
-`{G}+{G}+{1}{G}` was shown payable from two Game Trails and a Forest with the Mountain on the
-generic, so the dork was provably unnecessary. The other 24 carry the signature but not that proof.
-Deciding each one needs the same question answered: *was the batch payable without the creature,
-using only sources the control also had?*
+§2c settles both questions for all 25. Of these rows, **8 lose no attacker on the control's own line**
+and **1 is a payment the control had no legal way to make** — so 16, not 25, are payment-path damage.
+Read the two tables together: this one is the signature, §2c is the verdict.
+
+### 2c. VERDICT per case — was the bill payable WITHOUT the creature? (all 25 settled)
+
+`test/prepay_recheck.py adjudicate` answers, for every TAP-ORDER case, the question §2b left open and
+that gi309 was settled by hand on:
+
+> was the pre-combat bill payable, under TRUE colours, from sources the control also had, **without**
+> the disputed creature?
+
+It needs no engine change. The control's own game log carries the board per phase and each cast's
+`manaPaid`, which is enough to reconstruct (a) the bill the turn's pre-combat mains actually paid and
+(b) every mana source that stood untapped when the main opened, priced by `produces` /
+`produces_amount` / `sac_for_mana_amount` out of `cards.json`. Payability is then a bipartite matching
+of pips to sources — a `{G}` pip needs a source that makes green, a generic pip takes anything, and
+each source pays once. **`_units_for` and `_payable` are the whole model; everything else is bookkeeping.**
+
+Two questions are kept apart on purpose, because collapsing them is what made the first two passes of
+this checker wrong:
+
+| | question | what a "no" means |
+|---|---|---|
+| **avoidability** | was the bill payable from everything available, minus every copy of the disputed creature? | the tap was REQUIRED, not chosen — the fix is right |
+| **spend legality** | was the control's OWN payment colour-legal? | the pre-fix score came off a laundered payment, so `pre_fix` is not automatically the number to restore |
+
+They are independent: a turn can launder *and* still have had a creature-free legal payment (two cases
+below do exactly that).
+
+**Result: 25 of 25 settled, no case left unmodelled and no verdict resting on an assumption.**
+
+| verdict | games | meaning |
+|---|---|---|
+| **DEFECT** | **16** | the bill was payable without the creature. The tap is source selection, not necessity — these are the games a repaired payment path should recover |
+| **WARRANTED** | 1 | the available sources genuinely cannot cover the bill; a creature had to be tapped |
+| **CONTROL-ALSO-TAPS** | 8 | the control reaches combat with no free copy either, so no attacker was lost — the signature does not survive on the line ground truth records |
+
+| | |
+|---|---|
+| DEFECT by deck | mirrorwing 9, hinata 4, creature_giving 3 |
+| DEFECT by tier | overnight 13, smoke 2, regression 1 |
+| DEFECT by attribution | prepay-colours 14, ritual-colours 1, combination 1 |
+| DEFECT that also laundered | 2 (`hinata d5_s6006` gi270, `mirrorwing smoke` gi921) |
+
+Three things in that split are worth stating outright:
+
+- **The headline count from §2b falls by a third.** 8 of the 25 lose no attacker at all. `tapdiff`
+  samples at a claude-play decision — *before* the turn's last segment pays — so a creature the
+  control taps late in its own main reads there as spared. Measured at the declare-attackers state
+  instead, the control has no free copy either. Those 8 are not evidence of anything and should not
+  be counted as payment-path damage.
+- **The one WARRANTED case is a clean example of the fix working.** `mirrorwing_overnight_d0_s4004`
+  gi245 T3 pays three `{G}` pips off a Forest, a Mountain and a second Forest — the Mountain makes
+  only red, so the third green came out of the wild pool. Post-fix a real green source is required,
+  the only ones left are the two Elvish Mystics, and one gets tapped. That is not a regression to
+  repair; it is a line that was never legal.
+- **Laundering and avoidability are not the same thing.** gi921 T4 pays `{1}{G}` + `{1}{R}` + `{G}`
+  and takes one green out of a Sandstone Needle's red — illegal, so the fix is right to refuse it.
+  But eight legal sources stood free of the Mystic (two Forests, two Ignoble Hierarchs, two Sandstone
+  Needles), and two of those Hierarchs are 0-power and make `{G}`. The engine had to find real green;
+  it did not have to find it in the one creature that was going to deal damage.
+
+| case | gi | turns | attributed to | tapped | verdict | evidence |
+|---|---|---|---|---|---|---|
+| `creature_giving_overnight_d0_s4004` | 67 | 6 &rarr; 7 | prepay-colours | Birds of Paradise | **DEFECT** | T3 2 pips &larr; 3 free sources, colour-legal; T4 no free copy at combat; T5 no free copy at combat; T6 2 pips &larr; 5 free sources, colour-legal; T7 no pre-combat cast |
+| `creature_giving_overnight_d0_s6006` | 501 | 5 &rarr; 6 | prepay-colours | Birds of Paradise | **DEFECT** | T5 3 pips &larr; 5 free sources, colour-legal |
+| `creature_giving_overnight_d0_s8008` | 121 | 6 &rarr; 7 | prepay-colours | Birds of Paradise | **DEFECT** | T3 no free copy at combat; T4 2 pips &larr; 3 free sources, colour-legal; T5 1 pips &larr; 3 free sources, colour-legal; T6 no free copy at combat; T7 no pre-combat cast |
+| `hinata_overnight_d0_s10010` | 1941 | 6 &rarr; no win | combination | Ornithopter of Paradise | **DEFECT** | T4 2 pips &larr; 5 free sources, colour-legal |
+| `hinata_overnight_d0_s4004` | 107 | 6 &rarr; 7 | ritual-colours | Ornithopter of Paradise | **DEFECT** | T3 2 pips &larr; 3 free sources, colour-legal |
+| `hinata_overnight_d0_s6006` | 1370 | 5 &rarr; 6 | prepay-colours | Ornithopter of Paradise | **DEFECT** | T4 4 pips &larr; 5 free sources, colour-legal |
+| `hinata_overnight_d5_s6006` | 270 | 6 &rarr; 7 | prepay-colours | Ornithopter of Paradise | **DEFECT** | T5 4 pips &larr; 7 free sources, colour-legal **but the control laundered** |
+| `mirrorwing_overnight_d0_s10010` | 1994 | 6 &rarr; 7 | prepay-colours | Elvish Mystic | **DEFECT** | T3 3 pips &larr; 4 free sources, colour-legal |
+| `mirrorwing_overnight_d0_s4004` | 1946 | 4 &rarr; 5 | prepay-colours | Ignoble Hierarch | **DEFECT** | T4 3 pips &larr; 3 free sources, colour-legal |
+| `mirrorwing_overnight_d0_s6006` | 566 | 7 &rarr; 8 | prepay-colours | Elvish Mystic | **DEFECT** | T4 4 pips &larr; 4 free sources, colour-legal |
+| `mirrorwing_overnight_d3_s5005` | 309 | 4 &rarr; 5 | prepay-colours | Elvish Mystic | **DEFECT** | T4 4 pips &larr; 4 free sources, colour-legal |
+| `mirrorwing_overnight_d3_s7007` | 280 | 4 &rarr; 5 | prepay-colours | Elvish Mystic | **DEFECT** | T4 4 pips &larr; 4 free sources, colour-legal |
+| `mirrorwing_overnight_d5_s7007` | 280 | 4 &rarr; 5 | prepay-colours | Elvish Mystic | **DEFECT** | T4 4 pips &larr; 4 free sources, colour-legal |
+| `mirrorwing_regression_d3_s3003` | 67 | 6 &rarr; 7 | prepay-colours | Ignoble Hierarch | **DEFECT** | T4 6 pips &larr; 6 free sources, colour-legal |
+| `mirrorwing_smoke_d0_s1001` | 490 | 7 &rarr; 8 | prepay-colours | Elvish Mystic | **DEFECT** | T6 3 pips &larr; 5 free sources, colour-legal |
+| `mirrorwing_smoke_d0_s1001` | 921 | 7 &rarr; 8 | prepay-colours | Elvish Mystic | **DEFECT** | T4 5 pips &larr; 8 free sources, colour-legal **but the control laundered** |
+| `mirrorwing_overnight_d0_s4004` | 245 | 5 &rarr; 7 | prepay-colours | Elvish Mystic | **WARRANTED** | T3 3 pips &larr; 3 free sources |
+| `creature_giving_overnight_d0_s6006` | 259 | 4 &rarr; 5 | prepay-colours | Birds of Paradise | **CONTROL-ALSO-TAPS** | T3 no free copy at combat |
+| `creature_giving_overnight_d0_s8008` | 1958 | 5 &rarr; 6 | prepay-colours | Birds of Paradise | **CONTROL-ALSO-TAPS** | T5 no free copy at combat |
+| `creature_giving_smoke_d0_s1001` | 385 | 5 &rarr; 6 | prepay-colours | Birds of Paradise | **CONTROL-ALSO-TAPS** | T3 no free copy at combat |
+| `hinata_overnight_d0_s8008` | 1241 | 5 &rarr; 6 | prepay-colours | Sol Ring | **CONTROL-ALSO-TAPS** | T3 no free copy at combat |
+| `hinata_regression_d0_s2002` | 934 | 8 &rarr; no win | ritual-colours | Sol Ring | **CONTROL-ALSO-TAPS** | T7 no free copy at combat |
+| `mirrorwing_overnight_d0_s4004` | 284 | 8 &rarr; no win | prepay-colours | Elvish Mystic | **CONTROL-ALSO-TAPS** | T5 no free copy at combat |
+| `mirrorwing_overnight_d0_s6006` | 852 | 5 &rarr; 6 | prepay-colours | Ignoble Hierarch | **CONTROL-ALSO-TAPS** | T4 no free copy at combat |
+| `mirrorwing_overnight_d0_s8008` | 173 | 5 &rarr; 6 | prepay-colours | Ignoble Hierarch | **CONTROL-ALSO-TAPS** | T4 no free copy at combat |
+
+**How the checker refuses to guess.** Four classes of turn are voided rather than scored, because
+each under-counts one side of the ledger in the direction that could invent a verdict:
+
+| guard | why |
+|---|---|
+| `{X}` spells | `manaPaid` is inconsistent about X — Crackle with Power records `{4}{R}{R}` with X folded in, Reality Spasm records `{U}{U}` for an X of 4. Under-counting pips makes a bill look payable |
+| Reality Spasm's untap-refloat | a source taps twice in one main, so the source count is short |
+| a `{T}` ability that is not a mana ability | booking its source as mana it never made |
+| an uncoloured ritual float | mana this checker will not colour |
+
+Three more subtleties it had to be taught, each of which produced a wrong verdict first:
+
+- **Copies, not names.** Creature Giving holds two Birds of Paradise; a name-keyed "is it tapped"
+  reads yes when one is tapped and the other is free to swing.
+- **Summoning sickness.** gi284 casts a second Elvish Mystic on the turn it taps its first. The new
+  copy is untapped and cannot attack, so keying on the name said an attacker survived a board where
+  none did — it is matched by card NUMBER against the board as the main opened.
+- **Sources that leave the battlefield.** A Treasure vanishes because it was sacrificed for mana,
+  Sandstone Needle sacrifices itself as its last depletion counter comes off, and a Karoo land
+  bounces a land that was tapped for mana first. Dropping those made four cases read "4 pips vs 1
+  source". They are counted, and the count is FORCED rather than assumed whenever the surviving
+  sources fall short of a bill that demonstrably got paid.
+
+**What a DEFECT verdict does and does not claim.** It claims a legal creature-free payment existed
+for that turn's pre-combat bill. It does not claim the engine's solver can *find* it (that is the
+payment path's problem, which is the point), nor that the game recovers to exactly `pre_fix` — for
+the two cases that also laundered, the pre-fix number came partly off an illegal payment, so the
+right post-repair value may sit between `pre_fix` and `post_fix`. Treat DEFECT as "this game should
+improve", not "this game should read N".
 
 ## 3. Scope — what is and is not suspect
 
@@ -293,6 +411,28 @@ itself (only needed if the baseline moves): `python3 test/prepay_recheck.py buil
 To recompute the `walk_class`/`attribution` columns: `classify --jobs N` (expensive — it forces both
 arms down every prepay-attributed line).
 
+**The 16 DEFECT games in §2c are the sharpest signal available here** — each one has a turn *proven*
+payable without the creature the current engine taps, so a repaired payment path should move them.
+The verdict is a committed column in the tsv, so:
+
+```
+python3 test/prepay_recheck.py verify --defects --jobs 22    # just the 16 proven ones
+```
+
+On the current binary all 16 read `STILL-WORSE`, which is the control result — any `RECOVERED` is
+signal. (`verify` normalises the `-1` an unwon game carries in `gt_logs` to the loss-penalized
+`max_turns+1` a run reports; comparing them raw made every lost game read `MOVED`.)
+
+To regenerate the verdict list from scratch (~2 min on 20 jobs):
+
+```
+python3 test/prepay_recheck.py tapdiff    --jobs 20     # 418 games -> logs/prepay_tapdiff.json
+python3 test/prepay_recheck.py adjudicate --jobs 20     # the 25 hits -> logs/prepay_adjudicate.json
+```
+
+`adjudicate` runs the CONTROL (all fixes off) and reads its game log; it does not need your fix to be
+finished, and it re-derives nothing from this repo's ground truth.
+
 ## 6. What to do with the result
 
 **The recovered games must be rebaselined back.** They are currently committed ground truth at their
@@ -313,18 +453,29 @@ arms down every prepay-attributed line).
   directly off `floating_mana`). What is NOT established is *why* prepay taps four lands for a
   two-mana batch — whether that is deliberate ("commit the turn's sources up front") or itself a
   bug. That question lives inside the payment path and was left alone on purpose.
-- Every one of the 418 has now been checked for the tap-order signature (§2b) and attributed by
-  switch bisect. What is still NOT done per-case is the legality adjudication — "was the batch
-  payable without the creature?" — which stands for exactly one game, gi309. 24 of the 25 tap-order
-  rows and all 393 others rest on classification, not proof.
+- ANSWERED since the first draft: the legality adjudication — "was the bill payable without the
+  creature?" — now stands **per case for all 25 tap-order rows** (§2c), not just gi309. 16 are proven
+  DEFECT, 1 WARRANTED, 8 lose no attacker on the control's line at all.
+- **The 393 non-tap-order cases still rest on classification, not proof.** They were checked for the
+  tap signature and attributed by switch bisect, and none carries it; that is evidence they are not
+  *this* defect, not evidence they are correct. `EXECUTION-DIFFERS` in particular (44 cases, mirrorwing
+  32 / hinata 8 / slivers 4) means the execution changed on an identical forced line, which is the
+  payment path doing *something* — it just is not the attacker-losing something §2c prices. Whoever
+  repairs the path should re-run `verify` over the whole 418 rather than the 16.
+- §2c's model is a bipartite matching over `cards.json` production, not the engine's solver. It prices
+  what the CARDS allow. Where it says a creature-free payment existed, the engine may still fail to
+  find it — that is the defect, not a disagreement. Where a turn contains an `{X}` cost, an
+  untap-refloat, a non-mana `{T}` ability or an uncoloured ritual float, the turn is voided rather
+  than scored; after the guards were added, no case needed voiding.
 - ANSWERED since the first draft: the signature is **not** confined to Mirrorwing. EXECUTION-DIFFERS
-  covers hinata (8) and slivers (4) as well, and 217 of the 418 cases attribute to `prepay-colours`.
-  What remains unchecked is the per-case legality question above — which of those 44 + 59 cases
-  *should* recover, as opposed to merely differing.
+  covers hinata (8) and slivers (4) as well, and 217 of the 418 cases attribute to `prepay-colours`;
+  §2c's DEFECT set spans mirrorwing, hinata and creature_giving.
 - dragonstorm has **no** prepay-attributed case at all: all 37 of its entries are `ritual-colours`,
   which is why it is the one deck whose regression is unambiguously warranted.
 - The 418 cases are games that got **worse**. 125 got better over the same batch; those are not
   tracked here and some may be luck of the same re-ranking.
 - `pre_fix` is not automatically the "right" answer. For the ritual-colour decks the pre-fix value
   was produced by an *illegal* line, so a case reading `STILL-WORSE` there is correct behaviour, not
-  a failure. Only `EXECUTION-DIFFERS` cases carry the presumption that the old value should return.
+  a failure. This holds inside the DEFECT set too: gi270 and gi921 are proven avoidable *and* the
+  control laundered, so their repaired value may sit between `pre_fix` and `post_fix`. Read a DEFECT
+  as "this game should improve", not "this game should read N".

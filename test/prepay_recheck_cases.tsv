@@ -1,421 +1,423 @@
-# Games the 2026-08-25 colour-honesty batch made WORSE (baseline 90a537bd).
+# Games the 2026-08-25 colour-honesty batch made WORSE.
 # pre_fix = win turn before the batch, post_fix = win turn now (-1 = no win).
-# key	gi	deck	profile	seed	game_index	depth	budget	pre_fix	post_fix	attribution	walk_class
-auras_overnight_d0_s10010	72	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	10082	72	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s10010	458	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	10468	458	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s10010	762	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	10772	762	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s10010	803	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	10813	803	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s10010	980	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	10990	980	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s10010	1034	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	11044	1034	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s10010	1260	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	11270	1260	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s10010	1598	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	11608	1598	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s10010	1784	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	11794	1784	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s10010	1886	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	11896	1886	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s4004	106	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	4110	106	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s4004	395	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	4399	395	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s4004	932	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	4936	932	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s4004	1032	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	5036	1032	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s6006	205	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	6211	205	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s6006	291	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	6297	291	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s6006	301	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	6307	301	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s6006	495	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	6501	495	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s6006	793	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	6799	793	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s6006	1326	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7332	1326	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s6006	1376	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7382	1376	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s6006	1377	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7383	1377	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s6006	1413	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7419	1413	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s6006	1428	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7434	1428	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s6006	1698	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7704	1698	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s6006	1830	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7836	1830	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s8008	79	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	8087	79	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s8008	363	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	8371	363	0	0	6	7	aura-fetch-order	
-auras_overnight_d0_s8008	421	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	8429	421	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s8008	816	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	8824	816	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s8008	1150	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	9158	1150	0	0	4	5	aura-fetch-order	
-auras_overnight_d0_s8008	1856	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	9864	1856	0	0	4	5	aura-fetch-order	
-auras_overnight_d3_s5005	31	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	5036	31	3	80	4	5	aura-fetch-order	
-auras_overnight_d3_s7007	829	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7836	829	3	80	4	5	aura-fetch-order	
-auras_overnight_d5_s5005	31	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	5036	31	5	20	4	5	aura-fetch-order	
-auras_overnight_d5_s7007	829	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7836	829	5	20	4	5	aura-fetch-order	
-auras_regression_d0_s2002	269	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	2271	269	0	0	5	6	aura-fetch-order	
-auras_regression_d0_s2002	745	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	2747	745	0	0	4	5	aura-fetch-order	
-auras_regression_d0_s2002	882	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	2884	882	0	0	4	5	aura-fetch-order	
-auras_regression_d3_s2002	306	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	2308	306	3	10	5	6	aura-fetch-order	
-auras_regression_d5_s2002	306	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	2308	306	5	20	5	6	aura-fetch-order	
-auras_smoke_d0_s1001	324	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	1325	324	0	0	4	5	aura-fetch-order	
-auras_smoke_d0_s1001	409	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	1410	409	0	0	4	5	aura-fetch-order	
-auras_smoke_d0_s1001	580	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	1581	580	0	0	4	5	aura-fetch-order	
-auras_smoke_d0_s1001	994	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	1995	994	0	0	4	5	aura-fetch-order	
-creature_giving_overnight_d0_s10010	131	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	10141	131	0	0	5	6	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d0_s10010	1076	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	11086	1076	0	0	6	7	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d0_s10010	1152	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	11162	1152	0	0	5	6	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d0_s10010	1716	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	11726	1716	0	0	5	6	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d0_s4004	67	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	4071	67	0	0	6	7	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d0_s4004	307	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	4311	307	0	0	5	6	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d0_s4004	465	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	4469	465	0	0	6	7	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d0_s4004	1514	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	5518	1514	0	0	6	7	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d0_s6006	259	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	6265	259	0	0	4	5	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d0_s6006	501	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	6507	501	0	0	5	6	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d0_s6006	629	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	6635	629	0	0	4	5	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d0_s8008	121	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	8129	121	0	0	6	7	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d0_s8008	978	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	8986	978	0	0	6	7	prepay-colours	REFUSED
-creature_giving_overnight_d0_s8008	1958	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	9966	1958	0	0	5	6	prepay-colours	REFUSED
-creature_giving_overnight_d3_s4004	505	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	4509	505	3	20	4	5	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d3_s7007	56	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	7063	56	3	20	4	5	prepay-colours	INCONCLUSIVE
-creature_giving_overnight_d5_s7007	56	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	7063	56	5	40	4	5	prepay-colours	INCONCLUSIVE
-creature_giving_regression_d0_s2002	75	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	2077	75	0	0	7	-1	prepay-colours	INCONCLUSIVE
-creature_giving_smoke_d0_s1001	385	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	1386	385	0	0	5	6	prepay-colours	INCONCLUSIVE
-dragonstorm_overnight_d0_s10010	312	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	10322	312	0	0	6	-1	ritual-colours	
-dragonstorm_overnight_d0_s10010	548	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	10558	548	0	0	5	7	ritual-colours	
-dragonstorm_overnight_d0_s10010	1049	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	11059	1049	0	0	8	-1	ritual-colours	
-dragonstorm_overnight_d0_s10010	1363	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	11373	1363	0	0	6	7	ritual-colours	
-dragonstorm_overnight_d0_s10010	1570	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	11580	1570	0	0	7	8	ritual-colours	
-dragonstorm_overnight_d0_s10010	1942	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	11952	1942	0	0	6	-1	ritual-colours	
-dragonstorm_overnight_d0_s4004	300	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	4304	300	0	0	6	-1	ritual-colours	
-dragonstorm_overnight_d0_s4004	1080	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	5084	1080	0	0	8	-1	staged-suspend	
-dragonstorm_overnight_d0_s4004	1706	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	5710	1706	0	0	7	-1	ritual-colours	
-dragonstorm_overnight_d0_s4004	1932	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	5936	1932	0	0	8	-1	staged-suspend	
-dragonstorm_overnight_d0_s6006	105	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	6111	105	0	0	7	8	staged-suspend	
-dragonstorm_overnight_d0_s6006	128	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	6134	128	0	0	8	-1	ritual-colours	
-dragonstorm_overnight_d0_s6006	146	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	6152	146	0	0	6	7	ritual-colours	
-dragonstorm_overnight_d0_s6006	725	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	6731	725	0	0	6	-1	ritual-colours	
-dragonstorm_overnight_d0_s6006	1113	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7119	1113	0	0	6	7	ritual-colours	
-dragonstorm_overnight_d0_s6006	1416	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7422	1416	0	0	7	8	ritual-colours	
-dragonstorm_overnight_d0_s8008	1245	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	9253	1245	0	0	5	6	ritual-colours	
-dragonstorm_overnight_d0_s8008	1310	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	9318	1310	0	0	8	-1	ritual-colours	
-dragonstorm_overnight_d0_s8008	1475	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	9483	1475	0	0	7	8	staged-suspend	
-dragonstorm_overnight_d0_s8008	1993	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	10001	1993	0	0	6	-1	staged-suspend	
-dragonstorm_overnight_d3_s4004	20	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	4024	20	3	10	5	6	ritual-colours	
-dragonstorm_overnight_d3_s4004	107	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	4111	107	3	10	4	5	ritual-colours	
-dragonstorm_overnight_d3_s4004	318	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	4322	318	3	10	4	6	ritual-colours	
-dragonstorm_overnight_d3_s5005	419	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	5424	419	3	10	5	6	ritual-colours	
-dragonstorm_overnight_d3_s7007	227	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7234	227	3	10	5	7	ritual-colours	
-dragonstorm_overnight_d3_s7007	279	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7286	279	3	10	4	5	ritual-colours	
-dragonstorm_overnight_d3_s7007	363	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7370	363	3	10	4	5	ritual-colours	
-dragonstorm_overnight_d5_s4004	20	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	4024	20	5	20	5	6	ritual-colours	
-dragonstorm_overnight_d5_s4004	107	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	4111	107	5	20	4	5	ritual-colours	
-dragonstorm_overnight_d5_s6006	170	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	6176	170	5	20	4	5	ritual-colours	
-dragonstorm_overnight_d5_s7007	227	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7234	227	5	20	5	7	ritual-colours	
-dragonstorm_overnight_d5_s7007	279	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7286	279	5	20	4	5	ritual-colours	
-dragonstorm_regression_d0_s2002	37	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	2039	37	0	0	8	-1	staged-suspend	
-dragonstorm_regression_d0_s2002	186	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	2188	186	0	0	7	-1	ritual-colours	
-dragonstorm_regression_d3_s2002	171	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	2173	171	3	10	5	7	ritual-colours	
-dragonstorm_regression_d5_s2002	171	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	2173	171	5	20	5	7	ritual-colours	
-dragonstorm_smoke_d0_s1001	428	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	1429	428	0	0	7	-1	ritual-colours	
-fivecolour_overnight_d0_s8008	531	decks/FiveColour/FiveColour.cod	decks/FiveColour/FiveColour.profile.json	8539	531	0	0	6	7	prepay-colours	INCONCLUSIVE
-goblins_overnight_d0_s6006	657	decks/Goblins/Goblins.cod	decks/Goblins/Goblins.profile.json	6663	657	0	0	3	4	(none)	
-hinata_overnight_d0_s10010	25	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10035	25	0	0	4	5	prepay-colours	REFUSED
-hinata_overnight_d0_s10010	164	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10174	164	0	0	7	8	ritual-colours	
-hinata_overnight_d0_s10010	182	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10192	182	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s10010	200	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10210	200	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s10010	262	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10272	262	0	0	5	6	ritual-colours	
-hinata_overnight_d0_s10010	329	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10339	329	0	0	5	6	prepay-colours	EXECUTION-DIFFERS
-hinata_overnight_d0_s10010	372	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10382	372	0	0	4	5	ritual-colours	
-hinata_overnight_d0_s10010	443	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10453	443	0	0	7	8	prepay-colours	REFUSED
-hinata_overnight_d0_s10010	545	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10555	545	0	0	6	8	ritual-colours	
-hinata_overnight_d0_s10010	722	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10732	722	0	0	8	-1	ritual-colours	
-hinata_overnight_d0_s10010	745	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10755	745	0	0	5	6	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s10010	788	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10798	788	0	0	8	-1	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s10010	793	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10803	793	0	0	8	-1	ritual-colours	
-hinata_overnight_d0_s10010	809	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10819	809	0	0	5	6	prepay-colours	CHOICE-ONLY
-hinata_overnight_d0_s10010	825	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10835	825	0	0	7	8	ritual-colours	
-hinata_overnight_d0_s10010	881	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10891	881	0	0	6	7	prepay-colours	REFUSED
-hinata_overnight_d0_s10010	912	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10922	912	0	0	5	6	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s10010	920	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10930	920	0	0	6	7	prepay-colours	CHOICE-ONLY
-hinata_overnight_d0_s10010	1082	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11092	1082	0	0	5	6	prepay-colours	REFUSED
-hinata_overnight_d0_s10010	1139	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11149	1139	0	0	6	8	prepay-colours	REFUSED
-hinata_overnight_d0_s10010	1264	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11274	1264	0	0	4	5	ritual-colours	
-hinata_overnight_d0_s10010	1311	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11321	1311	0	0	6	8	ritual-colours	
-hinata_overnight_d0_s10010	1461	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11471	1461	0	0	7	8	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s10010	1465	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11475	1465	0	0	7	8	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s10010	1488	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11498	1488	0	0	5	6	ritual-colours	
-hinata_overnight_d0_s10010	1512	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11522	1512	0	0	5	7	ritual-colours	
-hinata_overnight_d0_s10010	1597	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11607	1597	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s10010	1600	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11610	1600	0	0	8	-1	ritual-colours	
-hinata_overnight_d0_s10010	1687	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11697	1687	0	0	8	-1	ritual-colours	
-hinata_overnight_d0_s10010	1862	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11872	1862	0	0	6	7	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s10010	1912	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11922	1912	0	0	8	-1	prepay-colours	REFUSED
-hinata_overnight_d0_s10010	1941	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11951	1941	0	0	6	-1	(combination)	INCONCLUSIVE
-hinata_overnight_d0_s4004	6	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4010	6	0	0	5	6	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s4004	107	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4111	107	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s4004	226	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4230	226	0	0	7	8	ritual-colours	
-hinata_overnight_d0_s4004	249	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4253	249	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s4004	463	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4467	463	0	0	6	7	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s4004	483	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4487	483	0	0	6	-1	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s4004	487	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4491	487	0	0	5	6	ritual-colours	
-hinata_overnight_d0_s4004	549	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4553	549	0	0	5	6	ritual-colours	
-hinata_overnight_d0_s4004	626	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4630	626	0	0	6	7	prepay-colours	CHOICE-ONLY
-hinata_overnight_d0_s4004	780	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4784	780	0	0	6	7	prepay-colours	EXECUTION-DIFFERS
-hinata_overnight_d0_s4004	823	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4827	823	0	0	7	8	ritual-colours	
-hinata_overnight_d0_s4004	927	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4931	927	0	0	6	-1	ritual-colours	
-hinata_overnight_d0_s4004	954	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4958	954	0	0	5	6	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s4004	997	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5001	997	0	0	6	7	prepay-colours	CHOICE-ONLY
-hinata_overnight_d0_s4004	1016	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5020	1016	0	0	7	8	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s4004	1022	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5026	1022	0	0	6	8	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s4004	1026	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5030	1026	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s4004	1030	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5034	1030	0	0	8	-1	prepay-colours	REFUSED
-hinata_overnight_d0_s4004	1135	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5139	1135	0	0	8	-1	ritual-colours	
-hinata_overnight_d0_s4004	1295	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5299	1295	0	0	5	7	ritual-colours	
-hinata_overnight_d0_s4004	1341	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5345	1341	0	0	4	5	prepay-colours	REFUSED
-hinata_overnight_d0_s4004	1355	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5359	1355	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s4004	1449	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5453	1449	0	0	4	5	ritual-colours	
-hinata_overnight_d0_s4004	1740	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5744	1740	0	0	5	6	prepay-colours	REFUSED
-hinata_overnight_d0_s4004	1762	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5766	1762	0	0	7	8	ritual-colours	
-hinata_overnight_d0_s4004	1882	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5886	1882	0	0	5	6	ritual-colours	
-hinata_overnight_d0_s4004	1887	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5891	1887	0	0	6	7	prepay-colours	CHOICE-ONLY
-hinata_overnight_d0_s6006	36	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6042	36	0	0	5	6	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s6006	408	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6414	408	0	0	7	-1	prepay-colours	REFUSED
-hinata_overnight_d0_s6006	424	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6430	424	0	0	8	-1	ritual-colours	
-hinata_overnight_d0_s6006	468	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6474	468	0	0	8	-1	prepay-colours	REFUSED
-hinata_overnight_d0_s6006	567	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6573	567	0	0	5	7	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s6006	671	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6677	671	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s6006	679	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6685	679	0	0	5	7	prepay-colours	REFUSED
-hinata_overnight_d0_s6006	848	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6854	848	0	0	5	6	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s6006	879	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6885	879	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s6006	892	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6898	892	0	0	5	6	ritual-colours	
-hinata_overnight_d0_s6006	1059	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7065	1059	0	0	4	5	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s6006	1117	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7123	1117	0	0	8	-1	prepay-colours	EXECUTION-DIFFERS
-hinata_overnight_d0_s6006	1144	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7150	1144	0	0	7	8	ritual-colours	
-hinata_overnight_d0_s6006	1370	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7376	1370	0	0	5	6	prepay-colours	CHOICE-ONLY
-hinata_overnight_d0_s6006	1405	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7411	1405	0	0	8	-1	ritual-colours	
-hinata_overnight_d0_s6006	1780	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7786	1780	0	0	8	-1	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s6006	1793	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7799	1793	0	0	5	6	prepay-colours	REFUSED
-hinata_overnight_d0_s6006	1822	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7828	1822	0	0	8	-1	ritual-colours	
-hinata_overnight_d0_s6006	1851	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7857	1851	0	0	6	7	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s6006	1882	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7888	1882	0	0	5	6	ritual-colours	
-hinata_overnight_d0_s6006	1991	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7997	1991	0	0	5	6	prepay-colours	REFUSED
-hinata_overnight_d0_s6006	1994	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8000	1994	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s8008	18	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8026	18	0	0	7	8	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s8008	53	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8061	53	0	0	7	8	prepay-colours	REFUSED
-hinata_overnight_d0_s8008	98	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8106	98	0	0	6	7	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s8008	138	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8146	138	0	0	8	-1	ritual-colours	
-hinata_overnight_d0_s8008	173	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8181	173	0	0	6	7	prepay-colours	REFUSED
-hinata_overnight_d0_s8008	191	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8199	191	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s8008	338	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8346	338	0	0	7	8	ritual-colours	
-hinata_overnight_d0_s8008	551	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8559	551	0	0	7	8	prepay-colours	CHOICE-ONLY
-hinata_overnight_d0_s8008	609	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8617	609	0	0	8	-1	ritual-colours	
-hinata_overnight_d0_s8008	640	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8648	640	0	0	7	-1	ritual-colours	
-hinata_overnight_d0_s8008	667	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8675	667	0	0	6	7	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s8008	905	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8913	905	0	0	7	8	ritual-colours	
-hinata_overnight_d0_s8008	910	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8918	910	0	0	5	6	ritual-colours	
-hinata_overnight_d0_s8008	1083	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9091	1083	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s8008	1141	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9149	1141	0	0	7	8	ritual-colours	
-hinata_overnight_d0_s8008	1145	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9153	1145	0	0	4	5	ritual-colours	
-hinata_overnight_d0_s8008	1153	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9161	1153	0	0	8	-1	ritual-colours	
-hinata_overnight_d0_s8008	1241	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9249	1241	0	0	5	6	prepay-colours	EXECUTION-DIFFERS
-hinata_overnight_d0_s8008	1253	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9261	1253	0	0	7	8	ritual-colours	
-hinata_overnight_d0_s8008	1319	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9327	1319	0	0	5	6	ritual-colours	
-hinata_overnight_d0_s8008	1422	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9430	1422	0	0	5	6	ritual-colours	
-hinata_overnight_d0_s8008	1443	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9451	1443	0	0	5	6	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s8008	1578	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9586	1578	0	0	6	7	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s8008	1694	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9702	1694	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s8008	1726	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9734	1726	0	0	6	7	prepay-colours	INCONCLUSIVE
-hinata_overnight_d0_s8008	1731	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9739	1731	0	0	6	7	ritual-colours	
-hinata_overnight_d0_s8008	1916	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9924	1916	0	0	7	8	prepay-colours	CHOICE-ONLY
-hinata_overnight_d3_s4004	82	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4086	82	3	10	5	6	ritual-colours	
-hinata_overnight_d3_s4004	96	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4100	96	3	10	4	5	(combination)	INCONCLUSIVE
-hinata_overnight_d3_s4004	130	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4134	130	3	10	6	7	prepay-colours	REFUSED
-hinata_overnight_d3_s4004	164	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4168	164	3	10	4	5	prepay-colours,ritual-colours	INCONCLUSIVE
-hinata_overnight_d3_s4004	183	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4187	183	3	10	6	7	ritual-colours	
-hinata_overnight_d3_s4004	275	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4279	275	3	10	3	4	ritual-colours	
-hinata_overnight_d3_s4004	352	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4356	352	3	10	5	6	ritual-colours	
-hinata_overnight_d3_s4004	386	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4390	386	3	10	8	-1	prepay-colours	EXECUTION-DIFFERS
-hinata_overnight_d3_s4004	399	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4403	399	3	10	4	5	ritual-colours	
-hinata_overnight_d3_s5005	18	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5023	18	3	10	6	7	prepay-colours	INCONCLUSIVE
-hinata_overnight_d3_s5005	196	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5201	196	3	10	4	5	prepay-colours	EXECUTION-DIFFERS
-hinata_overnight_d3_s5005	221	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5226	221	3	10	4	5	prepay-colours,ritual-colours	INCONCLUSIVE
-hinata_overnight_d3_s5005	268	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5273	268	3	10	5	6	ritual-colours	
-hinata_overnight_d3_s5005	290	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5295	290	3	10	6	7	ritual-colours	
-hinata_overnight_d3_s5005	297	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5302	297	3	10	5	6	prepay-colours	INCONCLUSIVE
-hinata_overnight_d3_s5005	308	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5313	308	3	10	4	5	ritual-colours	
-hinata_overnight_d3_s5005	339	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5344	339	3	10	6	7	prepay-colours	REFUSED
-hinata_overnight_d3_s6006	17	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6023	17	3	10	5	6	ritual-colours	
-hinata_overnight_d3_s6006	32	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6038	32	3	10	6	7	ritual-colours	
-hinata_overnight_d3_s6006	50	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6056	50	3	10	5	6	prepay-colours	REFUSED
-hinata_overnight_d3_s6006	158	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6164	158	3	10	5	6	prepay-colours	REFUSED
-hinata_overnight_d3_s6006	248	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6254	248	3	10	6	7	ritual-colours	
-hinata_overnight_d3_s6006	276	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6282	276	3	10	5	6	ritual-colours	
-hinata_overnight_d3_s6006	362	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6368	362	3	10	5	6	ritual-colours	
-hinata_overnight_d3_s6006	376	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6382	376	3	10	4	5	prepay-colours	INCONCLUSIVE
-hinata_overnight_d3_s6006	384	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6390	384	3	10	6	7	prepay-colours	INCONCLUSIVE
-hinata_overnight_d3_s6006	394	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6400	394	3	10	5	6	ritual-colours	
-hinata_overnight_d3_s6006	398	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6404	398	3	10	7	8	prepay-colours	INCONCLUSIVE
-hinata_overnight_d3_s7007	64	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7071	64	3	10	4	5	ritual-colours	
-hinata_overnight_d3_s7007	66	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7073	66	3	10	5	6	prepay-colours	EXECUTION-DIFFERS
-hinata_overnight_d3_s7007	87	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7094	87	3	10	6	7	ritual-colours	
-hinata_overnight_d3_s7007	137	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7144	137	3	10	4	5	ritual-colours	
-hinata_overnight_d3_s7007	229	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7236	229	3	10	5	6	prepay-colours	INCONCLUSIVE
-hinata_overnight_d5_s4004	79	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4083	79	5	20	4	5	prepay-colours	REFUSED
-hinata_overnight_d5_s4004	82	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4086	82	5	20	5	6	ritual-colours	
-hinata_overnight_d5_s4004	96	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4100	96	5	20	4	5	ritual-colours	
-hinata_overnight_d5_s4004	183	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4187	183	5	20	6	7	ritual-colours	
-hinata_overnight_d5_s4004	275	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4279	275	5	20	3	4	ritual-colours	
-hinata_overnight_d5_s5005	8	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5013	8	5	20	5	6	prepay-colours	INCONCLUSIVE
-hinata_overnight_d5_s5005	124	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5129	124	5	20	6	7	prepay-colours	REFUSED
-hinata_overnight_d5_s5005	196	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5201	196	5	20	4	5	prepay-colours	EXECUTION-DIFFERS
-hinata_overnight_d5_s5005	218	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5223	218	5	20	6	7	prepay-colours	REFUSED
-hinata_overnight_d5_s5005	268	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5273	268	5	20	5	6	ritual-colours	
-hinata_overnight_d5_s5005	290	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5295	290	5	20	6	7	ritual-colours	
-hinata_overnight_d5_s5005	297	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5302	297	5	20	5	6	prepay-colours	INCONCLUSIVE
-hinata_overnight_d5_s6006	17	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6023	17	5	20	5	6	ritual-colours	
-hinata_overnight_d5_s6006	28	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6034	28	5	20	5	6	prepay-colours	CHOICE-ONLY
-hinata_overnight_d5_s6006	32	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6038	32	5	20	6	7	ritual-colours	
-hinata_overnight_d5_s6006	62	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6068	62	5	20	5	6	prepay-colours	INCONCLUSIVE
-hinata_overnight_d5_s6006	158	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6164	158	5	20	5	6	prepay-colours	REFUSED
-hinata_overnight_d5_s6006	205	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6211	205	5	20	4	5	prepay-colours	INCONCLUSIVE
-hinata_overnight_d5_s6006	270	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6276	270	5	20	6	7	prepay-colours	INCONCLUSIVE
-hinata_overnight_d5_s6006	276	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6282	276	5	20	5	6	ritual-colours	
-hinata_overnight_d5_s6006	297	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6303	297	5	20	5	6	ritual-colours	
-hinata_overnight_d5_s7007	64	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7071	64	5	20	4	5	ritual-colours	
-hinata_overnight_d5_s7007	73	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7080	73	5	20	5	6	ritual-colours	
-hinata_overnight_d5_s7007	116	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7123	116	5	20	7	8	ritual-colours	
-hinata_overnight_d5_s7007	137	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7144	137	5	20	4	5	ritual-colours	
-hinata_overnight_d5_s7007	165	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7172	165	5	20	5	7	prepay-colours,ritual-colours	INCONCLUSIVE
-hinata_overnight_d5_s7007	229	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7236	229	5	20	5	6	prepay-colours	INCONCLUSIVE
-hinata_overnight_d5_s7007	244	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7251	244	5	20	4	5	ritual-colours	
-hinata_regression_d0_s2002	55	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2057	55	0	0	6	7	prepay-colours	CHOICE-ONLY
-hinata_regression_d0_s2002	93	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2095	93	0	0	5	6	prepay-colours	INCONCLUSIVE
-hinata_regression_d0_s2002	166	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2168	166	0	0	6	7	ritual-colours	
-hinata_regression_d0_s2002	185	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2187	185	0	0	7	-1	prepay-colours	INCONCLUSIVE
-hinata_regression_d0_s2002	256	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2258	256	0	0	7	8	prepay-colours	INCONCLUSIVE
-hinata_regression_d0_s2002	257	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2259	257	0	0	5	6	ritual-colours	
-hinata_regression_d0_s2002	295	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2297	295	0	0	5	6	ritual-colours	
-hinata_regression_d0_s2002	643	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2645	643	0	0	8	-1	prepay-colours	CHOICE-ONLY
-hinata_regression_d0_s2002	651	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2653	651	0	0	5	6	prepay-colours	CHOICE-ONLY
-hinata_regression_d0_s2002	829	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2831	829	0	0	8	-1	ritual-colours	
-hinata_regression_d0_s2002	885	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2887	885	0	0	7	8	prepay-colours,ritual-colours	INCONCLUSIVE
-hinata_regression_d0_s2002	934	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2936	934	0	0	8	-1	ritual-colours	
-hinata_regression_d0_s2002	981	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2983	981	0	0	8	-1	ritual-colours	
-hinata_regression_d3_s2002	36	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2038	36	3	10	4	5	ritual-colours	
-hinata_regression_d3_s2002	37	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2039	37	3	10	5	6	prepay-colours,ritual-colours	INCONCLUSIVE
-hinata_regression_d3_s2002	93	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2095	93	3	10	4	5	prepay-colours	INCONCLUSIVE
-hinata_regression_d3_s3003	6	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3009	6	3	10	4	5	ritual-colours	
-hinata_regression_d3_s3003	73	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3076	73	3	10	4	5	ritual-colours	
-hinata_regression_d3_s3003	97	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3100	97	3	10	5	6	prepay-colours	REFUSED
-hinata_regression_d3_s3003	101	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3104	101	3	10	5	6	prepay-colours	INCONCLUSIVE
-hinata_regression_d3_s3003	194	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3197	194	3	10	4	5	ritual-colours	
-hinata_regression_d3_s3003	199	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3202	199	3	10	4	5	ritual-colours	
-hinata_regression_d5_s2002	93	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2095	93	5	20	4	5	prepay-colours	INCONCLUSIVE
-hinata_regression_d5_s3003	70	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3073	70	5	20	4	5	ritual-colours	
-hinata_regression_d5_s3003	73	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3076	73	5	20	4	5	ritual-colours	
-hinata_regression_d5_s3003	82	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3085	82	5	20	4	5	ritual-colours	
-hinata_regression_d5_s3003	97	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3100	97	5	20	5	6	prepay-colours	INCONCLUSIVE
-hinata_smoke_d0_s1001	37	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1038	37	0	0	8	-1	ritual-colours	
-hinata_smoke_d0_s1001	114	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1115	114	0	0	6	7	prepay-colours	INCONCLUSIVE
-hinata_smoke_d0_s1001	161	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1162	161	0	0	6	7	ritual-colours	
-hinata_smoke_d0_s1001	271	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1272	271	0	0	6	7	ritual-colours	
-hinata_smoke_d0_s1001	442	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1443	442	0	0	5	8	prepay-colours	REFUSED
-hinata_smoke_d0_s1001	617	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1618	617	0	0	7	8	prepay-colours	INCONCLUSIVE
-hinata_smoke_d0_s1001	663	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1664	663	0	0	5	6	ritual-colours	
-hinata_smoke_d0_s1001	668	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1669	668	0	0	7	8	ritual-colours	
-hinata_smoke_d0_s1001	732	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1733	732	0	0	8	-1	prepay-colours	INCONCLUSIVE
-hinata_smoke_d0_s1001	790	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1791	790	0	0	6	7	prepay-colours	REFUSED
-hinata_smoke_d0_s1001	906	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1907	906	0	0	8	-1	prepay-colours	REFUSED
-hinata_smoke_d0_s1001	938	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1939	938	0	0	8	-1	ritual-colours	
-minotaur_overnight_d3_s4004	606	decks/Minotaur/Minotaur.cod	decks/Minotaur/Minotaur.profile.json	4610	606	3	20	5	6	bestow-signature	
-minotaur_overnight_d3_s5005	479	decks/Minotaur/Minotaur.cod	decks/Minotaur/Minotaur.profile.json	5484	479	3	20	4	5	bestow-signature	
-minotaur_overnight_d3_s5005	942	decks/Minotaur/Minotaur.cod	decks/Minotaur/Minotaur.profile.json	5947	942	3	20	4	5	bestow-signature	
-minotaur_overnight_d5_s5005	481	decks/Minotaur/Minotaur.cod	decks/Minotaur/Minotaur.profile.json	5486	481	5	40	4	5	bestow-signature	
-mirrorwing_overnight_d0_s10010	54	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	10064	54	0	0	4	5	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s10010	237	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	10247	237	0	0	5	8	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s10010	287	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	10297	287	0	0	8	-1	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s10010	887	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	10897	887	0	0	5	6	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s10010	1046	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11056	1046	0	0	6	-1	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s10010	1238	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11248	1238	0	0	4	5	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s10010	1248	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11258	1248	0	0	7	-1	prepay-colours	CHOICE-ONLY
-mirrorwing_overnight_d0_s10010	1414	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11424	1414	0	0	6	7	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s10010	1427	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11437	1427	0	0	5	6	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s10010	1535	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11545	1535	0	0	6	8	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s10010	1785	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11795	1785	0	0	6	7	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s10010	1820	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11830	1820	0	0	6	7	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s10010	1839	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11849	1839	0	0	6	7	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s10010	1994	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	12004	1994	0	0	6	7	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s4004	245	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4249	245	0	0	5	7	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s4004	284	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4288	284	0	0	8	-1	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s4004	324	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4328	324	0	0	5	6	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s4004	356	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4360	356	0	0	6	7	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s4004	406	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4410	406	0	0	5	6	prepay-colours	CHOICE-ONLY
-mirrorwing_overnight_d0_s4004	417	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4421	417	0	0	6	7	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s4004	452	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4456	452	0	0	4	5	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s4004	561	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4565	561	0	0	5	6	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s4004	735	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4739	735	0	0	4	5	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s4004	824	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4828	824	0	0	5	6	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s4004	1130	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5134	1130	0	0	8	-1	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s4004	1412	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5416	1412	0	0	6	8	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s4004	1688	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5692	1688	0	0	5	6	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s4004	1807	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5811	1807	0	0	6	8	prepay-colours	INCONCLUSIVE
-mirrorwing_overnight_d0_s4004	1895	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5899	1895	0	0	5	6	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s4004	1946	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5950	1946	0	0	4	5	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s6006	46	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6052	46	0	0	5	6	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s6006	220	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6226	220	0	0	8	-1	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s6006	473	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6479	473	0	0	7	8	prepay-colours	INCONCLUSIVE
-mirrorwing_overnight_d0_s6006	545	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6551	545	0	0	5	6	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s6006	566	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6572	566	0	0	7	8	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s6006	852	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6858	852	0	0	5	6	prepay-colours	CHOICE-ONLY
-mirrorwing_overnight_d0_s6006	1105	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7111	1105	0	0	5	6	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s6006	1480	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7486	1480	0	0	7	8	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s6006	1580	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7586	1580	0	0	8	-1	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s6006	1648	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7654	1648	0	0	5	6	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s6006	1683	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7689	1683	0	0	7	8	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s6006	1746	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7752	1746	0	0	7	8	prepay-colours	INCONCLUSIVE
-mirrorwing_overnight_d0_s8008	33	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8041	33	0	0	5	6	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s8008	173	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8181	173	0	0	5	6	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s8008	391	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8399	391	0	0	4	5	prepay-colours	CHOICE-ONLY
-mirrorwing_overnight_d0_s8008	514	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8522	514	0	0	5	6	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d0_s8008	564	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8572	564	0	0	6	7	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s8008	596	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8604	596	0	0	5	6	prepay-colours	CHOICE-ONLY
-mirrorwing_overnight_d0_s8008	909	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8917	909	0	0	5	6	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s8008	982	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8990	982	0	0	6	7	prepay-colours	CHOICE-ONLY
-mirrorwing_overnight_d0_s8008	1128	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	9136	1128	0	0	6	7	prepay-colours	INCONCLUSIVE
-mirrorwing_overnight_d0_s8008	1172	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	9180	1172	0	0	6	7	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s8008	1258	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	9266	1258	0	0	4	5	prepay-colours	REFUSED
-mirrorwing_overnight_d0_s8008	1372	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	9380	1372	0	0	4	5	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d3_s4004	106	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4110	106	3	10	5	6	prepay-colours	CHOICE-ONLY
-mirrorwing_overnight_d3_s4004	127	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4131	127	3	10	7	8	prepay-colours	INCONCLUSIVE
-mirrorwing_overnight_d3_s5005	309	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5314	309	3	10	4	5	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d3_s6006	56	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6062	56	3	10	4	5	prepay-colours	INCONCLUSIVE
-mirrorwing_overnight_d3_s7007	73	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7080	73	3	10	5	6	prepay-colours	INCONCLUSIVE
-mirrorwing_overnight_d3_s7007	280	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7287	280	3	10	4	5	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_overnight_d5_s4004	127	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4131	127	5	20	7	8	prepay-colours	INCONCLUSIVE
-mirrorwing_overnight_d5_s6006	56	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6062	56	5	20	4	5	prepay-colours	INCONCLUSIVE
-mirrorwing_overnight_d5_s6006	136	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6142	136	5	20	5	6	prepay-colours	REFUSED
-mirrorwing_overnight_d5_s7007	73	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7080	73	5	20	5	6	prepay-colours	INCONCLUSIVE
-mirrorwing_overnight_d5_s7007	280	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7287	280	5	20	4	5	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_regression_d0_s2002	44	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2046	44	0	0	6	7	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_regression_d0_s2002	111	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2113	111	0	0	4	5	prepay-colours	CHOICE-ONLY
-mirrorwing_regression_d0_s2002	280	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2282	280	0	0	7	8	prepay-colours	REFUSED
-mirrorwing_regression_d0_s2002	509	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2511	509	0	0	5	6	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_regression_d0_s2002	517	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2519	517	0	0	5	6	prepay-colours	REFUSED
-mirrorwing_regression_d0_s2002	640	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2642	640	0	0	5	6	prepay-colours	REFUSED
-mirrorwing_regression_d0_s2002	931	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2933	931	0	0	4	6	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_regression_d3_s3003	67	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	3070	67	3	10	6	7	prepay-colours	CHOICE-ONLY
-mirrorwing_regression_d3_s3003	138	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	3141	138	3	10	5	6	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_smoke_d0_s1001	185	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1186	185	0	0	7	-1	prepay-colours	REFUSED
-mirrorwing_smoke_d0_s1001	301	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1302	301	0	0	7	8	prepay-colours	INCONCLUSIVE
-mirrorwing_smoke_d0_s1001	350	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1351	350	0	0	6	7	prepay-colours	REFUSED
-mirrorwing_smoke_d0_s1001	373	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1374	373	0	0	6	8	prepay-colours	REFUSED
-mirrorwing_smoke_d0_s1001	487	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1488	487	0	0	5	6	prepay-colours	REFUSED
-mirrorwing_smoke_d0_s1001	490	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1491	490	0	0	7	8	prepay-colours	EXECUTION-DIFFERS
-mirrorwing_smoke_d0_s1001	681	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1682	681	0	0	5	6	prepay-colours	REFUSED
-mirrorwing_smoke_d0_s1001	727	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1728	727	0	0	4	5	prepay-colours	INCONCLUSIVE
-mirrorwing_smoke_d0_s1001	921	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1922	921	0	0	7	8	prepay-colours	CHOICE-ONLY
-mirrorwing_smoke_d3_s1001	86	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1087	86	3	10	4	5	prepay-colours	INCONCLUSIVE
-slivers_overnight_d0_s10010	45	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	10055	45	0	0	4	5	prepay-colours	CHOICE-ONLY
-slivers_overnight_d0_s10010	809	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	10819	809	0	0	4	5	prepay-colours	CHOICE-ONLY
-slivers_overnight_d0_s10010	1113	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	11123	1113	0	0	4	5	prepay-colours	INCONCLUSIVE
-slivers_overnight_d0_s10010	1152	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	11162	1152	0	0	4	5	prepay-colours	CHOICE-ONLY
-slivers_overnight_d0_s10010	1199	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	11209	1199	0	0	4	5	prepay-colours	INCONCLUSIVE
-slivers_overnight_d0_s4004	331	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	4335	331	0	0	4	5	prepay-colours	CHOICE-ONLY
-slivers_overnight_d0_s4004	1361	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	5365	1361	0	0	4	5	prepay-colours	CHOICE-ONLY
-slivers_overnight_d0_s4004	1977	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	5981	1977	0	0	4	5	prepay-colours	CHOICE-ONLY
-slivers_overnight_d0_s6006	713	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	6719	713	0	0	4	5	prepay-colours	CHOICE-ONLY
-slivers_overnight_d0_s6006	1074	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	7080	1074	0	0	4	5	prepay-colours	EXECUTION-DIFFERS
-slivers_overnight_d0_s6006	1408	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	7414	1408	0	0	4	5	prepay-colours	EXECUTION-DIFFERS
-slivers_overnight_d0_s6006	1713	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	7719	1713	0	0	4	5	prepay-colours	CHOICE-ONLY
-slivers_overnight_d0_s8008	203	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	8211	203	0	0	4	5	prepay-colours	CHOICE-ONLY
-slivers_overnight_d0_s8008	674	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	8682	674	0	0	5	6	prepay-colours	INCONCLUSIVE
-slivers_overnight_d0_s8008	1384	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	9392	1384	0	0	4	5	prepay-colours	CHOICE-ONLY
-slivers_overnight_d3_s7007	41	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	7048	41	3	10	4	5	prepay-colours	EXECUTION-DIFFERS
-slivers_overnight_d5_s7007	41	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	7048	41	5	20	4	5	prepay-colours	EXECUTION-DIFFERS
-slivers_smoke_d0_s1001	382	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	1383	382	0	0	5	6	prepay-colours	CHOICE-ONLY
-slivers_smoke_d0_s1001	625	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	1626	625	0	0	4	5	prepay-colours	INCONCLUSIVE
+# verdict: DEFECT = the turn is PROVEN payable without the creature the engine
+#          taps (see docs/design/prepay-payment-path-recheck.md section 2c).
+# key	gi	deck	profile	seed	game_index	depth	budget	pre_fix	post_fix	attribution	walk_class	verdict
+auras_overnight_d0_s10010	72	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	10082	72	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s10010	458	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	10468	458	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s10010	762	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	10772	762	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s10010	803	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	10813	803	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s10010	980	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	10990	980	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s10010	1034	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	11044	1034	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s10010	1260	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	11270	1260	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s10010	1598	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	11608	1598	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s10010	1784	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	11794	1784	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s10010	1886	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	11896	1886	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s4004	106	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	4110	106	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s4004	395	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	4399	395	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s4004	932	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	4936	932	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s4004	1032	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	5036	1032	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s6006	205	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	6211	205	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s6006	291	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	6297	291	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s6006	301	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	6307	301	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s6006	495	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	6501	495	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s6006	793	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	6799	793	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s6006	1326	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7332	1326	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s6006	1376	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7382	1376	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s6006	1377	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7383	1377	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s6006	1413	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7419	1413	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s6006	1428	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7434	1428	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s6006	1698	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7704	1698	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s6006	1830	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7836	1830	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s8008	79	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	8087	79	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s8008	363	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	8371	363	0	0	6	7	aura-fetch-order		
+auras_overnight_d0_s8008	421	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	8429	421	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s8008	816	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	8824	816	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s8008	1150	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	9158	1150	0	0	4	5	aura-fetch-order		
+auras_overnight_d0_s8008	1856	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	9864	1856	0	0	4	5	aura-fetch-order		
+auras_overnight_d3_s5005	31	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	5036	31	3	80	4	5	aura-fetch-order		
+auras_overnight_d3_s7007	829	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7836	829	3	80	4	5	aura-fetch-order		
+auras_overnight_d5_s5005	31	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	5036	31	5	20	4	5	aura-fetch-order		
+auras_overnight_d5_s7007	829	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	7836	829	5	20	4	5	aura-fetch-order		
+auras_regression_d0_s2002	269	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	2271	269	0	0	5	6	aura-fetch-order		
+auras_regression_d0_s2002	745	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	2747	745	0	0	4	5	aura-fetch-order		
+auras_regression_d0_s2002	882	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	2884	882	0	0	4	5	aura-fetch-order		
+auras_regression_d3_s2002	306	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	2308	306	3	10	5	6	aura-fetch-order		
+auras_regression_d5_s2002	306	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	2308	306	5	20	5	6	aura-fetch-order		
+auras_smoke_d0_s1001	324	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	1325	324	0	0	4	5	aura-fetch-order		
+auras_smoke_d0_s1001	409	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	1410	409	0	0	4	5	aura-fetch-order		
+auras_smoke_d0_s1001	580	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	1581	580	0	0	4	5	aura-fetch-order		
+auras_smoke_d0_s1001	994	decks/Auras/Auras.cod	decks/Auras/Auras.profile.json	1995	994	0	0	4	5	aura-fetch-order		
+creature_giving_overnight_d0_s10010	131	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	10141	131	0	0	5	6	prepay-colours	INCONCLUSIVE	
+creature_giving_overnight_d0_s10010	1076	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	11086	1076	0	0	6	7	prepay-colours	INCONCLUSIVE	
+creature_giving_overnight_d0_s10010	1152	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	11162	1152	0	0	5	6	prepay-colours	INCONCLUSIVE	
+creature_giving_overnight_d0_s10010	1716	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	11726	1716	0	0	5	6	prepay-colours	INCONCLUSIVE	
+creature_giving_overnight_d0_s4004	67	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	4071	67	0	0	6	7	prepay-colours	INCONCLUSIVE	DEFECT
+creature_giving_overnight_d0_s4004	307	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	4311	307	0	0	5	6	prepay-colours	INCONCLUSIVE	
+creature_giving_overnight_d0_s4004	465	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	4469	465	0	0	6	7	prepay-colours	INCONCLUSIVE	
+creature_giving_overnight_d0_s4004	1514	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	5518	1514	0	0	6	7	prepay-colours	INCONCLUSIVE	
+creature_giving_overnight_d0_s6006	259	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	6265	259	0	0	4	5	prepay-colours	INCONCLUSIVE	CONTROL-ALSO-TAPS
+creature_giving_overnight_d0_s6006	501	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	6507	501	0	0	5	6	prepay-colours	INCONCLUSIVE	DEFECT
+creature_giving_overnight_d0_s6006	629	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	6635	629	0	0	4	5	prepay-colours	INCONCLUSIVE	
+creature_giving_overnight_d0_s8008	121	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	8129	121	0	0	6	7	prepay-colours	INCONCLUSIVE	DEFECT
+creature_giving_overnight_d0_s8008	978	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	8986	978	0	0	6	7	prepay-colours	REFUSED	
+creature_giving_overnight_d0_s8008	1958	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	9966	1958	0	0	5	6	prepay-colours	REFUSED	CONTROL-ALSO-TAPS
+creature_giving_overnight_d3_s4004	505	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	4509	505	3	20	4	5	prepay-colours	INCONCLUSIVE	
+creature_giving_overnight_d3_s7007	56	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	7063	56	3	20	4	5	prepay-colours	INCONCLUSIVE	
+creature_giving_overnight_d5_s7007	56	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	7063	56	5	40	4	5	prepay-colours	INCONCLUSIVE	
+creature_giving_regression_d0_s2002	75	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	2077	75	0	0	7	-1	prepay-colours	INCONCLUSIVE	
+creature_giving_smoke_d0_s1001	385	decks/Creature Giving/Creature Giving.cod	decks/Creature Giving/Creature Giving.profile.json	1386	385	0	0	5	6	prepay-colours	INCONCLUSIVE	CONTROL-ALSO-TAPS
+dragonstorm_overnight_d0_s10010	312	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	10322	312	0	0	6	-1	ritual-colours		
+dragonstorm_overnight_d0_s10010	548	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	10558	548	0	0	5	7	ritual-colours		
+dragonstorm_overnight_d0_s10010	1049	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	11059	1049	0	0	8	-1	ritual-colours		
+dragonstorm_overnight_d0_s10010	1363	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	11373	1363	0	0	6	7	ritual-colours		
+dragonstorm_overnight_d0_s10010	1570	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	11580	1570	0	0	7	8	ritual-colours		
+dragonstorm_overnight_d0_s10010	1942	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	11952	1942	0	0	6	-1	ritual-colours		
+dragonstorm_overnight_d0_s4004	300	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	4304	300	0	0	6	-1	ritual-colours		
+dragonstorm_overnight_d0_s4004	1080	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	5084	1080	0	0	8	-1	staged-suspend		
+dragonstorm_overnight_d0_s4004	1706	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	5710	1706	0	0	7	-1	ritual-colours		
+dragonstorm_overnight_d0_s4004	1932	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	5936	1932	0	0	8	-1	staged-suspend		
+dragonstorm_overnight_d0_s6006	105	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	6111	105	0	0	7	8	staged-suspend		
+dragonstorm_overnight_d0_s6006	128	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	6134	128	0	0	8	-1	ritual-colours		
+dragonstorm_overnight_d0_s6006	146	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	6152	146	0	0	6	7	ritual-colours		
+dragonstorm_overnight_d0_s6006	725	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	6731	725	0	0	6	-1	ritual-colours		
+dragonstorm_overnight_d0_s6006	1113	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7119	1113	0	0	6	7	ritual-colours		
+dragonstorm_overnight_d0_s6006	1416	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7422	1416	0	0	7	8	ritual-colours		
+dragonstorm_overnight_d0_s8008	1245	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	9253	1245	0	0	5	6	ritual-colours		
+dragonstorm_overnight_d0_s8008	1310	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	9318	1310	0	0	8	-1	ritual-colours		
+dragonstorm_overnight_d0_s8008	1475	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	9483	1475	0	0	7	8	staged-suspend		
+dragonstorm_overnight_d0_s8008	1993	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	10001	1993	0	0	6	-1	staged-suspend		
+dragonstorm_overnight_d3_s4004	20	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	4024	20	3	10	5	6	ritual-colours		
+dragonstorm_overnight_d3_s4004	107	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	4111	107	3	10	4	5	ritual-colours		
+dragonstorm_overnight_d3_s4004	318	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	4322	318	3	10	4	6	ritual-colours		
+dragonstorm_overnight_d3_s5005	419	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	5424	419	3	10	5	6	ritual-colours		
+dragonstorm_overnight_d3_s7007	227	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7234	227	3	10	5	7	ritual-colours		
+dragonstorm_overnight_d3_s7007	279	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7286	279	3	10	4	5	ritual-colours		
+dragonstorm_overnight_d3_s7007	363	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7370	363	3	10	4	5	ritual-colours		
+dragonstorm_overnight_d5_s4004	20	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	4024	20	5	20	5	6	ritual-colours		
+dragonstorm_overnight_d5_s4004	107	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	4111	107	5	20	4	5	ritual-colours		
+dragonstorm_overnight_d5_s6006	170	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	6176	170	5	20	4	5	ritual-colours		
+dragonstorm_overnight_d5_s7007	227	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7234	227	5	20	5	7	ritual-colours		
+dragonstorm_overnight_d5_s7007	279	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	7286	279	5	20	4	5	ritual-colours		
+dragonstorm_regression_d0_s2002	37	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	2039	37	0	0	8	-1	staged-suspend		
+dragonstorm_regression_d0_s2002	186	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	2188	186	0	0	7	-1	ritual-colours		
+dragonstorm_regression_d3_s2002	171	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	2173	171	3	10	5	7	ritual-colours		
+dragonstorm_regression_d5_s2002	171	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	2173	171	5	20	5	7	ritual-colours		
+dragonstorm_smoke_d0_s1001	428	decks/Dragonstorm/Dragonstorm.cod	decks/Dragonstorm/Dragonstorm.profile.json	1429	428	0	0	7	-1	ritual-colours		
+fivecolour_overnight_d0_s8008	531	decks/FiveColour/FiveColour.cod	decks/FiveColour/FiveColour.profile.json	8539	531	0	0	6	7	prepay-colours	INCONCLUSIVE	
+goblins_overnight_d0_s6006	657	decks/Goblins/Goblins.cod	decks/Goblins/Goblins.profile.json	6663	657	0	0	3	4	(none)		
+hinata_overnight_d0_s10010	25	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10035	25	0	0	4	5	prepay-colours	REFUSED	
+hinata_overnight_d0_s10010	164	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10174	164	0	0	7	8	ritual-colours		
+hinata_overnight_d0_s10010	182	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10192	182	0	0	6	7	ritual-colours		
+hinata_overnight_d0_s10010	200	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10210	200	0	0	6	7	ritual-colours		
+hinata_overnight_d0_s10010	262	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10272	262	0	0	5	6	ritual-colours		
+hinata_overnight_d0_s10010	329	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10339	329	0	0	5	6	prepay-colours	EXECUTION-DIFFERS	
+hinata_overnight_d0_s10010	372	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10382	372	0	0	4	5	ritual-colours		
+hinata_overnight_d0_s10010	443	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10453	443	0	0	7	8	prepay-colours	REFUSED	
+hinata_overnight_d0_s10010	545	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10555	545	0	0	6	8	ritual-colours		
+hinata_overnight_d0_s10010	722	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10732	722	0	0	8	-1	ritual-colours		
+hinata_overnight_d0_s10010	745	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10755	745	0	0	5	6	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s10010	788	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10798	788	0	0	8	-1	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s10010	793	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10803	793	0	0	8	-1	ritual-colours		
+hinata_overnight_d0_s10010	809	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10819	809	0	0	5	6	prepay-colours	CHOICE-ONLY	
+hinata_overnight_d0_s10010	825	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10835	825	0	0	7	8	ritual-colours		
+hinata_overnight_d0_s10010	881	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10891	881	0	0	6	7	prepay-colours	REFUSED	
+hinata_overnight_d0_s10010	912	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10922	912	0	0	5	6	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s10010	920	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	10930	920	0	0	6	7	prepay-colours	CHOICE-ONLY	
+hinata_overnight_d0_s10010	1082	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11092	1082	0	0	5	6	prepay-colours	REFUSED	
+hinata_overnight_d0_s10010	1139	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11149	1139	0	0	6	8	prepay-colours	REFUSED	
+hinata_overnight_d0_s10010	1264	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11274	1264	0	0	4	5	ritual-colours		
+hinata_overnight_d0_s10010	1311	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11321	1311	0	0	6	8	ritual-colours		
+hinata_overnight_d0_s10010	1461	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11471	1461	0	0	7	8	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s10010	1465	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11475	1465	0	0	7	8	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s10010	1488	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11498	1488	0	0	5	6	ritual-colours		
+hinata_overnight_d0_s10010	1512	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11522	1512	0	0	5	7	ritual-colours		
+hinata_overnight_d0_s10010	1597	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11607	1597	0	0	6	7	ritual-colours		
+hinata_overnight_d0_s10010	1600	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11610	1600	0	0	8	-1	ritual-colours		
+hinata_overnight_d0_s10010	1687	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11697	1687	0	0	8	-1	ritual-colours		
+hinata_overnight_d0_s10010	1862	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11872	1862	0	0	6	7	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s10010	1912	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11922	1912	0	0	8	-1	prepay-colours	REFUSED	
+hinata_overnight_d0_s10010	1941	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	11951	1941	0	0	6	-1	(combination)	INCONCLUSIVE	DEFECT
+hinata_overnight_d0_s4004	6	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4010	6	0	0	5	6	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s4004	107	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4111	107	0	0	6	7	ritual-colours		DEFECT
+hinata_overnight_d0_s4004	226	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4230	226	0	0	7	8	ritual-colours		
+hinata_overnight_d0_s4004	249	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4253	249	0	0	6	7	ritual-colours		
+hinata_overnight_d0_s4004	463	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4467	463	0	0	6	7	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s4004	483	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4487	483	0	0	6	-1	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s4004	487	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4491	487	0	0	5	6	ritual-colours		
+hinata_overnight_d0_s4004	549	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4553	549	0	0	5	6	ritual-colours		
+hinata_overnight_d0_s4004	626	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4630	626	0	0	6	7	prepay-colours	CHOICE-ONLY	
+hinata_overnight_d0_s4004	780	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4784	780	0	0	6	7	prepay-colours	EXECUTION-DIFFERS	
+hinata_overnight_d0_s4004	823	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4827	823	0	0	7	8	ritual-colours		
+hinata_overnight_d0_s4004	927	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4931	927	0	0	6	-1	ritual-colours		
+hinata_overnight_d0_s4004	954	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4958	954	0	0	5	6	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s4004	997	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5001	997	0	0	6	7	prepay-colours	CHOICE-ONLY	
+hinata_overnight_d0_s4004	1016	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5020	1016	0	0	7	8	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s4004	1022	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5026	1022	0	0	6	8	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s4004	1026	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5030	1026	0	0	6	7	ritual-colours		
+hinata_overnight_d0_s4004	1030	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5034	1030	0	0	8	-1	prepay-colours	REFUSED	
+hinata_overnight_d0_s4004	1135	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5139	1135	0	0	8	-1	ritual-colours		
+hinata_overnight_d0_s4004	1295	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5299	1295	0	0	5	7	ritual-colours		
+hinata_overnight_d0_s4004	1341	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5345	1341	0	0	4	5	prepay-colours	REFUSED	
+hinata_overnight_d0_s4004	1355	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5359	1355	0	0	6	7	ritual-colours		
+hinata_overnight_d0_s4004	1449	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5453	1449	0	0	4	5	ritual-colours		
+hinata_overnight_d0_s4004	1740	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5744	1740	0	0	5	6	prepay-colours	REFUSED	
+hinata_overnight_d0_s4004	1762	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5766	1762	0	0	7	8	ritual-colours		
+hinata_overnight_d0_s4004	1882	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5886	1882	0	0	5	6	ritual-colours		
+hinata_overnight_d0_s4004	1887	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5891	1887	0	0	6	7	prepay-colours	CHOICE-ONLY	
+hinata_overnight_d0_s6006	36	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6042	36	0	0	5	6	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s6006	408	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6414	408	0	0	7	-1	prepay-colours	REFUSED	
+hinata_overnight_d0_s6006	424	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6430	424	0	0	8	-1	ritual-colours		
+hinata_overnight_d0_s6006	468	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6474	468	0	0	8	-1	prepay-colours	REFUSED	
+hinata_overnight_d0_s6006	567	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6573	567	0	0	5	7	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s6006	671	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6677	671	0	0	6	7	ritual-colours		
+hinata_overnight_d0_s6006	679	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6685	679	0	0	5	7	prepay-colours	REFUSED	
+hinata_overnight_d0_s6006	848	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6854	848	0	0	5	6	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s6006	879	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6885	879	0	0	6	7	ritual-colours		
+hinata_overnight_d0_s6006	892	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6898	892	0	0	5	6	ritual-colours		
+hinata_overnight_d0_s6006	1059	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7065	1059	0	0	4	5	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s6006	1117	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7123	1117	0	0	8	-1	prepay-colours	EXECUTION-DIFFERS	
+hinata_overnight_d0_s6006	1144	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7150	1144	0	0	7	8	ritual-colours		
+hinata_overnight_d0_s6006	1370	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7376	1370	0	0	5	6	prepay-colours	CHOICE-ONLY	DEFECT
+hinata_overnight_d0_s6006	1405	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7411	1405	0	0	8	-1	ritual-colours		
+hinata_overnight_d0_s6006	1780	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7786	1780	0	0	8	-1	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s6006	1793	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7799	1793	0	0	5	6	prepay-colours	REFUSED	
+hinata_overnight_d0_s6006	1822	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7828	1822	0	0	8	-1	ritual-colours		
+hinata_overnight_d0_s6006	1851	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7857	1851	0	0	6	7	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s6006	1882	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7888	1882	0	0	5	6	ritual-colours		
+hinata_overnight_d0_s6006	1991	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7997	1991	0	0	5	6	prepay-colours	REFUSED	
+hinata_overnight_d0_s6006	1994	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8000	1994	0	0	6	7	ritual-colours		
+hinata_overnight_d0_s8008	18	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8026	18	0	0	7	8	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s8008	53	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8061	53	0	0	7	8	prepay-colours	REFUSED	
+hinata_overnight_d0_s8008	98	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8106	98	0	0	6	7	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s8008	138	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8146	138	0	0	8	-1	ritual-colours		
+hinata_overnight_d0_s8008	173	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8181	173	0	0	6	7	prepay-colours	REFUSED	
+hinata_overnight_d0_s8008	191	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8199	191	0	0	6	7	ritual-colours		
+hinata_overnight_d0_s8008	338	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8346	338	0	0	7	8	ritual-colours		
+hinata_overnight_d0_s8008	551	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8559	551	0	0	7	8	prepay-colours	CHOICE-ONLY	
+hinata_overnight_d0_s8008	609	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8617	609	0	0	8	-1	ritual-colours		
+hinata_overnight_d0_s8008	640	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8648	640	0	0	7	-1	ritual-colours		
+hinata_overnight_d0_s8008	667	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8675	667	0	0	6	7	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s8008	905	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8913	905	0	0	7	8	ritual-colours		
+hinata_overnight_d0_s8008	910	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	8918	910	0	0	5	6	ritual-colours		
+hinata_overnight_d0_s8008	1083	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9091	1083	0	0	6	7	ritual-colours		
+hinata_overnight_d0_s8008	1141	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9149	1141	0	0	7	8	ritual-colours		
+hinata_overnight_d0_s8008	1145	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9153	1145	0	0	4	5	ritual-colours		
+hinata_overnight_d0_s8008	1153	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9161	1153	0	0	8	-1	ritual-colours		
+hinata_overnight_d0_s8008	1241	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9249	1241	0	0	5	6	prepay-colours	EXECUTION-DIFFERS	CONTROL-ALSO-TAPS
+hinata_overnight_d0_s8008	1253	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9261	1253	0	0	7	8	ritual-colours		
+hinata_overnight_d0_s8008	1319	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9327	1319	0	0	5	6	ritual-colours		
+hinata_overnight_d0_s8008	1422	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9430	1422	0	0	5	6	ritual-colours		
+hinata_overnight_d0_s8008	1443	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9451	1443	0	0	5	6	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s8008	1578	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9586	1578	0	0	6	7	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s8008	1694	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9702	1694	0	0	6	7	ritual-colours		
+hinata_overnight_d0_s8008	1726	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9734	1726	0	0	6	7	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d0_s8008	1731	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9739	1731	0	0	6	7	ritual-colours		
+hinata_overnight_d0_s8008	1916	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	9924	1916	0	0	7	8	prepay-colours	CHOICE-ONLY	
+hinata_overnight_d3_s4004	82	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4086	82	3	10	5	6	ritual-colours		
+hinata_overnight_d3_s4004	96	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4100	96	3	10	4	5	(combination)	INCONCLUSIVE	
+hinata_overnight_d3_s4004	130	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4134	130	3	10	6	7	prepay-colours	REFUSED	
+hinata_overnight_d3_s4004	164	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4168	164	3	10	4	5	prepay-colours,ritual-colours	INCONCLUSIVE	
+hinata_overnight_d3_s4004	183	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4187	183	3	10	6	7	ritual-colours		
+hinata_overnight_d3_s4004	275	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4279	275	3	10	3	4	ritual-colours		
+hinata_overnight_d3_s4004	352	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4356	352	3	10	5	6	ritual-colours		
+hinata_overnight_d3_s4004	386	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4390	386	3	10	8	-1	prepay-colours	EXECUTION-DIFFERS	
+hinata_overnight_d3_s4004	399	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4403	399	3	10	4	5	ritual-colours		
+hinata_overnight_d3_s5005	18	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5023	18	3	10	6	7	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d3_s5005	196	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5201	196	3	10	4	5	prepay-colours	EXECUTION-DIFFERS	
+hinata_overnight_d3_s5005	221	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5226	221	3	10	4	5	prepay-colours,ritual-colours	INCONCLUSIVE	
+hinata_overnight_d3_s5005	268	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5273	268	3	10	5	6	ritual-colours		
+hinata_overnight_d3_s5005	290	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5295	290	3	10	6	7	ritual-colours		
+hinata_overnight_d3_s5005	297	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5302	297	3	10	5	6	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d3_s5005	308	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5313	308	3	10	4	5	ritual-colours		
+hinata_overnight_d3_s5005	339	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5344	339	3	10	6	7	prepay-colours	REFUSED	
+hinata_overnight_d3_s6006	17	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6023	17	3	10	5	6	ritual-colours		
+hinata_overnight_d3_s6006	32	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6038	32	3	10	6	7	ritual-colours		
+hinata_overnight_d3_s6006	50	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6056	50	3	10	5	6	prepay-colours	REFUSED	
+hinata_overnight_d3_s6006	158	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6164	158	3	10	5	6	prepay-colours	REFUSED	
+hinata_overnight_d3_s6006	248	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6254	248	3	10	6	7	ritual-colours		
+hinata_overnight_d3_s6006	276	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6282	276	3	10	5	6	ritual-colours		
+hinata_overnight_d3_s6006	362	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6368	362	3	10	5	6	ritual-colours		
+hinata_overnight_d3_s6006	376	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6382	376	3	10	4	5	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d3_s6006	384	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6390	384	3	10	6	7	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d3_s6006	394	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6400	394	3	10	5	6	ritual-colours		
+hinata_overnight_d3_s6006	398	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6404	398	3	10	7	8	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d3_s7007	64	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7071	64	3	10	4	5	ritual-colours		
+hinata_overnight_d3_s7007	66	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7073	66	3	10	5	6	prepay-colours	EXECUTION-DIFFERS	
+hinata_overnight_d3_s7007	87	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7094	87	3	10	6	7	ritual-colours		
+hinata_overnight_d3_s7007	137	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7144	137	3	10	4	5	ritual-colours		
+hinata_overnight_d3_s7007	229	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7236	229	3	10	5	6	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d5_s4004	79	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4083	79	5	20	4	5	prepay-colours	REFUSED	
+hinata_overnight_d5_s4004	82	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4086	82	5	20	5	6	ritual-colours		
+hinata_overnight_d5_s4004	96	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4100	96	5	20	4	5	ritual-colours		
+hinata_overnight_d5_s4004	183	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4187	183	5	20	6	7	ritual-colours		
+hinata_overnight_d5_s4004	275	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	4279	275	5	20	3	4	ritual-colours		
+hinata_overnight_d5_s5005	8	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5013	8	5	20	5	6	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d5_s5005	124	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5129	124	5	20	6	7	prepay-colours	REFUSED	
+hinata_overnight_d5_s5005	196	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5201	196	5	20	4	5	prepay-colours	EXECUTION-DIFFERS	
+hinata_overnight_d5_s5005	218	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5223	218	5	20	6	7	prepay-colours	REFUSED	
+hinata_overnight_d5_s5005	268	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5273	268	5	20	5	6	ritual-colours		
+hinata_overnight_d5_s5005	290	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5295	290	5	20	6	7	ritual-colours		
+hinata_overnight_d5_s5005	297	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	5302	297	5	20	5	6	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d5_s6006	17	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6023	17	5	20	5	6	ritual-colours		
+hinata_overnight_d5_s6006	28	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6034	28	5	20	5	6	prepay-colours	CHOICE-ONLY	
+hinata_overnight_d5_s6006	32	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6038	32	5	20	6	7	ritual-colours		
+hinata_overnight_d5_s6006	62	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6068	62	5	20	5	6	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d5_s6006	158	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6164	158	5	20	5	6	prepay-colours	REFUSED	
+hinata_overnight_d5_s6006	205	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6211	205	5	20	4	5	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d5_s6006	270	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6276	270	5	20	6	7	prepay-colours	INCONCLUSIVE	DEFECT
+hinata_overnight_d5_s6006	276	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6282	276	5	20	5	6	ritual-colours		
+hinata_overnight_d5_s6006	297	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	6303	297	5	20	5	6	ritual-colours		
+hinata_overnight_d5_s7007	64	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7071	64	5	20	4	5	ritual-colours		
+hinata_overnight_d5_s7007	73	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7080	73	5	20	5	6	ritual-colours		
+hinata_overnight_d5_s7007	116	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7123	116	5	20	7	8	ritual-colours		
+hinata_overnight_d5_s7007	137	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7144	137	5	20	4	5	ritual-colours		
+hinata_overnight_d5_s7007	165	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7172	165	5	20	5	7	prepay-colours,ritual-colours	INCONCLUSIVE	
+hinata_overnight_d5_s7007	229	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7236	229	5	20	5	6	prepay-colours	INCONCLUSIVE	
+hinata_overnight_d5_s7007	244	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	7251	244	5	20	4	5	ritual-colours		
+hinata_regression_d0_s2002	55	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2057	55	0	0	6	7	prepay-colours	CHOICE-ONLY	
+hinata_regression_d0_s2002	93	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2095	93	0	0	5	6	prepay-colours	INCONCLUSIVE	
+hinata_regression_d0_s2002	166	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2168	166	0	0	6	7	ritual-colours		
+hinata_regression_d0_s2002	185	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2187	185	0	0	7	-1	prepay-colours	INCONCLUSIVE	
+hinata_regression_d0_s2002	256	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2258	256	0	0	7	8	prepay-colours	INCONCLUSIVE	
+hinata_regression_d0_s2002	257	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2259	257	0	0	5	6	ritual-colours		
+hinata_regression_d0_s2002	295	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2297	295	0	0	5	6	ritual-colours		
+hinata_regression_d0_s2002	643	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2645	643	0	0	8	-1	prepay-colours	CHOICE-ONLY	
+hinata_regression_d0_s2002	651	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2653	651	0	0	5	6	prepay-colours	CHOICE-ONLY	
+hinata_regression_d0_s2002	829	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2831	829	0	0	8	-1	ritual-colours		
+hinata_regression_d0_s2002	885	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2887	885	0	0	7	8	prepay-colours,ritual-colours	INCONCLUSIVE	
+hinata_regression_d0_s2002	934	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2936	934	0	0	8	-1	ritual-colours		CONTROL-ALSO-TAPS
+hinata_regression_d0_s2002	981	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2983	981	0	0	8	-1	ritual-colours		
+hinata_regression_d3_s2002	36	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2038	36	3	10	4	5	ritual-colours		
+hinata_regression_d3_s2002	37	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2039	37	3	10	5	6	prepay-colours,ritual-colours	INCONCLUSIVE	
+hinata_regression_d3_s2002	93	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2095	93	3	10	4	5	prepay-colours	INCONCLUSIVE	
+hinata_regression_d3_s3003	6	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3009	6	3	10	4	5	ritual-colours		
+hinata_regression_d3_s3003	73	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3076	73	3	10	4	5	ritual-colours		
+hinata_regression_d3_s3003	97	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3100	97	3	10	5	6	prepay-colours	REFUSED	
+hinata_regression_d3_s3003	101	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3104	101	3	10	5	6	prepay-colours	INCONCLUSIVE	
+hinata_regression_d3_s3003	194	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3197	194	3	10	4	5	ritual-colours		
+hinata_regression_d3_s3003	199	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3202	199	3	10	4	5	ritual-colours		
+hinata_regression_d5_s2002	93	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	2095	93	5	20	4	5	prepay-colours	INCONCLUSIVE	
+hinata_regression_d5_s3003	70	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3073	70	5	20	4	5	ritual-colours		
+hinata_regression_d5_s3003	73	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3076	73	5	20	4	5	ritual-colours		
+hinata_regression_d5_s3003	82	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3085	82	5	20	4	5	ritual-colours		
+hinata_regression_d5_s3003	97	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	3100	97	5	20	5	6	prepay-colours	INCONCLUSIVE	
+hinata_smoke_d0_s1001	37	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1038	37	0	0	8	-1	ritual-colours		
+hinata_smoke_d0_s1001	114	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1115	114	0	0	6	7	prepay-colours	INCONCLUSIVE	
+hinata_smoke_d0_s1001	161	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1162	161	0	0	6	7	ritual-colours		
+hinata_smoke_d0_s1001	271	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1272	271	0	0	6	7	ritual-colours		
+hinata_smoke_d0_s1001	442	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1443	442	0	0	5	8	prepay-colours	REFUSED	
+hinata_smoke_d0_s1001	617	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1618	617	0	0	7	8	prepay-colours	INCONCLUSIVE	
+hinata_smoke_d0_s1001	663	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1664	663	0	0	5	6	ritual-colours		
+hinata_smoke_d0_s1001	668	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1669	668	0	0	7	8	ritual-colours		
+hinata_smoke_d0_s1001	732	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1733	732	0	0	8	-1	prepay-colours	INCONCLUSIVE	
+hinata_smoke_d0_s1001	790	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1791	790	0	0	6	7	prepay-colours	REFUSED	
+hinata_smoke_d0_s1001	906	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1907	906	0	0	8	-1	prepay-colours	REFUSED	
+hinata_smoke_d0_s1001	938	decks/Hinata2/Hinata2.cod	decks/Hinata2/Hinata2.profile.json	1939	938	0	0	8	-1	ritual-colours		
+minotaur_overnight_d3_s4004	606	decks/Minotaur/Minotaur.cod	decks/Minotaur/Minotaur.profile.json	4610	606	3	20	5	6	bestow-signature		
+minotaur_overnight_d3_s5005	479	decks/Minotaur/Minotaur.cod	decks/Minotaur/Minotaur.profile.json	5484	479	3	20	4	5	bestow-signature		
+minotaur_overnight_d3_s5005	942	decks/Minotaur/Minotaur.cod	decks/Minotaur/Minotaur.profile.json	5947	942	3	20	4	5	bestow-signature		
+minotaur_overnight_d5_s5005	481	decks/Minotaur/Minotaur.cod	decks/Minotaur/Minotaur.profile.json	5486	481	5	40	4	5	bestow-signature		
+mirrorwing_overnight_d0_s10010	54	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	10064	54	0	0	4	5	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s10010	237	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	10247	237	0	0	5	8	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s10010	287	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	10297	287	0	0	8	-1	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s10010	887	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	10897	887	0	0	5	6	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s10010	1046	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11056	1046	0	0	6	-1	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s10010	1238	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11248	1238	0	0	4	5	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s10010	1248	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11258	1248	0	0	7	-1	prepay-colours	CHOICE-ONLY	
+mirrorwing_overnight_d0_s10010	1414	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11424	1414	0	0	6	7	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s10010	1427	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11437	1427	0	0	5	6	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s10010	1535	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11545	1535	0	0	6	8	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s10010	1785	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11795	1785	0	0	6	7	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s10010	1820	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11830	1820	0	0	6	7	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s10010	1839	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	11849	1839	0	0	6	7	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s10010	1994	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	12004	1994	0	0	6	7	prepay-colours	EXECUTION-DIFFERS	DEFECT
+mirrorwing_overnight_d0_s4004	245	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4249	245	0	0	5	7	prepay-colours	EXECUTION-DIFFERS	WARRANTED
+mirrorwing_overnight_d0_s4004	284	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4288	284	0	0	8	-1	prepay-colours	REFUSED	CONTROL-ALSO-TAPS
+mirrorwing_overnight_d0_s4004	324	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4328	324	0	0	5	6	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s4004	356	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4360	356	0	0	6	7	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s4004	406	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4410	406	0	0	5	6	prepay-colours	CHOICE-ONLY	
+mirrorwing_overnight_d0_s4004	417	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4421	417	0	0	6	7	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s4004	452	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4456	452	0	0	4	5	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s4004	561	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4565	561	0	0	5	6	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s4004	735	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4739	735	0	0	4	5	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s4004	824	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4828	824	0	0	5	6	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s4004	1130	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5134	1130	0	0	8	-1	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s4004	1412	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5416	1412	0	0	6	8	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s4004	1688	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5692	1688	0	0	5	6	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s4004	1807	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5811	1807	0	0	6	8	prepay-colours	INCONCLUSIVE	
+mirrorwing_overnight_d0_s4004	1895	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5899	1895	0	0	5	6	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s4004	1946	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5950	1946	0	0	4	5	prepay-colours	EXECUTION-DIFFERS	DEFECT
+mirrorwing_overnight_d0_s6006	46	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6052	46	0	0	5	6	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s6006	220	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6226	220	0	0	8	-1	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s6006	473	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6479	473	0	0	7	8	prepay-colours	INCONCLUSIVE	
+mirrorwing_overnight_d0_s6006	545	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6551	545	0	0	5	6	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s6006	566	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6572	566	0	0	7	8	prepay-colours	EXECUTION-DIFFERS	DEFECT
+mirrorwing_overnight_d0_s6006	852	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6858	852	0	0	5	6	prepay-colours	CHOICE-ONLY	CONTROL-ALSO-TAPS
+mirrorwing_overnight_d0_s6006	1105	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7111	1105	0	0	5	6	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s6006	1480	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7486	1480	0	0	7	8	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s6006	1580	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7586	1580	0	0	8	-1	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s6006	1648	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7654	1648	0	0	5	6	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s6006	1683	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7689	1683	0	0	7	8	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s6006	1746	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7752	1746	0	0	7	8	prepay-colours	INCONCLUSIVE	
+mirrorwing_overnight_d0_s8008	33	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8041	33	0	0	5	6	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s8008	173	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8181	173	0	0	5	6	prepay-colours	EXECUTION-DIFFERS	CONTROL-ALSO-TAPS
+mirrorwing_overnight_d0_s8008	391	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8399	391	0	0	4	5	prepay-colours	CHOICE-ONLY	
+mirrorwing_overnight_d0_s8008	514	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8522	514	0	0	5	6	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d0_s8008	564	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8572	564	0	0	6	7	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s8008	596	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8604	596	0	0	5	6	prepay-colours	CHOICE-ONLY	
+mirrorwing_overnight_d0_s8008	909	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8917	909	0	0	5	6	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s8008	982	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	8990	982	0	0	6	7	prepay-colours	CHOICE-ONLY	
+mirrorwing_overnight_d0_s8008	1128	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	9136	1128	0	0	6	7	prepay-colours	INCONCLUSIVE	
+mirrorwing_overnight_d0_s8008	1172	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	9180	1172	0	0	6	7	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s8008	1258	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	9266	1258	0	0	4	5	prepay-colours	REFUSED	
+mirrorwing_overnight_d0_s8008	1372	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	9380	1372	0	0	4	5	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_overnight_d3_s4004	106	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4110	106	3	10	5	6	prepay-colours	CHOICE-ONLY	
+mirrorwing_overnight_d3_s4004	127	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4131	127	3	10	7	8	prepay-colours	INCONCLUSIVE	
+mirrorwing_overnight_d3_s5005	309	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	5314	309	3	10	4	5	prepay-colours	EXECUTION-DIFFERS	DEFECT
+mirrorwing_overnight_d3_s6006	56	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6062	56	3	10	4	5	prepay-colours	INCONCLUSIVE	
+mirrorwing_overnight_d3_s7007	73	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7080	73	3	10	5	6	prepay-colours	INCONCLUSIVE	
+mirrorwing_overnight_d3_s7007	280	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7287	280	3	10	4	5	prepay-colours	EXECUTION-DIFFERS	DEFECT
+mirrorwing_overnight_d5_s4004	127	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	4131	127	5	20	7	8	prepay-colours	INCONCLUSIVE	
+mirrorwing_overnight_d5_s6006	56	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6062	56	5	20	4	5	prepay-colours	INCONCLUSIVE	
+mirrorwing_overnight_d5_s6006	136	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	6142	136	5	20	5	6	prepay-colours	REFUSED	
+mirrorwing_overnight_d5_s7007	73	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7080	73	5	20	5	6	prepay-colours	INCONCLUSIVE	
+mirrorwing_overnight_d5_s7007	280	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	7287	280	5	20	4	5	prepay-colours	EXECUTION-DIFFERS	DEFECT
+mirrorwing_regression_d0_s2002	44	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2046	44	0	0	6	7	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_regression_d0_s2002	111	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2113	111	0	0	4	5	prepay-colours	CHOICE-ONLY	
+mirrorwing_regression_d0_s2002	280	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2282	280	0	0	7	8	prepay-colours	REFUSED	
+mirrorwing_regression_d0_s2002	509	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2511	509	0	0	5	6	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_regression_d0_s2002	517	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2519	517	0	0	5	6	prepay-colours	REFUSED	
+mirrorwing_regression_d0_s2002	640	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2642	640	0	0	5	6	prepay-colours	REFUSED	
+mirrorwing_regression_d0_s2002	931	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	2933	931	0	0	4	6	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_regression_d3_s3003	67	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	3070	67	3	10	6	7	prepay-colours	CHOICE-ONLY	DEFECT
+mirrorwing_regression_d3_s3003	138	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	3141	138	3	10	5	6	prepay-colours	EXECUTION-DIFFERS	
+mirrorwing_smoke_d0_s1001	185	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1186	185	0	0	7	-1	prepay-colours	REFUSED	
+mirrorwing_smoke_d0_s1001	301	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1302	301	0	0	7	8	prepay-colours	INCONCLUSIVE	
+mirrorwing_smoke_d0_s1001	350	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1351	350	0	0	6	7	prepay-colours	REFUSED	
+mirrorwing_smoke_d0_s1001	373	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1374	373	0	0	6	8	prepay-colours	REFUSED	
+mirrorwing_smoke_d0_s1001	487	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1488	487	0	0	5	6	prepay-colours	REFUSED	
+mirrorwing_smoke_d0_s1001	490	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1491	490	0	0	7	8	prepay-colours	EXECUTION-DIFFERS	DEFECT
+mirrorwing_smoke_d0_s1001	681	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1682	681	0	0	5	6	prepay-colours	REFUSED	
+mirrorwing_smoke_d0_s1001	727	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1728	727	0	0	4	5	prepay-colours	INCONCLUSIVE	
+mirrorwing_smoke_d0_s1001	921	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1922	921	0	0	7	8	prepay-colours	CHOICE-ONLY	DEFECT
+mirrorwing_smoke_d3_s1001	86	decks/Mirrorwing Dragon/Mirrorwing Dragon.cod	decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json	1087	86	3	10	4	5	prepay-colours	INCONCLUSIVE	
+slivers_overnight_d0_s10010	45	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	10055	45	0	0	4	5	prepay-colours	CHOICE-ONLY	
+slivers_overnight_d0_s10010	809	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	10819	809	0	0	4	5	prepay-colours	CHOICE-ONLY	
+slivers_overnight_d0_s10010	1113	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	11123	1113	0	0	4	5	prepay-colours	INCONCLUSIVE	
+slivers_overnight_d0_s10010	1152	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	11162	1152	0	0	4	5	prepay-colours	CHOICE-ONLY	
+slivers_overnight_d0_s10010	1199	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	11209	1199	0	0	4	5	prepay-colours	INCONCLUSIVE	
+slivers_overnight_d0_s4004	331	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	4335	331	0	0	4	5	prepay-colours	CHOICE-ONLY	
+slivers_overnight_d0_s4004	1361	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	5365	1361	0	0	4	5	prepay-colours	CHOICE-ONLY	
+slivers_overnight_d0_s4004	1977	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	5981	1977	0	0	4	5	prepay-colours	CHOICE-ONLY	
+slivers_overnight_d0_s6006	713	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	6719	713	0	0	4	5	prepay-colours	CHOICE-ONLY	
+slivers_overnight_d0_s6006	1074	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	7080	1074	0	0	4	5	prepay-colours	EXECUTION-DIFFERS	
+slivers_overnight_d0_s6006	1408	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	7414	1408	0	0	4	5	prepay-colours	EXECUTION-DIFFERS	
+slivers_overnight_d0_s6006	1713	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	7719	1713	0	0	4	5	prepay-colours	CHOICE-ONLY	
+slivers_overnight_d0_s8008	203	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	8211	203	0	0	4	5	prepay-colours	CHOICE-ONLY	
+slivers_overnight_d0_s8008	674	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	8682	674	0	0	5	6	prepay-colours	INCONCLUSIVE	
+slivers_overnight_d0_s8008	1384	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	9392	1384	0	0	4	5	prepay-colours	CHOICE-ONLY	
+slivers_overnight_d3_s7007	41	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	7048	41	3	10	4	5	prepay-colours	EXECUTION-DIFFERS	
+slivers_overnight_d5_s7007	41	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	7048	41	5	20	4	5	prepay-colours	EXECUTION-DIFFERS	
+slivers_smoke_d0_s1001	382	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	1383	382	0	0	5	6	prepay-colours	CHOICE-ONLY	
+slivers_smoke_d0_s1001	625	decks/slivers_vial/slivers_vial.txt	decks/slivers_vial/slivers_vial.profile.json	1626	625	0	0	4	5	prepay-colours	INCONCLUSIVE	
