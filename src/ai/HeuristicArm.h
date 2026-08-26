@@ -81,6 +81,9 @@ enum Slot : int
     HINATA_IREN_EARLY,        // MTG_HINATA_IREN_EARLY     LOO: Irencrag back to 18 (any payoff may follow)
     HINATA_FIND_LATE,         // MTG_HINATA_FIND_LATE      LOO: tutor/cantrips/dig back to 20 (after her)
     HINATA_PAY_TIE,           // MTG_HINATA_PAY_TIE        LOO: the three payoffs tied at 20 again
+    HINATA_GAMBLE_LATE,       // MTG_HINATA_GAMBLE_LATE    tutor AFTER the cantrips (cantrip, then fetch)
+    BP_CONDEMN_RITUAL,        // MTG_BP_CONDEMN_RITUAL_EXEMPT  never condemn a RITUAL (mana-exempt hole)
+    BP_CONDEMN_TUTOR,         // MTG_BP_CONDEMN_TUTOR_EXEMPT   never condemn a TUTOR (target is info-fixed)
     COUNT
 };
 
@@ -139,6 +142,9 @@ inline const char* Name(int slot)
         "MTG_HINATA_IREN_EARLY",
         "MTG_HINATA_FIND_LATE",
         "MTG_HINATA_PAY_TIE",
+        "MTG_HINATA_GAMBLE_LATE",
+        "MTG_BP_CONDEMN_RITUAL_EXEMPT",
+        "MTG_BP_CONDEMN_TUTOR_EXEMPT",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

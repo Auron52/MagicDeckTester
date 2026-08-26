@@ -1,7 +1,8 @@
 # Hinata's full cast order (MTG_HINATA_ORDER_FULL)
 
-**Status: BUILT, default OFF. Round 1 measured the order WITHOUT condemnation -- a methodology
-error, see §6 -- and it regressed. Round 2 (order x condemnation) is the live measurement.**
+**Status: BUILT, default OFF, and MEASURED NEGATIVE in every configuration -- do not adopt the
+order. Its lasting output is two ENGINE bugs it root-caused in the condemnation filter (bugs 4 and 5
+in `breakpoint-condemnation-status.md`), which are general and worth adopting on their own.**
 Self-contained. Everything needed to resume is here or in git.
 
 ## 1. Why this deck needed an order at all
@@ -178,7 +179,42 @@ accelerant-nailed-to-its-rank failure the mana exemption exists for. `BpSlotIsAf
 consults that exemption when `MTG_BP_CONDEMN_ORDER_AWARE` is on, which is a second reason the
 non-order-aware arm is expected to be the bad one.
 
-## 7. Files
+## 7. Verdict (2026-08-26)
+
+Every arm is worse than the shipped generic tiering, on both blocks:
+
+| arm | hold | train |
+|---|---|---|
+| full order | +0.0210 (t=4.86) | +0.0270 (t=6.06) |
+| best order arm (Irencrag back to 18) | +0.0110 (t=3.26) | +0.0113 (t=3.72) |
+| + condemnation + both exemptions | +0.0117 | +0.0140 |
+| + the greedy deletion too | +0.0113 | +0.0163 |
+
+Leave-one-out attributes about half the damage to ONE position: the USER's ruling that Irencrag Feat
+is "second last ... it can only be cast before Crackle". `max_casts_after: 1` permits one more spell
+of ANY kind, so pinning it there forecloses Irencrag -> Soulfire and Irencrag -> Opus, and Soulfire
+is {6}{R}{R}{R} against Irencrag's seven {R}. Reverting it recovers 0.0100 hold / 0.0157 train. The
+remaining ~half is unattributed; the untested suspect is that the generic order TIES Ornithopter and
+Hinata at 10 and this order splits them 10/11.
+
+**The order's motivation also evaporated.** It was proposed to fix Hinata's negative lean under
+`MTG_BP_NO_GREEDY_CONT`; at n=3000 that lever is NEUTRAL here (+0.0007 t=0.41 hold, +0.0013 t=1.41
+train) and the 0-better:4-worse lean at n=400 does not reproduce.
+
+**Condemnation cannot be the justification either.** Once bugs 4 and 5 are fixed it is ~inert on this
+deck (30-52 of 3,000 games differ), because Hinata's breakpoint sites are its CANTRIPS at rank 7 --
+near the front of the order -- so almost nothing is ever "already considered". That is structural,
+not a defect in the order.
+
+### CORRECTION -- Reality Spasm is NOT a dead card
+
+§2 above repeats the claim in `cards.json` that Reality Spasm is never cast in the current model.
+The game logs refute it: it is cast throughout, and it is the single most common cast that
+condemnation deletes (33 of the 75 regressions). The `[PARTIAL: ...]` note in its `oracle_text` is
+STALE on that point. The X-untap -> same-turn-Crackle CHAIN may still be missing, but the card is
+live and its rank-15 position binds.
+
+## 8. Files
 
 * `src/ai/DecisionProviders.cpp` -- `HinataFullOrderRank`, `HinataProvider::CastOrderRank`,
   `CastOrderTierName`, and the flag readers.

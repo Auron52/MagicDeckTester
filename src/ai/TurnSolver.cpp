@@ -761,6 +761,39 @@ static bool BpCondemnManaExemptEnabled()
     return heurarm::Flag(heurarm::BP_CONDEMN_MANA, on);
 }
 
+// RITUAL EXEMPTION (MTG_BP_CONDEMN_RITUAL_EXEMPT) -- the hole in the exemption above.
+//
+// The mana exemption's argument is verbatim: "an accelerant is cast when the rest of the turn needs
+// the mana, and how much mana the turn needs is exactly what a breakpoint draw reveals." That is a
+// statement about MANA, not about permanents -- but the test it ships with is `mana_rock ||
+// ManaDork`, which only recognises accelerants that are PERMANENTS. A ritual is an accelerant that
+// is a spell, and every word of the argument applies to it unchanged.
+//
+// ROOT-CAUSED, not reasoned (Hinata, 2026-08-26). Condemnation measured NEGATIVE on Hinata in every
+// configuration (+0.033 on the generic order, +0.052 on the full order, +0.007..0.008 even with
+// order-awareness). Instrumenting five of the losing games with MTG_CONDEMN_WHO gives 4,541
+// condemnations and exactly two victims: Gamble 3,869 and REALITY SPASM 665. Reality Spasm
+// (untap_x_mana_sources) is a ritual -- with Hinata's discount cancelling its {X} it is {U}{U} to
+// untap X mana sources -- and it was condemned at the Soulfire Eruption breakpoint (rank 15 < 20)
+// in every one. Across the 75 regressions it is the single most common cast the baseline makes and
+// the condemnation arm does not (33 of them). Irencrag Feat (ritual_floating_mana) falls through the
+// same hole and accounts for 6 more.
+//
+// The failure mode is precisely the one the Sol Ring measurement documents: the winning line casts
+// the payoff FIRST and the accelerant afterwards, funded by what the payoff revealed. Nailing the
+// accelerant to its cast-order rank deletes that line, and no depth or budget reaches it.
+static bool BpCondemnRitualExemptEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_RITUAL_EXEMPT");   // default OFF pending measurement
+    return heurarm::Flag(heurarm::BP_CONDEMN_RITUAL, on);
+}
+
+static bool BpCondemnTutorExemptEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_TUTOR_EXEMPT");    // default OFF pending measurement
+    return heurarm::Flag(heurarm::BP_CONDEMN_TUTOR, on);
+}
+
 static bool BpSlotIsAfterSite(const GameState& state, const Card& cand)
 {
     if (!BpCondemnOrderAwareEnabled() || g_bp_site_def == nullptr) { return false; }
@@ -769,6 +802,25 @@ static bool BpSlotIsAfterSite(const GameState& state, const Card& cand)
     // A mana source re-sequences legitimately; exempt it before the rank comparison.
     if (BpCondemnManaExemptEnabled()
         && (cd->params.mana_rock || cd->tmpl == CardTemplate::ManaDork)) { return true; }
+    // ...and so does a ritual, which is the same accelerant argument for a card that is a SPELL
+    // rather than a permanent. See BpCondemnRitualExemptEnabled.
+    if (BpCondemnRitualExemptEnabled()
+        && (cd->params.ritual_floating_mana > 0 || cd->params.untap_x_mana_sources)) { return true; }
+    // TUTOR EXEMPTION (MTG_BP_CONDEMN_TUTOR_EXEMPT). The sibling-line argument needs the earlier
+    // line to cast the card AT ITS PROPER POSITION and get the same thing. For a tutor that is
+    // false: WHAT IT FETCHES is chosen at resolution from the state, so "Gamble then Ponder" and
+    // "Ponder then Gamble" fetch different cards. HinataProvider::TutorCandidates is explicitly
+    // combo-aware (fetch Hinata while she is missing, else the missing piece), so a tutor declined
+    // before a breakpoint was declined under strictly less information -- which is the same reason
+    // a card the breakpoint DREW is never condemned.
+    //
+    // ROOT-CAUSED (Hinata, 2026-08-26): Gamble is 3,869 of the 4,541 condemnations across five
+    // losing games, every one of them at a Ponder or Preordain site. Note this is only reachable
+    // because the reviewed order ranks Gamble (6) AHEAD of the cantrips (7) -- see
+    // MTG_HINATA_GAMBLE_LATE for the order-side fix of the same finding. The two are measured
+    // separately because they make different claims: this one says a tutor is never condemnable
+    // anywhere, that one says this deck's tutor belongs after its card selection.
+    if (BpCondemnTutorExemptEnabled() && cd->params.tutor_to_hand) { return true; }
     const DecisionProvider& prov = ResolveProvider(state);
     return prov.CastOrderRank(state, *cd) >= prov.CastOrderRank(state, *g_bp_site_def);
 }

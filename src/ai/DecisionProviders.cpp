@@ -4871,6 +4871,26 @@ static bool HinataPayoffsTied()
     return heurarm::Flag(heurarm::HINATA_PAY_TIE, on);
 }
 
+// MTG_HINATA_GAMBLE_LATE -- the ORDER-side fix for the condemnation root-cause: rank the tutor
+// AFTER the cantrips (8, between Ponder/Preordain at 7 and Expressive Iteration at 9) instead of
+// ahead of them at 6.
+//
+// The reviewed order put Gamble first on "most information, and its random discard is safest on the
+// fullest hand". Root-causing condemnation's regressions says that placement is what makes the
+// tutor condemnable: Gamble is 3,869 of 4,541 condemnations across five losing games, every one at
+// a Ponder or Preordain site, purely because rank 6 < rank 7.
+//
+// It is also arguably the better play doctrine, and the deck's own recorded rule says so:
+// "Cantrips are for FINDING what is missing: pieces or lands" -- so cantrip FIRST, learn what is
+// missing, and only then commit the singleton tutor to fetching it. TutorCandidates is combo-aware
+// and reads the state at resolution, so a Gamble cast before the cantrips is a Gamble that fetches
+// on worse information. Weighed against that, the full-hand discard argument is second-order.
+static bool HinataGambleLate()
+{
+    static const bool on = EnvOn("MTG_HINATA_GAMBLE_LATE");
+    return heurarm::Flag(heurarm::HINATA_GAMBLE_LATE, on);
+}
+
 static int HinataFullOrderRank(const CardDefinition& def)
 {
     const CardParams& p = def.params;
@@ -4879,10 +4899,8 @@ static int HinataFullOrderRank(const CardDefinition& def)
     const int find_base = HinataFindLate() ? 20 : 0;
     // 5-9: mana, then FIND before deploy (the draws-before-deploys rule condemnation needs).
     if (p.mana_rock)              { return 5; }   // Sol Ring -- untapped {C}{C} the same turn
-    if (p.tutor_to_hand)          { return find_base ? find_base : 6; }   // Gamble -- most
-                                                  // information; its random discard is safest on
-                                                  // the FULLEST hand (1/(n+1) to hit the card just
-                                                  // fetched), which also says early
+    if (p.tutor_to_hand)          { return find_base ? find_base
+                                                     : (HinataGambleLate() ? 8 : 6); }   // Gamble
     // 7-8: the two top-of-library manipulators. PEERS unless MTG_HINATA_PP_STRICT.
     if (p.cast_reorder > 0)       { return find_base ? find_base : 7; }   // Ponder -- reorder 3
     if (p.cast_scry > 0)          { return find_base ? find_base

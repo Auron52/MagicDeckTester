@@ -35,6 +35,11 @@ not review, and each deleted wins that no depth or budget could recover.
 | 1 | no order awareness at all — condemned cards whose slot came AFTER the breakpoint site | 6 losses, all Kor Duelist |
 | 2 | rank TIES treated as "earlier" (strict `>` instead of `>=`) | hold gi=1325, seed 901326, mode 2 |
 | 3 | mana sources condemned — an accelerant re-sequences legitimately | train gi=26, seed 300027, **mode 3 only** |
+| 4 | **RITUALS condemned** — bug 3's fix only recognises accelerants that are PERMANENTS | Hinata, 75 regressions, 2026-08-26 |
+| 5 | **TUTORS condemned** — what a tutor fetches is chosen at resolution, so the sibling line gets a different card | Hinata, same run |
+
+Bugs 4 and 5 are in §"Bugs 4 and 5" below. Both were found by root-causing a NEGATIVE measurement
+rather than by review, which is now four for five on this filter.
 
 **Bug 2, why a tie is not "earlier".** Two cards at the same rank are peers with no enumerated order
 between them, so condemning a peer is symmetric: whichever the plan casts first, the other is
@@ -110,6 +115,92 @@ correspondingly larger saving, so "inert here" is not "inert in general".
 That is a USER call. The engine is ready either way: flipping
 `MTG_BP_CONDEMN_ORDER_AWARE` to default ON and Kitty's hook to `true` is a two-line change, and it
 would affect ONLY KittyEquipment (every other condemnation default is off).
+
+## Bugs 4 and 5 (Hinata, 2026-08-26) -- the exemption test was narrower than its own argument
+
+Condemnation measured NEGATIVE on Hinata in every configuration: +0.033 on the generic order,
++0.052 on its full reviewed order, and +0.007..0.008 even with order-awareness (n=3000/cell, two
+blocks, play settings). That is a much larger effect than anything in the Kitty work above, so it
+was root-caused rather than attributed.
+
+**Method.** All 75 regressions (`peer -> peeroa`) were reproduced with `--seed base+gi
+--game-index gi`: 75 of 75 reproduce exactly and **none is a mulligan divergence**, so every one is
+a real play difference. `MTG_CONDEMN_WHO` over five of the losing games gives 4,541 condemnations
+and exactly TWO victims:
+
+| dropped | count | at site | rank test |
+|---|---|---|---|
+| Gamble | 3,869 (85%) | Ponder / Preordain (7) | 6 < 7 |
+| Reality Spasm | 665 (15%) | Soulfire Eruption (20) | 15 < 20 |
+
+**Bug 4, RITUALS.** Bug 3's fix exempts `mana_rock || CardTemplate::ManaDork`. But its ARGUMENT --
+"an accelerant is cast when the rest of the turn needs the mana, and how much mana the turn needs is
+exactly what a breakpoint draw reveals" -- is a statement about MANA, and the test only recognises
+accelerants that are PERMANENTS. A ritual is an accelerant that is a SPELL and every word applies to
+it unchanged. Reality Spasm (`untap_x_mana_sources`; with Hinata's discount cancelling its {X} it is
+{U}{U} to untap X sources) and Irencrag Feat (`ritual_floating_mana`) fall straight through. Across
+the 75 regressions Reality Spasm is the most common cast the baseline makes and the condemnation arm
+does not (33), Irencrag 6 more. Fixed by `MTG_BP_CONDEMN_RITUAL_EXEMPT`.
+
+**Bug 5, TUTORS.** The sibling-line argument needs the earlier line to cast the card at its proper
+position AND GET THE SAME THING. For a tutor that is false: the fetch is chosen at resolution from
+the state (`HinataProvider::TutorCandidates` is combo-aware -- fetch Hinata while she is missing,
+else the missing piece), so "Gamble then Ponder" and "Ponder then Gamble" fetch different cards. A
+tutor declined before a breakpoint was declined under strictly less information, which is the same
+reason a card the breakpoint DREW is never condemned. Fixed by `MTG_BP_CONDEMN_TUTOR_EXEMPT`.
+
+### VOLUME IS NOT HARM -- the most transferable result here
+
+| fix | vs order-only, train | hold | condemnations (5 games) |
+|---|---|---|---|
+| none | +0.0070 (t=2.09) | +0.0077 (t=2.62) | 4,541 |
+| **ritual exempt** | **+0.0033 (t=1.23)** | **+0.0020 (t=0.97)** | 3,874 |
+| tutor exempt | +0.0057 (t=2.48) | +0.0073 (t=3.32) | 207 |
+| both | +0.0033 (t=2.36) | +0.0007 (t=0.71) | 6 |
+
+The tutor exemption removes **85% of condemnations by COUNT and almost none of the damage**; the
+ritual exemption removes 15% by count and is the whole fix. Never rank a prune's bugs by how often
+they fire. (Bug 5 is kept anyway, on the soundness argument -- it is simply not what was hurting.)
+
+### An ORDER-side fix for the same finding was built and REJECTED
+
+Gamble is only condemnable because the reviewed order ranks it (6) ahead of the cantrips (7), so
+`MTG_HINATA_GAMBLE_LATE` moves it to 8. Its own counter kills it: **Gamble is itself a breakpoint
+site** (`tutor_to_hand` is in `is_draw_engine`), so at rank 8 it condemns the rank-7 cantrips
+instead -- 4,541 -> 4,271, now Preordain 2,400 + Ponder 1,140. It relocates the bug. Recorded so
+nobody re-proposes it.
+
+### Cross-deck: SAFE everywhere, but demonstrated useful only on Hinata
+
+The exemptions are engine-wide, so they were priced on every deck that can run condemnation, with
+condemnation ENABLED IN BOTH ARMS (n=2500/cell, two blocks):
+
+| deck | condemnations fire? | what it drops | delta | games differ |
+|---|---|---|---|---|
+| Anti-Lifegain | yes, 46 / 15 games | Plague Drone, Aria of Flame | +0.0000 | 0 |
+| KittyEquipment | yes, 287 / 15 games | Puresteel Paladin, Stoneforge Mystic | +0.0000 | 3-4 |
+| **Dragonstorm** | **NO -- 0 / 15 games** | — | +0.0000 | 0 | 
+
+So: no regression anywhere, and on AL the exemptions correctly decline to fire (neither victim is a
+ritual or a tutor).
+
+> **The Dragonstorm cell is VACUOUS and must not be read as evidence.** It was included precisely
+> because it is the ritual deck, but condemnation never fires there at all (no `is_draw_engine`
+> card, so no breakpoint arms the hand snapshot). A zero delta from an arm where the lever cannot
+> fire says nothing. THE RITUAL EXEMPTION IS DEMONSTRATED ON HINATA ONLY. An earlier version of this
+> control was vacuous for a different reason -- it ran AL and Kitty at their shipped defaults, where
+> condemnation is OFF -- which is the second time in one session that a "0 games differ" was a dead
+> lever rather than a safe one. Always confirm the lever FIRES before reading its null result.
+
+### What this does NOT fix
+
+With both exemptions condemnation on Hinata is ~inert (30-52 of 3,000 games differ) and
+neutral-to-marginally-negative -- it stops losing, it never wins. The reason is structural: this
+deck's breakpoint sites are its CANTRIPS, at rank 7 near the FRONT of the order, so "already
+considered and declined" is nearly an empty set by construction. A cast order cannot fix that. The
+forward-looking note above ("a deck with frequent breakpoints would see a correspondingly larger
+saving") should be read with this qualifier: what matters is not breakpoint FREQUENCY but how much
+of the order sits BEFORE the sites that fire.
 
 ## Two things worth carrying elsewhere
 
