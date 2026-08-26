@@ -224,7 +224,7 @@ static const int   s_dork_ramp     = s_dork_ramp_env ? std::atoi(s_dork_ramp_env
 // pump/option value. Default TRUE (a real rollout-evaluated search node rejects a wasteful early
 // cast); Solve() flips it FALSE for its own enumeration so the greedy path keeps the tuned auto-fire
 // and stays byte-identical. thread_local so parallel rollouts don't race.
-static thread_local bool g_search_candidate_enum = true;
+// g_search_candidate_enum moved to SpellEffects.h (shared with DecisionProviders; see note there).
 
 // Move-ordering for the full-depth branch-and-bound (FSLineWin / FSLineTail). Each B&B loop
 // returns at the FIRST verified in-horizon win; trying the plans that statically look lethal
@@ -5056,7 +5056,7 @@ std::string TurnSolver::SacFloatColorFor(const GameState& state, const std::vect
 // interleaving and breaking the harness's determinism/thread-invariance contract. Each worker builds
 // and uses its own engines, so thread_local is exactly the right scope.
 // See docs/design/searched-play-flag-thread-scope.md.
-static thread_local bool g_searched_play = false;
+// g_searched_play moved to SpellEffects.h (shared with DecisionProviders; see note there).
 void TurnSolver::SetSearchedPlay(bool enable)
 {
     g_searched_play = enable;

@@ -1193,6 +1193,24 @@ inline bool CardHasColorNamed(const Card& c, const std::string& col)
 // and the front became raw-power Worldspine over the actually-lethal Craterhoof).
 inline thread_local bool g_tutor_at_resolution = false;
 
+// True while candidates are being enumerated FOR THE SEARCH (variant fan); false on the greedy
+// paths (d0 decision + rollout leaves), which bind the provider's first pick with no branch.
+// Set/reset by TurnSolver around enumeration (was file-local there; shared 2026-08-26 so a
+// provider can rank differently when a search will validate the line vs when greedy commits to
+// it blind -- first consumer: Stompy's Hornet-Queen-under-pump promotion, which measured
+// +4 games at searched depth and -56 turn-steps at greedy when applied to both).
+inline thread_local bool g_search_candidate_enum = true;
+
+// True when THIS RUN plays searched (lookahead depth > 0); set once per game by
+// TurnSolver::SetSearchedPlay from AIEngine's constructor. Distinct from
+// g_search_candidate_enum, which flips per-callsite: this says "a search exists AT ALL to
+// validate a speculative line before the executor commits to it". At depth 0 every ranking
+// choice is executed blind, so a promotion that only pays off with follow-through must gate
+// here. (Was file-local to TurnSolver; shared 2026-08-26 for the Stompy Queen promotion --
+// resolution-time is where an unbound Natural Order binds its fetch, and that same site serves
+// both the searched executor, whose rollouts priced the line, and greedy d0, which cannot.)
+inline thread_local bool g_searched_play = false;
+
 inline void PerformTutorToBattlefield(GameState& state, int controller, const CardParams& pp,
                                       int max_puts,
                                       const std::vector<std::string>& preferred = {},
@@ -7657,7 +7675,10 @@ struct PayNeedScope
     PayNeedScope& operator=(const PayNeedScope&) = delete;
 };
 
-// SAC-FODDER PAYS FIRST (MTG_SAC_FODDER_PAYS, default OFF -- A/B lever, st993): while paying
+// SAC-FODDER PAYS FIRST (MTG_SAC_FODDER_PAYS, default ON, adopted 2026-08-26; =0 disables --
+// train: every stompy cell equal-or-faster; held-out overnight: net faster, the one slower
+// searched game gi739 recovers at unbounded budget; solo-vs-batch controls byte-identical, so
+// the deltas are pure lever effect): while paying
 // for a cast that sacrifices a specific creature as an ADDITIONAL COST (Natural Order; the
 // searched victim rides own_targets as a card m_number), that victim's mana ability is FREE --
 // the body is already spent by the cost itself, so tapping it can never lose an attacker or a
@@ -7671,7 +7692,7 @@ struct PayNeedScope
 // which promotes the exact victim COPY (m_number match) ahead of every other source. 0 = dead.
 inline bool SacFodderPaysEnabled()
 {
-    static const bool v = EnvOn("MTG_SAC_FODDER_PAYS");
+    static const bool v = EnvOn("MTG_SAC_FODDER_PAYS", true);
     return v;
 }
 inline thread_local int g_pay_sac_victim = 0;

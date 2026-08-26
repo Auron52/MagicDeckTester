@@ -10343,9 +10343,72 @@ StompyProvider::TutorCandidates(const GameState& s, int controller, const CardPa
             // WORSE than the swing tie-break, and it recovered none of the searched-depth gap.)
             return { swing >= opp_life ? t_sw : 1000 + t_sw, swing };
         };
+        // NO-DOCTRINE (MTG_STOMPY_NO_DOCTRINE, default ON, adopted 2026-08-26 on user approval
+        // "Okay, fair enough. Let's keep Hornet Queen then"; =0 disables. Held-out: all 8
+        // searched cells faster, 31 games incl. three new turn-3 kills, the one slower game
+        // budget-recovers; greedy byte-identical everywhere. Known accepted trade: train gi65
+        // (seed 2067) -- the elf exclusion lowers the bottomer's valuation of a Natural-Order
+        // keep, it keeps Worldly Tutor instead and that hand's best is T5 vs the old keep's T4;
+        // one game across ~11,600 measured, none recurred on held-out): USER doctrine
+        // 2026-08-26 for the Natural Order fetch -- "probably zero cases where you want a small
+        // elf. It is pretty much Craterhoof, Worldspine Wurm, Terastodon, Hornet Queen, Vaultborn
+        // Tyrant in that order." Encoded by card shape, not name: team pump > the biggest bodies
+        // by power > a multi-body token ETB (Hornet Queen, power 2 but five bodies -- invisible
+        // to the power>=6 threat filter today) > the remaining big body (Vaultborn). Scaled dorks
+        // are excluded from the NO fan entirely. GOLDFISH-SCOPED (user, same day): Vaultborn
+        // "probably incorrect in all situations (in this goldfish scenario)" -- vs a real
+        // opponent (Phase 2) his lifegain body and opposing-permanent Terastodon modes are real
+        // options and this ordering must be re-judged, not inherited.
+        static const bool s_no_doctrine = EnvOn("MTG_STOMPY_NO_DOCTRINE", true);
+        const bool no_doctrine = s_no_doctrine && is_no;
+        // USER refinement 2026-08-26: "The only case for Hornet Queen would be something like
+        // Craterhoof in hand or second Natural Order. Want a bigger pump for Craterhoof in
+        // order to get lethal." -- five extra bodies only matter when a team pump is still
+        // COMING (from hand, or fetchable by a second copy of this tutor); then she outranks
+        // the flat fatties. (A hand Hoof is also no longer in the library, so she competes for
+        // his vacated slot exactly in this state.)
+        // DEPTH-GATED (v4, measured through three shapes): the promotion is only sound when a
+        // search exists to validate the follow-up. v2 promoted everywhere -- searched depths
+        // gained 4 games (two new turn-3 kills: fetch the Queen, land the hand-Hoof on her five
+        // bodies) but greedy d0 fetched her blind and could not sequence the 8-mana Hoof after
+        // (+56 turn-steps, one game lost). v3 gated on enumeration-context and lost the GAINS
+        // too: the wins live at RESOLUTION, where an unbound Natural Order binds its fetch --
+        // the searched executor's rollouts price that same resolution, greedy's don't. So the
+        // gate is the RUN-level searched-play bit, the same signal cantrip-first uses.
+        bool pump_follow_up = false;
+        if (no_doctrine && g_searched_play)
+        {
+            int no_in_hand = 0;
+            for (const Card& hc : ap.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd == nullptr) { continue; }
+                if (hd->params.etb_team_pump_per_creature) { pump_follow_up = true; break; }
+                if (hd->params.tutor_to_battlefield_single) { ++no_in_hand; }
+            }
+            // Pre-cast, the NO being cast is itself still in hand -- a "second" copy means two.
+            if (no_in_hand >= (g_tutor_at_resolution ? 1 : 2)) { pump_follow_up = true; }
+        }
+        auto doctrine_class = [&](const CardDefinition& d) -> int
+        {
+            if (d.params.etb_team_pump_per_creature)     { return 6; }
+            if (d.params.etb_self_creates_tokens >= 2)   { return pump_follow_up ? 5 : 2; }
+            if (d.card.m_power.value_or(0) >= 10)        { return 4; }
+            if (d.card.m_power.value_or(0) >= 7)         { return 3; }
+            return 1;
+        };
+        // USER 2026-08-26: "we should have the 4 potential targets and leave the rest out. In
+        // this situation." (goldfish) -- the Natural Order pool is EXACTLY {team pump, power>=10,
+        // power>=7, multi-body token ETB}; Vaultborn (class 1) is out of the contender fan even
+        // as a last resort. The static fall-through below still fires when NONE of the four
+        // remain in the library (a castable NO must offer something legal); the search decides
+        // whether that cast is worth making at all.
         auto is_threat = [&](const CardDefinition* d)
-        { return d != nullptr && d->card.IsCreature()
-              && (d->params.etb_team_pump_per_creature || d->card.m_power.value_or(0) >= 6); };
+        {
+            if (d == nullptr || !d->card.IsCreature()) { return false; }
+            if (no_doctrine) { return doctrine_class(*d) >= 2; }
+            return d->params.etb_team_pump_per_creature || d->card.m_power.value_or(0) >= 6;
+        };
         auto is_scaled = [&](const CardDefinition* d)
         { return d != nullptr && d->card.IsCreature()
               && !d->params.mana_per_creature_subtype.empty(); };
@@ -10373,9 +10436,17 @@ StompyProvider::TutorCandidates(const GameState& s, int controller, const CardPa
             std::stable_sort(threats.begin(), threats.end(),
                              [&](const std::string& a, const std::string& b)
             {
-                const Rank ra = rank_threat(*CardDatabase::Instance().Lookup(a));
-                const Rank rb = rank_threat(*CardDatabase::Instance().Lookup(b));
+                const CardDefinition& da = *CardDatabase::Instance().Lookup(a);
+                const CardDefinition& db = *CardDatabase::Instance().Lookup(b);
+                const Rank ra = rank_threat(da);
+                const Rank rb = rank_threat(db);
                 if (ra.kill != rb.kill) { return ra.kill < rb.kill; }
+                if (no_doctrine)
+                {
+                    // Doctrine order among non-lethal contenders; power desc within a class.
+                    const int ca = doctrine_class(da), cb = doctrine_class(db);
+                    if (ca != cb) { return ca > cb; }
+                }
                 return ra.tie > rb.tie;
             });
             const Rank best = rank_threat(*CardDatabase::Instance().Lookup(threats.front()));
@@ -10423,10 +10494,15 @@ StompyProvider::TutorCandidates(const GameState& s, int controller, const CardPa
                 // three threats plus the scaled dorks; starving already put a dork in front.
                 for (std::size_t k = 0; k < threats.size() && k < 3; ++k)
                 { out.push_back(threats[k]); }
-                for (const std::string& c : cands)
+                // Doctrine: a Natural Order never fetches a scaled dork ("zero cases where you
+                // want a small elf" -- the sacrifice trades a body for it, unlike Worldly Tutor).
+                if (!no_doctrine)
                 {
-                    if (!is_scaled(CardDatabase::Instance().Lookup(c))) { continue; }
-                    if (std::find(out.begin(), out.end(), c) == out.end()) { out.push_back(c); }
+                    for (const std::string& c : cands)
+                    {
+                        if (!is_scaled(CardDatabase::Instance().Lookup(c))) { continue; }
+                        if (std::find(out.begin(), out.end(), c) == out.end()) { out.push_back(c); }
+                    }
                 }
             }
             if (!out.empty()) { return out; }
