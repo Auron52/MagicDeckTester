@@ -272,6 +272,10 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 tag = a.card_name + (a.gy_exile_mode == 1 ? ": exile instant/sorcery (drain 2)"
                                                           : ": exile creature (gain 2)");
                 break;
+            case Action::Kind::GraveyardReturnAbility:
+                // One plan variant per legal target, so the label must name WHICH card comes back.
+                tag = a.card_name + ": sacrifice \xE2\x86\x92 return " + a.tutor_target + " to hand";
+                break;
             case Action::Kind::AttachAllEquipment:
                 tag = a.card_name + ": attach all Equipment"; break;
             case Action::Kind::PutFromHandAbility:
@@ -858,6 +862,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // line then carried both `cast=Mutavault` and `animate=Mutavault` and matched no plan.
             return k == Action::Kind::GarthActivate || k == Action::Kind::ActivateLoyalty
                 || k == Action::Kind::Equip         || k == Action::Kind::GraveyardExileAbility
+                || k == Action::Kind::GraveyardReturnAbility
                 || k == Action::Kind::AnimateLand   || k == Action::Kind::TapForTokenPay;
         };
         {
@@ -955,6 +960,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
              || ac.kind == Action::Kind::AttachAllEquipment
              || ac.kind == Action::Kind::PutFromHandAbility
              || ac.kind == Action::Kind::GraveyardExileAbility
+             || ac.kind == Action::Kind::GraveyardReturnAbility
              || ac.kind == Action::Kind::AnimateLand
              || ac.kind == Action::Kind::TapForTokenPay
              || ac.kind == Action::Kind::JitteModeAbility)
@@ -988,6 +994,14 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 // Mutavault's animate and Sliver Hive's token ability both name the LAND, so
                 // `cast=<land>` would be meaningless (a land is played, not cast) -- and a deck can
                 // hold several copies, so the verb also has to be distinguishable per source.
+                // Haven's rebuy names the LAND (never castable) AND carries a target, so it needs
+                // both its own verb and the target token -- otherwise two rebuy variants of one Haven
+                // would write the identical line and the human could not say WHICH Dragon to return.
+                else if (ac.kind == Action::Kind::GraveyardReturnAbility)
+                {
+                    os << ", \"verb\": \"gyreturn\", \"gyreturn_target\": ";
+                    JsonStr(os, ac.tutor_target);
+                }
                 else if (ac.kind == Action::Kind::AnimateLand)    { os << ", \"verb\": \"animate\""; }
                 else if (ac.kind == Action::Kind::TapForTokenPay) { os << ", \"verb\": \"taptoken\""; }
                 // `activate_source` = the permanent the human CLICKS, when that is not `card`.
@@ -1942,6 +1956,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "jittemode") { ls.jitte_modes.push_back(std::atoi(val.c_str())); }
         else if (key == "equip")     { ls.equips.push_back(val); }        // equip an Equipment in play
         else if (key == "gyexile")   { ls.gy_exiles.push_back(std::atoi(val.c_str())); }  // Deathrite mode
+        else if (key == "gyreturn")  { ls.gy_returns.push_back(val); }    // Haven rebuy (returned card)
         else if (key == "channel")   { ls.channels.push_back(val); }      // from-hand channel ability
         else if (key == "suspend")   { ls.suspends.push_back(val); }      // from-hand Suspend (Lotus Bloom)
         else if (key == "animate")   { ls.animates.push_back(val); }      // Mutavault "{1}: 2/2"
@@ -3902,10 +3917,12 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //                                    // also: "charge_counters" / "storage_counters", and
 //                                    // "equips": "<host card name>" to stage an ATTACHED Equipment/Aura
 //     "hand": [ "Aria of Flame", "Invigorate" ],
+//     "graveyard": [ "Scourge of Valkas" ],       // stage cards in the graveyard (gy-reading abilities)
 //     "library_filler": "Forest", "library_size": 40,   // so draws / rollouts don't run dry
 //     "depth": 5, "budget_ms": 100, "max_turns": 4,
 //     "expect_win_turn": 4,          // optional: nonzero exit if the actual win turn is later (a FAIL)
 //     "expect_no_win": true,         // optional: nonzero exit if the engine DID win (negative guard)
+//     "expect_opponent_life": 13,    // optional: pin the exact damage a non-lethal payoff dealt
 //     "validate_line": "land=X;cast=A;cast=B",   // optional: run TurnSolver::CheckLine on this board
 //     "expect_verdict": "accept",    // ... and fail unless the verdict matches (default "accept").
 //                                    // Guards a line the SEARCH would not pick on its own (a
@@ -4043,6 +4060,12 @@ static int RunScenario(const std::filesystem::path& scenario_path)
         const std::string filler = j.value("library_filler", std::string("Forest"));
         const int lib = j.value("library_size", 40);
         for (int i = 0; i < lib; ++i) { state.players[0].library.push_back(make_card(filler)); }
+        // Optional GRAVEYARD ("graveyard": [names...]). Needed to fixture any ability that READS the
+        // graveyard (Haven of the Spirit Dragon's sac-to-rebuy, Deathrite's exile modes): in a
+        // goldfish those zones fill only by cleanup discard, so a seed-driven run reaches the state
+        // far too rarely to regression-guard it.
+        for (const auto& gc : j.value("graveyard", json::array()))
+        { state.players[0].graveyard.push_back(make_card(gc.get<std::string>())); }
         // Optional named library cards ("library": [names...]), appended AFTER the filler -- i.e.
         // at the BOTTOM, below any top-N look window -- so a fixture can stage a card that is
         // reachable by a full-library search (a tutor) but NOT by a top-of-library peek. (The
@@ -4114,6 +4137,22 @@ static int RunScenario(const std::filesystem::path& scenario_path)
               << " opponent_life=" << state.players[1].life
               << " active_life="   << state.players[0].life
               << (log_out.empty() ? "" : (" log=" + log_out)) << "\n";
+
+    // Optional DAMAGE assertion: fail (exit 1) unless the opponent is at exactly this life. A win-turn
+    // assertion cannot see a payoff that does not finish the game -- an ETB ping that deals the wrong
+    // X, or a haste grant that silently fails to let a fresh creature attack, both still produce
+    // "no win" on a short fixture. This pins the actual number the board produced.
+    if (j.contains("expect_opponent_life"))
+    {
+        const int exp = j.at("expect_opponent_life").get<int>();
+        const int got = state.players[1].life;
+        if (got != exp)
+        {
+            std::cout << "scenario: FAIL expected opponent_life " << exp << ", got " << got << "\n";
+            return 1;
+        }
+        std::cout << "scenario: PASS (opponent_life " << exp << ")\n";
+    }
 
     // Optional NEGATIVE assertion: fail (exit 1) if the engine DID win, when the fixture asserts it
     // must not (e.g. Invigorate must NOT auto-fire and gift life when it is not lethal, or when no

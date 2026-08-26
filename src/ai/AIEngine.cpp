@@ -3474,6 +3474,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
             { ApplyGraveyardExileAbility(state, state.active_player_index, a.sac_source_id, a.gy_exile_mode); }
         }
+        else if (a.kind == Action::Kind::GraveyardReturnAbility)
+        {
+            // Haven of the Spirit Dragon (executor mirror of the rollout's trailing pass).
+            ManaPool avail = AvailableManaPool(state);
+            if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            {
+                ApplyGraveyardReturnAbility(state, state.active_player_index, a.sac_source_id,
+                                            a.tutor_target);
+            }
+        }
         else if (a.kind == Action::Kind::ActivateRevealTop)
         {
             // Call of the Wild (executor mirror): pay K x cost, K sequential reveal-deploys.

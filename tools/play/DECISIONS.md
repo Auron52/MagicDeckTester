@@ -143,6 +143,7 @@ opened when one source offers several distinct activations) is for.
 | verb | ability | why it needs its own verb |
 |---|---|---|
 | `gyexile=<mode>` | Deathrite Shaman's `{B},{T}: exile an instant/sorcery, each opponent loses 2` | the action names the SOURCE, so `cast=Deathrite Shaman` collides with hard-casting one of the other three copies |
+| `gyreturn=<returned card>` | Haven of the Spirit Dragon's `{2},{T}, Sacrifice: return target Dragon creature card from your graveyard to your hand` | a land is played, not cast, so `cast=<land>` is meaningless — and unlike every other verb the value is the **returned card**, not the source: one Haven with three distinct Dragons in the graveyard is three different activations, and naming the land could not tell them apart |
 | `animate=<land>` | Mutavault's `{1}: becomes a 2/2` | a land is played, not cast, so `cast=<land>` is meaningless; several copies must stay distinguishable |
 | `taptoken=<land>` | Sliver Hive's `{5},{T}: create a Sliver` | same |
 | `channel=<card>` | Twinshot Sniper's `{1}{R}, Discard this card: 2 damage` | a from-HAND ability, not a board activation and not a cast — `cast=<name>` cannot say which of the two ways you are playing the card |

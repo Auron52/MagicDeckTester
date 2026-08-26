@@ -137,6 +137,19 @@
     "toughness": "3",
     "type_line": "Creature — Cat Knight"
   },
+  "Atsushi, the Blazing Sky": {
+    "cmc": 4.0,
+    "keywords": [
+      "Flying",
+      "Trample",
+      "Treasure"
+    ],
+    "mana_cost": "{2}{R}{R}",
+    "oracle_text": "Flying, trample\nWhen Atsushi dies, choose one —\n• Exile the top two cards of your library. Until the end of your next turn, you may play those cards.\n• Create three Treasure tokens.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Dragon Spirit"
+  },
   "Audacity": {
     "cmc": 1.0,
     "keywords": [
@@ -489,6 +502,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Dragon Tempest": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Whenever a creature you control with flying enters, it gains haste until end of turn.\nWhenever a Dragon you control enters, it deals X damage to any target, where X is the number of Dragons you control.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Dragonlord Kolaghan": {
     "cmc": 6.0,
     "keywords": [
@@ -500,6 +522,15 @@
     "power": "6",
     "toughness": "5",
     "type_line": "Legendary Creature — Elder Dragon"
+  },
+  "Dragonspeaker Shaman": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}{R}",
+    "oracle_text": "Dragon spells you cast cost {2} less to cast.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Human Barbarian Shaman"
   },
   "Dragonstorm": {
     "cmc": 9.0,
@@ -653,6 +684,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Fire Diamond": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{2}",
+    "oracle_text": "This artifact enters tapped.\n{T}: Add {R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
   "Fists of Flame": {
     "cmc": 2.0,
     "keywords": [],
@@ -755,6 +795,19 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf Scout"
+  },
+  "Glorybringer": {
+    "cmc": 5.0,
+    "keywords": [
+      "Exert",
+      "Flying",
+      "Haste"
+    ],
+    "mana_cost": "{3}{R}{R}",
+    "oracle_text": "Flying, haste\nYou may exert this creature as it attacks. When you do, it deals 4 damage to target non-Dragon creature an opponent controls. (An exerted creature won't untap during your next untap step.)",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Creature — Dragon"
   },
   "Gnarled Scarhide": {
     "cmc": 1.0,
@@ -927,6 +980,15 @@
     "toughness": "2",
     "type_line": "Creature — Sliver"
   },
+  "Haven of the Spirit Dragon": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a Dragon creature spell.\n{2}, {T}, Sacrifice this land: Return target Dragon creature card or Ugin planeswalker card from your graveyard to your hand.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Haytham Kenway": {
     "cmc": 4.0,
     "keywords": [
@@ -1040,6 +1102,18 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Inferno of the Star Mounts": {
+    "cmc": 6.0,
+    "keywords": [
+      "Flying",
+      "Haste"
+    ],
+    "mana_cost": "{4}{R}{R}",
+    "oracle_text": "This spell can't be countered.\nFlying, haste\n{R}: Inferno of the Star Mounts gets +1/+0 until end of turn. When its power becomes 20 this way, it deals 20 damage to any target.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Legendary Creature — Dragon"
   },
   "Inspiring Veteran": {
     "cmc": 2.0,
@@ -1410,6 +1484,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Mind Stone": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{2}",
+    "oracle_text": "{T}: Add {C}.\n{1}, {T}, Sacrifice this artifact: Draw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
   },
   "Mirri's Guile": {
     "cmc": 1.0,
@@ -2379,6 +2462,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Urza's Incubator": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{3}",
+    "oracle_text": "As this artifact enters, choose a creature type.\nCreature spells of the chosen type cost {2} less to cast.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
   },
   "Utvara Hellkite": {
     "cmc": 8.0,

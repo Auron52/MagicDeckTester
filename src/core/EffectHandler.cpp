@@ -18,6 +18,11 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     perm.controller_index  = entry.controller_index;
     perm.owner_index       = entry.controller_index;
     perm.entered_this_turn = true;
+    // Fire Diamond: "This artifact enters tapped." enters_tapped was previously honored only on the
+    // land-drop path, so a CAST permanent carrying it entered untapped and was tappable for mana
+    // the same turn. Lands are played, not cast, so they never reach here -- no double-apply.
+    // Lockstep with TurnSolver's rollout non-creature enter branch.
+    if (def.params.enters_tapped) { perm.tapped = true; }
     // Planeswalker: enters with its starting loyalty (dedicated int + a display-mirror counter
     // the existing viewer badge code picks up). Mirrors the rollout's non-creature enter branch.
     if (def.params.loyalty_start > 0)

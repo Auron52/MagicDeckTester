@@ -156,6 +156,18 @@ struct CardParams
     // Colored-creature-only mana (Unclaimed Territory / Cavern of Souls / Secluded Courtyard):
     // "{T}: Add {C}. {T}: Add one mana of any color -- spend only on a creature spell of the chosen
     // type." Unlike creature_mana_only, the {C} is UNRESTRICTED; only the COLORED mana is creature-
+    // Haven of the Spirit Dragon: "{2}, {T}, Sacrifice this land: Return target Dragon creature card
+    // from your graveyard to your hand." Set gy_return_cost to enable (empty = no such ability).
+    // gy_return_requires_subtype narrows the legal targets ("Dragon"; empty = any creature card);
+    // gy_return_requires_creature gates on the graveyard card being a creature. The source is TAPPED
+    // and SACRIFICED as part of the cost, so it can never pay its own {2} and never targets itself.
+    // WHICH card to return is a real choice: the enumeration emits one Action per distinct legal
+    // graveyard card NAME (carried on Action::tutor_target and folded into the plan signature), so
+    // the search picks among them and the viewer surfaces every option -- never a "first match".
+    std::optional<ManaCost> gy_return_cost;
+    std::string             gy_return_requires_subtype;
+    bool                    gy_return_requires_creature = false;
+
     // restricted. Modelled as produces = [C, <colors>] + this flag: at payment time a non-creature
     // spell may take only {C} from the source (ProducesForPayment strips the colours), a creature
     // spell may take any colour. The chosen creature TYPE is simplified to "any creature" (these
@@ -345,6 +357,10 @@ struct CardParams
     int                      etb_created_token_power     = 0;
     int                      etb_created_token_toughness = 0;
     std::vector<std::string> etb_created_token_subtypes;
+    // Keywords the created token is printed with (Lathliss/Utvara: "with flying"). Historically
+    // dropped because Flying is inert in a goldfish; Dragon Tempest reads it ("a creature you
+    // control WITH FLYING enters"), so it is now carried. Empty = the prior keywordless token.
+    std::vector<std::string> etb_created_token_keywords;
 
     // Utvara Hellkite: "Whenever a Dragon you control attacks, create a 6/6 red Dragon creature
     // token with flying." PER attacking matching creature (not the flat tapped-and-attacking
@@ -358,6 +374,7 @@ struct CardParams
     int                      attack_per_token_power       = 0;
     int                      attack_per_token_toughness   = 0;
     std::vector<std::string> attack_per_token_subtypes;
+    std::vector<std::string> attack_per_token_keywords;       // see etb_created_token_keywords
     std::vector<std::string> attack_token_requires_subtypes;  // attacker subtypes counted (empty = any)
 
     // Firebreathing (activated pump; converts LEFTOVER combat mana -> attacker power = face
@@ -371,6 +388,28 @@ struct CardParams
     std::optional<ManaCost>  team_pump_cost;
     int                      team_pump_power = 0;
     std::vector<std::string> team_pump_subtypes;
+
+    // Inferno of the Star Mounts: "{R}: gets +1/+0 until end of turn. When its power becomes 20
+    // THIS WAY, it deals 20 damage to any target." A threshold rider on the SELF firebreathing
+    // above: after an activation lands on this permanent, if its power is now exactly
+    // firebreathing_threshold_power, deal firebreathing_threshold_damage to the opponent's face
+    // ("any target" collapses to the face -- optimal vs a passive opponent, the Scourge precedent).
+    // "This way" = the increment that crosses the line must come from THIS ability, which is what
+    // checking at the activation site gives; other pumps (a Lathliss team pump) legitimately count
+    // toward the total. Fires at most once per permanent per turn (the equality test cannot
+    // re-trigger, since further activations push power past the threshold), and the damage is
+    // opponent LIFE LOSS so the rollout's win projection counts it toward lethal. 0 = inert.
+    int                      firebreathing_threshold_power  = 0;
+    int                      firebreathing_threshold_damage = 0;
+
+    // Dragon Tempest: "Whenever a creature you control with flying enters, it gains haste until
+    // end of turn." A permanent you control with this flag grants Permanent::temp_haste to every
+    // entering controlled creature that has flying (read by CanAttackFull / CanTapNow, cleared each
+    // cleanup -- the Expedite grants_temp_haste machinery). Fired from the universal enter cascade
+    // (OnDragonEnters' creature-enter watcher block), so it covers hard-cast Dragons AND every
+    // token (Lathliss 5/5, Utvara 6/6 -- both enter with flying). Tempest's OTHER clause, the
+    // Dragon-count ping, is exactly Scourge's and rides dragon_ping_on_enter above. false = inert.
+    bool                     haste_on_flying_enter = false;
 
     // ETB library dig (e.g. Acclaimed Contender: "When this enters, if you control another
     // Knight, look at the top five cards of your library. You may reveal a Knight ... and
@@ -980,6 +1019,27 @@ struct CardParams
     // twin of reduces_spell_color (which keys on colour pips); matching scans def.card.m_subtypes
     // like affinity_for_subtype. Empty = not a reducer.
     std::string reduces_spell_subtype;
+
+    // How much GENERIC one matching reducer takes off (Goblin Warchief 1; Dragonspeaker Shaman
+    // and Urza's Incubator both read "cost {2} less to cast" -> 2). Still floored at 0 and still
+    // stacks per copy, so this only scales the per-reducer step. Defaults to 1 = the shipped
+    // Warchief behaviour, so every existing deck is byte-identical.
+    int reduces_spell_subtype_amount = 1;
+
+    // Urza's Incubator: "CREATURE spells of the chosen type cost {2} less" -- the reduction
+    // applies ONLY to creature spells. Dragonspeaker Shaman ("Dragon SPELLS you cast") leaves
+    // this false and discounts any spell carrying the subtype. Inert for Warchief (false).
+    //
+    bool reduces_spell_subtype_creature_only = false;
+
+    // "As this permanent enters, choose a creature type" (Urza's Incubator). When true the reducer's
+    // subtype is NOT the printed reduces_spell_subtype (which stays empty) but the type chosen at
+    // ETB and carried on Permanent::chosen_subtype_id -- so the card is generic and works in ANY
+    // tribal deck (Dragons picks Dragon, a Slivers deck picks Sliver) instead of being hard-coded.
+    // The choice is made by the shared DominantCreatureSubtypeId: the creature subtype with the most
+    // cards across the controller's zones, i.e. what the deck is actually built around. false =
+    // a printed-subtype reducer (Goblin Warchief / Dragonspeaker Shaman) -> byte-identical.
+    bool chooses_creature_type = false;
 
     // ETB fixed-token creation ("When THIS creature enters, create N 1/1 red Goblin tokens" —
     // Mogg War Marshal 1, Siege-Gang Commander 3). > 0 fires at THIS permanent's own ETB, using

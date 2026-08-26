@@ -1,0 +1,47 @@
+{
+  "deck": "decks/Dragons/Dragons.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Dragon Tempest",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    }
+  ],
+  "hand": [
+    "Lathliss, Dragon Queen"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 300,
+  "max_turns": 6,
+  "expect_opponent_life": 13,
+  "comment": "Dragon Tempest, both clauses, on a board where each is separately visible. Lathliss (a 6/6 flier) is the only Dragon, so the ETB ping is X=1 -> 20 to 19; she then attacks for 6 -> 13. The attack is the HASTE clause: she entered this turn, so without Dragon Tempest's 'whenever a creature you control with flying enters, it gains haste' she is summoning-sick and deals nothing. A win-turn assertion cannot see either half (neither is lethal here), which is why this pins opponent_life exactly: 13 fails if the ping deals the wrong X OR if the haste grant stops firing."
+}

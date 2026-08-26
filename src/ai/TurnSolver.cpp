@@ -1618,19 +1618,49 @@ static int SameTurnAffinityGenericCredit(const GameState& state, const std::vect
 struct SameTurnReducerCounts
 {
     int red = 0, white = 0, blue = 0, black = 0, green = 0;
-    std::unordered_map<std::string, int> sub;    // subtype reducers (Goblin Warchief)
-    bool Any() const { return (red + white + blue + black + green) > 0 || !sub.empty(); }
+    // Subtype reducers, keyed by INTERNED subtype id and already scaled by
+    // reduces_spell_subtype_amount (Warchief 1 per copy, Dragonspeaker Shaman / Urza's Incubator 2).
+    // Split by scope: `sub` discounts ANY spell carrying the subtype, `sub_creature` only CREATURE
+    // spells (Incubator's "creature spells of the chosen type"), so a deck running both kinds on one
+    // subtype prices each exactly. Ids (not names) because a chooses_creature_type reducer has no
+    // printed subtype -- its type is decided at ETB and predicted here off the same shared helper.
+    std::unordered_map<uint16_t, int> sub;
+    std::unordered_map<uint16_t, int> sub_creature;
+    bool Any() const
+    { return (red + white + blue + black + green) > 0 || !sub.empty() || !sub_creature.empty(); }
 };
 
-static SameTurnReducerCounts CountSameTurnReducers(const std::vector<Action>& cands,
+static SameTurnReducerCounts CountSameTurnReducers(const GameState& state,
+                                                   const std::vector<Action>& cands,
                                                    const std::vector<int>& sel)
 {
     SameTurnReducerCounts rc;
+    uint16_t chosen = SubtypeRegistry::kNone;   // lazily resolved; deck-constant
     for (int j : sel)
     {
         const CardDefinition* d = cands[j].def;
         if (!d) { continue; }
-        if (!d->params.reduces_spell_subtype.empty()) { ++rc.sub[d->params.reduces_spell_subtype]; }
+        if (!d->params.reduces_spell_subtype.empty() || d->params.chooses_creature_type)
+        {
+            uint16_t id;
+            if (d->params.chooses_creature_type)
+            {
+                // A same-turn Incubator is not on the battlefield yet, so its ETB choice has not
+                // happened. It is a pure function of the deck, so predicting it here gives exactly
+                // what OnDragonEnters will pick when the cast resolves.
+                if (chosen == SubtypeRegistry::kNone)
+                { chosen = DominantCreatureSubtypeId(state, state.active_player_index); }
+                id = chosen;
+            }
+            else
+            { id = SubtypeRegistry::Instance().Id(d->params.reduces_spell_subtype); }
+            if (id != SubtypeRegistry::kNone)
+            {
+                const int amt = std::max(1, d->params.reduces_spell_subtype_amount);
+                if (d->params.reduces_spell_subtype_creature_only) { rc.sub_creature[id] += amt; }
+                else                                              { rc.sub[id] += amt; }
+            }
+        }
         if (d->params.reduces_spell_color.empty()) { continue; }
         const std::string& c = d->params.reduces_spell_color;
         if      (c == "R") { ++rc.red; }   else if (c == "W") { ++rc.white; }
@@ -1659,13 +1689,30 @@ static int SameTurnReducerDiscountFor(const SameTurnReducerCounts& rc,
     // Subtype reducers (Warchief): a Goblin spell gets -1 per OTHER same-turn Warchief in the
     // subset. Warchief is itself a Goblin, so exclude the spell's own reducer copy (a lone
     // Warchief never discounts itself; two Warchiefs each discount the other).
-    for (const std::string& cs : dj->card.m_subtypes)
+    const bool     dj_is_creature = dj->card.IsCreature();
+    const uint16_t dj_printed     = SubtypeRegistry::Instance().Id(dj->params.reduces_spell_subtype);
+    for (std::size_t si = 0; si < dj->card.m_subtypes.size(); ++si)
     {
+        const uint16_t cs = dj->card.m_subtypes.IdAt(si);
         auto it = rc.sub.find(cs);
-        if (it == rc.sub.end()) { continue; }
-        int n = it->second;
-        if (dj->params.reduces_spell_subtype == cs) { --n; }   // exclude self
-        reducers += n;
+        if (it != rc.sub.end())
+        {
+            int n = it->second;
+            // Exclude self by the reducer's OWN step, not by 1 (a lone Dragonspeaker Shaman is a
+            // Shaman, not a Dragon, so this only bites a reducer that shares its own subtype).
+            // A chooses_creature_type reducer (Incubator) is an artifact with no subtypes, so it
+            // can never reach this branch.
+            if (dj_printed == cs && !dj->params.reduces_spell_subtype_creature_only)
+            { n -= std::max(1, dj->params.reduces_spell_subtype_amount); }
+            reducers += n;
+        }
+        if (!dj_is_creature) { continue; }        // Incubator: creature spells only
+        auto ic = rc.sub_creature.find(cs);
+        if (ic == rc.sub_creature.end()) { continue; }
+        int m = ic->second;
+        if (dj_printed == cs && dj->params.reduces_spell_subtype_creature_only)
+        { m -= std::max(1, dj->params.reduces_spell_subtype_amount); }
+        reducers += m;
     }
     // A colour reducer never discounts itself (a Ruby Medallion is {2}, colourless); Warchief's
     // own subtype match is excluded above.
@@ -1675,8 +1722,7 @@ static int SameTurnReducerDiscountFor(const SameTurnReducerCounts& rc,
 static int SameTurnReducerGenericCredit(const GameState& state, const std::vector<Action>& cands,
                                         const std::vector<int>& sel)
 {
-    (void)state;
-    const SameTurnReducerCounts rc = CountSameTurnReducers(cands, sel);
+    const SameTurnReducerCounts rc = CountSameTurnReducers(state, cands, sel);
     if (!rc.Any()) { return 0; }
     int credit = 0;
     for (int j : sel) { credit += SameTurnReducerDiscountFor(rc, cands, j); }
@@ -1771,7 +1817,11 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
             const Action& a = cands[j];
             if (a.kind == Action::Kind::ActivateVial) { continue; }   // Vial deploys cost no mana
             const CardDefinition* def = a.def;
-            const bool is_rock = def && def->params.mana_rock && !def->card.IsCreature();
+            // A rock that ENTERS TAPPED (Fire Diamond) produces nothing the turn it is cast, so it
+            // is not part of this same-turn ramp pass -- crediting it would let the enumerator fund
+            // a cast off mana the executor cannot actually make. Mirrors the a.rock_mana gate.
+            const bool is_rock = def && def->params.mana_rock && !def->card.IsCreature()
+                              && !def->params.enters_tapped;
             if (is_rock != want_rock) { continue; }
             const bool for_creature = def && def->card.IsCreature();
             if (!TapForCostDirect(cp, a.cost, for_creature)) { return false; }
@@ -7507,7 +7557,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // Same-turn mana-rock ramp: a non-creature mana rock (Sol Ring) taps the turn it is cast.
         // Stamp the mana it produces (by real colour) so the enumerator can fund the rest of the
         // subset off it. Creatures (mana dorks) are excluded -- they are summoning-sick this turn.
-        if (RockRampEnumEnabled() && def.params.mana_rock && !def.card.IsCreature())
+        // A rock that ENTERS TAPPED (Fire Diamond) produces nothing until the next untap step, so
+        // it is excluded here exactly like a summoning-sick dork.
+        if (RockRampEnumEnabled() && def.params.mana_rock && !def.card.IsCreature()
+            && !def.params.enters_tapped)
         { AddSourceToPool(a.rock_mana, state, def); }
         // Terastodon: the ETB destroy-K rides chosen_x on the cast. The v1 engine wired K through
         // the apply/executor path but never EMITTED K > 0, so no Elephant was ever made. The
@@ -8733,6 +8786,44 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
 
+        // Haven of the Spirit Dragon: "{2}, {T}, Sacrifice this land: Return target Dragon creature
+        // card from your graveyard to your hand." One Action per (source, distinct legal graveyard
+        // NAME) so WHICH card to rebuy is a real searched decision, not a first-match shortcut (the
+        // core invariant). Names are deduped because two copies of the same card are interchangeable
+        // -- that is a lossless fold, not a choice. Variants of one source are mutually exclusive per
+        // plan via the shared sac_source_id (it can only be sacrificed once).
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (!pd || !pd->params.gy_return_cost.has_value()) { continue; }
+            if (!CanTapNow(p, state.battlefield)) { continue; }
+            const std::vector<Card>& gy = state.players[state.active_player_index].graveyard;
+            std::vector<std::string> seen;
+            for (const Card& gc : gy)
+            {
+                if (!GyReturnTargetLegal(*pd, ZoneCard(gc))) { continue; }
+                const std::string nm = gc.m_name.str();
+                bool dup = false;
+                for (const std::string& s : seen) { if (s == nm) { dup = true; break; } }
+                if (dup) { continue; }
+                seen.push_back(nm);
+
+                Action a;
+                a.kind           = Action::Kind::GraveyardReturnAbility;
+                a.card_name      = p.card.m_name;
+                a.hand_index     = -1;
+                a.cost           = pd->params.gy_return_cost.value();
+                a.sac_source_id  = p.card.m_number;
+                a.tutor_target   = nm;            // WHICH card comes back (searched / human-picked)
+                // A rebuy is card advantage, not damage: rank it above the inert lifegain mode but
+                // well below a real clock, and let the search price the actual line.
+                a.eval           = 2;
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
+            }
+        }
+
         // Balan, Wandering Knight: "{1}{W}: Attach all Equipment you control to Balan." One action
         // per Balan (legend rule keeps it to one); gated on >= 1 controlled Equipment not already
         // attached to him -- a strict no-op activation is identical-minus-mana, lossless to skip.
@@ -9604,6 +9695,7 @@ static int ActivationFamilyKey(const Action& a)
         case Action::Kind::ActivateLoyalty:
         case Action::Kind::Equip:
         case Action::Kind::GraveyardExileAbility:
+        case Action::Kind::GraveyardReturnAbility:   // shared {T}+sacrifice: one rebuy per Haven
         case Action::Kind::AttachAllEquipment:
         case Action::Kind::PutFromHandAbility:   // shared {T}: one put per Stoneforge
         case Action::Kind::JitteModeAbility:     // one counter-spend variant per Jitte per plan
@@ -10194,7 +10286,7 @@ static int SequencedRitualCredit(const ManaPool& pool, const std::vector<Action>
     // Same-turn discounts, computed once. Inert (and byte-identical) when the caller passes no
     // state, when the cost-trick model is off, or when the subset holds no reducer/affinity spell.
     const bool                   use_disc = (st_disc != nullptr) && CostTricksEnabled();
-    const SameTurnReducerCounts  rcounts  = use_disc ? CountSameTurnReducers(cands, sel)
+    const SameTurnReducerCounts  rcounts  = use_disc ? CountSameTurnReducers(*st_disc, cands, sel)
                                                      : SameTurnReducerCounts{};
     auto eff_cost = [&](int j)
     {
@@ -15601,6 +15693,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             perm.controller_index  = state.active_player_index;
             perm.owner_index       = state.active_player_index;
             perm.entered_this_turn = true;
+            // Fire Diamond: "This artifact enters tapped." enters_tapped used to be honored ONLY on
+            // the land-drop path, so a cast permanent carrying it entered untapped and could be
+            // tapped for mana the same turn -- a full turn of free acceleration the card does not
+            // have. Lands never reach this branch (they are played, not cast), so this cannot
+            // double-apply. Lockstep with EffectHandler::EnterBattlefield.
+            if (def.params.enters_tapped) { perm.tapped = true; }
             // Planeswalker: starting loyalty + display-mirror counter (lockstep w/ EffectHandler).
             if (def.params.loyalty_start > 0)
             {
@@ -16223,6 +16321,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // source got tapped for mana or the fuel got exiled meanwhile -- stranded-outlet safe).
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
             { ApplyGraveyardExileAbility(state, state.active_player_index, a.sac_source_id, a.gy_exile_mode); }
+        }
+        else if (a.kind == Action::Kind::GraveyardReturnAbility)
+        {
+            // Haven of the Spirit Dragon: pay {2}, then tap+sacrifice the land and return the chosen
+            // Dragon. Same stranded-outlet safety as above (the land may have been tapped for mana
+            // by an earlier cast in this very plan, or the target may already be gone).
+            if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            {
+                ApplyGraveyardReturnAbility(state, state.active_player_index, a.sac_source_id,
+                                            a.tutor_target);
+            }
         }
         else if (a.kind == Action::Kind::AnimateLand)
         {
@@ -19110,6 +19219,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 case Action::Kind::GraveyardExileAbility:
                     msf.push_back("DRE#" + std::to_string(act.sac_source_id)
                                   + "m" + std::to_string(act.gy_exile_mode)); break;
+                // Haven gy-return: which source AND which card comes back are distinct decisions
+                // (core invariant -- the dedup must never collapse two different rebuy targets).
+                case Action::Kind::GraveyardReturnAbility:
+                    msf.push_back("GYR#" + std::to_string(act.sac_source_id)
+                                  + ">" + act.tutor_target); break;
                 // Equip: which Equipment AND which host are distinct decisions (core invariant).
                 case Action::Kind::Equip:
                     msf.push_back("EQ#" + std::to_string(act.sac_source_id)
@@ -21822,6 +21936,13 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // permanent keeps the EXACT prior key (byte-identical).
         if (perm.age_counters > 0)
         { Fold(tk, 0xA6E0); Fold(tk, static_cast<uint64_t>(perm.age_counters)); }
+        // Chosen creature type (Urza's Incubator): future-determining -- it decides WHICH spells the
+        // permanent discounts. Today it is a deck-constant (DominantCreatureSubtypeId), so folding it
+        // cannot actually split any state; it is folded anyway so that making the choice a real
+        // searched branch later cannot silently merge two differently-named Incubators. Folded ONLY
+        // when nonzero, so every deck without a type-choosing permanent keeps the EXACT prior key.
+        if (perm.chosen_subtype_id != 0)
+        { Fold(tk, 0xC7BE); Fold(tk, static_cast<uint64_t>(perm.chosen_subtype_id)); }
         // Storage battery (Dwarven Hold / Mercadian Bazaar): burst amount and StorageSourceLive both
         // read the charge + hold flag, so two states differing only there solve DIFFERENTLY and must
         // not share a TT entry. This hole was LATENT under ordered keys (permuted histories usually
@@ -26667,6 +26788,32 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         }
     }
 
+    // --- gyreturn= : Haven of the Spirit Dragon. The source must be live and untapped, and the
+    // graveyard must actually hold the named card as a legal target.
+    if (!spec.gy_returns.empty())
+    {
+        const CardDefinition* src = nullptr;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != active || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.gy_return_cost.has_value()) { src = d; break; }
+        }
+        if (!src)
+        { return "you control no untapped permanent with a graveyard-return ability"; }
+        for (const std::string& want : spec.gy_returns)
+        {
+            bool found = false;
+            for (const Card& c : s.players[active].graveyard)
+            {
+                if (c.m_name != want) { continue; }
+                if (GyReturnTargetLegal(*src, ZoneCard(c))) { found = true; break; }
+            }
+            if (!found)
+            { return "'" + want + "' is not a legal graveyard-return target in your graveyard"; }
+        }
+    }
+
     (void)ap;
     return {};
 }
@@ -26684,7 +26831,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
                       spec.vial_deploys.empty() && spec.retrace_casts.empty() &&
                       spec.sac_outlets.empty() && spec.attach_all.empty() &&
                       spec.sf_puts.empty() && spec.jitte_modes.empty() && spec.equips.empty() &&
-                      spec.gy_exiles.empty() && spec.channels.empty() &&
+                      spec.gy_exiles.empty() && spec.gy_returns.empty() && spec.channels.empty() &&
                       spec.suspends.empty() &&
                       spec.animates.empty() && spec.tap_tokens.empty()))
     {
@@ -26730,6 +26877,9 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
     std::vector<int> sortedGyExiles = spec.gy_exiles;
     std::sort(sortedGyExiles.begin(), sortedGyExiles.end());
     const bool gyexile_declared   = !spec.gy_exiles.empty();
+    const bool gyreturn_declared  = !spec.gy_returns.empty();
+    std::vector<std::string> sortedGyReturns = spec.gy_returns;
+    std::sort(sortedGyReturns.begin(), sortedGyReturns.end());
     std::vector<std::string> sortedChannels = spec.channels;
     std::sort(sortedChannels.begin(), sortedChannels.end());
     const bool channel_declared   = !spec.channels.empty();
@@ -26780,7 +26930,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         int planLE = 0, planSacs = 0;
         std::vector<std::string> orderNames, vialNames, retraceNames, sacOutNames;
         std::vector<std::string> attachAllNames, sfPutNames, equipNames, channelNames, suspendNames;
-        std::vector<std::string> animateNames, tapTokenNames;
+        std::vector<std::string> animateNames, tapTokenNames, gyReturnNames;
         std::vector<int> jitteModes, gyExileModes;
         for (const Action& a : p.actions)
         {
@@ -26810,6 +26960,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             { equipNames.push_back(a.card_name); continue; }
             if (gyexile_declared && a.kind == Action::Kind::GraveyardExileAbility)
             { gyExileModes.push_back(a.gy_exile_mode); continue; }
+            if (gyreturn_declared && a.kind == Action::Kind::GraveyardReturnAbility)
+            { gyReturnNames.push_back(a.tutor_target); continue; }
             if (channel_declared && a.kind == Action::Kind::Channel)
             { channelNames.push_back(a.card_name); continue; }
             if (suspend_declared && a.kind == Action::Kind::Suspend)
@@ -26856,6 +27008,12 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
             std::vector<int> v2 = gyExileModes;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedGyExiles) { continue; }
+        }
+        if (gyreturn_declared)
+        {
+            std::vector<std::string> v2 = gyReturnNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedGyReturns) { continue; }
         }
         if (channel_declared)
         {
@@ -27499,7 +27657,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state, bool is_pre_
         const bool alt_free = def->params.alt_lifegain_cost > 0
             && ControlsSubtype(s, s.active_player_index, def->params.alt_cost_requires_subtype);
         PendingCast pc;
-        pc.name = name; pc.def = def; pc.rock = def->params.mana_rock && !def->card.IsCreature();
+        // enters_tapped (Fire Diamond): produces nothing the turn it is cast -- same gate the
+        // enumerator's rock_mana carries, so the validator agrees with what is enumerable.
+        pc.name = name; pc.def = def;
+        pc.rock = def->params.mana_rock && !def->card.IsCreature() && !def->params.enters_tapped;
         // Use the EFFECTIVE cost so a Hinata-discounted (or Medallion/affinity-reduced) spell
         // validates at the same reduced generic the enumerator charges -- otherwise a hand-built
         // line casting e.g. Magma Opus with Hinata in play is checked against the full {6}{U}{R}

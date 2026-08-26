@@ -2238,6 +2238,9 @@
     "team_pump_power": 1,
     "team_pump_subtypes": [
      "Dragon"
+    ],
+    "etb_created_token_keywords": [
+     "Flying"
     ]
    }
   },
@@ -2266,6 +2269,9 @@
     ],
     "attack_token_requires_subtypes": [
      "Dragon"
+    ],
+    "attack_per_token_keywords": [
+     "Flying"
     ]
    }
   },
@@ -5318,6 +5324,188 @@
     "sac_creature_cost": "{2}",
     "sac_outlet_allows_enchantment": true,
     "sac_outlet_excludes_self": true
+   }
+  },
+  {
+   "name": "Atsushi, the Blazing Sky",
+   "mana_cost": "{2}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Dragon",
+    "Spirit"
+   ],
+   "keywords": [
+    "Flying",
+    "Trample"
+   ],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Flying, trample\nWhen Atsushi dies, choose one —\n• Exile the top two cards of your library. Until the end of your next turn, you may play those cards.\n• Create three Treasure tokens. [Flying and trample both inert (the goldfish opponent never blocks -- PopulateOpponentSpawns' creatures exist only as spell targets). PARTIAL: the modal dies-trigger is NOT implemented because it is UNREACHABLE in this deck -- nothing here or on the opponent's side can kill our creatures (the passive opponent never attacks or blocks, the deck holds no sacrifice outlet, and aiming our own Lightning Bolt at a Dragon is never a line the search takes). Legend rule is LIVE (3 copies).]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Inferno of the Star Mounts",
+   "mana_cost": "{4}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Dragon"
+   ],
+   "keywords": [
+    "Flying",
+    "Haste"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "This spell can't be countered.\nFlying, haste\n{R}: Inferno of the Star Mounts gets +1/+0 until end of turn. When its power becomes 20 this way, it deals 20 damage to any target. [\"Can't be countered\" inert (the passive opponent casts nothing). Flying inert (no blockers). Haste is real and load-bearing -- it attacks the turn it lands. Firebreathing '{R}: +1/+0' via firebreathing_cost/power, spent with LEFTOVER combat mana. The power-becomes-20 rider via firebreathing_threshold_power/_damage: after an activation lands, power == 20 deals 20 to the opponent's face ('any target' collapses to the face, the Scourge precedent) as LIFE LOSS, so the rollout counts it toward lethal. Legend rule is LIVE (3 copies).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "firebreathing_cost": "{R}",
+    "firebreathing_power": 1,
+    "firebreathing_threshold_power": 20,
+    "firebreathing_threshold_damage": 20
+   }
+  },
+  {
+   "name": "Dragon Tempest",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Whenever a creature you control with flying enters, it gains haste until end of turn.\nWhenever a Dragon you control enters, it deals X damage to any target, where X is the number of Dragons you control. [Clause 1 via haste_on_flying_enter: fired from the universal enter cascade (OnDragonEnters), so it covers hard-cast Dragons AND tokens -- Lathliss's 5/5 and Utvara's 6/6 are printed 'with flying' and now carry the keyword, so a Lathliss token made in the main phase can attack the turn it appears. Sets Permanent::temp_haste (the Expedite field, read by CanAttackFull/CanTapNow, cleared each cleanup). Clause 2 is EXACTLY Scourge of Valkas' ping and rides the shared dragon_ping_on_enter: X = Dragons you control counting the newcomer, dealt as opponent LIFE LOSS -- 'any target' collapses to the opponent's face, which is inert to choose against a passive opponent (optimal and byte-identical; the Scourge precedent). A Tempest and a Scourge each ping separately.]",
+   "template": "custom",
+   "parameters": {
+    "dragon_ping_on_enter": true,
+    "haste_on_flying_enter": true
+   }
+  },
+  {
+   "name": "Urza's Incubator",
+   "mana_cost": "{3}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "As this artifact enters, choose a creature type.\nCreature spells of the chosen type cost {2} less to cast. [GENERIC -- the chosen type is NOT baked into this entry, so the card works in any tribal deck. chooses_creature_type makes the ETB choice real: the universal enter cascade calls the shared DominantCreatureSubtypeId (the creature subtype with the most cards across the controller's zones, i.e. what the deck is built around) and stores the interned id on Permanent::chosen_subtype_id -- Dragon in this deck, Sliver in a Slivers deck. Because the scanned zones union to the whole deck the answer is a game-constant, so the executor and the rollout always agree; it is still folded into the sim key / dominance so a future per-copy searched choice cannot silently merge two copies. The reduction itself rides reduces_spell_subtype_amount 2 (the Goblin Warchief reducer, scaled from {1} to {2}) + reduces_spell_subtype_creature_only (Incubator discounts CREATURE spells only, unlike Dragonspeaker Shaman's 'Dragon spells'). Reduces GENERIC, floored at 0, stacking per copy; a same-turn Incubator is credited by SameTurnReducerCounts, which predicts the same choice off the same helper.]",
+   "template": "custom",
+   "parameters": {
+    "chooses_creature_type": true,
+    "reduces_spell_subtype_amount": 2,
+    "reduces_spell_subtype_creature_only": true
+   }
+  },
+  {
+   "name": "Mind Stone",
+   "mana_cost": "{2}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{1}, {T}, Sacrifice this artifact: Draw a card. [Mana rock producing {C} (mana_rock + produces). The late-game cash-in rides the existing sacrifice_draw_cost (Fiery Islet / Horizon Canopy), which matches the source by permanent NAME and is not land-gated, so it works unchanged on an artifact: pay {1}, tap, sacrifice to the graveyard, draw one.]",
+   "template": "custom",
+   "parameters": {
+    "mana_rock": true,
+    "produces": [
+     "C"
+    ],
+    "sacrifice_draw_cost": "{1}"
+   }
+  },
+  {
+   "name": "Fire Diamond",
+   "mana_cost": "{2}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This artifact enters tapped.\n{T}: Add {R}. [Mana rock producing {R}. enters_tapped is now honored on the CAST path too (EffectHandler::EnterBattlefield + TurnSolver's rollout non-creature enter, in lockstep) -- previously that flag only applied to land drops, so a cast rock carrying it entered untapped and was tappable the same turn. The enumerator's same-turn rock-ramp credit (Action::rock_mana and the affordability walk) is gated off for an enters_tapped rock for the same reason: it produces nothing until the next untap step.]",
+   "template": "custom",
+   "parameters": {
+    "mana_rock": true,
+    "produces": [
+     "R"
+    ],
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Dragonspeaker Shaman",
+   "mana_cost": "{1}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Barbarian",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Dragon spells you cast cost {2} less to cast. [Cost reduction via reduces_spell_subtype 'Dragon' + reduces_spell_subtype_amount 2 (the Goblin Warchief reducer, scaled from {1} to {2}). Applies to ANY Dragon spell (reduces_spell_subtype_creature_only stays false, unlike Urza's Incubator) -- every Dragon in this deck is a creature, so the two coincide here. Reduces GENERIC, floored at 0, stacking per copy. The Shaman is a Human Barbarian Shaman, NOT a Dragon, so it never discounts itself and the reducer's self-exclusion never fires.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "reduces_spell_subtype": "Dragon",
+    "reduces_spell_subtype_amount": 2
+   }
+  },
+  {
+   "name": "Glorybringer",
+   "mana_cost": "{3}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Dragon"
+   ],
+   "keywords": [
+    "Flying",
+    "Haste"
+   ],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Flying, haste\nYou may exert this creature as it attacks. When you do, it deals 4 damage to target non-Dragon creature an opponent controls. (An exerted creature won't untap during your next untap step.) [Flying inert (no blockers). Haste is real -- it attacks the turn it lands. PARTIAL: exert is not modelled, because NEVER exerting is the optimal line here and so is byte-identical to a faithful implementation played correctly: exert is OPTIONAL, its cost (skip the next untap step, i.e. no attack next turn) is strictly negative, and its payload kills a goldfish creature that never blocks or attacks and that no card in this deck cares about.]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Haven of the Spirit Dragon",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a Dragon creature spell.\n{2}, {T}, Sacrifice this land: Return target Dragon creature card or Ugin planeswalker card from your graveyard to your hand. [The two mana abilities via produces (all five colours + {C}) + colored_creature_only -- the Cavern of Souls / Unclaimed Territory model: the {C} pays anything, the coloured half only creature spells. Known collapse (identical to those two, and disclosed): the 'of the chosen type' / 'Dragon' narrowing on the coloured half is not modelled, so it could also pay for the deck's 2 Dragonspeaker Shamans. The graveyard-return ability IS implemented as a real activated ability (Action::Kind::GraveyardReturnAbility): pay gy_return_cost {2}, tap and SACRIFICE the land, return the chosen card. WHICH card comes back is a searched decision -- one plan variant per distinct legal graveyard name, folded into the plan signature, surfaced in the viewer as gyreturn=<returned card>. The Ugin-planeswalker half of the target clause is inert: the deck runs no planeswalker, so no Ugin can ever be in this graveyard.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G",
+     "C"
+    ],
+    "colored_creature_only": true,
+    "gy_return_cost": "{2}",
+    "gy_return_requires_creature": true,
+    "gy_return_requires_subtype": "Dragon"
    }
   }
  ]

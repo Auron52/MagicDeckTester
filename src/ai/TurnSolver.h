@@ -66,6 +66,13 @@ struct Action
                              // controlled creature (sac_victim_id = the host's card.m_number).
                              // Sorcery-speed; variants of one Equipment are mutually exclusive per
                              // plan via the shared sac_source_id.
+        GraveyardReturnAbility, // Haven of the Spirit Dragon: "{2}, {T}, Sacrifice this land: Return
+                             // target Dragon creature card from your graveyard to your hand." Pay
+                             // gy_return_cost (a.cost) + tap and SACRIFICE the source (sac_source_id
+                             // = its card.m_number); the chosen target rides tutor_target, with one
+                             // Action per distinct legal graveyard card NAME so the search picks
+                             // among them (and the viewer shows them all) rather than taking the
+                             // first match. One activation per source per plan (shared sac_source_id).
         GraveyardExileAbility, // Deathrite Shaman abilities 2/3: pay the colored cost ({B}/{G}) + tap
                              // the source (sac_source_id = its card.m_number), exile the first
                              // matching graveyard card, then drain 2 (gy_exile_mode 1) or gain 2
@@ -917,6 +924,13 @@ public:
         // permanent, so `cast=Deathrite Shaman` is ambiguous with hard-casting another copy from hand
         // -- and FiveColour runs four. WHICH graveyard card is exiled is fungible (disclosed 6a).
         std::vector<int>         gy_exiles;
+        // "gyreturn=<returned card name>": Haven of the Spirit Dragon's "{2}, {T}, Sacrifice: return
+        // target Dragon creature card from your graveyard to your hand", one entry per activation.
+        // Its own verb for the same reason `equip=` has one -- the action names the LAND, which is
+        // never cast -- and it carries the RETURNED CARD rather than the source, because that is the
+        // real choice: one Haven with three distinct Dragons in the graveyard offers three plans, and
+        // encoding only the source could not tell them apart.
+        std::vector<std::string> gy_returns;
         // "channel=<card name>": Twinshot Sniper's from-HAND channel ability. Not a board activation
         // (its source is a card in hand) and not a cast either -- "{1}{R}, Discard this card" plays the
         // same card a different way, so `cast=<name>` cannot distinguish the two. EMPTY => legacy

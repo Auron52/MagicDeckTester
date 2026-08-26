@@ -103,6 +103,16 @@ public:
         return SubtypeRegistry::Instance().Name(m_ids[i]);
     }
 
+    // Raw interned id at slot i, for id-equality checks that must not touch the name strings
+    // (Urza's Incubator's chosen creature type is carried as an id on the Permanent).
+    uint16_t IdAt(std::size_t i) const { return m_ids[i]; }
+    bool     HasId(uint16_t id) const
+    {
+        if (id == SubtypeRegistry::kNone) { return false; }
+        for (uint8_t i = 0; i < m_count; ++i) { if (m_ids[i] == id) { return true; } }
+        return false;
+    }
+
     void clear() { m_count = 0; }
 
     // Append a subtype by name. Interns it (read-only for an already-interned name, so

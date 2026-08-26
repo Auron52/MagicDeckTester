@@ -95,6 +95,13 @@ struct Permanent
                                             // BOTH end-of-turn sites in lockstep; folded into the
                                             // sim key. Never set outside token_copy_of_target ->
                                             // byte-identical elsewhere.
+    // "As this permanent enters, choose a creature type" (Urza's Incubator). The chosen type is
+    // carried here as an INTERNED SUBTYPE ID (SubtypeRegistry), fixed at ETB and never changed, so
+    // the card is generic -- the type is a property of the DECK it is played in, not baked into
+    // cards.json. Chosen by the shared DominantCreatureSubtypeId at the universal enter cascade,
+    // identically in the executor and the rollout. 0 = kNone = this permanent chooses nothing,
+    // which is every card but the Incubator -> byte-identical everywhere else.
+    uint16_t  chosen_subtype_id     = 0;
     bool      is_animated          = false; // land animated as a creature (e.g. Mutavault); reset each cleanup
     bool      is_token             = false; // created by a token-making effect (CreateToken). Lathliss's
                                             // "nontoken Dragon" gate reads this so a created 5/5 Dragon

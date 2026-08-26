@@ -1,0 +1,68 @@
+{
+  "card_scores": {
+    "Atsushi, the Blazing Sky": [
+      0.09512564605239682
+    ],
+    "Dragon Tempest": [
+      0.013504864311315146,
+      -0.028061224489795755
+    ],
+    "Dragonspeaker Shaman": [
+      0.25650160313502024
+    ],
+    "Fire Diamond": [
+      0.07289964040536123
+    ],
+    "Glorybringer": [
+      -0.051107774711897314
+    ],
+    "Gruul Turf": [
+      0.04236698973541042
+    ],
+    "Haven of the Spirit Dragon": [
+      -0.0357509987942235
+    ],
+    "Inferno of the Star Mounts": [
+      0.22346786248131512
+    ],
+    "Lathliss, Dragon Queen": [
+      0.03831629363544309
+    ],
+    "Lightning Bolt": [
+      -0.20306454109271055,
+      -0.12087912087912045
+    ],
+    "Lightning Greaves": [
+      -0.15757575757575815
+    ],
+    "Mind Stone": [
+      0.0009920634920632665
+    ],
+    "Scourge of Valkas": [
+      0.14466698841698822,
+      -0.2631865736704446
+    ],
+    "Sol Ring": [
+      0.990394241956869
+    ],
+    "Urza's Incubator": [
+      0.002443933294997258,
+      -0.2829981143934637
+    ],
+    "Utvara Hellkite": [
+      -0.2835249042145591
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

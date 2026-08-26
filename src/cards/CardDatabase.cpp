@@ -547,6 +547,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.grants_replicate_to_subtypes   = params.value("grants_replicate_to_subtypes", false);
     p.creature_mana_only             = params.value("creature_mana_only", false);
     p.colored_creature_only          = params.value("colored_creature_only", false);
+    if (params.contains("gy_return_cost"))
+        p.gy_return_cost = ManaCostFromString(params["gy_return_cost"].get<std::string>());
+    p.gy_return_requires_subtype  = params.value("gy_return_requires_subtype", std::string());
+    p.gy_return_requires_creature = params.value("gy_return_requires_creature", false);
     p.upkeep_creates_tokens          = params.value("upkeep_creates_tokens", 0);
     p.upkeep_token_power             = params.value("upkeep_token_power", 0);
     p.upkeep_token_toughness         = params.value("upkeep_token_toughness", 0);
@@ -611,11 +615,15 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_created_token_toughness       = params.value("etb_created_token_toughness", 0);
     for (const std::string& s : params.value("etb_created_token_subtypes", json::array()))
         p.etb_created_token_subtypes.push_back(s);
+    for (const std::string& s : params.value("etb_created_token_keywords", json::array()))
+        p.etb_created_token_keywords.push_back(s);
     p.attack_per_matching_creates_tokens = params.value("attack_per_matching_creates_tokens", 0);
     p.attack_per_token_power             = params.value("attack_per_token_power", 0);
     p.attack_per_token_toughness         = params.value("attack_per_token_toughness", 0);
     for (const std::string& s : params.value("attack_per_token_subtypes", json::array()))
         p.attack_per_token_subtypes.push_back(s);
+    for (const std::string& s : params.value("attack_per_token_keywords", json::array()))
+        p.attack_per_token_keywords.push_back(s);
     for (const std::string& s : params.value("attack_token_requires_subtypes", json::array()))
         p.attack_token_requires_subtypes.push_back(s);
     if (params.contains("firebreathing_cost"))
@@ -626,6 +634,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.team_pump_power = params.value("team_pump_power", 0);
     for (const std::string& s : params.value("team_pump_subtypes", json::array()))
         p.team_pump_subtypes.push_back(s);
+    p.firebreathing_threshold_power  = params.value("firebreathing_threshold_power", 0);
+    p.firebreathing_threshold_damage = params.value("firebreathing_threshold_damage", 0);
+    p.haste_on_flying_enter          = params.value("haste_on_flying_enter", false);
 
     p.etb_dig_count                = params.value("etb_dig_count", 0);
     for (const std::string& s : params.value("etb_dig_subtypes", json::array()))
@@ -771,6 +782,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
 
     // --- Goblins tribal ---
     p.reduces_spell_subtype     = params.value("reduces_spell_subtype", std::string());
+    p.reduces_spell_subtype_amount = params.value("reduces_spell_subtype_amount", 1);
+    p.reduces_spell_subtype_creature_only =
+        params.value("reduces_spell_subtype_creature_only", false);
+    p.chooses_creature_type     = params.value("chooses_creature_type", false);
     p.etb_self_creates_tokens   = params.value("etb_self_creates_tokens", 0);
     p.etb_damage_any            = params.value("etb_damage_any", 0);
     p.etb_damage_each_opponent  = params.value("etb_damage_each_opponent", 0);

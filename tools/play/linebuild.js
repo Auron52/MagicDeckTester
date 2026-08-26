@@ -79,6 +79,7 @@
   //   sfput=      Stoneforge Mystic's put-from-hand (names the EQUIPMENT)      (LineSpec::sf_puts)
   //   jittemode=  Umezawa's Jitte counter-spend (names the MODE INT)           (LineSpec::jitte_modes)
   //   gyexile=    Deathrite Shaman's graveyard exile (names the MODE INT)      (LineSpec::gy_exiles)
+  //   gyreturn=   Haven's sac-to-rebuy (names the RETURNED CARD, not the land)  (LineSpec::gy_returns)
   //   channel=    Twinshot Sniper's from-HAND channel ability (names the card) (LineSpec::channels)
   //   suspend=    Lotus Bloom's from-HAND Suspend (names the card)             (LineSpec::suspends)
   // The verbs whose value is a MODE INT rather than a card name. Kept as a set so encodeLine has one

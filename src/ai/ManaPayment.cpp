@@ -586,12 +586,17 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
         {
             if (p.controller_index != state.active_player_index) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
-            if (!pd || pd->params.reduces_spell_subtype.empty()) { continue; }
-            const std::string& rs = pd->params.reduces_spell_subtype;
-            for (const std::string& cs : def.card.m_subtypes)
-            {
-                if (cs == rs) { ++subtype_reduction; break; }
-            }
+            if (!pd) { continue; }
+            if (pd->params.reduces_spell_subtype.empty() && !pd->params.chooses_creature_type)
+            { continue; }
+            // Urza's Incubator discounts only CREATURE spells of the chosen type; Goblin Warchief
+            // and Dragonspeaker Shaman discount any spell carrying the subtype.
+            if (pd->params.reduces_spell_subtype_creature_only && !def.card.IsCreature()) { continue; }
+            // The chosen type (Incubator) or the printed one (Warchief/Dragonspeaker).
+            const uint16_t rs = ReducerSubtypeId(*pd, p);
+            // Per-reducer step: Warchief 1, Dragonspeaker/Incubator 2 ("cost {2} less").
+            if (def.card.m_subtypes.HasId(rs))
+            { subtype_reduction += std::max(1, pd->params.reduces_spell_subtype_amount); }
         }
         cost.generic = std::max(0, cost.generic - subtype_reduction);
     }

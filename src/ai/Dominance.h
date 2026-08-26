@@ -547,6 +547,11 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         mfold(p.loyalty_activated_this_turn ? 1u : 0u);
         mfold(p.storage_hold_this_turn ? 1u : 0u);
         mfold(static_cast<std::uint64_t>(p.garth_chosen_mask));
+        // Chosen creature type (Urza's Incubator): decides WHICH spells this permanent discounts, so
+        // two differently-choosing copies are not interchangeable. A deck-constant today (see the
+        // BuildSimKey note), folded so a future searched choice cannot merge them. Nonzero only for
+        // a type-choosing permanent -> every other deck's key is unchanged.
+        if (p.chosen_subtype_id != 0) { mfold(0xC7BEull); mfold(static_cast<std::uint64_t>(p.chosen_subtype_id)); }
         if (wired)
         {
             mfold(0xA77Aull);

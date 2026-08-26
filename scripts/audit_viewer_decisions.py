@@ -267,6 +267,7 @@ BOARD_ACTIVATIONS = {
     "equip_cost_generic":                        ("verb:equip",     truthy,   "equip_cost_generic"),
     "equip_combat_damage_charges":               ("verb:jittemode", truthy,   None),  # spends a counter
     "gy_exile_instant_sorcery_drain":            ("verb:gyexile",   positive, 1),     # "{B}, {T}"
+    "gy_return_cost":                            ("verb:gyreturn",  truthy,   "gy_return_cost"),
     "can_animate":                               ("verb:animate",   truthy,   "animate_cost"),
     "tap_token_cost":                            ("verb:taptoken",  truthy,   "tap_token_cost"),
     "channel_cost":                              ("verb:channel",   truthy,   "channel_cost"),
@@ -488,6 +489,33 @@ INERT_PARAMS = {
     "mana_per_creature_feeder_generic": "Three Tree scaled-mana activation feeder cost detail (rides mana_per_creature_subtype)",
     # Static cost reducer / mana restriction -- no choice:
     "reduces_spell_subtype": "static Goblin-spell cost reducer (Warchief, {1} less), no choice",
+    # The three riders below are MAGNITUDE/SCOPE on that same static reduction (Dragonspeaker Shaman
+    # and Urza's Incubator read "{2} less"; the Incubator's applies to creature spells only). A cost
+    # reduction is applied by the engine at payment time -- the player never chooses whether or how
+    # much to reduce -- so none of them creates a decision to surface.
+    "reduces_spell_subtype_amount": "magnitude of the static subtype cost reduction, no choice",
+    "reduces_spell_subtype_creature_only": "scope of the static subtype cost reduction, no choice",
+    # Urza's Incubator's "as this enters, choose a creature type". Modelled as a DETERMINISTIC,
+    # deck-derived choice (DominantCreatureSubtypeId -> Permanent::chosen_subtype_id), not a player
+    # decision: the tribe the deck is built around dominates every alternative, and the answer is a
+    # game-constant so no line ever turns on it. If it is ever made a real per-copy searched branch,
+    # this row must move to MANIFEST and get a chooser + GUI branch.
+    "chooses_creature_type": "ETB creature-type choice resolved deterministically from the deck, no player choice",
+    # Dragon Tempest's "whenever a creature you control with flying enters, it gains haste until end
+    # of turn" -- mandatory, untargeted, and it grants to the creature that just entered. Nothing to
+    # pick. Sits beside grants_haste / equip_grants_haste, which are classified the same way.
+    "haste_on_flying_enter": "static haste grant to entering fliers, no choice",
+    # Inferno of the Star Mounts' "when its power becomes 20 THIS WAY, it deals 20 damage to any
+    # target". The trigger is automatic once the threshold is crossed and "any target" collapses to
+    # the opponent's face vs a passive opponent (the Scourge precedent), so there is nothing to pick.
+    # The firebreathing ACTIVATION itself is the combat-time pump, already surfaced as the
+    # `firebreathe` chooser -- these two params only say where the rider fires and for how much.
+    "firebreathing_threshold_power": "power at which the firebreathing rider fires, no choice",
+    "firebreathing_threshold_damage": "damage the firebreathing rider deals to the face, no choice",
+    # Printed keywords on a created token (Lathliss's and Utvara's are "with flying"). Pure token
+    # data -- the player never chooses a token's keywords.
+    "etb_created_token_keywords": "printed keywords on the ETB-created token, no choice",
+    "attack_per_token_keywords": "printed keywords on the attack-created token, no choice",
     "colored_creature_only": "Cavern of Souls mana restriction (spend only on creature spells), no choice",
     # --- FiveColour: automatic triggers / mana production / detail params (NO player choice) ---
     # (Choice-bearing FiveColour params are in MAINPHASE_PARAMS below; the underlying resolution
@@ -594,6 +622,14 @@ MAINPHASE_PARAMS = {
     # --- FiveColour: activations / choices the search enumerates as main_phase plan variants ---
     "gy_land_exile_mana": "Deathrite land-exile mana activation = a main_phase plan action (DRE#); which land = fungible-fuel heuristic sub-choice (disclosed 6a)",
     "gy_exile_instant_sorcery_drain": "Deathrite instant/sorcery-exile drain activation = a main_phase plan action (DRE#); which card = fungible (disclosed 6a)",
+    # Haven of the Spirit Dragon's "{2},{T}, Sacrifice: return target Dragon creature card from your
+    # graveyard to your hand". Unlike Deathrite's, the target here is NOT fungible -- distinct Dragons
+    # are distinct choices -- so it is enumerated as one main_phase plan variant PER legal graveyard
+    # name (GYR# in the plan signature) and written as gyreturn=<returned card>. BOARD_ACTIVATIONS
+    # separately verifies the verb:gyreturn marker actually reaches the human-play decision JSON.
+    "gy_return_cost": "Haven graveyard-return activation = a main_phase plan action, one variant per legal target (GYR#)",
+    "gy_return_requires_subtype": "target filter on the gy-return ability, not a separate choice",
+    "gy_return_requires_creature": "target filter on the gy-return ability, not a separate choice",
     "gy_exile_creature_lifegain": "Deathrite creature-exile lifegain activation = a main_phase plan action (DRE#); which card = fungible (disclosed 6a)",
     "is_equipment": "Equip = a main_phase plan action (EQ#), one variant per legal creature target",
     "loyalty_abilities": "planeswalker loyalty activation = a main_phase plan action (PW#), one variant per affordable ability; ability sub-targets heuristic-resolved (disclosed 6a)",

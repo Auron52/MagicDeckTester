@@ -1,0 +1,47 @@
+{
+  "deck": "decks/Dragons/Dragons.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    },
+    {
+      "name": "Mountain",
+      "controller": 0
+    }
+  ],
+  "hand": [
+    "Lathliss, Dragon Queen"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 300,
+  "max_turns": 6,
+  "expect_opponent_life": 20,
+  "comment": "Negative twin of dragons_tempest_ping_and_haste: the SAME board minus Dragon Tempest. Lathliss still gets cast, but with no Tempest there is no ETB ping and no haste, so she cannot attack the turn she lands and the opponent takes ZERO. If this fixture ever starts dealing damage, something is granting haste or pinging that should not be -- which is the failure the positive fixture alone cannot distinguish from 'the engine always lets a fresh Dragon attack'."
+}

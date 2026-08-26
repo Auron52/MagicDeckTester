@@ -709,7 +709,8 @@ inline int SelectCleanupDiscardIndex(const GameState& state,
 
 // Forward declaration: CreateToken is defined further down but used by FireOnCastTriggers.
 inline void CreateToken(GameState&, int, int, int, const std::vector<std::string>&,
-                        const std::string& = std::string());
+                        const std::string& = std::string(),
+                        const std::vector<std::string>& = std::vector<std::string>());
 // Forward declaration: the Dragonstorm-engine cascade (Scourge ping + Lathliss token) is
 // mutually recursive with CreateToken (a Lathliss 5/5 token entering re-fires the cascade).
 // Defined after CreateToken; called from CreateToken so EVERY token dragon enter also pings.
@@ -2684,7 +2685,8 @@ inline void CreateToken(
     int                              power,
     int                              toughness,
     const std::vector<std::string>&  subtypes,
-    const std::string&               color)   // default given at the forward declaration above
+    const std::string&               color,    // default given at the forward declaration above
+    const std::vector<std::string>&  keywords) // ditto
 {
     Permanent token;
     // Token colour (StompySurprise: green Insect/Wurm/Elephant tokens are legal "sacrifice a
@@ -2709,6 +2711,20 @@ inline void CreateToken(
     token.card.RehashName();
     token.card.AddType(CardType::Creature);
     token.card.m_subtypes  = subtypes;
+    // Token keywords. Lathliss's and Utvara's tokens are printed "with flying", which was dropped
+    // here because Flying is inert in a goldfish (no blockers) -- until Dragon Tempest made it
+    // READABLE ("whenever a creature you control WITH FLYING enters, it gains haste"). Nothing else
+    // in the engine reads Keyword::Flying and the TT key folds card.m_name_hash, not the keyword
+    // mask, so populating this leaves every existing token-making deck byte-identical.
+    // (CardDatabase's KeywordFromString is file-local; this is the token-legal subset -- extend it
+    // when a token needs a keyword the engine actually reads.)
+    for (const std::string& kw : keywords)
+    {
+        if      (kw == "Flying")    { token.card.AddKeyword(Keyword::Flying); }
+        else if (kw == "Haste")     { token.card.AddKeyword(Keyword::Haste); }
+        else if (kw == "Trample")   { token.card.AddKeyword(Keyword::Trample); }
+        else if (kw == "Vigilance") { token.card.AddKeyword(Keyword::Vigilance); }
+    }
     token.card.m_power     = power;
     token.card.m_toughness = toughness;
     token.card.m_number    = state.next_token_number++;   // unique per-copy id (GameState.h note)
@@ -2753,6 +2769,72 @@ inline bool CardHasSubtype(const Card& c, const std::string& sub)
     return false;
 }
 
+// "As this permanent enters, choose a creature type" (Urza's Incubator). Returns the interned id of
+// the creature subtype the controller's DECK is built around: the subtype carried by the most
+// creature cards across all of that player's zones. That keeps the CARD generic -- an Incubator in a
+// Dragons deck chooses Dragon, in a Slivers deck Sliver -- instead of baking one tribe into
+// cards.json, which is wrong for every other deck that runs it.
+//
+// The union of the scanned zones is the player's whole deck, so this is a GAME-CONSTANT: every
+// Incubator that ever enters in one game gets the same answer regardless of when it enters. That is
+// what makes it safe to decide here (deterministically, in both worlds off the same shared helper)
+// rather than as a searched decision. Ties break on the LOWEST interned id, which is assignment
+// order in cards.json -- arbitrary, but the tie means the two tribes are equally represented, and a
+// deck built around two equally-sized tribes is not a case any shipped deck presents. If a deck ever
+// wants a genuine per-copy choice, this becomes a plan sub-decision and Permanent::chosen_subtype_id
+// must then be folded into the sim key as a real searched branch (it already is, see BuildSimKey).
+inline uint16_t DominantCreatureSubtypeId(const GameState& state, int controller)
+{
+    // Small open-addressed tally: decks carry a handful of distinct creature subtypes.
+    uint16_t ids[32]   = {0};
+    int      counts[32] = {0};
+    int      n = 0;
+    auto tally = [&](const Card& c)
+    {
+        if (!c.IsCreature()) { return; }
+        for (std::size_t i = 0; i < c.m_subtypes.size(); ++i)
+        {
+            const uint16_t id = c.m_subtypes.IdAt(i);
+            if (id == SubtypeRegistry::kNone) { continue; }
+            int slot = -1;
+            for (int k = 0; k < n; ++k) { if (ids[k] == id) { slot = k; break; } }
+            if (slot < 0)
+            {
+                if (n >= 32) { continue; }        // pathological subtype spread: ignore the tail
+                slot = n++; ids[slot] = id; counts[slot] = 0;
+            }
+            ++counts[slot];
+        }
+    };
+    const Player& p = state.players[controller];
+    for (const Card& c : p.library)         { tally(ZoneCard(c)); }
+    for (const Card& c : p.hand)            { tally(ZoneCard(c)); }
+    for (const Card& c : p.graveyard)       { tally(ZoneCard(c)); }
+    for (const StagedCard& s : p.staged_cards)    { tally(ZoneCard(s.card)); }
+    for (const SuspendedCard& s : p.suspended_cards) { tally(ZoneCard(s.card)); }
+    // Tokens are excluded: they are not deck cards, and counting them would let a board of Lathliss
+    // 5/5s re-decide the tribe mid-game (breaking the game-constant property above).
+    for (const Permanent& q : state.battlefield)
+    { if (q.controller_index == controller && !q.is_token) { tally(q.card); } }
+
+    uint16_t best = SubtypeRegistry::kNone;
+    int      best_n = 0;
+    for (int k = 0; k < n; ++k)
+    {
+        if (counts[k] > best_n || (counts[k] == best_n && best != SubtypeRegistry::kNone && ids[k] < best))
+        { best = ids[k]; best_n = counts[k]; }
+    }
+    return best;
+}
+
+// The subtype id a reducer permanent actually discounts: its CHOSEN type when the card says "choose
+// a creature type" (Urza's Incubator), else its printed reduces_spell_subtype (Goblin Warchief).
+inline uint16_t ReducerSubtypeId(const CardDefinition& def, const Permanent& perm)
+{
+    if (def.params.chooses_creature_type) { return perm.chosen_subtype_id; }
+    return SubtypeRegistry::Instance().Id(def.params.reduces_spell_subtype);
+}
+
 // Number of Dragons `controller` controls (by printed/token subtype "Dragon"). Counts tokens
 // (they carry subtype "Dragon"); animated lands are ignored (never Dragons in these decks).
 inline int CountControlledDragons(const GameState& state, int controller)
@@ -2782,8 +2864,43 @@ inline void OnDragonEnters(GameState& state, int controller, int entered_index)
     // its top, BEFORE the Dragon-subtype early-out, gated on the newcomer being a creature. A gift
     // token created for the OPPONENT (CreateToken -> here) therefore drains through Suture Priest
     // exactly like a cast creature. Param-gated scan -> byte-identical for every other deck.
+    // "As this permanent enters, choose a creature type" (Urza's Incubator). Decided HERE, at the
+    // universal enter cascade, so the executor and the rollout make the identical choice off one
+    // shared helper. Above the creature early-out because the Incubator is an artifact.
+    // Param-gated -> byte-identical for every card that does not choose a type.
+    {
+        const Permanent& e = state.battlefield[entered_index];
+        const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
+        if (ed && ed->params.chooses_creature_type)
+        {
+            state.battlefield[entered_index].chosen_subtype_id =
+                DominantCreatureSubtypeId(state, e.controller_index);
+        }
+    }
     if (state.battlefield[entered_index].card.IsCreature())
     { FireCreatureEnterWatchers(state, state.battlefield[entered_index].controller_index, entered_index); }
+    // Dragon Tempest: "Whenever a creature you control with flying enters, it gains haste until end
+    // of turn." Rides this universal cascade so it covers a hard-cast Dragon AND every token
+    // (Lathliss's 5/5 and Utvara's 6/6 both enter with flying, and CreateToken routes through here)
+    // -- which is the whole point of the card in this deck: a Lathliss token made in the main phase
+    // can attack the turn it appears. temp_haste is the Expedite field, read by CanAttackFull /
+    // CanTapNow and cleared each cleanup. Param-gated scan -> byte-identical for every other deck.
+    {
+        Permanent& newcomer = state.battlefield[entered_index];
+        if (newcomer.card.IsCreature() && !newcomer.temp_haste
+            && newcomer.card.HasKeyword(Keyword::Flying))
+        {
+            const int nctrl = newcomer.controller_index;
+            bool grant = false;
+            for (const Permanent& w : state.battlefield)
+            {
+                if (w.controller_index != nctrl) { continue; }
+                const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+                if (wd && wd->params.haste_on_flying_enter) { grant = true; break; }
+            }
+            if (grant) { state.battlefield[entered_index].temp_haste = true; }
+        }
+    }
     // Puresteel Paladin: "Whenever an Equipment you control enters, you may draw a card." Lives
     // at this universal cascade (NOT the on-cast hook) so it fires for a cast equipment AND one
     // put onto the battlefield (Stoneforge Mystic's ability, Armored Skyhunter's attack dig) --
@@ -2837,7 +2954,8 @@ inline void OnDragonEnters(GameState& state, int controller, int entered_index)
     // is a NONTOKEN Dragon that is not the Lathliss itself and matches the required subtype.
     if (!entered_is_token)
     {
-        struct Spec { int p, t; std::vector<std::string> subs; std::string color; };
+        struct Spec { int p, t; std::vector<std::string> subs; std::string color;
+                      std::vector<std::string> kws; };
         std::vector<Spec> specs;
         const int bf_size = static_cast<int>(state.battlefield.size());
         for (int i = 0; i < bf_size; ++i)
@@ -2854,11 +2972,12 @@ inline void OnDragonEnters(GameState& state, int controller, int entered_index)
             specs.push_back({ sdef->params.etb_created_token_power,
                               sdef->params.etb_created_token_toughness,
                               sdef->params.etb_created_token_subtypes,
-                              sdef->params.created_token_color });
+                              sdef->params.created_token_color,
+                              sdef->params.etb_created_token_keywords });
         }
         for (const Spec& s : specs)
         {
-            CreateToken(state, controller, s.p, s.t, s.subs, s.color);   // re-pings Scourge
+            CreateToken(state, controller, s.p, s.t, s.subs, s.color, s.kws);   // re-pings Scourge
         }
     }
 
@@ -3983,6 +4102,82 @@ inline void ApplyGraveyardExileAbility(GameState& state, int controller, int sou
     }
 }
 
+// ---- Graveyard-return activated ability (Haven of the Spirit Dragon) -------------------------
+// "{2}, {T}, Sacrifice this land: Return target Dragon creature card from your graveyard to your
+// hand." One shared helper called IDENTICALLY from the executor (AIEngine) and the rollout
+// (ApplyPlanDirect) so the zone changes stay lockstep.
+
+// Is this graveyard card a legal target for `def`'s gy-return ability? Graveyard cards are
+// name-only placeholders, so the caller must pass ZoneCard(...)-resolved cards (see ZoneCard).
+inline bool GyReturnTargetLegal(const CardDefinition& def, const Card& gc)
+{
+    if (def.params.gy_return_requires_creature && !gc.IsCreature()) { return false; }
+    if (!def.params.gy_return_requires_subtype.empty()
+        && !CardHasSubtype(gc, def.params.gy_return_requires_subtype)) { return false; }
+    return true;
+}
+
+// True if `controller` has at least one legal gy-return target for `def` right now.
+inline bool GyReturnHasFuel(const GameState& state, int controller, const CardDefinition& def)
+{
+    for (const Card& c : state.players[controller].graveyard)
+    { if (GyReturnTargetLegal(def, ZoneCard(c))) { return true; } }
+    return false;
+}
+
+// Pay the {T} + Sacrifice half of the cost (the mana half is paid by the caller, like every other
+// activated ability here) and return the chosen graveyard card to hand. `target_name` is the
+// searched/human pick; an empty or now-illegal name resolves to the first legal target so a
+// replayed line never strands. No-op if the source was tapped for mana by an earlier cast in the
+// same plan, or if the fuel left the graveyard meanwhile -- stranded-outlet safe, like Deathrite.
+inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int source_id,
+                                        const std::string& target_name)
+{
+    int src = -1;
+    const CardDefinition* d = nullptr;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != controller || p.tapped) { continue; }
+        if (p.card.m_number != source_id) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (!pd || !pd->params.gy_return_cost.has_value()) { continue; }
+        if (!CanTapNow(p, state.battlefield)) { continue; }
+        src = i; d = pd;
+        break;
+    }
+    if (src < 0 || !d) { return; }
+
+    std::vector<Card>& gy = state.players[controller].graveyard;
+    int pick = -1;
+    for (std::size_t i = 0; i < gy.size(); ++i)
+    {
+        if (!GyReturnTargetLegal(*d, ZoneCard(gy[i]))) { continue; }
+        if (pick < 0) { pick = static_cast<int>(i); }                 // fallback: first legal
+        if (!target_name.empty() && gy[i].m_name == target_name) { pick = static_cast<int>(i); break; }
+    }
+    if (pick < 0) { return; }   // no legal target: the ability would not have been activated
+
+    // Costs are paid on activation (CR 601.2h/602.1): tap, then sacrifice the source to the
+    // graveyard, and only then resolve the return. The source is a Land, so it can never be its own
+    // target even though it is in the graveyard by the time we move the picked card.
+    // (`pick` stays valid: the sacrifice push_back only APPENDS to the graveyard.)
+    const Card sacrificed = state.battlefield[src].card;
+    state.battlefield.erase(state.battlefield.begin() + src);
+    state.players[controller].graveyard.push_back(sacrificed);
+
+    std::vector<Card>& gy2 = state.players[controller].graveyard;
+    const Card returned = gy2[static_cast<std::size_t>(pick)];
+    gy2.erase(gy2.begin() + pick);
+    state.players[controller].hand.push_back(returned);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      sacrificed.m_name.str() + ": returned " + returned.m_name.str()
+                      + " from the graveyard to hand");
+    }
+}
+
 // Sacrifice-a-creature outlet (Skirk Prospector -> {R}; Siege-Gang -> 2 face damage; Pashalik -> two
 // tokens). The mana cost is paid by the caller (subset math); here we SACRIFICE the chosen victim,
 // apply the outlet payload from the source's params, and fire the victim's death-watchers.
@@ -4535,7 +4730,7 @@ inline void FireUtvaraAttackTokens(GameState& state, int controller,
                                    const std::vector<const Permanent*>& attackers)
 {
     if (attackers.empty()) { return; }
-    struct Spec { int n, p, t; std::vector<std::string> subs; };
+    struct Spec { int n, p, t; std::vector<std::string> subs; std::vector<std::string> kws; };
     std::vector<Spec> specs;
     const int bf_size = static_cast<int>(state.battlefield.size());
     for (int i = 0; i < bf_size; ++i)
@@ -4560,13 +4755,15 @@ inline void FireUtvaraAttackTokens(GameState& state, int controller,
         specs.push_back({ sdef->params.attack_per_matching_creates_tokens * matching,
                           sdef->params.attack_per_token_power,
                           sdef->params.attack_per_token_toughness,
-                          sdef->params.attack_per_token_subtypes });
+                          sdef->params.attack_per_token_subtypes,
+                          sdef->params.attack_per_token_keywords });
     }
     for (const Spec& s : specs)
     {
         for (int k = 0; k < s.n; ++k)
         {
-            CreateToken(state, controller, s.p, s.t, s.subs);   // untapped; pings via OnDragonEnters
+            // untapped; pings via OnDragonEnters (and, with a Dragon Tempest out, gains haste)
+            CreateToken(state, controller, s.p, s.t, s.subs, std::string(), s.kws);
         }
     }
 }
@@ -5264,6 +5461,31 @@ inline int ApplyFirebreathing(GameState& state, int controller,
                 CardDatabase::Instance().LookupCached(state.battlefield[best_self_idx].card);
             PayFromPool(pool, d->params.firebreathing_cost.value());
             state.battlefield[best_self_idx].temp_power_bonus += d->params.firebreathing_power;
+            // Inferno of the Star Mounts: "When its power becomes 20 THIS WAY, it deals 20 damage
+            // to any target." The crossing increment came from this ability (we are inside its
+            // activation), so the equality test here is exactly the trigger condition; other pumps
+            // that contributed to the total legitimately count. "Any target" collapses to the
+            // opponent's face (the Scourge precedent) and is dealt as LIFE LOSS, so the rollout's
+            // win projection counts it. Inert (threshold 0) for every other firebreather.
+            if (d->params.firebreathing_threshold_power > 0
+                && d->params.firebreathing_threshold_damage > 0
+                && state.battlefield[best_self_idx].EffectivePower()
+                       == d->params.firebreathing_threshold_power)
+            {
+                const int opp = 1 - controller;
+                const int before = state.players[opp].life;
+                state.players[opp].life -= d->params.firebreathing_threshold_damage;
+                state.opponent_lost_life_this_turn = true;
+                if (g_play_event_sink && !g_tap_speculating)
+                {
+                    EmitPlayEvent(state.turn_number, "damage",
+                                  state.battlefield[best_self_idx].card.m_name.str()
+                                  + " (power " + std::to_string(d->params.firebreathing_threshold_power)
+                                  + "): " + std::to_string(d->params.firebreathing_threshold_damage)
+                                  + " to opponent (" + std::to_string(before) + "\xE2\x86\x92"
+                                  + std::to_string(before - d->params.firebreathing_threshold_damage) + ")");
+                }
+            }
         }
         else
         {

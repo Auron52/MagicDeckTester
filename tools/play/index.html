@@ -762,8 +762,13 @@ function activatableSources(){
       if (a.sacout) sacout[src]=true;
       // Every distinct (verb, payload) this source can produce, deduped — the menu a two-step
       // activation offers after the first click (which Equipment to put, which Jitte mode).
-      const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+a.card;
-      (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:a.card };
+      // Haven's rebuy is the one verb whose LINE VALUE is not the source or the card_name but the
+      // card being RETURNED -- one Haven with three distinct Dragons in the graveyard is three
+      // different activations, so the target has to be both the option's name and part of the key
+      // (otherwise they dedupe to one and the human can only ever rebuy whichever came first).
+      const payload = (a.verb==='gyreturn' && a.gyreturn_target) ? a.gyreturn_target : a.card;
+      const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+payload;
+      (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:payload };
     }});
     Object.keys(per).forEach(n=>{ if (!(max[n]>=per[n])) max[n]=per[n]; });
   });
@@ -844,6 +849,7 @@ function queueActivation(src, opt){
     : opt.verb==='attachall' ? `${src}: attaching every Equipment you control to it. Commit the phase to resolve it.`
     : opt.verb==='jittemode' ? `${src}: spending a charge counter (${jitteModeLabel(opt.mode)}). Commit the phase to resolve it.`
     : opt.verb==='gyexile' ? `${src}: tapping to exile ${opt.mode===2?'a creature card from a graveyard and gain 2 life':'an instant or sorcery card from a graveyard — each opponent loses 2 life'}. Commit the phase to resolve it.`
+    : opt.verb==='gyreturn' ? `${src}: tapping and sacrificing it to return ${opt.name} from your graveyard to your hand. Commit the phase to resolve it.`
     : opt.verb==='animate' ? `${src}: animating it — it becomes a creature and can attack this turn. Commit the phase to resolve it.`
     : opt.verb==='taptoken' ? `${src}: tapping it to create a token. Commit the phase to resolve it.`
     : `Activating ${src}’s ability${cap>1?` (${have+1}/${cap})`:''}. Commit the phase to resolve it.`);
@@ -1217,6 +1223,7 @@ function renderPlanbar() {
               : p.kind==='suspend' ? ' ⌛ suspend (exile)'
               : p.kind!=='activate' ? ''
               : p.verb==='gyexile'   ? ' ⟳ ' + (p.mode===2 ? 'exile a creature, gain 2' : 'exile an instant/sorcery, drain 2')
+              : p.verb==='gyreturn'  ? ' ⟳ sac → return ' + p.name
               : p.verb==='animate'   ? ' ⟳ animate'
               : p.verb==='taptoken'  ? ' ⟳ make a token'
               : p.verb==='equip'     ? ' ⟳ equip'
@@ -1961,6 +1968,7 @@ function activationPickerHtml(pick){
                    : o.verb==='jittemode' ? jitteModeLabel(o.mode)
                    : o.verb==='gyexile'   ? (o.mode===2 ? 'Exile a creature card from a graveyard — gain 2 life'
                                                         : 'Exile an instant/sorcery from a graveyard — each opponent loses 2 life')
+                   : o.verb==='gyreturn'  ? `Sacrifice — return ${o.name} from your graveyard to your hand`
                    : o.verb==='animate'   ? `Animate ${o.name} — it becomes a creature and can attack`
                    : o.verb==='taptoken'  ? `Tap ${o.name} to create a token`
                    :                        `Activate ${o.name}`;

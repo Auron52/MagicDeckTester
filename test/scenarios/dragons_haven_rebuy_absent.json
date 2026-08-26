@@ -1,0 +1,43 @@
+{
+  "deck": "decks/Dragons/Dragons.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    {
+      "name": "Haven of the Spirit Dragon",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [],
+  "graveyard": [
+    "Scourge of Valkas",
+    "Lightning Bolt",
+    "Utvara Hellkite"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 5,
+  "validate_line": "gyreturn=Glorybringer",
+  "expect_verdict": "illegal",
+  "comment": "Haven of the Spirit Dragon '{2},{T}, Sacrifice: return target Dragon creature card from your graveyard to your hand'. WHICH card comes back is a searched decision (one plan variant per distinct legal graveyard name), so BOTH graveyard Dragons must validate -- a fixture asserting only one would still pass if the enumeration collapsed to a first-match. The two illegal siblings pin the target filter: a non-creature in the graveyard, and a Dragon that is not in the graveyard at all. The graveyard cannot be reached by seed-driven goldfish play here (nothing can kill our creatures, so it fills only by cleanup discard), which is why this is a constructed board."
+}
