@@ -1,0 +1,24 @@
+{
+ "_comment": "Umezawa's Jitte's +2/+2 mode in the board shape that actually broke it: the Jitte is ATTACHED and a SECOND creature is in play, so a legal 'move the Jitte onto Kemba' Equip action exists and shares the Jitte's activation family group (ActivationFamilyKey keys the family on the source permanent, and an Equipment is the source of both its Equip actions and its counter modes). The sibling kitty_jitte_pump_line has only one creature, so the already-attached Jitte has no legal Equip target, the group is JitteMode-only, and it stayed green throughout the 2026-08-26 defect -- which is precisely why it did not catch it. Pre-fix this graded legal_not_enumerated: BuildEquipPieceDeps gated on the group's FIRST member being an Equip and then stamped equip-piece requirements on every member, so mode 3 ('equipped creature' is not a target -> sac_victim_id 0) read as an equip with an uncastable host and its odometer digit was dead. USER 2026-08-24 asked for exactly this reachability: 'Pump for Umezawa's Jitte should be handled like the others. I should be able to activate them any time counters are present.' Verdict is `choose`, not `accept`, and that is correct: mode 3 rides chosen_x, so CheckLine offers an `activations` sub for HOW MANY counters to spend (the `jittemode=` verb carries only the mode) -- same contract as kitty_jitte_pump_line.",
+ "deck": "decks/KittyEquipment/KittyEquipment.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 4,
+ "active_life": 20,
+ "opponent_life": 20,
+ "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1" },
+ "battlefield": [
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Kor Duelist", "controller": 0, "tapped": false, "sick": false },
+  { "name": "Kemba, Kha Regent", "controller": 0, "tapped": false, "sick": false },
+  { "name": "Umezawa's Jitte", "controller": 0, "tapped": false, "charge_counters": 2, "equips": "Kor Duelist" }
+ ],
+ "hand": [],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "jittemode=3",
+ "expect_verdict": "choose"
+}

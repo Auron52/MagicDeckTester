@@ -3975,6 +3975,24 @@ static void BuildEquipPieceDeps(const GameState& state, const std::vector<Action
         for (std::size_t c = 0; c < groups[g].size(); ++c)
         {
             const Action& a = cands[groups[g][c]];
+            // ONLY an Equip has pieces. A family GROUP is keyed on the shared SOURCE permanent, not
+            // on the action kind (ActivationFamilyKey buckets Equip together with the same source's
+            // JitteModeAbility / PutFromHandAbility / GraveyardExileAbility / AttachAllEquipment), so
+            // a group whose FIRST member is an Equip -- all this loop's gate tests -- can hold members
+            // that are not equips at all. Umezawa's Jitte is the live case: it is an Equipment, so its
+            // own Equip actions and its counter-spend modes share one group. A non-equip member keeps
+            // the default required=false and contributes no dependency, which is what makes this
+            // predicate the exact odometer-level mirror of SubsetHasStrandedEquip (that guard likewise
+            // considers only Kind::Equip) rather than something strictly stronger.
+            //
+            // Without this skip, a mode carrying no target (sac_victim_id == 0 -- Jitte's gain-2-life
+            // and +N/+N modes, which affect "you" and "equipped creature", neither of which is a
+            // target) took the nums[k] <= 0 branch below and was stamped {required, groups = 0}:
+            // "needs a piece no group can ever cast", i.e. a permanently dead digit. Its odometer
+            // position was skipped before eval_and_push ever saw it, so the mode was unreachable in
+            // human play while every rules check stayed green -- `jittemode=2` graded
+            // legal_not_enumerated. See docs/design/enumerated-but-unplayable-activations.md.
+            if (a.kind != Action::Kind::Equip) { continue; }
             const int nums[2] = { a.sac_source_id, a.sac_victim_id };
             for (int k = 0; k < 2; ++k)
             {

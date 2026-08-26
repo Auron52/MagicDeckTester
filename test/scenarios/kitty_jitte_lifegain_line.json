@@ -1,0 +1,24 @@
+{
+ "_comment": "Umezawa's Jitte's SECOND counter mode -- 'you gain 2 life' -- must be expressible as a viewer LINE. This was docs/design/enumerated-but-unplayable-activations.md section 2's open case: the action was EMITTED as a candidate and its odometer digit existed, yet `jittemode=2` graded legal_not_enumerated, so a human could never activate it. Cause (fixed 2026-08-26, BuildEquipPieceDeps): ActivationFamilyKey buckets an Equipment's Equip actions and its JitteModeAbility modes into ONE family group keyed on the shared source permanent, but the equip-piece dependency builder gated on the group's FIRST member being an Equip and then stamped equip-piece requirements on EVERY member. Mode 2 affects 'you', so it carries no target (sac_victim_id 0) -- which the builder read as 'needs a piece no group can cast' and pruned the digit outright, before eval_and_push ever saw it. Like the -1/-1 mode this is human-play only (USER doctrine 2026-08-14: goldfishing always spends counters on the +2/+2), and it needs live charge counters, so no self-driving sweep reaches it -- hand-build the charged board. Sibling fixtures: kitty_jitte_mode_line (mode 1) and kitty_jitte_pump_group_line (mode 3 in the group-collision shape that actually triggered this bug; the older kitty_jitte_pump_line has a single creature, so no Equip action exists to head the group and it stayed green throughout).",
+ "deck": "decks/KittyEquipment/KittyEquipment.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "max_turns": 4,
+ "active_life": 20,
+ "opponent_life": 20,
+ "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1" },
+ "battlefield": [
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Kor Duelist", "controller": 0, "tapped": false, "sick": false },
+  { "name": "Umezawa's Jitte", "controller": 0, "tapped": false, "charge_counters": 2 }
+ ],
+ "hand": [],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "jittemode=2",
+ "expect_verdict": "accept",
+ "expect_no_win": true
+}

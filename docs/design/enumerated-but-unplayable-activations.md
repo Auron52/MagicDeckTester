@@ -105,30 +105,86 @@ The second wrong diagnosis has its own lesson, and it is not about mana:
 
 ---
 
-## 2. Umezawa's Jitte's `gain 2 life` mode — OPEN
+## 2. Umezawa's Jitte's `gain 2 life` mode — CLOSED (2026-08-26)
 
-`Action::Kind::JitteModeAbility` with `gy_exile_mode == 2` (KittyEquipment). On a hand-built board
-(charged Jitte, a Kor Duelist, two Plains, human-play enumeration) the action IS emitted — verified
-by instrumenting the push — and the family's other two members both become plans:
+`Action::Kind::JitteModeAbility` with `gy_exile_mode == 2` (KittyEquipment) graded **legal · not
+enumerated**: a legal play a human could not make. Closed by a one-line guard in
+`BuildEquipPieceDeps` ([TurnSolver.cpp](../../src/ai/TurnSolver.cpp)), with two new fixtures.
 
+### Root cause: an equip-only predicate applied to a whole activation FAMILY
+
+`ActivationFamilyKey` buckets seven activation kinds that share a source permanent into one
+odometer group — including `Equip` and `JitteModeAbility`. An Equipment is the source of *both* its
+Equip actions and its counter modes, so **Umezawa's Jitte is the one card where those two kinds land
+in the same group.**
+
+`BuildEquipPieceDeps` hoists the stranded-equip rejection from the subset to the odometer digit. It
+decided a group was "an equip group" by testing its **first member only**:
+
+```cpp
+if (groups[g].empty() || cands[groups[g][0]].kind != Action::Kind::Equip) { continue; }
 ```
-[DBGL] 3 plans
-  [0] cast: equip Umezawa's Jitte      | Equip
-  [1] cast: Umezawa's Jitte: -1/-1     | JitteModeAbility m1
-  [2] cast: (nothing)
+
+…and then stamped equip-piece requirements on **every** member of that group. A member with no
+target took the `nums[k] <= 0` branch and got `PieceReq{required = true, groups = 0}` — "needs a
+piece that no group can ever cast", i.e. a permanently dead digit.
+
+Modes 2 and 3 have no target. "You gain 2 life" affects *you*; "equipped creature gets +2/+2"
+affects the *equipped creature*, which is not a target either (that is why mode 3 is gated on being
+attached rather than on a legal target). Both carry `sac_victim_id == 0` — so both were pruned
+before `eval_and_push` ever saw them. Mode 1 targets a creature, so it survived and masked the bug.
+
+The fix restores the invariant the predicate's own comment claims — that it "rejects a subset of
+what `SubsetHasStrandedEquip` rejects", a guard which likewise considers only `Kind::Equip`:
+
+```cpp
+if (a.kind != Action::Kind::Equip) { continue; }   // only an Equip has pieces
 ```
 
-The mode-2 action is dropped between `CollectActions` and `EnumerateMainPlans`. Not the plan
-signature (`JITTE#<src>m<mode>><victim>` already separates the modes) and not
-`SubsetHasDuplicateSacSource` (no Jitte clause). Remaining suspects: the activation-family group
-odometer (`ActivationFamilyKey` buckets Equip and both Jitte modes on the same `sac_source_id`) and
-the equip-specific collapses that walk those groups.
+### It was not only mode 2 — the +2/+2 mode was dead too, in the commoner board
 
-Impact is small — gaining 2 life against a passive goldfish is worthless, and USER doctrine
-(2026-08-14) already prunes the non-combat Jitte modes from autonomous search — but `jittemode=2`
-grades **legal · not enumerated**, i.e. a legal play a human cannot make. `jittemode=1` works and is
-pinned by `test/scenarios/kitty_jitte_mode_line.json`.
+The defect fires only when an `Equip` action for that same Equipment is *also* enumerable, because
+otherwise the group is JitteMode-only and its first member is not an Equip. That is why
+`kitty_jitte_pump_line.json` never caught it: one creature, an already-attached Jitte, so there is no
+legal equip target and no Equip action to head the group. Add a second creature — a legal "move the
+Jitte onto Kemba" — and pre-fix:
 
-**Shape of a fix.** Instrument the group odometer on that board (three members in one family, two
-reach a plan) and find which predicate rejects the digit. If it is human-play-only, the fix is too;
-if it is a general group-collapse bug it may touch other decks and needs the suite.
+| board | `jittemode=2` | `jittemode=3` |
+|---|---|---|
+| attached Jitte, 1 creature (existing fixture) | n/a | `choose` ✓ |
+| attached Jitte, 2 creatures (Equip heads the group) | `legal_not_enumerated` ✗ | `legal_not_enumerated` ✗ |
+| …same board, after the fix | `accept` ✓ | `choose` ✓ |
+
+Mode 3 is the mode the USER explicitly asked for on 2026-08-24 ("Pump for Umezawa's Jitte should be
+handled like the others. I should be able to activate them any time counters are present."). It had
+been silently unreachable in exactly the situation a real game reaches most — more than one creature
+on the board. `choose` is the correct verdict there, not `accept`: mode 3 rides `chosen_x`, so
+`CheckLine` offers an `activations` sub for how many counters to spend.
+
+### Blast radius: none outside the Jitte
+
+An `Equip`'s `sac_source_id` is the *Equipment's* permanent number. The other family kinds are
+sourced on creatures — `PutFromHandAbility` on the Stoneforge, `AttachAllEquipment` on Balan,
+`GraveyardExileAbility` on the Deathrite — so they can never share a source with an Equip and never
+formed a mixed group. Only an Equipment that is itself an activation source can, and Umezawa's Jitte
+is the only one implemented. All three Jitte modes are human-play-only besides (USER doctrine
+2026-08-14 prunes them from autonomous search), so ground truth is untouched: smoke 42/42 and
+regression 70/70 with **0 configs changed**, 224 references with 0 enum-gap.
+
+### Fixtures
+
+* `test/scenarios/kitty_jitte_lifegain_line.json` — mode 2 on the section-2 board, expects `accept`.
+* `test/scenarios/kitty_jitte_pump_group_line.json` — mode 3 in the **group-collision** shape
+  (attached Jitte + second creature), expects `choose`. This is the shape the older pump fixture
+  could not reach.
+
+### Method lesson
+
+The investigation twice recorded "the odometer position IS walked" — inferred from an
+`[enum-stats]` line reporting a group of size 3 and a position bound of 4. That inference was wrong,
+and it sent the search downstream into `eval_and_push`'s guard chain and `CheckLine`'s matching,
+neither of which had anything to do with it. Two `fprintf`s — one at `eval_and_push` entry, one at
+the plan push — settled it in a single run: **only two of the three members ever entered the
+lambda.** A bound is a count of positions the odometer *may* visit, not evidence that any particular
+one was passed on. Same lesson as [[measure-the-behaviour-not-just-the-outcome]]: instrument the
+step you are actually claiming, not an aggregate that is merely consistent with it.
