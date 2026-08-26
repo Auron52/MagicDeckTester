@@ -76,6 +76,11 @@ enum Slot : int
     M2_D0_SEARCHED,           // MTG_M2_D0_SEARCHED        branch-site interior m2 at d<=0 is SEARCHED
     KE_ORDER_FULL,            // MTG_KE_ORDER_FULL         KittyEquipment FULL (total) cast order
     BP_NO_GREEDY_CONT,        // MTG_BP_NO_GREEDY_CONT     canonical continuation instead of greedy Solve
+    HINATA_ORDER_FULL,        // MTG_HINATA_ORDER_FULL     Hinata FULL cast order (Ponder/Preordain PEERS)
+    HINATA_PP_STRICT,         // MTG_HINATA_PP_STRICT      ...and split the peers: Ponder before Preordain
+    HINATA_IREN_EARLY,        // MTG_HINATA_IREN_EARLY     LOO: Irencrag back to 18 (any payoff may follow)
+    HINATA_FIND_LATE,         // MTG_HINATA_FIND_LATE      LOO: tutor/cantrips/dig back to 20 (after her)
+    HINATA_PAY_TIE,           // MTG_HINATA_PAY_TIE        LOO: the three payoffs tied at 20 again
     COUNT
 };
 
@@ -129,6 +134,11 @@ inline const char* Name(int slot)
         "MTG_M2_D0_SEARCHED",
         "MTG_KE_ORDER_FULL",
         "MTG_BP_NO_GREEDY_CONT",
+        "MTG_HINATA_ORDER_FULL",
+        "MTG_HINATA_PP_STRICT",
+        "MTG_HINATA_IREN_EARLY",
+        "MTG_HINATA_FIND_LATE",
+        "MTG_HINATA_PAY_TIE",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

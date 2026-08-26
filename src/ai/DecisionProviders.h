@@ -347,9 +347,20 @@ public:
     // card selection deterministically. ScryKeepOnTop above is re-expressed as a threshold on this
     // rank, so the keep/bottom gate and the ordering share one source of truth.
     int  SituationalCardRank(const GameState&, const Card&) const override;
-    // CastOrderRank: NOT overridden. "Cast a mana RITUAL (Reality Spasm / Irencrag Feat) before the
-    // payoff so its float funds the same-turn Crackle" -- Hinata (creature, 10) -> ritual (15) ->
-    // Crackle (20) -- is now the GENERIC card-parameter tiering, shared with every ritual deck.
+    // CastOrderRank -- the USER's FULL (total) cast order, 2026-08-26, behind MTG_HINATA_ORDER_FULL.
+    // Default OFF => the GENERIC card-parameter tiering below still describes the shipped engine.
+    //
+    // Why this deck needed one. The generic tiering puts SEVEN live cards on rank 20 -- every
+    // cantrip, the tutor and all three payoffs -- and ties are what make breakpoint condemnation
+    // inert (a tie cannot be a decline). Hinata does not even opt into CondemnsConsideredAtBreakpoint,
+    // correctly: TurnSolver's order-aware rule notes soundness "is CONDITIONAL on the deck's cast
+    // order encoding draws-before-deploys", which the generic order does not establish here.
+    //
+    // "Cast a mana RITUAL (Reality Spasm / Irencrag Feat) before the payoff so its float funds the
+    // same-turn Crackle" -- Hinata (creature, 10) -> ritual (15) -> Crackle (20) -- is the GENERIC
+    // card-parameter tiering, shared with every ritual deck, and the full order preserves it.
+    int  CastOrderRank(const GameState&, const CardDefinition&) const override;
+    const char* CastOrderTierName(int rank) const override;
     // Archetype gates relocated out of the solver (audit B1/B2): the untap-ritual cast variant and
     // Soulfire's own-target branch only earn their keep with Hinata's discount online.
     bool ShouldEmitUntapRitual(const GameState&) const override;
