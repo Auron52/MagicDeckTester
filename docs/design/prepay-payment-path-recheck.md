@@ -7,12 +7,18 @@ pre-built set of games rather than a re-derivation.
 **Owner of the defect:** `BatchPrepayMainCasts` / the prepaid-pool spend path in
 `src/ai/TurnSolver.cpp`, gated by `MTG_PREPAY_TRUE_COLOURS` (default on).
 
-**The list:** `test/prepay_recheck_cases.tsv` — 418 games, self-contained and classified.
-**Start with the 16 games marked DEFECT in §2c** — every case in the set whose turn is *proven*
-payable without the mana creature the fixed arm taps (mirrorwing 9, hinata 4, creature_giving 3;
-all three tiers). All 418 were checked for the signature (§2b, 25 hits) and all 25 hits were then
-adjudicated (§2c: 16 DEFECT, 1 WARRANTED, 8 lose no attacker on the control's line either).
-**The tool:** `test/prepay_recheck.py verify` — run it on your tree, read the summary.
+**The list:** `test/prepay_recheck_cases.tsv` — 418 games, self-contained, with a per-case
+`verdict` and `spend` column.
+**Start with the 32 games in §2e.** Every one is a game where the pre-fix line needed no laundered
+mana, or has a turn *proven* payable without the creature the current engine taps — usually both
+(mirrorwing 19, hinata 6, slivers 4, creature_giving 3).
+**The tool:** `test/prepay_recheck.py verify --defects` — run it on your tree, read the summary.
+
+What has been established, in order: all 418 checked for the tap-order signature (§2b, 25 hits); all
+25 adjudicated (§2c — 16 DEFECT, 1 WARRANTED, 8 lose no attacker at all); and all 418 checked for
+whether the PRE-FIX payment was even legal (§2d — **118 LAUNDERED, 132 LEGAL, 168 unpriced**).
+That last number is the one to internalise before restoring anything: **about a quarter of this list
+is the fix working, not the fix costing.**
 
 ---
 
@@ -316,19 +322,108 @@ the two cases that also laundered, the pre-fix number came partly off an illegal
 right post-repair value may sit between `pre_fix` and `post_fix`. Treat DEFECT as "this game should
 improve", not "this game should read N".
 
+### 2d. Was the PRE-FIX line's own payment even LEGAL? (all 418, not just the 25)
+
+§2c settles the 25 games that carry the tap-order signature. The other 393 do not — and "no
+signature" is evidence they are not *this* defect, not evidence the regression is right. There is
+one more question the same control logs answer for **every** case in the set:
+
+> was the pre-fix line's own payment colour-legal, under true colours, on every turn?
+
+`test/prepay_recheck.py legality` runs it. Same ledger as §2c, whole turn rather than pre-combat
+only, and the test is deliberately one-sided: a turn is called **LAUNDERED only when the sources the
+control tapped supply enough TOTAL mana but cannot supply the COLOURS**. If the sources fall short on
+raw count, this model is missing production and says nothing.
+
+| verdict | games | what it means for the rebaseline |
+|---|---|---|
+| **LAUNDERED** | **118** | `pre_fix` came off a payment the rules forbid. The game getting worse is the fix WORKING — do not restore the old number |
+| **LEGAL** | **132** | every priceable turn balances under true colours. The old line was legitimate, so something else moved this game |
+| UNPRICED | 168 | at least one turn this model refuses to price — `{X}` left unresolved in `manaPaid`, a Reality Spasm untap-refloat, or sources short on raw count |
+
+Two examples, both checked by hand against the log:
+
+- `mirrorwing_overnight_d0_s4004` gi452 T2 casts Elvish Mystic `{G}`, Oracle's Restoration `{G}` and
+  Ignoble Hierarch `{G}` — three green pips — tapping a Forest, an Elvish Mystic **and a Mountain**.
+  The Mountain makes only red.
+- gi1688 T3 casts `{R}` + `{1}{R}` + `{R}` off an Ignoble Hierarch, a Gruul Turf and a Forest. Three
+  red pips; the only red sources are the Hierarch and one half of the Karoo's `{R}{G}`. Two.
+
+**By deck** — the picture is not the one §3 originally drew:
+
+| deck | n | LAUNDERED | LEGAL | UNPRICED |
+|---|---|---|---|---|
+| hinata | 208 | 56 | 14 | 138 |
+| mirrorwing | 84 | **36** | **30** | 18 |
+| auras | 45 | 0 | 43 | 2 |
+| dragonstorm | 37 | 24 | 5 | 8 |
+| creature_giving | 19 | 2 | 17 | 0 |
+| slivers | 19 | 0 | **19** | 0 |
+| minotaur | 4 | 0 | 4 | 0 |
+| fivecolour / goblins | 2 | 0 | 0 | 2 |
+
+**By attribution** — this is the cleanest confirmation the switch bisect was telling the truth:
+
+| attributed to | n | LAUNDERED | LEGAL | UNPRICED |
+|---|---|---|---|---|
+| prepay-colours | 217 | 82 | 74 | 61 |
+| ritual-colours | 138 | 34 | 9 | 95 |
+| aura-fetch-order | 45 | **0** | 43 | 2 |
+| staged-suspend | 6 | 0 | 2 | 4 |
+| bestow-signature | 4 | **0** | 4 | 0 |
+| both mana fixes / combination / none | 8 | 2 | 0 | 6 |
+
+Zero laundering under `aura-fetch-order` and `bestow-signature`, 43 + 4 outright LEGAL: those two are
+policy and enumeration changes with no payment component at all, exactly as claimed — now measured
+rather than asserted. The prepay-attributed set splits nearly in half, which is the substantive
+finding: **about half of what the prepay fix "cost" was never legally ours.**
+
+**Crossed with the forced-walk classes**, the indicted class stops being one thing:
+
+| walk_class | n | LAUNDERED | LEGAL | UNPRICED |
+|---|---|---|---|---|
+| EXECUTION-DIFFERS | 44 | 13 | **21** | 10 |
+| REFUSED | 59 | **32** | 15 | 12 |
+| INCONCLUSIVE | 88 | 36 | 22 | 30 |
+| CHOICE-ONLY | 33 | 3 | 16 | 14 |
+
+`REFUSED` mostly resolves the way the fix wants: 32 of 59 refusals are the engine declining a line
+whose payment was genuinely illegal. `EXECUTION-DIFFERS` goes the other way — 21 of 44 played an
+identical forced line, got a worse result, and had a fully legal pre-fix payment. Those 21 are the
+strongest recovery candidates in the whole set outside §2c.
+
+### 2e. The priority list — 32 games
+
+Union of §2c's 16 DEFECT and §2d's 21 EXECUTION-DIFFERS ∧ LEGAL (five games are in both):
+**mirrorwing 19, hinata 6, slivers 4, creature_giving 3; overnight 25, regression 5, smoke 2.**
+
+Each is a game where the pre-fix line either needed no laundering at all, or has a turn *proven*
+payable without the creature the current engine taps — usually both. `slivers` is worth calling out:
+19 of 19 slivers cases are LEGAL with zero laundering anywhere in the deck, so its four
+EXECUTION-DIFFERS games have no colour-honesty explanation whatsoever.
+
 ## 3. Scope — what is and is not suspect
+
+Superseded in one respect by §2d, and the correction is worth stating plainly: an earlier draft of
+this table called mirrorwing **"NOT warranted"** on the strength of gi309. Measured across all 84 of
+its cases, mirrorwing is **36 LAUNDERED / 30 LEGAL / 18 unpriced** — mixed, not clean. gi309 is a real
+defect and so are 8 more of its games, but roughly as many mirrorwing regressions are the fix
+correctly refusing a payment the deck never legally had. No deck in this set is all one thing except
+auras, slivers and minotaur (zero laundering) and dragonstorm (almost all of it).
 
 | deck family | attributed to | verdict |
 |---|---|---|
-| dragonstorm | ritual colours | **warranted.** T2 Karrthus `{4}{B}{R}{G}` off Unclaimed Territory + Mountain: two distinct off-red pips, one non-red source. The second came from Irencrag's wild. Hand-checkable from card data. |
-| hinata | ritual colours (+ prepay) | **warranted**, but rests on attribution + the producer audit (9,408,348 uncoloured ritual floats with the fix off, 0 with it on) rather than a hand count — the Reality Spasm untap chain has to be traced to verify by eye. |
-| mirrorwing | prepay colours | **NOT warranted** — the defect above. |
-| auras / minotaur / others | aura-fetch-order, bestow-signature | out of scope for the payment path; those are policy/enumeration changes, not payment. |
+| dragonstorm | ritual colours | **warranted**, and now measured: 24 of 37 LAUNDERED, 0 clean defects. T2 Karrthus `{4}{B}{R}{G}` off Unclaimed Territory + Mountain is the shape — two distinct off-red pips, one non-red source, the second came from Irencrag's wild. |
+| hinata | ritual colours (+ prepay) | **mostly warranted**: 56 LAUNDERED vs 14 LEGAL, but 138 of 208 are unpriced (Reality Spasm's untap-refloat and unresolved `{X}`), so the split is the least settled in the set. 4 games are proven DEFECT in §2c. |
+| mirrorwing | prepay colours | **MIXED** — 36 LAUNDERED, 30 LEGAL. 9 proven DEFECT (§2c) plus 15 EXECUTION-DIFFERS ∧ LEGAL (§2d). Both the defect and the correction are real here. |
+| slivers | prepay colours | **NOT warranted** — 19 of 19 LEGAL, zero laundering anywhere in the deck, yet 4 games differ on an identical forced line. No colour-honesty explanation at all. |
+| creature_giving | prepay colours | mostly clean: 17 LEGAL / 2 LAUNDERED, 3 proven DEFECT. |
+| auras / minotaur | aura-fetch-order, bestow-signature | out of scope for the payment path, and now confirmed rather than assumed: **zero** laundered turns across 49 games. Policy/enumeration changes, not payment. |
 
-**Not yet checked, and worth checking:** whether any *hinata* or *dragonstorm* mover also loses a
-creature to the tap order. Their movement is correctly attributed to the ritual-colour fix, but
-attribution names the switch, not the mechanism — a game can be attributed to one fix and still be
-carrying this symptom. `classify` (below) labels these.
+**ANSWERED** (this section previously flagged it as open): whether hinata or dragonstorm movers also
+lose a creature to the tap order. They do — §2b finds 6 hinata cases carrying the signature, of which
+§2c proves 4 are DEFECT — so attribution to the ritual switch does not rule the symptom out. It also
+does not rule it in: dragonstorm has none.
 
 ## 4. The case set
 
@@ -423,15 +518,17 @@ On the current binary all 16 read `STILL-WORSE`, which is the control result —
 signal. (`verify` normalises the `-1` an unwon game carries in `gt_logs` to the loss-penalized
 `max_turns+1` a run reports; comparing them raw made every lost game read `MOVED`.)
 
-To regenerate the verdict list from scratch (~2 min on 20 jobs):
+To regenerate the verdict columns from scratch:
 
 ```
-python3 test/prepay_recheck.py tapdiff    --jobs 20     # 418 games -> logs/prepay_tapdiff.json
-python3 test/prepay_recheck.py adjudicate --jobs 20     # the 25 hits -> logs/prepay_adjudicate.json
+python3 test/prepay_recheck.py tapdiff    --jobs 22     # 418 games -> the 25-case signature set
+python3 test/prepay_recheck.py adjudicate --jobs 22     # those 25 -> the `verdict` column (fast)
+python3 test/prepay_recheck.py legality   --jobs 22     # all 418  -> the `spend` column (~7 min)
 ```
 
-`adjudicate` runs the CONTROL (all fixes off) and reads its game log; it does not need your fix to be
-finished, and it re-derives nothing from this repo's ground truth.
+Both run the CONTROL (all fixes off) and read its game log, so neither needs your fix to be finished
+and neither re-derives anything from this repo's ground truth. Both write their column back into the
+committed tsv.
 
 ## 6. What to do with the result
 
@@ -456,12 +553,15 @@ finished, and it re-derives nothing from this repo's ground truth.
 - ANSWERED since the first draft: the legality adjudication — "was the bill payable without the
   creature?" — now stands **per case for all 25 tap-order rows** (§2c), not just gi309. 16 are proven
   DEFECT, 1 WARRANTED, 8 lose no attacker on the control's line at all.
-- **The 393 non-tap-order cases still rest on classification, not proof.** They were checked for the
-  tap signature and attributed by switch bisect, and none carries it; that is evidence they are not
-  *this* defect, not evidence they are correct. `EXECUTION-DIFFERS` in particular (44 cases, mirrorwing
-  32 / hinata 8 / slivers 4) means the execution changed on an identical forced line, which is the
-  payment path doing *something* — it just is not the attacker-losing something §2c prices. Whoever
-  repairs the path should re-run `verify` over the whole 418 rather than the 16.
+- ANSWERED since the first draft: the 393 non-tap-order cases are no longer bare classification —
+  §2d prices the pre-fix payment of all 418. What remains genuinely open is the **168 UNPRICED**,
+  138 of them hinata, where a Reality Spasm untap-refloat or an unresolved `{X}` in `manaPaid` means
+  the ledger cannot balance the turn either way. Hinata's split (56 LAUNDERED / 14 LEGAL / 138
+  unpriced) is therefore the least settled part of this document.
+- §2d is one-sided on purpose and only ever accuses: a turn is LAUNDERED only when the sources
+  supply enough TOTAL mana but the wrong COLOURS. Where the count itself falls short the model is
+  missing production and abstains. So 118 is a **lower** bound on laundering, and 132 LEGAL is the
+  softer of the two numbers — it means "no laundering this model can see", not "audited clean".
 - §2c's model is a bipartite matching over `cards.json` production, not the engine's solver. It prices
   what the CARDS allow. Where it says a creature-free payment existed, the engine may still fail to
   find it — that is the defect, not a disagreement. Where a turn contains an `{X}` cost, an

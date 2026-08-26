@@ -44,6 +44,11 @@ USAGE
               creature. DEFECT = it was, so the tap was a choice. WARRANTED = it was not.
               No engine change: board state per phase plus each cast's `manaPaid` is enough.
 
+    legality  python3 test/prepay_recheck.py legality [--jobs N]
+              The one question the same data answers for ALL 418, tap-order or not: was the
+              PRE-FIX line's own payment colour-legal on every turn? LAUNDERED means `pre_fix`
+              came off a payment the rules forbid, so the game getting worse is the fix working.
+
 EXIT CODE
     verify exits 0 always; read the summary. It is a report, not a gate.
 """
@@ -52,10 +57,12 @@ import argparse, concurrent.futures as futures, json, os, re, subprocess, sys, t
 ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CASES = os.path.join(ROOT, "test", "prepay_recheck_cases.tsv")
 COLS  = ["key", "gi", "deck", "profile", "seed", "game_index", "depth", "budget",
-         "pre_fix", "post_fix", "attribution", "walk_class", "verdict"]
+         "pre_fix", "post_fix", "attribution", "walk_class", "verdict", "spend"]
 # `verdict` is filled by `adjudicate` and is blank for the 393 cases that never carried the
 # tap-order signature. DEFECT there means: that game has a turn PROVEN payable without the mana
 # creature the current engine taps, so a repaired payment path should move it.
+# `spend` is filled by `legality` for ALL 418: LAUNDERED = the PRE-FIX line paid a coloured pip its
+# own sources could not make, so `pre_fix` came off a payment the rules forbid.
 
 # The batch's off-switches. Setting all of them reproduces the PRE-batch engine in the SAME
 # executable, which is the only valid control: src/cards/data/cards.json is read at RUNTIME and
@@ -145,7 +152,7 @@ def cmd_build(args):
                 continue
             gi = int(a[0])
             rows.append([k, gi, r["deckfile"], r["profile"], r["seed"] + gi, gi,
-                         r["depth"], r["budget"], ow, nw, "", "", ""])
+                         r["depth"], r["budget"], ow, nw, "", "", "", ""])
     rows.sort(key=lambda x: (x[0], x[1]))
     with open(CASES, "w") as fh:
         fh.write("# Games the 2026-08-25 colour-honesty batch made WORSE (baseline %s).\n" % args.baseline)
@@ -456,13 +463,19 @@ def _card_db():
 
 def _enters_tapped_always(card):
     """Does this land ALWAYS enter tapped? Then a copy played this turn cannot have paid for
-    anything, and must not be counted as a source. Conditional ones (Game Trail's reveal, a
-    shockland's 2 life) can enter untapped and are counted."""
+    anything, and must not be counted as a source.
+
+    Three ways to enter untapped, and all three must be recognised or a real source is dropped:
+    a reveal (Game Trail), 2 life (the shocklands), and a board condition -- "enters tapped UNLESS
+    you control two or fewer other lands" (Razorverge Thicket, Rootbound Crag). Missing that last
+    one made every Razorverge turn-1 read "0 sources for 1 pip"."""
     p = card.get("parameters", {})
     if p.get("etb_untap_reveal_subtypes") or p.get("etb_pay_life_to_untap"):
         return False
     o = (card.get("oracle_text") or "").lower()
-    return "enters tapped" in o or "enters the battlefield tapped" in o
+    if "enters tapped" not in o and "enters the battlefield tapped" not in o:
+        return False
+    return "unless" not in o
 
 
 def _parse_cost(s):
@@ -502,11 +515,11 @@ def _payable(pips, units):
     return all(aug(pi, set()) for pi in order)
 
 
-def _turn_ledger(game, turn, db):
+def _turn_ledger(game, turn, db, precombat_only=True):
     """For one turn of a game log: the mana UNITS the player spent across its main phases, the PIPS
     those mains paid, and the notes that bound how far the ledger can be trusted.
 
-    Only the mains BEFORE combat are counted. That is the segment where a tapped creature costs an
+    `precombat_only` counts only the mains BEFORE combat. That is the segment where a tapped creature costs an
     attack, and it is where `tapdiff` samples -- span the whole turn instead and a source the control
     tapped in main 2 is booked as though it had been available before combat, which is how gi107's
     Ornithopter (tapped post-combat by the control) inflated the pre-combat pool.
@@ -548,7 +561,7 @@ def _turn_ledger(game, turn, db):
             fcost.append(u[1])
 
     for i, rec in enumerate(recs):
-        if (rec.get("phase") or "").startswith("COMBAT"):
+        if precombat_only and (rec.get("phase") or "").startswith("COMBAT"):
             break
         if not (rec.get("phase") or "").startswith("MAIN"):
             continue
@@ -567,6 +580,11 @@ def _turn_ledger(game, turn, db):
                 d = db.get(c.get("cardName"))
                 if d and not _enters_tapped_always(d):
                     add(c, units)
+                elif d:
+                    # An always-tapped land (a Karoo) makes no mana the turn it lands -- but this
+                    # ledger cannot see WHICH copy of a repeated land was played, so book it as a
+                    # `maybe`. Over-crediting here can only hide a laundered turn, never invent one.
+                    add(c, maybe)
         for num, c in prev_by.items():
             if num in now_by or c.get("tapped"):
                 continue
@@ -577,25 +595,52 @@ def _turn_ledger(game, turn, db):
                 add(c, maybe)                             # bounced / self-sacrificed: probably paid
         for a in rec.get("actions", []):
             if a.get("type") == "ABILITY":
-                # A {T} ability that is not a mana ability would have this ledger booking its source
-                # as mana it never made -- which is the one direction that could invent a DEFECT.
-                hard.append("tap-ability:" + str(a.get("cardName")))
+                # Only a MANA source's tap can mislead this ledger (it would book mana the source
+                # never made). A Sliver's pump ability or an Aether Vial activation logs here too and
+                # is harmless -- voiding on those alone cost 32 otherwise-priceable turns.
+                if _units_for(db.get(a.get("cardName"), {})):
+                    hard.append("tap-ability:" + str(a.get("cardName")))
                 continue
             if a.get("type") != "CAST_SPELL":
                 continue
-            got, ok = _parse_cost(a.get("manaPaid"))
+            # `manaPaid` is `effective.ToString()` (AIEngine.cpp) -- the cost AFTER discounts, i.e.
+            # what was really paid. That makes it trustworthy for X spells too: Crackle with Power's
+            # {X}{X}{X}{R}{R} at X=2, discounted by Hinata, logs as the {4}{R}{R} it actually cost.
+            # The ONE unsafe shape is a literal `{X}` surviving into the string, which means the X
+            # was never folded in -- `_parse_cost` rejects that and it lands in `hard` below.
+            paid = a.get("manaPaid") or ""
+            if paid == "Vial":
+                continue                          # Aether Vial: onto the battlefield, no mana paid
+            paid = paid.replace(" (retrace)", "")
+            got, ok = _parse_cost(paid)
             if not ok:
-                hard.append("uncosted:%s(%s)" % (a.get("cardName"), a.get("manaPaid")))
-            if a.get("chosenX") is not None:
-                # `manaPaid` is NOT consistent about X: Crackle with Power records {4}{R}{R} with the
-                # X folded in, Reality Spasm records {U}{U} for an X of 4. Under-counting pips is the
-                # unsafe direction (it makes a bill look payable), so an X spell voids the turn.
-                hard.append("x-spell:%s(X=%s,paid=%s)"
-                            % (a.get("cardName"), a.get("chosenX"), a.get("manaPaid")))
+                hard.append("uncosted:%s(%s)" % (a.get("cardName"), paid))
+            printed = (db.get(a.get("cardName")) or {}).get("mana_cost") or ""
+            if "/" in printed:
+                # ToString() renders a hybrid pip as its FIRST colour (Card.h says so, deliberately,
+                # to keep play digests stable). Reading {G/U} as a hard {G} would demand a colour the
+                # spell never required -- the one way this ledger could invent a LAUNDERED verdict.
+                # Recoverable when nothing discounted the spell: take the PRINTED pips instead, which
+                # carry the hybrid, and only void when the two disagree on size.
+                pgot, pok = _parse_cost(printed)
+                if pok and len(pgot) == len(got):
+                    got = pgot
+                else:
+                    hard.append("hybrid-cost:" + str(a.get("cardName")))
             bill += got
             p = (db.get(a.get("cardName")) or {}).get("parameters") or {}
             if p.get("untap_x_mana_sources"):
-                hard.append("untap-refloat:" + a.get("cardName", "?"))   # a source taps twice
+                # Untapping X sources lets them tap TWICE in one main, so the source count is short
+                # by X. Which X is not recorded, but `chosenX` is -- so credit X units able to make
+                # any colour this board produces. That is GENEROUS on purpose: over-crediting can
+                # only hide a laundered turn (a miss), never manufacture an accusation.
+                n = a.get("chosenX")
+                if n is None:
+                    hard.append("untap-refloat:" + a.get("cardName", "?"))
+                else:
+                    units += [_board_colors(rec, db)] * int(n)
+                    soft.append("untap-refloat:%s(X=%s, credited generously)"
+                                % (a.get("cardName", "?"), n))
             if p.get("ritual_floating_mana"):
                 col = p.get("ritual_float_color")
                 if col:
@@ -603,6 +648,18 @@ def _turn_ledger(game, turn, db):
                 else:
                     soft.append("uncoloured-ritual:" + a.get("cardName", "?"))
     return units, maybe, bill, fcost, soft, hard
+
+
+def _board_colors(rec, db):
+    """Every colour the player's own permanents can produce, as one pip set. Used to price an
+    untap-refloat: it is an upper bound on what the untapped sources could have made."""
+    cols = set()
+    for c in ((rec.get("boardAfter") or {}).get("battlefield") or []):
+        u = _units_for(db.get(c.get("cardName"), {}))
+        if u:
+            for s in u[0]:
+                cols |= set(s)
+    return frozenset(cols or ALL_COLORS)
 
 
 def _pre_main(game, turn):
@@ -842,6 +899,115 @@ def adjudicate_one(binary, r):
     return dict(r, verdict=verdict, verdict_detail="; ".join(out))
 
 
+# ---------------------------------------------------------------- legality
+# `adjudicate` settles the 25 games that carry the tap-order signature. The other 393 do not, and
+# "no signature" is evidence they are not THIS defect -- not evidence the regression is right. There
+# is one more question the same data answers for every case in the set, tap-order or not:
+#
+#     was the PRE-FIX line's own payment colour-legal, under true colours, on every turn?
+#
+# A `no` means the recorded `pre_fix` came off a payment the rules do not allow, so the game getting
+# worse is the fix working and `pre_fix` is not a number to restore. A `yes` means the old line was
+# legitimate and something else moved -- which is the case that deserves a look.
+#
+# The strong/weak distinction matters. If the sources the control tapped are FEWER than the mana it
+# spent, this model is missing production and says nothing (UNPRICED). Only a failure with enough
+# total mana on the table is a colour failure, and a colour failure IS laundering.
+def legality_one(binary, r):
+    db = _card_db()
+    tmp = tempfile.mkdtemp(prefix="legal_")
+    try:
+        cmd = [binary, os.path.join(ROOT, r["deck"]), "--profile", os.path.join(ROOT, r["profile"]),
+               "--games", "1", "--seed", r["seed"], "--game-index", r["game_index"],
+               "--depth", r["depth"], "--budget-ms", r["budget"],
+               "--ignore-play-profile", "--log-dir", tmp]
+        subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True,
+                       env=dict(os.environ, **LEGACY_ENV))
+        logs = glob.glob(os.path.join(tmp, "*.json"))
+        if not logs:
+            return dict(r, spend="ERR:no-control-log", spend_detail="")
+        g = json.load(open(logs[0]))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    bad, unpriced = [], []
+    for t in sorted({x.get("turn") for x in g.get("turns", []) if x.get("turn")}):
+        units, maybe, bill, fcost, soft, hard = _turn_ledger(g, t, db, precombat_only=False)
+        if not bill:
+            continue
+        if hard:
+            unpriced.append("T%d:%s" % (t, ",".join(sorted(set(hard)))))
+            continue
+        pool = units + maybe
+        want = bill + fcost
+        if _payable(want, pool):
+            # A `soft` note means the pool was credited GENEROUSLY (an untap-refloat priced at the
+            # board's whole colour range). Balancing under that credit does not prove legality, so it
+            # cannot be reported as LEGAL -- but failing under it is all the stronger.
+            if soft:
+                unpriced.append("T%d:%s" % (t, ",".join(sorted(set(soft)))))
+            continue
+        if len(pool) < len(want):
+            unpriced.append("T%d:short(%d<%d)" % (t, len(pool), len(want)))
+        else:
+            bad.append("T%d:%d mana on %d sources, colours do not match%s"
+                       % (t, len(want), len(pool), " (even generously credited)" if soft else ""))
+    if bad:
+        return dict(r, spend="LAUNDERED", spend_detail="; ".join(bad))
+    if unpriced:
+        return dict(r, spend="UNPRICED", spend_detail="; ".join(unpriced))
+    return dict(r, spend="LEGAL", spend_detail="")
+
+
+def cmd_legality(args):
+    binary = args.bin or os.path.join(ROOT, "build/Release/mtg")
+    rows = read_cases(args.filter)
+    print(f"LEGALITY  {len(rows)} cases -- was the PRE-FIX line's own payment colour-legal?")
+    print("  LAUNDERED = a turn spends more of a colour than its sources make: pre_fix came off an")
+    print("              illegal payment, so the game getting worse is the fix WORKING")
+    print("  LEGAL     = every turn balances under true colours -- the old line was legitimate")
+    print("  UNPRICED  = a turn this model refuses to price ({X}, untap-refloat, missing source)\n")
+    done, agg = [], {}
+    with futures.ThreadPoolExecutor(max_workers=args.jobs) as ex:
+        for a in ex.map(lambda r: legality_one(binary, r), rows):
+            done.append(a)
+            agg[a["spend"]] = agg.get(a["spend"], 0) + 1
+            if a["spend"] == "LAUNDERED":
+                print(f"  {a['key']} gi{a['gi']}: {a['pre_fix']}->{a['post_fix']} "
+                      f"[{a['attribution']}] {a['spend_detail']}", flush=True)
+    print("\nsummary: " + ", ".join(f"{k}={v}" for k, v in sorted(agg.items())))
+    cross = {}
+    for a in done:
+        cross.setdefault(a["attribution"], {}).setdefault(a["spend"], 0)
+        cross[a["attribution"]][a["spend"]] += 1
+    print("\nby attribution:")
+    for k in sorted(cross):
+        print(f"  {k:20s} " + ", ".join(f"{x}={y}" for x, y in sorted(cross[k].items())))
+    with open(os.path.join(ROOT, "logs", "prepay_legality.json"), "w") as fh:
+        json.dump(done, fh, indent=1)
+    print("\ndetail -> logs/prepay_legality.json")
+    _write_back({(r["key"], str(r["gi"])): {"spend": r["spend"]} for r in done})
+    return 0
+
+
+def _write_back(updates):
+    """Merge per-case columns into the COMMITTED tsv. logs/ is gitignored, and the tsv is the
+    artifact another tree actually receives."""
+    rows = read_cases()
+    with open(CASES, "w") as fh:
+        fh.write("# Games the 2026-08-25 colour-honesty batch made WORSE.\n")
+        fh.write("# pre_fix = win turn before the batch, post_fix = win turn now (-1 = no win).\n")
+        fh.write("# verdict: DEFECT   = the turn is PROVEN payable without the creature the engine\n")
+        fh.write("#                     taps  (section 2c of docs/design/prepay-payment-path-recheck.md)\n")
+        fh.write("# spend:   LAUNDERED= the PRE-FIX line paid a pip its own sources could not make,\n")
+        fh.write("#                     so pre_fix is not a number to restore   (section 2d)\n")
+        fh.write("# " + "\t".join(COLS) + "\n")
+        for r in rows:
+            r.update(updates.get((r["key"], str(r["gi"])), {}))
+            fh.write("\t".join(str(r.get(c, "")) for c in COLS) + "\n")
+    print(f"columns -> {os.path.relpath(CASES, ROOT)}")
+
+
 def cmd_adjudicate(args):
     binary = args.bin or os.path.join(ROOT, "build/Release/mtg")
     src = os.path.join(ROOT, "logs", "prepay_tapdiff.json")
@@ -869,18 +1035,7 @@ def cmd_adjudicate(args):
     print("detail -> logs/prepay_adjudicate.json")
     # ... and back into the COMMITTED case list, because logs/ is gitignored and the tsv is the
     # artifact another tree actually gets. `verify --defects` then narrows to the proven set.
-    by = {r["key"] + "|" + str(r["gi"]): r["verdict"] for r in done}
-    rows_all = read_cases()
-    with open(CASES, "w") as fh:
-        fh.write("# Games the 2026-08-25 colour-honesty batch made WORSE.\n")
-        fh.write("# pre_fix = win turn before the batch, post_fix = win turn now (-1 = no win).\n")
-        fh.write("# verdict: DEFECT = the turn is PROVEN payable without the creature the engine\n")
-        fh.write("#          taps (see docs/design/prepay-payment-path-recheck.md section 2c).\n")
-        fh.write("# " + "\t".join(COLS) + "\n")
-        for r in rows_all:
-            r["verdict"] = by.get(r["key"] + "|" + str(r["gi"]), r.get("verdict", ""))
-            fh.write("\t".join(str(r[c]) for c in COLS) + "\n")
-    print(f"verdicts -> {os.path.relpath(CASES, ROOT)}")
+    _write_back({(r["key"], str(r["gi"])): {"verdict": r["verdict"]} for r in done})
     return 0
 
 
@@ -892,15 +1047,17 @@ def main():
     c = sub.add_parser("classify")
     t = sub.add_parser("tapdiff")
     j = sub.add_parser("adjudicate")
+    g = sub.add_parser("legality")
     v.add_argument("--defects", action="store_true",
                    help="only the games section 2c PROVED were payable without the creature")
-    for p in (v, c, t, j):
+    for p in (v, c, t, j, g):
         p.add_argument("--jobs", type=int, default=min(16, (os.cpu_count() or 4) - 2))
         p.add_argument("--bin", default=None)
         p.add_argument("--filter", default=None)
     a = ap.parse_args()
     return {"build": cmd_build, "verify": cmd_verify, "classify": cmd_classify,
-            "tapdiff": cmd_tapdiff, "adjudicate": cmd_adjudicate}[a.cmd](a)
+            "tapdiff": cmd_tapdiff, "adjudicate": cmd_adjudicate,
+            "legality": cmd_legality}[a.cmd](a)
 
 
 if __name__ == "__main__":
