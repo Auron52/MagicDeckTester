@@ -238,25 +238,39 @@ Where the cost lands at the shipped budget is visible directly: the number of pa
 evaluations that reach the interior m2 DROPS, because the interior spend comes out of the same
 allowance -- AL 29,298 -> 20,837 (**-28.9%**), Kitty 175,954 -> 118,999 (**-32.4%**).
 
-### Verdict: do NOT adopt, and the reason is the useful part
+### Verdict: NOT YET adoptable -- and the blocker is COST ALONE
 
-It fails the adoption bar on both clauses at once: measurably worse quality at play settings, and up
-to **74% more search** to buy it. Keep `MTG_M2_D0_SEARCHED` in the tree as the instrument, default
-OFF, exactly as `MTG_AL_SSM_ROLLOUT` was kept.
+**USER BAR (2026-08-26), which supersedes an earlier reading in this file:**
 
-**But the finding is not "greedy wins".** It is stronger and more useful than that: at this site, on
-all three decks that have adopted the searched design, **the greedy interior second main returns the
-same plan the search returns** -- byte-identical over 2,000 unbudgeted games, and byte-identical on
-35 of 36 of the games where the shipped budget made them diverge. The standing directive's premise
-(*"greedy is simply too unreliable to be part of it"*) is measurably FALSE here. That is worth
-distinguishing from the AL rollout-site result in §3b, which was also budget dilution but where
-removing the rollout m2 entirely cost +7 turns -- there, greedy was an interior optimum doing real
-work. Here it is doing no work at all, correctly.
+> *"I would rather delete all greedy because we know it can be wrong. However, I want to work to
+> avoid compromises."*
 
-The generalisation to carry to the next deck: **a greedy step is worth removing only where it is
-measurably WRONG.** Test that first with `MTG_M2_D0_SEARCHED` at `budget_ms=0`, which costs one
-pooled batch and answers it in one digest comparison; if the digests match, the step is not the
-deck's problem and converting it only spends budget the outer loop needs.
+An agent draft of this section concluded "a greedy step is worth removing only where it is
+measurably wrong". **That is the wrong bar and it has been retracted.** "The digests match on the
+sample we ran" is an absence of evidence, not a safety argument -- it is the same shape as the
+standing NO-LOSSY-TRUNCATION bar, where *rare-but-possible is reason enough* and the frequency of a
+reachability defect is the wrong axis to judge it on. Greedy goes, everywhere; the job is to make
+removing it cost nothing, not to find decks where keeping it is defensible.
+
+So read the measurement above the other way round. It does not say "keep the greedy". It says:
+
+* **There is NO quality risk to trade against.** The conversion is play-IDENTICAL -- byte-identical
+  digests over 2,000 unbudgeted games and on 35 of the 36 games where the shipped budget made the
+  arms diverge. Nothing has to be given up to delete this greedy.
+* **The entire blocker is cost**, and the 6-of-6 gate-1 loss is a PURE consequence of it: the
+  interior spend comes out of the same allowance, so the outer candidate loop gets ~30% fewer
+  candidates. Remove the cost and the quality loss removes itself.
+
+And the cost is not a broad tax -- it is a **TAIL**, which is the tractable shape:
+
+| deck | total | games differing | where the extra work is |
+|---|---|---|---|
+| Anti-Lifegain | **+0.04%** | 51 / 1000 | worst single game +473 units on a 66,086-unit game |
+| KittyEquipment | +73.72% | 80 / 1000 | **gi=231 (x5.3) + gi=470 (x1.7) = 77.7% of ALL of it**; top 5 = 84.9% |
+
+**On Anti-Lifegain the greedy can be deleted today at no measurable cost.** On KittyEquipment the
+work is to root-cause a handful of blow-up games, not to pay a 74% tax. `MTG_M2_D0_SEARCHED` stays
+in the tree default OFF as the instrument WHILE that work happens -- not as a settled rejection.
 
 ## 4. The two known instances of that class (both fixed, both prunes)
 
@@ -325,9 +339,10 @@ runner was making the same misplay. A new deck may need its own instance of this
   AL's cost** -- so AL was the special case and no global change is warranted (see §3a).
 * **Hinata's searched-m2 rejection should be re-measured PER SITE** (`MTG_SSM_SITE=1`), not just
   re-measured: its red verdict, like AL's, is a single number over both sites.
-* **The d<=0 branch-site greedy is CLOSED** (§3c, 2026-08-26): measured on all three adopted decks,
-  play-identical to the search when budget is not the constraint, worse in 6 of 6 cells when it is.
-  Not adopted; `MTG_M2_D0_SEARCHED` stays in the tree default OFF as the instrument.
+* **The d<=0 branch-site greedy is MEASURED and its removal is a COST problem only** (§3c,
+  2026-08-26): play-identical to the search on every deck tested, so nothing is traded away by
+  deleting it. Free on Anti-Lifegain today; on KittyEquipment two games carry 77.7% of the cost.
+  **Open work: root-cause that tail, then delete the greedy.** Not a rejection.
 * **The remaining greedy inside the search is the BREAKPOINT CONTINUATION fallback** --
   `greedysite` sites 0-8, taken when `bp_searched_plan(site, ...)` returns false because the site is
   not searchable for that deck (site 3, the plain cantrip, is pruned outright). That is now the only
