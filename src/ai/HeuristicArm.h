@@ -74,6 +74,7 @@ enum Slot : int
     BP_CONDEMN_MANA,          // MTG_BP_CONDEMN_MANA_EXEMPT  never condemn a mana source
     SF_PUT_BP,                // MTG_SF_PUT_BP             site 6 fires off a Stoneforge PUT too
     M2_D0_SEARCHED,           // MTG_M2_D0_SEARCHED        branch-site interior m2 at d<=0 is SEARCHED
+    KE_ORDER_FULL,            // MTG_KE_ORDER_FULL         KittyEquipment FULL (total) cast order
     COUNT
 };
 
@@ -125,6 +126,7 @@ inline const char* Name(int slot)
         "MTG_BP_CONDEMN_MANA_EXEMPT",
         "MTG_SF_PUT_BP",
         "MTG_M2_D0_SEARCHED",
+        "MTG_KE_ORDER_FULL",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }

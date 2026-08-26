@@ -11836,8 +11836,92 @@ static bool KittyOrderEnabled()
     return heurarm::Flag(heurarm::KE_ORDER, on);
 }
 
+// MTG_KE_ORDER_FULL -- the USER's FULL (total) cast order for KittyEquipment.
+//
+// USER, 2026-08-26: *"I always asked for a full order in the past."* and *"The order not mattering
+// within a class has never prevented us from choosing an order to make condemnation a real tool."*
+//
+// The order below it is a CLASS ranking with ties: all eight Equipment share rank 8 and all four
+// hosts share 10. Those ties are why breakpoint condemnation is inert on this deck. Condemnation
+// drops a card the pre-breakpoint section already declined, judged by cast-order position -- and a
+// TIE cannot be a decline, because two cards at the same rank have no enumerated order between them,
+// so condemning a peer is symmetric and deletes the sibling line that would have cast it (measured:
+// Bonesplitter + Lightning Greaves both at rank 8, condemning the peer turns a T4 kill into T5).
+// The exemption that fixes that is what neuters the tool: MEASURED at shipped settings, 50 games,
+// condemnation is live on 82,506 of 82,506 continuation enumerations and drops 84 cards, every one
+// of them Puresteel Paladin -- the deck's only card ranked strictly before the equipment-ETB site.
+//
+// A TOTAL order removes the tie and with it the need for the exemption: every pair has a defined
+// order, so "earlier in the order" is a genuine decline everywhere. The within-class positions are a
+// CHOICE, not a derivation -- per the USER, the fact that order does not matter within a class is
+// the reason to pick one anyway, not a reason to leave them tied.
+//
+// Param-derived, no card names (house style: a deck gets its order from card DATA), and TOTAL by
+// construction -- the trailing tie-break folds mana value and the name hash so two cards can never
+// share a rank even if the decklist changes.
+static bool KittyOrderFullEnabled()
+{
+    static const bool on = EnvOn("MTG_KE_ORDER_FULL");
+    return heurarm::Flag(heurarm::KE_ORDER_FULL, on);
+}
+
+static int KittyFullOrderRank(const CardDefinition& def)
+{
+    const CardParams& p = def.params;
+    // 5-7: the engine pieces, unchanged from the class order the USER already reviewed.
+    if (p.mana_rock)                                              { return 5; }   // Sol Ring
+    if (p.draw_on_equipment_etb
+        || p.metalcraft_equip_zero_artifacts > 0)                 { return 6; }   // Puresteel Paladin
+    if (p.tap_put_from_hand_cost.has_value()
+        || (p.tutor_to_hand
+            && std::find(p.tutor_types.begin(), p.tutor_types.end(),
+                         std::string("Equipment")) != p.tutor_types.end()))
+                                                                  { return 7; }   // Stoneforge Mystic
+    // 8-15: the eight Equipment, one rank each. Cheapest-to-cast first (with Puresteel out every
+    // Equipment ENTERING draws a card, so more casts per turn is more cards), and the ladder within
+    // a cast cost runs biggest-payoff first.
+    if (p.is_equipment)
+    {
+        if (p.equip_power_bonus >= 10)              { return 8;  }  // Colossus Hammer  {1}, equip {8}
+        if (p.equip_min_power > 0)                  { return 11; }  // O-Naginata       {1}, power>=3
+        if (p.equip_grants_haste)                   { return 12; }  // Lightning Greaves{2}, equip {0}
+        if (p.equip_combat_damage_charges > 0)      { return 13; }  // Umezawa's Jitte  {2}
+        if (p.equip_sacrifices_prior_host)          { return 14; }  // Grafted Wargear  {3}, equip {0}
+        const int mv = def.card.m_mana_cost.ManaValue();
+        if (mv <= 1)
+        {
+            // Bonesplitter (equip {1}) before Shadowspear (equip {2}): cheaper to actually USE.
+            return p.equip_grants_lifelink ? 10 : 9;
+        }
+        return 15;                                                  // Loxodon Warhammer {3}, equip {3}
+    }
+    // 16-19: the four hosts, cheapest first -- Kor Duelist is the Colossus Hammer kill.
+    if (p.double_strike_while_equipped)                           { return 16; }  // Kor Duelist
+    if (p.upkeep_tokens_per_equipment)                            { return 17; }  // Kemba
+    if (p.double_strike_min_equipment > 0
+        || p.attach_all_equipment_cost.has_value())               { return 18; }  // Balan
+    if (p.attack_dig_attach_count > 0)                            { return 19; }  // Armored Skyhunter
+    // 30-31: removal, near-inert in a goldfish. Cheaper first.
+    if (def.tmpl == CardTemplate::Removal)
+    { return def.card.m_mana_cost.ManaValue() <= 1 ? 30 : 31; }
+    return 40;
+}
+
 int EquipmentProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
+    if (KittyOrderFullEnabled())
+    {
+        // TOTALITY GUARD. A rank collision would silently re-introduce exactly the tie this order
+        // exists to remove, so any card that lands on a shared tier is separated deterministically.
+        // Scaled by 64 to leave room; the tie-break is mana value then name hash, both stable.
+        const int base = KittyFullOrderRank(def) * 64;
+        if (base >= 40 * 64)
+        {
+            return base + static_cast<int>(def.card.m_mana_cost.ManaValue() & 0x1F)
+                        + static_cast<int>(def.card.m_name_hash & 0x1F);
+        }
+        return base;
+    }
     if (!KittyOrderEnabled()) { return GenericProvider::CastOrderRank(s, def); }
     // Order within the ruling's own list. The three tests are disjoint on this deck: no card
     // carries two of them (Paladin is the only metalcraft/equipment-ETB watcher, Stoneforge the
