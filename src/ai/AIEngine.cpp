@@ -4314,36 +4314,27 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
 
     if (def->params.sacrifice_land)
     {
-        // WHICH land is provider-owned: SacrificeLandCandidates (tapped-first, and under
-        // MTG_SAC_SPAWN_LAND_LAST a token-spawn land ranks after every fungible land). This
-        // site used to open-code "first tapped land, else first land" -- a byte-identical
-        // duplicate of the provider's flag-off order, EXCEPT it never saw the flag: the search
-        // (PerformSacrificeLandCost) spared the Forbidden Orchard while the executor ate it,
-        // the cg30 lockstep hole (overhaul ledger, 2026-08-25).
-        // Same ordinal pin the search consumed when it scored this plan (Plan::sac_pins,
-        // installed by _ssac_exec) -- executor/rollout lockstep; -1 / no plan is inert.
-        const int sac_pin = ConsumeScriptedSacPin();
-        std::vector<int> lands;
-        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
-        {
-            const Permanent& p = state.battlefield[i];
-            if (p.controller_index != state.active_player_index || !p.card.IsLand()) { continue; }
-            lands.push_back(i);
-        }
-        if (!lands.empty())
-        {
-            const std::vector<int> ranked = ResolveProvider(state).SacrificeLandCandidates(
-                state, state.active_player_index, lands);
-            int idx = lands.front();
-            if (!ranked.empty())
-            {
-                const std::size_t c = sac_pin < 0 ? 0
-                    : std::min<std::size_t>(static_cast<std::size_t>(sac_pin), ranked.size() - 1);
-                idx = ranked[c];
-            }
-            ap.graveyard.push_back(state.battlefield[idx].card);
-            state.battlefield.erase(state.battlefield.begin() + idx);
-        }
+        // DELEGATED to the shared PerformSacrificeLandCost (SpellEffects.h) -- which since the
+        // 2026-08-26 mana overhaul consumes the searched sac pin (Plan::sac_pins) itself, applies
+        // the provider ranking (tapped-first; MTG_SAC_SPAWN_LAND_LAST puts a token-spawn land last)
+        // and clamps a duplicate ordinal exactly as the open-coded copy here did. So this is the
+        // SAME decision, not a competing one -- it just stops being a second implementation of it.
+        //
+        // That matters for the reason the overhaul's own note gives ("two open-coded copies of one
+        // sacrifice rule is exactly the lockstep hole cg30 exposed"): a private copy is a private
+        // DECISION. This site never consulted `g_play_sacrifice_chooser`, so a human at the viewer
+        // could not pick the land, and it skipped FireSacrificeWatchers. Both are inert for
+        // autonomous play -- the chooser is null there, and no deck pairs Slaughter-Priest with a
+        // sac-land card -- which is why folding the sites is byte-identical rather than a play
+        // change (verified against the post-overhaul ground truth, not assumed).
+        //
+        // The one shape that differs is unreachable: with lands present but an EMPTY ranking the
+        // old copy sacrificed lands.front() while the helper sacrifices nothing. Every provider
+        // returns a permutation of its input, so an empty ranking cannot arise from a non-empty one.
+        //
+        // Position is load-bearing and unchanged: an additional cost is paid at CAST time, before
+        // resolution (CR 601.2h), so a Crop Rotation's fetched land is never a legal victim.
+        PerformSacrificeLandCost(state, hand_card.m_name.str());
     }
 
     // Natural Order: "sacrifice a green creature" additional cost, paid at cast (CR 601.2h) --

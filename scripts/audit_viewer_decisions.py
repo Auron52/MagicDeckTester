@@ -491,6 +491,17 @@ INERT_PARAMS = {
     "equip_grants_haste": "static grant detail (rides is_equipment)",
     "equip_grants_shroud": "static grant detail (goldfish-inert; rides is_equipment)",
     "graveyard_replace_shuffle_library": "automatic replacement effect (Progenitus shuffle-in), no choice",
+    # Progenitus. A static RESTRICTION, not a choice: protection from everything makes the creature
+    # an illegal target, and the only place that bites in a goldfish game is our OWN equip (equip
+    # targets, CR 702.6b), where the engine's answer is to REMOVE Progenitus from the host set
+    # (TurnSolver CollectActions, both the battlefield and hand host loops). Removing an illegal
+    # option is the correct viewer behaviour -- there is nothing for a human to decide, and offering
+    # the host would be offering an illegal play. Nothing else about protection is reachable against
+    # a passive opponent: it has no damage, no targeting and no blockers. Classified 2026-08-26; it
+    # was the last SELF-GUARD failure in the deck sweep and had been deferred as "needs a user
+    # decision" since 2026-08-25.
+    "protection_from_everything": "static restriction (illegal equip host, CR 702.6b) -- the engine "
+                                  "removes the illegal option rather than offering it; no choice",
     # --- StompySurprise (mono-green elf ramp) ---
     "etb_life_floor": "automatic ETB life set (Elderscale Wurm), no choice",
     "mana_per_creature_count_all": "scaled-dork count scope detail (rides mana_per_creature_subtype)",
@@ -741,7 +752,15 @@ def step(deck, prof, seed, gi, choices, max_turns, jitte=None):
            "--reveal", "6", "--choices", ",".join(map(str, choices)), "--jitte-prompt"]
     if jitte:
         cmd += ["--jitte", ",".join(jitte)]
-    out = subprocess.run(cmd, capture_output=True, text=True).stdout
+    # UNCAPPED plan list. MTG_PLAY_PLANS_CAP defaults to 200 (the viewer's DISPLAY cap, an ENOBUFS
+    # guard), and this sweep's whole question is "does the engine ever OFFER this action" -- which
+    # must be asked of the full enumeration, not of a truncated render. On a wide KittyEquipment
+    # board Stoneforge's sfput variants sort below the cap, so the board-activation gate reported
+    # `Stoneforge Mystic: tap_put_from_hand_cost -> NO plan action carried 'verb:sfput'` across 240
+    # driven games for an ability that is enumerated every one of them. test/viewer_protocol_check.py
+    # carries the identical note on its own replay() for the same reason.
+    out = subprocess.run(cmd, capture_output=True, text=True,
+                         env=dict(os.environ, MTG_PLAY_PLANS_CAP="0")).stdout
     if RES_RE.search(out):
         return None
     m = DEC_RE.search(out)
@@ -799,6 +818,12 @@ def pick_toward(d, target_lc):
     return pick(d)
 
 
+# Games the sweep's auto-escalation drives per candidate card. 40 is what the manual --verify-card
+# runs used to settle Boros Garrison / Stingscourger / Shard Volley; the escalation only fires for a
+# card the sweep already flagged, so the cost is paid on failures, not every run.
+VERIFY_BUDGET = 40
+
+
 def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_turns):
     """Seed-search for a game that casts `card_name`, then confirm its expected decision
     type(s) surface. Returns (status, detail): VERIFIED / HARD_MISS / NOT_FORCED.
@@ -807,8 +832,17 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
     is drawn in the fixed sweep, drive many deterministic games biased toward casting it.
     Type-level attribution (a decision of the expected type appeared in a game where the card
     was cast) -- unambiguous unless the deck has two cards producing the SAME type.
+
+    EVERY expected type must be seen, and coverage ACCUMULATES across the whole budget. This used
+    to return VERIFIED the moment ANY one of them appeared in a single game, which is how Shard
+    Volley -- expecting {'sacrifice', 'target'} -- reported VERIFIED on `target` alone while its
+    sacrifice prompt was genuinely dead (AIEngine::CastSpellFromHand had a private copy of the
+    sac-land rule that never consulted the chooser). A verifier that stops at the first hit cannot
+    be used as the gate that decides a HARD MISS, which is exactly what the sweep now does with it.
     """
     target_lc = card_name.lower()
+    want = set(expected_types)
+    covered, cover_src, first_hit = set(), set(), {}
     cast_seen_anywhere = False
     drawn_games = 0             # games where the card was ever in hand (distinguishes NOT_FORCED reasons)
     for gi in range(budget):
@@ -849,19 +883,77 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
             drawn_games += 1
         if cast_here:
             cast_seen_anywhere = True
-            hit = {t for (t, _) in observed if t in expected_types}
-            if hit:
-                src_confirmed = any(t in expected_types and target_lc in s for (t, s) in observed)
+            for (t, s) in observed:
+                if t not in want:
+                    continue
+                if t not in covered:
+                    first_hit[t] = gi
+                covered.add(t)
+                if target_lc in s:
+                    cover_src.add(t)
+            if covered >= want:
                 return ("VERIFIED", {"seed": base_seed, "game_index": gi,
-                                     "types": sorted(hit), "source_confirmed": src_confirmed})
+                                     "types": sorted(covered),
+                                     "source_confirmed": sorted(cover_src) == sorted(want),
+                                     "first_seen": first_hit})
     if cast_seen_anywhere:
-        return ("HARD_MISS", {"note": "card was cast but no expected decision surfaced"})
+        missing = sorted(want - covered)
+        return ("HARD_MISS", {"note": "card was cast but these expected decisions never surfaced: "
+                                      + ", ".join(missing),
+                              "missing": missing, "covered": sorted(covered)})
     if drawn_games:
         return ("NOT_FORCED", {"note": f"card was in hand in {drawn_games}/{budget} games but never "
                                f"cast (never castable/offered on the driven line -- try a hand-built "
                                f"--choices line, more turns, or a wider seed)"})
     return ("NOT_FORCED", {"note": f"card never drawn in {budget} games from seed {base_seed} "
                            f"(try a different/wider seed or more games)"})
+
+
+def verify_activation(deck, prof, card_name, marker, base_seed, budget, max_turns):
+    """Seed-search for a game where an enumerated plan action carries `marker` for `card_name`.
+
+    The board-activation twin of verify_card, and needed for the same reason: the sweep's
+    "source reached play but no action carried the marker" is evidence only if the sweep reached a
+    board where the ability was legal AND affordable. Sliver Hive's {5} taptoken is the standing
+    example -- it is real, wired and reachable, and simply never affordable in 6 games x 8 turns.
+    Returns (status, detail): VERIFIED / NOT_FORCED.
+    """
+    target_lc = (card_name or "").lower()
+    in_play_games = 0
+    for gi in range(budget):
+        choices, jitte, guard = [], [], 0
+        seen_states, in_play = set(), False
+        while guard < 220:
+            guard += 1
+            d = step(deck, prof, base_seed, gi, choices, max_turns, jitte)
+            if d is None:
+                break
+            for b in ((d.get("me") or {}).get("battlefield") or []):
+                if str(b.get("name", "")).lower() == target_lc:
+                    in_play = True
+            for pl in d.get("plans", []):
+                for a in pl.get("actions", []):
+                    if str(a.get("card", "")).lower() != target_lc:
+                        continue
+                    if marker in _activation_marker(a):
+                        return ("VERIFIED", {"seed": base_seed, "game_index": gi,
+                                             "turn": d.get("turn"), "marker": marker})
+            choice = pick_toward(d, target_lc)
+            if d.get("type") == "jitte":
+                jitte.append(f"{d.get('turn')}:{choice}")
+                continue
+            if d.get("type") == "main_phase":
+                key = (d.get("turn"),
+                       tuple(sorted(p.get("summary", "") for p in d.get("plans", []))))
+                if key in seen_states:
+                    choice = -1
+                else:
+                    seen_states.add(key)
+            push_choice(choices, choice)
+        if in_play:
+            in_play_games += 1
+    return ("NOT_FORCED", {"note": f"{card_name} was in play in {in_play_games}/{budget} games but "
+                           f"no enumerated action ever carried '{marker}'"})
 
 
 def run_sweep(deck, prof, base_seed, n_games, max_turns, mana_names=frozenset()):
@@ -1080,8 +1172,66 @@ def main():
         for m in missing:
             (hard_miss if cast else unverified).append((name, m, cast))
 
+    # ESCALATE before accusing. "The sweep cast this card and the type never appeared" is NOT the
+    # same as "a human cannot reach the decision" -- and conflating them made this gate cry wolf on
+    # two of its three reported hard misses (2026-08-26). Boros Garrison's Karoo bounce only prompts
+    # when you control more than one land to return; Stingscourger's echo comes due at the NEXT
+    # upkeep and only when its cost is affordable. Both are demonstrably reachable, and both read as
+    # HARD MISS purely because a 6-game / 8-turn sweep never hit the board state that offers them.
+    # A wolf-crying gate is worse than no gate: it trains the reader to discount it, and it buries
+    # the one entry (of three) that was real. So every candidate now goes through the targeted
+    # seed-search that already exists for the UNVERIFIED tail, and only a card the search ALSO
+    # fails to surface is reported as unreachable.
+    escalated = []
+    if hard_miss and prof:
+        by_card = {}
+        for name, m, _ in hard_miss:
+            by_card.setdefault(name, set()).add(m)
+        print(f"\nESCALATING {len(by_card)} sweep miss(es) to a targeted seed-search "
+              f"({VERIFY_BUDGET} games each) before reporting -- a short sweep not reaching a "
+              f"board state is not evidence the decision is unreachable...")
+        still, reached = [], []
+        for name, miss in sorted(by_card.items()):
+            card = next((c for c in cards if c.get("name") == name), None)
+            status, detail = (("NOT_FORCED", {"note": "card not found"}) if card is None
+                              else verify_card(deck, prof, name, miss, base_seed,
+                                               VERIFY_BUDGET, max(max_turns, 10)))
+            print(f"  {name}: expected {sorted(miss)} -> {status} {detail}")
+            if status == "VERIFIED":
+                reached.append((name, sorted(miss)))
+            else:
+                still.extend((name, m, True) for m in sorted(detail.get("missing") or miss))
+        if reached:
+            print("  -> REACHABLE after all (sweep coverage, not a wiring gap): "
+                  + "; ".join(f"{n} {ms}" for n, ms in reached))
+        escalated = reached
+        hard_miss = still
+
+    # The UNVERIFIED tail gets the SAME escalation. "Never cast in the sweep" is the weakest
+    # possible evidence, and leaving it as a standing caveat is what let three real gaps hide behind
+    # a soft label for months. The targeted search either reaches it (report clean) or does not
+    # (report it, honestly, as unreached rather than as broken).
+    if unverified and prof:
+        by_card = {}
+        for name, m, _ in unverified:
+            by_card.setdefault(name, set()).add(m)
+        print(f"\nESCALATING {len(by_card)} unverified expectation(s) to a targeted seed-search...")
+        still = []
+        for name, miss in sorted(by_card.items()):
+            status, detail = verify_card(deck, prof, name, miss, base_seed,
+                                         VERIFY_BUDGET, max(max_turns, 10))
+            print(f"  {name}: expected {sorted(miss)} -> {status} {detail}")
+            if status == "VERIFIED":
+                escalated.append((name, sorted(miss)))
+            elif status == "HARD_MISS":
+                still.extend((name, m, True) for m in sorted(detail.get("missing") or miss))
+            else:
+                still.extend((name, m, False) for m in sorted(miss))
+        unverified = [(n, m, c) for (n, m, c) in still if not c]
+        hard_miss += [(n, m, c) for (n, m, c) in still if c]
+
     if unverified:
-        print("\nUNVERIFIED (card never cast in sweep -- run a targeted 5h repro that casts it):")
+        print("\nUNVERIFIED (not reachable by the targeted search either -- needs a hand-built repro):")
         for name, m, _ in unverified:
             print(f"  {name}: expected '{m}' (not reached)")
 
@@ -1110,8 +1260,34 @@ def main():
             # decision-type diff uses.
             reached = (name or "").lower() in joined
             (act_miss if reached else act_unver).append((name, key, marker))
+    if act_unver and prof:
+        print(f"\nESCALATING {len(act_unver)} unverified board activation(s) to a targeted "
+              f"seed-search...")
+        still_unver = []
+        for name, key, marker in act_unver:
+            bare = marker.split("  [")[0]
+            status, detail = verify_activation(deck, prof, name, bare, base_seed,
+                                               VERIFY_BUDGET, max(max_turns, 10))
+            print(f"  {name}: {key} -> {status} {detail}")
+            if status == "VERIFIED":
+                escalated.append((name, [key]))
+            else:
+                still_unver.append((name, key, marker))
+        act_unver = still_unver
+    if act_miss and prof:
+        print(f"\nESCALATING {len(act_miss)} board-activation miss(es) to a targeted seed-search...")
+        still_miss = []
+        for name, key, marker in act_miss:
+            status, detail = verify_activation(deck, prof, name, marker, base_seed,
+                                               VERIFY_BUDGET, max(max_turns, 10))
+            print(f"  {name}: {key} -> {status} {detail}")
+            if status == "VERIFIED":
+                escalated.append((name, [key]))
+            else:
+                still_miss.append((name, key, marker))
+        act_miss = still_miss
     if act_unver:
-        print("\nUNVERIFIED board activations (source never reached play in the sweep):")
+        print("\nUNVERIFIED board activations (not reached by the targeted search either):")
         for name, key, marker in act_unver:
             print(f"  {name}: {key} -> expected a plan action carrying '{marker}' (not reached)")
     if act_miss:

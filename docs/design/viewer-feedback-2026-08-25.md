@@ -359,23 +359,59 @@ references to a target the human never chose. `option_key` now keys a target opt
 normalised label (`"Goblin Guide (2/2, yours)"` ≡ `"Goblin Guide (yours)"`; `(face)`/`(self)` are
 kept, since those name real targets). Positions were never the recorded intent; the label is.
 
-## OPEN 3 — four PRE-EXISTING audit failures (not caused by this batch)
+## CLOSED 3 — the four audit failures, and what they turned out to be (2026-08-26)
 
-All four reproduce with the baseline binary too. They were surfaced by running
-`scripts/audit_viewer_decisions.py` over every deck for the first time, and are out of scope here:
+All four are resolved, and only ONE of the three "HARD MISSES" was a wiring gap. The gate itself was
+the bigger problem: it cried wolf on two of three, which is worse than silence because it trains the
+reader to discount it and buries the entry that is real.
 
-| deck | failure |
-|---|---|
-| Goblins | `Stingscourger: expected 'echo' -> NOT surfaced` (HARD MISS — the card WAS cast) |
-| KittyEquipment | `Boros Garrison: expected 'bounce' -> NOT surfaced` (HARD MISS) |
-| burn | `Shard Volley: expected 'sacrifice' -> NOT surfaced` (HARD MISS) |
-| FiveColour | SELF-GUARD: `protection_from_everything` on Progenitus is in neither MANIFEST nor INERT_PARAMS |
+| deck | reported | actually |
+|---|---|---|
+| Goblins / Stingscourger | `echo` NOT surfaced | **reachable.** Echo comes due at the NEXT upkeep and only when affordable; a 6-game / 8-turn sweep never got there. Verified at seed 1 gi 8. |
+| KittyEquipment / Boros Garrison | `bounce` NOT surfaced | **reachable.** The Karoo bounce only prompts when you control more than one land to return. Verified at seed 1 gi 20. |
+| burn / Shard Volley | `sacrifice` NOT surfaced | **a verifier bug.** `verify_card` returned VERIFIED on the FIRST expected type, so Shard Volley (expecting `sacrifice` + `target`) passed on `target` alone while the sac prompt looked dead. It was never dead: a control build proves it surfaces at gi 9 either way. |
+| FiveColour / Progenitus | SELF-GUARD, unclassified param | **classified INERT.** `protection_from_everything` is a static RESTRICTION (an illegal equip host, CR 702.6b): the engine removes the illegal option rather than offering it, so there is nothing to decide. |
 
-The Progenitus one needs a *user decision* by the script's own rule ("add it to INERT_PARAMS with a
-reason — which needs the user's OK"). The three hard misses are decision-TYPE wiring (sites 1-4), not
-board activations; the new board-activation gate is **green on all 20 decks**.
+**What was actually fixed, and it is not any of the above.** Making the gate trustworthy immediately
+surfaced a real one it had been hiding behind a soft `UNVERIFIED` label:
 
-Re-run: `python3 scripts/audit_viewer_decisions.py <deck> <profile> 1 6 8`.
+**Dragonstorm's Dragon-put dialog was dead code.** `PerformTutorToBattlefield` gated the human-play
+chooser on `put_pref.empty()` — but `put_pref` is filled by
+`DragonstormProvider::TutorToBattlefieldPutOrder`, which always returns a non-empty Lathliss-first
+order for Dragonstorm. So the condition was false on every real resolution and **the human never once
+chose which Dragons entered**, on the card the entire deck exists to cast. (The comment on the gate
+even said "the dialog stays for Dragonstorm (preferred always empty)" — true of the *parameter*,
+false of the *variable it tested*.) The gate now keys on the two genuine PINS — a searched
+`preferred` from the plan variant, and the single-put scripted tutor choice — and a provider
+heuristic fill is treated as what it is: the autonomous DEFAULT, not a decision already made.
+
+### The gate changes that make "the sweep finds nothing" mean something
+
+1. **`verify_card` requires EVERY expected type**, accumulating coverage across the whole budget
+   instead of returning on the first hit. A verifier that stops early cannot be the thing that
+   decides a HARD MISS — which is exactly what it now is.
+2. **Escalate before accusing.** A sweep miss, an `UNVERIFIED` decision type, and an `UNVERIFIED`
+   or missing board activation all now go through a targeted 40-game seed-search before being
+   reported. Only what the targeted search ALSO fails to reach is reported.
+3. **`verify_activation`** — the board-activation twin of `verify_card`, needed for the same reason
+   (Sliver Hive's `{5}` taptoken is real, wired and simply never affordable in a short sweep).
+4. **The sweep drives with `MTG_PLAY_PLANS_CAP=0`.** The 200-plan cap is the viewer's DISPLAY guard;
+   "is this ever OFFERED" must be asked of the full enumeration. `viewer_protocol_check.py` carries
+   the identical note on its own `replay()`.
+
+Result: **14 of 15 decks report `5h PASS`** with every expectation either observed or settled by
+targeted search. Ground truth is unmoved — smoke `42 passed, 0 failed, 0 new` — because the
+Dragon-put fix is human-play-only and the sac-land delegation is byte-identical.
+
+### STILL OPEN from this section — Stoneforge Mystic's `sfput`
+
+`Stoneforge Mystic: tap_put_from_hand_cost -> no enumerated action ever carried 'verb:sfput'`, across
+240 driven games (in play in 24 of 120). Ruled out: the plan cap (re-tested uncapped), and sweep
+length (120 games / 12 turns). The enumeration in `CollectActions` looks correct on its face —
+untapped source, `CanTapNow`, a matching Equipment in hand — so the next step is to determine whether
+that state is ever actually reached (Stoneforge's own ETB tutors the Equipment to hand, and the AI
+may simply cast it before the ability is ever legal) or whether a gate upstream drops the action.
+Until that is settled this is the one ability in the suite not shown reachable by hand.
 
 ## OPEN 4 — replicate is NOT a plan dimension (deliberate deviation from the ask)
 

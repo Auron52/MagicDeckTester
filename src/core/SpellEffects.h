@@ -1221,6 +1221,16 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     // SELECTION + order; every non-Dragonstorm deck -- and Dragonstorm under MTG_UNPRUNED -- returns
     // {} -> byte-identical). This list is an EXACT ordered multiset (repeats == multiplicity).
     std::vector<std::string> put_pref = preferred;
+    // PINNED BY THE PLAN = the choice was already made where the human could see it (the searched
+    // `preferred`, or the single-put scripted tutor pin below). Only that may suppress the
+    // human-play dialog. The provider's heuristic fill is NOT a pin -- it is the autonomous
+    // DEFAULT, and treating it as one is what made the Dragon dialog dead code: the gate below read
+    // `put_pref.empty()`, DragonstormProvider::TutorToBattlefieldPutOrder always returns a non-empty
+    // Lathliss-first order for Dragonstorm, so the condition was false on every real resolution and
+    // the human never once chose which Dragons entered -- on the card the whole deck is built to
+    // cast. (The comment on the gate even said "the dialog stays for Dragonstorm (preferred always
+    // empty)": true of the PARAMETER, false of the variable it actually tested.)
+    const bool pinned_by_plan = !preferred.empty();
     if (put_pref.empty())
     {
         put_pref = ResolveProvider(state).TutorToBattlefieldPutOrder(state, controller, pp, max_puts);
@@ -1229,8 +1239,10 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     // (Plan::tutor_choice via ScriptedTutor) exactly as PerformTutor does -- index into the
     // provider's deduped candidate list at the TRUE resolution state, clamped (duplicate, never
     // a whiff). Consumed only by a single-put card so the Dragonstorm multi-put path is untouched.
+    bool pinned_single = false;
     if (pp.tutor_to_battlefield_single && put_pref.empty() && g_scripted_tutor_choice >= 0)
     {
+        pinned_single = true;
         const int pick = g_scripted_tutor_choice;
         g_scripted_tutor_choice = -1;
         std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, controller, pp);
@@ -1250,9 +1262,9 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     // Single-target put whose target already rode the chosen PLAN VARIANT (Natural Order /
     // Turntimber human play, preferred non-empty): the pick was made in the main_phase menu, so
     // the multi-pick dialog would DOUBLE-ASK (and its multi-int reply desynced the choices
-    // stream -- 5d sweep flag, s9104 gi3). The dialog stays for Dragonstorm (preferred always
-    // empty) and as a fallback for a preferred-less single put.
-    if (g_play_dragon_chooser && max_puts > 0 && put_pref.empty())
+    // stream -- 5d sweep flag, s9104 gi3) -- so those two PINS suppress it, and nothing else does.
+    // Dragonstorm has neither pin: its Dragons are chosen here, at resolution, off the real library.
+    if (g_play_dragon_chooser && max_puts > 0 && !pinned_by_plan && !pinned_single)
     {
         // Role rank = the provider's fixed play ORDER (Lathliss, Scourges, Utvara, Karrthus, Kolaghan);
         // the same classification DragonstormProvider::TutorToBattlefieldPutOrder uses. Duplicated here
