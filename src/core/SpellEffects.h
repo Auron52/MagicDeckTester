@@ -7570,6 +7570,35 @@ inline bool CopyMagnetLive(const GameState& state, int controller)
     return false;
 }
 
+// FRESH-SPEND AXIS (MTG_FRESH_SPEND_AXIS, default OFF): make the fresh-hold doctrine above a
+// searched BRANCH for exactly one shape -- a plan that converts the fresh mint into a THIS-TURN
+// kill (mw136: T5 Gold Rush -> crack the mint -> Luxurious Libation X+1 = exact lethal; banking
+// has zero option value when the game ends now). The doctrine stays the DEFAULT world: the train
+// measured the global release strictly worse (73 slower / 31 faster, mwA/mwB 2026-08-26), because
+// spend-vs-bank is a speculative next-turn comparison the search misprices -- so spend-variants
+// are ADMISSIBLE ONLY when their simulated combat is lethal the turn they apply (FSLineWin
+// discards every other freshmode variant before its tail is ever scored).
+inline bool FreshSpendAxisEnabled()
+{
+    static const bool v = EnvOn("MTG_FRESH_SPEND_AXIS");
+    return v;
+}
+
+// Plan-scoped release of the fresh-hold (Plan::freshmode_choice, ScriptedFreshMode below):
+// 1 == this plan variant is the SEARCHED "spend the fresh mint" branch. Like the tapmode pin it
+// is a whole-plan STATIC pin (never consumed), installed by both apply paths so search and
+// executor pay in lockstep.
+extern thread_local int g_scripted_freshmode;
+
+// ONE shared reader for "is the fresh-hold biting right now" -- every fresh-hold consumer
+// (PaySacSpendableNow, MintedTreasureSpendable, the two enumeration mint-credit twins) must gate
+// on THIS, not on PaySacFreshHoldEnabled() directly, so the freshmode pin releases all of them
+// together (a site left on the raw flag would price a world the payer then refuses).
+inline bool FreshHoldActive()
+{
+    return PaySacFreshHoldEnabled() && g_scripted_freshmode != 1;
+}
+
 // The state-aware twin of IsPaySacSource: use at every "can this permanent pay / produce NOW"
 // site (payment usability + the pool/colour scans that must promise exactly what payment
 // delivers). Def-only IsPaySacSource remains correct at the identity sites (odometer exclusion,
@@ -7577,7 +7606,7 @@ inline bool CopyMagnetLive(const GameState& state, int controller)
 inline bool PaySacSpendableNow(const GameState& state, const Permanent& p, const CardDefinition& def)
 {
     if (!IsPaySacSource(def)) { return false; }
-    if (!PaySacFreshHoldEnabled() || !p.entered_this_turn) { return true; }
+    if (!FreshHoldActive() || !p.entered_this_turn) { return true; }
     return CopyMagnetLive(state, p.controller_index);
 }
 
@@ -8544,6 +8573,18 @@ struct ScriptedTapMode
     ~ScriptedTapMode() { g_scripted_tapmode = saved; }
     ScriptedTapMode(const ScriptedTapMode&) = delete;
     ScriptedTapMode& operator=(const ScriptedTapMode&) = delete;
+    int saved;
+};
+
+// Whole-plan pin for the fresh-spend branch (Plan::freshmode_choice; declared with FreshHoldActive
+// above). Same shape as ScriptedTapMode: static for the whole apply, never consumed, restores on
+// exit so a nested apply cannot leak its script into the outer one.
+struct ScriptedFreshMode
+{
+    explicit ScriptedFreshMode(int k) : saved(g_scripted_freshmode) { g_scripted_freshmode = k; }
+    ~ScriptedFreshMode() { g_scripted_freshmode = saved; }
+    ScriptedFreshMode(const ScriptedFreshMode&) = delete;
+    ScriptedFreshMode& operator=(const ScriptedFreshMode&) = delete;
     int saved;
 };
 

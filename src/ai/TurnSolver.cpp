@@ -4151,6 +4151,16 @@ struct CondemnSuppressGuard   // save/restore, so nested guards cannot clear an 
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& state,
                                                             bool is_pre_combat);
 
+// HOST gate for the fresh-spend axis (MTG_FRESH_SPEND_AXIS): its variants are admissible only
+// where a host VALIDATES them by simulation -- FSLineWin's plan loop, which discards any
+// freshmode variant whose combat is not lethal the turn it applies. Every other enumeration host
+// (the d0 greedy, SolveWithLookahead, the m2 host, breakpoint re-solves) scores plans without
+// that check, so an unvalidated spend-variant there would re-open exactly the mispricing the
+// fresh-hold doctrine exists to stop (train: global release 73 slower / 31 faster). FSLineWin
+// sets this around its enumeration call; everyone else leaves it false -> no variants, byte-
+// identical.
+static thread_local bool g_fresh_axis_enum = false;
+
 // ---- Searched mid-turn breakpoints (docs/design/post-breakpoint-search.md) -------------------
 // MTG_BP_SEARCH=<W> turns the post-breakpoint continuation into a real search node: the land
 // enumeration emits W extra Plan variants (bp_choice = 0..W-1) for every plan that opens a
@@ -11793,9 +11803,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // crediting it prices a fund the payer will refuse -- the same phantom-credit class as
             // the X-fill fix above (mirrorwing gi43/242/292: the credit admitted lines whose
             // continuation then starved, killing the T5 pump finish). Credit only when the minted
-            // Treasure is actually spendable this turn: magnet live, or the hold disabled.
+            // Treasure is actually spendable this turn: magnet live, or the hold released
+            // (FreshHoldActive folds in the freshmode pin -- the fresh-spend axis's variant world).
             if (sel_mint && minted > 0 && pool.CanPay(mint_costs)
-                && (!PaySacFreshHoldEnabled() || CopyMagnetLive(state, state.active_player_index)))
+                && (!FreshHoldActive() || CopyMagnetLive(state, state.active_player_index)))
             { eff.wild += minted; eff_nc.wild += minted; credited = true; simul_mint_credit = minted; }
         }
         // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
@@ -13553,6 +13564,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // cast pays. Scoped, so a nested breakpoint re-solve gets its own hold and restores this one.
     // Empty (zero) for every plan without a hand cast, and inert for every deck with no mid-line sink.
     LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
+    // Searched fresh-mint release (MTG_FRESH_SPEND_AXIS): same whole-plan static pin -- the
+    // deferred-breakpoint re-solve after the mint must price under the same world as the prepay.
+    ScriptedFreshMode _sfm(plan.freshmode_choice);
 
     // Searched Goblin Lackey put: copied onto the STATE (not a scoped guard) because the trigger
     // fires later, in this turn's combat-damage step. Only a real variant writes it, so a plan that
@@ -17796,7 +17810,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // FRESH-HOLD parity -- lockstep twin of the gate in consider() (see the rationale
             // there): a magnetless mint is banked this turn, so it can fund nothing.
             if (sel_mint && minted > 0 && pool.CanPay(mint_costs)
-                && (!PaySacFreshHoldEnabled() || CopyMagnetLive(state, state.active_player_index)))
+                && (!FreshHoldActive() || CopyMagnetLive(state, state.active_player_index)))
             { eff.wild += minted; eff_nc.wild += minted; credited = true; simul_mint_credit = minted; }
         }
         // Same-turn HASTED dork credit. The rock credit above excludes creatures because a dork cast
@@ -20751,6 +20765,44 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         }
     }
 
+    // SEARCHED FRESH-MINT RELEASE (MTG_FRESH_SPEND_AXIS; overhaul ledger "Cluster C / mw136").
+    // One variant per base plan that casts a Treasure-minter while no copy-magnet is live: the
+    // copy prices and pays under the released fresh-hold (ScriptedFreshMode; the deferred
+    // breakpoint re-solve after the mint then sees the Treasure as spendable, so the continuation
+    // can raise an X or afford a cast the doctrine world cannot). Host-gated (g_fresh_axis_enum):
+    // only FSLineWin emits these, because only FSLineWin validates them -- a freshmode variant
+    // whose simulated combat does not kill THIS turn is discarded there, never scored. Magnet
+    // live -> the hold is already released for real (PaySacSpendableNow) and every variant would
+    // be a duplicate world.
+    if (FreshSpendAxisEnabled() && g_fresh_axis_enum && TreasurePaySourceEnabled()
+        && PaySacFreshHoldEnabled() && !HumanPlayActive()
+        && !CopyMagnetLive(state, state.active_player_index))
+    {
+        std::vector<TurnSolver::Plan> extra;
+        for (const TurnSolver::Plan& p : all)
+        {
+            // Base plans only -- one axis at a time, so cost stays additive (tutor's rule).
+            if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
+                || p.etbdig_choice >= 0 || p.lackey_choice >= 0
+                || !p.sac_pins.empty() || p.tapmode_choice != 0
+                || p.freshmode_choice != 0) { continue; }
+            bool mints = false;
+            for (const Action& act : p.actions)
+            {
+                if (act.kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* d = act.def ? act.def
+                                                  : CardDatabase::Instance().Lookup(act.card_name);
+                if (d && d->params.creates_treasures > 0) { mints = true; break; }
+            }
+            if (!mints) { continue; }
+            TurnSolver::Plan v = p;
+            v.freshmode_choice = 1;
+            extra.push_back(std::move(v));
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
           state.turn_number, all.size(), land_names.size(), ap.hand.size());
     PROF_ADD(plans_generated, all.size());
@@ -20759,6 +20811,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     if (branchstats::Enabled())
     {
         std::size_t base = 0, scry = 0, tut = 0, dig = 0, lack = 0, pond = 0, disc = 0, sac = 0;
+        std::size_t fresh = 0;
         for (const TurnSolver::Plan& p : all)
         {
             if      (p.scry_choice    >= 0) { ++scry; }
@@ -20768,6 +20821,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             else if (p.ponder_choice  >= 0) { ++pond; }
             else if (p.discard_choice >= 0) { ++disc; }
             else if (!p.sac_pins.empty())   { ++sac;  }
+            else if (p.freshmode_choice != 0) { ++fresh; }
             else                            { ++base; }
         }
         branchstats::RecordAxis("(base plans)", base);
@@ -20778,6 +20832,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         branchstats::RecordAxis("axis: ponder", pond);
         branchstats::RecordAxis("axis: cleanup-discard", disc);
         branchstats::RecordAxis("axis: sac-land", sac);
+        branchstats::RecordAxis("axis: fresh-spend", fresh);
     }
     return all;
 }
@@ -22666,7 +22721,14 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     std::vector<TurnSolver::Plan> pre;
     {
         EnumTimeScope _ets;
+        // Fresh-spend axis host gate: FSLineWin is the ONLY host whose plan loop validates
+        // freshmode variants (the this-turn-lethal admissibility check below), so only its
+        // enumeration may emit them. Save/restore rather than set/clear so a nested host under
+        // this one cannot observe a stale true.
+        const bool fresh_prev = g_fresh_axis_enum;
+        g_fresh_axis_enum = true;
         pre = EnumeratePlansWithLand(state, true);
+        g_fresh_axis_enum = fresh_prev;
         g_bp_root_enum = false;
         MoveOrderPlans(pre);   // lethal-looking / higher-value plans first -> earlier B&B cutoff
     }
@@ -22820,6 +22882,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             FSLineStoreWin(lc, key, win, state);
             return win;
         }
+        // FRESH-SPEND admissibility (MTG_FRESH_SPEND_AXIS): a freshmode variant exists ONLY to
+        // realize a this-turn kill -- when the kill is real the win-floor above already took it
+        // (and the committed plan carries the pin for the executor). Anything else is the
+        // speculative spend-vs-bank comparison the fresh-hold doctrine exists to forbid (train:
+        // global release 73 slower / 31 faster), so the variant is discarded before its tail is
+        // ever scored. Deliberate v1 bound: a this-turn kill completed in the SECOND main (crack
+        // the mint post-combat) is not admitted; no observed case yet -- extend by clamping the
+        // tail's cutoff to state.turn_number if one appears.
+        if (p.freshmode_choice == 1)
+        { if (rec_vals) { node_vals.push_back(max_turns + 1); } continue; }
 
         int chose_release = -1;   // -1 not contested / 0 natural / 1 release / 2 hold
         TurnSolver::SearchLine tail =
@@ -25814,7 +25886,7 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
         && g_scripted_sac_cursor < static_cast<int>(g_scripted_sac_pins->size());
     if (g_scripted_top_choice >= 0 || g_scripted_etbdig_choice >= 0
         || g_scripted_tutor_choice >= 0 || g_scripted_reorder_choice >= 0
-        || g_scripted_tapmode != 0 || sac_pins_live)
+        || g_scripted_tapmode != 0 || g_scripted_freshmode != 0 || sac_pins_live)
     {
         Fold(k, 0x5C21);
         Fold(k, static_cast<uint64_t>(g_scripted_top_choice + 1));
@@ -25822,6 +25894,7 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
         Fold(k, static_cast<uint64_t>(g_scripted_tutor_choice + 1));
         Fold(k, static_cast<uint64_t>(g_scripted_reorder_choice + 1));
         Fold(k, static_cast<uint64_t>(g_scripted_tapmode));
+        Fold(k, static_cast<uint64_t>(g_scripted_freshmode));
         if (sac_pins_live)
         {
             Fold(k, 0x5AC1);

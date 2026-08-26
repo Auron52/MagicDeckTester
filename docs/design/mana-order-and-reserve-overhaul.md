@@ -1081,3 +1081,57 @@ train under the full candidate config vs the pre-fix fcB baseline: 1600 games, Z
 win-turn changes, 4 games play-fingerprint-only (d3 gi16/gi151, d5 gi16/gi47 — the m2
 payment re-picked, same outcome). fc341 closes the M2_RELEASE-caused unrecoverable;
 open list is now Cluster C (mw136), Cluster D (mw326), st993, CR-cast gate, flip.
+
+## Cluster C (mw136) ROOT-CAUSED + FIXED — MTG_FRESH_SPEND_AXIS (2026-08-26)
+
+REPRO: Mirrorwing d5 shape, `--seed 6142 --game-index 136 --games 1 --budget-ms 0
+--threads 1`. Bundle = 6, bundle+axis = 5, matching the FH=0 arm's 5.
+
+ROOT CAUSE — a proven counterexample to the fresh-hold doctrine. mw136's winning T5:
+Gold Rush {1}{G} (mints a Treasure) + Fists of Flame {1}{R} + Luxurious Libation {X}{G}
+with X=1 funded by CRACKING THE SAME-TURN MINT = exactly 7 combat damage. Under
+fresh-hold the mint is invisible to payment and pools: X=0, 6 damage, opponent lives on
+1, win slips to T6. Proven two ways: a forced-lands probe (MTG_FORCE_LAND walking the
+identical surface line under the bundle still prices X=0 and wins 6 — the loss is the
+doctrine, not land order) and the FH=0 log (no Treasure on the battlefield after m1;
+opp 7→0).
+
+INSTRUMENT CAVEAT (recorded for future defect work): EnumerateEarliestWins said
+earliest=6 at T2 in BOTH arms while the FH=0 arm's real game realized 5 from the same
+candidate — EWINS' continuation policy under-performs the committed-line machinery
+(deferred-breakpoint re-solves, X re-choice) and is a DEAD INSTRUMENT for this class.
+Trust forced-walk probes and realized games instead.
+
+WHY NOT RETIRE THE DOCTRINE: mirrorwing train, FH=0 vs bundle: 73 games slower /
+31 faster (d0 65/28, searched 8/3). The doctrine still earns its keep — the search
+overvalues speculative spend-lines. Both gate-retirement and an unconditional searched
+branch are contraindicated by measurement.
+
+FIX — the sac-axis architecture applied to fresh-hold (heuristic-as-hard-rule → branch
+overridden by a heuristic, per the user's standing directive): MTG_FRESH_SPEND_AXIS
+(default OFF; the doctrine is the user's, amending its reach is an adoption decision).
+One shared predicate `FreshHoldActive()` (SpellEffects.h) = PaySacFreshHoldEnabled() &&
+g_scripted_freshmode != 1, read by PaySacSpendableNow, MintedTreasureSpendable, and both
+enumeration mint-credit twins. Plans carry `freshmode_choice` (whole-plan static pin);
+EnumeratePlansWithLand fans out a freshmode=1 twin of every axis-clean treasure-minting
+plan; ScriptedFreshMode RAII pins it in ApplyPlanDirect, the executor (AIEngine), and
+folds into the 0x5C21 memo key when non-zero. Copy fan-out suffices — creates_treasures
+opens the DEFERRED BREAKPOINT, so the post-mint re-solve re-chooses Libation's X under
+the pin.
+
+ADMISSIBILITY IS THE DESIGN CORE: freshmode variants are admitted ONLY when their
+simulated combat kills the turn they apply (FSLineWin discards them past the win-floor
+check otherwise; discarded variants record max_turns+1). Banking has zero option value
+at a terminal win, so the comparison is exact, not speculative — the 73/31 hazard never
+prices in. Host-gated via thread-local g_fresh_axis_enum: only FSLineWin's enumeration
+emits variants, because only its plan loop validates them; d0 greedy, legacy lookahead,
+m2 host, and breakpoint re-solves are byte-identical. v1 BOUND: m2-completed kills are
+not admitted; extend by clamping the tail's cutoff to state.turn_number if a case
+appears.
+
+VERIFIED: acid — mw136 bundle+axis=5 (log shows the mint cracked, X=1, 7 damage),
+bundle-no-axis=6. Clean-env smoke 42/42, 0 configs changed. Mirrorwing train: bundle
+no-axis arm BYTE-IDENTICAL to the pre-refactor bundle arm (refactor inert); bundle+axis
+arm: 0 faster / 1 slower in-train (d5 s2002 gi48 5→6 — RECOVERABLE: wins 5 at b30 and
+at unbounded, train runs b20; fan-out budget noise, clears the standing rule) plus 3
+fingerprint-only. Open list is now Cluster D (mw326), st993, CR-cast gate, flip.

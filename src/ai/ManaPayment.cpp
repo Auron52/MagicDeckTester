@@ -824,7 +824,7 @@ static bool LadderProjectable(const GameState& state, const std::vector<Action>&
 // common fan shape is Zada-then-Gold-Rush inside one plan.
 static bool MintedTreasureSpendable(const GameState& state, const std::vector<Action>& acts)
 {
-    if (!TreasurePaySourceEnabled() || !PaySacFreshHoldEnabled()) { return true; }
+    if (!TreasurePaySourceEnabled() || !FreshHoldActive()) { return true; }
     if (CopyMagnetLive(state, state.active_player_index)) { return true; }
     for (const Action& a : acts)
     {

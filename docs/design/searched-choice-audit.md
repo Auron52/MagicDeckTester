@@ -138,3 +138,19 @@ heuristic decision point must either (a) ride an existing searched axis, or (b) 
 a measured A/B (the heuristic-optimization skill's loop) before adoption. A bare untested
 rank/order added to both engines is the failure mode cg30 exemplifies — the tapped-first
 sac rule shipped inside a feature and was never separately measured.
+
+## (C) LATENT DEFECT recorded 2026-08-26: tapmode axis has NO executor pin
+
+Found while building MTG_FRESH_SPEND_AXIS's executor lockstep. The tapmode axis
+(UnprunedGate::TapReserve, `tapmode_choice` on the Plan, ScriptedTapMode RAII in
+ApplyPlanDirect) is pinned in the SOLVER's plan-application but NOT in the EXECUTOR:
+AIEngine.cpp's pin block (ScriptedSacLand / ScriptedFreshMode etc., ~2434) has no
+ScriptedTapMode. This is exactly the cg30 two-sites class: a plan chosen under
+tapmode=1 pricing would be re-priced by the executor under tapmode=0 rules, so the
+realized payment can diverge from the priced one.
+
+LATENT, not live: the gate defaults OFF, so no shipped configuration hits it. But any
+future sweep or adoption of TapReserve will silently measure a chimera (solver arm A,
+executor arm default). FIX WHEN TOUCHED: add `ScriptedTapMode _stm_exec(
+plan.tapmode_choice);` beside the other executor pins and re-run the gate's acid case
+before trusting any TapReserve measurement.

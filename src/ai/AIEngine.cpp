@@ -2440,6 +2440,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     ScriptedSacLand _ssac_exec(plan.sac_pins);      // executor/rollout lockstep for the searched
                                                     // sac-land picks (one entry per sac ordinal,
                                                     // resolved at the true state); empty inert
+    ScriptedFreshMode _sfm_exec(plan.freshmode_choice);  // executor/rollout lockstep for the
+                                                    // fresh-spend branch: the committed lethal's
+                                                    // payment may crack the same-turn mint, so the
+                                                    // replay must pay in the same world; 0 inert
 
     // Same for the searched Lackey put -- executor/rollout lockstep: without it the search would
     // score one Goblin entering and the real game would put a different one.

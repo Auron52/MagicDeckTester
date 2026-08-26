@@ -475,6 +475,16 @@ public:
         // heuristic is unchanged and this costs nothing until the audit asks for it.
         int tapmode_choice = 0;
 
+        // FRESH-MINT release (MTG_FRESH_SPEND_AXIS). 0 (default) == the §2a fresh-hold doctrine
+        // (a magnetless same-turn Treasure is a bank, invisible to payment and pools); 1 == this
+        // variant prices and pays with the fresh mint spendable. Whole-plan static pin
+        // (ScriptedFreshMode), tapmode's twin. A freshmode variant is ADMISSIBLE only when its
+        // simulated combat wins the turn it applies (FSLineWin discards the rest): spending
+        // vs banking is a speculative next-turn comparison the search misprices (train: global
+        // release 73 slower / 31 faster), but when the line kills NOW the bank is worth zero and
+        // the comparison is exact (mw136's T5 Gold-Rush -> Libation X+1 exact lethal).
+        int freshmode_choice = 0;
+
         // Goblin Lackey put (combat_damage_puts_subtype_from_hand): which candidate of the
         // provider's ranked CombatCheatCandidates the trigger puts onto the battlefield. -1
         // (default) == the provider's top pick, byte-identical to no branch. Unlike scry_choice and
