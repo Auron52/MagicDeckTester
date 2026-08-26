@@ -226,6 +226,39 @@ static const int   s_dork_ramp     = s_dork_ramp_env ? std::atoi(s_dork_ramp_env
 // and stays byte-identical. thread_local so parallel rollouts don't race.
 // g_search_candidate_enum moved to SpellEffects.h (shared with DecisionProviders; see note there).
 
+// The m2 land drop is LIVE at this state: globally (MTG_MAIN2_DROP), or -- USER rule 2026-08-26
+// (MTG_M2_RECONSIDER, EngineFlags.h) -- because a STAGED land sits in hand that main-1 could not
+// have planned around. See the comment at the consider host for the full rationale.
+static bool M2DropLive(const GameState& s)
+{
+    if (Main2DropEnabled()) { return true; }
+    if (!M2ReconsiderEnabled()) { return false; }
+    const Player& p = s.ActivePlayer();
+    if (p.lands_played_this_turn >= p.LandDropsAvailable()) { return false; }
+    for (const Card& c : p.hand)
+    {
+        // A staged land is here NOW (arrived after main-1 -- e.g. a post-combat Light Up the
+        // Stage already resolved at this state).
+        if (c.m_is_staged && !c.m_impulse_no_land && c.IsLand()
+            && s.turn_number <= c.m_staged_expiry) { return true; }
+        // A STAGER is in hand: a land may arrive MID-PLAN (cast LUTS -> staged Mountain ->
+        // play it -> its mana casts the next spell). The searched-continuation fan that finds
+        // that chain only forms on the with-land enumeration path, and at THIS (pre-cast)
+        // state the land does not exist yet -- so the potential is the trigger. Presence-only
+        // by design: castability is the enumeration's job, and a false positive costs plan
+        // space only in a deck that plays staging cards at all.
+        // FORWARD trigger scope: stages_cards only (the LUTS class). Expressive Iteration was
+        // tried here and REVERTED: an EI land staged in main-1 is already covered by the
+        // staged-NOW branch above, while speculatively opening every m2 where an EI merely sits
+        // in hand reproduced part of the blanket flag's measured hinata harm (train d3_s3003
+        // 5.6800 -> 5.7050, the blanket value). Spectacle-class stagers WANT the post-combat
+        // cast; EI does not.
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->params.stages_cards) { return true; }   // staged stagers count too
+    }
+    return false;
+}
+
 // Move-ordering for the full-depth branch-and-bound (FSLineWin / FSLineTail). Each B&B loop
 // returns at the FIRST verified in-horizon win; trying the plans that statically look lethal
 // (then higher-value) first makes that win surface after fewer simulated plans, so WINNING
@@ -14229,7 +14262,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // gi=141 lockstep lesson. Flag off => post-combat plans carry no land, block no-op, byte-identical.
     // bp_resume: the whole prefix (this land block through the Karoo deferral) is INSIDE the
     // snapshot's state -- skipped.
-    if (bp_resume == nullptr && (is_pre_combat || s_human_play || Main2DropEnabled()))
+    if (bp_resume == nullptr && (is_pre_combat || s_human_play || Main2DropEnabled()
+                                 // Reconsider mode: the executor follows any land the SEARCH
+                                 // decided (it only decides one where M2DropLive held); the
+                                 // greedy fallback stays pre-combat-only either way.
+                                 || (M2ReconsiderEnabled() && plan.land_decided)))
     {
         if (plan.land_decided)
         {
@@ -20260,6 +20297,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     RevealLogPause _rlp_enum;   // candidate scoring is hypothetical -- see EnumeratePlans
     considerstats::RecordHost(is_pre_combat);
     const Player& ap = state.ActivePlayer();
+    // The m2 land drop is LIVE at this state: globally (MTG_MAIN2_DROP), or -- USER rule
+    // 2026-08-26 (MTG_M2_RECONSIDER) -- because a STAGED land sits in hand that main-1 could
+    // not have planned around (impulse-exiled by a post-combat Light Up the Stage etc.).
+    // Evaluated per-state: the extra land dimension exists only where such a land actually
+    // exists, so a deck that never stages a land never enumerates it (the plan-space bloat
+    // measured under the blanket flag is impossible by construction, not by deck exclusion).
+    // Drawn-after-m1 lands are the deferred second half (needs an arrival stamp threaded
+    // through Library::DrawN); every measured win so far is staged. Known accepted corner
+    // (USER): a hand land played in m1 BEFORE a post-combat staging of two lands can strand
+    // one staged land at expiry -- recoverable only by the search holding the m1 drop in
+    // anticipation, "probably never relevant in a real game". (Definition: M2DropLive, file
+    // scope near the top -- also used by the FSLineTail second-main enumeration sites.)
     // Human play also offers the land drop in the POST-combat main when it is still open: a real
     // game can pass the drop pre-combat, cast a Spectacle dig (Light Up the Stage) post-combat, then
     // play a land it revealed as the turn's drop. The autonomous search historically only dropped
@@ -20269,7 +20318,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     // (MTG_MAIN2_DROP, EngineFlags.h) opens it for the autonomous engine too; the executor's
     // fold_land follows the same reader, so search and executor stay lockstep.
     const bool s_human_play_drop = HumanPlayActive();
-    bool drop_available = (is_pre_combat || Main2DropEnabled() || s_human_play_drop)
+    bool drop_available = (is_pre_combat || M2DropLive(state) || s_human_play_drop)
                        && ap.lands_played_this_turn < ap.LandDropsAvailable();
 
     if (!drop_available)
@@ -23008,8 +23057,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         std::vector<TurnSolver::Plan> post;
         {
             EnumTimeScope _ets;
-            post = Main2DropEnabled() ? EnumeratePlansWithLand(state, false)
-                                      : EnumeratePlansM2Memoized(state);
+            post = M2DropLive(state) ? EnumeratePlansWithLand(state, false)
+                                     : EnumeratePlansM2Memoized(state);
         }
         // Always allow casting nothing in the second main and just advancing the
         // turn. EnumeratePlans returns an empty vector when no post-combat play is
@@ -23020,7 +23069,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // land_decided on the do-nothing plan (an explicit deferred/blank drop) so the
         // land-execution path never greedy-plays a land the enumeration did not choose.
         post.push_back(TurnSolver::Plan{});
-        post.back().land_decided = Main2DropEnabled();
+        post.back().land_decided = M2DropLive(state);
         MoveOrderPlans(post);   // lethal-looking / higher-value second mains first -> earlier cutoff
         // NOTE: we do NOT shortcut on the projected `wins_this_turn` flag here. That
         // projection (pending_atk + direct_dmg >= opp life) can over-count what the
@@ -23213,8 +23262,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 std::vector<TurnSolver::Plan> tranche;
                 {
                     CondemnSuppressGuard _cs;   // unfiltered enumeration
-                    tranche = Main2DropEnabled() ? EnumeratePlansWithLand(state, false)
-                                                 : EnumeratePlans(state, false);
+                    tranche = M2DropLive(state) ? EnumeratePlansWithLand(state, false)
+                                                : EnumeratePlans(state, false);
                 }
                 tranche.erase(std::remove_if(tranche.begin(), tranche.end(),
                                   [&](const TurnSolver::Plan& q)

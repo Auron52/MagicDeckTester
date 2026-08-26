@@ -1945,7 +1945,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // so the executor follows the plan's land exactly like the first main (the greedy
         // suppression note below remains true for the flag-off world it describes).
         const bool fold_land = (m_lookahead_depth > 0
-                                && (is_pre_combat_main || Main2DropEnabled()));
+                                && (is_pre_combat_main || Main2DropEnabled()
+                                    // Reconsider mode (MTG_M2_RECONSIDER): m2 land handling is
+                                    // plan-driven -- the solver's M2DropLive opens the land
+                                    // dimension per-state and the executor follows the plan's
+                                    // land exactly; the depth>0 greedy m2 fallback stays
+                                    // suppressed (gi=141 lockstep), same as flag-off today.
+                                    || M2ReconsiderEnabled()));
 
         if (!fold_land)
         {

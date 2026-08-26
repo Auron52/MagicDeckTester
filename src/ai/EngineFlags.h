@@ -24,6 +24,21 @@ inline bool Main2DropEnabled()
     return v;
 }
 
+// MTG_M2_RECONSIDER=1 -- measurement lever (default OFF): main 2 RECONSIDERS newly-available
+// cards, including the land drop (USER rule 2026-08-26: "all we need to do is allow for
+// reconsideration of drawn/staged cards including the land drop" -- NOT a spectacle/deck
+// special case). Unlike MTG_MAIN2_DROP (blanket m2 land dimension, measured to bloat hinata's
+// plan space), this opens the m2 land drop ONLY at states where a STAGED land sits in hand --
+// a land main-1 could not have planned around, e.g. impulse-exiled by a post-combat spectacle
+// Light Up the Stage (the measured burn mechanism: 12/12 cells faster). Read by the search
+// (M2DropLive in TurnSolver) and the executor (AIEngine fold_land + ApplyPlanDirect's
+// plan.land_decided follow) -- shared reader per the lockstep rule.
+inline bool M2ReconsiderEnabled()
+{
+    static const bool v = EnvOn("MTG_M2_RECONSIDER");
+    return v;
+}
+
 // MTG_DORK_GROWTH -- same-turn SCALED-MANA-DORK growth (Priest of Titania / Elvish Archdruid):
 // a dork whose one-tap yield is the live count of its subtype grows with every matching creature
 // cast this turn, so (a) EnumeratePlans credits a subset's matching casts into each live dork's
