@@ -302,17 +302,47 @@ ROW_K=3
 ROW_GAMES=2500
 mapfile -t DECK_TABLE < <(python3 scripts/deck_registry.py --shell "$ROW_GAMES")
 [ ${#DECK_TABLE[@]} -gt 0 ] || { echo "no decks discovered under decks/ -- each needs <stem>.cod|.txt AND <stem>.profile.json"; exit 2; }
-# SINGLE-DECK MODE. `run <deck-dir>` replaces the table above with one row derived from the folder,
-# so a NEW deck goes through exactly this pipeline instead of a hand-rolled one. Nothing else differs:
-# same phases, same staging, same freeze rule. Its own VLQ dir keeps it from colliding with a fleet run.
-DECK_DIR=${2:-}
-if [ -n "$DECK_DIR" ]; then
-    _stem=$(basename "$DECK_DIR")
-    _key=$(echo "$_stem" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '_')
-    [ -d "$DECK_DIR" ] || { echo "no such deck dir: $DECK_DIR"; exit 2; }
-    [ -e "$DECK_DIR/$_stem.profile.json" ] || { echo "no profile at $DECK_DIR/$_stem.profile.json -- run analyze_deck.py first"; exit 2; }
-    DECK_TABLE=("$_key|$DECK_DIR|$_stem|$_key|900000|$ROW_GAMES")
-    VLQ=logs/vlq_$_key
+# NAMED-DECK MODE. `run <deck-dir> [<deck-dir> ...]` replaces the table above with one row per named
+# folder, so a NEW deck goes through exactly this pipeline instead of a hand-rolled one. Nothing else
+# differs: same phases, same staging, same freeze rule. Its own VLQ dir keeps it from colliding with
+# a fleet run.
+#
+# MORE THAN ONE DECK GOES IN ONE QUEUE, never a deck-at-a-time loop. Every phase here is already
+# multi-deck (the fleet path IS this path with more rows), and the reason matters: phases A, C and E
+# are each ONE pooled batch, so N decks in one queue pay three tails TOTAL while N sequential runs
+# pay 3N -- plus each run's serial stretches (train, metadata, the report pass) idle the whole box
+# while the next deck's games wait. That is the repo's standing rule (CLAUDE.md: one pooled work
+# queue; "WAVES ARE A LOOP"), and per-deck invocation is exactly the wave it forbids. Pooling costs
+# nothing in isolation either -- rows split by seed bucket, cells are keyed by deck, and phase E
+# writes per-deck reports.
+DECK_DIRS=("${@:2}")
+DECK_DIR=${2:-}                                    # first only; the resume hint uses DECK_ARGS below
+DECK_ARGS=""
+if [ ${#DECK_DIRS[@]} -gt 0 ]; then
+    DECK_TABLE=(); _keys=()
+    for _dd in "${DECK_DIRS[@]}"; do
+        _dd=${_dd%/}
+        _stem=$(basename "$_dd")
+        _key=$(echo "$_stem" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '_')
+        [ -d "$_dd" ] || { echo "no such deck dir: $_dd"; exit 2; }
+        [ -e "$_dd/$_stem.profile.json" ] || { echo "no profile at $_dd/$_stem.profile.json -- run analyze_deck.py first"; exit 2; }
+        # ROW SEED BASE. phase_split recovers which deck a pooled row belongs to with
+        # `seed / 100000`, so the bases must be DISTINCT whenever more than one deck shares a queue.
+        #   * one deck  -> the historical literal 900000. Every existing single-deck queue's rows on
+        #     disk were dumped under it, and moving it would strand them (they would split into an
+        #     empty bucket and phase B would retrain on nothing while reporting success).
+        #   * two+      -> the registry's assignment, which is the same one the fleet uses: a
+        #     crc32-of-key slot, so adding or removing a deck cannot renumber the others.
+        if [ ${#DECK_DIRS[@]} -eq 1 ]; then _base=900000
+        else _base=$(python3 scripts/deck_registry.py --shell "$ROW_GAMES" | awk -F'|' -v k="$_key" '$1==k{print $5}'); fi
+        [ -n "$_base" ] || { echo "$_key has no registry entry -- scripts/deck_registry.py discovers decks/<Stem>/ holding <Stem>.cod|.txt AND <Stem>.profile.json"; exit 2; }
+        DECK_TABLE+=("$_key|$_dd|$_stem|$_key|$_base|$ROW_GAMES")
+        _keys+=("$_key")
+        DECK_ARGS="$DECK_ARGS $_dd"
+    done
+    # Queue dir keyed by the SORTED key set, so `run A B` and `run B A` resume the same queue rather
+    # than silently starting a second one that repeats every game.
+    VLQ=logs/vlq_$(printf '%s\n' "${_keys[@]}" | sort | paste -sd+ -)
     DONE=$VLQ/done; ROWDIR=$VLQ/rows
     mkdir -p "$DONE" "$ROWDIR" logs/eval
 fi
@@ -944,11 +974,17 @@ if total:
 PY
     fi
     [ -s "$MATRIX_TXT" ] && echo "             table -> $MATRIX_TXT"
-    live=$(pgrep -c -x mtg 2>/dev/null || echo 0)
-    if [ "$live" != 0 ]; then echo "running    : yes ($live mtg) -- a games phase is active"
-    else                      echo "running    : no"; fi
+    # `pgrep -c` PRINTS 0 and EXITS 1 on no match, so the old `|| echo 0` appended a SECOND zero:
+    # $live became the two-line string "0\n0", which `!= 0` reports as RUNNING. Every idle queue read
+    # "a games phase is active", which is the one thing this line exists to tell you apart. Count the
+    # lines instead -- one number, always. `-x` (exact comm) is deliberate: `-f` self-matches this
+    # very script's command line. mtg.run is the regression harness's copy of the same binary; it
+    # competes for the box just as hard, so it counts.
+    live=$(pgrep -x 'mtg|mtg\.run' 2>/dev/null | wc -l)
+    if [ "$live" -gt 0 ]; then echo "running    : yes ($live mtg) -- a games phase is active"
+    else                       echo "running    : no"; fi
     echo
-    echo "resume     : bash $0 run ${DECK_DIR:-}"
+    echo "resume     : bash $0 run${DECK_ARGS:-}"
     echo "             Re-running is SAFE and incremental: finished phases are skipped via marker"
     echo "             files in $DONE, and rows dedupe on (seed,turn), so an interrupted dump loses"
     echo "             only in-flight games. To redo one phase, delete its marker and re-run."
@@ -977,5 +1013,5 @@ ab)
     phase_freeze && phase_measure || { log "STOPPED in ab"; exit 1; }
     log "=== AB COMPLETE -- nothing adopted; review the report above ==="
     ;;
-*) echo "usage: $0 {run|ab|status} [deck-dir]"; echo "  $0 run                    # regenerate the whole fleet"; echo "  $0 run decks/FiveColour   # one deck, new or existing"; echo "  $0 ab  decks/FiveColour   # adoption A/B of the staged model, no matrix needed"; echo "  the deck is the ONLY input; NEVER_CONDEMN (floor 5) is the one setting"; exit 2 ;;
+*) echo "usage: $0 {run|ab|status} [deck-dir ...]"; echo "  $0 run                          # regenerate the whole fleet"; echo "  $0 run decks/FiveColour         # one deck, new or existing"; echo "  $0 run decks/A decks/B          # two+ decks in ONE pooled queue (3 tails, not 3 per deck)"; echo "  $0 ab  decks/FiveColour         # adoption A/B of the staged model, no matrix needed"; echo "  the deck(s) are the ONLY input; NEVER_CONDEMN (floor 5) is the one setting"; exit 2 ;;
 esac
