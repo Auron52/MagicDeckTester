@@ -116,14 +116,39 @@ when payable WITHOUT tapping an attacker"). Nothing else in the engine prices an
 decision. The obvious candidate fix -- gate a SPECULATIVE cast (a tutor, a dig) on the
 no-attackers pool -- is untested and is the natural next experiment.
 
-## 4. What is NOT settled
+## 4. Cost
 
-* **Adoption is not proposed yet.** 59 : 31 combined is a real signal, but the 7 mulligan-divergence
-  games mean the play-only effect is smaller than the raw counts suggest, and the regressions are
-  concentrated in TOP_RESOLVE (16 of 31). Worth understanding the 12 "different cast CHOICE /
-  TOP_RESOLVE" games as a group before shipping — they may share one shape, the way the
-  KittyEquipment condemnation losses were all one card.
-* **Cost is unmeasured here.** Wall ms in the batch is contended and worthless; a `cost.py` pass on
-  the `.units` files is still to do.
+Work units on the same run. Stompy plays at a BUDGET (b20), so these say how the budget was SPENT,
+not what a prune costs -- see `breakpoint-condemnation-status.md` for why that distinction bit once
+already. Read them as "what the deck actually consumes", which is what they are.
+
+| arm | hold | train | mean ratio (hold/train) |
+|---|---|---|---|
+| order | -0.34% | -0.78% | 1.018 / 1.011 (typical game DEARER) |
+| top | -10.13% | -12.12% | 0.947 / 0.945 |
+| order+top | -10.27% | -11.71% | 0.960 / 0.957 |
+
+`MTG_TOP_RESOLVE` is ~10-12% CHEAPER, which is counter-intuitive for a lever that ADDS a breakpoint.
+Decomposing the saving by outcome shows it is not the improved games paying for it:
+
+| games | n (train) | units delta | share of total saving |
+|---|---|---|---|
+| win turn improved | 17 | -52% of their base | 12.9% |
+| win turn worse | 10 | -15% | 1.5% |
+| **win turn unchanged** | **1,973** | **-10.8%** | **85.7%** |
+
+Hold is the same shape (88.4% from 1,972 unchanged games). So the lever makes the TYPICAL Stompy
+turn ~10% cheaper to search without changing its outcome -- an effect that is not yet explained and
+should not be quoted as understood.
+
+## 5. What is NOT settled
+
+* **Adoption is not proposed yet.** 59 : 31 combined is a real signal and the cost is favourable,
+  but 7 of the 31 are mulligan divergence, so the play-only effect is smaller than the raw counts
+  suggest.
+* **The regression shape is now known and is fixable in principle** (section 3): gate a speculative
+  cast on `AvailableManaPoolNoAttackers`. Untested. If it closes the 11 persistent games without
+  costing the 37 wins, TOP_RESOLVE becomes a clear adopt.
+* **Why the typical game gets 10% cheaper is unexplained** (section 4).
 * **Gate 2 (the deleted-wins re-derivation) still needs running** under the combined arm, now that
   TOP_RESOLVE is known to matter.
