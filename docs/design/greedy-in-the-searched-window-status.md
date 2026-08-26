@@ -280,6 +280,18 @@ interior second main, so on the nine decks with no second main they are **struct
 second main is decided greedily at the branch site ~20.8k times per 150 games, and it has no
 override.
 
+**UPDATE 2026-08-26 — the `depth <= 0` half of this table is now MEASURED and CLOSED.** The row
+above is `depth > 0` only; at `depth <= 0` the branch site is greedy on every deck regardless of
+every hook, and that is where nearly all of it lives (antilife 100%, kitty 94.9%, fivecolour 83.4%
+of branch-site interior second mains). `MTG_M2_D0_SEARCHED` (heurarm, default OFF) converts it.
+Result: **the greedy plan is the SAME plan.** Byte-identical play digests over 1,000 unbudgeted
+games on antilife AND on kitty, and byte-identical on 35 of the 36 games where the shipped budget
+made the arms diverge; at play settings the arm is worse in 6 of 6 cells purely because the interior
+spend starves the outer candidate loop (-28.9% / -32.4% pass-0 candidate evaluations). NOT adopted.
+Full record: `searched-design-deck-rollout.md` §3c. The transferable half: **a greedy step is worth
+removing only where it is measurably WRONG, and one `budget_ms=0` digest comparison settles that
+before any conversion work.**
+
 ### 4.4 Per-deck greedy site map (all EVALUATION unless noted)
 
 `s0` draw breakpoint · `s1`,`s2`,`s4` other breakpoint classes · `s8` deferred/cantrip breakpoint ·
@@ -345,6 +357,9 @@ CONVERGENCE, not to a round number.
   re-validated without a scratch build.
 * `MTG_AL_SSM_ROLLOUT` — re-open antilife's declined rollout second main (default OFF, rejected).
 * `MTG_M2_CAP1` — cap the interior m2 solve to depth 1 (per-job form of `MTG_M2_SEARCH_DEPTH=1`).
+* `MTG_M2_D0_SEARCHED` — search the `depth <= 0` branch-site interior second main instead of taking
+  greedy (default OFF, measured and rejected; see §4.3's update). Also the cheap way to ask of any
+  future deck "is this greedy step actually wrong?" — run it at `budget_ms=0` and compare digests.
 * `MTG_M2_YIELD_STATS=1` now also prints **`M2 PATH`**, **`M2 SITE`** and **`COMMITTED PASS`** —
   which second-main path ran, at which call site, and which pass committed. This is the instrument
   that found everything in section 2.
