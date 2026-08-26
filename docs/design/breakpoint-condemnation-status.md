@@ -1,7 +1,8 @@
-# Breakpoint condemnation: fixed, play-neutral, a real but small prune -- flip is a USER call
+# Breakpoint condemnation: SIX bugs fixed; now globally adoptable -- the flip is a USER call
 
-**Status: the engine work is DONE and committed; the adoption decision is OPEN and belongs to the
-USER.** Self-contained. Supersedes the "condemnation is harmful" reading that circulated on
+**Status: the engine work is DONE and committed. As of 2026-08-26 the correctness fixes are DEFAULT
+ON and condemnation is quality-neutral on every deck it can fire on, so the remaining decision is
+whether to flip `MTG_BP_CLASSIFY` itself (which moves GT on mirrorwing). That belongs to the USER.** Self-contained. Supersedes the "condemnation is harmful" reading that circulated on
 2026-08-25 (measured on a filter with two reachability bugs still in it) AND the "it buys nothing,
 net +0.72% dearer" reading from earlier the same day (which measured how a BUDGET was spent rather
 than what the prune costs -- see the cost section).
@@ -13,9 +14,11 @@ condemnation filter refuses to re-offer a cast that the pre-breakpoint section a
 and passed on. It is a PRUNE — a pure cost device — and it is per-deck
 (`DecisionProvider::CondemnsConsideredAtBreakpoint`), plus a global `MTG_BP_CLASSIFY`.
 
-Live defaults today: OFF everywhere. `MTG_BP_CLASSIFY` off, AntiLifegain's `MTG_AL_BP_CONDEMN` off,
-KittyEquipment's hook returns `EnvOn("MTG_KE_CONDEMN")` (off). So everything below is inert until
-someone flips a default.
+Live defaults (2026-08-26): the FILTER is still off -- `MTG_BP_CLASSIFY` off, `MTG_AL_BP_CONDEMN`
+off, `MTG_KE_CONDEMN` off -- but every CORRECTNESS fix is now default ON
+(`MTG_BP_CONDEMN_ORDER_AWARE`, `_MANA_EXEMPT`, `_RITUAL_EXEMPT`, `_TUTOR_EXEMPT`,
+`_REDUCER_EXEMPT`). That split matters: previously a deck that flipped its per-deck hook silently got
+the PRE-FIX filter, because the fixes for bugs 1, 4 and 5 were themselves default OFF.
 
 ## The USER's specification, and why the first version was wrong
 
@@ -39,8 +42,10 @@ not review, and each deleted wins that no depth or budget could recover.
 | 5 | **TUTORS condemned** — what a tutor fetches is chosen at resolution, so the sibling line gets a different card | Hinata, same run |
 | 6 | **COST REDUCERS condemned** — a reducer is an accelerant that pays in discounts | Hinata, train gi=1938, 2026-08-26 |
 
-Bugs 4 and 5 are in §"Bugs 4 and 5" below. Both were found by root-causing a NEGATIVE measurement
-rather than by review, which is now four for five on this filter.
+Bugs 4-6 are below. Every one was found by root-causing a NEGATIVE measurement rather than by
+review -- five of the six were. Bugs 3, 4 and 6 are the SAME bug three times: an accelerant is
+whatever changes what the turn can afford, and each fix recognised only one more form of it
+(permanent -> spell -> discount).
 
 **Bug 2, why a tie is not "earlier".** Two cards at the same rank are peers with no enumerated order
 between them, so condemning a peer is symmetric: whichever the plan casts first, the other is
@@ -113,9 +118,10 @@ A third consideration is FORWARD-LOOKING: the filter fires in only ~17% of Kitty
 this deck has exactly one breakpoint class. A deck with frequent breakpoints would see a
 correspondingly larger saving, so "inert here" is not "inert in general".
 
-That is a USER call. The engine is ready either way: flipping
-`MTG_BP_CONDEMN_ORDER_AWARE` to default ON and Kitty's hook to `true` is a two-line change, and it
-would affect ONLY KittyEquipment (every other condemnation default is off).
+That is a USER call. **SUPERSEDED IN SCOPE by bugs 4-6 below**: `MTG_BP_CONDEMN_ORDER_AWARE` is now
+default ON, and the question is no longer Kitty-only -- with the reducer/ritual/tutor exemptions in,
+condemnation is quality-neutral on ALL five decks it can fire on, so the live proposal is to flip the
+GLOBAL `MTG_BP_CLASSIFY` rather than any per-deck hook. The section below has those numbers.
 
 ## Bugs 4 and 5 (Hinata, 2026-08-26) -- the exemption test was narrower than its own argument
 
