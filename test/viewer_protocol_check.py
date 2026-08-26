@@ -65,8 +65,12 @@ STRICT = "--strict" in sys.argv[1:]
 #      never skipped: losing it is genuine content loss and must surface as drift.
 # Scope: card name "Treasure Token" -- the only amount-1 pay-sac source (`sac_count` cannot
 # distinguish it: Lotus Bloom also records sac_count 1 but is amount 3 and KEEPS its action fold).
+# MTG_TREASURE_PAY_SOURCE is default-ON in the engine since the 89076b85 flip (EnvOn(..., true):
+# unset means ON, =0 means off). The checker's mirror must use the same default -- the original
+# presence-only read (`bool(_tps)`) left the compat DORMANT exactly when the engine behaviour was
+# on by default, so every treasure-naming reference gapped (Mirrorwing s9_gi8, 2026-08-26).
 _tps = os.environ.get("MTG_TREASURE_PAY_SOURCE")
-TREASURE_PAY_COMPAT = bool(_tps) and _tps != "0"
+TREASURE_PAY_COMPAT = _tps != "0"
 PAY_SAC_NAMES = {"Treasure Token"}
 
 # Per-replay ADDRESS-SPACE cap, in MB (MTG_REPLAY_AS_CAP_MB; 0 disables). A replay is an ordinary
