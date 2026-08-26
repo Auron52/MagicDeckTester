@@ -7599,6 +7599,38 @@ inline bool FreshHoldActive()
     return PaySacFreshHoldEnabled() && g_scripted_freshmode != 1;
 }
 
+// CURRENT PAYMENT's coloured need (W,U,B,R,G), published by TapForCostSharedOnce for the
+// duration of one payment and zero/dead everywhere else. Consumer: the sole-colour-provider
+// rank tier (MTG_SCARCE_COLOR_HOLD, DecisionProviders.cpp) -- the stranding it prevents exists
+// ONLY when the payment being ordered does NOT itself need the scarce colour (mw326: Gold Rush
+// {1}{G} eating the lone {R} source), so a payment that needs the colour keeps today's rank.
+// The first, unconditioned tier measured +0.067 summed on held-out mirrorwing (12/12 cells
+// worse) by reordering every mint-plan payment; this gate trims it to the hazard shape.
+// live=false => tier inactive (conservative: prepay combined solves and every non-payment rank
+// read are untouched). Same publish-a-scalar shape as the (reverted) fix-1 g_pay_remaining_pips.
+inline thread_local int  g_pay_colored_need[5] = {0, 0, 0, 0, 0};
+inline thread_local bool g_pay_need_live       = false;
+struct PayNeedScope
+{
+    int  prev[5];
+    bool prev_live;
+    PayNeedScope(int w, int u, int b, int r, int g)
+    {
+        for (int i = 0; i < 5; ++i) { prev[i] = g_pay_colored_need[i]; }
+        prev_live = g_pay_need_live;
+        g_pay_colored_need[0] = w; g_pay_colored_need[1] = u; g_pay_colored_need[2] = b;
+        g_pay_colored_need[3] = r; g_pay_colored_need[4] = g;
+        g_pay_need_live = true;
+    }
+    ~PayNeedScope()
+    {
+        for (int i = 0; i < 5; ++i) { g_pay_colored_need[i] = prev[i]; }
+        g_pay_need_live = prev_live;
+    }
+    PayNeedScope(const PayNeedScope&)            = delete;
+    PayNeedScope& operator=(const PayNeedScope&) = delete;
+};
+
 // The state-aware twin of IsPaySacSource: use at every "can this permanent pay / produce NOW"
 // site (payment usability + the pool/colour scans that must promise exactly what payment
 // delivers). Def-only IsPaySacSource remains correct at the identity sites (odometer exclusion,

@@ -38,6 +38,9 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     const ManaPool reserve_pre = state.floating_mana;
     ManaCost cost = cost_in;
     SpendFloatingTowardCost(state.floating_mana, cost);
+    // Publish this payment's coloured need (net of floating) for the sole-colour-provider rank
+    // tier -- see PayNeedScope in SpellEffects.h. RAII: dead again the instant this payment ends.
+    PayNeedScope _pns(cost.white, cost.blue, cost.black, cost.red, cost.green);
 
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
@@ -1707,7 +1710,13 @@ static std::uint64_t PayloadReserveMask(const GameState& state)
 // the greedy from burning the lone {R} land on a colour-flexible cost.
 static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost& cost)
 {
-    if (!ScarceColorHoldEnabled()) { return 0; }
+    // SPLIT LEVER (2026-08-26): the mask half sits behind its own opt-in, SEPARATE from the rank
+    // half (MTG_SCARCE_COLOR_HOLD). The rank half is the measured mw326 fix; this mask targets
+    // the prepay-declined multi-cast class, which has NO motivating case yet -- and the held-out
+    // mirrorwing A/B of the combined lever ran net-worse, so the unproven half must be
+    // independently measurable (and stays off) until a case motivates it.
+    static const bool s_mask_on = EnvOn("MTG_SCARCE_COLOR_MASK");
+    if (!s_mask_on) { return 0; }
     const PlanTraits* pt = CurrentPlanTraits();
     if (!pt || pt->mana_casts < 2) { return 0; }
     const int n = static_cast<int>(state.battlefield.size());

@@ -1856,9 +1856,13 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     const int amt = ManaProducedPerTap(def);
     // SOLE-COLOUR PROVIDER (MTG_SCARCE_COLOR_HOLD's rank half -- see ScarceColorHoldEnabled in
     // SpellEffects.h for the mw326 trace): a source that is the ONLY untapped provider of one of
-    // its colours taps LAST of the plain sources (66: past the whole DTL creature band's flat/
-    // grower tiers, before the fuel dork at 67 -- a stranded colour costs this turn, an exiled
-    // fetch is gone forever). This is the same stranding class the colourless-before-mono tier
+    // its colours taps LAST OF THE LANDS (63: past every plain-land tier and the reserve tiers
+    // 60-62, BEFORE the DTL creature band at 64+ -- a first build used 66, past the flat/grower
+    // dorks, and measured +0.065 summed on held-out mirrorwing with the cost surviving every
+    // firing-condition narrowing: ranked past the band, the tier tapped BODIES in the land's
+    // place, contradicting the band's body-preservation doctrine on every mint turn; the fix
+    // only ever needed the sole provider to route colour-flexible pips to OTHER LANDS first).
+    // This is the same stranding class the colourless-before-mono tier
     // below fixes one level down: there a GENERIC pip ate a coloured source while colourless sat
     // untapped; here a colour-FLEXIBLE cost ate the board's lone {R} (mw326: Gruul Turf at the
     // fixed-multi 10 paid Gold Rush {1}{G} whole, so the breakpoint's Mirrorwing {R}{R} -- a cast
@@ -1866,14 +1870,18 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
     // ordering, not exclusion: a cost that genuinely needs the colour still taps it. Covers mono
     // sources too (a lone Mountain should not pay a generic pip while any other source can).
     //
-    // SCOPE (load-bearing): fires ONLY under a live plan apply whose plan can introduce a
-    // mid-turn cast (PlanTraits::mid_turn_casts -- mint / flood draw). That is the one shape no
-    // plan-scope mechanism can cover (the follow-on cast's pips are unknowable at payment time);
-    // known same-plan casts are covered losslessly by ScarceColorHoldMask. The first build
-    // applied this demotion to EVERY payment (null traits included) and wholesale-churned the
-    // slivers/antilife/dragonstorm trains (uniform 4->5 blocks) by reordering rollout-interior
-    // payments -- the exact MW gi75 distortion the null-traits contract exists to prevent.
-    if (ScarceColorHoldEnabled() && CurrentPlanTraits() != nullptr
+    // SCOPE (load-bearing, twice narrowed by measurement): fires ONLY (a) under a live plan
+    // apply whose plan can introduce a mid-turn cast (PlanTraits::mid_turn_casts -- mint / flood
+    // draw; the follow-on cast's pips are unknowable at payment time, the one shape no plan-scope
+    // mechanism can cover), and (b) inside a LIVE payment whose own coloured need EXCLUDES the
+    // scarce colour (g_pay_colored_need, published by TapForCostSharedOnce) -- the stranding is a
+    // colour-FLEXIBLE cost eating the lone provider; a payment that needs the colour keeps
+    // today's rank. Narrowing (a): the unscoped first build wholesale-churned the slivers/
+    // antilife/dragonstorm trains (uniform 4->5 blocks) by reordering rollout-interior payments
+    // (the MW gi75 distortion class). Narrowing (b): even mid-turn-cast-scoped, the
+    // unconditioned tier measured +0.067 summed on held-out mirrorwing (12/12 cells worse) --
+    // reordering every mint-plan payment costs more than the rare stranding it prevents.
+    if (ScarceColorHoldEnabled() && g_pay_need_live && CurrentPlanTraits() != nullptr
         && CurrentPlanTraits()->mid_turn_casts)
     {
         int mine = 0;
@@ -1900,7 +1908,11 @@ static int ManaSourceRankBase(const GameState& s, const CardDefinition& def)
                 }
             }
             for (int ci = 0; ci < 5; ++ci)
-            { if ((mine & (1 << ci)) && counts[ci] <= 1) { return 66; } }
+            {
+                // Demote only for a colour this payment does NOT need (narrowing (b) above).
+                if ((mine & (1 << ci)) && counts[ci] <= 1
+                    && g_pay_colored_need[ci] == 0) { return 63; }
+            }
         }
     }
     if (amt > 1 && static_cast<int>(prod.size()) > 1) { return 10; }  // bounce/fixed-multi: no choice

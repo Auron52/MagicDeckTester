@@ -1234,3 +1234,29 @@ FINAL SHAPE (all-lands-spawn AND drain-live AND no-refetch): cg train zero win-t
 3 d0 games fingerprint-only; cg30 recheck 4; smoke 42/42 0 changed. The gate now blocks exactly
 the shape the doctrine named, and that shape is rare enough to be outcome-neutral on the train —
 adoption is a doctrine-consistency call, not a numbers call (default OFF either way).
+
+### SCH held-out correction: the tier's rank was the cost, not its firing set (2026-08-26)
+
+The scoped tier still FAILED the held-out bar: bundle10+axis+SCH on the mirrorwing overnight
+seeds measured +0.067 summed over 12 cells (12/12 worse), while axis-only measured -0.0017
+(neutral; adopt-clean on its own). Two narrowings of the FIRING SET barely moved it (+0.063):
+(a) splitting the speculative mask half behind MTG_SCARCE_COLOR_MASK (default off, no motivating
+case -- the rank half alone is the mw326 fix), and (b) a per-payment coloured-need gate
+(PayNeedScope/g_pay_colored_need published by TapForCostSharedOnce: demote only for a colour the
+CURRENT payment does not need -- the actual stranding shape).
+
+The real cost was the DEMOTION TARGET: 66 ranks the sole provider past the DTL band's flat and
+grower dorks, so on every mint turn the tier tapped BODIES in the land's place -- re-creating
+exactly the body-bleed the band exists to prevent. The fix only ever needed colour-flexible pips
+routed to OTHER LANDS first. Moved to 63 (last of the lands, before the band): held-out SUM
+-0.0007 (neutral, three cells better), mw326 still 5 at d3+d5 unbounded, mw136 still 5.
+
+FINAL CANDIDATE MEASUREMENT (bundle10 vs bundle10+axis+SCH, both arms this binary):
+ * train full suite: 1 faster (mw d3 gi56 6->5) / 1 slower (mw d5 gi48 5->6 -- the known
+   RECOVERABLE axis fan-out budget artifact, wins 5 at b30 and unbounded), everything else
+   byte-identical in win turns across every deck and depth;
+ * held-out mirrorwing overnight: -0.0007 summed (neutral); fivecolour overnight from the
+   pre-narrowing run: flat-to-better (d0 -0.001..-0.0025, searched byte-flat);
+ * clean-env smoke 42/42, 0 configs changed.
+The train-visible mirrorwing d0 swing the broad tier produced (29 faster / 9 slower) did NOT
+survive held-out -- it was overfit; the narrowed tier trades it away for the neutral profile.
