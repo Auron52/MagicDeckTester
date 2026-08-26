@@ -1,4 +1,4 @@
-# Regression ground truth -- commit dea375b5  date 2026-08-26
+# Regression ground truth -- commit 89a2f6c6  date 2026-08-26
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -40,9 +40,9 @@ mirrorwing_smoke_d5_s1001=4.7467/d414c1f9e97ddde6
 fivecolour_smoke_d0_s1001=5.7830/d12e40a253275d5a
 fivecolour_smoke_d3_s1001=4.9667/e78c58adbad71403
 fivecolour_smoke_d5_s1001=5.1333/f6d7ed5a947b839a
-stompy_smoke_d0_s1001=5.8620/ffb3b0883cb1cf93
-stompy_smoke_d3_s1001=4.7000/d5448493909087df
-stompy_smoke_d5_s1001=4.6933/ffeaeef8af014330
+stompy_smoke_d0_s1001=5.8590/739596515d53a9d0
+stompy_smoke_d3_s1001=4.6933/2eb28e67d6eaae1f
+stompy_smoke_d5_s1001=4.6933/95390166f7af550b
 minotaur_smoke_d0_s1001=5.5070/0879e55559b8832e
 minotaur_smoke_d3_s1001=4.9920/cf2145b7c657f298
 minotaur_smoke_d5_s1001=5.0067/161a9186592451b6
@@ -108,11 +108,11 @@ fivecolour_regression_d3_s2002=4.8700/752a45d07327c153
 fivecolour_regression_d3_s3003=4.9500/3a9202c780ee2d3f
 fivecolour_regression_d5_s2002=4.8200/41afbbacfcb57c4e
 fivecolour_regression_d5_s3003=4.8900/97ce5224e181f1f1
-stompy_regression_d0_s2002=5.7990/6201a9057e1ba62c
-stompy_regression_d3_s2002=4.7600/154518c3f6494969
-stompy_regression_d3_s3003=4.8467/d76138ee3928055f
-stompy_regression_d5_s2002=4.7720/d6ac926aed19ba43
-stompy_regression_d5_s3003=4.8240/4d75af7a6432efd0
+stompy_regression_d0_s2002=5.7920/f6e738025d33b729
+stompy_regression_d3_s2002=4.7567/63e703dc35b8590d
+stompy_regression_d3_s3003=4.8400/3db2466d88ceabb2
+stompy_regression_d5_s2002=4.7640/df7444f778c2d515
+stompy_regression_d5_s3003=4.8120/0b2beee97d4044dd
 minotaur_regression_d0_s2002=5.5090/acda52e017080c31
 minotaur_regression_d3_s2002=5.0167/6d3abe76132c4ae2
 minotaur_regression_d3_s3003=4.9633/af9f1f635a42b49a
@@ -264,18 +264,18 @@ fivecolour_overnight_d5_s4004=4.8667/bda43a38464fad0a
 fivecolour_overnight_d5_s5005=4.9133/52f4d6f4be7a6da1
 fivecolour_overnight_d5_s6006=4.9300/fc1f831f760f28f9
 fivecolour_overnight_d5_s7007=4.8767/b85c0d6eb3178064
-stompy_overnight_d0_s4004=5.8605/9e212af78c5008c0
-stompy_overnight_d0_s6006=5.8230/f7dea3a617988f58
-stompy_overnight_d0_s8008=5.8465/a4ddcf8e0850dbd7
-stompy_overnight_d0_s10010=5.7860/4b259f94e58ec1f4
-stompy_overnight_d3_s4004=4.8260/0e35fdb85a30f310
-stompy_overnight_d3_s5005=4.8200/57a576789328259a
-stompy_overnight_d3_s6006=4.8330/8dbf9cd93a3498cc
-stompy_overnight_d3_s7007=4.7840/2635a658e6fe9a24
-stompy_overnight_d5_s4004=4.8220/7ddeb22522055a24
-stompy_overnight_d5_s5005=4.8480/232e08ff9671f590
-stompy_overnight_d5_s6006=4.8160/e4b682763e1fa307
-stompy_overnight_d5_s7007=4.8060/a0658cafd178436e
+stompy_overnight_d0_s4004=5.8565/0b9470b607ac57d1
+stompy_overnight_d0_s6006=5.8220/fc42fdef4c1a3f7a
+stompy_overnight_d0_s8008=5.8440/a56642c087694530
+stompy_overnight_d0_s10010=5.7865/64836eaf124c049e
+stompy_overnight_d3_s4004=4.8190/b95848fc2a9b8e85
+stompy_overnight_d3_s5005=4.8160/a54455582d9bb060
+stompy_overnight_d3_s6006=4.8280/14871cddfe856931
+stompy_overnight_d3_s7007=4.7820/555df86d5326baaf
+stompy_overnight_d5_s4004=4.8160/2623052f0abff19c
+stompy_overnight_d5_s5005=4.8400/e5a68d463cdc3899
+stompy_overnight_d5_s6006=4.8080/c58be8c531781dd5
+stompy_overnight_d5_s7007=4.8020/32e8436ae92398b7
 minotaur_overnight_d0_s4004=5.5330/3f6a7f493b61978d
 minotaur_overnight_d0_s6006=5.5085/1cadee06503d95cc
 minotaur_overnight_d0_s8008=5.5030/81aa3e48b7172b11
