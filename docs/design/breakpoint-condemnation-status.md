@@ -41,6 +41,7 @@ not review, and each deleted wins that no depth or budget could recover.
 | 4 | **RITUALS condemned** — bug 3's fix only recognises accelerants that are PERMANENTS | Hinata, 75 regressions, 2026-08-26 |
 | 5 | **TUTORS condemned** — what a tutor fetches is chosen at resolution, so the sibling line gets a different card | Hinata, same run |
 | 6 | **COST REDUCERS condemned** — a reducer is an accelerant that pays in discounts | Hinata, train gi=1938, 2026-08-26 |
+| 7 | **TREASURE-makers and, under a copy MAGNET, solo-target tricks** — condemnation FORCES THE CAST EARLY | Mirrorwing, train gi=13, 2026-08-26 |
 
 Bugs 4-6 are below. Every one was found by root-causing a NEGATIVE measurement rather than by
 review -- five of the six were. Bugs 3, 4 and 6 are the SAME bug three times: an accelerant is
@@ -257,6 +258,48 @@ saves: the find-promotion-only order is **+0.0113 (t=3.41) / +0.0120 (t=3.85)** 
 its own, and 1.9-2.5% dearer. Under it condemnation does improve (hold t=3.21 -> 0.71), but
 `base -> min_cond` is still +0.0120/+0.0147. The exemption buys the same soundness for free. See
 `hinata-cast-order.md`.
+
+## Bug 7 (Mirrorwing) -- the damage can run the OTHER way: a FORCED-EARLY cast
+
+Every earlier bug deleted a cast. This one adds one. Mirrorwing was the deck condemnation fires on
+most (21,841 per 8 games) and it measured neutral-but-leaning-worse: +0.0027 (t=1.23) train,
++0.0013 (t=0.43) hold. Root-causing its 24 train regressions -- all 24 have condemnations, none is a
+mulligan divergence -- the line diff says it plainly (train gi=13, a T4 win becoming T5):
+
+```
+  OFF (wins T4)                          ON (wins T5)
+  T2  holds Gold Rush                    T2 CAST Gold Rush      <- forced early, 1 creature out
+  T3/T4 casts it twice, more bodies out
+```
+
+**Banning a card in the continuation removes "decline now, cast it later this turn", so the only
+remaining options are "now" or "never" -- and the search takes "now".** In a Zada / Mirrorwing deck a
+solo-target trick is copied once per other creature, so a trick cast before the turn's bodies arrive
+is a drastically weaker spell.
+
+Two exemptions follow, both the accelerant argument again:
+
+* **Treasure-makers** (`creates_treasures`) join the RITUAL exemption -- a Treasure is stored mana,
+  so minting one is a ritual that pays later. Gold Rush (rank 15) was condemned at Fists of Flame
+  sites (16). *Honest caveat: this was folded in without its own arm. It removes 12% of the
+  condemnations, and the aggregate moved within noise -- it is kept on the soundness argument, not
+  on a measured win.*
+* **Solo-target tricks and body-makers while a copy magnet is on the battlefield**
+  (`MTG_BP_CONDEMN_COPY_EXEMPT`, default ON). A board-state rule, not a per-deck one; only Mirrorwing
+  contains a magnet at all, so it is provably inert on the other 14 suite decks.
+
+| contrast | train | hold | work |
+|---|---|---|---|
+| condemnation vs OFF, no copy exemption | +0.0027 (t=1.23) | +0.0013 (t=0.43) | -3.44% / -1.95% |
+| **+ copy exemption vs OFF** | **+0.0003 (t=0.18)** | **-0.0040 (t=-1.43)** | **-3.62% / -2.46%** |
+| the exemption itself | -0.0023 (t=-2.11) | **-0.0053 (t=-4.01), 16 faster : 0 slower** | a further -0.19% / -0.52% |
+
+### VOLUME IS NOT HARM -- twice, in opposite directions
+
+The copy exemption removes **0.7%** of Mirrorwing's condemnations (19,265 -> 19,133) and that 0.7% is
+the entire quality gain. Bug 5 was the mirror image: the tutor exemption removed **85%** of Hinata's
+condemnations and almost none of its damage. A condemnation counter tells you nothing about which
+condemnations matter -- always measure the metric.
 
 ### What this does NOT fix
 

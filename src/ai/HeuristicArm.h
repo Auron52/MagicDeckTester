@@ -86,6 +86,7 @@ enum Slot : int
     BP_CONDEMN_TUTOR,         // MTG_BP_CONDEMN_TUTOR_EXEMPT   never condemn a TUTOR (target is info-fixed)
     HINATA_DORK_TIE,          // MTG_HINATA_DORK_TIE       LOO: dork + engine tied at 10, as generic has them
     BP_CONDEMN_REDUCER,       // MTG_BP_CONDEMN_REDUCER_EXEMPT never condemn a COST REDUCER
+    BP_CONDEMN_COPY,          // MTG_BP_CONDEMN_COPY_EXEMPT   never condemn a trick under a copy MAGNET
     COUNT
 };
 
@@ -149,6 +150,7 @@ inline const char* Name(int slot)
         "MTG_BP_CONDEMN_TUTOR_EXEMPT",
         "MTG_HINATA_DORK_TIE",
         "MTG_BP_CONDEMN_REDUCER_EXEMPT",
+        "MTG_BP_CONDEMN_COPY_EXEMPT",
     };
     return (slot >= 0 && slot < COUNT) ? kNames[slot] : nullptr;
 }
