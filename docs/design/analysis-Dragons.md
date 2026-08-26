@@ -136,7 +136,7 @@ Scourge 0.145; Utvara Hellkite **−0.284** (an 8-drop), Lightning Greaves −0.
 | viewer_wiring | PASS — 2 types wired end-to-end (`bounce`, `target`) |
 | mismatch (5a) | **PASS — zero `[nonconv]`, zero `[fd-diverge]`** over seeds 7001/7002 × 60 games |
 | play_invariants | PASS — 8 games / 1120 decisions: determinism + integrity + progress hold |
-| claude_sweep (5d) | NOT RUN — needs the Sonnet subagent fan-out; this session was instructed not to spawn agents |
+| claude_sweep (5d) | NOT RUN — needs the Sonnet subagent fan-out, which this session's harness configuration blocks unless the user asks for it. NOT a user decision and NOT a judgement that the sweep is unnecessary; it is simply outstanding |
 
 **5b multi-depth sanity** (200 games, seed 2002, profile attached): d0 **6.240** → d3 **5.735**
 → d5 **5.735**. Monotonic (non-increasing with depth) and plausible for a deck whose payoffs
@@ -192,10 +192,12 @@ trips Treasure-Hunt detection.
 ## Open convergence loops
 
 * **5d claude-play sweep — NOT RUN.** The one gate item still open. It needs the ~15–20 game
-  Sonnet subagent fan-out from `.claude/skills/claude-play.md`; this session was instructed not to
-  spawn agents, so it is deferred to the user. `play_invariants` (determinism / integrity /
-  progress over 1120 decisions) already guards the protocol mechanically, but it is not a
-  substitute — the sweep's value is a second opinion on *legality and missed lines*.
+  Sonnet subagent fan-out from `.claude/skills/claude-play.md`, which this session's harness
+  configuration blocks unless the user asks for it. **This is an environment limitation, not a user
+  ruling and not a judgement that the check is unnecessary** — the deck is un-swept, and whoever
+  picks this up should run it. `play_invariants` (determinism / integrity / progress over 1120
+  decisions) already guards the protocol mechanically, but it is not a substitute: the sweep's
+  value is an independent opinion on *legality and missed lines*, which no mechanical gate gives.
 * **5c2 CLOSED** at 121,000 paired games — default kept ON, see the table above. Re-open only if
   someone wants the ~8 h `--blocks 270` run to resolve a 4e-5 turns/game effect.
 * **Not in the regression suite.** Adding Dragons to `test/regression_cases.sh` costs shared
