@@ -137,8 +137,11 @@ Commit `regression_gt.txt` together with the code/profile change that justified
 the new numbers.
 
 Typical rebaseline cycle after a deliberate change:
-`run → inspect FAILs/deltas → analyze EVERY changed game per-game → --accept → (optional) re-run to confirm all PASS`.
-The per-game analysis comes **before** `--accept`, always.
+`run → inspect FAILs/deltas → analyze EVERY changed game per-game → --accept`.
+The per-game analysis comes **before** `--accept`, always. Run each tier ONCE —
+never re-run a tier to "confirm" or to check it reproduces (user directive
+2026-08-26: duplicate runs are a waste; determinism is the engine's contract,
+and an unreproducible one-off anomaly is not grounds for a standing 2x tax).
 
 ### If your evidence says a tier WILL regress, rebaseline that tier NOW
 

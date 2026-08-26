@@ -284,8 +284,13 @@ What IS established, and what makes the tier safe to rebaseline anyway:
   mixed heavy batch, no-bincache copy, 48-way stress, and full runs 1 and 3);
 - runs 1 and 3 agree on all 168 cells.
 
-Do NOT accept a tier from a single run without re-running it. Two runs of the SAME binary is what
-caught this; it is cheap next to a corrupted baseline.
+~~Do NOT accept a tier from a single run without re-running it.~~ **RETRACTED — user directive
+2026-08-26: never run a tier twice.** The run-twice practice was this agent's invention, not a user
+rule, and the user has explicitly dropped it: run each tier once and accept from that run. The
+anomaly above remains a one-off that no one has been able to reproduce (a later 168-cell overnight
+re-run on 2026-08-26 was byte-identical to its first run); an unreproducible one-off is not worth a
+2x measurement tax on every accept. If a nondeterministic divergence ever shows up concretely in the
+course of normal work, address it then — do not run duplicate tiers as insurance.
 
 ## CLOSED 2 — ground truth IS rebaselined (this section records the pre-accept state)
 
