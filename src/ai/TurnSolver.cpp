@@ -13319,6 +13319,18 @@ namespace
         std::atomic<uint64_t> committed[kBpSites]{}; // subset on a COMMITTED line -> a real game decision
         std::atomic<uint64_t> searched[kBpSites]{};  // subset resolved by SEARCH (Plan::bp_choice)
         std::atomic<uint64_t> nested[kBpSites]{};    // NESTED (2nd+ breakpoint of an apply) -> still greedy
+        // WHY the greedy fell through, split into the two populations that need OPPOSITE treatment:
+        //   overrun  -- eligible, but bp_choice >= cands.size(). Wave 0 emits a FIXED depth*W
+        //               variants regardless of how long the continuation list really is, so these
+        //               are provably WASTED NODES: duplicates of the base plan (see the comment at
+        //               the fallback). Deletable outright -- widening W manufactures more of them.
+        //   untarget -- this plan is not the variant exploring THIS breakpoint (bp_choice < 0, i.e.
+        //               the base plan itself, or bp_at addressing a different occurrence). These are
+        //               real scoring positions whose continuation is decided greedily, so the base
+        //               plan is scored on a greedy continuation while its variants are scored on
+        //               searched ones. These need a searched REPLACEMENT, not deletion.
+        std::atomic<uint64_t> overrun[kBpSites]{};
+        std::atomic<uint64_t> untarget[kBpSites]{};
         ~BpProbe()
         {
             if (!EnvOn("MTG_BP_PROBE")) { return; }
@@ -13330,13 +13342,16 @@ namespace
                 const uint64_t z = nested[i].load(std::memory_order_relaxed);
                 if (n) { std::fprintf(stderr,
                                       "[bp-probe] %-58s total=%-10llu greedy=%-10llu searched=%-10llu"
-                                      " nested-unsearchable=%-10llu (%.1f%% searched, committed-line: %llu)\n",
+                                      " nested-unsearchable=%-10llu (%.1f%% searched, committed-line: %llu)"
+                                      "  [greedy split: overrun=%llu untarget=%llu]\n",
                                       kBpSiteName[i], static_cast<unsigned long long>(n),
                                       static_cast<unsigned long long>(n - q),
                                       static_cast<unsigned long long>(q),
                                       static_cast<unsigned long long>(z),
                                       n ? (100.0 * static_cast<double>(q) / static_cast<double>(n)) : 0.0,
-                                      static_cast<unsigned long long>(c)); }
+                                      static_cast<unsigned long long>(c),
+                                      static_cast<unsigned long long>(overrun[i].load(std::memory_order_relaxed)),
+                                      static_cast<unsigned long long>(untarget[i].load(std::memory_order_relaxed))); }
             }
         }
     };
@@ -13345,7 +13360,8 @@ namespace
     // one that still fell through to greedy TurnSolver::Solve. The purge is complete for a site when
     // greedy reaches 0 -- total alone cannot show that, and rises simply because more plans are
     // applied. See docs/design/post-breakpoint-search.md.
-    inline void BpHit(int i, bool on_committed_line, bool resolved_by_search, bool nested_blocked)
+    inline void BpHit(int i, bool on_committed_line, bool resolved_by_search, bool nested_blocked,
+                      bool eligible = false)
     {
         static const bool on = EnvOn("MTG_BP_PROBE");
         if (!on) { return; }
@@ -13353,6 +13369,13 @@ namespace
         if (on_committed_line)   { g_bp_probe.committed[i].fetch_add(1, std::memory_order_relaxed); }
         if (resolved_by_search)  { g_bp_probe.searched[i].fetch_add(1, std::memory_order_relaxed); }
         if (nested_blocked)      { g_bp_probe.nested[i].fetch_add(1, std::memory_order_relaxed); }
+        // See the field comments: an eligible-but-unresolved hit overran the continuation list (a
+        // wasted duplicate); an ineligible one is a plan that is not targeting this breakpoint.
+        if (!resolved_by_search)
+        {
+            (eligible ? g_bp_probe.overrun[i] : g_bp_probe.untarget[i])
+                .fetch_add(1, std::memory_order_relaxed);
+        }
     }
 
     // MTG_BP_CANDS_PROBE=1: the continuation-count distribution at every SEARCHED breakpoint (see
@@ -14769,7 +14792,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                          state.turn_number, site, seen_before, plan.bp_at, plan.bp_choice,
                          resolved ? 1 : 0, class_on ? "" : " (class off)");
         }
-        BpHit(site, out_breakpoint != nullptr, resolved, nested_blocked);
+        BpHit(site, out_breakpoint != nullptr, resolved, nested_blocked, eligible);
         return resolved;
     };
     // Play a continuation's SEARCHED land drop and record it for commit-the-line replay. Inert for
@@ -27134,9 +27157,50 @@ namespace
     }
 }
 
+// IS THE CONTINUATION IN LINE WITH THE DESIGN? (USER 2026-08-26: "we should not be rechecking most
+// spells at each breakpoint.") A continuation is only allowed to drop an already-considered cast
+// when BOTH halves of the condemnation contract hold at this enumeration:
+//   * BpClassifyActive(state) -- the deck (or MTG_BP_CLASSIFY) asks for condemnation at all, and
+//   * g_bp_hand_before != nullptr -- the PRE-DRAW hand snapshot is bound, which is what makes a card
+//     "already considered" rather than "new this breakpoint".
+// The snapshot is bound by exactly one scope (TurnSolver::CantripOrderScope), so a continuation
+// enumerated outside that scope re-offers the WHOLE hand no matter what the deck asked for -- and
+// "condemnation is on" then reads identical to "condemnation is doing something". Counted here so
+// that can never again be inferred from a provider hook reading ON. Under MTG_BP_PROBE only.
+namespace bpdesign
+{
+    inline std::atomic<uint64_t> g_with{0}, g_no_snapshot{0}, g_classify_off{0};
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!EnvOn("MTG_BP_PROBE")) { return; }
+            const uint64_t w = g_with.load(), n = g_no_snapshot.load(), c = g_classify_off.load();
+            const uint64_t t = w + n + c;
+            if (t == 0) { return; }
+            std::fprintf(stderr,
+                         "=== BP CONTINUATION ENUMS: %llu total | condemnation LIVE %llu (%.1f%%)"
+                         " | classify-off %llu | classify-on but NO pre-draw snapshot %llu ===\n",
+                         (unsigned long long)t, (unsigned long long)w,
+                         100.0 * static_cast<double>(w) / static_cast<double>(t),
+                         (unsigned long long)c, (unsigned long long)n);
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameState& state,
                                                                    bool is_pre_combat)
 {
+    // static, not a per-call EnvOn: this runs millions of times per game and a getenv here is the
+    // hot-path wart that has already had to be fixed twice in this file.
+    static const bool s_bp_probe = EnvOn("MTG_BP_PROBE");
+    if (s_bp_probe)
+    {
+        if (!BpClassifyActive(state))         { bpdesign::g_classify_off.fetch_add(1, std::memory_order_relaxed); }
+        else if (g_bp_hand_before == nullptr) { bpdesign::g_no_snapshot.fetch_add(1, std::memory_order_relaxed); }
+        else                                  { bpdesign::g_with.fetch_add(1, std::memory_order_relaxed); }
+    }
     // MEMO. The W variants of one base plan are emitted consecutively and every one reaches the SAME
     // breakpoint state, so without a cache each pays a full EnumeratePlansWithLand -- and that
     // enumeration is NOT a search node, so it never appears in interior_nodes (Dragonstorm at the
