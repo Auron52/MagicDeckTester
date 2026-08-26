@@ -7,7 +7,8 @@ pre-built set of games rather than a re-derivation.
 **Owner of the defect:** `BatchPrepayMainCasts` / the prepaid-pool spend path in
 `src/ai/TurnSolver.cpp`, gated by `MTG_PREPAY_TRUE_COLOURS` (default on).
 
-**The list:** `test/prepay_recheck_cases.tsv` — 418 games, self-contained.
+**The list:** `test/prepay_recheck_cases.tsv` — 418 games, self-contained and classified.
+**Start with the 44 `EXECUTION-DIFFERS` rows** (mirrorwing 32, hinata 8, slivers 4).
 **The tool:** `test/prepay_recheck.py verify` — run it on your tree, read the summary.
 
 ---
@@ -154,15 +155,49 @@ key  gi  deck  profile  seed  game_index  depth  budget  pre_fix  post_fix  attr
 checkout that does not share this repo's `gt_logs` or `explain_game.py` state. `pre_fix` is the win
 turn before the batch, `post_fix` the rebaselined value now (`-1` = no win inside `max_turns`).
 
-`walk_class` is the discriminating column:
+### Classified results (all 418, run 2026-08-26)
 
-- **EXECUTION-DIFFERS** — both arms were forced down the identical recorded line and still disagreed
-  on the result. This cannot be a search, ranking or enumeration effect; it is the payment path.
-  **These are the cases the prepay work should fix.**
-- **CHOICE-ONLY** — the recorded line still executes correctly under the fix; only the plan the search
-  *picked* changed. Fixing the payment path need not recover these, and they may be legitimate.
-- **REFUSED** — the current engine refuses an action of the old line (none expected; would be a
-  separate and more serious finding).
+**Attribution** — which switch, flipped alone, restores the pre-batch score:
+
+| attribution | games |
+|---|---|
+| `prepay-colours` | **217** |
+| `ritual-colours` | 138 |
+| `aura-fetch-order` | 45 |
+| `staged-suspend` | 6 |
+| both mana fixes | 5 |
+| `bestow-signature` | 4 |
+| combination / none | 3 |
+
+**`walk_class`** — computed for the 224 prepay-attributed cases only (the other 194 are
+`aura-fetch-order`, `staged-suspend` and `bestow-signature`, which are not payment-path changes):
+
+| class | games | meaning |
+|---|---|---|
+| **EXECUTION-DIFFERS** | **44** | both arms forced down the identical recorded line, different result. Cannot be search, ranking or enumeration. **This is the indicted class.** |
+| REFUSED | 59 | the fixed engine refuses an action of the old line and the control does not |
+| INCONCLUSIVE | 88 | the control refuses the same turn — the forced walk drifted, not a finding |
+| CHOICE-ONLY | 33 | the old line still executes fine; only the plan the search *picked* moved |
+
+**EXECUTION-DIFFERS spans three decks and all three tiers** — mirrorwing 32, hinata 8, slivers 4;
+five of them lost the win entirely (`post_fix = -1`). So this is **not** a Mirrorwing curiosity, which
+is what an earlier draft of this document assumed.
+
+### Reading the classes honestly
+
+- **EXECUTION-DIFFERS is the triage class, not a verdict.** It proves the *execution* changed, not
+  that the old outcome was legal. On hinata the same signature appears with the leftover reading
+  `{R:1, C:1}` — and that `C` is a Sol Ring's colourless, which is exactly the laundering the fix
+  exists to stop. So a hinata case here may be split between the legitimate correction and the
+  over-tap side effect, and each still needs its legality answered before assuming it should recover.
+  Mirrorwing gi309 is a defect *because* its T4 cost was independently shown payable without the dork.
+- **REFUSED is likewise ambiguous** for the same reason: a refusal is correct when the old line truly
+  needed laundered mana, and a defect when the line is legal but the over-committed surplus made it
+  unpayable in that order. 59 cases, mirrorwing 29 / hinata 28 / creature_giving 2 — none individually
+  adjudicated.
+- **INCONCLUSIVE means the instrument could not speak**, not that the case is clean. Forcing a whole
+  game re-derives every sub-decision, and a defaulted scry reorders the library; where the control
+  hits the same wall, the walk drifted. 88 of 224 land here, so absence of evidence is common.
 
 ## 5. How to use it
 
@@ -208,9 +243,12 @@ arms down every prepay-attributed line).
   directly off `floating_mana`). What is NOT established is *why* prepay taps four lands for a
   two-mana batch — whether that is deliberate ("commit the turn's sources up front") or itself a
   bug. That question lives inside the payment path and was left alone on purpose.
-- Whether the same signature explains any hinata / dragonstorm / slivers case is **unchecked**.
-  Those decks' movement is attributed to the ritual-colour fix, but attribution names a switch, not
-  a mechanism, and slivers is also cantrip-adjacent. Use the signature in §2a to triage.
+- ANSWERED since the first draft: the signature is **not** confined to Mirrorwing. EXECUTION-DIFFERS
+  covers hinata (8) and slivers (4) as well, and 217 of the 418 cases attribute to `prepay-colours`.
+  What remains unchecked is the per-case legality question above — which of those 44 + 59 cases
+  *should* recover, as opposed to merely differing.
+- dragonstorm has **no** prepay-attributed case at all: all 37 of its entries are `ritual-colours`,
+  which is why it is the one deck whose regression is unambiguously warranted.
 - The 418 cases are games that got **worse**. 125 got better over the same batch; those are not
   tracked here and some may be luck of the same re-ranking.
 - `pre_fix` is not automatically the "right" answer. For the ritual-colour decks the pre-fix value

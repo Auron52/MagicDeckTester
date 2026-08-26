@@ -209,7 +209,13 @@ def classify_one(binary, r):
             res = G.check_game(mode, r["key"], int(r["gi"]), binary, binary)
             if res.get("status") == "WALKED":
                 ow, ctl, rep = res.get("old_win"), res.get("old_self"), res.get("replay_win")
-                if res.get("blocked"):
+                b, cb = res.get("blocked"), res.get("ctrl_blocked")
+                # A refusal the CONTROL reproduces is the forced walk drifting off the recorded
+                # line (a defaulted scry reorders the library), NOT the engine refusing it. Only a
+                # refusal the control does not share is evidence -- same bar gt_line_playable uses.
+                if b and cb and cb.get("turn") == b.get("turn"):
+                    walk = "INCONCLUSIVE"
+                elif b:
                     walk = "REFUSED"
                 elif ctl == ow and rep != ow:
                     walk = "EXECUTION-DIFFERS"      # identical forced line, different result
