@@ -2444,6 +2444,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                     // fresh-spend branch: the committed lethal's
                                                     // payment may crack the same-turn mint, so the
                                                     // replay must pay in the same world; 0 inert
+    ScriptedTapMode _stm_exec(plan.tapmode_choice); // executor/rollout lockstep for the tapmode
+                                                    // (TapReserve) axis -- the searched-choice
+                                                    // audit's §C latent gap: the solver pinned
+                                                    // this in ApplyPlanDirect but the executor
+                                                    // re-priced under default rules, so any
+                                                    // TapReserve sweep measured a chimera; 0 inert
 
     // Same for the searched Lackey put -- executor/rollout lockstep: without it the search would
     // score one Goblin entering and the real game would put a different one.

@@ -139,7 +139,12 @@ a measured A/B (the heuristic-optimization skill's loop) before adoption. A bare
 rank/order added to both engines is the failure mode cg30 exemplifies — the tapped-first
 sac rule shipped inside a feature and was never separately measured.
 
-## (C) LATENT DEFECT recorded 2026-08-26: tapmode axis has NO executor pin
+## (C) FIXED 2026-08-26 (same day, mana-robustness pass): executor pin added --
+## `ScriptedTapMode _stm_exec(plan.tapmode_choice)` now sits beside the other executor pins in
+## AIEngine.cpp. Confirmed inert in shipped config: byte-identity smoke 42/42 on the pinned
+## build (gate defaults OFF -> tapmode_choice 0). Original record kept below.
+
+## (C-original) LATENT DEFECT recorded 2026-08-26: tapmode axis has NO executor pin
 
 Found while building MTG_FRESH_SPEND_AXIS's executor lockstep. The tapmode axis
 (UnprunedGate::TapReserve, `tapmode_choice` on the Plan, ScriptedTapMode RAII in

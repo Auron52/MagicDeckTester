@@ -13579,7 +13579,17 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     //
     // Cost is bounded and paid only where there is something to give back: the whole block is
     // skipped unless the solve tapped more sources than the bill has mana points.
-    static const bool s_shrink = EnvOn("MTG_PREPAY_SHRINK");
+    // ADOPTED default-ON 2026-08-26 (user approval at the measured cost; =0 disables): pooled
+    // batch makespans move ~0-1% (regression 140s->140s, overnight 867s->874s); the visible cost
+    // is ~+90s in regression's reference-sweep phase (224 serial replay chains inherit the flag).
+    // Recovers 12/16 proven §2c defect games on the post-sac-fodder tree, and RESTORES
+    // batch==standalone agreement for mirrorwing (the accepted GT windfall d3_s5005 4.7150 was a
+    // batch-only artifact riding the over-tap; with the shrink both read 4.7475 ~= the old
+    // standalone truth). Optimization headroom, deliberately NOT built (correct-by-construction
+    // beats surface area at this cost level): a sound release-feasibility prefilter needs
+    // per-source max-yield over ALL non-held sources (the re-solve may recruit substitutes), and
+    // the full-battlefield restore/best copies could shrink to tap-bit deltas.
+    static const bool s_shrink = EnvOn("MTG_PREPAY_SHRINK", true);
     if (s_shrink && n <= 64)
     {
         std::uint64_t newly = 0;
