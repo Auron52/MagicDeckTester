@@ -1,8 +1,10 @@
-# Breakpoint condemnation: fixed, measured inert, flip is a USER call
+# Breakpoint condemnation: fixed, play-neutral, a real but small prune -- flip is a USER call
 
 **Status: the engine work is DONE and committed; the adoption decision is OPEN and belongs to the
 USER.** Self-contained. Supersedes the "condemnation is harmful" reading that circulated on
-2026-08-25 — that was measured on a filter with two reachability bugs still in it.
+2026-08-25 (measured on a filter with two reachability bugs still in it) AND the "it buys nothing,
+net +0.72% dearer" reading from earlier the same day (which measured how a BUDGET was spent rather
+than what the prune costs -- see the cost section).
 
 ## What condemnation is
 
@@ -63,23 +65,47 @@ off). Arm = `MTG_KE_CONDEMN` + `MTG_BP_CONDEMN_ORDER_AWARE`.
 | m3 train | d7 / b10000 | 0 | 0 | identical | +3.13% |
 | m3 hold | d7 / b10000 | 0 | 0 | identical | −1.14% |
 
-Net work **+0.72%** — marginally dearer. Mean ratio is ~1.000 in every cell, so the typical game is
-untouched and a heavy tail on m3train carries the total. Only 5–6 games per cell play differently at
-all, and none changes a win turn.
+Net work **+0.72%** at the shipped budgets — which reads like "no saving", and is the wrong
+reading. **That number measures how the budget was SPENT, not what the prune costs.**
 
-**A correct condemnation buys nothing on this deck.** The 44–61% saving that originally justified it
-was a d3 gate-cell artefact (see the DROPPED note in `DecisionProviders.h`), and it does not survive
-at either mode the deck is actually judged at.
+`SearchBudget` is denominated in the very units being counted, and the iterative-deepening start
+gate reinvests anything a prune frees into BEGINNING another pass. So a budgeted search never
+returns a saving: total units stay pinned near the allowance and tail noise sets the sign. The repo
+already documents this dynamic for a different lever — the m2 search memo, where "a hit skips the
+nested search's budget consumption, so the outer deepening fits more passes ... that changed budget
+dynamic is part of what the adoption A/B judges."
+
+Re-measured at depth 5 with `budget_ms=0` (UNLIMITED), where a prune has nowhere to reinvest —
+1,500 paired games, hold block:
+
+| | cheaper | dearer | identical | mean ratio | total |
+|---|---|---|---|---|---|
+| condemnation vs base | **250** | **3** | 1,247 | 0.9969 ± 0.0005 | −0.11% |
+
+**It is a genuine prune and it does strictly less work**, ~83:1 in its favour on the games it
+touches. The total is only −0.11% because the filter fires in ~17% of games at all. Quality at
+unlimited budget is again 0 better : 0 worse, with 2 games playing differently.
+
+So the honest summary: a correct condemnation is play-safe and genuinely cheaper per search, but on
+this deck the budget converts that saving into MORE SEARCH at equal cost — and the extra search
+measures 0/0. The original 44–61% claim remains a d3 gate-cell artefact.
 
 ## The open decision
 
-Applying the adoption bar literally — *improve quality, or be quality-neutral **with other upside*** —
-condemnation stays OFF: it is quality-neutral with no upside, and a hair dearer.
+The adoption bar is *improve quality, or be quality-neutral **with other upside** (perf counts)*.
+Condemnation is now quality-neutral across 11,500 paired games and three budget regimes, and the
+upside is real but SMALL: strictly less search work (250 : 3 at unlimited budget) that the shipped
+budget spends on more search rather than returning as time. On this deck that extra search buys
+nothing measurable — so the flip neither clearly passes nor clearly fails the bar on perf grounds.
 
-The remaining argument for ON is **doctrinal, not empirical**: the USER's *"within a turn all
-breakpoints and phases should be treated as one decision"* framing, which AntiLifegain already
-encodes as `MTG_AL_CONDEMN`. Under that doctrine the search should not be free to change its mind
-about a card mid-turn, and the fact that doing so costs nothing measurable is beside the point.
+The stronger argument for ON is **doctrinal**: the USER's *"within a turn all breakpoints and phases
+should be treated as one decision"* framing, which AntiLifegain already encodes as
+`MTG_AL_CONDEMN`. Under that doctrine the search should not be free to change its mind about a card
+mid-turn, and the fact that doing so is currently free is beside the point.
+
+A third consideration is FORWARD-LOOKING: the filter fires in only ~17% of KittyEquipment games, and
+this deck has exactly one breakpoint class. A deck with frequent breakpoints would see a
+correspondingly larger saving, so "inert here" is not "inert in general".
 
 That is a USER call. The engine is ready either way: flipping
 `MTG_BP_CONDEMN_ORDER_AWARE` to default ON and Kitty's hook to `true` is a two-line change, and it

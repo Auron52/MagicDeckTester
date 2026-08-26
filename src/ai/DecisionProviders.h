@@ -869,13 +869,21 @@ public:
     //   * QUALITY EXACTLY NEUTRAL. 0 games better, 0 worse, in all four cells. Every block average
     //     is byte-identical to baseline. Only 5-6 games per cell play differently at all, and none
     //     of them changes a win turn.
-    //   * NO SAVING, STILL. Deterministic GameWorkMeter units: +0.21% / -0.11% / -1.14% / +3.13%,
-    //     net +0.72% -- i.e. marginally DEARER. The mean ratio is ~1.000 everywhere, so the typical
-    //     game is untouched and a heavy tail on m3train carries the total. The original 44-61%
-    //     saving remains what the DROPPED note says it was: a d3 gate-cell artefact.
-    // So the honest summary is that a CORRECT condemnation buys nothing here. It is no longer a
-    // reason to avoid the filter, and no longer a reason to want it. Leaving it OFF is the
-    // adoption bar applied literally (quality-neutral requires "other upside"; there is none).
+    //   * IT DOES DO LESS WORK -- but only an UNBUDGETED run can see it. At the shipped budgets the
+    //     units read +0.21% / -0.11% / -1.14% / +3.13% (net +0.72%), which looks like "no saving".
+    //     That number is measuring HOW THE BUDGET WAS SPENT, not what the prune costs. A budgeted
+    //     search does not RETURN a saving: SearchBudget is denominated in the very units being
+    //     counted, and the iterative-deepening start gate reinvests anything freed into BEGINNING
+    //     another pass, so total units stay pinned near the allowance and tail noise sets the sign.
+    //     The same dynamic is documented for the m2 search memo ("a hit skips the nested search's
+    //     budget consumption, so the outer deepening fits more passes").
+    //     Re-measured at depth 5 with budget_ms=0 (UNLIMITED), where a prune has nowhere to
+    //     reinvest: 1,500 paired games, **250 cheaper : 3 dearer : 1,247 identical**, mean ratio
+    //     0.9969 +/- 0.0005. So it is a genuine prune; the total is only -0.11% because the filter
+    //     touches ~17% of games at all. The original 44-61% claim remains a d3 gate-cell artefact.
+    // So a CORRECT condemnation is play-safe and genuinely cheaper per search, but on THIS deck the
+    // effect is too small to surface as either wall time or quality: the budget converts it into
+    // more search at equal cost, and that extra search measures 0/0.
     // The remaining argument for turning it ON is doctrinal, not empirical -- the USER's "within a
     // turn all breakpoints and phases are one decision" framing that AntiLifegain encodes -- and
     // that is a USER call, recorded in docs/design/breakpoint-condemnation-status.md.
