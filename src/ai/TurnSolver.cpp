@@ -1227,6 +1227,7 @@ namespace m2yield
     // decision, the ROLLOUT site is the leaf estimator's playout policy (see MTG_SSM_SITE).
     inline std::atomic<uint64_t> g_br_s{0}, g_br_g{0}, g_ro_s{0}, g_ro_g{0};
     inline std::atomic<uint64_t> g_br_d0{0}, g_ro_d0{0};   // depth<=0: no search left, greedy by structure
+    inline std::atomic<uint64_t> g_br_d0s{0};              // ...of which MTG_M2_D0_SEARCHED rescued
     // Which iterative-deepening passes COMPLETED. sub_depth is the PASS INDEX (0..depth-1), and
     // pass 0 is the one whose interior m2 -- and whose whole rollout -- falls to greedy, because
     // SolveSecondMainInSearch takes Solve() at depth<=0. Every completed pass overwrites the
@@ -1245,7 +1246,7 @@ namespace m2yield
     inline std::mutex g_mtx;
     inline std::map<std::string, uint64_t> g_by_kind;   // "<kind>:<card>" -> count
 
-    inline void RecordPath(bool searched, bool depth_out, bool in_rollout)
+    inline void RecordPath(bool searched, bool depth_out, bool in_rollout, bool d0_searched = false)
     {
         if (!Enabled()) { return; }
         if (searched)        { g_searched.fetch_add(1, std::memory_order_relaxed); }
@@ -1255,8 +1256,10 @@ namespace m2yield
         {
             // depth<=0 is greedy at BOTH sites regardless of the hooks -- there is no search left to
             // do. Counted separately per site so "greedy inside the branching" (the search's own
-            // leaf boundary) is never confused with "greedy in the playout".
+            // leaf boundary) is never confused with "greedy in the playout". g_br_d0 stays the
+            // total (so the pre-lever ratio is still readable) and g_br_d0s is the rescued subset.
             (in_rollout ? g_ro_d0 : g_br_d0).fetch_add(1, std::memory_order_relaxed);
+            if (d0_searched) { g_br_d0s.fetch_add(1, std::memory_order_relaxed); }
             return;
         }
         if (in_rollout) { (searched ? g_ro_s : g_ro_g).fetch_add(1, std::memory_order_relaxed); }
@@ -1298,10 +1301,10 @@ namespace m2yield
                          s ? 100.0 * static_cast<double>(sr) / static_cast<double>(s) : 0.0,
                          (unsigned long long)gh, (unsigned long long)gd);
             std::fprintf(stderr,
-                         "=== M2 SITE: BRANCH searched %llu / greedy %llu / d<=0 %llu | "
-                         "ROLLOUT searched %llu / greedy %llu / d<=0 %llu ===\n",
+                         "=== M2 SITE: BRANCH searched %llu / greedy %llu / d<=0 %llu (of which "
+                         "SEARCHED %llu) | ROLLOUT searched %llu / greedy %llu / d<=0 %llu ===\n",
                          (unsigned long long)g_br_s.load(), (unsigned long long)g_br_g.load(),
-                         (unsigned long long)g_br_d0.load(),
+                         (unsigned long long)g_br_d0.load(), (unsigned long long)g_br_d0s.load(),
                          (unsigned long long)g_ro_s.load(), (unsigned long long)g_ro_g.load(),
                          (unsigned long long)g_ro_d0.load());
             std::fprintf(stderr, "=== COMMITTED PASS (sub_depth):");
@@ -1480,6 +1483,34 @@ inline long long Quantity(const GameState& state)
 }
 }
 
+// MTG_M2_D0_SEARCHED -- the LAST greedy step inside the search's own branching.
+//
+// USER, 2026-08-23: *"decks must have NO GREEDY components in the search."* Everything else has been
+// converted deck by deck (DecisionProvider::SearchedSecondMainInSearch), but `depth <= 0` below has
+// always fallen to greedy Solve() *regardless of every hook*, and that is not a rare corner. The
+// branch-site depth IS the iterative-deepening PASS INDEX (SolveWithLookahead's
+// `for (sub_depth = 0; sub_depth <= depth-1; ...)`), so PASS 0 -- the pass that finally commits
+// 94.7% of FiveColour's decisions, 99.5% of Anti-Lifegain's and 82.9% of Kitty's -- prices every
+// candidate with a GREEDY interior second main. Counted on fivecolour, the reference adoption:
+// 2,025,249 greedy branch-site second mains at d<=0 against 42,502 searched ones, i.e. 98% greedy.
+// That is the open item docs/design/searched-design-deck-rollout.md §3b names.
+//
+// On, the interior m2 runs at depth 1 instead of greedy: still ONE ply (it cannot compound with the
+// outer pass, which is the budget-dilution failure MTG_M2_CAP1 was built to test), but the plan is
+// CHOSEN by enumerating the m2 candidate set and scoring each with a playout rather than by Solve()'s
+// ordering heuristic. Default OFF -- this is the hot path and the cost is the whole question.
+//
+// BRANCH SITE ONLY, and that is structural rather than a preference: the rescued call re-enters
+// SolveWithLookahead(is_pre_combat=false, depth=1), whose own rollout re-enters this function at
+// depth 0 with in_rollout=true. Rescuing there too would recurse without a decrementing bound
+// (`depth` passes through SimulateToEndImpl UNCHANGED). Declining at the rollout site terminates it,
+// and it is also where the repo's law puts it: OPTIMISTIC where you BRANCH, HONEST where you SCORE.
+static bool M2D0SearchedEnabled()
+{
+    static const bool on = EnvOn("MTG_M2_D0_SEARCHED");
+    return heurarm::Flag(heurarm::M2_D0_SEARCHED, on);
+}
+
 static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int depth, int max_turns,
                                                 SearchBudget* budget, bool second_main,
                                                 TranspositionTable* tt, bool in_rollout)
@@ -1533,11 +1564,17 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     const int cap = heurarm::Flag(heurarm::M2_CAP1, false) ? 1 : s_m2_depth_cap;
     const int m2_depth = (cap > 0 && cap < depth) ? cap : depth;
     const bool depth_out = (depth <= 0);
-    m2yield::RecordPath(!depth_out && searched, depth_out, in_rollout);
+    // See M2D0SearchedEnabled above: rescue the d<=0 BRANCH site into a one-ply searched m2. The
+    // deck must already have opted into the searched interior m2 (`searched`), so this lever is
+    // inert on every deck that has not -- it widens an adopted design, it does not start a new one.
+    const bool d0_searched = depth_out && !in_rollout && searched && M2D0SearchedEnabled();
+    const bool greedy_here = !searched || (depth_out && !d0_searched);
+    const int eff_depth    = d0_searched ? 1 : m2_depth;
+    m2yield::RecordPath(!greedy_here, depth_out, in_rollout, d0_searched);
     const TurnSolver::Plan p =
-        (depth_out || !searched)
+        greedy_here
             ? TurnSolver::Solve(state, false)
-            : SearchedSecondMainMemoized(state, m2_depth, max_turns, budget, second_main, tt);
+            : SearchedSecondMainMemoized(state, eff_depth, max_turns, budget, second_main, tt);
     m2yield::Record(p);
     return p;
 }
@@ -17108,8 +17145,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (out_breakpoint) { sink_stack.push_back(my_bp_sink); }
                 TurnSolver::Plan extra;
-                greedysite::Record(4);
-                if (!bp_searched_plan(4, extra)) { extra = TurnSolver::Solve(state, is_pre_combat); }
+                // Record only on the FALLBACK, like every other site: this counter's contract is
+                // "greedy Solve()s actually reached from inside the search", and bumping it before
+                // the searched attempt counted the site's successes as greedy too -- which is the
+                // exact reading error the counter exists to prevent.
+                if (!bp_searched_plan(4, extra))
+                {
+                    greedysite::Record(4);
+                    extra = TurnSolver::Solve(state, is_pre_combat);
+                }
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);

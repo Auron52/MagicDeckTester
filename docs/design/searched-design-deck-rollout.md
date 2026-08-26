@@ -162,7 +162,101 @@ settings.
 
 **What IS inside the window, on every deck, is the d<=0 branch-site greedy** -- see the M2 SITE
 counter. FiveColour, the reference adoption, takes 2,025,249 greedy branch-site second mains at
-d<=0 against 42,502 searched ones: 98% greedy. That is the open item.
+d<=0 against 42,502 searched ones: 98% greedy. That was the open item; §3c closes it.
+
+## 3c. The d<=0 branch-site greedy: MEASURED, and it is NOT unreliable -- do NOT adopt (2026-08-26)
+
+`SolveSecondMainInSearch` falls to greedy `Solve()` whenever `depth <= 0`, **regardless of every
+per-deck hook**. That is not a rare corner: the branch-site depth IS the iterative-deepening PASS
+INDEX (`for (sub_depth = 0; sub_depth <= depth-1; ...)`), so pass 0 -- the pass that finally commits
+most decisions -- prices every candidate with a greedy interior second main. Census at HEAD, shipped
+play settings, `MTG_M2_YIELD_STATS` (200 games; 5C 50):
+
+| deck | BRANCH searched | BRANCH d<=0 (greedy) | share greedy |
+|---|---|---|---|
+| Anti-Lifegain | 0 | 29,298 | **100%** |
+| KittyEquipment | 9,450 | 175,954 | 94.9% |
+| FiveColour | 21,824 | 109,633 | 83.4% |
+
+`MTG_M2_D0_SEARCHED` (heurarm, **default OFF**) runs those calls at depth 1 instead: one ply, so it
+cannot compound with the outer pass, but the plan is CHOSEN by enumerating the m2 candidate set and
+scoring each with a playout rather than by `Solve()`'s ordering. It is gated on the deck having
+already adopted the searched interior m2, so it widens an adopted design rather than starting a new
+one, and it is **BRANCH-SITE ONLY for a structural reason**: the rescued call re-enters
+`SolveWithLookahead(is_pre_combat=false, depth=1)`, whose own rollout re-enters this function at
+depth 0 with `in_rollout=true`, and `depth` passes through `SimulateToEndImpl` UNCHANGED -- rescuing
+there too recurses with no decrementing bound. Declining at the rollout site terminates it, and it is
+also where the standing law puts it (OPTIMISTIC where you BRANCH, HONEST where you SCORE).
+
+### Gate 1 -- quality at PLAY settings. All six cells WORSE.
+
+One pooled batch, 24,000 paired games, arms paired on seed, depth/budget from each deck's own
+`value_play` (AL d5/b20, Kitty d5/b20, 5C d6/b20). Positive delta = worse.
+
+| deck / block | n | delta | se | t | faster | slower | plays differ |
+|---|---|---|---|---|---|---|---|
+| al train | 5000 | **+0.0032** | 0.0010 | 3.27 | 1 | 14 | 43 |
+| al hold | 5000 | +0.0008 | 0.0006 | 1.41 | 2 | 6 | 31 |
+| kitty train | 5000 | +0.0008 | 0.0005 | 1.63 | 1 | 5 | 20 |
+| kitty hold | 5000 | +0.0006 | 0.0003 | 1.73 | 0 | 3 | 19 |
+| 5c train | 2000 | +0.0015 | 0.0009 | 1.73 | 0 | 3 | 13 |
+| 5c hold | 2000 | +0.0005 | 0.0005 | 1.00 | 0 | 1 | 18 |
+
+**6 of 6 cells worse, 32 games slower : 4 faster.** No single cell is decisive; the agreement across
+six independent cells and the 8:1 game count are.
+
+### Gate 2 -- WHY. It is budget dilution, and the greedy plan is the SAME plan.
+
+All 36 changed games re-played at escalated budget AND depth, **both arms escalated together**
+(escalating only the arm compares two configurations and answers nothing):
+
+| cell | games | identical PLAY DIGEST | turn differs |
+|---|---|---|---|
+| 10x budget (b200) | 36 | **35** | 1 |
+| 100x budget (b2000, al+kitty) | 32 | 31 | 1 |
+| 100x budget + 1 depth (b2000/d6) | 32 | **32** | 0 |
+| 10x budget + 1 depth (b200/d7, 5c) | 4 | **4** | 0 |
+
+Not merely the same win turn -- the same DECISION STREAM. The single holdout (al train gi=889, 6->7)
+survives 100x budget and closes on one extra depth ply.
+
+Confirmed on the whole population rather than just the changed games, at `budget_ms=0` (UNLIMITED),
+1000 paired games each, native depth:
+
+| deck | base avg | arm avg | play digest | search work |
+|---|---|---|---|---|
+| Anti-Lifegain | 4.1880 | 4.1880 | **IDENTICAL** `f01244e4c19986ce` | +0.04% (1 cheaper : 50 dearer : 949 same) |
+| KittyEquipment | 4.3560 | 4.3560 | **IDENTICAL** `b0f6812ee188f954` | **+73.72%** (0 : 80 : 920) |
+
+**The lever fired, and that was checked rather than assumed** -- the failure mode this counter exists
+for is that "no effect" and "never ran" look identical. AL at b0/d5, 30 games: 1,441 of 1,441
+branch-site d<=0 calls rescued in the arm, 0 in the baseline, with the branch-site searched count
+(819) and every rollout count unchanged. FiveColour was not run unbudgeted (its games already reach
+100 s at the shipped b20); its four changed games are covered by the escalation table above.
+
+Where the cost lands at the shipped budget is visible directly: the number of pass-0 candidate
+evaluations that reach the interior m2 DROPS, because the interior spend comes out of the same
+allowance -- AL 29,298 -> 20,837 (**-28.9%**), Kitty 175,954 -> 118,999 (**-32.4%**).
+
+### Verdict: do NOT adopt, and the reason is the useful part
+
+It fails the adoption bar on both clauses at once: measurably worse quality at play settings, and up
+to **74% more search** to buy it. Keep `MTG_M2_D0_SEARCHED` in the tree as the instrument, default
+OFF, exactly as `MTG_AL_SSM_ROLLOUT` was kept.
+
+**But the finding is not "greedy wins".** It is stronger and more useful than that: at this site, on
+all three decks that have adopted the searched design, **the greedy interior second main returns the
+same plan the search returns** -- byte-identical over 2,000 unbudgeted games, and byte-identical on
+35 of 36 of the games where the shipped budget made them diverge. The standing directive's premise
+(*"greedy is simply too unreliable to be part of it"*) is measurably FALSE here. That is worth
+distinguishing from the AL rollout-site result in §3b, which was also budget dilution but where
+removing the rollout m2 entirely cost +7 turns -- there, greedy was an interior optimum doing real
+work. Here it is doing no work at all, correctly.
+
+The generalisation to carry to the next deck: **a greedy step is worth removing only where it is
+measurably WRONG.** Test that first with `MTG_M2_D0_SEARCHED` at `budget_ms=0`, which costs one
+pooled batch and answers it in one digest comparison; if the digests match, the step is not the
+deck's problem and converting it only spends budget the outer loop needs.
 
 ## 4. The two known instances of that class (both fixed, both prunes)
 
@@ -231,3 +325,10 @@ runner was making the same misplay. A new deck may need its own instance of this
   AL's cost** -- so AL was the special case and no global change is warranted (see §3a).
 * **Hinata's searched-m2 rejection should be re-measured PER SITE** (`MTG_SSM_SITE=1`), not just
   re-measured: its red verdict, like AL's, is a single number over both sites.
+* **The d<=0 branch-site greedy is CLOSED** (§3c, 2026-08-26): measured on all three adopted decks,
+  play-identical to the search when budget is not the constraint, worse in 6 of 6 cells when it is.
+  Not adopted; `MTG_M2_D0_SEARCHED` stays in the tree default OFF as the instrument.
+* **The remaining greedy inside the search is the BREAKPOINT CONTINUATION fallback** --
+  `greedysite` sites 0-8, taken when `bp_searched_plan(site, ...)` returns false because the site is
+  not searchable for that deck (site 3, the plain cantrip, is pruned outright). That is now the only
+  unmeasured greedy class, and §3c gives the cheap way to test it: does it return a different plan?
